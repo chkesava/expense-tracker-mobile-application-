@@ -1,19 +1,22 @@
-const tintColorLight = '#2f95dc';
-const tintColorDark = '#fff';
+/**
+ * Backward-compatible Colors map for leftover template code.
+ * Prefer `useTheme()` / `theme/tokens` for new UI.
+ */
+import { darkColors, lightColors } from "@/theme/tokens";
 
 export default {
   light: {
-    text: '#000',
-    background: '#fff',
-    tint: tintColorLight,
-    tabIconDefault: '#ccc',
-    tabIconSelected: tintColorLight,
+    text: lightColors.foreground,
+    background: lightColors.background,
+    tint: lightColors.tint,
+    tabIconDefault: lightColors.tabIconDefault,
+    tabIconSelected: lightColors.tabIconSelected,
   },
   dark: {
-    text: '#fff',
-    background: '#000',
-    tint: tintColorDark,
-    tabIconDefault: '#ccc',
-    tabIconSelected: tintColorDark,
+    text: darkColors.foreground,
+    background: darkColors.background,
+    tint: darkColors.tint,
+    tabIconDefault: darkColors.tabIconDefault,
+    tabIconSelected: darkColors.tabIconSelected,
   },
 };

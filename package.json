@@ -52,7 +52,8 @@
     "web": "expo start --web",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck:shared": "tsc -p tsconfig.shared.json"
+    "typecheck:shared": "tsc -p tsconfig.shared.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "private": true
 }
