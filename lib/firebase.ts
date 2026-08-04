@@ -1,15 +1,15 @@
 /**
  * Firebase Auth + Firestore bootstrap for Expo.
  *
- * Offline strategy (Phase 1):
- * - Web: IndexedDB persistentLocalCache (parity with Vite app).
- * - Native: memoryLocalCache — durable RN offline requires either
- *   @react-native-firebase/firestore or an IndexedDB polyfill in a later phase.
- * Auth session persistence (AsyncStorage) is deferred to Phase 2 with Authentication UI.
+ * Offline strategy:
+ * - Auth (native): AsyncStorage via createAuth.native.ts
+ * - Auth (web): browser persistence via createAuth.web.ts
+ * - Firestore (web): IndexedDB persistentLocalCache
+ * - Firestore (native): memoryLocalCache — durable RN offline deferred
  */
 
 import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
-import { getAuth, type Auth } from "firebase/auth";
+import type { Auth } from "firebase/auth";
 import {
   getFirestore,
   initializeFirestore,
@@ -20,6 +20,7 @@ import {
 } from "firebase/firestore";
 import { Platform } from "react-native";
 
+import { createAuth } from "./createAuth";
 import { env, isFirebaseEnvConfigured } from "./env";
 
 let app: FirebaseApp | null = null;
@@ -64,6 +65,8 @@ export type FirebaseClients = {
   error: string | null;
   /** Human-readable offline cache mode for diagnostics */
   firestoreCacheMode: "persistent-indexeddb" | "memory" | "default" | "uninitialized";
+  /** Auth persistence mode for Phase 1 verification */
+  authPersistence: "async-storage" | "browser" | "none" | "uninitialized";
 };
 
 export function getFirebaseClients(): FirebaseClients {
@@ -75,13 +78,14 @@ export function getFirebaseClients(): FirebaseClients {
       db: null,
       error: "Missing EXPO_PUBLIC_FIREBASE_* environment variables",
       firestoreCacheMode: "uninitialized",
+      authPersistence: "uninitialized",
     };
   }
 
   if (!app) {
     try {
       app = createApp();
-      auth = getAuth(app);
+      auth = createAuth(app);
       db = createDb(app);
       initError = null;
     } catch (e) {
@@ -98,6 +102,12 @@ export function getFirebaseClients(): FirebaseClients {
       ? "persistent-indexeddb"
       : "memory";
 
+  const authPersistence: FirebaseClients["authPersistence"] = !auth
+    ? "uninitialized"
+    : Platform.OS === "web"
+      ? "browser"
+      : "async-storage";
+
   return {
     configured: true,
     app,
@@ -105,6 +115,7 @@ export function getFirebaseClients(): FirebaseClients {
     db,
     error: initError,
     firestoreCacheMode: cacheMode,
+    authPersistence,
   };
 }
 
