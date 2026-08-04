@@ -7,6 +7,8 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import "react-native-reanimated";
 
 import { ToastProvider } from "@/lib/toast";
+import { AuthProvider } from "@/providers/AuthProvider";
+import { SystemSettingsProvider } from "@/providers/SystemSettingsProvider";
 import { AppThemeProvider, useTheme } from "@/theme/ThemeProvider";
 
 export { ErrorBoundary } from "expo-router";
@@ -25,7 +27,11 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <AppThemeProvider>
           <ToastProvider>
-            <RootNavigator />
+            <SystemSettingsProvider>
+              <AuthProvider>
+                <RootNavigator />
+              </AuthProvider>
+            </SystemSettingsProvider>
           </ToastProvider>
         </AppThemeProvider>
       </SafeAreaProvider>
@@ -41,16 +47,13 @@ function RootNavigator() {
       <StatusBar style={themeName === "dark" ? "light" : "dark"} />
       <Stack
         screenOptions={{
-          headerStyle: { backgroundColor: theme.colors.background },
-          headerTintColor: theme.colors.foreground,
-          headerShadowVisible: false,
+          headerShown: false,
           contentStyle: { backgroundColor: theme.colors.background },
         }}
       >
-        <Stack.Screen
-          name="index"
-          options={{ title: "Expense Tracker" }}
-        />
+        <Stack.Screen name="index" />
+        <Stack.Screen name="(auth)" />
+        <Stack.Screen name="(app)" />
         <Stack.Screen name="+not-found" />
       </Stack>
     </>

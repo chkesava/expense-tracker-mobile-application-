@@ -13,6 +13,9 @@ export const env = {
   /** Public app origin for payment share links (ex-VITE_PUBLIC_APP_URL). */
   publicAppUrl: read("EXPO_PUBLIC_APP_URL"),
 
+  /** Google OAuth Web client ID (Firebase Console → Auth → Google). */
+  googleWebClientId: read("EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID"),
+
   firebase: {
     apiKey: read("EXPO_PUBLIC_FIREBASE_API_KEY"),
     authDomain: read("EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN"),

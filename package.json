@@ -5,12 +5,15 @@
   "dependencies": {
     "@gorhom/bottom-sheet": "^5.2.14",
     "@hookform/resolvers": "^5.7.1",
+    "@react-native-async-storage/async-storage": "2.2.0",
     "@shopify/flash-list": "^2.3.2",
     "@tanstack/react-query": "^5.101.4",
     "date-fns": "^4.4.0",
     "expo": "~57.0.10",
+    "expo-auth-session": "~57.0.6",
     "expo-camera": "~57.0.3",
     "expo-constants": "~57.0.9",
+    "expo-crypto": "~57.0.1",
     "expo-font": "~57.0.1",
     "expo-image-picker": "~57.0.7",
     "expo-linking": "~57.0.5",
@@ -53,7 +56,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck:shared": "tsc -p tsconfig.shared.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "env:copy-from-web": "node ./scripts/copy-env-from-web.mjs"
   },
   "private": true
 }
