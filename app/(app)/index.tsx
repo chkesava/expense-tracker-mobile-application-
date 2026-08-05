@@ -17,7 +17,7 @@ import { useTheme } from "@/theme/ThemeProvider";
  */
 export default function AppHomeScreen() {
   const { theme } = useTheme();
-  const { user, logout } = useAuth();
+  const { user, realUser, isDuress, logout } = useAuth();
   const { settings: system } = useSystemSettings();
   const { settings } = useSettings();
   const { role, isAdmin } = useUserDoc();
@@ -58,9 +58,27 @@ export default function AppHomeScreen() {
             lineHeight: 20,
           }}
         >
-          Phase 3 user settings are active. Dashboard and ledger arrive in later
+          Phase 4 privacy lock is active. Dashboard and ledger arrive in later
           phases.
         </Text>
+
+        {isDuress ? (
+          <Card title="Duress mode" subtitle="Isolated session">
+            <Text style={{ color: theme.colors.warning }}>
+              Effective UID ends with _duress. Real ledger data is not loaded on
+              this session path.
+            </Text>
+            <Text
+              style={{
+                color: theme.colors.mutedForeground,
+                fontSize: 12,
+                marginTop: theme.space.sm,
+              }}
+            >
+              Real UID: {realUser?.uid}
+            </Text>
+          </Card>
+        ) : null}
 
         {system.announcementBanner ? (
           <Card title="Announcement">
@@ -84,6 +102,7 @@ export default function AppHomeScreen() {
             <Text style={{ color: theme.colors.cardForeground }}>
               Role: {role}
               {isAdmin ? " (admin)" : ""}
+              {settings.privacyPin ? " · PIN on" : " · PIN off"}
             </Text>
             <Text style={{ color: theme.colors.mutedForeground, fontSize: 12 }}>
               Currency: {system.defaultCurrency} · View: {settings.defaultView} ·

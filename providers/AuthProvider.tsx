@@ -1,6 +1,6 @@
 /**
  * Auth provider — Firebase email/password + Google credential.
- * Duress mode is deferred to Phase 4 (realUser === user for now).
+ * Phase 4: `user` may be a duress proxy (`uid + "_duress"`); `realUser` is always Firebase user.
  */
 
 import {
@@ -29,11 +29,13 @@ import { doc, getDoc } from "firebase/firestore";
 
 import { ensureCategoryHierarchy } from "@/lib/ensureCategoryHierarchy";
 import { getFirebaseAuth, getFirestoreDb } from "@/lib/firebase";
+import { privacySession } from "@/lib/privacySession";
 
 type AuthContextType = {
   user: User | null;
   realUser: User | null;
   loading: boolean;
+  isDuress: boolean;
   loginWithEmail: (email: string, password: string) => Promise<void>;
   signUpWithEmail: (
     email: string,
@@ -41,7 +43,6 @@ type AuthContextType = {
     displayName: string
   ) => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
-  /** Sign in with a Google ID token from expo-auth-session. */
   loginWithGoogleIdToken: (idToken: string) => Promise<void>;
   logout: () => Promise<void>;
 };
@@ -55,9 +56,25 @@ function authErrorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
+function createDuressUser(real: User): User {
+  const duressUser = Object.create(real) as User;
+  Object.defineProperty(duressUser, "uid", {
+    get: () => `${real.uid}_duress`,
+    enumerable: true,
+  });
+  return duressUser;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [realUser, setRealUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isDuress, setIsDuress] = useState(() => privacySession.isDuress());
+
+  useEffect(() => {
+    return privacySession.subscribe(() => {
+      setIsDuress(privacySession.isDuress());
+    });
+  }, []);
 
   useEffect(() => {
     const auth = getFirebaseAuth();
@@ -75,7 +92,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           console.error("Error ensuring category hierarchy on login:", error);
         }
       }
-      setUser(currentUser);
+      if (!currentUser) {
+        privacySession.clearAll();
+      }
+      setRealUser(currentUser);
       setLoading(false);
     });
 
@@ -164,6 +184,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const auth = getFirebaseAuth();
     if (!auth) return;
     try {
+      privacySession.clearAll();
       await signOut(auth);
     } catch (error) {
       console.error("Logout failed", error);
@@ -171,12 +192,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Phase 4 will introduce duress; for Phase 2 effective user === real user.
+  const effectiveUser = useMemo(() => {
+    if (!realUser) return null;
+    if (isDuress) return createDuressUser(realUser);
+    return realUser;
+  }, [realUser, isDuress]);
+
   const value = useMemo<AuthContextType>(
     () => ({
-      user,
-      realUser: user,
+      user: effectiveUser,
+      realUser,
       loading,
+      isDuress,
       loginWithEmail,
       signUpWithEmail,
       resetPassword,
@@ -184,8 +211,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       logout,
     }),
     [
-      user,
+      effectiveUser,
+      realUser,
       loading,
+      isDuress,
       loginWithEmail,
       signUpWithEmail,
       resetPassword,

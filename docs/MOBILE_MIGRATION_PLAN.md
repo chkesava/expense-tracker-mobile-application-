@@ -18,7 +18,7 @@
 | 1 | App foundation (Expo shell, env, Firebase, design tokens) | 0 | Medium |
 | 2 | Authentication & system gates ✅ **Done** | 0, 1 | High |
 | 3 | User document, settings & theme ✅ **Done** | 0–2 | Medium |
-| 4 | Privacy lock (PIN; biometrics optional) | 0–3 | High |
+| 4 | Privacy lock (PIN; biometrics) ✅ **Done** | 0–3 | High |
 | 5 | Expense shell navigation & chrome | 0–4 | Medium |
 | 6 | Core finance data layer | 0–5 | Very High |
 | 7 | Categories, budgets, rules & goals | 0–6 | High |
@@ -241,12 +241,14 @@ Gate the authenticated product behind privacy controls before loading finance sh
 **High** (PIN + duress); **Very High** if biometrics included in same phase
 
 ### Acceptance Criteria
-- [ ] With PIN configured, app content is blocked until correct PIN.
-- [ ] Wrong PIN does not unlock; rate-limit / UX matches product intent.
-- [ ] Fake PIN activates duress session: effective Firestore paths use `{uid}_duress`.
-- [ ] Leaving duress/logout restores real user isolation; no cross-leak of real ledger into duress paths.
-- [ ] Inactivity and background lock settings behave on mobile lifecycle events.
-- [ ] *(If in scope)* Biometric unlock works on supported devices and fails closed when unavailable.
+- [x] With PIN configured, app content is blocked until correct PIN.
+- [x] Wrong PIN does not unlock; rate-limit / UX matches product intent.
+- [x] Fake PIN activates duress session: effective Firestore paths use `{uid}_duress`.
+- [x] Leaving duress/logout restores real user isolation; no cross-leak of real ledger into duress paths.
+- [x] Inactivity and background lock settings behave on mobile lifecycle events.
+- [x] Biometric unlock works on supported devices and fails closed when unavailable.
+
+**Status:** Completed (2026-08-05) — PIN / privacy lock / biometrics / inactivity / duress.
 
 ---
 

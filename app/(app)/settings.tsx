@@ -12,6 +12,7 @@ import { doc, setDoc } from "firebase/firestore";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
+import { useBiometrics } from "@/hooks/useBiometrics";
 import { getFirestoreDb } from "@/lib/firebase";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
@@ -25,6 +26,14 @@ import {
   THEME_NAMES,
   type ThemeName,
 } from "@/theme/tokens";
+
+const INACTIVITY_OPTIONS = [
+  { value: "15", label: "15s" },
+  { value: "30", label: "30s" },
+  { value: "60", label: "1m" },
+  { value: "300", label: "5m" },
+  { value: "600", label: "10m" },
+];
 
 const DEFAULT_VIEWS: { value: DefaultView; label: string }[] = [
   { value: "dashboard", label: "Dashboard" },
@@ -49,12 +58,12 @@ const COMMON_TIMEZONES = [
 ];
 
 /**
- * Phase 3 settings subset — profile, general prefs, personalize.
- * Privacy / Manage / Accounts / Data deferred.
+ * Settings — profile, general, personalize, privacy (Phase 4).
+ * Manage / Accounts / Data deferred.
  */
 export default function SettingsScreen() {
   const { theme, themeName, setThemeName } = useTheme();
-  const { user, logout } = useAuth();
+  const { user, realUser, logout } = useAuth();
   const { data, role, isAdmin } = useUserDoc();
   const {
     settings,
@@ -65,12 +74,28 @@ export default function SettingsScreen() {
     setLockPastMonths,
     setNavigationStyle,
     setDefaultCategory,
+    setPrivacyPin,
+    setFakePin,
+    setLockOnInactivity,
+    setInactivityTimeout,
+    setLockOnAppSwitch,
   } = useSettings();
   const { settings: system } = useSystemSettings();
+  const {
+    isSupported: biometricsSupported,
+    isRegistered: biometricsRegistered,
+    register: registerBiometrics,
+    unregister: unregisterBiometrics,
+  } = useBiometrics();
 
   const [username, setUsername] = useState("");
   const [budgetText, setBudgetText] = useState(String(settings.monthlyBudget || 0));
   const [savingProfile, setSavingProfile] = useState(false);
+  const [newPin, setNewPin] = useState("");
+  const [confirmPin, setConfirmPin] = useState("");
+  const [newFakePin, setNewFakePin] = useState("");
+  const [confirmFakePin, setConfirmFakePin] = useState("");
+
 
   useEffect(() => {
     setUsername(typeof data?.username === "string" ? data.username : "");
@@ -82,16 +107,16 @@ export default function SettingsScreen() {
 
   const onSaveProfile = async () => {
     const db = getFirestoreDb();
-    if (!user || !db) return;
+    if (!realUser || !db) return;
     setSavingProfile(true);
     try {
       await setDoc(
-        doc(db, "users", user.uid),
+        doc(db, "users", realUser.uid),
         {
           username: username.trim(),
-          email: user.email,
-          displayName: user.displayName,
-          photoURL: user.photoURL,
+          email: realUser.email,
+          displayName: realUser.displayName,
+          photoURL: realUser.photoURL,
         },
         { merge: true }
       );
@@ -101,6 +126,62 @@ export default function SettingsScreen() {
     } finally {
       setSavingProfile(false);
     }
+  };
+
+  const onEnablePin = () => {
+    if (!/^\d{4}$/.test(newPin)) {
+      toast.error("PIN must be exactly 4 digits");
+      return;
+    }
+    if (newPin !== confirmPin) {
+      toast.error("PIN confirmation does not match");
+      return;
+    }
+    setPrivacyPin(newPin);
+    setNewPin("");
+    setConfirmPin("");
+    toast.success("Privacy PIN enabled");
+  };
+
+  const onRemovePin = () => {
+    setPrivacyPin("");
+    setFakePin("");
+    void unregisterBiometrics();
+    toast.success("Privacy PIN removed");
+  };
+
+  const onEnableFakePin = () => {
+    if (!settings.privacyPin) {
+      toast.error("Set a privacy PIN first");
+      return;
+    }
+    if (!/^\d{4}$/.test(newFakePin)) {
+      toast.error("Duress PIN must be exactly 4 digits");
+      return;
+    }
+    if (newFakePin !== confirmFakePin) {
+      toast.error("Duress PIN confirmation does not match");
+      return;
+    }
+    if (newFakePin === settings.privacyPin) {
+      toast.error("Duress PIN must differ from your real PIN");
+      return;
+    }
+    setFakePin(newFakePin);
+    setNewFakePin("");
+    setConfirmFakePin("");
+    toast.success("Duress PIN enabled");
+  };
+
+  const onToggleBiometrics = async () => {
+    if (biometricsRegistered) {
+      await unregisterBiometrics();
+      toast.success("Biometrics disabled");
+      return;
+    }
+    const ok = await registerBiometrics();
+    if (ok) toast.success("Biometrics enabled");
+    else toast.error("Biometric setup failed or was cancelled");
   };
 
   const onLogout = async () => {
@@ -226,6 +307,136 @@ export default function SettingsScreen() {
           </View>
         </Card>
 
+        <Card title="Privacy" subtitle="PIN, duress, lock, biometrics">
+          <View style={{ gap: theme.space.md }}>
+            {settings.privacyPin ? (
+              <>
+                <Text style={{ color: theme.colors.success, fontSize: theme.typography.sm }}>
+                  Privacy PIN is enabled
+                </Text>
+                <Button variant="destructive" onPress={onRemovePin}>
+                  Remove PIN
+                </Button>
+
+                <RowSwitch
+                  label="Lock on inactivity"
+                  value={settings.lockOnInactivity}
+                  onValueChange={setLockOnInactivity}
+                />
+                {settings.lockOnInactivity ? (
+                  <>
+                    <FieldLabel label="Inactivity timeout" />
+                    <ChipRow
+                      options={INACTIVITY_OPTIONS}
+                      selected={String(settings.inactivityTimeout || 60)}
+                      onSelect={(v) => setInactivityTimeout(Number(v))}
+                    />
+                  </>
+                ) : null}
+
+                <RowSwitch
+                  label="Lock when app switches away"
+                  value={settings.lockOnAppSwitch}
+                  onValueChange={setLockOnAppSwitch}
+                />
+
+                {biometricsSupported ? (
+                  <Button variant="outline" onPress={() => void onToggleBiometrics()}>
+                    {biometricsRegistered
+                      ? "Disable biometrics"
+                      : "Enable biometrics"}
+                  </Button>
+                ) : (
+                  <Text
+                    style={{
+                      color: theme.colors.mutedForeground,
+                      fontSize: theme.typography.xs,
+                    }}
+                  >
+                    Biometrics unavailable on this device.
+                  </Text>
+                )}
+
+                <FieldLabel label="Duress (fake) PIN" />
+                <Text
+                  style={{
+                    color: theme.colors.mutedForeground,
+                    fontSize: theme.typography.xs,
+                  }}
+                >
+                  Opens an isolated empty vault ({`{uid}_duress`}). Must differ from
+                  your real PIN.
+                </Text>
+                {settings.fakePin ? (
+                  <Button
+                    variant="outline"
+                    onPress={() => {
+                      setFakePin("");
+                      toast.success("Duress PIN removed");
+                    }}
+                  >
+                    Remove duress PIN
+                  </Button>
+                ) : (
+                  <>
+                    <Input
+                      label="New duress PIN"
+                      value={newFakePin}
+                      onChangeText={(t) =>
+                        setNewFakePin(t.replace(/\D/g, "").slice(0, 4))
+                      }
+                      keyboardType="number-pad"
+                      secureTextEntry
+                      maxLength={4}
+                    />
+                    <Input
+                      label="Confirm duress PIN"
+                      value={confirmFakePin}
+                      onChangeText={(t) =>
+                        setConfirmFakePin(t.replace(/\D/g, "").slice(0, 4))
+                      }
+                      keyboardType="number-pad"
+                      secureTextEntry
+                      maxLength={4}
+                    />
+                    <Button onPress={onEnableFakePin}>Enable duress PIN</Button>
+                  </>
+                )}
+              </>
+            ) : (
+              <>
+                <Text
+                  style={{
+                    color: theme.colors.mutedForeground,
+                    fontSize: theme.typography.sm,
+                  }}
+                >
+                  Set a 4-digit PIN to lock the app after sign-in.
+                </Text>
+                <Input
+                  label="New PIN"
+                  value={newPin}
+                  onChangeText={(t) => setNewPin(t.replace(/\D/g, "").slice(0, 4))}
+                  keyboardType="number-pad"
+                  secureTextEntry
+                  maxLength={4}
+                />
+                <Input
+                  label="Confirm PIN"
+                  value={confirmPin}
+                  onChangeText={(t) =>
+                    setConfirmPin(t.replace(/\D/g, "").slice(0, 4))
+                  }
+                  keyboardType="number-pad"
+                  secureTextEntry
+                  maxLength={4}
+                />
+                <Button onPress={onEnablePin}>Enable privacy PIN</Button>
+              </>
+            )}
+          </View>
+        </Card>
+
         <Text
           style={{
             color: theme.colors.mutedForeground,
@@ -233,7 +444,7 @@ export default function SettingsScreen() {
             textAlign: "center",
           }}
         >
-          Privacy, accounts, budgets, and data tools arrive in later phases.
+          Accounts, budgets, and data tools arrive in later phases.
         </Text>
       </ScrollView>
     </SafeAreaView>

@@ -2,13 +2,14 @@ import { ActivityIndicator, View } from "react-native";
 import { Redirect, Stack } from "expo-router";
 
 import { MaintenanceScreen } from "@/components/MaintenanceScreen";
+import { PrivacyLock } from "@/components/PrivacyLock";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAuth } from "@/providers/AuthProvider";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import { useTheme } from "@/theme/ThemeProvider";
 
 /**
- * Protected app shell — requires auth; honors maintenance mode for non-admins.
+ * Protected app shell — auth + maintenance + privacy lock.
  */
 export default function AppLayout() {
   const { theme } = useTheme();
@@ -40,16 +41,18 @@ export default function AppLayout() {
   }
 
   return (
-    <Stack
-      screenOptions={{
-        headerStyle: { backgroundColor: theme.colors.background },
-        headerTintColor: theme.colors.foreground,
-        headerShadowVisible: false,
-        contentStyle: { backgroundColor: theme.colors.background },
-      }}
-    >
-      <Stack.Screen name="index" options={{ title: "Home" }} />
-      <Stack.Screen name="settings" options={{ title: "Settings" }} />
-    </Stack>
+    <PrivacyLock>
+      <Stack
+        screenOptions={{
+          headerStyle: { backgroundColor: theme.colors.background },
+          headerTintColor: theme.colors.foreground,
+          headerShadowVisible: false,
+          contentStyle: { backgroundColor: theme.colors.background },
+        }}
+      >
+        <Stack.Screen name="index" options={{ title: "Home" }} />
+        <Stack.Screen name="settings" options={{ title: "Settings" }} />
+      </Stack>
+    </PrivacyLock>
   );
 }
