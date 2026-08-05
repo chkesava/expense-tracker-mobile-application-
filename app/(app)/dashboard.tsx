@@ -1,13 +1,15 @@
-import { useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useMemo, useState } from "react";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import {
   ArrowDownLeft,
   ArrowUpRight,
   BarChart3,
+  Calendar,
   CreditCard,
   Flame,
+  History,
   Home as HomeIcon,
   PieChart,
   Plus,
@@ -20,13 +22,23 @@ import {
 } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
+import { EmptyState } from "@/components/common/EmptyState";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { Card } from "@/components/ui/Card";
+import { useAccountEntries } from "@/hooks/useAccountEntries";
+import { useAccountPayments } from "@/hooks/useAccountPayments";
+import { useAccounts } from "@/hooks/useAccounts";
+import { useAccountTransfers } from "@/hooks/useAccountTransfers";
+import { useAccountTypes } from "@/hooks/useAccountTypes";
+import { useExpenses } from "@/hooks/useExpenses";
+import { useIncomes } from "@/hooks/useIncomes";
 import { useAuth } from "@/providers/AuthProvider";
 import { useModals } from "@/providers/ModalProvider";
 import { useSettings } from "@/providers/SettingsProvider";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
+import { computeBankBalance } from "@/shared/utils/accountBalance";
+import { getAccountKind } from "@/shared/utils/accountKind";
 import { currentMonthKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
@@ -40,6 +52,14 @@ export default function DashboardScreen() {
   const { settings } = useSettings();
   const { globalMonth, setIsAddExpenseOpen, setIsMonthDrawerOpen } = useModals();
 
+  const { expenses, loading: expensesLoading } = useExpenses();
+  const { incomes, loading: incomesLoading } = useIncomes();
+  const { accounts, loading: accountsLoading } = useAccounts();
+  const { accountTypes } = useAccountTypes();
+  const { payments } = useAccountPayments();
+  const { entries } = useAccountEntries();
+  const { transfers } = useAccountTransfers();
+
   const [refreshing, setRefreshing] = useState(false);
 
   const activeMonth = globalMonth || currentMonthKey(settings.timezone);
@@ -50,6 +70,77 @@ export default function DashboardScreen() {
       setRefreshing(false);
     }, 600);
   };
+
+  // Filtered transactions for active month
+  const monthlyExpenses = useMemo(() => {
+    return expenses.filter(
+      (e) => e.month === activeMonth || (e.date && e.date.startsWith(activeMonth))
+    );
+  }, [expenses, activeMonth]);
+
+  const monthlyIncomes = useMemo(() => {
+    return incomes.filter(
+      (i) => i.month === activeMonth || (i.date && i.date.startsWith(activeMonth))
+    );
+  }, [incomes, activeMonth]);
+
+  // Aggregated totals
+  const monthlySpent = useMemo(() => {
+    return monthlyExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
+  }, [monthlyExpenses]);
+
+  const monthlyIncome = useMemo(() => {
+    return monthlyIncomes.reduce((sum, i) => sum + (i.amount || 0), 0);
+  }, [monthlyIncomes]);
+
+  // Account type map for kinds
+  const typeMap = useMemo(() => {
+    const map = new Map<string, string>();
+    accountTypes.forEach((t) => map.set(t.id, t.name));
+    return map;
+  }, [accountTypes]);
+
+  // Total balance computation
+  const totalBalance = useMemo(() => {
+    const nonCreditAccounts = accounts.filter((acc) => {
+      const typeName = typeMap.get(acc.typeId) || "";
+      return getAccountKind(typeName) !== "credit";
+    });
+
+    if (nonCreditAccounts.length > 0) {
+      return nonCreditAccounts.reduce((sum, acc) => {
+        return (
+          sum +
+          computeBankBalance(
+            acc,
+            expenses,
+            incomes,
+            payments,
+            entries,
+            transfers
+          )
+        );
+      }, 0);
+    }
+
+    // Fallback if no bank accounts configured yet
+    const lifetimeIncome = incomes.reduce((sum, i) => sum + (i.amount || 0), 0);
+    const lifetimeSpent = expenses.reduce((sum, e) => sum + (e.amount || 0), 0);
+    return lifetimeIncome - lifetimeSpent;
+  }, [accounts, typeMap, expenses, incomes, payments, entries, transfers]);
+
+  // Budget progress
+  const budgetProgress = useMemo(() => {
+    if (!settings.monthlyBudget || settings.monthlyBudget <= 0) return 0;
+    return Math.min(100, Math.round((monthlySpent / settings.monthlyBudget) * 100));
+  }, [monthlySpent, settings.monthlyBudget]);
+
+  // 5 Most recent transactions
+  const recentTransactions = useMemo(() => {
+    return expenses.slice(0, 5);
+  }, [expenses]);
+
+  const isLoading = expensesLoading || incomesLoading || accountsLoading;
 
   return (
     <PageShell
@@ -140,6 +231,7 @@ export default function DashboardScreen() {
               pressed && { opacity: 0.7 },
             ]}
           >
+            <Calendar size={12} color={theme.colors.primary} style={{ marginRight: 4 }} />
             <Text style={[styles.monthBadgeText, { color: theme.colors.primary }]}>
               {activeMonth}
             </Text>
@@ -147,12 +239,16 @@ export default function DashboardScreen() {
         </View>
 
         <View style={styles.amountRow}>
-          <Amount
-            value={0}
-            currency={system.defaultCurrency}
-            ghostable
-            style={{ fontSize: theme.typography.xxl, fontWeight: "900" }}
-          />
+          {isLoading ? (
+            <ActivityIndicator size="small" color={theme.colors.primary} />
+          ) : (
+            <Amount
+              value={totalBalance}
+              currency={system.defaultCurrency}
+              ghostable
+              style={{ fontSize: theme.typography.xxl, fontWeight: "900" }}
+            />
+          )}
         </View>
 
         {/* In / Out Stats */}
@@ -172,7 +268,7 @@ export default function DashboardScreen() {
               </Text>
             </View>
             <Amount
-              value={0}
+              value={monthlyIncome}
               currency={system.defaultCurrency}
               ghostable
               style={{ color: theme.colors.success, fontSize: theme.typography.md, fontWeight: "700" }}
@@ -194,7 +290,7 @@ export default function DashboardScreen() {
               </Text>
             </View>
             <Amount
-              value={0}
+              value={monthlySpent}
               currency={system.defaultCurrency}
               ghostable
               style={{ color: theme.colors.foreground, fontSize: theme.typography.md, fontWeight: "700" }}
@@ -289,7 +385,7 @@ export default function DashboardScreen() {
         </Pressable>
       </View>
 
-      {/* Widgets & Placeholders Grid */}
+      {/* Widgets & Recent Transactions Grid */}
       <View style={styles.widgetsGrid}>
         {/* Monthly Budget Card */}
         {settings.monthlyBudget > 0 ? (
@@ -308,30 +404,108 @@ export default function DashboardScreen() {
                   style={[
                     styles.progressBarFill,
                     {
-                      width: "15%",
-                      backgroundColor: theme.colors.primary,
+                      width: `${Math.min(100, Math.max(2, budgetProgress))}%`,
+                      backgroundColor:
+                        budgetProgress >= 100
+                          ? theme.colors.destructive
+                          : budgetProgress >= 80
+                            ? theme.colors.warning
+                            : theme.colors.primary,
                     },
                   ]}
                 />
               </View>
-              <Text style={[styles.budgetText, { color: theme.colors.mutedForeground }]}>
-                Realtime calculations connect in Phase 6.
-              </Text>
+              <View style={styles.budgetFooter}>
+                <Text style={[styles.budgetText, { color: theme.colors.mutedForeground }]}>
+                  {budgetProgress}% used
+                </Text>
+                <Amount
+                  value={Math.max(0, settings.monthlyBudget - monthlySpent)}
+                  currency={system.defaultCurrency}
+                  ghostable
+                  style={{ fontSize: theme.typography.sm, fontWeight: "600" }}
+                />
+              </View>
             </View>
           </Card>
         ) : null}
 
-        {/* Recent Transactions Placeholder */}
+        {/* Recent Transactions Live Feed */}
         <Card
           title="Recent Transactions"
-          subtitle="Latest ledger activity"
+          subtitle={`${expenses.length} total recorded`}
         >
-          <View style={styles.emptyCardContent}>
-            <PieChart size={32} color={theme.colors.mutedForeground} />
-            <Text style={[styles.emptyCardText, { color: theme.colors.mutedForeground }]}>
-              Realtime Firestore ledger listeners arrive in Phase 6.
-            </Text>
-          </View>
+          {recentTransactions.length === 0 ? (
+            <EmptyState
+              icon={<History size={32} color={theme.colors.mutedForeground} />}
+              title="No Transactions"
+              description="Your logged expenses will appear here in realtime."
+            />
+          ) : (
+            <View style={styles.transactionsList}>
+              {recentTransactions.map((item, index) => (
+                <View
+                  key={item.id || `tx-${index}`}
+                  style={[
+                    styles.transactionRow,
+                    index < recentTransactions.length - 1 && {
+                      borderBottomColor: theme.colors.border,
+                      borderBottomWidth: StyleSheet.hairlineWidth,
+                    },
+                  ]}
+                >
+                  <View style={styles.txLeft}>
+                    <View
+                      style={[
+                        styles.categoryDot,
+                        {
+                          backgroundColor: isDark
+                            ? "rgba(107, 99, 255, 0.2)"
+                            : "rgba(79, 70, 255, 0.12)",
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.categoryDotText,
+                          { color: theme.colors.primary },
+                        ]}
+                      >
+                        {item.category?.charAt(0).toUpperCase() || "?"}
+                      </Text>
+                    </View>
+                    <View style={styles.txMeta}>
+                      <Text
+                        style={[styles.txTitle, { color: theme.colors.foreground }]}
+                        numberOfLines={1}
+                      >
+                        {item.note || item.category || "Expense"}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.txSubtitle,
+                          { color: theme.colors.mutedForeground },
+                        ]}
+                      >
+                        {item.date} • {item.category}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <Amount
+                    value={item.amount}
+                    currency={system.defaultCurrency}
+                    ghostable
+                    style={{
+                      color: theme.colors.foreground,
+                      fontWeight: "700",
+                      fontSize: theme.typography.md,
+                    }}
+                  />
+                </View>
+              ))}
+            </View>
+          )}
         </Card>
       </View>
     </PageShell>
@@ -340,19 +514,21 @@ export default function DashboardScreen() {
 
 const styles = StyleSheet.create({
   container: {
-    gap: 16,
+    paddingBottom: 40,
   },
   alertBanner: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 14,
-    borderRadius: 16,
-    borderWidth: 1,
     gap: 12,
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginBottom: 16,
   },
   alertTitle: {
-    fontWeight: "800",
-    fontSize: 13,
+    fontSize: 14,
+    fontWeight: "700",
+    marginBottom: 2,
   },
   alertText: {
     fontSize: 12,
@@ -362,63 +538,67 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     borderWidth: 1,
     padding: 20,
-    gap: 12,
+    marginBottom: 16,
   },
   overviewHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    marginBottom: 12,
   },
   overviewSubtitle: {
     fontSize: 11,
     fontWeight: "800",
-    letterSpacing: 0.8,
+    letterSpacing: 1.2,
   },
   monthBadge: {
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 5,
     borderRadius: 12,
     borderWidth: 1,
   },
   monthBadgeText: {
-    fontSize: 11,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "700",
   },
   amountRow: {
-    paddingVertical: 4,
+    marginBottom: 20,
   },
   statsRow: {
     flexDirection: "row",
     alignItems: "center",
-    borderTopWidth: 1,
-    paddingTop: 14,
-    marginTop: 4,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingTop: 16,
   },
   statBox: {
     flex: 1,
-    gap: 4,
+  },
+  statDivider: {
+    width: 1,
+    height: 32,
+    marginHorizontal: 16,
   },
   statLabelRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
+    marginBottom: 4,
   },
   statLabel: {
     fontSize: 12,
     fontWeight: "600",
   },
-  statDivider: {
-    width: 1,
-    height: 32,
-    marginHorizontal: 12,
-  },
   quickActionsGrid: {
     flexDirection: "row",
-    gap: 10,
+    gap: 12,
+    marginBottom: 16,
   },
   quickActionButton: {
     flex: 1,
     alignItems: "center",
+    justifyContent: "center",
     paddingVertical: 14,
     paddingHorizontal: 8,
     borderRadius: 18,
@@ -426,19 +606,18 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   actionIconWrap: {
-    width: 38,
-    height: 38,
-    borderRadius: 13,
+    width: 40,
+    height: 40,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
   },
   actionLabel: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "700",
-    textAlign: "center",
   },
   widgetsGrid: {
-    gap: 14,
+    gap: 16,
   },
   budgetProgressContainer: {
     gap: 8,
@@ -452,17 +631,51 @@ const styles = StyleSheet.create({
     height: "100%",
     borderRadius: 4,
   },
+  budgetFooter: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
   budgetText: {
     fontSize: 12,
+    fontWeight: "500",
   },
-  emptyCardContent: {
+  transactionsList: {
+    gap: 4,
+  },
+  transactionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 10,
+  },
+  txLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flex: 1,
+    marginRight: 12,
+  },
+  categoryDot: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 24,
-    gap: 10,
   },
-  emptyCardText: {
-    fontSize: 13,
-    textAlign: "center",
+  categoryDotText: {
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  txMeta: {
+    flex: 1,
+  },
+  txTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    marginBottom: 2,
+  },
+  txSubtitle: {
+    fontSize: 11,
   },
 });

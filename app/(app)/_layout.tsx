@@ -9,6 +9,7 @@ import { MobileActionDock } from "@/components/MobileActionDock";
 import { PrivacyLock } from "@/components/PrivacyLock";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAuth } from "@/providers/AuthProvider";
+import { FinanceDataProvider } from "@/providers/FinanceDataProvider";
 import { LedgerStateProvider } from "@/providers/LedgerStateProvider";
 import { ModalProvider } from "@/providers/ModalProvider";
 import { useSettings } from "@/providers/SettingsProvider";
@@ -43,7 +44,7 @@ function AppShellInner() {
 }
 
 /**
- * Protected app shell — auth + maintenance + privacy lock + product navigation.
+ * Protected app shell — auth + maintenance + privacy lock + finance data + product navigation.
  */
 export default function AppLayout() {
   const { theme } = useTheme();
@@ -76,11 +77,13 @@ export default function AppLayout() {
 
   return (
     <PrivacyLock>
-      <ModalProvider>
-        <LedgerStateProvider>
-          <AppShellInner />
-        </LedgerStateProvider>
-      </ModalProvider>
+      <FinanceDataProvider>
+        <ModalProvider>
+          <LedgerStateProvider>
+            <AppShellInner />
+          </LedgerStateProvider>
+        </ModalProvider>
+      </FinanceDataProvider>
     </PrivacyLock>
   );
 }
