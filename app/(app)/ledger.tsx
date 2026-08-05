@@ -7,6 +7,7 @@ import {
   View,
 } from "react-native";
 import {
+  Calendar,
   CreditCard,
   HandCoins,
   History,
@@ -21,6 +22,7 @@ import {
 
 import { Amount } from "@/components/common/Amount";
 import { EmptyState } from "@/components/common/EmptyState";
+import { ExpenseList } from "@/components/ExpenseList";
 import { PageHeader, type PageHeaderTab } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/Button";
@@ -48,7 +50,13 @@ export default function LedgerScreen() {
   const isDark = themeUsesDarkPalette(themeName);
   const { settings } = useSettings();
   const { settings: system } = useSystemSettings();
-  const { setIsAddExpenseOpen, globalMonth } = useModals();
+  const {
+    setIsAddExpenseOpen,
+    globalMonth,
+    setIsMonthDrawerOpen,
+    setEditingExpense,
+    setEditingIncome,
+  } = useModals();
   const {
     ledgerTab,
     setLedgerTab,
@@ -211,11 +219,41 @@ export default function LedgerScreen() {
             })}
           </View>
 
-          <Input
-            value={query}
-            onChangeText={setQuery}
-            placeholder="Search notes, categories, tags..."
-          />
+          {/* Search bar & Active Month Pill */}
+          <View style={styles.searchAndMonthRow}>
+            <View style={{ flex: 1 }}>
+              <Input
+                value={query}
+                onChangeText={setQuery}
+                placeholder="Search notes, categories, tags..."
+              />
+            </View>
+            <Pressable
+              onPress={() => {
+                setIsMonthDrawerOpen(true);
+              }}
+              style={[
+                styles.monthPickerButton,
+                {
+                  backgroundColor: isDark
+                    ? "rgba(255,255,255,0.06)"
+                    : "rgba(0,0,0,0.04)",
+                  borderColor: theme.colors.border,
+                },
+              ]}
+            >
+              <Calendar size={16} color={theme.colors.primary} />
+              <Text
+                style={{
+                  fontSize: theme.typography.xs,
+                  fontWeight: "700",
+                  color: theme.colors.foreground,
+                }}
+              >
+                {activeMonth}
+              </Text>
+            </Pressable>
+          </View>
 
           {expensesTab === "history" && (
             <>
@@ -225,86 +263,15 @@ export default function LedgerScreen() {
                   color={theme.colors.primary}
                   style={{ marginTop: 24 }}
                 />
-              ) : filteredExpenses.length === 0 ? (
-                <EmptyState
-                  icon={<History size={36} color={theme.colors.mutedForeground} />}
-                  title="No Expenses in this View"
-                  description={
-                    query
-                      ? `No records matching "${query}".`
-                      : `No expenses logged for ${activeMonth}.`
-                  }
-                  action={
-                    <Button onPress={() => setIsAddExpenseOpen(true)}>
-                      Add Expense
-                    </Button>
-                  }
-                />
               ) : (
-                <View style={styles.itemList}>
-                  {filteredExpenses.map((e, idx) => (
-                    <View
-                      key={e.id || `exp-${idx}`}
-                      style={[
-                        styles.itemCard,
-                        {
-                          backgroundColor: theme.colors.card,
-                          borderColor: theme.colors.border,
-                        },
-                      ]}
-                    >
-                      <View style={styles.itemLeft}>
-                        <View
-                          style={[
-                            styles.categoryBadge,
-                            {
-                              backgroundColor: isDark
-                                ? "rgba(107, 99, 255, 0.15)"
-                                : "rgba(79, 70, 255, 0.1)",
-                            },
-                          ]}
-                        >
-                          <Text
-                            style={[
-                              styles.categoryBadgeText,
-                              { color: theme.colors.primary },
-                            ]}
-                          >
-                            {e.category}
-                          </Text>
-                        </View>
-                        <Text
-                          style={[
-                            styles.itemTitle,
-                            { color: theme.colors.foreground },
-                          ]}
-                          numberOfLines={1}
-                        >
-                          {e.note || e.subcategory || e.category}
-                        </Text>
-                        <Text
-                          style={[
-                            styles.itemSubtitle,
-                            { color: theme.colors.mutedForeground },
-                          ]}
-                        >
-                          {e.date} {e.time ? `• ${e.time}` : ""}
-                        </Text>
-                      </View>
-
-                      <Amount
-                        value={e.amount}
-                        currency={system.defaultCurrency}
-                        ghostable
-                        style={{
-                          color: theme.colors.foreground,
-                          fontSize: theme.typography.md,
-                          fontWeight: "700",
-                        }}
-                      />
-                    </View>
-                  ))}
-                </View>
+                <ExpenseList
+                  expenses={filteredExpenses}
+                  accounts={accounts}
+                  onEditExpense={(exp) => {
+                    setEditingExpense(exp);
+                    setIsAddExpenseOpen(true);
+                  }}
+                />
               )}
             </>
           )}
@@ -317,62 +284,16 @@ export default function LedgerScreen() {
                   color={theme.colors.primary}
                   style={{ marginTop: 24 }}
                 />
-              ) : filteredIncomes.length === 0 ? (
-                <EmptyState
-                  icon={<TrendingUp size={36} color={theme.colors.mutedForeground} />}
-                  title="No Incomes Recorded"
-                  description={`No income entries found for ${activeMonth}.`}
-                  action={
-                    <Button onPress={() => setIsAddExpenseOpen(true)}>
-                      Add Income
-                    </Button>
-                  }
-                />
               ) : (
-                <View style={styles.itemList}>
-                  {filteredIncomes.map((inc, idx) => (
-                    <View
-                      key={inc.id || `inc-${idx}`}
-                      style={[
-                        styles.itemCard,
-                        {
-                          backgroundColor: theme.colors.card,
-                          borderColor: theme.colors.border,
-                        },
-                      ]}
-                    >
-                      <View style={styles.itemLeft}>
-                        <Text
-                          style={[
-                            styles.itemTitle,
-                            { color: theme.colors.foreground },
-                          ]}
-                        >
-                          {inc.source || "Income"}
-                        </Text>
-                        <Text
-                          style={[
-                            styles.itemSubtitle,
-                            { color: theme.colors.mutedForeground },
-                          ]}
-                        >
-                          {inc.date} {inc.note ? `• ${inc.note}` : ""}
-                        </Text>
-                      </View>
-
-                      <Amount
-                        value={inc.amount}
-                        currency={system.defaultCurrency}
-                        ghostable
-                        style={{
-                          color: theme.colors.success,
-                          fontSize: theme.typography.md,
-                          fontWeight: "700",
-                        }}
-                      />
-                    </View>
-                  ))}
-                </View>
+                <ExpenseList
+                  expenses={[]}
+                  incomes={filteredIncomes}
+                  accounts={accounts}
+                  onEditIncome={(inc) => {
+                    setEditingIncome(inc);
+                    setIsAddExpenseOpen(true);
+                  }}
+                />
               )}
             </>
           )}
@@ -577,6 +498,20 @@ const styles = StyleSheet.create({
   },
   itemList: {
     gap: 8,
+  },
+  searchAndMonthRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  monthPickerButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    height: 48,
+    borderRadius: 12,
+    borderWidth: 1,
   },
   itemCard: {
     flexDirection: "row",
