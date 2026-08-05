@@ -48,6 +48,7 @@ type SettingsContextType = {
   setLockOnInactivity: (val: boolean) => void;
   setInactivityTimeout: (val: number) => void;
   setLockOnAppSwitch: (val: boolean) => void;
+  setEnableInvestments: (val: boolean) => void;
 };
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
@@ -124,6 +125,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       setInactivityTimeout: (val) =>
         void updateSettings({ inactivityTimeout: val }),
       setLockOnAppSwitch: (val) => void updateSettings({ lockOnAppSwitch: val }),
+      setEnableInvestments: (val) => void updateSettings({ enableInvestments: val }),
     }),
     [settings, loading, updateSettings]
   );

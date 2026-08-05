@@ -1,15 +1,49 @@
 import { ActivityIndicator, View } from "react-native";
 import { Redirect, Stack } from "expo-router";
 
+import { AddTransactionModal } from "@/components/AddTransactionModal";
+import { BottomNav } from "@/components/BottomNav";
+import { Header } from "@/components/Header";
 import { MaintenanceScreen } from "@/components/MaintenanceScreen";
+import { MobileActionDock } from "@/components/MobileActionDock";
 import { PrivacyLock } from "@/components/PrivacyLock";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAuth } from "@/providers/AuthProvider";
+import { LedgerStateProvider } from "@/providers/LedgerStateProvider";
+import { ModalProvider } from "@/providers/ModalProvider";
+import { useSettings } from "@/providers/SettingsProvider";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import { useTheme } from "@/theme/ThemeProvider";
 
+function AppShellInner() {
+  const { settings } = useSettings();
+
+  return (
+    <View style={{ flex: 1 }}>
+      <Header />
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          animation: "fade",
+        }}
+      >
+        <Stack.Screen name="index" />
+        <Stack.Screen name="dashboard" />
+        <Stack.Screen name="ledger" />
+        <Stack.Screen name="insights" />
+        <Stack.Screen name="vaults" />
+        <Stack.Screen name="settings" />
+        <Stack.Screen name="app-selector" />
+      </Stack>
+
+      {settings.navigationStyle === "dock" ? <MobileActionDock /> : <BottomNav />}
+      <AddTransactionModal />
+    </View>
+  );
+}
+
 /**
- * Protected app shell — auth + maintenance + privacy lock.
+ * Protected app shell — auth + maintenance + privacy lock + product navigation.
  */
 export default function AppLayout() {
   const { theme } = useTheme();
@@ -42,17 +76,11 @@ export default function AppLayout() {
 
   return (
     <PrivacyLock>
-      <Stack
-        screenOptions={{
-          headerStyle: { backgroundColor: theme.colors.background },
-          headerTintColor: theme.colors.foreground,
-          headerShadowVisible: false,
-          contentStyle: { backgroundColor: theme.colors.background },
-        }}
-      >
-        <Stack.Screen name="index" options={{ title: "Home" }} />
-        <Stack.Screen name="settings" options={{ title: "Settings" }} />
-      </Stack>
+      <ModalProvider>
+        <LedgerStateProvider>
+          <AppShellInner />
+        </LedgerStateProvider>
+      </ModalProvider>
     </PrivacyLock>
   );
 }

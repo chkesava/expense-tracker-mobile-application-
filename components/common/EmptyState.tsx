@@ -1,15 +1,15 @@
 import { View, Text, StyleSheet } from "react-native";
 import type { ReactNode } from "react";
-
 import { useTheme } from "@/theme/ThemeProvider";
 
 export type EmptyStateProps = {
+  icon?: ReactNode;
   title: string;
   description?: string;
   action?: ReactNode;
 };
 
-export function EmptyState({ title, description, action }: EmptyStateProps) {
+export function EmptyState({ icon, title, description, action }: EmptyStateProps) {
   const { theme } = useTheme();
 
   return (
@@ -23,6 +23,7 @@ export function EmptyState({ title, description, action }: EmptyStateProps) {
       ]}
       accessibilityRole="summary"
     >
+      {icon ? <View style={styles.iconContainer}>{icon}</View> : null}
       <Text
         style={{
           color: theme.colors.foreground,
@@ -53,6 +54,11 @@ export function EmptyState({ title, description, action }: EmptyStateProps) {
 const styles = StyleSheet.create({
   wrap: {
     width: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  iconContainer: {
+    marginBottom: 8,
     alignItems: "center",
     justifyContent: "center",
   },

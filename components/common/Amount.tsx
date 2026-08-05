@@ -1,5 +1,5 @@
 import { Text, type StyleProp, type TextStyle } from "react-native";
-
+import { useSettings } from "@/providers/SettingsProvider";
 import { formatAmount } from "@/shared/utils/formatCurrency";
 import { useTheme } from "@/theme/ThemeProvider";
 
@@ -9,6 +9,7 @@ export type AmountProps = {
   currency?: string;
   prefix?: string;
   fractionDigits?: number;
+  ghostable?: boolean;
   style?: StyleProp<TextStyle>;
 };
 
@@ -17,13 +18,17 @@ export function Amount({
   currency = "INR",
   prefix,
   fractionDigits,
+  ghostable = false,
   style,
 }: AmountProps) {
   const { theme } = useTheme();
+  const { settings } = useSettings();
+
+  const isGhosted = ghostable && settings?.ghostMode;
 
   return (
     <Text
-      accessibilityLabel={`Amount ${value}`}
+      accessibilityLabel={isGhosted ? "Hidden amount" : `Amount ${value}`}
       style={[
         {
           color: theme.colors.foreground,
@@ -34,7 +39,7 @@ export function Amount({
         style,
       ]}
     >
-      {formatAmount(value, currency, { prefix, fractionDigits })}
+      {isGhosted ? "••••••" : formatAmount(value, currency, { prefix, fractionDigits })}
     </Text>
   );
 }

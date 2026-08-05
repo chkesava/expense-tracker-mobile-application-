@@ -1,14 +1,15 @@
 import { useEffect, useState } from "react";
 import {
   Pressable,
-  ScrollView,
   Switch,
   Text,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { doc, setDoc } from "firebase/firestore";
+import { Settings as SettingsIcon } from "lucide-react-native";
 
+import { PageHeader } from "@/components/layout/PageHeader";
+import { PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
@@ -58,8 +59,7 @@ const COMMON_TIMEZONES = [
 ];
 
 /**
- * Settings — profile, general, personalize, privacy (Phase 4).
- * Manage / Accounts / Data deferred.
+ * Settings — profile, general, personalize, privacy.
  */
 export default function SettingsScreen() {
   const { theme, themeName, setThemeName } = useTheme();
@@ -74,6 +74,7 @@ export default function SettingsScreen() {
     setLockPastMonths,
     setNavigationStyle,
     setDefaultCategory,
+    setEnableInvestments,
     setPrivacyPin,
     setFakePin,
     setLockOnInactivity,
@@ -95,7 +96,6 @@ export default function SettingsScreen() {
   const [confirmPin, setConfirmPin] = useState("");
   const [newFakePin, setNewFakePin] = useState("");
   const [confirmFakePin, setConfirmFakePin] = useState("");
-
 
   useEffect(() => {
     setUsername(typeof data?.username === "string" ? data.username : "");
@@ -198,256 +198,241 @@ export default function SettingsScreen() {
     : [settings.timezone, ...COMMON_TIMEZONES];
 
   return (
-    <SafeAreaView
-      edges={["bottom"]}
-      style={{ flex: 1, backgroundColor: theme.colors.background }}
-    >
-      <ScrollView
-        contentContainerStyle={{
-          padding: theme.space.lg,
-          gap: theme.space.lg,
-          paddingBottom: theme.space.xxl,
-        }}
-        keyboardShouldPersistTaps="handled"
-      >
-        <Card title="Profile" subtitle={`${role}${isAdmin ? " · admin" : ""}`}>
-          <View style={{ gap: theme.space.md }}>
-            <Text style={{ color: theme.colors.mutedForeground, fontSize: theme.typography.sm }}>
-              {user?.displayName || "—"} · {user?.email || "—"}
-            </Text>
-            <Input
-              label="Username"
-              value={username}
-              onChangeText={setUsername}
-              autoCapitalize="none"
-              placeholder="yourname"
-            />
-            <Button loading={savingProfile} onPress={onSaveProfile}>
-              Save profile
-            </Button>
-            <Button variant="destructive" onPress={onLogout}>
-              Sign out
-            </Button>
-          </View>
-        </Card>
+    <PageShell contentContainerStyle={{ gap: theme.space.lg }}>
+      <PageHeader
+        title="Settings"
+        subtitle="Preferences & Security"
+        icon={<SettingsIcon size={22} color={theme.colors.primary} />}
+      />
 
-        <Card title="General" subtitle={`Currency from system: ${system.defaultCurrency}`}>
-          <View style={{ gap: theme.space.md }}>
-            <Input
-              label="Default category"
-              value={settings.defaultCategory}
-              onChangeText={setDefaultCategory}
-              placeholder="Food & Dining"
-            />
+      <Card title="Profile" subtitle={`${role}${isAdmin ? " · admin" : ""}`}>
+        <View style={{ gap: theme.space.md }}>
+          <Text style={{ color: theme.colors.mutedForeground, fontSize: theme.typography.sm }}>
+            {user?.displayName || "—"} · {user?.email || "—"}
+          </Text>
+          <Input
+            label="Username"
+            value={username}
+            onChangeText={setUsername}
+            autoCapitalize="none"
+            placeholder="yourname"
+          />
+          <Button loading={savingProfile} onPress={onSaveProfile}>
+            Save profile
+          </Button>
+          <Button variant="destructive" onPress={onLogout}>
+            Sign out
+          </Button>
+        </View>
+      </Card>
 
-            <FieldLabel label="Timezone" />
-            <ChipRow
-              options={timezones.map((tz) => ({ value: tz, label: tz }))}
-              selected={settings.timezone}
-              onSelect={setTimezone}
-            />
+      <Card title="General" subtitle={`Currency from system: ${system.defaultCurrency}`}>
+        <View style={{ gap: theme.space.md }}>
+          <Input
+            label="Default category"
+            value={settings.defaultCategory}
+            onChangeText={setDefaultCategory}
+            placeholder="Food & Dining"
+          />
 
-            <FieldLabel label="Default view" />
-            <ChipRow
-              options={DEFAULT_VIEWS}
-              selected={settings.defaultView}
-              onSelect={(v) => setDefaultView(v as DefaultView)}
-            />
+          <FieldLabel label="Timezone" />
+          <ChipRow
+            options={timezones.map((tz) => ({ value: tz, label: tz }))}
+            selected={settings.timezone}
+            onSelect={setTimezone}
+          />
 
-            <Input
-              label="Monthly budget"
-              value={budgetText}
-              onChangeText={setBudgetText}
-              keyboardType="numeric"
-              onBlur={() => {
-                const n = Number(budgetText);
-                setMonthlyBudget(Number.isFinite(n) ? Math.max(0, n) : 0);
-              }}
-            />
+          <FieldLabel label="Default view" />
+          <ChipRow
+            options={DEFAULT_VIEWS}
+            selected={settings.defaultView}
+            onSelect={(v) => setDefaultView(v as DefaultView)}
+          />
 
-            <Input
-              label="UPI ID"
-              value={settings.upiId}
-              onChangeText={setUpiId}
-              autoCapitalize="none"
-              placeholder="name@bank"
-            />
+          <Input
+            label="Monthly budget"
+            value={budgetText}
+            onChangeText={setBudgetText}
+            keyboardType="numeric"
+            onBlur={() => {
+              const n = Number(budgetText);
+              setMonthlyBudget(Number.isFinite(n) ? Math.max(0, n) : 0);
+            }}
+          />
 
-            <RowSwitch
-              label="Lock past months"
-              value={settings.lockPastMonths}
-              onValueChange={setLockPastMonths}
-            />
+          <Input
+            label="UPI ID"
+            value={settings.upiId}
+            onChangeText={setUpiId}
+            autoCapitalize="none"
+            placeholder="name@bank"
+          />
 
-            <Text style={{ color: theme.colors.mutedForeground, fontSize: 12 }}>
-              enableInvestments: {settings.enableInvestments ? "on" : "off"} (user
-              flag; UI toggle later)
-            </Text>
-          </View>
-        </Card>
+          <RowSwitch
+            label="Lock past months"
+            value={settings.lockPastMonths}
+            onValueChange={setLockPastMonths}
+          />
 
-        <Card title="Personalize" subtitle="Synced to your account">
-          <View style={{ gap: theme.space.md }}>
-            <FieldLabel label="Theme" />
-            <ChipRow
-              options={THEME_NAMES.map((name) => ({
-                value: name,
-                label: THEME_LABELS[name],
-              }))}
-              selected={themeName}
-              onSelect={(v) => setThemeName(v as ThemeName)}
-            />
+          <RowSwitch
+            label="Enable Investments feature"
+            value={settings.enableInvestments}
+            onValueChange={setEnableInvestments}
+          />
+        </View>
+      </Card>
 
-            <FieldLabel label="Navigation style" />
-            <ChipRow
-              options={NAV_STYLES}
-              selected={settings.navigationStyle}
-              onSelect={(v) => setNavigationStyle(v as NavigationStyle)}
-            />
-          </View>
-        </Card>
+      <Card title="Personalize" subtitle="Synced to your account">
+        <View style={{ gap: theme.space.md }}>
+          <FieldLabel label="Theme" />
+          <ChipRow
+            options={THEME_NAMES.map((name) => ({
+              value: name,
+              label: THEME_LABELS[name],
+            }))}
+            selected={themeName}
+            onSelect={(v) => setThemeName(v as ThemeName)}
+          />
 
-        <Card title="Privacy" subtitle="PIN, duress, lock, biometrics">
-          <View style={{ gap: theme.space.md }}>
-            {settings.privacyPin ? (
-              <>
-                <Text style={{ color: theme.colors.success, fontSize: theme.typography.sm }}>
-                  Privacy PIN is enabled
-                </Text>
-                <Button variant="destructive" onPress={onRemovePin}>
-                  Remove PIN
+          <FieldLabel label="Navigation style" />
+          <ChipRow
+            options={NAV_STYLES}
+            selected={settings.navigationStyle}
+            onSelect={(v) => setNavigationStyle(v as NavigationStyle)}
+          />
+        </View>
+      </Card>
+
+      <Card title="Privacy" subtitle="PIN, duress, lock, biometrics">
+        <View style={{ gap: theme.space.md }}>
+          {settings.privacyPin ? (
+            <>
+              <Text style={{ color: theme.colors.success, fontSize: theme.typography.sm }}>
+                Privacy PIN is enabled
+              </Text>
+              <Button variant="destructive" onPress={onRemovePin}>
+                Remove PIN
+              </Button>
+
+              <RowSwitch
+                label="Lock on inactivity"
+                value={settings.lockOnInactivity}
+                onValueChange={setLockOnInactivity}
+              />
+              {settings.lockOnInactivity ? (
+                <>
+                  <FieldLabel label="Inactivity timeout" />
+                  <ChipRow
+                    options={INACTIVITY_OPTIONS}
+                    selected={String(settings.inactivityTimeout || 60)}
+                    onSelect={(v) => setInactivityTimeout(Number(v))}
+                  />
+                </>
+              ) : null}
+
+              <RowSwitch
+                label="Lock when app switches away"
+                value={settings.lockOnAppSwitch}
+                onValueChange={setLockOnAppSwitch}
+              />
+
+              {biometricsSupported ? (
+                <Button variant="outline" onPress={() => void onToggleBiometrics()}>
+                  {biometricsRegistered
+                    ? "Disable biometrics"
+                    : "Enable biometrics"}
                 </Button>
-
-                <RowSwitch
-                  label="Lock on inactivity"
-                  value={settings.lockOnInactivity}
-                  onValueChange={setLockOnInactivity}
-                />
-                {settings.lockOnInactivity ? (
-                  <>
-                    <FieldLabel label="Inactivity timeout" />
-                    <ChipRow
-                      options={INACTIVITY_OPTIONS}
-                      selected={String(settings.inactivityTimeout || 60)}
-                      onSelect={(v) => setInactivityTimeout(Number(v))}
-                    />
-                  </>
-                ) : null}
-
-                <RowSwitch
-                  label="Lock when app switches away"
-                  value={settings.lockOnAppSwitch}
-                  onValueChange={setLockOnAppSwitch}
-                />
-
-                {biometricsSupported ? (
-                  <Button variant="outline" onPress={() => void onToggleBiometrics()}>
-                    {biometricsRegistered
-                      ? "Disable biometrics"
-                      : "Enable biometrics"}
-                  </Button>
-                ) : (
-                  <Text
-                    style={{
-                      color: theme.colors.mutedForeground,
-                      fontSize: theme.typography.xs,
-                    }}
-                  >
-                    Biometrics unavailable on this device.
-                  </Text>
-                )}
-
-                <FieldLabel label="Duress (fake) PIN" />
+              ) : (
                 <Text
                   style={{
                     color: theme.colors.mutedForeground,
                     fontSize: theme.typography.xs,
                   }}
                 >
-                  Opens an isolated empty vault ({`{uid}_duress`}). Must differ from
-                  your real PIN.
+                  Biometrics unavailable on this device.
                 </Text>
-                {settings.fakePin ? (
-                  <Button
-                    variant="outline"
-                    onPress={() => {
-                      setFakePin("");
-                      toast.success("Duress PIN removed");
-                    }}
-                  >
-                    Remove duress PIN
-                  </Button>
-                ) : (
-                  <>
-                    <Input
-                      label="New duress PIN"
-                      value={newFakePin}
-                      onChangeText={(t) =>
-                        setNewFakePin(t.replace(/\D/g, "").slice(0, 4))
-                      }
-                      keyboardType="number-pad"
-                      secureTextEntry
-                      maxLength={4}
-                    />
-                    <Input
-                      label="Confirm duress PIN"
-                      value={confirmFakePin}
-                      onChangeText={(t) =>
-                        setConfirmFakePin(t.replace(/\D/g, "").slice(0, 4))
-                      }
-                      keyboardType="number-pad"
-                      secureTextEntry
-                      maxLength={4}
-                    />
-                    <Button onPress={onEnableFakePin}>Enable duress PIN</Button>
-                  </>
-                )}
-              </>
-            ) : (
-              <>
-                <Text
-                  style={{
-                    color: theme.colors.mutedForeground,
-                    fontSize: theme.typography.sm,
+              )}
+
+              <FieldLabel label="Duress (fake) PIN" />
+              <Text
+                style={{
+                  color: theme.colors.mutedForeground,
+                  fontSize: theme.typography.xs,
+                }}
+              >
+                Opens an isolated empty vault ({`{uid}_duress`}). Must differ from
+                your real PIN.
+              </Text>
+              {settings.fakePin ? (
+                <Button
+                  variant="outline"
+                  onPress={() => {
+                    setFakePin("");
+                    toast.success("Duress PIN removed");
                   }}
                 >
-                  Set a 4-digit PIN to lock the app after sign-in.
-                </Text>
-                <Input
-                  label="New PIN"
-                  value={newPin}
-                  onChangeText={(t) => setNewPin(t.replace(/\D/g, "").slice(0, 4))}
-                  keyboardType="number-pad"
-                  secureTextEntry
-                  maxLength={4}
-                />
-                <Input
-                  label="Confirm PIN"
-                  value={confirmPin}
-                  onChangeText={(t) =>
-                    setConfirmPin(t.replace(/\D/g, "").slice(0, 4))
-                  }
-                  keyboardType="number-pad"
-                  secureTextEntry
-                  maxLength={4}
-                />
-                <Button onPress={onEnablePin}>Enable privacy PIN</Button>
-              </>
-            )}
-          </View>
-        </Card>
-
-        <Text
-          style={{
-            color: theme.colors.mutedForeground,
-            fontSize: theme.typography.xs,
-            textAlign: "center",
-          }}
-        >
-          Accounts, budgets, and data tools arrive in later phases.
-        </Text>
-      </ScrollView>
-    </SafeAreaView>
+                  Remove duress PIN
+                </Button>
+              ) : (
+                <>
+                  <Input
+                    label="New duress PIN"
+                    value={newFakePin}
+                    onChangeText={(t) =>
+                      setNewFakePin(t.replace(/\D/g, "").slice(0, 4))
+                    }
+                    keyboardType="number-pad"
+                    secureTextEntry
+                    maxLength={4}
+                  />
+                  <Input
+                    label="Confirm duress PIN"
+                    value={confirmFakePin}
+                    onChangeText={(t) =>
+                      setConfirmFakePin(t.replace(/\D/g, "").slice(0, 4))
+                    }
+                    keyboardType="number-pad"
+                    secureTextEntry
+                    maxLength={4}
+                  />
+                  <Button onPress={onEnableFakePin}>Enable duress PIN</Button>
+                </>
+              )}
+            </>
+          ) : (
+            <>
+              <Text
+                style={{
+                  color: theme.colors.mutedForeground,
+                  fontSize: theme.typography.sm,
+                }}
+              >
+                Set a 4-digit PIN to lock the app after sign-in.
+              </Text>
+              <Input
+                label="New PIN"
+                value={newPin}
+                onChangeText={(t) => setNewPin(t.replace(/\D/g, "").slice(0, 4))}
+                keyboardType="number-pad"
+                secureTextEntry
+                maxLength={4}
+              />
+              <Input
+                label="Confirm PIN"
+                value={confirmPin}
+                onChangeText={(t) =>
+                  setConfirmPin(t.replace(/\D/g, "").slice(0, 4))
+                }
+                keyboardType="number-pad"
+                secureTextEntry
+                maxLength={4}
+              />
+              <Button onPress={onEnablePin}>Enable privacy PIN</Button>
+            </>
+          )}
+        </View>
+      </Card>
+    </PageShell>
   );
 }
 

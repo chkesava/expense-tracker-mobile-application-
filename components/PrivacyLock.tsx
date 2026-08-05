@@ -347,37 +347,77 @@ export function PrivacyLock({ children }: { children: ReactNode }) {
         </View>
 
         <View style={styles.keypad}>
-          {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
-            <Key
-              key={num}
-              label={String(num)}
-              disabled={keypadDisabled}
-              onPress={() => handlePinClick(String(num))}
-            />
+          {(
+            [
+              ["1", "2", "3"],
+              ["4", "5", "6"],
+              ["7", "8", "9"],
+            ] as const
+          ).map((row) => (
+            <View key={row.join("-")} style={styles.keyRow}>
+              {row.map((num) => (
+                <Key
+                  key={num}
+                  label={num}
+                  disabled={keypadDisabled}
+                  onPress={() => handlePinClick(num)}
+                />
+              ))}
+            </View>
           ))}
 
-          {isRegistered ? (
+          <View style={styles.keyRow}>
+            {isRegistered ? (
+              <Key
+                disabled={keypadDisabled}
+                onPress={() => void handleBiometricUnlock()}
+                icon={<Fingerprint color={theme.colors.primary} size={26} />}
+                accessibilityLabel="Unlock with biometrics"
+              />
+            ) : (
+              <View style={styles.keyEmpty} />
+            )}
+            <Key
+              label="0"
+              disabled={keypadDisabled}
+              onPress={() => handlePinClick("0")}
+            />
             <Key
               disabled={keypadDisabled}
-              onPress={() => void handleBiometricUnlock()}
-              icon={<Fingerprint color={theme.colors.primary} size={24} />}
+              onPress={handleDelete}
+              icon={<Delete color={theme.colors.foreground} size={22} />}
+              accessibilityLabel="Delete digit"
             />
-          ) : (
-            <View style={styles.keyEmpty} />
-          )}
-
-          <Key
-            label="0"
-            disabled={keypadDisabled}
-            onPress={() => handlePinClick("0")}
-          />
-
-          <Key
-            disabled={keypadDisabled}
-            onPress={handleDelete}
-            icon={<Delete color={theme.colors.foreground} size={22} />}
-          />
+          </View>
         </View>
+
+        {isRegistered && lockoutTimeLeft <= 0 ? (
+          <Pressable
+            onPress={() => void handleBiometricUnlock()}
+            style={{
+              marginTop: theme.space.lg,
+              paddingVertical: theme.space.sm,
+              paddingHorizontal: theme.space.lg,
+              borderRadius: theme.radius.full,
+              borderWidth: 1,
+              borderColor: theme.colors.primary,
+              flexDirection: "row",
+              alignItems: "center",
+              gap: theme.space.sm,
+            }}
+          >
+            <Fingerprint color={theme.colors.primary} size={18} />
+            <Text
+              style={{
+                color: theme.colors.primary,
+                fontWeight: "700",
+                fontSize: theme.typography.sm,
+              }}
+            >
+              Unlock with biometrics
+            </Text>
+          </Pressable>
+        ) : null}
 
         {failedAttempts > 0 && lockoutTimeLeft <= 0 ? (
           <Text
@@ -418,17 +458,21 @@ function Key({
   icon,
   onPress,
   disabled,
+  accessibilityLabel,
 }: {
   label?: string;
   icon?: ReactNode;
   onPress: () => void;
   disabled?: boolean;
+  accessibilityLabel?: string;
 }) {
   const { theme } = useTheme();
   return (
     <Pressable
       disabled={disabled}
       onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel ?? label}
       style={({ pressed }) => [
         styles.key,
         {
@@ -444,7 +488,7 @@ function Key({
         <Text
           style={{
             color: theme.colors.foreground,
-            fontSize: 22,
+            fontSize: 24,
             fontWeight: "700",
           }}
         >
@@ -454,6 +498,9 @@ function Key({
     </Pressable>
   );
 }
+
+const KEY_SIZE = 72;
+const KEY_GAP = 18;
 
 const styles = StyleSheet.create({
   overlay: {
@@ -482,22 +529,24 @@ const styles = StyleSheet.create({
     gap: 20,
   },
   keypad: {
-    width: 260,
+    width: KEY_SIZE * 3 + KEY_GAP * 2,
+    gap: KEY_GAP,
+  },
+  keyRow: {
     flexDirection: "row",
-    flexWrap: "wrap",
     justifyContent: "space-between",
-    rowGap: 16,
+    width: "100%",
   },
   key: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: KEY_SIZE,
+    height: KEY_SIZE,
+    borderRadius: KEY_SIZE / 2,
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
   },
   keyEmpty: {
-    width: 64,
-    height: 64,
+    width: KEY_SIZE,
+    height: KEY_SIZE,
   },
 });

@@ -74,11 +74,20 @@ const LEDGER_PREFIXES = [
 const INSIGHTS_PREFIXES = ["/insights", "/analytics", "/analysis"];
 const VAULT_PREFIXES = ["/vaults"];
 
-export function isNavItemActive(pathname: string, id: NavSectionId): boolean {
-  if (id === "home") return pathname === "/dashboard";
-  if (id === "settings") return pathname.startsWith("/settings");
-  if (id === "admin") return pathname.startsWith("/admin");
-  if (id === "vaults") return VAULT_PREFIXES.some((prefix) => pathname.startsWith(prefix));
-  if (id === "insights") return INSIGHTS_PREFIXES.some((prefix) => pathname.startsWith(prefix));
-  return LEDGER_PREFIXES.some((prefix) => pathname.startsWith(prefix));
+function normalizePathname(pathname: string): string {
+  if (!pathname) return "/dashboard";
+  let clean = pathname.replace(/^\/\(app\)/, "");
+  if (!clean || clean === "/") return "/dashboard";
+  return clean;
 }
+
+export function isNavItemActive(pathname: string, id: NavSectionId): boolean {
+  const clean = normalizePathname(pathname);
+  if (id === "home") return clean === "/dashboard" || clean === "/";
+  if (id === "settings") return clean.startsWith("/settings");
+  if (id === "admin") return clean.startsWith("/admin");
+  if (id === "vaults") return VAULT_PREFIXES.some((prefix) => clean.startsWith(prefix));
+  if (id === "insights") return INSIGHTS_PREFIXES.some((prefix) => clean.startsWith(prefix));
+  return LEDGER_PREFIXES.some((prefix) => clean.startsWith(prefix));
+}
+
