@@ -20,6 +20,8 @@ import {
   Wallet,
 } from "lucide-react-native";
 
+import { AccountsList } from "@/components/accounts/AccountsList";
+import { CardsList } from "@/components/accounts/CardsList";
 import { Amount } from "@/components/common/Amount";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ExpenseList } from "@/components/ExpenseList";
@@ -317,105 +319,10 @@ export default function LedgerScreen() {
       )}
 
       {/* Tab: Accounts */}
-      {ledgerTab === "accounts" && (
-        <View style={styles.sectionContainer}>
-          {accountsLoading ? (
-            <ActivityIndicator
-              size="large"
-              color={theme.colors.primary}
-              style={{ marginTop: 24 }}
-            />
-          ) : accounts.length === 0 ? (
-            <EmptyState
-              icon={<Wallet size={36} color={theme.colors.mutedForeground} />}
-              title="No Bank or Cash Accounts"
-              description="Track bank accounts, wallets, and cash reserves in one place."
-              action={
-                <Button onPress={() => setIsAddExpenseOpen(true)}>
-                  Add Account
-                </Button>
-              }
-            />
-          ) : (
-            <View style={styles.itemList}>
-              {accounts.map((acc) => {
-                const typeName = typeMap.get(acc.typeId) || "Account";
-                const kind = getAccountKind(typeName);
-                const balance =
-                  kind !== "credit"
-                    ? computeBankBalance(
-                        acc,
-                        expenses,
-                        incomes,
-                        payments,
-                        entries,
-                        transfers
-                      )
-                    : 0;
-
-                return (
-                  <View
-                    key={acc.id}
-                    style={[
-                      styles.itemCard,
-                      {
-                        backgroundColor: theme.colors.card,
-                        borderColor: theme.colors.border,
-                      },
-                    ]}
-                  >
-                    <View style={styles.itemLeft}>
-                      <Text
-                        style={[
-                          styles.itemTitle,
-                          { color: theme.colors.foreground },
-                        ]}
-                      >
-                        {acc.name}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.itemSubtitle,
-                          { color: theme.colors.mutedForeground },
-                        ]}
-                      >
-                        {typeName}
-                      </Text>
-                    </View>
-
-                    {kind !== "credit" && (
-                      <Amount
-                        value={balance}
-                        currency={system.defaultCurrency}
-                        ghostable
-                        style={{
-                          color:
-                            balance >= 0
-                              ? theme.colors.foreground
-                              : theme.colors.destructive,
-                          fontSize: theme.typography.md,
-                          fontWeight: "700",
-                        }}
-                      />
-                    )}
-                  </View>
-                );
-              })}
-            </View>
-          )}
-        </View>
-      )}
+      {ledgerTab === "accounts" && <AccountsList />}
 
       {/* Tab: Cards */}
-      {ledgerTab === "cards" && (
-        <View style={styles.sectionContainer}>
-          <EmptyState
-            icon={<CreditCard size={36} color={theme.colors.mutedForeground} />}
-            title="Credit Cards"
-            description="Statement cycle tracking, bill payments, and credit limits connect in Phase 13."
-          />
-        </View>
-      )}
+      {ledgerTab === "cards" && <CardsList />}
 
       {/* Tab: Splits */}
       {ledgerTab === "splits" && (

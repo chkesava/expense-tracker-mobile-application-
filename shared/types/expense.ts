@@ -67,6 +67,9 @@ export interface Account {
   openingBalance?: number;
   balanceInitialized?: boolean;
   balanceAsOfDate?: string;
+  accountNumber?: string;
+  color?: string;
+  currency?: string;
   createdAt?: unknown;
 }
 
