@@ -1,9 +1,13 @@
+import { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { Calendar, ChevronRight, Repeat } from "lucide-react-native";
 
+import { Amount } from "@/components/common/Amount";
 import { Card } from "@/components/ui/Card";
+import { useSubscriptions } from "@/hooks/useSubscriptions";
+import { computeMonthlyCommitments } from "@/shared/utils/subscriptionProcessor";
 import { useTheme } from "@/theme/ThemeProvider";
 
 export interface SubscriptionsWidgetProps {
@@ -13,11 +17,16 @@ export interface SubscriptionsWidgetProps {
 export function SubscriptionsWidget({ currency }: SubscriptionsWidgetProps) {
   const router = useRouter();
   const { theme } = useTheme();
+  const { subscriptions } = useSubscriptions();
+
+  const commitments = useMemo(() => {
+    return computeMonthlyCommitments(subscriptions);
+  }, [subscriptions]);
 
   return (
     <Card
       title="Recurring Subscriptions"
-      subtitle="Upcoming renewals & auto-debits"
+      subtitle={`${commitments.activeCount} active · ${currency} ${commitments.totalMonthly.toLocaleString()} / mo`}
       headerRight={
         <Pressable
           onPress={() => {
@@ -49,17 +58,19 @@ export function SubscriptionsWidget({ currency }: SubscriptionsWidgetProps) {
                 fontWeight: "600",
               }}
             >
-              Subscription Auto-Tracker
+              Monthly Auto-Commitment
             </Text>
           </View>
-          <Text
+          <Amount
+            value={commitments.totalMonthly}
+            currency={currency}
+            ghostable
             style={{
-              fontSize: theme.typography.xs,
-              color: theme.colors.mutedForeground,
+              fontSize: theme.typography.sm,
+              fontWeight: "700",
+              color: theme.colors.foreground,
             }}
-          >
-            Active
-          </Text>
+          />
         </View>
       </View>
     </Card>

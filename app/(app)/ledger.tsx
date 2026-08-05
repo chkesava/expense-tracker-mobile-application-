@@ -22,6 +22,7 @@ import {
 
 import { AccountsList } from "@/components/accounts/AccountsList";
 import { CardsList } from "@/components/accounts/CardsList";
+import { SubscriptionsList } from "@/components/subscriptions/SubscriptionsList";
 import { Amount } from "@/components/common/Amount";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ExpenseList } from "@/components/ExpenseList";
@@ -336,15 +337,7 @@ export default function LedgerScreen() {
       )}
 
       {/* Tab: Subscriptions */}
-      {ledgerTab === "subscriptions" && (
-        <View style={styles.sectionContainer}>
-          <EmptyState
-            icon={<Repeat size={36} color={theme.colors.mutedForeground} />}
-            title="Subscriptions"
-            description="Recurring bills, renewal calendar, and autopay tracking connect in Phase 14."
-          />
-        </View>
-      )}
+      {ledgerTab === "subscriptions" && <SubscriptionsList />}
 
       {/* Tab: Travel */}
       {ledgerTab === "travel" && (

@@ -180,6 +180,7 @@ export interface Expense {
   splitId?: string; // ID of the split this expense belongs to
   tripId?: string | null; // ID of the trip this expense belongs to
   vaultId?: string | null; // ID of the shared vault this expense belongs to
+  subscriptionId?: string; // ID of the subscription that generated this expense
   isRecurring?: boolean;
   isAudited?: boolean;
   createdAt: unknown;
