@@ -31,6 +31,7 @@ import { useAccountPayments } from "@/hooks/useAccountPayments";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useAccountTransfers } from "@/hooks/useAccountTransfers";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
+import { useCategoryBudgets } from "@/hooks/useCategoryBudgets";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useIncomes } from "@/hooks/useIncomes";
 import { useAuth } from "@/providers/AuthProvider";
@@ -59,6 +60,7 @@ export default function DashboardScreen() {
   const { payments } = useAccountPayments();
   const { entries } = useAccountEntries();
   const { transfers } = useAccountTransfers();
+  const { budgets: categoryBudgets } = useCategoryBudgets();
 
   const [refreshing, setRefreshing] = useState(false);
 
@@ -134,6 +136,35 @@ export default function DashboardScreen() {
     if (!settings.monthlyBudget || settings.monthlyBudget <= 0) return 0;
     return Math.min(100, Math.round((monthlySpent / settings.monthlyBudget) * 100));
   }, [monthlySpent, settings.monthlyBudget]);
+
+  // Active month category budgets with spending
+  const activeCategoryBudgets = useMemo(() => {
+    const monthBudgets = categoryBudgets.filter((b) => b.month === activeMonth);
+    if (monthBudgets.length === 0) return [];
+
+    // Group spending by category / subcategory
+    const spendingByCat = new Map<string, number>();
+    monthlyExpenses.forEach((e) => {
+      const key = e.subcategory ? `${e.category}::${e.subcategory}` : e.category;
+      spendingByCat.set(key, (spendingByCat.get(key) || 0) + (e.amount || 0));
+      if (e.subcategory) {
+        spendingByCat.set(e.category, (spendingByCat.get(e.category) || 0) + (e.amount || 0));
+      }
+    });
+
+    return monthBudgets.map((b) => {
+      const key = b.subcategory ? `${b.category}::${b.subcategory}` : b.category;
+      const spent = spendingByCat.get(key) || 0;
+      const pct = b.amount > 0 ? Math.min(100, Math.round((spent / b.amount) * 100)) : 0;
+      return {
+        ...b,
+        spent,
+        pct,
+        isOver: spent > b.amount,
+        isWarning: pct >= 80 && spent <= b.amount,
+      };
+    });
+  }, [categoryBudgets, activeMonth, monthlyExpenses]);
 
   // 5 Most recent transactions
   const recentTransactions = useMemo(() => {
@@ -426,6 +457,74 @@ export default function DashboardScreen() {
                   style={{ fontSize: theme.typography.sm, fontWeight: "600" }}
                 />
               </View>
+            </View>
+          </Card>
+        ) : null}
+
+        {/* Category Budgets & Warnings Card */}
+        {activeCategoryBudgets.length > 0 ? (
+          <Card
+            title="Category Budgets"
+            subtitle={`${activeMonth} · ${activeCategoryBudgets.length} budgeted`}
+          >
+            <View style={{ gap: 12 }}>
+              {activeCategoryBudgets.map((b) => (
+                <View key={b.id} style={{ gap: 4 }}>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontSize: theme.typography.sm,
+                        fontWeight: "700",
+                        color: theme.colors.foreground,
+                      }}
+                    >
+                      {b.category}
+                      {b.subcategory ? ` › ${b.subcategory}` : ""}
+                    </Text>
+                    <Text
+                      style={{
+                        fontSize: theme.typography.xs,
+                        fontWeight: "600",
+                        color: b.isOver
+                          ? theme.colors.destructive
+                          : b.isWarning
+                            ? theme.colors.warning
+                            : theme.colors.mutedForeground,
+                      }}
+                    >
+                      {b.pct}% · {system.defaultCurrency}
+                      {b.spent.toLocaleString()} / {system.defaultCurrency}
+                      {b.amount.toLocaleString()}
+                    </Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.progressBarBg,
+                      { backgroundColor: theme.colors.muted },
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.progressBarFill,
+                        {
+                          width: `${Math.min(100, Math.max(2, b.pct))}%`,
+                          backgroundColor: b.isOver
+                            ? theme.colors.destructive
+                            : b.isWarning
+                              ? theme.colors.warning
+                              : theme.colors.primary,
+                        },
+                      ]}
+                    />
+                  </View>
+                </View>
+              ))}
             </View>
           </Card>
         ) : null}

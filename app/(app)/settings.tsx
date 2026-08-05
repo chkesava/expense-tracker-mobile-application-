@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
 import {
+  Modal,
   Pressable,
   Switch,
   Text,
   View,
 } from "react-native";
 import { doc, setDoc } from "firebase/firestore";
-import { Settings as SettingsIcon } from "lucide-react-native";
+import { Settings as SettingsIcon, X } from "lucide-react-native";
 
+import { CategoryManager } from "@/components/categories/CategoryManager";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/Button";
@@ -96,6 +98,7 @@ export default function SettingsScreen() {
   const [confirmPin, setConfirmPin] = useState("");
   const [newFakePin, setNewFakePin] = useState("");
   const [confirmFakePin, setConfirmFakePin] = useState("");
+  const [showCategoryManagerModal, setShowCategoryManagerModal] = useState(false);
 
   useEffect(() => {
     setUsername(typeof data?.username === "string" ? data.username : "");
@@ -282,6 +285,29 @@ export default function SettingsScreen() {
         </View>
       </Card>
 
+      <Card
+        title="Categories & Taxonomy"
+        subtitle="Manage hierarchy, colors, emojis & merge categories"
+      >
+        <View style={{ gap: theme.space.md }}>
+          <Text
+            style={{
+              color: theme.colors.mutedForeground,
+              fontSize: theme.typography.sm,
+              lineHeight: 18,
+            }}
+          >
+            Customize your expense categories, add subcategories, set favorites, or merge categories with automatic historical rewrites.
+          </Text>
+          <Button
+            variant="outline"
+            onPress={() => setShowCategoryManagerModal(true)}
+          >
+            Open Category Manager
+          </Button>
+        </View>
+      </Card>
+
       <Card title="Personalize" subtitle="Synced to your account">
         <View style={{ gap: theme.space.md }}>
           <FieldLabel label="Theme" />
@@ -432,6 +458,52 @@ export default function SettingsScreen() {
           )}
         </View>
       </Card>
+
+      <Modal
+        visible={showCategoryManagerModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowCategoryManagerModal(false)}
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: theme.colors.background,
+            paddingTop: 16,
+            paddingHorizontal: 16,
+          }}
+        >
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+              marginBottom: 16,
+            }}
+          >
+            <Text
+              style={{
+                fontSize: 18,
+                fontWeight: "800",
+                color: theme.colors.foreground,
+              }}
+            >
+              Categories & Taxonomy
+            </Text>
+            <Pressable
+              onPress={() => setShowCategoryManagerModal(false)}
+              style={{
+                padding: 8,
+                borderRadius: 20,
+                backgroundColor: theme.colors.muted,
+              }}
+            >
+              <X size={18} color={theme.colors.foreground} />
+            </Pressable>
+          </View>
+          <CategoryManager />
+        </View>
+      </Modal>
     </PageShell>
   );
 }
