@@ -22,6 +22,7 @@ import {
 
 import { AccountsList } from "@/components/accounts/AccountsList";
 import { CardsList } from "@/components/accounts/CardsList";
+import { CollectList } from "@/components/collect/CollectList";
 import { SplitsList } from "@/components/splits/SplitsList";
 import { SubscriptionsList } from "@/components/subscriptions/SubscriptionsList";
 import { TripsList } from "@/components/trips/TripsList";
@@ -337,15 +338,7 @@ export default function LedgerScreen() {
       {ledgerTab === "travel" && <TripsList />}
 
       {/* Tab: Collect */}
-      {ledgerTab === "collect" && (
-        <View style={styles.sectionContainer}>
-          <EmptyState
-            icon={<HandCoins size={36} color={theme.colors.mutedForeground} />}
-            title="Payment Requests"
-            description="UPI payment links and payment collection requests connect in Phase 16."
-          />
-        </View>
-      )}
+      {ledgerTab === "collect" && <CollectList />}
 
       {/* Tab: Investments */}
       {ledgerTab === "investments" && (
