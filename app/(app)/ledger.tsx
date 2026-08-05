@@ -22,6 +22,7 @@ import {
 
 import { AccountsList } from "@/components/accounts/AccountsList";
 import { CardsList } from "@/components/accounts/CardsList";
+import { SplitsList } from "@/components/splits/SplitsList";
 import { SubscriptionsList } from "@/components/subscriptions/SubscriptionsList";
 import { Amount } from "@/components/common/Amount";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -326,15 +327,7 @@ export default function LedgerScreen() {
       {ledgerTab === "cards" && <CardsList />}
 
       {/* Tab: Splits */}
-      {ledgerTab === "splits" && (
-        <View style={styles.sectionContainer}>
-          <EmptyState
-            icon={<Users size={36} color={theme.colors.mutedForeground} />}
-            title="Split Expenses"
-            description="Group settlements, UPI deep-linking, and debt tracking connect in Phase 12."
-          />
-        </View>
-      )}
+      {ledgerTab === "splits" && <SplitsList />}
 
       {/* Tab: Subscriptions */}
       {ledgerTab === "subscriptions" && <SubscriptionsList />}
