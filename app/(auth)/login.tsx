@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -10,20 +10,19 @@ import {
   View,
 } from "react-native";
 import { Redirect } from "expo-router";
-import * as Google from "expo-auth-session/providers/google";
-import * as WebBrowser from "expo-web-browser";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
-import { env } from "@/lib/env";
+import {
+  isGoogleBridgeConfigured,
+  signInWithGoogleViaWebBridge,
+} from "@/lib/googleAuthBridge";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import { useTheme } from "@/theme/ThemeProvider";
-
-WebBrowser.maybeCompleteAuthSession();
 
 type AuthMode = "login" | "signup" | "forgot";
 
@@ -39,34 +38,7 @@ export default function AuthScreen() {
   const [displayName, setDisplayName] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  const googleConfigured = Boolean(env.googleWebClientId);
-  const [request, response, promptAsync] = Google.useIdTokenAuthRequest(
-    googleConfigured
-      ? {
-          clientId: env.googleWebClientId,
-          iosClientId: env.googleWebClientId,
-          androidClientId: env.googleWebClientId,
-          webClientId: env.googleWebClientId,
-        }
-      : {
-          // Hook requires a clientId; disabled button when empty.
-          clientId: "unused.apps.googleusercontent.com",
-        }
-  );
-
-  useEffect(() => {
-    if (response?.type !== "success") return;
-    const idToken = response.params.id_token;
-    if (!idToken) {
-      toast.error("Google sign-in did not return an ID token.");
-      return;
-    }
-    setSubmitting(true);
-    loginWithGoogleIdToken(idToken)
-      .then(() => toast.success("Welcome!"))
-      .catch((error: Error) => toast.error(error.message))
-      .finally(() => setSubmitting(false));
-  }, [response, loginWithGoogleIdToken]);
+  const googleConfigured = isGoogleBridgeConfigured();
 
   if (authLoading) {
     return (
@@ -118,13 +90,22 @@ export default function AuthScreen() {
 
   const onGoogle = async () => {
     if (!googleConfigured) {
-      toast.error("Add EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID to your .env");
+      toast.error("Set EXPO_PUBLIC_APP_URL to your deployed web app URL.");
       return;
     }
+    setSubmitting(true);
     try {
-      await promptAsync();
+      const idToken = await signInWithGoogleViaWebBridge();
+      await loginWithGoogleIdToken(idToken);
+      toast.success("Welcome!");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Google sign-in failed");
+      const message =
+        error instanceof Error ? error.message : "Google sign-in failed";
+      if (!/cancelled/i.test(message)) {
+        toast.error(message);
+      }
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -221,7 +202,7 @@ export default function AuthScreen() {
                 <Button
                   variant="outline"
                   loading={submitting}
-                  disabled={submitting || !request}
+                  disabled={submitting || !googleConfigured}
                   onPress={onGoogle}
                 >
                   Continue with Google
@@ -245,7 +226,6 @@ export default function AuthScreen() {
                     />
                   </>
                 ) : null}
-                {mode === "signup" && !settings.disableSignups ? null : null}
               </View>
             </View>
           </Card>

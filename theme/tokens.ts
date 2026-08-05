@@ -1,9 +1,51 @@
 /**
- * Design tokens — light & dark only for Phase 1.
- * Derived from expense-tracker `src/index.css` :root / .dark HSL values (converted to hex).
+ * Design tokens — light & dark palettes.
+ * Named themes beyond light/dark map onto these palettes (full CSS themes later).
  */
 
-export type ThemeName = "light" | "dark";
+export type ThemeName =
+  | "light"
+  | "dark"
+  | "midnight"
+  | "midnight-olive"
+  | "vintage-parchment"
+  | "sakura-bloom"
+  | "cyberpunk"
+  | "nordic"
+  | "deep-sea"
+  | "glass-3d"
+  | "claymorphism";
+
+export const THEME_NAMES: ThemeName[] = [
+  "light",
+  "dark",
+  "midnight",
+  "midnight-olive",
+  "vintage-parchment",
+  "sakura-bloom",
+  "cyberpunk",
+  "nordic",
+  "deep-sea",
+  "glass-3d",
+  "claymorphism",
+];
+
+const DARK_APPEARANCE: ReadonlySet<ThemeName> = new Set([
+  "dark",
+  "midnight",
+  "midnight-olive",
+  "cyberpunk",
+  "deep-sea",
+  "glass-3d",
+]);
+
+export function isThemeName(value: unknown): value is ThemeName {
+  return typeof value === "string" && (THEME_NAMES as string[]).includes(value);
+}
+
+export function themeUsesDarkPalette(name: ThemeName): boolean {
+  return DARK_APPEARANCE.has(name);
+}
 
 export type ColorTokens = {
   background: string;
@@ -139,7 +181,7 @@ export const darkColors: ColorTokens = {
 export function createTheme(name: ThemeName): ThemeTokens {
   return {
     name,
-    colors: name === "dark" ? darkColors : lightColors,
+    colors: themeUsesDarkPalette(name) ? darkColors : lightColors,
     space,
     radius,
     typography,
@@ -147,3 +189,17 @@ export function createTheme(name: ThemeName): ThemeTokens {
 }
 
 export const THEME_STORAGE_KEY = "expense-tracker-theme";
+
+export const THEME_LABELS: Record<ThemeName, string> = {
+  light: "Light",
+  dark: "Dark",
+  midnight: "Midnight",
+  "midnight-olive": "Midnight Olive",
+  "vintage-parchment": "Vintage Parchment",
+  "sakura-bloom": "Sakura Bloom",
+  cyberpunk: "Cyberpunk",
+  nordic: "Nordic",
+  "deep-sea": "Deep Sea",
+  "glass-3d": "Glass 3D",
+  claymorphism: "Claymorphism",
+};

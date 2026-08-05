@@ -1,21 +1,26 @@
 import { ScrollView, Text, View } from "react-native";
+import { Link } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
+import { useSettings } from "@/providers/SettingsProvider";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
+import { useUserDoc } from "@/providers/UserDocProvider";
 import { useTheme } from "@/theme/ThemeProvider";
 
 /**
- * Phase 2 signed-in landing — not Dashboard (Phase 10).
- * Proves auth + system settings + logout.
+ * Signed-in landing — not Dashboard (Phase 10).
+ * Phase 3: shows prefs + link to Settings.
  */
 export default function AppHomeScreen() {
   const { theme } = useTheme();
   const { user, logout } = useAuth();
-  const { settings } = useSystemSettings();
+  const { settings: system } = useSystemSettings();
+  const { settings } = useSettings();
+  const { role, isAdmin } = useUserDoc();
 
   const onLogout = async () => {
     try {
@@ -53,14 +58,14 @@ export default function AppHomeScreen() {
             lineHeight: 20,
           }}
         >
-          Phase 2 authentication is active. Dashboard and ledger arrive in later
+          Phase 3 user settings are active. Dashboard and ledger arrive in later
           phases.
         </Text>
 
-        {settings.announcementBanner ? (
+        {system.announcementBanner ? (
           <Card title="Announcement">
             <Text style={{ color: theme.colors.cardForeground }}>
-              {settings.announcementBanner}
+              {system.announcementBanner}
             </Text>
           </Card>
         ) : null}
@@ -76,10 +81,17 @@ export default function AppHomeScreen() {
             <Text style={{ color: theme.colors.cardForeground }}>
               UID: {user?.uid}
             </Text>
-            <Text style={{ color: theme.colors.mutedForeground, fontSize: 12 }}>
-              Currency default: {settings.defaultCurrency} · Signups{" "}
-              {settings.disableSignups ? "disabled" : "enabled"}
+            <Text style={{ color: theme.colors.cardForeground }}>
+              Role: {role}
+              {isAdmin ? " (admin)" : ""}
             </Text>
+            <Text style={{ color: theme.colors.mutedForeground, fontSize: 12 }}>
+              Currency: {system.defaultCurrency} · View: {settings.defaultView} ·
+              Nav: {settings.navigationStyle} · TZ: {settings.timezone}
+            </Text>
+            <Link href="/(app)/settings" asChild>
+              <Button variant="outline">Open settings</Button>
+            </Link>
             <Button variant="destructive" onPress={onLogout}>
               Sign out
             </Button>

@@ -8,8 +8,11 @@ import "react-native-reanimated";
 
 import { ToastProvider } from "@/lib/toast";
 import { AuthProvider } from "@/providers/AuthProvider";
+import { SettingsProvider } from "@/providers/SettingsProvider";
 import { SystemSettingsProvider } from "@/providers/SystemSettingsProvider";
+import { UserDocProvider } from "@/providers/UserDocProvider";
 import { AppThemeProvider, useTheme } from "@/theme/ThemeProvider";
+import { themeUsesDarkPalette } from "@/theme/tokens";
 
 export { ErrorBoundary } from "expo-router";
 
@@ -25,15 +28,19 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <AppThemeProvider>
-          <ToastProvider>
-            <SystemSettingsProvider>
-              <AuthProvider>
-                <RootNavigator />
-              </AuthProvider>
-            </SystemSettingsProvider>
-          </ToastProvider>
-        </AppThemeProvider>
+        <SystemSettingsProvider>
+          <AuthProvider>
+            <UserDocProvider>
+              <AppThemeProvider>
+                <SettingsProvider>
+                  <ToastProvider>
+                    <RootNavigator />
+                  </ToastProvider>
+                </SettingsProvider>
+              </AppThemeProvider>
+            </UserDocProvider>
+          </AuthProvider>
+        </SystemSettingsProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
@@ -44,7 +51,7 @@ function RootNavigator() {
 
   return (
     <>
-      <StatusBar style={themeName === "dark" ? "light" : "dark"} />
+      <StatusBar style={themeUsesDarkPalette(themeName) ? "light" : "dark"} />
       <Stack
         screenOptions={{
           headerShown: false,
@@ -54,6 +61,7 @@ function RootNavigator() {
         <Stack.Screen name="index" />
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="(app)" />
+        <Stack.Screen name="google-auth" options={{ animation: "none" }} />
         <Stack.Screen name="+not-found" />
       </Stack>
     </>

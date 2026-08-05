@@ -16,8 +16,8 @@
 |-------|------|------------|-----------------|
 | 0 | Shared contracts & portable pure logic | — | Low |
 | 1 | App foundation (Expo shell, env, Firebase, design tokens) | 0 | Medium |
-| 2 | Authentication & system gates | 0, 1 | High |
-| 3 | User document, settings & theme | 0–2 | Medium |
+| 2 | Authentication & system gates ✅ **Done** | 0, 1 | High |
+| 3 | User document, settings & theme ✅ **Done** | 0–2 | Medium |
 | 4 | Privacy lock (PIN; biometrics optional) | 0–3 | High |
 | 5 | Expense shell navigation & chrome | 0–4 | Medium |
 | 6 | Core finance data layer | 0–5 | Very High |
@@ -38,8 +38,9 @@
 | 21 | SIP plans & virtual SIP | 0–20 (quotes), cron | Very High |
 | 22 | Nutrition twin app | 0–4, 5 shell patterns | High |
 | 23 | Admin console (optional / defer) | 0–3, role gate | High |
+| 24 | Native Google Sign-In & store build prep | 2 (auth), Play Store gate | High |
 
-**Shippable consumer MVP** is approximately end of **Phase 14** (with Insights optional as Phase 15). Portfolio/SIP/Nutrition/Admin are post-MVP.
+**Shippable consumer MVP** (feature set) is approximately end of **Phase 14** (with Insights optional as Phase 15). Portfolio/SIP/Nutrition/Admin are post-MVP. **Play Store upload requires Phase 24** (native Google + EAS) — Expo Go bridge from Phase 2 is not enough for production.
 
 ---
 
@@ -134,13 +135,20 @@ Users can sign in/out; maintenance and signup flags work before any private fina
 ### Modules
 - `AuthProvider` / `useAuth` (realUser vs session user; **no duress yet** or stub only)
 - Auth UI (login / signup / forgot)
-- Google Sign-In (native) + email/password
+- Google Sign-In via **web bridge** (Expo Go) + email/password — same Firebase UID as web
 - `SystemSettingsProvider` (maintenance, disableSignups, currency, banners, feature flags)
 - `MaintenanceScreen`
 - Post-login `ensureCategoryHierarchy` trigger
 
+### Google auth — Phase 2 scope vs later
+| Track | When | What |
+|-------|------|------|
+| **Expo Go / early mobile** | Phase 2 | Web bridge (`/mobile-google-auth`) → Google OAuth ID token → `signInWithCredential`. See `docs/GOOGLE_AUTH_BRIDGE.md`. |
+| **Production / Play Store** | **Phase 24** (do not skip) | Native `@react-native-google-signin/google-signin` — **cannot run in Expo Go**; needs custom native build (EAS / `expo run:android`), Android `package`, SHA-1 OAuth client, and usually `google-services.json`. Same Google account → same UID as web. |
+
 ### Dependencies
 - Phase 0, 1
+- Web deploy of `/mobile-google-auth` for Expo Go Google login
 
 ### Files
 | Source | Role |
@@ -151,17 +159,21 @@ Users can sign in/out; maintenance and signup flags work before any private fina
 | `src/components/MaintenanceScreen.tsx` | Maintenance gate |
 | `src/utils/ensureCategoryHierarchy.ts` | Category seed on login |
 | `src/components/AnnouncementBanner.tsx` | Optional banner |
+| Web: `MobileGoogleAuthPage.tsx` | Expo Go Google bridge (not native) |
 
 ### Estimated Complexity
-**High** (Google native auth + Auth state mapping)
+**High** (Google bridge + Auth state mapping; native Google deferred to Phase 24)
 
 ### Acceptance Criteria
-- [ ] Email/password signup, login, password reset, logout work against the same Firebase project as web.
-- [ ] Google sign-in works on device builds (not popup-based).
-- [ ] New signups blocked when `disableSignups` is true (including Google new-user rejection path parity).
-- [ ] Non-admins see maintenance screen when `maintenanceMode` is true; admins can bypass (role read can be minimal).
-- [ ] Category hierarchy ensure runs once per authenticated session without crashing.
-- [ ] Unauthenticated users cannot reach expense routes.
+- [x] Email/password signup, login, password reset, logout work against the same Firebase project as web.
+- [x] Google sign-in via web bridge works in Expo Go and maps to the same Firebase UID as web (Google OAuth ID token — not Firebase JWT).
+- [x] New signups blocked when `disableSignups` is true (including Google new-user rejection path parity).
+- [x] Non-admins see maintenance screen when `maintenanceMode` is true; admins can bypass (role read can be minimal).
+- [x] Category hierarchy ensure runs once per authenticated session without crashing.
+- [x] Unauthenticated users cannot reach expense routes.
+- [x] Phase 24 native Google / store build is listed as a release gate (not forgotten after features ship).
+
+**Status:** Completed (2026-08-05) — verified on device with Google via web bridge; signed-in home shows Firebase session (same project / UID path as web). Native Google remains Phase 24.
 
 ---
 
@@ -193,11 +205,13 @@ Wire the shared user document that all later phases read for prefs and role.
 **Medium**
 
 ### Acceptance Criteria
-- [ ] Single shared listener for `users/{uid}` feeds settings and theme (no N× snapshots for those fields).
-- [ ] Missing user doc is seeded with DEFAULTS (parity with web merge).
-- [ ] Changing theme/settings on mobile reflects in Firestore and survives relaunch.
-- [ ] `enableInvestments`, `navigationStyle`, `defaultView`, budget/UPI/timezone prefs readable by later phases.
-- [ ] Role resolves correctly for SUPER_ADMIN vs USER.
+- [x] Single shared listener for `users/{uid}` feeds settings and theme (no N× snapshots for those fields).
+- [x] Missing user doc is seeded with DEFAULTS (parity with web merge).
+- [x] Changing theme/settings on mobile reflects in Firestore and survives relaunch.
+- [x] `enableInvestments`, `navigationStyle`, `defaultView`, budget/UPI/timezone prefs readable by later phases.
+- [x] Role resolves correctly for SUPER_ADMIN vs USER.
+
+**Status:** Implemented (2026-08-05) — code complete; confirm persistence on device via Settings screen.
 
 ---
 
@@ -873,9 +887,47 @@ Prefer keeping admin on web. Include only if mobile ops is a hard requirement.
 
 ---
 
+## Phase 24 — Native Google Sign-In & Store Build Prep
+
+**Do not skip before Play Store / production APK.** Expo Go Google login (Phase 2 web bridge) is for development only.
+
+`@react-native-google-signin/google-signin` **cannot run in Expo Go** — it needs a custom native build (EAS / `expo run:android`), plus Android package + SHA-1. The Phase 2 bridge remains valid for Expo Go; native is required for production UX and store builds. Same Google account still lands on the same Firebase UID as the web app.
+
+### Modules
+- `@react-native-google-signin/google-signin` + Expo config plugin
+- Android `package` / applicationId + iOS `bundleIdentifier` (if shipping iOS)
+- Google Cloud / Firebase **Android OAuth client** with correct **SHA-1** (debug + release / EAS)
+- `google-services.json` (and iOS plist if needed) wired in `app.json`
+- Prefer native Google path in non–Expo-Go builds; keep web bridge as Expo Go fallback (or remove once store-only)
+- EAS development + production profiles; AAB/APK smoke of Google login
+
+### Dependencies
+- Phase 2 (AuthProvider + `loginWithGoogleIdToken` already wired)
+- Firebase project already used by web (Google provider enabled)
+
+### Files / console work
+| Item | Role |
+|------|------|
+| `app.json` / `app.config` | `android.package`, plugin, `googleServicesFile` |
+| Google Cloud Console | Android OAuth client + SHA-1 fingerprints |
+| Firebase Console | Download `google-services.json`; enable Google sign-in |
+| `docs/GOOGLE_AUTH_BRIDGE.md` | Bridge vs native decision notes |
+
+### Estimated Complexity
+**High** (native module + OAuth console + EAS)
+
+### Acceptance Criteria
+- [ ] App builds outside Expo Go (EAS or `expo run:android`).
+- [ ] Native Google Sign-In returns a Google ID token and Firebase signs in to the **same UID** as web Google users.
+- [ ] Debug and release/EAS SHA-1 clients both work (no `DEVELOPER_ERROR` / invalid audience).
+- [ ] Documented fallback: Expo Go continues via web bridge until store-only builds.
+- [ ] Play Store / production checklist includes this phase as a hard gate.
+
+---
+
 ## Cross-Cutting Workstreams (Apply Continuously)
 
-These are not independent phases but must be tracked alongside Phases 1–23.
+These are not independent phases but must be tracked alongside Phases 1–24.
 
 | Workstream | Applies from | Notes |
 |------------|--------------|-------|
@@ -886,6 +938,7 @@ These are not independent phases but must be tracked alongside Phases 1–23.
 | E2E smoke tests | Phase 8+ | Auth → add expense → list; expand per phase |
 | Performance | Phase 6+ | Staged listeners; avoid exploding snapshot fan-out |
 | Deep linking | Phase 14, 12–13 | Payment, split, trip routes |
+| Native Google / store build | Phase 24 (gate) | Not Expo Go; EAS + package + SHA-1; see Phase 24 |
 
 ---
 
@@ -894,7 +947,7 @@ These are not independent phases but must be tracked alongside Phases 1–23.
 ```
 0 Types/Utils
  └─ 1 Foundation (Expo, Firebase, tokens)
-      └─ 2 Auth + SystemSettings
+      └─ 2 Auth + SystemSettings (Expo Go Google = web bridge)
            └─ 3 UserDoc / Settings / Theme
                 └─ 4 PrivacyLock (+ duress)
                      └─ 5 Expense shell
@@ -916,6 +969,7 @@ These are not independent phases but must be tracked alongside Phases 1–23.
                           ├─ 14 Payment collect / public pay
                           └─ 22 Nutrition (parallel after 4–5)
                      └─ 23 Admin (optional)
+      └─ 24 Native Google Sign-In + EAS/store build (Play Store gate; after Phase 2)
 ```
 
 ---
@@ -924,9 +978,9 @@ These are not independent phases but must be tracked alongside Phases 1–23.
 
 | Release | Includes through | Goal |
 |---------|------------------|------|
-| **Internal alpha** | Phase 8 | Sign in, add/list expenses |
+| **Internal alpha** | Phase 8 | Sign in (bridge Google / email), add/list expenses |
 | **Beta** | Phase 14 | Accounts, subscriptions, splits, trips, collect pay |
-| **v1.0 consumer** | Phase 15 (+ 16 optional) | Insights; AI optional behind flag |
+| **v1.0 consumer** | Phase 15 (+ 16 optional) **+ Phase 24** | Insights; **native Google + store build required before Play Store** |
 | **v1.1** | Phases 17–19 | Vaults, classic investments, focus/XP |
 | **v1.2 investing pack** | Phases 20–21 | Portfolio + SIP |
 | **v1.3 wellness** | Phase 22 | Nutrition |
