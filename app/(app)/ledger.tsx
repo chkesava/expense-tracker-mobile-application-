@@ -24,6 +24,7 @@ import { AccountsList } from "@/components/accounts/AccountsList";
 import { CardsList } from "@/components/accounts/CardsList";
 import { SplitsList } from "@/components/splits/SplitsList";
 import { SubscriptionsList } from "@/components/subscriptions/SubscriptionsList";
+import { TripsList } from "@/components/trips/TripsList";
 import { Amount } from "@/components/common/Amount";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ExpenseList } from "@/components/ExpenseList";
@@ -333,15 +334,7 @@ export default function LedgerScreen() {
       {ledgerTab === "subscriptions" && <SubscriptionsList />}
 
       {/* Tab: Travel */}
-      {ledgerTab === "travel" && (
-        <View style={styles.sectionContainer}>
-          <EmptyState
-            icon={<Plane size={36} color={theme.colors.mutedForeground} />}
-            title="Travel Vaults"
-            description="Trip budgets, multi-currency conversion, and travel logs connect in Phase 15."
-          />
-        </View>
-      )}
+      {ledgerTab === "travel" && <TripsList />}
 
       {/* Tab: Collect */}
       {ledgerTab === "collect" && (
