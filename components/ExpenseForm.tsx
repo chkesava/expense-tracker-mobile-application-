@@ -23,12 +23,17 @@ import {
   CreditCard,
   FolderTree,
   Plus,
+  Receipt,
   Sparkles,
   Tag,
   Wallet,
   X,
 } from "lucide-react-native";
 
+import { MagicChatModal } from "@/components/ai/MagicChatModal";
+import { ReceiptScannerModal } from "@/components/ai/ReceiptScannerModal";
+import type { ParsedTransaction } from "@/shared/utils/magicParser";
+import type { ExtractedReceiptData } from "@/services/ocrService";
 import { CategoryPicker } from "@/components/categories/CategoryPicker";
 import { Amount } from "@/components/common/Amount";
 import { Button } from "@/components/ui/Button";
@@ -115,6 +120,29 @@ export function ExpenseForm({
   const [categoryTouched, setCategoryTouched] = useState(false);
   const [suggestionHint, setSuggestionHint] = useState<string | null>(null);
   const [showCategoryPickerModal, setShowCategoryPickerModal] = useState(false);
+  const [isMagicModalOpen, setIsMagicModalOpen] = useState(false);
+  const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
+
+  const handleApplyMagicParsed = (parsed: ParsedTransaction) => {
+    setType(parsed.type);
+    if (parsed.amount) setAmount(String(parsed.amount));
+    if (parsed.date) setDate(parsed.date);
+    if (parsed.category) setCategory(parsed.category);
+    if (parsed.subcategory) setSubcategory(parsed.subcategory);
+    if (parsed.accountId) setAccountId(parsed.accountId);
+    if (parsed.note) setNote(parsed.note);
+    setCategoryTouched(true);
+  };
+
+  const handleApplyReceiptParsed = (data: ExtractedReceiptData) => {
+    setType("expense");
+    if (data.total) setAmount(String(data.total));
+    if (data.date) setDate(data.date);
+    if (data.merchant) setNote(data.merchant);
+    if (data.suggestedCategory) setCategory(data.suggestedCategory);
+    if (data.suggestedSubcategory) setSubcategory(data.suggestedSubcategory);
+    setCategoryTouched(true);
+  };
 
   // Initialize or reset form values
   useEffect(() => {
@@ -445,6 +473,65 @@ export function ExpenseForm({
               ]}
             >
               Income
+            </Text>
+          </Pressable>
+        </View>
+      ) : null}
+
+      {/* AI Quick Actions Toolbar */}
+      {system.enableAIFeatures && !editingExpense && !editingIncome ? (
+        <View style={styles.aiQuickStrip}>
+          <Pressable
+            onPress={() => {
+              Haptics.selectionAsync().catch(() => undefined);
+              setIsMagicModalOpen(true);
+            }}
+            style={({ pressed }) => [
+              styles.aiQuickButton,
+              {
+                backgroundColor: isDark
+                  ? "rgba(99,102,241,0.15)"
+                  : "rgba(99,102,241,0.08)",
+                borderColor: "rgba(99,102,241,0.3)",
+                opacity: pressed ? 0.7 : 1,
+              },
+            ]}
+          >
+            <Sparkles size={15} color={theme.colors.primary} />
+            <Text
+              style={[
+                styles.aiQuickButtonText,
+                { color: theme.colors.primary },
+              ]}
+            >
+              Magic NLP Input
+            </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() => {
+              Haptics.selectionAsync().catch(() => undefined);
+              setIsReceiptModalOpen(true);
+            }}
+            style={({ pressed }) => [
+              styles.aiQuickButton,
+              {
+                backgroundColor: isDark
+                  ? "rgba(255,255,255,0.06)"
+                  : "rgba(0,0,0,0.04)",
+                borderColor: theme.colors.border,
+                opacity: pressed ? 0.7 : 1,
+              },
+            ]}
+          >
+            <Receipt size={15} color={theme.colors.foreground} />
+            <Text
+              style={[
+                styles.aiQuickButtonText,
+                { color: theme.colors.foreground },
+              ]}
+            >
+              Scan Receipt OCR
             </Text>
           </Pressable>
         </View>
@@ -935,11 +1022,43 @@ export function ExpenseForm({
           />
         </View>
       </Modal>
+
+      {/* AI Modals */}
+      <MagicChatModal
+        visible={isMagicModalOpen}
+        onClose={() => setIsMagicModalOpen(false)}
+        onApplyParsed={handleApplyMagicParsed}
+      />
+
+      <ReceiptScannerModal
+        visible={isReceiptModalOpen}
+        onClose={() => setIsReceiptModalOpen(false)}
+        onApplyReceipt={handleApplyReceiptParsed}
+      />
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
+  aiQuickStrip: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  aiQuickButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  aiQuickButtonText: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
   typeSegment: {
     flexDirection: "row",
     padding: 4,

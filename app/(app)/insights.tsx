@@ -17,6 +17,7 @@ import { MonthlyAnalyticsView } from "@/components/analytics/MonthlyAnalyticsVie
 import { YearlyAnalyticsView } from "@/components/analytics/YearlyAnalyticsView";
 import { AnalysisLabView } from "@/components/analytics/AnalysisLabView";
 import { ExportDataModal } from "@/components/analytics/ExportDataModal";
+import { AiAdvisorView } from "@/components/ai/AiAdvisorView";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
@@ -104,13 +105,7 @@ export default function InsightsScreen() {
       {activeTab === "search" && <AnalysisLabView initialQuery={params.q} />}
 
       {/* AI Advisor Tab (Phase 16) */}
-      {activeTab === "advisor" && (
-        <EmptyState
-          icon={<Bot size={36} color={theme.colors.mutedForeground} />}
-          title="AI Financial Advisor"
-          description="Contextual budget insights, anomaly alerts, and AI savings recommendations connect in Phase 16."
-        />
-      )}
+      {activeTab === "advisor" && <AiAdvisorView />}
 
       {/* Export Data Modal */}
       <ExportDataModal

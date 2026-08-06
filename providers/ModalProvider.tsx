@@ -5,6 +5,10 @@ import { currentMonthKey } from "@/shared/utils/dates";
 export interface ModalContextType {
   isAddExpenseOpen: boolean;
   setIsAddExpenseOpen: (open: boolean) => void;
+  isMagicChatOpen: boolean;
+  setIsMagicChatOpen: (open: boolean) => void;
+  isReceiptScannerOpen: boolean;
+  setIsReceiptScannerOpen: (open: boolean) => void;
   editingExpense: Expense | null;
   setEditingExpense: (expense: Expense | null) => void;
   editingIncome: Income | null;
@@ -21,6 +25,8 @@ const ModalContext = createContext<ModalContextType | undefined>(undefined);
 
 export function ModalProvider({ children }: { children: ReactNode }) {
   const [isAddExpenseOpen, setIsAddExpenseOpen] = useState(false);
+  const [isMagicChatOpen, setIsMagicChatOpen] = useState(false);
+  const [isReceiptScannerOpen, setIsReceiptScannerOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [editingIncome, setEditingIncome] = useState<Income | null>(null);
   const [accountEntryAccount, setAccountEntryAccount] = useState<Account | null>(null);
@@ -32,6 +38,10 @@ export function ModalProvider({ children }: { children: ReactNode }) {
       value={{
         isAddExpenseOpen,
         setIsAddExpenseOpen,
+        isMagicChatOpen,
+        setIsMagicChatOpen,
+        isReceiptScannerOpen,
+        setIsReceiptScannerOpen,
         editingExpense,
         setEditingExpense,
         editingIncome,

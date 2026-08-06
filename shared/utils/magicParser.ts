@@ -1,144 +1,258 @@
-import { suggestCategoryFromNote } from "../data/categoryTaxonomy";
-import { toLocalDateKey } from "./dates";
+import {
+  CATEGORY_TAXONOMY,
+  suggestCategoryFromNote,
+} from "@/shared/data/categoryTaxonomy";
+import type { CategorizationRule } from "@/shared/types/expense";
 
-export interface ParsedExpense {
-  amount: number | null;
-  date: string;
-  note: string;
-  category: string;
+export interface ParsedTransaction {
+  type: "expense" | "income";
+  amount?: number;
+  date?: string; // YYYY-MM-DD
+  category?: string;
   subcategory?: string;
+  accountId?: string;
+  accountName?: string;
+  note?: string;
   confidence: number;
 }
 
-const STOP_WORDS = ["a", "an", "the", "is", "of", "for", "at", "on", "to", "with", "from", "paid", "gave", "spent", "buy", "bought"];
+export interface ParseOptions {
+  accounts?: Array<{ id: string; name: string }>;
+  rules?: CategorizationRule[];
+  defaultCurrency?: string;
+}
 
-const DAY_MAP: Record<string, number> = {
-  sunday: 0, sun: 0,
-  monday: 1, mon: 1,
-  tuesday: 2, tue: 2,
-  wednesday: 3, wed: 3,
-  thursday: 4, thu: 4,
-  friday: 5, fri: 5,
-  saturday: 6, sat: 6,
-};
+/**
+ * Format a Date object to YYYY-MM-DD
+ */
+function formatDateKey(d: Date): string {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
 
-const MONTH_MAP: Record<string, number> = {
-  jan: 0, january: 0, feb: 1, february: 1, mar: 2, march: 2, apr: 3, april: 3,
-  may: 4, jun: 5, june: 5, jul: 6, july: 6, aug: 7, august: 7, sep: 8, september: 8,
-  oct: 9, october: 9, nov: 10, november: 10, dec: 11, december: 11
-};
+/**
+ * Parse natural language text into a structured transaction.
+ * Handles patterns like:
+ * - "Spent 450 on groceries yesterday with HDFC"
+ * - "Paid 1200 for electricity bill"
+ * - "5k salary received today in SBI"
+ * - "Coffee 150 rs"
+ * - "Dinner with friends 2400 last friday cash"
+ */
+export function parseNaturalLanguageTransaction(
+  input: string,
+  options: ParseOptions = {}
+): ParsedTransaction {
+  const text = (input || "").trim();
+  if (!text) {
+    return {
+      type: "expense",
+      confidence: 0,
+    };
+  }
 
-export function parseMagicEntry(text: string): ParsedExpense {
-  const normalized = text.toLowerCase().trim();
-  const words = normalized.split(/\s+/);
-  
-  let amount: number | null = null;
-  const amountPatterns = [
-    /(?:rs|₹|\$|bucks)?\s?(\d+(?:\.\d+)?)\s?(k|grand|bucks|rs|₹|\$)?/i,
-    /(\d+(?:\.\d+)?)\s?(?:k|grand|bucks|rs|₹|\$)/i
+  let remaining = text;
+  let type: "expense" | "income" = "expense";
+  let amount: number | undefined = undefined;
+  let date: string | undefined = undefined;
+  let category: string | undefined = undefined;
+  let subcategory: string | undefined = undefined;
+  let accountId: string | undefined = undefined;
+  let accountName: string | undefined = undefined;
+  let confidence = 0.4;
+
+  // 1. Detect Type (Expense vs Income)
+  const incomeKeywords = [
+    /\bsalary\b/i,
+    /\breceived\b/i,
+    /\bincome\b/i,
+    /\bcredited\b/i,
+    /\bearned\b/i,
+    /\bdividend\b/i,
+    /\bcashback\b/i,
+    /\brefund\b/i,
+  ];
+  if (incomeKeywords.some((regex) => regex.test(text))) {
+    type = "income";
+    category = "Salary";
+  }
+
+  // 2. Extract Amount
+  // Matches: ₹500, Rs. 500, $500, 500rs, 5.5k, 5k, 500.50, 500
+  const amountRegexes = [
+    /(?:(?:rs\.?|₹|\$|inr|eur|gbp)\s*)(\d+(?:\.\d+)?)\s*(k|lakh|lac)?\b/i,
+    /\b(\d+(?:\.\d+)?)\s*(?:k|lakh|lac)\b/i,
+    /\b(\d+(?:\.\d+)?)\s*(?:rs\.?|₹|\$|inr|bucks)\b/i,
+    /\b(\d{1,7}(?:\.\d{1,2})?)\b/,
   ];
 
-  for (const pattern of amountPatterns) {
-    const match = normalized.match(pattern);
+  for (const regex of amountRegexes) {
+    const match = text.match(regex);
     if (match) {
-      let val = parseFloat(match[1]);
+      let rawVal = parseFloat(match[1]);
       const suffix = (match[2] || "").toLowerCase();
-      if (suffix === "k") val *= 1000;
-      if (suffix === "grand") val *= 1000;
-      
-      if (!amount || (val > amount && val < 1000000 && (val < 1900 || val > 2100))) {
-        amount = val;
+
+      if (suffix === "k") {
+        rawVal *= 1000;
+      } else if (suffix === "lakh" || suffix === "lac") {
+        rawVal *= 100000;
+      } else if (match[0].toLowerCase().endsWith("k")) {
+        rawVal *= 1000;
+      }
+
+      if (!isNaN(rawVal) && rawVal > 0) {
+        amount = rawVal;
+        confidence += 0.25;
+        // Strip amount token from remaining text
+        remaining = remaining.replace(match[0], " ");
+        break;
       }
     }
   }
 
-  let date = new Date();
-  let dateFound = false;
+  // 3. Extract Date Relative / Absolute
+  const now = new Date();
+  const dateMap: Array<{ pattern: RegExp; getOffset: () => Date }> = [
+    {
+      pattern: /\btoday\b/i,
+      getOffset: () => new Date(now),
+    },
+    {
+      pattern: /\byesterday\b/i,
+      getOffset: () => {
+        const d = new Date(now);
+        d.setDate(d.getDate() - 1);
+        return d;
+      },
+    },
+    {
+      pattern: /\bday before yesterday\b/i,
+      getOffset: () => {
+        const d = new Date(now);
+        d.setDate(d.getDate() - 2);
+        return d;
+      },
+    },
+    {
+      pattern: /\blast\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i,
+      getOffset: () => {
+        const targetDayStr = text.match(/\blast\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i)?.[1]?.toLowerCase();
+        const days = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+        const targetIdx = days.indexOf(targetDayStr || "");
+        const d = new Date(now);
+        if (targetIdx !== -1) {
+          const currIdx = d.getDay();
+          let diff = currIdx - targetIdx;
+          if (diff <= 0) diff += 7;
+          d.setDate(d.getDate() - diff);
+        }
+        return d;
+      },
+    },
+  ];
 
-  if (normalized.includes("yesterday") || normalized.includes("last night")) {
-    date.setDate(date.getDate() - 1);
-    dateFound = true;
-  } else if (normalized.includes("day before")) {
-    date.setDate(date.getDate() - 2);
-    dateFound = true;
+  for (const { pattern, getOffset } of dateMap) {
+    if (pattern.test(text)) {
+      date = formatDateKey(getOffset());
+      remaining = remaining.replace(pattern, " ");
+      break;
+    }
   }
-  
-  const agoMatch = normalized.match(/(\d+)\s+days?\s+ago/);
-  if (agoMatch) {
-    date.setDate(date.getDate() - parseInt(agoMatch[1]));
-    dateFound = true;
+
+  // Check for ISO or YYYY-MM-DD or DD/MM/YYYY
+  if (!date) {
+    const isoMatch = text.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
+    if (isoMatch) {
+      date = isoMatch[0];
+      remaining = remaining.replace(isoMatch[0], " ");
+    } else {
+      const slashMatch = text.match(/\b(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})\b/);
+      if (slashMatch) {
+        const d = String(slashMatch[1]).padStart(2, "0");
+        const m = String(slashMatch[2]).padStart(2, "0");
+        const y = slashMatch[3];
+        date = `${y}-${m}-${d}`;
+        remaining = remaining.replace(slashMatch[0], " ");
+      }
+    }
   }
 
-  const lastDayMatch = normalized.match(/last\s+(sunday|monday|tuesday|wednesday|thursday|friday|saturday|sun|mon|tue|wed|thu|fri|sat)/);
-  if (lastDayMatch) {
-    const targetDay = DAY_MAP[lastDayMatch[1]];
-    const currentDay = date.getDay();
-    let diff = currentDay - targetDay;
-    if (diff <= 0) diff += 7;
-    date.setDate(date.getDate() - diff);
-    dateFound = true;
+  if (!date) {
+    date = formatDateKey(now);
   }
 
-  const specificDateMatch = normalized.match(/(?:on\s+)?(\d+)(?:st|nd|rd|th)?\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*/);
-  if (specificDateMatch) {
-    const day = parseInt(specificDateMatch[1]);
-    const month = MONTH_MAP[specificDateMatch[2]];
-    date.setMonth(month);
-    date.setDate(day);
-    dateFound = true;
+  // 4. Extract Account Matching
+  if (options.accounts && options.accounts.length > 0) {
+    for (const acc of options.accounts) {
+      const accRegex = new RegExp(`\\b(?:in|with|via|from|to|by|using)?\\s*(${acc.name})\\b`, "i");
+      if (accRegex.test(remaining)) {
+        accountId = acc.id;
+        accountName = acc.name;
+        confidence += 0.15;
+        remaining = remaining.replace(accRegex, " ");
+        break;
+      }
+    }
   }
 
-  const formattedDate = toLocalDateKey(date);
+  // 5. Extract Category from Categorization Rules or Taxonomy
+  if (type === "expense") {
+    // Try user rules first
+    if (options.rules && options.rules.length > 0) {
+      const matchedRule = options.rules.find((r) =>
+        text.toLowerCase().includes(r.keyword.toLowerCase())
+      );
+      if (matchedRule) {
+        category = matchedRule.category;
+        subcategory = matchedRule.subcategory;
+        confidence += 0.2;
+      }
+    }
 
-  const suggestion = suggestCategoryFromNote(text);
-  const category = suggestion?.category ?? "Miscellaneous";
-  const subcategory = suggestion?.subcategory ?? "Other";
-  const maxScore = suggestion ? 4 : 0;
+    // Try taxonomy suggestion if not resolved
+    if (!category) {
+      const taxonomySuggestion = suggestCategoryFromNote(text);
+      if (taxonomySuggestion) {
+        category = taxonomySuggestion.category;
+        subcategory = taxonomySuggestion.subcategory;
+        confidence += 0.15;
+      }
+    }
 
-  const noteParts = words.filter(word => {
-    const amountStr = amount?.toString();
-    if (amountStr && (word.includes(amountStr) || ["k", "grand", "bucks", "rs", "₹", "$"].includes(word.toLowerCase()))) return false;
-    if (dateFound && ["today", "yesterday", "last", "night", "ago", "days", "day", ...Object.keys(DAY_MAP), ...Object.keys(MONTH_MAP)].includes(word.toLowerCase())) return false;
-    if (STOP_WORDS.includes(word.toLowerCase())) return false;
-    return true;
-  });
+    // Default fallback
+    if (!category) {
+      category = "Other";
+      subcategory = "General";
+    }
+  }
 
-  let note = noteParts.join(" ").trim();
-  note = note.replace(/^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$/g, "");
-  if (note) {
-    note = note.charAt(0).toUpperCase() + note.slice(1);
+  // 6. Clean Note
+  // Strip common prepositions / trigger words
+  let cleanNote = remaining
+    .replace(/\b(spent|paid|bought|for|on|at|in|with|via|from|to|by|using|rs|inr|dollars|today|yesterday|last|received|credited|earned|salary|income)\b/gi, " ")
+    .replace(/[₹\$#@!%^&*()_+=\[\]{};':"\\|,.<>\/?~`]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  // If clean note became empty, use original category or fallback
+  if (!cleanNote) {
+    cleanNote = subcategory || category || "Transaction";
+  } else {
+    // Capitalize first letter
+    cleanNote = cleanNote.charAt(0).toUpperCase() + cleanNote.slice(1);
   }
 
   return {
+    type,
     amount,
-    date: formattedDate,
-    note: note || "No description",
+    date,
     category,
     subcategory,
-    confidence: maxScore > 0 ? Math.min(maxScore / 5, 1) : 0.5
+    accountId,
+    accountName,
+    note: cleanNote,
+    confidence: Math.min(1.0, Math.round(confidence * 100) / 100),
   };
-}
-
-export function parseMagicBatch(text: string): ParsedExpense[] {
-  const lines = text.split(/\r?\n/).filter(line => line.trim().length > 0);
-  const results: ParsedExpense[] = [];
-  
-  for (const line of lines) {
-    const parsed = parseMagicEntry(line);
-    if (parsed.amount !== null) {
-      results.push(parsed);
-    }
-  }
-
-  if (results.length === 0 && text.toLowerCase().includes(" and ") && text.length < 200) {
-    const parts = text.split(/\s+and\s+/i);
-    for (const part of parts) {
-      const parsed = parseMagicEntry(part);
-      if (parsed.amount !== null) {
-        results.push(parsed);
-      }
-    }
-  }
-
-  return results;
 }
