@@ -372,7 +372,7 @@ export function CardsList() {
                     >
                       <CreditCard size={18} color="#FFF" />
                     </View>
-                    <View style={{ gap: 2 }}>
+                    <View style={{ gap: 2, flex: 1, minWidth: 0 }}>
                       <Text
                         style={[
                           styles.cardName,
@@ -381,6 +381,7 @@ export function CardsList() {
                             fontSize: theme.typography.md,
                           },
                         ]}
+                        numberOfLines={1}
                       >
                         {card.name}
                       </Text>
@@ -389,6 +390,7 @@ export function CardsList() {
                           color: theme.colors.mutedForeground,
                           fontSize: theme.typography.xs,
                         }}
+                        numberOfLines={1}
                       >
                         {card.accountNumber || "Credit Card"}
                       </Text>
@@ -648,6 +650,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
+    flex: 1,
+    minWidth: 0,
+    marginRight: 8,
   },
   cardIconBox: {
     width: 38,
@@ -667,6 +672,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
     gap: 4,
+    flexShrink: 0,
   },
   metricsRow: {
     flexDirection: "row",

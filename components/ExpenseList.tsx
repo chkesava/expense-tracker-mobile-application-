@@ -8,6 +8,7 @@ import {
   Text,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   addDoc,
   collection,
@@ -63,6 +64,7 @@ export function ExpenseList({
   onEditIncome,
   showMonthSummary = true,
 }: ExpenseListProps) {
+  const insets = useSafeAreaInsets();
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const { user } = useAuth();
@@ -404,6 +406,7 @@ export function ExpenseList({
                                   fontSize: 10,
                                 },
                               ]}
+                              numberOfLines={1}
                             >
                               {acc.name}
                             </Text>
@@ -456,7 +459,10 @@ export function ExpenseList({
         onRequestClose={() => setSelectedTx(null)}
       >
         <Pressable
-          style={styles.modalOverlay}
+          style={[
+            styles.modalOverlay,
+            { paddingBottom: Math.max(insets.bottom + 16, 24) },
+          ]}
           onPress={() => setSelectedTx(null)}
         >
           <Pressable
@@ -473,13 +479,14 @@ export function ExpenseList({
               <View style={{ gap: 16 }}>
                 {/* Header */}
                 <View style={styles.sheetHeader}>
-                  <View>
+                  <View style={{ flex: 1, minWidth: 0, marginRight: 12 }}>
                     <Text
                       style={{
                         fontSize: theme.typography.lg,
                         fontWeight: "800",
                         color: theme.colors.foreground,
                       }}
+                      numberOfLines={2}
                     >
                       {selectedTx.kind === "expense"
                         ? selectedTx.data.note || selectedTx.data.category
@@ -489,7 +496,9 @@ export function ExpenseList({
                       style={{
                         fontSize: theme.typography.xs,
                         color: theme.colors.mutedForeground,
+                        marginTop: 2,
                       }}
+                      numberOfLines={1}
                     >
                       {selectedTx.date} •{" "}
                       {selectedTx.kind === "expense"
@@ -497,19 +506,21 @@ export function ExpenseList({
                         : selectedTx.data.source}
                     </Text>
                   </View>
-                  <Amount
-                    value={selectedTx.data.amount}
-                    currency={system.defaultCurrency}
-                    ghostable
-                    style={{
-                      fontSize: theme.typography.lg,
-                      fontWeight: "800",
-                      color:
-                        selectedTx.kind === "expense"
-                          ? theme.colors.destructive
-                          : theme.colors.success,
-                    }}
-                  />
+                  <View style={{ alignItems: "flex-end", flexShrink: 0 }}>
+                    <Amount
+                      value={selectedTx.data.amount}
+                      currency={system.defaultCurrency}
+                      ghostable
+                      style={{
+                        fontSize: theme.typography.lg,
+                        fontWeight: "800",
+                        color:
+                          selectedTx.kind === "expense"
+                            ? theme.colors.destructive
+                            : theme.colors.success,
+                      }}
+                    />
+                  </View>
                 </View>
 
                 {/* Actions */}
@@ -559,6 +570,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   summaryCol: {
+    flex: 1,
     alignItems: "center",
     gap: 4,
   },
@@ -603,6 +615,7 @@ const styles = StyleSheet.create({
   },
   rowDetails: {
     flex: 1,
+    minWidth: 0,
     gap: 3,
   },
   rowTitle: {
@@ -612,9 +625,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
+    flexWrap: "wrap",
   },
   rowCategory: {
     fontWeight: "500",
+    flexShrink: 1,
   },
   accBadge: {
     flexDirection: "row",
@@ -624,13 +639,16 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 8,
     borderWidth: 1,
+    maxWidth: 140,
   },
   accBadgeText: {
     fontWeight: "600",
   },
   rowRight: {
     alignItems: "flex-end",
+    flexShrink: 0,
     gap: 4,
+    minWidth: 60,
   },
   tagsPreview: {
     flexDirection: "row",

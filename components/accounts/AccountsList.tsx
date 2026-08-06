@@ -431,7 +431,7 @@ export function AccountsList() {
                       >
                         <Wallet size={20} color={accountColor} />
                       </View>
-                      <View style={{ gap: 2 }}>
+                      <View style={{ gap: 2, flex: 1, minWidth: 0 }}>
                         <Text
                           style={[
                             styles.accountName,
@@ -452,6 +452,7 @@ export function AccountsList() {
                               fontSize: theme.typography.xs,
                             },
                           ]}
+                          numberOfLines={1}
                         >
                           {account.accountNumber
                             ? `${group.typeName} • ${account.accountNumber}`
@@ -601,6 +602,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
     flex: 1,
+    minWidth: 0,
+    marginRight: 8,
     marginLeft: 4,
   },
   accountIconBox: {
@@ -618,6 +621,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+    flexShrink: 0,
   },
   emptyCard: {
     padding: 32,
