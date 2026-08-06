@@ -14,6 +14,7 @@ import { X } from "lucide-react-native";
 
 import { Button } from "@/components/ui/Button";
 import { usePaymentRequests } from "@/hooks/usePaymentRequests";
+import { useSettings } from "@/providers/SettingsProvider";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import { useAuth } from "@/providers/AuthProvider";
 import type { QrStyleId } from "@/shared/utils/qrStyles";
@@ -35,6 +36,7 @@ export function CreatePaymentRequestModal({
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const { user } = useAuth();
+  const { settings: userSettings } = useSettings();
   const { settings: system } = useSystemSettings();
   const { createPaymentRequest } = usePaymentRequests();
 
@@ -53,7 +55,7 @@ export function CreatePaymentRequestModal({
     }
   }, [visible]);
 
-  const upiId = system.upiId || "";
+  const upiId = userSettings.upiId || "";
   const payeeName = user?.displayName || user?.email?.split("@")[0] || "Me";
 
   const handleSave = async () => {

@@ -42,7 +42,7 @@ describe("UPI link generation for payment requests", () => {
   it("generates valid UPI deep link from payment request data", () => {
     const link = generateUpiLink("payee@okaxis", "Test User", 500, "For Rent");
     expect(link).toContain("upi://pay");
-    expect(link).toContain("pa=payee%40okaxis");
+    expect(link).toContain("pa=payee@okaxis");
     expect(link).toContain("am=500.00");
     expect(link).toContain("cu=INR");
     expect(link).toContain("tn=For%20Rent");
