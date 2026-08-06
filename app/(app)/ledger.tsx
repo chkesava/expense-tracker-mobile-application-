@@ -26,6 +26,7 @@ import { CollectList } from "@/components/collect/CollectList";
 import { SplitsList } from "@/components/splits/SplitsList";
 import { SubscriptionsList } from "@/components/subscriptions/SubscriptionsList";
 import { TripsList } from "@/components/trips/TripsList";
+import { InvestmentsList } from "@/components/investments/InvestmentsList";
 import { Amount } from "@/components/common/Amount";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ExpenseList } from "@/components/ExpenseList";
@@ -341,15 +342,7 @@ export default function LedgerScreen() {
       {ledgerTab === "collect" && <CollectList />}
 
       {/* Tab: Investments */}
-      {ledgerTab === "investments" && (
-        <View style={styles.sectionContainer}>
-          <EmptyState
-            icon={<TrendingUp size={36} color={theme.colors.mutedForeground} />}
-            title="Investments"
-            description="Portfolio tracking and investment logs connect in Phase 17."
-          />
-        </View>
-      )}
+      {ledgerTab === "investments" && <InvestmentsList />}
     </PageShell>
   );
 }
