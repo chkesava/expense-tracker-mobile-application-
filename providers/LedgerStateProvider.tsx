@@ -12,7 +12,8 @@ export type LedgerTab =
   | "subscriptions"
   | "travel"
   | "collect"
-  | "investments";
+  | "investments"
+  | "portfolio";
 
 export interface LedgerStateContextType {
   // Active Ledger Hub tab

@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import "react-native-reanimated";
@@ -18,6 +19,15 @@ import { themeUsesDarkPalette } from "@/theme/tokens";
 
 export { ErrorBoundary } from "expo-router";
 
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 60_000,
+      retry: 1,
+    },
+  },
+});
+
 SplashScreen.preventAutoHideAsync().catch(() => {
   /* splash may already be hidden in fast refresh */
 });
@@ -30,22 +40,24 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <SystemSettingsProvider>
-          <AuthProvider>
-            <UserDocProvider>
-              <AppThemeProvider>
-                <SettingsProvider>
-                  <CelebrationProvider>
-                    <ToastProvider>
-                      <RootNavigator />
-                      <CelebrationOverlay />
-                    </ToastProvider>
-                  </CelebrationProvider>
-                </SettingsProvider>
-              </AppThemeProvider>
-            </UserDocProvider>
-          </AuthProvider>
-        </SystemSettingsProvider>
+        <QueryClientProvider client={queryClient}>
+          <SystemSettingsProvider>
+            <AuthProvider>
+              <UserDocProvider>
+                <AppThemeProvider>
+                  <SettingsProvider>
+                    <CelebrationProvider>
+                      <ToastProvider>
+                        <RootNavigator />
+                        <CelebrationOverlay />
+                      </ToastProvider>
+                    </CelebrationProvider>
+                  </SettingsProvider>
+                </AppThemeProvider>
+              </UserDocProvider>
+            </AuthProvider>
+          </SystemSettingsProvider>
+        </QueryClientProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

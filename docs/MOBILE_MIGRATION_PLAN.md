@@ -783,12 +783,14 @@ Strong mobile-native fit; only needs auth/settings for create, public read for p
 **Very High**
 
 ### Acceptance Criteria
-- [ ] Quotes load via HTTPS Netlify functions (not direct Yahoo from device if blocked).
-- [ ] Holdings CRUD + live P/L metrics work offline for Firestore side; prices degrade gracefully.
-- [ ] Mock buy/sell/cash/orders/watchlist/alerts/snapshots match web collection shapes.
-- [ ] CSV import validates via Zod schemas.
-- [ ] Portfolio charts render with chosen RN chart library.
-- [ ] Feature remains fully hidden when investments flags are off.
+- [x] Quotes load via HTTPS Netlify functions (not direct Yahoo from device if blocked).
+- [x] Holdings CRUD + live P/L metrics work offline for Firestore side; prices degrade gracefully.
+- [x] Mock buy/sell/cash/orders/watchlist/alerts/snapshots match web collection shapes.
+- [x] CSV import validates via Zod schemas.
+- [x] Portfolio charts render with chosen RN chart library.
+- [x] Feature remains fully hidden when investments flags are off.
+
+**Status:** Completed (2026-08-06) — the Stocks tab uses the shared web Firestore collection shapes, HTTPS Netlify market proxies, React Query quote caching, `react-native-svg` portfolio charts, and validated CSV import.
 
 ---
 

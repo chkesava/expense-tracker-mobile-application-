@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -7,6 +7,7 @@ import {
   View,
 } from "react-native";
 import {
+  BarChart3,
   Calendar,
   CreditCard,
   HandCoins,
@@ -27,6 +28,7 @@ import { SplitsList } from "@/components/splits/SplitsList";
 import { SubscriptionsList } from "@/components/subscriptions/SubscriptionsList";
 import { TripsList } from "@/components/trips/TripsList";
 import { InvestmentsList } from "@/components/investments/InvestmentsList";
+import { PortfolioDashboard } from "@/components/portfolio/PortfolioDashboard";
 import { Amount } from "@/components/common/Amount";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ExpenseList } from "@/components/ExpenseList";
@@ -80,6 +82,13 @@ export default function LedgerScreen() {
   const { payments } = useAccountPayments();
   const { entries } = useAccountEntries();
   const { transfers } = useAccountTransfers();
+  const investmentsEnabled = settings.enableInvestments && system.enableInvestments;
+
+  useEffect(() => {
+    if (!investmentsEnabled && (ledgerTab === "investments" || ledgerTab === "portfolio")) {
+      setLedgerTab("expenses");
+    }
+  }, [investmentsEnabled, ledgerTab, setLedgerTab]);
 
   const activeMonth = globalMonth || currentMonthKey(settings.timezone);
 
@@ -161,12 +170,17 @@ export default function LedgerScreen() {
       label: "Collect",
       icon: <HandCoins size={16} color={theme.colors.foreground} />,
     },
-    ...(settings.enableInvestments
+    ...(investmentsEnabled
       ? [
           {
             id: "investments",
             label: "Investments",
             icon: <TrendingUp size={16} color={theme.colors.foreground} />,
+          },
+          {
+            id: "portfolio",
+            label: "Stocks",
+            icon: <BarChart3 size={16} color={theme.colors.foreground} />,
           },
         ]
       : []),
@@ -342,7 +356,10 @@ export default function LedgerScreen() {
       {ledgerTab === "collect" && <CollectList />}
 
       {/* Tab: Investments */}
-      {ledgerTab === "investments" && <InvestmentsList />}
+      {ledgerTab === "investments" && investmentsEnabled && <InvestmentsList />}
+
+      {/* Tab: Portfolio / Stocks */}
+      {ledgerTab === "portfolio" && investmentsEnabled && <PortfolioDashboard />}
     </PageShell>
   );
 }
