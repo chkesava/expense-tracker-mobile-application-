@@ -18,7 +18,8 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "bundler": "metro",
@@ -36,7 +37,8 @@
         }
       ],
       "expo-secure-store",
-      "expo-local-authentication"
+      "expo-local-authentication",
+      "@react-native-google-signin/google-signin"
     ],
     "experiments": {
       "typedRoutes": true

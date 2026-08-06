@@ -89,15 +89,32 @@ export default function AuthScreen() {
   };
 
   const onGoogle = async () => {
-    if (!googleConfigured) {
-      toast.error("Set EXPO_PUBLIC_APP_URL to your deployed web app URL.");
-      return;
-    }
     setSubmitting(true);
     try {
-      const idToken = await signInWithGoogleViaWebBridge();
-      await loginWithGoogleIdToken(idToken);
-      toast.success("Welcome!");
+      let idToken: string | null = null;
+      try {
+        const { GoogleSignin } = require("@react-native-google-signin/google-signin");
+        const hasPlayServices = await GoogleSignin.hasPlayServices();
+        if (hasPlayServices) {
+          const res = await GoogleSignin.signIn();
+          idToken = res.data?.idToken ?? null;
+        }
+      } catch (nativeError) {
+        console.log("Native Google Sign-In failed or not supported in this environment, attempting web bridge fallback", nativeError);
+      }
+
+      if (!idToken) {
+        if (!googleConfigured) {
+          toast.error("Set EXPO_PUBLIC_APP_URL to your deployed web app URL.");
+          return;
+        }
+        idToken = await signInWithGoogleViaWebBridge();
+      }
+
+      if (idToken) {
+        await loginWithGoogleIdToken(idToken);
+        toast.success("Welcome!");
+      }
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Google sign-in failed";

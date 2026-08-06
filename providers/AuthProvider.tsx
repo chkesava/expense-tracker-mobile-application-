@@ -26,6 +26,7 @@ import {
   type UserCredential,
 } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
+import { GoogleSignin } from "@react-native-google-signin/google-signin";
 
 import { ensureCategoryHierarchy } from "@/lib/ensureCategoryHierarchy";
 import { getFirebaseAuth, getFirestoreDb } from "@/lib/firebase";
@@ -69,6 +70,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [realUser, setRealUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [isDuress, setIsDuress] = useState(() => privacySession.isDuress());
+
+  useEffect(() => {
+    // Configure native Google Sign-in on mount
+    GoogleSignin.configure({
+      webClientId: "277918386395-s8m2t41lpslrc2n6n46ld4epbpg4pgg1.apps.googleusercontent.com", // client ID of type 3 (web client ID)
+      offlineAccess: true,
+    });
+  }, []);
 
   useEffect(() => {
     return privacySession.subscribe(() => {
@@ -185,6 +194,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!auth) return;
     try {
       privacySession.clearAll();
+      await GoogleSignin.signOut().catch(() => {});
       await signOut(auth);
     } catch (error) {
       console.error("Logout failed", error);
