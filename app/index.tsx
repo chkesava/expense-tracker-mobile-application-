@@ -3,13 +3,15 @@ import { Redirect } from "expo-router";
 
 import { useAuth } from "@/providers/AuthProvider";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useWorkspace } from "@/providers/WorkspaceProvider";
 
 /** Entry redirect — auth → app shell, else → login. */
 export default function Index() {
   const { theme } = useTheme();
-  const { user, loading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
+  const { activeWorkspace, isLoading: workspaceLoading } = useWorkspace();
 
-  if (loading) {
+  if (authLoading || workspaceLoading) {
     return (
       <View
         style={{
@@ -25,7 +27,10 @@ export default function Index() {
   }
 
   if (user) {
-    return <Redirect href="/(app)" />;
+    if (activeWorkspace === "nutrition") {
+      return <Redirect href={"/(nutrition)" as any} />;
+    }
+    return <Redirect href={"/(app)" as any} />;
   }
 
   return <Redirect href="/(auth)/login" />;

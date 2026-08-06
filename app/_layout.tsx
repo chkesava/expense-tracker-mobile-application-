@@ -14,6 +14,7 @@ import { CelebrationProvider } from "@/providers/CelebrationProvider";
 import { SettingsProvider } from "@/providers/SettingsProvider";
 import { SystemSettingsProvider } from "@/providers/SystemSettingsProvider";
 import { UserDocProvider } from "@/providers/UserDocProvider";
+import { WorkspaceProvider } from "@/providers/WorkspaceProvider";
 import { AppThemeProvider, useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
@@ -44,16 +45,18 @@ export default function RootLayout() {
           <SystemSettingsProvider>
             <AuthProvider>
               <UserDocProvider>
-                <AppThemeProvider>
-                  <SettingsProvider>
-                    <CelebrationProvider>
-                      <ToastProvider>
-                        <RootNavigator />
-                        <CelebrationOverlay />
-                      </ToastProvider>
-                    </CelebrationProvider>
-                  </SettingsProvider>
-                </AppThemeProvider>
+                <WorkspaceProvider>
+                  <AppThemeProvider>
+                    <SettingsProvider>
+                      <CelebrationProvider>
+                        <ToastProvider>
+                          <RootNavigator />
+                          <CelebrationOverlay />
+                        </ToastProvider>
+                      </CelebrationProvider>
+                    </SettingsProvider>
+                  </AppThemeProvider>
+                </WorkspaceProvider>
               </UserDocProvider>
             </AuthProvider>
           </SystemSettingsProvider>
@@ -78,6 +81,7 @@ function RootNavigator() {
         <Stack.Screen name="index" />
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="(app)" />
+        <Stack.Screen name="(nutrition)" />
         <Stack.Screen name="google-auth" options={{ animation: "none" }} />
         <Stack.Screen name="+not-found" />
       </Stack>

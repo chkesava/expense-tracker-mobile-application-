@@ -15,14 +15,17 @@ import { PageShell } from "@/components/layout/PageShell";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
+import { useWorkspace } from "@/providers/WorkspaceProvider";
+
 export default function AppSelectorScreen() {
   const router = useRouter();
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
+  const { activeWorkspace, setActiveWorkspace } = useWorkspace();
 
   const handleSelectExpense = () => {
     Haptics.selectionAsync().catch(() => undefined);
-    router.replace("/dashboard");
+    setActiveWorkspace("expense");
   };
 
   return (
@@ -99,15 +102,20 @@ export default function AppSelectorScreen() {
           </View>
         </Pressable>
 
-        {/* Nutrition Space (Deferred) */}
-        <View
-          style={[
+        {/* Nutrition Space */}
+        <Pressable
+          onPress={() => {
+            Haptics.selectionAsync().catch(() => undefined);
+            setActiveWorkspace("nutrition");
+          }}
+          style={({ pressed }) => [
             styles.spaceCard,
             {
               backgroundColor: theme.colors.card,
-              borderColor: theme.colors.border,
-              opacity: 0.75,
+              borderColor: activeWorkspace === "nutrition" ? theme.colors.primary : theme.colors.border,
+              borderWidth: activeWorkspace === "nutrition" ? 2 : 1,
             },
+            pressed && { transform: [{ scale: 0.98 }] },
           ]}
         >
           <View style={styles.cardHeader}>
@@ -115,29 +123,27 @@ export default function AppSelectorScreen() {
               style={[
                 styles.iconWrap,
                 {
-                  backgroundColor: isDark
-                    ? "rgba(255, 255, 255, 0.1)"
-                    : "rgba(0, 0, 0, 0.08)",
+                  backgroundColor: "rgba(34, 197, 94, 0.15)",
                 },
               ]}
             >
-              <Apple size={24} color={theme.colors.mutedForeground} />
+              <Apple size={24} color="#22C55E" />
             </View>
-            <View
-              style={[
-                styles.badge,
-                {
-                  backgroundColor: isDark
-                    ? "rgba(255, 255, 255, 0.08)"
-                    : "rgba(0, 0, 0, 0.05)",
-                },
-              ]}
-            >
-              <Clock size={12} color={theme.colors.mutedForeground} />
-              <Text style={[styles.badgeText, { color: theme.colors.mutedForeground }]}>
-                PHASE 22
-              </Text>
-            </View>
+            {activeWorkspace === "nutrition" && (
+              <View
+                style={[
+                  styles.badge,
+                  {
+                    backgroundColor: "rgba(34, 197, 94, 0.15)",
+                  },
+                ]}
+              >
+                <CheckCircle2 size={12} color="#22C55E" />
+                <Text style={[styles.badgeText, { color: "#22C55E" }]}>
+                  ACTIVE
+                </Text>
+              </View>
+            )}
           </View>
 
           <Text
@@ -159,11 +165,12 @@ export default function AppSelectorScreen() {
           </Text>
 
           <View style={styles.cardFooter}>
-            <Text style={[styles.launchText, { color: theme.colors.mutedForeground }]}>
-              Coming in Phase 22
+            <Text style={[styles.launchText, { color: theme.colors.primary }]}>
+              Open Workspace
             </Text>
+            <ArrowRight size={16} color={theme.colors.primary} />
           </View>
-        </View>
+        </Pressable>
       </View>
     </PageShell>
   );
