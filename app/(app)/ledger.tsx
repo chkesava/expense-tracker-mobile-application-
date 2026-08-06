@@ -29,6 +29,7 @@ import { SubscriptionsList } from "@/components/subscriptions/SubscriptionsList"
 import { TripsList } from "@/components/trips/TripsList";
 import { InvestmentsList } from "@/components/investments/InvestmentsList";
 import { PortfolioDashboard } from "@/components/portfolio/PortfolioDashboard";
+import { SipDashboard } from "@/components/sip/SipDashboard";
 import { Amount } from "@/components/common/Amount";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ExpenseList } from "@/components/ExpenseList";
@@ -181,6 +182,11 @@ export default function LedgerScreen() {
             id: "portfolio",
             label: "Stocks",
             icon: <BarChart3 size={16} color={theme.colors.foreground} />,
+          },
+          {
+            id: "sip",
+            label: "Virtual SIPs",
+            icon: <Calendar size={16} color={theme.colors.foreground} />,
           },
         ]
       : []),
@@ -360,6 +366,9 @@ export default function LedgerScreen() {
 
       {/* Tab: Portfolio / Stocks */}
       {ledgerTab === "portfolio" && investmentsEnabled && <PortfolioDashboard />}
+
+      {/* Tab: Virtual SIPs */}
+      {ledgerTab === "sip" && investmentsEnabled && <SipDashboard />}
     </PageShell>
   );
 }
