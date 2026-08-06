@@ -6,8 +6,10 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import "react-native-reanimated";
 
+import { CelebrationOverlay } from "@/components/common/CelebrationOverlay";
 import { ToastProvider } from "@/lib/toast";
 import { AuthProvider } from "@/providers/AuthProvider";
+import { CelebrationProvider } from "@/providers/CelebrationProvider";
 import { SettingsProvider } from "@/providers/SettingsProvider";
 import { SystemSettingsProvider } from "@/providers/SystemSettingsProvider";
 import { UserDocProvider } from "@/providers/UserDocProvider";
@@ -33,9 +35,12 @@ export default function RootLayout() {
             <UserDocProvider>
               <AppThemeProvider>
                 <SettingsProvider>
-                  <ToastProvider>
-                    <RootNavigator />
-                  </ToastProvider>
+                  <CelebrationProvider>
+                    <ToastProvider>
+                      <RootNavigator />
+                      <CelebrationOverlay />
+                    </ToastProvider>
+                  </CelebrationProvider>
                 </SettingsProvider>
               </AppThemeProvider>
             </UserDocProvider>
