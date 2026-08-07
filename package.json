@@ -22,12 +22,14 @@
     "expo-image-picker": "~57.0.7",
     "expo-linking": "~57.0.5",
     "expo-local-authentication": "~57.0.2",
+    "expo-modules-autolinking": "^57.0.9",
     "expo-notifications": "~57.0.8",
     "expo-router": "~57.0.10",
     "expo-secure-store": "~57.0.1",
     "expo-splash-screen": "~57.0.5",
     "expo-status-bar": "~57.0.1",
     "expo-symbols": "~57.0.1",
+    "expo-system-ui": "~57.0.2",
     "expo-web-browser": "~57.0.2",
     "firebase": "^12.17.0",
     "lucide-react-native": "^1.28.0",
@@ -37,7 +39,6 @@
     "react-hook-form": "^7.84.0",
     "react-native": "0.86.2",
     "react-native-gesture-handler": "~2.32.0",
-    "react-native-mmkv": "^4.3.2",
     "react-native-qrcode-svg": "^6.3.21",
     "react-native-reanimated": "4.5.1",
     "react-native-safe-area-context": "~5.7.0",
@@ -64,7 +65,13 @@
     "test:watch": "vitest",
     "typecheck:shared": "tsc -p tsconfig.shared.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "env:copy-from-web": "node ./scripts/copy-env-from-web.mjs"
+    "env:copy-from-web": "node ./scripts/copy-env-from-web.mjs",
+    "release:verify": "node scripts/verify-environment.js && node scripts/verify-keystore.js && node scripts/verify-google-services.js && node scripts/verify-gradle.js",
+    "release:prepare": "node scripts/prepare-release.js",
+    "release:build": "node scripts/build-release.js",
+    "release:sha1": "node scripts/extract-sha1.js",
+    "release:report": "node scripts/release-report.js",
+    "release": "node scripts/release.js"
   },
   "private": true
 }

@@ -71,17 +71,19 @@ export function SipHistoryList({ transactions, currency = "INR" }: SipHistoryLis
   };
 
   return (
-    <FlatList
-      data={transactions}
-      keyExtractor={(item) => item.id}
-      renderItem={renderItem}
-      contentContainerStyle={styles.listContent}
-      ListEmptyComponent={
+    <View style={styles.listContent}>
+      {transactions.length === 0 ? (
         <Text style={{ color: theme.colors.mutedForeground, textAlign: "center", marginTop: 24 }}>
           No SIP history found.
         </Text>
-      }
-    />
+      ) : (
+        transactions.map((item) => (
+          <View key={item.id}>
+            {renderItem({ item })}
+          </View>
+        ))
+      )}
+    </View>
   );
 }
 

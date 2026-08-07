@@ -2,27 +2,29 @@
  * Environment configuration for Expo.
  * Maps former Vite `VITE_*` keys to `EXPO_PUBLIC_*`.
  * Server-only secrets (TWELVE_DATA, CRON, service account) must NEVER be listed here.
+ *
+ * IMPORTANT: Expo/Metro only inlines *static* `process.env.EXPO_PUBLIC_*` access.
+ * Dynamic `process.env[key]` stays empty in release APKs.
  */
 
-function read(key: string): string {
-  const value = process.env[key];
+function trimEnv(value: string | undefined): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
 export const env = {
   /** Public app origin for payment share links (ex-VITE_PUBLIC_APP_URL). */
-  publicAppUrl: read("EXPO_PUBLIC_APP_URL"),
+  publicAppUrl: trimEnv(process.env.EXPO_PUBLIC_APP_URL),
 
   /** Google OAuth Web client ID (Firebase Console → Auth → Google). */
-  googleWebClientId: read("EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID"),
+  googleWebClientId: trimEnv(process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID),
 
   firebase: {
-    apiKey: read("EXPO_PUBLIC_FIREBASE_API_KEY"),
-    authDomain: read("EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN"),
-    projectId: read("EXPO_PUBLIC_FIREBASE_PROJECT_ID"),
-    storageBucket: read("EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET"),
-    messagingSenderId: read("EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER"),
-    appId: read("EXPO_PUBLIC_FIREBASE_APP_ID"),
+    apiKey: trimEnv(process.env.EXPO_PUBLIC_FIREBASE_API_KEY),
+    authDomain: trimEnv(process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN),
+    projectId: trimEnv(process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID),
+    storageBucket: trimEnv(process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET),
+    messagingSenderId: trimEnv(process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER),
+    appId: trimEnv(process.env.EXPO_PUBLIC_FIREBASE_APP_ID),
   },
 } as const;
 

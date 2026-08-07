@@ -15,10 +15,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
-import {
-  isGoogleBridgeConfigured,
-  signInWithGoogleViaWebBridge,
-} from "@/lib/googleAuthBridge";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
@@ -37,8 +33,6 @@ export default function AuthScreen() {
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [submitting, setSubmitting] = useState(false);
-
-  const googleConfigured = isGoogleBridgeConfigured();
 
   if (authLoading) {
     return (
@@ -91,33 +85,52 @@ export default function AuthScreen() {
   const onGoogle = async () => {
     setSubmitting(true);
     try {
-      let idToken: string | null = null;
-      try {
-        const { GoogleSignin } = require("@react-native-google-signin/google-signin");
-        const hasPlayServices = await GoogleSignin.hasPlayServices();
-        if (hasPlayServices) {
-          const res = await GoogleSignin.signIn();
-          idToken = res.data?.idToken ?? null;
-        }
-      } catch (nativeError) {
-        console.log("Native Google Sign-In failed or not supported in this environment, attempting web bridge fallback", nativeError);
+      const { GoogleSignin, isSuccessResponse } = await import(
+        "@react-native-google-signin/google-signin"
+      );
+
+      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+      const result = await GoogleSignin.signIn();
+
+      if (!isSuccessResponse(result)) {
+        // User dismissed the account picker — not an error.
+        return;
       }
 
+      const idToken = result.data.idToken;
       if (!idToken) {
-        if (!googleConfigured) {
-          toast.error("Set EXPO_PUBLIC_APP_URL to your deployed web app URL.");
-          return;
-        }
-        idToken = await signInWithGoogleViaWebBridge();
+        throw new Error(
+          "Google did not return an ID token. Check that the Web client ID is configured."
+        );
       }
 
-      if (idToken) {
-        await loginWithGoogleIdToken(idToken);
-        toast.success("Welcome!");
-      }
+      await loginWithGoogleIdToken(idToken);
+      toast.success("Welcome!");
     } catch (error) {
-      const message =
+      let message =
         error instanceof Error ? error.message : "Google sign-in failed";
+
+      try {
+        const { isErrorWithCode, statusCodes } = await import(
+          "@react-native-google-signin/google-signin"
+        );
+        if (isErrorWithCode(error)) {
+          if (error.code === statusCodes.SIGN_IN_CANCELLED) {
+            return;
+          }
+          if (error.code === statusCodes.IN_PROGRESS) {
+            message = "Google sign-in is already in progress.";
+          } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+            message = "Google Play Services is not available on this device.";
+          } else if (String(error.code) === "10") {
+            message =
+              "Google Sign-In configuration error (SHA-1 / package name). Add the release signing SHA-1 in Firebase.";
+          }
+        }
+      } catch {
+        // Module helpers unavailable — keep generic message.
+      }
+
       if (!/cancelled/i.test(message)) {
         toast.error(message);
       }
@@ -219,7 +232,7 @@ export default function AuthScreen() {
                 <Button
                   variant="outline"
                   loading={submitting}
-                  disabled={submitting || !googleConfigured}
+                  disabled={submitting}
                   onPress={onGoogle}
                 >
                   Continue with Google

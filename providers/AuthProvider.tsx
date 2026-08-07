@@ -29,8 +29,13 @@ import { doc, getDoc } from "firebase/firestore";
 import { GoogleSignin } from "@react-native-google-signin/google-signin";
 
 import { ensureCategoryHierarchy } from "@/lib/ensureCategoryHierarchy";
+import { env } from "@/lib/env";
 import { getFirebaseAuth, getFirestoreDb } from "@/lib/firebase";
 import { privacySession } from "@/lib/privacySession";
+
+const GOOGLE_WEB_CLIENT_ID =
+  env.googleWebClientId ||
+  "246872619658-5dm89l8189ql00m4ab84no0onon4osbk.apps.googleusercontent.com";
 
 type AuthContextType = {
   user: User | null;
@@ -72,10 +77,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isDuress, setIsDuress] = useState(() => privacySession.isDuress());
 
   useEffect(() => {
-    // Configure native Google Sign-in on mount
     GoogleSignin.configure({
-      webClientId: "277918386395-s8m2t41lpslrc2n6n46ld4epbpg4pgg1.apps.googleusercontent.com", // client ID of type 3 (web client ID)
-      offlineAccess: true,
+      webClientId: GOOGLE_WEB_CLIENT_ID,
+      offlineAccess: false,
     });
   }, []);
 

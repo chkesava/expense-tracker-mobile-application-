@@ -158,23 +158,22 @@ export function HoldingsList() {
         ))}
       </View>
 
-      <FlatList
-        data={filteredAndSortedHoldings}
-        keyExtractor={item => item.id}
-        renderItem={({ item }) => (
-          <HoldingCard
-            holding={item}
-            currency={system.defaultCurrency}
-            onPress={() => setSelectedHolding(item)}
-          />
-        )}
-        contentContainerStyle={styles.listContent}
-        ListEmptyComponent={
+      <View style={styles.listContent}>
+        {filteredAndSortedHoldings.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Text style={[styles.emptyText, textStyle]}>No holdings found.</Text>
           </View>
-        }
-      />
+        ) : (
+          filteredAndSortedHoldings.map((item) => (
+            <HoldingCard
+              key={item.id}
+              holding={item}
+              currency={system.defaultCurrency}
+              onPress={() => setSelectedHolding(item)}
+            />
+          ))
+        )}
+      </View>
 
       <TouchableOpacity
         style={[styles.fab, { backgroundColor: theme.colors.primary }]}

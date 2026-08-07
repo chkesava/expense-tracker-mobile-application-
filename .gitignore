@@ -16,7 +16,15 @@ expo-env.d.ts
 *.p8
 *.p12
 *.key
+*.keystore
 *.mobileprovision
+
+# Local release signing material (never commit private keys)
+/keystores/*.keystore
+/keystores/*.jks
+
+# Built APKs (share via Drive/email; keep folder via .gitkeep)
+/releases/*.apk
 
 # Metro
 .metro-health-check*
@@ -33,6 +41,9 @@ yarn-error.*
 # local env files
 .env
 .env*.local
+.env.release
+.release-state.json
+
 
 # typescript
 *.tsbuildinfo
@@ -40,3 +51,5 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+android/app/*.keystore
+android/app/*.jks

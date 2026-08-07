@@ -1,0 +1,63 @@
+{
+  "project_info": {
+    "project_number": "246872619658",
+    "project_id": "expenseapp-27f94",
+    "storage_bucket": "expenseapp-27f94.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:246872619658:android:4ecd4bcc317d14bb4c8b73",
+        "android_client_info": {
+          "package_name": "com.example.expensetracker"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "246872619658-hp1au5cfbm6apnh8cq549fg0eifsae22.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.expensetracker",
+            "certificate_hash": "b351a9757a4deab8b072844b3d0409f5126cd579"
+          }
+        },
+        {
+          "client_id": "246872619658-pcjicsd1m0lndugjarqh2hkbhgdfpvma.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.expensetracker",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
+          "client_id": "246872619658-vmbdu4g7e6id19eqalq7j6je5f75qch3.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.expensetracker",
+            "certificate_hash": "7e715b66af9e0e16b2fdbacbef451ce67b63c82f"
+          }
+        },
+        {
+          "client_id": "246872619658-5dm89l8189ql00m4ab84no0onon4osbk.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD8i0yIFHeMTX1NPJKzXIBwtbRz0pn6Cxs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "246872619658-5dm89l8189ql00m4ab84no0onon4osbk.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

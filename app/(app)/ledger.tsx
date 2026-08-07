@@ -293,9 +293,14 @@ export default function LedgerScreen() {
               ) : (
                 <ExpenseList
                   expenses={filteredExpenses}
+                  incomes={filteredIncomes}
                   accounts={accounts}
                   onEditExpense={(exp) => {
                     setEditingExpense(exp);
+                    setIsAddExpenseOpen(true);
+                  }}
+                  onEditIncome={(inc) => {
+                    setEditingIncome(inc);
                     setIsAddExpenseOpen(true);
                   }}
                 />

@@ -138,20 +138,13 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 }
 
 function SettingsBootSplash() {
-  // Avoid importing theme here — Settings sits under ThemeProvider.
-  // Use a neutral fullscreen hold until user doc resolves.
-  const { theme } = useTheme();
   return (
     <View
       style={{
         flex: 1,
-        alignItems: "center",
-        justifyContent: "center",
-        backgroundColor: theme.colors.background,
+        backgroundColor: "#0F2F4B",
       }}
-    >
-      <ActivityIndicator color={theme.colors.primary} />
-    </View>
+    />
   );
 }
 

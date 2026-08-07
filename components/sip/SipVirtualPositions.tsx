@@ -73,17 +73,19 @@ export function SipVirtualPositions({ positions, currency = "INR" }: SipVirtualP
   };
 
   return (
-    <FlatList
-      data={positions}
-      keyExtractor={(item) => item.id}
-      renderItem={renderItem}
-      contentContainerStyle={styles.listContent}
-      ListEmptyComponent={
+    <View style={styles.listContent}>
+      {positions.length === 0 ? (
         <Text style={{ color: theme.colors.mutedForeground, textAlign: "center", marginTop: 24 }}>
           No virtual positions yet.
         </Text>
-      }
-    />
+      ) : (
+        positions.map((item) => (
+          <View key={item.id}>
+            {renderItem({ item })}
+          </View>
+        ))
+      )}
+    </View>
   );
 }
 
