@@ -1,15 +1,21 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { LayoutChangeEvent, StyleSheet, Text, View } from "react-native";
 import Svg, { Circle, Defs, LinearGradient, Path, Stop, Line, Text as SvgText } from "react-native-svg";
 import * as Haptics from "expo-haptics";
 import Animated, {
   FadeIn,
   FadeOut,
+  useAnimatedProps,
+  useSharedValue,
+  withDelay,
+  withSpring,
 } from "react-native-reanimated";
 
 import { Amount } from "@/components/common/Amount";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 export interface CurvePoint {
   date: string; // e.g. "2026-08-01" or "1", "2"...
@@ -22,6 +28,52 @@ export interface SpendingCurveChartProps {
   currency?: string;
   lineColor?: string;
   showCumulative?: boolean;
+}
+
+function AnimatedCurveDot({
+  cx,
+  cy,
+  targetRadius,
+  fill,
+  stroke,
+  strokeWidth,
+  index,
+  onPress,
+}: {
+  cx: number;
+  cy: number;
+  targetRadius: number;
+  fill: string;
+  stroke: string;
+  strokeWidth: number;
+  index: number;
+  onPress: () => void;
+}) {
+  const radius = useSharedValue(0);
+
+  useEffect(() => {
+    radius.value = 0;
+    radius.value = withDelay(
+      index * 30,
+      withSpring(targetRadius, { damping: 14, stiffness: 220 })
+    );
+  }, [targetRadius, index, radius]);
+
+  const animatedProps = useAnimatedProps(() => ({
+    r: radius.value,
+  }));
+
+  return (
+    <AnimatedCircle
+      cx={cx}
+      cy={cy}
+      fill={fill}
+      stroke={stroke}
+      strokeWidth={strokeWidth}
+      animatedProps={animatedProps}
+      onPress={onPress}
+    />
+  );
 }
 
 export function SpendingCurveChart({
@@ -137,13 +189,14 @@ export function SpendingCurveChart({
           <Amount
             value={selectedPoint.amount}
             currency={currency}
+            animated
             style={{ fontSize: 13, fontWeight: "800", color: activeLineColor }}
           />
         </Animated.View>
       )}
 
       {/* SVG Canvas with Animated Container */}
-      <Animated.View entering={FadeIn.duration(250)}>
+      <Animated.View entering={FadeIn.duration(280)}>
         <Svg width={containerWidth} height={height}>
           <Defs>
             <LinearGradient id="curveGradient" x1="0" y1="0" x2="0" y2="1">
@@ -193,15 +246,18 @@ export function SpendingCurveChart({
               i === coordinates.length - 1 ||
               pt.amount === Math.max(...processedData.map((d) => d.amount));
 
+            const targetRadius = isSelected ? 6 : isKeyPoint ? 3.5 : 2;
+
             return (
-              <Circle
+              <AnimatedCurveDot
                 key={i}
                 cx={pt.x}
                 cy={pt.y}
-                r={isSelected ? 6 : isKeyPoint ? 3.5 : 2}
+                targetRadius={targetRadius}
                 fill={isSelected ? theme.colors.foreground : activeLineColor}
                 stroke={theme.colors.card}
                 strokeWidth={isSelected ? 2 : 1}
+                index={i}
                 onPress={() => {
                   Haptics.selectionAsync().catch(() => undefined);
                   setSelectedIndex(i);
@@ -274,4 +330,3 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 });
-

@@ -55,18 +55,17 @@ function AnimatedBarSegment({
   index: number;
   onPress: () => void;
 }) {
-  const heightProgress = useSharedValue(0);
+  const animatedHeight = useSharedValue(0);
 
   useEffect(() => {
-    heightProgress.value = 0;
-    heightProgress.value = withDelay(
-      index * 35,
-      withSpring(1, { damping: 16, stiffness: 220 })
+    animatedHeight.value = withDelay(
+      index * 30,
+      withSpring(targetHeight, { damping: 17, stiffness: 200, mass: 0.8 })
     );
-  }, [targetHeight, index, heightProgress]);
+  }, [targetHeight, index, animatedHeight]);
 
   const animatedProps = useAnimatedProps(() => {
-    const currentHeight = Math.max(targetHeight * heightProgress.value, 2);
+    const currentHeight = Math.max(animatedHeight.value, 2);
     const currentY = baselineY - currentHeight;
     return {
       height: currentHeight,

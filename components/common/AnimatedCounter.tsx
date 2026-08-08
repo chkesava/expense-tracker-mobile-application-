@@ -16,6 +16,7 @@ export interface AnimatedCounterProps {
   prefix?: string;
   fractionDigits?: number;
   duration?: number;
+  startFromZero?: boolean;
   style?: StyleProp<TextStyle>;
   formatter?: (val: number) => string;
   accessibilityLabel?: string;
@@ -26,17 +27,22 @@ export function AnimatedCounter({
   currency = "INR",
   prefix,
   fractionDigits,
-  duration = 600,
+  duration = 650,
+  startFromZero = true,
   style,
   formatter,
   accessibilityLabel,
 }: AnimatedCounterProps) {
-  const [displayValue, setDisplayValue] = useState<number>(() => value);
-  const animValue = useSharedValue(value);
-  const prevTargetRef = useRef(value);
+  const isFirstMount = useRef(true);
+  const [displayValue, setDisplayValue] = useState<number>(() =>
+    startFromZero ? 0 : value
+  );
+  const animValue = useSharedValue(startFromZero ? 0 : value);
+  const prevTargetRef = useRef(startFromZero ? 0 : value);
 
   useEffect(() => {
-    const startVal = prevTargetRef.current;
+    const startVal = isFirstMount.current && startFromZero ? 0 : prevTargetRef.current;
+    isFirstMount.current = false;
     prevTargetRef.current = value;
 
     if (startVal === value) {
@@ -50,7 +56,7 @@ export function AnimatedCounter({
       duration,
       easing: Easing.out(Easing.cubic),
     });
-  }, [value, duration, animValue]);
+  }, [value, duration, animValue, startFromZero]);
 
   useAnimatedReaction(
     () => animValue.value,

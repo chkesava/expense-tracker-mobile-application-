@@ -1,11 +1,12 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import Svg, { G, Path } from "react-native-svg";
+import Svg, { Circle, G, Path } from "react-native-svg";
 import * as Haptics from "expo-haptics";
 import Animated, {
   FadeIn,
-  useAnimatedStyle,
+  useAnimatedProps,
   useSharedValue,
+  withDelay,
   withSpring,
   ZoomIn,
 } from "react-native-reanimated";
@@ -13,6 +14,8 @@ import Animated, {
 import { Amount } from "@/components/common/Amount";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 export interface DonutSegment {
   id?: string;
@@ -28,6 +31,80 @@ export interface DonutChartProps {
   currency?: string;
   title?: string;
   showLegend?: boolean;
+}
+
+function AnimatedDonutSlice({
+  cx,
+  cy,
+  radius,
+  strokeWidth,
+  color,
+  rotation,
+  sliceLength,
+  circumference,
+  isSelected,
+  index,
+  onPress,
+}: {
+  cx: number;
+  cy: number;
+  radius: number;
+  strokeWidth: number;
+  color: string;
+  rotation: number;
+  sliceLength: number;
+  circumference: number;
+  isSelected: boolean;
+  index: number;
+  onPress: () => void;
+}) {
+  const progress = useSharedValue(0);
+  const animRadius = useSharedValue(radius);
+  const animStroke = useSharedValue(strokeWidth);
+
+  useEffect(() => {
+    progress.value = 0;
+    progress.value = withDelay(
+      index * 50,
+      withSpring(1, { damping: 18, stiffness: 160, mass: 0.8 })
+    );
+  }, [sliceLength, index, progress]);
+
+  useEffect(() => {
+    animRadius.value = withSpring(isSelected ? radius + 2 : radius, {
+      damping: 15,
+      stiffness: 200,
+    });
+    animStroke.value = withSpring(isSelected ? strokeWidth + 4 : strokeWidth, {
+      damping: 15,
+      stiffness: 200,
+    });
+  }, [isSelected, radius, strokeWidth, animRadius, animStroke]);
+
+  const animatedProps = useAnimatedProps(() => {
+    const currentLength = sliceLength * progress.value;
+    const gap = Math.max(0, circumference - currentLength);
+    return {
+      r: animRadius.value,
+      strokeWidth: animStroke.value,
+      strokeDasharray: `${currentLength} ${gap}`,
+    };
+  });
+
+  return (
+    <AnimatedCircle
+      cx={cx}
+      cy={cy}
+      r={radius}
+      fill="none"
+      stroke={color}
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+      transform={`rotate(${rotation} ${cx} ${cy})`}
+      animatedProps={animatedProps}
+      onPress={onPress}
+    />
+  );
 }
 
 export function DonutChart({
@@ -47,40 +124,29 @@ export function DonutChart({
 
   const center = size / 2;
   const radius = center - strokeWidth / 2 - 4;
+  const circumference = 2 * Math.PI * radius;
 
-  const arcs = useMemo(() => {
+  const slices = useMemo(() => {
     if (total === 0) return [];
-    let currentAngle = -Math.PI / 2; // start from top (12 o'clock)
+    let cumulativeOffset = 0;
 
     return validData.map((item, idx) => {
       const percentage = item.value / total;
-      const angleSpan = percentage * 2 * Math.PI;
-      const startAngle = currentAngle;
-      const endAngle = currentAngle + angleSpan;
-      currentAngle = endAngle;
+      const sliceLength = percentage * circumference;
+      const rotation = cumulativeOffset * 360 - 90; // Start at 12 o'clock
+      cumulativeOffset += percentage;
 
       const isSelected = selectedIndex === idx;
-      const currentRadius = isSelected ? radius + 2 : radius;
-      const currentStroke = isSelected ? strokeWidth + 4 : strokeWidth;
-
-      // Calculate path arc
-      const x1 = center + currentRadius * Math.cos(startAngle);
-      const y1 = center + currentRadius * Math.sin(startAngle);
-      const x2 = center + currentRadius * Math.cos(endAngle - 0.001); // avoid exact 2pi wrap glitch
-      const y2 = center + currentRadius * Math.sin(endAngle - 0.001);
-
-      const largeArcFlag = angleSpan > Math.PI ? 1 : 0;
-      const d = `M ${x1} ${y1} A ${currentRadius} ${currentRadius} 0 ${largeArcFlag} 1 ${x2} ${y2}`;
 
       return {
         ...item,
         percentage: Math.round(percentage * 100),
-        d,
-        strokeWidth: currentStroke,
+        sliceLength,
+        rotation,
         isSelected,
       };
     });
-  }, [validData, total, radius, strokeWidth, center, selectedIndex]);
+  }, [validData, total, circumference, selectedIndex]);
 
   const activeItem = selectedIndex !== null ? validData[selectedIndex] : null;
 
@@ -93,8 +159,10 @@ export function DonutChart({
     return (
       <View style={[styles.emptyContainer, { height: size }]}>
         <Svg width={size} height={size}>
-          <Path
-            d={`M ${center + radius} ${center} A ${radius} ${radius} 0 1 1 ${center - radius} ${center} A ${radius} ${radius} 0 1 1 ${center + radius} ${center}`}
+          <Circle
+            cx={center}
+            cy={center}
+            r={radius}
             stroke={isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)"}
             strokeWidth={strokeWidth}
             fill="none"
@@ -117,22 +185,29 @@ export function DonutChart({
       >
         <Svg width={size} height={size}>
           {/* Background track */}
-          <Path
-            d={`M ${center + radius} ${center} A ${radius} ${radius} 0 1 1 ${center - radius} ${center} A ${radius} ${radius} 0 1 1 ${center + radius} ${center}`}
+          <Circle
+            cx={center}
+            cy={center}
+            r={radius}
             stroke={isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"}
             strokeWidth={strokeWidth}
             fill="none"
           />
           {/* Segment Arcs */}
           <G>
-            {arcs.map((arc, idx) => (
-              <Path
-                key={arc.label + idx}
-                d={arc.d}
-                stroke={arc.color}
-                strokeWidth={arc.strokeWidth}
-                strokeLinecap="round"
-                fill="none"
+            {slices.map((slice, idx) => (
+              <AnimatedDonutSlice
+                key={slice.label + idx}
+                cx={center}
+                cy={center}
+                radius={radius}
+                strokeWidth={strokeWidth}
+                color={slice.color}
+                rotation={slice.rotation}
+                sliceLength={slice.sliceLength}
+                circumference={circumference}
+                isSelected={slice.isSelected}
+                index={idx}
                 onPress={() => handleSelect(idx)}
               />
             ))}
@@ -298,4 +373,3 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 });
-

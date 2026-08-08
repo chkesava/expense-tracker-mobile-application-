@@ -304,6 +304,7 @@ export function MonthlyAnalyticsView() {
               value={totalIncome}
               currency={system.defaultCurrency}
               ghostable
+              animated
               style={{ fontSize: 18, fontWeight: "800", color: theme.colors.success }}
             />
           </View>
@@ -316,6 +317,7 @@ export function MonthlyAnalyticsView() {
               value={totalExpense}
               currency={system.defaultCurrency}
               ghostable
+              animated
               style={{ fontSize: 18, fontWeight: "800", color: theme.colors.destructive }}
             />
           </View>
@@ -328,6 +330,7 @@ export function MonthlyAnalyticsView() {
               value={netSavings}
               currency={system.defaultCurrency}
               ghostable
+              animated
               style={{
                 fontSize: 18,
                 fontWeight: "800",
@@ -371,6 +374,7 @@ export function MonthlyAnalyticsView() {
               value={pacing.projectedEndMonthTotal}
               currency={system.defaultCurrency}
               ghostable
+              animated
               style={{ fontSize: 13, fontWeight: "700", color: theme.colors.foreground }}
             />
           </View>

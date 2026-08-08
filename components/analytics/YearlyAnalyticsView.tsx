@@ -215,6 +215,7 @@ export function YearlyAnalyticsView() {
               value={totalAnnualExpense}
               currency={system.defaultCurrency}
               ghostable
+              animated
               style={{ fontSize: 18, fontWeight: "800", color: theme.colors.destructive }}
             />
           </View>
@@ -227,6 +228,7 @@ export function YearlyAnalyticsView() {
               value={totalAnnualIncome}
               currency={system.defaultCurrency}
               ghostable
+              animated
               style={{ fontSize: 18, fontWeight: "800", color: theme.colors.success }}
             />
           </View>
@@ -239,6 +241,7 @@ export function YearlyAnalyticsView() {
               value={netAnnualSavings}
               currency={system.defaultCurrency}
               ghostable
+              animated
               style={{
                 fontSize: 18,
                 fontWeight: "800",
@@ -255,6 +258,7 @@ export function YearlyAnalyticsView() {
               value={monthlyAverageExpense}
               currency={system.defaultCurrency}
               ghostable
+              animated
               style={{ fontSize: 18, fontWeight: "800", color: theme.colors.foreground }}
             />
           </View>

@@ -13,6 +13,7 @@ export type AmountProps = {
   ghostable?: boolean;
   animated?: boolean;
   animationDuration?: number;
+  startFromZero?: boolean;
   style?: StyleProp<TextStyle>;
 };
 
@@ -24,6 +25,7 @@ export function Amount({
   ghostable = false,
   animated = false,
   animationDuration,
+  startFromZero,
   style,
 }: AmountProps) {
   const { theme } = useTheme();
@@ -58,6 +60,7 @@ export function Amount({
         prefix={prefix}
         fractionDigits={fractionDigits}
         duration={animationDuration}
+        startFromZero={startFromZero}
         accessibilityLabel={`Amount ${value}`}
         style={[
           {

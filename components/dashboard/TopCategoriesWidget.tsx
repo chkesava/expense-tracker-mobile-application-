@@ -1,6 +1,11 @@
-import { useMemo } from "react";
+import React, { useEffect, useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { PieChart } from "lucide-react-native";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withSpring,
+} from "react-native-reanimated";
 
 import { Amount } from "@/components/common/Amount";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -13,6 +18,44 @@ export interface TopCategoriesWidgetProps {
   expenses: Expense[];
   currency: string;
   activeMonth: string;
+}
+
+function AnimatedCategoryBar({
+  percentage,
+  color,
+  index,
+}: {
+  percentage: number;
+  color: string;
+  index: number;
+}) {
+  const widthProgress = useSharedValue(0);
+
+  useEffect(() => {
+    widthProgress.value = withDelay(
+      index * 60,
+      withSpring(Math.min(100, Math.max(2, percentage)), {
+        damping: 18,
+        stiffness: 180,
+      })
+    );
+  }, [percentage, index, widthProgress]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    width: `${widthProgress.value}%`,
+  }));
+
+  return (
+    <Animated.View
+      style={[
+        styles.progressBarFill,
+        {
+          backgroundColor: color,
+        },
+        animatedStyle,
+      ]}
+    />
+  );
 }
 
 export function TopCategoriesWidget({
@@ -47,8 +90,19 @@ export function TopCategoriesWidget({
     >
       <View style={{ gap: 12 }}>
         {categories.map((cat, idx) => {
+          const barColor =
+            idx === 0
+              ? theme.colors.primary
+              : idx === 1
+                ? "#8B5CF6"
+                : idx === 2
+                  ? "#EC4899"
+                  : idx === 3
+                    ? "#F59E0B"
+                    : theme.colors.mutedForeground;
+
           return (
-            <View key={cat.category} style={{ gap: 4 }}>
+            <View key={cat.category} style={{ gap: 6 }}>
               <View
                 style={{
                   flexDirection: "row",
@@ -89,6 +143,7 @@ export function TopCategoriesWidget({
                     value={cat.amount}
                     currency={currency}
                     ghostable
+                    animated
                     style={{
                       fontSize: theme.typography.sm,
                       fontWeight: "700",
@@ -113,21 +168,10 @@ export function TopCategoriesWidget({
                   { backgroundColor: theme.colors.muted },
                 ]}
               >
-                <View
-                  style={[
-                    styles.progressBarFill,
-                    {
-                      width: `${Math.min(100, Math.max(2, cat.percentage))}%`,
-                      backgroundColor:
-                        idx === 0
-                          ? theme.colors.primary
-                          : idx === 1
-                            ? "#8B5CF6"
-                            : idx === 2
-                              ? "#EC4899"
-                              : theme.colors.mutedForeground,
-                    },
-                  ]}
+                <AnimatedCategoryBar
+                  percentage={cat.percentage}
+                  color={barColor}
+                  index={idx}
                 />
               </View>
             </View>

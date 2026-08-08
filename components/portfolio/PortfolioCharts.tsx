@@ -1,16 +1,82 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import Svg, { Circle, G, Path, Polyline, Text as SvgText } from "react-native-svg";
+import Svg, { Circle, G, Polyline, Text as SvgText } from "react-native-svg";
+import Animated, {
+  FadeIn,
+  useAnimatedProps,
+  useSharedValue,
+  withDelay,
+  withSpring,
+  ZoomIn,
+} from "react-native-reanimated";
 
 import { Card } from "@/components/ui/Card";
 import type { AllocationSlice } from "@/shared/features/portfolio/types";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+
 export interface PortfolioChartsProps {
   allocations: AllocationSlice[];
   sparklineData: number[];
   currency: string;
+}
+
+// ─── Donut Segment ──────────────────────────────────────────
+
+function AnimatedAllocationSlice({
+  cx,
+  cy,
+  radius,
+  strokeWidth,
+  color,
+  rotation,
+  dashLength,
+  circumference,
+  index,
+}: {
+  cx: number;
+  cy: number;
+  radius: number;
+  strokeWidth: number;
+  color: string;
+  rotation: number;
+  dashLength: number;
+  circumference: number;
+  index: number;
+}) {
+  const progress = useSharedValue(0);
+
+  useEffect(() => {
+    progress.value = 0;
+    progress.value = withDelay(
+      index * 50,
+      withSpring(1, { damping: 18, stiffness: 160, mass: 0.8 })
+    );
+  }, [dashLength, index, progress]);
+
+  const animatedProps = useAnimatedProps(() => {
+    const currentLength = dashLength * progress.value;
+    const gap = Math.max(0, circumference - currentLength);
+    return {
+      strokeDasharray: `${currentLength} ${gap}`,
+    };
+  });
+
+  return (
+    <AnimatedCircle
+      cx={cx}
+      cy={cy}
+      r={radius}
+      fill="none"
+      stroke={color}
+      strokeWidth={strokeWidth}
+      strokeLinecap="butt"
+      transform={`rotate(${rotation} ${cx} ${cy})`}
+      animatedProps={animatedProps}
+    />
+  );
 }
 
 // ─── Donut Chart ──────────────────────────────────────────────
@@ -41,59 +107,60 @@ function AllocationDonut({
   let cumulativeOffset = 0;
 
   return (
-    <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-      {/* Background circle */}
-      <Circle
-        cx={cx}
-        cy={cy}
-        r={radius}
-        fill="none"
-        stroke={theme.colors.muted}
-        strokeWidth={strokeWidth}
-      />
-      {slices.map((slice, i) => {
-        const pct = slice.value / total;
-        const dashLength = pct * circumference;
-        const dashGap = circumference - dashLength;
-        const rotation = cumulativeOffset * 360 - 90; // start from top
-        cumulativeOffset += pct;
+    <Animated.View entering={ZoomIn.springify().damping(18)}>
+      <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        {/* Background circle */}
+        <Circle
+          cx={cx}
+          cy={cy}
+          r={radius}
+          fill="none"
+          stroke={theme.colors.muted}
+          strokeWidth={strokeWidth}
+        />
+        {slices.map((slice, i) => {
+          const pct = slice.value / total;
+          const dashLength = pct * circumference;
+          const rotation = cumulativeOffset * 360 - 90; // start from top
+          cumulativeOffset += pct;
 
-        return (
-          <Circle
-            key={i}
-            cx={cx}
-            cy={cy}
-            r={radius}
-            fill="none"
-            stroke={slice.color}
-            strokeWidth={strokeWidth}
-            strokeDasharray={`${dashLength} ${dashGap}`}
-            strokeLinecap="butt"
-            transform={`rotate(${rotation} ${cx} ${cy})`}
-          />
-        );
-      })}
-      {/* Center label */}
-      <SvgText
-        x={cx}
-        y={cy - 4}
-        textAnchor="middle"
-        fontSize={11}
-        fontWeight="800"
-        fill={theme.colors.foreground}
-      >
-        {slices.length}
-      </SvgText>
-      <SvgText
-        x={cx}
-        y={cy + 10}
-        textAnchor="middle"
-        fontSize={9}
-        fill={theme.colors.mutedForeground}
-      >
-        Assets
-      </SvgText>
-    </Svg>
+          return (
+            <AnimatedAllocationSlice
+              key={i}
+              cx={cx}
+              cy={cy}
+              radius={radius}
+              strokeWidth={strokeWidth}
+              color={slice.color}
+              rotation={rotation}
+              dashLength={dashLength}
+              circumference={circumference}
+              index={i}
+            />
+          );
+        })}
+        {/* Center label */}
+        <SvgText
+          x={cx}
+          y={cy - 4}
+          textAnchor="middle"
+          fontSize={11}
+          fontWeight="800"
+          fill={theme.colors.foreground}
+        >
+          {slices.length}
+        </SvgText>
+        <SvgText
+          x={cx}
+          y={cy + 10}
+          textAnchor="middle"
+          fontSize={9}
+          fill={theme.colors.mutedForeground}
+        >
+          Assets
+        </SvgText>
+      </Svg>
+    </Animated.View>
   );
 }
 
@@ -137,16 +204,18 @@ function Sparkline({
   const lineColor = isPositive ? "#10B981" : "#EF4444";
 
   return (
-    <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Polyline
-        points={points}
-        fill="none"
-        stroke={lineColor}
-        strokeWidth={2}
-        strokeLinejoin="round"
-        strokeLinecap="round"
-      />
-    </Svg>
+    <Animated.View entering={FadeIn.duration(300)}>
+      <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
+        <Polyline
+          points={points}
+          fill="none"
+          stroke={lineColor}
+          strokeWidth={2.5}
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+      </Svg>
+    </Animated.View>
   );
 }
 
