@@ -49,7 +49,7 @@ export function EmptyState({
         style={{
           color: theme.colors.foreground,
           fontSize: theme.typography.lg,
-          fontWeight: "800",
+          fontFamily: theme.fontFamily.bold,
           textAlign: "center",
         }}
       >
@@ -60,6 +60,7 @@ export function EmptyState({
           style={{
             color: theme.colors.mutedForeground,
             fontSize: theme.typography.sm,
+            fontFamily: theme.fontFamily.regular,
             textAlign: "center",
             lineHeight: 20,
           }}

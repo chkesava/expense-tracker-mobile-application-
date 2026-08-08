@@ -40,13 +40,9 @@ export function AddFab({
       accessibilityLabel={accessibilityLabel}
       style={({ pressed }) => [
         withLabel ? styles.pillButton : styles.circleButton,
+        theme.elevation[3],
         {
           backgroundColor: theme.colors.primary,
-          shadowColor: theme.colors.primary,
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.35,
-          shadowRadius: 8,
-          elevation: 6,
         },
         !withLabel && {
           width: dimensions.diameter,
@@ -62,7 +58,11 @@ export function AddFab({
         <Text
           style={[
             styles.label,
-            { color: theme.colors.primaryForeground, fontSize: theme.typography.sm },
+            {
+              color: theme.colors.primaryForeground,
+              fontSize: theme.typography.sm,
+              fontFamily: theme.fontFamily.semibold,
+            },
           ]}
         >
           {label}

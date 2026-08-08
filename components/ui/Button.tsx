@@ -11,7 +11,14 @@ import type { ReactNode } from "react";
 
 import { useTheme } from "@/theme/ThemeProvider";
 
-type ButtonVariant = "primary" | "secondary" | "outline" | "destructive" | "ghost";
+type ButtonVariant =
+  | "primary"
+  | "secondary"
+  | "outline"
+  | "destructive"
+  | "ghost"
+  | "tonal"
+  | "elevated";
 type ButtonSize = "sm" | "md" | "lg";
 
 export type ButtonProps = Omit<PressableProps, "children" | "style"> & {
@@ -41,14 +48,20 @@ export function Button({
         ? theme.colors.destructive
         : variant === "secondary"
           ? theme.colors.secondary
-          : "transparent";
+          : variant === "tonal"
+            ? theme.colors.secondaryContainer
+            : variant === "elevated"
+              ? theme.colors.card
+              : "transparent";
 
   const foreground =
     variant === "primary"
       ? theme.colors.primaryForeground
       : variant === "destructive"
         ? theme.colors.destructiveForeground
-        : theme.colors.foreground;
+        : variant === "tonal"
+          ? theme.colors.onSecondaryContainer
+          : theme.colors.foreground;
 
   const borderColor =
     variant === "outline" || variant === "secondary"
@@ -64,6 +77,8 @@ export function Button({
         ? theme.typography.md
         : theme.typography.sm;
 
+  const elevationStyle = variant === "elevated" ? theme.elevation[1] : undefined;
+
   return (
     <Pressable
       accessibilityRole="button"
@@ -76,9 +91,10 @@ export function Button({
           borderWidth: variant === "outline" || variant === "secondary" ? 1 : 0,
           paddingVertical,
           paddingHorizontal,
-          borderRadius: theme.radius.md,
+          borderRadius: theme.radius.lg,
           opacity: isDisabled ? 0.5 : pressed ? 0.92 : 1,
         },
+        elevationStyle,
         style,
       ]}
       {...props}
@@ -86,7 +102,13 @@ export function Button({
       {loading ? (
         <ActivityIndicator color={foreground} />
       ) : typeof children === "string" ? (
-        <Text style={{ color: foreground, fontSize, fontWeight: "700" }}>
+        <Text
+          style={{
+            color: foreground,
+            fontSize,
+            fontFamily: theme.fontFamily.semibold,
+          }}
+        >
           {children}
         </Text>
       ) : (
@@ -102,6 +124,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     flexDirection: "row",
     gap: 8,
-    minHeight: 44,
+    minHeight: 48,
   },
 });

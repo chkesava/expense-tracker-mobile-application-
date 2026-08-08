@@ -1,5 +1,5 @@
 export { Button } from "./Button";
 export { Input } from "./Input";
-export { Card } from "./Card";
+export { Card, type CardProps, type CardVariant } from "./Card";
 export { AddFab, type AddFabProps } from "./AddFab";
 

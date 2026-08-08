@@ -1,7 +1,8 @@
 import { useEffect, useRef } from "react";
-import { Animated, type StyleProp, type ViewStyle } from "react-native";
+import { Animated, Easing, type StyleProp, type ViewStyle } from "react-native";
 
 import { useTheme } from "@/theme/ThemeProvider";
+import { durations } from "@/theme/motion";
 
 export type SkeletonProps = {
   width?: number | `${number}%`;
@@ -24,12 +25,14 @@ export function Skeleton({
       Animated.sequence([
         Animated.timing(opacity, {
           toValue: 1,
-          duration: 700,
+          duration: durations.loading,
+          easing: Easing.bezier(0.2, 0, 0, 1),
           useNativeDriver: true,
         }),
         Animated.timing(opacity, {
           toValue: 0.4,
-          duration: 700,
+          duration: durations.loading,
+          easing: Easing.bezier(0.2, 0, 0, 1),
           useNativeDriver: true,
         }),
       ])

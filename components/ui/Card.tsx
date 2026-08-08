@@ -3,27 +3,44 @@ import type { ReactNode } from "react";
 
 import { useTheme } from "@/theme/ThemeProvider";
 
+export type CardVariant = "outlined" | "elevated" | "filled";
+
 export type CardProps = {
   children?: ReactNode;
   title?: string;
   subtitle?: string;
   headerRight?: ReactNode;
+  variant?: CardVariant;
   style?: StyleProp<ViewStyle>;
 };
 
-export function Card({ children, title, subtitle, headerRight, style }: CardProps) {
+export function Card({
+  children,
+  title,
+  subtitle,
+  headerRight,
+  variant = "outlined",
+  style,
+}: CardProps) {
   const { theme } = useTheme();
+
+  const backgroundColor =
+    variant === "filled" ? theme.colors.surfaceVariant : theme.colors.card;
+  const borderWidth = variant === "outlined" ? 1 : 0;
+  const elevationStyle = variant === "elevated" ? theme.elevation[1] : undefined;
 
   return (
     <View
       style={[
         styles.card,
         {
-          backgroundColor: theme.colors.card,
+          backgroundColor,
           borderColor: theme.colors.border,
+          borderWidth,
           borderRadius: theme.radius.lg,
           padding: theme.space.lg,
         },
+        elevationStyle,
         style,
       ]}
     >
@@ -35,7 +52,7 @@ export function Card({ children, title, subtitle, headerRight, style }: CardProp
                 style={{
                   color: theme.colors.cardForeground,
                   fontSize: theme.typography.lg,
-                  fontWeight: "800",
+                  fontFamily: theme.fontFamily.bold,
                   marginBottom: subtitle ? theme.space.xs : theme.space.md,
                 }}
               >

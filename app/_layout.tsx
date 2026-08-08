@@ -7,6 +7,13 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as SecureStore from "expo-secure-store";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import {
+  useFonts,
+  Inter_400Regular,
+  Inter_500Medium,
+  Inter_600SemiBold,
+  Inter_700Bold,
+} from "@expo-google-fonts/inter";
 import "react-native-reanimated";
 
 import { CelebrationOverlay } from "@/components/common/CelebrationOverlay";
@@ -45,6 +52,12 @@ function AppInitializer({ children }: { children: React.ReactNode }) {
   const [navigationReady, setNavigationReady] = useState(false);
   const [appIsReady, setAppIsReady] = useState(false);
   const [animationComplete, setAnimationComplete] = useState(false);
+  const [fontsLoaded] = useFonts({
+    Inter_400Regular,
+    Inter_500Medium,
+    Inter_600SemiBold,
+    Inter_700Bold,
+  });
 
   // 1. Wait for Secure Store (Biometric check)
   useEffect(() => {
@@ -100,11 +113,20 @@ function AppInitializer({ children }: { children: React.ReactNode }) {
       !userDocLoading &&
       secureStoreLoaded &&
       themeStorageLoaded &&
-      navigationReady
+      navigationReady &&
+      fontsLoaded
     ) {
       setAppIsReady(true);
     }
-  }, [authLoading, settingsLoading, userDocLoading, secureStoreLoaded, themeStorageLoaded, navigationReady]);
+  }, [
+    authLoading,
+    settingsLoading,
+    userDocLoading,
+    secureStoreLoaded,
+    themeStorageLoaded,
+    navigationReady,
+    fontsLoaded,
+  ]);
 
   // 5. Hide native splash screen
   useEffect(() => {

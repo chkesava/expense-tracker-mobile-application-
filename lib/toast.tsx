@@ -9,6 +9,13 @@ import {
 } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  CheckCircle2,
+  XCircle,
+  Info,
+  AlertTriangle,
+  type LucideIcon,
+} from "lucide-react-native";
 
 import { useTheme } from "@/theme/ThemeProvider";
 
@@ -125,36 +132,56 @@ function ToastViewport({
     }
   };
 
+  const kindIcon = (kind: ToastKind): LucideIcon | null => {
+    switch (kind) {
+      case "success":
+        return CheckCircle2;
+      case "error":
+        return XCircle;
+      case "warning":
+        return AlertTriangle;
+      case "info":
+        return Info;
+      default:
+        return null;
+    }
+  };
+
   return (
     <View
       pointerEvents="box-none"
       style={[styles.viewport, { bottom: Math.max(insets.bottom, 16) + 8 }]}
     >
-      {items.map((item) => (
-        <Pressable
-          key={item.id}
-          onPress={() => onDismiss(item.id)}
-          accessibilityRole="alert"
-          style={[
-            styles.toast,
-            {
-              backgroundColor: theme.colors.card,
-              borderColor: theme.colors.border,
-              borderLeftColor: kindColor(item.kind),
-            },
-          ]}
-        >
-          <Text
-            style={{
-              color: theme.colors.cardForeground,
-              fontSize: theme.typography.sm,
-              fontWeight: "600",
-            }}
+      {items.map((item) => {
+        const Icon = kindIcon(item.kind);
+        return (
+          <Pressable
+            key={item.id}
+            onPress={() => onDismiss(item.id)}
+            accessibilityRole="alert"
+            style={[
+              styles.toast,
+              theme.elevation[3],
+              {
+                backgroundColor: theme.colors.card,
+                borderRadius: theme.radius.md,
+              },
+            ]}
           >
-            {item.message}
-          </Text>
-        </Pressable>
-      ))}
+            {Icon ? <Icon size={theme.iconSize.md} color={kindColor(item.kind)} /> : null}
+            <Text
+              style={{
+                flex: 1,
+                color: theme.colors.cardForeground,
+                fontSize: theme.typography.sm,
+                fontFamily: theme.fontFamily.medium,
+              }}
+            >
+              {item.message}
+            </Text>
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
@@ -168,15 +195,10 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   toast: {
-    borderWidth: 1,
-    borderLeftWidth: 4,
-    borderRadius: 12,
-    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 16,
     paddingVertical: 12,
-    shadowColor: "#000",
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
   },
 });

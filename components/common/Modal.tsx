@@ -59,9 +59,12 @@ export function Modal({
         <View
           style={[
             styles.sheetCard,
+            theme.elevation[3],
             {
               backgroundColor: theme.colors.card,
               borderColor: theme.colors.border,
+              borderTopLeftRadius: theme.radius.sheet,
+              borderTopRightRadius: theme.radius.sheet,
               paddingBottom: Math.max(insets.bottom, 16),
               maxHeight: typeof maxHeight === "number" ? maxHeight : undefined,
             },
@@ -92,7 +95,11 @@ export function Modal({
               <Text
                 style={[
                   styles.title,
-                  { color: theme.colors.foreground, fontSize: theme.typography.lg },
+                  {
+                    color: theme.colors.foreground,
+                    fontSize: theme.typography.lg,
+                    fontFamily: theme.fontFamily.bold,
+                  },
                 ]}
                 numberOfLines={1}
               >
@@ -150,14 +157,7 @@ const styles = StyleSheet.create({
   },
   sheetCard: {
     width: "100%",
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
     borderWidth: 1,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
-    elevation: 20,
     overflow: "hidden",
   },
   dragHandleContainer: {

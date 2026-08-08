@@ -68,6 +68,18 @@ export type ColorTokens = {
   tint: string;
   tabIconDefault: string;
   tabIconSelected: string;
+  /** MD3 container roles */
+  primaryContainer: string;
+  onPrimaryContainer: string;
+  secondaryContainer: string;
+  onSecondaryContainer: string;
+  surfaceVariant: string;
+  onSurfaceVariant: string;
+  outline: string;
+  outlineVariant: string;
+  scrim: string;
+  info: string;
+  infoForeground: string;
 };
 
 export type SpaceTokens = {
@@ -85,6 +97,8 @@ export type RadiusTokens = {
   lg: number;
   xl: number;
   full: number;
+  /** Bottom-sheet / large surface corner radius (MD3 extra-large) */
+  sheet: number;
 };
 
 export type TypographyTokens = {
@@ -96,12 +110,73 @@ export type TypographyTokens = {
   xxl: number;
 };
 
+export type FontFamilyTokens = {
+  regular: string;
+  medium: string;
+  semibold: string;
+  bold: string;
+};
+
+export type ElevationLevel = {
+  elevation: number;
+  shadowColor: string;
+  shadowOpacity: number;
+  shadowRadius: number;
+  shadowOffset: { width: number; height: number };
+};
+
+export type ElevationTokens = {
+  0: ElevationLevel;
+  1: ElevationLevel;
+  2: ElevationLevel;
+  3: ElevationLevel;
+  4: ElevationLevel;
+  5: ElevationLevel;
+};
+
+export type IconSizeTokens = {
+  sm: number;
+  md: number;
+  lg: number;
+  xl: number;
+};
+
+export type ChartTokens = {
+  categorical: string[];
+  positive: string;
+  negative: string;
+};
+
+/** MD3-flavored type scale — additive to the legacy `typography` numeric scale. */
+export type TypeScaleEntry = {
+  fontSize: number;
+  lineHeight: number;
+  fontFamily: string;
+};
+
+export type TypeScaleTokens = {
+  titleLarge: TypeScaleEntry;
+  titleMedium: TypeScaleEntry;
+  titleSmall: TypeScaleEntry;
+  bodyLarge: TypeScaleEntry;
+  bodyMedium: TypeScaleEntry;
+  bodySmall: TypeScaleEntry;
+  labelLarge: TypeScaleEntry;
+  labelMedium: TypeScaleEntry;
+  labelSmall: TypeScaleEntry;
+};
+
 export type ThemeTokens = {
   name: ThemeName;
   colors: ColorTokens;
   space: SpaceTokens;
   radius: RadiusTokens;
   typography: TypographyTokens;
+  fontFamily: FontFamilyTokens;
+  elevation: ElevationTokens;
+  iconSize: IconSizeTokens;
+  chart: ChartTokens;
+  type: TypeScaleTokens;
 };
 
 const space: SpaceTokens = {
@@ -119,6 +194,7 @@ const radius: RadiusTokens = {
   lg: 16,
   xl: 20,
   full: 9999,
+  sheet: 28,
 };
 
 const typography: TypographyTokens = {
@@ -128,6 +204,62 @@ const typography: TypographyTokens = {
   lg: 18,
   xl: 22,
   xxl: 28,
+};
+
+/** Inter, loaded via @expo-google-fonts/inter in app/_layout.tsx. Falls back to the system font until loaded. */
+const fontFamily: FontFamilyTokens = {
+  regular: "Inter_400Regular",
+  medium: "Inter_500Medium",
+  semibold: "Inter_600SemiBold",
+  bold: "Inter_700Bold",
+};
+
+function elevationLevel(
+  elevation: number,
+  shadowOpacity: number,
+  shadowRadius: number,
+  offsetY: number
+): ElevationLevel {
+  return {
+    elevation,
+    shadowColor: "#000000",
+    shadowOpacity,
+    shadowRadius,
+    shadowOffset: { width: 0, height: offsetY },
+  };
+}
+
+/** MD3 elevation levels 0–5 (Android `elevation` + cross-platform shadow*). */
+const elevation: ElevationTokens = {
+  0: elevationLevel(0, 0, 0, 0),
+  1: elevationLevel(1, 0.08, 3, 1),
+  2: elevationLevel(3, 0.1, 6, 2),
+  3: elevationLevel(6, 0.14, 10, 4),
+  4: elevationLevel(8, 0.16, 12, 6),
+  5: elevationLevel(12, 0.2, 16, 8),
+};
+
+const iconSize: IconSizeTokens = {
+  sm: 16,
+  md: 20,
+  lg: 24,
+  xl: 32,
+};
+
+function typeEntry(fontSize: number, lineHeight: number, family: string): TypeScaleEntry {
+  return { fontSize, lineHeight, fontFamily: family };
+}
+
+const type: TypeScaleTokens = {
+  titleLarge: typeEntry(22, 28, fontFamily.semibold),
+  titleMedium: typeEntry(18, 24, fontFamily.semibold),
+  titleSmall: typeEntry(16, 22, fontFamily.semibold),
+  bodyLarge: typeEntry(16, 24, fontFamily.regular),
+  bodyMedium: typeEntry(14, 20, fontFamily.regular),
+  bodySmall: typeEntry(12, 16, fontFamily.regular),
+  labelLarge: typeEntry(14, 20, fontFamily.medium),
+  labelMedium: typeEntry(12, 16, fontFamily.medium),
+  labelSmall: typeEntry(11, 16, fontFamily.medium),
 };
 
 /** Light — electric indigo primary (web :root) */
@@ -152,6 +284,17 @@ export const lightColors: ColorTokens = {
   tint: "#4F46FF",
   tabIconDefault: "#9CA3AF",
   tabIconSelected: "#4F46FF",
+  primaryContainer: "#E4E1FF",
+  onPrimaryContainer: "#150066",
+  secondaryContainer: "#E7EAF3",
+  onSecondaryContainer: "#1E293B",
+  surfaceVariant: "#EEF1F6",
+  onSurfaceVariant: "#44464F",
+  outline: "#C9CDD6",
+  outlineVariant: "#E1E4EA",
+  scrim: "rgba(15, 23, 42, 0.5)",
+  info: "#3B82F6",
+  infoForeground: "#F8FAFC",
 };
 
 /** Dark — OLED indigo (web .dark) */
@@ -176,6 +319,23 @@ export const darkColors: ColorTokens = {
   tint: "#6B63FF",
   tabIconDefault: "#6B7280",
   tabIconSelected: "#6B63FF",
+  primaryContainer: "#2C2470",
+  onPrimaryContainer: "#E4E1FF",
+  secondaryContainer: "#1F2436",
+  onSecondaryContainer: "#E2E8F0",
+  surfaceVariant: "#181C2C",
+  onSurfaceVariant: "#C5CAD6",
+  outline: "#3A3F55",
+  outlineVariant: "#252A3D",
+  scrim: "rgba(0, 0, 0, 0.7)",
+  info: "#60A5FA",
+  infoForeground: "#080A14",
+};
+
+const chart: ChartTokens = {
+  categorical: ["#4F46FF", "#25965A", "#F59E0B", "#EF4444", "#3B82F6", "#EC4899", "#14B8A6"],
+  positive: "#25965A",
+  negative: "#EF4444",
 };
 
 export function createTheme(name: ThemeName): ThemeTokens {
@@ -185,6 +345,11 @@ export function createTheme(name: ThemeName): ThemeTokens {
     space,
     radius,
     typography,
+    fontFamily,
+    elevation,
+    iconSize,
+    chart,
+    type,
   };
 }
 
