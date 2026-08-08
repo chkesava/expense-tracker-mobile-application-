@@ -1,6 +1,5 @@
 import React, { useMemo } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
-import * as Haptics from "expo-haptics";
+import { StyleSheet, Text, View } from "react-native";
 import {
   Banknote,
   Calendar,
@@ -59,22 +58,16 @@ export function InvestmentCard({
 
   return (
     <Card
+      onPress={onPress}
+      elevation={2}
+      contentStyle={styles.pressable}
+      disabled={isClosed}
       style={[
         styles.card,
-        {
-          borderColor: theme.colors.border,
-          opacity: isClosed ? 0.6 : 1,
-        },
+        { borderColor: theme.colors.border },
       ]}
     >
-      <Pressable
-        onPress={() => {
-          Haptics.selectionAsync().catch(() => undefined);
-          onPress();
-        }}
-        style={styles.pressable}
-      >
-        <View style={styles.header}>
+      <View style={styles.header}>
           <View style={styles.titleCol}>
             <View style={styles.kindRow}>
               <View
@@ -202,15 +195,13 @@ export function InvestmentCard({
             </View>
           )}
         </View>
-      </Pressable>
     </Card>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    padding: 0,
-    borderRadius: 18,
+    borderRadius: 20,
     overflow: "hidden",
   },
   pressable: {

@@ -272,7 +272,6 @@ const styles = StyleSheet.create({
     gap: 14,
   },
   summaryCard: {
-    padding: 16,
     borderRadius: 18,
   },
   summaryTop: {

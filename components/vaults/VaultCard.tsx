@@ -1,7 +1,6 @@
 import React from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
-import * as Haptics from "expo-haptics";
-import { ArrowDownLeft, ArrowUpRight, ChevronRight, ShieldCheck, Users } from "lucide-react-native";
+import { StyleSheet, Text, View } from "react-native";
+import { ArrowDownLeft, ArrowUpRight, Users } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
 import { Card } from "@/components/ui/Card";
@@ -24,23 +23,16 @@ export function VaultCard({ vault, stats, onPress }: VaultCardProps) {
 
   return (
     <Card
-      style={[
-        styles.card,
-        {
-          borderColor: theme.colors.border,
-        },
-      ]}
+      onPress={onPress}
+      elevation={2}
+      contentStyle={styles.cardContent}
+      style={styles.card}
     >
-      <Pressable
-        onPress={() => {
-          Haptics.selectionAsync().catch(() => undefined);
-          onPress();
-        }}
-        style={styles.pressable}
-      >
-        {/* Accent Top Strip */}
-        <View style={[styles.accentStrip, { backgroundColor: themeColor }]} />
+      {/* Accent Top Strip */}
+      <View style={[styles.accentStrip, { backgroundColor: themeColor }]} />
 
+      {/* Body */}
+      <View style={styles.body}>
         <View style={styles.cardHeader}>
           <View style={styles.titleCol}>
             <View style={styles.nameRow}>
@@ -91,7 +83,6 @@ export function VaultCard({ vault, stats, onPress }: VaultCardProps) {
             ) : null}
           </View>
 
-          <ChevronRight size={18} color={theme.colors.mutedForeground} />
         </View>
 
         {/* Balance & Budget Details */}
@@ -182,20 +173,23 @@ export function VaultCard({ vault, stats, onPress }: VaultCardProps) {
             {stats.transactionCount} Activity
           </Text>
         </View>
-      </Pressable>
+      </View>
     </Card>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    padding: 0,
-    borderRadius: 18,
+    borderRadius: 20,
     overflow: "hidden",
   },
-  pressable: {
+  cardContent: {
+    padding: 0,
+  },
+  body: {
     padding: 16,
     gap: 12,
+    paddingTop: 20,
   },
   accentStrip: {
     position: "absolute",

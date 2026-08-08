@@ -4,6 +4,7 @@ import QRCode from "react-native-qrcode-svg";
 import { Ban, Copy, Share2, Trash2 } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
+import { Card } from "@/components/ui/Card";
 import { usePaymentRequests } from "@/hooks/usePaymentRequests";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import type { PaymentRequest } from "@/shared/types/paymentRequest";
@@ -90,14 +91,12 @@ export function PaymentRequestCard({ request }: PaymentRequestCardProps) {
   };
 
   return (
-    <View
+    <Card
+      elevation={2}
       style={[
         styles.card,
         {
-          backgroundColor: theme.colors.card,
-          borderColor: isCancelled
-            ? theme.colors.border
-            : theme.colors.border,
+          borderColor: isCancelled ? theme.colors.border : theme.colors.border,
           opacity: isCancelled ? 0.65 : 1,
         },
       ]}
@@ -244,15 +243,13 @@ export function PaymentRequestCard({ request }: PaymentRequestCardProps) {
           </Text>
         </Pressable>
       </View>
-    </View>
+    </Card>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
     borderRadius: 20,
-    borderWidth: 1,
-    padding: 16,
     gap: 14,
   },
   topRow: {
