@@ -7,6 +7,9 @@ import { Header } from "@/components/Header";
 import { MaintenanceScreen } from "@/components/MaintenanceScreen";
 import { MobileActionDock } from "@/components/MobileActionDock";
 import { PrivacyLock } from "@/components/PrivacyLock";
+import { SetupWizardModal } from "@/components/onboarding/SetupWizardModal";
+import { useAndroidBackHandler } from "@/hooks/useAndroidBackHandler";
+import { useNavigationStateRestoration } from "@/hooks/useNavigationStateRestoration";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAuth } from "@/providers/AuthProvider";
 import { FinanceDataProvider } from "@/providers/FinanceDataProvider";
@@ -19,27 +22,78 @@ import { useTheme } from "@/theme/ThemeProvider";
 
 function AppShellInner() {
   const { settings } = useSettings();
+  const { theme } = useTheme();
+
+  // Android hardware / gesture Back button behavior
+  useAndroidBackHandler();
+
+  // Route state restoration across sessions
+  useNavigationStateRestoration(true);
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
       <Header />
       <Stack
         screenOptions={{
           headerShown: false,
-          animation: "fade",
+          contentStyle: { backgroundColor: theme.colors.background },
+          animation: "fade_from_bottom",
         }}
       >
         <Stack.Screen name="index" />
-        <Stack.Screen name="dashboard" />
-        <Stack.Screen name="ledger" />
-        <Stack.Screen name="insights" />
-        <Stack.Screen name="vaults" />
-        <Stack.Screen name="settings" />
-        <Stack.Screen name="app-selector" />
+        <Stack.Screen
+          name="dashboard"
+          options={{
+            animation: "fade",
+          }}
+        />
+        <Stack.Screen
+          name="ledger"
+          options={{
+            animation: "fade",
+          }}
+        />
+        <Stack.Screen
+          name="insights"
+          options={{
+            animation: "fade",
+          }}
+        />
+        <Stack.Screen
+          name="vaults"
+          options={{
+            animation: "fade",
+          }}
+        />
+        <Stack.Screen
+          name="settings"
+          options={{
+            animation: "slide_from_right",
+          }}
+        />
+        <Stack.Screen
+          name="app-selector"
+          options={{
+            animation: "slide_from_right",
+          }}
+        />
+        <Stack.Screen
+          name="accounts"
+          options={{
+            animation: "slide_from_right",
+          }}
+        />
+        <Stack.Screen
+          name="add"
+          options={{
+            animation: "fade_from_bottom",
+          }}
+        />
       </Stack>
 
       {settings.navigationStyle === "dock" ? <MobileActionDock /> : <BottomNav />}
       <AddTransactionModal />
+      <SetupWizardModal />
     </View>
   );
 }

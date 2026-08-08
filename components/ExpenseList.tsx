@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import {
-  Modal,
   Pressable,
   SectionList,
   StyleSheet,
@@ -10,10 +9,19 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { deleteDoc, doc } from "firebase/firestore";
 import * as Haptics from "expo-haptics";
-import { Edit2, Tag, Trash2, Wallet } from "lucide-react-native";
+import {
+  Calendar,
+  CreditCard,
+  Edit3,
+  FileText,
+  Tag,
+  Trash2,
+  Wallet,
+} from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
 import { EmptyState } from "@/components/common/EmptyState";
+import { Modal } from "@/components/common/Modal";
 import { SwipeableRow } from "@/components/common/SwipeableRow";
 import { Button } from "@/components/ui/Button";
 import { getFirestoreDb } from "@/lib/firebase";
@@ -61,7 +69,6 @@ export function ExpenseList({
   const { settings: system } = useSystemSettings();
 
   const [selectedTx, setSelectedTx] = useState<CombinedTransaction | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<CombinedTransaction | null>(null);
 
   // Account map by ID
   const accountMap = useMemo(() => {
@@ -119,10 +126,8 @@ export function ExpenseList({
     try {
       const collectionName = target.kind === "expense" ? "expenses" : "incomes";
       const docRef = doc(db, "users", uid, collectionName, target.id);
-      const snapshotData = { ...target.data };
 
       await deleteDoc(docRef);
-      setDeleteTarget(null);
       setSelectedTx(null);
 
       toast.success(
@@ -171,7 +176,7 @@ export function ExpenseList({
       <SwipeableRow
         rightActions={[
           {
-            icon: Edit2,
+            icon: Edit3,
             label: "Edit",
             color: theme.colors.primary,
             onPress: () => {
@@ -195,6 +200,10 @@ export function ExpenseList({
             Haptics.selectionAsync().catch(() => undefined);
             setSelectedTx(item);
           }}
+          android_ripple={{
+            color: theme.colors.primary + "18",
+            borderless: false,
+          }}
           style={({ pressed }) => [
             styles.row,
             {
@@ -209,9 +218,7 @@ export function ExpenseList({
               borderBottomColor: theme.colors.border,
             },
             pressed && {
-              backgroundColor: isDark
-                ? "rgba(255,255,255,0.06)"
-                : "rgba(0,0,0,0.03)",
+              opacity: 0.9,
             },
           ]}
         >
@@ -298,10 +305,11 @@ export function ExpenseList({
             <Amount
               value={item.data.amount}
               currency={system.defaultCurrency}
+              prefix={isExpense ? "-" : "+"}
               ghostable
               style={{
                 fontSize: theme.typography.sm,
-                fontWeight: "700",
+                fontWeight: "800",
                 color: isExpense ? theme.colors.foreground : theme.colors.success,
               }}
             />
@@ -334,6 +342,10 @@ export function ExpenseList({
     );
   }
 
+  const selectedAcc = selectedTx?.data.accountId
+    ? accountMap.get(selectedTx.data.accountId)
+    : undefined;
+
   return (
     <>
       <SectionList
@@ -344,16 +356,15 @@ export function ExpenseList({
         showsVerticalScrollIndicator={false}
         refreshing={onRefresh ? !!refreshing : undefined}
         onRefresh={onRefresh}
-        contentContainerStyle={{ paddingBottom: 16, gap: 12 }}
+        contentContainerStyle={{ paddingBottom: 32, gap: 12 }}
         ListHeaderComponent={
           showMonthSummary ? (
             <View
               style={[
                 styles.summaryCard,
+                theme.elevation[1],
                 {
-                  backgroundColor: isDark
-                    ? "rgba(255,255,255,0.04)"
-                    : "rgba(0,0,0,0.02)",
+                  backgroundColor: theme.colors.card,
                   borderColor: theme.colors.border,
                 },
               ]}
@@ -370,7 +381,7 @@ export function ExpenseList({
                   ghostable
                   style={{
                     fontSize: theme.typography.md,
-                    fontWeight: "700",
+                    fontWeight: "800",
                     color: theme.colors.destructive,
                   }}
                 />
@@ -390,7 +401,7 @@ export function ExpenseList({
                   ghostable
                   style={{
                     fontSize: theme.typography.md,
-                    fontWeight: "700",
+                    fontWeight: "800",
                     color: theme.colors.success,
                   }}
                 />
@@ -410,7 +421,7 @@ export function ExpenseList({
                   ghostable
                   style={{
                     fontSize: theme.typography.md,
-                    fontWeight: "700",
+                    fontWeight: "800",
                     color: totals.net >= 0 ? theme.colors.success : theme.colors.destructive,
                   }}
                 />
@@ -456,109 +467,162 @@ export function ExpenseList({
         SectionSeparatorComponent={() => <View style={{ height: 8 }} />}
       />
 
-      {/* Transaction Action Bottom Sheet Modal */}
+      {/* Material 3 Transaction Detail Bottom Sheet */}
       <Modal
-        visible={!!selectedTx}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setSelectedTx(null)}
+        isOpen={!!selectedTx}
+        onClose={() => setSelectedTx(null)}
+        title="Transaction Details"
       >
-        <Pressable
-          style={[
-            styles.modalOverlay,
-            { paddingBottom: Math.max(insets.bottom + 16, 24) },
-          ]}
-          onPress={() => setSelectedTx(null)}
-        >
-          <Pressable
-            style={[
-              styles.actionSheet,
-              {
-                backgroundColor: theme.colors.card,
-                borderColor: theme.colors.border,
-              },
-            ]}
-            onPress={(e) => e.stopPropagation()}
-          >
-            {selectedTx ? (
-              <View style={{ gap: 16 }}>
-                {/* Header */}
-                <View style={styles.sheetHeader}>
-                  <View style={{ flex: 1, minWidth: 0, marginRight: 12 }}>
-                    <Text
-                      style={{
-                        fontSize: theme.typography.lg,
-                        fontWeight: "800",
-                        color: theme.colors.foreground,
-                      }}
-                      numberOfLines={2}
-                    >
-                      {selectedTx.kind === "expense"
-                        ? selectedTx.data.note || selectedTx.data.category
-                        : selectedTx.data.note || selectedTx.data.source}
-                    </Text>
-                    <Text
-                      style={{
-                        fontSize: theme.typography.xs,
-                        color: theme.colors.mutedForeground,
-                        marginTop: 2,
-                      }}
-                      numberOfLines={1}
-                    >
-                      {selectedTx.date} •{" "}
-                      {selectedTx.kind === "expense"
-                        ? selectedTx.data.category
-                        : selectedTx.data.source}
-                    </Text>
-                  </View>
-                  <View style={{ alignItems: "flex-end", flexShrink: 0 }}>
-                    <Amount
-                      value={selectedTx.data.amount}
-                      currency={system.defaultCurrency}
-                      ghostable
-                      style={{
-                        fontSize: theme.typography.lg,
-                        fontWeight: "800",
-                        color:
-                          selectedTx.kind === "expense"
-                            ? theme.colors.destructive
-                            : theme.colors.success,
-                      }}
-                    />
-                  </View>
-                </View>
-
-                {/* Actions */}
-                <View style={{ gap: 8 }}>
-                  <Button
-                    variant="outline"
-                    onPress={() => {
-                      const tx = selectedTx;
-                      setSelectedTx(null);
-                      if (tx.kind === "expense") {
-                        onEditExpense?.(tx.data);
-                      } else {
-                        onEditIncome?.(tx.data);
-                      }
-                    }}
-                  >
-                    Edit Transaction
-                  </Button>
-
-                  <Button
-                    variant="destructive"
-                    onPress={() => {
-                      const tx = selectedTx;
-                      if (tx) handleDelete(tx);
-                    }}
-                  >
-                    Delete Transaction
-                  </Button>
-                </View>
+        {selectedTx ? (
+          <View style={{ gap: 20 }}>
+            {/* Amount & Category Hero */}
+            <View style={styles.modalHeroWrap}>
+              <View
+                style={[
+                  styles.modalIconBox,
+                  {
+                    backgroundColor:
+                      selectedTx.kind === "expense"
+                        ? theme.colors.primary + "18"
+                        : theme.colors.success + "18",
+                  },
+                ]}
+              >
+                <Text style={{ fontSize: 28 }}>
+                  {selectedTx.kind === "expense"
+                    ? getCategoryIcon(selectedTx.data.category)
+                    : "💰"}
+                </Text>
               </View>
-            ) : null}
-          </Pressable>
-        </Pressable>
+
+              <Amount
+                value={selectedTx.data.amount}
+                currency={system.defaultCurrency}
+                prefix={selectedTx.kind === "expense" ? "-" : "+"}
+                ghostable
+                style={{
+                  fontSize: 32,
+                  fontWeight: "900",
+                  letterSpacing: -0.5,
+                  color:
+                    selectedTx.kind === "expense"
+                      ? theme.colors.destructive
+                      : theme.colors.success,
+                }}
+              />
+
+              <Text
+                style={{
+                  fontSize: theme.typography.md,
+                  fontWeight: "700",
+                  color: theme.colors.foreground,
+                  textAlign: "center",
+                }}
+              >
+                {selectedTx.kind === "expense"
+                  ? selectedTx.data.note || selectedTx.data.category
+                  : selectedTx.data.note || selectedTx.data.source}
+              </Text>
+            </View>
+
+            {/* Key-Value Details */}
+            <View
+              style={[
+                styles.detailsList,
+                {
+                  backgroundColor: isDark
+                    ? "rgba(255,255,255,0.04)"
+                    : "rgba(0,0,0,0.03)",
+                  borderColor: theme.colors.border,
+                },
+              ]}
+            >
+              <View style={styles.detailRow}>
+                <View style={styles.detailLabelRow}>
+                  <Calendar size={15} color={theme.colors.mutedForeground} />
+                  <Text style={[styles.detailLabel, { color: theme.colors.mutedForeground }]}>
+                    Date
+                  </Text>
+                </View>
+                <Text style={[styles.detailValue, { color: theme.colors.foreground }]}>
+                  {selectedTx.date}
+                </Text>
+              </View>
+
+              <View style={styles.detailRow}>
+                <View style={styles.detailLabelRow}>
+                  <Tag size={15} color={theme.colors.mutedForeground} />
+                  <Text style={[styles.detailLabel, { color: theme.colors.mutedForeground }]}>
+                    Category
+                  </Text>
+                </View>
+                <Text style={[styles.detailValue, { color: theme.colors.foreground }]}>
+                  {selectedTx.kind === "expense"
+                    ? `${selectedTx.data.category}${
+                        selectedTx.data.subcategory ? ` › ${selectedTx.data.subcategory}` : ""
+                      }`
+                    : selectedTx.data.source}
+                </Text>
+              </View>
+
+              {selectedAcc ? (
+                <View style={styles.detailRow}>
+                  <View style={styles.detailLabelRow}>
+                    <Wallet size={15} color={theme.colors.mutedForeground} />
+                    <Text style={[styles.detailLabel, { color: theme.colors.mutedForeground }]}>
+                      Account
+                    </Text>
+                  </View>
+                  <Text style={[styles.detailValue, { color: theme.colors.foreground }]}>
+                    {selectedAcc.name}
+                  </Text>
+                </View>
+              ) : null}
+
+              {selectedTx.kind === "expense" && selectedTx.data.tags && selectedTx.data.tags.length > 0 ? (
+                <View style={styles.detailRow}>
+                  <View style={styles.detailLabelRow}>
+                    <FileText size={15} color={theme.colors.mutedForeground} />
+                    <Text style={[styles.detailLabel, { color: theme.colors.mutedForeground }]}>
+                      Tags
+                    </Text>
+                  </View>
+                  <Text style={[styles.detailValue, { color: theme.colors.foreground }]}>
+                    {selectedTx.data.tags.join(", ")}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+
+            {/* Action Buttons */}
+            <View style={{ gap: 10 }}>
+              <Button
+                variant="tonal"
+                onPress={() => {
+                  const tx = selectedTx;
+                  setSelectedTx(null);
+                  if (tx.kind === "expense") {
+                    onEditExpense?.(tx.data);
+                  } else {
+                    onEditIncome?.(tx.data);
+                  }
+                }}
+              >
+                Edit Transaction
+              </Button>
+
+              <Button
+                variant="destructive"
+                onPress={() => {
+                  const tx = selectedTx;
+                  if (tx) handleDelete(tx);
+                }}
+              >
+                Delete Transaction
+              </Button>
+            </View>
+          </View>
+        ) : null}
       </Modal>
     </>
   );
@@ -574,7 +638,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-around",
     paddingVertical: 14,
     paddingHorizontal: 12,
-    borderRadius: 16,
+    borderRadius: 20,
     borderWidth: 1,
   },
   summaryCol: {
@@ -613,8 +677,8 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   avatar: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
@@ -661,21 +725,41 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 3,
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "flex-end",
-    padding: 16,
+  modalHeroWrap: {
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 8,
   },
-  actionSheet: {
-    padding: 20,
-    borderRadius: 24,
+  modalIconBox: {
+    width: 56,
+    height: 56,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 4,
+  },
+  detailsList: {
+    borderRadius: 16,
     borderWidth: 1,
-    gap: 16,
+    padding: 14,
+    gap: 12,
   },
-  sheetHeader: {
+  detailRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+  },
+  detailLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  detailLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  detailValue: {
+    fontSize: 13,
+    fontWeight: "700",
   },
 });

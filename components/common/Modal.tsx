@@ -11,6 +11,8 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { X } from "lucide-react-native";
+import * as Haptics from "expo-haptics";
+
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
@@ -27,18 +29,23 @@ export function Modal({
   onClose,
   title,
   children,
-  maxHeight = "85%",
+  maxHeight = "88%",
 }: ModalProps) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const insets = useSafeAreaInsets();
 
+  const handleClose = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+    onClose();
+  };
+
   return (
     <RNModal
       visible={isOpen}
       transparent
-      animationType="fade"
-      onRequestClose={onClose}
+      animationType="slide"
+      onRequestClose={handleClose}
       statusBarTranslucent
     >
       <KeyboardAvoidingView
@@ -49,55 +56,54 @@ export function Modal({
         <Pressable
           style={[
             styles.backdrop,
-            { backgroundColor: isDark ? "rgba(0,0,0,0.7)" : "rgba(15,23,42,0.5)" },
+            { backgroundColor: isDark ? "rgba(0,0,0,0.72)" : "rgba(15,23,42,0.55)" },
           ]}
-          onPress={onClose}
+          onPress={handleClose}
           accessibilityLabel="Close modal overlay"
         />
 
-        {/* Bottom Sheet Card */}
+        {/* Material 3 Bottom Sheet */}
         <View
           style={[
             styles.sheetCard,
-            theme.elevation[3],
+            theme.elevation[4],
             {
               backgroundColor: theme.colors.card,
               borderColor: theme.colors.border,
-              borderTopLeftRadius: theme.radius.sheet,
-              borderTopRightRadius: theme.radius.sheet,
+              borderTopLeftRadius: theme.radius.sheet ?? 28,
+              borderTopRightRadius: theme.radius.sheet ?? 28,
               paddingBottom: Math.max(insets.bottom, 16),
               maxHeight: typeof maxHeight === "number" ? maxHeight : undefined,
             },
           ]}
         >
-          {/* Drag pill handle */}
+          {/* Top Drag Indicator */}
           <View style={styles.dragHandleContainer}>
             <View
               style={[
                 styles.dragHandle,
                 {
                   backgroundColor: isDark
-                    ? "rgba(255,255,255,0.2)"
-                    : "rgba(0,0,0,0.15)",
+                    ? "rgba(255,255,255,0.25)"
+                    : "rgba(0,0,0,0.2)",
                 },
               ]}
             />
           </View>
 
           {/* Header */}
-          <View
-            style={[
-              styles.header,
-              { borderBottomColor: theme.colors.border },
-            ]}
-          >
-            {title ? (
+          {title ? (
+            <View
+              style={[
+                styles.header,
+                { borderBottomColor: theme.colors.border },
+              ]}
+            >
               <Text
                 style={[
                   styles.title,
                   {
                     color: theme.colors.foreground,
-                    fontSize: theme.typography.lg,
                     fontFamily: theme.fontFamily.bold,
                   },
                 ]}
@@ -105,29 +111,32 @@ export function Modal({
               >
                 {title}
               </Text>
-            ) : (
-              <View style={{ flex: 1 }} />
-            )}
 
-            <Pressable
-              onPress={onClose}
-              style={({ pressed }) => [
-                styles.closeButton,
-                {
-                  backgroundColor: isDark
-                    ? "rgba(255,255,255,0.06)"
-                    : "rgba(0,0,0,0.05)",
-                },
-                pressed && { opacity: 0.7 },
-              ]}
-              accessibilityLabel="Close modal"
-              accessibilityRole="button"
-            >
-              <X size={18} color={theme.colors.mutedForeground} />
-            </Pressable>
-          </View>
+              <Pressable
+                onPress={handleClose}
+                android_ripple={{
+                  color: theme.colors.primary + "20",
+                  borderless: true,
+                  radius: 20,
+                }}
+                style={({ pressed }) => [
+                  styles.closeButton,
+                  {
+                    backgroundColor: isDark
+                      ? "rgba(255,255,255,0.08)"
+                      : "rgba(0,0,0,0.05)",
+                  },
+                  Platform.OS === "ios" && pressed && { opacity: 0.7 },
+                ]}
+                accessibilityLabel="Close modal"
+                accessibilityRole="button"
+              >
+                <X size={18} color={theme.colors.mutedForeground} />
+              </Pressable>
+            </View>
+          ) : null}
 
-          {/* Body Content */}
+          {/* Sheet Content */}
           <ScrollView
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.content}
@@ -157,16 +166,16 @@ const styles = StyleSheet.create({
   },
   sheetCard: {
     width: "100%",
-    borderWidth: 1,
+    borderTopWidth: 1,
     overflow: "hidden",
   },
   dragHandleContainer: {
     alignItems: "center",
-    paddingTop: 10,
-    paddingBottom: 6,
+    paddingTop: 12,
+    paddingBottom: 8,
   },
   dragHandle: {
-    width: 40,
+    width: 36,
     height: 4,
     borderRadius: 2,
   },
@@ -179,18 +188,20 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   title: {
-    fontWeight: "800",
+    fontSize: 18,
     letterSpacing: -0.3,
     flex: 1,
   },
   closeButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
   },
   content: {
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 24,
   },
 });

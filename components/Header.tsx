@@ -145,17 +145,18 @@ export function Header() {
             {/* Month Selector Pill */}
             <Pressable
               onPress={handleOpenMonthPicker}
+              android_ripple={{ color: theme.colors.primary + "18", borderless: false }}
               style={({ pressed }) => [
                 styles.monthPill,
                 {
                   backgroundColor: theme.colors.card,
                   borderColor: theme.colors.border,
                 },
-                pressed && { opacity: 0.7 },
+                pressed && { opacity: 0.8 },
               ]}
               accessibilityLabel="Choose month"
             >
-              <Calendar size={13} color={theme.colors.primary} strokeWidth={2.2} />
+              <Calendar size={14} color={theme.colors.primary} strokeWidth={2.2} />
               <Text
                 style={[
                   styles.monthLabel,
@@ -169,29 +170,34 @@ export function Header() {
             {/* Settings Button */}
             <Pressable
               onPress={handleOpenSettings}
+              android_ripple={{ color: theme.colors.primary + "20", borderless: true, radius: 20 }}
               style={({ pressed }) => [
                 styles.iconButton,
                 {
                   backgroundColor: theme.colors.card,
                   borderColor: theme.colors.border,
                 },
-                pressed && { opacity: 0.7 },
+                pressed && { opacity: 0.8 },
               ]}
               accessibilityLabel="Open settings"
             >
-              <SettingsIcon size={16} color={theme.colors.foreground} />
+              <SettingsIcon size={18} color={theme.colors.foreground} />
             </Pressable>
 
             {/* User Avatar / Drawer Trigger */}
             <Pressable
-              onPress={() => setIsDrawerOpen(true)}
+              onPress={() => {
+                Haptics.selectionAsync().catch(() => undefined);
+                setIsDrawerOpen(true);
+              }}
+              android_ripple={{ color: theme.colors.primary + "30", borderless: true, radius: 20 }}
               style={({ pressed }) => [
                 styles.avatarButton,
                 {
                   backgroundColor: theme.colors.primary,
                   borderColor: theme.colors.border,
                 },
-                pressed && { opacity: 0.8 },
+                pressed && { opacity: 0.88 },
               ]}
               accessibilityLabel="Open user menu"
             >

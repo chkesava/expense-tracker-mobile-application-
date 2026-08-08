@@ -19,6 +19,8 @@ import { useSettings } from "@/providers/SettingsProvider";
 import { useUserDoc } from "@/providers/UserDocProvider";
 import { useTheme } from "@/theme/ThemeProvider";
 
+import { useSystemSettings } from "@/providers/SystemSettingsProvider";
+
 export type SetupStep = {
   id: string;
   label: string;
@@ -33,6 +35,7 @@ type SetupProgressContextType = {
   progress: number;
   isOnboarding: boolean;
   isFirstLaunch: boolean;
+  launchSetupWizard: (stepIndex?: number) => void;
   completeWelcome: () => void;
   dismissOnboarding: () => void;
   resetOnboarding: () => void;
@@ -46,6 +49,7 @@ const SetupProgressContext = createContext<SetupProgressContextType | undefined>
 export function SetupProgressProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const { settings, updateSettings } = useSettings();
+  const { settings: systemSettings } = useSystemSettings();
   const { data: userDoc, loading: userDocLoading } = useUserDoc();
   const { themeName } = useTheme();
   const { accounts, loading: accountsLoading } = useAccounts();
@@ -53,7 +57,12 @@ export function SetupProgressProvider({ children }: { children: ReactNode }) {
   const { incomes, loading: incomesLoading } = useIncomes();
   const { categories } = useCategories();
   const { celebrate } = useCelebration();
-  const { setIsAddExpenseOpen } = useModals();
+  const { setIsAddExpenseOpen, setIsSetupWizardOpen, setSetupWizardInitialStep } = useModals();
+
+  const launchSetupWizard = useCallback((stepIndex: number = 0) => {
+    setSetupWizardInitialStep(stepIndex);
+    setIsSetupWizardOpen(true);
+  }, [setIsSetupWizardOpen, setSetupWizardInitialStep]);
 
   const { onboarding } = settings;
   const visitedScreens = useMemo(
@@ -107,25 +116,31 @@ export function SetupProgressProvider({ children }: { children: ReactNode }) {
         id: "profile",
         label: "Complete your profile",
         completed: Boolean(userDoc?.username),
-        onNavigate: () => router.push("/settings"),
+        onNavigate: () => launchSetupWizard(0),
       },
       {
-        id: "theme",
-        label: "Customize your theme",
-        completed: themeName !== "dark",
-        onNavigate: () => router.push("/settings"),
+        id: "currency",
+        label: "Select your default currency",
+        completed: Boolean(systemSettings?.defaultCurrency),
+        onNavigate: () => launchSetupWizard(1),
+      },
+      {
+        id: "budget",
+        label: "Set a monthly budget",
+        completed: settings.monthlyBudget > 0,
+        onNavigate: () => launchSetupWizard(2),
       },
       {
         id: "account",
         label: "Add your first account",
         completed: accounts.length > 0,
-        onNavigate: () => router.push("/settings"),
+        onNavigate: () => launchSetupWizard(3),
       },
       {
         id: "expense",
         label: "Log your first expense",
         completed: expenses.length > 0,
-        onNavigate: () => setIsAddExpenseOpen(true),
+        onNavigate: () => launchSetupWizard(4),
       },
       {
         id: "income",
@@ -134,15 +149,15 @@ export function SetupProgressProvider({ children }: { children: ReactNode }) {
         onNavigate: () => setIsAddExpenseOpen(true),
       },
       {
-        id: "budget",
-        label: "Set a monthly budget",
-        completed: settings.monthlyBudget > 0,
-        onNavigate: () => router.push("/settings"),
-      },
-      {
         id: "first_category",
         label: "Create a custom category",
         completed: categories.some((c) => !c.isDefault),
+        onNavigate: () => router.push("/settings"),
+      },
+      {
+        id: "theme",
+        label: "Customize your theme",
+        completed: themeName !== "dark",
         onNavigate: () => router.push("/settings"),
       },
       {
@@ -160,15 +175,17 @@ export function SetupProgressProvider({ children }: { children: ReactNode }) {
     ];
   }, [
     userDoc?.username,
-    themeName,
+    systemSettings?.defaultCurrency,
+    settings.monthlyBudget,
     accounts.length,
     expenses.length,
     incomes.length,
-    settings.monthlyBudget,
     categories,
+    themeName,
     visitedScreens,
-    router,
+    launchSetupWizard,
     setIsAddExpenseOpen,
+    router,
   ]);
 
   const totalCount = steps.length;
@@ -319,6 +336,7 @@ export function SetupProgressProvider({ children }: { children: ReactNode }) {
         progress,
         isOnboarding,
         isFirstLaunch,
+        launchSetupWizard,
         completeWelcome,
         dismissOnboarding,
         resetOnboarding,

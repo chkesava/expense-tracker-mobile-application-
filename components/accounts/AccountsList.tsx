@@ -309,92 +309,98 @@ export function AccountsList() {
         </View>
       </Card>
 
-      {/* Quick Actions Row */}
-      <View style={styles.actionRow}>
+      {/* Material 3 Quick Actions Carousel */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.actionRow}
+      >
         <Pressable
           onPress={handleOpenCreateAccount}
-          style={[
-            styles.actionButton,
+          android_ripple={{ color: theme.colors.primary + "20", borderless: false }}
+          style={({ pressed }) => [
+            styles.actionChip,
+            theme.elevation[1],
             {
-              backgroundColor: theme.colors.card,
-              borderColor: theme.colors.border,
+              backgroundColor: theme.colors.primary,
+              borderColor: theme.colors.primary,
             },
+            pressed && { opacity: 0.88, transform: [{ scale: 0.97 }] },
           ]}
+          accessibilityRole="button"
         >
-          <Plus size={16} color={theme.colors.primary} />
-          <Text
-            style={[
-              styles.actionButtonText,
-              { color: theme.colors.foreground },
-            ]}
-          >
+          <Plus size={16} color={theme.colors.primaryForeground} strokeWidth={2.4} />
+          <Text style={[styles.actionChipText, { color: theme.colors.primaryForeground }]}>
             Add Account
           </Text>
         </Pressable>
 
         <Pressable
-          onPress={() => setIsTransferModalOpen(true)}
-          style={[
-            styles.actionButton,
+          onPress={() => {
+            Haptics.selectionAsync().catch(() => undefined);
+            setIsTransferModalOpen(true);
+          }}
+          android_ripple={{ color: theme.colors.primary + "18", borderless: false }}
+          style={({ pressed }) => [
+            styles.actionChip,
             {
               backgroundColor: theme.colors.card,
               borderColor: theme.colors.border,
             },
+            pressed && { opacity: 0.88, transform: [{ scale: 0.97 }] },
           ]}
+          accessibilityRole="button"
         >
           <ArrowLeftRight size={16} color={theme.colors.primary} />
-          <Text
-            style={[
-              styles.actionButtonText,
-              { color: theme.colors.foreground },
-            ]}
-          >
+          <Text style={[styles.actionChipText, { color: theme.colors.foreground }]}>
             Transfer
           </Text>
         </Pressable>
 
         <Pressable
-          onPress={() => setIsStockCashModalOpen(true)}
-          style={[
-            styles.actionButton,
+          onPress={() => {
+            Haptics.selectionAsync().catch(() => undefined);
+            setIsStockCashModalOpen(true);
+          }}
+          android_ripple={{ color: purple + "20", borderless: false }}
+          style={({ pressed }) => [
+            styles.actionChip,
             {
               backgroundColor: theme.colors.card,
               borderColor: theme.colors.border,
             },
+            pressed && { opacity: 0.88, transform: [{ scale: 0.97 }] },
           ]}
+          accessibilityRole="button"
         >
           <TrendingUp size={16} color={purple} />
-          <Text
-            style={[
-              styles.actionButtonText,
-              { color: theme.colors.foreground },
-            ]}
-          >
+          <Text style={[styles.actionChipText, { color: theme.colors.foreground }]}>
             Stocks Cash
           </Text>
         </Pressable>
 
         <Pressable
-          onPress={() => setIsEntryModalOpen(true)}
-          style={[
-            styles.actionButton,
+          onPress={() => {
+            Haptics.selectionAsync().catch(() => undefined);
+            setIsEntryModalOpen(true);
+          }}
+          android_ripple={{ color: theme.colors.primary + "18", borderless: false }}
+          style={({ pressed }) => [
+            styles.actionChip,
             {
               backgroundColor: theme.colors.card,
               borderColor: theme.colors.border,
             },
+            pressed && { opacity: 0.88, transform: [{ scale: 0.97 }] },
           ]}
+          accessibilityRole="button"
         >
           <SlidersHorizontal size={16} color={theme.colors.primary} />
-          <Text
-            style={[
-              styles.actionButtonText,
-              { color: theme.colors.foreground },
-            ]}
-          >
-            Adjust
+          <Text style={[styles.actionChipText, { color: theme.colors.foreground }]}>
+            Adjust Balance
           </Text>
         </Pressable>
-      </View>
+      </ScrollView>
 
       {/* Stocks & Demat Cash Card */}
       <View style={styles.groupSection}>
@@ -896,20 +902,22 @@ const styles = StyleSheet.create({
   },
   actionRow: {
     flexDirection: "row",
-    gap: 8,
+    gap: 10,
+    paddingVertical: 2,
   },
-  actionButton: {
-    flex: 1,
+  actionChip: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 10,
-    borderRadius: 14,
+    paddingHorizontal: 16,
+    borderRadius: 24,
     borderWidth: 1,
-    gap: 4,
+    minHeight: 46,
+    gap: 8,
   },
-  actionButtonText: {
-    fontSize: 11,
+  actionChipText: {
+    fontSize: 13,
     fontWeight: "700",
   },
   groupSection: {

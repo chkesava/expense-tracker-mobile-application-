@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
-import { Home as HomeIcon, ShieldAlert, Sparkles } from "lucide-react-native";
+import { Home as HomeIcon, Plus, ShieldAlert, Sparkles } from "lucide-react-native";
 
 import { BudgetAlertsWidget } from "@/components/dashboard/BudgetAlertsWidget";
 import { FinancialGoalsWidget } from "@/components/dashboard/FinancialGoalsWidget";
@@ -19,6 +19,7 @@ import { SetupChecklistWidget } from "@/components/dashboard/SetupChecklistWidge
 import { WelcomeScreen } from "@/components/onboarding/WelcomeScreen";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
+import { DashboardSkeleton } from "@/components/ui/DashboardSkeleton";
 import { useSetupProgress } from "@/providers/SetupProgressProvider";
 import { useAccountEntries } from "@/hooks/useAccountEntries";
 import { useAccountPayments } from "@/hooks/useAccountPayments";
@@ -420,9 +421,49 @@ export default function DashboardScreen() {
       {/* Setup Checklist Widget */}
       <SetupChecklistWidget />
 
-      {/* Dynamic Ordered Widgets */}
-      <View style={styles.widgetsGrid}>
-        {orderedWidgetIds.map((widgetId) => renderWidget(widgetId))}
+      {/* Dynamic Ordered Widgets or Shimmer Skeleton */}
+      {isLoading && expenses.length === 0 && accounts.length === 0 ? (
+        <DashboardSkeleton />
+      ) : (
+        <View style={styles.widgetsGrid}>
+          {orderedWidgetIds.map((widgetId) => renderWidget(widgetId))}
+        </View>
+      )}
+
+      {/* Material 3 Extended Floating Action Button (FAB) */}
+      <View style={styles.fabContainer} pointerEvents="box-none">
+        <Pressable
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+            setIsAddExpenseOpen(true);
+          }}
+          android_ripple={{
+            color: "rgba(255, 255, 255, 0.28)",
+            borderless: false,
+          }}
+          style={({ pressed }) => [
+            styles.extendedFab,
+            theme.elevation[4],
+            {
+              backgroundColor: theme.colors.primary,
+            },
+            pressed && { opacity: 0.9, transform: [{ scale: 0.96 }] },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Add new transaction"
+        >
+          <View style={styles.fabIcon}>
+            <Plus size={20} color={theme.colors.primaryForeground} strokeWidth={2.6} />
+          </View>
+          <Text
+            style={[
+              styles.fabLabel,
+              { color: theme.colors.primaryForeground },
+            ]}
+          >
+            Log Expense
+          </Text>
+        </Pressable>
       </View>
     </PageShell>
   );
@@ -430,14 +471,14 @@ export default function DashboardScreen() {
 
 const styles = StyleSheet.create({
   container: {
-    paddingBottom: 40,
+    paddingBottom: 90,
   },
   alertBanner: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
     padding: 14,
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
     marginBottom: 16,
   },
@@ -451,6 +492,30 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
   widgetsGrid: {
-    gap: 12,
+    gap: 14,
+  },
+  fabContainer: {
+    position: "absolute",
+    bottom: 20,
+    right: 16,
+    zIndex: 99,
+  },
+  extendedFab: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 28,
+    minHeight: 56,
+  },
+  fabIcon: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  fabLabel: {
+    fontSize: 15,
+    fontWeight: "800",
+    letterSpacing: 0.2,
   },
 });

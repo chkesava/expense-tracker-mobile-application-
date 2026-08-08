@@ -1,7 +1,9 @@
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
-import { ArrowDownLeft, ArrowUpRight, Calendar } from "lucide-react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { ArrowDownLeft, ArrowUpRight, Calendar, TrendingUp } from "lucide-react-native";
+import * as Haptics from "expo-haptics";
 
 import { Amount } from "@/components/common/Amount";
+import { Skeleton } from "@/components/common/Skeleton";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
@@ -27,76 +29,113 @@ export function OverviewWidget({
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
 
+  const netSavings = monthlyIncome - monthlySpent;
+  const savingsRate = monthlyIncome > 0 ? Math.max(0, Math.round((netSavings / monthlyIncome) * 100)) : 0;
+
   return (
     <View
-      style={[styles.overviewCard, theme.elevation[2], { backgroundColor: theme.colors.card }]}
+      style={[
+        styles.heroCard,
+        theme.elevation[3],
+        {
+          backgroundColor: theme.colors.card,
+          borderColor: isDark ? "rgba(107, 99, 255, 0.25)" : "rgba(79, 70, 255, 0.15)",
+        },
+      ]}
     >
-      <View style={styles.overviewHeader}>
-        <Text
-          style={[
-            styles.overviewSubtitle,
-            { color: theme.colors.mutedForeground },
-          ]}
-        >
-          TOTAL BALANCE
-        </Text>
+      {/* Top Bar: Subtitle & MD3 Month Filter Chip */}
+      <View style={styles.headerRow}>
+        <View style={styles.titleWrap}>
+          <TrendingUp size={16} color={theme.colors.primary} />
+          <Text style={[styles.heroSubtitle, { color: theme.colors.mutedForeground }]}>
+            TOTAL NET BALANCE
+          </Text>
+        </View>
+
         <Pressable
-          onPress={onOpenMonthPicker}
+          onPress={() => {
+            Haptics.selectionAsync().catch(() => undefined);
+            onOpenMonthPicker();
+          }}
+          android_ripple={{
+            color: theme.colors.primary + "20",
+            borderless: false,
+          }}
           style={({ pressed }) => [
-            styles.monthBadge,
+            styles.monthChip,
             {
               backgroundColor: isDark
-                ? "rgba(255,255,255,0.06)"
-                : "rgba(0,0,0,0.04)",
-              borderColor: theme.colors.border,
+                ? "rgba(107, 99, 255, 0.15)"
+                : "rgba(79, 70, 255, 0.08)",
+              borderColor: isDark
+                ? "rgba(107, 99, 255, 0.3)"
+                : "rgba(79, 70, 255, 0.2)",
             },
-            pressed && { opacity: 0.7 },
+            pressed && { opacity: 0.8 },
           ]}
+          accessibilityRole="button"
+          accessibilityLabel={`Change month, currently ${activeMonth}`}
         >
-          <Calendar
-            size={12}
-            color={theme.colors.primary}
-            style={{ marginRight: 4 }}
-          />
-          <Text
-            style={[styles.monthBadgeText, { color: theme.colors.primary }]}
-          >
+          <Calendar size={13} color={theme.colors.primary} />
+          <Text style={[styles.monthChipText, { color: theme.colors.primary }]}>
             {activeMonth}
           </Text>
         </Pressable>
       </View>
 
-      <View style={styles.amountRow}>
+      {/* Hero Display Amount */}
+      <View style={styles.amountContainer}>
         {isLoading ? (
-          <ActivityIndicator size="small" color={theme.colors.primary} />
+          <Skeleton width={180} height={38} borderRadius={8} style={{ marginVertical: 4 }} />
         ) : (
           <Amount
             value={totalBalance}
             currency={currency}
             ghostable
-            style={{ fontSize: 28, fontWeight: "900" }}
+            style={{
+              fontSize: 34,
+              fontWeight: "900",
+              letterSpacing: -0.5,
+              color: totalBalance >= 0 ? theme.colors.foreground : theme.colors.destructive,
+            }}
           />
         )}
-      </View>
 
-      {/* In / Out Stats */}
-      <View
-        style={[
-          styles.statsRow,
-          {
-            borderTopColor: theme.colors.border,
-          },
-        ]}
-      >
-        <View style={styles.statBox}>
-          <View style={styles.statLabelRow}>
-            <ArrowDownLeft size={14} color={theme.colors.success} />
+        {monthlyIncome > 0 ? (
+          <View style={styles.savingsBadge}>
             <Text
               style={[
-                styles.statLabel,
-                { color: theme.colors.mutedForeground },
+                styles.savingsBadgeText,
+                { color: netSavings >= 0 ? theme.colors.success : theme.colors.destructive },
               ]}
             >
+              {netSavings >= 0 ? `+${savingsRate}% saved this month` : "Deficit this month"}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+
+      {/* MD3 Tonal Stat Cards (Income vs Spent) */}
+      <View style={styles.tonalGrid}>
+        {/* Income Card */}
+        <View
+          style={[
+            styles.tonalCard,
+            {
+              backgroundColor: isDark
+                ? "rgba(34, 197, 94, 0.12)"
+                : "rgba(34, 197, 94, 0.08)",
+              borderColor: isDark
+                ? "rgba(34, 197, 94, 0.25)"
+                : "rgba(34, 197, 94, 0.2)",
+            },
+          ]}
+        >
+          <View style={styles.tonalHeader}>
+            <View style={[styles.iconCircle, { backgroundColor: "rgba(34, 197, 94, 0.2)" }]}>
+              <ArrowDownLeft size={14} color="#22C55E" />
+            </View>
+            <Text style={[styles.tonalLabel, { color: theme.colors.mutedForeground }]}>
               Income
             </Text>
           </View>
@@ -105,30 +144,33 @@ export function OverviewWidget({
             currency={currency}
             ghostable
             style={{
-              color: theme.colors.success,
-              fontSize: theme.typography.md,
-              fontWeight: "700",
+              color: isDark ? "#4ade80" : "#16a34a",
+              fontSize: 17,
+              fontWeight: "800",
             }}
           />
         </View>
 
+        {/* Spent Card */}
         <View
           style={[
-            styles.statDivider,
-            { backgroundColor: theme.colors.border },
+            styles.tonalCard,
+            {
+              backgroundColor: isDark
+                ? "rgba(239, 68, 68, 0.12)"
+                : "rgba(239, 68, 68, 0.08)",
+              borderColor: isDark
+                ? "rgba(239, 68, 68, 0.25)"
+                : "rgba(239, 68, 68, 0.2)",
+            },
           ]}
-        />
-
-        <View style={styles.statBox}>
-          <View style={styles.statLabelRow}>
-            <ArrowUpRight size={14} color={theme.colors.destructive} />
-            <Text
-              style={[
-                styles.statLabel,
-                { color: theme.colors.mutedForeground },
-              ]}
-            >
-              Spent
+        >
+          <View style={styles.tonalHeader}>
+            <View style={[styles.iconCircle, { backgroundColor: "rgba(239, 68, 68, 0.2)" }]}>
+              <ArrowUpRight size={14} color="#EF4444" />
+            </View>
+            <Text style={[styles.tonalLabel, { color: theme.colors.mutedForeground }]}>
+              Expenses
             </Text>
           </View>
           <Amount
@@ -136,9 +178,9 @@ export function OverviewWidget({
             currency={currency}
             ghostable
             style={{
-              color: theme.colors.foreground,
-              fontSize: theme.typography.md,
-              fontWeight: "700",
+              color: isDark ? "#f87171" : "#dc2626",
+              fontSize: 17,
+              fontWeight: "800",
             }}
           />
         </View>
@@ -148,58 +190,75 @@ export function OverviewWidget({
 }
 
 const styles = StyleSheet.create({
-  overviewCard: {
+  heroCard: {
     borderRadius: 24,
+    borderWidth: 1,
     padding: 20,
-    marginBottom: 4,
+    gap: 16,
   },
-  overviewHeader: {
+  headerRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 12,
   },
-  overviewSubtitle: {
-    fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 1.2,
-  },
-  monthBadge: {
+  titleWrap: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 12,
-    borderWidth: 1,
+    gap: 6,
   },
-  monthBadgeText: {
+  heroSubtitle: {
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 1,
+  },
+  monthChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    minHeight: 32,
+  },
+  monthChipText: {
     fontSize: 12,
     fontWeight: "700",
   },
-  amountRow: {
-    marginBottom: 20,
-  },
-  statsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingTop: 16,
-  },
-  statBox: {
-    flex: 1,
-  },
-  statDivider: {
-    width: 1,
-    height: 32,
-    marginHorizontal: 16,
-  },
-  statLabelRow: {
-    flexDirection: "row",
-    alignItems: "center",
+  amountContainer: {
     gap: 4,
-    marginBottom: 4,
   },
-  statLabel: {
+  savingsBadge: {
+    marginTop: 2,
+  },
+  savingsBadgeText: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  tonalGrid: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  tonalCard: {
+    flex: 1,
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 14,
+    gap: 8,
+  },
+  tonalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  iconCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tonalLabel: {
     fontSize: 12,
     fontWeight: "600",
   },

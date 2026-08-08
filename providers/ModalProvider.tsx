@@ -19,6 +19,10 @@ export interface ModalContextType {
   setIsMonthDrawerOpen: (open: boolean) => void;
   globalMonth: string | null;
   setGlobalMonth: (month: string | null) => void;
+  isSetupWizardOpen: boolean;
+  setIsSetupWizardOpen: (open: boolean) => void;
+  setupWizardInitialStep: number;
+  setSetupWizardInitialStep: (step: number) => void;
 }
 
 const ModalContext = createContext<ModalContextType | undefined>(undefined);
@@ -32,6 +36,8 @@ export function ModalProvider({ children }: { children: ReactNode }) {
   const [accountEntryAccount, setAccountEntryAccount] = useState<Account | null>(null);
   const [isMonthDrawerOpen, setIsMonthDrawerOpen] = useState(false);
   const [globalMonth, setGlobalMonth] = useState<string | null>(currentMonthKey());
+  const [isSetupWizardOpen, setIsSetupWizardOpen] = useState(false);
+  const [setupWizardInitialStep, setSetupWizardInitialStep] = useState(0);
 
   return (
     <ModalContext.Provider
@@ -52,6 +58,10 @@ export function ModalProvider({ children }: { children: ReactNode }) {
         setIsMonthDrawerOpen,
         globalMonth,
         setGlobalMonth,
+        isSetupWizardOpen,
+        setIsSetupWizardOpen,
+        setupWizardInitialStep,
+        setSetupWizardInitialStep,
       }}
     >
       {children}

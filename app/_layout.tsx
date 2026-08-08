@@ -49,6 +49,7 @@ function AppInitializer({ children }: { children: React.ReactNode }) {
   const { loading: userDocLoading } = useUserDoc();
   const [secureStoreLoaded, setSecureStoreLoaded] = useState(false);
   const [themeStorageLoaded, setThemeStorageLoaded] = useState(false);
+  const [firstLaunchChecked, setFirstLaunchChecked] = useState(false);
   const [navigationReady, setNavigationReady] = useState(false);
   const [appIsReady, setAppIsReady] = useState(false);
   const [animationComplete, setAnimationComplete] = useState(false);
@@ -74,15 +75,24 @@ function AppInitializer({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  // 2. Wait for AsyncStorage Theme configuration loading
+  // 2. Wait for AsyncStorage Theme & First-Launch configuration loading
   useEffect(() => {
     let cancelled = false;
-    AsyncStorage.getItem(THEME_STORAGE_KEY)
+    Promise.all([
+      AsyncStorage.getItem(THEME_STORAGE_KEY),
+      AsyncStorage.getItem("@vault_has_launched_before"),
+    ])
       .then(() => {
-        if (!cancelled) setThemeStorageLoaded(true);
+        if (!cancelled) {
+          setThemeStorageLoaded(true);
+          setFirstLaunchChecked(true);
+        }
       })
       .catch(() => {
-        if (!cancelled) setThemeStorageLoaded(true);
+        if (!cancelled) {
+          setThemeStorageLoaded(true);
+          setFirstLaunchChecked(true);
+        }
       });
     return () => {
       cancelled = true;
@@ -113,6 +123,7 @@ function AppInitializer({ children }: { children: React.ReactNode }) {
       !userDocLoading &&
       secureStoreLoaded &&
       themeStorageLoaded &&
+      firstLaunchChecked &&
       navigationReady &&
       fontsLoaded
     ) {
@@ -124,6 +135,7 @@ function AppInitializer({ children }: { children: React.ReactNode }) {
     userDocLoading,
     secureStoreLoaded,
     themeStorageLoaded,
+    firstLaunchChecked,
     navigationReady,
     fontsLoaded,
   ]);
@@ -189,14 +201,16 @@ function RootNavigator() {
         screenOptions={{
           headerShown: false,
           contentStyle: { backgroundColor: theme.colors.background },
+          animation: "fade_from_bottom",
         }}
       >
         <Stack.Screen name="index" />
-        <Stack.Screen name="(auth)" />
+        <Stack.Screen name="onboarding" options={{ animation: "fade" }} />
+        <Stack.Screen name="(auth)" options={{ animation: "fade" }} />
         <Stack.Screen name="(app)" />
-        <Stack.Screen name="(nutrition)" />
+        <Stack.Screen name="(nutrition)" options={{ animation: "slide_from_right" }} />
         <Stack.Screen name="google-auth" options={{ animation: "none" }} />
-        <Stack.Screen name="+not-found" />
+        <Stack.Screen name="+not-found" options={{ animation: "fade" }} />
       </Stack>
     </>
   );

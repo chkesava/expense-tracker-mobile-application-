@@ -10,7 +10,6 @@ import {
   Wallet,
 } from "lucide-react-native";
 
-import { AddFab } from "@/components/ui/AddFab";
 import { useModals } from "@/providers/ModalProvider";
 import { useSettings } from "@/providers/SettingsProvider";
 import {
@@ -21,16 +20,28 @@ import {
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
+/**
+ * Material Design 3 Navigation Bar for Android
+ * 
+ * Spec:
+ * - 80dp container height + safe area bottom inset
+ * - Pill active indicator (64x32dp) with primaryContainer fill
+ * - 24dp icons with primary / onSurfaceVariant colors
+ * - 12sp labels (labelMedium)
+ * - Android ripple and haptic feedback
+ */
 export function BottomNav() {
   const router = useRouter();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
-  const { setIsAddExpenseOpen } = useModals();
   const { settings } = useSettings();
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
 
-  const iconMap: Record<string, React.ComponentType<{ size: number; color: string; strokeWidth?: number }>> = {
+  const iconMap: Record<
+    string,
+    React.ComponentType<{ size: number; color: string; strokeWidth?: number }>
+  > = {
     home: Home,
     ledger: Wallet,
     investments: TrendingUp,
@@ -39,101 +50,94 @@ export function BottomNav() {
   };
 
   const navLinks = CORE_NAV_ITEMS.filter(
-    (item) => item.includeInBottomNav && (!item.requiresInvestmentsFeature || settings.enableInvestments)
+    (item) =>
+      item.includeInBottomNav &&
+      (!item.requiresInvestmentsFeature || settings.enableInvestments)
   );
 
-  const mid = Math.ceil(navLinks.length / 2);
-  const leftLinks = navLinks.slice(0, mid);
-  const rightLinks = navLinks.slice(mid);
-
-  const renderTab = (link: (typeof navLinks)[number]) => {
-    const isActive = isNavItemActive(pathname, link.id as NavSectionId);
-    const Icon = iconMap[link.id] || Home;
-
-    return (
-      <Pressable
-        key={link.id}
-        onPress={() => {
-          if (!isActive) {
-            Haptics.selectionAsync().catch(() => undefined);
-            const route = link.path.startsWith("/") ? link.path : `/${link.path}`;
-            router.push(route as any);
-          }
-        }}
-        style={({ pressed }) => [
-          styles.tabButton,
-          isActive && [
-            styles.tabButtonActive,
-            {
-              backgroundColor: isDark
-                ? "rgba(107, 99, 255, 0.12)"
-                : "rgba(79, 70, 255, 0.08)",
-            },
-          ],
-          pressed && { opacity: 0.7 },
-        ]}
-        accessibilityRole="tab"
-        accessibilityLabel={`Go to ${link.label}`}
-        accessibilityState={{ selected: isActive }}
-      >
-        <Icon
-          size={20}
-          color={isActive ? theme.colors.primary : theme.colors.mutedForeground}
-          strokeWidth={isActive ? 2.5 : 2}
-        />
-        <Text
-          style={[
-            styles.tabLabel,
-            {
-              color: isActive
-                ? theme.colors.primary
-                : theme.colors.mutedForeground,
-              fontWeight: isActive ? "800" : "600",
-            },
-          ]}
-        >
-          {link.mobileLabel || link.label}
-        </Text>
-      </Pressable>
-    );
+  const handleTabPress = (link: (typeof navLinks)[number], isActive: boolean) => {
+    if (isActive) return;
+    Haptics.selectionAsync().catch(() => undefined);
+    const route = link.path.startsWith("/") ? link.path : `/${link.path}`;
+    // Replace to keep tab navigation clean and prevent endless stack accumulation
+    if (route === "/dashboard") {
+      router.replace("/dashboard");
+    } else {
+      router.navigate(route as any);
+    }
   };
 
   return (
     <View
-      pointerEvents="box-none"
       style={[
-        styles.wrapper,
+        styles.navContainer,
         {
-          bottom: Math.max(insets.bottom, 12),
+          backgroundColor: theme.colors.card,
+          borderTopColor: theme.colors.border,
+          paddingBottom: Math.max(insets.bottom, 8),
         },
       ]}
     >
-      <View
-        style={[
-          styles.dockCard,
-          {
-            backgroundColor: theme.colors.card,
-            borderColor: theme.colors.border,
-            shadowColor: "#000",
-            shadowOffset: { width: 0, height: 6 },
-            shadowOpacity: isDark ? 0.35 : 0.12,
-            shadowRadius: 16,
-            elevation: 12,
-          },
-        ]}
-      >
-        {leftLinks.map(renderTab)}
+      <View style={styles.destinationsRow}>
+        {navLinks.map((link) => {
+          const isActive = isNavItemActive(pathname, link.id as NavSectionId);
+          const Icon = iconMap[link.id] || Home;
 
-        {/* Center Add Button */}
-        <View style={styles.fabContainer}>
-          <AddFab
-            size="md"
-            onPress={() => setIsAddExpenseOpen(true)}
-            accessibilityLabel="Add transaction"
-          />
-        </View>
+          return (
+            <Pressable
+              key={link.id}
+              onPress={() => handleTabPress(link, isActive)}
+              android_ripple={{
+                color: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)",
+                borderless: false,
+              }}
+              style={styles.tabButton}
+              accessibilityRole="tab"
+              accessibilityLabel={`Go to ${link.label}`}
+              accessibilityState={{ selected: isActive }}
+            >
+              {/* Material 3 Active Indicator Pill */}
+              <View
+                style={[
+                  styles.indicatorPill,
+                  {
+                    backgroundColor: isActive
+                      ? isDark
+                        ? "rgba(107, 99, 255, 0.22)"
+                        : "rgba(79, 70, 255, 0.12)"
+                      : "transparent",
+                  },
+                ]}
+              >
+                <Icon
+                  size={24}
+                  color={
+                    isActive
+                      ? theme.colors.primary
+                      : theme.colors.mutedForeground
+                  }
+                  strokeWidth={isActive ? 2.4 : 1.8}
+                />
+              </View>
 
-        {rightLinks.map(renderTab)}
+              {/* Material 3 Label */}
+              <Text
+                style={[
+                  styles.tabLabel,
+                  {
+                    color: isActive
+                      ? theme.colors.foreground
+                      : theme.colors.mutedForeground,
+                    fontWeight: isActive ? "700" : "500",
+                  },
+                ]}
+                numberOfLines={1}
+              >
+                {link.mobileLabel || link.label}
+              </Text>
+            </Pressable>
+          );
+        })}
       </View>
     </View>
   );
@@ -142,41 +146,44 @@ export function BottomNav() {
 export default BottomNav;
 
 const styles = StyleSheet.create({
-  wrapper: {
+  navContainer: {
     position: "absolute",
     left: 0,
     right: 0,
-    alignItems: "center",
-    paddingHorizontal: 16,
+    bottom: 0,
+    borderTopWidth: 1,
+    elevation: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
     zIndex: 90,
   },
-  dockCard: {
+  destinationsRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    width: "100%",
-    maxWidth: 440,
-    borderRadius: 28,
-    borderWidth: 1,
-    paddingHorizontal: 6,
-    paddingVertical: 6,
+    justifyContent: "space-around",
+    height: 72,
+    paddingHorizontal: 8,
   },
   tabButton: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
+    height: "100%",
     paddingVertical: 6,
-    borderRadius: 18,
-    gap: 3,
+    borderRadius: 16,
+    gap: 4,
   },
-  tabButtonActive: {},
-  tabLabel: {
-    fontSize: 10,
-    letterSpacing: 0.1,
-  },
-  fabContainer: {
-    paddingHorizontal: 4,
+  indicatorPill: {
+    width: 60,
+    height: 32,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
+  },
+  tabLabel: {
+    fontSize: 12,
+    letterSpacing: 0.2,
   },
 });
