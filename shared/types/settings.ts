@@ -21,6 +21,16 @@ export type OnboardingState = {
   visitedScreens: string[];
 };
 
+export type DateFormatOption =
+  | "YYYY-MM-DD"
+  | "DD/MM/YYYY"
+  | "MM/DD/YYYY"
+  | "DD MMM YYYY";
+
+export type NumberFormatOption = "auto" | "standard" | "lakhs";
+
+export type FirstDayOfWeekOption = "monday" | "sunday";
+
 export type UserSettings = {
   lockPastMonths: boolean;
   compactListMode: boolean;
@@ -42,6 +52,14 @@ export type UserSettings = {
   inactivityTimeout: number;
   lockOnAppSwitch: boolean;
   onboarding: OnboardingState;
+  /** Personalization */
+  accentColor?: string;
+  currency: string;
+  language: string;
+  dateFormat: DateFormatOption;
+  numberFormat: NumberFormatOption;
+  firstDayOfWeek: FirstDayOfWeekOption;
+  themeMode?: string;
 };
 
 function deviceTimezone(): string {
@@ -96,6 +114,13 @@ export const SETTINGS_DEFAULTS: UserSettings = {
     setupStartedAt: "",
     visitedScreens: [],
   },
+  accentColor: "indigo",
+  currency: "INR",
+  language: "en",
+  dateFormat: "YYYY-MM-DD",
+  numberFormat: "auto",
+  firstDayOfWeek: "monday",
+  themeMode: "system",
 };
 
 export function mergeSettingsFromDoc(
@@ -122,6 +147,22 @@ export function mergeSettingsFromDoc(
       typeof data.timezone === "string" && data.timezone
         ? data.timezone
         : SETTINGS_DEFAULTS.timezone,
+    currency:
+      typeof data.currency === "string" && data.currency
+        ? data.currency
+        : SETTINGS_DEFAULTS.currency,
+    language:
+      typeof data.language === "string" && data.language
+        ? data.language
+        : SETTINGS_DEFAULTS.language,
+    dateFormat:
+      (data.dateFormat as DateFormatOption) || SETTINGS_DEFAULTS.dateFormat,
+    numberFormat:
+      (data.numberFormat as NumberFormatOption) ||
+      SETTINGS_DEFAULTS.numberFormat,
+    firstDayOfWeek:
+      (data.firstDayOfWeek as FirstDayOfWeekOption) ||
+      SETTINGS_DEFAULTS.firstDayOfWeek,
     onboarding: {
       ...SETTINGS_DEFAULTS.onboarding,
       ...((data.onboarding as Partial<OnboardingState>) || {}),

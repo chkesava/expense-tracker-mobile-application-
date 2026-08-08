@@ -22,8 +22,11 @@ import { useUserDoc } from "@/providers/UserDocProvider";
 import {
   SETTINGS_DEFAULTS,
   mergeSettingsFromDoc,
+  type DateFormatOption,
   type DefaultView,
+  type FirstDayOfWeekOption,
   type NavigationStyle,
+  type NumberFormatOption,
   type UserSettings,
 } from "@/shared/types/settings";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -51,6 +54,12 @@ type SettingsContextType = {
   setInactivityTimeout: (val: number) => void;
   setLockOnAppSwitch: (val: boolean) => void;
   setEnableInvestments: (val: boolean) => void;
+  setAccentColor: (val: string) => void;
+  setCurrency: (val: string) => void;
+  setLanguage: (val: string) => void;
+  setDateFormat: (val: DateFormatOption) => void;
+  setNumberFormat: (val: NumberFormatOption) => void;
+  setFirstDayOfWeek: (val: FirstDayOfWeekOption) => void;
 };
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
@@ -133,6 +142,12 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         void updateSettings({ inactivityTimeout: val }),
       setLockOnAppSwitch: (val) => void updateSettings({ lockOnAppSwitch: val }),
       setEnableInvestments: (val) => void updateSettings({ enableInvestments: val }),
+      setAccentColor: (val) => void updateSettings({ accentColor: val }),
+      setCurrency: (val) => void updateSettings({ currency: val }),
+      setLanguage: (val) => void updateSettings({ language: val }),
+      setDateFormat: (val) => void updateSettings({ dateFormat: val }),
+      setNumberFormat: (val) => void updateSettings({ numberFormat: val }),
+      setFirstDayOfWeek: (val) => void updateSettings({ firstDayOfWeek: val }),
     }),
     [settings, loading, updateSettings]
   );

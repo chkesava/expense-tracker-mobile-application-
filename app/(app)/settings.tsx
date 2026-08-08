@@ -17,19 +17,32 @@ import { PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
+import { PersonalizationPreviewCard } from "@/components/settings/PersonalizationPreviewCard";
 import { useBiometrics } from "@/hooks/useBiometrics";
 import { getFirestoreDb } from "@/lib/firebase";
 import { haptic } from "@/lib/haptics";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
+import { useTranslation, SUPPORTED_LANGUAGES, type LanguageCode } from "@/providers/LocalizationProvider";
 import { useSettings } from "@/providers/SettingsProvider";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import { useUserDoc } from "@/providers/UserDocProvider";
-import type { DefaultView, NavigationStyle } from "@/shared/types/settings";
+import type {
+  DateFormatOption,
+  DefaultView,
+  FirstDayOfWeekOption,
+  NavigationStyle,
+  NumberFormatOption,
+} from "@/shared/types/settings";
+import { SUPPORTED_CURRENCIES } from "@/shared/utils/formatCurrency";
 import { useTheme } from "@/theme/ThemeProvider";
 import {
+  ACCENT_COLOR_NAMES,
+  ACCENT_PALETTES,
   THEME_LABELS,
   THEME_NAMES,
+  type AccentColorName,
+  type ThemeMode,
   type ThemeName,
   themeUsesDarkPalette,
 } from "@/theme/tokens";
@@ -59,6 +72,31 @@ const DEFAULT_VIEWS: { value: DefaultView; label: string }[] = [
   { value: "add", label: "Add" },
 ];
 
+const THEME_MODE_OPTIONS: { value: ThemeMode; label: string }[] = [
+  { value: "system", label: "System Auto" },
+  { value: "light", label: "Light" },
+  { value: "dark", label: "Dark (OLED)" },
+  { value: "custom", label: "Custom Presets" },
+];
+
+const DATE_FORMAT_OPTIONS: { value: DateFormatOption; label: string }[] = [
+  { value: "YYYY-MM-DD", label: "YYYY-MM-DD" },
+  { value: "DD/MM/YYYY", label: "DD/MM/YYYY" },
+  { value: "MM/DD/YYYY", label: "MM/DD/YYYY" },
+  { value: "DD MMM YYYY", label: "DD MMM YYYY" },
+];
+
+const NUMBER_FORMAT_OPTIONS: { value: NumberFormatOption; label: string }[] = [
+  { value: "auto", label: "Auto (Regional)" },
+  { value: "standard", label: "Standard (1,000,000)" },
+  { value: "lakhs", label: "Indian (10,00,000)" },
+];
+
+const FIRST_DAY_OPTIONS: { value: FirstDayOfWeekOption; label: string }[] = [
+  { value: "monday", label: "Monday" },
+  { value: "sunday", label: "Sunday" },
+];
+
 const NAV_STYLES: { value: NavigationStyle; label: string }[] = [
   { value: "bottom", label: "Bottom tabs" },
   { value: "dock", label: "Action dock" },
@@ -78,9 +116,18 @@ const COMMON_TIMEZONES = [
  * Settings — profile, general, personalize, privacy.
  */
 export default function SettingsScreen() {
-  const { theme, themeName, setThemeName } = useTheme();
+  const {
+    theme,
+    themeName,
+    setThemeName,
+    themeMode,
+    setThemeMode,
+    accentColor,
+    setAccentColor,
+  } = useTheme();
   const { user, realUser, logout } = useAuth();
   const { data, role, isAdmin } = useUserDoc();
+  const { t } = useTranslation();
   const {
     settings,
     setTimezone,
@@ -97,6 +144,11 @@ export default function SettingsScreen() {
     setLockOnInactivity,
     setInactivityTimeout,
     setLockOnAppSwitch,
+    setCurrency,
+    setLanguage,
+    setDateFormat,
+    setNumberFormat,
+    setFirstDayOfWeek,
   } = useSettings();
   const { settings: system } = useSystemSettings();
   const { celebrateMilestone } = useCelebration();
@@ -336,17 +388,163 @@ export default function SettingsScreen() {
         </View>
       </Card>
 
-      <Card title="Personalize" subtitle="Synced to your account">
+      <Card
+        title={t("section_personalize", "Personalize")}
+        subtitle="Theme, accent color, currency, language & formatting"
+      >
         <View style={{ gap: theme.space.md }}>
-          <FieldLabel label="Theme" />
+          {/* Live Preview Card */}
+          <FieldLabel label={t("section_preview", "Live Theme Preview")} />
+          <PersonalizationPreviewCard />
+
+          <View style={{ height: 1, backgroundColor: theme.colors.border, marginVertical: theme.space.xs }} />
+
+          {/* Theme Mode */}
+          <FieldLabel label={t("theme_mode", "Theme Mode")} />
           <ChipRow
-            options={THEME_NAMES.map((name) => ({
-              value: name,
-              label: THEME_LABELS[name],
-            }))}
-            selected={themeName}
-            onSelect={(v) => setThemeName(v as ThemeName)}
+            options={THEME_MODE_OPTIONS}
+            selected={themeMode}
+            onSelect={(v) => setThemeMode(v as ThemeMode)}
           />
+
+          {/* When Custom Presets is selected, display theme palettes */}
+          {themeMode === "custom" ? (
+            <View style={{ gap: theme.space.xs, marginTop: theme.space.xs }}>
+              <FieldLabel label={t("theme_mode_custom", "Theme Presets")} />
+              <ChipRow
+                options={THEME_NAMES.map((name) => ({
+                  value: name,
+                  label: THEME_LABELS[name],
+                }))}
+                selected={themeName}
+                onSelect={(v) => setThemeName(v as ThemeName)}
+              />
+            </View>
+          ) : null}
+
+          <View style={{ height: 1, backgroundColor: theme.colors.border, marginVertical: theme.space.xs }} />
+
+          {/* Accent Color */}
+          <FieldLabel label={t("accent_color", "Accent Color")} />
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
+            {ACCENT_COLOR_NAMES.map((name) => {
+              const pal = ACCENT_PALETTES[name];
+              const active = accentColor === name;
+              const palPrimary = themeUsesDarkPalette(themeName)
+                ? pal.dark.primary
+                : pal.light.primary;
+              const palContainer = themeUsesDarkPalette(themeName)
+                ? pal.dark.primaryContainer
+                : pal.light.primaryContainer;
+
+              return (
+                <Pressable
+                  key={name}
+                  onPress={() => {
+                    void haptic.selection();
+                    setAccentColor(name);
+                  }}
+                  android_ripple={{
+                    color: palPrimary + "20",
+                    borderless: false,
+                  }}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 8,
+                    paddingHorizontal: 14,
+                    minHeight: 40,
+                    borderRadius: 20,
+                    borderWidth: active ? 2 : 1,
+                    borderColor: active ? palPrimary : theme.colors.border,
+                    backgroundColor: active
+                      ? palContainer
+                      : theme.colors.surfaceVariant,
+                  }}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: active }}
+                >
+                  <View
+                    style={{
+                      width: 14,
+                      height: 14,
+                      borderRadius: 7,
+                      backgroundColor: palPrimary,
+                    }}
+                  />
+                  <Text
+                    style={{
+                      fontSize: 13,
+                      fontWeight: active ? "700" : "500",
+                      color: active ? palPrimary : theme.colors.foreground,
+                    }}
+                  >
+                    {pal.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          <View style={{ height: 1, backgroundColor: theme.colors.border, marginVertical: theme.space.xs }} />
+
+          {/* Preferred Currency */}
+          <FieldLabel label={t("currency_label", "Preferred Currency")} />
+          <ChipRow
+            options={SUPPORTED_CURRENCIES.map((c) => ({
+              value: c.code,
+              label: `${c.flag} ${c.code} (${c.symbol})`,
+            }))}
+            selected={settings.currency || "INR"}
+            onSelect={(v) => {
+              setCurrency(v);
+              toast.success(`Currency set to ${v}`);
+            }}
+          />
+
+          <View style={{ height: 1, backgroundColor: theme.colors.border, marginVertical: theme.space.xs }} />
+
+          {/* Language Selection */}
+          <FieldLabel label={t("language_label", "Language")} />
+          <ChipRow
+            options={SUPPORTED_LANGUAGES.map((l) => ({
+              value: l.code,
+              label: `${l.flag} ${l.nativeLabel}`,
+            }))}
+            selected={settings.language || "en"}
+            onSelect={(v) => {
+              setLanguage(v);
+              toast.success(`Language updated`);
+            }}
+          />
+
+          <View style={{ height: 1, backgroundColor: theme.colors.border, marginVertical: theme.space.xs }} />
+
+          {/* Date Format */}
+          <FieldLabel label={t("date_format_label", "Date Format")} />
+          <ChipRow
+            options={DATE_FORMAT_OPTIONS}
+            selected={settings.dateFormat || "YYYY-MM-DD"}
+            onSelect={(v) => setDateFormat(v as DateFormatOption)}
+          />
+
+          {/* Number Format */}
+          <FieldLabel label={t("number_format_label", "Number Format")} />
+          <ChipRow
+            options={NUMBER_FORMAT_OPTIONS}
+            selected={settings.numberFormat || "auto"}
+            onSelect={(v) => setNumberFormat(v as NumberFormatOption)}
+          />
+
+          {/* First Day of Week */}
+          <FieldLabel label={t("first_day_of_week_label", "First Day of Week")} />
+          <ChipRow
+            options={FIRST_DAY_OPTIONS}
+            selected={settings.firstDayOfWeek || "monday"}
+            onSelect={(v) => setFirstDayOfWeek(v as FirstDayOfWeekOption)}
+          />
+
+          <View style={{ height: 1, backgroundColor: theme.colors.border, marginVertical: theme.space.xs }} />
 
           <FieldLabel label="Navigation style" />
           <ChipRow

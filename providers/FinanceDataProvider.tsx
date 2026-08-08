@@ -24,6 +24,7 @@ import {
 } from "react";
 
 import { getFirestoreDb } from "@/lib/firebase";
+import { setGlobalPendingSyncCount } from "@/lib/syncStatusStore";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import type {
@@ -47,6 +48,8 @@ export type ExpensesContextType = {
   expenses: Expense[];
   expensesLoading: boolean;
   pendingSyncCount: number;
+  /** True when data is being served from local cache (offline or first-load). */
+  isFromCache: boolean;
 };
 
 export type IncomesContextType = {
@@ -161,6 +164,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
   const pendingEntriesCountRef = useRef(0);
   const pendingTransfersCountRef = useRef(0);
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
+  const [isFromCache, setIsFromCache] = useState(false);
 
   const updatePendingSyncCount = useCallback(() => {
     const total =
@@ -172,6 +176,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       pendingEntriesCountRef.current +
       pendingTransfersCountRef.current;
     setPendingSyncCount(total);
+    setGlobalPendingSyncCount(total);
   }, []);
 
   // ─── Critical listeners (First paint) ────────────────────────────────────────
@@ -205,6 +210,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       pendingEntriesCountRef.current = 0;
       pendingTransfersCountRef.current = 0;
       setPendingSyncCount(0);
+      setGlobalPendingSyncCount(0);
       return;
     }
 
@@ -234,6 +240,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
           (d) => d.metadata.hasPendingWrites
         ).length;
         updatePendingSyncCount();
+        setIsFromCache(snap.metadata.fromCache);
         setExpensesLoading(false);
       },
       (error) => {
@@ -796,8 +803,9 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       expenses,
       expensesLoading,
       pendingSyncCount,
+      isFromCache,
     }),
-    [expenses, expensesLoading, pendingSyncCount]
+    [expenses, expensesLoading, pendingSyncCount, isFromCache]
   );
 
   const incomesValue = useMemo<IncomesContextType>(

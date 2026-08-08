@@ -16,17 +16,27 @@ import { useAuth } from "@/providers/AuthProvider";
 import { useUserDoc } from "@/providers/UserDocProvider";
 import { memoryStorage, setSharedStorage } from "@/shared/storage/memoryStorage";
 import {
+  ACCENT_STORAGE_KEY,
   THEME_STORAGE_KEY,
   createTheme,
+  isAccentColorName,
   isThemeName,
+  type AccentColorName,
   type ThemeName,
   type ThemeTokens,
 } from "./tokens";
 
+export type ThemeMode = "system" | "light" | "dark" | "custom";
+export const THEME_MODE_STORAGE_KEY = "expense-tracker-theme-mode";
+
 type ThemeContextValue = {
   theme: ThemeTokens;
   themeName: ThemeName;
+  themeMode: ThemeMode;
+  accentColor: AccentColorName;
   setThemeName: (name: ThemeName) => void;
+  setThemeMode: (mode: ThemeMode) => void;
+  setAccentColor: (accent: AccentColorName) => void;
   toggleTheme: () => void;
 };
 
@@ -42,45 +52,92 @@ function resolveInitialTheme(system: string | null | undefined): ThemeName {
   return system === "dark" ? "dark" : "light";
 }
 
+function resolveInitialAccent(): AccentColorName {
+  try {
+    const stored = memoryStorage.getItem(ACCENT_STORAGE_KEY);
+    if (isAccentColorName(stored)) return stored;
+  } catch {
+    /* ignore */
+  }
+  return "indigo";
+}
+
 /**
- * Theme provider — AsyncStorage + Firestore `users/{uid}.theme` (shared UserDoc).
+ * Theme provider — AsyncStorage + Firestore `users/{uid}`.
  * Must sit under AuthProvider + UserDocProvider.
  */
 export function AppThemeProvider({ children }: { children: ReactNode }) {
   const system = useSystemColorScheme();
   const { realUser } = useAuth();
   const { data } = useUserDoc();
+
+  const [themeMode, setThemeModeState] = useState<ThemeMode>("system");
   const [themeName, setThemeNameState] = useState<ThemeName>(() =>
     resolveInitialTheme(system)
+  );
+  const [accentColor, setAccentColorState] = useState<AccentColorName>(() =>
+    resolveInitialAccent()
   );
 
   useEffect(() => {
     setSharedStorage(memoryStorage);
     let cancelled = false;
-    AsyncStorage.getItem(THEME_STORAGE_KEY)
-      .then((stored) => {
-        if (cancelled || !isThemeName(stored)) return;
-        setThemeNameState(stored);
-        memoryStorage.setItem(THEME_STORAGE_KEY, stored);
+    Promise.all([
+      AsyncStorage.getItem(THEME_STORAGE_KEY),
+      AsyncStorage.getItem(THEME_MODE_STORAGE_KEY),
+      AsyncStorage.getItem(ACCENT_STORAGE_KEY),
+    ])
+      .then(([storedTheme, storedMode, storedAccent]) => {
+        if (cancelled) return;
+        if (isThemeName(storedTheme)) {
+          setThemeNameState(storedTheme);
+          memoryStorage.setItem(THEME_STORAGE_KEY, storedTheme);
+        }
+        if (storedMode === "system" || storedMode === "light" || storedMode === "dark" || storedMode === "custom") {
+          setThemeModeState(storedMode);
+        }
+        if (isAccentColorName(storedAccent)) {
+          setAccentColorState(storedAccent);
+          memoryStorage.setItem(ACCENT_STORAGE_KEY, storedAccent);
+        }
       })
       .catch(() => undefined);
+
     return () => {
       cancelled = true;
     };
   }, []);
 
-  // Sync theme from the shared user doc listener (no extra onSnapshot)
+  // Sync theme from shared user doc listener
   useEffect(() => {
     if (isThemeName(data?.theme)) {
       setThemeNameState(data.theme);
       memoryStorage.setItem(THEME_STORAGE_KEY, data.theme);
       void AsyncStorage.setItem(THEME_STORAGE_KEY, data.theme);
     }
-  }, [data?.theme]);
+    if (isAccentColorName((data as Record<string, unknown>)?.accentColor)) {
+      const acc = (data as Record<string, unknown>).accentColor as AccentColorName;
+      setAccentColorState(acc);
+      memoryStorage.setItem(ACCENT_STORAGE_KEY, acc);
+      void AsyncStorage.setItem(ACCENT_STORAGE_KEY, acc);
+    }
+    const mode = (data as Record<string, unknown>)?.themeMode;
+    if (mode === "system" || mode === "light" || mode === "dark" || mode === "custom") {
+      setThemeModeState(mode);
+    }
+  }, [data]);
+
+  // Handle system appearance changes when in system mode
+  useEffect(() => {
+    if (themeMode === "system") {
+      setThemeNameState(system === "dark" ? "dark" : "light");
+    }
+  }, [system, themeMode]);
 
   const setThemeName = useCallback(
     (name: ThemeName) => {
       setThemeNameState(name);
+      setThemeModeState(name === "light" ? "light" : name === "dark" ? "dark" : "custom");
       try {
         memoryStorage.setItem(THEME_STORAGE_KEY, name);
       } catch {
@@ -90,30 +147,88 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
 
       const db = getFirestoreDb();
       if (realUser && db) {
-        setDoc(doc(db, "users", realUser.uid), { theme: name }, { merge: true }).catch(
-          (err) => console.error("Failed to sync theme to Firestore", err)
-        );
+        setDoc(
+          doc(db, "users", realUser.uid),
+          { theme: name, themeMode: name === "light" ? "light" : name === "dark" ? "dark" : "custom" },
+          { merge: true }
+        ).catch((err) => console.error("Failed to sync theme to Firestore", err));
+      }
+    },
+    [realUser]
+  );
+
+  const setThemeMode = useCallback(
+    (mode: ThemeMode) => {
+      setThemeModeState(mode);
+      let targetTheme: ThemeName = themeName;
+      if (mode === "system") {
+        targetTheme = system === "dark" ? "dark" : "light";
+      } else if (mode === "light") {
+        targetTheme = "light";
+      } else if (mode === "dark") {
+        targetTheme = "dark";
+      }
+      setThemeNameState(targetTheme);
+
+      void AsyncStorage.setItem(THEME_MODE_STORAGE_KEY, mode);
+      void AsyncStorage.setItem(THEME_STORAGE_KEY, targetTheme);
+
+      const db = getFirestoreDb();
+      if (realUser && db) {
+        setDoc(
+          doc(db, "users", realUser.uid),
+          { theme: targetTheme, themeMode: mode },
+          { merge: true }
+        ).catch((err) => console.error("Failed to sync theme mode to Firestore", err));
+      }
+    },
+    [realUser, system, themeName]
+  );
+
+  const setAccentColor = useCallback(
+    (accent: AccentColorName) => {
+      setAccentColorState(accent);
+      try {
+        memoryStorage.setItem(ACCENT_STORAGE_KEY, accent);
+      } catch {
+        /* ignore */
+      }
+      void AsyncStorage.setItem(ACCENT_STORAGE_KEY, accent);
+
+      const db = getFirestoreDb();
+      if (realUser && db) {
+        setDoc(
+          doc(db, "users", realUser.uid),
+          { accentColor: accent },
+          { merge: true }
+        ).catch((err) => console.error("Failed to sync accent color to Firestore", err));
       }
     },
     [realUser]
   );
 
   const toggleTheme = useCallback(() => {
-    setThemeName(themeName === "dark" || themeName === "light"
-      ? themeName === "dark"
-        ? "light"
-        : "dark"
-      : themeUsesOppositeToggle(themeName));
+    setThemeName(
+      themeName === "dark" || themeName === "light"
+        ? themeName === "dark"
+          ? "light"
+          : "dark"
+        : themeUsesOppositeToggle(themeName)
+    );
   }, [setThemeName, themeName]);
 
   const value = useMemo<ThemeContextValue>(
     () => ({
-      theme: createTheme(themeName),
+      theme: createTheme(themeName, accentColor),
       themeName,
+      themeMode,
+      accentColor,
       setThemeName,
+      setThemeMode,
+      setAccentColor,
       toggleTheme,
     }),
-    [themeName, setThemeName, toggleTheme]
+    [themeName, themeMode, accentColor, setThemeName, setThemeMode, setAccentColor, toggleTheme]
   );
 
   return (
@@ -122,7 +237,6 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
 }
 
 function themeUsesOppositeToggle(name: ThemeName): ThemeName {
-  // Named themes: flip to light/dark counterpart for quick toggle.
   const darkish = [
     "dark",
     "midnight",
@@ -141,3 +255,4 @@ export function useTheme() {
   }
   return ctx;
 }
+

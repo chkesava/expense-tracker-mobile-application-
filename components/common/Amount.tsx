@@ -19,7 +19,7 @@ export type AmountProps = {
 
 export function Amount({
   value,
-  currency = "INR",
+  currency,
   prefix,
   fractionDigits,
   ghostable = false,
@@ -32,6 +32,8 @@ export function Amount({
   const { settings } = useSettings();
 
   const isGhosted = ghostable && settings?.ghostMode;
+  const effectiveCurrency = currency || settings?.currency || "INR";
+  const numberFormatStyle = settings?.numberFormat || "auto";
 
   if (isGhosted) {
     return (
@@ -56,7 +58,7 @@ export function Amount({
     return (
       <AnimatedCounter
         value={value}
-        currency={currency}
+        currency={effectiveCurrency}
         prefix={prefix}
         fractionDigits={fractionDigits}
         duration={animationDuration}
@@ -87,8 +89,13 @@ export function Amount({
         style,
       ]}
     >
-      {formatAmount(value, currency, { prefix, fractionDigits })}
+      {formatAmount(value, effectiveCurrency, {
+        prefix,
+        fractionDigits,
+        numberFormatStyle,
+      })}
     </Text>
   );
 }
+
 

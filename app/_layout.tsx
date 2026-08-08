@@ -17,10 +17,13 @@ import {
 import "react-native-reanimated";
 
 import { CelebrationOverlay } from "@/components/common/CelebrationOverlay";
+import { OfflineBanner } from "@/components/common/OfflineBanner";
 import { SplashAnimationOverlay } from "@/components/common/SplashAnimationOverlay";
 import { ToastProvider } from "@/lib/toast";
 import { AuthProvider, useAuth } from "@/providers/AuthProvider";
 import { CelebrationProvider } from "@/providers/CelebrationProvider";
+import { LocalizationProvider } from "@/providers/LocalizationProvider";
+import { NetworkProvider } from "@/providers/NetworkProvider";
 import { SettingsProvider, useSettings } from "@/providers/SettingsProvider";
 import { SystemSettingsProvider } from "@/providers/SystemSettingsProvider";
 import { UserDocProvider, useUserDoc } from "@/providers/UserDocProvider";
@@ -165,26 +168,30 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
-          <SystemSettingsProvider>
-            <AuthProvider>
-              <UserDocProvider>
-                <WorkspaceProvider>
-                  <AppThemeProvider>
-                    <SettingsProvider>
-                      <CelebrationProvider>
-                        <ToastProvider>
-                          <AppInitializer>
-                            <RootNavigator />
-                            <CelebrationOverlay />
-                          </AppInitializer>
-                        </ToastProvider>
-                      </CelebrationProvider>
-                    </SettingsProvider>
-                  </AppThemeProvider>
-                </WorkspaceProvider>
-              </UserDocProvider>
-            </AuthProvider>
-          </SystemSettingsProvider>
+          <NetworkProvider>
+            <SystemSettingsProvider>
+              <AuthProvider>
+                <UserDocProvider>
+                  <WorkspaceProvider>
+                    <AppThemeProvider>
+                      <SettingsProvider>
+                        <LocalizationProvider>
+                          <CelebrationProvider>
+                            <ToastProvider>
+                              <AppInitializer>
+                                <RootNavigator />
+                                <CelebrationOverlay />
+                              </AppInitializer>
+                            </ToastProvider>
+                          </CelebrationProvider>
+                        </LocalizationProvider>
+                      </SettingsProvider>
+                    </AppThemeProvider>
+                  </WorkspaceProvider>
+                </UserDocProvider>
+              </AuthProvider>
+            </SystemSettingsProvider>
+          </NetworkProvider>
         </QueryClientProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
@@ -212,6 +219,7 @@ function RootNavigator() {
         <Stack.Screen name="google-auth" options={{ animation: "none" }} />
         <Stack.Screen name="+not-found" options={{ animation: "fade" }} />
       </Stack>
+      <OfflineBanner />
     </>
   );
 }

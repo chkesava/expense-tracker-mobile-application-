@@ -166,8 +166,11 @@ export type TypeScaleTokens = {
   labelSmall: TypeScaleEntry;
 };
 
+export type ThemeMode = "system" | "light" | "dark" | "custom";
+
 export type ThemeTokens = {
   name: ThemeName;
+  accentColor: AccentColorName;
   colors: ColorTokens;
   space: SpaceTokens;
   radius: RadiusTokens;
@@ -332,28 +335,295 @@ export const darkColors: ColorTokens = {
   infoForeground: "#080A14",
 };
 
-const chart: ChartTokens = {
-  categorical: ["#4F46FF", "#25965A", "#F59E0B", "#EF4444", "#3B82F6", "#EC4899", "#14B8A6"],
-  positive: "#25965A",
-  negative: "#EF4444",
+export type AccentColorName =
+  | "indigo"
+  | "emerald"
+  | "sapphire"
+  | "amethyst"
+  | "amber"
+  | "rose"
+  | "teal"
+  | "orange"
+  | "slate";
+
+export const ACCENT_COLOR_NAMES: AccentColorName[] = [
+  "indigo",
+  "emerald",
+  "sapphire",
+  "amethyst",
+  "amber",
+  "rose",
+  "teal",
+  "orange",
+  "slate",
+];
+
+export type AccentPalette = {
+  name: AccentColorName;
+  label: string;
+  hex: string;
+  light: {
+    primary: string;
+    primaryForeground: string;
+    tint: string;
+    tabIconSelected: string;
+    primaryContainer: string;
+    onPrimaryContainer: string;
+  };
+  dark: {
+    primary: string;
+    primaryForeground: string;
+    tint: string;
+    tabIconSelected: string;
+    primaryContainer: string;
+    onPrimaryContainer: string;
+  };
 };
 
-export function createTheme(name: ThemeName): ThemeTokens {
+export const ACCENT_PALETTES: Record<AccentColorName, AccentPalette> = {
+  indigo: {
+    name: "indigo",
+    label: "Indigo",
+    hex: "#4F46FF",
+    light: {
+      primary: "#4F46FF",
+      primaryForeground: "#F8FAFC",
+      tint: "#4F46FF",
+      tabIconSelected: "#4F46FF",
+      primaryContainer: "#E4E1FF",
+      onPrimaryContainer: "#150066",
+    },
+    dark: {
+      primary: "#6B63FF",
+      primaryForeground: "#080A14",
+      tint: "#6B63FF",
+      tabIconSelected: "#6B63FF",
+      primaryContainer: "#2C2470",
+      onPrimaryContainer: "#E4E1FF",
+    },
+  },
+  emerald: {
+    name: "emerald",
+    label: "Emerald",
+    hex: "#10B981",
+    light: {
+      primary: "#059669",
+      primaryForeground: "#FFFFFF",
+      tint: "#059669",
+      tabIconSelected: "#059669",
+      primaryContainer: "#D1FAE5",
+      onPrimaryContainer: "#064E3B",
+    },
+    dark: {
+      primary: "#10B981",
+      primaryForeground: "#080A14",
+      tint: "#10B981",
+      tabIconSelected: "#10B981",
+      primaryContainer: "#064E3B",
+      onPrimaryContainer: "#A7F3D0",
+    },
+  },
+  sapphire: {
+    name: "sapphire",
+    label: "Sapphire",
+    hex: "#3B82F6",
+    light: {
+      primary: "#2563EB",
+      primaryForeground: "#FFFFFF",
+      tint: "#2563EB",
+      tabIconSelected: "#2563EB",
+      primaryContainer: "#DBEAFE",
+      onPrimaryContainer: "#1E3A8A",
+    },
+    dark: {
+      primary: "#3B82F6",
+      primaryForeground: "#080A14",
+      tint: "#3B82F6",
+      tabIconSelected: "#3B82F6",
+      primaryContainer: "#1E3A8A",
+      onPrimaryContainer: "#BFDBFE",
+    },
+  },
+  amethyst: {
+    name: "amethyst",
+    label: "Amethyst",
+    hex: "#8B5CF6",
+    light: {
+      primary: "#7C3AED",
+      primaryForeground: "#FFFFFF",
+      tint: "#7C3AED",
+      tabIconSelected: "#7C3AED",
+      primaryContainer: "#EDE9FE",
+      onPrimaryContainer: "#4C1D95",
+    },
+    dark: {
+      primary: "#8B5CF6",
+      primaryForeground: "#080A14",
+      tint: "#8B5CF6",
+      tabIconSelected: "#8B5CF6",
+      primaryContainer: "#4C1D95",
+      onPrimaryContainer: "#DDD6FE",
+    },
+  },
+  amber: {
+    name: "amber",
+    label: "Amber Gold",
+    hex: "#F59E0B",
+    light: {
+      primary: "#D97706",
+      primaryForeground: "#FFFFFF",
+      tint: "#D97706",
+      tabIconSelected: "#D97706",
+      primaryContainer: "#FEF3C7",
+      onPrimaryContainer: "#78350F",
+    },
+    dark: {
+      primary: "#F59E0B",
+      primaryForeground: "#080A14",
+      tint: "#F59E0B",
+      tabIconSelected: "#F59E0B",
+      primaryContainer: "#78350F",
+      onPrimaryContainer: "#FDE68A",
+    },
+  },
+  rose: {
+    name: "rose",
+    label: "Rose",
+    hex: "#F43F5E",
+    light: {
+      primary: "#E11D48",
+      primaryForeground: "#FFFFFF",
+      tint: "#E11D48",
+      tabIconSelected: "#E11D48",
+      primaryContainer: "#FFE4E6",
+      onPrimaryContainer: "#881337",
+    },
+    dark: {
+      primary: "#F43F5E",
+      primaryForeground: "#080A14",
+      tint: "#F43F5E",
+      tabIconSelected: "#F43F5E",
+      primaryContainer: "#881337",
+      onPrimaryContainer: "#FECDD3",
+    },
+  },
+  teal: {
+    name: "teal",
+    label: "Teal Mint",
+    hex: "#14B8A6",
+    light: {
+      primary: "#0D9488",
+      primaryForeground: "#FFFFFF",
+      tint: "#0D9488",
+      tabIconSelected: "#0D9488",
+      primaryContainer: "#CCFBF1",
+      onPrimaryContainer: "#134E4A",
+    },
+    dark: {
+      primary: "#14B8A6",
+      primaryForeground: "#080A14",
+      tint: "#14B8A6",
+      tabIconSelected: "#14B8A6",
+      primaryContainer: "#134E4A",
+      onPrimaryContainer: "#99F6E4",
+    },
+  },
+  orange: {
+    name: "orange",
+    label: "Sunset Orange",
+    hex: "#F97316",
+    light: {
+      primary: "#EA580C",
+      primaryForeground: "#FFFFFF",
+      tint: "#EA580C",
+      tabIconSelected: "#EA580C",
+      primaryContainer: "#FFEDD5",
+      onPrimaryContainer: "#7C2D12",
+    },
+    dark: {
+      primary: "#F97316",
+      primaryForeground: "#080A14",
+      tint: "#F97316",
+      tabIconSelected: "#F97316",
+      primaryContainer: "#7C2D12",
+      onPrimaryContainer: "#FED7AA",
+    },
+  },
+  slate: {
+    name: "slate",
+    label: "Monochrome Slate",
+    hex: "#64748B",
+    light: {
+      primary: "#334155",
+      primaryForeground: "#FFFFFF",
+      tint: "#334155",
+      tabIconSelected: "#334155",
+      primaryContainer: "#E2E8F0",
+      onPrimaryContainer: "#0F172A",
+    },
+    dark: {
+      primary: "#94A3B8",
+      primaryForeground: "#080A14",
+      tint: "#94A3B8",
+      tabIconSelected: "#94A3B8",
+      primaryContainer: "#1E293B",
+      onPrimaryContainer: "#E2E8F0",
+    },
+  },
+};
+
+export function isAccentColorName(value: unknown): value is AccentColorName {
+  return (
+    typeof value === "string" &&
+    (ACCENT_COLOR_NAMES as string[]).includes(value)
+  );
+}
+
+export function createTheme(
+  name: ThemeName,
+  accentColor: AccentColorName = "indigo"
+): ThemeTokens {
+  const isDark = themeUsesDarkPalette(name);
+  const baseColors = isDark ? { ...darkColors } : { ...lightColors };
+  const palette = ACCENT_PALETTES[accentColor] || ACCENT_PALETTES.indigo;
+  const accentOverrides = isDark ? palette.dark : palette.light;
+
+  const colors: ColorTokens = {
+    ...baseColors,
+    ...accentOverrides,
+  };
+
+  const chartColors: ChartTokens = {
+    categorical: [
+      palette.hex,
+      "#25965A",
+      "#F59E0B",
+      "#EF4444",
+      "#3B82F6",
+      "#EC4899",
+      "#14B8A6",
+    ],
+    positive: "#25965A",
+    negative: "#EF4444",
+  };
+
   return {
     name,
-    colors: themeUsesDarkPalette(name) ? darkColors : lightColors,
+    accentColor,
+    colors,
     space,
     radius,
     typography,
     fontFamily,
     elevation,
     iconSize,
-    chart,
+    chart: chartColors,
     type,
   };
 }
 
 export const THEME_STORAGE_KEY = "expense-tracker-theme";
+export const ACCENT_STORAGE_KEY = "expense-tracker-accent-color";
 
 export const THEME_LABELS: Record<ThemeName, string> = {
   light: "Light",

@@ -4,18 +4,17 @@
  * Offline strategy:
  * - Auth (native): AsyncStorage via createAuth.native.ts
  * - Auth (web): browser persistence via createAuth.web.ts
- * - Firestore (web): IndexedDB persistentLocalCache
- * - Firestore (native): memoryLocalCache — durable RN offline deferred
+ * - Firestore (web): IndexedDB persistentLocalCache (multi-tab)
+ * - Firestore (native): SQLite persistentLocalCache (survives app restart)
  */
 
 import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
 import type { Auth } from "firebase/auth";
 import {
-  getFirestore,
   initializeFirestore,
-  memoryLocalCache,
   persistentLocalCache,
   persistentMultipleTabManager,
+  persistentSingleTabManager,
   type Firestore,
 } from "firebase/firestore";
 import { Platform } from "react-native";
@@ -43,17 +42,25 @@ function createApp(): FirebaseApp {
 function createDb(firebaseApp: FirebaseApp): Firestore {
   try {
     if (Platform.OS === "web") {
+      // Web: IndexedDB persistence with multi-tab support
       return initializeFirestore(firebaseApp, {
         localCache: persistentLocalCache({
           tabManager: persistentMultipleTabManager(),
         }),
       });
     }
+    // Native (iOS/Android): SQLite-backed persistent cache
+    // Survives app restarts. Writes queued offline replay automatically.
     return initializeFirestore(firebaseApp, {
-      localCache: memoryLocalCache(),
+      localCache: persistentLocalCache({
+        tabManager: persistentSingleTabManager({ forceOwnership: true }),
+      }),
     });
   } catch {
-    return getFirestore(firebaseApp);
+    // Fallback: in-memory cache if persistence init fails (e.g. storage full)
+    return initializeFirestore(firebaseApp, {
+      localCache: persistentLocalCache(),
+    });
   }
 }
 
@@ -64,7 +71,12 @@ export type FirebaseClients = {
   db: Firestore | null;
   error: string | null;
   /** Human-readable offline cache mode for diagnostics */
-  firestoreCacheMode: "persistent-indexeddb" | "memory" | "default" | "uninitialized";
+  firestoreCacheMode:
+    | "persistent-indexeddb"
+    | "persistent-sqlite"
+    | "memory"
+    | "default"
+    | "uninitialized";
   /** Auth persistence mode for Phase 1 verification */
   authPersistence: "async-storage" | "browser" | "none" | "uninitialized";
 };
@@ -100,7 +112,7 @@ export function getFirebaseClients(): FirebaseClients {
     ? "uninitialized"
     : Platform.OS === "web"
       ? "persistent-indexeddb"
-      : "memory";
+      : "persistent-sqlite";
 
   const authPersistence: FirebaseClients["authPersistence"] = !auth
     ? "uninitialized"
