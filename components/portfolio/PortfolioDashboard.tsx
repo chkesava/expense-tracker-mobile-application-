@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import * as Haptics from "expo-haptics";
 import {
   BarChart3,
@@ -7,6 +7,8 @@ import {
   LineChart,
   TrendingUp,
 } from "lucide-react-native";
+
+import { SkeletonHero, SkeletonChart, SkeletonList } from "@/components/common/Skeleton";
 
 import { OnboardingFlow } from "@/components/portfolio/OnboardingFlow";
 import { PortfolioCharts } from "@/components/portfolio/PortfolioCharts";
@@ -199,7 +201,13 @@ export function PortfolioDashboard() {
   }, [snapshots, summary.portfolioValue]);
 
   if (loading) {
-    return <ActivityIndicator color={theme.colors.primary} style={{ marginVertical: 32 }} />;
+    return (
+      <View style={{ gap: 16, paddingVertical: 8 }}>
+        <SkeletonHero />
+        <SkeletonChart height={160} />
+        <SkeletonList count={3} />
+      </View>
+    );
   }
 
   // Onboarding gate

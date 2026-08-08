@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import {
-  ActivityIndicator,
   Pressable,
   StyleSheet,
   Text,
@@ -11,6 +10,7 @@ import { MapPin, Plane, Plus } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
 import { EmptyState } from "@/components/common/EmptyState";
+import { SkeletonHero, SkeletonList } from "@/components/common/Skeleton";
 import { CreateTripModal } from "@/components/trips/CreateTripModal";
 import { TripDetailModal } from "@/components/trips/TripDetailModal";
 import { useTrips } from "@/hooks/useTrips";
@@ -47,8 +47,9 @@ export function TripsList() {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={theme.colors.primary} />
+      <View style={[styles.container, { gap: 16 }]}>
+        <SkeletonHero />
+        <SkeletonList count={3} />
       </View>
     );
   }

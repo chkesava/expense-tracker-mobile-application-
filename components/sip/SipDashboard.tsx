@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import * as Haptics from "expo-haptics";
 import {
   Bell,
@@ -8,6 +8,8 @@ import {
   History,
   TrendingUp,
 } from "lucide-react-native";
+
+import { SkeletonHero, SkeletonList } from "@/components/common/Skeleton";
 
 import { useSips } from "@/hooks/useSips";
 import { useMarketQuotes } from "@/hooks/useMarketQuotes";
@@ -145,8 +147,9 @@ export function SipDashboard() {
 
   if (loading) {
     return (
-      <View style={styles.loading}>
-        <ActivityIndicator size="large" color={theme.colors.primary} />
+      <View style={[styles.container, { gap: 16 }]}>
+        <SkeletonHero />
+        <SkeletonList count={3} />
       </View>
     );
   }

@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import {
-  ActivityIndicator,
   Pressable,
   StyleSheet,
   Text,
@@ -20,6 +19,7 @@ import {
 
 import { Amount } from "@/components/common/Amount";
 import { EmptyState } from "@/components/common/EmptyState";
+import { SkeletonHero, SkeletonList } from "@/components/common/Skeleton";
 import { EditSubscriptionModal } from "@/components/subscriptions/EditSubscriptionModal";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -74,8 +74,9 @@ export function SubscriptionsList() {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={theme.colors.primary} />
+      <View style={[styles.container, { gap: 16 }]}>
+        <SkeletonHero />
+        <SkeletonList count={4} />
       </View>
     );
   }

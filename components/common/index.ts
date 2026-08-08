@@ -1,7 +1,16 @@
 export { Amount } from "./Amount";
 export { AnimatedCounter, type AnimatedCounterProps } from "./AnimatedCounter";
 export { EmptyState } from "./EmptyState";
-export { Skeleton } from "./Skeleton";
+export {
+  Skeleton,
+  SkeletonCard,
+  SkeletonList,
+  SkeletonListItem,
+  SkeletonHero,
+  SkeletonChart,
+  SkeletonDonut,
+  type SkeletonProps,
+} from "./Skeleton";
 export { Modal, type ModalProps } from "./Modal";
 export { Dialog, type DialogProps, type DialogAction } from "./Dialog";
 export { ListItem, type ListItemProps } from "./ListItem";

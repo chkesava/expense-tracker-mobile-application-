@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import {
-  ActivityIndicator,
   Pressable,
   StyleSheet,
   Text,
@@ -17,6 +16,7 @@ import {
 
 import { Amount } from "@/components/common/Amount";
 import { EmptyState } from "@/components/common/EmptyState";
+import { SkeletonHero, SkeletonList } from "@/components/common/Skeleton";
 import { CreateSplitModal } from "@/components/splits/CreateSplitModal";
 import { SplitDetailModal } from "@/components/splits/SplitDetailModal";
 import { useAuth } from "@/providers/AuthProvider";
@@ -55,8 +55,9 @@ export function SplitsList() {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={theme.colors.primary} />
+      <View style={[styles.container, { gap: 16 }]}>
+        <SkeletonHero />
+        <SkeletonList count={3} />
       </View>
     );
   }
