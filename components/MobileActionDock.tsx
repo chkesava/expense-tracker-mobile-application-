@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import * as Haptics from "expo-haptics";
 import { Menu } from "lucide-react-native";
 
+import { haptic } from "@/lib/haptics";
 import { SideDrawer } from "@/components/SideDrawer";
 import { AddFab } from "@/components/ui/AddFab";
 import { useModals } from "@/providers/ModalProvider";
@@ -18,7 +18,7 @@ export function MobileActionDock() {
   const isDark = themeUsesDarkPalette(themeName);
 
   const handleOpenMenu = () => {
-    Haptics.selectionAsync().catch(() => undefined);
+    void haptic.navigation();
     setIsMenuOpen(true);
   };
 

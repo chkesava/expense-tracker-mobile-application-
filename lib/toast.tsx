@@ -18,6 +18,7 @@ import {
 } from "lucide-react-native";
 
 import { useTheme } from "@/theme/ThemeProvider";
+import { haptic } from "@/lib/haptics";
 
 export type ToastKind = "success" | "error" | "info" | "warning" | "message";
 
@@ -75,6 +76,13 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       setItems((prev) => [...prev.slice(-3), { id, kind, message, duration: durationMs }]);
       const timer = setTimeout(() => dismiss(id), durationMs);
       timers.current.set(id, timer);
+
+      // Trigger tactile haptics based on toast kind
+      if (kind === "success") {
+        void haptic.success();
+      } else if (kind === "error") {
+        void haptic.error();
+      }
     },
     [dismiss]
   );

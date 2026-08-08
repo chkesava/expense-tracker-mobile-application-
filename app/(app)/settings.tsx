@@ -19,6 +19,7 @@ import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { useBiometrics } from "@/hooks/useBiometrics";
 import { getFirestoreDb } from "@/lib/firebase";
+import { haptic } from "@/lib/haptics";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import { useSettings } from "@/providers/SettingsProvider";
@@ -89,6 +90,7 @@ export default function SettingsScreen() {
     setNavigationStyle,
     setDefaultCategory,
     setEnableInvestments,
+    setHapticFeedback,
     setPrivacyPin,
     setFakePin,
     setLockOnInactivity,
@@ -341,6 +343,79 @@ export default function SettingsScreen() {
             selected={settings.navigationStyle}
             onSelect={(v) => setNavigationStyle(v as NavigationStyle)}
           />
+
+          <View style={{ height: 1, backgroundColor: theme.colors.border, marginVertical: theme.space.sm }} />
+
+          <RowSwitch
+            label="Haptic feedback"
+            value={settings.hapticFeedback}
+            onValueChange={setHapticFeedback}
+          />
+
+          {settings.hapticFeedback ? (
+            <View style={{ gap: theme.space.xs, marginTop: -theme.space.xs }}>
+              <Text
+                style={{
+                  color: theme.colors.mutedForeground,
+                  fontSize: theme.typography.xs,
+                }}
+              >
+                Test vibration patterns:
+              </Text>
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: theme.space.xs }}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onPress={() => {
+                    void haptic.save();
+                    toast.success("Save vibration tested");
+                  }}
+                >
+                  Save
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onPress={() => {
+                    void haptic.delete();
+                    toast.show("Delete vibration tested", "message");
+                  }}
+                >
+                  Delete
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onPress={() => {
+                    void haptic.success();
+                    toast.success("Success vibration tested");
+                  }}
+                >
+                  Success
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onPress={() => {
+                    void haptic.error();
+                    toast.error("Error vibration tested");
+                  }}
+                >
+                  Error
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onPress={() => {
+                    void haptic.navigation();
+                    toast.info("Navigation vibration tested");
+                  }}
+                >
+                  Navigation
+                </Button>
+              </View>
+            </View>
+          ) : null}
 
           <View style={{ height: 1, backgroundColor: theme.colors.border, marginVertical: theme.space.sm }} />
           <DashboardWidgetToggles />

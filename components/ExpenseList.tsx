@@ -10,7 +10,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { deleteDoc, doc } from "firebase/firestore";
-import * as Haptics from "expo-haptics";
+import { haptic } from "@/lib/haptics";
 import {
   Calendar,
   CreditCard,
@@ -136,6 +136,7 @@ export function ExpenseList({
 
       await deleteDoc(docRef);
       setSelectedTx(null);
+      void haptic.delete();
 
       toast.success(
         `${target.kind === "expense" ? "Expense" : "Income"} deleted`
@@ -204,7 +205,7 @@ export function ExpenseList({
       >
         <Pressable
           onPress={() => {
-            Haptics.selectionAsync().catch(() => undefined);
+            void haptic.selection();
             setSelectedTx(item);
           }}
           android_ripple={{
@@ -385,7 +386,7 @@ export function ExpenseList({
             <RefreshControl
               refreshing={!!refreshing}
               onRefresh={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
+                void haptic.impact();
                 onRefresh();
               }}
               tintColor={theme.colors.primary}

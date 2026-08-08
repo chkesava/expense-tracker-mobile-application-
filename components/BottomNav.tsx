@@ -1,7 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { usePathname, useRouter } from "expo-router";
-import * as Haptics from "expo-haptics";
 import {
   BarChart3,
   Home,
@@ -9,6 +8,8 @@ import {
   Users,
   Wallet,
 } from "lucide-react-native";
+
+import { haptic } from "@/lib/haptics";
 
 import { useModals } from "@/providers/ModalProvider";
 import { useSettings } from "@/providers/SettingsProvider";
@@ -57,7 +58,7 @@ export function BottomNav() {
 
   const handleTabPress = (link: (typeof navLinks)[number], isActive: boolean) => {
     if (isActive) return;
-    Haptics.selectionAsync().catch(() => undefined);
+    void haptic.navigation();
     const route = link.path.startsWith("/") ? link.path : `/${link.path}`;
     // Replace to keep tab navigation clean and prevent endless stack accumulation
     if (route === "/dashboard") {

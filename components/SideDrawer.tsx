@@ -30,6 +30,7 @@ import {
 } from "lucide-react-native";
 
 import { useUserRole } from "@/hooks/useUserRole";
+import { haptic } from "@/lib/haptics";
 import { useAuth } from "@/providers/AuthProvider";
 import { useSettings } from "@/providers/SettingsProvider";
 import {
@@ -76,20 +77,20 @@ export function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
   ];
 
   const handleNavigate = (path: string) => {
-    Haptics.selectionAsync().catch(() => undefined);
+    void haptic.navigation();
     onClose();
     const route = path.startsWith("/") ? path : `/${path}`;
     router.push(route as any);
   };
 
   const handleSwitchApp = () => {
-    Haptics.selectionAsync().catch(() => undefined);
+    void haptic.navigation();
     onClose();
     router.push("/app-selector" as any);
   };
 
   const handleLogout = async () => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => undefined);
+    void haptic.impact();
     onClose();
     await logout();
   };

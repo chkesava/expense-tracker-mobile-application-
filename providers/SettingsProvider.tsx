@@ -16,6 +16,7 @@ import { ActivityIndicator, View } from "react-native";
 import { doc, setDoc } from "firebase/firestore";
 
 import { getFirestoreDb } from "@/lib/firebase";
+import { haptic } from "@/lib/haptics";
 import { useAuth } from "@/providers/AuthProvider";
 import { useUserDoc } from "@/providers/UserDocProvider";
 import {
@@ -43,6 +44,7 @@ type SettingsContextType = {
   setDashboardOrder: (order: string[]) => void;
   setNavigationStyle: (val: NavigationStyle) => void;
   setGhostMode: (val: boolean) => void;
+  setHapticFeedback: (val: boolean) => void;
   setPrivacyPin: (val: string) => void;
   setFakePin: (val: string) => void;
   setLockOnInactivity: (val: boolean) => void;
@@ -58,6 +60,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const { data, exists, loading: userDocLoading } = useUserDoc();
   const [settings, setSettings] = useState<UserSettings>(SETTINGS_DEFAULTS);
   const [seedAttempted, setSeedAttempted] = useState(false);
+
+  useEffect(() => {
+    haptic.setEnabled(settings.hapticFeedback);
+  }, [settings.hapticFeedback]);
 
   useEffect(() => {
     const db = getFirestoreDb();
@@ -119,6 +125,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       setDashboardOrder: (order) => void updateSettings({ dashboardOrder: order }),
       setNavigationStyle: (val) => void updateSettings({ navigationStyle: val }),
       setGhostMode: (val) => void updateSettings({ ghostMode: val }),
+      setHapticFeedback: (val) => void updateSettings({ hapticFeedback: val }),
       setPrivacyPin: (val) => void updateSettings({ privacyPin: val }),
       setFakePin: (val) => void updateSettings({ fakePin: val }),
       setLockOnInactivity: (val) => void updateSettings({ lockOnInactivity: val }),

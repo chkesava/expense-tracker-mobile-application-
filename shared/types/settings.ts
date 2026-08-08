@@ -35,6 +35,7 @@ export type UserSettings = {
   dashboardOrder: string[];
   navigationStyle: NavigationStyle;
   ghostMode: boolean;
+  hapticFeedback: boolean;
   privacyPin: string;
   fakePin: string;
   lockOnInactivity: boolean;
@@ -82,6 +83,7 @@ export const SETTINGS_DEFAULTS: UserSettings = {
   ],
   navigationStyle: "bottom",
   ghostMode: false,
+  hapticFeedback: true,
   privacyPin: "",
   fakePin: "",
   lockOnInactivity: true,
@@ -113,6 +115,9 @@ export function mergeSettingsFromDoc(
       SETTINGS_DEFAULTS.dashboardOrder,
     ghostMode:
       (data.ghostMode as boolean | undefined) ?? SETTINGS_DEFAULTS.ghostMode,
+    hapticFeedback:
+      (data.hapticFeedback as boolean | undefined) ??
+      SETTINGS_DEFAULTS.hapticFeedback,
     timezone:
       typeof data.timezone === "string" && data.timezone
         ? data.timezone
@@ -129,3 +134,4 @@ export function mergeSettingsFromDoc(
     },
   };
 }
+

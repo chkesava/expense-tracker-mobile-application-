@@ -15,7 +15,7 @@ import {
   serverTimestamp,
   updateDoc,
 } from "firebase/firestore";
-import * as Haptics from "expo-haptics";
+import { haptic } from "@/lib/haptics";
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -262,7 +262,7 @@ export function ExpenseForm({
   ]);
 
   const handleAddQuickAmount = (val: number) => {
-    Haptics.selectionAsync().catch(() => undefined);
+      void haptic.selection();
     const curr = Number(amount) || 0;
     setAmount(String(curr + val));
   };
@@ -398,7 +398,7 @@ export function ExpenseForm({
         >
           <Pressable
             onPress={() => {
-              Haptics.selectionAsync().catch(() => undefined);
+                void haptic.selection();
               setType("expense");
             }}
             style={[
@@ -438,7 +438,7 @@ export function ExpenseForm({
 
           <Pressable
             onPress={() => {
-              Haptics.selectionAsync().catch(() => undefined);
+                void haptic.selection();
               setType("income");
             }}
             style={[
@@ -483,7 +483,7 @@ export function ExpenseForm({
         <View style={styles.aiQuickStrip}>
           <Pressable
             onPress={() => {
-              Haptics.selectionAsync().catch(() => undefined);
+                void haptic.selection();
               setIsMagicModalOpen(true);
             }}
             style={({ pressed }) => [
@@ -510,7 +510,7 @@ export function ExpenseForm({
 
           <Pressable
             onPress={() => {
-              Haptics.selectionAsync().catch(() => undefined);
+                void haptic.selection();
               setIsReceiptModalOpen(true);
             }}
             style={({ pressed }) => [
@@ -719,7 +719,7 @@ export function ExpenseForm({
                   <Pressable
                     key={src}
                     onPress={() => {
-                      Haptics.selectionAsync().catch(() => undefined);
+                        void haptic.selection();
                       setSource(src);
                     }}
                     style={[
@@ -790,7 +790,7 @@ export function ExpenseForm({
                   <Pressable
                     key={acc.id}
                     onPress={() => {
-                      Haptics.selectionAsync().catch(() => undefined);
+                        void haptic.selection();
                       setAccountId(acc.id);
                     }}
                     style={[

@@ -2,7 +2,6 @@ import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import * as Haptics from "expo-haptics";
 import {
   Activity,
   Calendar,
@@ -18,6 +17,7 @@ import { useSettings } from "@/providers/SettingsProvider";
 import { currentMonthKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
 
 function formatMonthLabel(month: string) {
   if (!month) return "This Month";
@@ -47,22 +47,22 @@ export function Header() {
   const selectedMonth = globalMonth || currentMonthKey(settings.timezone);
 
   const handleToggleGhost = () => {
-    Haptics.selectionAsync().catch(() => undefined);
+    void haptic.selection();
     setGhostMode(!settings.ghostMode);
   };
 
   const handleOpenMonthPicker = () => {
-    Haptics.selectionAsync().catch(() => undefined);
+    void haptic.navigation();
     setIsMonthDrawerOpen(true);
   };
 
   const handleOpenSettings = () => {
-    Haptics.selectionAsync().catch(() => undefined);
+    void haptic.navigation();
     router.push("/settings" as any);
   };
 
   const handleLogoPress = () => {
-    Haptics.selectionAsync().catch(() => undefined);
+    void haptic.navigation();
     router.push("/dashboard" as any);
   };
 
@@ -187,7 +187,7 @@ export function Header() {
             {/* User Avatar / Drawer Trigger */}
             <Pressable
               onPress={() => {
-                Haptics.selectionAsync().catch(() => undefined);
+                void haptic.navigation();
                 setIsDrawerOpen(true);
               }}
               android_ripple={{ color: theme.colors.primary + "30", borderless: true, radius: 20 }}

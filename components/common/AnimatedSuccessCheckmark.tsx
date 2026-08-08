@@ -1,6 +1,5 @@
 import React, { useEffect } from "react";
 import { StyleSheet, View } from "react-native";
-import * as Haptics from "expo-haptics";
 import Svg, { Circle, Path } from "react-native-svg";
 import Animated, {
   useAnimatedProps,
@@ -14,6 +13,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { useTheme } from "@/theme/ThemeProvider";
+import { haptic as hapticEngine } from "@/lib/haptics";
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 const AnimatedPath = Animated.createAnimatedComponent(Path);
@@ -41,9 +41,7 @@ export function AnimatedSuccessCheckmark({
 
   useEffect(() => {
     if (haptic) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(
-        () => undefined
-      );
+      void hapticEngine.success();
     }
 
     ringScale.value = withSequence(

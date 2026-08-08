@@ -12,9 +12,10 @@ import {
   Text,
   View,
 } from "react-native";
-import * as Haptics from "expo-haptics";
 import { Delete, Fingerprint, Lock } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+import { haptic } from "@/lib/haptics";
 
 import { useBiometrics } from "@/hooks/useBiometrics";
 import { privacySession } from "@/lib/privacySession";
@@ -186,19 +187,11 @@ export function PrivacyLock({ children }: { children: ReactNode }) {
   }, [settings.privacyPin, settings.lockOnInactivity, settings.inactivityTimeout, lockApp]);
 
   const triggerErrorHaptic = async () => {
-    try {
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    } catch {
-      /* ignore */
-    }
+    await haptic.error();
   };
 
   const triggerTapHaptic = async () => {
-    try {
-      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    } catch {
-      /* ignore */
-    }
+    await haptic.impact();
   };
 
   const handleUnlock = useCallback(() => {
