@@ -1,14 +1,38 @@
 import React, { useState, useMemo } from "react";
-import { View, Text, StyleSheet, Pressable, Switch, ScrollView, Modal, FlatList, TextInput } from "react-native";
-import { Trash2, Plus, ChevronDown, ChevronUp, FolderPlus, HelpCircle } from "lucide-react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  Switch,
+  ScrollView,
+  Modal,
+  TextInput,
+} from "react-native";
+import * as Haptics from "expo-haptics";
+import {
+  Trash2,
+  Plus,
+  ChevronDown,
+  ChevronUp,
+  FolderPlus,
+  HelpCircle,
+  Tag,
+  Target,
+  PiggyBank,
+  Wallet,
+  CreditCard,
+  Sparkles,
+} from "lucide-react-native";
+
 import { useTheme } from "@/theme/ThemeProvider";
+import { themeUsesDarkPalette } from "@/theme/tokens";
 import { useSettings } from "@/providers/SettingsProvider";
 import { useCategorizationRules } from "@/hooks/useCategorizationRules";
 import { useCategoryBudgets } from "@/hooks/useCategoryBudgets";
 import { useFinancialGoals } from "@/hooks/useFinancialGoals";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
 import { useAccounts } from "@/hooks/useAccounts";
-import { useCategories } from "@/hooks/useCategories";
 import { CategoryPicker } from "@/components/categories/CategoryPicker";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
@@ -17,36 +41,96 @@ import { isCreditAccount } from "@/shared/utils/accountKind";
 import { Amount } from "@/components/common/Amount";
 
 // -------------------------------------------------------------
-// Helper Component: Collapsible Section
+// Helper Component: Material 3 Collapsible Section
 // -------------------------------------------------------------
 function CollapsibleSection({
   title,
   subtitle,
   children,
+  icon: Icon,
 }: {
   title: string;
   subtitle?: string;
   children: React.ReactNode;
+  icon?: React.ComponentType<{ size: number; color: string }>;
 }) {
-  const { theme } = useTheme();
+  const { theme, themeName } = useTheme();
+  const isDark = themeUsesDarkPalette(themeName);
   const [expanded, setExpanded] = useState(false);
 
+  const toggleExpand = () => {
+    Haptics.selectionAsync().catch(() => undefined);
+    setExpanded(!expanded);
+  };
+
   return (
-    <Card
-      title={title}
-      subtitle={subtitle}
-      headerRight={
-        <Pressable onPress={() => setExpanded(!expanded)} style={{ padding: 4 }}>
+    <View
+      style={[
+        styles.sectionCard,
+        theme.elevation[1],
+        {
+          backgroundColor: theme.colors.card,
+          borderColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)",
+        },
+      ]}
+    >
+      <Pressable
+        onPress={toggleExpand}
+        android_ripple={{
+          color: theme.colors.primary + "18",
+          borderless: false,
+        }}
+        style={styles.sectionHeader}
+        accessibilityRole="button"
+        accessibilityLabel={`${title} section, ${expanded ? "expanded" : "collapsed"}`}
+      >
+        <View style={styles.sectionTitleRow}>
+          {Icon ? (
+            <View
+              style={[
+                styles.iconContainer,
+                {
+                  backgroundColor: isDark
+                    ? "rgba(107, 99, 255, 0.15)"
+                    : "rgba(79, 70, 255, 0.08)",
+                },
+              ]}
+            >
+              <Icon size={18} color={theme.colors.primary} />
+            </View>
+          ) : null}
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.sectionTitle, { color: theme.colors.foreground }]}>
+              {title}
+            </Text>
+            {subtitle ? (
+              <Text style={[styles.sectionSubtitle, { color: theme.colors.mutedForeground }]}>
+                {subtitle}
+              </Text>
+            ) : null}
+          </View>
+        </View>
+
+        <View
+          style={[
+            styles.chevronBox,
+            { backgroundColor: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" },
+          ]}
+        >
           {expanded ? (
             <ChevronUp size={20} color={theme.colors.foreground} />
           ) : (
             <ChevronDown size={20} color={theme.colors.foreground} />
           )}
-        </Pressable>
-      }
-    >
-      {expanded ? <View style={{ marginTop: theme.space.md, gap: theme.space.md }}>{children}</View> : null}
-    </Card>
+        </View>
+      </Pressable>
+
+      {expanded ? (
+        <View style={[styles.sectionBody, { borderTopColor: theme.colors.border }]}>
+          {children}
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -54,17 +138,19 @@ function CollapsibleSection({
 // 1. Dashboard Widget Toggles (Personalization)
 // -------------------------------------------------------------
 const WIDGET_DEFS = [
-  { id: "subscriptions", label: "Subscriptions", desc: "Recurring payments" },
-  { id: "focus", label: "Focus Mode", desc: "Goals & limits" },
-  { id: "gamification", label: "Gamification", desc: "Streaks & XP" },
-  { id: "topCategories", label: "Top Categories", desc: "Rank by spend" },
+  { id: "subscriptions", label: "Subscriptions", desc: "Recurring subscriptions & bills" },
+  { id: "focus", label: "Focus Mode", desc: "Monthly limits & financial goals" },
+  { id: "gamification", label: "Gamification", desc: "Daily streaks, badges & XP" },
+  { id: "topCategories", label: "Top Categories", desc: "Top spending distribution" },
 ] as const;
 
 export function DashboardWidgetToggles() {
-  const { theme } = useTheme();
+  const { theme, themeName } = useTheme();
+  const isDark = themeUsesDarkPalette(themeName);
   const { settings, updateSettings } = useSettings();
 
   const toggleWidget = (id: keyof typeof settings.dashboardWidgets) => {
+    Haptics.selectionAsync().catch(() => undefined);
     const current = settings.dashboardWidgets || {};
     const updated = {
       ...current,
@@ -74,33 +160,44 @@ export function DashboardWidgetToggles() {
   };
 
   return (
-    <View style={{ gap: theme.space.sm }}>
-      <Text style={{ color: theme.colors.foreground, fontWeight: "bold", fontSize: 15 }}>
-        Dashboard widgets
-      </Text>
-      <Text style={{ color: theme.colors.mutedForeground, fontSize: 12 }}>
-        Hide widgets you don’t use.
-      </Text>
-      <View style={{ gap: theme.space.xs, marginTop: theme.space.xs }}>
+    <View style={{ gap: 12 }}>
+      <View>
+        <Text style={{ color: theme.colors.foreground, fontWeight: "800", fontSize: 16 }}>
+          Dashboard Widgets
+        </Text>
+        <Text style={{ color: theme.colors.mutedForeground, fontSize: 13, marginTop: 2 }}>
+          Customize what appears on your home dashboard.
+        </Text>
+      </View>
+
+      <View style={{ gap: 8, marginTop: 4 }}>
         {WIDGET_DEFS.map((widget) => {
           const checked = settings.dashboardWidgets?.[widget.id] ?? true;
           return (
-            <View
+            <Pressable
               key={widget.id}
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                justifyContent: "space-between",
-                paddingVertical: theme.space.sm,
-                borderBottomWidth: 1,
-                borderBottomColor: theme.colors.border,
+              onPress={() => toggleWidget(widget.id as any)}
+              android_ripple={{
+                color: theme.colors.primary + "14",
+                borderless: false,
               }}
+              style={[
+                styles.tileRow,
+                {
+                  backgroundColor: isDark
+                    ? "rgba(255,255,255,0.03)"
+                    : "rgba(0,0,0,0.02)",
+                  borderColor: theme.colors.border,
+                },
+              ]}
+              accessibilityRole="switch"
+              accessibilityState={{ checked }}
             >
-              <View style={{ flex: 1, marginRight: theme.space.md }}>
-                <Text style={{ color: theme.colors.foreground, fontWeight: "600", fontSize: 14 }}>
+              <View style={{ flex: 1, marginRight: 16 }}>
+                <Text style={{ color: theme.colors.foreground, fontWeight: "700", fontSize: 15 }}>
                   {widget.label}
                 </Text>
-                <Text style={{ color: theme.colors.mutedForeground, fontSize: 11 }}>
+                <Text style={{ color: theme.colors.mutedForeground, fontSize: 12, marginTop: 2 }}>
                   {widget.desc}
                 </Text>
               </View>
@@ -108,8 +205,9 @@ export function DashboardWidgetToggles() {
                 value={checked}
                 onValueChange={() => toggleWidget(widget.id as any)}
                 trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
+                thumbColor="#FFFFFF"
               />
-            </View>
+            </Pressable>
           );
         })}
       </View>
@@ -121,7 +219,8 @@ export function DashboardWidgetToggles() {
 // 2. Auto-Categorization Rules (Personalization)
 // -------------------------------------------------------------
 export function AutoCategorizationRulesManager() {
-  const { theme } = useTheme();
+  const { theme, themeName } = useTheme();
+  const isDark = themeUsesDarkPalette(themeName);
   const { rules, addRule, deleteRule } = useCategorizationRules();
   const [keyword, setKeyword] = useState("");
   const [category, setCategory] = useState("Food & Dining");
@@ -129,16 +228,27 @@ export function AutoCategorizationRulesManager() {
 
   const handleAdd = () => {
     if (!keyword.trim() || !category) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
     void addRule(keyword.trim(), category, subcategory);
     setKeyword("");
   };
 
+  const handleDelete = (id?: string) => {
+    if (!id) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+    deleteRule(id);
+  };
+
   return (
-    <CollapsibleSection title="Auto-categorization Rules" subtitle={`Manage keywords (${rules.length} rules)`}>
-      <View style={{ gap: theme.space.md, paddingBottom: theme.space.sm }}>
+    <CollapsibleSection
+      title="Auto-Categorization Rules"
+      subtitle={`Auto-assign categories by keyword (${rules.length} active)`}
+      icon={Sparkles}
+    >
+      <View style={{ gap: 14 }}>
         <Input
-          label="Keyword"
-          placeholder='e.g. "netflix" or "uber"'
+          label="Keyword Trigger"
+          placeholder='e.g. "netflix", "uber", "starbucks"'
           value={keyword}
           onChangeText={setKeyword}
           autoCapitalize="none"
@@ -151,43 +261,66 @@ export function AutoCategorizationRulesManager() {
             setCategory(cat);
             setSubcategory(sub);
           }}
-          label="Assign Category & Subcategory"
+          label="Target Category & Subcategory"
         />
 
-        <Button onPress={handleAdd} disabled={!keyword.trim() || !category}>
-          Add rule
+        <Button
+          onPress={handleAdd}
+          disabled={!keyword.trim() || !category}
+          style={{ height: 48, borderRadius: 12 }}
+        >
+          Add Rule
         </Button>
 
-        <View style={{ gap: theme.space.xs, marginTop: theme.space.md }}>
+        <View style={{ gap: 8, marginTop: 8 }}>
           {rules.length === 0 ? (
-            <Text style={{ color: theme.colors.mutedForeground, fontSize: 12, fontStyle: "italic", textAlign: "center" }}>
-              No rules yet. Keyword matches note text automatically.
+            <Text
+              style={{
+                color: theme.colors.mutedForeground,
+                fontSize: 13,
+                fontStyle: "italic",
+                textAlign: "center",
+                paddingVertical: 12,
+              }}
+            >
+              No rules yet. Any transaction note matching a keyword will be categorized automatically.
             </Text>
           ) : (
             rules.map((rule) => (
               <View
                 key={rule.id}
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  backgroundColor: theme.colors.card,
-                  borderColor: theme.colors.border,
-                  borderWidth: 1,
-                  borderRadius: theme.radius.md,
-                  padding: theme.space.md,
-                }}
+                style={[
+                  styles.itemCard,
+                  {
+                    backgroundColor: isDark
+                      ? "rgba(255,255,255,0.03)"
+                      : "rgba(0,0,0,0.02)",
+                    borderColor: theme.colors.border,
+                  },
+                ]}
               >
-                <View style={{ flex: 1, marginRight: theme.space.md }}>
-                  <Text style={{ color: theme.colors.foreground, fontWeight: "bold" }}>
+                <View style={{ flex: 1, marginRight: 12 }}>
+                  <Text style={{ color: theme.colors.foreground, fontWeight: "800", fontSize: 14 }}>
                     "{rule.keyword}"
                   </Text>
-                  <Text style={{ color: theme.colors.mutedForeground, fontSize: 12, marginTop: 2 }}>
-                    → {rule.category} {rule.subcategory ? `· ${rule.subcategory}` : ""}
+                  <Text style={{ color: theme.colors.mutedForeground, fontSize: 12, marginTop: 3 }}>
+                    → {rule.category} {rule.subcategory ? `› ${rule.subcategory}` : ""}
                   </Text>
                 </View>
-                <Pressable onPress={() => rule.id && deleteRule(rule.id)} style={{ padding: 6 }}>
-                  <Trash2 size={16} color={theme.colors.destructive} />
+
+                {/* 48x48dp Touch Target Delete Button */}
+                <Pressable
+                  onPress={() => handleDelete(rule.id)}
+                  android_ripple={{
+                    color: "rgba(239, 68, 68, 0.2)",
+                    borderless: true,
+                    radius: 24,
+                  }}
+                  style={styles.touchActionBtn}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Delete rule for ${rule.keyword}`}
+                >
+                  <Trash2 size={18} color={theme.colors.destructive} />
                 </Pressable>
               </View>
             ))
@@ -202,7 +335,8 @@ export function AutoCategorizationRulesManager() {
 // 3. Category Budgets (Manage)
 // -------------------------------------------------------------
 export function CategoryBudgetsManager() {
-  const { theme } = useTheme();
+  const { theme, themeName } = useTheme();
+  const isDark = themeUsesDarkPalette(themeName);
   const { budgets, addBudget, deleteBudget } = useCategoryBudgets();
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("Food & Dining");
@@ -217,13 +351,24 @@ export function CategoryBudgetsManager() {
   const handleAdd = () => {
     const amt = Number(amount);
     if (!category || !month || isNaN(amt) || amt <= 0) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
     void addBudget(category, amt, month, subcategory);
     setAmount("");
   };
 
+  const handleDelete = (id?: string) => {
+    if (!id) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+    deleteBudget(id);
+  };
+
   return (
-    <CollapsibleSection title="Category Budgets" subtitle={`Monthly limit alerts (${budgets.length} budgets)`}>
-      <View style={{ gap: theme.space.md, paddingBottom: theme.space.sm }}>
+    <CollapsibleSection
+      title="Category Budgets"
+      subtitle={`Set category spending boundaries (${budgets.length} active)`}
+      icon={PiggyBank}
+    >
+      <View style={{ gap: 14 }}>
         <CategoryPicker
           category={category}
           subcategory={subcategory}
@@ -243,46 +388,69 @@ export function CategoryBudgetsManager() {
 
         <Input
           label="Limit Amount"
-          placeholder="Amount"
+          placeholder="e.g. 15000"
           value={amount}
           onChangeText={setAmount}
           keyboardType="numeric"
         />
 
-        <Button onPress={handleAdd} disabled={!category || !month || !amount}>
-          Add budget
+        <Button
+          onPress={handleAdd}
+          disabled={!category || !month || !amount}
+          style={{ height: 48, borderRadius: 12 }}
+        >
+          Add Budget
         </Button>
 
-        <View style={{ gap: theme.space.xs, marginTop: theme.space.md }}>
+        <View style={{ gap: 8, marginTop: 8 }}>
           {budgets.length === 0 ? (
-            <Text style={{ color: theme.colors.mutedForeground, fontSize: 12, fontStyle: "italic", textAlign: "center" }}>
-              No category budgets set yet.
+            <Text
+              style={{
+                color: theme.colors.mutedForeground,
+                fontSize: 13,
+                fontStyle: "italic",
+                textAlign: "center",
+                paddingVertical: 12,
+              }}
+            >
+              No category budgets set for this month.
             </Text>
           ) : (
             budgets.map((b) => (
               <View
                 key={b.id}
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  backgroundColor: theme.colors.card,
-                  borderColor: theme.colors.border,
-                  borderWidth: 1,
-                  borderRadius: theme.radius.md,
-                  padding: theme.space.md,
-                }}
+                style={[
+                  styles.itemCard,
+                  {
+                    backgroundColor: isDark
+                      ? "rgba(255,255,255,0.03)"
+                      : "rgba(0,0,0,0.02)",
+                    borderColor: theme.colors.border,
+                  },
+                ]}
               >
-                <View style={{ flex: 1, marginRight: theme.space.md }}>
-                  <Text style={{ color: theme.colors.foreground, fontWeight: "bold" }}>
+                <View style={{ flex: 1, marginRight: 12 }}>
+                  <Text style={{ color: theme.colors.foreground, fontWeight: "800", fontSize: 14 }}>
                     {b.category} {b.subcategory ? `› ${b.subcategory}` : ""}
                   </Text>
-                  <Text style={{ color: theme.colors.mutedForeground, fontSize: 12, marginTop: 2 }}>
-                    {b.month} · <Amount value={b.amount} />
+                  <Text style={{ color: theme.colors.mutedForeground, fontSize: 12, marginTop: 3 }}>
+                    {b.month} · <Amount value={b.amount} style={{ fontWeight: "700" }} />
                   </Text>
                 </View>
-                <Pressable onPress={() => b.id && deleteBudget(b.id)} style={{ padding: 6 }}>
-                  <Trash2 size={16} color={theme.colors.destructive} />
+
+                {/* 48x48dp Touch Target Delete Button */}
+                <Pressable
+                  onPress={() => handleDelete(b.id)}
+                  android_ripple={{
+                    color: "rgba(239, 68, 68, 0.2)",
+                    borderless: true,
+                    radius: 24,
+                  }}
+                  style={styles.touchActionBtn}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Delete budget for ${b.category}`}
+                >
+                  <Trash2 size={18} color={theme.colors.destructive} />
                 </Pressable>
               </View>
             ))
@@ -297,7 +465,8 @@ export function CategoryBudgetsManager() {
 // 4. Financial Goals (Manage)
 // -------------------------------------------------------------
 export function FinancialGoalsManager() {
-  const { theme } = useTheme();
+  const { theme, themeName } = useTheme();
+  const isDark = themeUsesDarkPalette(themeName);
   const { goals, addGoal, deleteGoal } = useFinancialGoals();
   const [name, setName] = useState("");
   const [target, setTarget] = useState("");
@@ -308,6 +477,7 @@ export function FinancialGoalsManager() {
     const tgt = Number(target);
     const cur = Number(current);
     if (!name.trim() || isNaN(tgt) || tgt <= 0) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
     void addGoal(name.trim(), tgt, cur, deadline);
     setName("");
     setTarget("");
@@ -315,12 +485,22 @@ export function FinancialGoalsManager() {
     setDeadline("");
   };
 
+  const handleDelete = (id?: string) => {
+    if (!id) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+    deleteGoal(id);
+  };
+
   return (
-    <CollapsibleSection title="Financial Goals" subtitle={`Track savings targets (${goals.length} goals)`}>
-      <View style={{ gap: theme.space.md, paddingBottom: theme.space.sm }}>
+    <CollapsibleSection
+      title="Financial Goals"
+      subtitle={`Track savings targets and milestones (${goals.length} active)`}
+      icon={Target}
+    >
+      <View style={{ gap: 14 }}>
         <Input
           label="Goal Name"
-          placeholder="e.g. Emergency Fund"
+          placeholder="e.g. Emergency Fund, Vacation, New Laptop"
           value={name}
           onChangeText={setName}
         />
@@ -335,7 +515,7 @@ export function FinancialGoalsManager() {
 
         <Input
           label="Current Savings"
-          placeholder="e.g. 10000 (starting)"
+          placeholder="e.g. 10000 (starting balance)"
           value={current}
           onChangeText={setCurrent}
           keyboardType="numeric"
@@ -348,44 +528,88 @@ export function FinancialGoalsManager() {
           onChangeText={setDeadline}
         />
 
-        <Button onPress={handleAdd} disabled={!name.trim() || !target}>
-          Add goal
+        <Button
+          onPress={handleAdd}
+          disabled={!name.trim() || !target}
+          style={{ height: 48, borderRadius: 12 }}
+        >
+          Add Goal
         </Button>
 
-        <View style={{ gap: theme.space.xs, marginTop: theme.space.md }}>
+        <View style={{ gap: 8, marginTop: 8 }}>
           {goals.length === 0 ? (
-            <Text style={{ color: theme.colors.mutedForeground, fontSize: 12, fontStyle: "italic", textAlign: "center" }}>
-              No financial goals set.
+            <Text
+              style={{
+                color: theme.colors.mutedForeground,
+                fontSize: 13,
+                fontStyle: "italic",
+                textAlign: "center",
+                paddingVertical: 12,
+              }}
+            >
+              No financial goals set yet.
             </Text>
           ) : (
-            goals.map((g) => (
-              <View
-                key={g.id}
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  backgroundColor: theme.colors.card,
-                  borderColor: theme.colors.border,
-                  borderWidth: 1,
-                  borderRadius: theme.radius.md,
-                  padding: theme.space.md,
-                }}
-              >
-                <View style={{ flex: 1, marginRight: theme.space.md }}>
-                  <Text style={{ color: theme.colors.foreground, fontWeight: "bold" }}>
-                    {g.name}
-                  </Text>
-                  <Text style={{ color: theme.colors.mutedForeground, fontSize: 12, marginTop: 2 }}>
-                    Progress: <Amount value={g.currentAmount} /> / <Amount value={g.targetAmount} />
-                    {g.deadline ? ` · By ${g.deadline}` : ""}
-                  </Text>
+            goals.map((g) => {
+              const pct = g.targetAmount > 0 ? Math.min(100, Math.round((g.currentAmount / g.targetAmount) * 100)) : 0;
+              return (
+                <View
+                  key={g.id}
+                  style={[
+                    styles.itemCard,
+                    {
+                      backgroundColor: isDark
+                        ? "rgba(255,255,255,0.03)"
+                        : "rgba(0,0,0,0.02)",
+                      borderColor: theme.colors.border,
+                    },
+                  ]}
+                >
+                  <View style={{ flex: 1, marginRight: 12 }}>
+                    <Text style={{ color: theme.colors.foreground, fontWeight: "800", fontSize: 14 }}>
+                      {g.name}
+                    </Text>
+                    <Text style={{ color: theme.colors.mutedForeground, fontSize: 12, marginTop: 3 }}>
+                      <Amount value={g.currentAmount} /> / <Amount value={g.targetAmount} /> ({pct}%)
+                      {g.deadline ? ` · ${g.deadline}` : ""}
+                    </Text>
+
+                    {/* Mini Progress Bar */}
+                    <View
+                      style={[
+                        styles.goalProgressBarBg,
+                        { backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)" },
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.goalProgressBarFill,
+                          {
+                            backgroundColor: theme.colors.primary,
+                            width: `${pct}%`,
+                          },
+                        ]}
+                      />
+                    </View>
+                  </View>
+
+                  {/* 48x48dp Touch Target Delete Button */}
+                  <Pressable
+                    onPress={() => handleDelete(g.id)}
+                    android_ripple={{
+                      color: "rgba(239, 68, 68, 0.2)",
+                      borderless: true,
+                      radius: 24,
+                    }}
+                    style={styles.touchActionBtn}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Delete goal ${g.name}`}
+                  >
+                    <Trash2 size={18} color={theme.colors.destructive} />
+                  </Pressable>
                 </View>
-                <Pressable onPress={() => g.id && deleteGoal(g.id)} style={{ padding: 6 }}>
-                  <Trash2 size={16} color={theme.colors.destructive} />
-                </Pressable>
-              </View>
-            ))
+              );
+            })
           )}
         </View>
       </View>
@@ -397,58 +621,93 @@ export function FinancialGoalsManager() {
 // 5. Account Types (Accounts)
 // -------------------------------------------------------------
 export function AccountTypesManager() {
-  const { theme } = useTheme();
+  const { theme, themeName } = useTheme();
+  const isDark = themeUsesDarkPalette(themeName);
   const { accountTypes, addAccountType, deleteAccountType } = useAccountTypes();
   const [newType, setNewType] = useState("");
 
   const handleAdd = () => {
     if (!newType.trim()) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
     void addAccountType(newType.trim());
     setNewType("");
   };
 
+  const handleDelete = (id?: string) => {
+    if (!id) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+    deleteAccountType(id);
+  };
+
   return (
-    <CollapsibleSection title="Account Types" subtitle={`Define types (${accountTypes.length} types)`}>
-      <View style={{ gap: theme.space.md, paddingBottom: theme.space.sm }}>
-        <View style={{ flexDirection: "row", gap: theme.space.sm, alignItems: "flex-end" }}>
+    <CollapsibleSection
+      title="Account Types"
+      subtitle={`Define categories of accounts (${accountTypes.length} types)`}
+      icon={Wallet}
+    >
+      <View style={{ gap: 14 }}>
+        <View style={{ flexDirection: "row", gap: 10, alignItems: "flex-end" }}>
           <View style={{ flex: 1 }}>
             <Input
-              label="New Type"
-              placeholder="e.g. Bank, Card, Cash"
+              label="New Account Type"
+              placeholder="e.g. Bank, Credit Card, Cash, Crypto"
               value={newType}
               onChangeText={setNewType}
             />
           </View>
-          <Button onPress={handleAdd} disabled={!newType.trim()} style={{ height: 46 }}>
+          <Button
+            onPress={handleAdd}
+            disabled={!newType.trim()}
+            style={{ height: 48, paddingHorizontal: 20, borderRadius: 12 }}
+          >
             Add
           </Button>
         </View>
 
-        <View style={{ gap: theme.space.xs, marginTop: theme.space.md }}>
+        <View style={{ gap: 8, marginTop: 8 }}>
           {accountTypes.length === 0 ? (
-            <Text style={{ color: theme.colors.mutedForeground, fontSize: 12, fontStyle: "italic", textAlign: "center" }}>
+            <Text
+              style={{
+                color: theme.colors.mutedForeground,
+                fontSize: 13,
+                fontStyle: "italic",
+                textAlign: "center",
+                paddingVertical: 12,
+              }}
+            >
               No custom account types.
             </Text>
           ) : (
             accountTypes.map((t) => (
               <View
                 key={t.id}
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  backgroundColor: theme.colors.card,
-                  borderColor: theme.colors.border,
-                  borderWidth: 1,
-                  borderRadius: theme.radius.md,
-                  padding: theme.space.md,
-                }}
+                style={[
+                  styles.itemCard,
+                  {
+                    backgroundColor: isDark
+                      ? "rgba(255,255,255,0.03)"
+                      : "rgba(0,0,0,0.02)",
+                    borderColor: theme.colors.border,
+                  },
+                ]}
               >
-                <Text style={{ color: theme.colors.foreground, fontWeight: "600" }}>
+                <Text style={{ color: theme.colors.foreground, fontWeight: "700", fontSize: 15 }}>
                   {t.name}
                 </Text>
-                <Pressable onPress={() => t.id && deleteAccountType(t.id)} style={{ padding: 6 }}>
-                  <Trash2 size={16} color={theme.colors.destructive} />
+
+                {/* 48x48dp Touch Target Delete Button */}
+                <Pressable
+                  onPress={() => handleDelete(t.id)}
+                  android_ripple={{
+                    color: "rgba(239, 68, 68, 0.2)",
+                    borderless: true,
+                    radius: 24,
+                  }}
+                  style={styles.touchActionBtn}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Delete account type ${t.name}`}
+                >
+                  <Trash2 size={18} color={theme.colors.destructive} />
                 </Pressable>
               </View>
             ))
@@ -463,7 +722,8 @@ export function AccountTypesManager() {
 // 6. Custom Accounts (Accounts)
 // -------------------------------------------------------------
 export function AccountsManager() {
-  const { theme } = useTheme();
+  const { theme, themeName } = useTheme();
+  const isDark = themeUsesDarkPalette(themeName);
   const { accounts, addAccount, deleteAccount } = useAccounts();
   const { accountTypes } = useAccountTypes();
 
@@ -472,7 +732,6 @@ export function AccountsManager() {
   const [openingBalance, setOpeningBalance] = useState("");
   const [creditLimit, setCreditLimit] = useState("");
   const [billGenerationDay, setBillGenerationDay] = useState("");
-
   const [showTypePicker, setShowTypePicker] = useState(false);
 
   const selectedTypeName = useMemo(() => {
@@ -486,7 +745,8 @@ export function AccountsManager() {
 
   const handleAdd = () => {
     if (!name.trim() || !typeId) return;
-    
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
+
     const extras: any = {};
     if (isCredit) {
       if (creditLimit) extras.creditLimit = Number(creditLimit);
@@ -500,7 +760,7 @@ export function AccountsManager() {
     }
 
     void addAccount(name.trim(), typeId, extras);
-    
+
     // Reset Form
     setName("");
     setTypeId("");
@@ -509,20 +769,35 @@ export function AccountsManager() {
     setBillGenerationDay("");
   };
 
+  const handleDelete = (id?: string) => {
+    if (!id) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+    deleteAccount(id);
+  };
+
   return (
-    <CollapsibleSection title="Accounts" subtitle={`Configure accounts (${accounts.length} active)`}>
-      <View style={{ gap: theme.space.md, paddingBottom: theme.space.sm }}>
+    <CollapsibleSection
+      title="Financial Accounts"
+      subtitle={`Configure bank accounts, wallets, and cards (${accounts.length} active)`}
+      icon={CreditCard}
+    >
+      <View style={{ gap: 14 }}>
         <Input
           label="Account Name"
-          placeholder="e.g. Chase Checkings"
+          placeholder="e.g. HDFC Salary, ICICI Card, Cash Wallet"
           value={name}
           onChangeText={setName}
         />
 
-        <Pressable onPress={() => setShowTypePicker(true)}>
+        <Pressable
+          onPress={() => {
+            Haptics.selectionAsync().catch(() => undefined);
+            setShowTypePicker(true);
+          }}
+        >
           <Input
             label="Account Type"
-            value={selectedTypeName || "Select type..."}
+            value={selectedTypeName || "Tap to select type..."}
             editable={false}
             pointerEvents="none"
           />
@@ -542,7 +817,7 @@ export function AccountsManager() {
           <>
             <Input
               label="Credit Limit"
-              placeholder="e.g. 10000"
+              placeholder="e.g. 100000"
               value={creditLimit}
               onChangeText={setCreditLimit}
               keyboardType="numeric"
@@ -557,42 +832,66 @@ export function AccountsManager() {
           </>
         ) : null}
 
-        <Button onPress={handleAdd} disabled={!name.trim() || !typeId}>
+        <Button
+          onPress={handleAdd}
+          disabled={!name.trim() || !typeId}
+          style={{ height: 48, borderRadius: 12 }}
+        >
           Add Account
         </Button>
 
-        <View style={{ gap: theme.space.xs, marginTop: theme.space.md }}>
+        <View style={{ gap: 8, marginTop: 8 }}>
           {accounts.length === 0 ? (
-            <Text style={{ color: theme.colors.mutedForeground, fontSize: 12, fontStyle: "italic", textAlign: "center" }}>
-              No custom accounts added.
+            <Text
+              style={{
+                color: theme.colors.mutedForeground,
+                fontSize: 13,
+                fontStyle: "italic",
+                textAlign: "center",
+                paddingVertical: 12,
+              }}
+            >
+              No custom accounts added yet.
             </Text>
           ) : (
             accounts.map((acc) => {
-              const typeName = accountTypes.find((t) => t.id === acc.typeId)?.name || "Unknown";
+              const typeName =
+                accountTypes.find((t) => t.id === acc.typeId)?.name || "Account";
               return (
                 <View
                   key={acc.id}
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    backgroundColor: theme.colors.card,
-                    borderColor: theme.colors.border,
-                    borderWidth: 1,
-                    borderRadius: theme.radius.md,
-                    padding: theme.space.md,
-                  }}
+                  style={[
+                    styles.itemCard,
+                    {
+                      backgroundColor: isDark
+                        ? "rgba(255,255,255,0.03)"
+                        : "rgba(0,0,0,0.02)",
+                      borderColor: theme.colors.border,
+                    },
+                  ]}
                 >
-                  <View style={{ flex: 1, marginRight: theme.space.md }}>
-                    <Text style={{ color: theme.colors.foreground, fontWeight: "bold" }}>
+                  <View style={{ flex: 1, marginRight: 12 }}>
+                    <Text style={{ color: theme.colors.foreground, fontWeight: "800", fontSize: 15 }}>
                       {acc.name}
                     </Text>
-                    <Text style={{ color: theme.colors.mutedForeground, fontSize: 12, marginTop: 2 }}>
-                      Type: {typeName} {acc.creditLimit ? `· Limit: ${acc.creditLimit}` : ""}
+                    <Text style={{ color: theme.colors.mutedForeground, fontSize: 12, marginTop: 3 }}>
+                      {typeName} {acc.creditLimit ? `· Limit: ${acc.creditLimit.toLocaleString()}` : ""}
                     </Text>
                   </View>
-                  <Pressable onPress={() => acc.id && deleteAccount(acc.id)} style={{ padding: 6 }}>
-                    <Trash2 size={16} color={theme.colors.destructive} />
+
+                  {/* 48x48dp Touch Target Delete Button */}
+                  <Pressable
+                    onPress={() => handleDelete(acc.id)}
+                    android_ripple={{
+                      color: "rgba(239, 68, 68, 0.2)",
+                      borderless: true,
+                      radius: 24,
+                    }}
+                    style={styles.touchActionBtn}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Delete account ${acc.name}`}
+                  >
+                    <Trash2 size={18} color={theme.colors.destructive} />
                   </Pressable>
                 </View>
               );
@@ -600,42 +899,74 @@ export function AccountsManager() {
           )}
         </View>
 
-        {/* Modal Type Selector */}
-        <Modal visible={showTypePicker} transparent animationType="fade">
-          <Pressable style={styles.modalBg} onPress={() => setShowTypePicker(false)}>
-            <View style={[styles.modalContent, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
-              <Text style={[styles.modalTitle, { color: theme.colors.foreground }]}>Select Account Type</Text>
-              <ScrollView style={{ maxHeight: 300 }}>
+        {/* Material 3 Bottom Sheet Type Selector */}
+        <Modal
+          visible={showTypePicker}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowTypePicker(false)}
+        >
+          <View style={[styles.modalOverlay, { backgroundColor: "rgba(0,0,0,0.65)" }]}>
+            <Pressable style={styles.modalBackdrop} onPress={() => setShowTypePicker(false)} />
+            <View
+              style={[
+                styles.modalBottomSheet,
+                {
+                  backgroundColor: theme.colors.card,
+                  borderColor: theme.colors.border,
+                },
+              ]}
+            >
+              <View style={styles.sheetHandle} />
+              <Text style={[styles.modalTitle, { color: theme.colors.foreground }]}>
+                Select Account Type
+              </Text>
+              <ScrollView style={{ maxHeight: 320 }}>
                 {accountTypes.length === 0 ? (
                   <Text style={{ color: theme.colors.mutedForeground, padding: 16, textAlign: "center" }}>
-                    No custom types defined yet. Add type first above.
+                    No custom types defined yet. Add an account type first.
                   </Text>
                 ) : (
                   accountTypes.map((type) => (
                     <Pressable
                       key={type.id}
                       onPress={() => {
+                        Haptics.selectionAsync().catch(() => undefined);
                         setTypeId(type.id);
                         setShowTypePicker(false);
+                      }}
+                      android_ripple={{
+                        color: theme.colors.primary + "1A",
+                        borderless: false,
                       }}
                       style={({ pressed }) => [
                         styles.pickerItem,
                         {
                           borderBottomColor: theme.colors.border,
-                          backgroundColor: pressed ? theme.colors.muted : "transparent",
+                          backgroundColor: pressed
+                            ? isDark
+                              ? "rgba(255,255,255,0.06)"
+                              : "rgba(0,0,0,0.04)"
+                            : "transparent",
                         },
                       ]}
                     >
-                      <Text style={{ color: theme.colors.foreground, fontSize: 16 }}>{type.name}</Text>
+                      <Text style={{ color: theme.colors.foreground, fontSize: 16, fontWeight: "600" }}>
+                        {type.name}
+                      </Text>
                     </Pressable>
                   ))
                 )}
               </ScrollView>
-              <Button onPress={() => setShowTypePicker(false)} variant="outline" style={{ marginTop: 8 }}>
+              <Button
+                onPress={() => setShowTypePicker(false)}
+                variant="outline"
+                style={{ marginTop: 12, height: 48, borderRadius: 12 }}
+              >
                 Cancel
               </Button>
             </View>
-          </Pressable>
+          </View>
         </Modal>
       </View>
     </CollapsibleSection>
@@ -643,27 +974,118 @@ export function AccountsManager() {
 }
 
 const styles = StyleSheet.create({
-  modalBg: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 24,
-  },
-  modalContent: {
-    width: "100%",
-    maxWidth: 320,
-    borderRadius: 16,
+  sectionCard: {
+    borderRadius: 18,
     borderWidth: 1,
+    overflow: "hidden",
+    marginBottom: 12,
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+  },
+  sectionTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flex: 1,
+  },
+  iconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+  },
+  sectionSubtitle: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  chevronBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 8,
+  },
+  sectionBody: {
     padding: 16,
+    borderTopWidth: 1,
+  },
+  tileRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    minHeight: 56,
+  },
+  itemCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    minHeight: 52,
+  },
+  touchActionBtn: {
+    width: 48,
+    height: 48,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  goalProgressBarBg: {
+    height: 4,
+    borderRadius: 2,
+    width: "100%",
+    marginTop: 6,
+    overflow: "hidden",
+  },
+  goalProgressBarFill: {
+    height: "100%",
+    borderRadius: 2,
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+  },
+  modalBackdrop: {
+    flex: 1,
+  },
+  modalBottomSheet: {
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    borderWidth: 1,
+    padding: 20,
+    paddingBottom: 32,
+  },
+  sheetHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "rgba(128,128,128,0.4)",
+    alignSelf: "center",
+    marginBottom: 16,
   },
   modalTitle: {
     fontSize: 18,
-    fontWeight: "bold",
-    marginBottom: 16,
+    fontWeight: "900",
+    marginBottom: 12,
   },
   pickerItem: {
-    paddingVertical: 14,
+    paddingVertical: 16,
     paddingHorizontal: 8,
     borderBottomWidth: 1,
   },

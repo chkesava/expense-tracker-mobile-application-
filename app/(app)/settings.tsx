@@ -7,6 +7,7 @@ import {
   View,
 } from "react-native";
 import { useRouter } from "expo-router";
+import * as Haptics from "expo-haptics";
 import { doc, setDoc } from "firebase/firestore";
 import { ListChecks, RotateCcw, EyeOff, Settings as SettingsIcon, X } from "lucide-react-native";
 
@@ -29,6 +30,7 @@ import {
   THEME_LABELS,
   THEME_NAMES,
   type ThemeName,
+  themeUsesDarkPalette,
 } from "@/theme/tokens";
 import {
   DashboardWidgetToggles,
@@ -554,28 +556,57 @@ function RowSwitch({
   label,
   value,
   onValueChange,
+  description,
 }: {
   label: string;
   value: boolean;
   onValueChange: (v: boolean) => void;
+  description?: string;
 }) {
-  const { theme } = useTheme();
+  const { theme, themeName } = useTheme();
+  const isDark = themeUsesDarkPalette(themeName);
+
+  const handleToggle = () => {
+    Haptics.selectionAsync().catch(() => undefined);
+    onValueChange(!value);
+  };
+
   return (
-    <View
+    <Pressable
+      onPress={handleToggle}
+      android_ripple={{
+        color: theme.colors.primary + "14",
+        borderless: false,
+      }}
       style={{
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "space-between",
         gap: theme.space.md,
+        minHeight: 52,
+        paddingVertical: 8,
+        paddingHorizontal: 4,
       }}
+      accessibilityRole="switch"
+      accessibilityState={{ checked: value }}
     >
-      <Text style={{ color: theme.colors.foreground, flex: 1 }}>{label}</Text>
+      <View style={{ flex: 1 }}>
+        <Text style={{ color: theme.colors.foreground, fontSize: 15, fontWeight: "600" }}>
+          {label}
+        </Text>
+        {description ? (
+          <Text style={{ color: theme.colors.mutedForeground, fontSize: 12, marginTop: 2 }}>
+            {description}
+          </Text>
+        ) : null}
+      </View>
       <Switch
         value={value}
         onValueChange={onValueChange}
         trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
+        thumbColor="#FFFFFF"
       />
-    </View>
+    </Pressable>
   );
 }
 
@@ -588,31 +619,48 @@ function ChipRow<T extends string>({
   selected: T;
   onSelect: (value: T) => void;
 }) {
-  const { theme } = useTheme();
+  const { theme, themeName } = useTheme();
+  const isDark = themeUsesDarkPalette(themeName);
+
   return (
-    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: theme.space.sm }}>
+    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
       {options.map((opt) => {
         const active = opt.value === selected;
         return (
           <Pressable
             key={opt.value}
-            onPress={() => onSelect(opt.value)}
+            onPress={() => {
+              Haptics.selectionAsync().catch(() => undefined);
+              onSelect(opt.value);
+            }}
+            android_ripple={{
+              color: active ? "rgba(255,255,255,0.2)" : theme.colors.primary + "1A",
+              borderless: false,
+            }}
             style={{
-              paddingHorizontal: theme.space.md,
-              paddingVertical: theme.space.sm,
-              borderRadius: theme.radius.full,
+              paddingHorizontal: 16,
+              minHeight: 40,
+              justifyContent: "center",
+              alignItems: "center",
+              borderRadius: 20,
               borderWidth: 1,
               borderColor: active ? theme.colors.primary : theme.colors.border,
-              backgroundColor: active ? theme.colors.primary : theme.colors.card,
+              backgroundColor: active
+                ? theme.colors.primary
+                : isDark
+                ? "rgba(255,255,255,0.03)"
+                : "rgba(0,0,0,0.02)",
             }}
+            accessibilityRole="radio"
+            accessibilityState={{ selected: active }}
           >
             <Text
               style={{
                 color: active
                   ? theme.colors.primaryForeground
                   : theme.colors.foreground,
-                fontSize: theme.typography.sm,
-                fontWeight: "600",
+                fontSize: 14,
+                fontWeight: active ? "700" : "500",
               }}
             >
               {opt.label}
@@ -625,7 +673,8 @@ function ChipRow<T extends string>({
 }
 
 function GettingStartedCard() {
-  const { theme } = useTheme();
+  const { theme, themeName } = useTheme();
+  const isDark = themeUsesDarkPalette(themeName);
   const router = useRouter();
 
   let setupProgress: ReturnType<typeof useSetupProgress> | null = null;
@@ -662,7 +711,7 @@ function GettingStartedCard() {
           style={{
             height: 6,
             borderRadius: 3,
-            backgroundColor: theme.colors.border,
+            backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)",
             overflow: "hidden",
           }}
         >
@@ -677,20 +726,30 @@ function GettingStartedCard() {
         </View>
 
         <Pressable
-          onPress={() => router.push("/dashboard")}
+          onPress={() => {
+            Haptics.selectionAsync().catch(() => undefined);
+            router.push("/dashboard");
+          }}
+          android_ripple={{
+            color: theme.colors.primary + "14",
+            borderless: false,
+          }}
           style={{
             flexDirection: "row",
             alignItems: "center",
-            gap: theme.space.sm,
-            paddingVertical: theme.space.sm,
+            gap: 12,
+            minHeight: 48,
+            paddingVertical: 10,
+            paddingHorizontal: 6,
+            borderRadius: 12,
           }}
         >
-          <ListChecks size={18} color={theme.colors.primary} />
+          <ListChecks size={20} color={theme.colors.primary} />
           <Text
             style={{
               color: theme.colors.foreground,
-              fontSize: theme.typography.sm,
-              fontWeight: "600",
+              fontSize: 15,
+              fontWeight: "700",
             }}
           >
             View Setup Checklist
@@ -698,19 +757,29 @@ function GettingStartedCard() {
         </Pressable>
 
         <Pressable
-          onPress={resetOnboarding}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+            resetOnboarding();
+          }}
+          android_ripple={{
+            color: theme.colors.primary + "14",
+            borderless: false,
+          }}
           style={{
             flexDirection: "row",
             alignItems: "center",
-            gap: theme.space.sm,
-            paddingVertical: theme.space.sm,
+            gap: 12,
+            minHeight: 48,
+            paddingVertical: 10,
+            paddingHorizontal: 6,
+            borderRadius: 12,
           }}
         >
-          <RotateCcw size={18} color={theme.colors.mutedForeground} />
+          <RotateCcw size={20} color={theme.colors.mutedForeground} />
           <Text
             style={{
               color: theme.colors.foreground,
-              fontSize: theme.typography.sm,
+              fontSize: 15,
               fontWeight: "600",
             }}
           >
@@ -720,19 +789,29 @@ function GettingStartedCard() {
 
         {isOnboarding && (
           <Pressable
-            onPress={dismissOnboarding}
+            onPress={() => {
+              Haptics.selectionAsync().catch(() => undefined);
+              dismissOnboarding();
+            }}
+            android_ripple={{
+              color: theme.colors.primary + "14",
+              borderless: false,
+            }}
             style={{
               flexDirection: "row",
               alignItems: "center",
-              gap: theme.space.sm,
-              paddingVertical: theme.space.sm,
+              gap: 12,
+              minHeight: 48,
+              paddingVertical: 10,
+              paddingHorizontal: 6,
+              borderRadius: 12,
             }}
           >
-            <EyeOff size={18} color={theme.colors.mutedForeground} />
+            <EyeOff size={20} color={theme.colors.mutedForeground} />
             <Text
               style={{
                 color: theme.colors.mutedForeground,
-                fontSize: theme.typography.sm,
+                fontSize: 15,
                 fontWeight: "600",
               }}
             >
