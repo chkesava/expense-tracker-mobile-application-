@@ -158,17 +158,9 @@ export function CollectList() {
       {/* Requests List */}
       {displayList.length === 0 ? (
         <EmptyState
-          icon={<HandCoins size={36} color={theme.colors.mutedForeground} />}
-          title={
-            activeTab === "active"
-              ? "No Active Payment Requests"
-              : "No Cancelled Requests"
-          }
-          description={
-            activeTab === "active"
-              ? "Create a payment request to generate a QR code and UPI link you can share with anyone."
-              : "Cancelled payment requests will appear here."
-          }
+          emoji="💸"
+          title="No Pending Receivables"
+          description="Create payment requests to collect money from friends."
         />
       ) : (
         <View style={styles.listContainer}>

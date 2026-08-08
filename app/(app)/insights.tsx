@@ -19,6 +19,7 @@ import { AnalysisLabView } from "@/components/analytics/AnalysisLabView";
 import { ExportDataModal } from "@/components/analytics/ExportDataModal";
 import { AiAdvisorView } from "@/components/ai/AiAdvisorView";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
+import { useSetupProgress } from "@/providers/SetupProgressProvider";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
@@ -32,6 +33,11 @@ export default function InsightsScreen() {
 
   const [activeTab, setActiveTab] = useState<InsightsTab>("analytics");
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const { markScreenVisited } = useSetupProgress();
+
+  useEffect(() => {
+    markScreenVisited("insights");
+  }, [markScreenVisited]);
 
   useEffect(() => {
     if (params.tab && ["analytics", "yearly", "search", "advisor"].includes(params.tab)) {

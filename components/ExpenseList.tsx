@@ -164,8 +164,9 @@ export function ExpenseList({
   if (combinedTransactions.length === 0) {
     return (
       <EmptyState
-        title="No transactions found"
-        description="Try selecting another month or tap '+' to log an expense or income."
+        emoji="📊"
+        title="No Expenses Yet"
+        description="Track your first expense to begin understanding your spending habits."
       />
     );
   }

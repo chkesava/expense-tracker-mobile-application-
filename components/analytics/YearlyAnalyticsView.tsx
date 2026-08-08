@@ -15,6 +15,7 @@ import {
 } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
+import { EmptyState } from "@/components/common/EmptyState";
 import { Card } from "@/components/ui/Card";
 import { BarChart, type BarChartItem } from "@/components/charts/BarChart";
 import { DonutChart } from "@/components/charts/DonutChart";
@@ -177,6 +178,14 @@ export function YearlyAnalyticsView() {
         </Pressable>
       </View>
 
+      {yearExpenses.length === 0 ? (
+        <EmptyState
+          emoji="📅"
+          title="No Yearly Data Yet"
+          description="Year-over-year analytics will populate as you track expenses over time."
+        />
+      ) : (
+        <>
       {/* Annual Summary Hero Card */}
       <Card style={styles.heroCard}>
         <Text style={[styles.sectionSubtitle, { color: theme.colors.mutedForeground }]}>
@@ -382,6 +391,8 @@ export function YearlyAnalyticsView() {
             />
           </View>
         </Card>
+      )}
+      </>
       )}
     </View>
   );

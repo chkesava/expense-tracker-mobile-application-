@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
@@ -15,8 +15,11 @@ import { QuickAddWidget } from "@/components/dashboard/QuickAddWidget";
 import { RecentActivityWidget } from "@/components/dashboard/RecentActivityWidget";
 import { SubscriptionsWidget } from "@/components/dashboard/SubscriptionsWidget";
 import { TopCategoriesWidget } from "@/components/dashboard/TopCategoriesWidget";
+import { SetupChecklistWidget } from "@/components/dashboard/SetupChecklistWidget";
+import { WelcomeScreen } from "@/components/onboarding/WelcomeScreen";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
+import { useSetupProgress } from "@/providers/SetupProgressProvider";
 import { useAccountEntries } from "@/hooks/useAccountEntries";
 import { useAccountPayments } from "@/hooks/useAccountPayments";
 import { useAccounts } from "@/hooks/useAccounts";
@@ -65,6 +68,11 @@ export default function DashboardScreen() {
   const { transfers } = useAccountTransfers();
   const { budgets: categoryBudgets } = useCategoryBudgets();
   const { goals } = useFinancialGoals();
+  const { markScreenVisited } = useSetupProgress();
+
+  useEffect(() => {
+    markScreenVisited("dashboard");
+  }, [markScreenVisited]);
 
   const [refreshing, setRefreshing] = useState(false);
 
@@ -405,6 +413,12 @@ export default function DashboardScreen() {
           </Text>
         </View>
       ) : null}
+
+      {/* Welcome Screen Modal for First-time users */}
+      <WelcomeScreen />
+
+      {/* Setup Checklist Widget */}
+      <SetupChecklistWidget />
 
       {/* Dynamic Ordered Widgets */}
       <View style={styles.widgetsGrid}>

@@ -1,63 +1,35 @@
-import { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
-import { ChevronRight, TrendingUp } from "lucide-react-native";
+import { ChevronRight } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
 import { Card } from "@/components/ui/Card";
-import { useInvestments } from "@/hooks/useInvestments";
-import { usePortfolio } from "@/hooks/usePortfolio";
-import { useMarketQuotes } from "@/hooks/useMarketQuotes";
-import { getInvestmentValuation } from "@/shared/utils/investmentInterest";
+import { useUnifiedNetWorth } from "@/hooks/useUnifiedNetWorth";
 import { useTheme } from "@/theme/ThemeProvider";
+import { themeUsesDarkPalette } from "@/theme/tokens";
 
 export interface InvestmentsWidgetProps {
-  liquidBalance: number;
+  liquidBalance?: number;
   currency: string;
 }
 
 export function InvestmentsWidget({
-  liquidBalance,
   currency,
 }: InvestmentsWidgetProps) {
   const router = useRouter();
-  const { theme } = useTheme();
-  const { investments } = useInvestments();
-  const { holdings } = usePortfolio();
+  const { theme, themeName } = useTheme();
+  const isDark = themeUsesDarkPalette(themeName);
+  const netWorth = useUnifiedNetWorth();
 
-  // Gather symbols for quotes
-  const symbolRequests = useMemo(
-    () =>
-      holdings.map((h) => ({
-        symbol: h.yahooSymbol || h.symbol,
-        instrumentType: h.instrumentType,
-      })),
-    [holdings]
-  );
-  const { quotes } = useMarketQuotes(symbolRequests);
-
-  const portfolioTotal = useMemo(() => {
-    return holdings.reduce((sum, h) => {
-      const quote = quotes.get(h.yahooSymbol || h.symbol);
-      const currentPrice = quote?.currentPrice ?? h.averageBuyPrice;
-      return sum + currentPrice * h.quantity;
-    }, 0);
-  }, [holdings, quotes]);
-
-  const today = new Date().toISOString().slice(0, 10);
-  const investmentTotal = useMemo(() => {
-    return investments
-      .filter((i) => i.status === "active")
-      .reduce((sum, inv) => sum + getInvestmentValuation(inv, today).totalValue, 0);
-  }, [investments, today]);
-
-  const totalAssets = liquidBalance + investmentTotal + portfolioTotal;
+  const red = isDark ? "#f87171" : "#dc2626";
+  const green = isDark ? "#4ade80" : "#16a34a";
+  const blue = isDark ? "#60a5fa" : "#2563eb";
 
   return (
     <Card
       title="Asset Allocation"
-      subtitle="Liquid accounts & portfolio overview"
+      subtitle="Complete net worth & liabilities breakdown"
       headerRight={
         <Pressable
           onPress={() => {
@@ -79,6 +51,7 @@ export function InvestmentsWidget({
       }
     >
       <View style={styles.content}>
+        {/* Liquid Bank Accounts */}
         <View style={styles.row}>
           <Text
             style={{
@@ -89,7 +62,7 @@ export function InvestmentsWidget({
             Liquid Holdings
           </Text>
           <Amount
-            value={liquidBalance}
+            value={netWorth.liquidBankAssets}
             currency={currency}
             ghostable
             style={{
@@ -100,6 +73,7 @@ export function InvestmentsWidget({
           />
         </View>
 
+        {/* Fixed Investments (FD / RD) */}
         <View style={styles.row}>
           <Text
             style={{
@@ -107,20 +81,21 @@ export function InvestmentsWidget({
               color: theme.colors.mutedForeground,
             }}
           >
-            Investments Value
+            Investments Value (FD/RD)
           </Text>
           <Amount
-            value={investmentTotal}
+            value={netWorth.investmentsValue}
             currency={currency}
             ghostable
             style={{
               fontSize: theme.typography.sm,
               fontWeight: "700",
-              color: "#10B981",
+              color: green,
             }}
           />
         </View>
 
+        {/* Stocks & Demat Cash */}
         <View style={styles.row}>
           <Text
             style={{
@@ -128,25 +103,52 @@ export function InvestmentsWidget({
               color: theme.colors.mutedForeground,
             }}
           >
-            Portfolio Holdings
+            Stocks & Demat
           </Text>
           <Amount
-            value={portfolioTotal}
+            value={netWorth.totalStocksValue}
             currency={currency}
             ghostable
             style={{
               fontSize: theme.typography.sm,
               fontWeight: "700",
-              color: "#3B82F6",
+              color: blue,
             }}
           />
         </View>
 
+        {/* Liabilities (Credit Cards & Overdrafts) */}
+        {netWorth.totalLiabilities > 0 && (
+          <View style={styles.row}>
+            <Text
+              style={{
+                fontSize: theme.typography.sm,
+                color: red,
+                fontWeight: "600",
+              }}
+            >
+              Liabilities (Credit Cards)
+            </Text>
+            <Amount
+              value={netWorth.totalLiabilities}
+              currency={currency}
+              prefix="-"
+              ghostable
+              style={{
+                fontSize: theme.typography.sm,
+                fontWeight: "700",
+                color: red,
+              }}
+            />
+          </View>
+        )}
+
+        {/* Total Net Worth */}
         <View
           style={[
             styles.row,
             {
-              paddingTop: 8,
+              paddingTop: 10,
               borderTopWidth: StyleSheet.hairlineWidth,
               borderTopColor: theme.colors.border,
             },
@@ -162,11 +164,11 @@ export function InvestmentsWidget({
             Total Net Worth
           </Text>
           <Amount
-            value={totalAssets}
+            value={netWorth.totalNetWorth}
             currency={currency}
             ghostable
             style={{
-              fontSize: theme.typography.sm,
+              fontSize: theme.typography.md,
               fontWeight: "900",
               color: theme.colors.foreground,
             }}

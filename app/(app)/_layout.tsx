@@ -12,6 +12,7 @@ import { useAuth } from "@/providers/AuthProvider";
 import { FinanceDataProvider } from "@/providers/FinanceDataProvider";
 import { LedgerStateProvider } from "@/providers/LedgerStateProvider";
 import { ModalProvider } from "@/providers/ModalProvider";
+import { SetupProgressProvider } from "@/providers/SetupProgressProvider";
 import { useSettings } from "@/providers/SettingsProvider";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -79,9 +80,11 @@ export default function AppLayout() {
     <PrivacyLock>
       <FinanceDataProvider>
         <ModalProvider>
-          <LedgerStateProvider>
-            <AppShellInner />
-          </LedgerStateProvider>
+          <SetupProgressProvider>
+            <LedgerStateProvider>
+              <AppShellInner />
+            </LedgerStateProvider>
+          </SetupProgressProvider>
         </ModalProvider>
       </FinanceDataProvider>
     </PrivacyLock>

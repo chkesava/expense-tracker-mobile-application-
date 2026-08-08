@@ -429,6 +429,87 @@ export function usePortfolio() {
     }
   }, [db, user]);
 
+  const depositCash = useCallback(async (amount: number, note?: string) => {
+    if (!user || !db || !(amount > 0)) return false;
+    const settingsRef = doc(db, "users", user.uid, "portfolioSettings", SETTINGS_DOC_ID);
+    const transactionRef = doc(collection(db, "users", user.uid, "portfolioTransactions"));
+    try {
+      await runTransaction(db, async (firestoreTransaction) => {
+        const settingsSnapshot = await firestoreTransaction.get(settingsRef);
+        const currentBalance = Number(settingsSnapshot.data()?.cashBalance ?? 0);
+        firestoreTransaction.set(
+          settingsRef,
+          {
+            cashBalance: currentBalance + amount,
+            updatedAt: serverTimestamp(),
+            createdAt: settingsSnapshot.data()?.createdAt ?? serverTimestamp(),
+          },
+          { merge: true }
+        );
+        firestoreTransaction.set(transactionRef, {
+          holdingId: "cash",
+          symbol: "CASH",
+          type: "BUY",
+          quantity: 1,
+          price: amount,
+          fees: 0,
+          notes: note || "Cash deposit to Stocks Demat",
+          date: todayKey(),
+          orderStatus: "executed",
+          createdAt: serverTimestamp(),
+        });
+      });
+      toast.success("Cash deposited to Stocks Demat");
+      return true;
+    } catch (error) {
+      console.error("Failed to deposit cash", error);
+      toast.error("Failed to deposit cash");
+      return false;
+    }
+  }, [db, user]);
+
+  const withdrawCash = useCallback(async (amount: number, note?: string) => {
+    if (!user || !db || !(amount > 0)) return false;
+    const settingsRef = doc(db, "users", user.uid, "portfolioSettings", SETTINGS_DOC_ID);
+    const transactionRef = doc(collection(db, "users", user.uid, "portfolioTransactions"));
+    try {
+      await runTransaction(db, async (firestoreTransaction) => {
+        const settingsSnapshot = await firestoreTransaction.get(settingsRef);
+        const currentBalance = Number(settingsSnapshot.data()?.cashBalance ?? 0);
+        if (currentBalance < amount) {
+          throw new Error("Insufficient cash balance");
+        }
+        firestoreTransaction.set(
+          settingsRef,
+          {
+            cashBalance: currentBalance - amount,
+            updatedAt: serverTimestamp(),
+            createdAt: settingsSnapshot.data()?.createdAt ?? serverTimestamp(),
+          },
+          { merge: true }
+        );
+        firestoreTransaction.set(transactionRef, {
+          holdingId: "cash",
+          symbol: "CASH",
+          type: "SELL",
+          quantity: 1,
+          price: amount,
+          fees: 0,
+          notes: note || "Cash withdrawal from Stocks Demat",
+          date: todayKey(),
+          orderStatus: "executed",
+          createdAt: serverTimestamp(),
+        });
+      });
+      toast.success("Cash withdrawn from Stocks Demat");
+      return true;
+    } catch (error) {
+      console.error("Failed to withdraw cash", error);
+      toast.error(error instanceof Error ? error.message : "Failed to withdraw cash");
+      return false;
+    }
+  }, [db, user]);
+
   return {
     holdings,
     transactions,
@@ -453,5 +534,7 @@ export function usePortfolio() {
     executeMockSell,
     placeLimitBuyOrder,
     cancelOrder,
+    depositCash,
+    withdrawCash,
   };
 }

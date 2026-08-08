@@ -213,12 +213,12 @@ export function InvestmentsList() {
         </View>
       ) : filteredInvestments.length === 0 ? (
         <EmptyState
-          icon={<TrendingUp size={40} color={theme.colors.mutedForeground} />}
-          title={searchQuery ? "No investments found" : "No Investments Logged"}
+          emoji="📈"
+          title={searchQuery ? "No investments found" : "No Investments Tracked"}
           description={
             searchQuery
               ? "Try adjusting your search filter"
-              : "Track Fixed Deposits, High-Yield Savings, and Mutual Funds with real-time accrued returns."
+              : "Add fixed deposits, recurring deposits, and other investments."
           }
           action={
             <Button

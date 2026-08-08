@@ -277,17 +277,9 @@ export function SubscriptionsList() {
       {/* Subscriptions List */}
       {filteredSubscriptions.length === 0 ? (
         <EmptyState
-          icon={<Repeat size={36} color={theme.colors.mutedForeground} />}
-          title={
-            activeTab === "active"
-              ? "No Active Recurring Items"
-              : "No Completed Items"
-          }
-          description={
-            activeTab === "active"
-              ? "Add your subscriptions, EMIs, or recurring transfers to auto-track them."
-              : "Completed loans and finished commitments will appear here."
-          }
+          emoji="🔄"
+          title="No Subscriptions"
+          description="Track recurring subscriptions like Netflix, Spotify, and gym memberships."
         />
       ) : (
         <View style={styles.listContainer}>

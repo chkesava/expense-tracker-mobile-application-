@@ -223,21 +223,9 @@ export function TripsList() {
       {/* Trips List */}
       {filteredTrips.length === 0 ? (
         <EmptyState
-          icon={<Plane size={36} color={theme.colors.mutedForeground} />}
-          title={
-            activeTab === "active"
-              ? "No Active Trips"
-              : activeTab === "upcoming"
-                ? "No Upcoming Trips"
-                : "No Completed Trips"
-          }
-          description={
-            activeTab === "active"
-              ? "Create a trip to start tracking your travel spending."
-              : activeTab === "upcoming"
-                ? "Plan a future trip and set category budgets in advance."
-                : "Your completed travel adventures will be archived here."
-          }
+          emoji="✈️"
+          title="No Trips Yet"
+          description="Plan and track travel expenses with friends."
         />
       ) : (
         <View style={styles.listContainer}>

@@ -18,7 +18,17 @@ export function FinancialGoalsWidget({
 }: FinancialGoalsWidgetProps) {
   const { theme } = useTheme();
 
-  if (goals.length === 0) return null;
+  if (goals.length === 0) {
+    return (
+      <Card title="Financial Goals">
+        <EmptyState
+          emoji="🎯"
+          title="Set Your First Goal"
+          description="Create savings goals to track your progress toward financial milestones."
+        />
+      </Card>
+    );
+  }
 
   return (
     <Card

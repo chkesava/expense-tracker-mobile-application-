@@ -21,6 +21,7 @@ import {
 } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
+import { EmptyState } from "@/components/common/EmptyState";
 import { Card } from "@/components/ui/Card";
 import { BarChart } from "@/components/charts/BarChart";
 import { DonutChart } from "@/components/charts/DonutChart";
@@ -199,7 +200,15 @@ export function MonthlyAnalyticsView() {
         </Pressable>
       </View>
 
-      {/* Smart Financial Health Banner */}
+      {monthExpenses.length === 0 ? (
+        <EmptyState
+          emoji="📉"
+          title="No Analytics Data"
+          description="Analytics will appear once you start recording expenses."
+        />
+      ) : (
+        <>
+          {/* Smart Financial Health Banner */}
       <View
         style={[
           styles.insightBanner,
@@ -586,6 +595,8 @@ export function MonthlyAnalyticsView() {
             ))}
           </View>
         </Card>
+      )}
+      </>
       )}
     </View>
   );

@@ -218,17 +218,9 @@ export function SplitsList() {
       {/* Splits List */}
       {filteredSplits.length === 0 ? (
         <EmptyState
-          icon={<Users size={36} color={theme.colors.mutedForeground} />}
-          title={
-            activeTab === "active"
-              ? "No Active Split Bills"
-              : "No Settled Splits"
-          }
-          description={
-            activeTab === "active"
-              ? "Split group expenses with friends and track reimbursements."
-              : "Fully settled group splits will be archived here."
-          }
+          emoji="🤝"
+          title="No Split Bills Yet"
+          description="Split expenses with friends and roommates. Track who owes what."
         />
       ) : (
         <View style={styles.listContainer}>

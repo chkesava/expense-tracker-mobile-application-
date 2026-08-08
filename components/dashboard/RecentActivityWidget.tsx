@@ -55,9 +55,9 @@ export function RecentActivityWidget({
     >
       {recentTransactions.length === 0 ? (
         <EmptyState
-          icon={<History size={32} color={theme.colors.mutedForeground} />}
-          title="No Transactions"
-          description="Your logged expenses will appear here in realtime."
+          emoji="📝"
+          title="Your Journey Starts Here"
+          description="Add your first expense to see recent activity."
         />
       ) : (
         <View style={styles.transactionsList}>

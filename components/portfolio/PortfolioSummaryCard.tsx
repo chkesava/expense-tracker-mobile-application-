@@ -1,18 +1,18 @@
-import React from 'react';
-import { View, StyleSheet, Text } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Card } from '@/components/ui/Card';
 import { Amount } from '@/components/common/Amount';
 import { useTheme } from '@/theme/ThemeProvider';
 import { themeUsesDarkPalette } from '@/theme/tokens';
-import { TrendingUp, TrendingDown } from 'lucide-react-native';
+import { TrendingUp, TrendingDown, ArrowLeftRight } from 'lucide-react-native';
 import type { PortfolioSummary } from '@/shared/features/portfolio/types';
 
 interface PortfolioSummaryCardProps {
   summary: PortfolioSummary;
   currency: string;
+  onManageCash?: () => void;
 }
 
-export function PortfolioSummaryCard({ summary, currency }: PortfolioSummaryCardProps) {
+export function PortfolioSummaryCard({ summary, currency, onManageCash }: PortfolioSummaryCardProps) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
 
@@ -71,15 +71,26 @@ export function PortfolioSummaryCard({ summary, currency }: PortfolioSummaryCard
             </Text>
           </View>
         </View>
-        <View style={styles.statItem}>
-          <Text style={[styles.label, subTextStyle]}>Cash Balance</Text>
+        <Pressable
+          onPress={onManageCash}
+          style={({ pressed }) => [
+            styles.statItem,
+            onManageCash ? { opacity: pressed ? 0.7 : 1 } : null,
+          ]}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <Text style={[styles.label, subTextStyle]}>Cash Balance</Text>
+            {onManageCash && (
+              <ArrowLeftRight size={11} color={theme.colors.primary} />
+            )}
+          </View>
           <Amount
             value={summary.cashBalance}
             currency={currency}
             style={[styles.statValue, textStyle]}
             ghostable
           />
-        </View>
+        </Pressable>
         <View style={styles.statItem}>
           <Text style={[styles.label, subTextStyle]}>Holdings</Text>
           <Text style={[styles.statValue, textStyle]}>{summary.totalHoldings}</Text>

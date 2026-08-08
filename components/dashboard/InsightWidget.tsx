@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { AlertCircle, CheckCircle2, Sparkles, TrendingUp } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
+import { EmptyState } from "@/components/common/EmptyState";
 import { Card } from "@/components/ui/Card";
 import type { Expense } from "@/shared/types/expense";
 import { computeDailySpendingPace } from "@/shared/utils/dashboardWidgets";
@@ -28,6 +29,18 @@ export function InsightWidget({
   const pace = useMemo(() => {
     return computeDailySpendingPace(expenses, activeMonth, monthlyBudget);
   }, [expenses, activeMonth, monthlyBudget]);
+
+  if (expenses.length === 0) {
+    return (
+      <Card title="Daily Spending Pace">
+        <EmptyState
+          emoji="💡"
+          title="Insights Coming Soon"
+          description="Financial insights will appear once you start recording expenses."
+        />
+      </Card>
+    );
+  }
 
   return (
     <Card

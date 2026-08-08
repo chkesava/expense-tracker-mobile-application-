@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import {
   Pressable,
-  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,6 +11,7 @@ import * as Haptics from "expo-haptics";
 import {
   ArrowLeftRight,
   ChevronRight,
+  CreditCard,
   Landmark,
   Plus,
   SlidersHorizontal,
@@ -21,8 +21,10 @@ import {
 
 import { AddAccountEntryModal } from "@/components/accounts/AddAccountEntryModal";
 import { EditAccountModal } from "@/components/accounts/EditAccountModal";
+import { PayCreditBillModal } from "@/components/accounts/PayCreditBillModal";
 import { TransferFundsModal } from "@/components/accounts/TransferFundsModal";
 import { Amount } from "@/components/common/Amount";
+import { ManageStockCashModal } from "@/components/portfolio/ManageStockCashModal";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { useAccountEntries } from "@/hooks/useAccountEntries";
@@ -32,6 +34,7 @@ import { useAccountTransfers } from "@/hooks/useAccountTransfers";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useIncomes } from "@/hooks/useIncomes";
+import { useUnifiedNetWorth } from "@/hooks/useUnifiedNetWorth";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import type { Account } from "@/shared/types/expense";
 import {
@@ -48,19 +51,25 @@ export function AccountsList() {
   const isDark = themeUsesDarkPalette(themeName);
   const { settings: system } = useSystemSettings();
 
-  const { accounts, loading: accountsLoading } = useAccounts();
-  const { accountTypes, loading: typesLoading } = useAccountTypes();
+  const { accounts } = useAccounts();
+  const { accountTypes } = useAccountTypes();
   const { expenses } = useExpenses();
   const { incomes } = useIncomes();
   const { entries } = useAccountEntries();
   const { payments } = useAccountPayments();
   const { transfers } = useAccountTransfers();
 
+  // Unified net worth calculation across bank accounts, credit cards, investments & stocks
+  const netWorth = useUnifiedNetWorth();
+
   // Modals state
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [isEntryModalOpen, setIsEntryModalOpen] = useState(false);
+  const [isStockCashModalOpen, setIsStockCashModalOpen] = useState(false);
+  const [isPayCreditModalOpen, setIsPayCreditModalOpen] = useState(false);
+  const [selectedPayCardId, setSelectedPayCardId] = useState<string | undefined>();
 
   const typeMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -68,11 +77,19 @@ export function AccountsList() {
     return map;
   }, [accountTypes]);
 
-  // Exclude credit cards from primary deposit/cash accounts (they have their own Cards view)
+  // Deposit/bank accounts (non-credit)
   const depositAccounts = useMemo(() => {
     return accounts.filter((a) => {
       const typeName = typeMap.get(a.typeId) || "";
       return getAccountKind(typeName) !== "credit";
+    });
+  }, [accounts, typeMap]);
+
+  // Credit card accounts (liabilities)
+  const creditAccounts = useMemo(() => {
+    return accounts.filter((a) => {
+      const typeName = typeMap.get(a.typeId) || "";
+      return getAccountKind(typeName) === "credit";
     });
   }, [accounts, typeMap]);
 
@@ -100,38 +117,6 @@ export function AccountsList() {
     return map;
   }, [accounts, typeMap, expenses, incomes, payments, entries, transfers]);
 
-  // Net worth calculation (Assets - Credit Liabilities)
-  const netWorthSummary = useMemo(() => {
-    let totalAssets = 0;
-    let totalLiabilities = 0;
-
-    accounts.forEach((a) => {
-      const typeName = typeMap.get(a.typeId) || "";
-      const kind = getAccountKind(typeName);
-      if (kind === "credit") {
-        const usage = computeCreditUsage(a, expenses, payments);
-        totalLiabilities += usage.usedThisCycle;
-      } else {
-        const bal = computeBankBalance(
-          a,
-          expenses,
-          incomes,
-          payments,
-          entries,
-          transfers
-        );
-        if (bal > 0) {
-          totalAssets += bal;
-        } else {
-          totalLiabilities += Math.abs(bal);
-        }
-      }
-    });
-
-    const net = totalAssets - totalLiabilities;
-    return { totalAssets, totalLiabilities, net };
-  }, [accounts, typeMap, expenses, incomes, payments, entries, transfers]);
-
   // Group deposit accounts by type
   const groupedAccounts = useMemo(() => {
     const groups: { typeId: string; typeName: string; list: Account[] }[] = [];
@@ -143,7 +128,6 @@ export function AccountsList() {
       }
     });
 
-    // Also include accounts whose type might not be in accountTypes
     const unmapped = depositAccounts.filter(
       (a) => !accountTypes.some((t) => t.id === a.typeId)
     );
@@ -174,12 +158,17 @@ export function AccountsList() {
     setIsEditModalOpen(true);
   };
 
+  const green = isDark ? "#4ade80" : "#16a34a";
+  const red = isDark ? "#f87171" : "#dc2626";
+  const blue = isDark ? "#60a5fa" : "#2563eb";
+  const purple = isDark ? "#a78bfa" : "#7c3aed";
+
   return (
     <ScrollView
       contentContainerStyle={styles.container}
       showsVerticalScrollIndicator={false}
     >
-      {/* Liquid Net Worth Hero Banner */}
+      {/* Comprehensive Net Worth Hero Card */}
       <Card
         style={[
           styles.netWorthCard,
@@ -200,43 +189,45 @@ export function AccountsList() {
                 { color: theme.colors.mutedForeground },
               ]}
             >
-              Liquid Net Worth
+              Total Net Worth
             </Text>
           </View>
         </View>
 
         <Amount
-          value={netWorthSummary.net}
+          value={netWorth.totalNetWorth}
           currency={system.defaultCurrency}
           ghostable
           style={{
-          fontSize: 28,
+            fontSize: 30,
             fontWeight: "800",
             color:
-              netWorthSummary.net >= 0
+              netWorth.totalNetWorth >= 0
                 ? theme.colors.foreground
                 : theme.colors.destructive,
           }}
         />
 
+        {/* Assets vs Liabilities Summary */}
         <View style={styles.netWorthSubRow}>
           <View style={styles.netWorthStat}>
             <Text
               style={{
                 fontSize: theme.typography.xs,
                 color: theme.colors.mutedForeground,
+                fontWeight: "600",
               }}
             >
               Total Assets
             </Text>
             <Amount
-              value={netWorthSummary.totalAssets}
+              value={netWorth.totalAssets}
               currency={system.defaultCurrency}
               ghostable
               style={{
                 fontSize: theme.typography.sm,
-                fontWeight: "700",
-                color: theme.colors.success,
+                fontWeight: "800",
+                color: green,
               }}
             />
           </View>
@@ -253,19 +244,66 @@ export function AccountsList() {
               style={{
                 fontSize: theme.typography.xs,
                 color: theme.colors.mutedForeground,
+                fontWeight: "600",
               }}
             >
               Liabilities
             </Text>
             <Amount
-              value={netWorthSummary.totalLiabilities}
+              value={netWorth.totalLiabilities}
               currency={system.defaultCurrency}
+              prefix={netWorth.totalLiabilities > 0 ? "-" : ""}
               ghostable
               style={{
                 fontSize: theme.typography.sm,
-                fontWeight: "700",
-                color: theme.colors.destructive,
+                fontWeight: "800",
+                color: netWorth.totalLiabilities > 0 ? red : theme.colors.mutedForeground,
               }}
+            />
+          </View>
+        </View>
+
+        {/* Detailed Breakdown Pills */}
+        <View
+          style={[
+            styles.breakdownRow,
+            {
+              borderTopColor: isDark
+                ? "rgba(255,255,255,0.08)"
+                : "rgba(0,0,0,0.06)",
+            },
+          ]}
+        >
+          <View style={styles.breakdownItem}>
+            <Text style={[styles.breakdownLabel, { color: theme.colors.mutedForeground }]}>
+              Bank/Cash
+            </Text>
+            <Amount
+              value={netWorth.liquidBankAssets}
+              currency={system.defaultCurrency}
+              style={{ fontSize: 11, fontWeight: "700", color: theme.colors.foreground }}
+            />
+          </View>
+
+          <View style={styles.breakdownItem}>
+            <Text style={[styles.breakdownLabel, { color: theme.colors.mutedForeground }]}>
+              Fixed Deposits
+            </Text>
+            <Amount
+              value={netWorth.investmentsValue}
+              currency={system.defaultCurrency}
+              style={{ fontSize: 11, fontWeight: "700", color: green }}
+            />
+          </View>
+
+          <View style={styles.breakdownItem}>
+            <Text style={[styles.breakdownLabel, { color: theme.colors.mutedForeground }]}>
+              Stocks & Demat
+            </Text>
+            <Amount
+              value={netWorth.totalStocksValue}
+              currency={system.defaultCurrency}
+              style={{ fontSize: 11, fontWeight: "700", color: blue }}
             />
           </View>
         </View>
@@ -316,6 +354,27 @@ export function AccountsList() {
         </Pressable>
 
         <Pressable
+          onPress={() => setIsStockCashModalOpen(true)}
+          style={[
+            styles.actionButton,
+            {
+              backgroundColor: theme.colors.card,
+              borderColor: theme.colors.border,
+            },
+          ]}
+        >
+          <TrendingUp size={16} color={purple} />
+          <Text
+            style={[
+              styles.actionButtonText,
+              { color: theme.colors.foreground },
+            ]}
+          >
+            Stocks Cash
+          </Text>
+        </Pressable>
+
+        <Pressable
           onPress={() => setIsEntryModalOpen(true)}
           style={[
             styles.actionButton,
@@ -337,7 +396,137 @@ export function AccountsList() {
         </Pressable>
       </View>
 
-      {/* Grouped Deposit Accounts */}
+      {/* Stocks & Demat Cash Card */}
+      <View style={styles.groupSection}>
+        <Text
+          style={[
+            styles.groupHeader,
+            {
+              color: theme.colors.mutedForeground,
+              fontSize: theme.typography.xs,
+            },
+          ]}
+        >
+          STOCKS & DEMAT PORTFOLIO
+        </Text>
+        <Card
+          style={[
+            styles.stockPortfolioCard,
+            {
+              backgroundColor: theme.colors.card,
+              borderColor: isDark ? "rgba(99, 102, 241, 0.3)" : "rgba(99, 102, 241, 0.2)",
+            },
+          ]}
+        >
+          <View style={styles.stockCardHeader}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+              <View
+                style={[
+                  styles.accountIconBox,
+                  {
+                    backgroundColor: isDark
+                      ? "rgba(99, 102, 241, 0.15)"
+                      : "rgba(99, 102, 241, 0.1)",
+                  },
+                ]}
+              >
+                <TrendingUp size={20} color={theme.colors.primary} />
+              </View>
+              <View style={{ gap: 2 }}>
+                <Text
+                  style={[
+                    styles.accountName,
+                    {
+                      color: theme.colors.foreground,
+                      fontSize: theme.typography.md,
+                    },
+                  ]}
+                >
+                  Stocks Demat Account
+                </Text>
+                <Text
+                  style={[
+                    styles.accountSub,
+                    {
+                      color: theme.colors.mutedForeground,
+                      fontSize: theme.typography.xs,
+                    },
+                  ]}
+                >
+                  Trading Cash & Equities Portfolio
+                </Text>
+              </View>
+            </View>
+
+            <Amount
+              value={netWorth.totalStocksValue}
+              currency={system.defaultCurrency}
+              ghostable
+              style={{
+                fontSize: theme.typography.md,
+                fontWeight: "800",
+                color: theme.colors.foreground,
+              }}
+            />
+          </View>
+
+          <View style={styles.stockCardStatsRow}>
+            <View style={{ flex: 1 }}>
+              <Text
+                style={{
+                  fontSize: theme.typography.xs,
+                  color: theme.colors.mutedForeground,
+                }}
+              >
+                Cash Balance:{" "}
+                <Amount
+                  value={netWorth.stocksCashBalance}
+                  currency={system.defaultCurrency}
+                  style={{ fontWeight: "700", color: theme.colors.foreground }}
+                />
+              </Text>
+            </View>
+            <View style={{ flex: 1, alignItems: "flex-end" }}>
+              <Text
+                style={{
+                  fontSize: theme.typography.xs,
+                  color: theme.colors.mutedForeground,
+                }}
+              >
+                Holdings Value:{" "}
+                <Amount
+                  value={netWorth.stocksHoldingsValue}
+                  currency={system.defaultCurrency}
+                  style={{ fontWeight: "700", color: blue }}
+                />
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.stockCardActionsRow}>
+            <Button
+              size="sm"
+              variant="outline"
+              onPress={() => setIsStockCashModalOpen(true)}
+              style={{ flex: 1 }}
+            >
+              Transfer Cash
+            </Button>
+            <Button
+              size="sm"
+              onPress={() => {
+                Haptics.selectionAsync().catch(() => undefined);
+                router.push("/ledger?tab=portfolio");
+              }}
+              style={{ flex: 1 }}
+            >
+              View Portfolio
+            </Button>
+          </View>
+        </Card>
+      </View>
+
+      {/* Grouped Bank / Deposit Accounts */}
       {groupedAccounts.length === 0 ? (
         <Card
           style={[
@@ -358,7 +547,7 @@ export function AccountsList() {
               },
             ]}
           >
-            No Accounts Added Yet
+            No Bank Accounts Added Yet
           </Text>
           <Text
             style={[
@@ -369,7 +558,7 @@ export function AccountsList() {
               },
             ]}
           >
-            Track your bank accounts, cash wallets, and investments in one place.
+            Track your bank accounts, savings, and cash wallets in one place.
           </Text>
           <Button onPress={handleOpenCreateAccount} size="sm">
             Create First Account
@@ -489,6 +678,128 @@ export function AccountsList() {
         ))
       )}
 
+      {/* Credit Cards & Liabilities Section */}
+      {creditAccounts.length > 0 && (
+        <View style={styles.groupSection}>
+          <Text
+            style={[
+              styles.groupHeader,
+              {
+                color: red,
+                fontSize: theme.typography.xs,
+              },
+            ]}
+          >
+            CREDIT CARDS & LIABILITIES ({creditAccounts.length})
+          </Text>
+
+          <View style={{ gap: 10 }}>
+            {creditAccounts.map((account) => {
+              const usage = computeCreditUsage(account, expenses, payments);
+              const cardColor = account.color || "#EF4444";
+
+              return (
+                <Pressable
+                  key={account.id}
+                  onPress={() => handleOpenAccountDetail(account)}
+                  onLongPress={() => handleOpenEditAccount(account)}
+                  style={({ pressed }) => [
+                    styles.accountCard,
+                    {
+                      backgroundColor: theme.colors.card,
+                      borderColor: theme.colors.border,
+                      opacity: pressed ? 0.9 : 1,
+                    },
+                  ]}
+                >
+                  {/* Left Accent Bar */}
+                  <View
+                    style={[
+                      styles.colorAccentBar,
+                      { backgroundColor: cardColor },
+                    ]}
+                  />
+
+                  {/* Account Icon & Info */}
+                  <View style={styles.accountCardLeft}>
+                    <View
+                      style={[
+                        styles.accountIconBox,
+                        {
+                          backgroundColor: isDark
+                            ? "rgba(239, 68, 68, 0.15)"
+                            : "rgba(239, 68, 68, 0.1)",
+                        },
+                      ]}
+                    >
+                      <CreditCard size={20} color={cardColor} />
+                    </View>
+                    <View style={{ gap: 2, flex: 1, minWidth: 0 }}>
+                      <Text
+                        style={[
+                          styles.accountName,
+                          {
+                            color: theme.colors.foreground,
+                            fontSize: theme.typography.md,
+                          },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {account.name}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.accountSub,
+                          {
+                            color: theme.colors.mutedForeground,
+                            fontSize: theme.typography.xs,
+                          },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {account.accountNumber
+                          ? `Credit Card • •••• ${account.accountNumber.slice(-4)}`
+                          : "Credit Card"}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Used Liability & Chevron */}
+                  <View style={styles.accountCardRight}>
+                    <View style={{ alignItems: "flex-end" }}>
+                      <Amount
+                        value={usage.usedThisCycle}
+                        currency={system.defaultCurrency}
+                        prefix={usage.usedThisCycle > 0 ? "-" : ""}
+                        ghostable
+                        style={{
+                          fontSize: theme.typography.md,
+                          fontWeight: "800",
+                          color: usage.usedThisCycle > 0 ? red : theme.colors.foreground,
+                        }}
+                      />
+                      <Text
+                        style={{
+                          fontSize: 10,
+                          color: theme.colors.mutedForeground,
+                          fontWeight: "600",
+                        }}
+                      >
+                        Used This Cycle
+                      </Text>
+                    </View>
+                    <ChevronRight
+                      size={16}
+                      color={theme.colors.mutedForeground}
+                    />
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+      )}
+
       {/* Modals */}
       <EditAccountModal
         isOpen={isEditModalOpen}
@@ -506,6 +817,20 @@ export function AccountsList() {
         isOpen={isEntryModalOpen}
         onClose={() => setIsEntryModalOpen(false)}
         accounts={depositAccounts}
+      />
+
+      <ManageStockCashModal
+        visible={isStockCashModalOpen}
+        onClose={() => setIsStockCashModalOpen(false)}
+        currency={system.defaultCurrency}
+      />
+
+      <PayCreditBillModal
+        isOpen={isPayCreditModalOpen}
+        onClose={() => setIsPayCreditModalOpen(false)}
+        defaultCreditCardId={selectedPayCardId}
+        accounts={accounts}
+        accountTypes={accountTypes}
       />
     </ScrollView>
   );
@@ -555,22 +880,36 @@ const styles = StyleSheet.create({
     width: 1,
     height: 24,
   },
+  breakdownRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingTop: 8,
+    borderTopWidth: 1,
+  },
+  breakdownItem: {
+    alignItems: "center",
+    gap: 2,
+  },
+  breakdownLabel: {
+    fontSize: 10,
+    fontWeight: "600",
+  },
   actionRow: {
     flexDirection: "row",
-    gap: 10,
+    gap: 8,
   },
   actionButton: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 12,
+    paddingVertical: 10,
     borderRadius: 14,
     borderWidth: 1,
-    gap: 6,
+    gap: 4,
   },
   actionButtonText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "700",
   },
   groupSection: {
@@ -580,6 +919,27 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     letterSpacing: 0.8,
     marginLeft: 4,
+  },
+  stockPortfolioCard: {
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 12,
+  },
+  stockCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  stockCardStatsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  stockCardActionsRow: {
+    flexDirection: "row",
+    gap: 10,
+    paddingTop: 4,
   },
   accountCard: {
     flexDirection: "row",

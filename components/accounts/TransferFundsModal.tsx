@@ -1,17 +1,21 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import * as Haptics from "expo-haptics";
-import { ArrowRight, Wallet } from "lucide-react-native";
+import { ArrowRight, TrendingUp, Wallet } from "lucide-react-native";
 
 import { Modal } from "@/components/common/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { useAccountEntries } from "@/hooks/useAccountEntries";
 import { useAccountTransfers } from "@/hooks/useAccountTransfers";
+import { usePortfolio } from "@/hooks/usePortfolio";
 import { toast } from "@/lib/toast";
 import type { Account } from "@/shared/types/expense";
 import { formatDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+
+export const DEMAT_ACCOUNT_ID = "stocks_demat";
 
 export interface TransferFundsModalProps {
   isOpen: boolean;
@@ -31,12 +35,26 @@ export function TransferFundsModal({
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const { addTransfer } = useAccountTransfers();
+  const { addEntry } = useAccountEntries();
+  const { depositCash, withdrawCash } = usePortfolio();
+
+  const selectableOptions = useMemo(() => {
+    return [
+      ...accounts,
+      {
+        id: DEMAT_ACCOUNT_ID,
+        name: "Stocks Demat Cash",
+        typeId: "demat",
+        createdAt: "",
+      } as Account,
+    ];
+  }, [accounts]);
 
   const [fromAccountId, setFromAccountId] = useState(
     defaultFromAccountId || accounts[0]?.id || ""
   );
   const [toAccountId, setToAccountId] = useState(
-    defaultToAccountId || accounts[1]?.id || accounts[0]?.id || ""
+    defaultToAccountId || DEMAT_ACCOUNT_ID
   );
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState(formatDateKey(new Date()));
@@ -77,20 +95,69 @@ export function TransferFundsModal({
 
     setSaving(true);
     try {
-      const ok = await addTransfer(
-        fromAccountId,
-        toAccountId,
-        parsedAmount,
-        date.trim(),
-        note.trim() || undefined
-      );
+      if (fromAccountId === DEMAT_ACCOUNT_ID) {
+        // Stocks Demat -> Bank Account
+        const withdrawOk = await withdrawCash(
+          parsedAmount,
+          note.trim() || `Transfer from Stocks Demat`
+        );
+        if (!withdrawOk) {
+          setSaving(false);
+          return;
+        }
 
-      if (ok) {
-        toast.success("Transfer recorded successfully");
+        await addEntry(
+          toAccountId,
+          parsedAmount,
+          "credit",
+          date.trim(),
+          note.trim() || `Transfer from Stocks Demat`
+        );
+
+        toast.success("Transferred funds from Stocks Demat to Account");
+        setAmount("");
+        onClose();
+      } else if (toAccountId === DEMAT_ACCOUNT_ID) {
+        // Bank Account -> Stocks Demat
+        const fromAccount = accounts.find((a) => a.id === fromAccountId);
+        const entryOk = await addEntry(
+          fromAccountId,
+          parsedAmount,
+          "debit",
+          date.trim(),
+          note.trim() || `Transfer to Stocks Demat (${fromAccount?.name ?? "Bank"})`
+        );
+
+        if (!entryOk) {
+          setSaving(false);
+          return;
+        }
+
+        await depositCash(
+          parsedAmount,
+          note.trim() || `Transfer from ${fromAccount?.name ?? "Bank Account"}`
+        );
+
+        toast.success("Transferred funds to Stocks Demat");
         setAmount("");
         onClose();
       } else {
-        toast.error("Failed to record transfer");
+        // Regular Bank -> Bank Transfer
+        const ok = await addTransfer(
+          fromAccountId,
+          toAccountId,
+          parsedAmount,
+          date.trim(),
+          note.trim() || undefined
+        );
+
+        if (ok) {
+          toast.success("Transfer recorded successfully");
+          setAmount("");
+          onClose();
+        } else {
+          toast.error("Failed to record transfer");
+        }
       }
     } catch (err) {
       console.error("Save transfer error:", err);
@@ -121,8 +188,9 @@ export function TransferFundsModal({
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={{ gap: 8 }}
           >
-            {accounts.map((a) => {
+            {selectableOptions.map((a) => {
               const isSelected = fromAccountId === a.id;
+              const isDemat = a.id === DEMAT_ACCOUNT_ID;
               return (
                 <Pressable
                   key={a.id}
@@ -144,14 +212,25 @@ export function TransferFundsModal({
                     },
                   ]}
                 >
-                  <Wallet
-                    size={14}
-                    color={
-                      isSelected
-                        ? theme.colors.primaryForeground
-                        : theme.colors.mutedForeground
-                    }
-                  />
+                  {isDemat ? (
+                    <TrendingUp
+                      size={14}
+                      color={
+                        isSelected
+                          ? theme.colors.primaryForeground
+                          : theme.colors.mutedForeground
+                      }
+                    />
+                  ) : (
+                    <Wallet
+                      size={14}
+                      color={
+                        isSelected
+                          ? theme.colors.primaryForeground
+                          : theme.colors.mutedForeground
+                      }
+                    />
+                  )}
                   <Text
                     style={[
                       styles.pillText,
@@ -207,10 +286,11 @@ export function TransferFundsModal({
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={{ gap: 8 }}
           >
-            {accounts
+            {selectableOptions
               .filter((a) => a.id !== fromAccountId)
               .map((a) => {
                 const isSelected = toAccountId === a.id;
+                const isDemat = a.id === DEMAT_ACCOUNT_ID;
                 return (
                   <Pressable
                     key={a.id}
@@ -232,14 +312,25 @@ export function TransferFundsModal({
                       },
                     ]}
                   >
-                    <Wallet
-                      size={14}
-                      color={
-                        isSelected
-                          ? theme.colors.primaryForeground
-                          : theme.colors.mutedForeground
-                      }
-                    />
+                    {isDemat ? (
+                      <TrendingUp
+                        size={14}
+                        color={
+                          isSelected
+                            ? theme.colors.primaryForeground
+                            : theme.colors.mutedForeground
+                        }
+                      />
+                    ) : (
+                      <Wallet
+                        size={14}
+                        color={
+                          isSelected
+                            ? theme.colors.primaryForeground
+                            : theme.colors.mutedForeground
+                        }
+                      />
+                    )}
                     <Text
                       style={[
                         styles.pillText,
@@ -307,7 +398,7 @@ export function TransferFundsModal({
           <Input
             value={note}
             onChangeText={setNote}
-            placeholder="e.g. Savings transfer, ATM withdrawal"
+            placeholder="e.g. Stocks investment fund, ATM withdrawal"
           />
         </View>
 

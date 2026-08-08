@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { PieChart } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
+import { EmptyState } from "@/components/common/EmptyState";
 import { Card } from "@/components/ui/Card";
 import type { Expense } from "@/shared/types/expense";
 import { computeTopCategories } from "@/shared/utils/dashboardWidgets";
@@ -25,7 +26,17 @@ export function TopCategoriesWidget({
     return computeTopCategories(expenses, 5);
   }, [expenses]);
 
-  if (categories.length === 0) return null;
+  if (categories.length === 0) {
+    return (
+      <Card title="Top Spending Categories">
+        <EmptyState
+          emoji="📊"
+          title="No Spending Data Yet"
+          description="Your category breakdown will appear after recording expenses."
+        />
+      </Card>
+    );
+  }
 
   return (
     <Card

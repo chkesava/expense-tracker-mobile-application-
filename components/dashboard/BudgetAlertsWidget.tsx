@@ -2,6 +2,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { AlertCircle, CheckCircle2, Flame, ShieldAlert } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
+import { EmptyState } from "@/components/common/EmptyState";
 import { Card } from "@/components/ui/Card";
 import { useTheme } from "@/theme/ThemeProvider";
 
@@ -40,6 +41,18 @@ export function BudgetAlertsWidget({
 
   const remaining = Math.max(0, monthlyBudget - monthlySpent);
   const isOverBudget = monthlyBudget > 0 && monthlySpent > monthlyBudget;
+
+  if (monthlyBudget === 0 && activeCategoryBudgets.length === 0) {
+    return (
+      <Card title="Monthly Budget">
+        <EmptyState
+          emoji="💰"
+          title="No Budget Configured"
+          description="Set a monthly budget to get spending alerts and stay on track."
+        />
+      </Card>
+    );
+  }
 
   return (
     <View style={{ gap: 14 }}>

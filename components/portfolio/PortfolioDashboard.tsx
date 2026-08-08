@@ -11,6 +11,7 @@ import {
 import { OnboardingFlow } from "@/components/portfolio/OnboardingFlow";
 import { PortfolioCharts } from "@/components/portfolio/PortfolioCharts";
 import { PortfolioSummaryCard } from "@/components/portfolio/PortfolioSummaryCard";
+import { ManageStockCashModal } from "@/components/portfolio/ManageStockCashModal";
 import { HoldingsList } from "@/components/portfolio/HoldingsList";
 import { WatchlistTab } from "@/components/portfolio/WatchlistTab";
 import { AlertsTab } from "@/components/portfolio/AlertsTab";
@@ -62,6 +63,7 @@ export function PortfolioDashboard() {
   } = usePortfolio();
 
   const [subTab, setSubTab] = useState<PortfolioSubTab>("holdings");
+  const [isCashModalOpen, setIsCashModalOpen] = useState(false);
 
   // Gather symbols for live quotes
   const symbolRequests = useMemo(
@@ -227,6 +229,7 @@ export function PortfolioDashboard() {
       <PortfolioSummaryCard
         summary={summary}
         currency={system.defaultCurrency}
+        onManageCash={() => setIsCashModalOpen(true)}
       />
 
       {/* Sub-tab pills */}
@@ -258,9 +261,11 @@ export function PortfolioDashboard() {
               <Text
                 style={{
                   fontSize: 12,
-                  fontWeight: active ? "800" : "600",
-                  color: active ? "#FFFFFF" : theme.colors.foreground,
-                  marginLeft: 4,
+                  fontWeight: "600",
+                  marginLeft: 6,
+                  color: active
+                    ? "#FFF"
+                    : theme.colors.foreground,
                 }}
               >
                 {tab.label}
@@ -270,7 +275,7 @@ export function PortfolioDashboard() {
         })}
       </View>
 
-      {/* Content */}
+      {/* Active Tab View */}
       {subTab === "holdings" && <HoldingsList />}
 
       {subTab === "watchlist" && (
@@ -283,9 +288,22 @@ export function PortfolioDashboard() {
         />
       )}
 
-      {subTab === "orders" && <OrdersTab orders={orders} currency={system.defaultCurrency} onCancel={cancelOrder} />}
+      {subTab === "orders" && (
+        <OrdersTab
+          orders={orders}
+          currency={system.defaultCurrency}
+          onCancel={cancelOrder}
+        />
+      )}
 
-      {subTab === "alerts" && <AlertsTab alerts={alerts} onAdd={addAlert} onToggle={toggleAlert} onDelete={deleteAlert} />}
+      {subTab === "alerts" && (
+        <AlertsTab
+          alerts={alerts}
+          onAdd={addAlert}
+          onToggle={toggleAlert}
+          onDelete={deleteAlert}
+        />
+      )}
 
       {subTab === "charts" && (
         <PortfolioCharts
@@ -294,6 +312,12 @@ export function PortfolioDashboard() {
           currency={system.defaultCurrency}
         />
       )}
+
+      <ManageStockCashModal
+        visible={isCashModalOpen}
+        onClose={() => setIsCashModalOpen(false)}
+        currency={system.defaultCurrency}
+      />
     </View>
   );
 }

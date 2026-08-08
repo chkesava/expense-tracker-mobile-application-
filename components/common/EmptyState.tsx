@@ -1,19 +1,34 @@
 import { View, Text, StyleSheet } from "react-native";
 import type { ReactNode } from "react";
 import { useTheme } from "@/theme/ThemeProvider";
+import Animated, { FadeInDown } from "react-native-reanimated";
 
 export type EmptyStateProps = {
   icon?: ReactNode;
+  emoji?: string;
   title: string;
   description?: string;
   action?: ReactNode;
+  secondaryAction?: ReactNode;
+  animated?: boolean;
 };
 
-export function EmptyState({ icon, title, description, action }: EmptyStateProps) {
+export function EmptyState({ 
+  icon, 
+  emoji,
+  title, 
+  description, 
+  action, 
+  secondaryAction,
+  animated = true 
+}: EmptyStateProps) {
   const { theme } = useTheme();
 
+  const Container = animated ? Animated.View : View;
+  const containerProps = animated ? { entering: FadeInDown.duration(500) } : {};
+
   return (
-    <View
+    <Container
       style={[
         styles.wrap,
         {
@@ -22,8 +37,14 @@ export function EmptyState({ icon, title, description, action }: EmptyStateProps
         },
       ]}
       accessibilityRole="summary"
+      {...containerProps as any}
     >
-      {icon ? <View style={styles.iconContainer}>{icon}</View> : null}
+      {emoji ? (
+        <Text style={{ fontSize: 48, textAlign: 'center', marginBottom: 8 }}>
+          {emoji}
+        </Text>
+      ) : null}
+      {icon && !emoji ? <View style={styles.iconContainer}>{icon}</View> : null}
       <Text
         style={{
           color: theme.colors.foreground,
@@ -47,7 +68,8 @@ export function EmptyState({ icon, title, description, action }: EmptyStateProps
         </Text>
       ) : null}
       {action ? <View style={{ marginTop: theme.space.md }}>{action}</View> : null}
-    </View>
+      {secondaryAction ? <View style={{ marginTop: theme.space.sm }}>{secondaryAction}</View> : null}
+    </Container>
   );
 }
 

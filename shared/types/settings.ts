@@ -13,6 +13,14 @@ export type DashboardWidgets = {
   topCategories: boolean;
 };
 
+export type OnboardingState = {
+  welcomeCompleted: boolean;
+  onboardingDismissed: boolean;
+  completedSteps: string[];
+  setupStartedAt: string;
+  visitedScreens: string[];
+};
+
 export type UserSettings = {
   lockPastMonths: boolean;
   compactListMode: boolean;
@@ -32,6 +40,7 @@ export type UserSettings = {
   lockOnInactivity: boolean;
   inactivityTimeout: number;
   lockOnAppSwitch: boolean;
+  onboarding: OnboardingState;
 };
 
 function deviceTimezone(): string {
@@ -78,6 +87,13 @@ export const SETTINGS_DEFAULTS: UserSettings = {
   lockOnInactivity: true,
   inactivityTimeout: 60,
   lockOnAppSwitch: true,
+  onboarding: {
+    welcomeCompleted: false,
+    onboardingDismissed: false,
+    completedSteps: [],
+    setupStartedAt: "",
+    visitedScreens: [],
+  },
 };
 
 export function mergeSettingsFromDoc(
@@ -101,5 +117,15 @@ export function mergeSettingsFromDoc(
       typeof data.timezone === "string" && data.timezone
         ? data.timezone
         : SETTINGS_DEFAULTS.timezone,
+    onboarding: {
+      ...SETTINGS_DEFAULTS.onboarding,
+      ...((data.onboarding as Partial<OnboardingState>) || {}),
+      completedSteps:
+        (data.onboarding as Partial<OnboardingState>)?.completedSteps ||
+        SETTINGS_DEFAULTS.onboarding.completedSteps,
+      visitedScreens:
+        (data.onboarding as Partial<OnboardingState>)?.visitedScreens ||
+        SETTINGS_DEFAULTS.onboarding.visitedScreens,
+    },
   };
 }

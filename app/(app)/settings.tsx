@@ -6,8 +6,9 @@ import {
   Text,
   View,
 } from "react-native";
+import { useRouter } from "expo-router";
 import { doc, setDoc } from "firebase/firestore";
-import { Settings as SettingsIcon, X } from "lucide-react-native";
+import { ListChecks, RotateCcw, EyeOff, Settings as SettingsIcon, X } from "lucide-react-native";
 
 import { CategoryManager } from "@/components/categories/CategoryManager";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -29,6 +30,15 @@ import {
   THEME_NAMES,
   type ThemeName,
 } from "@/theme/tokens";
+import {
+  DashboardWidgetToggles,
+  AutoCategorizationRulesManager,
+  CategoryBudgetsManager,
+  FinancialGoalsManager,
+  AccountTypesManager,
+  AccountsManager,
+} from "@/components/settings/SettingsSubmenus";
+import { useSetupProgress } from "@/providers/SetupProgressProvider";
 
 const INACTIVITY_OPTIONS = [
   { value: "15", label: "15s" },
@@ -208,6 +218,9 @@ export default function SettingsScreen() {
         icon={<SettingsIcon size={22} color={theme.colors.primary} />}
       />
 
+      {/* Getting Started — onboarding controls */}
+      <GettingStartedCard />
+
       <Card title="Profile" subtitle={`${role}${isAdmin ? " · admin" : ""}`}>
         <View style={{ gap: theme.space.md }}>
           <Text style={{ color: theme.colors.mutedForeground, fontSize: theme.typography.sm }}>
@@ -326,8 +339,22 @@ export default function SettingsScreen() {
             selected={settings.navigationStyle}
             onSelect={(v) => setNavigationStyle(v as NavigationStyle)}
           />
+
+          <View style={{ height: 1, backgroundColor: theme.colors.border, marginVertical: theme.space.sm }} />
+          <DashboardWidgetToggles />
+
+          <View style={{ height: 1, backgroundColor: theme.colors.border, marginVertical: theme.space.sm }} />
+          <AutoCategorizationRulesManager />
         </View>
       </Card>
+
+      <CategoryBudgetsManager />
+
+      <FinancialGoalsManager />
+
+      <AccountTypesManager />
+
+      <AccountsManager />
 
       <Card title="Privacy" subtitle="PIN, duress, lock, biometrics">
         <View style={{ gap: theme.space.md }}>
@@ -594,5 +621,126 @@ function ChipRow<T extends string>({
         );
       })}
     </View>
+  );
+}
+
+function GettingStartedCard() {
+  const { theme } = useTheme();
+  const router = useRouter();
+
+  let setupProgress: ReturnType<typeof useSetupProgress> | null = null;
+  try {
+    setupProgress = useSetupProgress();
+  } catch {
+    // SetupProgressProvider not yet mounted — skip rendering
+    return null;
+  }
+
+  if (!setupProgress) return null;
+
+  const {
+    completedCount,
+    totalCount,
+    progress,
+    isOnboarding,
+    dismissOnboarding,
+    resetOnboarding,
+  } = setupProgress;
+
+  return (
+    <Card
+      title="Getting Started"
+      subtitle={
+        isOnboarding
+          ? `${completedCount} / ${totalCount} steps completed`
+          : "Setup complete!"
+      }
+    >
+      <View style={{ gap: theme.space.md }}>
+        {/* Progress bar */}
+        <View
+          style={{
+            height: 6,
+            borderRadius: 3,
+            backgroundColor: theme.colors.border,
+            overflow: "hidden",
+          }}
+        >
+          <View
+            style={{
+              height: 6,
+              borderRadius: 3,
+              backgroundColor: theme.colors.primary,
+              width: `${Math.round(progress * 100)}%`,
+            }}
+          />
+        </View>
+
+        <Pressable
+          onPress={() => router.push("/dashboard")}
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: theme.space.sm,
+            paddingVertical: theme.space.sm,
+          }}
+        >
+          <ListChecks size={18} color={theme.colors.primary} />
+          <Text
+            style={{
+              color: theme.colors.foreground,
+              fontSize: theme.typography.sm,
+              fontWeight: "600",
+            }}
+          >
+            View Setup Checklist
+          </Text>
+        </Pressable>
+
+        <Pressable
+          onPress={resetOnboarding}
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: theme.space.sm,
+            paddingVertical: theme.space.sm,
+          }}
+        >
+          <RotateCcw size={18} color={theme.colors.mutedForeground} />
+          <Text
+            style={{
+              color: theme.colors.foreground,
+              fontSize: theme.typography.sm,
+              fontWeight: "600",
+            }}
+          >
+            Restart Onboarding
+          </Text>
+        </Pressable>
+
+        {isOnboarding && (
+          <Pressable
+            onPress={dismissOnboarding}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: theme.space.sm,
+              paddingVertical: theme.space.sm,
+            }}
+          >
+            <EyeOff size={18} color={theme.colors.mutedForeground} />
+            <Text
+              style={{
+                color: theme.colors.mutedForeground,
+                fontSize: theme.typography.sm,
+                fontWeight: "600",
+              }}
+            >
+              Hide Onboarding
+            </Text>
+          </Pressable>
+        )}
+      </View>
+    </Card>
   );
 }
