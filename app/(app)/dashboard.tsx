@@ -451,6 +451,6 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
   widgetsGrid: {
-    gap: 16,
+    gap: 12,
   },
 });

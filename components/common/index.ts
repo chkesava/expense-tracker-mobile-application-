@@ -7,4 +7,6 @@ export { ListItem, type ListItemProps } from "./ListItem";
 export { LoadingState, type LoadingStateProps } from "./LoadingState";
 export { ErrorState, type ErrorStateProps } from "./ErrorState";
 export { SuccessState, type SuccessStateProps } from "./SuccessState";
+export { SearchBar, type SearchBarProps } from "./SearchBar";
+export { SwipeableRow, type SwipeableRowProps, type SwipeAction } from "./SwipeableRow";
 

@@ -29,18 +29,7 @@ export function OverviewWidget({
 
   return (
     <View
-      style={[
-        styles.overviewCard,
-        {
-          backgroundColor: theme.colors.card,
-          borderColor: theme.colors.border,
-          shadowColor: "#000",
-          shadowOffset: { width: 0, height: 6 },
-          shadowOpacity: isDark ? 0.35 : 0.08,
-          shadowRadius: 16,
-          elevation: 6,
-        },
-      ]}
+      style={[styles.overviewCard, theme.elevation[2], { backgroundColor: theme.colors.card }]}
     >
       <View style={styles.overviewHeader}>
         <Text
@@ -161,7 +150,6 @@ export function OverviewWidget({
 const styles = StyleSheet.create({
   overviewCard: {
     borderRadius: 24,
-    borderWidth: 1,
     padding: 20,
     marginBottom: 4,
   },

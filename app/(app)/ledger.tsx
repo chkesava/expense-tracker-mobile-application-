@@ -1,6 +1,5 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
   Pressable,
   StyleSheet,
   Text,
@@ -32,12 +31,13 @@ import { PortfolioDashboard } from "@/components/portfolio/PortfolioDashboard";
 import { SipDashboard } from "@/components/sip/SipDashboard";
 import { Amount } from "@/components/common/Amount";
 import { EmptyState } from "@/components/common/EmptyState";
+import { SearchBar } from "@/components/common/SearchBar";
+import { Skeleton } from "@/components/common/Skeleton";
 import { ExpenseList } from "@/components/ExpenseList";
 import { PageHeader, type PageHeaderTab } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { Input } from "@/components/ui/Input";
 import { useAccountEntries } from "@/hooks/useAccountEntries";
 import { useAccountPayments } from "@/hooks/useAccountPayments";
 import { useAccounts } from "@/hooks/useAccounts";
@@ -90,6 +90,12 @@ export default function LedgerScreen() {
       setLedgerTab("expenses");
     }
   }, [investmentsEnabled, ledgerTab, setLedgerTab]);
+
+  const [refreshing, setRefreshing] = useState(false);
+  const handleRefresh = () => {
+    setRefreshing(true);
+    setTimeout(() => setRefreshing(false), 600);
+  };
 
   const activeMonth = globalMonth || currentMonthKey(settings.timezone);
 
@@ -192,8 +198,14 @@ export default function LedgerScreen() {
       : []),
   ];
 
+  const isExpenseListTab =
+    ledgerTab === "expenses" && (expensesTab === "history" || expensesTab === "income");
+
   return (
-    <PageShell contentContainerStyle={styles.container}>
+    <PageShell
+      scrollable={!isExpenseListTab}
+      contentContainerStyle={styles.container}
+    >
       <PageHeader
         title="Ledger Hub"
         subtitle="Transactions & Accounts"
@@ -205,7 +217,7 @@ export default function LedgerScreen() {
 
       {/* Tab: Expenses (Journal) */}
       {ledgerTab === "expenses" && (
-        <View style={styles.sectionContainer}>
+        <View style={[styles.sectionContainer, isExpenseListTab && { flex: 1 }]}>
           {/* Sub-tab pills */}
           <View style={styles.subTabsRow}>
             {(["history", "income", "audit", "data"] as const).map((sub) => {
@@ -249,7 +261,7 @@ export default function LedgerScreen() {
           {/* Search bar & Active Month Pill */}
           <View style={styles.searchAndMonthRow}>
             <View style={{ flex: 1 }}>
-              <Input
+              <SearchBar
                 value={query}
                 onChangeText={setQuery}
                 placeholder="Search notes, categories, tags..."
@@ -283,18 +295,20 @@ export default function LedgerScreen() {
           </View>
 
           {expensesTab === "history" && (
-            <>
+            <View style={{ flex: 1 }}>
               {expensesLoading ? (
-                <ActivityIndicator
-                  size="large"
-                  color={theme.colors.primary}
-                  style={{ marginTop: 24 }}
-                />
+                <View style={{ gap: 8, marginTop: 8 }}>
+                  {[0, 1, 2, 3, 4].map((i) => (
+                    <Skeleton key={i} height={64} borderRadius={theme.radius.lg} />
+                  ))}
+                </View>
               ) : (
                 <ExpenseList
                   expenses={filteredExpenses}
                   incomes={filteredIncomes}
                   accounts={accounts}
+                  refreshing={refreshing}
+                  onRefresh={handleRefresh}
                   onEditExpense={(exp) => {
                     setEditingExpense(exp);
                     setIsAddExpenseOpen(true);
@@ -305,29 +319,31 @@ export default function LedgerScreen() {
                   }}
                 />
               )}
-            </>
+            </View>
           )}
 
           {expensesTab === "income" && (
-            <>
+            <View style={{ flex: 1 }}>
               {incomesLoading ? (
-                <ActivityIndicator
-                  size="large"
-                  color={theme.colors.primary}
-                  style={{ marginTop: 24 }}
-                />
+                <View style={{ gap: 8, marginTop: 8 }}>
+                  {[0, 1, 2, 3, 4].map((i) => (
+                    <Skeleton key={i} height={64} borderRadius={theme.radius.lg} />
+                  ))}
+                </View>
               ) : (
                 <ExpenseList
                   expenses={[]}
                   incomes={filteredIncomes}
                   accounts={accounts}
+                  refreshing={refreshing}
+                  onRefresh={handleRefresh}
                   onEditIncome={(inc) => {
                     setEditingIncome(inc);
                     setIsAddExpenseOpen(true);
                   }}
                 />
               )}
-            </>
+            </View>
           )}
 
           {expensesTab === "audit" && (

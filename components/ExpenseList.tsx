@@ -1,37 +1,21 @@
 import { useMemo, useState } from "react";
 import {
-  Alert,
   Modal,
   Pressable,
-  ScrollView,
+  SectionList,
   StyleSheet,
   Text,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-} from "firebase/firestore";
+import { deleteDoc, doc } from "firebase/firestore";
 import * as Haptics from "expo-haptics";
-import {
-  ArrowDownLeft,
-  ArrowUpRight,
-  CreditCard,
-  Edit2,
-  FolderTree,
-  Tag,
-  Trash2,
-  Wallet,
-  X,
-} from "lucide-react-native";
+import { Edit2, Tag, Trash2, Wallet } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
 import { EmptyState } from "@/components/common/EmptyState";
+import { SwipeableRow } from "@/components/common/SwipeableRow";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
 import { getFirestoreDb } from "@/lib/firebase";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
@@ -50,6 +34,8 @@ export interface ExpenseListProps {
   onEditExpense?: (expense: Expense) => void;
   onEditIncome?: (income: Income) => void;
   showMonthSummary?: boolean;
+  refreshing?: boolean;
+  onRefresh?: () => void;
 }
 
 type CombinedTransaction =
@@ -63,6 +49,8 @@ export function ExpenseList({
   onEditExpense,
   onEditIncome,
   showMonthSummary = true,
+  refreshing,
+  onRefresh,
 }: ExpenseListProps) {
   const insets = useSafeAreaInsets();
   const { theme, themeName } = useTheme();
@@ -161,6 +149,181 @@ export function ExpenseList({
     }
   };
 
+  const sections = useMemo(
+    () =>
+      Object.keys(groupedByDay.groups).map((dateKey) => ({
+        title: dateKey,
+        data: groupedByDay.groups[dateKey],
+      })),
+    [groupedByDay]
+  );
+
+  const renderTxRow = (
+    item: CombinedTransaction,
+    isFirstInSection: boolean,
+    isLastInSection: boolean
+  ) => {
+    const isExpense = item.kind === "expense";
+    const iconChar = isExpense ? getCategoryIcon(item.data.category) : "💰";
+    const acc = item.data.accountId ? accountMap.get(item.data.accountId) : undefined;
+
+    return (
+      <SwipeableRow
+        rightActions={[
+          {
+            icon: Edit2,
+            label: "Edit",
+            color: theme.colors.primary,
+            onPress: () => {
+              if (item.kind === "expense") {
+                onEditExpense?.(item.data);
+              } else {
+                onEditIncome?.(item.data);
+              }
+            },
+          },
+          {
+            icon: Trash2,
+            label: "Delete",
+            color: theme.colors.destructive,
+            onPress: () => handleDelete(item),
+          },
+        ]}
+      >
+        <Pressable
+          onPress={() => {
+            Haptics.selectionAsync().catch(() => undefined);
+            setSelectedTx(item);
+          }}
+          style={({ pressed }) => [
+            styles.row,
+            {
+              backgroundColor: theme.colors.card,
+              borderTopLeftRadius: isFirstInSection ? theme.radius.lg : 0,
+              borderTopRightRadius: isFirstInSection ? theme.radius.lg : 0,
+              borderBottomLeftRadius: isLastInSection ? theme.radius.lg : 0,
+              borderBottomRightRadius: isLastInSection ? theme.radius.lg : 0,
+            },
+            !isLastInSection && {
+              borderBottomWidth: 1,
+              borderBottomColor: theme.colors.border,
+            },
+            pressed && {
+              backgroundColor: isDark
+                ? "rgba(255,255,255,0.06)"
+                : "rgba(0,0,0,0.03)",
+            },
+          ]}
+        >
+          {/* Category Icon */}
+          <View
+            style={[
+              styles.avatar,
+              {
+                backgroundColor: isExpense
+                  ? theme.colors.primary + "18"
+                  : theme.colors.success + "18",
+              },
+            ]}
+          >
+            <Text style={{ fontSize: 18 }}>{iconChar}</Text>
+          </View>
+
+          {/* Details */}
+          <View style={styles.rowDetails}>
+            <Text
+              style={[
+                styles.rowTitle,
+                {
+                  color: theme.colors.foreground,
+                  fontSize: theme.typography.sm,
+                },
+              ]}
+              numberOfLines={1}
+            >
+              {isExpense
+                ? item.data.note || item.data.category
+                : item.data.note || item.data.source}
+            </Text>
+
+            <View style={styles.rowSub}>
+              <Text
+                style={[
+                  styles.rowCategory,
+                  {
+                    color: theme.colors.mutedForeground,
+                    fontSize: theme.typography.xs,
+                  },
+                ]}
+              >
+                {isExpense
+                  ? `${item.data.category}${
+                      item.data.subcategory ? ` › ${item.data.subcategory}` : ""
+                    }`
+                  : item.data.source}
+              </Text>
+
+              {acc ? (
+                <View
+                  style={[
+                    styles.accBadge,
+                    {
+                      backgroundColor: isDark
+                        ? "rgba(255,255,255,0.06)"
+                        : "rgba(0,0,0,0.04)",
+                      borderColor: theme.colors.border,
+                    },
+                  ]}
+                >
+                  <Wallet size={10} color={theme.colors.mutedForeground} />
+                  <Text
+                    style={[
+                      styles.accBadgeText,
+                      {
+                        color: theme.colors.mutedForeground,
+                        fontSize: 10,
+                      },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {acc.name}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+          </View>
+
+          {/* Amount & Time */}
+          <View style={styles.rowRight}>
+            <Amount
+              value={item.data.amount}
+              currency={system.defaultCurrency}
+              ghostable
+              style={{
+                fontSize: theme.typography.sm,
+                fontWeight: "700",
+                color: isExpense ? theme.colors.foreground : theme.colors.success,
+              }}
+            />
+            {isExpense && item.data.tags && item.data.tags.length > 0 ? (
+              <View style={styles.tagsPreview}>
+                <Tag size={10} color={theme.colors.mutedForeground} />
+                <Text
+                  style={{
+                    fontSize: 10,
+                    color: theme.colors.mutedForeground,
+                  }}
+                >
+                  {item.data.tags.length}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+        </Pressable>
+      </SwipeableRow>
+    );
+  };
+
   if (combinedTransactions.length === 0) {
     return (
       <EmptyState
@@ -172,126 +335,110 @@ export function ExpenseList({
   }
 
   return (
-    <View style={{ gap: 16 }}>
-      {/* Month Summary Bar */}
-      {showMonthSummary ? (
-        <View
-          style={[
-            styles.summaryCard,
-            {
-              backgroundColor: isDark
-                ? "rgba(255,255,255,0.04)"
-                : "rgba(0,0,0,0.02)",
-              borderColor: theme.colors.border,
-            },
-          ]}
-        >
-          <View style={styles.summaryCol}>
-            <Text
+    <>
+      <SectionList
+        style={styles.list}
+        sections={sections}
+        keyExtractor={(item) => item.id}
+        stickySectionHeadersEnabled
+        showsVerticalScrollIndicator={false}
+        refreshing={onRefresh ? !!refreshing : undefined}
+        onRefresh={onRefresh}
+        contentContainerStyle={{ paddingBottom: 16, gap: 12 }}
+        ListHeaderComponent={
+          showMonthSummary ? (
+            <View
               style={[
-                styles.summaryLabel,
-                { color: theme.colors.mutedForeground },
+                styles.summaryCard,
+                {
+                  backgroundColor: isDark
+                    ? "rgba(255,255,255,0.04)"
+                    : "rgba(0,0,0,0.02)",
+                  borderColor: theme.colors.border,
+                },
               ]}
             >
-              Spent
-            </Text>
-            <Amount
-              value={totals.totalSpent}
-              currency={system.defaultCurrency}
-              ghostable
-              style={{
-                fontSize: theme.typography.md,
-                fontWeight: "700",
-                color: theme.colors.destructive,
-              }}
-            />
-          </View>
+              <View style={styles.summaryCol}>
+                <Text
+                  style={[styles.summaryLabel, { color: theme.colors.mutedForeground }]}
+                >
+                  Spent
+                </Text>
+                <Amount
+                  value={totals.totalSpent}
+                  currency={system.defaultCurrency}
+                  ghostable
+                  style={{
+                    fontSize: theme.typography.md,
+                    fontWeight: "700",
+                    color: theme.colors.destructive,
+                  }}
+                />
+              </View>
 
-          <View
-            style={[styles.summaryDivider, { backgroundColor: theme.colors.border }]}
-          />
+              <View style={[styles.summaryDivider, { backgroundColor: theme.colors.border }]} />
 
-          <View style={styles.summaryCol}>
-            <Text
-              style={[
-                styles.summaryLabel,
-                { color: theme.colors.mutedForeground },
-              ]}
-            >
-              Income
-            </Text>
-            <Amount
-              value={totals.totalIncome}
-              currency={system.defaultCurrency}
-              ghostable
-              style={{
-                fontSize: theme.typography.md,
-                fontWeight: "700",
-                color: theme.colors.success,
-              }}
-            />
-          </View>
+              <View style={styles.summaryCol}>
+                <Text
+                  style={[styles.summaryLabel, { color: theme.colors.mutedForeground }]}
+                >
+                  Income
+                </Text>
+                <Amount
+                  value={totals.totalIncome}
+                  currency={system.defaultCurrency}
+                  ghostable
+                  style={{
+                    fontSize: theme.typography.md,
+                    fontWeight: "700",
+                    color: theme.colors.success,
+                  }}
+                />
+              </View>
 
-          <View
-            style={[styles.summaryDivider, { backgroundColor: theme.colors.border }]}
-          />
+              <View style={[styles.summaryDivider, { backgroundColor: theme.colors.border }]} />
 
-          <View style={styles.summaryCol}>
-            <Text
-              style={[
-                styles.summaryLabel,
-                { color: theme.colors.mutedForeground },
-              ]}
-            >
-              Net
-            </Text>
-            <Amount
-              value={totals.net}
-              currency={system.defaultCurrency}
-              ghostable
-              style={{
-                fontSize: theme.typography.md,
-                fontWeight: "700",
-                color:
-                  totals.net >= 0 ? theme.colors.success : theme.colors.destructive,
-              }}
-            />
-          </View>
-        </View>
-      ) : null}
+              <View style={styles.summaryCol}>
+                <Text
+                  style={[styles.summaryLabel, { color: theme.colors.mutedForeground }]}
+                >
+                  Net
+                </Text>
+                <Amount
+                  value={totals.net}
+                  currency={system.defaultCurrency}
+                  ghostable
+                  style={{
+                    fontSize: theme.typography.md,
+                    fontWeight: "700",
+                    color: totals.net >= 0 ? theme.colors.success : theme.colors.destructive,
+                  }}
+                />
+              </View>
+            </View>
+          ) : null
+        }
+        renderSectionHeader={({ section }) => {
+          const items = section.data;
+          const dayTotal = items.reduce((sum, item) => {
+            return item.kind === "expense" ? sum - item.data.amount : sum + item.data.amount;
+          }, 0);
 
-      {/* Grouped Transaction List */}
-      {Object.keys(groupedByDay.groups).map((dateKey) => {
-        const items = groupedByDay.groups[dateKey];
-        const dayTotal = items.reduce((sum, item) => {
-          return item.kind === "expense"
-            ? sum - item.data.amount
-            : sum + item.data.amount;
-        }, 0);
-
-        return (
-          <View key={dateKey} style={styles.dayGroup}>
-            {/* Day Header */}
-            <View style={styles.dayHeader}>
+          return (
+            <View style={[styles.dayHeader, { backgroundColor: theme.colors.background }]}>
               <Text
                 style={[
                   styles.dayHeaderText,
-                  {
-                    color: theme.colors.foreground,
-                    fontSize: theme.typography.sm,
-                  },
+                  { color: theme.colors.foreground, fontSize: theme.typography.sm },
                 ]}
               >
-                {formatHeaderDate(dateKey)}
+                {formatHeaderDate(section.title)}
               </Text>
               <Text
                 style={[
                   styles.daySubtotal,
                   {
-                    color:
-                      dayTotal >= 0
-                        ? theme.colors.success
-                        : theme.colors.mutedForeground,
+                    color: dayTotal >= 0 ? theme.colors.success : theme.colors.mutedForeground,
                     fontSize: theme.typography.xs,
                   },
                 ]}
@@ -301,156 +448,13 @@ export function ExpenseList({
                 {Math.abs(dayTotal).toLocaleString()}
               </Text>
             </View>
-
-            {/* Day Item Cards */}
-            <Card style={{ padding: 0, overflow: "hidden" }}>
-              {items.map((item, index) => {
-                const isExpense = item.kind === "expense";
-                const iconChar = isExpense
-                  ? getCategoryIcon(item.data.category)
-                  : "💰";
-                const acc = item.data.accountId
-                  ? accountMap.get(item.data.accountId)
-                  : undefined;
-
-                return (
-                  <Pressable
-                    key={item.id}
-                    onPress={() => {
-                      Haptics.selectionAsync().catch(() => undefined);
-                      setSelectedTx(item);
-                    }}
-                    style={({ pressed }) => [
-                      styles.row,
-                      index < items.length - 1 && {
-                        borderBottomWidth: 1,
-                        borderBottomColor: theme.colors.border,
-                      },
-                      pressed && {
-                        backgroundColor: isDark
-                          ? "rgba(255,255,255,0.06)"
-                          : "rgba(0,0,0,0.03)",
-                      },
-                    ]}
-                  >
-                    {/* Category Icon */}
-                    <View
-                      style={[
-                        styles.avatar,
-                        {
-                          backgroundColor: isExpense
-                            ? theme.colors.primary + "18"
-                            : theme.colors.success + "18",
-                        },
-                      ]}
-                    >
-                      <Text style={{ fontSize: 18 }}>{iconChar}</Text>
-                    </View>
-
-                    {/* Details */}
-                    <View style={styles.rowDetails}>
-                      <Text
-                        style={[
-                          styles.rowTitle,
-                          {
-                            color: theme.colors.foreground,
-                            fontSize: theme.typography.sm,
-                          },
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {isExpense
-                          ? item.data.note || item.data.category
-                          : item.data.note || item.data.source}
-                      </Text>
-
-                      <View style={styles.rowSub}>
-                        <Text
-                          style={[
-                            styles.rowCategory,
-                            {
-                              color: theme.colors.mutedForeground,
-                              fontSize: theme.typography.xs,
-                            },
-                          ]}
-                        >
-                          {isExpense
-                            ? `${item.data.category}${
-                                item.data.subcategory
-                                  ? ` › ${item.data.subcategory}`
-                                  : ""
-                              }`
-                            : item.data.source}
-                        </Text>
-
-                        {acc ? (
-                          <View
-                            style={[
-                              styles.accBadge,
-                              {
-                                backgroundColor: isDark
-                                  ? "rgba(255,255,255,0.06)"
-                                  : "rgba(0,0,0,0.04)",
-                                borderColor: theme.colors.border,
-                              },
-                            ]}
-                          >
-                            <Wallet
-                              size={10}
-                              color={theme.colors.mutedForeground}
-                            />
-                            <Text
-                              style={[
-                                styles.accBadgeText,
-                                {
-                                  color: theme.colors.mutedForeground,
-                                  fontSize: 10,
-                                },
-                              ]}
-                              numberOfLines={1}
-                            >
-                              {acc.name}
-                            </Text>
-                          </View>
-                        ) : null}
-                      </View>
-                    </View>
-
-                    {/* Amount & Time */}
-                    <View style={styles.rowRight}>
-                      <Amount
-                        value={item.data.amount}
-                        currency={system.defaultCurrency}
-                        ghostable
-                        style={{
-                          fontSize: theme.typography.sm,
-                          fontWeight: "700",
-                          color: isExpense
-                            ? theme.colors.foreground
-                            : theme.colors.success,
-                        }}
-                      />
-                      {isExpense && item.data.tags && item.data.tags.length > 0 ? (
-                        <View style={styles.tagsPreview}>
-                          <Tag size={10} color={theme.colors.mutedForeground} />
-                          <Text
-                            style={{
-                              fontSize: 10,
-                              color: theme.colors.mutedForeground,
-                            }}
-                          >
-                            {item.data.tags.length}
-                          </Text>
-                        </View>
-                      ) : null}
-                    </View>
-                  </Pressable>
-                );
-              })}
-            </Card>
-          </View>
-        );
-      })}
+          );
+        }}
+        renderItem={({ item, index, section }) =>
+          renderTxRow(item, index === 0, index === section.data.length - 1)
+        }
+        SectionSeparatorComponent={() => <View style={{ height: 8 }} />}
+      />
 
       {/* Transaction Action Bottom Sheet Modal */}
       <Modal
@@ -556,11 +560,14 @@ export function ExpenseList({
           </Pressable>
         </Pressable>
       </Modal>
-    </View>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
+  list: {
+    flex: 1,
+  },
   summaryCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -585,14 +592,12 @@ const styles = StyleSheet.create({
     width: 1,
     height: 32,
   },
-  dayGroup: {
-    gap: 8,
-  },
   dayHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 4,
+    paddingVertical: 8,
   },
   dayHeaderText: {
     fontWeight: "800",
