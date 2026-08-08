@@ -83,7 +83,7 @@ export function SetupWizardModal() {
   const { settings, updateSettings } = useSettings();
   const { settings: systemSettings } = useSystemSettings();
   const { addAccount, accountTypes } = useAccountsContext();
-  const { celebrate } = useCelebration();
+  const { celebrate, celebrateMilestone } = useCelebration();
 
   const [currentStep, setCurrentStep] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -161,6 +161,12 @@ export function SetupWizardModal() {
           await updateSettings({
             monthlyBudget: num,
           });
+          celebrateMilestone("milestone_first_budget", {
+            title: "First Budget Set!",
+            subtitle: "Setting limits is the secret to financial freedom.",
+            badgeEmoji: "🎯",
+            pointsEarned: 25,
+          });
         }
       } else if (currentStep === 3) {
         // Save First Account
@@ -184,12 +190,13 @@ export function SetupWizardModal() {
             date: new Date().toISOString().split("T")[0],
             createdAt: serverTimestamp(),
           });
+          celebrateMilestone("milestone_first_expense", {
+            title: "First Expense Logged!",
+            subtitle: "You've taken the first step towards mindful spending!",
+            badgeEmoji: "🎉",
+            pointsEarned: 25,
+          });
         }
-        celebrate({
-          title: "Setup Completed!",
-          subtitle: "Your financial hub is ready",
-          badgeEmoji: "🎉",
-        });
         toast.success("Setup complete! Your workspace is ready.");
         setIsSetupWizardOpen(false);
         return;

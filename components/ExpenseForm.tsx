@@ -50,6 +50,7 @@ import { useIncomes } from "@/hooks/useIncomes";
 import { getFirestoreDb } from "@/lib/firebase";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
+import { useCelebration } from "@/providers/CelebrationProvider";
 import { useSettings } from "@/providers/SettingsProvider";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import { suggestCategoryFromNote } from "@/shared/data/categoryTaxonomy";
@@ -92,6 +93,7 @@ export function ExpenseForm({
   const uid = user?.uid;
   const { settings } = useSettings();
   const { settings: system } = useSystemSettings();
+  const { celebrateMilestone } = useCelebration();
 
   const { accounts } = useAccounts();
   const { accountTypes } = useAccountTypes();
@@ -340,6 +342,14 @@ export function ExpenseForm({
             createdAt: serverTimestamp(),
           });
           toast.success("Expense logged");
+
+          // Celebrate first expense milestone with subtle confetti & animation
+          celebrateMilestone("milestone_first_expense", {
+            title: "First Expense Logged!",
+            subtitle: "You've taken the first step towards mindful spending!",
+            badgeEmoji: "🎉",
+            pointsEarned: 25,
+          });
         }
 
         // Store recent category preference

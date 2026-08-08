@@ -20,4 +20,6 @@ export { SuccessState, type SuccessStateProps } from "./SuccessState";
 export { AnimatedSuccessCheckmark, type AnimatedSuccessCheckmarkProps } from "./AnimatedSuccessCheckmark";
 export { SearchBar, type SearchBarProps } from "./SearchBar";
 export { SwipeableRow, type SwipeableRowProps, type SwipeAction } from "./SwipeableRow";
+export { ConfettiCannon, type ConfettiCannonProps } from "./ConfettiCannon";
+export { CelebrationOverlay } from "./CelebrationOverlay";
 

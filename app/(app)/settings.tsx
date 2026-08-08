@@ -41,6 +41,7 @@ import {
   AccountTypesManager,
   AccountsManager,
 } from "@/components/settings/SettingsSubmenus";
+import { useCelebration } from "@/providers/CelebrationProvider";
 import { useSetupProgress } from "@/providers/SetupProgressProvider";
 
 const INACTIVITY_OPTIONS = [
@@ -98,6 +99,7 @@ export default function SettingsScreen() {
     setLockOnAppSwitch,
   } = useSettings();
   const { settings: system } = useSystemSettings();
+  const { celebrateMilestone } = useCelebration();
   const {
     isSupported: biometricsSupported,
     isRegistered: biometricsRegistered,
@@ -276,7 +278,16 @@ export default function SettingsScreen() {
             keyboardType="numeric"
             onBlur={() => {
               const n = Number(budgetText);
-              setMonthlyBudget(Number.isFinite(n) ? Math.max(0, n) : 0);
+              const validAmount = Number.isFinite(n) ? Math.max(0, n) : 0;
+              setMonthlyBudget(validAmount);
+              if (validAmount > 0) {
+                celebrateMilestone("milestone_first_budget", {
+                  title: "First Budget Set!",
+                  subtitle: "Setting limits is the secret to financial freedom.",
+                  badgeEmoji: "🎯",
+                  pointsEarned: 25,
+                });
+              }
             }}
           />
 

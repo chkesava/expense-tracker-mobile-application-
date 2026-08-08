@@ -5,7 +5,9 @@ import React, {
   useState,
   type ReactNode,
 } from "react";
-import * as Haptics from "expo-haptics";
+
+import { haptic } from "@/lib/haptics";
+import { useSettings } from "@/providers/SettingsProvider";
 
 export interface CelebrationEvent {
   title: string;
@@ -16,6 +18,8 @@ export interface CelebrationEvent {
 
 interface CelebrationContextType {
   celebrate: (event: CelebrationEvent) => void;
+  celebrateMilestone: (key: string, event: CelebrationEvent) => boolean;
+  isMilestoneCelebrated: (key: string) => boolean;
   currentCelebration: CelebrationEvent | null;
   dismissCelebration: () => void;
 }
@@ -25,15 +29,45 @@ const CelebrationContext = createContext<CelebrationContextType | undefined>(
 );
 
 export function CelebrationProvider({ children }: { children: ReactNode }) {
+  const { settings, updateSettings } = useSettings();
   const [currentCelebration, setCurrentCelebration] =
     useState<CelebrationEvent | null>(null);
 
+  const completedSteps = settings?.onboarding?.completedSteps || [];
+
+  const isMilestoneCelebrated = useCallback(
+    (key: string) => {
+      return completedSteps.includes(key);
+    },
+    [completedSteps]
+  );
+
   const celebrate = useCallback((event: CelebrationEvent) => {
-    Haptics.notificationAsync(
-      Haptics.NotificationFeedbackType.Success
-    ).catch(() => undefined);
+    void haptic.success();
     setCurrentCelebration(event);
   }, []);
+
+  const celebrateMilestone = useCallback(
+    (key: string, event: CelebrationEvent): boolean => {
+      const currentList = settings?.onboarding?.completedSteps || [];
+      if (currentList.includes(key)) {
+        return false;
+      }
+
+      // Persist milestone in user settings
+      const updatedSteps = [...currentList, key];
+      void updateSettings({
+        onboarding: {
+          ...settings?.onboarding,
+          completedSteps: updatedSteps,
+        },
+      });
+
+      celebrate(event);
+      return true;
+    },
+    [settings?.onboarding, updateSettings, celebrate]
+  );
 
   const dismissCelebration = useCallback(() => {
     setCurrentCelebration(null);
@@ -43,6 +77,8 @@ export function CelebrationProvider({ children }: { children: ReactNode }) {
     <CelebrationContext.Provider
       value={{
         celebrate,
+        celebrateMilestone,
+        isMilestoneCelebrated,
         currentCelebration,
         dismissCelebration,
       }}

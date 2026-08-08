@@ -14,6 +14,7 @@ import { Check, Plus, Shield, Users, X } from "lucide-react-native";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { toast } from "@/lib/toast";
+import { useCelebration } from "@/providers/CelebrationProvider";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import type { SharedVault } from "@/shared/types/vault";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -50,6 +51,7 @@ export function CreateVaultModal({
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const { settings: system } = useSystemSettings();
+  const { celebrateMilestone } = useCelebration();
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -72,6 +74,12 @@ export function CreateVaultModal({
         budget: numBudget,
         currency: system.defaultCurrency,
         themeColor,
+      });
+      celebrateMilestone("milestone_first_goal", {
+        title: "First Goal Created!",
+        subtitle: "Every dream begins with a target. Keep going!",
+        badgeEmoji: "✨",
+        pointsEarned: 50,
       });
       setName("");
       setDescription("");

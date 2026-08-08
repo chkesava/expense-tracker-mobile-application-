@@ -27,6 +27,7 @@ import {
 
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useCelebration } from "@/providers/CelebrationProvider";
 import { useSettings } from "@/providers/SettingsProvider";
 import { useCategorizationRules } from "@/hooks/useCategorizationRules";
 import { useCategoryBudgets } from "@/hooks/useCategoryBudgets";
@@ -338,6 +339,7 @@ export function CategoryBudgetsManager() {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const { budgets, addBudget, deleteBudget } = useCategoryBudgets();
+  const { celebrateMilestone } = useCelebration();
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("Food & Dining");
   const [subcategory, setSubcategory] = useState("Groceries");
@@ -353,6 +355,12 @@ export function CategoryBudgetsManager() {
     if (!category || !month || isNaN(amt) || amt <= 0) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
     void addBudget(category, amt, month, subcategory);
+    celebrateMilestone("milestone_first_budget", {
+      title: "First Budget Set!",
+      subtitle: "Setting limits is the secret to financial freedom.",
+      badgeEmoji: "🎯",
+      pointsEarned: 25,
+    });
     setAmount("");
   };
 
@@ -448,7 +456,7 @@ export function CategoryBudgetsManager() {
                   }}
                   style={styles.touchActionBtn}
                   accessibilityRole="button"
-                  accessibilityLabel={`Delete budget for ${b.category}`}
+                  accessibilityLabel="Delete budget"
                 >
                   <Trash2 size={18} color={theme.colors.destructive} />
                 </Pressable>
@@ -468,6 +476,7 @@ export function FinancialGoalsManager() {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const { goals, addGoal, deleteGoal } = useFinancialGoals();
+  const { celebrateMilestone } = useCelebration();
   const [name, setName] = useState("");
   const [target, setTarget] = useState("");
   const [current, setCurrent] = useState("");
@@ -479,6 +488,12 @@ export function FinancialGoalsManager() {
     if (!name.trim() || isNaN(tgt) || tgt <= 0) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
     void addGoal(name.trim(), tgt, cur, deadline);
+    celebrateMilestone("milestone_first_goal", {
+      title: "First Goal Created!",
+      subtitle: "Every dream begins with a target. Keep going!",
+      badgeEmoji: "✨",
+      pointsEarned: 50,
+    });
     setName("");
     setTarget("");
     setCurrent("");
