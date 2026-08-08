@@ -1,4 +1,5 @@
 import { StyleSheet, Text, View } from "react-native";
+import { useRouter } from "expo-router";
 import { Calendar, Target } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
@@ -16,15 +17,22 @@ export function FinancialGoalsWidget({
   goals,
   currency,
 }: FinancialGoalsWidgetProps) {
+  const router = useRouter();
   const { theme } = useTheme();
 
   if (goals.length === 0) {
     return (
       <Card title="Financial Goals">
         <EmptyState
-          emoji="🎯"
+          illustration="investments"
+          compact
           title="Set Your First Goal"
-          description="Create savings goals to track your progress toward financial milestones."
+          description="Create savings targets (vacation, emergency fund, tech) to visualize progress."
+          primaryAction={{
+            label: "Create Goal",
+            onPress: () => router.push("/settings"),
+          }}
+          tip="Tracking dedicated savings goals keeps you motivated and discourages impulse buying."
         />
       </Card>
     );

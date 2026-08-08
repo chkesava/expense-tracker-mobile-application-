@@ -55,9 +55,11 @@ export function RecentActivityWidget({
     >
       {recentTransactions.length === 0 ? (
         <EmptyState
-          emoji="📝"
-          title="Your Journey Starts Here"
-          description="Add your first expense to see recent activity."
+          illustration="expenses"
+          compact
+          title="No Recent Transactions"
+          description="Add your first expense or income to see live activity here."
+          tip="Tap the bottom '+' button to quickly log your first transaction."
         />
       ) : (
         <View style={styles.transactionsList}>

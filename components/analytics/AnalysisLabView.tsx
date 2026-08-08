@@ -348,9 +348,24 @@ export function AnalysisLabView({ initialQuery = "" }: AnalysisLabViewProps) {
       {/* Transaction List */}
       {filteredTransactions.length === 0 ? (
         <EmptyState
-          icon={<Search size={36} color={theme.colors.mutedForeground} />}
+          illustration="search"
           title="No Transactions Found"
-          description="Try broadening your search query or resetting filters."
+          description="Try broadening your search query, adjusting amount bounds, or resetting filters."
+          primaryAction={{
+            label: "Reset All Filters",
+            onPress: () => {
+              setFilters({
+                query: "",
+                type: "all",
+                datePreset: "all",
+                categories: [],
+                accountIds: [],
+                minAmount: "",
+                maxAmount: "",
+              });
+            },
+          }}
+          tip="The Analytics Lab allows deep multi-attribute slicing across all ledger accounts simultaneously."
         />
       ) : (
         <View style={styles.listContainer}>

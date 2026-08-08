@@ -223,9 +223,15 @@ export function TripsList() {
       {/* Trips List */}
       {filteredTrips.length === 0 ? (
         <EmptyState
-          emoji="✈️"
-          title="No Trips Yet"
-          description="Plan and track travel expenses with friends."
+          illustration="trips"
+          title="No Travel Trips Planned"
+          description="Organize vacation budgets, multi-currency itineraries, and group travel expenses."
+          primaryAction={{
+            label: "Plan New Trip",
+            icon: <Plus size={16} color="#FFFFFF" strokeWidth={2.4} />,
+            onPress: () => setIsCreateOpen(true),
+          }}
+          tip="Travel mode automatically isolates trip expenses under designated vacation budgets."
         />
       ) : (
         <View style={styles.listContainer}>

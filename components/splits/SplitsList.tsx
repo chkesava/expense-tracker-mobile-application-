@@ -218,9 +218,15 @@ export function SplitsList() {
       {/* Splits List */}
       {filteredSplits.length === 0 ? (
         <EmptyState
-          emoji="🤝"
+          illustration="splits"
           title="No Split Bills Yet"
-          description="Split expenses with friends and roommates. Track who owes what."
+          description="Split group dinners, house rent, or shared trips with friends and track settlements in real-time."
+          primaryAction={{
+            label: "Create First Split",
+            icon: <Plus size={16} color="#FFFFFF" strokeWidth={2.4} />,
+            onPress: () => setIsCreateOpen(true),
+          }}
+          tip="Split balances update automatically as participants settle up their share."
         />
       ) : (
         <View style={styles.listContainer}>

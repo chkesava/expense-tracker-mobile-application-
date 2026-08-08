@@ -5,6 +5,7 @@ import {
   Text,
   View,
 } from "react-native";
+import { useRouter } from "expo-router";
 import {
   BarChart3,
   Calendar,
@@ -56,6 +57,7 @@ import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
 export default function LedgerScreen() {
+  const router = useRouter();
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const { settings } = useSettings();
@@ -348,17 +350,31 @@ export default function LedgerScreen() {
 
           {expensesTab === "audit" && (
             <EmptyState
-              icon={<Sparkles size={36} color={theme.colors.mutedForeground} />}
-              title="Audit Log"
-              description="Realtime audit trail and transaction history logs."
+              illustration="search"
+              title="Audit Trail Clean"
+              description="Realtime audit trail and transaction history logs will appear here as entries are modified."
+              primaryAction={{
+                label: "View Journal",
+                onPress: () => setExpensesTab("history"),
+              }}
+              tip="All modifications, deletions, and balance adjustments are logged with timestamps for security."
             />
           )}
 
           {expensesTab === "data" && (
             <EmptyState
-              icon={<History size={36} color={theme.colors.mutedForeground} />}
-              title="Data Management"
-              description="Export, backup, and restore your financial datasets."
+              illustration="general"
+              title="Data & Backup Vault"
+              description="Export, backup, and restore your financial datasets securely."
+              primaryAction={{
+                label: "Export CSV / JSON",
+                onPress: () => router.push("/settings"),
+              }}
+              secondaryAction={{
+                label: "Manage Cloud Sync",
+                onPress: () => router.push("/settings"),
+              }}
+              tip="Cloud synchronization keeps all your accounts seamlessly aligned across devices."
             />
           )}
         </View>

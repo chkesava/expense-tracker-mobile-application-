@@ -149,23 +149,27 @@ export default function VaultsScreen() {
         </View>
       ) : filteredVaults.length === 0 ? (
         <EmptyState
-          icon={<FolderPlus size={40} color={theme.colors.mutedForeground} />}
-          title={searchQuery ? "No vaults match search" : "No Shared Vaults Yet"}
+          illustration="vaults"
+          title={searchQuery ? "No Vaults Match Search" : "No Shared Vaults Yet"}
           description={
             searchQuery
-              ? "Try adjusting your search terms"
+              ? "Try adjusting or clearing your search terms."
               : "Create collaborative vaults with your partner, roommates, or family for joint budgets."
           }
-          action={
-            <Button
-              onPress={() => setIsCreateModalOpen(true)}
-              style={{ marginTop: 8 }}
-            >
-              <Text style={{ color: "#FFFFFF", fontWeight: "700" }}>
-                Create First Vault
-              </Text>
-            </Button>
+          primaryAction={{
+            label: "Create First Vault",
+            icon: <Plus size={16} color="#FFFFFF" strokeWidth={2.4} />,
+            onPress: () => setIsCreateModalOpen(true),
+          }}
+          secondaryAction={
+            searchQuery
+              ? {
+                  label: "Clear Search",
+                  onPress: () => setSearchQuery(""),
+                }
+              : undefined
           }
+          tip="Shared vaults isolate group expenses without exposing your personal private bank accounts."
         />
       ) : (
         <View style={{ gap: 12 }}>

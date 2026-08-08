@@ -7,6 +7,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
 import { deleteDoc, doc } from "firebase/firestore";
 import * as Haptics from "expo-haptics";
 import {
@@ -14,6 +15,8 @@ import {
   CreditCard,
   Edit3,
   FileText,
+  Plus,
+  ScanLine,
   Tag,
   Trash2,
   Wallet,
@@ -39,6 +42,7 @@ export interface ExpenseListProps {
   expenses: Expense[];
   incomes?: Income[];
   accounts?: Account[];
+  onAddExpense?: () => void;
   onEditExpense?: (expense: Expense) => void;
   onEditIncome?: (income: Income) => void;
   showMonthSummary?: boolean;
@@ -54,6 +58,7 @@ export function ExpenseList({
   expenses,
   incomes = [],
   accounts = [],
+  onAddExpense,
   onEditExpense,
   onEditIncome,
   showMonthSummary = true,
@@ -61,6 +66,7 @@ export function ExpenseList({
   onRefresh,
 }: ExpenseListProps) {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const { user } = useAuth();
@@ -335,9 +341,28 @@ export function ExpenseList({
   if (combinedTransactions.length === 0) {
     return (
       <EmptyState
-        emoji="📊"
+        illustration="expenses"
         title="No Expenses Yet"
-        description="Track your first expense to begin understanding your spending habits."
+        description="Track your first expense to begin understanding your spending habits and category breakdowns."
+        primaryAction={{
+          label: "Add Expense",
+          icon: <Plus size={16} color="#FFFFFF" strokeWidth={2.4} />,
+          onPress: () => {
+            if (onAddExpense) {
+              onAddExpense();
+            } else {
+              router.push("/dashboard");
+            }
+          },
+        }}
+        secondaryAction={{
+          label: "Scan Receipt",
+          icon: <ScanLine size={16} color={theme.colors.primary} strokeWidth={2} />,
+          onPress: () => {
+            router.push("/dashboard");
+          },
+        }}
+        tip="Quick-add cash expenses in under 3 seconds using the bottom dock '+' button anytime."
       />
     );
   }

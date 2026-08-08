@@ -277,9 +277,15 @@ export function SubscriptionsList() {
       {/* Subscriptions List */}
       {filteredSubscriptions.length === 0 ? (
         <EmptyState
-          emoji="🔄"
-          title="No Subscriptions"
-          description="Track recurring subscriptions like Netflix, Spotify, and gym memberships."
+          illustration="subscriptions"
+          title="No Subscriptions Yet"
+          description="Track recurring subscriptions, software licenses, utilities, and memberships with automated renewal alerts."
+          primaryAction={{
+            label: "Add Subscription",
+            icon: <Plus size={16} color="#FFFFFF" strokeWidth={2.4} />,
+            onPress: handleOpenAdd,
+          }}
+          tip="Receive advance renewal reminders so you never get surprised by automatic debits."
         />
       ) : (
         <View style={styles.listContainer}>

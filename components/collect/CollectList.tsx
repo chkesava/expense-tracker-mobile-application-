@@ -158,9 +158,23 @@ export function CollectList() {
       {/* Requests List */}
       {displayList.length === 0 ? (
         <EmptyState
-          emoji="💸"
-          title="No Pending Receivables"
-          description="Create payment requests to collect money from friends."
+          illustration="collect"
+          title={activeTab === "active" ? "No Pending Receivables" : "No Cancelled Requests"}
+          description={
+            activeTab === "active"
+              ? "Create payment requests to track money lent to friends or pending reimbursements."
+              : "Cancelled or closed payment requests will appear here for reference."
+          }
+          primaryAction={
+            activeTab === "active"
+              ? {
+                  label: "Create Request",
+                  icon: <Plus size={16} color="#FFFFFF" strokeWidth={2.4} />,
+                  onPress: () => setIsCreateOpen(true),
+                }
+              : undefined
+          }
+          tip="Mark payment requests as collected with 1 tap to auto-credit your chosen account."
         />
       ) : (
         <View style={styles.listContainer}>

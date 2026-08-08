@@ -30,9 +30,11 @@ export function TopCategoriesWidget({
     return (
       <Card title="Top Spending Categories">
         <EmptyState
-          emoji="📊"
+          illustration="analytics"
+          compact
           title="No Spending Data Yet"
-          description="Your category breakdown will appear after recording expenses."
+          description="Your category breakdown will automatically appear after recording transactions."
+          tip="Track core essentials first: Housing, Food, Transport, and Utilities."
         />
       </Card>
     );

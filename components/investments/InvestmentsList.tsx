@@ -213,24 +213,27 @@ export function InvestmentsList() {
         </View>
       ) : filteredInvestments.length === 0 ? (
         <EmptyState
-          emoji="📈"
-          title={searchQuery ? "No investments found" : "No Investments Tracked"}
+          illustration="investments"
+          title={searchQuery ? "No Investments Found" : "No Investments Tracked"}
           description={
             searchQuery
-              ? "Try adjusting your search filter"
-              : "Add fixed deposits, recurring deposits, and other investments."
+              ? "Try adjusting your search query or clearing filters."
+              : "Track Fixed Deposits, Mutual Funds, Gold, and calculate compounding portfolio returns."
           }
-          action={
-            <Button
-              onPress={() => setIsCreateModalOpen(true)}
-              style={{ marginTop: 8 }}
-            >
-              <Plus size={16} color="#FFFFFF" />
-              <Text style={{ marginLeft: 6, color: "#FFFFFF", fontWeight: "700" }}>
-                Add First Investment
-              </Text>
-            </Button>
+          primaryAction={{
+            label: "Add Investment",
+            icon: <Plus size={16} color="#FFFFFF" strokeWidth={2.4} />,
+            onPress: () => setIsCreateModalOpen(true),
+          }}
+          secondaryAction={
+            searchQuery
+              ? {
+                  label: "Clear Search",
+                  onPress: () => setSearchQuery(""),
+                }
+              : undefined
           }
+          tip="Categorizing assets by liquidity helps calculate your true emergency fund runway."
         />
       ) : (
         <View style={{ gap: 12 }}>

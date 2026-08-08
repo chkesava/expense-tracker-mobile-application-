@@ -1,4 +1,5 @@
 import { StyleSheet, Text, View } from "react-native";
+import { useRouter } from "expo-router";
 import { AlertCircle, CheckCircle2, Flame, ShieldAlert } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
@@ -32,6 +33,7 @@ export function BudgetAlertsWidget({
   activeCategoryBudgets,
   activeMonth,
 }: BudgetAlertsWidgetProps) {
+  const router = useRouter();
   const { theme } = useTheme();
 
   const budgetProgress =
@@ -46,9 +48,15 @@ export function BudgetAlertsWidget({
     return (
       <Card title="Monthly Budget">
         <EmptyState
-          emoji="💰"
+          illustration="budgets"
+          compact
           title="No Budget Configured"
-          description="Set a monthly budget to get spending alerts and stay on track."
+          description="Set a monthly target to receive spending alerts and pacing forecasts."
+          primaryAction={{
+            label: "Configure Budget",
+            onPress: () => router.push("/settings"),
+          }}
+          tip="Budgets help prevent overspending by alerting you at 80% and 100% thresholds."
         />
       </Card>
     );

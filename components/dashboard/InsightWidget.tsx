@@ -34,9 +34,11 @@ export function InsightWidget({
     return (
       <Card title="Daily Spending Pace">
         <EmptyState
-          emoji="💡"
+          illustration="analytics"
+          compact
           title="Insights Coming Soon"
-          description="Financial insights will appear once you start recording expenses."
+          description="Spending velocity, projected monthly run rate, and pace alerts will calculate automatically."
+          tip="Log expenses as they happen for the most accurate daily velocity tracking."
         />
       </Card>
     );

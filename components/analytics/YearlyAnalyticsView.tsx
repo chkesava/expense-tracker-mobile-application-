@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import {
   Award,
@@ -33,6 +34,7 @@ const MONTH_NAMES = [
 ];
 
 export function YearlyAnalyticsView() {
+  const router = useRouter();
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const { settings: system } = useSystemSettings();
@@ -180,9 +182,21 @@ export function YearlyAnalyticsView() {
 
       {yearExpenses.length === 0 ? (
         <EmptyState
-          emoji="📅"
-          title="No Yearly Data Yet"
-          description="Year-over-year analytics will populate as you track expenses over time."
+          illustration="analytics"
+          title="No Annual Data Yet"
+          description="Year-over-year analytics and month-over-month comparisons will populate as you track transactions throughout the year."
+          primaryAction={{
+            label: "Go to Dashboard",
+            onPress: () => router.push("/dashboard"),
+          }}
+          secondaryAction={{
+            label: "Previous Year",
+            onPress: () => {
+              Haptics.selectionAsync().catch(() => undefined);
+              setSelectedYear((y) => y - 1);
+            },
+          }}
+          tip="Annual breakdowns highlight your top 3 annual spending categories and tax deductibles."
         />
       ) : (
         <>

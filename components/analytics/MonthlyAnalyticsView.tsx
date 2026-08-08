@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import {
   AlertTriangle,
@@ -13,6 +14,7 @@ import {
   Info,
   Layers,
   PieChart,
+  Plus,
   ShoppingBag,
   Sparkles,
   TrendingDown,
@@ -48,6 +50,7 @@ import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
 export function MonthlyAnalyticsView() {
+  const router = useRouter();
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const { settings: userSettings } = useSettings();
@@ -202,9 +205,19 @@ export function MonthlyAnalyticsView() {
 
       {monthExpenses.length === 0 ? (
         <EmptyState
-          emoji="📉"
-          title="No Analytics Data"
-          description="Analytics will appear once you start recording expenses."
+          illustration="analytics"
+          title="No Data For This Month"
+          description="Log a few expenses or incomes in this month to generate category breakdowns, spending velocity, and cash flow trends."
+          primaryAction={{
+            label: "Log Expense",
+            icon: <Plus size={16} color="#FFFFFF" strokeWidth={2.4} />,
+            onPress: () => router.push("/dashboard"),
+          }}
+          secondaryAction={{
+            label: "Previous Month",
+            onPress: handlePrevMonth,
+          }}
+          tip="Analytics become significantly more actionable once you log at least 5 transactions in a month."
         />
       ) : (
         <>

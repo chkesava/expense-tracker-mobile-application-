@@ -20,6 +20,7 @@ import {
 import { EditAccountModal } from "@/components/accounts/EditAccountModal";
 import { PayCreditBillModal } from "@/components/accounts/PayCreditBillModal";
 import { Amount } from "@/components/common/Amount";
+import { EmptyState } from "@/components/common/EmptyState";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { useAccountPayments } from "@/hooks/useAccountPayments";
@@ -303,42 +304,22 @@ export function CardsList() {
 
       {/* Cards List */}
       {creditCards.length === 0 ? (
-        <Card
-          style={[
-            styles.emptyCard,
-            {
-              backgroundColor: theme.colors.card,
-              borderColor: theme.colors.border,
-            },
-          ]}
-        >
-          <CreditCard size={36} color={theme.colors.mutedForeground} />
-          <Text
-            style={[
-              styles.emptyTitle,
-              {
-                color: theme.colors.foreground,
-                fontSize: theme.typography.lg,
-              },
-            ]}
-          >
-            No Credit Cards Added
-          </Text>
-          <Text
-            style={[
-              styles.emptyDesc,
-              {
-                color: theme.colors.mutedForeground,
-                fontSize: theme.typography.sm,
-              },
-            ]}
-          >
-            Keep track of statements, credit limits, and billing cycle resets.
-          </Text>
-          <Button onPress={handleOpenAddCard} size="sm">
-            Add Credit Card
-          </Button>
-        </Card>
+        <EmptyState
+          illustration="cards"
+          title="No Credit Cards Added"
+          description="Keep track of billing statement dates, credit limits, and automatic due date reminders."
+          primaryAction={{
+            label: "Add Credit Card",
+            icon: <Plus size={16} color="#FFFFFF" strokeWidth={2.4} />,
+            onPress: handleOpenAddCard,
+          }}
+          secondaryAction={{
+            label: "Record Bill Payment",
+            icon: <CheckCircle2 size={16} color={theme.colors.success} />,
+            onPress: () => handleOpenPayBill(),
+          }}
+          tip="Setting your billing cycle reset date enables automated payment countdowns and credit health tracking."
+        />
       ) : (
         <View style={{ gap: 14 }}>
           {creditCards.map((card) => {

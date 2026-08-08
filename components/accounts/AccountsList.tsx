@@ -24,6 +24,7 @@ import { EditAccountModal } from "@/components/accounts/EditAccountModal";
 import { PayCreditBillModal } from "@/components/accounts/PayCreditBillModal";
 import { TransferFundsModal } from "@/components/accounts/TransferFundsModal";
 import { Amount } from "@/components/common/Amount";
+import { EmptyState } from "@/components/common/EmptyState";
 import { ManageStockCashModal } from "@/components/portfolio/ManageStockCashModal";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -534,42 +535,22 @@ export function AccountsList() {
 
       {/* Grouped Bank / Deposit Accounts */}
       {groupedAccounts.length === 0 ? (
-        <Card
-          style={[
-            styles.emptyCard,
-            {
-              backgroundColor: theme.colors.card,
-              borderColor: theme.colors.border,
-            },
-          ]}
-        >
-          <Landmark size={36} color={theme.colors.mutedForeground} />
-          <Text
-            style={[
-              styles.emptyTitle,
-              {
-                color: theme.colors.foreground,
-                fontSize: theme.typography.lg,
-              },
-            ]}
-          >
-            No Bank Accounts Added Yet
-          </Text>
-          <Text
-            style={[
-              styles.emptyDesc,
-              {
-                color: theme.colors.mutedForeground,
-                fontSize: theme.typography.sm,
-              },
-            ]}
-          >
-            Track your bank accounts, savings, and cash wallets in one place.
-          </Text>
-          <Button onPress={handleOpenCreateAccount} size="sm">
-            Create First Account
-          </Button>
-        </Card>
+        <EmptyState
+          illustration="accounts"
+          title="No Bank Accounts Added Yet"
+          description="Track your savings, checking accounts, and physical cash wallets in one secure place."
+          primaryAction={{
+            label: "Add First Account",
+            icon: <Plus size={16} color="#FFFFFF" strokeWidth={2.4} />,
+            onPress: handleOpenCreateAccount,
+          }}
+          secondaryAction={{
+            label: "Adjust Balance",
+            icon: <SlidersHorizontal size={16} color={theme.colors.primary} />,
+            onPress: () => setIsEntryModalOpen(true),
+          }}
+          tip="Keep opening balances accurate so your historical net worth calculates automatically."
+        />
       ) : (
         groupedAccounts.map((group) => (
           <View key={group.typeId} style={styles.groupSection}>
