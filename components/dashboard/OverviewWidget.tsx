@@ -91,6 +91,7 @@ export function OverviewWidget({
           <Amount
             value={totalBalance}
             currency={currency}
+            animated
             ghostable
             style={{
               fontSize: 34,
@@ -142,6 +143,7 @@ export function OverviewWidget({
           <Amount
             value={monthlyIncome}
             currency={currency}
+            animated
             ghostable
             style={{
               color: isDark ? "#4ade80" : "#16a34a",
@@ -176,6 +178,7 @@ export function OverviewWidget({
           <Amount
             value={monthlySpent}
             currency={currency}
+            animated
             ghostable
             style={{
               color: isDark ? "#f87171" : "#dc2626",

@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import {
   Pressable,
+  RefreshControl,
   SectionList,
   StyleSheet,
   Text,
@@ -379,8 +380,20 @@ export function ExpenseList({
         keyExtractor={(item) => item.id}
         stickySectionHeadersEnabled
         showsVerticalScrollIndicator={false}
-        refreshing={onRefresh ? !!refreshing : undefined}
-        onRefresh={onRefresh}
+        refreshControl={
+          onRefresh ? (
+            <RefreshControl
+              refreshing={!!refreshing}
+              onRefresh={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
+                onRefresh();
+              }}
+              tintColor={theme.colors.primary}
+              colors={[theme.colors.primary]}
+              progressBackgroundColor={theme.colors.card}
+            />
+          ) : undefined
+        }
         contentContainerStyle={{ paddingBottom: 32, gap: 12 }}
         ListHeaderComponent={
           showMonthSummary ? (

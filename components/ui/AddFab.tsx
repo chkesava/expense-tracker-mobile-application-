@@ -1,7 +1,18 @@
-import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
+import { Pressable, StyleSheet, Text, type StyleProp, type ViewStyle } from "react-native";
 import * as Haptics from "expo-haptics";
 import { Plus } from "lucide-react-native";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSequence,
+  withSpring,
+  withTiming,
+  ZoomIn,
+} from "react-native-reanimated";
+
 import { useTheme } from "@/theme/ThemeProvider";
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 export interface AddFabProps {
   onPress: () => void;
@@ -21,11 +32,33 @@ export function AddFab({
   accessibilityLabel = "Add transaction",
 }: AddFabProps) {
   const { theme } = useTheme();
+  const scale = useSharedValue(1);
+  const iconRotation = useSharedValue(0);
+
+  const handlePressIn = () => {
+    scale.value = withSpring(0.91, { damping: 12, stiffness: 350 });
+  };
+
+  const handlePressOut = () => {
+    scale.value = withSpring(1, { damping: 10, stiffness: 300 });
+  };
 
   const handlePress = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
+    iconRotation.value = withSequence(
+      withTiming(45, { duration: 120 }),
+      withSpring(0, { damping: 12, stiffness: 200 })
+    );
     onPress();
   };
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  const iconAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${iconRotation.value}deg` }],
+  }));
 
   const dimensions = {
     sm: { diameter: 40, iconSize: 20 },
@@ -34,11 +67,18 @@ export function AddFab({
   }[size];
 
   return (
-    <Pressable
+    <AnimatedPressable
+      entering={ZoomIn.springify().damping(15)}
       onPress={handlePress}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
-      style={({ pressed }) => [
+      android_ripple={{
+        color: "rgba(255, 255, 255, 0.25)",
+        borderless: false,
+      }}
+      style={[
         withLabel ? styles.pillButton : styles.circleButton,
         theme.elevation[3],
         {
@@ -49,11 +89,13 @@ export function AddFab({
           height: dimensions.diameter,
           borderRadius: dimensions.diameter / 2,
         },
-        pressed && { transform: [{ scale: 0.94 }], opacity: 0.9 },
         style,
+        animatedStyle,
       ]}
     >
-      <Plus size={dimensions.iconSize} color={theme.colors.primaryForeground} strokeWidth={2.5} />
+      <Animated.View style={iconAnimatedStyle}>
+        <Plus size={dimensions.iconSize} color={theme.colors.primaryForeground} strokeWidth={2.5} />
+      </Animated.View>
       {withLabel ? (
         <Text
           style={[
@@ -68,7 +110,7 @@ export function AddFab({
           {label}
         </Text>
       ) : null}
-    </Pressable>
+    </AnimatedPressable>
   );
 }
 
@@ -78,6 +120,7 @@ const styles = StyleSheet.create({
   circleButton: {
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
   },
   pillButton: {
     flexDirection: "row",
@@ -87,8 +130,10 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 24,
     gap: 6,
+    overflow: "hidden",
   },
   label: {
     fontWeight: "700",
   },
 });
+

@@ -12,9 +12,16 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { X } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
+import Animated, {
+  FadeIn,
+  FadeOut,
+  SlideInDown,
+} from "react-native-reanimated";
 
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 export interface ModalProps {
   isOpen: boolean;
@@ -44,7 +51,7 @@ export function Modal({
     <RNModal
       visible={isOpen}
       transparent
-      animationType="slide"
+      animationType="none"
       onRequestClose={handleClose}
       statusBarTranslucent
     >
@@ -52,8 +59,10 @@ export function Modal({
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.overlay}
       >
-        {/* Backdrop dismiss */}
-        <Pressable
+        {/* Backdrop dismiss with animated fade */}
+        <AnimatedPressable
+          entering={FadeIn.duration(200)}
+          exiting={FadeOut.duration(150)}
           style={[
             styles.backdrop,
             { backgroundColor: isDark ? "rgba(0,0,0,0.72)" : "rgba(15,23,42,0.55)" },
@@ -62,8 +71,9 @@ export function Modal({
           accessibilityLabel="Close modal overlay"
         />
 
-        {/* Material 3 Bottom Sheet */}
-        <View
+        {/* Material 3 Bottom Sheet with Reanimated spring entrance */}
+        <Animated.View
+          entering={SlideInDown.springify().damping(22).stiffness(240)}
           style={[
             styles.sheetCard,
             theme.elevation[4],
@@ -144,7 +154,7 @@ export function Modal({
           >
             {children}
           </ScrollView>
-        </View>
+        </Animated.View>
       </KeyboardAvoidingView>
     </RNModal>
   );

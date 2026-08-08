@@ -2,6 +2,7 @@ import { Text, type StyleProp, type TextStyle } from "react-native";
 import { useSettings } from "@/providers/SettingsProvider";
 import { formatAmount } from "@/shared/utils/formatCurrency";
 import { useTheme } from "@/theme/ThemeProvider";
+import { AnimatedCounter } from "./AnimatedCounter";
 
 export type AmountProps = {
   value: number;
@@ -10,6 +11,8 @@ export type AmountProps = {
   prefix?: string;
   fractionDigits?: number;
   ghostable?: boolean;
+  animated?: boolean;
+  animationDuration?: number;
   style?: StyleProp<TextStyle>;
 };
 
@@ -19,6 +22,8 @@ export function Amount({
   prefix,
   fractionDigits,
   ghostable = false,
+  animated = false,
+  animationDuration,
   style,
 }: AmountProps) {
   const { theme } = useTheme();
@@ -26,9 +31,49 @@ export function Amount({
 
   const isGhosted = ghostable && settings?.ghostMode;
 
+  if (isGhosted) {
+    return (
+      <Text
+        accessibilityLabel="Hidden amount"
+        style={[
+          {
+            color: theme.colors.foreground,
+            fontSize: theme.typography.lg,
+            fontWeight: "700",
+            fontVariant: ["tabular-nums"],
+          },
+          style,
+        ]}
+      >
+        ••••••
+      </Text>
+    );
+  }
+
+  if (animated) {
+    return (
+      <AnimatedCounter
+        value={value}
+        currency={currency}
+        prefix={prefix}
+        fractionDigits={fractionDigits}
+        duration={animationDuration}
+        accessibilityLabel={`Amount ${value}`}
+        style={[
+          {
+            color: theme.colors.foreground,
+            fontSize: theme.typography.lg,
+            fontWeight: "700",
+          },
+          style,
+        ]}
+      />
+    );
+  }
+
   return (
     <Text
-      accessibilityLabel={isGhosted ? "Hidden amount" : `Amount ${value}`}
+      accessibilityLabel={`Amount ${value}`}
       style={[
         {
           color: theme.colors.foreground,
@@ -39,7 +84,8 @@ export function Amount({
         style,
       ]}
     >
-      {isGhosted ? "••••••" : formatAmount(value, currency, { prefix, fractionDigits })}
+      {formatAmount(value, currency, { prefix, fractionDigits })}
     </Text>
   );
 }
+

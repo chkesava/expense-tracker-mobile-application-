@@ -1,11 +1,21 @@
-import React, { useMemo, useState } from "react";
-import { LayoutChangeEvent, Pressable, StyleSheet, Text, View } from "react-native";
+import React, { useEffect, useMemo, useState } from "react";
+import { LayoutChangeEvent, StyleSheet, Text, View } from "react-native";
 import Svg, { G, Line, Rect, Text as SvgText } from "react-native-svg";
 import * as Haptics from "expo-haptics";
+import Animated, {
+  FadeIn,
+  FadeOut,
+  useAnimatedProps,
+  useSharedValue,
+  withDelay,
+  withSpring,
+} from "react-native-reanimated";
 
 import { Amount } from "@/components/common/Amount";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+
+const AnimatedRect = Animated.createAnimatedComponent(Rect);
 
 export interface BarChartItem {
   label: string; // e.g. "Jan", "Feb" or "Food"
@@ -24,6 +34,57 @@ export interface BarChartProps {
   primaryColor?: string;
   secondaryColor?: string;
   showLegend?: boolean;
+}
+
+function AnimatedBarSegment({
+  x,
+  targetHeight,
+  baselineY,
+  width,
+  color,
+  opacity,
+  index,
+  onPress,
+}: {
+  x: number;
+  targetHeight: number;
+  baselineY: number;
+  width: number;
+  color: string;
+  opacity: number;
+  index: number;
+  onPress: () => void;
+}) {
+  const heightProgress = useSharedValue(0);
+
+  useEffect(() => {
+    heightProgress.value = 0;
+    heightProgress.value = withDelay(
+      index * 35,
+      withSpring(1, { damping: 16, stiffness: 220 })
+    );
+  }, [targetHeight, index, heightProgress]);
+
+  const animatedProps = useAnimatedProps(() => {
+    const currentHeight = Math.max(targetHeight * heightProgress.value, 2);
+    const currentY = baselineY - currentHeight;
+    return {
+      height: currentHeight,
+      y: currentY,
+    };
+  });
+
+  return (
+    <AnimatedRect
+      x={x}
+      width={width}
+      rx={4}
+      fill={color}
+      opacity={opacity}
+      animatedProps={animatedProps}
+      onPress={onPress}
+    />
+  );
 }
 
 export function BarChart({
@@ -66,6 +127,7 @@ export function BarChart({
   const chartPaddingTop = 20;
   const chartPaddingBottom = 26;
   const chartHeight = height - chartPaddingTop - chartPaddingBottom;
+  const baselineY = chartPaddingTop + chartHeight;
 
   const handleSelectBar = (idx: number) => {
     Haptics.selectionAsync().catch(() => undefined);
@@ -87,9 +149,11 @@ export function BarChart({
 
   return (
     <View style={styles.container} onLayout={handleLayout}>
-      {/* Selected Item Tooltip Header */}
+      {/* Selected Item Tooltip Header with Reanimated Fade */}
       {selectedItem && (
-        <View
+        <Animated.View
+          entering={FadeIn.duration(180)}
+          exiting={FadeOut.duration(120)}
           style={[
             styles.tooltipBadge,
             {
@@ -113,7 +177,7 @@ export function BarChart({
               </Text>
             )}
           </View>
-        </View>
+        </Animated.View>
       )}
 
       {/* SVG Canvas */}
@@ -142,39 +206,39 @@ export function BarChart({
             const slotCenterX = idx * slotWidth + slotWidth / 2;
 
             const h1 = Math.max((item.value / maxValue) * chartHeight, 2);
-            const y1 = chartPaddingTop + chartHeight - h1;
-
             const color1 = item.color || defaultPrimaryColor;
+            const barOpacity = selectedIndex === null || isSelected ? 1 : 0.4;
 
             if (hasSecondary) {
               const h2 = Math.max(((item.secondaryValue ?? 0) / maxValue) * chartHeight, 2);
-              const y2 = chartPaddingTop + chartHeight - h2;
               const color2 = item.secondaryColor || defaultSecondaryColor;
 
               const x1 = slotCenterX - barWidth - 1;
               const x2 = slotCenterX + 1;
 
               return (
-                <G key={idx} onPress={() => handleSelectBar(idx)}>
+                <G key={idx}>
                   {/* Primary Bar */}
-                  <Rect
+                  <AnimatedBarSegment
                     x={x1}
-                    y={y1}
+                    targetHeight={h1}
+                    baselineY={baselineY}
                     width={barWidth}
-                    height={h1}
-                    rx={4}
-                    fill={color1}
-                    opacity={selectedIndex === null || isSelected ? 1 : 0.4}
+                    color={color1}
+                    opacity={barOpacity}
+                    index={idx}
+                    onPress={() => handleSelectBar(idx)}
                   />
                   {/* Secondary Bar */}
-                  <Rect
+                  <AnimatedBarSegment
                     x={x2}
-                    y={y2}
+                    targetHeight={h2}
+                    baselineY={baselineY}
                     width={barWidth}
-                    height={h2}
-                    rx={4}
-                    fill={color2}
-                    opacity={selectedIndex === null || isSelected ? 1 : 0.4}
+                    color={color2}
+                    opacity={barOpacity}
+                    index={idx}
+                    onPress={() => handleSelectBar(idx)}
                   />
                   {/* X-axis Label */}
                   <SvgText
@@ -184,6 +248,7 @@ export function BarChart({
                     fontWeight={isSelected ? "800" : "500"}
                     fill={isSelected ? theme.colors.foreground : theme.colors.mutedForeground}
                     textAnchor="middle"
+                    onPress={() => handleSelectBar(idx)}
                   >
                     {item.label}
                   </SvgText>
@@ -193,15 +258,16 @@ export function BarChart({
 
             const x = slotCenterX - barWidth / 2;
             return (
-              <G key={idx} onPress={() => handleSelectBar(idx)}>
-                <Rect
+              <G key={idx}>
+                <AnimatedBarSegment
                   x={x}
-                  y={y1}
+                  targetHeight={h1}
+                  baselineY={baselineY}
                   width={barWidth}
-                  height={h1}
-                  rx={4}
-                  fill={color1}
-                  opacity={selectedIndex === null || isSelected ? 1 : 0.4}
+                  color={color1}
+                  opacity={barOpacity}
+                  index={idx}
+                  onPress={() => handleSelectBar(idx)}
                 />
                 {/* X-axis Label */}
                 <SvgText
@@ -211,6 +277,7 @@ export function BarChart({
                   fontWeight={isSelected ? "800" : "500"}
                   fill={isSelected ? theme.colors.foreground : theme.colors.mutedForeground}
                   textAnchor="middle"
+                  onPress={() => handleSelectBar(idx)}
                 >
                   {item.label}
                 </SvgText>
@@ -291,3 +358,4 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 });
+

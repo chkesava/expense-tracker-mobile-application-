@@ -1,7 +1,11 @@
 import React, { useMemo, useState } from "react";
-import { LayoutChangeEvent, Pressable, StyleSheet, Text, View } from "react-native";
+import { LayoutChangeEvent, StyleSheet, Text, View } from "react-native";
 import Svg, { Circle, Defs, LinearGradient, Path, Stop, Line, Text as SvgText } from "react-native-svg";
 import * as Haptics from "expo-haptics";
+import Animated, {
+  FadeIn,
+  FadeOut,
+} from "react-native-reanimated";
 
 import { Amount } from "@/components/common/Amount";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -112,9 +116,11 @@ export function SpendingCurveChart({
 
   return (
     <View style={styles.container} onLayout={handleLayout}>
-      {/* Selected Point Badge */}
+      {/* Selected Point Badge with Reanimated Fade */}
       {selectedPoint && (
-        <View
+        <Animated.View
+          entering={FadeIn.duration(180)}
+          exiting={FadeOut.duration(120)}
           style={[
             styles.tooltipBadge,
             {
@@ -133,112 +139,113 @@ export function SpendingCurveChart({
             currency={currency}
             style={{ fontSize: 13, fontWeight: "800", color: activeLineColor }}
           />
-        </View>
+        </Animated.View>
       )}
 
-      {/* SVG Canvas */}
-      <Svg width={containerWidth} height={height}>
-        <Defs>
-          <LinearGradient id="curveGradient" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0%" stopColor={activeLineColor} stopOpacity={isDark ? 0.35 : 0.25} />
-            <Stop offset="100%" stopColor={activeLineColor} stopOpacity={0.0} />
-          </LinearGradient>
-        </Defs>
+      {/* SVG Canvas with Animated Container */}
+      <Animated.View entering={FadeIn.duration(250)}>
+        <Svg width={containerWidth} height={height}>
+          <Defs>
+            <LinearGradient id="curveGradient" x1="0" y1="0" x2="0" y2="1">
+              <Stop offset="0%" stopColor={activeLineColor} stopOpacity={isDark ? 0.35 : 0.25} />
+              <Stop offset="100%" stopColor={activeLineColor} stopOpacity={0.0} />
+            </LinearGradient>
+          </Defs>
 
-        {/* Grid lines */}
-        {[0, 0.5, 1].map((ratio, i) => {
-          const y = chartPaddingTop + chartHeight * (1 - ratio);
-          return (
-            <Line
-              key={i}
-              x1={chartPaddingHorizontal}
-              y1={y}
-              x2={containerWidth - chartPaddingHorizontal}
-              y2={y}
-              stroke={isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)"}
-              strokeDasharray="4 4"
-              strokeWidth={1}
+          {/* Grid lines */}
+          {[0, 0.5, 1].map((ratio, i) => {
+            const y = chartPaddingTop + chartHeight * (1 - ratio);
+            return (
+              <Line
+                key={i}
+                x1={chartPaddingHorizontal}
+                y1={y}
+                x2={containerWidth - chartPaddingHorizontal}
+                y2={y}
+                stroke={isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)"}
+                strokeDasharray="4 4"
+                strokeWidth={1}
+              />
+            );
+          })}
+
+          {/* Shaded Area Fill */}
+          {areaPath ? <Path d={areaPath} fill="url(#curveGradient)" /> : null}
+
+          {/* Smooth Line */}
+          {linePath ? (
+            <Path
+              d={linePath}
+              stroke={activeLineColor}
+              strokeWidth={2.5}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              fill="none"
             />
-          );
-        })}
+          ) : null}
 
-        {/* Shaded Area Fill */}
-        {areaPath ? <Path d={areaPath} fill="url(#curveGradient)" /> : null}
+          {/* Interactive Data Dots */}
+          {coordinates.map((pt, i) => {
+            const isSelected = selectedIndex === i;
+            const isKeyPoint =
+              isSelected ||
+              i === 0 ||
+              i === coordinates.length - 1 ||
+              pt.amount === Math.max(...processedData.map((d) => d.amount));
 
-        {/* Smooth Line */}
-        {linePath ? (
-          <Path
-            d={linePath}
-            stroke={activeLineColor}
-            strokeWidth={2.5}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            fill="none"
-          />
-        ) : null}
+            return (
+              <Circle
+                key={i}
+                cx={pt.x}
+                cy={pt.y}
+                r={isSelected ? 6 : isKeyPoint ? 3.5 : 2}
+                fill={isSelected ? theme.colors.foreground : activeLineColor}
+                stroke={theme.colors.card}
+                strokeWidth={isSelected ? 2 : 1}
+                onPress={() => {
+                  Haptics.selectionAsync().catch(() => undefined);
+                  setSelectedIndex(i);
+                }}
+              />
+            );
+          })}
 
-        {/* Interactive Data Dots (Sampled or key points) */}
-        {coordinates.map((pt, i) => {
-          const isSelected = selectedIndex === i;
-          // Show dots for peak or selected, or every 5th point
-          const isKeyPoint =
-            isSelected ||
-            i === 0 ||
-            i === coordinates.length - 1 ||
-            pt.amount === Math.max(...processedData.map((d) => d.amount));
-
-          return (
-            <Circle
-              key={i}
-              cx={pt.x}
-              cy={pt.y}
-              r={isSelected ? 6 : isKeyPoint ? 3.5 : 2}
-              fill={isSelected ? theme.colors.foreground : activeLineColor}
-              stroke={theme.colors.card}
-              strokeWidth={isSelected ? 2 : 1}
-              onPress={() => {
-                Haptics.selectionAsync().catch(() => undefined);
-                setSelectedIndex(i);
-              }}
-            />
-          );
-        })}
-
-        {/* Date labels at bottom */}
-        {coordinates.length > 0 && (
-          <>
-            <SvgText
-              x={coordinates[0].x}
-              y={height - 8}
-              fontSize={10}
-              fill={theme.colors.mutedForeground}
-              textAnchor="start"
-            >
-              {coordinates[0].date}
-            </SvgText>
-            {coordinates.length > 2 && (
+          {/* Date labels at bottom */}
+          {coordinates.length > 0 && (
+            <>
               <SvgText
-                x={coordinates[Math.floor(coordinates.length / 2)].x}
+                x={coordinates[0].x}
                 y={height - 8}
                 fontSize={10}
                 fill={theme.colors.mutedForeground}
-                textAnchor="middle"
+                textAnchor="start"
               >
-                {coordinates[Math.floor(coordinates.length / 2)].date}
+                {coordinates[0].date}
               </SvgText>
-            )}
-            <SvgText
-              x={coordinates[coordinates.length - 1].x}
-              y={height - 8}
-              fontSize={10}
-              fill={theme.colors.mutedForeground}
-              textAnchor="end"
-            >
-              {coordinates[coordinates.length - 1].date}
-            </SvgText>
-          </>
-        )}
-      </Svg>
+              {coordinates.length > 2 && (
+                <SvgText
+                  x={coordinates[Math.floor(coordinates.length / 2)].x}
+                  y={height - 8}
+                  fontSize={10}
+                  fill={theme.colors.mutedForeground}
+                  textAnchor="middle"
+                >
+                  {coordinates[Math.floor(coordinates.length / 2)].date}
+                </SvgText>
+              )}
+              <SvgText
+                x={coordinates[coordinates.length - 1].x}
+                y={height - 8}
+                fontSize={10}
+                fill={theme.colors.mutedForeground}
+                textAnchor="end"
+              >
+                {coordinates[coordinates.length - 1].date}
+              </SvgText>
+            </>
+          )}
+        </Svg>
+      </Animated.View>
     </View>
   );
 }
@@ -267,3 +274,4 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 });
+

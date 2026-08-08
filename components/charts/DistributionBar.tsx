@@ -1,5 +1,14 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
+import Animated, {
+  FadeIn,
+  FadeInRight,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withSpring,
+} from "react-native-reanimated";
+
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
@@ -13,6 +22,52 @@ export interface DistributionBarProps {
   segments: DistributionSegment[];
   height?: number;
   showLegend?: boolean;
+}
+
+function AnimatedSegment({
+  flex,
+  color,
+  isFirst,
+  isLast,
+  height,
+  index,
+}: {
+  flex: number;
+  color: string;
+  isFirst: boolean;
+  isLast: boolean;
+  height: number;
+  index: number;
+}) {
+  const scale = useSharedValue(0);
+
+  useEffect(() => {
+    scale.value = 0;
+    scale.value = withDelay(
+      index * 40,
+      withSpring(1, { damping: 16, stiffness: 220 })
+    );
+  }, [scale, index, flex]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    flex: flex * scale.value,
+  }));
+
+  return (
+    <Animated.View
+      style={[
+        styles.segment,
+        {
+          backgroundColor: color,
+          borderTopLeftRadius: isFirst ? height / 2 : 0,
+          borderBottomLeftRadius: isFirst ? height / 2 : 0,
+          borderTopRightRadius: isLast ? height / 2 : 0,
+          borderBottomRightRadius: isLast ? height / 2 : 0,
+        },
+        animatedStyle,
+      ]}
+    />
+  );
 }
 
 export function DistributionBar({
@@ -58,31 +113,30 @@ export function DistributionBar({
           const isLast = idx === validSegments.length - 1;
 
           return (
-            <View
+            <AnimatedSegment
               key={segment.label + idx}
-              style={[
-                styles.segment,
-                {
-                  flex,
-                  backgroundColor: segment.color,
-                  borderTopLeftRadius: isFirst ? height / 2 : 0,
-                  borderBottomLeftRadius: isFirst ? height / 2 : 0,
-                  borderTopRightRadius: isLast ? height / 2 : 0,
-                  borderBottomRightRadius: isLast ? height / 2 : 0,
-                },
-              ]}
+              flex={flex}
+              color={segment.color}
+              isFirst={isFirst}
+              isLast={isLast}
+              height={height}
+              index={idx}
             />
           );
         })}
       </View>
 
-      {/* Legend Row */}
+      {/* Legend Row with Staggered Entrance */}
       {showLegend && (
         <View style={styles.legendRow}>
           {validSegments.map((segment, idx) => {
             const percent = Math.round((segment.value / total) * 100);
             return (
-              <View key={segment.label + idx} style={styles.legendItem}>
+              <Animated.View
+                key={segment.label + idx}
+                entering={FadeInRight.delay(idx * 30).springify()}
+                style={styles.legendItem}
+              >
                 <View
                   style={[styles.colorDot, { backgroundColor: segment.color }]}
                 />
@@ -95,7 +149,7 @@ export function DistributionBar({
                 >
                   {segment.label} ({percent}%)
                 </Text>
-              </View>
+              </Animated.View>
             );
           })}
         </View>
@@ -143,3 +197,4 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 });
+

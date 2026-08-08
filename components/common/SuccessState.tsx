@@ -1,24 +1,23 @@
 import { StyleSheet, Text, View } from "react-native";
-import Animated, { FadeIn, ZoomIn } from "react-native-reanimated";
-import { CheckCircle2 } from "lucide-react-native";
+import Animated, { FadeIn } from "react-native-reanimated";
 
+import { AnimatedSuccessCheckmark } from "./AnimatedSuccessCheckmark";
 import { useTheme } from "@/theme/ThemeProvider";
 import { durations } from "@/theme/motion";
 
 export type SuccessStateProps = {
   title: string;
   description?: string;
+  size?: number;
 };
 
-export function SuccessState({ title, description }: SuccessStateProps) {
+export function SuccessState({ title, description, size = 64 }: SuccessStateProps) {
   const { theme } = useTheme();
 
   return (
-    <View style={[styles.wrap, { padding: theme.space.xl, gap: theme.space.sm }]}>
-      <Animated.View entering={ZoomIn.duration(durations.extraLong)}>
-        <CheckCircle2 size={theme.iconSize.xl} color={theme.colors.success} strokeWidth={1.75} />
-      </Animated.View>
-      <Animated.View entering={FadeIn.duration(durations.extraLong).delay(durations.medium)}>
+    <View style={[styles.wrap, { padding: theme.space.xl, gap: theme.space.md }]}>
+      <AnimatedSuccessCheckmark size={size} />
+      <Animated.View entering={FadeIn.duration(durations.extraLong).delay(150)}>
         <Text
           style={{
             color: theme.colors.foreground,
@@ -55,3 +54,4 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 });
+

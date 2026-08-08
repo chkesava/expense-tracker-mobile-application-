@@ -9,6 +9,12 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { usePathname, useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
+import Animated, {
+  FadeIn,
+  FadeInRight,
+  FadeOut,
+  SlideInRight,
+} from "react-native-reanimated";
 import {
   Activity,
   ArrowLeftRight,
@@ -34,6 +40,8 @@ import {
 } from "@/shared/config/navigation";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 export interface SideDrawerProps {
   isOpen: boolean;
@@ -70,7 +78,6 @@ export function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
   const handleNavigate = (path: string) => {
     Haptics.selectionAsync().catch(() => undefined);
     onClose();
-    // Normalize path to router push
     const route = path.startsWith("/") ? path : `/${path}`;
     router.push(route as any);
   };
@@ -91,13 +98,15 @@ export function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
     <Modal
       visible={isOpen}
       transparent
-      animationType="fade"
+      animationType="none"
       onRequestClose={onClose}
       statusBarTranslucent
     >
       <View style={styles.container}>
-        {/* Backdrop */}
-        <Pressable
+        {/* Backdrop with Animated Fade */}
+        <AnimatedPressable
+          entering={FadeIn.duration(200)}
+          exiting={FadeOut.duration(150)}
           style={[
             styles.backdrop,
             { backgroundColor: isDark ? "rgba(0,0,0,0.65)" : "rgba(15,23,42,0.4)" },
@@ -106,8 +115,9 @@ export function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
           accessibilityLabel="Close navigation drawer"
         />
 
-        {/* Drawer Panel */}
-        <View
+        {/* Drawer Panel with Reanimated slide-in */}
+        <Animated.View
+          entering={SlideInRight.springify().damping(24).stiffness(250)}
           style={[
             styles.panel,
             {
@@ -151,50 +161,54 @@ export function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
             </Pressable>
           </View>
 
-          {/* Links List */}
+          {/* Links List with Staggered Entrance */}
           <ScrollView
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.linksContainer}
           >
-            {navLinks.map((link) => {
+            {navLinks.map((link, idx) => {
               const isActive = isNavItemActive(pathname, link.id);
               const Icon = iconMap[link.id];
 
               return (
-                <Pressable
+                <Animated.View
                   key={link.id}
-                  onPress={() => handleNavigate(link.path)}
-                  style={({ pressed }) => [
-                    styles.navItem,
-                    {
-                      backgroundColor: isActive
-                        ? isDark
-                          ? "rgba(107, 99, 255, 0.15)"
-                          : "rgba(79, 70, 255, 0.1)"
-                        : "transparent",
-                    },
-                    pressed && { opacity: 0.8 },
-                  ]}
+                  entering={FadeInRight.delay(idx * 35).springify().damping(18)}
                 >
-                  <Icon
-                    size={20}
-                    color={isActive ? theme.colors.primary : theme.colors.mutedForeground}
-                  />
-                  <Text
-                    style={[
-                      styles.navItemLabel,
+                  <Pressable
+                    onPress={() => handleNavigate(link.path)}
+                    style={({ pressed }) => [
+                      styles.navItem,
                       {
-                        color: isActive
-                          ? theme.colors.primary
-                          : theme.colors.foreground,
-                        fontWeight: isActive ? "800" : "600",
-                        fontSize: theme.typography.md,
+                        backgroundColor: isActive
+                          ? isDark
+                            ? "rgba(107, 99, 255, 0.15)"
+                            : "rgba(79, 70, 255, 0.1)"
+                          : "transparent",
                       },
+                      pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] },
                     ]}
                   >
-                    {link.label}
-                  </Text>
-                </Pressable>
+                    <Icon
+                      size={20}
+                      color={isActive ? theme.colors.primary : theme.colors.mutedForeground}
+                    />
+                    <Text
+                      style={[
+                        styles.navItemLabel,
+                        {
+                          color: isActive
+                            ? theme.colors.primary
+                            : theme.colors.foreground,
+                          fontWeight: isActive ? "800" : "600",
+                          fontSize: theme.typography.md,
+                        },
+                      ]}
+                    >
+                      {link.label}
+                    </Text>
+                  </Pressable>
+                </Animated.View>
               );
             })}
           </ScrollView>
@@ -295,13 +309,14 @@ export function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
               </Pressable>
             </View>
           </View>
-        </View>
+        </Animated.View>
       </View>
     </Modal>
   );
 }
 
 export default SideDrawer;
+
 
 const styles = StyleSheet.create({
   container: {

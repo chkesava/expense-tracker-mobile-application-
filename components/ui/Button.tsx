@@ -11,8 +11,15 @@ import {
 } from "react-native";
 import type { ReactNode } from "react";
 import * as Haptics from "expo-haptics";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from "react-native-reanimated";
 
 import { useTheme } from "@/theme/ThemeProvider";
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 export type ButtonVariant =
   | "primary"
@@ -44,11 +51,14 @@ export function Button({
   haptic = true,
   disabled,
   onPress,
+  onPressIn,
+  onPressOut,
   style,
   ...props
 }: ButtonProps) {
   const { theme } = useTheme();
   const isDisabled = disabled || loading;
+  const scale = useSharedValue(1);
 
   const isPrimary = variant === "primary" || variant === "filled";
   const isText = variant === "ghost" || variant === "text";
@@ -109,6 +119,20 @@ export function Button({
     ? "rgba(255, 255, 255, 0.24)"
     : theme.colors.primary + "22";
 
+  const handlePressIn = (e: GestureResponderEvent) => {
+    if (!isDisabled) {
+      scale.value = withSpring(0.96, { damping: 14, stiffness: 350 });
+    }
+    onPressIn?.(e);
+  };
+
+  const handlePressOut = (e: GestureResponderEvent) => {
+    if (!isDisabled) {
+      scale.value = withSpring(1, { damping: 12, stiffness: 300 });
+    }
+    onPressOut?.(e);
+  };
+
   const handlePress = (e: GestureResponderEvent) => {
     if (isDisabled) return;
     if (haptic) {
@@ -117,18 +141,24 @@ export function Button({
     onPress?.(e);
   };
 
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
   return (
-    <Pressable
+    <AnimatedPressable
       accessibilityRole="button"
       accessibilityState={{ disabled: isDisabled, busy: loading }}
       disabled={isDisabled}
       onPress={handlePress}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
       android_ripple={{
         color: rippleColor,
         borderless: false,
         foreground: true,
       }}
-      style={({ pressed }) => [
+      style={[
         styles.base,
         {
           backgroundColor: background,
@@ -139,10 +169,11 @@ export function Button({
           minHeight,
           minWidth,
           borderRadius,
-          opacity: isDisabled ? 0.45 : Platform.OS === "ios" && pressed ? 0.88 : 1,
+          opacity: isDisabled ? 0.45 : 1,
         },
         elevationStyle,
         style,
+        animatedStyle,
       ]}
       {...props}
     >
@@ -165,7 +196,7 @@ export function Button({
       ) : (
         children
       )}
-    </Pressable>
+    </AnimatedPressable>
   );
 }
 
@@ -181,3 +212,4 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
 });
+

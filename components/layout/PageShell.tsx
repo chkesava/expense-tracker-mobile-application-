@@ -8,6 +8,7 @@ import {
   ViewStyle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import * as Haptics from "expo-haptics";
 import { useTheme } from "@/theme/ThemeProvider";
 import { AuraBackground } from "./AuraBackground";
 
@@ -36,6 +37,12 @@ export function PageShell({
 }: PageShellProps) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
+
+  const handleRefresh = () => {
+    if (!onRefresh) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
+    onRefresh();
+  };
 
   // Compute required safe top and bottom clearances
   const userContentStyle = StyleSheet.flatten(contentContainerStyle) || {};
@@ -88,9 +95,10 @@ export function PageShell({
             onRefresh ? (
               <RefreshControl
                 refreshing={refreshing}
-                onRefresh={onRefresh}
+                onRefresh={handleRefresh}
                 tintColor={theme.colors.primary}
                 colors={[theme.colors.primary]}
+                progressBackgroundColor={theme.colors.card}
                 progressViewOffset={effectivePaddingTop}
               />
             ) : undefined
@@ -106,3 +114,4 @@ export function PageShell({
     </View>
   );
 }
+

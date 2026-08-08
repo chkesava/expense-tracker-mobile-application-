@@ -2,6 +2,13 @@ import React, { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Svg, { G, Path } from "react-native-svg";
 import * as Haptics from "expo-haptics";
+import Animated, {
+  FadeIn,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  ZoomIn,
+} from "react-native-reanimated";
 
 import { Amount } from "@/components/common/Amount";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -104,7 +111,10 @@ export function DonutChart({
 
   return (
     <View style={styles.container}>
-      <View style={{ width: size, height: size, alignSelf: "center" }}>
+      <Animated.View
+        entering={ZoomIn.springify().damping(18)}
+        style={{ width: size, height: size, alignSelf: "center" }}
+      >
         <Svg width={size} height={size}>
           {/* Background track */}
           <Path
@@ -146,6 +156,7 @@ export function DonutChart({
           <Amount
             value={activeItem ? activeItem.value : total}
             currency={currency}
+            animated
             ghostable
             style={{
               fontSize: activeItem ? 18 : 20,
@@ -164,11 +175,11 @@ export function DonutChart({
             </Text>
           )}
         </Pressable>
-      </View>
+      </Animated.View>
 
       {/* Interactive Legend Grid */}
       {showLegend && (
-        <View style={styles.legendContainer}>
+        <Animated.View entering={FadeIn.delay(100)} style={styles.legendContainer}>
           {validData.map((item, idx) => {
             const isSelected = selectedIndex === idx;
             const percent = Math.round((item.value / total) * 100);
@@ -217,7 +228,7 @@ export function DonutChart({
               </Pressable>
             );
           })}
-        </View>
+        </Animated.View>
       )}
     </View>
   );
@@ -287,3 +298,4 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 });
+
