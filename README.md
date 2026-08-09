@@ -202,8 +202,18 @@ Documentation-only commits are skipped (`**.md` and `docs/**` are in `paths-igno
 | `ANDROID_KEYSTORE_BASE64` | Base64 of `keystores/expense-tracker-upload-key.keystore` |
 | `ANDROID_KEYSTORE_PASSWORD` | Keystore password |
 | `ANDROID_KEY_PASSWORD` | Key alias password |
-| `MOBILE_ENV_FILE` | Full contents of your local `.env` |
 | `FIREBASE_SERVICE_ACCOUNT` | Service account JSON (see below) |
+| `MOBILE_ENV_FILE` | *(optional)* Full contents of your local `.env` |
+| `EXPO_PUBLIC_APP_URL` | Same as local `.env` |
+| `EXPO_PUBLIC_FIREBASE_API_KEY` | Same as local `.env` |
+| `EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN` | Same as local `.env` |
+| `EXPO_PUBLIC_FIREBASE_PROJECT_ID` | Same as local `.env` |
+| `EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET` | Same as local `.env` |
+| `EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER` | Same as local `.env` |
+| `EXPO_PUBLIC_FIREBASE_APP_ID` | Same as local `.env` |
+| `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` | Google OAuth **Web** client ID |
+
+Use either **`MOBILE_ENV_FILE`** or the individual `EXPO_PUBLIC_*` secrets (both work). If you use individual secrets, also add `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` so Google Sign-In works in release builds.
 
 Generate the keystore secret on Windows:
 

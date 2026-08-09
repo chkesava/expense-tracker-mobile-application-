@@ -61,13 +61,52 @@ jobs:
       - name: Restore .env
         env:
           MOBILE_ENV_FILE: ${{ secrets.MOBILE_ENV_FILE }}
+          EXPO_PUBLIC_APP_URL: ${{ secrets.EXPO_PUBLIC_APP_URL }}
+          EXPO_PUBLIC_FIREBASE_API_KEY: ${{ secrets.EXPO_PUBLIC_FIREBASE_API_KEY }}
+          EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ secrets.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN }}
+          EXPO_PUBLIC_FIREBASE_PROJECT_ID: ${{ secrets.EXPO_PUBLIC_FIREBASE_PROJECT_ID }}
+          EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET: ${{ secrets.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET }}
+          EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER: ${{ secrets.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER }}
+          EXPO_PUBLIC_FIREBASE_APP_ID: ${{ secrets.EXPO_PUBLIC_FIREBASE_APP_ID }}
+          EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: ${{ secrets.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID }}
+          MYAPP_RELEASE_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          MYAPP_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          if [ -z "$MOBILE_ENV_FILE" ]; then
-            echo "::error::MOBILE_ENV_FILE secret is empty. The release bundle would ship without Firebase config."
+          if [ -n "$MOBILE_ENV_FILE" ]; then
+            printf '%s\n' "$MOBILE_ENV_FILE" > .env
+            echo "Wrote .env from MOBILE_ENV_FILE."
+          else
+            # Compose from individual secrets (matches how this repo's secrets were set up).
+            : > .env
+            write_kv() {
+              local key="$1"
+              local value="$2"
+              if [ -n "$value" ]; then
+                printf '%s=%s\n' "$key" "$value" >> .env
+              fi
+            }
+            write_kv EXPO_PUBLIC_APP_URL "$EXPO_PUBLIC_APP_URL"
+            write_kv EXPO_PUBLIC_FIREBASE_API_KEY "$EXPO_PUBLIC_FIREBASE_API_KEY"
+            write_kv EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN "$EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN"
+            write_kv EXPO_PUBLIC_FIREBASE_PROJECT_ID "$EXPO_PUBLIC_FIREBASE_PROJECT_ID"
+            write_kv EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET "$EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET"
+            write_kv EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER "$EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER"
+            write_kv EXPO_PUBLIC_FIREBASE_APP_ID "$EXPO_PUBLIC_FIREBASE_APP_ID"
+            write_kv EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID "$EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID"
+            write_kv MYAPP_RELEASE_STORE_PASSWORD "$MYAPP_RELEASE_STORE_PASSWORD"
+            write_kv MYAPP_RELEASE_KEY_PASSWORD "$MYAPP_RELEASE_KEY_PASSWORD"
+            echo "Wrote .env from individual EXPO_PUBLIC_* secrets."
+          fi
+
+          KEY_COUNT=$(grep -c '^EXPO_PUBLIC_' .env || true)
+          if [ "$KEY_COUNT" -lt 7 ]; then
+            echo "::error::Need the Firebase EXPO_PUBLIC_* secrets (or one MOBILE_ENV_FILE). Found $KEY_COUNT EXPO_PUBLIC_* lines."
             exit 1
           fi
-          printf '%s\n' "$MOBILE_ENV_FILE" > .env
-          echo "Wrote .env with $(grep -c '^EXPO_PUBLIC_' .env) EXPO_PUBLIC_* keys."
+          if ! grep -q '^EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=.' .env; then
+            echo "::warning::EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID is missing — Google Sign-In may fail in the release APK. Add that secret and re-run."
+          fi
+          echo "Wrote .env with $KEY_COUNT EXPO_PUBLIC_* keys."
 
       - name: Restore signing keystore
         env:
