@@ -148,9 +148,13 @@ async function publishReleaseMetadata(cliOptions = null) {
     return payload;
   }
 
-  let admin;
+  let initializeApp;
+  let getApps;
+  let cert;
+  let getFirestore;
   try {
-    admin = require('firebase-admin');
+    ({ initializeApp, getApps, cert } = require('firebase-admin/app'));
+    ({ getFirestore } = require('firebase-admin/firestore'));
   } catch (_) {
     failFast({
       step: 'Publish Release Metadata',
@@ -162,16 +166,16 @@ async function publishReleaseMetadata(cliOptions = null) {
 
   const serviceAccount = loadServiceAccount();
 
-  if (admin.apps.length === 0) {
-    admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount),
+  // firebase-admin v12+ no longer exposes admin.apps on the default export.
+  if (getApps().length === 0) {
+    initializeApp({
+      credential: cert(serviceAccount),
       projectId: serviceAccount.project_id
     });
   }
 
   try {
-    await admin
-      .firestore()
+    await getFirestore()
       .collection(RELEASE_DOC_COLLECTION)
       .doc(RELEASE_DOC_ID)
       .set(payload, { merge: true });
@@ -180,7 +184,7 @@ async function publishReleaseMetadata(cliOptions = null) {
       step: 'Publish Release Metadata',
       error: 'Firestore write failed.',
       why: e.message,
-      fix: 'Confirm the service account has the "Cloud Datastore User" role on this project.'
+      fix: 'Confirm the service account has the "Cloud Datastore User" (or Firestore write) role on this project.'
     });
   }
 

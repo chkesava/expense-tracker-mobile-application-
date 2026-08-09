@@ -197,16 +197,16 @@ jobs:
             v${{ steps.version.outputs.name }} (build ${{ steps.version.outputs.code }})
             ${{ steps.notes.outputs.value }}
 
-      # Prefer the binary download URI so the in-app "Download update" button
-      # opens the APK directly. Fall back to the tester invite / console link.
+      # Prefer the durable tester / console share link. Binary download URIs from
+      # App Distribution often expire and break the in-app update button later.
       - name: Resolve download URL
         id: download
         env:
-          BINARY_URI: ${{ steps.distribute.outputs.BINARY_DOWNLOAD_URI }}
           TESTING_URI: ${{ steps.distribute.outputs.TESTING_URI }}
+          BINARY_URI: ${{ steps.distribute.outputs.BINARY_DOWNLOAD_URI }}
           CONSOLE_URI: ${{ steps.distribute.outputs.FIREBASE_CONSOLE_URI }}
         run: |
-          URL="${BINARY_URI:-${TESTING_URI:-$CONSOLE_URI}}"
+          URL="${TESTING_URI:-${BINARY_URI:-$CONSOLE_URI}}"
           if [ -z "$URL" ]; then
             echo "::error::Firebase App Distribution did not emit a download URL."
             exit 1
