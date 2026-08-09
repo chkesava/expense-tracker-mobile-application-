@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  Linking,
   Modal,
   Pressable,
   Switch,
@@ -18,6 +19,11 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { PersonalizationPreviewCard } from "@/components/settings/PersonalizationPreviewCard";
+import {
+  fetchLatestRelease,
+  getInstalledVersionCode,
+  getInstalledVersionName,
+} from "@/hooks/useAppUpdate";
 import { useBiometrics } from "@/hooks/useBiometrics";
 import { getFirestoreDb } from "@/lib/firebase";
 import { haptic } from "@/lib/haptics";
@@ -772,6 +778,8 @@ export default function SettingsScreen() {
         </View>
       </Card>
 
+      <AppVersionCard />
+
       <Modal
         visible={showCategoryManagerModal}
         animationType="slide"
@@ -818,6 +826,52 @@ export default function SettingsScreen() {
         </View>
       </Modal>
     </PageShell>
+  );
+}
+
+function AppVersionCard() {
+  const { theme } = useTheme();
+  const [checking, setChecking] = useState(false);
+
+  const versionName = getInstalledVersionName();
+  const versionCode = getInstalledVersionCode();
+
+  const onCheck = async () => {
+    setChecking(true);
+    try {
+      const release = await fetchLatestRelease();
+
+      if (!release) {
+        toast.info("No release information available right now");
+        return;
+      }
+
+      if (versionCode !== null && release.versionCode > versionCode) {
+        toast.success(`Version ${release.versionName} is available`);
+        await Linking.openURL(release.downloadUrl);
+        return;
+      }
+
+      toast.success("You are on the latest version");
+    } catch {
+      toast.error("Could not check for updates");
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  return (
+    <Card title="App version" subtitle="Updates are delivered as signed APK builds">
+      <View style={{ gap: theme.space.md }}>
+        <Text style={{ color: theme.colors.mutedForeground, fontSize: theme.typography.sm }}>
+          Installed: v{versionName}
+          {versionCode !== null ? ` (build ${versionCode})` : ""}
+        </Text>
+        <Button variant="outline" loading={checking} onPress={onCheck}>
+          Check for updates
+        </Button>
+      </View>
+    </Card>
   );
 }
 

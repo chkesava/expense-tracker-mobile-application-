@@ -29,7 +29,9 @@ function prepareRelease(cliOptions = null) {
   console.log('\n📦 Managing Application Version & Build Code...');
   const current = getCurrentVersion();
   const targetVersionName = options.version || current.versionName;
-  const targetVersionCode = current.versionCode + 1;
+  // CI passes an explicit code derived from the workflow run number, since it
+  // never commits the bump back to main.
+  const targetVersionCode = options.versionCode || current.versionCode + 1;
 
   const versionResult = updateVersion({
     versionName: targetVersionName,

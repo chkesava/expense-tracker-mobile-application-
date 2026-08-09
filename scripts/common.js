@@ -92,6 +92,7 @@ function parseCliArgs() {
   const args = process.argv.slice(2);
   const options = {
     version: null,
+    versionCode: null,
     skipPrebuild: false,
     clean: false
   };
@@ -99,6 +100,18 @@ function parseCliArgs() {
   for (const arg of args) {
     if (arg.startsWith('--version=')) {
       options.version = arg.split('=')[1].trim();
+    } else if (arg.startsWith('--version-code=')) {
+      const raw = arg.split('=')[1].trim();
+      const parsed = Number.parseInt(raw, 10);
+      if (!Number.isInteger(parsed) || parsed < 1) {
+        failFast({
+          step: 'Parse CLI Arguments',
+          error: `Invalid --version-code value: "${raw}"`,
+          why: 'Android versionCode must be a positive integer.',
+          fix: 'Pass a positive integer, e.g. --version-code=28'
+        });
+      }
+      options.versionCode = parsed;
     } else if (arg === '--skip-prebuild') {
       options.skipPrebuild = true;
     } else if (arg === '--clean') {

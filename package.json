@@ -1,7 +1,7 @@
 {
   "name": "expense-tracker-mobile",
   "main": "expo-router/entry",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "dependencies": {
     "@expo-google-fonts/inter": "^0.4.2",
     "@gorhom/bottom-sheet": "^5.2.14",
@@ -13,6 +13,7 @@
     "@tanstack/react-query": "^5.101.4",
     "date-fns": "^4.4.0",
     "expo": "~57.0.10",
+    "expo-application": "~57.0.2",
     "expo-auth-session": "~57.0.6",
     "expo-camera": "~57.0.3",
     "expo-constants": "~57.0.9",
@@ -55,6 +56,7 @@
   "devDependencies": {
     "@types/node": "^26.1.2",
     "@types/react": "~19.2.2",
+    "firebase-admin": "^14.2.0",
     "typescript": "~6.0.3",
     "vitest": "3.2.4"
   },
@@ -73,6 +75,7 @@
     "release:build": "node scripts/build-release.js",
     "release:sha1": "node scripts/extract-sha1.js",
     "release:report": "node scripts/release-report.js",
+    "release:publish": "node scripts/publish-release-metadata.js",
     "release": "node scripts/release.js"
   },
   "private": true

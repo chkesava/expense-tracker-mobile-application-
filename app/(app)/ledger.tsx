@@ -298,7 +298,7 @@ export default function LedgerScreen() {
 
           {expensesTab === "history" && (
             <View style={{ flex: 1 }}>
-              {expensesLoading ? (
+              {expensesLoading && filteredExpenses.length === 0 ? (
                 <View style={{ gap: 8, marginTop: 8 }}>
                   {[0, 1, 2, 3, 4].map((i) => (
                     <Skeleton key={i} height={64} borderRadius={theme.radius.lg} />
@@ -326,7 +326,7 @@ export default function LedgerScreen() {
 
           {expensesTab === "income" && (
             <View style={{ flex: 1 }}>
-              {incomesLoading ? (
+              {incomesLoading && filteredIncomes.length === 0 ? (
                 <View style={{ gap: 8, marginTop: 8 }}>
                   {[0, 1, 2, 3, 4].map((i) => (
                     <Skeleton key={i} height={64} borderRadius={theme.radius.lg} />

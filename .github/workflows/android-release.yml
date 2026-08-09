@@ -1,0 +1,204 @@
+name: Android Release
+
+# Never add pull_request here: fork PRs would gain access to the signing
+# keystore and the Firebase service account.
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.gitignore'
+      - '.vscode/**'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version name (e.g. 1.2.0). Defaults to app.json value.'
+        required: false
+        type: string
+      mandatory:
+        description: 'Force users to update before continuing'
+        required: false
+        default: false
+        type: boolean
+      notes:
+        description: 'Release notes shown to testers and in the update prompt'
+        required: false
+        type: string
+
+concurrency:
+  group: android-release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build, distribute and announce
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Restore .env
+        env:
+          MOBILE_ENV_FILE: ${{ secrets.MOBILE_ENV_FILE }}
+        run: |
+          if [ -z "$MOBILE_ENV_FILE" ]; then
+            echo "::error::MOBILE_ENV_FILE secret is empty. The release bundle would ship without Firebase config."
+            exit 1
+          fi
+          printf '%s\n' "$MOBILE_ENV_FILE" > .env
+          echo "Wrote .env with $(grep -c '^EXPO_PUBLIC_' .env) EXPO_PUBLIC_* keys."
+
+      - name: Restore signing keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "::error::ANDROID_KEYSTORE_BASE64 secret is empty."
+            exit 1
+          fi
+          mkdir -p keystores
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > keystores/expense-tracker-upload-key.keystore
+          echo "Keystore restored ($(stat -c%s keystores/expense-tracker-upload-key.keystore) bytes)."
+
+      - name: Write service account credentials
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "::error::FIREBASE_SERVICE_ACCOUNT secret is empty."
+            exit 1
+          fi
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "${{ runner.temp }}/service-account.json"
+          chmod 600 "${{ runner.temp }}/service-account.json"
+
+      - name: Resolve version
+        id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          VERSION_CODE_OFFSET: ${{ vars.VERSION_CODE_OFFSET }}
+        run: |
+          VERSION_NAME="$INPUT_VERSION"
+          if [ -z "$VERSION_NAME" ]; then
+            VERSION_NAME=$(node -p "require('./app.json').expo.version")
+          fi
+          OFFSET="${VERSION_CODE_OFFSET:-27}"
+          VERSION_CODE=$((OFFSET + GITHUB_RUN_NUMBER))
+          echo "name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
+          echo "code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
+          echo "Building v$VERSION_NAME (build $VERSION_CODE)"
+
+      - name: Resolve release notes
+        id: notes
+        env:
+          INPUT_NOTES: ${{ inputs.notes }}
+        run: |
+          NOTES="$INPUT_NOTES"
+          if [ -z "$NOTES" ]; then
+            NOTES=$(git log -1 --pretty=%s)
+          fi
+          {
+            echo 'value<<RELEASE_NOTES_EOF'
+            echo "$NOTES"
+            echo 'RELEASE_NOTES_EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      # verify-environment.js and verify-gradle.js both require android/ to
+      # exist, so prebuild has to run before the release pipeline.
+      - name: Expo prebuild (Android)
+        run: npx expo prebuild --platform android --no-install
+
+      - name: Build signed release APK
+        env:
+          MYAPP_RELEASE_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          MYAPP_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          node scripts/release.js \
+            --skip-prebuild \
+            --version=${{ steps.version.outputs.name }} \
+            --version-code=${{ steps.version.outputs.code }}
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: expense-tracker-v${{ steps.version.outputs.name }}-build${{ steps.version.outputs.code }}
+          path: releases/*.apk
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Distribute to Firebase App Distribution
+        id: distribute
+        uses: wzieba/Firebase-Distribution-Github-Action@v1
+        with:
+          appId: ${{ vars.FIREBASE_ANDROID_APP_ID }}
+          serviceCredentialsFileContent: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          groups: testers
+          file: releases/app-release.apk
+          releaseNotes: |
+            v${{ steps.version.outputs.name }} (build ${{ steps.version.outputs.code }})
+            ${{ steps.notes.outputs.value }}
+
+      # Prefer the binary download URI so the in-app "Download update" button
+      # opens the APK directly. Fall back to the tester invite / console link.
+      - name: Resolve download URL
+        id: download
+        env:
+          BINARY_URI: ${{ steps.distribute.outputs.BINARY_DOWNLOAD_URI }}
+          TESTING_URI: ${{ steps.distribute.outputs.TESTING_URI }}
+          CONSOLE_URI: ${{ steps.distribute.outputs.FIREBASE_CONSOLE_URI }}
+        run: |
+          URL="${BINARY_URI:-${TESTING_URI:-$CONSOLE_URI}}"
+          if [ -z "$URL" ]; then
+            echo "::error::Firebase App Distribution did not emit a download URL."
+            exit 1
+          fi
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "Using download URL: $URL"
+
+      - name: Publish release metadata to Firestore
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/service-account.json
+          RELEASE_DOWNLOAD_URL: ${{ steps.download.outputs.url }}
+          RELEASE_NOTES: ${{ steps.notes.outputs.value }}
+          RELEASE_MANDATORY: ${{ inputs.mandatory || false }}
+        run: node scripts/publish-release-metadata.js
+
+      - name: Clean up credentials
+        if: always()
+        run: |
+          rm -f "${{ runner.temp }}/service-account.json"
+          rm -f keystores/expense-tracker-upload-key.keystore
+          rm -f .env
+
+      - name: Job summary
+        if: success()
+        run: |
+          {
+            echo "## Android release published"
+            echo ""
+            echo "- Version: **v${{ steps.version.outputs.name }}** (build ${{ steps.version.outputs.code }})"
+            echo "- Notes: ${{ steps.notes.outputs.value }}"
+            echo "- Mandatory update: ${{ inputs.mandatory || false }}"
+            echo "- Download: ${{ steps.download.outputs.url }}"
+            echo "- Testers link: ${{ steps.distribute.outputs.TESTING_URI }}"
+          } >> "$GITHUB_STEP_SUMMARY"

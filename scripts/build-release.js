@@ -156,12 +156,14 @@ function buildRelease(cliOptions = null) {
 
   // Step 2: Run Expo Prebuild if required
   const androidExists = fs.existsSync(ANDROID_DIR);
-  if (!androidExists || options.prebuild) {
+  if (!androidExists && !options.skipPrebuild) {
     console.log('\n🔄 Running Expo Prebuild...');
     runCommand('npx expo prebuild --no-install', ROOT_DIR, expoPublic);
     console.log('✅ Expo prebuild completed successfully.');
-  } else {
+  } else if (androidExists) {
     console.log('ℹ️  Native Android directory present. Skipping prebuild.');
+  } else {
+    console.log('ℹ️  --skip-prebuild set. Expecting native Android files to already exist.');
   }
 
   const gradleEnv = {

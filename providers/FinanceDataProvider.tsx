@@ -155,6 +155,12 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
   const [transfers, setTransfers] = useState<AccountTransfer[]>([]);
   const [transfersLoading, setTransfersLoading] = useState(true);
 
+  // Avoid permanent skeletons when resubscribing after Google Sign-In / activity resume.
+  const expensesHydratedRef = useRef(false);
+  const incomesHydratedRef = useRef(false);
+  const accountsHydratedRef = useRef(false);
+  const accountTypesHydratedRef = useRef(false);
+
   // Track pending writes per collection
   const pendingExpensesCountRef = useRef(0);
   const pendingIncomesCountRef = useRef(0);
@@ -211,13 +217,18 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       pendingTransfersCountRef.current = 0;
       setPendingSyncCount(0);
       setGlobalPendingSyncCount(0);
+      expensesHydratedRef.current = false;
+      incomesHydratedRef.current = false;
+      accountsHydratedRef.current = false;
+      accountTypesHydratedRef.current = false;
       return;
     }
 
-    setExpensesLoading(true);
-    setIncomesLoading(true);
-    setAccountsLoading(true);
-    setAccountTypesLoading(true);
+    // Don't flip to skeleton if we already have data (listener resubscribe after Google Sign-In).
+    setExpensesLoading(!expensesHydratedRef.current);
+    setIncomesLoading(!incomesHydratedRef.current);
+    setAccountsLoading(!accountsHydratedRef.current);
+    setAccountTypesLoading(!accountTypesHydratedRef.current);
     setPaymentsLoading(true);
     setEntriesLoading(true);
     setTransfersLoading(true);
@@ -241,6 +252,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         ).length;
         updatePendingSyncCount();
         setIsFromCache(snap.metadata.fromCache);
+        expensesHydratedRef.current = true;
         setExpensesLoading(false);
       },
       (error) => {
@@ -261,6 +273,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
             (d) => d.metadata.hasPendingWrites
           ).length;
           updatePendingSyncCount();
+          incomesHydratedRef.current = true;
           setIncomesLoading(false);
         },
         (error) => {
@@ -278,6 +291,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
             (d) => d.metadata.hasPendingWrites
           ).length;
           updatePendingSyncCount();
+          accountsHydratedRef.current = true;
           setAccountsLoading(false);
         },
         (error) => {
@@ -295,6 +309,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
             (d) => d.metadata.hasPendingWrites
           ).length;
           updatePendingSyncCount();
+          accountTypesHydratedRef.current = true;
           setAccountTypesLoading(false);
         },
         (error) => {
@@ -330,7 +345,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         expensesUpgradeUnsub = onSnapshot(
           query(collection(db, ...base, "expenses"), orderBy("createdAt", "desc")),
           (snap) => {
-            // Replace limited window with full history without flipping loading flag
+            // Replace limited window with full history without flipping loading
             // (keeps ledger/dashboard mounted list from blanking mid-scroll).
             setExpenses(
               snap.docs.map((d) => ({ id: d.id, ...(d.data() as object) } as Expense))
@@ -339,9 +354,12 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
               (d) => d.metadata.hasPendingWrites
             ).length;
             updatePendingSyncCount();
+            expensesHydratedRef.current = true;
+            setExpensesLoading(false);
           },
           (error) => {
             console.error("Error fetching full expenses:", error);
+            setExpensesLoading(false);
           }
         );
 
