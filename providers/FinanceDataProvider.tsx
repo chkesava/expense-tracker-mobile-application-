@@ -330,6 +330,8 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         expensesUpgradeUnsub = onSnapshot(
           query(collection(db, ...base, "expenses"), orderBy("createdAt", "desc")),
           (snap) => {
+            // Replace limited window with full history without flipping loading flag
+            // (keeps ledger/dashboard mounted list from blanking mid-scroll).
             setExpenses(
               snap.docs.map((d) => ({ id: d.id, ...(d.data() as object) } as Expense))
             );
@@ -337,7 +339,6 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
               (d) => d.metadata.hasPendingWrites
             ).length;
             updatePendingSyncCount();
-            setExpensesLoading(false);
           },
           (error) => {
             console.error("Error fetching full expenses:", error);
@@ -410,7 +411,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
           ),
         ];
       },
-      { timeoutMs: 2000, fallbackDelayMs: 800 }
+      { timeoutMs: 2800, fallbackDelayMs: 1200 }
     );
 
     return () => {

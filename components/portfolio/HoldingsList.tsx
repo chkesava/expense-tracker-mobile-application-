@@ -1,5 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { View, StyleSheet, Text, FlatList, TouchableOpacity } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { Input } from '@/components/ui/Input';
 import { useTheme } from '@/theme/ThemeProvider';
 import { themeUsesDarkPalette } from '@/theme/tokens';
@@ -11,6 +12,7 @@ import { usePortfolio } from '@/hooks/usePortfolio';
 import { useMarketQuotes } from '@/hooks/useMarketQuotes';
 import { useSystemSettings } from '@/providers/SystemSettingsProvider';
 import { computePositionMetrics } from '@/shared/types/market';
+import { sampleScrollFps } from '@/lib/perf';
 import { Download, Plus } from 'lucide-react-native';
 import type { Holding, HoldingWithMetrics, InstrumentType } from '@/shared/features/portfolio/types';
 
@@ -101,6 +103,17 @@ export function HoldingsList() {
     return 'success';
   };
 
+  const renderHolding = useCallback(
+    ({ item }: { item: HoldingWithMetrics }) => (
+      <HoldingCard
+        holding={item}
+        currency={system.defaultCurrency}
+        onPress={() => setSelectedHolding(item)}
+      />
+    ),
+    [system.defaultCurrency]
+  );
+
   const textStyle = { color: theme.colors.foreground };
   const primaryBg = { backgroundColor: theme.colors.primary };
   const primaryText = { color: theme.colors.primaryForeground };
@@ -164,14 +177,12 @@ export function HoldingsList() {
             <Text style={[styles.emptyText, textStyle]}>No holdings found.</Text>
           </View>
         ) : (
-          filteredAndSortedHoldings.map((item) => (
-            <HoldingCard
-              key={item.id}
-              holding={item}
-              currency={system.defaultCurrency}
-              onPress={() => setSelectedHolding(item)}
-            />
-          ))
+          <FlashList
+            data={filteredAndSortedHoldings}
+            keyExtractor={(item) => item.id}
+            renderItem={renderHolding}
+            onScrollBeginDrag={() => sampleScrollFps('portfolio_holdings')}
+          />
         )}
       </View>
 
@@ -264,8 +275,10 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   listContent: {
+    flex: 1,
     paddingHorizontal: 16,
     paddingBottom: 100,
+    minHeight: 320,
   },
   emptyContainer: {
     padding: 32,

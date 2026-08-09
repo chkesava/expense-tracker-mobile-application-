@@ -31,7 +31,9 @@ import { GoogleSignin } from "@react-native-google-signin/google-signin";
 import { ensureCategoryHierarchy } from "@/lib/ensureCategoryHierarchy";
 import { env } from "@/lib/env";
 import { getFirebaseAuth, getFirestoreDb } from "@/lib/firebase";
+import { perfMark } from "@/lib/perf";
 import { privacySession } from "@/lib/privacySession";
+import { scheduleIdleWork } from "@/shared/utils/scheduleIdle";
 
 const GOOGLE_WEB_CLIENT_ID =
   env.googleWebClientId ||
@@ -97,22 +99,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      if (currentUser && db) {
-        try {
-          await ensureCategoryHierarchy(db, currentUser.uid);
-        } catch (error) {
-          console.error("Error ensuring category hierarchy on login:", error);
-        }
-      }
+    let cancelHierarchy: (() => void) | undefined;
+
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       if (!currentUser) {
         privacySession.clearAll();
       }
+
+      // Unblock first paint immediately; seed categories after interactions.
       setRealUser(currentUser);
       setLoading(false);
+      perfMark("auth_ready");
+
+      cancelHierarchy?.();
+      cancelHierarchy = undefined;
+
+      if (currentUser && db) {
+        cancelHierarchy = scheduleIdleWork(
+          () => {
+            void ensureCategoryHierarchy(db, currentUser.uid).catch((error) => {
+              console.error("Error ensuring category hierarchy on login:", error);
+            });
+          },
+          { fallbackDelayMs: 600, timeoutMs: 2500 }
+        );
+      }
     });
 
-    return unsubscribe;
+    return () => {
+      cancelHierarchy?.();
+      unsubscribe();
+    };
   }, []);
 
   const loginWithEmail = useCallback(async (email: string, password: string) => {

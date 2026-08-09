@@ -1,16 +1,16 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   Pressable,
   RefreshControl,
-  SectionList,
   StyleSheet,
   Text,
   View,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { FlashList } from "@shopify/flash-list";
 import { useRouter } from "expo-router";
 import { deleteDoc, doc } from "firebase/firestore";
 import { haptic } from "@/lib/haptics";
+import { sampleScrollFps } from "@/lib/perf";
 import {
   Calendar,
   CreditCard,
@@ -55,6 +55,21 @@ type CombinedTransaction =
   | { kind: "expense"; data: Expense; date: string; id: string }
   | { kind: "income"; data: Income; date: string; id: string };
 
+type LedgerListItem =
+  | {
+      type: "header";
+      id: string;
+      title: string;
+      dayTotal: number;
+    }
+  | {
+      type: "tx";
+      id: string;
+      item: CombinedTransaction;
+      isFirst: boolean;
+      isLast: boolean;
+    };
+
 export function ExpenseList({
   expenses,
   incomes = [],
@@ -66,7 +81,6 @@ export function ExpenseList({
   refreshing,
   onRefresh,
 }: ExpenseListProps) {
-  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
@@ -126,41 +140,47 @@ export function ExpenseList({
     return { groups, todayStr, yesterdayStr };
   }, [combinedTransactions, settings.timezone]);
 
-  const handleDelete = async (target: CombinedTransaction) => {
-    const db = getFirestoreDb();
-    if (!uid || !db || !target.id) return;
+  const formatHeaderDate = useCallback(
+    (dateKey: string) => {
+      if (dateKey === groupedByDay.todayStr) return "Today";
+      if (dateKey === groupedByDay.yesterdayStr) return "Yesterday";
+      try {
+        const d = parseLocalDate(dateKey);
+        return d.toLocaleDateString("en-US", {
+          weekday: "short",
+          month: "short",
+          day: "numeric",
+        });
+      } catch {
+        return dateKey;
+      }
+    },
+    [groupedByDay.todayStr, groupedByDay.yesterdayStr]
+  );
 
-    try {
-      const collectionName = target.kind === "expense" ? "expenses" : "incomes";
-      const docRef = doc(db, "users", uid, collectionName, target.id);
+  const handleDelete = useCallback(
+    async (target: CombinedTransaction) => {
+      const db = getFirestoreDb();
+      if (!uid || !db || !target.id) return;
 
-      await deleteDoc(docRef);
-      setSelectedTx(null);
-      void haptic.delete();
+      try {
+        const collectionName = target.kind === "expense" ? "expenses" : "incomes";
+        const docRef = doc(db, "users", uid, collectionName, target.id);
 
-      toast.success(
-        `${target.kind === "expense" ? "Expense" : "Income"} deleted`
-      );
-    } catch (err) {
-      console.error("Delete transaction error:", err);
-      toast.error("Failed to delete transaction");
-    }
-  };
+        await deleteDoc(docRef);
+        setSelectedTx(null);
+        void haptic.delete();
 
-  const formatHeaderDate = (dateKey: string) => {
-    if (dateKey === groupedByDay.todayStr) return "Today";
-    if (dateKey === groupedByDay.yesterdayStr) return "Yesterday";
-    try {
-      const d = parseLocalDate(dateKey);
-      return d.toLocaleDateString("en-US", {
-        weekday: "short",
-        month: "short",
-        day: "numeric",
-      });
-    } catch {
-      return dateKey;
-    }
-  };
+        toast.success(
+          `${target.kind === "expense" ? "Expense" : "Income"} deleted`
+        );
+      } catch (err) {
+        console.error("Delete transaction error:", err);
+        toast.error("Failed to delete transaction");
+      }
+    },
+    [uid]
+  );
 
   const sections = useMemo(
     () =>
@@ -171,11 +191,47 @@ export function ExpenseList({
     [groupedByDay]
   );
 
-  const renderTxRow = (
-    item: CombinedTransaction,
-    isFirstInSection: boolean,
-    isLastInSection: boolean
-  ) => {
+  const listData = useMemo(() => {
+    const rows: LedgerListItem[] = [];
+    for (const section of sections) {
+      const dayTotal = section.data.reduce((sum, item) => {
+        return item.kind === "expense"
+          ? sum - item.data.amount
+          : sum + item.data.amount;
+      }, 0);
+      rows.push({
+        type: "header",
+        id: `header-${section.title}`,
+        title: section.title,
+        dayTotal,
+      });
+      section.data.forEach((item, index) => {
+        rows.push({
+          type: "tx",
+          id: `${item.kind}-${item.id}`,
+          item,
+          isFirst: index === 0,
+          isLast: index === section.data.length - 1,
+        });
+      });
+    }
+    return rows;
+  }, [sections]);
+
+  const stickyHeaderIndices = useMemo(
+    () =>
+      listData
+        .map((row, index) => (row.type === "header" ? index : -1))
+        .filter((index) => index >= 0),
+    [listData]
+  );
+
+  const renderTxRow = useCallback(
+    (
+      item: CombinedTransaction,
+      isFirstInSection: boolean,
+      isLastInSection: boolean
+    ) => {
     const isExpense = item.kind === "expense";
     const iconChar = isExpense ? getCategoryIcon(item.data.category) : "💰";
     const acc = item.data.accountId ? accountMap.get(item.data.accountId) : undefined;
@@ -338,7 +394,54 @@ export function ExpenseList({
         </Pressable>
       </SwipeableRow>
     );
-  };
+    },
+    [
+      accountMap,
+      handleDelete,
+      isDark,
+      onEditExpense,
+      onEditIncome,
+      system.defaultCurrency,
+      theme,
+    ]
+  );
+
+  const renderListItem = useCallback(
+    ({ item }: { item: LedgerListItem }) => {
+      if (item.type === "header") {
+        return (
+          <View style={[styles.dayHeader, { backgroundColor: theme.colors.background }]}>
+            <Text
+              style={[
+                styles.dayHeaderText,
+                { color: theme.colors.foreground, fontSize: theme.typography.sm },
+              ]}
+            >
+              {formatHeaderDate(item.title)}
+            </Text>
+            <Text
+              style={[
+                styles.daySubtotal,
+                {
+                  color:
+                    item.dayTotal >= 0
+                      ? theme.colors.success
+                      : theme.colors.mutedForeground,
+                  fontSize: theme.typography.xs,
+                },
+              ]}
+            >
+              {item.dayTotal >= 0 ? "+" : "-"}
+              {system.defaultCurrency}
+              {Math.abs(item.dayTotal).toLocaleString()}
+            </Text>
+          </View>
+        );
+      }
+      return renderTxRow(item.item, item.isFirst, item.isLast);
+    },
+    [formatHeaderDate, renderTxRow, system.defaultCurrency, theme]
+  );
 
   if (combinedTransactions.length === 0) {
     return (
@@ -375,12 +478,16 @@ export function ExpenseList({
 
   return (
     <>
-      <SectionList
+      <FlashList
         style={styles.list}
-        sections={sections}
+        data={listData}
         keyExtractor={(item) => item.id}
-        stickySectionHeadersEnabled
+        getItemType={(item) => item.type}
+        stickyHeaderIndices={stickyHeaderIndices}
         showsVerticalScrollIndicator={false}
+        onScrollBeginDrag={() => {
+          sampleScrollFps("ledger");
+        }}
         refreshControl={
           onRefresh ? (
             <RefreshControl
@@ -395,7 +502,7 @@ export function ExpenseList({
             />
           ) : undefined
         }
-        contentContainerStyle={{ paddingBottom: 32, gap: 12 }}
+        contentContainerStyle={styles.listContent}
         ListHeaderComponent={
           showMonthSummary ? (
             <View
@@ -468,42 +575,7 @@ export function ExpenseList({
             </View>
           ) : null
         }
-        renderSectionHeader={({ section }) => {
-          const items = section.data;
-          const dayTotal = items.reduce((sum, item) => {
-            return item.kind === "expense" ? sum - item.data.amount : sum + item.data.amount;
-          }, 0);
-
-          return (
-            <View style={[styles.dayHeader, { backgroundColor: theme.colors.background }]}>
-              <Text
-                style={[
-                  styles.dayHeaderText,
-                  { color: theme.colors.foreground, fontSize: theme.typography.sm },
-                ]}
-              >
-                {formatHeaderDate(section.title)}
-              </Text>
-              <Text
-                style={[
-                  styles.daySubtotal,
-                  {
-                    color: dayTotal >= 0 ? theme.colors.success : theme.colors.mutedForeground,
-                    fontSize: theme.typography.xs,
-                  },
-                ]}
-              >
-                {dayTotal >= 0 ? "+" : "-"}
-                {system.defaultCurrency}
-                {Math.abs(dayTotal).toLocaleString()}
-              </Text>
-            </View>
-          );
-        }}
-        renderItem={({ item, index, section }) =>
-          renderTxRow(item, index === 0, index === section.data.length - 1)
-        }
-        SectionSeparatorComponent={() => <View style={{ height: 8 }} />}
+        renderItem={renderListItem}
       />
 
       {/* Material 3 Transaction Detail Bottom Sheet */}
@@ -670,6 +742,9 @@ export function ExpenseList({
 const styles = StyleSheet.create({
   list: {
     flex: 1,
+  },
+  listContent: {
+    paddingBottom: 32,
   },
   summaryCard: {
     flexDirection: "row",

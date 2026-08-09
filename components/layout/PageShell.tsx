@@ -1,5 +1,7 @@
 import React, { type ReactNode } from "react";
 import {
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   RefreshControl,
   ScrollView,
   StyleProp,
@@ -17,6 +19,7 @@ export interface PageShellProps {
   scrollable?: boolean;
   refreshing?: boolean;
   onRefresh?: () => void;
+  onScrollBeginDrag?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
   style?: StyleProp<ViewStyle>;
   contentContainerStyle?: StyleProp<ViewStyle>;
   hideHeaderOffset?: boolean;
@@ -29,6 +32,7 @@ export function PageShell({
   scrollable = true,
   refreshing = false,
   onRefresh,
+  onScrollBeginDrag,
   style,
   contentContainerStyle,
   hideHeaderOffset = false,
@@ -91,6 +95,7 @@ export function PageShell({
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={resolvedContentStyle}
+          onScrollBeginDrag={onScrollBeginDrag}
           refreshControl={
             onRefresh ? (
               <RefreshControl

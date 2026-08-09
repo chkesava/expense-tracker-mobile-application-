@@ -17,6 +17,7 @@ import {
 import { getFirestoreDb } from "@/lib/firebase";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
+import { scheduleIdleWork } from "@/shared/utils/scheduleIdle";
 import type {
   Holding,
   PortfolioOrder,
@@ -51,10 +52,13 @@ function todayKey() {
 /**
  * Portfolio data repository. Every path intentionally matches the existing web
  * app, so a signed-in user sees the same portfolio on web and mobile.
+ *
+ * @param options.enabled When false, skips snapshot listeners (ledger tabs already unmount portfolio/SIP when inactive).
  */
-export function usePortfolio() {
+export function usePortfolio(options?: { enabled?: boolean }) {
   const { user } = useAuth();
   const db = getFirestoreDb();
+  const enabled = options?.enabled ?? true;
 
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [transactions, setTransactions] = useState<PortfolioTransaction[]>([]);
@@ -78,10 +82,17 @@ export function usePortfolio() {
       return;
     }
 
+    if (!enabled) {
+      setLoading(false);
+      return;
+    }
+
     const uid = user.uid;
     setLoading(true);
     const settingsRef = doc(db, "users", uid, "portfolioSettings", SETTINGS_DOC_ID);
-    const unsubs = [
+
+    // Critical: settings + holdings for first paint
+    const primaryUnsubs = [
       onSnapshot(settingsRef, (snapshot) => {
         setSettings(
           snapshot.exists()
@@ -95,46 +106,62 @@ export function usePortfolio() {
             .map((item) => ({ id: item.id, ...item.data() } as Holding))
             .sort((a, b) => a.symbol.localeCompare(b.symbol))
         );
+        setLoading(false);
+      }, (error) => {
+        console.error("Failed to load holdings", error);
+        setLoading(false);
       }),
-      onSnapshot(query(collection(db, "users", uid, "portfolioTransactions")), (snapshot) => {
-        setTransactions(
-          snapshot.docs
-            .map((item) => ({ id: item.id, ...item.data() } as PortfolioTransaction))
-            .sort((a, b) => b.date.localeCompare(a.date))
-        );
-      }),
-      onSnapshot(query(collection(db, "users", uid, "watchlist")), (snapshot) => {
-        setWatchlist(snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as WatchlistItem)));
-      }),
-      onSnapshot(query(collection(db, "users", uid, "portfolioOrders")), (snapshot) => {
-        setOrders(
-          snapshot.docs
-            .map((item) => ({ id: item.id, ...item.data() } as PortfolioOrder))
-            .sort((a, b) => String(b.createdAt ?? "").localeCompare(String(a.createdAt ?? "")))
-        );
-      }),
-      onSnapshot(query(collection(db, "users", uid, "alerts")), (snapshot) => {
-        setAlerts(snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as PriceAlert)));
-      }),
-      onSnapshot(
-        query(collection(db, "users", uid, "portfolioSnapshots")),
-        (snapshot) => {
-          setSnapshots(
-            snapshot.docs
-              .map((item) => ({ id: item.id, ...item.data() } as PortfolioSnapshot))
-              .sort((a, b) => a.date.localeCompare(b.date))
-          );
-          setLoading(false);
-        },
-        (error) => {
-          console.error("Failed to load portfolio snapshots", error);
-          setLoading(false);
-        }
-      ),
     ];
 
-    return () => unsubs.forEach((unsubscribe) => unsubscribe());
-  }, [db, user]);
+    // Secondary collections after idle — avoid snapshot fan-out on dashboard
+    let secondaryUnsubs: Array<() => void> = [];
+    const cancelIdle = scheduleIdleWork(
+      () => {
+        secondaryUnsubs = [
+          onSnapshot(query(collection(db, "users", uid, "portfolioTransactions")), (snapshot) => {
+            setTransactions(
+              snapshot.docs
+                .map((item) => ({ id: item.id, ...item.data() } as PortfolioTransaction))
+                .sort((a, b) => b.date.localeCompare(a.date))
+            );
+          }),
+          onSnapshot(query(collection(db, "users", uid, "watchlist")), (snapshot) => {
+            setWatchlist(snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as WatchlistItem)));
+          }),
+          onSnapshot(query(collection(db, "users", uid, "portfolioOrders")), (snapshot) => {
+            setOrders(
+              snapshot.docs
+                .map((item) => ({ id: item.id, ...item.data() } as PortfolioOrder))
+                .sort((a, b) => String(b.createdAt ?? "").localeCompare(String(a.createdAt ?? "")))
+            );
+          }),
+          onSnapshot(query(collection(db, "users", uid, "alerts")), (snapshot) => {
+            setAlerts(snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as PriceAlert)));
+          }),
+          onSnapshot(
+            query(collection(db, "users", uid, "portfolioSnapshots")),
+            (snapshot) => {
+              setSnapshots(
+                snapshot.docs
+                  .map((item) => ({ id: item.id, ...item.data() } as PortfolioSnapshot))
+                  .sort((a, b) => a.date.localeCompare(b.date))
+              );
+            },
+            (error) => {
+              console.error("Failed to load portfolio snapshots", error);
+            }
+          ),
+        ];
+      },
+      { fallbackDelayMs: 900, timeoutMs: 2500 }
+    );
+
+    return () => {
+      cancelIdle();
+      primaryUnsubs.forEach((unsubscribe) => unsubscribe());
+      secondaryUnsubs.forEach((unsubscribe) => unsubscribe());
+    };
+  }, [db, user, enabled]);
 
   const addHolding = useCallback(async (holding: CreateHoldingInput): Promise<string | null> => {
     if (!user || !db) return null;

@@ -16,10 +16,12 @@ import { RecentActivityWidget } from "@/components/dashboard/RecentActivityWidge
 import { SubscriptionsWidget } from "@/components/dashboard/SubscriptionsWidget";
 import { TopCategoriesWidget } from "@/components/dashboard/TopCategoriesWidget";
 import { SetupChecklistWidget } from "@/components/dashboard/SetupChecklistWidget";
+import { LazyMount } from "@/components/common/LazyMount";
 import { WelcomeScreen } from "@/components/onboarding/WelcomeScreen";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { DashboardSkeleton } from "@/components/ui/DashboardSkeleton";
+import { sampleScrollFps } from "@/lib/perf";
 import { useSetupProgress } from "@/providers/SetupProgressProvider";
 import { useAccountEntries } from "@/hooks/useAccountEntries";
 import { useAccountPayments } from "@/hooks/useAccountPayments";
@@ -45,6 +47,13 @@ import {
 import { currentMonthKey, formatDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+
+const ABOVE_FOLD_WIDGETS: DashboardWidgetId[] = [
+  "overview",
+  "quickAdd",
+  "budgetAlerts",
+  "focus",
+];
 
 export default function DashboardScreen() {
   const router = useRouter();
@@ -230,8 +239,9 @@ export default function DashboardScreen() {
     setIsAddExpenseOpen(true);
   };
 
-  const renderWidget = (widgetId: DashboardWidgetId) => {
-    switch (widgetId) {
+  const renderWidget = (widgetId: DashboardWidgetId, index: number) => {
+    const node = (() => {
+      switch (widgetId) {
       case "overview":
         return (
           <OverviewWidget
@@ -345,7 +355,22 @@ export default function DashboardScreen() {
 
       default:
         return null;
+      }
+    })();
+
+    if (!node) return null;
+
+    if (ABOVE_FOLD_WIDGETS.includes(widgetId)) {
+      return node;
     }
+
+    // Below-fold: defer mount to keep first dashboard frame light
+    const delayMs = 40 + Math.max(0, index) * 40;
+    return (
+      <LazyMount key={widgetId} delayMs={delayMs} minHeight={120}>
+        {node}
+      </LazyMount>
+    );
   };
 
   return (
@@ -353,6 +378,7 @@ export default function DashboardScreen() {
       refreshing={refreshing}
       onRefresh={handleRefresh}
       contentContainerStyle={styles.container}
+      onScrollBeginDrag={() => sampleScrollFps("dashboard")}
     >
       <PageHeader
         title="Dashboard"
@@ -426,7 +452,7 @@ export default function DashboardScreen() {
         <DashboardSkeleton />
       ) : (
         <View style={styles.widgetsGrid}>
-          {orderedWidgetIds.map((widgetId) => renderWidget(widgetId))}
+          {orderedWidgetIds.map((widgetId, index) => renderWidget(widgetId, index))}
         </View>
       )}
 

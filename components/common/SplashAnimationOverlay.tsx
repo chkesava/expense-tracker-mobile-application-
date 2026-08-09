@@ -53,16 +53,16 @@ export function SplashAnimationOverlay({
       easing: Easing.out(Easing.ease),
     });
 
-    // 3. Complete ~800ms sequence and smoothly fade out overlay to reveal destination
+    // Complete ~450ms brand beat then fade out (was ~750ms + 350ms fade)
     const timer = setTimeout(() => {
       containerScale.value = withTiming(1.04, {
-        duration: 350,
+        duration: 280,
         easing: Easing.out(Easing.cubic),
       });
       containerOpacity.value = withTiming(
         0,
         {
-          duration: 350,
+          duration: 280,
           easing: Easing.out(Easing.cubic),
         },
         (isFinished) => {
@@ -71,7 +71,7 @@ export function SplashAnimationOverlay({
           }
         }
       );
-    }, 750);
+    }, 450);
 
     return () => clearTimeout(timer);
   }, [

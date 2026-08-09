@@ -19,6 +19,7 @@ import "react-native-reanimated";
 import { CelebrationOverlay } from "@/components/common/CelebrationOverlay";
 import { OfflineBanner } from "@/components/common/OfflineBanner";
 import { SplashAnimationOverlay } from "@/components/common/SplashAnimationOverlay";
+import { perfMark } from "@/lib/perf";
 import { ToastProvider } from "@/lib/toast";
 import { AuthProvider, useAuth } from "@/providers/AuthProvider";
 import { CelebrationProvider } from "@/providers/CelebrationProvider";
@@ -48,11 +49,10 @@ SplashScreen.preventAutoHideAsync().catch(() => {
 
 function AppInitializer({ children }: { children: React.ReactNode }) {
   const { loading: authLoading } = useAuth();
-  const { loading: settingsLoading } = useSettings();
-  const { loading: userDocLoading } = useUserDoc();
-  const [secureStoreLoaded, setSecureStoreLoaded] = useState(false);
-  const [themeStorageLoaded, setThemeStorageLoaded] = useState(false);
-  const [firstLaunchChecked, setFirstLaunchChecked] = useState(false);
+  // Settings / userDoc continue loading in the background — not on the splash critical path.
+  useSettings();
+  useUserDoc();
+  const [localStoresReady, setLocalStoresReady] = useState(false);
   const [navigationReady, setNavigationReady] = useState(false);
   const [appIsReady, setAppIsReady] = useState(false);
   const [animationComplete, setAnimationComplete] = useState(false);
@@ -63,90 +63,59 @@ function AppInitializer({ children }: { children: React.ReactNode }) {
     Inter_700Bold,
   });
 
-  // 1. Wait for Secure Store (Biometric check)
   useEffect(() => {
-    let cancelled = false;
-    SecureStore.getItemAsync("vault_biometric_id")
-      .then(() => {
-        if (!cancelled) setSecureStoreLoaded(true);
-      })
-      .catch(() => {
-        if (!cancelled) setSecureStoreLoaded(true);
-      });
-    return () => {
-      cancelled = true;
-    };
+    perfMark("app_module");
   }, []);
 
-  // 2. Wait for AsyncStorage Theme & First-Launch configuration loading
+  // Parallel: SecureStore + theme/first-launch AsyncStorage
   useEffect(() => {
     let cancelled = false;
     Promise.all([
-      AsyncStorage.getItem(THEME_STORAGE_KEY),
-      AsyncStorage.getItem("@vault_has_launched_before"),
-    ])
-      .then(() => {
-        if (!cancelled) {
-          setThemeStorageLoaded(true);
-          setFirstLaunchChecked(true);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setThemeStorageLoaded(true);
-          setFirstLaunchChecked(true);
-        }
-      });
+      SecureStore.getItemAsync("vault_biometric_id").catch(() => null),
+      AsyncStorage.getItem(THEME_STORAGE_KEY).catch(() => null),
+      AsyncStorage.getItem("@vault_has_launched_before").catch(() => null),
+    ]).finally(() => {
+      if (!cancelled) {
+        setLocalStoresReady(true);
+        perfMark("local_stores_ready");
+      }
+    });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  // 3. Monitor Navigation container readiness
   const navigationRef = useNavigationContainerRef();
   useEffect(() => {
     if (navigationRef?.isReady()) {
       setNavigationReady(true);
+      perfMark("navigation_ready");
       return;
     }
     const interval = setInterval(() => {
       if (navigationRef?.isReady()) {
         setNavigationReady(true);
         clearInterval(interval);
+        perfMark("navigation_ready");
       }
     }, 50);
     return () => clearInterval(interval);
   }, [navigationRef]);
 
-  // 4. Combined readiness check
   useEffect(() => {
-    if (
-      !authLoading &&
-      !settingsLoading &&
-      !userDocLoading &&
-      secureStoreLoaded &&
-      themeStorageLoaded &&
-      firstLaunchChecked &&
-      navigationReady &&
-      fontsLoaded
-    ) {
-      setAppIsReady(true);
-    }
-  }, [
-    authLoading,
-    settingsLoading,
-    userDocLoading,
-    secureStoreLoaded,
-    themeStorageLoaded,
-    firstLaunchChecked,
-    navigationReady,
-    fontsLoaded,
-  ]);
+    if (fontsLoaded) perfMark("fonts_ready");
+  }, [fontsLoaded]);
 
-  // 5. Hide native splash screen
+  // Critical path: auth + fonts + local stores + nav (not settings/userDoc)
+  useEffect(() => {
+    if (!authLoading && localStoresReady && navigationReady && fontsLoaded) {
+      setAppIsReady(true);
+      perfMark("app_ready");
+    }
+  }, [authLoading, localStoresReady, navigationReady, fontsLoaded]);
+
   useEffect(() => {
     if (appIsReady) {
-      // Hide the native splash screen instantly, since SplashAnimationOverlay is now mounted
       SplashScreen.hideAsync().catch(() => undefined);
     }
   }, [appIsReady]);
@@ -156,7 +125,10 @@ function AppInitializer({ children }: { children: React.ReactNode }) {
       {children}
       {!animationComplete && appIsReady && (
         <SplashAnimationOverlay
-          onAnimationComplete={() => setAnimationComplete(true)}
+          onAnimationComplete={() => {
+            setAnimationComplete(true);
+            perfMark("splash_animation_done");
+          }}
         />
       )}
     </>

@@ -14,6 +14,7 @@ import {
 import { getFirestoreDb } from "@/lib/firebase";
 import { useAuth } from "@/providers/AuthProvider";
 import { toast } from "@/lib/toast";
+import { scheduleIdleWork } from "@/shared/utils/scheduleIdle";
 import { fetchMarketQuote } from "@/services/marketDataService";
 import {
   SipPlan,
@@ -60,9 +61,10 @@ function calculateNextExecutionDate(
   return nextDate;
 }
 
-export function useSips() {
+export function useSips(options?: { enabled?: boolean }) {
   const { user } = useAuth();
   const uid = user?.uid;
+  const enabled = options?.enabled ?? true;
 
   const [plans, setPlans] = useState<SipPlan[]>([]);
   const [transactions, setTransactions] = useState<SipTransaction[]>([]);
@@ -81,33 +83,46 @@ export function useSips() {
       return;
     }
 
+    if (!enabled) {
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
 
+    // Primary: plans + virtual positions for SIP UI first paint
     const unsubPlans = onSnapshot(collection(db, `users/${uid}/sipPlans`), (snap) => {
       setPlans(snap.docs.map((d) => ({ id: d.id, ...d.data() } as SipPlan)));
-    });
-
-    const unsubTx = onSnapshot(collection(db, `users/${uid}/sipTransactions`), (snap) => {
-      setTransactions(snap.docs.map((d) => ({ id: d.id, ...d.data() } as SipTransaction)));
+      setLoading(false);
     });
 
     const unsubVP = onSnapshot(collection(db, `users/${uid}/virtualPositions`), (snap) => {
       setVirtualPositions(snap.docs.map((d) => ({ id: d.id, ...d.data() } as VirtualPosition)));
     });
 
-    const unsubNotif = onSnapshot(collection(db, `users/${uid}/notifications`), (snap) => {
-      setNotifications(snap.docs.map((d) => ({ id: d.id, ...d.data() } as AppNotification)));
-    });
+    let unsubTx: (() => void) | undefined;
+    let unsubNotif: (() => void) | undefined;
 
-    setLoading(false);
+    const cancelIdle = scheduleIdleWork(
+      () => {
+        unsubTx = onSnapshot(collection(db, `users/${uid}/sipTransactions`), (snap) => {
+          setTransactions(snap.docs.map((d) => ({ id: d.id, ...d.data() } as SipTransaction)));
+        });
+        unsubNotif = onSnapshot(collection(db, `users/${uid}/notifications`), (snap) => {
+          setNotifications(snap.docs.map((d) => ({ id: d.id, ...d.data() } as AppNotification)));
+        });
+      },
+      { fallbackDelayMs: 900, timeoutMs: 2500 }
+    );
 
     return () => {
+      cancelIdle();
       unsubPlans();
-      unsubTx();
       unsubVP();
-      unsubNotif();
+      unsubTx?.();
+      unsubNotif?.();
     };
-  }, [uid]);
+  }, [uid, enabled]);
 
   const createSipPlan = useCallback(
     async (
