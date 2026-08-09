@@ -29,21 +29,28 @@ const UserDocContext = createContext<UserDocContextType | undefined>(undefined);
 
 export function UserDocProvider({ children }: { children: ReactNode }) {
   const { realUser, user } = useAuth();
+  const uid = realUser?.uid ?? null;
+
   const [data, setData] = useState<DocumentData | null>(null);
   const [exists, setExists] = useState(false);
-  const [loading, setLoading] = useState(() => Boolean(realUser));
+  /** Only equals `uid` after the first snapshot (or error) for that user. */
+  const [observedUid, setObservedUid] = useState<string | null>(null);
 
   useEffect(() => {
     const db = getFirestoreDb();
-    if (!realUser || !db) {
+    if (!uid || !db) {
       setData(null);
       setExists(false);
-      setLoading(false);
+      setObservedUid(null);
       return;
     }
 
-    setLoading(true);
-    const ref = doc(db, "users", realUser.uid);
+    // Mark this uid as not-yet-observed so Settings cannot seed defaults mid-race.
+    setData(null);
+    setExists(false);
+    setObservedUid(null);
+
+    const ref = doc(db, "users", uid);
     const unsub = onSnapshot(
       ref,
       (snap) => {
@@ -54,18 +61,20 @@ export function UserDocProvider({ children }: { children: ReactNode }) {
           setData(null);
           setExists(false);
         }
-        setLoading(false);
+        setObservedUid(uid);
       },
       (error) => {
         console.error("Error fetching user document:", error);
         setData(null);
         setExists(false);
-        setLoading(false);
+        setObservedUid(uid);
       }
     );
 
     return unsub;
-  }, [realUser]);
+  }, [uid]);
+
+  const loading = Boolean(uid) && observedUid !== uid;
 
   const isDuress = Boolean(realUser && user && realUser.uid !== user.uid);
 

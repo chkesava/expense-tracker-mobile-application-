@@ -12,7 +12,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { ActivityIndicator, View } from "react-native";
+import { View } from "react-native";
 import { doc, setDoc } from "firebase/firestore";
 
 import { getFirestoreDb } from "@/lib/firebase";
@@ -29,7 +29,6 @@ import {
   type NumberFormatOption,
   type UserSettings,
 } from "@/shared/types/settings";
-import { useTheme } from "@/theme/ThemeProvider";
 
 type SettingsContextType = {
   settings: UserSettings;
@@ -75,7 +74,6 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   }, [settings.hapticFeedback]);
 
   useEffect(() => {
-    const db = getFirestoreDb();
     if (!realUser) {
       setSettings(SETTINGS_DEFAULTS);
       setSeedAttempted(false);
@@ -86,12 +84,12 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     if (exists && data) {
       setSettings(mergeSettingsFromDoc(data as Record<string, unknown>));
       setSeedAttempted(false);
-    } else if (!exists && !seedAttempted && db) {
+    } else if (!exists && !seedAttempted) {
+      // Doc is confirmed missing after the first snapshot. Apply defaults in
+      // memory only — never write SETTINGS_DEFAULTS to Firestore. A merge seed
+      // previously raced ahead of the snapshot and wiped budget/accent/theme.
       setSeedAttempted(true);
-      setDoc(doc(db, "users", realUser.uid), SETTINGS_DEFAULTS, {
-        merge: true,
-      }).catch((err) => console.error("Failed to seed user settings", err));
-      setSettings(SETTINGS_DEFAULTS);
+      setSettings(mergeSettingsFromDoc(null));
     }
   }, [realUser, data, exists, userDocLoading, seedAttempted]);
 
