@@ -12,11 +12,9 @@ import * as Haptics from "expo-haptics";
 import {
   Check,
   ChevronDown,
-  FolderPlus,
   Plus,
   Search,
   Star,
-  Tag,
   X,
 } from "lucide-react-native";
 
@@ -40,6 +38,13 @@ export interface CategoryPickerProps {
   disabled?: boolean;
   searchable?: boolean;
   label?: string;
+  /**
+   * Render the two-column picker directly (no nested modal / trigger).
+   * Use when the parent already shows a sheet/modal.
+   */
+  inline?: boolean;
+  /** Called when the user finishes a selection (subcategory, or category with no subs). */
+  onComplete?: () => void;
 }
 
 export function CategoryPicker({
@@ -49,6 +54,8 @@ export function CategoryPicker({
   disabled = false,
   searchable = true,
   label = "Category & Subcategory",
+  inline = false,
+  onComplete,
 }: CategoryPickerProps) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
@@ -75,20 +82,20 @@ export function CategoryPicker({
 
   const onChangeRef = useRef(onCategoryChange);
   onChangeRef.current = onCategoryChange;
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
 
-  // Selected parent node
   const activeParent = useMemo(
-    () => visibleParents.find((c) => c.name === (selectedParentName || category)),
+    () =>
+      visibleParents.find((c) => c.name === (selectedParentName || category)),
     [visibleParents, selectedParentName, category]
   );
 
-  // Subcategories of selected parent
   const subcategories = useMemo(() => {
     if (!activeParent) return [];
     return getSubcategories(activeParent.id);
   }, [activeParent, getSubcategories]);
 
-  // Filtered parent categories
   const filteredParents = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return visibleParents;
@@ -99,7 +106,12 @@ export function CategoryPicker({
     );
   }, [visibleParents, search, getSubcategories]);
 
-  // Auto-validate and select fallback if current is invalid
+  // Keep draft parent in sync when opening / when value changes externally
+  useEffect(() => {
+    if (category) setSelectedParentName(category);
+  }, [category]);
+
+  // Auto-validate existing selection if subcategory is invalid for current parent
   useEffect(() => {
     if (!activeParent || subcategories.length === 0) return;
     const isValid = subcategories.some((s) => s.name === subcategory);
@@ -110,7 +122,7 @@ export function CategoryPicker({
     }
   }, [activeParent, subcategories, subcategory]);
 
-  // Initial default selection if empty
+  // Initial default if empty
   useEffect(() => {
     if (visibleParents.length === 0) return;
     if (!category || !visibleParents.some((c) => c.name === category)) {
@@ -122,30 +134,43 @@ export function CategoryPicker({
     }
   }, [visibleParents, favoriteParents, category, getSubcategories]);
 
-  const handleSelectPair = (cat: string, sub: string) => {
+  const finishSelection = (cat: string, sub: string) => {
     Haptics.selectionAsync().catch(() => undefined);
     onChangeRef.current(cat, sub, { fromUser: true });
     pushRecentCategoryPair(cat, sub);
     setRecentPairs(getRecentCategoryPairs());
-    setIsOpen(false);
+    if (!inline) setIsOpen(false);
+    onCompleteRef.current?.();
   };
 
   const handleSelectParent = (parentName: string) => {
     Haptics.selectionAsync().catch(() => undefined);
     setSelectedParentName(parentName);
+    setShowAddSub(false);
+
     const parent = visibleParents.find((c) => c.name === parentName);
-    if (parent) {
-      const subs = getSubcategories(parent.id);
-      const firstSub = subs[0]?.name || "Other";
-      onChangeRef.current(parentName, firstSub, { fromUser: true });
-      pushRecentCategoryPair(parentName, firstSub);
-      setRecentPairs(getRecentCategoryPairs());
+    if (!parent) return;
+
+    const subs = getSubcategories(parent.id);
+
+    // No subcategories → finish immediately (user preference)
+    if (subs.length === 0) {
+      finishSelection(parentName, "Other");
+      return;
     }
+
+    // Keep picker open — wait for explicit subcategory tap.
+    // Soft-update form values without fromUser so parents don't close early.
+    const previewSub =
+      subcategory && subs.some((s) => s.name === subcategory)
+        ? subcategory
+        : subs[0].name;
+    onChangeRef.current(parentName, previewSub, { fromUser: false });
   };
 
   const handleSelectSub = (subName: string) => {
     if (!activeParent) return;
-    handleSelectPair(activeParent.name, subName);
+    finishSelection(activeParent.name, subName);
   };
 
   const handleCreateParent = async () => {
@@ -160,10 +185,380 @@ export function CategoryPicker({
 
   const handleCreateSub = async () => {
     if (!activeParent || !newSubName.trim()) return;
-    await addSubcategory(activeParent.id, newSubName.trim());
+    const name = newSubName.trim();
+    await addSubcategory(activeParent.id, name);
     setNewSubName("");
     setShowAddSub(false);
+    finishSelection(activeParent.name, name);
   };
+
+  const pickerBody = (
+    <>
+      {searchable ? (
+        <View style={styles.searchContainer}>
+          <View
+            style={[
+              styles.searchBar,
+              {
+                backgroundColor: isDark
+                  ? "rgba(255,255,255,0.06)"
+                  : "rgba(0,0,0,0.04)",
+                borderColor: theme.colors.border,
+              },
+            ]}
+          >
+            <Search size={16} color={theme.colors.mutedForeground} />
+            <TextInput
+              value={search}
+              onChangeText={setSearch}
+              placeholder="Search categories or subcategories..."
+              placeholderTextColor={theme.colors.mutedForeground}
+              style={[styles.searchInput, { color: theme.colors.foreground }]}
+            />
+            {search ? (
+              <Pressable onPress={() => setSearch("")} hitSlop={8}>
+                <X size={16} color={theme.colors.mutedForeground} />
+              </Pressable>
+            ) : null}
+          </View>
+        </View>
+      ) : null}
+
+      {recentPairs.length > 0 && !search ? (
+        <View style={styles.recentSection}>
+          <Text
+            style={[styles.sectionTitle, { color: theme.colors.mutedForeground }]}
+          >
+            RECENT
+          </Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.chipsRow}
+          >
+            {recentPairs.map((p, idx) => (
+              <Pressable
+                key={`recent-${idx}`}
+                onPress={() => finishSelection(p.category, p.subcategory)}
+                style={({ pressed }) => [
+                  styles.chipPill,
+                  {
+                    backgroundColor: isDark
+                      ? "rgba(255,255,255,0.06)"
+                      : "rgba(0,0,0,0.04)",
+                    borderColor: theme.colors.border,
+                  },
+                  pressed && { opacity: 0.75 },
+                ]}
+              >
+                <Text style={styles.chipEmoji}>
+                  {getCategoryIcon(p.category)}
+                </Text>
+                <Text
+                  style={[styles.chipText, { color: theme.colors.foreground }]}
+                >
+                  {p.category} › {p.subcategory}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+      ) : null}
+
+      <View style={styles.splitColumns}>
+        <View
+          style={[
+            styles.parentsColumn,
+            { borderRightColor: theme.colors.border },
+          ]}
+        >
+          <View style={styles.columnHeader}>
+            <Text
+              style={[
+                styles.sectionTitle,
+                { color: theme.colors.mutedForeground },
+              ]}
+            >
+              PARENT ({filteredParents.length})
+            </Text>
+            <Pressable
+              onPress={() => setShowAddParent(true)}
+              hitSlop={8}
+              style={styles.addInlineBtn}
+            >
+              <Plus size={14} color={theme.colors.primary} />
+            </Pressable>
+          </View>
+
+          {showAddParent ? (
+            <View style={styles.inlineAddBox}>
+              <TextInput
+                value={newParentName}
+                onChangeText={setNewParentName}
+                placeholder="Category name"
+                placeholderTextColor={theme.colors.mutedForeground}
+                style={[
+                  styles.inlineInput,
+                  {
+                    color: theme.colors.foreground,
+                    borderColor: theme.colors.border,
+                  },
+                ]}
+                autoFocus
+              />
+              <View style={styles.inlineActionRow}>
+                <Pressable
+                  onPress={handleCreateParent}
+                  style={[
+                    styles.inlineSaveBtn,
+                    { backgroundColor: theme.colors.primary },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.inlineSaveText,
+                      { color: theme.colors.primaryForeground },
+                    ]}
+                  >
+                    Add
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => {
+                    setNewParentName("");
+                    setShowAddParent(false);
+                  }}
+                  style={styles.inlineCancelBtn}
+                >
+                  <Text
+                    style={[
+                      styles.inlineCancelText,
+                      { color: theme.colors.mutedForeground },
+                    ]}
+                  >
+                    Cancel
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : null}
+
+          <ScrollView
+            style={{ flex: 1 }}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: 24 }}
+            keyboardShouldPersistTaps="handled"
+          >
+            {filteredParents.map((parent) => {
+              const isSelected =
+                (selectedParentName || category) === parent.name;
+              return (
+                <Pressable
+                  key={parent.id}
+                  onPress={() => handleSelectParent(parent.name)}
+                  style={({ pressed }) => [
+                    styles.parentRow,
+                    {
+                      backgroundColor: isSelected
+                        ? isDark
+                          ? "rgba(107, 99, 255, 0.2)"
+                          : "rgba(79, 70, 255, 0.12)"
+                        : "transparent",
+                      borderColor: isSelected
+                        ? theme.colors.primary
+                        : "transparent",
+                    },
+                    pressed && { opacity: 0.7 },
+                  ]}
+                >
+                  <Text style={styles.parentEmoji}>
+                    {parent.icon || getCategoryIcon(parent.name)}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.parentName,
+                      {
+                        color: isSelected
+                          ? theme.colors.primary
+                          : theme.colors.foreground,
+                        fontWeight: isSelected ? "700" : "500",
+                      },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {parent.name}
+                  </Text>
+                  {parent.isFavorite ? (
+                    <Star
+                      size={12}
+                      color={theme.colors.warning}
+                      fill={theme.colors.warning}
+                    />
+                  ) : null}
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </View>
+
+        <View style={styles.subsColumn}>
+          <View style={styles.columnHeader}>
+            <Text
+              style={[
+                styles.sectionTitle,
+                { color: theme.colors.mutedForeground },
+              ]}
+            >
+              SUBCATEGORY ({subcategories.length})
+            </Text>
+            {activeParent ? (
+              <Pressable
+                onPress={() => setShowAddSub(true)}
+                hitSlop={8}
+                style={styles.addInlineBtn}
+              >
+                <Plus size={14} color={theme.colors.primary} />
+              </Pressable>
+            ) : null}
+          </View>
+
+          {!activeParent ? (
+            <Text
+              style={[
+                styles.emptyHint,
+                { color: theme.colors.mutedForeground },
+              ]}
+            >
+              Select a category first
+            </Text>
+          ) : null}
+
+          {activeParent && subcategories.length > 0 ? (
+            <Text
+              style={[
+                styles.pickHint,
+                { color: theme.colors.mutedForeground },
+              ]}
+            >
+              Tap a subcategory to confirm
+            </Text>
+          ) : null}
+
+          {showAddSub ? (
+            <View style={styles.inlineAddBox}>
+              <TextInput
+                value={newSubName}
+                onChangeText={setNewSubName}
+                placeholder="Subcategory name"
+                placeholderTextColor={theme.colors.mutedForeground}
+                style={[
+                  styles.inlineInput,
+                  {
+                    color: theme.colors.foreground,
+                    borderColor: theme.colors.border,
+                  },
+                ]}
+                autoFocus
+              />
+              <View style={styles.inlineActionRow}>
+                <Pressable
+                  onPress={handleCreateSub}
+                  style={[
+                    styles.inlineSaveBtn,
+                    { backgroundColor: theme.colors.primary },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.inlineSaveText,
+                      { color: theme.colors.primaryForeground },
+                    ]}
+                  >
+                    Add
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => {
+                    setNewSubName("");
+                    setShowAddSub(false);
+                  }}
+                  style={styles.inlineCancelBtn}
+                >
+                  <Text
+                    style={[
+                      styles.inlineCancelText,
+                      { color: theme.colors.mutedForeground },
+                    ]}
+                  >
+                    Cancel
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : null}
+
+          <ScrollView
+            style={{ flex: 1 }}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: 24 }}
+            keyboardShouldPersistTaps="handled"
+          >
+            {subcategories.map((sub) => {
+              const parentMatches =
+                category === (selectedParentName || category);
+              const isSelected = parentMatches && subcategory === sub.name;
+              return (
+                <Pressable
+                  key={sub.id}
+                  onPress={() => handleSelectSub(sub.name)}
+                  style={({ pressed }) => [
+                    styles.subRow,
+                    {
+                      backgroundColor: isSelected
+                        ? isDark
+                          ? "rgba(107, 99, 255, 0.2)"
+                          : "rgba(79, 70, 255, 0.12)"
+                        : "transparent",
+                      borderColor: isSelected
+                        ? theme.colors.primary
+                        : "transparent",
+                    },
+                    pressed && { opacity: 0.7 },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.subName,
+                      {
+                        color: isSelected
+                          ? theme.colors.primary
+                          : theme.colors.foreground,
+                        fontWeight: isSelected ? "700" : "500",
+                      },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {sub.name}
+                  </Text>
+                  {isSelected ? (
+                    <Check size={14} color={theme.colors.primary} />
+                  ) : null}
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </View>
+      </View>
+    </>
+  );
+
+  if (inline) {
+    return (
+      <View style={[styles.inlineRoot, disabled && { opacity: 0.6 }]} pointerEvents={disabled ? "none" : "auto"}>
+        {pickerBody}
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -173,7 +568,6 @@ export function CategoryPicker({
         </Text>
       ) : null}
 
-      {/* Trigger Button */}
       <Pressable
         onPress={() => {
           if (!disabled) {
@@ -195,10 +589,14 @@ export function CategoryPicker({
         <View style={styles.triggerLeft}>
           <Text style={styles.iconEmoji}>{getCategoryIcon(category)}</Text>
           <View style={styles.triggerTextContainer}>
-            <Text style={[styles.categoryText, { color: theme.colors.foreground }]}>
+            <Text
+              style={[styles.categoryText, { color: theme.colors.foreground }]}
+            >
               {category || "Select Category"}
             </Text>
-            <Text style={[styles.subText, { color: theme.colors.mutedForeground }]}>
+            <Text
+              style={[styles.subText, { color: theme.colors.mutedForeground }]}
+            >
               {subcategory ? `›  ${subcategory}` : "Choose subcategory"}
             </Text>
           </View>
@@ -207,7 +605,6 @@ export function CategoryPicker({
         <ChevronDown size={18} color={theme.colors.mutedForeground} />
       </Pressable>
 
-      {/* Category Selection Modal Sheet */}
       <Modal
         visible={isOpen}
         animationType="slide"
@@ -224,10 +621,19 @@ export function CategoryPicker({
               },
             ]}
           >
-            {/* Header */}
-            <View style={[styles.modalHeader, { borderBottomColor: theme.colors.border }]}>
+            <View
+              style={[
+                styles.modalHeader,
+                { borderBottomColor: theme.colors.border },
+              ]}
+            >
               <View>
-                <Text style={[styles.modalTitle, { color: theme.colors.foreground }]}>
+                <Text
+                  style={[
+                    styles.modalTitle,
+                    { color: theme.colors.foreground },
+                  ]}
+                >
                   Select Category
                 </Text>
                 <Text
@@ -236,7 +642,7 @@ export function CategoryPicker({
                     { color: theme.colors.mutedForeground },
                   ]}
                 >
-                  Choose parent and subcategory
+                  Choose parent, then subcategory
                 </Text>
               </View>
 
@@ -253,343 +659,7 @@ export function CategoryPicker({
               </Pressable>
             </View>
 
-            {/* Search Input */}
-            {searchable && (
-              <View style={styles.searchContainer}>
-                <View
-                  style={[
-                    styles.searchBar,
-                    {
-                      backgroundColor: isDark
-                        ? "rgba(255,255,255,0.06)"
-                        : "rgba(0,0,0,0.04)",
-                      borderColor: theme.colors.border,
-                    },
-                  ]}
-                >
-                  <Search size={16} color={theme.colors.mutedForeground} />
-                  <TextInput
-                    value={search}
-                    onChangeText={setSearch}
-                    placeholder="Search categories or subcategories..."
-                    placeholderTextColor={theme.colors.mutedForeground}
-                    style={[styles.searchInput, { color: theme.colors.foreground }]}
-                  />
-                  {search ? (
-                    <Pressable onPress={() => setSearch("")} hitSlop={8}>
-                      <X size={16} color={theme.colors.mutedForeground} />
-                    </Pressable>
-                  ) : null}
-                </View>
-              </View>
-            )}
-
-            {/* Recent Pairs Quick Chips */}
-            {recentPairs.length > 0 && !search && (
-              <View style={styles.recentSection}>
-                <Text style={[styles.sectionTitle, { color: theme.colors.mutedForeground }]}>
-                  RECENT
-                </Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.chipsRow}
-                >
-                  {recentPairs.map((p, idx) => (
-                    <Pressable
-                      key={`recent-${idx}`}
-                      onPress={() => handleSelectPair(p.category, p.subcategory)}
-                      style={({ pressed }) => [
-                        styles.chipPill,
-                        {
-                          backgroundColor: isDark
-                            ? "rgba(255,255,255,0.06)"
-                            : "rgba(0,0,0,0.04)",
-                          borderColor: theme.colors.border,
-                        },
-                        pressed && { opacity: 0.75 },
-                      ]}
-                    >
-                      <Text style={styles.chipEmoji}>
-                        {getCategoryIcon(p.category)}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.chipText,
-                          { color: theme.colors.foreground },
-                        ]}
-                      >
-                        {p.category} › {p.subcategory}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </ScrollView>
-              </View>
-            )}
-
-            {/* Two-column Hierarchy Layout */}
-            <View style={styles.splitColumns}>
-              {/* Left Column: Parent Categories */}
-              <View
-                style={[
-                  styles.parentsColumn,
-                  { borderRightColor: theme.colors.border },
-                ]}
-              >
-                <View style={styles.columnHeader}>
-                  <Text
-                    style={[
-                      styles.sectionTitle,
-                      { color: theme.colors.mutedForeground },
-                    ]}
-                  >
-                    PARENT ({filteredParents.length})
-                  </Text>
-                  <Pressable
-                    onPress={() => setShowAddParent(true)}
-                    hitSlop={8}
-                    style={styles.addInlineBtn}
-                  >
-                    <Plus size={14} color={theme.colors.primary} />
-                  </Pressable>
-                </View>
-
-                {showAddParent ? (
-                  <View style={styles.inlineAddBox}>
-                    <TextInput
-                      value={newParentName}
-                      onChangeText={setNewParentName}
-                      placeholder="Category name"
-                      placeholderTextColor={theme.colors.mutedForeground}
-                      style={[
-                        styles.inlineInput,
-                        {
-                          color: theme.colors.foreground,
-                          borderColor: theme.colors.border,
-                        },
-                      ]}
-                      autoFocus
-                    />
-                    <View style={styles.inlineActionRow}>
-                      <Pressable
-                        onPress={handleCreateParent}
-                        style={[
-                          styles.inlineSaveBtn,
-                          { backgroundColor: theme.colors.primary },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.inlineSaveText,
-                            { color: theme.colors.primaryForeground },
-                          ]}
-                        >
-                          Add
-                        </Text>
-                      </Pressable>
-                      <Pressable
-                        onPress={() => {
-                          setNewParentName("");
-                          setShowAddParent(false);
-                        }}
-                        style={styles.inlineCancelBtn}
-                      >
-                        <Text
-                          style={[
-                            styles.inlineCancelText,
-                            { color: theme.colors.mutedForeground },
-                          ]}
-                        >
-                          Cancel
-                        </Text>
-                      </Pressable>
-                    </View>
-                  </View>
-                ) : null}
-
-                <ScrollView
-                  style={{ flex: 1 }}
-                  showsVerticalScrollIndicator={false}
-                  contentContainerStyle={{ paddingBottom: 24 }}
-                >
-                  {filteredParents.map((parent) => {
-                    const isSelected =
-                      (selectedParentName || category) === parent.name;
-                    return (
-                      <Pressable
-                        key={parent.id}
-                        onPress={() => handleSelectParent(parent.name)}
-                        style={({ pressed }) => [
-                          styles.parentRow,
-                          {
-                            backgroundColor: isSelected
-                              ? isDark
-                                ? "rgba(107, 99, 255, 0.2)"
-                                : "rgba(79, 70, 255, 0.12)"
-                              : "transparent",
-                            borderColor: isSelected
-                              ? theme.colors.primary
-                              : "transparent",
-                          },
-                          pressed && { opacity: 0.7 },
-                        ]}
-                      >
-                        <Text style={styles.parentEmoji}>
-                          {parent.icon || getCategoryIcon(parent.name)}
-                        </Text>
-                        <Text
-                          style={[
-                            styles.parentName,
-                            {
-                              color: isSelected
-                                ? theme.colors.primary
-                                : theme.colors.foreground,
-                              fontWeight: isSelected ? "700" : "500",
-                            },
-                          ]}
-                          numberOfLines={1}
-                        >
-                          {parent.name}
-                        </Text>
-                        {parent.isFavorite ? (
-                          <Star
-                            size={12}
-                            color={theme.colors.warning}
-                            fill={theme.colors.warning}
-                          />
-                        ) : null}
-                      </Pressable>
-                    );
-                  })}
-                </ScrollView>
-              </View>
-
-              {/* Right Column: Subcategories */}
-              <View style={styles.subsColumn}>
-                <View style={styles.columnHeader}>
-                  <Text
-                    style={[
-                      styles.sectionTitle,
-                      { color: theme.colors.mutedForeground },
-                    ]}
-                  >
-                    SUBCATEGORY ({subcategories.length})
-                  </Text>
-                  {activeParent ? (
-                    <Pressable
-                      onPress={() => setShowAddSub(true)}
-                      hitSlop={8}
-                      style={styles.addInlineBtn}
-                    >
-                      <Plus size={14} color={theme.colors.primary} />
-                    </Pressable>
-                  ) : null}
-                </View>
-
-                {showAddSub ? (
-                  <View style={styles.inlineAddBox}>
-                    <TextInput
-                      value={newSubName}
-                      onChangeText={setNewSubName}
-                      placeholder="Subcategory name"
-                      placeholderTextColor={theme.colors.mutedForeground}
-                      style={[
-                        styles.inlineInput,
-                        {
-                          color: theme.colors.foreground,
-                          borderColor: theme.colors.border,
-                        },
-                      ]}
-                      autoFocus
-                    />
-                    <View style={styles.inlineActionRow}>
-                      <Pressable
-                        onPress={handleCreateSub}
-                        style={[
-                          styles.inlineSaveBtn,
-                          { backgroundColor: theme.colors.primary },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.inlineSaveText,
-                            { color: theme.colors.primaryForeground },
-                          ]}
-                        >
-                          Add
-                        </Text>
-                      </Pressable>
-                      <Pressable
-                        onPress={() => {
-                          setNewSubName("");
-                          setShowAddSub(false);
-                        }}
-                        style={styles.inlineCancelBtn}
-                      >
-                        <Text
-                          style={[
-                            styles.inlineCancelText,
-                            { color: theme.colors.mutedForeground },
-                          ]}
-                        >
-                          Cancel
-                        </Text>
-                      </Pressable>
-                    </View>
-                  </View>
-                ) : null}
-
-                <ScrollView
-                  style={{ flex: 1 }}
-                  showsVerticalScrollIndicator={false}
-                  contentContainerStyle={{ paddingBottom: 24 }}
-                >
-                  {subcategories.map((sub) => {
-                    const isSelected =
-                      category === (selectedParentName || category) &&
-                      subcategory === sub.name;
-                    return (
-                      <Pressable
-                        key={sub.id}
-                        onPress={() => handleSelectSub(sub.name)}
-                        style={({ pressed }) => [
-                          styles.subRow,
-                          {
-                            backgroundColor: isSelected
-                              ? isDark
-                                ? "rgba(107, 99, 255, 0.2)"
-                                : "rgba(79, 70, 255, 0.12)"
-                              : "transparent",
-                            borderColor: isSelected
-                              ? theme.colors.primary
-                              : "transparent",
-                          },
-                          pressed && { opacity: 0.7 },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.subName,
-                            {
-                              color: isSelected
-                                ? theme.colors.primary
-                                : theme.colors.foreground,
-                              fontWeight: isSelected ? "700" : "500",
-                            },
-                          ]}
-                          numberOfLines={1}
-                        >
-                          {sub.name}
-                        </Text>
-                        {isSelected ? (
-                          <Check size={14} color={theme.colors.primary} />
-                        ) : null}
-                      </Pressable>
-                    );
-                  })}
-                </ScrollView>
-              </View>
-            </View>
+            {pickerBody}
           </View>
         </View>
       </Modal>
@@ -600,6 +670,10 @@ export function CategoryPicker({
 const styles = StyleSheet.create({
   container: {
     gap: 6,
+  },
+  inlineRoot: {
+    flex: 1,
+    minHeight: 0,
   },
   label: {
     fontSize: 12,
@@ -720,6 +794,7 @@ const styles = StyleSheet.create({
   splitColumns: {
     flex: 1,
     flexDirection: "row",
+    minHeight: 0,
   },
   parentsColumn: {
     flex: 1,
@@ -803,5 +878,16 @@ const styles = StyleSheet.create({
   subName: {
     flex: 1,
     fontSize: 13,
+  },
+  emptyHint: {
+    fontSize: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 12,
+  },
+  pickHint: {
+    fontSize: 11,
+    fontWeight: "600",
+    paddingHorizontal: 4,
+    marginBottom: 6,
   },
 });

@@ -11,7 +11,6 @@ import {
 
 import { haptic } from "@/lib/haptics";
 
-import { useModals } from "@/providers/ModalProvider";
 import { useSettings } from "@/providers/SettingsProvider";
 import {
   CORE_NAV_ITEMS,
@@ -22,14 +21,7 @@ import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
 /**
- * Material Design 3 Navigation Bar for Android
- * 
- * Spec:
- * - 80dp container height + safe area bottom inset
- * - Pill active indicator (64x32dp) with primaryContainer fill
- * - 24dp icons with primary / onSurfaceVariant colors
- * - 12sp labels (labelMedium)
- * - Android ripple and haptic feedback
+ * Bottom tab bar — purple active indicator matching the Vault dashboard reference.
  */
 export function BottomNav() {
   const router = useRouter();
@@ -56,11 +48,13 @@ export function BottomNav() {
       (!item.requiresInvestmentsFeature || settings.enableInvestments)
   );
 
-  const handleTabPress = (link: (typeof navLinks)[number], isActive: boolean) => {
+  const handleTabPress = (
+    link: (typeof navLinks)[number],
+    isActive: boolean
+  ) => {
     if (isActive) return;
     void haptic.navigation();
     const route = link.path.startsWith("/") ? link.path : `/${link.path}`;
-    // Replace to keep tab navigation clean and prevent endless stack accumulation
     if (route === "/dashboard") {
       router.replace("/dashboard");
     } else {
@@ -73,8 +67,10 @@ export function BottomNav() {
       style={[
         styles.navContainer,
         {
-          backgroundColor: theme.colors.card,
-          borderTopColor: theme.colors.border,
+          backgroundColor: isDark ? "rgba(8, 10, 20, 0.96)" : theme.colors.card,
+          borderTopColor: isDark
+            ? "rgba(107, 99, 255, 0.14)"
+            : theme.colors.border,
           paddingBottom: Math.max(insets.bottom, 8),
         },
       ]}
@@ -83,13 +79,15 @@ export function BottomNav() {
         {navLinks.map((link) => {
           const isActive = isNavItemActive(pathname, link.id as NavSectionId);
           const Icon = iconMap[link.id] || Home;
+          const activeColor = theme.colors.primary;
+          const inactiveColor = theme.colors.mutedForeground;
 
           return (
             <Pressable
               key={link.id}
               onPress={() => handleTabPress(link, isActive)}
               android_ripple={{
-                color: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)",
+                color: isDark ? "rgba(107,99,255,0.18)" : "rgba(79,70,255,0.1)",
                 borderless: false,
               }}
               style={styles.tabButton}
@@ -97,39 +95,40 @@ export function BottomNav() {
               accessibilityLabel={`Go to ${link.label}`}
               accessibilityState={{ selected: isActive }}
             >
-              {/* Material 3 Active Indicator Pill */}
+              {isActive ? (
+                <View
+                  style={[
+                    styles.activeGlowLine,
+                    { backgroundColor: activeColor, shadowColor: activeColor },
+                  ]}
+                />
+              ) : (
+                <View style={styles.activeGlowLinePlaceholder} />
+              )}
+
               <View
                 style={[
-                  styles.indicatorPill,
-                  {
-                    backgroundColor: isActive
-                      ? isDark
-                        ? "rgba(107, 99, 255, 0.22)"
-                        : "rgba(79, 70, 255, 0.12)"
-                      : "transparent",
+                  styles.iconWrap,
+                  isActive && {
+                    backgroundColor: isDark
+                      ? "rgba(107, 99, 255, 0.2)"
+                      : "rgba(79, 70, 255, 0.12)",
                   },
                 ]}
               >
                 <Icon
-                  size={24}
-                  color={
-                    isActive
-                      ? theme.colors.primary
-                      : theme.colors.mutedForeground
-                  }
-                  strokeWidth={isActive ? 2.4 : 1.8}
+                  size={22}
+                  color={isActive ? activeColor : inactiveColor}
+                  strokeWidth={isActive ? 2.5 : 1.8}
                 />
               </View>
 
-              {/* Material 3 Label */}
               <Text
                 style={[
                   styles.tabLabel,
                   {
-                    color: isActive
-                      ? theme.colors.foreground
-                      : theme.colors.mutedForeground,
-                    fontWeight: isActive ? "700" : "500",
+                    color: isActive ? activeColor : inactiveColor,
+                    fontWeight: isActive ? "800" : "500",
                   },
                 ]}
                 numberOfLines={1}
@@ -152,12 +151,12 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    borderTopWidth: 1,
-    elevation: 8,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    elevation: 12,
+    shadowColor: "#6B63FF",
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
     zIndex: 90,
   },
   destinationsRow: {
@@ -165,26 +164,43 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-around",
     height: 72,
-    paddingHorizontal: 8,
+    paddingHorizontal: 6,
   },
   tabButton: {
     flex: 1,
     alignItems: "center",
-    justifyContent: "center",
+    justifyContent: "flex-start",
     height: "100%",
-    paddingVertical: 6,
+    paddingTop: 4,
+    paddingBottom: 6,
     borderRadius: 16,
     gap: 4,
   },
-  indicatorPill: {
-    width: 60,
+  activeGlowLine: {
+    width: 28,
+    height: 3,
+    borderRadius: 2,
+    marginBottom: 4,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  activeGlowLinePlaceholder: {
+    width: 28,
+    height: 3,
+    marginBottom: 4,
+    opacity: 0,
+  },
+  iconWrap: {
+    width: 44,
     height: 32,
     borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
   },
   tabLabel: {
-    fontSize: 12,
+    fontSize: 11,
     letterSpacing: 0.2,
   },
 });
