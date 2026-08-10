@@ -60,6 +60,7 @@ import {
   AccountTypesManager,
   AccountsManager,
 } from "@/components/settings/SettingsSubmenus";
+import { SmsAutomationSettings } from "@/components/settings/SmsAutomationSettings";
 import { useCelebration } from "@/providers/CelebrationProvider";
 import { useSetupProgress } from "@/providers/SetupProgressProvider";
 
@@ -647,6 +648,8 @@ export default function SettingsScreen() {
       <AccountTypesManager />
 
       <AccountsManager />
+
+      <SmsAutomationSettings />
 
       <Card title="Privacy" subtitle="PIN, duress, lock, biometrics">
         <View style={{ gap: theme.space.md }}>
