@@ -1,5 +1,6 @@
 import type { Expense, Income } from "@/shared/types/expense";
 import { groupByCategory } from "@/shared/utils/analytics";
+import { currentMonthKey } from "@/shared/utils/dates";
 import { getSmartInsight } from "@/shared/utils/insights";
 import {
   getAnomalies,
@@ -48,7 +49,7 @@ export function buildAdvisorContext(
   incomes: Income[],
   currency: string = "INR"
 ): AdvisorContext {
-  const currentMonth = new Date().toISOString().slice(0, 7);
+  const currentMonth = currentMonthKey();
 
   const monthExpenses = expenses.filter(
     (e) => e.month === currentMonth || e.date?.startsWith(currentMonth)

@@ -27,6 +27,7 @@ import { InvestmentDetailModal } from "@/components/investments/InvestmentDetail
 import { useInvestments } from "@/hooks/useInvestments";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import type { Investment, InvestmentKind } from "@/shared/types/investment";
+import { todayDateKey } from "@/shared/utils/dates";
 import { getInvestmentValuation } from "@/shared/utils/investmentInterest";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
@@ -52,7 +53,7 @@ export function InvestmentsList() {
   const [selectedInvestment, setSelectedInvestment] =
     useState<Investment | null>(null);
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayDateKey();
 
   // Portfolio Totals calculation
   const portfolioSummary = useMemo(() => {

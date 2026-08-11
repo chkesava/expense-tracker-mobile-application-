@@ -13,14 +13,14 @@ function expense(date: string, amount = 10): Expense {
   };
 }
 
-describe("grouping.groupByDay (UTC ISO keys)", () => {
+describe("grouping.groupByDay (local calendar keys)", () => {
   afterEach(() => {
     vi.useRealTimers();
   });
 
-  it("splits expenses into today / yesterday / earlier using toISOString calendar keys", () => {
+  it("splits expenses into today / yesterday / earlier using local calendar keys", () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-08-11T12:00:00.000Z"));
+    vi.setSystemTime(new Date(2026, 7, 11, 12, 0, 0));
 
     const result = groupByDay([
       expense("2026-08-11"),

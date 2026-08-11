@@ -5,6 +5,7 @@ import { getFirestoreDb } from "@/lib/firebase";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import type { FocusSession } from "@/shared/types/focus";
+import { toLocalDateKey } from "@/shared/utils/dates";
 
 export function useFocusMode() {
   const { user } = useAuth();
@@ -66,13 +67,13 @@ export function useFocusMode() {
         id: `focus_${Date.now()}`,
         category: params.category,
         dailyLimit: params.dailyLimit,
-        startDate: startDate.toISOString().slice(0, 10),
-        endDate: endDate.toISOString().slice(0, 10),
+        startDate: toLocalDateKey(startDate),
+        endDate: toLocalDateKey(endDate),
         durationDays: params.durationDays,
         status: "active",
         currentSpend: 0,
         daysSuccessful: 0,
-        lastCheckDate: startDate.toISOString().slice(0, 10),
+        lastCheckDate: toLocalDateKey(startDate),
       };
 
       try {

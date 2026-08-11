@@ -36,6 +36,19 @@ describe("ocrService.parseReceiptOcrText", () => {
     expect(result.total).toBe(100);
   });
 
+  it("prefers day-first when both parts can be months (INR)", () => {
+    // 08/11/2026 → 8 Nov 2026, not 11 Aug
+    expect(parseReceiptOcrText("Shop\n08/11/2026\nTotal: 10").date).toBe(
+      "2026-11-08"
+    );
+  });
+
+  it("treats first part as month when second > 12", () => {
+    expect(parseReceiptOcrText("Shop\n08/25/2026\nTotal: 10").date).toBe(
+      "2026-08-25"
+    );
+  });
+
   it("falls back to largest bottom-half number when total keyword missing", () => {
     const result = parseReceiptOcrText(
       ["Corner Store", "Line item 12", "99", "250"].join("\n")
@@ -43,9 +56,9 @@ describe("ocrService.parseReceiptOcrText", () => {
     expect(result.total).toBe(250);
   });
 
-  it("defaults missing date to UTC ISO calendar day", () => {
+  it("defaults missing date to local calendar day", () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-08-11T12:00:00.000Z"));
+    vi.setSystemTime(new Date(2026, 7, 11, 12, 0, 0));
     const result = parseReceiptOcrText("Corner Store\nTotal: 50");
     expect(result.date).toBe("2026-08-11");
   });

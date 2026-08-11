@@ -50,7 +50,9 @@ export function isValidDateKey(value: string): boolean {
 }
 
 export function isValidMonthKey(value: string): boolean {
-  return /^\d{4}-\d{2}$/.test(value);
+  if (!/^\d{4}-\d{2}$/.test(value)) return false;
+  const month = Number(value.slice(5, 7));
+  return month >= 1 && month <= 12;
 }
 
 export function daysInMonth(year: number, monthIndex: number): number {

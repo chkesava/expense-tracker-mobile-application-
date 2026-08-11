@@ -189,30 +189,30 @@ export function planDueSubscriptionPosts(
   const actions: DuePostAction[] = [];
 
   for (const sub of subscriptions) {
+    if (!sub.id) continue;
     const evaluation = evaluateSubscriptionDue(sub, evaluationDate);
     if (!evaluation.isDue || !evaluation.targetDateStr) continue;
+
+    const subscriptionId = sub.id;
+    const { monthKey, targetDateStr, isCompleted } = evaluation;
 
     if (sub.type === "transfer") {
       actions.push({
         kind: "transfer",
-        subscriptionId: sub.id,
-        monthKey: evaluation.monthKey,
-        transfer: buildTransferFromSubscription(sub, evaluation.targetDateStr),
-        markCompleted: evaluation.isCompleted,
+        subscriptionId,
+        monthKey,
+        transfer: buildTransferFromSubscription(sub, targetDateStr),
+        markCompleted: isCompleted,
       });
       continue;
     }
 
     actions.push({
       kind: "expense",
-      subscriptionId: sub.id,
-      monthKey: evaluation.monthKey,
-      expense: buildExpenseFromSubscription(
-        sub,
-        evaluation.targetDateStr,
-        evaluation.monthKey
-      ),
-      markCompleted: evaluation.isCompleted,
+      subscriptionId,
+      monthKey,
+      expense: buildExpenseFromSubscription(sub, targetDateStr, monthKey),
+      markCompleted: isCompleted,
     });
   }
 
@@ -229,6 +229,7 @@ export function applyPostPlanToSubscriptions(
 ): Subscription[] {
   const byId = new Map(actions.map((a) => [a.subscriptionId, a]));
   return subscriptions.map((sub) => {
+    if (!sub.id) return sub;
     const action = byId.get(sub.id);
     if (!action) return sub;
     return {

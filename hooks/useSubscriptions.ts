@@ -18,9 +18,8 @@ import { useAuth } from "@/providers/AuthProvider";
 import type { Subscription } from "@/shared/types/subscription";
 import { scheduleIdleWork } from "@/shared/utils/scheduleIdle";
 import {
-  buildExpenseFromSubscription,
-  buildTransferFromSubscription,
   evaluateSubscriptionDue,
+  planDueSubscriptionPosts,
 } from "@/shared/utils/subscriptionProcessor";
 
 export function useSubscriptions(options?: { enabled?: boolean }) {
@@ -76,55 +75,51 @@ export function useSubscriptions(options?: { enabled?: boolean }) {
     isProcessingRef.current = true;
     try {
       const now = new Date();
+      const plan = planDueSubscriptionPosts(subscriptions, now);
+
+      for (const action of plan) {
+        if (!action.subscriptionId) continue;
+        const batch = writeBatch(db);
+
+        if (action.kind === "transfer") {
+          const newTransferRef = doc(
+            collection(db, "users", uid, "accountTransfers")
+          );
+          batch.set(newTransferRef, {
+            ...action.transfer,
+            createdAt: serverTimestamp(),
+          });
+        } else {
+          const newExpenseRef = doc(collection(db, "users", uid, "expenses"));
+          batch.set(newExpenseRef, {
+            ...action.expense,
+            createdAt: serverTimestamp(),
+          });
+        }
+
+        const subRef = doc(
+          db,
+          "users",
+          uid,
+          "subscriptions",
+          action.subscriptionId
+        );
+        const subUpdates: Record<string, unknown> = {
+          lastProcessed: action.monthKey,
+        };
+        if (action.markCompleted) {
+          subUpdates.isCompleted = true;
+          subUpdates.isActive = false;
+        }
+        batch.update(subRef, subUpdates);
+        await batch.commit();
+      }
+
       for (const sub of subscriptions) {
         if (!sub.id) continue;
+        if (plan.some((a) => a.subscriptionId === sub.id)) continue;
         const evaluation = evaluateSubscriptionDue(sub, now);
-
-        if (evaluation.isDue) {
-          const batch = writeBatch(db);
-
-          if (sub.type === "transfer") {
-            const transferPayload = buildTransferFromSubscription(
-              sub,
-              evaluation.targetDateStr
-            );
-            const newTransferRef = doc(
-              collection(db, "users", uid, "accountTransfers")
-            );
-            batch.set(newTransferRef, {
-              ...transferPayload,
-              createdAt: serverTimestamp(),
-            });
-          } else {
-            const expensePayload = buildExpenseFromSubscription(
-              sub,
-              evaluation.targetDateStr,
-              evaluation.monthKey
-            );
-            const newExpenseRef = doc(
-              collection(db, "users", uid, "expenses")
-            );
-            batch.set(newExpenseRef, {
-              ...expensePayload,
-              createdAt: serverTimestamp(),
-            });
-          }
-
-          // Update subscription lastProcessed and completion state
-          const subRef = doc(db, "users", uid, "subscriptions", sub.id);
-          const subUpdates: Record<string, unknown> = {
-            lastProcessed: evaluation.monthKey,
-          };
-
-          if (evaluation.isCompleted) {
-            subUpdates.isCompleted = true;
-            subUpdates.isActive = false;
-          }
-
-          batch.update(subRef, subUpdates);
-          await batch.commit();
-        } else if (evaluation.isCompleted && !sub.isCompleted) {
-          // Mark completed if expired
+        if (evaluation.isCompleted && !sub.isCompleted) {
           const subRef = doc(db, "users", uid, "subscriptions", sub.id);
           await updateDoc(subRef, {
             isCompleted: true,

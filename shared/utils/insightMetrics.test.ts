@@ -35,9 +35,9 @@ describe("insightMetrics", () => {
   });
 
   describe("getMonthDayProgress", () => {
-    it("uses today within the current UTC month and full length for past months", () => {
+    it("uses today within the current local month and full length for past months", () => {
       vi.useFakeTimers();
-      vi.setSystemTime(new Date("2026-08-11T12:00:00.000Z"));
+      vi.setSystemTime(new Date(2026, 7, 11, 12, 0, 0));
 
       expect(getMonthDayProgress("2026-08")).toMatchObject({
         dayOfMonth: 11,
@@ -55,7 +55,7 @@ describe("insightMetrics", () => {
   describe("getPacingMetrics", () => {
     it("projects end-of-month spend from MTD run rate", () => {
       vi.useFakeTimers();
-      vi.setSystemTime(new Date("2026-08-10T12:00:00.000Z"));
+      vi.setSystemTime(new Date(2026, 7, 10, 12, 0, 0));
 
       const metrics = getPacingMetrics(
         [

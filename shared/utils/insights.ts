@@ -1,4 +1,5 @@
 import type { Expense } from "../types/expense";
+import { currentMonthKey } from "./dates";
 
 /** Semantic usage tokens for UI theming (web/RN map these to styles). */
 export type UsageColorToken = "destructive" | "warning" | "success";
@@ -25,7 +26,7 @@ export const getSmartInsight = (
     // Check date context
     const now = new Date();
     const today = now.getDate();
-    const currentMonthStr = now.toISOString().slice(0, 7);
+    const currentMonthStr = currentMonthKey();
     const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
     const isCurrentMonth = selectedMonth === currentMonthStr;
 

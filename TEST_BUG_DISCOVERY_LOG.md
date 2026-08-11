@@ -134,17 +134,17 @@ Steps to Reproduce:
 2. Near local midnight, create expense / view analytics / set investment “today”
 3. Compare stored month keys vs analytics filters
 
-Evidence: `toISOString().slice` usage in e.g. `shared/utils/grouping.ts`, `insightMetrics.ts`, `insights.ts`, `aiAdvisorService.ts`, investment hooks/components, OCR default date, vault expenses, focus mode, gamification
+Evidence: Was widespread `toISOString().slice` for calendar keys; production consumers migrated to `todayDateKey` / `currentMonthKey` / `toLocalDateKey` / `parseLocalDate`. Remaining `toISOString().slice` only in `magicParser.test.ts` (test fixture).
 
-Root Cause: TBD — inconsistent date-key helpers
+Root Cause: Mixing UTC ISO strings with local calendar keys
 
-Status: Open — Requires Test Verification
+Status: Fixed
 
-Fix: TBD
+Fix: Shared date helpers + consumer migration across hooks, components, services, and shared utils
 
-Regression Test: Partially added — `shared/utils/dates.test.ts` + frozen-time billing/credit tests. Phase 2 added coverage documenting UTC `toISOString` usage in `grouping`, `weeklySummary`, `insightMetrics`, OCR default date, and `aiAdvisorService` month scoping. Remaining consumer migration still open.
+Regression Test: `shared/utils/dates.test.ts`, grouping/weeklySummary/insightMetrics/OCR/AI advisor tests; production grep clean except intentional test fixture
 
-Related PR/Commit:
+Related PR/Commit: bug-ticket batch on docs/testing-master-plan
 ```
 
 ### BUG-003
@@ -179,9 +179,9 @@ Evidence: `services/sms/smsParser.ts` stub; `smsTransactionProcessor.ts` local-s
 
 Root Cause: N/A (incomplete feature path + permission merge risk)
 
-Status: Open — Risk Area
+Status: Deferred — SMS module not on this branch (main / docs/testing-master-plan). Reopen when SMS merges.
 
-Fix: TBD (future SMS template phases)
+Fix: N/A until SMS lands
 
 Regression Test: TBD — parser templates, dedupe, duress, prefs gates, device permission matrix
 
@@ -216,17 +216,17 @@ Steps to Reproduce:
 3. Attempt add expense / read ledger / enable SMS
 4. Inspect Firestore paths and UI data
 
-Evidence: `lib/authHelpers.ts` (`uid + "_duress"`); `lib/privacySession.ts`; SMS gates on `isDuress` (when present)
+Evidence: `lib/authHelpers.ts` (`uid + "_duress"`); `lib/privacySession.ts`; `lib/duressPath.contract.test.ts` documents collection path must use proxied uid
 
-Root Cause: TBD if any failure found
+Root Cause: N/A for unit contract — helpers correct. Full AuthProvider ↔ Firestore isolation still needs emulator.
 
-Status: Open — Partial unit coverage in Phase 4; integration still required
+Status: Fixed (unit/contract) — Deferred (AuthProvider + Firestore emulator E2E)
 
-Fix: TBD
+Fix: Unit coverage for createDuressUser + privacy session + path contract. Emulator integration deferred (Phase 8 / follow-up).
 
-Regression Test: `lib/authHelpers.test.ts`, `lib/privacySession.test.ts`
+Regression Test: `lib/authHelpers.test.ts`, `lib/privacySession.test.ts`, `lib/duressPath.contract.test.ts`
 
-Related PR/Commit:
+Related PR/Commit: Phase 4 + bug-ticket batch
 ```
 
 ### BUG-005
@@ -249,7 +249,7 @@ Preconditions: Subscriptions with next due date on/near today; app idle scheduli
 
 Expected Behavior: Exactly-once posting per due period; correct expense/transfer documents; `lastProcessed` advanced safely across timezones
 
-Actual Behavior: Pure planner idempotency is now covered (`planDueSubscriptionPosts` + `applyPostPlanToSubscriptions`). Hook idle `writeBatch` orchestration in `useSubscriptions` still needs emulator/device verification.
+Actual Behavior: Planner + idempotency covered; `useSubscriptions` now calls `planDueSubscriptionPosts` then writes plan payloads. Device/emulator double-fire still deferred (Phase 8).
 
 Steps to Reproduce:
 1. Seed subscription due today
@@ -258,15 +258,15 @@ Steps to Reproduce:
 
 Evidence: `hooks/useSubscriptions.ts` + `shared/utils/subscriptionProcessor.ts`
 
-Root Cause: TBD if hook double-fires despite lastProcessed
+Root Cause: N/A for planner path — hook now uses shared planner
 
-Status: Open — Partial (planner covered in Phase 6); hook orchestration remaining
+Status: Fixed (planner + hook wiring) — Deferred (device double-fire verification)
 
-Fix: TBD — prefer calling `planDueSubscriptionPosts` from the hook
+Fix: `useSubscriptions` uses `planDueSubscriptionPosts`; skip subscriptions without `id`
 
 Regression Test: `subscriptionProcessor.test.ts` idempotency + `moneyFlows.integration.test.ts`
 
-Related PR/Commit:
+Related PR/Commit: Phase 6 + bug-ticket batch
 ```
 
 ### BUG-006
@@ -289,21 +289,21 @@ Preconditions: Credit card with billing cycle + notes regex payment matching pat
 
 Expected Behavior: Running balance and credit cycle match user mental model; transfers not double-counted as expenses
 
-Actual Behavior: Complex paths exist (structured fields OR note regex / date parse); expand coverage for cycle edges and external payments
+Actual Behavior: Credit-cycle expense dates use `parseLocalDate` (local calendar), not UTC `Date` parse. Broader balance matrix remains covered by Phase 1 tests.
 
 Steps to Reproduce: TBD with fixture matrix
 
 Evidence: `shared/utils/accountBalance.ts`, `billingCycle.ts`
 
-Root Cause: TBD
+Root Cause: UTC vs local date parse on credit expense filtering
 
-Status: Open — Expand test coverage (Phase 1 matrix added: baseline cutoff, appliedCycle payments, bill history paid/partial, previews)
+Status: Fixed (credit expense local date parse)
 
-Fix: TBD
+Fix: `parseLocalDate` for credit cycle expense date comparisons
 
-Regression Test: Expanded in `shared/utils/accountActivities.test.ts` + `billingCycle.test.ts`
+Regression Test: Expanded in `shared/utils/accountActivities.test.ts` + `billingCycle.test.ts` + accountBalance coverage
 
-Related PR/Commit:
+Related PR/Commit: bug-ticket batch
 ```
 
 ### BUG-007
@@ -326,21 +326,21 @@ Preconditions: `useNutrition` hook exists; dashboard may still show mock meals
 
 Expected Behavior: Single source of truth for meals logged
 
-Actual Behavior: Dual path risk (mock UI vs live hook) — verify which path ships
+Actual Behavior: Was mock/hardcoded; now reads `useNutrition(todayDateKey())` for macros, water, and meals (empty meal slots until logged).
 
-Steps to Reproduce: Open nutrition index; log meal; confirm UI updates from Firestore vs hardcoded data
+Steps to Reproduce: Open nutrition index; log meal; confirm UI updates from live hook vs hardcoded data
 
-Evidence: `app/(nutrition)/index.tsx` vs `hooks/useNutrition.ts`
+Evidence: `app/(nutrition)/index.tsx` + `hooks/useNutrition.ts`
 
-Root Cause: TBD (product incompleteness)
+Root Cause: Dashboard shipped with mock meal data
 
-Status: Open — Requires Test Verification
+Status: Fixed
 
-Fix: TBD
+Fix: Wire dashboard to `useNutrition`; empty meal placeholders when no log meals; optional `meals` on `DailyLogSummary`
 
-Regression Test: TBD
+Regression Test: Manual — Nutrition workspace; typecheck/runtime load
 
-Related PR/Commit:
+Related PR/Commit: bug-ticket batch
 ```
 
 ---
@@ -365,24 +365,23 @@ Preconditions: Run `npm run typecheck`
 
 Expected Behavior: Clean typecheck for release/PR gates (Phase 9+)
 
-Actual Behavior: Fails with:
-`components/common/Modal.tsx(174,19): error TS2551: Property 'absoluteFillObject' does not exist on type 'typeof StyleSheet'. Did you mean 'absoluteFill'?`
+Actual Behavior: Was failing on `StyleSheet.absoluteFillObject`. Now uses `StyleSheet.absoluteFill`. Full `npm run typecheck` passes.
 
 Steps to Reproduce:
-1. On latest main checkout
+1. On latest docs/testing-master-plan checkout
 2. npm run typecheck
 
-Evidence: Phase 0 baseline run 2026-08-11
+Evidence: Phase 0 baseline run 2026-08-11; re-verified green after fix
 
-Root Cause: TBD — RN StyleSheet API / types mismatch
+Root Cause: Deprecated/removed StyleSheet API in current RN typings
 
-Status: Open — Requires fix before treating full typecheck as mandatory CI gate
+Status: Fixed
 
-Fix: TBD (use StyleSheet.absoluteFill or compatible typing)
+Fix: `StyleSheet.absoluteFill` in `components/common/Modal.tsx`
 
-Regression Test: TBD — typecheck in CI
+Regression Test: `npm run typecheck` green (gate for Phase 9 CI)
 
-Related PR/Commit:
+Related PR/Commit: bug-ticket batch
 ```
 
 ---
@@ -407,21 +406,21 @@ Preconditions: Call isValidMonthKey("2026-13")
 
 Expected Behavior: Reject impossible months if used as semantic validation
 
-Actual Behavior: Returns true — format-only `/^\d{4}-\d{2}$/` check (documented in unit test)
+Actual Behavior: Was format-only and accepted `2026-13`. Now rejects month outside 01–12.
 
-Steps to Reproduce: See dates.test.ts "accepts YYYY-MM shape for month keys"
+Steps to Reproduce: See dates.test.ts isValidMonthKey cases
 
-Evidence: Phase 1 unit test intentionally asserts current behavior
+Evidence: Phase 1 unit tests updated for semantic month range
 
-Root Cause: Intentional format-only helper — or incomplete validation (TBD product decision)
+Root Cause: Format-only regex without month range check
 
-Status: Open — Product decision whether to tighten validation
+Status: Fixed
 
-Fix: TBD
+Fix: Validate month in 01–12 after format match
 
-Regression Test: dates.test.ts documents current contract
+Regression Test: `shared/utils/dates.test.ts` (`2026-13` / `2026-00` false)
 
-Related PR/Commit:
+Related PR/Commit: bug-ticket batch
 ```
 
 ---
@@ -444,30 +443,30 @@ Environment: Node Vitest / device OCR
 
 Preconditions: Receipt text contains a numeric date like 08/11/2026
 
-Expected Behavior: Interpret per locale / unambiguous ISO when possible
+Expected Behavior: India default day-first for ambiguous numeric dates; when day > 12, treat first part as month
 
-Actual Behavior: Second pattern treats values as DD/MM/YYYY (day first). US MM/DD receipts may be mis-parsed.
+Actual Behavior: INR day-first preferred (`08/11/2026` → `2026-11-08`); `08/25/2026` → `2026-08-25`. Fallback date uses `todayDateKey()`.
 
-Steps to Reproduce: parseReceiptOcrText("Shop\n08/11/2026\nTotal: 10") — currently becomes 2026-11-08
+Steps to Reproduce: See ocrService.test.ts DD/MM + ambiguity cases
 
-Evidence: ocrService.ts datePatterns + Phase 2 unit tests for DD/MM form
+Evidence: ocrService.ts datePatterns + unit tests
 
-Root Cause: Assumed day-first numeric dates
+Root Cause: Locale ambiguity for numeric dates — product choice India DD/MM
 
-Status: Open — Requires Test Verification / product locale decision
+Status: Fixed (INR day-first policy locked in tests)
 
-Fix: TBD
+Fix: Day-first when second ≤ 12; month-first when second > 12; local `todayDateKey` fallback
 
-Regression Test: Partial — DD/MM case covered; MM/DD ambiguity not yet locked
+Regression Test: `services/ocrService.test.ts` (DD/MM, ambiguous, second>12, local fallback)
 
-Related PR/Commit:
+Related PR/Commit: bug-ticket batch
 ```
 
 ---
 
 ## Confirmed bugs found during testing phases
 
-*(None yet — product test failures. Tooling debt logged above as BUG-008.)*
+BUG-008 was confirmed by failing `npm run typecheck` and is now fixed. Other tickets were static-analysis / risk items closed with code + regression coverage above.
 
 ---
 
@@ -476,12 +475,12 @@ Related PR/Commit:
 | ID | Module | Classification | Severity | Status |
 | ---- | ------ | -------------- | -------- | ------ |
 | BUG-001 | Workspace navigation | Fixed — `/(app)` route | High | Fixed |
-| BUG-002 | Date/time keys | Potential Issue — Requires Test Verification | High | Open |
-| BUG-003 | SMS automation | Risk Area — Requires Test Verification | High | Open (deferred until SMS merges) |
-| BUG-004 | Auth duress | Risk Area — Requires Test Verification | Critical | Open |
-| BUG-005 | Subscription auto-post | Risk Area — Requires Test Verification | Critical | Open |
-| BUG-006 | Account balances | Risk Area — Requires Test Verification | High | Open |
-| BUG-007 | Nutrition data source | Potential Issue — Requires Test Verification | Medium | Open |
-| BUG-008 | Full app typecheck / Modal | Potential Issue — Requires Test Verification | Medium | Open |
-| BUG-009 | isValidMonthKey format-only | Potential Issue — Requires Test Verification | Low | Open |
-| BUG-010 | OCR DD/MM vs MM/DD date parse | Potential Issue — Requires Test Verification | Medium | Open |
+| BUG-002 | Date/time keys | Fixed — local date helpers | High | Fixed |
+| BUG-003 | SMS automation | Risk Area — SMS not on branch | High | Deferred |
+| BUG-004 | Auth duress | Unit/contract fixed; emulator deferred | Critical | Fixed (unit) / Deferred (E2E) |
+| BUG-005 | Subscription auto-post | Planner + hook wired; device deferred | Critical | Fixed (code) / Deferred (device) |
+| BUG-006 | Account balances | Credit cycle local date parse | High | Fixed |
+| BUG-007 | Nutrition data source | Live `useNutrition` wired | Medium | Fixed |
+| BUG-008 | Full app typecheck / Modal | `absoluteFill` + typecheck green | Medium | Fixed |
+| BUG-009 | isValidMonthKey | Month 01–12 validation | Low | Fixed |
+| BUG-010 | OCR DD/MM vs MM/DD | INR day-first policy + tests | Medium | Fixed |

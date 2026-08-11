@@ -66,12 +66,14 @@ describe("dates", () => {
       expect(isValidDateKey("")).toBe(false);
     });
 
-    it("accepts YYYY-MM shape for month keys (format-only check)", () => {
+    it("accepts YYYY-MM and rejects impossible months", () => {
       expect(isValidMonthKey("2026-08")).toBe(true);
+      expect(isValidMonthKey("2026-01")).toBe(true);
+      expect(isValidMonthKey("2026-12")).toBe(true);
       expect(isValidMonthKey("2026-8")).toBe(false);
       expect(isValidMonthKey("202608")).toBe(false);
-      // Documented: does not validate month range 01–12
-      expect(isValidMonthKey("2026-13")).toBe(true);
+      expect(isValidMonthKey("2026-13")).toBe(false);
+      expect(isValidMonthKey("2026-00")).toBe(false);
     });
   });
 

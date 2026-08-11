@@ -49,9 +49,9 @@ describe("weeklySummary", () => {
     expect(result.weeks[0]?.total).toBe(10);
   });
 
-  it("computes current-week daily average only for the UTC calendar month of today", () => {
+  it("computes current-week daily average only for the local calendar month of today", () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-08-11T12:00:00.000Z")); // day 11 → week 2
+    vi.setSystemTime(new Date(2026, 7, 11, 12, 0, 0)); // day 11 → week 2
 
     const result = getWeeklySummary(
       [expense("08", 70), expense("11", 70)],
@@ -66,7 +66,7 @@ describe("weeklySummary", () => {
 
   it("skips current-week average for historical months", () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-08-11T12:00:00.000Z"));
+    vi.setSystemTime(new Date(2026, 7, 11, 12, 0, 0));
     const result = getWeeklySummary([expense("01", 100)], "2026-07");
     expect(result.currentWeek).toBeUndefined();
     expect(result.currentWeekAvg).toBe(0);

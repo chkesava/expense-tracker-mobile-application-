@@ -27,9 +27,9 @@ describe("aiAdvisorService.buildAdvisorContext", () => {
     vi.useRealTimers();
   });
 
-  it("scopes totals to the UTC current month and derives savings metrics", () => {
+  it("scopes totals to the local current month and derives savings metrics", () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-08-11T12:00:00.000Z"));
+    vi.setSystemTime(new Date(2026, 7, 11, 12, 0, 0));
 
     const ctx = buildAdvisorContext(
       [
@@ -52,7 +52,7 @@ describe("aiAdvisorService.buildAdvisorContext", () => {
 
   it("handles empty ledgers without throwing", () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-08-11T12:00:00.000Z"));
+    vi.setSystemTime(new Date(2026, 7, 11, 12, 0, 0));
     const ctx = buildAdvisorContext([], []);
     expect(ctx.totalExpenses).toBe(0);
     expect(ctx.totalIncome).toBe(0);
