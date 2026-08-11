@@ -761,7 +761,7 @@ Highest-risk discovery areas: subscription auto-post, account balances, duress i
 | Complexity       | Medium                                                          |
 | Entry            | Tests flaky rate acceptable                                     |
 | Exit             | PR CI required for merge                                        |
-| Deliverables     | New GitHub Actions workflow (future; not now)                   |
+| Deliverables     | `.github/workflows/pr-checks.yml` (`npm test` + both typechecks; no signing secrets) |
 
 
 

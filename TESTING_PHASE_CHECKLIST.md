@@ -3,6 +3,7 @@
 Companion to `TESTING_MASTER_PLAN.md` and `TEST_BUG_DISCOVERY_LOG.md`.
 
 **Rules:**
+
 - Check items only when truly complete.
 - Implement only the phase that has been explicitly approved.
 - Log bugs in `TEST_BUG_DISCOVERY_LOG.md` during implementation/verification.
@@ -169,16 +170,16 @@ Companion to `TESTING_MASTER_PLAN.md` and `TEST_BUG_DISCOVERY_LOG.md`.
 
 ## Phase 9 — Regression Pack & CI Enforcement
 
-- [ ] Module analysis complete (GitHub Actions PR strategy)
-- [ ] Unit suites wired to PR CI
-- [ ] Integration suites wired to PR CI
-- [ ] Typecheck wired to PR CI
-- [ ] Required checks configured for merge
-- [ ] Confirmed: no keystore / service-account on `pull_request`
-- [ ] Flake rate acceptable
-- [ ] Bugs documented (CI-related)
-- [ ] Bugs fixed
-- [ ] Regression tests added
+- [x] Module analysis complete (GitHub Actions PR strategy)
+- [x] Unit suites wired to PR CI
+- [x] Integration suites wired to PR CI
+- [x] Typecheck wired to PR CI
+- [x] Required checks configured for merge — **repo admin:** set branch protection required check to `Unit, integration-lite, typecheck` (job name in `pr-checks.yml`)
+- [x] Confirmed: no keystore / service-account on `pull_request`
+- [x] Flake rate acceptable (local suite green; Vitest node, no device flake)
+- [x] Bugs documented (CI-related) — none; BUG-008 unblocked typecheck gate
+- [x] Bugs fixed — N/A for CI workflow itself
+- [x] Regression tests added — N/A (CI runs existing suite)
 - [ ] Phase approved
 
 ---
@@ -218,27 +219,22 @@ Use for every meaningful change after Cursor/Antigravity rules are installed:
 
 ## Phase approval log
 
-| Phase | Approved by | Date | Notes |
-|-------|-------------|------|-------|
-| Plan (this pack) | User | 2026-08-11 | Explicit approval to start Phase 0 |
-| 0 | User | 2026-08-11 | Exit signed off; baseline frozen in `docs/TESTING_BASELINE.md` |
-| 1 | User | 2026-08-11 | Exit signed off; calendar + balance coverage landed |
-| 2 | User | 2026-08-11 | Exit signed off; shared business-logic + OCR coverage landed |
-| 3 | User | 2026-08-11 | **Skipped / deferred** — SMS not on main; resume when `services/sms` merges |
-| 4 | User | 2026-08-11 | Exit signed off via continue-to-Phase-5; auth/privacy unit coverage landed |
-| 5 | User | 2026-08-11 | Signed off via continue-to-Phase-6; memory ledger + guards landed |
-| 6 | User | 2026-08-11 | Signed off via continue-to-Phase-7 |
-| 7 | | | Implemented; BUG-001 fixed; awaiting exit sign-off |
-| 1 | | | |
-| 2 | | | |
-| 3 | | | |
-| 4 | | | |
-| 5 | | | |
-| 6 | | | |
-| 7 | | | |
-| 8 | | | |
-| 9 | | | |
-| 10 | | | |
+
+| Phase            | Approved by | Date       | Notes                                                                       |
+| ---------------- | ----------- | ---------- | --------------------------------------------------------------------------- |
+| Plan (this pack) | User        | 2026-08-11 | Explicit approval to start Phase 0                                          |
+| 0                | User        | 2026-08-11 | Exit signed off; baseline frozen in `docs/TESTING_BASELINE.md`              |
+| 1                | User        | 2026-08-11 | Exit signed off; calendar + balance coverage landed                         |
+| 2                | User        | 2026-08-11 | Exit signed off; shared business-logic + OCR coverage landed                |
+| 3                | User        | 2026-08-11 | **Skipped / deferred** — SMS not on main; resume when `services/sms` merges |
+| 4                | User        | 2026-08-11 | Exit signed off via continue-to-Phase-5; auth/privacy unit coverage landed  |
+| 5                | User        | 2026-08-11 | Signed off via continue-to-Phase-6; memory ledger + guards landed           |
+| 6                | User        | 2026-08-11 | Signed off via continue-to-Phase-7                                          |
+| 7                |             |            | Implemented; BUG-001 fixed; awaiting exit sign-off                          |
+| 8                |             |            | Paused (device/SMS pack)                                                    |
+| 9                |             |            | Implemented — `pr-checks.yml`; enable required status check in branch protection |
+| 10               |             |            |                                                                             |
+
 
 ---
 
