@@ -46,16 +46,16 @@ Companion to `TESTING_MASTER_PLAN.md` and `TEST_BUG_DISCOVERY_LOG.md`.
 
 ## Phase 1 — Core Calendar & Money Primitives
 
-- [ ] Module analysis complete (`dates`, `billingCycle`, account balance edges)
-- [ ] Unit test scope identified
-- [ ] Integration test scope identified (none / minimal)
-- [ ] Edge cases identified (IST midnight, leap years, credit cycle boundaries)
-- [ ] Test implementation completed
-- [ ] Tests passing
-- [ ] Bugs documented (BUG-002, BUG-006 updates as needed)
-- [ ] Bugs fixed
-- [ ] Regression tests added
-- [ ] Phase approved
+- [x] Module analysis complete (`dates`, `billingCycle`, account balance edges)
+- [x] Unit test scope identified
+- [x] Integration test scope identified (none / minimal)
+- [x] Edge cases identified (IST midnight, leap years, credit cycle boundaries)
+- [x] Test implementation completed (`dates.test.ts`, `billingCycle.test.ts`, expanded `accountActivities.test.ts`)
+- [x] Tests passing — 24 files / 143 tests
+- [x] Bugs documented (BUG-002 / BUG-006 progress notes; BUG-009 month-key format-only)
+- [x] Bugs fixed *(none required for Phase 1 — coverage only)*
+- [x] Regression tests added *(calendar + credit cycle matrix)*
+- [ ] Phase approved *(waiting for human exit sign-off)*
 
 ---
 
@@ -222,7 +222,7 @@ Use for every meaningful change after Cursor/Antigravity rules are installed:
 |-------|-------------|------|-------|
 | Plan (this pack) | User | 2026-08-11 | Explicit approval to start Phase 0 |
 | 0 | User | 2026-08-11 | Exit signed off; baseline frozen in `docs/TESTING_BASELINE.md` |
-| 1 | | | In progress |
+| 1 | | | Implemented; awaiting exit sign-off (24 files / 143 tests) |
 | 1 | | | |
 | 2 | | | |
 | 3 | | | |

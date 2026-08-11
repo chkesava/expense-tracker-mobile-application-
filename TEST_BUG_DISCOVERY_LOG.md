@@ -142,7 +142,7 @@ Status: Open — Requires Test Verification
 
 Fix: TBD
 
-Regression Test: TBD — unit tests for `dates.ts` + golden cases for consumers
+Regression Test: Partially added — `shared/utils/dates.test.ts` + frozen-time billing/credit tests. Remaining consumer `toISOString().slice` paths still need coverage/migration.
 
 Related PR/Commit:
 ```
@@ -297,11 +297,11 @@ Evidence: `shared/utils/accountBalance.ts`, `billingCycle.ts`
 
 Root Cause: TBD
 
-Status: Open — Expand test coverage
+Status: Open — Expand test coverage (Phase 1 matrix added: baseline cutoff, appliedCycle payments, bill history paid/partial, previews)
 
 Fix: TBD
 
-Regression Test: Expand account balance / billing cycle matrix
+Regression Test: Expanded in `shared/utils/accountActivities.test.ts` + `billingCycle.test.ts`
 
 Related PR/Commit:
 ```
@@ -387,6 +387,45 @@ Related PR/Commit:
 
 ---
 
+### BUG-009
+
+```text
+BUG-009
+
+Module: shared/utils/dates
+Feature: isValidMonthKey
+Test Suite: shared/utils/dates.test.ts
+Test Type: Unit / Static Analysis
+Severity: Low
+Priority: P3
+
+Classification: Potential Issue — Requires Test Verification
+
+Environment: Node Vitest
+
+Preconditions: Call isValidMonthKey("2026-13")
+
+Expected Behavior: Reject impossible months if used as semantic validation
+
+Actual Behavior: Returns true — format-only `/^\d{4}-\d{2}$/` check (documented in unit test)
+
+Steps to Reproduce: See dates.test.ts "accepts YYYY-MM shape for month keys"
+
+Evidence: Phase 1 unit test intentionally asserts current behavior
+
+Root Cause: Intentional format-only helper — or incomplete validation (TBD product decision)
+
+Status: Open — Product decision whether to tighten validation
+
+Fix: TBD
+
+Regression Test: dates.test.ts documents current contract
+
+Related PR/Commit:
+```
+
+---
+
 ## Confirmed bugs found during testing phases
 
 *(None yet — product test failures. Tooling debt logged above as BUG-008.)*
@@ -405,3 +444,4 @@ Related PR/Commit:
 | BUG-006 | Account balances | Risk Area — Requires Test Verification | High | Open |
 | BUG-007 | Nutrition data source | Potential Issue — Requires Test Verification | Medium | Open |
 | BUG-008 | Full app typecheck / Modal | Potential Issue — Requires Test Verification | Medium | Open |
+| BUG-009 | isValidMonthKey format-only | Potential Issue — Requires Test Verification | Low | Open |

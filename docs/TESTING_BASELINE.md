@@ -11,9 +11,9 @@ Companion docs: `TESTING_MASTER_PLAN.md`, `TESTING_PHASE_CHECKLIST.md`, `TEST_BU
 
 ## 1. Baseline commands (today)
 
-| Command | Purpose | Phase 0 result |
-|---------|---------|----------------|
-| `npm test` | Vitest run (`vitest run`) | **PASS** — 22 files, 122 tests |
+| Command | Purpose | Phase 0 / current result |
+|---------|---------|--------------------------|
+| `npm test` | Vitest run (`vitest run`) | Phase 0: **22 / 122 PASS**. After Phase 1: **24 / 143 PASS** |
 | `npm run test:watch` | Vitest watch | Available |
 | `npm run typecheck:shared` | `tsc -p tsconfig.shared.json` | **PASS after Phase 0 config fix** (was failing: missing `@/` paths + `window`) |
 | `npm run typecheck` | Full app `tsc --noEmit` | **FAIL (known debt)** — see §5 |
