@@ -6,3 +6,7 @@ export type NativeSmsRow = {
   receivedAtMs: number;
   read?: boolean;
 };
+
+export type OnSmsReceivedPayload = {
+  messages: NativeSmsRow[];
+};

@@ -20,6 +20,26 @@ export const SMS_AUTOMATION_PREFS_DEFAULTS: SmsAutomationPrefs = {
 
 const STORAGE_KEY = "vault_sms_automation_prefs_v1";
 
+type PrefsListener = (prefs: SmsAutomationPrefs) => void;
+const prefsListeners = new Set<PrefsListener>();
+
+export function subscribeSmsAutomationPrefs(listener: PrefsListener): () => void {
+  prefsListeners.add(listener);
+  return () => {
+    prefsListeners.delete(listener);
+  };
+}
+
+function notifyPrefsListeners(prefs: SmsAutomationPrefs): void {
+  for (const listener of prefsListeners) {
+    try {
+      listener(prefs);
+    } catch {
+      /* ignore subscriber errors */
+    }
+  }
+}
+
 export async function loadSmsAutomationPrefs(): Promise<SmsAutomationPrefs> {
   try {
     const AsyncStorage = (
@@ -48,6 +68,7 @@ export async function saveSmsAutomationPrefs(
     await import("@react-native-async-storage/async-storage")
   ).default;
   await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(prefs));
+  notifyPrefsListeners(prefs);
 }
 
 export async function updateSmsAutomationPrefs(

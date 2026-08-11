@@ -1,16 +1,21 @@
 import { NativeModule, requireNativeModule } from "expo";
 
-import type { NativeSmsRow } from "./SmsReader.types";
+import type { NativeSmsRow, OnSmsReceivedPayload } from "./SmsReader.types";
 
-declare class SmsReaderModuleType extends NativeModule {
-  /**
-   * Query Android SMS inbox. Does not upload data.
-   */
+type SmsReaderEvents = {
+  onSmsReceived: (event: OnSmsReceivedPayload) => void;
+};
+
+declare class SmsReaderModuleType extends NativeModule<SmsReaderEvents> {
   readInbox(
     limit: number,
     minDateMs: number,
     afterId: string | null
   ): Promise<NativeSmsRow[]>;
+  /** Runtime BroadcastReceiver for SMS_RECEIVED. */
+  startListening(): Promise<boolean>;
+  stopListening(): Promise<boolean>;
+  isListening(): Promise<boolean>;
 }
 
 export default requireNativeModule<SmsReaderModuleType>("SmsReader");

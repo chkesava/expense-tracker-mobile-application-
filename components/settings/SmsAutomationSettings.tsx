@@ -6,6 +6,7 @@ import { ChevronDown, ChevronUp, MessageSquare } from "lucide-react-native";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { useSmsPermission } from "@/hooks/useSmsPermission";
+import { useSmsReceiver } from "@/providers/SmsReceiverProvider";
 import { toast } from "@/lib/toast";
 import { defaultSmsReader } from "@/services/sms/smsReader";
 import type { SmsPermissionStatus } from "@/services/sms/smsPermissions";
@@ -118,6 +119,7 @@ export function SmsAutomationSettings() {
     setAutoAdd,
     setReviewBeforeAdding,
   } = useSmsPermission();
+  const { listening, inboundStatus } = useSmsReceiver();
 
   const granted = permissionStatus === "granted";
   const busy = permissionLoading || prefsLoading || scanning;
@@ -272,6 +274,24 @@ export function SmsAutomationSettings() {
           <Text style={{ color: theme.colors.mutedForeground, fontSize: 12 }}>
             Status: {permissionLabel(permissionStatus, supported)}
           </Text>
+          <Text style={{ color: theme.colors.mutedForeground, fontSize: 12 }}>
+            Live detection:{" "}
+            {listening
+              ? "active (waiting for new SMS)"
+              : prefs.enabled && granted
+                ? "starting…"
+                : "off"}
+          </Text>
+          {inboundStatus.lastReceivedAtMs ? (
+            <Text style={{ color: theme.colors.mutedForeground, fontSize: 12 }}>
+              Last SMS event:{" "}
+              {new Date(inboundStatus.lastReceivedAtMs).toLocaleString()}
+              {inboundStatus.lastSender
+                ? ` · ${inboundStatus.lastSender}`
+                : ""}
+              {` · relevant ${inboundStatus.lastRelevantCount}`}
+            </Text>
+          ) : null}
         </View>
 
         <View

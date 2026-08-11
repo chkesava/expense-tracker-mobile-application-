@@ -4,6 +4,7 @@ import { AppState, Platform, type AppStateStatus } from "react-native";
 import {
   loadSmsAutomationPrefs,
   saveSmsAutomationPrefs,
+  subscribeSmsAutomationPrefs,
   type SmsAutomationPrefs,
   SMS_AUTOMATION_PREFS_DEFAULTS,
 } from "@/services/sms/smsAutomationPrefs";
@@ -141,6 +142,12 @@ export function useSmsPermission(): UseSmsPermissionResult {
       cancelled = true;
     };
   }, [refreshPermission]);
+
+  useEffect(() => {
+    return subscribeSmsAutomationPrefs((next) => {
+      setPrefs(next);
+    });
+  }, []);
 
   useEffect(() => {
     const onChange = (state: AppStateStatus) => {

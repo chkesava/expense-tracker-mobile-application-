@@ -1,14 +1,30 @@
 import { NativeModule, registerWebModule } from "expo";
 
-import type { NativeSmsRow } from "./SmsReader.types";
+import type { NativeSmsRow, OnSmsReceivedPayload } from "./SmsReader.types";
 
-class SmsReaderModule extends NativeModule {
+type SmsReaderEvents = {
+  onSmsReceived: (event: OnSmsReceivedPayload) => void;
+};
+
+class SmsReaderModule extends NativeModule<SmsReaderEvents> {
   async readInbox(
     _limit: number,
     _minDateMs: number,
     _afterId: string | null
   ): Promise<NativeSmsRow[]> {
     return [];
+  }
+
+  async startListening(): Promise<boolean> {
+    return false;
+  }
+
+  async stopListening(): Promise<boolean> {
+    return false;
+  }
+
+  async isListening(): Promise<boolean> {
+    return false;
   }
 }
 

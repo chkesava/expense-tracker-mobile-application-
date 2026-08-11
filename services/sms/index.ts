@@ -18,6 +18,7 @@ export {
   loadSmsAutomationPrefs,
   saveSmsAutomationPrefs,
   updateSmsAutomationPrefs,
+  subscribeSmsAutomationPrefs,
   SMS_AUTOMATION_PREFS_DEFAULTS,
   type SmsAutomationPrefs,
 } from "./smsAutomationPrefs";
@@ -48,3 +49,24 @@ export {
 } from "./smsPipeline";
 
 export { readNativeInbox, type NativeInboxQuery } from "./nativeInbox";
+
+export {
+  startSmsListening,
+  stopSmsListening,
+  isSmsListening,
+  addSmsReceivedListener,
+  type SmsInboundListener,
+} from "./smsListener";
+
+export {
+  processIncomingSmsMessages,
+  type ProcessIncomingSmsResult,
+} from "./smsTransactionProcessor";
+
+export {
+  loadSmsInboundStatus,
+  saveSmsInboundStatus,
+  patchSmsInboundStatus,
+  SMS_INBOUND_STATUS_DEFAULTS,
+  type SmsInboundStatus,
+} from "./smsInboundStatus";
