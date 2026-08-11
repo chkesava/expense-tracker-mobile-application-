@@ -1,8 +1,12 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useRouter } from 'expo-router';
+import React, { createContext, useContext, useState, useEffect } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useRouter } from "expo-router";
+import {
+  resolveWorkspaceRoute,
+  type WorkspaceType,
+} from "@/shared/config/workspaceRoutes";
 
-export type WorkspaceType = 'expense' | 'nutrition';
+export type { WorkspaceType };
 
 interface WorkspaceContextProps {
   activeWorkspace: WorkspaceType;
@@ -11,27 +15,30 @@ interface WorkspaceContextProps {
 }
 
 const WorkspaceContext = createContext<WorkspaceContextProps>({
-  activeWorkspace: 'expense',
+  activeWorkspace: "expense",
   setActiveWorkspace: async () => {},
   isLoading: true,
 });
 
 export const useWorkspace = () => useContext(WorkspaceContext);
 
-export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [activeWorkspace, setActiveWorkspaceState] = useState<WorkspaceType>('expense');
+export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
+  const [activeWorkspace, setActiveWorkspaceState] =
+    useState<WorkspaceType>("expense");
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
 
   useEffect(() => {
     const loadWorkspace = async () => {
       try {
-        const stored = await AsyncStorage.getItem('@active_workspace');
-        if (stored === 'expense' || stored === 'nutrition') {
-          setActiveWorkspaceState(stored as WorkspaceType);
+        const stored = await AsyncStorage.getItem("@active_workspace");
+        if (stored === "expense" || stored === "nutrition") {
+          setActiveWorkspaceState(stored);
         }
       } catch (error) {
-        console.error('Failed to load workspace', error);
+        console.error("Failed to load workspace", error);
       } finally {
         setIsLoading(false);
       }
@@ -42,20 +49,17 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const setActiveWorkspace = async (workspace: WorkspaceType) => {
     try {
       setActiveWorkspaceState(workspace);
-      await AsyncStorage.setItem('@active_workspace', workspace);
-      
-      if (workspace === 'expense') {
-        router.replace('/(tabs)' as any);
-      } else {
-        router.replace('/(nutrition)' as any);
-      }
+      await AsyncStorage.setItem("@active_workspace", workspace);
+      router.replace(resolveWorkspaceRoute(workspace) as never);
     } catch (error) {
-      console.error('Failed to save workspace', error);
+      console.error("Failed to save workspace", error);
     }
   };
 
   return (
-    <WorkspaceContext.Provider value={{ activeWorkspace, setActiveWorkspace, isLoading }}>
+    <WorkspaceContext.Provider
+      value={{ activeWorkspace, setActiveWorkspace, isLoading }}
+    >
       {children}
     </WorkspaceContext.Provider>
   );

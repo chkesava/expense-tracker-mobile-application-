@@ -132,22 +132,22 @@ Companion to `TESTING_MASTER_PLAN.md` and `TEST_BUG_DISCOVERY_LOG.md`.
 - [x] Bugs documented (BUG-005 partial coverage)
 - [x] Bugs fixed *(planner extract only)*
 - [x] Regression tests added
-- [ ] Phase approved *(waiting for human exit sign-off)*
+- [x] Phase approved
 
 ---
 
 ## Phase 7 — Cross-Module Journeys & Navigation
 
-- [ ] Module analysis complete (workspace, journeys, export, payment links)
-- [ ] Unit test scope identified
-- [ ] Integration / journey scope identified
-- [ ] Edge cases identified (BUG-001 `/(tabs)` vs `/(app)`)
-- [ ] Test implementation completed
-- [ ] Tests passing
-- [ ] Bugs documented (BUG-001, BUG-007 if still open)
-- [ ] Bugs fixed
-- [ ] Regression tests added
-- [ ] Phase approved
+- [x] Module analysis complete (workspace, journeys, export, payment links)
+- [x] Unit test scope identified
+- [x] Integration / journey scope identified
+- [x] Edge cases identified (BUG-001 `/(tabs)` vs `/(app)`)
+- [x] Test implementation completed
+- [x] Tests passing
+- [x] Bugs documented (BUG-001 fixed)
+- [x] Bugs fixed — workspace expense route → `/(app)`
+- [x] Regression tests added
+- [ ] Phase approved *(waiting for human exit sign-off)*
 
 ---
 
@@ -227,7 +227,8 @@ Use for every meaningful change after Cursor/Antigravity rules are installed:
 | 3 | User | 2026-08-11 | **Skipped / deferred** — SMS not on main; resume when `services/sms` merges |
 | 4 | User | 2026-08-11 | Exit signed off via continue-to-Phase-5; auth/privacy unit coverage landed |
 | 5 | User | 2026-08-11 | Signed off via continue-to-Phase-6; memory ledger + guards landed |
-| 6 | | | Implemented; awaiting exit sign-off (46 files / 226 tests) |
+| 6 | User | 2026-08-11 | Signed off via continue-to-Phase-7 |
+| 7 | | | Implemented; BUG-001 fixed; awaiting exit sign-off |
 | 1 | | | |
 | 2 | | | |
 | 3 | | | |

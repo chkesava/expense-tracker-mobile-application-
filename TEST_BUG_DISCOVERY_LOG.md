@@ -94,17 +94,17 @@ Steps to Reproduce:
 2. Switch back to Expense
 3. Observe routing result
 
-Evidence: `providers/WorkspaceProvider.tsx` — `router.replace('/(tabs)' as any)`
+Evidence: Was `router.replace('/(tabs)')`; now `resolveWorkspaceRoute` → `/(app)`
 
 Root Cause: TBD (route path mismatch / leftover migration path)
 
-Status: Open — Requires Test Verification
+Status: Fixed
 
-Fix: TBD
+Fix: `resolveWorkspaceRoute` maps expense → `/(app)`; `WorkspaceProvider` uses it
 
-Regression Test: TBD — workspace switch expense ↔ nutrition
+Regression Test: `shared/config/workspaceRoutes.test.ts`, `shared/config/journeys.test.ts`
 
-Related PR/Commit:
+Related PR/Commit: Phase 7 on docs/testing-master-plan
 ```
 
 ### BUG-002
@@ -265,17 +265,6 @@ Status: Open — Partial (planner covered in Phase 6); hook orchestration remain
 Fix: TBD — prefer calling `planDueSubscriptionPosts` from the hook
 
 Regression Test: `subscriptionProcessor.test.ts` idempotency + `moneyFlows.integration.test.ts`
-
-Related PR/Commit:
-```
-
-Root Cause: TBD
-
-Status: Open — Requires Test Verification
-
-Fix: TBD
-
-Regression Test: TBD — idempotency / double-fire / timezone edge cases
 
 Related PR/Commit:
 ```
@@ -486,7 +475,7 @@ Related PR/Commit:
 
 | ID | Module | Classification | Severity | Status |
 | ---- | ------ | -------------- | -------- | ------ |
-| BUG-001 | Workspace navigation | Potential Issue — Requires Test Verification | High | Open |
+| BUG-001 | Workspace navigation | Fixed — `/(app)` route | High | Fixed |
 | BUG-002 | Date/time keys | Potential Issue — Requires Test Verification | High | Open |
 | BUG-003 | SMS automation | Risk Area — Requires Test Verification | High | Open (deferred until SMS merges) |
 | BUG-004 | Auth duress | Risk Area — Requires Test Verification | Critical | Open |
