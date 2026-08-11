@@ -1,5 +1,6 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
+  InteractionManager,
   Pressable,
   RefreshControl,
   StyleSheet,
@@ -13,7 +14,6 @@ import { haptic } from "@/lib/haptics";
 import { sampleScrollFps } from "@/lib/perf";
 import {
   Calendar,
-  CreditCard,
   Edit3,
   FileText,
   Plus,
@@ -26,7 +26,10 @@ import {
 import { Amount } from "@/components/common/Amount";
 import { EmptyState } from "@/components/common/EmptyState";
 import { Modal } from "@/components/common/Modal";
-import { SwipeableRow } from "@/components/common/SwipeableRow";
+import {
+  SwipeableRow,
+  closeOpenSwipeableRow,
+} from "@/components/common/SwipeableRow";
 import { Button } from "@/components/ui/Button";
 import { getFirestoreDb } from "@/lib/firebase";
 import { toast } from "@/lib/toast";
@@ -90,6 +93,8 @@ export function ExpenseList({
   const { settings: system } = useSystemSettings();
 
   const [selectedTx, setSelectedTx] = useState<CombinedTransaction | null>(null);
+  const [swipeCloseSignal, setSwipeCloseSignal] = useState(0);
+  const deletingIdsRef = useRef(new Set<string>());
 
   // Account map by ID
   const accountMap = useMemo(() => {
@@ -161,11 +166,21 @@ export function ExpenseList({
   const handleDelete = useCallback(
     async (target: CombinedTransaction) => {
       const db = getFirestoreDb();
-      if (!uid || !db || !target.id) return;
+      const docId = target.id?.trim();
+      if (!uid || !db) {
+        toast.error("Not authenticated");
+        return;
+      }
+      if (!docId) {
+        toast.error("Cannot delete — missing transaction id");
+        return;
+      }
+      if (deletingIdsRef.current.has(docId)) return;
+      deletingIdsRef.current.add(docId);
 
       try {
         const collectionName = target.kind === "expense" ? "expenses" : "incomes";
-        const docRef = doc(db, "users", uid, collectionName, target.id);
+        const docRef = doc(db, "users", uid, collectionName, docId);
 
         await deleteDoc(docRef);
         setSelectedTx(null);
@@ -177,9 +192,35 @@ export function ExpenseList({
       } catch (err) {
         console.error("Delete transaction error:", err);
         toast.error("Failed to delete transaction");
+      } finally {
+        deletingIdsRef.current.delete(docId);
       }
     },
     [uid]
+  );
+
+  const openEditFromRow = useCallback(
+    (target: CombinedTransaction) => {
+      // Prefer the list row id (from Firestore doc id) over any field on the payload.
+      if (target.kind === "expense") {
+        onEditExpense?.({ ...target.data, id: target.id });
+      } else {
+        onEditIncome?.({ ...target.data, id: target.id });
+      }
+    },
+    [onEditExpense, onEditIncome]
+  );
+
+  const openEditAfterDetailClose = useCallback(
+    (target: CombinedTransaction) => {
+      // Closing one RN Modal and opening another in the same tick often drops
+      // the second sheet on Android — wait until the detail sheet finishes.
+      setSelectedTx(null);
+      InteractionManager.runAfterInteractions(() => {
+        setTimeout(() => openEditFromRow(target), 50);
+      });
+    },
+    [openEditFromRow]
   );
 
   const sections = useMemo(
@@ -238,24 +279,21 @@ export function ExpenseList({
 
     return (
       <SwipeableRow
+        closeSignal={swipeCloseSignal}
         rightActions={[
           {
             icon: Edit3,
             label: "Edit",
             color: theme.colors.primary,
-            onPress: () => {
-              if (item.kind === "expense") {
-                onEditExpense?.(item.data);
-              } else {
-                onEditIncome?.(item.data);
-              }
-            },
+            onPress: () => openEditFromRow(item),
           },
           {
             icon: Trash2,
             label: "Delete",
             color: theme.colors.destructive,
-            onPress: () => handleDelete(item),
+            onPress: () => {
+              void handleDelete(item);
+            },
           },
         ]}
       >
@@ -399,8 +437,8 @@ export function ExpenseList({
       accountMap,
       handleDelete,
       isDark,
-      onEditExpense,
-      onEditIncome,
+      openEditFromRow,
+      swipeCloseSignal,
       system.defaultCurrency,
       theme,
     ]
@@ -486,6 +524,8 @@ export function ExpenseList({
         stickyHeaderIndices={stickyHeaderIndices}
         showsVerticalScrollIndicator={false}
         onScrollBeginDrag={() => {
+          closeOpenSwipeableRow();
+          setSwipeCloseSignal((n) => n + 1);
           sampleScrollFps("ledger");
         }}
         refreshControl={
@@ -711,12 +751,7 @@ export function ExpenseList({
                 variant="tonal"
                 onPress={() => {
                   const tx = selectedTx;
-                  setSelectedTx(null);
-                  if (tx.kind === "expense") {
-                    onEditExpense?.(tx.data);
-                  } else {
-                    onEditIncome?.(tx.data);
-                  }
+                  if (tx) openEditAfterDetailClose(tx);
                 }}
               >
                 Edit Transaction
@@ -726,7 +761,7 @@ export function ExpenseList({
                 variant="destructive"
                 onPress={() => {
                   const tx = selectedTx;
-                  if (tx) handleDelete(tx);
+                  if (tx) void handleDelete(tx);
                 }}
               >
                 Delete Transaction

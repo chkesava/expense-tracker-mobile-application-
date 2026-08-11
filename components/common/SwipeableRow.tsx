@@ -1,6 +1,6 @@
-import { useRef, type ReactNode } from "react";
-import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
-import Swipeable from "react-native-gesture-handler/Swipeable";
+import { useEffect, useRef, type ReactNode } from "react";
+import { Animated, StyleSheet, Text, View } from "react-native";
+import { Pressable, Swipeable } from "react-native-gesture-handler";
 import * as Haptics from "expo-haptics";
 import type { LucideIcon } from "lucide-react-native";
 
@@ -16,12 +16,30 @@ export type SwipeAction = {
 export type SwipeableRowProps = {
   children: ReactNode;
   rightActions: SwipeAction[];
+  /** When this value changes, any open swipe closes (e.g. list scroll / recycle). */
+  closeSignal?: number;
 };
 
+/** Only one ledger row stays open at a time. */
+let openSwipeable: Swipeable | null = null;
+
+export function closeOpenSwipeableRow() {
+  openSwipeable?.close();
+  openSwipeable = null;
+}
+
 /** Gmail/Google-Pay style swipe-to-reveal row actions. Tapping an action is the confirmation. */
-export function SwipeableRow({ children, rightActions }: SwipeableRowProps) {
+export function SwipeableRow({
+  children,
+  rightActions,
+  closeSignal,
+}: SwipeableRowProps) {
   const { theme } = useTheme();
   const swipeableRef = useRef<Swipeable>(null);
+
+  useEffect(() => {
+    swipeableRef.current?.close();
+  }, [closeSignal]);
 
   return (
     <Swipeable
@@ -29,6 +47,17 @@ export function SwipeableRow({ children, rightActions }: SwipeableRowProps) {
       friction={2}
       rightThreshold={40}
       overshootRight={false}
+      onSwipeableWillOpen={() => {
+        if (openSwipeable && openSwipeable !== swipeableRef.current) {
+          openSwipeable.close();
+        }
+        openSwipeable = swipeableRef.current;
+      }}
+      onSwipeableWillClose={() => {
+        if (openSwipeable === swipeableRef.current) {
+          openSwipeable = null;
+        }
+      }}
       renderRightActions={(progress) => (
         <View style={styles.actionsRow}>
           {rightActions.map((action) => {
@@ -42,16 +71,26 @@ export function SwipeableRow({ children, rightActions }: SwipeableRowProps) {
               <Pressable
                 key={action.label}
                 onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+                  const run = action.onPress;
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(
+                    () => undefined
+                  );
+                  // Run the action first, then close — closing before onPress can drop taps
+                  // when FlashList recycles the row mid-gesture.
+                  run();
                   swipeableRef.current?.close();
-                  action.onPress();
                 }}
                 accessibilityRole="button"
                 accessibilityLabel={action.label}
                 style={[styles.action, { backgroundColor: action.color }]}
               >
-                <Animated.View style={{ transform: [{ scale }], alignItems: "center", gap: 4 }}>
-                  <Icon size={theme.iconSize.lg} color={theme.colors.primaryForeground} />
+                <Animated.View
+                  style={{ transform: [{ scale }], alignItems: "center", gap: 4 }}
+                >
+                  <Icon
+                    size={theme.iconSize.lg}
+                    color={theme.colors.primaryForeground}
+                  />
                   <Text
                     style={{
                       color: theme.colors.primaryForeground,
