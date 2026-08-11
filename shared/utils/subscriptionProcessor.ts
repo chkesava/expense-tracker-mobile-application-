@@ -161,6 +161,84 @@ export interface MonthlyCommitmentSummary {
   transfersTotal: number;
 }
 
+export type DuePostAction =
+  | {
+      kind: "expense";
+      subscriptionId: string;
+      monthKey: string;
+      expense: Omit<Expense, "id">;
+      markCompleted: boolean;
+    }
+  | {
+      kind: "transfer";
+      subscriptionId: string;
+      monthKey: string;
+      transfer: Omit<AccountTransfer, "id">;
+      markCompleted: boolean;
+    };
+
+/**
+ * Pure planner for idle auto-post: which due subscriptions become expenses/transfers.
+ * Hook orchestration should call this once, write payloads, then set `lastProcessed`.
+ * Re-running with updated `lastProcessed` must yield an empty plan (idempotency).
+ */
+export function planDueSubscriptionPosts(
+  subscriptions: Subscription[],
+  evaluationDate = new Date()
+): DuePostAction[] {
+  const actions: DuePostAction[] = [];
+
+  for (const sub of subscriptions) {
+    const evaluation = evaluateSubscriptionDue(sub, evaluationDate);
+    if (!evaluation.isDue || !evaluation.targetDateStr) continue;
+
+    if (sub.type === "transfer") {
+      actions.push({
+        kind: "transfer",
+        subscriptionId: sub.id,
+        monthKey: evaluation.monthKey,
+        transfer: buildTransferFromSubscription(sub, evaluation.targetDateStr),
+        markCompleted: evaluation.isCompleted,
+      });
+      continue;
+    }
+
+    actions.push({
+      kind: "expense",
+      subscriptionId: sub.id,
+      monthKey: evaluation.monthKey,
+      expense: buildExpenseFromSubscription(
+        sub,
+        evaluation.targetDateStr,
+        evaluation.monthKey
+      ),
+      markCompleted: evaluation.isCompleted,
+    });
+  }
+
+  return actions;
+}
+
+/**
+ * Applies a post plan to subscription copies by setting lastProcessed / isCompleted.
+ * Does not touch Firestore — used to simulate the write-batch outcome for tests.
+ */
+export function applyPostPlanToSubscriptions(
+  subscriptions: Subscription[],
+  actions: DuePostAction[]
+): Subscription[] {
+  const byId = new Map(actions.map((a) => [a.subscriptionId, a]));
+  return subscriptions.map((sub) => {
+    const action = byId.get(sub.id);
+    if (!action) return sub;
+    return {
+      ...sub,
+      lastProcessed: action.monthKey,
+      ...(action.markCompleted ? { isCompleted: true, isActive: false } : {}),
+    };
+  });
+}
+
 /**
  * Computes overall monthly commitments across active subscriptions and EMIs.
  */

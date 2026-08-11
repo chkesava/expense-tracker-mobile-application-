@@ -236,8 +236,8 @@ BUG-005
 
 Module: Subscriptions / EMI
 Feature: Auto-post due subscriptions via writeBatch
-Test Suite: TBD — subscriptionProcessor + useSubscriptions orchestration
-Test Type: Static Analysis
+Test Suite: `subscriptionProcessor` planDueSubscriptionPosts + moneyFlows integration
+Test Type: Unit / Integration-lite / Static Analysis
 Severity: Critical
 Priority: P0
 
@@ -249,7 +249,7 @@ Preconditions: Subscriptions with next due date on/near today; app idle scheduli
 
 Expected Behavior: Exactly-once posting per due period; correct expense/transfer documents; `lastProcessed` advanced safely across timezones
 
-Actual Behavior: Pure due-date util is unit-tested; hook orchestration (idle schedule + batch write + double-fire) is not
+Actual Behavior: Pure planner idempotency is now covered (`planDueSubscriptionPosts` + `applyPostPlanToSubscriptions`). Hook idle `writeBatch` orchestration in `useSubscriptions` still needs emulator/device verification.
 
 Steps to Reproduce:
 1. Seed subscription due today
@@ -257,6 +257,17 @@ Steps to Reproduce:
 3. Count created expenses
 
 Evidence: `hooks/useSubscriptions.ts` + `shared/utils/subscriptionProcessor.ts`
+
+Root Cause: TBD if hook double-fires despite lastProcessed
+
+Status: Open — Partial (planner covered in Phase 6); hook orchestration remaining
+
+Fix: TBD — prefer calling `planDueSubscriptionPosts` from the hook
+
+Regression Test: `subscriptionProcessor.test.ts` idempotency + `moneyFlows.integration.test.ts`
+
+Related PR/Commit:
+```
 
 Root Cause: TBD
 
