@@ -33,6 +33,7 @@ import { env } from "@/lib/env";
 import { getFirebaseAuth, getFirestoreDb } from "@/lib/firebase";
 import { perfMark } from "@/lib/perf";
 import { privacySession } from "@/lib/privacySession";
+import { authErrorMessage, createDuressUser } from "@/lib/authHelpers";
 import { scheduleIdleWork } from "@/shared/utils/scheduleIdle";
 
 const GOOGLE_WEB_CLIENT_ID =
@@ -56,22 +57,6 @@ type AuthContextType = {
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-function authErrorMessage(error: unknown, fallback: string): string {
-  if (error && typeof error === "object" && "message" in error) {
-    return String((error as { message?: string }).message || fallback);
-  }
-  return fallback;
-}
-
-function createDuressUser(real: User): User {
-  const duressUser = Object.create(real) as User;
-  Object.defineProperty(duressUser, "uid", {
-    get: () => `${real.uid}_duress`,
-    enumerable: true,
-  });
-  return duressUser;
-}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [realUser, setRealUser] = useState<User | null>(null);

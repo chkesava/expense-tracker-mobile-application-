@@ -195,8 +195,8 @@ BUG-004
 
 Module: Auth / Privacy
 Feature: Duress PIN → proxied Firestore UID
-Test Suite: TBD — privacySession + AuthProvider integration
-Test Type: Static Analysis
+Test Suite: `lib/privacySession.test.ts`, `lib/authHelpers.test.ts` (+ AuthProvider integration still TBD Phase 5)
+Test Type: Unit / Static Analysis
 Severity: Critical
 Priority: P0
 
@@ -208,7 +208,7 @@ Preconditions: Real Firebase user signed in; user unlocks with duress PIN
 
 Expected Behavior: All Firestore paths use `uid_duress`; SMS import blocked; real data never visible or writable under duress session
 
-Actual Behavior: Must be verified — `createDuressUser` proxies `uid` via `Object.create` + defineProperty; any code using `realUser` incorrectly or clearing duress incompletely could leak or contaminate collections
+Actual Behavior: Must be verified end-to-end — unit coverage now locks `createDuressUser` UID proxy + privacySession lock/duress/lockout contracts. Full AuthProvider ↔ Firestore path isolation still needs emulator integration.
 
 Steps to Reproduce:
 1. Configure duress PIN
@@ -216,15 +216,15 @@ Steps to Reproduce:
 3. Attempt add expense / read ledger / enable SMS
 4. Inspect Firestore paths and UI data
 
-Evidence: `providers/AuthProvider.tsx` (`uid + "_duress"`); `lib/privacySession.ts`; SMS gates on `isDuress`
+Evidence: `lib/authHelpers.ts` (`uid + "_duress"`); `lib/privacySession.ts`; SMS gates on `isDuress` (when present)
 
 Root Cause: TBD if any failure found
 
-Status: Open — Requires Test Verification
+Status: Open — Partial unit coverage in Phase 4; integration still required
 
 Fix: TBD
 
-Regression Test: TBD — duress isolation suite (must block release if failing)
+Regression Test: `lib/authHelpers.test.ts`, `lib/privacySession.test.ts`
 
 Related PR/Commit:
 ```

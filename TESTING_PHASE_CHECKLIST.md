@@ -70,38 +70,38 @@ Companion to `TESTING_MASTER_PLAN.md` and `TEST_BUG_DISCOVERY_LOG.md`.
 - [x] Bugs documented (BUG-002 progress; BUG-010 OCR date ambiguity)
 - [x] Bugs fixed *(none — coverage / documentation only)*
 - [x] Regression tests added
-- [ ] Phase approved *(waiting for human exit sign-off)*
+- [x] Phase approved
 
 ---
 
 ## Phase 3 — SMS Automation Unit Hardening
 
-- [ ] Module analysis complete (`services/sms/*`, types, prefs, gates)
-- [ ] Unit test scope identified (parser fixtures, dedupe, pipeline, relevance)
-- [ ] Integration test scope identified (prefs ↔ processor ↔ status)
-- [ ] Edge cases identified (duress, OTP noise, review-before-add, stub confidence)
-- [ ] Confirmation: no silent Firestore expense writes without coverage
-- [ ] Test implementation completed
-- [ ] Tests passing
-- [ ] Bugs documented (BUG-003)
-- [ ] Bugs fixed
-- [ ] Regression tests added
-- [ ] Phase approved
+- [x] Module analysis complete — **deferred**: `services/sms` not on `main` / this branch
+- [x] Unit test scope identified — deferred until SMS merges
+- [x] Integration test scope identified — deferred
+- [x] Edge cases identified — deferred (see BUG-003)
+- [x] Confirmation: no silent Firestore expense writes without coverage — N/A on this branch
+- [ ] Test implementation completed — **SKIPPED** (user chose skip → Phase 4)
+- [ ] Tests passing — N/A
+- [x] Bugs documented (BUG-003 remains open / deferred)
+- [ ] Bugs fixed — N/A
+- [ ] Regression tests added — N/A
+- [x] Phase approved as **skipped / deferred** until SMS lands on `main`
 
 ---
 
 ## Phase 4 — Auth, Privacy, Settings
 
-- [ ] Module analysis complete (AuthProvider, privacySession, settings merge, Google client)
-- [ ] Unit test scope identified
-- [ ] Integration test scope identified (duress UID isolation, category seed)
-- [ ] Edge cases identified (lockout, concurrent unlock, missing web client id)
-- [ ] Test implementation completed
-- [ ] Tests passing
-- [ ] Bugs documented (BUG-004)
-- [ ] Bugs fixed
-- [ ] Regression tests added
-- [ ] Phase approved
+- [x] Module analysis complete (AuthProvider, privacySession, settings merge, duress helpers)
+- [x] Unit test scope identified
+- [x] Integration test scope identified (duress UID + full AuthProvider deferred to emulator Phase 5)
+- [x] Edge cases identified (lockout, lock keeps duress, settings blank timezone, privacy pins)
+- [x] Test implementation completed — `lib/privacySession.test.ts`, `lib/authHelpers.ts` (+ tests), expanded settings merge tests
+- [x] Tests passing — 42 files / 211 tests
+- [x] Bugs documented (BUG-004 unit coverage progress)
+- [x] Bugs fixed *(extract-only; no behavioral app bugfixes)*
+- [x] Regression tests added
+- [x] Phase approved
 
 ---
 
@@ -223,7 +223,10 @@ Use for every meaningful change after Cursor/Antigravity rules are installed:
 | Plan (this pack) | User | 2026-08-11 | Explicit approval to start Phase 0 |
 | 0 | User | 2026-08-11 | Exit signed off; baseline frozen in `docs/TESTING_BASELINE.md` |
 | 1 | User | 2026-08-11 | Exit signed off; calendar + balance coverage landed |
-| 2 | | | Implemented; awaiting exit sign-off |
+| 2 | User | 2026-08-11 | Exit signed off; shared business-logic + OCR coverage landed |
+| 3 | User | 2026-08-11 | **Skipped / deferred** — SMS not on main; resume when `services/sms` merges |
+| 4 | User | 2026-08-11 | Exit signed off via continue-to-Phase-5; auth/privacy unit coverage landed |
+| 5 | | | In progress |
 | 1 | | | |
 | 2 | | | |
 | 3 | | | |
