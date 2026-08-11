@@ -1,4 +1,4 @@
-export type { SmsReader, SmsReaderCapability } from "./smsReader";
+export type { SmsReader, SmsReaderCapability, SmsReadOptions } from "./smsReader";
 export {
   stubSmsReader,
   androidSmsReader,
@@ -31,6 +31,11 @@ export {
 export { buildSmsFingerprint } from "./smsDedupe";
 
 export {
+  filterRelevantSms,
+  isRelevantTransactionSms,
+} from "./smsRelevanceFilter";
+
+export {
   adaptParsedSmsToWritePayload,
   type AdaptSmsOptions,
 } from "./expenseAdapter";
@@ -41,3 +46,5 @@ export {
   type SmsPipelineDeps,
   type SmsPipelineResult,
 } from "./smsPipeline";
+
+export { readNativeInbox, type NativeInboxQuery } from "./nativeInbox";

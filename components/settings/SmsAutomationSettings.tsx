@@ -7,9 +7,12 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { useSmsPermission } from "@/hooks/useSmsPermission";
 import { toast } from "@/lib/toast";
+import { defaultSmsReader } from "@/services/sms/smsReader";
+import type { SmsPermissionStatus } from "@/services/sms/smsPermissions";
+import { filterRelevantSms } from "@/services/sms/smsRelevanceFilter";
+import type { RawSmsMessage } from "@/shared/types/smsTransaction";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
-import type { SmsPermissionStatus } from "@/services/sms/smsPermissions";
 
 function permissionLabel(status: SmsPermissionStatus, supported: boolean): string {
   if (!supported) return "Android only";
@@ -91,12 +94,18 @@ function RowSwitch({
 
 /**
  * Settings → Automation → SMS Transaction Reader
- * Phase 1: permission grant/revoke/detect only (no parsing).
+ * Phase 2: permission + local inbox scan (no Firebase upload of raw SMS).
  */
 export function SmsAutomationSettings() {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const [readerExpanded, setReaderExpanded] = useState(true);
+  const [scanning, setScanning] = useState(false);
+  const [lastScan, setLastScan] = useState<{
+    total: number;
+    relevant: number;
+    samples: Array<{ id: string; address: string }>;
+  } | null>(null);
   const {
     supported,
     permissionStatus,
@@ -111,7 +120,7 @@ export function SmsAutomationSettings() {
   } = useSmsPermission();
 
   const granted = permissionStatus === "granted";
-  const busy = permissionLoading || prefsLoading;
+  const busy = permissionLoading || prefsLoading || scanning;
 
   const onAllowSmsAccess = async () => {
     const status = await requestPermission();
@@ -152,6 +161,48 @@ export function SmsAutomationSettings() {
     toast.info("Permission denied. SMS reader stays off.");
   };
 
+  const onScanInboxLocally = async () => {
+    if (!supported) {
+      toast.info("SMS reading is only available on Android.");
+      return;
+    }
+    if (!granted) {
+      toast.info("Allow SMS access first.");
+      return;
+    }
+
+    setScanning(true);
+    try {
+      // Local-only: never upload raw SMS / body / sender to Firebase.
+      const all = await defaultSmsReader.readMessages({
+        limit: 80,
+        relevantOnly: false,
+      });
+      const relevant = filterRelevantSms(all);
+
+      const samples = relevant.slice(0, 5).map((m: RawSmsMessage) => ({
+        id: m.id,
+        address: m.address,
+      }));
+
+      setLastScan({
+        total: all.length,
+        relevant: relevant.length,
+        samples,
+      });
+
+      toast.success(
+        `Found ${relevant.length} likely transaction SMS (of ${all.length} recent, kept on device)`
+      );
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Could not read SMS inbox";
+      toast.error(message);
+    } finally {
+      setScanning(false);
+    }
+  };
+
   return (
     <Card
       title="Automation"
@@ -159,7 +210,6 @@ export function SmsAutomationSettings() {
       icon={<MessageSquare size={18} color={theme.colors.primary} />}
     >
       <View style={{ gap: theme.space.md }}>
-        {/* Intro / allow card */}
         <View
           style={{
             gap: 12,
@@ -224,7 +274,6 @@ export function SmsAutomationSettings() {
           </Text>
         </View>
 
-        {/* SMS Transaction Reader submenu */}
         <View
           style={{
             borderRadius: 14,
@@ -308,6 +357,29 @@ export function SmsAutomationSettings() {
 
         <View style={{ gap: 8 }}>
           <Button
+            variant="tonal"
+            loading={scanning}
+            disabled={!supported || !granted || busy}
+            onPress={() => void onScanInboxLocally()}
+          >
+            Scan inbox locally
+          </Button>
+          {lastScan ? (
+            <View style={{ gap: 4 }}>
+              <Text style={{ color: theme.colors.mutedForeground, fontSize: 12 }}>
+                Last local scan: {lastScan.relevant} relevant of {lastScan.total}{" "}
+                recent (not uploaded)
+              </Text>
+              {lastScan.samples.length > 0 ? (
+                <Text style={{ color: theme.colors.mutedForeground, fontSize: 12 }}>
+                  Senders:{" "}
+                  {lastScan.samples.map((s) => s.address || "(unknown)").join(", ")}
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
+
+          <Button
             variant="outline"
             disabled={!supported || busy}
             onPress={() => void openSystemSettings()}
@@ -315,8 +387,8 @@ export function SmsAutomationSettings() {
             Manage SMS permission in system settings
           </Button>
           <Text style={{ color: theme.colors.mutedForeground, fontSize: 12, lineHeight: 18 }}>
-            To revoke access, turn off SMS permission in Android settings. Vault
-            detects the change when you return.
+            Raw SMS stays on your device. To revoke access, turn off SMS permission
+            in Android settings.
           </Text>
           {!supported ? (
             <Text style={{ color: theme.colors.mutedForeground, fontSize: 12 }}>

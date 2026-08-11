@@ -4,18 +4,18 @@ export type SmsReaderCapability =
   | { supported: false; reason: "ios" | "web" | "unavailable" }
   | { supported: true; platform: "android" };
 
-/**
- * Platform boundary for SMS access.
- * Web / default stub. Native: `smsReader.native.ts`.
- */
+export type SmsReadOptions = {
+  cursor?: SmsSyncCursor;
+  limit?: number;
+  relevantOnly?: boolean;
+  minReceivedAtMs?: number;
+};
+
 export interface SmsReader {
   getCapability(): SmsReaderCapability;
   hasPermission(): Promise<boolean>;
   requestPermission(): Promise<boolean>;
-  readMessages(options?: {
-    cursor?: SmsSyncCursor;
-    limit?: number;
-  }): Promise<RawSmsMessage[]>;
+  readMessages(options?: SmsReadOptions): Promise<RawSmsMessage[]>;
 }
 
 export const stubSmsReader: SmsReader = {
