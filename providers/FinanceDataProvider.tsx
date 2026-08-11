@@ -24,6 +24,12 @@ import {
 } from "react";
 
 import { getFirestoreDb } from "@/lib/firebase";
+import {
+  canDeleteAccount,
+  countLinkedAccountRecords,
+  totalPendingSyncCount,
+  validateAccountMoneyMove,
+} from "@/lib/finance/ledgerGuards";
 import { setGlobalPendingSyncCount } from "@/lib/syncStatusStore";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
@@ -173,14 +179,15 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
   const [isFromCache, setIsFromCache] = useState(false);
 
   const updatePendingSyncCount = useCallback(() => {
-    const total =
-      pendingExpensesCountRef.current +
-      pendingIncomesCountRef.current +
-      pendingAccountsCountRef.current +
-      pendingAccountTypesCountRef.current +
-      pendingPaymentsCountRef.current +
-      pendingEntriesCountRef.current +
-      pendingTransfersCountRef.current;
+    const total = totalPendingSyncCount([
+      pendingExpensesCountRef.current,
+      pendingIncomesCountRef.current,
+      pendingAccountsCountRef.current,
+      pendingAccountTypesCountRef.current,
+      pendingPaymentsCountRef.current,
+      pendingEntriesCountRef.current,
+      pendingTransfersCountRef.current,
+    ]);
     setPendingSyncCount(total);
     setGlobalPendingSyncCount(total);
   }, []);
@@ -550,16 +557,17 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         ),
       ]);
 
-      const linkedCount =
-        linkedExpensesSnap.size +
-        linkedIncomesSnap.size +
-        linkedEntriesSnap.size +
-        linkedPaymentsFromSnap.size +
-        linkedPaymentsToSnap.size +
-        linkedTransfersFromSnap.size +
-        linkedTransfersToSnap.size;
+      const linkedCount = countLinkedAccountRecords([
+        linkedExpensesSnap.size,
+        linkedIncomesSnap.size,
+        linkedEntriesSnap.size,
+        linkedPaymentsFromSnap.size,
+        linkedPaymentsToSnap.size,
+        linkedTransfersFromSnap.size,
+        linkedTransfersToSnap.size,
+      ]);
 
-      if (linkedCount > 0) {
+      if (!canDeleteAccount(linkedCount)) {
         toast.error(
           `Cannot delete account. ${linkedCount} linked records exist. Unlink transactions first.`
         );
@@ -614,14 +622,15 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     ) => {
       const u = userRef.current;
       const database = getFirestoreDb();
-      if (!u || !database || !fromAccountId || !toAccountId || amount <= 0)
-        return false;
-      if (fromAccountId === toAccountId) {
-        toast.error("Source and destination accounts must differ");
-        return false;
-      }
-      if (!isValidDateKey(date)) {
-        toast.error("Invalid payment date");
+      if (!u || !database) return false;
+      const validation = validateAccountMoneyMove({
+        fromAccountId,
+        toAccountId,
+        amount,
+        date,
+      });
+      if (!validation.ok) {
+        toast.error(validation.error);
         return false;
       }
       try {
@@ -771,16 +780,24 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     ) => {
       const u = userRef.current;
       const database = getFirestoreDb();
-      if (!u || !database || !fromAccountId || !toAccountId || amount <= 0) {
+      if (!u || !database) {
         toast.error("Choose two accounts and enter a valid amount");
         return false;
       }
-      if (fromAccountId === toAccountId) {
-        toast.error("Source and destination accounts must differ");
-        return false;
-      }
-      if (!isValidDateKey(date)) {
-        toast.error("Invalid transfer date");
+      const validation = validateAccountMoneyMove({
+        fromAccountId,
+        toAccountId,
+        amount,
+        date,
+      });
+      if (!validation.ok) {
+        toast.error(
+          validation.error === "Invalid payment date"
+            ? "Invalid transfer date"
+            : validation.error === "Source and destination accounts are required"
+              ? "Choose two accounts and enter a valid amount"
+              : validation.error
+        );
         return false;
       }
       try {

@@ -13,7 +13,7 @@ Companion docs: `TESTING_MASTER_PLAN.md`, `TESTING_PHASE_CHECKLIST.md`, `TEST_BU
 
 | Command | Purpose | Phase 0 / current result |
 |---------|---------|--------------------------|
-| `npm test` | Vitest run (`vitest run`) | Phase 0: **22 / 122**. Phase 1: **24 / 143**. Phase 2: **40 / 195**. Phase 4: **42 / 211 PASS** (`lib/**` included) |
+| `npm test` | Vitest run (`vitest run`) | Phase 4: **42 / 211**. Phase 5: **45 / 220 PASS** |
 | `npm run test:watch` | Vitest watch | Available |
 | `npm run typecheck:shared` | `tsc -p tsconfig.shared.json` | **PASS after Phase 0 config fix** (was failing: missing `@/` paths + `window`) |
 | `npm run typecheck` | Full app `tsc --noEmit` | **FAIL (known debt)** — see §5 |

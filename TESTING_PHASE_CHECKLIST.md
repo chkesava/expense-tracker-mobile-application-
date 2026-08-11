@@ -107,17 +107,17 @@ Companion to `TESTING_MASTER_PLAN.md` and `TEST_BUG_DISCOVERY_LOG.md`.
 
 ## Phase 5 — Data Layer Integration
 
-- [ ] Module analysis complete (FinanceData, Network, syncStatusStore)
-- [ ] Unit test scope identified
-- [ ] Integration test scope identified (CRUD, pending writes, reconnect)
-- [ ] Edge cases identified (staged history load, listener failure)
-- [ ] Emulator/fake harness available
-- [ ] Test implementation completed
-- [ ] Tests passing
-- [ ] Bugs documented
-- [ ] Bugs fixed
-- [ ] Regression tests added
-- [ ] Phase approved
+- [x] Module analysis complete (FinanceData, syncStatusStore, ledger guards)
+- [x] Unit test scope identified
+- [x] Integration test scope identified — in-memory ledger harness now; Firebase Emulator deferred (see `docs/TESTING_PHASE5_DATA_LAYER.md`)
+- [x] Edge cases identified (uid isolation, linked account delete, payment validation, pending counts)
+- [x] Emulator/fake harness available — **fakes landed**; emulator install deferred
+- [x] Test implementation completed
+- [x] Tests passing — 45 files / 220 tests
+- [x] Bugs documented (none new confirmed; harness notes in Phase 5 doc)
+- [x] Bugs fixed *(guard extract wiring only)*
+- [x] Regression tests added
+- [x] Phase approved
 
 ---
 
@@ -226,7 +226,8 @@ Use for every meaningful change after Cursor/Antigravity rules are installed:
 | 2 | User | 2026-08-11 | Exit signed off; shared business-logic + OCR coverage landed |
 | 3 | User | 2026-08-11 | **Skipped / deferred** — SMS not on main; resume when `services/sms` merges |
 | 4 | User | 2026-08-11 | Exit signed off via continue-to-Phase-5; auth/privacy unit coverage landed |
-| 5 | | | In progress |
+| 5 | User | 2026-08-11 | Signed off via continue-to-Phase-6; memory ledger + guards landed |
+| 6 | | | In progress |
 | 1 | | | |
 | 2 | | | |
 | 3 | | | |
