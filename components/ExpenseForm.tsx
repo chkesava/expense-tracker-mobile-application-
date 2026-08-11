@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Modal,
   Pressable,
@@ -119,6 +119,7 @@ export function ExpenseForm({
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const isSubmittingRef = useRef(false);
   const [categoryTouched, setCategoryTouched] = useState(false);
   const [suggestionHint, setSuggestionHint] = useState<string | null>(null);
   const [showCategoryPickerModal, setShowCategoryPickerModal] = useState(false);
@@ -291,6 +292,8 @@ export function ExpenseForm({
   };
 
   const handleSubmit = async () => {
+    if (isSubmittingRef.current) return;
+
     const db = getFirestoreDb();
     if (!uid || !db) {
       toast.error("Not authenticated");
@@ -316,6 +319,17 @@ export function ExpenseForm({
       return;
     }
 
+    // Editing without a Firestore doc id would otherwise silently insert a duplicate.
+    if (type === "expense" && editingExpense && !editingExpense.id?.trim()) {
+      toast.error("Cannot update expense — missing id");
+      return;
+    }
+    if (type === "income" && editingIncome && !editingIncome.id?.trim()) {
+      toast.error("Cannot update income — missing id");
+      return;
+    }
+
+    isSubmittingRef.current = true;
     setIsSubmitting(true);
     try {
       if (type === "expense") {
@@ -330,9 +344,9 @@ export function ExpenseForm({
           tags: tags.length > 0 ? tags : [],
         };
 
-        if (editingExpense?.id) {
+        if (editingExpense) {
           await updateDoc(
-            doc(db, "users", uid, "expenses", editingExpense.id),
+            doc(db, "users", uid, "expenses", editingExpense.id!.trim()),
             payload
           );
           toast.success("Expense updated");
@@ -364,9 +378,9 @@ export function ExpenseForm({
           note: note.trim(),
         };
 
-        if (editingIncome?.id) {
+        if (editingIncome) {
           await updateDoc(
-            doc(db, "users", uid, "incomes", editingIncome.id),
+            doc(db, "users", uid, "incomes", editingIncome.id!.trim()),
             payload
           );
           toast.success("Income updated");
@@ -384,6 +398,7 @@ export function ExpenseForm({
       console.error("ExpenseForm submission error:", err);
       toast.error("Failed to save transaction");
     } finally {
+      isSubmittingRef.current = false;
       setIsSubmitting(false);
     }
   };

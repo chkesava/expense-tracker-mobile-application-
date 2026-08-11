@@ -245,7 +245,8 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       ),
       (snap) => {
         setExpenses(
-          snap.docs.map((d) => ({ id: d.id, ...(d.data() as object) } as Expense))
+          // Firestore doc id must win over any `id` field stored on the document.
+          snap.docs.map((d) => ({ ...(d.data() as object), id: d.id } as Expense))
         );
         pendingExpensesCountRef.current = snap.docs.filter(
           (d) => d.metadata.hasPendingWrites
@@ -267,7 +268,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         query(collection(db, ...base, "incomes"), orderBy("createdAt", "desc")),
         (snap) => {
           setIncomes(
-            snap.docs.map((d) => ({ id: d.id, ...(d.data() as object) } as Income))
+            snap.docs.map((d) => ({ ...(d.data() as object), id: d.id } as Income))
           );
           pendingIncomesCountRef.current = snap.docs.filter(
             (d) => d.metadata.hasPendingWrites
@@ -348,7 +349,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
             // Replace limited window with full history without flipping loading
             // (keeps ledger/dashboard mounted list from blanking mid-scroll).
             setExpenses(
-              snap.docs.map((d) => ({ id: d.id, ...(d.data() as object) } as Expense))
+              snap.docs.map((d) => ({ ...(d.data() as object), id: d.id } as Expense))
             );
             pendingExpensesCountRef.current = snap.docs.filter(
               (d) => d.metadata.hasPendingWrites
