@@ -186,16 +186,16 @@ Companion to `TESTING_MASTER_PLAN.md` and `TEST_BUG_DISCOVERY_LOG.md`.
 
 ## Phase 10 — Android Release Gate
 
-- [ ] Module analysis complete (android-release workflow gate)
-- [ ] Mandatory test step runs **before** APK build
-- [ ] `release:verify` included
-- [ ] Typecheck included
-- [ ] SMS/device pack gating defined when SMS ships
-- [ ] Failed tests block distribution
-- [ ] Job summary includes test result signal
-- [ ] Bugs documented
-- [ ] Bugs fixed
-- [ ] Regression tests added
+- [x] Module analysis complete (android-release workflow gate)
+- [x] Mandatory test step runs **before** APK build (`npm test` + typechecks before keystore/APK)
+- [x] `release:verify` included (after prebuild, before APK)
+- [x] Typecheck included (`typecheck` + `typecheck:shared`)
+- [x] SMS/device pack gating defined when SMS ships — **deferred note** in workflow summary until SMS merges
+- [x] Failed tests block distribution (steps fail the job before distribute)
+- [x] Job summary includes test result signal
+- [x] Bugs documented — none specific to release gate
+- [x] Bugs fixed — N/A
+- [x] Regression tests added — N/A (runs existing suite)
 - [ ] Phase approved
 - [ ] Testing program Definition of Done reviewed (`TESTING_MASTER_PLAN.md` §23)
 
@@ -233,7 +233,7 @@ Use for every meaningful change after Cursor/Antigravity rules are installed:
 | 7                |             |            | Implemented; BUG-001 fixed; awaiting exit sign-off                          |
 | 8                |             |            | Paused (device/SMS pack)                                                    |
 | 9                |             |            | Implemented — `pr-checks.yml`; enable required status check in branch protection |
-| 10               |             |            |                                                                             |
+| 10               |             |            | Implemented — release job gates APK on tests/typecheck/`release:verify`     |
 
 
 ---

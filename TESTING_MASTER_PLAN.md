@@ -781,7 +781,7 @@ Highest-risk discovery areas: subscription auto-post, account balances, duress i
 | Complexity   | Medium                                                                                     |
 | Entry        | PR CI proven                                                                               |
 | Exit         | Release cannot publish if tests fail                                                       |
-| Deliverables | Updated android-release workflow (future)                                                  |
+| Deliverables | `android-release.yml` runs `npm test` + typechecks + `release:verify` before APK           |
 
 
 **Phase count: 11 (Phase 0–10).**
