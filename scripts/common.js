@@ -157,6 +157,19 @@ function getCurrentVersion() {
   };
 }
 
+/** Bump the patch segment: 1.1.0 → 1.1.1. Missing parts default to 0. */
+function bumpPatchVersion(versionName) {
+  const parts = String(versionName || '0.0.0')
+    .split('.')
+    .map((part) => {
+      const n = Number.parseInt(part, 10);
+      return Number.isFinite(n) && n >= 0 ? n : 0;
+    });
+  while (parts.length < 3) parts.push(0);
+  parts[2] += 1;
+  return `${parts[0]}.${parts[1]}.${parts[2]}`;
+}
+
 function updateVersion({ versionName, versionCode }) {
   const current = getCurrentVersion();
   const newVersionName = versionName || current.versionName;
@@ -243,6 +256,7 @@ module.exports = {
   failFast,
   parseCliArgs,
   getCurrentVersion,
+  bumpPatchVersion,
   updateVersion,
   saveReleaseState,
   getReleaseState,

@@ -13,7 +13,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version name (e.g. 1.2.0). Defaults to app.json value.'
+        description: 'Version name (e.g. 1.2.0). Defaults to auto-bumped patch from app.json.'
         required: false
         type: string
       mandatory:
@@ -30,6 +30,9 @@ concurrency:
   group: android-release
   cancel-in-progress: false
 
+permissions:
+  contents: write
+
 jobs:
   build:
     name: Build, distribute and announce
@@ -39,6 +42,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Needed so the bot can push the version bump commit back to main.
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -137,15 +143,25 @@ jobs:
           INPUT_VERSION: ${{ inputs.version }}
           VERSION_CODE_OFFSET: ${{ vars.VERSION_CODE_OFFSET }}
         run: |
+          CURRENT_NAME=$(node -p "require('./app.json').expo.version")
+          CURRENT_CODE=$(node -p "Number(require('./app.json').expo.android.versionCode)||0")
+
           VERSION_NAME="$INPUT_VERSION"
           if [ -z "$VERSION_NAME" ]; then
-            VERSION_NAME=$(node -p "require('./app.json').expo.version")
+            # Each automatic main release advances the patch: 1.1.0 → 1.1.1
+            VERSION_NAME=$(node -e "const {bumpPatchVersion}=require('./scripts/common'); console.log(bumpPatchVersion(process.argv[1]))" "$CURRENT_NAME")
           fi
+
           OFFSET="${VERSION_CODE_OFFSET:-27}"
           VERSION_CODE=$((OFFSET + GITHUB_RUN_NUMBER))
+          # Never go backwards relative to what is already in app.json.
+          if [ "$VERSION_CODE" -le "$CURRENT_CODE" ]; then
+            VERSION_CODE=$((CURRENT_CODE + 1))
+          fi
+
           echo "name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
           echo "code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
-          echo "Building v$VERSION_NAME (build $VERSION_CODE)"
+          echo "Building v$VERSION_NAME (build $VERSION_CODE) from base v$CURRENT_NAME (build $CURRENT_CODE)"
 
       - name: Resolve release notes
         id: notes
@@ -220,7 +236,28 @@ jobs:
           RELEASE_DOWNLOAD_URL: ${{ steps.download.outputs.url }}
           RELEASE_NOTES: ${{ steps.notes.outputs.value }}
           RELEASE_MANDATORY: ${{ inputs.mandatory || false }}
+          RELEASE_VERSION_NAME: ${{ steps.version.outputs.name }}
+          RELEASE_VERSION_CODE: ${{ steps.version.outputs.code }}
         run: node scripts/publish-release-metadata.js
+
+      # Persist the bumped version so the next main release continues 1.1.1 → 1.1.2.
+      # [skip ci] prevents this push from re-triggering the Android Release workflow.
+      - name: Commit version bump
+        if: success()
+        env:
+          VERSION_NAME: ${{ steps.version.outputs.name }}
+          VERSION_CODE: ${{ steps.version.outputs.code }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app.json package.json
+          if git diff --staged --quiet; then
+            echo "Version files already match v${VERSION_NAME} (build ${VERSION_CODE})."
+          else
+            git commit -m "chore: bump version to v${VERSION_NAME} (build ${VERSION_CODE}) [skip ci]"
+            git push
+            echo "Committed and pushed version bump."
+          fi
 
       - name: Clean up credentials
         if: always()

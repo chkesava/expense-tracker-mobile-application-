@@ -35,6 +35,10 @@ function parseArgs() {
     downloadUrl: process.env.RELEASE_DOWNLOAD_URL || '',
     notes: process.env.RELEASE_NOTES || '',
     mandatory: String(process.env.RELEASE_MANDATORY || '').toLowerCase() === 'true',
+    versionName: process.env.RELEASE_VERSION_NAME || '',
+    versionCode: process.env.RELEASE_VERSION_CODE
+      ? Number.parseInt(process.env.RELEASE_VERSION_CODE, 10)
+      : null,
     dryRun: false
   };
 
@@ -45,6 +49,10 @@ function parseArgs() {
       options.notes = arg.slice('--notes='.length).trim();
     } else if (arg.startsWith('--mandatory=')) {
       options.mandatory = arg.slice('--mandatory='.length).trim().toLowerCase() === 'true';
+    } else if (arg.startsWith('--version-name=')) {
+      options.versionName = arg.slice('--version-name='.length).trim();
+    } else if (arg.startsWith('--version-code=')) {
+      options.versionCode = Number.parseInt(arg.slice('--version-code='.length).trim(), 10);
     } else if (arg === '--dry-run') {
       options.dryRun = true;
     }
@@ -115,6 +123,14 @@ function resolveApkFileName() {
 async function publishReleaseMetadata(cliOptions = null) {
   const options = cliOptions || parseArgs();
   const version = getCurrentVersion();
+  const versionName =
+    options.versionName && options.versionName.trim()
+      ? options.versionName.trim()
+      : version.versionName;
+  const versionCode =
+    Number.isInteger(options.versionCode) && options.versionCode > 0
+      ? options.versionCode
+      : version.versionCode;
 
   console.log('\n📡 Publishing release metadata to Firestore...');
 
@@ -128,8 +144,8 @@ async function publishReleaseMetadata(cliOptions = null) {
   }
 
   const payload = {
-    versionName: version.versionName,
-    versionCode: version.versionCode,
+    versionName,
+    versionCode,
     downloadUrl: options.downloadUrl,
     notes: options.notes || '',
     mandatory: options.mandatory,
@@ -164,10 +180,28 @@ async function publishReleaseMetadata(cliOptions = null) {
     });
   }
 
+  if (typeof initializeApp !== 'function' || typeof getFirestore !== 'function' || typeof cert !== 'function') {
+    failFast({
+      step: 'Publish Release Metadata',
+      error: 'firebase-admin modular API is unavailable.',
+      why: 'initializeApp/getFirestore/cert could not be loaded from firebase-admin.',
+      fix: 'Upgrade firebase-admin to v12+ and keep using the modular imports.'
+    });
+  }
+
   const serviceAccount = loadServiceAccount();
 
-  // firebase-admin v12+ no longer exposes admin.apps on the default export.
-  if (getApps().length === 0) {
+  // firebase-admin v14 removed admin.apps on the default export. Guard getApps()
+  // so a missing helper cannot crash with "Cannot read properties of undefined (reading 'length')".
+  let alreadyInitialized = false;
+  try {
+    const apps = typeof getApps === 'function' ? getApps() : [];
+    alreadyInitialized = Array.isArray(apps) && apps.length > 0;
+  } catch (_) {
+    alreadyInitialized = false;
+  }
+
+  if (!alreadyInitialized) {
     initializeApp({
       credential: cert(serviceAccount),
       projectId: serviceAccount.project_id
