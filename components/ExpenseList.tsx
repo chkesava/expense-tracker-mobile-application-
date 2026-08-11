@@ -30,7 +30,6 @@ import {
   SwipeableRow,
   closeOpenSwipeableRow,
 } from "@/components/common/SwipeableRow";
-import { Button } from "@/components/ui/Button";
 import { getFirestoreDb } from "@/lib/firebase";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
@@ -745,27 +744,66 @@ export function ExpenseList({
               ) : null}
             </View>
 
-            {/* Action Buttons */}
+            {/* Action Buttons — plain Pressable avoids Reanimated pressables
+                failing to receive taps inside the bottom sheet on Android. */}
             <View style={{ gap: 10 }}>
-              <Button
-                variant="tonal"
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Edit Transaction"
+                android_ripple={{ color: theme.colors.primary + "22" }}
                 onPress={() => {
                   const tx = selectedTx;
-                  if (tx) openEditAfterDetailClose(tx);
+                  if (!tx) return;
+                  void haptic.selection();
+                  openEditAfterDetailClose(tx);
                 }}
+                style={({ pressed }) => [
+                  styles.detailActionBtn,
+                  {
+                    backgroundColor: theme.colors.secondaryContainer,
+                    opacity: pressed ? 0.85 : 1,
+                  },
+                ]}
               >
-                Edit Transaction
-              </Button>
+                <Text
+                  style={{
+                    color: theme.colors.onSecondaryContainer,
+                    fontSize: theme.typography.sm,
+                    fontWeight: "700",
+                  }}
+                >
+                  Edit Transaction
+                </Text>
+              </Pressable>
 
-              <Button
-                variant="destructive"
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Delete Transaction"
+                android_ripple={{ color: "rgba(255,255,255,0.24)" }}
                 onPress={() => {
                   const tx = selectedTx;
-                  if (tx) void handleDelete(tx);
+                  if (!tx) return;
+                  void haptic.impact();
+                  void handleDelete(tx);
                 }}
+                style={({ pressed }) => [
+                  styles.detailActionBtn,
+                  {
+                    backgroundColor: theme.colors.destructive,
+                    opacity: pressed ? 0.85 : 1,
+                  },
+                ]}
               >
-                Delete Transaction
-              </Button>
+                <Text
+                  style={{
+                    color: theme.colors.destructiveForeground,
+                    fontSize: theme.typography.sm,
+                    fontWeight: "700",
+                  }}
+                >
+                  Delete Transaction
+                </Text>
+              </Pressable>
             </View>
           </View>
         ) : null}
@@ -910,5 +948,14 @@ const styles = StyleSheet.create({
   detailValue: {
     fontSize: 13,
     fontWeight: "700",
+  },
+  detailActionBtn: {
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 48,
+    borderRadius: 999,
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    overflow: "hidden",
   },
 });
