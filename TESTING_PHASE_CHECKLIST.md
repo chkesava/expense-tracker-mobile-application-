@@ -55,22 +55,22 @@ Companion to `TESTING_MASTER_PLAN.md` and `TEST_BUG_DISCOVERY_LOG.md`.
 - [x] Bugs documented (BUG-002 / BUG-006 progress notes; BUG-009 month-key format-only)
 - [x] Bugs fixed *(none required for Phase 1 — coverage only)*
 - [x] Regression tests added *(calendar + credit cycle matrix)*
-- [ ] Phase approved *(waiting for human exit sign-off)*
+- [x] Phase approved
 
 ---
 
 ## Phase 2 — Shared Business Logic Completeness
 
-- [ ] Module analysis complete (remaining `shared/utils`, OCR, advisor filters, net-worth extract)
-- [ ] Unit test scope identified
-- [ ] Integration test scope identified
-- [ ] Edge cases identified (empty/large datasets, month key alignment)
-- [ ] Test implementation completed
-- [ ] Tests passing
-- [ ] Bugs documented
-- [ ] Bugs fixed
-- [ ] Regression tests added
-- [ ] Phase approved
+- [x] Module analysis complete (remaining `shared/utils`, OCR, advisor filters)
+- [x] Unit test scope identified
+- [x] Integration test scope identified (none)
+- [x] Edge cases identified (empty datasets, UTC month keys, OCR date forms)
+- [x] Test implementation completed
+- [x] Tests passing
+- [x] Bugs documented (BUG-002 progress; BUG-010 OCR date ambiguity)
+- [x] Bugs fixed *(none — coverage / documentation only)*
+- [x] Regression tests added
+- [ ] Phase approved *(waiting for human exit sign-off)*
 
 ---
 
@@ -222,7 +222,8 @@ Use for every meaningful change after Cursor/Antigravity rules are installed:
 |-------|-------------|------|-------|
 | Plan (this pack) | User | 2026-08-11 | Explicit approval to start Phase 0 |
 | 0 | User | 2026-08-11 | Exit signed off; baseline frozen in `docs/TESTING_BASELINE.md` |
-| 1 | | | Implemented; awaiting exit sign-off (24 files / 143 tests) |
+| 1 | User | 2026-08-11 | Exit signed off; calendar + balance coverage landed |
+| 2 | | | Implemented; awaiting exit sign-off |
 | 1 | | | |
 | 2 | | | |
 | 3 | | | |

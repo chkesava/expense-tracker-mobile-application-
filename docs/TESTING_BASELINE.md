@@ -13,7 +13,7 @@ Companion docs: `TESTING_MASTER_PLAN.md`, `TESTING_PHASE_CHECKLIST.md`, `TEST_BU
 
 | Command | Purpose | Phase 0 / current result |
 |---------|---------|--------------------------|
-| `npm test` | Vitest run (`vitest run`) | Phase 0: **22 / 122 PASS**. After Phase 1: **24 / 143 PASS** |
+| `npm test` | Vitest run (`vitest run`) | Phase 0: **22 / 122 PASS**. Phase 1: **24 / 143 PASS**. Phase 2: **40 files / 195 PASS** (includes `services/**/*.test.ts`) |
 | `npm run test:watch` | Vitest watch | Available |
 | `npm run typecheck:shared` | `tsc -p tsconfig.shared.json` | **PASS after Phase 0 config fix** (was failing: missing `@/` paths + `window`) |
 | `npm run typecheck` | Full app `tsc --noEmit` | **FAIL (known debt)** — see §5 |
@@ -30,10 +30,10 @@ File: `vitest.config.ts`
 | Setting | Value |
 |---------|--------|
 | Environment | `node` |
-| Include globs | `shared/**/*.test.ts` **only** on `main` |
+| Include globs | `shared/**/*.test.ts`, `services/**/*.test.ts` (Phase 2+) |
 | Alias | `@` → repo root |
 
-**Note:** Earlier planning analysis on `feature/sms-automation` also included `services/sms/**/*.test.ts`. That tree is **not** on current `main`. Phase 3 will extend `include` when SMS merges.
+**Note:** SMS (`services/sms/**`) is still absent on `main`; Phase 3 will add those tests when SMS merges.
 
 ### Baseline test inventory (22 files)
 

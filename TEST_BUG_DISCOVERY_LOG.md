@@ -142,7 +142,7 @@ Status: Open — Requires Test Verification
 
 Fix: TBD
 
-Regression Test: Partially added — `shared/utils/dates.test.ts` + frozen-time billing/credit tests. Remaining consumer `toISOString().slice` paths still need coverage/migration.
+Regression Test: Partially added — `shared/utils/dates.test.ts` + frozen-time billing/credit tests. Phase 2 added coverage documenting UTC `toISOString` usage in `grouping`, `weeklySummary`, `insightMetrics`, OCR default date, and `aiAdvisorService` month scoping. Remaining consumer migration still open.
 
 Related PR/Commit:
 ```
@@ -426,6 +426,45 @@ Related PR/Commit:
 
 ---
 
+### BUG-010
+
+```text
+BUG-010
+
+Module: services/ocrService
+Feature: Receipt date parsing (numeric forms)
+Test Suite: services/ocrService.test.ts
+Test Type: Unit / Static Analysis
+Severity: Medium
+Priority: P2
+
+Classification: Potential Issue — Requires Test Verification
+
+Environment: Node Vitest / device OCR
+
+Preconditions: Receipt text contains a numeric date like 08/11/2026
+
+Expected Behavior: Interpret per locale / unambiguous ISO when possible
+
+Actual Behavior: Second pattern treats values as DD/MM/YYYY (day first). US MM/DD receipts may be mis-parsed.
+
+Steps to Reproduce: parseReceiptOcrText("Shop\n08/11/2026\nTotal: 10") — currently becomes 2026-11-08
+
+Evidence: ocrService.ts datePatterns + Phase 2 unit tests for DD/MM form
+
+Root Cause: Assumed day-first numeric dates
+
+Status: Open — Requires Test Verification / product locale decision
+
+Fix: TBD
+
+Regression Test: Partial — DD/MM case covered; MM/DD ambiguity not yet locked
+
+Related PR/Commit:
+```
+
+---
+
 ## Confirmed bugs found during testing phases
 
 *(None yet — product test failures. Tooling debt logged above as BUG-008.)*
@@ -445,3 +484,4 @@ Related PR/Commit:
 | BUG-007 | Nutrition data source | Potential Issue — Requires Test Verification | Medium | Open |
 | BUG-008 | Full app typecheck / Modal | Potential Issue — Requires Test Verification | Medium | Open |
 | BUG-009 | isValidMonthKey format-only | Potential Issue — Requires Test Verification | Low | Open |
+| BUG-010 | OCR DD/MM vs MM/DD date parse | Potential Issue — Requires Test Verification | Medium | Open |
