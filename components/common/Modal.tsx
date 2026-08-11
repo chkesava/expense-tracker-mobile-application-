@@ -12,16 +12,10 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { X } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
-import Animated, {
-  FadeIn,
-  FadeOut,
-  SlideInDown,
-} from "react-native-reanimated";
+import Animated, { SlideInDown } from "react-native-reanimated";
 
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
-
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 export interface ModalProps {
   isOpen: boolean;
@@ -55,107 +49,116 @@ export function Modal({
       onRequestClose={handleClose}
       statusBarTranslucent
     >
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={styles.overlay}
-      >
-        {/* Backdrop dismiss with animated fade */}
-        <AnimatedPressable
-          entering={FadeIn.duration(200)}
-          exiting={FadeOut.duration(150)}
+      {/*
+        Hit-testing layout (important on Android):
+        - Root is a plain View (not KeyboardAvoidingView / AnimatedPressable).
+        - Backdrop is a separate absolute Pressable underneath the sheet.
+        - Sheet sits above with zIndex/elevation so Edit/Delete buttons receive taps.
+      */}
+      <View style={styles.overlay} pointerEvents="box-none">
+        <Pressable
           style={[
             styles.backdrop,
-            { backgroundColor: isDark ? "rgba(0,0,0,0.72)" : "rgba(15,23,42,0.55)" },
+            {
+              backgroundColor: isDark
+                ? "rgba(0,0,0,0.72)"
+                : "rgba(15,23,42,0.55)",
+            },
           ]}
           onPress={handleClose}
           accessibilityLabel="Close modal overlay"
         />
 
-        {/* Material 3 Bottom Sheet with Reanimated spring entrance */}
-        <Animated.View
-          entering={SlideInDown.springify().damping(22).stiffness(240)}
-          style={[
-            styles.sheetCard,
-            theme.elevation[4],
-            {
-              backgroundColor: theme.colors.card,
-              borderColor: theme.colors.border,
-              borderTopLeftRadius: theme.radius.sheet ?? 28,
-              borderTopRightRadius: theme.radius.sheet ?? 28,
-              paddingBottom: Math.max(insets.bottom, 16),
-              maxHeight: typeof maxHeight === "number" ? maxHeight : undefined,
-            },
-          ]}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          style={styles.sheetAvoider}
+          pointerEvents="box-none"
         >
-          {/* Top Drag Indicator */}
-          <View style={styles.dragHandleContainer}>
-            <View
-              style={[
-                styles.dragHandle,
-                {
-                  backgroundColor: isDark
-                    ? "rgba(255,255,255,0.25)"
-                    : "rgba(0,0,0,0.2)",
-                },
-              ]}
-            />
-          </View>
-
-          {/* Header */}
-          {title ? (
-            <View
-              style={[
-                styles.header,
-                { borderBottomColor: theme.colors.border },
-              ]}
-            >
-              <Text
+          <Animated.View
+            entering={SlideInDown.springify().damping(22).stiffness(240)}
+            pointerEvents="auto"
+            style={[
+              styles.sheetCard,
+              theme.elevation[4],
+              {
+                backgroundColor: theme.colors.card,
+                borderColor: theme.colors.border,
+                borderTopLeftRadius: theme.radius.sheet ?? 28,
+                borderTopRightRadius: theme.radius.sheet ?? 28,
+                paddingBottom: Math.max(insets.bottom, 16),
+                maxHeight:
+                  typeof maxHeight === "number" ? maxHeight : undefined,
+              },
+            ]}
+          >
+            <View style={styles.dragHandleContainer}>
+              <View
                 style={[
-                  styles.title,
-                  {
-                    color: theme.colors.foreground,
-                    fontFamily: theme.fontFamily.bold,
-                  },
-                ]}
-                numberOfLines={1}
-              >
-                {title}
-              </Text>
-
-              <Pressable
-                onPress={handleClose}
-                android_ripple={{
-                  color: theme.colors.primary + "20",
-                  borderless: true,
-                  radius: 20,
-                }}
-                style={({ pressed }) => [
-                  styles.closeButton,
+                  styles.dragHandle,
                   {
                     backgroundColor: isDark
-                      ? "rgba(255,255,255,0.08)"
-                      : "rgba(0,0,0,0.05)",
+                      ? "rgba(255,255,255,0.25)"
+                      : "rgba(0,0,0,0.2)",
                   },
-                  Platform.OS === "ios" && pressed && { opacity: 0.7 },
                 ]}
-                accessibilityLabel="Close modal"
-                accessibilityRole="button"
-              >
-                <X size={18} color={theme.colors.mutedForeground} />
-              </Pressable>
+              />
             </View>
-          ) : null}
 
-          {/* Sheet Content */}
-          <ScrollView
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.content}
-            keyboardShouldPersistTaps="handled"
-          >
-            {children}
-          </ScrollView>
-        </Animated.View>
-      </KeyboardAvoidingView>
+            {title ? (
+              <View
+                style={[
+                  styles.header,
+                  { borderBottomColor: theme.colors.border },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.title,
+                    {
+                      color: theme.colors.foreground,
+                      fontFamily: theme.fontFamily.bold,
+                    },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {title}
+                </Text>
+
+                <Pressable
+                  onPress={handleClose}
+                  android_ripple={{
+                    color: theme.colors.primary + "20",
+                    borderless: true,
+                    radius: 20,
+                  }}
+                  style={({ pressed }) => [
+                    styles.closeButton,
+                    {
+                      backgroundColor: isDark
+                        ? "rgba(255,255,255,0.08)"
+                        : "rgba(0,0,0,0.05)",
+                    },
+                    Platform.OS === "ios" && pressed && { opacity: 0.7 },
+                  ]}
+                  accessibilityLabel="Close modal"
+                  accessibilityRole="button"
+                >
+                  <X size={18} color={theme.colors.mutedForeground} />
+                </Pressable>
+              </View>
+            ) : null}
+
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.content}
+              keyboardShouldPersistTaps="always"
+              bounces={false}
+            >
+              {children}
+            </ScrollView>
+          </Animated.View>
+        </KeyboardAvoidingView>
+      </View>
     </RNModal>
   );
 }
@@ -168,16 +171,18 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   backdrop: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    ...StyleSheet.absoluteFillObject,
+  },
+  sheetAvoider: {
+    width: "100%",
+    zIndex: 2,
   },
   sheetCard: {
     width: "100%",
     borderTopWidth: 1,
     overflow: "hidden",
+    zIndex: 2,
+    elevation: 8,
   },
   dragHandleContainer: {
     alignItems: "center",
