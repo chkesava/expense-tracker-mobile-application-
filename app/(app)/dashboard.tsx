@@ -14,6 +14,7 @@ import { InvestmentsWidget } from "@/components/dashboard/InvestmentsWidget";
 import { OverviewWidget } from "@/components/dashboard/OverviewWidget";
 import { QuickAddWidget } from "@/components/dashboard/QuickAddWidget";
 import { QuickInsightsWidget } from "@/components/dashboard/QuickInsightsWidget";
+import { SmartInsightsWidget } from "@/components/dashboard/SmartInsightsWidget";
 import { RecentActivityWidget } from "@/components/dashboard/RecentActivityWidget";
 import { SubscriptionsWidget } from "@/components/dashboard/SubscriptionsWidget";
 import { TopCategoriesWidget } from "@/components/dashboard/TopCategoriesWidget";
@@ -546,6 +547,12 @@ export default function DashboardScreen() {
                     monthLabel={formatMonthChipLabel(activeMonth)}
                     onOpenMonthPicker={() => setIsMonthDrawerOpen(true)}
                   />
+                  <SmartInsightsWidget
+                    expenses={expenses}
+                    monthlyBudget={settings.monthlyBudget}
+                    currency={system.defaultCurrency}
+                    todayKey={todayKey}
+                  />
                 </View>
               ) : null}
             </View>
@@ -553,15 +560,23 @@ export default function DashboardScreen() {
 
           {/* If no hero widgets enabled, still show Quick Insights at top */}
           {heroCount === 0 ? (
-            <QuickInsightsWidget
-              monthlySpent={monthlySpent}
-              monthlyIncome={monthlyIncome}
-              previousSpent={previousSpent}
-              previousIncome={previousIncome}
-              currency={system.defaultCurrency}
-              monthLabel={formatMonthChipLabel(activeMonth)}
-              onOpenMonthPicker={() => setIsMonthDrawerOpen(true)}
-            />
+            <>
+              <QuickInsightsWidget
+                monthlySpent={monthlySpent}
+                monthlyIncome={monthlyIncome}
+                previousSpent={previousSpent}
+                previousIncome={previousIncome}
+                currency={system.defaultCurrency}
+                monthLabel={formatMonthChipLabel(activeMonth)}
+                onOpenMonthPicker={() => setIsMonthDrawerOpen(true)}
+              />
+              <SmartInsightsWidget
+                expenses={expenses}
+                monthlyBudget={settings.monthlyBudget}
+                currency={system.defaultCurrency}
+                todayKey={todayKey}
+              />
+            </>
           ) : null}
         </View>
       )}
@@ -638,6 +653,7 @@ const styles = StyleSheet.create({
   },
   quickInsightsSlot: {
     marginTop: 14,
+    gap: 14,
   },
   fabContainer: {
     position: "absolute",
