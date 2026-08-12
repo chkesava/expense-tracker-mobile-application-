@@ -2,11 +2,12 @@ import type {
   RawSmsMessage,
   SmsParsedTransaction,
 } from "@/shared/types/smsTransaction";
-import { formatDateKey, monthFromDateKey } from "@/shared/utils/dates";
+import { monthFromDateKey } from "@/shared/utils/dates";
 import {
   detectSmsTransaction,
   isExpenseOrIncomeKind,
 } from "./smsDetector";
+import { extractSmsFields } from "./smsFieldExtractor";
 
 export interface SmsParseContext {
   /** Optional account names for matching “from HDFC” style hints */
@@ -15,10 +16,28 @@ export interface SmsParseContext {
   timezone?: string;
 }
 
+function buildNote(parts: {
+  merchant?: string;
+  bank?: string;
+  paymentMethod?: string;
+  accountLast4?: string;
+  externalRef?: string;
+  fallback: string;
+}): string {
+  const chunks = [
+    parts.merchant,
+    parts.paymentMethod,
+    parts.bank,
+    parts.accountLast4 ? `A/c ${parts.accountLast4}` : undefined,
+    parts.externalRef ? `Ref ${parts.externalRef}` : undefined,
+  ].filter(Boolean);
+  if (chunks.length > 0) return chunks.join(" · ").slice(0, 160);
+  return parts.fallback.slice(0, 160);
+}
+
 /**
- * Bank / UPI SMS parser boundary.
- * Phase 4: detection (expense/income/transfer/otp/promo/non_financial) + amount.
- * Full merchant/category templates come in a later phase.
+ * Bank / UPI SMS parser.
+ * Phase 5: detect type + extract amount/merchant/bank/method/date/account/ref.
  */
 export function parseBankSms(
   message: RawSmsMessage,
@@ -34,35 +53,59 @@ export function parseBankSms(
   }
 
   const detection = detectSmsTransaction(message);
-  const date = formatDateKey(
-    new Date(message.receivedAtMs || Date.now()),
-    context.timezone
-  );
+  const fields = extractSmsFields(message, { timezone: context.timezone });
+
+  const amount = fields.amount ?? detection.amount;
+  const date = fields.date;
+  const month = date ? monthFromDateKey(date) : undefined;
 
   const parsed: SmsParsedTransaction = {
     kind: detection.kind,
-    amount: detection.amount,
+    amount,
     date,
-    month: monthFromDateKey(date),
-    note: body.slice(0, 160),
+    month,
+    time: fields.time,
+    merchant: fields.merchant,
+    bank: fields.bank,
+    paymentMethod: fields.paymentMethod,
+    accountLast4: fields.accountLast4,
+    externalRef: fields.externalRef,
+    note: buildNote({
+      merchant: fields.merchant,
+      bank: fields.bank,
+      paymentMethod: fields.paymentMethod,
+      accountLast4: fields.accountLast4,
+      externalRef: fields.externalRef,
+      fallback: body,
+    }),
     confidence: detection.confidence,
     detectionReasons: detection.reasons,
-    templateId: "phase4-detector",
+    parseReasons: fields.reasons,
+    templateId: "phase5-parser",
   };
 
-  // Account hint from optional context (name match in body)
+  // Prefer matching user account by last4 or name
   if (context.accounts?.length) {
     const lower = body.toLowerCase();
-    const hit = context.accounts.find((a) =>
+    const byName = context.accounts.find((a) =>
       lower.includes(a.name.trim().toLowerCase())
     );
-    if (hit) parsed.accountHint = hit.name;
+    if (byName) parsed.accountHint = byName.name;
+  }
+  if (fields.accountLast4) {
+    parsed.accountHint = parsed.accountHint || `…${fields.accountLast4}`;
   }
 
-  // Mark low confidence for expense/income without amount
-  if (isExpenseOrIncomeKind(detection.kind) && detection.amount == null) {
-    parsed.confidence = Math.min(parsed.confidence, 0.55);
+  // Confidence boosts when key fields are present
+  let confidence = parsed.confidence;
+  if (isExpenseOrIncomeKind(detection.kind)) {
+    if (amount == null) confidence = Math.min(confidence, 0.55);
+    else confidence = Math.max(confidence, 0.82);
+    if (fields.merchant) confidence = Math.min(0.95, confidence + 0.05);
+    if (fields.paymentMethod) confidence = Math.min(0.96, confidence + 0.03);
+    if (fields.externalRef) confidence = Math.min(0.97, confidence + 0.02);
   }
+  parsed.confidence = confidence;
 
   return parsed;
 }

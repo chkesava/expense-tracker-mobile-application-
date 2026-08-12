@@ -32,6 +32,29 @@ function requireAmountAndDate(
   return { amount: parsed.amount, date, month };
 }
 
+function buildNote(parsed: SmsParsedTransaction): string {
+  if (parsed.note?.trim()) return parsed.note.trim();
+  const chunks = [
+    parsed.merchant,
+    parsed.paymentMethod,
+    parsed.bank,
+    parsed.accountLast4 ? `A/c ${parsed.accountLast4}` : undefined,
+    parsed.externalRef ? `Ref ${parsed.externalRef}` : undefined,
+  ].filter(Boolean);
+  return chunks.length > 0 ? chunks.join(" · ") : "SMS import";
+}
+
+function buildTags(
+  parsed: SmsParsedTransaction,
+  extra?: string[]
+): string[] {
+  const tags = new Set<string>(extra ?? []);
+  tags.add("sms");
+  if (parsed.paymentMethod) tags.add(parsed.paymentMethod.toLowerCase());
+  if (parsed.bank) tags.add(parsed.bank.toLowerCase().replace(/\s+/g, "-"));
+  return [...tags];
+}
+
 /**
  * Maps a parsed SMS draft to the same payload shape ExpenseForm writes.
  * Does not call Firestore — keeps existing create UI untouched.
@@ -44,15 +67,16 @@ export function adaptParsedSmsToWritePayload(
   if (!core) return null;
 
   const accountId = options.accountId ?? null;
-  const note =
-    parsed.note?.trim() ||
-    [parsed.merchant, parsed.externalRef].filter(Boolean).join(" · ") ||
-    "SMS import";
+  const note = buildNote(parsed);
 
   if (parsed.kind === "income") {
     const payload: SmsIncomeWritePayload = {
       amount: core.amount,
-      source: options.defaultIncomeSource || "Other",
+      source:
+        options.defaultIncomeSource ||
+        parsed.merchant ||
+        parsed.bank ||
+        "Other",
       date: core.date,
       month: core.month,
       accountId,
@@ -77,7 +101,7 @@ export function adaptParsedSmsToWritePayload(
     month: core.month,
     accountId,
     note,
-    tags: options.tags?.length ? [...options.tags] : [],
+    tags: buildTags(parsed, options.tags),
   };
   return { collection: "expenses", payload };
 }

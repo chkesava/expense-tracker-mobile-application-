@@ -63,7 +63,15 @@ export interface SmsParsedTransaction {
   date?: string;
   /** YYYY-MM derived when date is known */
   month?: string;
+  /** Optional HH:mm if present in SMS */
+  time?: string;
   merchant?: string;
+  /** Detected bank name (e.g. SBI, HDFC) */
+  bank?: string;
+  /** UPI | IMPS | NEFT | RTGS | CARD | ATM | NETBANKING */
+  paymentMethod?: string;
+  /** Masked account last 4 digits when present */
+  accountLast4?: string;
   note?: string;
   accountHint?: string;
   category?: string;
@@ -75,6 +83,8 @@ export interface SmsParsedTransaction {
   templateId?: string;
   /** Short detector rule labels for debugging (local only). */
   detectionReasons?: string[];
+  /** Field extractor rule tags (local debug). */
+  parseReasons?: string[];
 }
 
 /**

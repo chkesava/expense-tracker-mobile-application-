@@ -8,6 +8,7 @@ import type {
   RawSmsMessage,
   SmsDetectionKind,
 } from "@/shared/types/smsTransaction";
+import { extractAmount } from "./smsFieldExtractor";
 
 export type SmsDetectionResult = {
   kind: SmsDetectionKind;
@@ -17,11 +18,6 @@ export type SmsDetectionResult = {
   /** Best-effort amount when present in the body. */
   amount?: number;
 };
-
-const AMOUNT_PATTERNS: RegExp[] = [
-  /(?:inr|rs\.?|₹)\s*([\d,]+(?:\.\d{1,2})?)/i,
-  /([\d,]+(?:\.\d{1,2})?)\s*(?:inr|rs\.?|₹)/i,
-];
 
 const OTP_PATTERNS: RegExp[] = [
   /\botp\b/i,
@@ -80,16 +76,6 @@ const INCOME_PATTERNS: RegExp[] = [
   /\binward\s+(?:neft|imps|rtgs|upi)\b/i,
 ];
 
-function parseAmount(body: string): number | undefined {
-  for (const re of AMOUNT_PATTERNS) {
-    const match = body.match(re);
-    if (!match?.[1]) continue;
-    const value = Number(match[1].replace(/,/g, ""));
-    if (Number.isFinite(value) && value > 0) return value;
-  }
-  return undefined;
-}
-
 function hasMoneySignal(body: string, amount?: number): boolean {
   if (amount != null) return true;
   return /(?:inr|rs\.?|₹)\s*[\d,]+/i.test(body) || /[\d,]+\s*(?:inr|rs\.?|₹)/i.test(body);
@@ -111,7 +97,7 @@ export function detectSmsTransaction(
     return { kind: "non_financial", confidence: 0.95, reasons: ["empty_body"] };
   }
 
-  const amount = parseAmount(body);
+  const amount = extractAmount(body);
   const reasons: string[] = [];
 
   // 1) OTP — even if amount-like digits appear

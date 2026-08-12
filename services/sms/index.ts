@@ -36,6 +36,18 @@ export {
   type SmsDetectionResult,
 } from "./smsDetector";
 
+export {
+  extractSmsFields,
+  extractAmount,
+  extractMerchant,
+  extractBank,
+  extractPaymentMethod,
+  extractAccountLast4,
+  extractReferenceId,
+  type SmsExtractedFields,
+  type SmsPaymentMethod,
+} from "./smsFieldExtractor";
+
 export { buildSmsFingerprint } from "./smsDedupe";
 
 export {
