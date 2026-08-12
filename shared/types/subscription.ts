@@ -7,6 +7,8 @@ export interface Subscription {
     isActive: boolean;
     lastProcessed: string; // "YYYY-MM"
     type: "subscription" | "emi" | "transfer";
+    /** `sms` = detected from repeating expenses; skip auto-post to avoid double-counting. */
+    source?: "manual" | "sms";
     endMonth?: number; // 1-12
     endYear?: number;
     isCompleted?: boolean;

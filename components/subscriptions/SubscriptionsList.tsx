@@ -366,6 +366,24 @@ export function SubscriptionsList() {
                           </Text>
                         </View>
                       ) : null}
+
+                      {sub.source === "sms" ? (
+                        <View
+                          style={[
+                            styles.pausedBadge,
+                            { backgroundColor: "rgba(16, 185, 129, 0.15)" },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.pausedBadgeText,
+                              { color: "#059669" },
+                            ]}
+                          >
+                            DETECTED
+                          </Text>
+                        </View>
+                      ) : null}
                     </View>
 
                     <Text

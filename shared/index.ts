@@ -16,6 +16,7 @@ export * from "./types/trip";
 export * from "./types/user";
 export * from "./types/vault";
 export * from "./types/vaultExpense";
+export * from "./types/smsTransaction";
 
 export * from "./data/categoryTaxonomy";
 export * from "./config/navigation";

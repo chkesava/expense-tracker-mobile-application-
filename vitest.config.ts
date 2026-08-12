@@ -8,7 +8,7 @@ export default defineConfig({
     },
   },
   test: {
-    include: ["shared/**/*.test.ts", "services/**/*.test.ts", "lib/**/*.test.ts"],
+    include: ["shared/**/*.test.ts", "services/**/*.test.ts", "lib/**/*.test.ts","services/sms/**/*.test.ts"],
     environment: "node",
   },
 });

@@ -17,6 +17,7 @@ import { FinanceDataProvider } from "@/providers/FinanceDataProvider";
 import { LedgerStateProvider } from "@/providers/LedgerStateProvider";
 import { ModalProvider } from "@/providers/ModalProvider";
 import { SetupProgressProvider } from "@/providers/SetupProgressProvider";
+import { SmsReceiverProvider } from "@/providers/SmsReceiverProvider";
 import { useSettings } from "@/providers/SettingsProvider";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -68,6 +69,12 @@ function AppShellInner() {
         />
         <Stack.Screen
           name="settings"
+          options={{
+            animation: "slide_from_right",
+          }}
+        />
+        <Stack.Screen
+          name="sms-inbox"
           options={{
             animation: "slide_from_right",
           }}
@@ -138,7 +145,9 @@ export default function AppLayout() {
         <ModalProvider>
           <SetupProgressProvider>
             <LedgerStateProvider>
-              <AppShellInner />
+              <SmsReceiverProvider>
+                <AppShellInner />
+              </SmsReceiverProvider>
             </LedgerStateProvider>
           </SetupProgressProvider>
         </ModalProvider>

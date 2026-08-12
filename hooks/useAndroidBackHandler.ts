@@ -57,6 +57,7 @@ export function useAndroidBackHandler() {
       const isSubScreen =
         cleanPath.startsWith("/accounts/") ||
         cleanPath === "/settings" ||
+        cleanPath === "/sms-inbox" ||
         cleanPath === "/app-selector" ||
         cleanPath.startsWith("/(nutrition)/");
 

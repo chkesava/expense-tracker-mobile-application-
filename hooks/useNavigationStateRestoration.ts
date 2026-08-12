@@ -37,6 +37,7 @@ export function useNavigationStateRestoration(isAuthenticated: boolean) {
             "/vaults",
             "/insights",
             "/settings",
+            "/sms-inbox",
             "/app-selector",
           ];
           if (

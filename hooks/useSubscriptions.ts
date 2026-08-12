@@ -117,6 +117,7 @@ export function useSubscriptions(options?: { enabled?: boolean }) {
 
       for (const sub of subscriptions) {
         if (!sub.id) continue;
+        if (sub.source === "sms") continue;
         if (plan.some((a) => a.subscriptionId === sub.id)) continue;
         const evaluation = evaluateSubscriptionDue(sub, now);
         if (evaluation.isCompleted && !sub.isCompleted) {
@@ -189,7 +190,13 @@ export function useSubscriptions(options?: { enabled?: boolean }) {
     if (!uid || !db || !id) return false;
 
     try {
+      const existing = subscriptions.find((sub) => sub.id === id);
       await deleteDoc(doc(db, "users", uid, "subscriptions", id));
+      if (existing?.source === "sms") {
+        void import("@/services/sms/smsRecurringSync").then((m) =>
+          m.rememberDeletedSmsSubscription(existing)
+        );
+      }
       toast.success("Subscription deleted");
       return true;
     } catch (err) {

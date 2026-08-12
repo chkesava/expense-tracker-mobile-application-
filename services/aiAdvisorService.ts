@@ -1,5 +1,6 @@
 import type { Expense, Income } from "@/shared/types/expense";
 import { groupByCategory } from "@/shared/utils/analytics";
+import { answerAdvisorQuery } from "@/shared/utils/advisorQueries";
 import { currentMonthKey } from "@/shared/utils/dates";
 import { getSmartInsight } from "@/shared/utils/insights";
 import {
@@ -26,6 +27,8 @@ export interface AdvisorContext {
   topVendors: Array<{ vendor: string; count: number; total: number }>;
   weekendSpendPct: number;
   anomaliesCount: number;
+  foodSpend: number;
+  monthlyBudget: number;
 }
 
 export interface ChatMessage {
@@ -47,7 +50,8 @@ export interface ChatMessage {
 export function buildAdvisorContext(
   expenses: Expense[],
   incomes: Income[],
-  currency: string = "INR"
+  currency: string = "INR",
+  monthlyBudget = 0
 ): AdvisorContext {
   const currentMonth = currentMonthKey();
 
@@ -103,6 +107,9 @@ export function buildAdvisorContext(
     totalWeekendWeekday > 0 ? Math.round((split.weekend / totalWeekendWeekday) * 100) : 0;
 
   const anomalies = getAnomalies(monthExpenses);
+  const foodSpend = monthExpenses
+    .filter((e) => (e.category || "").toLowerCase().startsWith("food"))
+    .reduce((sum, e) => sum + e.amount, 0);
 
   return {
     currency,
@@ -118,6 +125,8 @@ export function buildAdvisorContext(
     topVendors,
     weekendSpendPct,
     anomaliesCount: anomalies.length,
+    foodSpend,
+    monthlyBudget,
   };
 }
 
@@ -132,6 +141,29 @@ export async function generateAdvisorResponse(
   const query = userQuery.trim().toLowerCase();
   const timestamp = Date.now();
   const id = `msg_${timestamp}_${Math.random().toString(36).slice(2, 6)}`;
+
+  const direct = answerAdvisorQuery(userQuery, {
+    currency: context.currency === "INR" ? "₹" : context.currency,
+    currentMonth: context.currentMonth,
+    foodSpend: context.foodSpend,
+    topCategory: context.topCategories[0],
+    monthlyBudget: context.monthlyBudget,
+    monthSpent: context.totalExpenses,
+    netSavings: context.netSavings,
+  });
+  if (direct) {
+    return {
+      id,
+      role: "assistant",
+      content: direct,
+      timestamp,
+      quickActions: [
+        "How much did I spend on food this month?",
+        "Where am I spending the most?",
+        "Can I spend ₹3,000 this weekend?",
+      ],
+    };
+  }
 
   // 1. Spending Overview / Month Health
   if (

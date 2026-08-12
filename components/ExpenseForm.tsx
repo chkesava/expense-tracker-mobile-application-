@@ -9,10 +9,7 @@ import {
   View,
 } from "react-native";
 import {
-  addDoc,
-  collection,
   doc,
-  serverTimestamp,
   updateDoc,
 } from "firebase/firestore";
 import { haptic } from "@/lib/haptics";
@@ -49,6 +46,7 @@ import { useExpenses } from "@/hooks/useExpenses";
 import { useIncomes } from "@/hooks/useIncomes";
 import { getFirestoreDb } from "@/lib/firebase";
 import { toast } from "@/lib/toast";
+import { createExpense, createIncome } from "@/services/ledger/createLedgerTransaction";
 import { useAuth } from "@/providers/AuthProvider";
 import { useCelebration } from "@/providers/CelebrationProvider";
 import { useSettings } from "@/providers/SettingsProvider";
@@ -283,12 +281,17 @@ export function ExpenseForm({
     setTags(tags.filter((t) => t !== tagToRemove));
   };
 
-  const handleSelectCategoryPair = (cat: string, sub?: string) => {
+  const handleSelectCategoryPair = (
+    cat: string,
+    sub?: string,
+    options?: { fromUser?: boolean }
+  ) => {
     setCategory(cat);
     if (sub) setSubcategory(sub);
-    setCategoryTouched(true);
-    setSuggestionHint(null);
-    setShowCategoryPickerModal(false);
+    if (options?.fromUser) {
+      setCategoryTouched(true);
+      setSuggestionHint(null);
+    }
   };
 
   const handleSubmit = async () => {
@@ -351,10 +354,7 @@ export function ExpenseForm({
           );
           toast.success("Expense updated");
         } else {
-          await addDoc(collection(db, "users", uid, "expenses"), {
-            ...payload,
-            createdAt: serverTimestamp(),
-          });
+          await createExpense(uid, payload);
           toast.success("Expense logged");
 
           // Celebrate first expense milestone with subtle confetti & animation
@@ -385,10 +385,7 @@ export function ExpenseForm({
           );
           toast.success("Income updated");
         } else {
-          await addDoc(collection(db, "users", uid, "incomes"), {
-            ...payload,
-            createdAt: serverTimestamp(),
-          });
+          await createIncome(uid, payload);
           toast.success("Income logged");
         }
       }
@@ -994,7 +991,7 @@ export function ExpenseForm({
         ) : null}
       </View>
 
-      {/* Category Picker Modal */}
+      {/* Category Picker Modal — stays open until subcategory is chosen */}
       <Modal
         visible={showCategoryPickerModal}
         animationType="slide"
@@ -1007,6 +1004,7 @@ export function ExpenseForm({
             backgroundColor: theme.colors.background,
             paddingTop: 16,
             paddingHorizontal: 16,
+            paddingBottom: 16,
           }}
         >
           <View
@@ -1014,18 +1012,29 @@ export function ExpenseForm({
               flexDirection: "row",
               alignItems: "center",
               justifyContent: "space-between",
-              marginBottom: 16,
+              marginBottom: 8,
             }}
           >
-            <Text
-              style={{
-                fontSize: 18,
-                fontWeight: "800",
-                color: theme.colors.foreground,
-              }}
-            >
-              Select Category
-            </Text>
+            <View style={{ flex: 1, paddingRight: 12 }}>
+              <Text
+                style={{
+                  fontSize: 18,
+                  fontWeight: "800",
+                  color: theme.colors.foreground,
+                }}
+              >
+                Select Category
+              </Text>
+              <Text
+                style={{
+                  fontSize: 12,
+                  marginTop: 2,
+                  color: theme.colors.mutedForeground,
+                }}
+              >
+                Pick a category, then a subcategory
+              </Text>
+            </View>
             <Pressable
               onPress={() => setShowCategoryPickerModal(false)}
               style={{
@@ -1033,17 +1042,17 @@ export function ExpenseForm({
                 borderRadius: 20,
                 backgroundColor: theme.colors.muted,
               }}
+              accessibilityLabel="Close category picker"
             >
               <X size={18} color={theme.colors.foreground} />
             </Pressable>
           </View>
           <CategoryPicker
+            inline
             category={category}
             subcategory={subcategory}
-            onCategoryChange={(c, s) => {
-              handleSelectCategoryPair(c, s);
-              setShowCategoryPickerModal(false);
-            }}
+            onCategoryChange={handleSelectCategoryPair}
+            onComplete={() => setShowCategoryPickerModal(false)}
           />
         </View>
       </Modal>

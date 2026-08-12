@@ -5,7 +5,7 @@ import {
   Text,
   View,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import {
   BarChart3,
   Calendar,
@@ -58,6 +58,7 @@ import { themeUsesDarkPalette } from "@/theme/tokens";
 
 export default function LedgerScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ tab?: string }>();
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const { settings } = useSettings();
@@ -86,6 +87,12 @@ export default function LedgerScreen() {
   const { entries } = useAccountEntries();
   const { transfers } = useAccountTransfers();
   const investmentsEnabled = settings.enableInvestments && system.enableInvestments;
+
+  useEffect(() => {
+    if (params.tab === "subscriptions") {
+      setLedgerTab("subscriptions");
+    }
+  }, [params.tab, setLedgerTab]);
 
   useEffect(() => {
     if (!investmentsEnabled && (ledgerTab === "investments" || ledgerTab === "portfolio")) {
