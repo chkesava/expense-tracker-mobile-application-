@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
-import { Calendar, ChevronRight, Repeat } from "lucide-react-native";
+import { ChevronRight, Repeat } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
 import { Card } from "@/components/ui/Card";
@@ -14,8 +14,10 @@ export interface SubscriptionsWidgetProps {
   currency: string;
 }
 
+const PREVIEW_LIMIT = 4;
+
 export function SubscriptionsWidget({ currency }: SubscriptionsWidgetProps) {
-  const router = useRouter();
+  const { push } = useRouter();
   const { theme } = useTheme();
   const { subscriptions } = useSubscriptions();
 
@@ -23,18 +25,23 @@ export function SubscriptionsWidget({ currency }: SubscriptionsWidgetProps) {
     return computeMonthlyCommitments(subscriptions);
   }, [subscriptions]);
 
+  const preview = useMemo(() => {
+    return subscriptions
+      .filter((sub) => sub.isActive && !sub.isCompleted)
+      .slice(0, PREVIEW_LIMIT);
+  }, [subscriptions]);
+
+  const openSubscriptions = () => {
+    Haptics.selectionAsync().catch(() => undefined);
+    push("/ledger?tab=subscriptions");
+  };
+
   return (
     <Card
-      title="Recurring Subscriptions"
+      title="Recurring Payments"
       subtitle={`${commitments.activeCount} active · ${currency} ${commitments.totalMonthly.toLocaleString()} / mo`}
       headerRight={
-        <Pressable
-          onPress={() => {
-            Haptics.selectionAsync().catch(() => undefined);
-            router.push("/ledger");
-          }}
-          style={styles.viewBtn}
-        >
+        <Pressable onPress={openSubscriptions} style={styles.viewBtn}>
           <Text
             style={[
               styles.viewBtnText,
@@ -48,30 +55,49 @@ export function SubscriptionsWidget({ currency }: SubscriptionsWidgetProps) {
       }
     >
       <View style={styles.content}>
-        <View style={styles.row}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            <Repeat size={16} color={theme.colors.primary} />
-            <Text
-              style={{
-                fontSize: theme.typography.sm,
-                color: theme.colors.foreground,
-                fontWeight: "600",
-              }}
+        {preview.length > 0 ? (
+          preview.map((sub) => (
+            <Pressable
+              key={sub.id || sub.name}
+              onPress={openSubscriptions}
+              style={styles.row}
             >
-              Monthly Auto-Commitment
-            </Text>
-          </View>
-          <Amount
-            value={commitments.totalMonthly}
-            currency={currency}
-            ghostable
+              <View style={styles.nameRow}>
+                <Repeat size={14} color={theme.colors.primary} />
+                <Text
+                  style={{
+                    fontSize: theme.typography.sm,
+                    color: theme.colors.foreground,
+                    fontWeight: "600",
+                    flex: 1,
+                  }}
+                  numberOfLines={1}
+                >
+                  {sub.name}
+                </Text>
+              </View>
+              <Amount
+                value={sub.amount}
+                currency={currency}
+                ghostable
+                style={{
+                  fontSize: theme.typography.sm,
+                  fontWeight: "700",
+                  color: theme.colors.foreground,
+                }}
+              />
+            </Pressable>
+          ))
+        ) : (
+          <Text
             style={{
               fontSize: theme.typography.sm,
-              fontWeight: "700",
-              color: theme.colors.foreground,
+              color: theme.colors.mutedForeground,
             }}
-          />
-        </View>
+          >
+            Repeating merchants like Netflix will show up here.
+          </Text>
+        )}
       </View>
     </Card>
   );
@@ -88,10 +114,18 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingVertical: 4,
+    gap: 10,
   },
   row: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    gap: 12,
+  },
+  nameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
   },
 });

@@ -127,6 +127,19 @@ export async function processIncomingSmsMessages(
     } catch {
       /* notifications are best-effort */
     }
+    if (options.uid && dispatched.committedEntries.length) {
+      try {
+        const { syncRecurringAfterSmsCommit } = await import(
+          "./smsRecurringSync"
+        );
+        await syncRecurringAfterSmsCommit(
+          options.uid,
+          dispatched.committedEntries
+        );
+      } catch {
+        /* recurring detect is best-effort */
+      }
+    }
   }
 
   const head = relevant[0];

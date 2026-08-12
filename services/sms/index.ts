@@ -148,6 +148,7 @@ export {
 export {
   buildDetectedNotification,
   buildAutoAddedNotification,
+  buildRecurringDetectedNotification,
   type SmsNotificationCopy,
 } from "./smsNotificationCopy";
 
@@ -156,6 +157,13 @@ export {
   notifySmsDispatch,
   SMS_NOTIFICATION_CHANNEL_ID,
 } from "./smsNotifications";
+
+export {
+  detectRecurringPatterns,
+  matchesExistingSubscription,
+  patternToSubscription,
+  type RecurringPattern,
+} from "./smsRecurringDetector";
 
 export { commitSmsWritePayload } from "./smsExpenseWriter";
 

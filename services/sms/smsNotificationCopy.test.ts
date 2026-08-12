@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildAutoAddedNotification,
   buildDetectedNotification,
+  buildRecurringDetectedNotification,
 } from "@/services/sms/smsNotificationCopy";
 import { processRawSmsMessages } from "@/services/sms/smsPipeline";
 import type { RawSmsMessage } from "@/shared/types/smsTransaction";
@@ -58,5 +59,20 @@ describe("SMS notification copy", () => {
     const copy = buildAutoAddedNotification(entry!);
     expect(copy.title).toBe("✅ ₹35,000 Salary income added");
     expect(copy.body).toBe("Salary");
+  });
+
+  it("formats a recurring Netflix detection", () => {
+    const copy = buildRecurringDetectedNotification({
+      merchant: "Netflix",
+      amount: 649,
+      category: "Entertainment",
+      occurrences: 4,
+      dates: ["2026-05-12", "2026-06-12", "2026-07-12", "2026-08-12"],
+      dayOfMonth: 12,
+      key: "netflix|649.00",
+    });
+    expect(copy.title).toBe("🔄 Recurring payment detected");
+    expect(copy.body).toBe("Netflix · ₹649 / month");
+    expect(copy.data.url).toBe("/ledger?tab=subscriptions");
   });
 });

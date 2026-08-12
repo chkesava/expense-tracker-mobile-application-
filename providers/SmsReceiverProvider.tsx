@@ -13,7 +13,7 @@ import {
   type ReactNode,
 } from "react";
 import { AppState, Platform, type AppStateStatus } from "react-native";
-import { router } from "expo-router";
+import { router, type Href } from "expo-router";
 
 import { useAuth } from "@/providers/AuthProvider";
 import {
@@ -39,6 +39,7 @@ import {
   SMS_INBOUND_STATUS_DEFAULTS,
 } from "@/services/sms/smsInboundStatus";
 import { processIncomingSmsMessages } from "@/services/sms/smsTransactionProcessor";
+import { useSmsRecurringSync } from "@/hooks/useSmsRecurringSync";
 
 type SmsReceiverContextValue = {
   listening: boolean;
@@ -63,6 +64,8 @@ export function SmsReceiverProvider({ children }: { children: ReactNode }) {
     SMS_INBOUND_STATUS_DEFAULTS
   );
   const [ready, setReady] = useState(false);
+
+  useSmsRecurringSync();
 
   const refreshListening = useCallback(async () => {
     if (!supported) {
@@ -122,7 +125,7 @@ export function SmsReceiverProvider({ children }: { children: ReactNode }) {
         if (data?.source !== "sms") return;
         const url = data.url;
         if (typeof url === "string" && url.startsWith("/")) {
-          router.push(url as "/sms-inbox" | "/dashboard");
+          router.push(url as Href);
         }
       });
     });
