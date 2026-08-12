@@ -13,6 +13,7 @@ import {
   type ReactNode,
 } from "react";
 import { AppState, Platform, type AppStateStatus } from "react-native";
+import { router } from "expo-router";
 
 import { useAuth } from "@/providers/AuthProvider";
 import {
@@ -108,6 +109,37 @@ export function SmsReceiverProvider({ children }: { children: ReactNode }) {
       setPrefs(next);
     });
   }, []);
+
+  // Tap a transaction notification → inbox (detected) or dashboard (auto-added).
+  useEffect(() => {
+    if (!supported) return;
+    let cancelled = false;
+    let sub: { remove: () => void } | undefined;
+    void import("expo-notifications").then((Notifications) => {
+      if (cancelled) return;
+      sub = Notifications.addNotificationResponseReceivedListener((response) => {
+        const data = response.notification.request.content.data;
+        if (data?.source !== "sms") return;
+        const url = data.url;
+        if (typeof url === "string" && url.startsWith("/")) {
+          router.push(url as "/sms-inbox" | "/dashboard");
+        }
+      });
+    });
+    return () => {
+      cancelled = true;
+      sub?.remove();
+    };
+  }, [supported]);
+
+  // Ask for notification permission once SMS listening is on.
+  useEffect(() => {
+    if (!supported || !ready) return;
+    if (!prefs.enabled || permissionStatus !== "granted" || isDuress) return;
+    void import("@/services/sms/smsNotifications").then((m) =>
+      m.requestSmsNotificationPermission()
+    );
+  }, [supported, ready, prefs.enabled, permissionStatus, isDuress]);
 
   // Subscribe to inbound events once; processor gates on prefs/duress.
   useEffect(() => {

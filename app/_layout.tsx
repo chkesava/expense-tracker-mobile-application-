@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
+import { Platform } from "react-native";
 import { Stack, useNavigationContainerRef } from "expo-router";
+import * as Notifications from "expo-notifications";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -46,6 +48,17 @@ const queryClient = new QueryClient({
 SplashScreen.preventAutoHideAsync().catch(() => {
   /* splash may already be hidden in fast refresh */
 });
+
+if (Platform.OS !== "web") {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldPlaySound: false,
+      shouldSetBadge: false,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
+  });
+}
 
 function AppInitializer({ children }: { children: React.ReactNode }) {
   const { loading: authLoading } = useAuth();

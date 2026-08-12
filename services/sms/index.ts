@@ -141,7 +141,21 @@ export {
   isHighConfidenceForAutoAdd,
   routeWriteReady,
   dispatchWriteReady,
+  type SmsWriteReadyEntry,
+  type SmsDispatchResult,
 } from "./smsAutoAdd";
+
+export {
+  buildDetectedNotification,
+  buildAutoAddedNotification,
+  type SmsNotificationCopy,
+} from "./smsNotificationCopy";
+
+export {
+  requestSmsNotificationPermission,
+  notifySmsDispatch,
+  SMS_NOTIFICATION_CHANNEL_ID,
+} from "./smsNotifications";
 
 export { commitSmsWritePayload } from "./smsExpenseWriter";
 

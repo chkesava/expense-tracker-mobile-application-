@@ -118,6 +118,15 @@ export async function processIncomingSmsMessages(
     });
     inboxQueuedCount = dispatched.queued;
     autoAddedCount = dispatched.committed;
+    try {
+      const { notifySmsDispatch } = await import("./smsNotifications");
+      await notifySmsDispatch({
+        committedEntries: dispatched.committedEntries,
+        queuedEntries: dispatched.queuedEntries,
+      });
+    } catch {
+      /* notifications are best-effort */
+    }
   }
 
   const head = relevant[0];

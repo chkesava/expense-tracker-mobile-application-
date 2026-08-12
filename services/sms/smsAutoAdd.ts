@@ -54,6 +54,13 @@ export function routeWriteReady(
   return { toCommit, toReview };
 }
 
+export type SmsDispatchResult = {
+  committed: number;
+  queued: number;
+  committedEntries: SmsWriteReadyEntry[];
+  queuedEntries: SmsWriteReadyEntry[];
+};
+
 export async function dispatchWriteReady(
   writeReady: SmsWriteReadyEntry[],
   options: {
@@ -61,10 +68,10 @@ export async function dispatchWriteReady(
     uid?: string;
     writer?: SmsExpenseWriter;
   }
-): Promise<{ committed: number; queued: number }> {
+): Promise<SmsDispatchResult> {
   const routed = routeWriteReady(writeReady, options.mode);
   let toReview = routed.toReview;
-  let committed = 0;
+  const committedEntries: SmsWriteReadyEntry[] = [];
 
   if (routed.toCommit.length) {
     if (!options.uid) {
@@ -77,7 +84,7 @@ export async function dispatchWriteReady(
       for (const entry of routed.toCommit) {
         try {
           await commit(options.uid, entry.write);
-          committed += 1;
+          committedEntries.push(entry);
         } catch {
           failed.push(entry);
         }
@@ -87,5 +94,10 @@ export async function dispatchWriteReady(
   }
 
   const queued = await enqueueWriteReadyForReview(toReview);
-  return { committed, queued };
+  return {
+    committed: committedEntries.length,
+    queued,
+    committedEntries,
+    queuedEntries: queued > 0 ? toReview : [],
+  };
 }

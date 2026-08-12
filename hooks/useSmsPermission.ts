@@ -98,6 +98,9 @@ export function useSmsPermission(): UseSmsPermissionResult {
 
       if (status === "granted") {
         await persistPrefs({ ...prefs, enabled: true });
+        void import("@/services/sms/smsNotifications").then((m) =>
+          m.requestSmsNotificationPermission()
+        );
       } else {
         await persistPrefs({ ...prefs, enabled: false });
       }
