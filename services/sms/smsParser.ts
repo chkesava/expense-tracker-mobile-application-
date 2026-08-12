@@ -10,6 +10,7 @@ import {
   isExpenseOrIncomeKind,
 } from "./smsDetector";
 import { extractSmsFields } from "./smsFieldExtractor";
+import { classifySmsIncomeSource } from "./smsIncomeClassifier";
 import { normalizeMerchantName } from "./smsMerchantNormalizer";
 
 export interface SmsParseContext {
@@ -107,6 +108,12 @@ export function parseBankSms(
     }
   }
 
+  if (detection.kind === "income") {
+    parsed.incomeSource = classifySmsIncomeSource(body, amount);
+    parseReasons.push(`income_${parsed.incomeSource.replace(/\s+/g, "_").toLowerCase()}`);
+    parsed.parseReasons = parseReasons;
+  }
+
   // Prefer matching user account by last4 or name
   if (context.accounts?.length) {
     const lower = body.toLowerCase();
@@ -127,6 +134,7 @@ export function parseBankSms(
     if (merchant) confidence = Math.min(0.95, confidence + 0.05);
     if (merchantNorm.matched) confidence = Math.min(0.97, confidence + 0.02);
     if (parsed.category) confidence = Math.min(0.98, confidence + 0.02);
+    if (parsed.incomeSource) confidence = Math.min(0.97, confidence + 0.02);
     if (fields.paymentMethod) confidence = Math.min(0.96, confidence + 0.03);
     if (fields.externalRef) confidence = Math.min(0.97, confidence + 0.02);
   }

@@ -1,11 +1,8 @@
 /**
- * Thin Firestore writer for SMS review Add.
- * Mirrors ExpenseForm create payload; does not change ExpenseForm.
+ * SMS commit uses the same createExpense / createIncome helpers as ExpenseForm.
  */
 
-import { addDoc, collection, serverTimestamp } from "firebase/firestore";
-
-import { getFirestoreDb } from "@/lib/firebase";
+import { createExpense, createIncome } from "@/services/ledger/createLedgerTransaction";
 import type { SmsWritePayload } from "@/shared/types/smsTransaction";
 
 export type SmsCommitResult = {
@@ -25,13 +22,10 @@ export async function commitSmsWritePayload(
   if (!uid.trim() || uid.endsWith("_duress")) {
     throw new Error("SMS commit blocked");
   }
-  const db = getFirestoreDb();
-  if (!db) {
-    throw new Error("Firestore is not available");
+  if (write.collection === "expenses") {
+    const id = await createExpense(uid, write.payload);
+    return { collection: "expenses", id };
   }
-  const ref = await addDoc(collection(db, "users", uid, write.collection), {
-    ...write.payload,
-    createdAt: serverTimestamp(),
-  });
-  return { collection: write.collection, id: ref.id };
+  const id = await createIncome(uid, write.payload);
+  return { collection: "incomes", id };
 }

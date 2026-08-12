@@ -25,10 +25,15 @@ export const LEGACY_FLAT_CATEGORIES = [
 export const INCOME_SOURCES = [
   "Salary",
   "Freelance",
-  "Investment",
-  "Gift",
   "Business",
   "Rental",
+  "Bank Credit",
+  "UPI Received",
+  "Refund",
+  "Cashback",
+  "Interest",
+  "Investment",
+  "Gift",
   "Other",
 ] as const;
 

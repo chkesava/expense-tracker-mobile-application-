@@ -9,10 +9,7 @@ import {
   View,
 } from "react-native";
 import {
-  addDoc,
-  collection,
   doc,
-  serverTimestamp,
   updateDoc,
 } from "firebase/firestore";
 import { haptic } from "@/lib/haptics";
@@ -49,6 +46,7 @@ import { useExpenses } from "@/hooks/useExpenses";
 import { useIncomes } from "@/hooks/useIncomes";
 import { getFirestoreDb } from "@/lib/firebase";
 import { toast } from "@/lib/toast";
+import { createExpense, createIncome } from "@/services/ledger/createLedgerTransaction";
 import { useAuth } from "@/providers/AuthProvider";
 import { useCelebration } from "@/providers/CelebrationProvider";
 import { useSettings } from "@/providers/SettingsProvider";
@@ -356,10 +354,7 @@ export function ExpenseForm({
           );
           toast.success("Expense updated");
         } else {
-          await addDoc(collection(db, "users", uid, "expenses"), {
-            ...payload,
-            createdAt: serverTimestamp(),
-          });
+          await createExpense(uid, payload);
           toast.success("Expense logged");
 
           // Celebrate first expense milestone with subtle confetti & animation
@@ -390,10 +385,7 @@ export function ExpenseForm({
           );
           toast.success("Income updated");
         } else {
-          await addDoc(collection(db, "users", uid, "incomes"), {
-            ...payload,
-            createdAt: serverTimestamp(),
-          });
+          await createIncome(uid, payload);
           toast.success("Income logged");
         }
       }

@@ -74,6 +74,7 @@ export function adaptParsedSmsToWritePayload(
       amount: core.amount,
       source:
         options.defaultIncomeSource ||
+        parsed.incomeSource ||
         parsed.merchant ||
         parsed.bank ||
         "Other",

@@ -39,6 +39,12 @@ export {
 } from "./smsDetector";
 
 export {
+  classifySmsIncomeSource,
+  SMS_INCOME_SOURCES,
+  type SmsIncomeSource,
+} from "./smsIncomeClassifier";
+
+export {
   extractSmsFields,
   extractAmount,
   extractMerchant,

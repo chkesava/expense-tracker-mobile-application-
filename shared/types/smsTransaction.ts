@@ -87,6 +87,8 @@ export interface SmsParsedTransaction {
   detectionReasons?: string[];
   /** Field extractor rule tags (local debug). */
   parseReasons?: string[];
+  /** Income source when kind is income (Salary, Refund, …). */
+  incomeSource?: string;
 }
 
 /**

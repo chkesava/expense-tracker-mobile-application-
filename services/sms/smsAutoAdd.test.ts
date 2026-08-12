@@ -84,4 +84,22 @@ describe("auto-add routing", () => {
     expect(routed.toCommit).toHaveLength(0);
     expect(routed.toReview).toHaveLength(0);
   });
+
+  it("auto-adds a high-confidence salary credit", () => {
+    const result = processRawSmsMessages([
+      {
+        id: "3",
+        address: "VK-SBIINB",
+        body: "₹35,000 credited to your account",
+        receivedAtMs: Date.parse("2026-08-12T10:00:00+05:30"),
+      },
+    ]);
+    expect(result.writeReady[0]?.write.collection).toBe("incomes");
+    expect(isHighConfidenceForAutoAdd(result.writeReady[0]?.record.parsed)).toBe(
+      true
+    );
+    const routed = routeWriteReady(result.writeReady, "auto");
+    expect(routed.toCommit).toHaveLength(1);
+    expect(routed.toReview).toHaveLength(0);
+  });
 });

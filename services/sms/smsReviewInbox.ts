@@ -65,9 +65,11 @@ export function findReviewInboxItem(
   return items.find((item) => item.id === id);
 }
 
-/** Mock-style line: "Food" from "Food & Dining". */
+/** Mock-style line: "Food" from "Food & Dining"; income shows Salary / Refund / …. */
 export function briefSmsCategoryLabel(item: SmsReviewInboxItem): string {
-  if (item.write.collection === "incomes") return "Income";
+  if (item.write.collection === "incomes") {
+    return item.write.payload.source || item.parsed.incomeSource || "Income";
+  }
   const category =
     item.parsed.category ||
     (item.write.collection === "expenses" ? item.write.payload.category : "") ||
@@ -77,10 +79,8 @@ export function briefSmsCategoryLabel(item: SmsReviewInboxItem): string {
 }
 
 export function reviewItemMerchant(item: SmsReviewInboxItem): string {
+  if (item.write.collection === "incomes") return "Income";
   if (item.parsed.merchant?.trim()) return item.parsed.merchant.trim();
-  if (item.write.collection === "incomes") {
-    return item.write.payload.source || "Income";
-  }
   return "Unknown";
 }
 
