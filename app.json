@@ -25,7 +25,7 @@
         "android.permission.RECEIVE_SMS",
         "android.permission.POST_NOTIFICATIONS"
       ],
-      "versionCode": 27
+      "versionCode": 32
     },
     "web": {
       "bundler": "metro",

@@ -153,7 +153,7 @@ export function computeCreditUsage(
 
   const cycleExpenses = expenses.filter((e) => {
     if (e.accountId !== account.id) return false;
-    const expDate = new Date(e.date);
+    const expDate = parseLocalDate(e.date);
     return expDate >= previousBillDate && expDate < nextBillDate;
   });
 

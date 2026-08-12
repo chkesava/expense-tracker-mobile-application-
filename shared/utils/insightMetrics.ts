@@ -1,4 +1,5 @@
 import type { Expense, Income } from "../types/expense";
+import { currentMonthKey } from "./dates";
 
 const FIXED_CATEGORIES = [
   "Housing",
@@ -18,7 +19,7 @@ const FIXED_CATEGORIES = [
  */
 export function getMonthDayProgress(selectedMonth: string) {
   const today = new Date();
-  const currentMonthStr = today.toISOString().slice(0, 7); // "YYYY-MM"
+  const currentMonthStr = currentMonthKey();
   
   const [year, month] = selectedMonth.split("-").map(Number);
   const totalDays = new Date(year, month, 0).getDate(); // Last day of month
@@ -207,13 +208,10 @@ export function getAnomalyMetrics(expenses: Expense[], selectedMonth: string) {
     }
   });
 
-  // Get largest single transaction
-  let largestTransaction: Expense | null = null;
-  currentMonthExpenses.forEach((e) => {
-    if (!largestTransaction || e.amount > largestTransaction.amount) {
-      largestTransaction = e;
-    }
-  });
+  const largestTransaction = currentMonthExpenses.reduce<Expense | null>(
+    (largest, e) => (!largest || e.amount > largest.amount ? e : largest),
+    null
+  );
 
   return {
     anomalies: anomalies.sort((a, b) => b.percentIncrease - a.percentIncrease),

@@ -64,6 +64,17 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Phase 10 quality gate — fail before secrets-heavy / APK work when tests break.
+      # Intentionally placed before keystore restore so a bad main merge fails fast.
+      - name: Unit + integration-lite suite
+        run: npm test
+
+      - name: Shared typecheck
+        run: npm run typecheck:shared
+
+      - name: Full app typecheck
+        run: npm run typecheck
+
       - name: Restore .env
         env:
           MOBILE_ENV_FILE: ${{ secrets.MOBILE_ENV_FILE }}
@@ -179,9 +190,15 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       # verify-environment.js and verify-gradle.js both require android/ to
-      # exist, so prebuild has to run before the release pipeline.
+      # exist, so prebuild has to run before release:verify / the APK build.
       - name: Expo prebuild (Android)
         run: npx expo prebuild --platform android --no-install
+
+      - name: Release environment verify
+        env:
+          MYAPP_RELEASE_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          MYAPP_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: npm run release:verify
 
       - name: Build signed release APK
         env:
@@ -277,4 +294,10 @@ jobs:
             echo "- Mandatory update: ${{ inputs.mandatory || false }}"
             echo "- Download: ${{ steps.download.outputs.url }}"
             echo "- Testers link: ${{ steps.distribute.outputs.TESTING_URI }}"
+            echo ""
+            echo "### Quality gate (Phase 10)"
+            echo "- \`npm test\` — passed before APK"
+            echo "- \`npm run typecheck:shared\` / \`typecheck\` — passed before APK"
+            echo "- \`npm run release:verify\` — passed after prebuild, before APK"
+            echo "- SMS device pack — deferred (SMS not on this branch)"
           } >> "$GITHUB_STEP_SUMMARY"

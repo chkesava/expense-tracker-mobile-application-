@@ -20,6 +20,7 @@ import {
   generateTransactionsCsv,
   generateTransactionsJson,
 } from "@/shared/utils/csvExport";
+import { currentMonthKey, todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
@@ -48,7 +49,7 @@ export function ExportDataModal({ visible, onClose }: ExportDataModalProps) {
   }, [accounts]);
 
   const currentYear = useMemo(() => String(new Date().getFullYear()), []);
-  const currentMonth = useMemo(() => new Date().toISOString().slice(0, 7), []);
+  const currentMonth = useMemo(() => currentMonthKey(), []);
 
   const filteredData = useMemo(() => {
     if (scope === "year") {
@@ -89,7 +90,7 @@ export function ExportDataModal({ visible, onClose }: ExportDataModalProps) {
             accountMap,
           }
         );
-        title = `Expense_Tracker_Export_${scope}_${new Date().toISOString().slice(0, 10)}.csv`;
+        title = `Expense_Tracker_Export_${scope}_${todayDateKey()}.csv`;
       } else {
         content = generateTransactionsJson(
           filteredData.expenses,
@@ -99,7 +100,7 @@ export function ExportDataModal({ visible, onClose }: ExportDataModalProps) {
             accountMap,
           }
         );
-        title = `Expense_Tracker_Export_${scope}_${new Date().toISOString().slice(0, 10)}.json`;
+        title = `Expense_Tracker_Export_${scope}_${todayDateKey()}.json`;
       }
 
       await Share.share({

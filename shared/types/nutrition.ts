@@ -69,6 +69,7 @@ export interface DailyLogSummary {
     durationMinutes: number;
     caloriesBurned: number;
   };
+  meals?: Meal[];
 }
 
 export interface WeightEntry {

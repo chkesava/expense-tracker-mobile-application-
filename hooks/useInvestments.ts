@@ -15,6 +15,7 @@ import { getFirestoreDb } from "@/lib/firebase";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import type { Investment } from "@/shared/types/investment";
+import { todayDateKey } from "@/shared/utils/dates";
 
 export function useInvestments(options?: { enabled?: boolean }) {
   const enabled = options?.enabled !== false;
@@ -124,7 +125,7 @@ export function useInvestments(options?: { enabled?: boolean }) {
 
   const closeInvestment = useCallback(
     async (id: string) => {
-      const today = new Date().toISOString().slice(0, 10);
+      const today = todayDateKey();
       return updateInvestment(id, {
         status: "closed",
         closedDate: today,

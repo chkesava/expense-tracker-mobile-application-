@@ -6,7 +6,8 @@ import {
   computeMonthlyCommitments,
   evaluateSubscriptionDue,
   getNextRenewalDate,
-  isEmiTermCompleted,
+  planDueSubscriptionPosts,
+  applyPostPlanToSubscriptions,
 } from "./subscriptionProcessor";
 
 describe("subscriptionProcessor utilities", () => {
@@ -171,6 +172,42 @@ describe("subscriptionProcessor utilities", () => {
       expect(summary.totalMonthly).toBe(0);
       expect(summary.activeCount).toBe(0);
       expect(summary.completedCount).toBe(1);
+    });
+  });
+
+  describe("planDueSubscriptionPosts idempotency", () => {
+    it("plans expense + transfer actions, then no-ops after lastProcessed apply", () => {
+      const evalDate = new Date(2026, 7, 15, 12, 0, 0); // 15 Aug local
+      const list: Subscription[] = [
+        { ...mockSub, lastProcessed: "2026-07" },
+        { ...mockTransfer, lastProcessed: "2026-07", dayOfMonth: 1 },
+      ];
+
+      const firstPlan = planDueSubscriptionPosts(list, evalDate);
+      expect(firstPlan).toHaveLength(2);
+      expect(firstPlan.map((a) => a.kind).sort()).toEqual(["expense", "transfer"]);
+
+      const afterPost = applyPostPlanToSubscriptions(list, firstPlan);
+      const secondPlan = planDueSubscriptionPosts(afterPost, evalDate);
+      expect(secondPlan).toHaveLength(0);
+    });
+
+    it("marks EMI completed on final month plan", () => {
+      const evalDate = new Date(2026, 7, 10, 12, 0, 0);
+      const plan = planDueSubscriptionPosts(
+        [{ ...mockEmi, lastProcessed: "2026-07" }],
+        evalDate
+      );
+      expect(plan).toHaveLength(1);
+      expect(plan[0]?.markCompleted).toBe(true);
+
+      const updated = applyPostPlanToSubscriptions(
+        [{ ...mockEmi, lastProcessed: "2026-07" }],
+        plan
+      );
+      expect(updated[0]?.isCompleted).toBe(true);
+      expect(updated[0]?.isActive).toBe(false);
+      expect(planDueSubscriptionPosts(updated, evalDate)).toHaveLength(0);
     });
   });
 });

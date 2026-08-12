@@ -30,6 +30,7 @@ import {
   parseReceiptOcrText,
   type ExtractedReceiptData,
 } from "@/services/ocrService";
+import { todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
@@ -111,7 +112,7 @@ export function ReceiptScannerModal({
       // Generate realistic extracted receipt details from simulated image OCR
       const sampleOcrLines = `STARBUCKS COFFEE #1042
 123 Market St, Financial District
-Date: ${new Date().toISOString().slice(0, 10)}
+Date: ${todayDateKey()}
 1x Iced Caramel Macchiato 290.00
 1x Blueberry Muffin 160.00
 Subtotal: 450.00
