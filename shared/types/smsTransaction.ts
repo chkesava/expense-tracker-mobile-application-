@@ -144,3 +144,15 @@ export interface SmsIncomeWritePayload {
 export type SmsWritePayload =
   | { collection: "expenses"; payload: SmsExpenseWritePayload }
   | { collection: "incomes"; payload: SmsIncomeWritePayload };
+
+/**
+ * Local review-inbox row. Raw SMS body is never stored here.
+ */
+export interface SmsReviewInboxItem {
+  id: string;
+  smsId: string;
+  fingerprint: SmsFingerprint;
+  parsed: SmsParsedTransaction;
+  write: SmsWritePayload;
+  queuedAtMs: number;
+}

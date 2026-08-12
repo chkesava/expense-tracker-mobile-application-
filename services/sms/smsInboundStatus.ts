@@ -13,6 +13,7 @@ export type SmsInboundStatus = {
   lastRelevantCount: number;
   lastSkippedCount: number;
   lastWriteReadyCount: number;
+  lastDuplicateCount: number;
   totalInboundEvents: number;
 };
 
@@ -23,6 +24,7 @@ export const SMS_INBOUND_STATUS_DEFAULTS: SmsInboundStatus = {
   lastRelevantCount: 0,
   lastSkippedCount: 0,
   lastWriteReadyCount: 0,
+  lastDuplicateCount: 0,
   totalInboundEvents: 0,
 };
 

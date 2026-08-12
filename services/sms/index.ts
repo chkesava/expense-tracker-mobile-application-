@@ -66,7 +66,17 @@ export {
   type SmsCategoryRule,
 } from "./smsCategoryRules";
 
-export { buildSmsFingerprint } from "./smsDedupe";
+export {
+  buildSmsFingerprint,
+  buildSmsDedupeKeys,
+  normalizeSmsReferenceId,
+  findDuplicateSmsKey,
+} from "./smsDedupe";
+
+export {
+  loadSmsDedupeKeys,
+  mergeSmsDedupeKeys,
+} from "./smsDedupeStore";
 
 export {
   filterRelevantSms,
@@ -99,6 +109,27 @@ export {
   processIncomingSmsMessages,
   type ProcessIncomingSmsResult,
 } from "./smsTransactionProcessor";
+
+export {
+  briefSmsCategoryLabel,
+  formatDetectedCount,
+  reviewItemAmount,
+  reviewItemMerchant,
+} from "./smsReviewInbox";
+
+export {
+  loadSmsReviewInbox,
+  enqueueSmsReviewItems,
+  subscribeSmsReviewInbox,
+} from "./smsReviewInboxStore";
+
+export {
+  enqueueWriteReadyForReview,
+  ignoreSmsReviewItem,
+  addSmsReviewItem,
+} from "./smsReviewActions";
+
+export { commitSmsWritePayload } from "./smsExpenseWriter";
 
 export {
   loadSmsInboundStatus,

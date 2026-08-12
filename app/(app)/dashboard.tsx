@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
-import { Plus, ShieldAlert, Sparkles } from "lucide-react-native";
+import { Plus, ShieldAlert, Sparkles, Inbox } from "lucide-react-native";
 
 import { BudgetAlertsWidget } from "@/components/dashboard/BudgetAlertsWidget";
 import { DashboardWelcome } from "@/components/dashboard/DashboardWelcome";
@@ -33,6 +33,7 @@ import { useCategoryBudgets } from "@/hooks/useCategoryBudgets";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useFinancialGoals } from "@/hooks/useFinancialGoals";
 import { useIncomes } from "@/hooks/useIncomes";
+import { useSmsReviewInbox } from "@/hooks/useSmsReviewInbox";
 import { useAuth } from "@/providers/AuthProvider";
 import { useModals } from "@/providers/ModalProvider";
 import { useSettings } from "@/providers/SettingsProvider";
@@ -45,6 +46,7 @@ import {
   getOrderedDashboardWidgets,
   type DashboardWidgetId,
 } from "@/shared/utils/dashboardWidgets";
+import { formatDetectedCount } from "@/services/sms/smsReviewInbox";
 import { currentMonthKey, formatDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
@@ -97,6 +99,7 @@ export default function DashboardScreen() {
 
   const { expenses, loading: expensesLoading } = useExpenses();
   const { incomes, loading: incomesLoading } = useIncomes();
+  const { count: inboxCount } = useSmsReviewInbox();
   const { accounts, loading: accountsLoading } = useAccounts();
   const { accountTypes } = useAccountTypes();
   const { payments } = useAccountPayments();
@@ -461,6 +464,41 @@ export default function DashboardScreen() {
             </Text>
           </View>
         </View>
+      ) : null}
+
+      {!isDuress && inboxCount > 0 ? (
+        <Pressable
+          onPress={() => {
+            Haptics.selectionAsync().catch(() => undefined);
+            router.push("/sms-inbox" as any);
+          }}
+          style={[
+            styles.alertBanner,
+            {
+              backgroundColor: isDark
+                ? "rgba(107, 99, 255, 0.15)"
+                : "rgba(79, 70, 255, 0.08)",
+              borderColor: theme.colors.primary,
+            },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Open Transaction Inbox"
+        >
+          <Inbox size={18} color={theme.colors.primary} />
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.alertTitle, { color: theme.colors.foreground }]}>
+              Transaction Inbox
+            </Text>
+            <Text
+              style={[
+                styles.alertText,
+                { color: theme.colors.mutedForeground },
+              ]}
+            >
+              {formatDetectedCount(inboxCount)} — tap to Add or Ignore
+            </Text>
+          </View>
+        </Pressable>
       ) : null}
 
       {system.announcementBanner ? (

@@ -74,6 +74,12 @@ function AppShellInner() {
           }}
         />
         <Stack.Screen
+          name="sms-inbox"
+          options={{
+            animation: "slide_from_right",
+          }}
+        />
+        <Stack.Screen
           name="app-selector"
           options={{
             animation: "slide_from_right",

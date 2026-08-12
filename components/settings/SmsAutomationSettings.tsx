@@ -1,16 +1,24 @@
 import { useState } from "react";
 import { Pressable, Switch, Text, View } from "react-native";
+import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { ChevronDown, ChevronUp, MessageSquare } from "lucide-react-native";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { useSmsPermission } from "@/hooks/useSmsPermission";
+import { useSmsReviewInbox } from "@/hooks/useSmsReviewInbox";
 import { useSmsReceiver } from "@/providers/SmsReceiverProvider";
 import { toast } from "@/lib/toast";
 import { defaultSmsReader } from "@/services/sms/smsReader";
 import type { SmsPermissionStatus } from "@/services/sms/smsPermissions";
 import { filterRelevantSms } from "@/services/sms/smsRelevanceFilter";
+import {
+  loadSmsDedupeKeys,
+  mergeSmsDedupeKeys,
+} from "@/services/sms/smsDedupeStore";
+import { processRawSmsMessages } from "@/services/sms/smsPipeline";
+import { enqueueWriteReadyForReview } from "@/services/sms/smsReviewActions";
 import type { RawSmsMessage } from "@/shared/types/smsTransaction";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
@@ -98,6 +106,7 @@ function RowSwitch({
  * Phase 2: permission + local inbox scan (no Firebase upload of raw SMS).
  */
 export function SmsAutomationSettings() {
+  const router = useRouter();
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const [readerExpanded, setReaderExpanded] = useState(true);
@@ -105,6 +114,8 @@ export function SmsAutomationSettings() {
   const [lastScan, setLastScan] = useState<{
     total: number;
     relevant: number;
+    writeReady: number;
+    duplicates: number;
     samples: Array<{ id: string; address: string }>;
   } | null>(null);
   const {
@@ -120,6 +131,7 @@ export function SmsAutomationSettings() {
     setReviewBeforeAdding,
   } = useSmsPermission();
   const { listening, inboundStatus } = useSmsReceiver();
+  const { count: inboxCount } = useSmsReviewInbox();
 
   const granted = permissionStatus === "granted";
   const busy = permissionLoading || prefsLoading || scanning;
@@ -181,6 +193,15 @@ export function SmsAutomationSettings() {
         relevantOnly: false,
       });
       const relevant = filterRelevantSms(all);
+      const known = await loadSmsDedupeKeys();
+      const pipeline = processRawSmsMessages(relevant, {
+        knownDedupeKeys: known,
+      });
+      await mergeSmsDedupeKeys(known);
+      const queued = await enqueueWriteReadyForReview(pipeline.writeReady);
+      const duplicates = pipeline.records.filter(
+        (r) => r.skipReason === "duplicate"
+      ).length;
 
       const samples = relevant.slice(0, 5).map((m: RawSmsMessage) => ({
         id: m.id,
@@ -190,11 +211,15 @@ export function SmsAutomationSettings() {
       setLastScan({
         total: all.length,
         relevant: relevant.length,
+        writeReady: pipeline.writeReady.length,
+        duplicates,
         samples,
       });
 
       toast.success(
-        `Found ${relevant.length} likely transaction SMS (of ${all.length} recent, kept on device)`
+        queued > 0
+          ? `${queued} transaction${queued === 1 ? "" : "s"} added to Transaction Inbox`
+          : `No new transactions (${duplicates} already seen)`
       );
     } catch (err) {
       const message =
@@ -293,6 +318,12 @@ export function SmsAutomationSettings() {
                 ? ` · ${inboundStatus.lastDetectionKind}`
                 : ""}
               {` · relevant ${inboundStatus.lastRelevantCount}`}
+              {inboundStatus.lastWriteReadyCount
+                ? ` · new ${inboundStatus.lastWriteReadyCount}`
+                : ""}
+              {inboundStatus.lastDuplicateCount
+                ? ` · duplicates ${inboundStatus.lastDuplicateCount}`
+                : ""}
             </Text>
           ) : null}
         </View>
@@ -380,6 +411,17 @@ export function SmsAutomationSettings() {
 
         <View style={{ gap: 8 }}>
           <Button
+            variant="primary"
+            onPress={() => {
+              Haptics.selectionAsync().catch(() => undefined);
+              router.push("/sms-inbox" as any);
+            }}
+          >
+            {inboxCount > 0
+              ? `Open Transaction Inbox (${inboxCount})`
+              : "Open Transaction Inbox"}
+          </Button>
+          <Button
             variant="tonal"
             loading={scanning}
             disabled={!supported || !granted || busy}
@@ -390,8 +432,9 @@ export function SmsAutomationSettings() {
           {lastScan ? (
             <View style={{ gap: 4 }}>
               <Text style={{ color: theme.colors.mutedForeground, fontSize: 12 }}>
-                Last local scan: {lastScan.relevant} relevant of {lastScan.total}{" "}
-                recent (not uploaded)
+                Last local scan: {lastScan.writeReady} new of {lastScan.relevant}{" "}
+                relevant ({lastScan.duplicates} duplicates, {lastScan.total}{" "}
+                recent, not uploaded)
               </Text>
               {lastScan.samples.length > 0 ? (
                 <Text style={{ color: theme.colors.mutedForeground, fontSize: 12 }}>

@@ -6,15 +6,23 @@ import type {
   SmsSyncCursor,
 } from "@/shared/types/smsTransaction";
 import { adaptParsedSmsToWritePayload } from "./expenseAdapter";
-import { buildSmsFingerprint } from "./smsDedupe";
+import {
+  buildSmsDedupeKeys,
+  buildSmsFingerprint,
+  findDuplicateSmsKey,
+  rememberSmsDedupeKeys,
+} from "./smsDedupe";
 import { isExpenseOrIncomeKind } from "./smsDetector";
 import { parseBankSms, type SmsParseContext } from "./smsParser";
+import { loadSmsDedupeKeys, mergeSmsDedupeKeys } from "./smsDedupeStore";
 import { defaultSmsReader, type SmsReader } from "./smsReader";
 
 export interface SmsPipelineDeps {
   reader?: SmsReader;
-  /** Local fingerprints already seen (later: AsyncStorage-backed set) */
+  /** @deprecated Prefer knownDedupeKeys */
   knownFingerprints?: Set<string>;
+  /** Seen refs / txn signatures / fingerprints (Phase 8) */
+  knownDedupeKeys?: Set<string>;
   parseContext?: SmsParseContext;
   /** When true, SMS import is disabled (default recommendation for duress) */
   blockImport?: boolean;
@@ -46,14 +54,17 @@ function skipReasonForKind(kind: SmsDetectionKind): SmsSkipReason | null {
 }
 
 /**
- * Orchestrates read → detect/parse → dedupe → adapt.
- * Phase 4: classification is live; Firebase writes still deferred.
+ * Orchestrates read → detect/parse → dedupe → adapt → review inbox.
+ * Phase 9: writeReady candidates are parked for Add / Ignore (Firestore on Add).
  */
 export async function processSmsInbox(
   deps: SmsPipelineDeps = {}
 ): Promise<SmsPipelineResult> {
   const reader = deps.reader ?? defaultSmsReader;
-  const known = deps.knownFingerprints ?? new Set<string>();
+  const known =
+    deps.knownDedupeKeys ??
+    deps.knownFingerprints ??
+    (await loadSmsDedupeKeys());
   const now = Date.now();
 
   if (deps.blockImport) {
@@ -83,10 +94,12 @@ export async function processSmsInbox(
   }
 
   const messages = await reader.readMessages({ relevantOnly: false });
-  return processRawSmsMessages(messages, {
-    knownFingerprints: known,
+  const result = processRawSmsMessages(messages, {
+    knownDedupeKeys: known,
     parseContext: deps.parseContext,
   });
+  await mergeSmsDedupeKeys(known);
+  return result;
 }
 
 /** Pure path for tests / later phases feeding messages without the reader. */
@@ -94,10 +107,11 @@ export function processRawSmsMessages(
   messages: RawSmsMessage[],
   options: {
     knownFingerprints?: Set<string>;
+    knownDedupeKeys?: Set<string>;
     parseContext?: SmsParseContext;
   } = {}
 ): SmsPipelineResult {
-  const known = options.knownFingerprints ?? new Set<string>();
+  const known = options.knownDedupeKeys ?? options.knownFingerprints ?? new Set<string>();
   const records: SmsProcessingRecord[] = [];
   const writeReady: SmsPipelineResult["writeReady"] = [];
   let lastId: string | undefined;
@@ -106,11 +120,12 @@ export function processRawSmsMessages(
   for (const message of messages) {
     const parsed = parseBankSms(message, options.parseContext);
     const fingerprint = buildSmsFingerprint(message, parsed);
+    const dedupeKeys = buildSmsDedupeKeys(message, parsed);
     const updatedAtMs = Date.now();
     lastId = message.id;
     lastAt = message.receivedAtMs;
 
-    if (known.has(fingerprint)) {
+    if (findDuplicateSmsKey(dedupeKeys, known)) {
       records.push({
         smsId: message.id,
         fingerprint,
@@ -132,7 +147,7 @@ export function processRawSmsMessages(
         parsed,
         updatedAtMs,
       });
-      known.add(fingerprint);
+      rememberSmsDedupeKeys(known, [`sms:${message.id}`, `fp:${fingerprint}`]);
       continue;
     }
 
@@ -145,7 +160,7 @@ export function processRawSmsMessages(
         parsed,
         updatedAtMs,
       });
-      known.add(fingerprint);
+      rememberSmsDedupeKeys(known, [`sms:${message.id}`, `fp:${fingerprint}`]);
       continue;
     }
 
@@ -159,7 +174,7 @@ export function processRawSmsMessages(
         parsed,
         updatedAtMs,
       });
-      known.add(fingerprint);
+      rememberSmsDedupeKeys(known, [`sms:${message.id}`, `fp:${fingerprint}`]);
       continue;
     }
 
@@ -172,7 +187,7 @@ export function processRawSmsMessages(
     };
     records.push(record);
     writeReady.push({ record, write });
-    known.add(fingerprint);
+    rememberSmsDedupeKeys(known, dedupeKeys);
   }
 
   return {

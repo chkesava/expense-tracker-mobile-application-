@@ -1,17 +1,22 @@
 /**
  * Transaction processor for newly received SMS.
- * Phase 4: detect class for every message → pipeline (no Firebase writes yet).
+ * Parks drafts in the Transaction Inbox (or auto-commits when Auto Add is on).
  */
 
 import type { RawSmsMessage } from "@/shared/types/smsTransaction";
 import { loadSmsAutomationPrefs } from "./smsAutomationPrefs";
 import { detectSmsTransaction } from "./smsDetector";
 import {
+  loadSmsDedupeKeys,
+  mergeSmsDedupeKeys,
+} from "./smsDedupeStore";
+import {
   loadSmsInboundStatus,
   patchSmsInboundStatus,
 } from "./smsInboundStatus";
 import { processRawSmsMessages } from "./smsPipeline";
 import { filterRelevantSms } from "./smsRelevanceFilter";
+import { enqueueWriteReadyForReview } from "./smsReviewActions";
 
 export type ProcessIncomingSmsResult = {
   accepted: boolean;
@@ -19,17 +24,19 @@ export type ProcessIncomingSmsResult = {
   relevantCount: number;
   skippedCount: number;
   writeReadyCount: number;
+  duplicateCount?: number;
+  inboxQueuedCount?: number;
   /** Detection kind of the first message in the batch (debug / Settings). */
   lastDetectionKind?: string;
 };
 
 /**
  * Handle a batch from the BroadcastReceiver.
- * Does not upload raw SMS or create Firestore expenses in this phase.
+ * Parks write-ready drafts in the Transaction Inbox (or auto-commits when Auto Add is on).
  */
 export async function processIncomingSmsMessages(
   messages: RawSmsMessage[],
-  options: { blockImport?: boolean } = {}
+  options: { blockImport?: boolean; uid?: string } = {}
 ): Promise<ProcessIncomingSmsResult> {
   if (!messages.length) {
     return {
@@ -74,6 +81,7 @@ export async function processIncomingSmsMessages(
       lastRelevantCount: 0,
       lastSkippedCount: messages.length,
       lastWriteReadyCount: 0,
+      lastDuplicateCount: 0,
     });
     return {
       accepted: false,
@@ -85,12 +93,37 @@ export async function processIncomingSmsMessages(
     };
   }
 
-  // Classify full batch (including non-relevant) for accurate skip reasons,
-  // but adapt only money-movement candidates via pipeline.
-  const pipeline = processRawSmsMessages(messages);
+  // Classify full batch; skip duplicates via persisted ref/txn keys.
+  const known = await loadSmsDedupeKeys();
+  const pipeline = processRawSmsMessages(messages, {
+    knownDedupeKeys: known,
+  });
   const skippedCount = pipeline.records.filter((r) => r.status === "skipped")
     .length;
+  const duplicateCount = pipeline.records.filter(
+    (r) => r.skipReason === "duplicate"
+  ).length;
   const writeReadyCount = pipeline.writeReady.length;
+  await mergeSmsDedupeKeys(known);
+
+  let inboxQueuedCount = 0;
+  const autoCommit =
+    prefs.autoAdd && !prefs.reviewBeforeAdding && Boolean(options.uid);
+  if (autoCommit && options.uid) {
+    const { commitSmsWritePayload } = await import("./smsExpenseWriter");
+    const failed: typeof pipeline.writeReady = [];
+    for (const entry of pipeline.writeReady) {
+      try {
+        await commitSmsWritePayload(options.uid, entry.write);
+      } catch {
+        failed.push(entry);
+      }
+    }
+    inboxQueuedCount = await enqueueWriteReadyForReview(failed);
+  } else {
+    inboxQueuedCount = await enqueueWriteReadyForReview(pipeline.writeReady);
+  }
+
   const head = relevant[0];
   const headKind = detectSmsTransaction(head).kind;
   const current = await loadSmsInboundStatus();
@@ -102,6 +135,7 @@ export async function processIncomingSmsMessages(
     lastRelevantCount: relevant.length,
     lastSkippedCount: skippedCount,
     lastWriteReadyCount: writeReadyCount,
+    lastDuplicateCount: duplicateCount,
     totalInboundEvents: (current.totalInboundEvents || 0) + 1,
   });
 
@@ -111,6 +145,8 @@ export async function processIncomingSmsMessages(
     relevantCount: relevant.length,
     skippedCount,
     writeReadyCount,
+    duplicateCount,
+    inboxQueuedCount,
     lastDetectionKind: headKind,
   };
 }
