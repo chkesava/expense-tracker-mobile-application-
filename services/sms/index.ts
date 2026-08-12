@@ -29,6 +29,13 @@ export {
   type SmsParseContext,
 } from "./smsParser";
 
+export {
+  detectSmsTransaction,
+  isMoneyMovementKind,
+  isExpenseOrIncomeKind,
+  type SmsDetectionResult,
+} from "./smsDetector";
+
 export { buildSmsFingerprint } from "./smsDedupe";
 
 export {

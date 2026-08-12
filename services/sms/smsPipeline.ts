@@ -1,10 +1,13 @@
 import type {
   RawSmsMessage,
+  SmsDetectionKind,
   SmsProcessingRecord,
+  SmsSkipReason,
   SmsSyncCursor,
 } from "@/shared/types/smsTransaction";
 import { adaptParsedSmsToWritePayload } from "./expenseAdapter";
 import { buildSmsFingerprint } from "./smsDedupe";
+import { isExpenseOrIncomeKind } from "./smsDetector";
 import { parseBankSms, type SmsParseContext } from "./smsParser";
 import { defaultSmsReader, type SmsReader } from "./smsReader";
 
@@ -27,9 +30,24 @@ export interface SmsPipelineResult {
   cursor: SmsSyncCursor;
 }
 
+function skipReasonForKind(kind: SmsDetectionKind): SmsSkipReason | null {
+  switch (kind) {
+    case "otp":
+      return "otp";
+    case "promotional":
+      return "promotional";
+    case "transfer":
+      return "transfer";
+    case "non_financial":
+      return "non_financial";
+    default:
+      return null;
+  }
+}
+
 /**
- * Orchestrates read → parse → dedupe → adapt.
- * Phase 1: permission check/request live on Android; inbox read stays empty.
+ * Orchestrates read → detect/parse → dedupe → adapt.
+ * Phase 4: classification is live; Firebase writes still deferred.
  */
 export async function processSmsInbox(
   deps: SmsPipelineDeps = {}
@@ -64,7 +82,7 @@ export async function processSmsInbox(
     };
   }
 
-  const messages = await reader.readMessages();
+  const messages = await reader.readMessages({ relevantOnly: false });
   return processRawSmsMessages(messages, {
     knownFingerprints: known,
     parseContext: deps.parseContext,
@@ -104,7 +122,21 @@ export function processRawSmsMessages(
       continue;
     }
 
-    if (parsed.kind === "unknown" || parsed.confidence <= 0) {
+    const kindSkip = skipReasonForKind(parsed.kind);
+    if (kindSkip) {
+      records.push({
+        smsId: message.id,
+        fingerprint,
+        status: "skipped",
+        skipReason: kindSkip,
+        parsed,
+        updatedAtMs,
+      });
+      known.add(fingerprint);
+      continue;
+    }
+
+    if (!isExpenseOrIncomeKind(parsed.kind) || parsed.confidence <= 0) {
       records.push({
         smsId: message.id,
         fingerprint,

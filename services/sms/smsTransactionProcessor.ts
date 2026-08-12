@@ -1,10 +1,11 @@
 /**
  * Transaction processor for newly received SMS.
- * Phase 3: filter → pipeline → local status only (no Firebase expense writes yet).
+ * Phase 4: detect class for every message → pipeline (no Firebase writes yet).
  */
 
 import type { RawSmsMessage } from "@/shared/types/smsTransaction";
 import { loadSmsAutomationPrefs } from "./smsAutomationPrefs";
+import { detectSmsTransaction } from "./smsDetector";
 import {
   loadSmsInboundStatus,
   patchSmsInboundStatus,
@@ -18,6 +19,8 @@ export type ProcessIncomingSmsResult = {
   relevantCount: number;
   skippedCount: number;
   writeReadyCount: number;
+  /** Detection kind of the first message in the batch (debug / Settings). */
+  lastDetectionKind?: string;
 };
 
 /**
@@ -59,13 +62,15 @@ export async function processIncomingSmsMessages(
     };
   }
 
-  const relevant = filterRelevantSms(messages);
   const latest = messages[0];
+  const firstDetection = detectSmsTransaction(latest);
+  const relevant = filterRelevantSms(messages);
 
   if (!relevant.length) {
     await patchSmsInboundStatus({
       lastReceivedAtMs: latest?.receivedAtMs,
       lastSender: latest?.address,
+      lastDetectionKind: firstDetection.kind,
       lastRelevantCount: 0,
       lastSkippedCount: messages.length,
       lastWriteReadyCount: 0,
@@ -76,19 +81,24 @@ export async function processIncomingSmsMessages(
       relevantCount: 0,
       skippedCount: messages.length,
       writeReadyCount: 0,
+      lastDetectionKind: firstDetection.kind,
     };
   }
 
-  const pipeline = processRawSmsMessages(relevant);
+  // Classify full batch (including non-relevant) for accurate skip reasons,
+  // but adapt only money-movement candidates via pipeline.
+  const pipeline = processRawSmsMessages(messages);
   const skippedCount = pipeline.records.filter((r) => r.status === "skipped")
     .length;
   const writeReadyCount = pipeline.writeReady.length;
   const head = relevant[0];
+  const headKind = detectSmsTransaction(head).kind;
   const current = await loadSmsInboundStatus();
 
   await patchSmsInboundStatus({
     lastReceivedAtMs: head.receivedAtMs,
     lastSender: head.address,
+    lastDetectionKind: headKind,
     lastRelevantCount: relevant.length,
     lastSkippedCount: skippedCount,
     lastWriteReadyCount: writeReadyCount,
@@ -101,5 +111,6 @@ export async function processIncomingSmsMessages(
     relevantCount: relevant.length,
     skippedCount,
     writeReadyCount,
+    lastDetectionKind: headKind,
   };
 }

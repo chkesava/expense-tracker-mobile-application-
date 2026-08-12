@@ -289,6 +289,9 @@ export function SmsAutomationSettings() {
               {inboundStatus.lastSender
                 ? ` · ${inboundStatus.lastSender}`
                 : ""}
+              {inboundStatus.lastDetectionKind
+                ? ` · ${inboundStatus.lastDetectionKind}`
+                : ""}
               {` · relevant ${inboundStatus.lastRelevantCount}`}
             </Text>
           ) : null}

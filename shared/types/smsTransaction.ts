@@ -14,6 +14,10 @@ export type SmsProcessingStatus =
 
 export type SmsSkipReason =
   | "not_transaction"
+  | "otp"
+  | "promotional"
+  | "transfer"
+  | "non_financial"
   | "low_confidence"
   | "duplicate"
   | "unsupported_platform"
@@ -33,7 +37,20 @@ export interface RawSmsMessage {
   read?: boolean;
 }
 
-export type SmsTransactionKind = "expense" | "income" | "unknown";
+/**
+ * Phase 4 detection classes for an inbound SMS.
+ * Only expense/income become write candidates later.
+ */
+export type SmsDetectionKind =
+  | "expense"
+  | "income"
+  | "transfer"
+  | "otp"
+  | "promotional"
+  | "non_financial";
+
+/** @deprecated Prefer SmsDetectionKind — kept as an alias for parsed drafts. */
+export type SmsTransactionKind = SmsDetectionKind;
 
 /**
  * Structured draft after bank/UPI SMS parsing.
@@ -56,6 +73,8 @@ export interface SmsParsedTransaction {
   confidence: number;
   /** Template or bank id that matched, if any */
   templateId?: string;
+  /** Short detector rule labels for debugging (local only). */
+  detectionReasons?: string[];
 }
 
 /**

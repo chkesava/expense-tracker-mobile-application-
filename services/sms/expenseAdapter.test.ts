@@ -42,16 +42,32 @@ describe("adaptParsedSmsToWritePayload", () => {
 });
 
 describe("processRawSmsMessages", () => {
-  it("skips unknown templates from Phase 0 stub parser", () => {
+  it("detects debit SMS as expense and prepares a local write payload", () => {
     const result = processRawSmsMessages([
       {
         id: "1",
         address: "VK-HDFCBK",
-        body: "INR 500 debited",
+        body: "Your account has been debited ₹500",
+        receivedAtMs: Date.parse("2026-08-10T10:00:00+05:30"),
+      },
+    ]);
+    expect(result.records[0]?.parsed?.kind).toBe("expense");
+    expect(result.records[0]?.parsed?.amount).toBe(500);
+    expect(result.writeReady).toHaveLength(1);
+    expect(result.writeReady[0]?.write.collection).toBe("expenses");
+  });
+
+  it("skips OTP messages", () => {
+    const result = processRawSmsMessages([
+      {
+        id: "2",
+        address: "VK-HDFCBK",
+        body: "Your OTP is 482913. Do not share with anyone.",
         receivedAtMs: Date.now(),
       },
     ]);
+    expect(result.records[0]?.parsed?.kind).toBe("otp");
+    expect(result.records[0]?.skipReason).toBe("otp");
     expect(result.writeReady).toHaveLength(0);
-    expect(result.records[0]?.status).toBe("skipped");
   });
 });

@@ -8,6 +8,8 @@ export type SmsInboundStatus = {
   listeningRequested: boolean;
   lastReceivedAtMs?: number;
   lastSender?: string;
+  /** Phase 4: last detected class (expense/income/…). */
+  lastDetectionKind?: string;
   lastRelevantCount: number;
   lastSkippedCount: number;
   lastWriteReadyCount: number;
