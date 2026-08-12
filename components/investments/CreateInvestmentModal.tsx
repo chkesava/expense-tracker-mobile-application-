@@ -27,6 +27,7 @@ import type {
   Investment,
   InvestmentKind,
 } from "@/shared/types/investment";
+import { todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
@@ -48,9 +49,7 @@ export function CreateInvestmentModal({
   const [kind, setKind] = useState<InvestmentKind>("fixed_deposit");
   const [name, setName] = useState("");
   const [principal, setPrincipal] = useState("");
-  const [startDate, setStartDate] = useState(
-    new Date().toISOString().slice(0, 10)
-  );
+  const [startDate, setStartDate] = useState(todayDateKey());
 
   // Interest based fields
   const [annualRate, setAnnualRate] = useState("7.5");

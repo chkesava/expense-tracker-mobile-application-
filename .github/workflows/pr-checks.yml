@@ -1,0 +1,62 @@
+name: PR Checks
+
+# Quality gate only — never request signing keystores, Firebase service accounts,
+# or other release secrets here. Fork PRs must not gain access to those materials.
+# Release signing stays in android-release.yml (push main / workflow_dispatch only).
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - 'docs/**'
+      - 'feature/**'
+      - 'fix/**'
+      - 'test/**'
+
+concurrency:
+  group: pr-checks-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Unit, integration-lite, typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Unit + integration-lite suite
+        run: npm test
+
+      - name: Shared typecheck
+        run: npm run typecheck:shared
+
+      - name: Full app typecheck
+        run: npm run typecheck
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "## PR Checks"
+            echo ""
+            echo "- Suite: \`npm test\` (Vitest unit + integration-lite)"
+            echo "- Shared: \`npm run typecheck:shared\`"
+            echo "- App: \`npm run typecheck\`"
+            echo "- Secrets used: **none** (no keystore / service account on this workflow)"
+          } >> "$GITHUB_STEP_SUMMARY"

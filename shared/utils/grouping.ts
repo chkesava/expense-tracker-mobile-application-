@@ -1,12 +1,13 @@
 import type { Expense } from "../types/expense";
+import { todayDateKey, toLocalDateKey } from "./dates";
 
 export function groupByDay(expenses: Expense[]) {
-  const today = new Date().toISOString().slice(0,10);
-  const yesterday = new Date(Date.now()-86400000).toISOString().slice(0,10);
+  const today = todayDateKey();
+  const yesterday = toLocalDateKey(new Date(Date.now() - 86400000));
 
   return {
-    today: expenses.filter(e=>e.date===today),
-    yesterday: expenses.filter(e=>e.date===yesterday),
-    earlier: expenses.filter(e=>e.date!==today && e.date!==yesterday)
+    today: expenses.filter((e) => e.date === today),
+    yesterday: expenses.filter((e) => e.date === yesterday),
+    earlier: expenses.filter((e) => e.date !== today && e.date !== yesterday),
   };
 }

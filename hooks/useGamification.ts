@@ -6,6 +6,7 @@ import { getFirestoreDb } from "@/lib/firebase";
 import { useAuth } from "@/providers/AuthProvider";
 import type { UserStats } from "@/shared/types/stats";
 import { LEVEL_THRESHOLDS } from "@/shared/types/stats";
+import { todayDateKey } from "@/shared/utils/dates";
 
 export function useGamification() {
   const { user } = useAuth();
@@ -36,7 +37,7 @@ export function useGamification() {
           const defaultStats: UserStats = {
             currentStreak: 1,
             longestStreak: 1,
-            lastLoginDate: new Date().toISOString().slice(0, 10),
+            lastLoginDate: todayDateKey(),
             points: 120,
             level: 1,
             badges: ["no_spend"],

@@ -8,6 +8,10 @@ import { useSyncExternalStore } from "react";
 let pendingSyncCount = 0;
 const listeners = new Set<() => void>();
 
+export function getGlobalPendingSyncCount(): number {
+  return pendingSyncCount;
+}
+
 export function setGlobalPendingSyncCount(count: number): void {
   if (pendingSyncCount === count) return;
   pendingSyncCount = count;

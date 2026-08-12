@@ -24,6 +24,7 @@ import { Amount } from "@/components/common/Amount";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import type { Investment } from "@/shared/types/investment";
+import { todayDateKey } from "@/shared/utils/dates";
 import { getInvestmentValuation } from "@/shared/utils/investmentInterest";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
@@ -48,7 +49,7 @@ export function InvestmentDetailModal({
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayDateKey();
   const valuation = useMemo(() => {
     if (!investment) return null;
     return getInvestmentValuation(investment, today);

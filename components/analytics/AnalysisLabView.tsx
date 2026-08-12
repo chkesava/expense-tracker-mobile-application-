@@ -32,6 +32,7 @@ import { useIncomes } from "@/hooks/useIncomes";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import { getCategoryIcon } from "@/shared/data/categoryTaxonomy";
 import type { Expense, Income } from "@/shared/types/expense";
+import { currentMonthKey, toLocalDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
@@ -115,11 +116,11 @@ export function AnalysisLabView({ initialQuery = "" }: AnalysisLabViewProps) {
   // Apply filters & search query
   const filteredTransactions = useMemo(() => {
     const now = new Date();
-    const currentMonthStr = now.toISOString().slice(0, 7);
+    const currentMonthStr = currentMonthKey();
     const currentYearStr = String(now.getFullYear());
-    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
-      .toISOString()
-      .slice(0, 10);
+    const thirtyDaysAgo = toLocalDateKey(
+      new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+    );
 
     const minNum = parseFloat(filters.minAmount);
     const maxNum = parseFloat(filters.maxAmount);

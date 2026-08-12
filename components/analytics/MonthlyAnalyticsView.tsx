@@ -46,6 +46,7 @@ import {
   getWeekendVsWeekdaySplit,
 } from "@/shared/utils/rangeAnalytics";
 import { groupByCategory } from "@/shared/utils/analytics";
+import { currentMonthKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
@@ -61,7 +62,7 @@ export function MonthlyAnalyticsView() {
   const { accounts } = useAccounts();
 
   // Current month state "YYYY-MM"
-  const currentMonthStr = useMemo(() => new Date().toISOString().slice(0, 7), []);
+  const currentMonthStr = useMemo(() => currentMonthKey(), []);
   const [selectedMonth, setSelectedMonth] = useState<string>(currentMonthStr);
 
   const monthlyBudget = userSettings.monthlyBudget || 0;

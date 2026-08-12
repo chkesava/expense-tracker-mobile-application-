@@ -1,4 +1,5 @@
 import { suggestCategoryFromNote } from "@/shared/data/categoryTaxonomy";
+import { todayDateKey } from "@/shared/utils/dates";
 
 export interface ExtractedReceiptData {
   merchant?: string;
@@ -70,7 +71,7 @@ export function parseReceiptOcrText(rawText: string): ExtractedReceiptData {
     }
   }
 
-  // 3. Date extraction (YYYY-MM-DD or DD/MM/YYYY or DD-Mon-YYYY)
+  // 3. Date extraction (YYYY-MM-DD preferred; numeric forms interpret day-first / DD-MM for INR)
   const datePatterns = [
     /\b(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})\b/,
     /\b(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})\b/,
@@ -82,24 +83,31 @@ export function parseReceiptOcrText(rawText: string): ExtractedReceiptData {
       const dMatch = line.match(pat);
       if (dMatch) {
         if (dMatch[3] && dMatch[3].length === 4) {
-          // DD/MM/YYYY
-          const d = String(dMatch[1]).padStart(2, "0");
-          const m = String(dMatch[2]).padStart(2, "0");
+          // Numeric DD/MM/YYYY (India default). If first > 12 it must be day.
+          const first = Number(dMatch[1]);
+          const second = Number(dMatch[2]);
           const y = dMatch[3];
-          date = `${y}-${m}-${d}`;
+          const dayFirst = first > 12 || second <= 12;
+          const d = String(dayFirst ? first : second).padStart(2, "0");
+          const m = String(dayFirst ? second : first).padStart(2, "0");
+          if (Number(m) >= 1 && Number(m) <= 12 && Number(d) >= 1 && Number(d) <= 31) {
+            date = `${y}-${m}-${d}`;
+          }
         } else if (dMatch[1].length === 4) {
           // YYYY-MM-DD
           date = `${dMatch[1]}-${String(dMatch[2]).padStart(2, "0")}-${String(dMatch[3]).padStart(2, "0")}`;
         }
-        confidence += 0.15;
-        break;
+        if (date) {
+          confidence += 0.15;
+          break;
+        }
       }
     }
     if (date) break;
   }
 
   if (!date) {
-    date = new Date().toISOString().slice(0, 10);
+    date = todayDateKey();
   }
 
   // 4. Tax extraction

@@ -5,6 +5,7 @@ import { useTheme } from "@/theme/ThemeProvider";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { sipPlanFormSchema, SipPlanFormInput } from "@/shared/features/sip/schemas";
+import { todayDateKey } from "@/shared/utils/dates";
 
 export type SipPlanFormModalProps = {
   visible: boolean;
@@ -36,7 +37,7 @@ export function SipPlanFormModal({ visible, onClose, onSubmit }: SipPlanFormModa
   const [investmentAmount, setInvestmentAmount] = useState("");
   const [frequency, setFrequency] = useState<"daily" | "weekly" | "monthly" | "quarterly" | "yearly">("monthly");
   const [executionDay, setExecutionDay] = useState("1");
-  const [startDate, setStartDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [startDate, setStartDate] = useState(() => todayDateKey());
   
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});

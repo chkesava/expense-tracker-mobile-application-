@@ -15,6 +15,7 @@ import { getFirestoreDb } from "@/lib/firebase";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import type { VaultExpense } from "@/shared/types/vaultExpense";
+import { todayDateKey } from "@/shared/utils/dates";
 
 export function useVaultExpenses(vaultId?: string) {
   const { user } = useAuth();
@@ -78,7 +79,7 @@ export function useVaultExpenses(vaultId?: string) {
           type: params.type,
           category: params.category || (params.type === "deposit" ? "Funding" : "General"),
           note: params.note?.trim() || "",
-          date: params.date || new Date().toISOString().slice(0, 10),
+          date: params.date || todayDateKey(),
           createdBy: uid,
           createdByName: userName,
           createdAt: serverTimestamp(),
