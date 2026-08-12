@@ -27,6 +27,7 @@ import { Card } from "@/components/ui/Card";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useIncomes } from "@/hooks/useIncomes";
 import { useAuth } from "@/providers/AuthProvider";
+import { useSettings } from "@/providers/SettingsProvider";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import {
   buildAdvisorContext,
@@ -37,17 +38,18 @@ import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
 const INITIAL_SUGGESTIONS = [
+  "How much did I spend on food this month?",
+  "Where am I spending the most?",
+  "Can I spend ₹3,000 this weekend?",
   "Analyze my monthly spending",
   "Where can I find savings?",
-  "Show my top categories",
-  "Can I afford a 4500 purchase?",
-  "Check my budget pacing health",
 ];
 
 export function AiAdvisorView() {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const { settings: system } = useSystemSettings();
+  const { settings } = useSettings();
   const { user, isDuress } = useAuth();
 
   const { expenses } = useExpenses();
@@ -65,8 +67,14 @@ export function AiAdvisorView() {
 
   // Financial Context
   const context = useMemo(
-    () => buildAdvisorContext(expenses, incomes, system.defaultCurrency),
-    [expenses, incomes, system.defaultCurrency]
+    () =>
+      buildAdvisorContext(
+        expenses,
+        incomes,
+        system.defaultCurrency,
+        settings.monthlyBudget
+      ),
+    [expenses, incomes, system.defaultCurrency, settings.monthlyBudget]
   );
 
   // Load chat history from AsyncStorage

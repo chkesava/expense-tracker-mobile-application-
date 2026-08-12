@@ -82,21 +82,20 @@ export async function addSmsReviewItem(
   const result = await commit(uid, item.write);
   await dismissSmsReviewItem(id);
   if (result.collection === "expenses") {
-    try {
-      const { syncRecurringAfterSmsCommit } = await import("./smsRecurringSync");
-      await syncRecurringAfterSmsCommit(uid, [
-        {
-          record: {
-            smsId: item.smsId,
-            fingerprint: item.fingerprint,
-            parsed: item.parsed,
+    void import("./smsRecurringSync")
+      .then((m) =>
+        m.syncRecurringAfterSmsCommit(uid, [
+          {
+            record: {
+              smsId: item.smsId,
+              fingerprint: item.fingerprint,
+              parsed: item.parsed,
+            },
+            write: item.write,
           },
-          write: item.write,
-        },
-      ]);
-    } catch {
-      /* recurring detect is best-effort */
-    }
+        ])
+      )
+      .catch(() => undefined);
   }
   return result;
 }

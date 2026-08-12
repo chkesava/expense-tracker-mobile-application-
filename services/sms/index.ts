@@ -32,6 +32,11 @@ export {
 } from "./smsParser";
 
 export {
+  needsSmsAiFallback,
+  applySmsAiFallback,
+} from "./smsAiFallback";
+
+export {
   detectSmsTransaction,
   isMoneyMovementKind,
   isExpenseOrIncomeKind,

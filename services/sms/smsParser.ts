@@ -12,6 +12,7 @@ import {
 import { extractSmsFields } from "./smsFieldExtractor";
 import { classifySmsIncomeSource } from "./smsIncomeClassifier";
 import { normalizeMerchantName } from "./smsMerchantNormalizer";
+import { applySmsAiFallback, needsSmsAiFallback } from "./smsAiFallback";
 
 export interface SmsParseContext {
   /** Optional account names for matching “from HDFC” style hints */
@@ -139,6 +140,10 @@ export function parseBankSms(
     if (fields.externalRef) confidence = Math.min(0.97, confidence + 0.02);
   }
   parsed.confidence = confidence;
+
+  if (needsSmsAiFallback(parsed)) {
+    return applySmsAiFallback(message, parsed, context);
+  }
 
   return parsed;
 }
