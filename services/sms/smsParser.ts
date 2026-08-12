@@ -1,17 +1,22 @@
+import type { CategorizationRule } from "@/shared/types/expense";
 import type {
   RawSmsMessage,
   SmsParsedTransaction,
 } from "@/shared/types/smsTransaction";
 import { monthFromDateKey } from "@/shared/utils/dates";
+import { categorizeSmsMerchant } from "./smsCategorizer";
 import {
   detectSmsTransaction,
   isExpenseOrIncomeKind,
 } from "./smsDetector";
 import { extractSmsFields } from "./smsFieldExtractor";
+import { normalizeMerchantName } from "./smsMerchantNormalizer";
 
 export interface SmsParseContext {
   /** Optional account names for matching “from HDFC” style hints */
   accounts?: Array<{ id: string; name: string }>;
+  /** User keyword rules from Settings (win over built-in merchant map) */
+  categorizationRules?: CategorizationRule[];
   /** Override timezone when deriving date from receivedAtMs */
   timezone?: string;
 }
@@ -37,7 +42,7 @@ function buildNote(parts: {
 
 /**
  * Bank / UPI SMS parser.
- * Phase 5: detect type + extract amount/merchant/bank/method/date/account/ref.
+ * Phase 5: extract fields. Phase 6: normalize merchant. Phase 7: categorize.
  */
 export function parseBankSms(
   message: RawSmsMessage,
@@ -58,6 +63,10 @@ export function parseBankSms(
   const amount = fields.amount ?? detection.amount;
   const date = fields.date;
   const month = date ? monthFromDateKey(date) : undefined;
+  const merchantNorm = normalizeMerchantName(fields.merchant);
+  const merchant = merchantNorm.merchant;
+  const parseReasons = [...fields.reasons];
+  if (merchantNorm.reason) parseReasons.push(`merchant_${merchantNorm.reason}`);
 
   const parsed: SmsParsedTransaction = {
     kind: detection.kind,
@@ -65,13 +74,14 @@ export function parseBankSms(
     date,
     month,
     time: fields.time,
-    merchant: fields.merchant,
+    merchant,
+    merchantRaw: merchantNorm.merchantRaw,
     bank: fields.bank,
     paymentMethod: fields.paymentMethod,
     accountLast4: fields.accountLast4,
     externalRef: fields.externalRef,
     note: buildNote({
-      merchant: fields.merchant,
+      merchant,
       bank: fields.bank,
       paymentMethod: fields.paymentMethod,
       accountLast4: fields.accountLast4,
@@ -80,9 +90,22 @@ export function parseBankSms(
     }),
     confidence: detection.confidence,
     detectionReasons: detection.reasons,
-    parseReasons: fields.reasons,
-    templateId: "phase5-parser",
+    parseReasons,
+    templateId: "phase7-parser",
   };
+
+  if (detection.kind === "expense" && merchant) {
+    const cat = categorizeSmsMerchant(
+      merchant,
+      context.categorizationRules
+    );
+    if (cat) {
+      parsed.category = cat.category;
+      parsed.subcategory = cat.subcategory;
+      parseReasons.push(`category_${cat.source}`);
+      parsed.parseReasons = parseReasons;
+    }
+  }
 
   // Prefer matching user account by last4 or name
   if (context.accounts?.length) {
@@ -101,7 +124,9 @@ export function parseBankSms(
   if (isExpenseOrIncomeKind(detection.kind)) {
     if (amount == null) confidence = Math.min(confidence, 0.55);
     else confidence = Math.max(confidence, 0.82);
-    if (fields.merchant) confidence = Math.min(0.95, confidence + 0.05);
+    if (merchant) confidence = Math.min(0.95, confidence + 0.05);
+    if (merchantNorm.matched) confidence = Math.min(0.97, confidence + 0.02);
+    if (parsed.category) confidence = Math.min(0.98, confidence + 0.02);
     if (fields.paymentMethod) confidence = Math.min(0.96, confidence + 0.03);
     if (fields.externalRef) confidence = Math.min(0.97, confidence + 0.02);
   }

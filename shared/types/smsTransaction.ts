@@ -66,6 +66,8 @@ export interface SmsParsedTransaction {
   /** Optional HH:mm if present in SMS */
   time?: string;
   merchant?: string;
+  /** Original SMS merchant token before catalog normalization. */
+  merchantRaw?: string;
   /** Detected bank name (e.g. SBI, HDFC) */
   bank?: string;
   /** UPI | IMPS | NEFT | RTGS | CARD | ATM | NETBANKING */

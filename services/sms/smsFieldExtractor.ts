@@ -211,9 +211,9 @@ function cleanMerchantToken(raw: string): string | undefined {
 
 export function extractMerchant(body: string): string | undefined {
   const patterns = [
-    /(?:paid\s+to|sent\s+to|purchased?\s+at|spent\s+at|payment\s+to|towards|info[:\s]+)\s*([A-Za-z0-9][A-Za-z0-9 &._-]{1,40})/i,
-    /\bat\s+([A-Za-z0-9][A-Za-z0-9 &._-]{1,40})(?:\s+on\b|\s+via\b|\.|$)/i,
-    /\bto\s+([A-Za-z0-9][A-Za-z0-9 &._-]{1,40})(?:\s+on\b|\s+via\b|\s+upi\b|\.|$)/i,
+    /(?:paid\s+to|sent\s+to|purchased?\s+at|spent\s+at|payment\s+to|towards|info[:\s]+)\s*([A-Za-z0-9][A-Za-z0-9 &*._-]{1,40})/i,
+    /\bat\s+([A-Za-z0-9][A-Za-z0-9 &*._-]{1,40})(?:\s+on\b|\s+via\b|\.|$)/i,
+    /\bto\s+([A-Za-z0-9][A-Za-z0-9 &*._-]{1,40})(?:\s+on\b|\s+via\b|\s+upi\b|\.|$)/i,
     /\b([A-Za-z0-9._-]{2,40})@(?:upi|ybl|oksbi|okhdfc|okicici|okaxis|paytm|ibl|axl)\b/i,
   ];
 

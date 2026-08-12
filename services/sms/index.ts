@@ -48,6 +48,24 @@ export {
   type SmsPaymentMethod,
 } from "./smsFieldExtractor";
 
+export {
+  normalizeMerchantName,
+  foldMerchantKey,
+  type SmsMerchantNormalization,
+} from "./smsMerchantNormalizer";
+
+export { SMS_MERCHANT_CATALOG, type SmsMerchantEntry } from "./smsMerchantCatalog";
+
+export {
+  categorizeSmsMerchant,
+  type SmsCategoryMatch,
+} from "./smsCategorizer";
+
+export {
+  SMS_MERCHANT_CATEGORY_RULES,
+  type SmsCategoryRule,
+} from "./smsCategoryRules";
+
 export { buildSmsFingerprint } from "./smsDedupe";
 
 export {

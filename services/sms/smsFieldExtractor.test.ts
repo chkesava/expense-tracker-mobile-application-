@@ -47,7 +47,7 @@ describe("parseBankSms Phase 5", () => {
 
     expect(parsed.kind).toBe("expense");
     expect(parsed.amount).toBe(450);
-    expect(parsed.merchant?.toLowerCase()).toContain("swiggy");
+    expect(parsed.merchant).toBe("Swiggy");
     expect(parsed.bank).toBe("SBI");
     expect(parsed.paymentMethod).toBe("UPI");
     expect(parsed.accountLast4).toBe("4521");
@@ -55,12 +55,16 @@ describe("parseBankSms Phase 5", () => {
     expect(parsed.date).toBe("2026-08-12");
     expect(parsed.note).toMatch(/Swiggy/i);
     expect(parsed.note).toMatch(/UPI/);
-    expect(parsed.templateId).toBe("phase5-parser");
+    expect(parsed.templateId).toBe("phase7-parser");
+    expect(parsed.category).toBe("Food & Dining");
+    expect(parsed.subcategory).toBe("Food Delivery");
 
     const write = adaptParsedSmsToWritePayload(parsed);
     expect(write?.collection).toBe("expenses");
     if (write?.collection === "expenses") {
       expect(write.payload.amount).toBe(450);
+      expect(write.payload.category).toBe("Food & Dining");
+      expect(write.payload.subcategory).toBe("Food Delivery");
       expect(write.payload.tags).toEqual(
         expect.arrayContaining(["sms", "upi", "sbi"])
       );
