@@ -19,8 +19,10 @@ export {
   saveSmsAutomationPrefs,
   updateSmsAutomationPrefs,
   subscribeSmsAutomationPrefs,
+  normalizeSmsAutomationPrefs,
   SMS_AUTOMATION_PREFS_DEFAULTS,
   type SmsAutomationPrefs,
+  type SmsHandlingMode,
 } from "./smsAutomationPrefs";
 
 export {
@@ -128,6 +130,12 @@ export {
   ignoreSmsReviewItem,
   addSmsReviewItem,
 } from "./smsReviewActions";
+
+export {
+  isHighConfidenceForAutoAdd,
+  routeWriteReady,
+  dispatchWriteReady,
+} from "./smsAutoAdd";
 
 export { commitSmsWritePayload } from "./smsExpenseWriter";
 

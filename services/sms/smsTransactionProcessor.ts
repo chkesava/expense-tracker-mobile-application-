@@ -1,10 +1,11 @@
 /**
  * Transaction processor for newly received SMS.
- * Parks drafts in the Transaction Inbox (or auto-commits when Auto Add is on).
+ * Routes drafts by handling mode: manual (ignore live), review (inbox), auto (high-confidence write).
  */
 
 import type { RawSmsMessage } from "@/shared/types/smsTransaction";
 import { loadSmsAutomationPrefs } from "./smsAutomationPrefs";
+import { dispatchWriteReady } from "./smsAutoAdd";
 import { detectSmsTransaction } from "./smsDetector";
 import {
   loadSmsDedupeKeys,
@@ -16,7 +17,6 @@ import {
 } from "./smsInboundStatus";
 import { processRawSmsMessages } from "./smsPipeline";
 import { filterRelevantSms } from "./smsRelevanceFilter";
-import { enqueueWriteReadyForReview } from "./smsReviewActions";
 
 export type ProcessIncomingSmsResult = {
   accepted: boolean;
@@ -26,13 +26,14 @@ export type ProcessIncomingSmsResult = {
   writeReadyCount: number;
   duplicateCount?: number;
   inboxQueuedCount?: number;
+  autoAddedCount?: number;
   /** Detection kind of the first message in the batch (debug / Settings). */
   lastDetectionKind?: string;
 };
 
 /**
  * Handle a batch from the BroadcastReceiver.
- * Parks write-ready drafts in the Transaction Inbox (or auto-commits when Auto Add is on).
+ * Auto mode writes high-confidence drafts; everything else goes to Review Inbox.
  */
 export async function processIncomingSmsMessages(
   messages: RawSmsMessage[],
@@ -107,21 +108,16 @@ export async function processIncomingSmsMessages(
   await mergeSmsDedupeKeys(known);
 
   let inboxQueuedCount = 0;
-  const autoCommit =
-    prefs.autoAdd && !prefs.reviewBeforeAdding && Boolean(options.uid);
-  if (autoCommit && options.uid) {
-    const { commitSmsWritePayload } = await import("./smsExpenseWriter");
-    const failed: typeof pipeline.writeReady = [];
-    for (const entry of pipeline.writeReady) {
-      try {
-        await commitSmsWritePayload(options.uid, entry.write);
-      } catch {
-        failed.push(entry);
-      }
-    }
-    inboxQueuedCount = await enqueueWriteReadyForReview(failed);
+  let autoAddedCount = 0;
+  if (prefs.handlingMode === "manual") {
+    // Live SMS is not queued; the user scans when they want to review.
   } else {
-    inboxQueuedCount = await enqueueWriteReadyForReview(pipeline.writeReady);
+    const dispatched = await dispatchWriteReady(pipeline.writeReady, {
+      mode: prefs.handlingMode,
+      uid: options.uid,
+    });
+    inboxQueuedCount = dispatched.queued;
+    autoAddedCount = dispatched.committed;
   }
 
   const head = relevant[0];
@@ -136,6 +132,8 @@ export async function processIncomingSmsMessages(
     lastSkippedCount: skippedCount,
     lastWriteReadyCount: writeReadyCount,
     lastDuplicateCount: duplicateCount,
+    lastAutoAddedCount: autoAddedCount,
+    lastInboxQueuedCount: inboxQueuedCount,
     totalInboundEvents: (current.totalInboundEvents || 0) + 1,
   });
 
@@ -147,6 +145,7 @@ export async function processIncomingSmsMessages(
     writeReadyCount,
     duplicateCount,
     inboxQueuedCount,
+    autoAddedCount,
     lastDetectionKind: headKind,
   };
 }

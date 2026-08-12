@@ -14,6 +14,8 @@ export type SmsInboundStatus = {
   lastSkippedCount: number;
   lastWriteReadyCount: number;
   lastDuplicateCount: number;
+  lastAutoAddedCount: number;
+  lastInboxQueuedCount: number;
   totalInboundEvents: number;
 };
 
@@ -25,6 +27,8 @@ export const SMS_INBOUND_STATUS_DEFAULTS: SmsInboundStatus = {
   lastSkippedCount: 0,
   lastWriteReadyCount: 0,
   lastDuplicateCount: 0,
+  lastAutoAddedCount: 0,
+  lastInboxQueuedCount: 0,
   totalInboundEvents: 0,
 };
 

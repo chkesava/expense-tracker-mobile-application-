@@ -19,6 +19,7 @@ describe("sms automation prefs defaults", () => {
   it("starts disabled with review-before-adding on", () => {
     const prefs: SmsAutomationPrefs = { ...SMS_AUTOMATION_PREFS_DEFAULTS };
     expect(prefs.enabled).toBe(false);
+    expect(prefs.handlingMode).toBe("review");
     expect(prefs.autoAdd).toBe(false);
     expect(prefs.reviewBeforeAdding).toBe(true);
   });

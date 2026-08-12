@@ -135,5 +135,5 @@ export function parseBankSms(
   return parsed;
 }
 
-/** Minimum confidence to consider auto-commit without review (product-tunable later). */
+/** Minimum confidence to auto-add without review. Also requires merchant + amount + date. */
 export const SMS_AUTO_COMMIT_CONFIDENCE = 0.75;

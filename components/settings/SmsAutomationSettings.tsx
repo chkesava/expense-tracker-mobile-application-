@@ -8,8 +8,11 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { useSmsPermission } from "@/hooks/useSmsPermission";
 import { useSmsReviewInbox } from "@/hooks/useSmsReviewInbox";
+import { useAuth } from "@/providers/AuthProvider";
 import { useSmsReceiver } from "@/providers/SmsReceiverProvider";
 import { toast } from "@/lib/toast";
+import type { SmsHandlingMode } from "@/services/sms/smsAutomationPrefs";
+import { dispatchWriteReady } from "@/services/sms/smsAutoAdd";
 import { defaultSmsReader } from "@/services/sms/smsReader";
 import type { SmsPermissionStatus } from "@/services/sms/smsPermissions";
 import { filterRelevantSms } from "@/services/sms/smsRelevanceFilter";
@@ -18,10 +21,38 @@ import {
   mergeSmsDedupeKeys,
 } from "@/services/sms/smsDedupeStore";
 import { processRawSmsMessages } from "@/services/sms/smsPipeline";
-import { enqueueWriteReadyForReview } from "@/services/sms/smsReviewActions";
 import type { RawSmsMessage } from "@/shared/types/smsTransaction";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+
+const HANDLING_OPTIONS: Array<{
+  mode: SmsHandlingMode;
+  label: string;
+  description: string;
+}> = [
+  {
+    mode: "manual",
+    label: "Manual",
+    description: "Scan when you want. Live SMS is not queued or saved.",
+  },
+  {
+    mode: "review",
+    label: "Review before adding",
+    description: "Send every detected transaction to the Review Inbox.",
+  },
+  {
+    mode: "auto",
+    label: "Automatically add",
+    description: "Save high-confidence drafts. Low-confidence ones go to Review Inbox.",
+  },
+];
+
+function handlingModeSummary(enabled: boolean, mode: SmsHandlingMode): string {
+  if (!enabled) return "Off";
+  if (mode === "auto") return "Automatically add";
+  if (mode === "manual") return "Manual";
+  return "Review before adding";
+}
 
 function permissionLabel(status: SmsPermissionStatus, supported: boolean): string {
   if (!supported) return "Android only";
@@ -127,9 +158,9 @@ export function SmsAutomationSettings() {
     requestPermission,
     openSystemSettings,
     setEnabled,
-    setAutoAdd,
-    setReviewBeforeAdding,
+    setHandlingMode,
   } = useSmsPermission();
+  const { user } = useAuth();
   const { listening, inboundStatus } = useSmsReceiver();
   const { count: inboxCount } = useSmsReviewInbox();
 
@@ -198,7 +229,10 @@ export function SmsAutomationSettings() {
         knownDedupeKeys: known,
       });
       await mergeSmsDedupeKeys(known);
-      const queued = await enqueueWriteReadyForReview(pipeline.writeReady);
+      const dispatched = await dispatchWriteReady(pipeline.writeReady, {
+        mode: prefs.handlingMode === "auto" ? "auto" : "review",
+        uid: user?.uid,
+      });
       const duplicates = pipeline.records.filter(
         (r) => r.skipReason === "duplicate"
       ).length;
@@ -216,11 +250,23 @@ export function SmsAutomationSettings() {
         samples,
       });
 
-      toast.success(
-        queued > 0
-          ? `${queued} transaction${queued === 1 ? "" : "s"} added to Transaction Inbox`
-          : `No new transactions (${duplicates} already seen)`
-      );
+      if (dispatched.committed > 0 && dispatched.queued > 0) {
+        toast.success(
+          `${dispatched.committed} added, ${dispatched.queued} sent to Review Inbox`
+        );
+      } else if (dispatched.committed > 0) {
+        toast.success(
+          `${dispatched.committed} high-confidence transaction${dispatched.committed === 1 ? "" : "s"} added`
+        );
+      } else if (dispatched.queued > 0) {
+        toast.success(
+          `${dispatched.queued} transaction${dispatched.queued === 1 ? "" : "s"} added to Transaction Inbox`
+        );
+      } else {
+        toast.success(
+          `No new transactions (${duplicates} already seen)`
+        );
+      }
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Could not read SMS inbox";
@@ -321,6 +367,12 @@ export function SmsAutomationSettings() {
               {inboundStatus.lastWriteReadyCount
                 ? ` · new ${inboundStatus.lastWriteReadyCount}`
                 : ""}
+              {inboundStatus.lastAutoAddedCount
+                ? ` · auto-added ${inboundStatus.lastAutoAddedCount}`
+                : ""}
+              {inboundStatus.lastInboxQueuedCount
+                ? ` · inbox ${inboundStatus.lastInboxQueuedCount}`
+                : ""}
               {inboundStatus.lastDuplicateCount
                 ? ` · duplicates ${inboundStatus.lastDuplicateCount}`
                 : ""}
@@ -364,7 +416,7 @@ export function SmsAutomationSettings() {
                 SMS Transaction Reader
               </Text>
               <Text style={{ color: theme.colors.mutedForeground, fontSize: 12 }}>
-                Enabled / Auto Add / Review
+                {handlingModeSummary(prefs.enabled, prefs.handlingMode)}
               </Text>
             </View>
             {readerExpanded ? (
@@ -385,26 +437,104 @@ export function SmsAutomationSettings() {
               }}
             >
               <RowSwitch
-                label="Enabled"
-                description="Master switch for SMS-based expense tracking"
+                label="SMS Transaction Reader"
+                description={prefs.enabled ? "ON" : "Off"}
                 value={prefs.enabled}
                 disabled={!supported || busy}
                 onValueChange={(v) => void onToggleEnabled(v)}
               />
-              <RowSwitch
-                label="Auto Add"
-                description="Create expenses automatically when a bank SMS is detected"
-                value={prefs.autoAdd}
-                disabled={!supported || busy || !prefs.enabled}
-                onValueChange={(v) => void setAutoAdd(v)}
-              />
-              <RowSwitch
-                label="Review Before Adding"
-                description="Show candidates for confirmation before they are saved"
-                value={prefs.reviewBeforeAdding}
-                disabled={!supported || busy || !prefs.enabled}
-                onValueChange={(v) => void setReviewBeforeAdding(v)}
-              />
+              <Text
+                style={{
+                  color: theme.colors.foreground,
+                  fontSize: 13,
+                  fontWeight: "700",
+                  marginTop: 8,
+                }}
+              >
+                Transaction handling
+              </Text>
+              {HANDLING_OPTIONS.map((option) => {
+                const selected = prefs.handlingMode === option.mode;
+                const disabled = !supported || busy || !prefs.enabled;
+                return (
+                  <Pressable
+                    key={option.mode}
+                    onPress={() => {
+                      if (disabled) return;
+                      Haptics.selectionAsync().catch(() => undefined);
+                      void setHandlingMode(option.mode);
+                    }}
+                    disabled={disabled}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "flex-start",
+                      gap: 12,
+                      paddingVertical: 10,
+                      opacity: disabled ? 0.45 : 1,
+                    }}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected, disabled }}
+                    accessibilityLabel={option.label}
+                  >
+                    <View
+                      style={{
+                        width: 20,
+                        height: 20,
+                        borderRadius: 10,
+                        borderWidth: 2,
+                        borderColor: selected
+                          ? theme.colors.primary
+                          : theme.colors.mutedForeground,
+                        alignItems: "center",
+                        justifyContent: "center",
+                        marginTop: 1,
+                      }}
+                    >
+                      {selected ? (
+                        <View
+                          style={{
+                            width: 10,
+                            height: 10,
+                            borderRadius: 5,
+                            backgroundColor: theme.colors.primary,
+                          }}
+                        />
+                      ) : null}
+                    </View>
+                    <View style={{ flex: 1, gap: 2 }}>
+                      <Text
+                        style={{
+                          color: theme.colors.foreground,
+                          fontSize: 15,
+                          fontWeight: "600",
+                        }}
+                      >
+                        {option.label}
+                      </Text>
+                      <Text
+                        style={{
+                          color: theme.colors.mutedForeground,
+                          fontSize: 12,
+                          lineHeight: 17,
+                        }}
+                      >
+                        {option.description}
+                      </Text>
+                    </View>
+                  </Pressable>
+                );
+              })}
+              <Text
+                style={{
+                  color: theme.colors.mutedForeground,
+                  fontSize: 12,
+                  lineHeight: 18,
+                  marginTop: 4,
+                }}
+              >
+                High-confidence transactions can be automatically added.
+                Low-confidence ones go to Review Inbox.
+              </Text>
             </View>
           ) : null}
         </View>

@@ -3,9 +3,11 @@ import { AppState, Platform, type AppStateStatus } from "react-native";
 
 import {
   loadSmsAutomationPrefs,
+  normalizeSmsAutomationPrefs,
   saveSmsAutomationPrefs,
   subscribeSmsAutomationPrefs,
   type SmsAutomationPrefs,
+  type SmsHandlingMode,
   SMS_AUTOMATION_PREFS_DEFAULTS,
 } from "@/services/sms/smsAutomationPrefs";
 import {
@@ -25,8 +27,7 @@ export type UseSmsPermissionResult = {
   requestPermission: () => Promise<SmsPermissionStatus>;
   openSystemSettings: () => Promise<void>;
   setEnabled: (enabled: boolean) => Promise<SmsPermissionStatus | null>;
-  setAutoAdd: (autoAdd: boolean) => Promise<void>;
-  setReviewBeforeAdding: (reviewBeforeAdding: boolean) => Promise<void>;
+  setHandlingMode: (mode: SmsHandlingMode) => Promise<void>;
 };
 
 export function useSmsPermission(): UseSmsPermissionResult {
@@ -72,8 +73,9 @@ export function useSmsPermission(): UseSmsPermissionResult {
   }, []);
 
   const persistPrefs = useCallback(async (next: SmsAutomationPrefs) => {
-    setPrefs(next);
-    await saveSmsAutomationPrefs(next);
+    const normalized = normalizeSmsAutomationPrefs(next);
+    setPrefs(normalized);
+    await saveSmsAutomationPrefs(normalized);
   }, []);
 
   const setEnabled = useCallback(
@@ -104,24 +106,9 @@ export function useSmsPermission(): UseSmsPermissionResult {
     [persistPrefs, prefs, supported]
   );
 
-  const setAutoAdd = useCallback(
-    async (autoAdd: boolean) => {
-      await persistPrefs({
-        ...prefs,
-        autoAdd,
-        reviewBeforeAdding: autoAdd ? false : true,
-      });
-    },
-    [persistPrefs, prefs]
-  );
-
-  const setReviewBeforeAdding = useCallback(
-    async (reviewBeforeAdding: boolean) => {
-      await persistPrefs({
-        ...prefs,
-        reviewBeforeAdding,
-        autoAdd: reviewBeforeAdding ? false : prefs.autoAdd,
-      });
+  const setHandlingMode = useCallback(
+    async (handlingMode: SmsHandlingMode) => {
+      await persistPrefs({ ...prefs, handlingMode });
     },
     [persistPrefs, prefs]
   );
@@ -169,7 +156,6 @@ export function useSmsPermission(): UseSmsPermissionResult {
     requestPermission,
     openSystemSettings,
     setEnabled,
-    setAutoAdd,
-    setReviewBeforeAdding,
+    setHandlingMode,
   };
 }
