@@ -81,9 +81,8 @@ export async function presentSmsNotification(
         body: copy.body,
         data: copy.data,
         sound: false,
-        channelId: SMS_NOTIFICATION_CHANNEL_ID,
       },
-      trigger: null,
+      trigger: { channelId: SMS_NOTIFICATION_CHANNEL_ID },
     });
   } catch {
     /* notifications are best-effort */
