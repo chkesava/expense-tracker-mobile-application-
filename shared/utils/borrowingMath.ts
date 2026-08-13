@@ -304,6 +304,28 @@ export function validateRepayment(
   return { ok: true };
 }
 
+/** Short human label for a borrowing's interest configuration. */
+export function describeInterest(borrowing: Borrowing): string {
+  if (borrowing.interestType === "NONE" || borrowing.interestFrequency === "NONE") {
+    return "No interest";
+  }
+  if (!Number.isFinite(borrowing.interestRate) || borrowing.interestRate <= 0) {
+    return "No interest";
+  }
+
+  const rate = `${borrowing.interestRate}%`;
+  switch (borrowing.interestFrequency) {
+    case "MONTHLY":
+      return `${rate} monthly interest`;
+    case "ANNUAL":
+      return `${rate} annual interest`;
+    case "ONE_TIME":
+      return `${rate} one-time interest`;
+    default:
+      return "No interest";
+  }
+}
+
 export interface BorrowingPortfolioSummary {
   totalBorrowed: number;
   totalOutstanding: number;

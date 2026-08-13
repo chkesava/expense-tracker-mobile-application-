@@ -4,6 +4,7 @@ import type { Borrowing, BorrowingRepayment } from "../types/borrowing";
 import {
   allocateRepayment,
   computeAccruedInterest,
+  describeInterest,
   elapsedMonths,
   monthlyInterestRate,
   summarizeBorrowing,
@@ -438,6 +439,27 @@ describe("validateRepayment", () => {
     });
     expect(result.ok).toBe(false);
     expect(result.error).toContain("already fully settled");
+  });
+});
+
+describe("describeInterest", () => {
+  it("labels each supported frequency", () => {
+    expect(describeInterest(makeBorrowing())).toBe("12% annual interest");
+    expect(
+      describeInterest(makeBorrowing({ interestFrequency: "MONTHLY", interestRate: 1 }))
+    ).toBe("1% monthly interest");
+    expect(
+      describeInterest(makeBorrowing({ interestFrequency: "ONE_TIME", interestRate: 5 }))
+    ).toBe("5% one-time interest");
+  });
+
+  it("labels interest-free and zero-rate borrowings", () => {
+    expect(
+      describeInterest(
+        makeBorrowing({ interestType: "NONE", interestFrequency: "NONE" })
+      )
+    ).toBe("No interest");
+    expect(describeInterest(makeBorrowing({ interestRate: 0 }))).toBe("No interest");
   });
 });
 
