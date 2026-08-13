@@ -5,6 +5,7 @@
 
 import { formatDateKey } from "@/shared/utils/dates";
 import type { RawSmsMessage } from "@/shared/types/smsTransaction";
+import { resolveInstitutionFromSms } from "@/shared/data/institutionMatch";
 
 export type SmsPaymentMethod =
   | "UPI"
@@ -147,6 +148,9 @@ export function extractBank(
   body: string,
   address?: string
 ): string | undefined {
+  const catalog = resolveInstitutionFromSms({ sender: address, body });
+  if (catalog) return catalog.institution.name;
+
   const haystack = `${address || ""} ${body}`;
   for (const bank of BANK_DEFS) {
     if (bank.patterns.some((re) => re.test(haystack))) return bank.name;

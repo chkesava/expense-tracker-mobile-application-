@@ -1,8 +1,34 @@
 import { describe, expect, it } from "vitest";
 
-import { extractSmsFields } from "@/services/sms/smsFieldExtractor";
+import {
+  extractBank,
+  extractSmsFields,
+} from "@/services/sms/smsFieldExtractor";
 import { parseBankSms } from "@/services/sms/smsParser";
 import { adaptParsedSmsToWritePayload } from "@/services/sms/expenseAdapter";
+
+describe("extractBank catalog identifiers", () => {
+  it("keeps SBI and HDFC from existing SMS fixtures", () => {
+    expect(
+      extractBank(
+        "Your A/c XX4521 has been debited for Rs.450 towards Swiggy via UPI. -SBI",
+        "VK-SBIINB"
+      )
+    ).toBe("SBI");
+    expect(extractBank("INR 120 spent at Zomato via UPI", "AX-HDFCBK")).toBe(
+      "HDFC"
+    );
+  });
+
+  it("resolves Super Money from SMS sender without using a display name", () => {
+    expect(extractBank("INR 200 spent on Super Card ending 4521", "VM-SUPER")).toBe(
+      "Super Money"
+    );
+    expect(extractBank("INR 200 spent on Super Card ending 4521", "AD-SUPER")).toBe(
+      "Super Money"
+    );
+  });
+});
 
 describe("extractSmsFields", () => {
   it("extracts amount, merchant, bank, UPI, date, account, and ref", () => {

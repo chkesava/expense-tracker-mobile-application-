@@ -8,6 +8,7 @@ import {
   foldInstitutionKey,
   getInstitutionById,
 } from "../data/institutions";
+import { institutionSmsMatchKeys } from "../data/institutionMatch";
 import { canonicalAccountTypeId } from "./accountKind";
 
 export type AccountIdentity = {
@@ -225,11 +226,7 @@ export function accountSmsMatchKeys(
   const keys: string[] = [];
   const institution = getInstitutionById(identity.institutionId);
   if (institution) {
-    keys.push(foldInstitutionKey(institution.id));
-    keys.push(foldInstitutionKey(institution.name));
-    for (const alias of institution.aliases) {
-      keys.push(foldInstitutionKey(alias));
-    }
+    keys.push(...institutionSmsMatchKeys(institution));
   } else {
     if (identity.institutionId) keys.push(foldInstitutionKey(identity.institutionId));
     if (identity.institutionName) {
@@ -314,7 +311,7 @@ export function accountMatchesSmsHint(
   return identity.matchKeys.some((key) => {
     if (key === identity.last4) return false;
     if (foldedHint === key) return true;
-    return key.length >= 4 && foldedHint.includes(key);
+    return key.length >= 6 && foldedHint.includes(key);
   });
 }
 

@@ -98,11 +98,11 @@ describe("hydrateAccountIdentity", () => {
 });
 
 describe("institution identity vs display name", () => {
-  it("resolves Super Card via catalog aliases, not displayName alone", () => {
+  it("resolves Super Card via catalog products without changing displayName", () => {
     const account = hydrateAccountIdentity(
       {
         id: "acc-sm",
-        name: "Super Money Credit Card",
+        name: "Travel card",
         typeId: "type-cc",
         institutionId: "super_money",
         last4: "4521",
@@ -110,10 +110,34 @@ describe("institution identity vs display name", () => {
       "Credit Card"
     );
     const identity = toAccountIdentity(account, "Credit Card");
+    expect(identity.displayName).toBe("Travel card");
+    expect(identity.institutionId).toBe("super_money");
     expect(identity.matchKeys).toContain("supercard");
-    expect(identity.matchKeys).not.toContain("supermoneycreditcard");
+    expect(identity.matchKeys).toContain("supermoneycreditcard");
+    expect(identity.matchKeys).not.toContain("travelcard");
     expect(accountMatchesSmsHint(account, "Super Card", "Credit Card")).toBe(
       true
+    );
+    expect(accountMatchesSmsHint(account, "Travel card", "Credit Card")).toBe(
+      false
+    );
+  });
+
+  it("matches SMS senders from catalog identity, not displayName", () => {
+    const account = hydrateAccountIdentity(
+      {
+        id: "acc-sm",
+        name: "Travel card",
+        typeId: "type-cc",
+        institutionId: "super_money",
+        last4: "4521",
+      },
+      "Credit Card"
+    );
+    expect(accountMatchesSmsHint(account, "VM-SUPER", "Credit Card")).toBe(true);
+    expect(accountMatchesSmsHint(account, "AD-SUPER", "Credit Card")).toBe(true);
+    expect(accountMatchesSmsHint(account, "VK-HDFCBK", "Credit Card")).toBe(
+      false
     );
   });
 
