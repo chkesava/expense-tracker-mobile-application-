@@ -1,5 +1,6 @@
 import React, { type ReactNode } from "react";
 import {
+  Dimensions,
   KeyboardAvoidingView,
   Modal as RNModal,
   Platform,
@@ -22,7 +23,29 @@ export interface ModalProps {
   onClose: () => void;
   title?: string;
   children: ReactNode;
+  /** Cap sheet height. Number = px; string like "88%" = fraction of window. */
   maxHeight?: number | string;
+}
+
+function resolveMaxHeight(maxHeight: number | string): number {
+  const windowHeight = Dimensions.get("window").height;
+  if (typeof maxHeight === "number" && Number.isFinite(maxHeight)) {
+    return maxHeight;
+  }
+  if (typeof maxHeight === "string") {
+    const trimmed = maxHeight.trim();
+    if (trimmed.endsWith("%")) {
+      const pct = Number.parseFloat(trimmed.slice(0, -1));
+      if (Number.isFinite(pct) && pct > 0) {
+        return (windowHeight * pct) / 100;
+      }
+    }
+    const asNumber = Number.parseFloat(trimmed);
+    if (Number.isFinite(asNumber) && asNumber > 0) {
+      return asNumber;
+    }
+  }
+  return windowHeight * 0.88;
 }
 
 export function Modal({
@@ -35,6 +58,7 @@ export function Modal({
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const insets = useSafeAreaInsets();
+  const sheetMaxHeight = resolveMaxHeight(maxHeight);
 
   const handleClose = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
@@ -85,9 +109,9 @@ export function Modal({
                 borderColor: theme.colors.border,
                 borderTopLeftRadius: theme.radius.sheet ?? 28,
                 borderTopRightRadius: theme.radius.sheet ?? 28,
-                paddingBottom: Math.max(insets.bottom, 16),
-                maxHeight:
-                  typeof maxHeight === "number" ? maxHeight : undefined,
+                // Keep sheet clear of home indicator; scroll content pads further.
+                paddingBottom: Math.max(insets.bottom, 20),
+                maxHeight: sheetMaxHeight,
               },
             ]}
           >
@@ -148,11 +172,18 @@ export function Modal({
               </View>
             ) : null}
 
+            {/*
+              flexShrink is required: without a bounded parent maxHeight the
+              ScrollView grows with its children and never scrolls, which hid
+              the submit buttons on long forms (Borrowing / Add Transaction).
+            */}
             <ScrollView
-              showsVerticalScrollIndicator={false}
+              style={styles.scroll}
               contentContainerStyle={styles.content}
+              showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="always"
-              bounces={false}
+              bounces
+              nestedScrollEnabled
             >
               {children}
             </ScrollView>
@@ -175,6 +206,7 @@ const styles = StyleSheet.create({
   },
   sheetAvoider: {
     width: "100%",
+    maxHeight: "100%",
     zIndex: 2,
   },
   sheetCard: {
@@ -214,9 +246,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  scroll: {
+    flexGrow: 0,
+    flexShrink: 1,
+  },
   content: {
     paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 24,
+    paddingTop: 20,
+    paddingBottom: 40,
+    flexGrow: 0,
   },
 });

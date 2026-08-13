@@ -359,6 +359,7 @@ export function CreateBorrowingModal({
 const styles = StyleSheet.create({
   body: {
     gap: 16,
+    paddingBottom: 8,
   },
   group: {
     gap: 8,

@@ -78,6 +78,11 @@ export interface ExpenseFormProps {
   editingIncome?: Income | null;
   onSuccess?: () => void;
   onCancel?: () => void;
+  /**
+   * When true, render without an outer ScrollView so a parent sheet/page
+   * owns scrolling. Prevents nested ScrollViews from clipping the save button.
+   */
+  embedded?: boolean;
 }
 
 export function ExpenseForm({
@@ -85,6 +90,7 @@ export function ExpenseForm({
   editingIncome,
   onSuccess,
   onCancel,
+  embedded = false,
 }: ExpenseFormProps) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
@@ -417,11 +423,8 @@ export function ExpenseForm({
     }
   };
 
-  return (
-    <ScrollView
-      contentContainerStyle={{ gap: 16, paddingBottom: 32 }}
-      keyboardShouldPersistTaps="handled"
-    >
+  const formBody = (
+    <>
       {/* Type Switcher */}
       {!editingExpense && !editingIncome ? (
         <View
@@ -1048,7 +1051,7 @@ export function ExpenseForm({
       </Card>
 
       {/* Action Buttons */}
-      <View style={{ gap: 10, marginTop: 8 }}>
+      <View style={{ gap: 10, marginTop: 16, marginBottom: 8 }}>
         <Button loading={isSubmitting} onPress={handleSubmit}>
           {editingExpense || editingIncome
             ? "Update Transaction"
@@ -1142,11 +1145,40 @@ export function ExpenseForm({
         onClose={() => setIsReceiptModalOpen(false)}
         onApplyReceipt={handleApplyReceiptParsed}
       />
+    </>
+  );
+
+  // Parent Modal owns scrolling when embedded — nested ScrollViews hide the
+  // save button because the outer sheet never gets a bounded scroll range.
+  if (embedded) {
+    return <View style={styles.embeddedBody}>{formBody}</View>;
+  }
+
+  return (
+    <ScrollView
+      style={styles.pageScroll}
+      contentContainerStyle={styles.pageScrollContent}
+      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
+    >
+      {formBody}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
+  embeddedBody: {
+    gap: 16,
+    paddingBottom: 8,
+  },
+  pageScroll: {
+    flex: 1,
+  },
+  pageScrollContent: {
+    gap: 16,
+    paddingTop: 8,
+    paddingBottom: 48,
+  },
   aiQuickStrip: {
     flexDirection: "row",
     gap: 8,

@@ -11,7 +11,7 @@ export default function AddScreen() {
   const { theme } = useTheme();
 
   return (
-    <PageShell>
+    <PageShell scrollable={false}>
       {/* Header */}
       <View style={styles.header}>
         <Pressable
@@ -32,7 +32,12 @@ export default function AddScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      <ExpenseForm onSuccess={() => router.back()} onCancel={() => router.back()} />
+      <View style={styles.formWrap}>
+        <ExpenseForm
+          onSuccess={() => router.back()}
+          onCancel={() => router.back()}
+        />
+      </View>
     </PageShell>
   );
 }
@@ -54,5 +59,8 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontWeight: "800",
+  },
+  formWrap: {
+    flex: 1,
   },
 });

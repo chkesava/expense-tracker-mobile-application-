@@ -31,6 +31,7 @@ export function AddTransactionModal() {
       }
     >
       <ExpenseForm
+        embedded
         editingExpense={editingExpense}
         editingIncome={editingIncome}
         onSuccess={handleClose}
