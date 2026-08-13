@@ -192,3 +192,170 @@ describe("resolveAccountFromSms", () => {
     expect(second).toEqual(first);
   });
 });
+
+describe("account type enforcement", () => {
+  const hdfcBank = () =>
+    bankAccount({ id: "acc-hdfc-bank", institutionId: "hdfc", last4: "4521" });
+  const hdfcCard = () =>
+    creditCard({
+      id: "acc-hdfc-cc",
+      institutionId: "hdfc",
+      last4: "4521",
+      name: "HDFC Credit Card",
+      displayName: "HDFC Credit Card",
+    });
+
+  it("uses account type when the same institution has Bank + Credit Card", () => {
+    const accounts = [hdfcBank(), hdfcCard()];
+    const cardSms = resolveAccountFromSms(
+      {
+        sender: "VK-HDFCBK",
+        body: "INR 899 spent on HDFC Credit Card ending 4521",
+        accountLast4: "4521",
+        paymentMethod: "CARD",
+      },
+      accounts
+    );
+    expect(cardSms.status).toBe("AUTO_MATCHED");
+    expect(cardSms.accountId).toBe("acc-hdfc-cc");
+    expect(cardSms.accountTypeId).toBe("credit_card");
+
+    const bankSms = resolveAccountFromSms(
+      {
+        sender: "AX-HDFCBK",
+        body: "Your A/c XX4521 has been debited for Rs.450 towards Swiggy via UPI",
+        accountLast4: "4521",
+        paymentMethod: "UPI",
+      },
+      accounts
+    );
+    expect(bankSms.status).toBe("AUTO_MATCHED");
+    expect(bankSms.accountId).toBe("acc-hdfc-bank");
+    expect(bankSms.accountTypeId).toBe("bank");
+  });
+
+  it("rejects a type conflict even when institution and last4 match", () => {
+    const result = resolveAccountFromSms(
+      {
+        sender: "AX-HDFCBK",
+        body: "Your A/c XX4521 has been debited for Rs.450 towards Swiggy via UPI",
+        accountLast4: "4521",
+        paymentMethod: "UPI",
+      },
+      [hdfcCard()]
+    );
+    expect(result.status).toBe("NEEDS_REVIEW");
+    expect(result.accountId).toBeNull();
+    expect(result.accountTypeId).toBe("bank");
+  });
+
+  it("does not put a bank debit on a credit card unless the SMS is explicitly a card", () => {
+    const upiOnCard = resolveAccountFromSms(
+      {
+        sender: "VK-HDFCBK",
+        body: "INR 200 sent via UPI from A/c XX4521",
+        accountLast4: "4521",
+        paymentMethod: "UPI",
+      },
+      [hdfcBank(), hdfcCard()]
+    );
+    expect(upiOnCard.accountId).toBe("acc-hdfc-bank");
+    expect(upiOnCard.accountTypeId).toBe("bank");
+
+    const upiWithCardEvidence = resolveAccountFromSms(
+      {
+        sender: "VK-HDFCBK",
+        body: "INR 200 spent on HDFC Credit Card ending 4521 via UPI",
+        accountLast4: "4521",
+        paymentMethod: "UPI",
+      },
+      [hdfcBank(), hdfcCard()]
+    );
+    expect(upiWithCardEvidence.accountId).toBe("acc-hdfc-cc");
+    expect(upiWithCardEvidence.accountTypeId).toBe("credit_card");
+  });
+
+  it("does not pick an account when the same last4 exists on different institutions", () => {
+    const superCard = creditCard({ id: "acc-super-cc", last4: "4521" });
+    const hdfc = bankAccount({ id: "acc-hdfc-bank", last4: "4521" });
+    const superSms = resolveAccountFromSms(SUPER_CARD_SMS, [superCard, hdfc]);
+    expect(superSms.accountId).toBe("acc-super-cc");
+
+    const hdfcSms = resolveAccountFromSms(
+      {
+        sender: "AX-HDFCBK",
+        body: "Your A/c XX4521 has been debited for Rs.450 towards Swiggy via UPI",
+        accountLast4: "4521",
+        paymentMethod: "UPI",
+      },
+      [superCard, hdfc]
+    );
+    expect(hdfcSms.accountId).toBe("acc-hdfc-bank");
+  });
+
+  it("uses last4 to pick among multiple credit cards from the same issuer", () => {
+    const travel = creditCard({ id: "acc-travel", last4: "4521", displayName: "Travel" });
+    const backup = creditCard({ id: "acc-backup", last4: "9999", displayName: "Backup" });
+    const result = resolveAccountFromSms(SUPER_CARD_SMS, [travel, backup]);
+    expect(result.status).toBe("AUTO_MATCHED");
+    expect(result.accountId).toBe("acc-travel");
+  });
+
+  it("returns AMBIGUOUS for two credit cards that share issuer and last4", () => {
+    const a = creditCard({ id: "acc-a", last4: "4521" });
+    const b = creditCard({ id: "acc-b", last4: "4521", displayName: "Second Super" });
+    const result = resolveAccountFromSms(SUPER_CARD_SMS, [a, b]);
+    expect(result.status).toBe("AMBIGUOUS");
+    expect(result.accountId).toBeNull();
+  });
+
+  it("returns AMBIGUOUS when last4 matches both a bank and a card and type is unknown", () => {
+    const result = resolveAccountFromSms(
+      {
+        sender: "VK-HDFCBK",
+        body: "INR 899 spent ending 4521",
+        accountLast4: "4521",
+      },
+      [hdfcBank(), hdfcCard()]
+    );
+    expect(result.status).toBe("AMBIGUOUS");
+    expect(result.accountId).toBeNull();
+  });
+
+  it("never matches a cash account", () => {
+    const cash: Account = {
+      id: "acc-cash",
+      name: "Cash",
+      typeId: "type-cash",
+      accountTypeId: "cash",
+      smsMatchingEnabled: true,
+    };
+    const result = resolveAccountFromSms(SUPER_CARD_SMS, [cash]);
+    expect(result.status).toBe("NEEDS_REVIEW");
+    expect(result.accountId).toBeNull();
+  });
+
+  it("resolves a wallet SMS to the wallet account, not a bank", () => {
+    const wallet: Account = {
+      id: "acc-paytm",
+      name: "Paytm",
+      typeId: "type-wallet",
+      displayName: "Paytm",
+      institutionId: "paytm",
+      accountTypeId: "wallet",
+      smsMatchingEnabled: true,
+    };
+    const bank = bankAccount({ id: "acc-hdfc" });
+    const result = resolveAccountFromSms(
+      {
+        sender: "VM-PAYTMB",
+        body: "Rs.200 paid from Paytm Wallet",
+        paymentMethod: "UPI",
+      },
+      [wallet, bank]
+    );
+    expect(result.status).toBe("AUTO_MATCHED");
+    expect(result.accountId).toBe("acc-paytm");
+    expect(result.accountTypeId).toBe("wallet");
+  });
+});

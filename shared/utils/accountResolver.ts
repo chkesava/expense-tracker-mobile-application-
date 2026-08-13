@@ -16,6 +16,7 @@ import {
   hydrateAccountIdentity,
   normalizeLast4,
   requiresCatalogInstitution,
+  requiresSmsLast4,
 } from "./accountIdentity";
 
 export type AccountResolutionStatus =
@@ -108,49 +109,76 @@ function smsLast4(sms: AccountResolverSmsInput): string | undefined {
   return undefined;
 }
 
-function inferSmsAccountType(
+const CARD_BODY =
+  /\bcredit\s+card\b|\bcard\s+(?:ending|xx+|ends?\s+with)\b|\bpos\b/i;
+const BANK_ACCOUNT_BODY =
+  /\ba\/c\b|\bacct\b|\baccount\b|\bsavings\b|\bchecking\b|\bdebit\s+card\b/i;
+const WALLET_BODY = /\bpaytm\b|\bphonepe\b|\bphone\s*pe\b|\bgpay\b|\bgoogle\s*pay\b|\bwallet\b/i;
+
+function hasStrongCreditCardEvidence(
   sms: AccountResolverSmsInput,
   institutionMatch?: InstitutionMatch
-): CanonicalAccountTypeId | undefined {
-  const body = sms.body || "";
+): boolean {
   const method = (sms.paymentMethod || "").toUpperCase();
-  if (method === "CARD") return "credit_card";
-  if (
-    /\bcredit\s+card\b/i.test(body) ||
-    /\bcard\s+(?:ending|xx+|ends?\s+with)\b/i.test(body)
-  ) {
-    return "credit_card";
-  }
+  if (method === "CARD") return true;
+  if (CARD_BODY.test(sms.body || "")) return true;
   if (
     institutionMatch?.source === "product" &&
     /\bcard\b/i.test(institutionMatch.matchedValue)
   ) {
-    return "credit_card";
+    return true;
   }
-  if (institutionMatch?.institution.type === "card_issuer") {
-    return "credit_card";
-  }
+  const institution = institutionMatch?.institution;
+  if (institution?.type === "card_issuer") return true;
+  return false;
+}
+
+function hasStrongBankEvidence(sms: AccountResolverSmsInput): boolean {
+  const method = (sms.paymentMethod || "").toUpperCase();
   if (
-    method === "UPI" ||
     method === "IMPS" ||
     method === "NEFT" ||
     method === "RTGS" ||
     method === "ATM" ||
     method === "NETBANKING"
   ) {
-    return "bank";
+    return true;
   }
-  if (/\ba\/c\b|\baccount\b|\bsavings\b/i.test(body) && !/\bcard\b/i.test(body)) {
-    return "bank";
+  const body = sms.body || "";
+  if (BANK_ACCOUNT_BODY.test(body) && !CARD_BODY.test(body)) return true;
+  if (method === "UPI" && !CARD_BODY.test(body)) return true;
+  return false;
+}
+
+/**
+ * Best-effort account type from SMS evidence. Credit-card signals win over
+ * bank rails such as UPI. Returns undefined when the type cannot be produced.
+ */
+export function inferSmsAccountType(
+  sms: AccountResolverSmsInput,
+  institutionMatch?: InstitutionMatch
+): CanonicalAccountTypeId | undefined {
+  if (hasStrongCreditCardEvidence(sms, institutionMatch)) return "credit_card";
+
+  const institution = institutionMatch?.institution;
+  if (institution?.type === "wallet" || WALLET_BODY.test(sms.body || "")) {
+    return "wallet";
   }
+
+  if (hasStrongBankEvidence(sms)) return "bank";
   return undefined;
+}
+
+function isSmsMatchableType(accountTypeId: CanonicalAccountTypeId): boolean {
+  return requiresCatalogInstitution(accountTypeId);
 }
 
 function typesCompatible(
   accountTypeId: CanonicalAccountTypeId,
   inferred?: CanonicalAccountTypeId
 ): boolean {
-  if (!requiresCatalogInstitution(accountTypeId)) return false;
+  if (accountTypeId === "cash") return false;
+  if (!isSmsMatchableType(accountTypeId)) return false;
   if (!inferred) return true;
   return accountTypeId === inferred;
 }
@@ -238,12 +266,17 @@ function scoreAccount(input: {
     score += SCORE.keyword;
   }
 
+  const last4Required = requiresSmsLast4(accountTypeId);
   const hasInstitutionIdentity =
     signals.includes("sender") ||
     signals.includes("product") ||
     signals.includes("alias") ||
     signals.includes("institutionId") ||
     signals.includes("keyword");
+  const last4Ok = !last4Required || signals.includes("last4");
+  const typeOk = Boolean(
+    inferredType ? signals.includes("accountTypeId") : true
+  );
 
   return {
     accountId: account.id,
@@ -251,7 +284,7 @@ function scoreAccount(input: {
     accountTypeId,
     score,
     signals,
-    sufficient: Boolean(signals.includes("last4") && hasInstitutionIdentity),
+    sufficient: Boolean(hasInstitutionIdentity && last4Ok && typeOk),
   };
 }
 

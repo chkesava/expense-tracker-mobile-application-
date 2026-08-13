@@ -76,8 +76,19 @@ export function defaultSmsMatchingEnabled(
   return accountTypeId !== "cash";
 }
 
-/** Bank and credit card accounts must pick a catalog institution for SMS matching. */
+/** Bank, card, and wallet accounts must pick a catalog institution for SMS matching. */
 export function requiresCatalogInstitution(
+  accountTypeId: CanonicalAccountTypeId
+): boolean {
+  return (
+    accountTypeId === "bank" ||
+    accountTypeId === "credit_card" ||
+    accountTypeId === "wallet"
+  );
+}
+
+/** Bank and credit cards need last4 for exact SMS matching. Wallets often have none. */
+export function requiresSmsLast4(
   accountTypeId: CanonicalAccountTypeId
 ): boolean {
   return accountTypeId === "bank" || accountTypeId === "credit_card";
@@ -99,7 +110,9 @@ export function suggestedAccountDisplayName(
       ? "Credit Card"
       : accountTypeId === "bank"
         ? "Bank"
-        : "Account";
+        : accountTypeId === "wallet"
+          ? "Wallet"
+          : "Account";
   if (!institution) return typeLabel;
   return `${institution.name} ${typeLabel}`;
 }
@@ -127,7 +140,9 @@ export function getAccountConfigurationStatus(
     account.accountTypeId || canonicalAccountTypeId(typeName || "");
   if (!requiresCatalogInstitution(accountTypeId)) return "NOT_SUPPORTED";
   if (!hasCatalogInstitution(account)) return "NEEDS_INSTITUTION";
-  if (!getAccountLast4(account)) return "NEEDS_LAST4";
+  if (requiresSmsLast4(accountTypeId) && !getAccountLast4(account)) {
+    return "NEEDS_LAST4";
+  }
   return "CONFIGURED";
 }
 

@@ -75,7 +75,12 @@ export type InstitutionType =
  * Canonical product type for matching. Does not replace `typeId`, which remains
  * the Firestore link to `users/{uid}/accountTypes`.
  */
-export type CanonicalAccountTypeId = "bank" | "credit_card" | "cash" | "other";
+export type CanonicalAccountTypeId =
+  | "bank"
+  | "credit_card"
+  | "cash"
+  | "wallet"
+  | "other";
 
 export interface Account {
   id: string;

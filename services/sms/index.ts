@@ -113,6 +113,7 @@ export {
 
 export {
   resolveAccountFromSms,
+  inferSmsAccountType,
   type AccountResolution,
   type AccountResolutionStatus,
   type AccountMatchSignal,

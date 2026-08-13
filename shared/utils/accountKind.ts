@@ -32,6 +32,8 @@ export function canonicalAccountTypeId(
   const kind = getAccountKind(typeName);
   if (kind === "credit") return "credit_card";
   if (kind === "bank") return "bank";
-  if (/\bcash\b/.test(typeName.toLowerCase())) return "cash";
+  const n = typeName.toLowerCase();
+  if (/\bcash\b/.test(n)) return "cash";
+  if (/\bwallet\b/.test(n)) return "wallet";
   return "other";
 }

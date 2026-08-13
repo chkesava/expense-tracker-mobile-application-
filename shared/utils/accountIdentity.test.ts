@@ -17,7 +17,7 @@ describe("canonicalAccountTypeId", () => {
     expect(canonicalAccountTypeId("Credit Card")).toBe("credit_card");
     expect(canonicalAccountTypeId("Bank")).toBe("bank");
     expect(canonicalAccountTypeId("Cash")).toBe("cash");
-    expect(canonicalAccountTypeId("Wallet")).toBe("other");
+    expect(canonicalAccountTypeId("Wallet")).toBe("wallet");
   });
 });
 

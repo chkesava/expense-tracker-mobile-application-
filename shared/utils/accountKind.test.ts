@@ -32,5 +32,7 @@ describe("canonicalAccountTypeId", () => {
   it("keeps cash distinct from ledger kind other", () => {
     expect(canonicalAccountTypeId("Cash")).toBe("cash");
     expect(canonicalAccountTypeId("Cash wallet")).toBe("cash");
+    expect(canonicalAccountTypeId("Wallet")).toBe("wallet");
+    expect(canonicalAccountTypeId("Paytm Wallet")).toBe("wallet");
   });
 });
