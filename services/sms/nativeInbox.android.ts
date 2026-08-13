@@ -1,26 +1,22 @@
 import SmsReader from "@/modules/sms-reader";
 import type { RawSmsMessage } from "@/shared/types/smsTransaction";
+import { toSmsLocalMetadata } from "./smsLocalMetadata";
 import type { NativeInboxQuery } from "./nativeInbox";
 
-function toRawSms(row: {
-  id: string;
-  address: string;
-  body: string;
-  receivedAtMs: number;
-  read?: boolean;
-}): RawSmsMessage {
+function toRawSms(row: Parameters<typeof toSmsLocalMetadata>[0] & { read?: boolean }): RawSmsMessage {
+  const meta = toSmsLocalMetadata(row);
   return {
-    id: String(row.id),
-    address: row.address ?? "",
-    body: row.body ?? "",
-    receivedAtMs: Number(row.receivedAtMs) || 0,
+    id: meta.smsId,
+    address: meta.sender,
+    body: meta.body,
+    receivedAtMs: meta.timestamp,
     read: Boolean(row.read),
   };
 }
 
 /**
  * Android bridge → local Expo module ContentResolver query.
- * Never uploads; callers must keep results on-device.
+ * Never uploads; permission denial returns an empty list.
  */
 export async function readNativeInbox(
   query: NativeInboxQuery = {}
@@ -32,6 +28,10 @@ export async function readNativeInbox(
     0;
   const afterId = query.cursor?.lastProcessedSmsId ?? null;
 
-  const rows = await SmsReader.readInbox(limit, minDateMs, afterId);
-  return (rows ?? []).map(toRawSms);
+  try {
+    const rows = await SmsReader.readInbox(limit, minDateMs, afterId);
+    return (rows ?? []).map(toRawSms);
+  } catch {
+    return [];
+  }
 }

@@ -1,6 +1,6 @@
 /**
  * Android runtime SMS permission helpers (PermissionsAndroid).
- * Phase 1: grant / check / open settings to revoke. No inbox reads.
+ * Checks and requests both READ_SMS and RECEIVE_SMS.
  */
 
 import {
@@ -10,11 +10,19 @@ import {
   type Permission,
 } from "react-native";
 
-export type SmsPermissionStatus =
-  | "granted"
-  | "denied"
-  | "blocked"
-  | "unavailable";
+import {
+  emptySmsPermissionDetails,
+  resolveSmsCheckDetails,
+  resolveSmsRequestStatus,
+  type SmsPermissionDetails,
+  type SmsPermissionStatus,
+} from "./smsPermissionStatus";
+
+export type { SmsPermissionDetails, SmsPermissionStatus } from "./smsPermissionStatus";
+export {
+  emptySmsPermissionDetails,
+  isSmsPermissionGranted,
+} from "./smsPermissionStatus";
 
 function isAndroid(): boolean {
   return Platform.OS === "android";
@@ -33,16 +41,28 @@ export function getSmsPermissionPlatformStatus(): SmsPermissionStatus | "support
   return "supported";
 }
 
-export async function checkSmsPermission(): Promise<SmsPermissionStatus> {
+export async function checkSmsPermissionDetails(): Promise<SmsPermissionDetails> {
   const keys = smsPermissionKeys();
-  if (!keys) return "unavailable";
+  if (!keys) return emptySmsPermissionDetails("unavailable");
 
   try {
-    const readGranted = await PermissionsAndroid.check(keys.read);
-    return readGranted ? "granted" : "denied";
+    const [readGranted, receiveGranted] = await Promise.all([
+      PermissionsAndroid.check(keys.read),
+      PermissionsAndroid.check(keys.receive),
+    ]);
+    return resolveSmsCheckDetails({
+      platformSupported: true,
+      readGranted,
+      receiveGranted,
+    });
   } catch {
-    return "denied";
+    return emptySmsPermissionDetails("denied");
   }
+}
+
+export async function checkSmsPermission(): Promise<SmsPermissionStatus> {
+  const details = await checkSmsPermissionDetails();
+  return details.status;
 }
 
 export async function requestSmsPermission(): Promise<SmsPermissionStatus> {
@@ -54,25 +74,11 @@ export async function requestSmsPermission(): Promise<SmsPermissionStatus> {
       keys.read,
       keys.receive,
     ]);
-
-    const read = result[keys.read];
-    const receive = result[keys.receive];
-
-    if (
-      read === PermissionsAndroid.RESULTS.GRANTED &&
-      receive === PermissionsAndroid.RESULTS.GRANTED
-    ) {
-      return "granted";
-    }
-
-    if (
-      read === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN ||
-      receive === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN
-    ) {
-      return "blocked";
-    }
-
-    return "denied";
+    return resolveSmsRequestStatus({
+      platformSupported: true,
+      readResult: result[keys.read],
+      receiveResult: result[keys.receive],
+    });
   } catch {
     return "denied";
   }
@@ -80,8 +86,4 @@ export async function requestSmsPermission(): Promise<SmsPermissionStatus> {
 
 export async function openSmsPermissionSettings(): Promise<void> {
   await Linking.openSettings();
-}
-
-export function isSmsPermissionGranted(status: SmsPermissionStatus): boolean {
-  return status === "granted";
 }

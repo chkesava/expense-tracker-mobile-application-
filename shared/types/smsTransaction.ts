@@ -28,11 +28,11 @@ export type SmsSkipReason =
 
 /** Platform message as returned by the native SMS reader (never uploaded). */
 export interface RawSmsMessage {
-  /** Android SMS `_id` (stringified). */
+  /** Android SMS `_id` (stringified). Same as smsId. */
   id: string;
   address: string;
   body: string;
-  /** Epoch ms when the SMS was received. */
+  /** Epoch ms when the SMS was received. Same as timestamp. */
   receivedAtMs: number;
   read?: boolean;
 }

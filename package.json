@@ -78,5 +78,10 @@
     "release:publish": "node scripts/publish-release-metadata.js",
     "release": "node scripts/release.js"
   },
-  "private": true
+  "private": true,
+  "expo": {
+    "autolinking": {
+      "nativeModulesDir": "./modules"
+    }
+  }
 }

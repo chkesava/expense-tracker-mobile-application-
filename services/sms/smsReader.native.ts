@@ -74,16 +74,20 @@ export const androidSmsReader: SmsReader = {
       return [];
     }
 
-    const messages = await readNativeInbox({
-      limit: options.limit,
-      cursor: options.cursor,
-      minReceivedAtMs: options.minReceivedAtMs,
-    });
+    try {
+      const messages = await readNativeInbox({
+        limit: options.limit,
+        cursor: options.cursor,
+        minReceivedAtMs: options.minReceivedAtMs,
+      });
 
-    if (options.relevantOnly === false) {
-      return messages;
+      if (options.relevantOnly === false) {
+        return messages;
+      }
+      return filterRelevantSms(messages);
+    } catch {
+      return [];
     }
-    return filterRelevantSms(messages);
   },
 };
 

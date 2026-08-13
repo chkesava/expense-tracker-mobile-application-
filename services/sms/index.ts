@@ -7,11 +7,14 @@ export {
 
 export {
   checkSmsPermission,
+  checkSmsPermissionDetails,
   requestSmsPermission,
   openSmsPermissionSettings,
   isSmsPermissionGranted,
   getSmsPermissionPlatformStatus,
+  emptySmsPermissionDetails,
   type SmsPermissionStatus,
+  type SmsPermissionDetails,
 } from "./smsPermissions";
 
 export {
@@ -109,6 +112,11 @@ export {
 } from "./smsPipeline";
 
 export { readNativeInbox, type NativeInboxQuery } from "./nativeInbox";
+
+export {
+  toSmsLocalMetadata,
+  type SmsLocalMetadata,
+} from "./smsLocalMetadata";
 
 export {
   startSmsListening,
