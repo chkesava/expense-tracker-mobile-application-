@@ -16,10 +16,32 @@ import { useBorrowings } from "@/hooks/useBorrowings";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import type { Borrowing, BorrowingStatus } from "@/shared/types/borrowing";
 import { LENDER_TYPES, LENDER_TYPE_LABELS } from "@/shared/types/borrowing";
+import { summarizeBorrowings } from "@/shared/utils/borrowingMath";
+import { todayDateKey, toLocalDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
 type StatusFilter = "all" | "outstanding" | BorrowingStatus;
+type DateFilter = "all" | "thisMonth" | "last6Months" | "thisYear";
+
+const DATE_FILTERS: { id: DateFilter; label: string }[] = [
+  { id: "all", label: "All time" },
+  { id: "thisMonth", label: "This month" },
+  { id: "last6Months", label: "Last 6 months" },
+  { id: "thisYear", label: "This year" },
+];
+
+/** Earliest borrowed date included by a date filter, or null for all time. */
+function dateFilterCutoff(filter: DateFilter, today: string): string | null {
+  if (filter === "all") return null;
+  const [year, month] = today.split("-").map(Number);
+
+  if (filter === "thisMonth") return `${today.slice(0, 7)}-01`;
+  if (filter === "thisYear") return `${year}-01-01`;
+
+  const start = new Date(year, month - 1 - 5, 1);
+  return toLocalDateKey(start);
+}
 
 const STATUS_FILTERS: { id: StatusFilter; label: string }[] = [
   { id: "all", label: "All" },
@@ -37,9 +59,9 @@ export function BorrowingsList() {
 
   const {
     borrowings,
+    repayments,
     loading,
     summaries,
-    portfolio,
     getSummary,
     getRepayments,
     createBorrowing,
@@ -50,12 +72,16 @@ export function BorrowingsList() {
 
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [lenderTypeFilter, setLenderTypeFilter] = useState<string>("all");
+  const [dateFilter, setDateFilter] = useState<DateFilter>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
+  const today = todayDateKey();
+
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
+    const cutoff = dateFilterCutoff(dateFilter, today);
 
     return borrowings.filter((borrowing) => {
       if (!borrowing.id) return false;
@@ -75,13 +101,29 @@ export function BorrowingsList() {
         return false;
       }
 
+      if (cutoff && borrowing.borrowedDate < cutoff) return false;
+
       if (!q) return true;
       return (
         borrowing.lenderName.toLowerCase().includes(q) ||
         (borrowing.note ?? "").toLowerCase().includes(q)
       );
     });
-  }, [borrowings, summaries, statusFilter, lenderTypeFilter, searchQuery]);
+  }, [
+    borrowings,
+    summaries,
+    statusFilter,
+    lenderTypeFilter,
+    dateFilter,
+    searchQuery,
+    today,
+  ]);
+
+  // Summary cards follow the active filters so the numbers match the list.
+  const portfolio = useMemo(
+    () => summarizeBorrowings(filtered, repayments, today),
+    [filtered, repayments, today]
+  );
 
   const selectedBorrowing: Borrowing | null = useMemo(
     () => borrowings.find((b) => b.id === selectedId) ?? null,
@@ -228,6 +270,30 @@ export function BorrowingsList() {
               );
             })}
           </ScrollView>
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.pillRow}
+          >
+            {DATE_FILTERS.map((filter) => {
+              const isActive = dateFilter === filter.id;
+              return (
+                <Pressable
+                  key={filter.id}
+                  onPress={() => {
+                    Haptics.selectionAsync().catch(() => undefined);
+                    setDateFilter(filter.id);
+                  }}
+                  style={[styles.pill, pillStyle(isActive)]}
+                >
+                  <Text style={[styles.pillText, pillTextStyle(isActive)]}>
+                    {filter.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
         </>
       ) : null}
 
@@ -278,6 +344,7 @@ export function BorrowingsList() {
                   onPress: () => {
                     setStatusFilter("all");
                     setLenderTypeFilter("all");
+                    setDateFilter("all");
                     setSearchQuery("");
                   },
                 }
