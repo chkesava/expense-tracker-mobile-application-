@@ -13,6 +13,7 @@ import {
   HandCoins,
   History,
   Landmark,
+  LayoutGrid,
   Plane,
   Plus,
   Repeat,
@@ -26,6 +27,7 @@ import { AccountsList } from "@/components/accounts/AccountsList";
 import { CardsList } from "@/components/accounts/CardsList";
 import { BorrowingsList } from "@/components/borrowings/BorrowingsList";
 import { CollectList } from "@/components/collect/CollectList";
+import { SpacesList } from "@/components/spaces/SpacesList";
 import { SplitsList } from "@/components/splits/SplitsList";
 import { SubscriptionsList } from "@/components/subscriptions/SubscriptionsList";
 import { TripsList } from "@/components/trips/TripsList";
@@ -172,6 +174,11 @@ export default function LedgerScreen() {
       id: "borrowings",
       label: "Borrowings",
       icon: <Landmark size={16} color={theme.colors.foreground} />,
+    },
+    {
+      id: "spaces",
+      label: "Spaces",
+      icon: <LayoutGrid size={16} color={theme.colors.foreground} />,
     },
     {
       id: "splits",
@@ -402,6 +409,9 @@ export default function LedgerScreen() {
 
       {/* Tab: Borrowings */}
       {ledgerTab === "borrowings" && <BorrowingsList />}
+
+      {/* Tab: Spaces */}
+      {ledgerTab === "spaces" && <SpacesList />}
 
       {/* Tab: Splits */}
       {ledgerTab === "splits" && <SplitsList />}
