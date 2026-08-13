@@ -45,6 +45,7 @@ import {
   computeCreditUsage,
 } from "@/shared/utils/accountBalance";
 import { getAccountKind } from "@/shared/utils/accountKind";
+import { formatAccountIdentityLine } from "@/shared/utils/accountIdentity";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
@@ -650,9 +651,7 @@ export function AccountsList() {
                           ]}
                           numberOfLines={1}
                         >
-                          {account.accountNumber
-                            ? `${group.typeName} • ${account.accountNumber}`
-                            : group.typeName}
+                          {formatAccountIdentityLine(account, group.typeName)}
                         </Text>
                       </View>
                     </View>
@@ -764,9 +763,7 @@ export function AccountsList() {
                         ]}
                         numberOfLines={1}
                       >
-                        {account.accountNumber
-                          ? `Credit Card • •••• ${account.accountNumber.slice(-4)}`
-                          : "Credit Card"}
+                        {formatAccountIdentityLine(account, "Credit Card")}
                       </Text>
                     </View>
                   </View>

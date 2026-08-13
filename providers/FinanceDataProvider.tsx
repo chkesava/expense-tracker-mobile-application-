@@ -42,6 +42,10 @@ import type {
   Expense,
   Income,
 } from "@/shared/types/expense";
+import {
+  buildAccountWritePayload,
+  hydrateAccountIdentity,
+} from "@/shared/utils/accountIdentity";
 import { isValidDateKey } from "@/shared/utils/dates";
 import { scheduleIdleWork } from "@/shared/utils/scheduleIdle";
 
@@ -152,8 +156,16 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
   const [incomesLoading, setIncomesLoading] = useState(true);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [accountsLoading, setAccountsLoading] = useState(true);
+  const accountsRef = useRef(accounts);
+  useEffect(() => {
+    accountsRef.current = accounts;
+  }, [accounts]);
   const [accountTypes, setAccountTypes] = useState<AccountType[]>([]);
   const [accountTypesLoading, setAccountTypesLoading] = useState(true);
+  const accountTypesRef = useRef(accountTypes);
+  useEffect(() => {
+    accountTypesRef.current = accountTypes;
+  }, [accountTypes]);
   const [payments, setPayments] = useState<AccountPayment[]>([]);
   const [paymentsLoading, setPaymentsLoading] = useState(true);
   const [entries, setEntries] = useState<AccountEntry[]>([]);
@@ -459,20 +471,14 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       const database = getFirestoreDb();
       if (!u || !database || !name.trim() || !typeId) return;
       try {
-        const payload: Record<string, unknown> = {
-          name: name.trim(),
+        const typeName = accountTypesRef.current.find((t) => t.id === typeId)?.name;
+        const payload = buildAccountWritePayload({
+          name,
           typeId,
+          typeName,
+          extras,
           createdAt: serverTimestamp(),
-        };
-        if (extras?.billGenerationDay != null)
-          payload.billGenerationDay = extras.billGenerationDay;
-        if (extras?.creditLimit != null) payload.creditLimit = extras.creditLimit;
-        if (extras?.openingBalance != null)
-          payload.openingBalance = extras.openingBalance;
-        if (extras?.balanceInitialized != null)
-          payload.balanceInitialized = extras.balanceInitialized;
-        if (extras?.balanceAsOfDate != null)
-          payload.balanceAsOfDate = extras.balanceAsOfDate;
+        });
 
         await addDoc(collection(database, "users", u.uid, "accounts"), payload);
         toast.success("Account added");
@@ -490,10 +496,27 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       const database = getFirestoreDb();
       if (!u || !database) return;
       try {
-        const { id: _, createdAt: __, ...validUpdates } = updates as Record<string, unknown>;
+        const existing = accountsRef.current.find((item) => item.id === id);
+        const merged: Account = {
+          id,
+          name: existing?.name || "Account",
+          typeId: existing?.typeId || "",
+          ...existing,
+          ...updates,
+        };
+        const typeName = accountTypesRef.current.find(
+          (t) => t.id === merged.typeId
+        )?.name;
+        const hydrated = hydrateAccountIdentity(merged, typeName);
+        const payload = buildAccountWritePayload({
+          name: hydrated.name,
+          typeId: hydrated.typeId,
+          typeName,
+          extras: hydrated,
+        });
         await updateDoc(
           doc(database, "users", u.uid, "accounts", id),
-          validUpdates
+          payload
         );
         toast.success("Account updated");
       } catch (err) {
@@ -853,9 +876,23 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     [incomes, incomesLoading]
   );
 
+  const typeNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    accountTypes.forEach((t) => map.set(t.id, t.name));
+    return map;
+  }, [accountTypes]);
+
+  const hydratedAccounts = useMemo(
+    () =>
+      accounts.map((account) =>
+        hydrateAccountIdentity(account, typeNameById.get(account.typeId))
+      ),
+    [accounts, typeNameById]
+  );
+
   const accountsValue = useMemo<AccountsContextType>(
     () => ({
-      accounts,
+      accounts: hydratedAccounts,
       accountsLoading,
       accountTypes,
       accountTypesLoading,
@@ -879,7 +916,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       deleteTransfer,
     }),
     [
-      accounts,
+      hydratedAccounts,
       accountsLoading,
       accountTypes,
       accountTypesLoading,

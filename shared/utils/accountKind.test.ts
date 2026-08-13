@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  canonicalAccountTypeId,
   getAccountKind,
   isBankAccount,
   isCreditAccount,
@@ -24,5 +25,12 @@ describe("accountKind", () => {
   it("falls back to other", () => {
     expect(getAccountKind("Cash wallet")).toBe("other");
     expect(getAccountKind("")).toBe("other");
+  });
+});
+
+describe("canonicalAccountTypeId", () => {
+  it("keeps cash distinct from ledger kind other", () => {
+    expect(canonicalAccountTypeId("Cash")).toBe("cash");
+    expect(canonicalAccountTypeId("Cash wallet")).toBe("cash");
   });
 });

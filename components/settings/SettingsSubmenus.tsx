@@ -747,6 +747,8 @@ export function AccountsManager() {
   const [openingBalance, setOpeningBalance] = useState("");
   const [creditLimit, setCreditLimit] = useState("");
   const [billGenerationDay, setBillGenerationDay] = useState("");
+  const [last4, setLast4] = useState("");
+  const [institutionName, setInstitutionName] = useState("");
   const [showTypePicker, setShowTypePicker] = useState(false);
 
   const selectedTypeName = useMemo(() => {
@@ -762,7 +764,11 @@ export function AccountsManager() {
     if (!name.trim() || !typeId) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
 
-    const extras: any = {};
+    const extras: any = {
+      displayName: name.trim(),
+      last4: last4.trim() || undefined,
+      institutionName: institutionName.trim() || undefined,
+    };
     if (isCredit) {
       if (creditLimit) extras.creditLimit = Number(creditLimit);
       if (billGenerationDay) extras.billGenerationDay = Number(billGenerationDay);
@@ -782,6 +788,8 @@ export function AccountsManager() {
     setOpeningBalance("");
     setCreditLimit("");
     setBillGenerationDay("");
+    setLast4("");
+    setInstitutionName("");
   };
 
   const handleDelete = (id?: string) => {
@@ -799,9 +807,24 @@ export function AccountsManager() {
       <View style={{ gap: 14 }}>
         <Input
           label="Account Name"
-          placeholder="e.g. HDFC Salary, ICICI Card, Cash Wallet"
+          placeholder="e.g. Super Money Credit Card"
           value={name}
           onChangeText={setName}
+        />
+
+        <Input
+          label="Institution"
+          placeholder="e.g. Super Money, HDFC"
+          value={institutionName}
+          onChangeText={setInstitutionName}
+        />
+
+        <Input
+          label="Last 4 digits"
+          placeholder="e.g. 4521"
+          value={last4}
+          onChangeText={setLast4}
+          keyboardType="numeric"
         />
 
         <Pressable
@@ -890,7 +913,16 @@ export function AccountsManager() {
                       {acc.name}
                     </Text>
                     <Text style={{ color: theme.colors.mutedForeground, fontSize: 12, marginTop: 3 }}>
-                      {typeName} {acc.creditLimit ? `· Limit: ${acc.creditLimit.toLocaleString()}` : ""}
+                      {[
+                        typeName,
+                        acc.institutionName,
+                        acc.last4 ? `•••• ${acc.last4}` : null,
+                        acc.creditLimit
+                          ? `Limit: ${acc.creditLimit.toLocaleString()}`
+                          : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
                     </Text>
                   </View>
 

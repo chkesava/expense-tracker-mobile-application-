@@ -177,6 +177,7 @@ export function SetupWizardModal() {
           await addAccount(accountName.trim(), typeId, {
             currency: selectedCurrency,
             openingBalance: bal,
+            displayName: accountName.trim(),
           });
         }
       } else if (currentStep === 4) {

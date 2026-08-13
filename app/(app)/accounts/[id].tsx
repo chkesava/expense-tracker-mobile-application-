@@ -49,6 +49,7 @@ import {
   getCreditBillHistory,
 } from "@/shared/utils/accountBalance";
 import { getAccountKind } from "@/shared/utils/accountKind";
+import { formatAccountIdentityLine } from "@/shared/utils/accountIdentity";
 import { formatDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
@@ -268,9 +269,7 @@ export default function AccountDetailScreen() {
               fontSize: theme.typography.xs,
             }}
           >
-            {account.accountNumber
-              ? `${typeName} • ${account.accountNumber}`
-              : typeName}
+            {formatAccountIdentityLine(account, typeName)}
           </Text>
         </View>
 

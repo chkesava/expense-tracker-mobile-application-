@@ -31,6 +31,7 @@ import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import type { Account } from "@/shared/types/expense";
 import { computeCreditUsage } from "@/shared/utils/accountBalance";
 import { getAccountKind } from "@/shared/utils/accountKind";
+import { formatAccountIdentityLine } from "@/shared/utils/accountIdentity";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
@@ -373,7 +374,7 @@ export function CardsList() {
                         }}
                         numberOfLines={1}
                       >
-                        {card.accountNumber || "Credit Card"}
+                        {formatAccountIdentityLine(card, "Credit Card")}
                       </Text>
                     </View>
                   </View>
