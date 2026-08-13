@@ -11,7 +11,7 @@ export type Institution = {
 /**
  * Static institution identity catalog.
  * Used to store `institutionId` separately from account display names.
- * Not a search UI — lookup is exact/alias resolution only.
+ * Search UI uses `searchInstitutions`; SMS/alias resolution uses `lookupInstitution`.
  */
 export const INSTITUTIONS: Institution[] = [
   {
@@ -70,6 +70,50 @@ export function getInstitutionById(id?: string | null): Institution | undefined 
   const key = (id || "").trim().toLowerCase();
   if (!key) return undefined;
   return INSTITUTIONS.find((item) => item.id === key);
+}
+
+/**
+ * Ranked catalog search for the account create/edit UI.
+ * Empty query returns the full catalog A–Z so users can browse, then pick an exact row.
+ */
+export function searchInstitutions(query: string): Institution[] {
+  const q = query.trim().toLowerCase();
+  if (!q) {
+    return [...INSTITUTIONS].sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  const folded = foldInstitutionKey(q);
+  const scored: { institution: Institution; score: number }[] = [];
+
+  for (const institution of INSTITUTIONS) {
+    const name = institution.name.toLowerCase();
+    const nameFolded = foldInstitutionKey(institution.name);
+    let score = 0;
+    if (name === q || nameFolded === folded) score = 1000;
+    else if (name.startsWith(q) || nameFolded.startsWith(folded)) score = 800;
+    else if (name.includes(q) || nameFolded.includes(folded)) score = 500;
+
+    for (const alias of institution.aliases) {
+      const aliasName = alias.toLowerCase();
+      const aliasFolded = foldInstitutionKey(alias);
+      if (aliasName === q || aliasFolded === folded) {
+        score = Math.max(score, 900);
+      } else if (aliasName.startsWith(q) || aliasFolded.startsWith(folded)) {
+        score = Math.max(score, 700);
+      } else if (aliasName.includes(q) || aliasFolded.includes(folded)) {
+        score = Math.max(score, 400);
+      }
+    }
+
+    if (score > 0) scored.push({ institution, score });
+  }
+
+  return scored
+    .sort(
+      (a, b) =>
+        b.score - a.score || a.institution.name.localeCompare(b.institution.name)
+    )
+    .map((row) => row.institution);
 }
 
 /**

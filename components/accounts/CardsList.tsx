@@ -19,6 +19,7 @@ import {
 
 import { EditAccountModal } from "@/components/accounts/EditAccountModal";
 import { PayCreditBillModal } from "@/components/accounts/PayCreditBillModal";
+import { SmsMatchingUnconfiguredText } from "@/components/accounts/SmsMatchingUnconfiguredText";
 import { Amount } from "@/components/common/Amount";
 import { EmptyState } from "@/components/common/EmptyState";
 import { Button } from "@/components/ui/Button";
@@ -376,6 +377,10 @@ export function CardsList() {
                       >
                         {formatAccountIdentityLine(card, "Credit Card")}
                       </Text>
+                      <SmsMatchingUnconfiguredText
+                        account={card}
+                        typeName="Credit Card"
+                      />
                     </View>
                   </View>
 

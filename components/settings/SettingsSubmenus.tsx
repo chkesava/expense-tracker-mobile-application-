@@ -38,7 +38,17 @@ import { CategoryPicker } from "@/components/categories/CategoryPicker";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { isCreditAccount } from "@/shared/utils/accountKind";
+import { InstitutionSearchField } from "@/components/accounts/InstitutionSearchField";
+import { SmsMatchingUnconfiguredText } from "@/components/accounts/SmsMatchingUnconfiguredText";
+import { getInstitutionById } from "@/shared/data/institutions";
+import {
+  requiresCatalogInstitution,
+  suggestedAccountDisplayName,
+} from "@/shared/utils/accountIdentity";
+import {
+  canonicalAccountTypeId,
+  isCreditAccount,
+} from "@/shared/utils/accountKind";
 import { Amount } from "@/components/common/Amount";
 
 // -------------------------------------------------------------
@@ -743,12 +753,13 @@ export function AccountsManager() {
   const { accountTypes } = useAccountTypes();
 
   const [name, setName] = useState("");
+  const [displayNameTouched, setDisplayNameTouched] = useState(false);
   const [typeId, setTypeId] = useState("");
   const [openingBalance, setOpeningBalance] = useState("");
   const [creditLimit, setCreditLimit] = useState("");
   const [billGenerationDay, setBillGenerationDay] = useState("");
   const [last4, setLast4] = useState("");
-  const [institutionName, setInstitutionName] = useState("");
+  const [institutionId, setInstitutionId] = useState("");
   const [showTypePicker, setShowTypePicker] = useState(false);
 
   const selectedTypeName = useMemo(() => {
@@ -760,14 +771,27 @@ export function AccountsManager() {
     return isCreditAccount(selectedTypeName);
   }, [selectedTypeName]);
 
+  const accountTypeId = canonicalAccountTypeId(selectedTypeName);
+  const needsInstitution = requiresCatalogInstitution(accountTypeId);
+  const catalogInstitution = getInstitutionById(institutionId);
+  const suggestedName = suggestedAccountDisplayName(
+    catalogInstitution,
+    accountTypeId
+  );
+  const canAdd =
+    Boolean(typeId) && (!needsInstitution || Boolean(catalogInstitution));
+
   const handleAdd = () => {
-    if (!name.trim() || !typeId) return;
+    if (!canAdd) return;
+    const displayName = name.trim() || suggestedName;
+    if (!displayName) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
 
     const extras: any = {
-      displayName: name.trim(),
+      displayName,
       last4: last4.trim() || undefined,
-      institutionName: institutionName.trim() || undefined,
+      institutionId: catalogInstitution?.id || "",
+      accountTypeId,
     };
     if (isCredit) {
       if (creditLimit) extras.creditLimit = Number(creditLimit);
@@ -780,16 +804,16 @@ export function AccountsManager() {
       }
     }
 
-    void addAccount(name.trim(), typeId, extras);
+    void addAccount(displayName, typeId, extras);
 
-    // Reset Form
     setName("");
+    setDisplayNameTouched(false);
     setTypeId("");
     setOpeningBalance("");
     setCreditLimit("");
     setBillGenerationDay("");
     setLast4("");
-    setInstitutionName("");
+    setInstitutionId("");
   };
 
   const handleDelete = (id?: string) => {
@@ -805,28 +829,6 @@ export function AccountsManager() {
       icon={CreditCard}
     >
       <View style={{ gap: 14 }}>
-        <Input
-          label="Account Name"
-          placeholder="e.g. Super Money Credit Card"
-          value={name}
-          onChangeText={setName}
-        />
-
-        <Input
-          label="Institution"
-          placeholder="e.g. Super Money, HDFC"
-          value={institutionName}
-          onChangeText={setInstitutionName}
-        />
-
-        <Input
-          label="Last 4 digits"
-          placeholder="e.g. 4521"
-          value={last4}
-          onChangeText={setLast4}
-          keyboardType="numeric"
-        />
-
         <Pressable
           onPress={() => {
             Haptics.selectionAsync().catch(() => undefined);
@@ -840,6 +842,36 @@ export function AccountsManager() {
             pointerEvents="none"
           />
         </Pressable>
+
+        {needsInstitution ? (
+          <InstitutionSearchField
+            selectedId={institutionId}
+            required
+            disabled={!typeId}
+            onSelect={(institution) => {
+              const nextId = institution?.id ?? "";
+              setInstitutionId(nextId);
+              if (!displayNameTouched) {
+                setName(
+                  suggestedAccountDisplayName(
+                    institution ?? undefined,
+                    accountTypeId
+                  )
+                );
+              }
+            }}
+          />
+        ) : null}
+
+        {typeId && accountTypeId !== "cash" ? (
+          <Input
+            label="Last 4 digits"
+            placeholder="e.g. 4521"
+            value={last4}
+            onChangeText={setLast4}
+            keyboardType="numeric"
+          />
+        ) : null}
 
         {typeId && !isCredit ? (
           <Input
@@ -870,9 +902,20 @@ export function AccountsManager() {
           </>
         ) : null}
 
+        <Input
+          label="Display Name"
+          placeholder={suggestedName || "e.g. Super Money Credit Card"}
+          value={name}
+          onChangeText={(value) => {
+            setDisplayNameTouched(true);
+            setName(value);
+          }}
+          helperText="Optional. Separate from institution identity."
+        />
+
         <Button
           onPress={handleAdd}
-          disabled={!name.trim() || !typeId}
+          disabled={!canAdd}
           style={{ height: 48, borderRadius: 12 }}
         >
           Add Account
@@ -924,6 +967,10 @@ export function AccountsManager() {
                         .filter(Boolean)
                         .join(" · ")}
                     </Text>
+                    <SmsMatchingUnconfiguredText
+                      account={acc}
+                      typeName={typeName}
+                    />
                   </View>
 
                   {/* 48x48dp Touch Target Delete Button */}
@@ -980,6 +1027,20 @@ export function AccountsManager() {
                       onPress={() => {
                         Haptics.selectionAsync().catch(() => undefined);
                         setTypeId(type.id);
+                        const nextTypeId = canonicalAccountTypeId(type.name);
+                        if (!requiresCatalogInstitution(nextTypeId)) {
+                          setInstitutionId("");
+                        }
+                        if (!displayNameTouched) {
+                          setName(
+                            suggestedAccountDisplayName(
+                              requiresCatalogInstitution(nextTypeId)
+                                ? getInstitutionById(institutionId)
+                                : undefined,
+                              nextTypeId
+                            )
+                          );
+                        }
                         setShowTypePicker(false);
                       }}
                       android_ripple={{

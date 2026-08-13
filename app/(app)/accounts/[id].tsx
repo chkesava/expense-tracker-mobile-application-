@@ -28,6 +28,7 @@ import {
 import { AddAccountEntryModal } from "@/components/accounts/AddAccountEntryModal";
 import { EditAccountModal } from "@/components/accounts/EditAccountModal";
 import { PayCreditBillModal } from "@/components/accounts/PayCreditBillModal";
+import { SmsMatchingUnconfiguredText } from "@/components/accounts/SmsMatchingUnconfiguredText";
 import { TransferFundsModal } from "@/components/accounts/TransferFundsModal";
 import { Amount } from "@/components/common/Amount";
 import { Card } from "@/components/ui/Card";
@@ -271,6 +272,10 @@ export default function AccountDetailScreen() {
           >
             {formatAccountIdentityLine(account, typeName)}
           </Text>
+          <SmsMatchingUnconfiguredText
+            account={account}
+            typeName={typeName}
+          />
         </View>
 
         <Pressable

@@ -45,7 +45,10 @@ import {
   computeCreditUsage,
 } from "@/shared/utils/accountBalance";
 import { getAccountKind } from "@/shared/utils/accountKind";
-import { formatAccountIdentityLine } from "@/shared/utils/accountIdentity";
+import {
+  formatAccountIdentityLine,
+} from "@/shared/utils/accountIdentity";
+import { SmsMatchingUnconfiguredText } from "@/components/accounts/SmsMatchingUnconfiguredText";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
@@ -653,6 +656,10 @@ export function AccountsList() {
                         >
                           {formatAccountIdentityLine(account, group.typeName)}
                         </Text>
+                        <SmsMatchingUnconfiguredText
+                          account={account}
+                          typeName={group.typeName}
+                        />
                       </View>
                     </View>
 
@@ -753,18 +760,22 @@ export function AccountsList() {
                       >
                         {account.name}
                       </Text>
-                      <Text
-                        style={[
-                          styles.accountSub,
-                          {
-                            color: theme.colors.mutedForeground,
-                            fontSize: theme.typography.xs,
-                          },
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {formatAccountIdentityLine(account, "Credit Card")}
-                      </Text>
+                        <Text
+                          style={[
+                            styles.accountSub,
+                            {
+                              color: theme.colors.mutedForeground,
+                              fontSize: theme.typography.xs,
+                            },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {formatAccountIdentityLine(account, "Credit Card")}
+                        </Text>
+                        <SmsMatchingUnconfiguredText
+                          account={account}
+                          typeName="Credit Card"
+                        />
                     </View>
                   </View>
 

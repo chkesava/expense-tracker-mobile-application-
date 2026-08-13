@@ -30,9 +30,17 @@ import {
   X,
 } from "lucide-react-native";
 
+import { InstitutionSearchField } from "@/components/accounts/InstitutionSearchField";
 import { useAccountsContext } from "@/providers/FinanceDataProvider";
 import { getFirestoreDb } from "@/lib/firebase";
 import { toast } from "@/lib/toast";
+import { getInstitutionById } from "@/shared/data/institutions";
+import type { CanonicalAccountTypeId } from "@/shared/types/expense";
+import {
+  requiresCatalogInstitution,
+  suggestedAccountDisplayName,
+} from "@/shared/utils/accountIdentity";
+import { canonicalAccountTypeId } from "@/shared/utils/accountKind";
 import { useAuth } from "@/providers/AuthProvider";
 import { useCelebration } from "@/providers/CelebrationProvider";
 import { useModals } from "@/providers/ModalProvider";
@@ -64,6 +72,13 @@ const ACCOUNT_TYPE_OPTIONS = [
   { key: "credit", label: "Credit Card", icon: CreditCard },
   { key: "investment", label: "Investment", icon: Coins },
 ];
+
+function wizardAccountTypeId(key: string): CanonicalAccountTypeId {
+  if (key === "credit") return "credit_card";
+  if (key === "bank") return "bank";
+  if (key === "cash") return "cash";
+  return "other";
+}
 
 const WIZARD_STEPS = [
   { title: "Profile", subtitle: "Personalize your account", icon: User },
@@ -99,9 +114,12 @@ export function SetupWizardModal() {
   const [budgetAmount, setBudgetAmount] = useState(settings.monthlyBudget ? String(settings.monthlyBudget) : "30000");
 
   // Step 3: Account
-  const [accountName, setAccountName] = useState("Primary Bank");
+  const [accountName, setAccountName] = useState("");
+  const [displayNameTouched, setDisplayNameTouched] = useState(false);
   const [accountTypeKey, setAccountTypeKey] = useState("bank");
   const [accountBalance, setAccountBalance] = useState("10000");
+  const [institutionId, setInstitutionId] = useState("");
+  const [accountLast4, setAccountLast4] = useState("");
 
   // Step 4: Expense
   const [expenseAmount, setExpenseAmount] = useState("250");
@@ -169,17 +187,36 @@ export function SetupWizardModal() {
           });
         }
       } else if (currentStep === 3) {
-        // Save First Account
-        if (accountName.trim()) {
-          const bal = parseFloat(accountBalance) || 0;
-          const matchedType = accountTypes.find((t) => t.name.toLowerCase().includes(accountTypeKey));
-          const typeId = matchedType?.id || accountTypes[0]?.id || "default_bank";
-          await addAccount(accountName.trim(), typeId, {
-            currency: selectedCurrency,
-            openingBalance: bal,
-            displayName: accountName.trim(),
-          });
+        const accountTypeId = wizardAccountTypeId(accountTypeKey);
+        const catalog = getInstitutionById(institutionId);
+        if (requiresCatalogInstitution(accountTypeId) && !catalog) {
+          toast.error("Select an institution from the list");
+          return;
         }
+        const displayName =
+          accountName.trim() ||
+          suggestedAccountDisplayName(catalog, accountTypeId);
+        if (!displayName) {
+          toast.error("Enter a display name or select an institution");
+          return;
+        }
+        const bal = parseFloat(accountBalance) || 0;
+        const matchedType =
+          accountTypes.find(
+            (t) => canonicalAccountTypeId(t.name) === accountTypeId
+          ) ||
+          accountTypes.find((t) =>
+            t.name.toLowerCase().includes(accountTypeKey)
+          );
+        const typeId = matchedType?.id || accountTypes[0]?.id || "default_bank";
+        await addAccount(displayName, typeId, {
+          currency: selectedCurrency,
+          openingBalance: bal,
+          displayName,
+          institutionId: catalog?.id || "",
+          last4: accountLast4.trim() || undefined,
+          accountTypeId,
+        });
       } else if (currentStep === 4) {
         // Save First Expense
         const exp = parseFloat(expenseAmount);
@@ -523,28 +560,6 @@ export function SetupWizardModal() {
                   Where do your transactions flow from? You can add unlimited accounts later.
                 </Text>
 
-                {/* Account Name */}
-                <View style={styles.inputGroup}>
-                  <Text style={[styles.inputLabel, { color: theme.colors.mutedForeground }]}>
-                    Account Name
-                  </Text>
-                  <TextInput
-                    value={accountName}
-                    onChangeText={setAccountName}
-                    placeholder="e.g. HDFC Bank, ICICI, Cash"
-                    placeholderTextColor={theme.colors.mutedForeground}
-                    style={[
-                      styles.textInput,
-                      {
-                        backgroundColor: theme.colors.card,
-                        borderColor: theme.colors.border,
-                        color: theme.colors.foreground,
-                      },
-                    ]}
-                  />
-                </View>
-
-                {/* Account Type */}
                 <View style={styles.inputGroup}>
                   <Text style={[styles.inputLabel, { color: theme.colors.mutedForeground }]}>
                     Account Type
@@ -559,6 +574,20 @@ export function SetupWizardModal() {
                           onPress={() => {
                             Haptics.selectionAsync().catch(() => undefined);
                             setAccountTypeKey(t.key);
+                            const nextTypeId = wizardAccountTypeId(t.key);
+                            if (!requiresCatalogInstitution(nextTypeId)) {
+                              setInstitutionId("");
+                            }
+                            if (!displayNameTouched) {
+                              setAccountName(
+                                suggestedAccountDisplayName(
+                                  requiresCatalogInstitution(nextTypeId)
+                                    ? getInstitutionById(institutionId)
+                                    : undefined,
+                                  nextTypeId
+                                )
+                              );
+                            }
                           }}
                           style={[
                             styles.typeCard,
@@ -582,7 +611,78 @@ export function SetupWizardModal() {
                   </View>
                 </View>
 
-                {/* Initial Balance */}
+                {requiresCatalogInstitution(wizardAccountTypeId(accountTypeKey)) ? (
+                  <View style={[styles.inputGroup, { width: "100%" }]}>
+                    <InstitutionSearchField
+                      selectedId={institutionId}
+                      required
+                      onSelect={(institution) => {
+                        const nextId = institution?.id ?? "";
+                        setInstitutionId(nextId);
+                        if (!displayNameTouched) {
+                          setAccountName(
+                            suggestedAccountDisplayName(
+                              institution ?? undefined,
+                              wizardAccountTypeId(accountTypeKey)
+                            )
+                          );
+                        }
+                      }}
+                    />
+                  </View>
+                ) : null}
+
+                {requiresCatalogInstitution(wizardAccountTypeId(accountTypeKey)) ? (
+                  <View style={styles.inputGroup}>
+                    <Text style={[styles.inputLabel, { color: theme.colors.mutedForeground }]}>
+                      Last 4
+                    </Text>
+                    <TextInput
+                      value={accountLast4}
+                      onChangeText={setAccountLast4}
+                      placeholder="e.g. 4521"
+                      keyboardType="number-pad"
+                      placeholderTextColor={theme.colors.mutedForeground}
+                      style={[
+                        styles.textInput,
+                        {
+                          backgroundColor: theme.colors.card,
+                          borderColor: theme.colors.border,
+                          color: theme.colors.foreground,
+                        },
+                      ]}
+                    />
+                  </View>
+                ) : null}
+
+                <View style={styles.inputGroup}>
+                  <Text style={[styles.inputLabel, { color: theme.colors.mutedForeground }]}>
+                    Display Name
+                  </Text>
+                  <TextInput
+                    value={accountName}
+                    onChangeText={(value) => {
+                      setDisplayNameTouched(true);
+                      setAccountName(value);
+                    }}
+                    placeholder={
+                      suggestedAccountDisplayName(
+                        getInstitutionById(institutionId),
+                        wizardAccountTypeId(accountTypeKey)
+                      ) || "Optional nickname"
+                    }
+                    placeholderTextColor={theme.colors.mutedForeground}
+                    style={[
+                      styles.textInput,
+                      {
+                        backgroundColor: theme.colors.card,
+                        borderColor: theme.colors.border,
+                        color: theme.colors.foreground,
+                      },
+                    ]}
+                  />
+                </View>
+
                 <View style={styles.inputGroup}>
                   <Text style={[styles.inputLabel, { color: theme.colors.mutedForeground }]}>
                     Current Balance ({selectedCurrency})

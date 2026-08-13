@@ -3,12 +3,10 @@ import type {
   CanonicalAccountTypeId,
   InstitutionType,
 } from "../types/expense";
+import type { Institution } from "../data/institutions";
 import {
   foldInstitutionKey,
   getInstitutionById,
-  inferInstitutionFromDisplayName,
-  lookupInstitution,
-  slugifyInstitutionId,
 } from "../data/institutions";
 import { canonicalAccountTypeId } from "./accountKind";
 
@@ -77,71 +75,145 @@ export function defaultSmsMatchingEnabled(
   return accountTypeId !== "cash";
 }
 
-function defaultInstitutionType(
+/** Bank and credit card accounts must pick a catalog institution for SMS matching. */
+export function requiresCatalogInstitution(
   accountTypeId: CanonicalAccountTypeId
-): InstitutionType {
-  if (accountTypeId === "credit_card") return "card_issuer";
-  if (accountTypeId === "bank") return "bank";
-  return "other";
+): boolean {
+  return accountTypeId === "bank" || accountTypeId === "credit_card";
 }
 
-function resolveInstitutionFields(input: {
-  institutionId?: string;
-  institutionName?: string;
-  institutionType?: InstitutionType;
-  displayName: string;
-}): {
+export function hasCatalogInstitution(
+  account: Pick<Account, "institutionId">
+): boolean {
+  return Boolean(getInstitutionById(account.institutionId));
+}
+
+export function suggestedAccountDisplayName(
+  institution: Institution | undefined,
+  accountTypeId: CanonicalAccountTypeId
+): string {
+  if (accountTypeId === "cash") return "Cash";
+  const typeLabel =
+    accountTypeId === "credit_card"
+      ? "Credit Card"
+      : accountTypeId === "bank"
+        ? "Bank"
+        : "Account";
+  if (!institution) return typeLabel;
+  return `${institution.name} ${typeLabel}`;
+}
+
+export type AccountConfigurationStatus =
+  | "CONFIGURED"
+  | "NEEDS_INSTITUTION"
+  | "NEEDS_ACCOUNT_TYPE"
+  | "NEEDS_LAST4"
+  | "NOT_SUPPORTED";
+
+/**
+ * Derived SMS-readiness for an account. Not persisted — existing docs stay
+ * valid for manual expenses regardless of this status.
+ */
+export function getAccountConfigurationStatus(
+  account: Pick<
+    Account,
+    "typeId" | "accountTypeId" | "institutionId" | "last4" | "accountNumber"
+  >,
+  typeName?: string
+): AccountConfigurationStatus {
+  if (!account.typeId) return "NEEDS_ACCOUNT_TYPE";
+  const accountTypeId =
+    account.accountTypeId || canonicalAccountTypeId(typeName || "");
+  if (!requiresCatalogInstitution(accountTypeId)) return "NOT_SUPPORTED";
+  if (!hasCatalogInstitution(account)) return "NEEDS_INSTITUTION";
+  if (!getAccountLast4(account)) return "NEEDS_LAST4";
+  return "CONFIGURED";
+}
+
+/**
+ * Bank/credit accounts without a catalog `institutionId` are usable for
+ * expenses but cannot participate in SMS matching.
+ */
+export function smsMatchingUnconfiguredLabel(
+  account: Pick<Account, "institutionId" | "accountTypeId">,
+  typeName?: string
+): string | null {
+  const accountTypeId =
+    account.accountTypeId || canonicalAccountTypeId(typeName || "");
+  if (!requiresCatalogInstitution(accountTypeId)) return null;
+  if (hasCatalogInstitution(account)) return null;
+  return "SMS matching not configured";
+}
+
+export type AccountIdentityMigrationReport = {
+  scanned: number;
+  migrated: number;
+  alreadyMigrated: number;
+  requiringConfiguration: number;
+  skipped: number;
+  errors: number;
+  byStatus: Record<AccountConfigurationStatus, number>;
+};
+
+function emptyStatusCounts(): Record<AccountConfigurationStatus, number> {
+  return {
+    CONFIGURED: 0,
+    NEEDS_INSTITUTION: 0,
+    NEEDS_ACCOUNT_TYPE: 0,
+    NEEDS_LAST4: 0,
+    NOT_SUPPORTED: 0,
+  };
+}
+
+/**
+ * Count-only migration report. Never includes display names, last4, or
+ * account numbers.
+ */
+export function summarizeAccountIdentityMigration(
+  accounts: Account[],
+  typeNameById?: Map<string, string>
+): AccountIdentityMigrationReport {
+  const byStatus = emptyStatusCounts();
+  let alreadyMigrated = 0;
+  let errors = 0;
+
+  for (const account of accounts) {
+    if (!account.id) errors += 1;
+    const typeName = typeNameById?.get(account.typeId);
+    const hydrated = hydrateAccountIdentity(account, typeName);
+    const status = getAccountConfigurationStatus(hydrated, typeName);
+    byStatus[status] += 1;
+    if (account.accountTypeId) alreadyMigrated += 1;
+  }
+
+  const requiringConfiguration =
+    byStatus.NEEDS_INSTITUTION +
+    byStatus.NEEDS_ACCOUNT_TYPE +
+    byStatus.NEEDS_LAST4;
+
+  return {
+    scanned: accounts.length,
+    migrated: alreadyMigrated,
+    alreadyMigrated,
+    requiringConfiguration,
+    skipped: byStatus.NOT_SUPPORTED,
+    errors,
+    byStatus,
+  };
+}
+
+function resolveCatalogInstitution(institutionId?: string | null): {
   institutionId?: string;
   institutionName?: string;
   institutionType?: InstitutionType;
 } {
-  const byId = getInstitutionById(input.institutionId);
-  if (byId) {
-    return {
-      institutionId: byId.id,
-      institutionName: input.institutionName?.trim() || byId.name,
-      institutionType: input.institutionType || byId.type,
-    };
-  }
-
-  const fromName = input.institutionName?.trim()
-    ? lookupInstitution(input.institutionName)
-    : undefined;
-  if (fromName) {
-    return {
-      institutionId: fromName.id,
-      institutionName: fromName.name,
-      institutionType: input.institutionType || fromName.type,
-    };
-  }
-
-  if (input.institutionName?.trim()) {
-    const slug = slugifyInstitutionId(input.institutionName);
-    return {
-      institutionId: input.institutionId?.trim() || slug || undefined,
-      institutionName: input.institutionName.trim(),
-      institutionType: input.institutionType,
-    };
-  }
-
-  if (input.institutionId?.trim()) {
-    return {
-      institutionId: input.institutionId.trim(),
-      institutionName: input.institutionName?.trim(),
-      institutionType: input.institutionType,
-    };
-  }
-
-  const inferred = inferInstitutionFromDisplayName(input.displayName);
-  if (inferred) {
-    return {
-      institutionId: inferred.id,
-      institutionName: inferred.name,
-      institutionType: inferred.type,
-    };
-  }
-
-  return {};
+  const catalog = getInstitutionById(institutionId);
+  if (!catalog) return {};
+  return {
+    institutionId: catalog.id,
+    institutionName: catalog.name,
+    institutionType: catalog.type,
+  };
 }
 
 export function accountSmsMatchKeys(
@@ -180,17 +252,16 @@ export function hydrateAccountIdentity(
   const last4 = getAccountLast4(account);
   const accountTypeId =
     account.accountTypeId || canonicalAccountTypeId(typeName || "");
-  const institution = resolveInstitutionFields({
-    institutionId: account.institutionId,
-    institutionName: account.institutionName,
-    institutionType: account.institutionType,
-    displayName,
-  });
-  const smsMatchingEnabled =
-    account.smsMatchingEnabled ?? defaultSmsMatchingEnabled(accountTypeId);
+  const institution = resolveCatalogInstitution(account.institutionId);
+  const catalogConfigured = Boolean(institution.institutionId);
+  const smsMatchingEnabled = requiresCatalogInstitution(accountTypeId)
+    ? catalogConfigured && account.smsMatchingEnabled !== false
+    : account.smsMatchingEnabled ?? defaultSmsMatchingEnabled(accountTypeId);
 
   return {
     ...account,
+    id: account.id,
+    typeId: account.typeId,
     name: account.name || displayName,
     displayName,
     last4,
@@ -198,12 +269,6 @@ export function hydrateAccountIdentity(
     accountTypeId,
     smsMatchingEnabled,
     ...institution,
-    institutionType:
-      institution.institutionType ||
-      account.institutionType ||
-      (institution.institutionId
-        ? defaultInstitutionType(accountTypeId)
-        : undefined),
   };
 }
 
@@ -239,6 +304,7 @@ export function accountMatchesSmsHint(
 ): boolean {
   const identity = toAccountIdentity(account, typeName);
   if (!identity.smsMatchingEnabled) return false;
+  if (!getInstitutionById(identity.institutionId)) return false;
 
   const foldedHint = foldInstitutionKey(hint);
   const digits = (hint || "").replace(/\D/g, "");
@@ -282,14 +348,11 @@ export function buildAccountWritePayload(
   const accountTypeId =
     extras.accountTypeId || canonicalAccountTypeId(input.typeName || "");
   const last4 = normalizeLast4(extras.last4) || normalizeLast4(extras.accountNumber);
-  const institution = resolveInstitutionFields({
-    institutionId: extras.institutionId,
-    institutionName: extras.institutionName,
-    institutionType: extras.institutionType,
-    displayName,
-  });
-  const smsMatchingEnabled =
-    extras.smsMatchingEnabled ?? defaultSmsMatchingEnabled(accountTypeId);
+  const institution = resolveCatalogInstitution(extras.institutionId);
+  const catalogConfigured = Boolean(institution.institutionId);
+  const smsMatchingEnabled = requiresCatalogInstitution(accountTypeId)
+    ? catalogConfigured && extras.smsMatchingEnabled !== false
+    : extras.smsMatchingEnabled ?? defaultSmsMatchingEnabled(accountTypeId);
 
   const payload: Record<string, unknown> = {
     name,
@@ -301,16 +364,9 @@ export function buildAccountWritePayload(
 
   put(payload, "last4", last4);
   put(payload, "accountNumber", extras.accountNumber?.trim() || last4);
-  put(payload, "institutionId", institution.institutionId);
-  put(payload, "institutionName", institution.institutionName);
-  put(
-    payload,
-    "institutionType",
-    institution.institutionType ||
-      (institution.institutionId
-        ? defaultInstitutionType(accountTypeId)
-        : undefined)
-  );
+  payload.institutionId = institution.institutionId ?? null;
+  payload.institutionName = institution.institutionName ?? null;
+  payload.institutionType = institution.institutionType ?? null;
 
   for (const key of ACCOUNT_EXTRA_KEYS) {
     if (
