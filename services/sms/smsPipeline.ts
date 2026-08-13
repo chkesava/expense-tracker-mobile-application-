@@ -50,6 +50,10 @@ function skipReasonForKind(kind: SmsDetectionKind): SmsSkipReason | null {
       return "promotional";
     case "transfer":
       return "transfer";
+    case "credit_card_payment":
+      return "credit_card_payment";
+    case "unknown":
+      return "unknown";
     case "non_financial":
       return "non_financial";
     default:

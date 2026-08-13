@@ -80,6 +80,7 @@ export function parseBankSms(
     merchantRaw: merchantNorm.merchantRaw,
     bank: fields.bank,
     paymentMethod: fields.paymentMethod,
+    sender: fields.sender || message.address,
     accountLast4: fields.accountLast4,
     externalRef: fields.externalRef,
     note: buildNote({
@@ -96,7 +97,10 @@ export function parseBankSms(
     templateId: "phase7-parser",
   };
 
-  if (detection.kind === "expense" && merchant) {
+  if (
+    (detection.kind === "expense" || detection.kind === "atm_withdrawal") &&
+    merchant
+  ) {
     const cat = categorizeSmsMerchant(
       merchant,
       context.categorizationRules
@@ -109,8 +113,11 @@ export function parseBankSms(
     }
   }
 
-  if (detection.kind === "income") {
-    parsed.incomeSource = classifySmsIncomeSource(body, amount);
+  if (detection.kind === "income" || detection.kind === "refund") {
+    parsed.incomeSource =
+      detection.kind === "refund"
+        ? "Refund"
+        : classifySmsIncomeSource(body, amount);
     parseReasons.push(`income_${parsed.incomeSource.replace(/\s+/g, "_").toLowerCase()}`);
     parsed.parseReasons = parseReasons;
   }

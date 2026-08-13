@@ -55,6 +55,48 @@ describe("detectSmsTransaction", () => {
     });
     expect(result.kind).toBe("non_financial");
   });
+
+  it("classifies refunds and reversals as refund, not expense", () => {
+    expect(
+      detectSmsTransaction({
+        address: "VK-HDFCBK",
+        body: "Rs.200 refunded to your A/c XX4521",
+      }).kind
+    ).toBe("refund");
+    expect(
+      detectSmsTransaction({
+        address: "VK-HDFCBK",
+        body: "Txn of INR 350 reversed and credited to A/c XX4521",
+      }).kind
+    ).toBe("refund");
+  });
+
+  it("classifies ATM cash withdrawal separately from card spend", () => {
+    expect(
+      detectSmsTransaction({
+        address: "VK-SBIINB",
+        body: "INR 2000 withdrawn from ATM from A/c XX4521",
+      }).kind
+    ).toBe("atm_withdrawal");
+  });
+
+  it("classifies credit card bill payments as credit_card_payment, not expense", () => {
+    expect(
+      detectSmsTransaction({
+        address: "VK-HDFCBK",
+        body: "Payment of Rs.5000 received towards your HDFC Credit Card ending 4521",
+      }).kind
+    ).toBe("credit_card_payment");
+  });
+
+  it("does not classify unknown money SMS as an expense", () => {
+    const result = detectSmsTransaction({
+      address: "VK-HDFCBK",
+      body: "INR 500. Avl Bal INR 9,000.00",
+    });
+    expect(result.kind).toBe("unknown");
+    expect(result.kind).not.toBe("expense");
+  });
 });
 
 describe("parseBankSms", () => {

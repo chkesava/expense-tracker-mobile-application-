@@ -43,6 +43,7 @@ export {
   detectSmsTransaction,
   isMoneyMovementKind,
   isExpenseOrIncomeKind,
+  isUnknownSmsKind,
   type SmsDetectionResult,
 } from "./smsDetector";
 
