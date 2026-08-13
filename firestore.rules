@@ -1,0 +1,92 @@
+rules_version = '2';
+
+// Reference source of truth for Firestore security. This file is NOT deployed
+// by CI — see docs/FIREBASE_RULES_DEPLOY.md for the manual deploy step.
+//
+// Ownership model: every personal record lives under `users/{uid}/...`, where
+// `uid` is the uid the app writes with. Duress mode swaps the app-level uid to
+// `<real uid>_duress` (see lib/authHelpers.ts and lib/duressPath.contract.test.ts),
+// so an owned path is either the auth uid or that uid with the duress suffix.
+// Both resolve to the same signed-in person, so both are allowed.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return signedIn()
+        && (uid == request.auth.uid || uid == request.auth.uid + '_duress');
+    }
+
+    // -----------------------------------------------------------------------
+    // Personal data — users/{uid}/...
+    //
+    // Collections currently written by the app:
+    //   accountEntries, accountPayments, accounts, accountTransfers,
+    //   accountTypes, alerts, borrowingRepayments, borrowings, categories,
+    //   categorizationRules, categoryBudgets, expenses, financialGoals, focus,
+    //   holdings, incomes, investments, meta, portfolioOrders,
+    //   portfolioSettings, portfolioSnapshots, portfolioTransactions, spaces,
+    //   stats, subscriptions, trips, watchlist
+    //
+    // The recursive match keeps a new collection from silently becoming
+    // unreadable the moment it ships, while still confining everything to the
+    // owning user.
+    // -----------------------------------------------------------------------
+    match /users/{uid} {
+      allow read, write: if isOwner(uid);
+
+      match /{document=**} {
+        allow read, write: if isOwner(uid);
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // Shared data — readable by the people named on the document.
+    // -----------------------------------------------------------------------
+    match /vaults/{vaultId} {
+      function isVaultMember() {
+        return signedIn()
+          && (resource.data.ownerId == request.auth.uid
+              || request.auth.uid in resource.data.memberIds);
+      }
+
+      allow read, update, delete: if isVaultMember();
+      allow create: if signedIn()
+        && request.resource.data.ownerId == request.auth.uid;
+
+      match /expenses/{expenseId} {
+        function parentVault() {
+          return get(/databases/$(database)/documents/vaults/$(vaultId)).data;
+        }
+
+        allow read, write: if signedIn()
+          && (parentVault().ownerId == request.auth.uid
+              || request.auth.uid in parentVault().memberIds);
+      }
+    }
+
+    match /splits/{splitId} {
+      allow read, update, delete: if signedIn()
+        && (resource.data.createdBy == request.auth.uid
+            || request.auth.uid in resource.data.participantIds);
+      allow create: if signedIn()
+        && request.resource.data.createdBy == request.auth.uid;
+    }
+
+    // A payment request is deliberately world-readable: it backs the public
+    // /payment/:slug link handed to whoever is being asked to pay, and that
+    // person is not signed in. Only the creator can write one.
+    match /paymentRequests/{requestId} {
+      allow read: if true;
+      allow update, delete: if signedIn()
+        && resource.data.createdBy == request.auth.uid;
+      allow create: if signedIn()
+        && request.resource.data.createdBy == request.auth.uid;
+    }
+
+    // Anything not matched above is denied.
+  }
+}
