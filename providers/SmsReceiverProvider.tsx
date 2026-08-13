@@ -39,6 +39,7 @@ import {
   SMS_INBOUND_STATUS_DEFAULTS,
 } from "@/services/sms/smsInboundStatus";
 import { processIncomingSmsMessages } from "@/services/sms/smsTransactionProcessor";
+import { useAccounts } from "@/hooks/useAccounts";
 import { useSmsRecurringSync } from "@/hooks/useSmsRecurringSync";
 
 type SmsReceiverContextValue = {
@@ -54,6 +55,7 @@ const SmsReceiverContext = createContext<SmsReceiverContextValue | undefined>(
 export function SmsReceiverProvider({ children }: { children: ReactNode }) {
   const supported = Platform.OS === "android";
   const { isDuress, user } = useAuth();
+  const { accounts } = useAccounts();
   const [prefs, setPrefs] = useState<SmsAutomationPrefs>(
     SMS_AUTOMATION_PREFS_DEFAULTS
   );
@@ -153,6 +155,7 @@ export function SmsReceiverProvider({ children }: { children: ReactNode }) {
         await processIncomingSmsMessages(messages, {
           blockImport: isDuress,
           uid: user?.uid,
+          accounts,
         });
         const status = await loadSmsInboundStatus();
         setInboundStatus(status);
@@ -160,7 +163,7 @@ export function SmsReceiverProvider({ children }: { children: ReactNode }) {
     });
 
     return () => sub.remove();
-  }, [supported, isDuress, user?.uid]);
+  }, [supported, isDuress, user?.uid, accounts]);
 
   // Register receiver only while Enabled + permission granted (and not duress).
   useEffect(() => {

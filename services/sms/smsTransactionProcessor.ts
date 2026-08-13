@@ -3,6 +3,7 @@
  * Routes drafts by handling mode: manual (ignore live), review (inbox), auto (high-confidence write).
  */
 
+import type { Account } from "@/shared/types/expense";
 import type { RawSmsMessage } from "@/shared/types/smsTransaction";
 import { loadSmsAutomationPrefs } from "./smsAutomationPrefs";
 import { dispatchWriteReady } from "./smsAutoAdd";
@@ -37,7 +38,7 @@ export type ProcessIncomingSmsResult = {
  */
 export async function processIncomingSmsMessages(
   messages: RawSmsMessage[],
-  options: { blockImport?: boolean; uid?: string } = {}
+  options: { blockImport?: boolean; uid?: string; accounts?: Account[] } = {}
 ): Promise<ProcessIncomingSmsResult> {
   if (!messages.length) {
     return {
@@ -98,6 +99,7 @@ export async function processIncomingSmsMessages(
   const known = await loadSmsDedupeKeys();
   const pipeline = processRawSmsMessages(messages, {
     knownDedupeKeys: known,
+    accounts: options.accounts,
   });
   const skippedCount = pipeline.records.filter((r) => r.status === "skipped")
     .length;

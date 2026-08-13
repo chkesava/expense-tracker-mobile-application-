@@ -111,6 +111,14 @@ export {
   type SmsPipelineResult,
 } from "./smsPipeline";
 
+export {
+  resolveAccountFromSms,
+  type AccountResolution,
+  type AccountResolutionStatus,
+  type AccountMatchSignal,
+  type AccountResolverSmsInput,
+} from "@/shared/utils/accountResolver";
+
 export { readNativeInbox, type NativeInboxQuery } from "./nativeInbox";
 
 export {

@@ -6,6 +6,7 @@ import { ChevronDown, ChevronUp, MessageSquare } from "lucide-react-native";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { useAccounts } from "@/hooks/useAccounts";
 import { useSmsPermission } from "@/hooks/useSmsPermission";
 import { useSmsReviewInbox } from "@/hooks/useSmsReviewInbox";
 import { useAuth } from "@/providers/AuthProvider";
@@ -161,6 +162,7 @@ export function SmsAutomationSettings() {
     setHandlingMode,
   } = useSmsPermission();
   const { user } = useAuth();
+  const { accounts } = useAccounts();
   const { listening, inboundStatus } = useSmsReceiver();
   const { count: inboxCount } = useSmsReviewInbox();
 
@@ -227,6 +229,7 @@ export function SmsAutomationSettings() {
       const known = await loadSmsDedupeKeys();
       const pipeline = processRawSmsMessages(relevant, {
         knownDedupeKeys: known,
+        accounts,
       });
       await mergeSmsDedupeKeys(known);
       const dispatched = await dispatchWriteReady(pipeline.writeReady, {

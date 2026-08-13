@@ -1,3 +1,4 @@
+import type { Account } from "@/shared/types/expense";
 import type {
   RawSmsMessage,
   SmsDetectionKind,
@@ -5,6 +6,7 @@ import type {
   SmsSkipReason,
   SmsSyncCursor,
 } from "@/shared/types/smsTransaction";
+import { resolveAccountFromSms } from "@/shared/utils/accountResolver";
 import { adaptParsedSmsToWritePayload } from "./expenseAdapter";
 import {
   buildSmsDedupeKeys,
@@ -24,6 +26,8 @@ export interface SmsPipelineDeps {
   /** Seen refs / txn signatures / fingerprints (Phase 8) */
   knownDedupeKeys?: Set<string>;
   parseContext?: SmsParseContext;
+  /** Existing users/{uid}/accounts — resolver never invents ids. */
+  accounts?: Account[];
   /** When true, SMS import is disabled (default recommendation for duress) */
   blockImport?: boolean;
 }
@@ -97,6 +101,7 @@ export async function processSmsInbox(
   const result = processRawSmsMessages(messages, {
     knownDedupeKeys: known,
     parseContext: deps.parseContext,
+    accounts: deps.accounts,
   });
   await mergeSmsDedupeKeys(known);
   return result;
@@ -109,6 +114,8 @@ export function processRawSmsMessages(
     knownFingerprints?: Set<string>;
     knownDedupeKeys?: Set<string>;
     parseContext?: SmsParseContext;
+    /** Existing users/{uid}/accounts — resolver never invents ids. */
+    accounts?: Account[];
   } = {}
 ): SmsPipelineResult {
   const known = options.knownDedupeKeys ?? options.knownFingerprints ?? new Set<string>();
@@ -164,7 +171,19 @@ export function processRawSmsMessages(
       continue;
     }
 
-    const write = adaptParsedSmsToWritePayload(parsed);
+    const resolution = resolveAccountFromSms(
+      {
+        sender: message.address,
+        body: message.body,
+        accountLast4: parsed.accountLast4,
+        paymentMethod: parsed.paymentMethod,
+      },
+      options.accounts ?? []
+    );
+    const write = adaptParsedSmsToWritePayload(parsed, {
+      accountId:
+        resolution.status === "AUTO_MATCHED" ? resolution.accountId : null,
+    });
     if (!write) {
       records.push({
         smsId: message.id,

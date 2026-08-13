@@ -27,6 +27,7 @@ export * from "./utils/dates";
 export * from "./utils/accountBalance";
 export * from "./utils/accountKind";
 export * from "./utils/accountIdentity";
+export * from "./utils/accountResolver";
 export * from "./utils/billingCycle";
 export * from "./utils/investmentInterest";
 export * from "./utils/analytics";
