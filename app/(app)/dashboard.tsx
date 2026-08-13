@@ -30,6 +30,7 @@ import { useAccountPayments } from "@/hooks/useAccountPayments";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useAccountTransfers } from "@/hooks/useAccountTransfers";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
+import { useBorrowings } from "@/hooks/useBorrowings";
 import { useCategoryBudgets } from "@/hooks/useCategoryBudgets";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useFinancialGoals } from "@/hooks/useFinancialGoals";
@@ -106,6 +107,7 @@ export default function DashboardScreen() {
   const { payments } = useAccountPayments();
   const { entries } = useAccountEntries();
   const { transfers } = useAccountTransfers();
+  const { borrowings, repayments: borrowingRepayments } = useBorrowings();
   const { budgets: categoryBudgets } = useCategoryBudgets();
   const { goals } = useFinancialGoals();
   const { markScreenVisited } = useSetupProgress();
@@ -201,7 +203,9 @@ export default function DashboardScreen() {
             incomes,
             payments,
             entries,
-            transfers
+            transfers,
+            borrowings,
+            borrowingRepayments
           )
         );
       }, 0);
@@ -210,7 +214,17 @@ export default function DashboardScreen() {
     const lifetimeIncome = incomes.reduce((sum, i) => sum + (i.amount || 0), 0);
     const lifetimeSpent = expenses.reduce((sum, e) => sum + (e.amount || 0), 0);
     return lifetimeIncome - lifetimeSpent;
-  }, [accounts, typeMap, expenses, incomes, payments, entries, transfers]);
+  }, [
+    accounts,
+    typeMap,
+    expenses,
+    incomes,
+    payments,
+    entries,
+    transfers,
+    borrowings,
+    borrowingRepayments,
+  ]);
 
   const activeCategoryBudgets = useMemo(() => {
     const monthBudgets = categoryBudgets.filter((b) => b.month === activeMonth);

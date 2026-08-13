@@ -7,6 +7,7 @@ import type {
   Expense,
   Income,
 } from "../types/expense";
+import type { Borrowing, BorrowingRepayment } from "../types/borrowing";
 import { getAccountKind } from "./accountKind";
 import { getBillingCycleDates, getDaysUntilReset } from "./billingCycle";
 import { parseLocalDate, toLocalDateKey, billDateForMonth } from "./dates";
@@ -84,6 +85,19 @@ function isOnOrAfter(date: string, baseline?: string): boolean {
   return date >= baseline;
 }
 
+/** Borrowed money credited into this account. A liability, never income. */
+function borrowingsCreditedTo(accountId: string, borrowings: Borrowing[]) {
+  return borrowings.filter((b) => b.creditedAccountId === accountId);
+}
+
+/** Loan repayments paid out of this account. Not ordinary expenses. */
+function repaymentsPaidFrom(
+  accountId: string,
+  repayments: BorrowingRepayment[]
+) {
+  return repayments.filter((r) => r.paymentAccountId === accountId);
+}
+
 function compareActivitiesChronologically(a: AccountActivity, b: AccountActivity) {
   const dateDiff = parseLocalDate(a.date).getTime() - parseLocalDate(b.date).getTime();
   if (dateDiff !== 0) return dateDiff;
@@ -108,7 +122,9 @@ export function computeBankBalance(
   incomes: Income[],
   payments: AccountPayment[] = [],
   entries: AccountEntry[] = [],
-  transfers: AccountTransfer[] = []
+  transfers: AccountTransfer[] = [],
+  borrowings: Borrowing[] = [],
+  borrowingRepayments: BorrowingRepayment[] = []
 ): number {
   const opening = account.openingBalance ?? 0;
   const baseline = account.balanceAsOfDate;
@@ -134,7 +150,23 @@ export function computeBankBalance(
   const transfersIn = transfersToAccount(account.id, transfers)
     .filter((transfer) => isOnOrAfter(transfer.date, baseline))
     .reduce((sum, transfer) => sum + transfer.amount, 0);
-  return opening + totalIncomes - totalExpenses - billPaymentsOut + manualAdjustments - transfersOut + transfersIn;
+  const borrowedIn = borrowingsCreditedTo(account.id, borrowings)
+    .filter((borrowing) => isOnOrAfter(borrowing.borrowedDate, baseline))
+    .reduce((sum, borrowing) => sum + borrowing.principalAmount, 0);
+  const repaymentsOut = repaymentsPaidFrom(account.id, borrowingRepayments)
+    .filter((repayment) => isOnOrAfter(repayment.date, baseline))
+    .reduce((sum, repayment) => sum + repayment.amount, 0);
+  return (
+    opening +
+    totalIncomes -
+    totalExpenses -
+    billPaymentsOut +
+    manualAdjustments -
+    transfersOut +
+    transfersIn +
+    borrowedIn -
+    repaymentsOut
+  );
 }
 
 export function computeCreditUsage(
@@ -258,7 +290,11 @@ export function buildAccountActivities(
   payments: AccountPayment[] = [],
   entries: AccountEntry[] = [],
   transfers: AccountTransfer[] = [],
-  accountNameById?: Record<string, string>
+  accountNameById?: Record<string, string>,
+  liabilities?: {
+    borrowings?: Borrowing[];
+    borrowingRepayments?: BorrowingRepayment[];
+  }
 ): AccountActivity[] {
   const baseline = account.balanceAsOfDate;
   const shouldApplyBaseline = getAccountKind(typeName) !== "credit";
@@ -288,6 +324,14 @@ export function buildAccountActivities(
   const incomingTransfers = transfersToAccount(account.id, transfers).filter((transfer) =>
     withinBaseline(transfer.date)
   );
+  const incomingBorrowings = borrowingsCreditedTo(
+    account.id,
+    liabilities?.borrowings ?? []
+  ).filter((borrowing) => withinBaseline(borrowing.borrowedDate));
+  const outgoingRepayments = repaymentsPaidFrom(
+    account.id,
+    liabilities?.borrowingRepayments ?? []
+  ).filter((repayment) => withinBaseline(repayment.date));
 
   const activities: AccountActivity[] = [
     ...accountExpenses.map((e, idx) => ({
@@ -360,6 +404,26 @@ export function buildAccountActivities(
       linkedTransferId: transfer.id,
       isTransfer: true,
       counterpartyName: accountNameById?.[transfer.fromAccountId] ?? "Account",
+    })),
+    ...incomingBorrowings.map((borrowing, idx) => ({
+      id: `borrowing-in-${borrowing.id ?? idx}`,
+      date: borrowing.borrowedDate,
+      amount: borrowing.principalAmount,
+      type: "credit" as const,
+      note: borrowing.note || "Money borrowed",
+      linkedBorrowingId: borrowing.id,
+      isBorrowing: true,
+      counterpartyName: borrowing.lenderName,
+    })),
+    ...outgoingRepayments.map((repayment, idx) => ({
+      id: `repayment-out-${repayment.id ?? idx}`,
+      date: repayment.date,
+      amount: repayment.amount,
+      type: "debit" as const,
+      note: repayment.note || "Loan repayment",
+      linkedRepaymentId: repayment.id,
+      linkedBorrowingId: repayment.borrowingId,
+      isLoanRepayment: true,
     })),
   ];
 

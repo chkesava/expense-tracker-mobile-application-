@@ -4,6 +4,7 @@ import { useAccountPayments } from "@/hooks/useAccountPayments";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useAccountTransfers } from "@/hooks/useAccountTransfers";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
+import { useBorrowings } from "@/hooks/useBorrowings";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useIncomes } from "@/hooks/useIncomes";
 import { useInvestments } from "@/hooks/useInvestments";
@@ -33,7 +34,9 @@ export interface UnifiedNetWorthSummary {
   creditCardLiabilities: number;
   /** Any negative bank account overdrafts */
   bankOverdraftLiabilities: number;
-  /** Total sum of all financial liabilities (Credit cards + Overdrafts) */
+  /** Outstanding principal plus accrued interest across all borrowings */
+  borrowingLiabilities: number;
+  /** Total sum of all financial liabilities (Credit cards + Overdrafts + Borrowings) */
   totalLiabilities: number;
   /** Net Worth = Total Assets - Total Liabilities */
   totalNetWorth: number;
@@ -49,6 +52,12 @@ export function useUnifiedNetWorth(): UnifiedNetWorthSummary {
   const { entries, loading: entriesLoading } = useAccountEntries();
   const { payments, loading: paymentsLoading } = useAccountPayments();
   const { transfers, loading: transfersLoading } = useAccountTransfers();
+  const {
+    borrowings,
+    repayments: borrowingRepayments,
+    portfolio: borrowingPortfolio,
+    loading: borrowingsLoading,
+  } = useBorrowings();
   const { investments, loading: investmentsLoading } = useInvestments();
   const {
     holdings,
@@ -93,7 +102,9 @@ export function useUnifiedNetWorth(): UnifiedNetWorthSummary {
           incomes,
           payments,
           entries,
-          transfers
+          transfers,
+          borrowings,
+          borrowingRepayments
         );
         if (bal > 0) {
           liquidBankAssets += bal;
@@ -115,8 +126,13 @@ export function useUnifiedNetWorth(): UnifiedNetWorthSummary {
     const stocksCashBalance = portfolioSettings?.cashBalance ?? 0;
     const totalStocksValue = stocksHoldingsValue + stocksCashBalance;
 
-    // 4. Totals
-    const totalLiabilities = creditCardLiabilities + bankOverdraftLiabilities;
+    // 4. Borrowings are a liability, never an asset, even though the borrowed
+    // cash already shows up inside the bank balances above.
+    const borrowingLiabilities = borrowingPortfolio.totalOutstanding;
+
+    // 5. Totals
+    const totalLiabilities =
+      creditCardLiabilities + bankOverdraftLiabilities + borrowingLiabilities;
     const totalAssets =
       liquidBankAssets + investmentsValue + totalStocksValue;
     const totalNetWorth = totalAssets - totalLiabilities;
@@ -130,6 +146,7 @@ export function useUnifiedNetWorth(): UnifiedNetWorthSummary {
       totalAssets,
       creditCardLiabilities,
       bankOverdraftLiabilities,
+      borrowingLiabilities,
       totalLiabilities,
       totalNetWorth,
     };
@@ -141,6 +158,9 @@ export function useUnifiedNetWorth(): UnifiedNetWorthSummary {
     payments,
     entries,
     transfers,
+    borrowings,
+    borrowingRepayments,
+    borrowingPortfolio,
     investments,
     holdings,
     quotes,
@@ -155,6 +175,7 @@ export function useUnifiedNetWorth(): UnifiedNetWorthSummary {
     entriesLoading ||
     paymentsLoading ||
     transfersLoading ||
+    borrowingsLoading ||
     investmentsLoading ||
     portfolioLoading ||
     quotesLoading;

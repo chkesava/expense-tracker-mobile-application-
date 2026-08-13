@@ -133,9 +133,15 @@ export interface AccountActivity {
   linkedPaymentId?: string;
   linkedAccountEntryId?: string;
   linkedTransferId?: string;
+  linkedBorrowingId?: string;
+  linkedRepaymentId?: string;
   isBillPayment?: boolean;
   isManualEntry?: boolean;
   isTransfer?: boolean;
+  /** Money received from a lender. A liability, never income. */
+  isBorrowing?: boolean;
+  /** Money paid back to a lender. Not an ordinary expense. */
+  isLoanRepayment?: boolean;
   counterpartyName?: string;
   runningBalance?: number;
 }

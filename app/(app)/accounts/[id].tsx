@@ -36,6 +36,7 @@ import { useAccountPayments } from "@/hooks/useAccountPayments";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useAccountTransfers } from "@/hooks/useAccountTransfers";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
+import { useBorrowings } from "@/hooks/useBorrowings";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useIncomes } from "@/hooks/useIncomes";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
@@ -66,6 +67,7 @@ export default function AccountDetailScreen() {
   const { entries } = useAccountEntries();
   const { payments } = useAccountPayments();
   const { transfers } = useAccountTransfers();
+  const { borrowings, repayments: borrowingRepayments } = useBorrowings();
 
   // Modals state
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -108,9 +110,21 @@ export default function AccountDetailScreen() {
       incomes,
       payments,
       entries,
-      transfers
+      transfers,
+      borrowings,
+      borrowingRepayments
     );
-  }, [account, isCreditCard, expenses, incomes, payments, entries, transfers]);
+  }, [
+    account,
+    isCreditCard,
+    expenses,
+    incomes,
+    payments,
+    entries,
+    transfers,
+    borrowings,
+    borrowingRepayments,
+  ]);
 
   const creditUsage = useMemo(() => {
     if (!account || !isCreditCard) return null;
@@ -133,7 +147,8 @@ export default function AccountDetailScreen() {
       payments,
       entries,
       transfers,
-      accountNameById
+      accountNameById,
+      { borrowings, borrowingRepayments }
     );
     // Sort descending by date
     return list.sort(
@@ -148,6 +163,8 @@ export default function AccountDetailScreen() {
     entries,
     transfers,
     accountNameById,
+    borrowings,
+    borrowingRepayments,
   ]);
 
   const filteredActivities = useMemo(() => {
