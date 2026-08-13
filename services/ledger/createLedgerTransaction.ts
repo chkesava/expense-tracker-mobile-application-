@@ -16,6 +16,8 @@ export type CreateExpenseInput = {
   accountId: string | null;
   note: string;
   tags: string[];
+  /** Optional Spending Space. Omitted from the document when unset. */
+  spaceId?: string | null;
 };
 
 export type CreateIncomeInput = {
@@ -53,6 +55,9 @@ export async function createExpense(
     accountId: payload.accountId,
     note: payload.note,
     tags: payload.tags.length > 0 ? payload.tags : [],
+    // addDoc rejects undefined, so an unassigned expense stays byte-identical
+    // to what this function wrote before Spaces existed.
+    ...(payload.spaceId ? { spaceId: payload.spaceId } : {}),
     createdAt: serverTimestamp(),
   });
   return ref.id;

@@ -44,6 +44,7 @@ import { useAccountTypes } from "@/hooks/useAccountTypes";
 import { useCategorizationRules } from "@/hooks/useCategorizationRules";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useIncomes } from "@/hooks/useIncomes";
+import { useSpaces } from "@/hooks/useSpaces";
 import { getFirestoreDb } from "@/lib/firebase";
 import { toast } from "@/lib/toast";
 import { createExpense, createIncome } from "@/services/ledger/createLedgerTransaction";
@@ -95,6 +96,7 @@ export function ExpenseForm({
 
   const { accounts } = useAccounts();
   const { accountTypes } = useAccountTypes();
+  const { spaces } = useSpaces();
   const { rules } = useCategorizationRules();
   const { expenses } = useExpenses();
   const { incomes } = useIncomes();
@@ -115,6 +117,7 @@ export function ExpenseForm({
   const [accountId, setAccountId] = useState<string>("");
   const [note, setNote] = useState("");
   const [tags, setTags] = useState<string[]>([]);
+  const [spaceId, setSpaceId] = useState<string>("");
   const [tagInput, setTagInput] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isSubmittingRef = useRef(false);
@@ -156,6 +159,7 @@ export function ExpenseForm({
       setAccountId(editingExpense.accountId || "");
       setNote(editingExpense.note || "");
       setTags(editingExpense.tags || []);
+      setSpaceId(editingExpense.spaceId || "");
       setCategoryTouched(true);
     } else if (editingIncome) {
       setType("income");
@@ -165,6 +169,7 @@ export function ExpenseForm({
       setAccountId(editingIncome.accountId || "");
       setNote(editingIncome.note || "");
       setTags([]);
+      setSpaceId("");
       setCategoryTouched(true);
     } else {
       setType("expense");
@@ -176,9 +181,19 @@ export function ExpenseForm({
       setAccountId(accounts.length > 0 ? accounts[0].id : "");
       setNote("");
       setTags([]);
+      setSpaceId("");
       setCategoryTouched(false);
     }
   }, [editingExpense, editingIncome, settings.defaultCategory, settings.timezone, accounts]);
+
+  // An archived space stays on its existing expenses but is no longer offered.
+  const selectableSpaces = useMemo(
+    () =>
+      spaces.filter(
+        (space) => space.status !== "ARCHIVED" || space.id === spaceId
+      ),
+    [spaces, spaceId]
+  );
 
   // Account helper lookups
   const typeMap = useMemo(() => {
@@ -345,12 +360,14 @@ export function ExpenseForm({
           accountId: accountId || null,
           note: note.trim(),
           tags: tags.length > 0 ? tags : [],
+          ...(spaceId ? { spaceId } : {}),
         };
 
         if (editingExpense) {
           await updateDoc(
             doc(db, "users", uid, "expenses", editingExpense.id!.trim()),
-            payload
+            // An edit must be able to clear the space, which needs an explicit null.
+            { ...payload, spaceId: spaceId || null }
           );
           toast.success("Expense updated");
         } else {
@@ -971,6 +988,62 @@ export function ExpenseForm({
               </View>
             </View>
           ) : null}
+
+          {/* Spending Space (optional grouping label) */}
+          {type === "expense" && selectableSpaces.length > 0 ? (
+            <View style={{ gap: 8 }}>
+              <Text
+                style={{
+                  fontSize: theme.typography.xs,
+                  fontWeight: "600",
+                  color: theme.colors.mutedForeground,
+                }}
+              >
+                SPACE (OPTIONAL)
+              </Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.spacePillRow}
+              >
+                {[{ id: "", name: "None" }, ...selectableSpaces].map((option) => {
+                  const optionId = option.id ?? "";
+                  const isActive = spaceId === optionId;
+                  return (
+                    <Pressable
+                      key={optionId || "none"}
+                      onPress={() => setSpaceId(optionId)}
+                      style={[
+                        styles.spacePill,
+                        {
+                          backgroundColor: isActive
+                            ? theme.colors.primary
+                            : isDark
+                              ? "rgba(255,255,255,0.06)"
+                              : "rgba(0,0,0,0.04)",
+                          borderColor: isActive
+                            ? theme.colors.primary
+                            : theme.colors.border,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={{
+                          fontSize: theme.typography.xs,
+                          fontWeight: isActive ? "700" : "500",
+                          color: isActive
+                            ? theme.colors.primaryForeground
+                            : theme.colors.foreground,
+                        }}
+                      >
+                        {option.name}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          ) : null}
         </View>
       </Card>
 
@@ -1197,6 +1270,17 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+  },
+  spacePillRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  spacePill: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderCurve: "continuous",
+    borderWidth: 1,
   },
   tagTextInput: {
     flex: 1,
