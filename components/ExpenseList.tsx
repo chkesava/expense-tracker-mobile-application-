@@ -16,6 +16,7 @@ import {
   Calendar,
   Edit3,
   FileText,
+  LayoutGrid,
   Plus,
   ScanLine,
   Tag,
@@ -30,6 +31,9 @@ import {
   SwipeableRow,
   closeOpenSwipeableRow,
 } from "@/components/common/SwipeableRow";
+import { AssignToSpaceModal } from "@/components/spaces/AssignToSpaceModal";
+import { Button } from "@/components/ui/Button";
+import { useSpaces } from "@/hooks/useSpaces";
 import { getFirestoreDb } from "@/lib/firebase";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
@@ -90,10 +94,31 @@ export function ExpenseList({
   const uid = user?.uid;
   const { settings } = useSettings();
   const { settings: system } = useSystemSettings();
+  const { spaces, removeExpenseFromSpace } = useSpaces();
 
   const [selectedTx, setSelectedTx] = useState<CombinedTransaction | null>(null);
   const [swipeCloseSignal, setSwipeCloseSignal] = useState(0);
   const deletingIdsRef = useRef(new Set<string>());
+
+  // Multi-select exists only to bulk-assign expenses to a Space.
+  const [selectedExpenseIds, setSelectedExpenseIds] = useState<Set<string>>(
+    () => new Set()
+  );
+  const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
+  const isSelecting = selectedExpenseIds.size > 0;
+
+  const toggleExpenseSelection = useCallback((expenseId: string) => {
+    setSelectedExpenseIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(expenseId)) next.delete(expenseId);
+      else next.add(expenseId);
+      return next;
+    });
+  }, []);
+
+  const clearSelection = useCallback(() => {
+    setSelectedExpenseIds(new Set());
+  }, []);
 
   // Account map by ID
   const accountMap = useMemo(() => {
@@ -275,6 +300,9 @@ export function ExpenseList({
     const isExpense = item.kind === "expense";
     const iconChar = isExpense ? getCategoryIcon(item.data.category) : "💰";
     const acc = item.data.accountId ? accountMap.get(item.data.accountId) : undefined;
+    const isRowSelected = Boolean(
+      isExpense && item.data.id && selectedExpenseIds.has(item.data.id)
+    );
 
     return (
       <SwipeableRow
@@ -299,7 +327,16 @@ export function ExpenseList({
         <Pressable
           onPress={() => {
             void haptic.selection();
+            if (isSelecting && isExpense && item.data.id) {
+              toggleExpenseSelection(item.data.id);
+              return;
+            }
             setSelectedTx(item);
+          }}
+          onLongPress={() => {
+            if (!isExpense || !item.data.id) return;
+            void haptic.impact();
+            toggleExpenseSelection(item.data.id);
           }}
           android_ripple={{
             color: theme.colors.primary + "18",
@@ -320,6 +357,9 @@ export function ExpenseList({
             },
             pressed && {
               opacity: 0.9,
+            },
+            isRowSelected && {
+              backgroundColor: theme.colors.primary + "1F",
             },
           ]}
         >
@@ -436,10 +476,13 @@ export function ExpenseList({
       accountMap,
       handleDelete,
       isDark,
+      isSelecting,
       openEditFromRow,
+      selectedExpenseIds,
       swipeCloseSignal,
       system.defaultCurrency,
       theme,
+      toggleExpenseSelection,
     ]
   );
 
@@ -513,8 +556,53 @@ export function ExpenseList({
     ? accountMap.get(selectedTx.data.accountId)
     : undefined;
 
+  const selectedSpaceId =
+    selectedTx?.kind === "expense" ? selectedTx.data.spaceId : null;
+  const selectedSpace = selectedSpaceId
+    ? spaces.find((s) => s.id === selectedSpaceId)
+    : undefined;
+
   return (
     <>
+      {isSelecting ? (
+        <View
+          style={[
+            styles.selectionBar,
+            {
+              backgroundColor: theme.colors.card,
+              borderColor: theme.colors.border,
+            },
+          ]}
+        >
+          <Text
+            style={[
+              styles.selectionCount,
+              { color: theme.colors.foreground, fontSize: theme.typography.sm },
+            ]}
+          >
+            {selectedExpenseIds.size} selected
+          </Text>
+
+          <View style={styles.selectionActions}>
+            <Button size="sm" onPress={() => setIsAssignModalOpen(true)}>
+              <Text
+                style={{
+                  fontWeight: "700",
+                  color: theme.colors.primaryForeground,
+                }}
+              >
+                Add to Space
+              </Text>
+            </Button>
+            <Button size="sm" variant="outline" onPress={clearSelection}>
+              <Text style={{ fontWeight: "700", color: theme.colors.foreground }}>
+                Cancel
+              </Text>
+            </Button>
+          </View>
+        </View>
+      ) : null}
+
       <FlashList
         style={styles.list}
         data={listData}
@@ -615,6 +703,13 @@ export function ExpenseList({
           ) : null
         }
         renderItem={renderListItem}
+      />
+
+      <AssignToSpaceModal
+        visible={isAssignModalOpen}
+        expenseIds={Array.from(selectedExpenseIds)}
+        onClose={() => setIsAssignModalOpen(false)}
+        onAssigned={clearSelection}
       />
 
       {/* Material 3 Transaction Detail Bottom Sheet */}
@@ -729,6 +824,20 @@ export function ExpenseList({
                 </View>
               ) : null}
 
+              {selectedTx.kind === "expense" ? (
+                <View style={styles.detailRow}>
+                  <View style={styles.detailLabelRow}>
+                    <LayoutGrid size={15} color={theme.colors.mutedForeground} />
+                    <Text style={[styles.detailLabel, { color: theme.colors.mutedForeground }]}>
+                      Space
+                    </Text>
+                  </View>
+                  <Text style={[styles.detailValue, { color: theme.colors.foreground }]}>
+                    {selectedSpace?.name ?? "None"}
+                  </Text>
+                </View>
+              ) : null}
+
               {selectedTx.kind === "expense" && selectedTx.data.tags && selectedTx.data.tags.length > 0 ? (
                 <View style={styles.detailRow}>
                   <View style={styles.detailLabelRow}>
@@ -747,6 +856,75 @@ export function ExpenseList({
             {/* Action Buttons — plain Pressable avoids Reanimated pressables
                 failing to receive taps inside the bottom sheet on Android. */}
             <View style={{ gap: 10 }}>
+              {selectedTx.kind === "expense" ? (
+                <View style={{ flexDirection: "row", gap: 10 }}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={selectedSpace ? "Change Space" : "Add to Space"}
+                    android_ripple={{ color: theme.colors.primary + "22" }}
+                    onPress={() => {
+                      const tx = selectedTx;
+                      if (!tx || tx.kind !== "expense" || !tx.data.id) return;
+                      void haptic.selection();
+                      setSelectedTx(null);
+                      setSelectedExpenseIds(new Set([tx.data.id]));
+                      setIsAssignModalOpen(true);
+                    }}
+                    style={({ pressed }) => [
+                      styles.detailActionBtn,
+                      {
+                        flex: 1,
+                        backgroundColor: theme.colors.secondaryContainer,
+                        opacity: pressed ? 0.85 : 1,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={{
+                        color: theme.colors.onSecondaryContainer,
+                        fontSize: theme.typography.sm,
+                        fontWeight: "700",
+                      }}
+                    >
+                      {selectedSpace ? "Change Space" : "Add to Space"}
+                    </Text>
+                  </Pressable>
+
+                  {selectedSpace ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Remove from Space"
+                      android_ripple={{ color: theme.colors.primary + "22" }}
+                      onPress={() => {
+                        const tx = selectedTx;
+                        if (!tx || tx.kind !== "expense" || !tx.data.id) return;
+                        void haptic.selection();
+                        void removeExpenseFromSpace(tx.data.id);
+                      }}
+                      style={({ pressed }) => [
+                        styles.detailActionBtn,
+                        {
+                          flex: 1,
+                          borderWidth: 1,
+                          borderColor: theme.colors.border,
+                          opacity: pressed ? 0.85 : 1,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={{
+                          color: theme.colors.foreground,
+                          fontSize: theme.typography.sm,
+                          fontWeight: "700",
+                        }}
+                      >
+                        Remove
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+              ) : null}
+
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Edit Transaction"
@@ -815,6 +993,25 @@ export function ExpenseList({
 const styles = StyleSheet.create({
   list: {
     flex: 1,
+  },
+  selectionBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    borderWidth: 1,
+    borderRadius: 14,
+    borderCurve: "continuous",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginBottom: 10,
+  },
+  selectionCount: {
+    fontWeight: "800",
+  },
+  selectionActions: {
+    flexDirection: "row",
+    gap: 8,
   },
   listContent: {
     paddingBottom: 32,
