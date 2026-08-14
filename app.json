@@ -11,6 +11,7 @@
       "supportsTablet": true
     },
     "android": {
+      "softwareKeyboardLayoutMode": "pan",
       "package": "com.example.expensetracker",
       "adaptiveIcon": {
         "backgroundColor": "#0F2F4B",

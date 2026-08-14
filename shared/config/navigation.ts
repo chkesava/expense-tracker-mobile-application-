@@ -22,8 +22,8 @@ export const CORE_NAV_ITEMS: NavigationItem[] = [
   {
     id: "ledger",
     path: "/ledger",
-    label: "Ledger",
-    mobileLabel: "Ledger",
+    label: "Transactions",
+    mobileLabel: "Transactions",
     includeInBottomNav: true,
     includeInDrawer: true,
   },

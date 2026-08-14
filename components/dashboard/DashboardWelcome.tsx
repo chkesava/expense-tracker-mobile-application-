@@ -1,6 +1,7 @@
-import { StyleSheet, Text, View } from "react-native";
-import { Wallet } from "lucide-react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Calendar, Wallet } from "lucide-react-native";
 
+import { haptic } from "@/lib/haptics";
 import { useAuth } from "@/providers/AuthProvider";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
@@ -11,7 +12,13 @@ function greetingForHour(hour: number): string {
   return "Good evening";
 }
 
-export function DashboardWelcome() {
+export function DashboardWelcome({
+  monthLabel,
+  onOpenMonthPicker,
+}: {
+  monthLabel?: string;
+  onOpenMonthPicker?: () => void;
+}) {
   const { user } = useAuth();
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
@@ -46,6 +53,37 @@ export function DashboardWelcome() {
         >
           Your financial overview
         </Text>
+        {!!monthLabel && onOpenMonthPicker ? (
+          <Pressable
+            onPress={() => {
+              void haptic.selection();
+              onOpenMonthPicker();
+            }}
+            android_ripple={{
+              color: theme.colors.success + "20",
+              borderless: false,
+            }}
+            style={({ pressed }) => [
+              styles.monthChip,
+              {
+                backgroundColor: isDark
+                  ? "rgba(52, 179, 122, 0.14)"
+                  : "rgba(37, 150, 90, 0.1)",
+                borderColor: isDark
+                  ? "rgba(52, 179, 122, 0.28)"
+                  : "rgba(37, 150, 90, 0.2)",
+              },
+              pressed && { opacity: 0.8 },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel={`Change month, currently ${monthLabel}`}
+          >
+            <Calendar size={13} color={theme.colors.success} strokeWidth={2.2} />
+            <Text style={[styles.monthChipText, { color: theme.colors.success }]}>
+              {monthLabel}
+            </Text>
+          </Pressable>
+        ) : null}
       </View>
 
       <View
@@ -118,6 +156,25 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "500",
     marginTop: 2,
+  },
+  monthChip: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    minHeight: 32,
+    borderRadius: 16,
+    borderCurve: "continuous",
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+  monthChipText: {
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 0.1,
   },
   visual: {
     width: 72,

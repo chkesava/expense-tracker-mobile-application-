@@ -13,6 +13,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import { useTheme } from "@/theme/ThemeProvider";
 import { AuraBackground } from "./AuraBackground";
+import {
+  APP_BAR_CONTENT_HEIGHT,
+  BOTTOM_NAV_SCROLL_PADDING,
+} from "./chrome";
 
 export interface PageShellProps {
   children: ReactNode;
@@ -59,12 +63,14 @@ export function PageShell({
       ? userContentStyle.paddingTop
       : 0;
 
-  // Top offset: Header height (~56) + insets.top
-  const minTop = hideHeaderOffset ? insets.top + theme.space.md : insets.top + 64;
-  // Bottom offset: Floating BottomNav/Dock height (~64) + insets.bottom + clearance (108px)
+  // Top offset: compact app bar (56) + status-bar inset + breathing room
+  const minTop = hideHeaderOffset
+    ? insets.top + theme.space.md
+    : insets.top + APP_BAR_CONTENT_HEIGHT + theme.space.sm;
+  // Bottom offset: nav bar + raised FAB overhang + clearance + system inset
   const minBottom = hideBottomOffset
     ? insets.bottom + theme.space.md
-    : insets.bottom + 108;
+    : insets.bottom + BOTTOM_NAV_SCROLL_PADDING;
 
   const effectivePaddingTop = Math.max(minTop, customPaddingTop);
   const effectivePaddingBottom = Math.max(minBottom, customPaddingBottom);

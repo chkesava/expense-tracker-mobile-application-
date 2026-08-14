@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
-import { Plus, ShieldAlert, Sparkles, Inbox } from "lucide-react-native";
+import { ShieldAlert, Sparkles, Inbox } from "lucide-react-native";
 
 import { BudgetAlertsWidget } from "@/components/dashboard/BudgetAlertsWidget";
 import { DashboardWelcome } from "@/components/dashboard/DashboardWelcome";
@@ -456,7 +456,10 @@ export default function DashboardScreen() {
       contentContainerStyle={styles.container}
       onScrollBeginDrag={() => sampleScrollFps("dashboard")}
     >
-      <DashboardWelcome />
+      <DashboardWelcome
+        monthLabel={formatMonthChipLabel(activeMonth)}
+        onOpenMonthPicker={() => setIsMonthDrawerOpen(true)}
+      />
 
       {isDuress ? (
         <View
@@ -600,48 +603,6 @@ export default function DashboardScreen() {
           ) : null}
         </View>
       )}
-
-      <View style={styles.fabContainer} pointerEvents="box-none">
-        <Pressable
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(
-              () => undefined
-            );
-            setIsAddExpenseOpen(true);
-          }}
-          android_ripple={{
-            color: "rgba(255, 255, 255, 0.28)",
-            borderless: false,
-          }}
-          style={({ pressed }) => [
-            styles.extendedFab,
-            theme.elevation[4],
-            {
-              backgroundColor: theme.colors.primary,
-              shadowColor: theme.colors.primary,
-            },
-            pressed && { opacity: 0.9, transform: [{ scale: 0.96 }] },
-          ]}
-          accessibilityRole="button"
-          accessibilityLabel="Add new transaction"
-        >
-          <View style={styles.fabIcon}>
-            <Plus
-              size={20}
-              color={theme.colors.primaryForeground}
-              strokeWidth={2.6}
-            />
-          </View>
-          <Text
-            style={[
-              styles.fabLabel,
-              { color: theme.colors.primaryForeground },
-            ]}
-          >
-            Log Expense
-          </Text>
-        </Pressable>
-      </View>
     </PageShell>
   );
 }
@@ -674,32 +635,5 @@ const styles = StyleSheet.create({
   quickInsightsSlot: {
     marginTop: 14,
     gap: 14,
-  },
-  fabContainer: {
-    position: "absolute",
-    bottom: 20,
-    right: 16,
-    zIndex: 99,
-  },
-  extendedFab: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 28,
-    minHeight: 56,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35,
-    shadowRadius: 16,
-  },
-  fabIcon: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  fabLabel: {
-    fontSize: 15,
-    fontWeight: "800",
-    letterSpacing: 0.2,
   },
 });

@@ -8,7 +8,6 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { usePathname, useRouter } from "expo-router";
-import * as Haptics from "expo-haptics";
 import Animated, {
   FadeIn,
   FadeInRight,
@@ -19,13 +18,14 @@ import {
   Activity,
   ArrowLeftRight,
   BarChart3,
+  Eye,
+  EyeOff,
   Home,
   LogOut,
+  Receipt,
   Settings,
   Shield,
   TrendingUp,
-  Users,
-  Wallet,
   X,
 } from "lucide-react-native";
 
@@ -55,15 +55,15 @@ export function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
   const insets = useSafeAreaInsets();
   const { user, logout } = useAuth();
   const { isAdmin } = useUserRole();
-  const { settings } = useSettings();
+  const { settings, setGhostMode } = useSettings();
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
 
   const iconMap: Record<NavSectionId, React.ComponentType<{ size: number; color: string }>> = {
     home: Home,
-    ledger: Wallet,
+    ledger: Receipt,
     investments: TrendingUp,
-    vaults: Users,
+    vaults: Shield,
     insights: BarChart3,
     settings: Settings,
     admin: Shield,
@@ -93,6 +93,11 @@ export function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
     void haptic.impact();
     onClose();
     await logout();
+  };
+
+  const handleToggleGhost = () => {
+    void haptic.selection();
+    setGhostMode(!settings.ghostMode);
   };
 
   return (
@@ -213,6 +218,59 @@ export function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
               );
             })}
           </ScrollView>
+
+          <Pressable
+            onPress={handleToggleGhost}
+            style={({ pressed }) => [
+              styles.ghostRow,
+              {
+                backgroundColor: settings.ghostMode
+                  ? isDark
+                    ? "rgba(107, 99, 255, 0.14)"
+                    : "rgba(79, 70, 255, 0.08)"
+                  : isDark
+                    ? "rgba(255,255,255,0.04)"
+                    : "rgba(0,0,0,0.03)",
+                borderColor: settings.ghostMode
+                  ? theme.colors.primary
+                  : theme.colors.border,
+              },
+              pressed && { opacity: 0.8 },
+            ]}
+            accessibilityRole="switch"
+            accessibilityState={{ checked: settings.ghostMode }}
+            accessibilityLabel={
+              settings.ghostMode ? "Disable ghost mode" : "Enable ghost mode"
+            }
+          >
+            {settings.ghostMode ? (
+              <EyeOff size={18} color={theme.colors.primary} />
+            ) : (
+              <Eye size={18} color={theme.colors.mutedForeground} />
+            )}
+            <View style={{ flex: 1 }}>
+              <Text
+                style={[
+                  styles.ghostTitle,
+                  {
+                    color: settings.ghostMode
+                      ? theme.colors.primary
+                      : theme.colors.foreground,
+                  },
+                ]}
+              >
+                {settings.ghostMode ? "Ghost mode on" : "Ghost mode"}
+              </Text>
+              <Text
+                style={[
+                  styles.ghostSubtitle,
+                  { color: theme.colors.mutedForeground },
+                ]}
+              >
+                Hide amounts across the app
+              </Text>
+            </View>
+          </Pressable>
 
           {/* Footer & User Profile */}
           <View
@@ -372,6 +430,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     gap: 4,
+  },
+  ghostRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginHorizontal: 12,
+    marginBottom: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderCurve: "continuous",
+    borderWidth: 1,
+  },
+  ghostTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  ghostSubtitle: {
+    fontSize: 11,
+    marginTop: 2,
   },
   navItem: {
     flexDirection: "row",
