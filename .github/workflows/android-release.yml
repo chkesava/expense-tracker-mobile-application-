@@ -1,15 +1,9 @@
 name: Android Release
 
+# Manual only from Actions → Android Release → Run workflow.
 # Never add pull_request here: fork PRs would gain access to the signing
 # keystore and the Firebase service account.
 on:
-  push:
-    branches: [main]
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
-      - '.gitignore'
-      - '.vscode/**'
   workflow_dispatch:
     inputs:
       version:
@@ -159,7 +153,7 @@ jobs:
 
           VERSION_NAME="$INPUT_VERSION"
           if [ -z "$VERSION_NAME" ]; then
-            # Each automatic main release advances the patch: 1.1.0 → 1.1.1
+            # Each manual release advances the patch: 1.1.0 → 1.1.1
             VERSION_NAME=$(node -e "const {bumpPatchVersion}=require('./scripts/common'); console.log(bumpPatchVersion(process.argv[1]))" "$CURRENT_NAME")
           fi
 
@@ -257,8 +251,7 @@ jobs:
           RELEASE_VERSION_CODE: ${{ steps.version.outputs.code }}
         run: node scripts/publish-release-metadata.js
 
-      # Persist the bumped version so the next main release continues 1.1.1 → 1.1.2.
-      # [skip ci] prevents this push from re-triggering the Android Release workflow.
+      # Persist the bumped version so the next manual release continues 1.1.1 → 1.1.2.
       - name: Commit version bump
         if: success()
         env:

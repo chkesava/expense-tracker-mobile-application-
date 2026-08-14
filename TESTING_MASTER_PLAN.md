@@ -944,7 +944,7 @@ Android-specific attention: SMS permissions post-prebuild, Google Sign-In SHA-1,
 | Push to feature branch                            | Unit + typecheck (fast)                                               |
 | PR opened / updated                               | Unit + integration + typecheck (required checks)                      |
 | Merge to main                                     | Full automated suite; optionally schedule release                     |
-| Android release (`workflow_dispatch` / push main) | Mandatory tests **then** build/distribute (secrets stay release-only) |
+| Android release (`workflow_dispatch` only)        | Mandatory tests **then** build/distribute (secrets stay release-only) |
 
 
 Do not put keystore secrets on `pull_request`. Keep current safety comment in `android-release.yml` when extending.

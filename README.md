@@ -183,15 +183,13 @@ Do **not** put server secrets (`TWELVE_DATA`, `CRON_SECRET`, service-account JSO
 
 ## Automated releases (CI/CD)
 
-Every push to `main` builds a signed APK, ships it to Firebase App Distribution, and tells installed apps that an update exists. Workflow: `.github/workflows/android-release.yml`.
+Android releases are **manual**. From GitHub: **Actions → Android Release → Run workflow**. That builds a signed APK, ships it to Firebase App Distribution, and tells installed apps that an update exists. Workflow: `.github/workflows/android-release.yml`. Merges to `main` do not start a build.
 
 ```text
-push to main  ->  GitHub Actions  ->  signed APK  ->  Firebase App Distribution  ->  tester notification
-                                          |
-                                          +->  Firestore system_settings/latest_release  ->  in-app update prompt
+Actions → Run workflow  ->  GitHub Actions  ->  signed APK  ->  Firebase App Distribution  ->  tester notification
+                                                  |
+                                                  +->  Firestore system_settings/latest_release  ->  in-app update prompt
 ```
-
-Documentation-only commits are skipped (`**.md` and `docs/**` are in `paths-ignore`).
 
 ### One-time setup
 
@@ -251,11 +249,10 @@ The workflow deliberately never triggers on `pull_request`: fork PRs would other
 
 ### Triggering a release
 
-- **Automatic** — push to `main`. The commit subject becomes the release note.
-- **Manual** — Actions tab → "Android Release" → Run workflow, with optional inputs:
-  - `version` — version name, e.g. `1.2.0` (defaults to `app.json`)
-  - `notes` — release notes shown to testers and in the update prompt
-  - `mandatory` — set `true` to make the in-app prompt non-dismissible
+Actions tab → **Android Release** → **Run workflow**, with optional inputs:
+- `version` — version name, e.g. `1.2.0` (defaults to auto-bumped patch from `app.json`)
+- `notes` — release notes shown to testers and in the update prompt (defaults to the latest commit subject)
+- `mandatory` — set `true` to make the in-app prompt non-dismissible
 
 ### How users get the update
 
