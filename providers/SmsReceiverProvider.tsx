@@ -121,9 +121,12 @@ export function SmsReceiverProvider({ children }: { children: ReactNode }) {
     void import("expo-notifications").then((Notifications) => {
       if (cancelled) return;
       sub = Notifications.addNotificationResponseReceivedListener((response) => {
-        const data = response.notification.request.content.data;
-        if (data?.source !== "sms") return;
-        const url = data.url;
+        const data = response.notification.request.content.data as
+          | { source?: string; url?: string }
+          | undefined;
+        const source = data?.source;
+        if (source !== "sms" && source !== "credit_card_bill") return;
+        const url = data?.url;
         if (typeof url === "string" && url.startsWith("/")) {
           router.push(url as Href);
         }
