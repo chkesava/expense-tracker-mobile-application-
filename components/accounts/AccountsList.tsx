@@ -34,6 +34,7 @@ import { useAccounts } from "@/hooks/useAccounts";
 import { useAccountTransfers } from "@/hooks/useAccountTransfers";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
 import { useBorrowings } from "@/hooks/useBorrowings";
+import { useReceivables } from "@/hooks/useReceivables";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useIncomes } from "@/hooks/useIncomes";
 import { useUnifiedNetWorth } from "@/hooks/useUnifiedNetWorth";
@@ -61,6 +62,7 @@ export function AccountsList() {
   const { payments } = useAccountPayments();
   const { transfers } = useAccountTransfers();
   const { borrowings, repayments: borrowingRepayments } = useBorrowings();
+  const { receivables, repayments: receivableRepayments } = useReceivables();
 
   // Unified net worth calculation across bank accounts, credit cards, investments & stocks
   const netWorth = useUnifiedNetWorth();
@@ -114,7 +116,9 @@ export function AccountsList() {
           entries,
           transfers,
           borrowings,
-          borrowingRepayments
+          borrowingRepayments,
+          receivables,
+          receivableRepayments
         );
         map.set(a.id, bal);
       }
@@ -130,6 +134,8 @@ export function AccountsList() {
     transfers,
     borrowings,
     borrowingRepayments,
+    receivables,
+    receivableRepayments,
   ]);
 
   // Group deposit accounts by type
