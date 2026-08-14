@@ -31,6 +31,7 @@ import { useAccounts } from "@/hooks/useAccounts";
 import { useAccountTransfers } from "@/hooks/useAccountTransfers";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
 import { useBorrowings } from "@/hooks/useBorrowings";
+import { useReceivables } from "@/hooks/useReceivables";
 import { useCategoryBudgets } from "@/hooks/useCategoryBudgets";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useFinancialGoals } from "@/hooks/useFinancialGoals";
@@ -108,6 +109,7 @@ export default function DashboardScreen() {
   const { entries } = useAccountEntries();
   const { transfers } = useAccountTransfers();
   const { borrowings, repayments: borrowingRepayments } = useBorrowings();
+  const { receivables, repayments: receivableRepayments } = useReceivables();
   const { budgets: categoryBudgets } = useCategoryBudgets();
   const { goals } = useFinancialGoals();
   const { markScreenVisited } = useSetupProgress();
@@ -205,7 +207,9 @@ export default function DashboardScreen() {
             entries,
             transfers,
             borrowings,
-            borrowingRepayments
+            borrowingRepayments,
+            receivables,
+            receivableRepayments
           )
         );
       }, 0);
@@ -224,6 +228,8 @@ export default function DashboardScreen() {
     transfers,
     borrowings,
     borrowingRepayments,
+    receivables,
+    receivableRepayments,
   ]);
 
   const activeCategoryBudgets = useMemo(() => {

@@ -28,7 +28,8 @@ service cloud.firestore {
     //   accountTypes, alerts, borrowingRepayments, borrowings, categories,
     //   categorizationRules, categoryBudgets, expenses, financialGoals, focus,
     //   holdings, incomes, investments, meta, portfolioOrders,
-    //   portfolioSettings, portfolioSnapshots, portfolioTransactions, spaces,
+    //   portfolioSettings, portfolioSnapshots, portfolioTransactions,
+    //   receivableRepayments, receivables, spaces,
     //   stats, subscriptions, trips, watchlist
     //
     // The recursive match keeps a new collection from silently becoming

@@ -10,6 +10,7 @@ import { useIncomes } from "@/hooks/useIncomes";
 import { useInvestments } from "@/hooks/useInvestments";
 import { useMarketQuotes } from "@/hooks/useMarketQuotes";
 import { usePortfolio } from "@/hooks/usePortfolio";
+import { useReceivables } from "@/hooks/useReceivables";
 import {
   computeBankBalance,
   computeCreditUsage,
@@ -36,6 +37,8 @@ export interface UnifiedNetWorthSummary {
   bankOverdraftLiabilities: number;
   /** Outstanding principal plus accrued interest across all borrowings */
   borrowingLiabilities: number;
+  /** Outstanding money lent to others (non-cash asset) */
+  receivableAssets: number;
   /** Total sum of all financial liabilities (Credit cards + Overdrafts + Borrowings) */
   totalLiabilities: number;
   /** Net Worth = Total Assets - Total Liabilities */
@@ -58,6 +61,12 @@ export function useUnifiedNetWorth(): UnifiedNetWorthSummary {
     portfolio: borrowingPortfolio,
     loading: borrowingsLoading,
   } = useBorrowings();
+  const {
+    receivables,
+    repayments: receivableRepayments,
+    portfolio: receivablePortfolio,
+    loading: receivablesLoading,
+  } = useReceivables();
   const { investments, loading: investmentsLoading } = useInvestments();
   const {
     holdings,
@@ -65,7 +74,6 @@ export function useUnifiedNetWorth(): UnifiedNetWorthSummary {
     loading: portfolioLoading,
   } = usePortfolio();
 
-  // Live quotes for portfolio holdings
   const symbolRequests = useMemo(
     () =>
       holdings.map((h) => ({
@@ -87,7 +95,6 @@ export function useUnifiedNetWorth(): UnifiedNetWorthSummary {
     let bankOverdraftLiabilities = 0;
     let creditCardLiabilities = 0;
 
-    // 1. Bank Accounts & Credit Cards
     accounts.forEach((a) => {
       const typeName = typeMap.get(a.typeId) || "";
       const kind = getAccountKind(typeName);
@@ -104,7 +111,9 @@ export function useUnifiedNetWorth(): UnifiedNetWorthSummary {
           entries,
           transfers,
           borrowings,
-          borrowingRepayments
+          borrowingRepayments,
+          receivables,
+          receivableRepayments
         );
         if (bal > 0) {
           liquidBankAssets += bal;
@@ -114,10 +123,8 @@ export function useUnifiedNetWorth(): UnifiedNetWorthSummary {
       }
     });
 
-    // 2. Fixed Deposits / Investments
     const investmentsValue = totalPortfolioValue(investments);
 
-    // 3. Stocks Portfolio (Holdings Market Value + Demat Cash Balance)
     let stocksHoldingsValue = 0;
     holdings.forEach((h) => {
       const livePrice = quotes.get(h.yahooSymbol)?.currentPrice ?? h.averageBuyPrice;
@@ -126,15 +133,15 @@ export function useUnifiedNetWorth(): UnifiedNetWorthSummary {
     const stocksCashBalance = portfolioSettings?.cashBalance ?? 0;
     const totalStocksValue = stocksHoldingsValue + stocksCashBalance;
 
-    // 4. Borrowings are a liability, never an asset, even though the borrowed
-    // cash already shows up inside the bank balances above.
+    // Borrowings are a liability; receivables are a non-cash asset that offsets
+    // cash already debited when the money was lent.
     const borrowingLiabilities = borrowingPortfolio.totalOutstanding;
+    const receivableAssets = receivablePortfolio.totalOutstanding;
 
-    // 5. Totals
     const totalLiabilities =
       creditCardLiabilities + bankOverdraftLiabilities + borrowingLiabilities;
     const totalAssets =
-      liquidBankAssets + investmentsValue + totalStocksValue;
+      liquidBankAssets + investmentsValue + totalStocksValue + receivableAssets;
     const totalNetWorth = totalAssets - totalLiabilities;
 
     return {
@@ -147,6 +154,7 @@ export function useUnifiedNetWorth(): UnifiedNetWorthSummary {
       creditCardLiabilities,
       bankOverdraftLiabilities,
       borrowingLiabilities,
+      receivableAssets,
       totalLiabilities,
       totalNetWorth,
     };
@@ -161,6 +169,9 @@ export function useUnifiedNetWorth(): UnifiedNetWorthSummary {
     borrowings,
     borrowingRepayments,
     borrowingPortfolio,
+    receivables,
+    receivableRepayments,
+    receivablePortfolio,
     investments,
     holdings,
     quotes,
@@ -176,6 +187,7 @@ export function useUnifiedNetWorth(): UnifiedNetWorthSummary {
     paymentsLoading ||
     transfersLoading ||
     borrowingsLoading ||
+    receivablesLoading ||
     investmentsLoading ||
     portfolioLoading ||
     quotesLoading;

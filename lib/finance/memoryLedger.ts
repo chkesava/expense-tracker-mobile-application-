@@ -3,6 +3,10 @@ import type {
   BorrowingRepayment,
 } from "@/shared/types/borrowing";
 import type { Account, Expense, Income } from "@/shared/types/expense";
+import type {
+  Receivable,
+  ReceivableRepayment,
+} from "@/shared/types/receivable";
 import type { Space } from "@/shared/types/space";
 import { monthFromDateKey } from "@/shared/utils/dates";
 import {
@@ -10,6 +14,10 @@ import {
   summarizeBorrowing,
   validateRepayment,
 } from "@/shared/utils/borrowingMath";
+import {
+  summarizeReceivable,
+  validateReceivableRepayment,
+} from "@/shared/utils/receivableMath";
 
 /**
  * In-memory stand-in for `users/{uid}/…` ledger collections.
@@ -48,6 +56,20 @@ export type MemoryLedger = {
   listBorrowings: () => Borrowing[];
   listRepayments: () => BorrowingRepayment[];
 
+  addReceivable: (
+    input: Omit<Receivable, "id" | "userId" | "createdAt" | "updatedAt"> &
+      Partial<Pick<Receivable, "userId">>
+  ) => Receivable;
+  addReceivableRepayment: (
+    input: Omit<ReceivableRepayment, "id" | "month" | "createdAt">,
+    options?: { allowOverpayment?: boolean }
+  ) =>
+    | { ok: true; repayment: ReceivableRepayment }
+    | { ok: false; error: string };
+  deleteReceivable: (id: string) => boolean;
+  listReceivables: () => Receivable[];
+  listReceivableRepayments: () => ReceivableRepayment[];
+
   addSpace: (
     input: Omit<Space, "id" | "userId" | "createdAt" | "updatedAt"> &
       Partial<Pick<Space, "userId">>
@@ -77,6 +99,8 @@ export function createMemoryLedger(uid: string): MemoryLedger {
   const accounts = new Map<string, Account>();
   const borrowings = new Map<string, Borrowing>();
   const repayments = new Map<string, BorrowingRepayment>();
+  const receivables = new Map<string, Receivable>();
+  const receivableRepayments = new Map<string, ReceivableRepayment>();
   const spaces = new Map<string, Space>();
   const pendingByCollection = new Map<string, number>();
 
@@ -96,6 +120,25 @@ export function createMemoryLedger(uid: string): MemoryLedger {
       outstandingPrincipal: summary.outstandingPrincipal,
       accruedInterest: summary.interestAccrued,
       totalOutstanding: summary.totalOutstanding,
+      status: summary.status,
+      settledDate: summary.settledDate,
+    });
+  }
+
+  function syncReceivableSummary(receivableId: string, asOfDate: string): void {
+    const receivable = receivables.get(receivableId);
+    if (!receivable) return;
+
+    const summary = summarizeReceivable(
+      receivable,
+      [...receivableRepayments.values()],
+      asOfDate
+    );
+
+    receivables.set(receivableId, {
+      ...receivable,
+      totalReceived: summary.totalReceived,
+      outstandingAmount: summary.outstandingAmount,
       status: summary.status,
       settledDate: summary.settledDate,
     });
@@ -242,6 +285,67 @@ export function createMemoryLedger(uid: string): MemoryLedger {
 
     listRepayments() {
       return [...repayments.values()];
+    },
+
+    addReceivable(input) {
+      const receivableId = id("rcv");
+      const row: Receivable = {
+        ...input,
+        userId: input.userId ?? uid,
+        id: receivableId,
+      };
+      receivables.set(receivableId, row);
+      syncReceivableSummary(receivableId, input.lentDate);
+      return receivables.get(receivableId)!;
+    },
+
+    addReceivableRepayment(input, options) {
+      const receivable = receivables.get(input.receivableId);
+      if (!receivable) return { ok: false, error: "Receivable not found." };
+
+      const summary = summarizeReceivable(
+        receivable,
+        [...receivableRepayments.values()],
+        input.date
+      );
+
+      const validation = validateReceivableRepayment(
+        input.amount,
+        summary,
+        options
+      );
+      if (!validation.ok) {
+        return { ok: false, error: validation.error ?? "Invalid repayment." };
+      }
+
+      const repaymentId = id("rrp");
+      const row: ReceivableRepayment = {
+        ...input,
+        id: repaymentId,
+        month: monthFromDateKey(input.date),
+        createdAt: input.date,
+      };
+
+      receivableRepayments.set(repaymentId, row);
+      syncReceivableSummary(input.receivableId, input.date);
+      return { ok: true, repayment: row };
+    },
+
+    deleteReceivable(receivableId) {
+      if (!receivables.has(receivableId)) return false;
+      [...receivableRepayments.values()]
+        .filter((r) => r.receivableId === receivableId)
+        .forEach((r) => receivableRepayments.delete(r.id!));
+      receivables.delete(receivableId);
+      return true;
+    },
+
+    listReceivables() {
+      return [...receivables.values()];
+    },
+
+    listReceivableRepayments() {
+      return [...receivableRepayments.values()];
     },
 
     addSpace(input) {

@@ -14,9 +14,15 @@ import { Amount } from "@/components/common/Amount";
 import { Modal } from "@/components/common/Modal";
 import { SearchBar } from "@/components/common/SearchBar";
 import { Button } from "@/components/ui/Button";
+import { useReceivables } from "@/hooks/useReceivables";
 import type { Expense } from "@/shared/types/expense";
 import type { Space } from "@/shared/types/space";
 import { SPACE_COLORS } from "@/shared/types/space";
+import { todayDateKey } from "@/shared/utils/dates";
+import {
+  receivablesInSpace,
+  summarizeReceivables,
+} from "@/shared/utils/receivableMath";
 import {
   buildSpaceCategoryBreakdown,
   expensesInSpace,
@@ -73,6 +79,20 @@ export function SpaceDetailModal({
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [fromDate, setFromDate] = useState("");
   const [sortMode, setSortMode] = useState<SortMode>("dateDesc");
+
+  const { receivables, repayments } = useReceivables({
+    enabled: visible && !!space?.id,
+  });
+
+  const spaceReceivables = useMemo(
+    () => (space?.id ? receivablesInSpace(receivables, space.id) : []),
+    [space?.id, receivables]
+  );
+
+  const moneyLentSummary = useMemo(() => {
+    if (spaceReceivables.length === 0) return null;
+    return summarizeReceivables(spaceReceivables, repayments, todayDateKey());
+  }, [spaceReceivables, repayments]);
 
   const spaceExpenses = useMemo(
     () => (space?.id ? expensesInSpace(expenses, space.id) : []),
@@ -285,6 +305,60 @@ export function SpaceDetailModal({
                 </View>
               </View>
             ))}
+          </View>
+        ) : null}
+
+        {moneyLentSummary ? (
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: theme.colors.foreground }]}>
+              Money Lent
+            </Text>
+            <View style={styles.statRow}>
+              <View style={styles.statCell}>
+                <Text
+                  style={[styles.statLabel, { color: theme.colors.mutedForeground }]}
+                >
+                  LOANS
+                </Text>
+                <Text style={[styles.statValue, { color: theme.colors.foreground }]}>
+                  {spaceReceivables.length}
+                </Text>
+              </View>
+
+              <View style={styles.statCell}>
+                <Text
+                  style={[styles.statLabel, { color: theme.colors.mutedForeground }]}
+                >
+                  TOTAL LENT
+                </Text>
+                <Amount
+                  value={moneyLentSummary.totalLent}
+                  currency={currency}
+                  style={{
+                    fontSize: 20,
+                    fontWeight: "900",
+                    color: theme.colors.foreground,
+                  }}
+                />
+              </View>
+
+              <View style={styles.statCell}>
+                <Text
+                  style={[styles.statLabel, { color: theme.colors.mutedForeground }]}
+                >
+                  OUTSTANDING
+                </Text>
+                <Amount
+                  value={moneyLentSummary.totalOutstanding}
+                  currency={currency}
+                  style={{
+                    fontSize: 20,
+                    fontWeight: "900",
+                    color: "#EF4444",
+                  }}
+                />
+              </View>
+            </View>
           </View>
         ) : null}
 
