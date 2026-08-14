@@ -9,6 +9,7 @@ export type LedgerTab =
   | "accounts"
   | "cards"
   | "borrowings"
+  | "receivables"
   | "spaces"
   | "splits"
   | "subscriptions"

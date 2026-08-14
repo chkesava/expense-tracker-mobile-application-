@@ -135,6 +135,8 @@ export interface AccountActivity {
   linkedTransferId?: string;
   linkedBorrowingId?: string;
   linkedRepaymentId?: string;
+  linkedReceivableId?: string;
+  linkedReceivableRepaymentId?: string;
   isBillPayment?: boolean;
   isManualEntry?: boolean;
   isTransfer?: boolean;
@@ -142,6 +144,10 @@ export interface AccountActivity {
   isBorrowing?: boolean;
   /** Money paid back to a lender. Not an ordinary expense. */
   isLoanRepayment?: boolean;
+  /** Money lent to someone. An asset conversion, never an expense. */
+  isReceivable?: boolean;
+  /** Collection against money lent. Never ordinary income. */
+  isReceivableRepayment?: boolean;
   counterpartyName?: string;
   runningBalance?: number;
 }

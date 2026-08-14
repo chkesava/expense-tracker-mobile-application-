@@ -8,6 +8,7 @@ import type {
   Income,
 } from "../types/expense";
 import type { Borrowing, BorrowingRepayment } from "../types/borrowing";
+import type { Receivable, ReceivableRepayment } from "../types/receivable";
 import { getAccountKind } from "./accountKind";
 import { getBillingCycleDates, getDaysUntilReset } from "./billingCycle";
 import { parseLocalDate, toLocalDateKey, billDateForMonth } from "./dates";
@@ -98,6 +99,19 @@ function repaymentsPaidFrom(
   return repayments.filter((r) => r.paymentAccountId === accountId);
 }
 
+/** Money lent out of this account. An asset conversion, never an expense. */
+function receivablesPaidFrom(accountId: string, receivables: Receivable[]) {
+  return receivables.filter((r) => r.sourceAccountId === accountId);
+}
+
+/** Collections received into this account. Never ordinary income. */
+function receivableRepaymentsInto(
+  accountId: string,
+  repayments: ReceivableRepayment[]
+) {
+  return repayments.filter((r) => r.receivedAccountId === accountId);
+}
+
 function compareActivitiesChronologically(a: AccountActivity, b: AccountActivity) {
   const dateDiff = parseLocalDate(a.date).getTime() - parseLocalDate(b.date).getTime();
   if (dateDiff !== 0) return dateDiff;
@@ -124,7 +138,9 @@ export function computeBankBalance(
   entries: AccountEntry[] = [],
   transfers: AccountTransfer[] = [],
   borrowings: Borrowing[] = [],
-  borrowingRepayments: BorrowingRepayment[] = []
+  borrowingRepayments: BorrowingRepayment[] = [],
+  receivables: Receivable[] = [],
+  receivableRepayments: ReceivableRepayment[] = []
 ): number {
   const opening = account.openingBalance ?? 0;
   const baseline = account.balanceAsOfDate;
@@ -156,6 +172,15 @@ export function computeBankBalance(
   const repaymentsOut = repaymentsPaidFrom(account.id, borrowingRepayments)
     .filter((repayment) => isOnOrAfter(repayment.date, baseline))
     .reduce((sum, repayment) => sum + repayment.amount, 0);
+  const lentOut = receivablesPaidFrom(account.id, receivables)
+    .filter((receivable) => isOnOrAfter(receivable.lentDate, baseline))
+    .reduce((sum, receivable) => sum + receivable.originalAmount, 0);
+  const collectionsIn = receivableRepaymentsInto(
+    account.id,
+    receivableRepayments
+  )
+    .filter((repayment) => isOnOrAfter(repayment.date, baseline))
+    .reduce((sum, repayment) => sum + repayment.amount, 0);
   return (
     opening +
     totalIncomes -
@@ -165,7 +190,9 @@ export function computeBankBalance(
     transfersOut +
     transfersIn +
     borrowedIn -
-    repaymentsOut
+    repaymentsOut -
+    lentOut +
+    collectionsIn
   );
 }
 
@@ -294,6 +321,10 @@ export function buildAccountActivities(
   liabilities?: {
     borrowings?: Borrowing[];
     borrowingRepayments?: BorrowingRepayment[];
+  },
+  receivableFlows?: {
+    receivables?: Receivable[];
+    receivableRepayments?: ReceivableRepayment[];
   }
 ): AccountActivity[] {
   const baseline = account.balanceAsOfDate;
@@ -331,6 +362,14 @@ export function buildAccountActivities(
   const outgoingRepayments = repaymentsPaidFrom(
     account.id,
     liabilities?.borrowingRepayments ?? []
+  ).filter((repayment) => withinBaseline(repayment.date));
+  const outgoingLends = receivablesPaidFrom(
+    account.id,
+    receivableFlows?.receivables ?? []
+  ).filter((receivable) => withinBaseline(receivable.lentDate));
+  const incomingCollections = receivableRepaymentsInto(
+    account.id,
+    receivableFlows?.receivableRepayments ?? []
   ).filter((repayment) => withinBaseline(repayment.date));
 
   const activities: AccountActivity[] = [
@@ -424,6 +463,26 @@ export function buildAccountActivities(
       linkedRepaymentId: repayment.id,
       linkedBorrowingId: repayment.borrowingId,
       isLoanRepayment: true,
+    })),
+    ...outgoingLends.map((receivable, idx) => ({
+      id: `receivable-out-${receivable.id ?? idx}`,
+      date: receivable.lentDate,
+      amount: receivable.originalAmount,
+      type: "debit" as const,
+      note: receivable.note || receivable.purpose || "Money lent",
+      linkedReceivableId: receivable.id,
+      isReceivable: true,
+      counterpartyName: receivable.personName,
+    })),
+    ...incomingCollections.map((repayment, idx) => ({
+      id: `receivable-repay-in-${repayment.id ?? idx}`,
+      date: repayment.date,
+      amount: repayment.amount,
+      type: "credit" as const,
+      note: repayment.note || "Receivable repayment",
+      linkedReceivableRepaymentId: repayment.id,
+      linkedReceivableId: repayment.receivableId,
+      isReceivableRepayment: true,
     })),
   ];
 

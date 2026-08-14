@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { Account, AccountPayment, AccountTransfer } from "../types/expense";
 import type { Borrowing, BorrowingRepayment } from "../types/borrowing";
+import type {
+  Receivable,
+  ReceivableRepayment,
+} from "../types/receivable";
 import { buildAccountActivities, computeBankBalance } from "./accountBalance";
 
 describe("account activity ledger", () => {
@@ -239,5 +243,83 @@ describe("borrowing effect on account balances", () => {
 
   it("keeps the activity feed empty when no liabilities are supplied", () => {
     expect(buildAccountActivities(bank, "Bank", [], [])).toHaveLength(0);
+  });
+});
+
+describe("receivable effect on account balances", () => {
+  const bank: Account = {
+    id: "acc-hdfc",
+    name: "HDFC",
+    typeId: "bank",
+    openingBalance: 50000,
+    balanceAsOfDate: "2026-01-01",
+  };
+
+  const receivable: Receivable = {
+    id: "rcv1",
+    userId: "u1",
+    personType: "FRIEND",
+    personName: "Rahul",
+    originalAmount: 20000,
+    lentDate: "2026-02-01",
+    sourceAccountId: "acc-hdfc",
+    status: "ACTIVE",
+  };
+
+  const collection: ReceivableRepayment = {
+    id: "rrp1",
+    receivableId: "rcv1",
+    amount: 8000,
+    receivedAccountId: "acc-hdfc",
+    date: "2026-03-01",
+  };
+
+  it("debits money lent from the source account", () => {
+    expect(
+      computeBankBalance(bank, [], [], [], [], [], [], [], [receivable])
+    ).toBe(30000);
+  });
+
+  it("credits collections into the receiving account", () => {
+    expect(
+      computeBankBalance(
+        bank,
+        [],
+        [],
+        [],
+        [],
+        [],
+        [],
+        [],
+        [receivable],
+        [collection]
+      )
+    ).toBe(38000);
+  });
+
+  it("emits receivable debit and collection credit activity rows", () => {
+    const activities = buildAccountActivities(
+      bank,
+      "Bank",
+      [],
+      [],
+      [],
+      [],
+      [],
+      undefined,
+      undefined,
+      { receivables: [receivable], receivableRepayments: [collection] }
+    );
+
+    expect(activities.find((a) => a.isReceivable)).toMatchObject({
+      type: "debit",
+      amount: 20000,
+      linkedReceivableId: "rcv1",
+    });
+    expect(activities.find((a) => a.isReceivableRepayment)).toMatchObject({
+      type: "credit",
+      amount: 8000,
+      linkedReceivableRepaymentId: "rrp1",
+    });
   });
 });
