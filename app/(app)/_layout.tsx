@@ -14,6 +14,7 @@ import { useNavigationStateRestoration } from "@/hooks/useNavigationStateRestora
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAuth } from "@/providers/AuthProvider";
 import { FinanceDataProvider } from "@/providers/FinanceDataProvider";
+import { CreditCardBillsProvider } from "@/providers/CreditCardBillsProvider";
 import { LedgerStateProvider } from "@/providers/LedgerStateProvider";
 import { ModalProvider } from "@/providers/ModalProvider";
 import { SetupProgressProvider } from "@/providers/SetupProgressProvider";
@@ -92,6 +93,12 @@ function AppShellInner() {
           }}
         />
         <Stack.Screen
+          name="credit-card-bills/[id]"
+          options={{
+            animation: "slide_from_right",
+          }}
+        />
+        <Stack.Screen
           name="add"
           options={{
             animation: "fade_from_bottom",
@@ -142,15 +149,17 @@ export default function AppLayout() {
   return (
     <PrivacyLock>
       <FinanceDataProvider>
-        <ModalProvider>
-          <SetupProgressProvider>
-            <LedgerStateProvider>
-              <SmsReceiverProvider>
-                <AppShellInner />
-              </SmsReceiverProvider>
-            </LedgerStateProvider>
-          </SetupProgressProvider>
-        </ModalProvider>
+        <CreditCardBillsProvider>
+          <ModalProvider>
+            <SetupProgressProvider>
+              <LedgerStateProvider>
+                <SmsReceiverProvider>
+                  <AppShellInner />
+                </SmsReceiverProvider>
+              </LedgerStateProvider>
+            </SetupProgressProvider>
+          </ModalProvider>
+        </CreditCardBillsProvider>
       </FinanceDataProvider>
     </PrivacyLock>
   );
