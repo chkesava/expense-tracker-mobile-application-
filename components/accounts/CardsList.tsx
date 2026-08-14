@@ -20,6 +20,7 @@ import {
 import { EditAccountModal } from "@/components/accounts/EditAccountModal";
 import { CreateCreditCardBillModal } from "@/components/creditCardBills/CreateCreditCardBillModal";
 import { PayCreditBillModal } from "@/components/accounts/PayCreditBillModal";
+import { SmsMatchingUnconfiguredText } from "@/components/accounts/SmsMatchingUnconfiguredText";
 import { Amount } from "@/components/common/Amount";
 import { EmptyState } from "@/components/common/EmptyState";
 import { Button } from "@/components/ui/Button";
@@ -34,6 +35,7 @@ import { OPEN_BILL_STATUSES } from "@/shared/types/creditCardBill";
 import type { Account } from "@/shared/types/expense";
 import { computeCreditUsage } from "@/shared/utils/accountBalance";
 import { getAccountKind } from "@/shared/utils/accountKind";
+import { formatAccountIdentityLine } from "@/shared/utils/accountIdentity";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
@@ -389,8 +391,12 @@ export function CardsList() {
                         }}
                         numberOfLines={1}
                       >
-                        {card.accountNumber || "Credit Card"}
+                        {formatAccountIdentityLine(card, "Credit Card")}
                       </Text>
+                      <SmsMatchingUnconfiguredText
+                        account={card}
+                        typeName="Credit Card"
+                      />
                     </View>
                   </View>
 

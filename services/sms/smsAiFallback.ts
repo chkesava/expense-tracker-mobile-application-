@@ -68,10 +68,13 @@ export function needsSmsAiFallback(parsed: SmsParsedTransaction): boolean {
   if (parsed.kind === "otp" || parsed.kind === "promotional" || parsed.kind === "transfer") {
     return false;
   }
+  if (parsed.kind === "credit_card_payment" || parsed.kind === "unknown") {
+    return false;
+  }
   if (isExpenseOrIncomeKind(parsed.kind)) {
     if (parsed.confidence < AI_TRIGGER_CONFIDENCE) return true;
     if (!parsed.date) return true;
-    if (parsed.kind === "income") {
+    if (parsed.kind === "income" || parsed.kind === "refund") {
       return !parsed.incomeSource && !parsed.merchant?.trim();
     }
     return !parsed.merchant?.trim();
@@ -118,7 +121,7 @@ export function applySmsAiFallback(
     next.parseReasons = [...(next.parseReasons || []), "ai_fallback_merchant"];
   }
 
-  if (next.kind === "non_financial" && (next.merchant || EXPENSE_HINT.test(body))) {
+  if (next.kind === "non_financial" && EXPENSE_HINT.test(body) && next.merchant) {
     next.kind = "expense";
     next.detectionReasons = [
       ...(next.detectionReasons || []),
@@ -152,7 +155,7 @@ export function applySmsAiFallback(
     }
   }
 
-  if (next.kind === "income" && !next.incomeSource) {
+  if ((next.kind === "income" || next.kind === "refund") && !next.incomeSource) {
     next.incomeSource = classifySmsIncomeSource(body, next.amount);
     next.parseReasons = [...(next.parseReasons || []), "ai_fallback_income"];
   }

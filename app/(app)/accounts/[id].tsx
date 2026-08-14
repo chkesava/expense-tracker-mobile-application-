@@ -28,6 +28,7 @@ import {
 import { AddAccountEntryModal } from "@/components/accounts/AddAccountEntryModal";
 import { EditAccountModal } from "@/components/accounts/EditAccountModal";
 import { PayCreditBillModal } from "@/components/accounts/PayCreditBillModal";
+import { SmsMatchingUnconfiguredText } from "@/components/accounts/SmsMatchingUnconfiguredText";
 import { CreateCreditCardBillModal } from "@/components/creditCardBills/CreateCreditCardBillModal";
 import { TransferFundsModal } from "@/components/accounts/TransferFundsModal";
 import { Amount } from "@/components/common/Amount";
@@ -52,6 +53,7 @@ import {
   getCreditBillHistory,
 } from "@/shared/utils/accountBalance";
 import { getAccountKind } from "@/shared/utils/accountKind";
+import { formatAccountIdentityLine } from "@/shared/utils/accountIdentity";
 import { formatDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
@@ -285,10 +287,12 @@ export default function AccountDetailScreen() {
               fontSize: theme.typography.xs,
             }}
           >
-            {account.accountNumber
-              ? `${typeName} • ${account.accountNumber}`
-              : typeName}
+            {formatAccountIdentityLine(account, typeName)}
           </Text>
+          <SmsMatchingUnconfiguredText
+            account={account}
+            typeName={typeName}
+          />
         </View>
 
         <Pressable

@@ -1,0 +1,13 @@
+{
+  "name": "sms-reader",
+  "version": "0.1.0",
+  "description": "Local Android SMS inbox and receive bridge. Results stay on-device.",
+  "main": "index.ts",
+  "keywords": ["expo", "react-native", "sms"],
+  "license": "UNLICENSED",
+  "peerDependencies": {
+    "expo": "*",
+    "react": "*",
+    "react-native": "*"
+  }
+}

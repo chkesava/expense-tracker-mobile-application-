@@ -2,7 +2,7 @@ name: PR Checks
 
 # Quality gate only — never request signing keystores, Firebase service accounts,
 # or other release secrets here. Fork PRs must not gain access to those materials.
-# Release signing stays in android-release.yml (push main / workflow_dispatch only).
+# Release signing stays in android-release.yml (workflow_dispatch only).
 
 on:
   pull_request:

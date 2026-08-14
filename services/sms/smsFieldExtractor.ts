@@ -5,6 +5,10 @@
 
 import { formatDateKey } from "@/shared/utils/dates";
 import type { RawSmsMessage } from "@/shared/types/smsTransaction";
+import {
+  matchInstitutionFromText,
+  resolveInstitutionFromSms,
+} from "@/shared/data/institutionMatch";
 
 export type SmsPaymentMethod =
   | "UPI"
@@ -27,6 +31,8 @@ export type SmsExtractedFields = {
   time?: string;
   accountLast4?: string;
   externalRef?: string;
+  /** SMS sender / DLT header */
+  sender?: string;
   reasons: string[];
 };
 
@@ -76,6 +82,10 @@ const MERCHANT_STOP = new Set(
     "transaction",
     "debited",
     "credited",
+    "refunded",
+    "reversed",
+    "withdrawn",
+    "received",
     "paid",
     "sent",
     "from",
@@ -92,6 +102,9 @@ const MERCHANT_STOP = new Set(
     "bal",
     "balance",
     "total",
+    "ending",
+    "card",
+    "wallet",
   ].map((s) => s.toLowerCase())
 );
 
@@ -122,9 +135,13 @@ const MONTHS: Record<string, number> = {
   december: 12,
 };
 
+const AVL_BAL_CHUNK =
+  /\b(?:avl|available|avail)\.?\s*bal(?:ance)?\b[:\s]*(?:inr|rs\.?|₹)?\s*[\d,]+(?:\.\d{1,2})?/gi;
+
 export function extractAmount(body: string): number | undefined {
+  const text = (body || "").replace(AVL_BAL_CHUNK, " ");
   for (const re of AMOUNT_PATTERNS) {
-    const match = body.match(re);
+    const match = text.match(re);
     if (!match?.[1]) continue;
     const value = Number(match[1].replace(/,/g, ""));
     if (Number.isFinite(value) && value > 0) return value;
@@ -133,12 +150,18 @@ export function extractAmount(body: string): number | undefined {
 }
 
 export function extractPaymentMethod(body: string): SmsPaymentMethod {
+  if (/\batm\b/i.test(body)) return "ATM";
   if (/\bupi\b/i.test(body)) return "UPI";
   if (/\bimps\b/i.test(body)) return "IMPS";
   if (/\bneft\b/i.test(body)) return "NEFT";
   if (/\brtgs\b/i.test(body)) return "RTGS";
-  if (/\batm\b/i.test(body)) return "ATM";
-  if (/\b(?:credit|debit)\s+card\b|\bpos\b|\bcard\s+xx/i.test(body)) return "CARD";
+  if (
+    /\b(?:credit|debit)\s+card\b|\bpos\b|\bcard\s+xx|\bcard\s+ending\b|\busing\s+your\s+card\b/i.test(
+      body
+    )
+  ) {
+    return "CARD";
+  }
   if (/\bnet\s*banking\b|\binternet\s+banking\b/i.test(body)) return "NETBANKING";
   return "UNKNOWN";
 }
@@ -147,6 +170,9 @@ export function extractBank(
   body: string,
   address?: string
 ): string | undefined {
+  const catalog = resolveInstitutionFromSms({ sender: address, body });
+  if (catalog) return catalog.institution.name;
+
   const haystack = `${address || ""} ${body}`;
   for (const bank of BANK_DEFS) {
     if (bank.patterns.some((re) => re.test(haystack))) return bank.name;
@@ -157,9 +183,10 @@ export function extractBank(
 export function extractAccountLast4(body: string): string | undefined {
   const patterns = [
     /(?:a\/c|acct|account|ac)\s*(?:no\.?|number|#)?\s*(?:xx+|x+|\*+)?\s*(\d{4})\b/i,
-    /(?:card|ending|ends?\s+with)\s*(?:xx+|x+|\*+)?\s*(\d{4})\b/i,
+    /(?:card|ending|ends?\s+with|ending\s+in)\s*(?:xx+|x+|\*+)?\s*(\d{4})\b/i,
     /\bxx+(\d{4})\b/i,
     /\bx{2,}(\d{4})\b/i,
+    /\bending\s+(\d{4})\b/i,
   ];
   for (const re of patterns) {
     const match = body.match(re);
@@ -173,6 +200,7 @@ export function extractReferenceId(body: string): string | undefined {
     /(?:upi\s*)?ref(?:erence)?(?:\s*(?:no|num|number|#))?[:\s-]*([A-Za-z0-9]{6,})/i,
     /(?:txn|transaction|rr|utr)(?:\s*(?:id|no|num|number|#))?[:\s-]*([A-Za-z0-9]{6,})/i,
     /\bUTR[:\s-]*([A-Za-z0-9]{6,})/i,
+    /\bIMPS\s+Ref[:\s-]*([A-Za-z0-9]{6,})/i,
   ];
   for (const re of patterns) {
     const match = body.match(re);
@@ -209,10 +237,21 @@ function cleanMerchantToken(raw: string): string | undefined {
   return value;
 }
 
+function isInstitutionOrProductLabel(value: string): boolean {
+  const match = matchInstitutionFromText(value);
+  if (!match) return false;
+  return (
+    match.source === "product" ||
+    match.source === "name" ||
+    match.source === "alias" ||
+    match.source === "abbreviation"
+  );
+}
+
 export function extractMerchant(body: string): string | undefined {
   const patterns = [
-    /(?:paid\s+to|sent\s+to|purchased?\s+at|spent\s+at|payment\s+to|towards|info[:\s]+)\s*([A-Za-z0-9][A-Za-z0-9 &*._-]{1,40})/i,
-    /\bat\s+([A-Za-z0-9][A-Za-z0-9 &*._-]{1,40})(?:\s+on\b|\s+via\b|\.|$)/i,
+    /(?:paid\s+to|sent\s+to|purchased?\s+at|spent\s+at|spent\s+on|payment\s+to|towards|info[:\s]+)\s*([A-Za-z0-9][A-Za-z0-9 &*._-]{1,40})/i,
+    /\bat\s+([A-Za-z0-9][A-Za-z0-9 &*._-]{1,40})(?:\s+on\b|\s+via\b|\s+using\b|\.|$)/i,
     /\bto\s+([A-Za-z0-9][A-Za-z0-9 &*._-]{1,40})(?:\s+on\b|\s+via\b|\s+upi\b|\.|$)/i,
     /\b([A-Za-z0-9._-]{2,40})@(?:upi|ybl|oksbi|okhdfc|okicici|okaxis|paytm|ibl|axl)\b/i,
   ];
@@ -220,8 +259,13 @@ export function extractMerchant(body: string): string | undefined {
   for (const re of patterns) {
     const match = body.match(re);
     if (!match?.[1]) continue;
-    const cleaned = cleanMerchantToken(match[1]);
-    if (cleaned) return cleaned;
+    let token = match[1];
+    token = token.replace(/\s+using\b.*$/i, "").trim();
+    token = token.replace(/\s+ending\b.*$/i, "").trim();
+    const cleaned = cleanMerchantToken(token);
+    if (!cleaned) continue;
+    if (isInstitutionOrProductLabel(cleaned)) continue;
+    return cleaned;
   }
   return undefined;
 }
@@ -243,6 +287,15 @@ export function extractDateFromBody(
   timezone?: string
 ): { date?: string; time?: string; reasons: string[] } {
   const reasons: string[] = [];
+
+  const iso = body.match(/\b(20\d{2})-(\d{2})-(\d{2})\b/);
+  if (iso) {
+    const date = toDateKey(Number(iso[1]), Number(iso[2]), Number(iso[3]));
+    if (date) {
+      reasons.push("date_iso");
+      return { date, time: extractTime(body), reasons };
+    }
+  }
 
   // 12-08-2026 or 12/08/26
   const dmy = body.match(
@@ -337,6 +390,9 @@ export function extractSmsFields(
   );
   reasons.push(...dated.reasons);
 
+  const sender = (message.address || "").trim() || undefined;
+  if (sender) reasons.push("sender");
+
   return {
     amount,
     merchant,
@@ -346,6 +402,7 @@ export function extractSmsFields(
     time: dated.time,
     accountLast4,
     externalRef,
+    sender,
     reasons,
   };
 }

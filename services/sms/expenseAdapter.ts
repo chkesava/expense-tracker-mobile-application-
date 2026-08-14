@@ -69,7 +69,7 @@ export function adaptParsedSmsToWritePayload(
   const accountId = options.accountId ?? null;
   const note = buildNote(parsed);
 
-  if (parsed.kind === "income") {
+  if (parsed.kind === "income" || parsed.kind === "refund") {
     const payload: SmsIncomeWritePayload = {
       amount: core.amount,
       source:
@@ -77,7 +77,7 @@ export function adaptParsedSmsToWritePayload(
         parsed.incomeSource ||
         parsed.merchant ||
         parsed.bank ||
-        "Other",
+        (parsed.kind === "refund" ? "Refund" : "Other"),
       date: core.date,
       month: core.month,
       accountId,
@@ -86,7 +86,7 @@ export function adaptParsedSmsToWritePayload(
     return { collection: "incomes", payload };
   }
 
-  if (parsed.kind !== "expense") {
+  if (parsed.kind !== "expense" && parsed.kind !== "atm_withdrawal") {
     return null;
   }
 

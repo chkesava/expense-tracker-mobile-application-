@@ -98,12 +98,19 @@ class SmsReaderModule : Module() {
 
         var count = 0
         while (cursor.moveToNext() && count < safeLimit) {
+          val id = cursor.getLong(idIdx).toString()
+          val address = cursor.getString(addressIdx) ?: ""
+          val body = cursor.getString(bodyIdx) ?: ""
+          val receivedAtMs = cursor.getLong(dateIdx).toDouble()
           results.add(
             mapOf(
-              "id" to cursor.getLong(idIdx).toString(),
-              "address" to (cursor.getString(addressIdx) ?: ""),
-              "body" to (cursor.getString(bodyIdx) ?: ""),
-              "receivedAtMs" to cursor.getLong(dateIdx).toDouble(),
+              "id" to id,
+              "smsId" to id,
+              "address" to address,
+              "sender" to address,
+              "body" to body,
+              "receivedAtMs" to receivedAtMs,
+              "timestamp" to receivedAtMs,
               "read" to (cursor.getInt(readIdx) == 1)
             )
           )
@@ -221,9 +228,12 @@ class SmsReaderModule : Module() {
         "rx:${receivedAtMs}:${acc.address.hashCode()}:${body.hashCode()}"
       mapOf(
         "id" to syntheticId,
+        "smsId" to syntheticId,
         "address" to acc.address,
+        "sender" to acc.address,
         "body" to body,
         "receivedAtMs" to receivedAtMs.toDouble(),
+        "timestamp" to receivedAtMs.toDouble(),
         "read" to false
       )
     }

@@ -15,7 +15,7 @@ import { normalizeMerchantName } from "./smsMerchantNormalizer";
 import { applySmsAiFallback, needsSmsAiFallback } from "./smsAiFallback";
 
 export interface SmsParseContext {
-  /** Optional account names for matching “from HDFC” style hints */
+  /** @deprecated Account matching uses AccountResolver with full Account rows. */
   accounts?: Array<{ id: string; name: string }>;
   /** User keyword rules from Settings (win over built-in merchant map) */
   categorizationRules?: CategorizationRule[];
@@ -80,6 +80,7 @@ export function parseBankSms(
     merchantRaw: merchantNorm.merchantRaw,
     bank: fields.bank,
     paymentMethod: fields.paymentMethod,
+    sender: fields.sender || message.address,
     accountLast4: fields.accountLast4,
     externalRef: fields.externalRef,
     note: buildNote({
@@ -96,7 +97,10 @@ export function parseBankSms(
     templateId: "phase7-parser",
   };
 
-  if (detection.kind === "expense" && merchant) {
+  if (
+    (detection.kind === "expense" || detection.kind === "atm_withdrawal") &&
+    merchant
+  ) {
     const cat = categorizeSmsMerchant(
       merchant,
       context.categorizationRules
@@ -109,22 +113,18 @@ export function parseBankSms(
     }
   }
 
-  if (detection.kind === "income") {
-    parsed.incomeSource = classifySmsIncomeSource(body, amount);
+  if (detection.kind === "income" || detection.kind === "refund") {
+    parsed.incomeSource =
+      detection.kind === "refund"
+        ? "Refund"
+        : classifySmsIncomeSource(body, amount);
     parseReasons.push(`income_${parsed.incomeSource.replace(/\s+/g, "_").toLowerCase()}`);
     parsed.parseReasons = parseReasons;
   }
 
-  // Prefer matching user account by last4 or name
-  if (context.accounts?.length) {
-    const lower = body.toLowerCase();
-    const byName = context.accounts.find((a) =>
-      lower.includes(a.name.trim().toLowerCase())
-    );
-    if (byName) parsed.accountHint = byName.name;
-  }
+  // Account last4 is a hint only. Exact accountId comes from AccountResolver.
   if (fields.accountLast4) {
-    parsed.accountHint = parsed.accountHint || `…${fields.accountLast4}`;
+    parsed.accountHint = `…${fields.accountLast4}`;
   }
 
   // Confidence boosts when key fields are present

@@ -7,11 +7,14 @@ export {
 
 export {
   checkSmsPermission,
+  checkSmsPermissionDetails,
   requestSmsPermission,
   openSmsPermissionSettings,
   isSmsPermissionGranted,
   getSmsPermissionPlatformStatus,
+  emptySmsPermissionDetails,
   type SmsPermissionStatus,
+  type SmsPermissionDetails,
 } from "./smsPermissions";
 
 export {
@@ -40,6 +43,7 @@ export {
   detectSmsTransaction,
   isMoneyMovementKind,
   isExpenseOrIncomeKind,
+  isUnknownSmsKind,
   type SmsDetectionResult,
 } from "./smsDetector";
 
@@ -108,7 +112,21 @@ export {
   type SmsPipelineResult,
 } from "./smsPipeline";
 
+export {
+  resolveAccountFromSms,
+  inferSmsAccountType,
+  type AccountResolution,
+  type AccountResolutionStatus,
+  type AccountMatchSignal,
+  type AccountResolverSmsInput,
+} from "@/shared/utils/accountResolver";
+
 export { readNativeInbox, type NativeInboxQuery } from "./nativeInbox";
+
+export {
+  toSmsLocalMetadata,
+  type SmsLocalMetadata,
+} from "./smsLocalMetadata";
 
 export {
   startSmsListening,
