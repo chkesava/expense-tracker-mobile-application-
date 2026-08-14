@@ -14,9 +14,6 @@ function simulateUpdateWrite(
   typeName: string
 ) {
   const merged: Account = {
-    id: existing.id,
-    name: existing.name,
-    typeId: existing.typeId,
     ...existing,
     ...updates,
   };
@@ -149,24 +146,16 @@ describe("existing account identity migration", () => {
   });
 
   it("classifies configuration statuses without inventing persisted fields", () => {
+    expect(getAccountConfigurationStatus({ typeId: "" }, "Credit Card")).toBe(
+      "NEEDS_ACCOUNT_TYPE"
+    );
     expect(
-      getAccountConfigurationStatus(
-        { typeId: "", name: "X", id: "a" },
-        "Credit Card"
-      )
-    ).toBe("NEEDS_ACCOUNT_TYPE");
-    expect(
-      getAccountConfigurationStatus(
-        { typeId: "type-cash", name: "Cash", id: "c" },
-        "Cash"
-      )
+      getAccountConfigurationStatus({ typeId: "type-cash" }, "Cash")
     ).toBe("NOT_SUPPORTED");
     expect(
       getAccountConfigurationStatus(
         {
           typeId: "type-cc",
-          name: "Card",
-          id: "n",
           institutionId: "super_money",
         },
         "Credit Card"
