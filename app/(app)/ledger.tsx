@@ -7,6 +7,7 @@ import {
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import {
+  ArrowDownLeft,
   BarChart3,
   Calendar,
   CreditCard,
@@ -26,6 +27,7 @@ import {
 import { AccountsList } from "@/components/accounts/AccountsList";
 import { CardsList } from "@/components/accounts/CardsList";
 import { BorrowingsList } from "@/components/borrowings/BorrowingsList";
+import { ReceivablesList } from "@/components/receivables/ReceivablesList";
 import { CollectList } from "@/components/collect/CollectList";
 import { SpacesList } from "@/components/spaces/SpacesList";
 import { SplitsList } from "@/components/splits/SplitsList";
@@ -174,6 +176,11 @@ export default function LedgerScreen() {
       id: "borrowings",
       label: "Borrowings",
       icon: <Landmark size={16} color={theme.colors.foreground} />,
+    },
+    {
+      id: "receivables",
+      label: "Receivables",
+      icon: <ArrowDownLeft size={16} color={theme.colors.foreground} />,
     },
     {
       id: "spaces",
@@ -409,6 +416,9 @@ export default function LedgerScreen() {
 
       {/* Tab: Borrowings */}
       {ledgerTab === "borrowings" && <BorrowingsList />}
+
+      {/* Tab: Receivables */}
+      {ledgerTab === "receivables" && <ReceivablesList />}
 
       {/* Tab: Spaces */}
       {ledgerTab === "spaces" && <SpacesList />}
