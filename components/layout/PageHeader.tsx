@@ -17,6 +17,8 @@ export interface PageHeaderTab {
   badge?: number | string;
 }
 
+export type PageHeaderTabVariant = "pill" | "underline";
+
 export interface PageHeaderProps {
   title: string;
   subtitle?: string;
@@ -25,6 +27,8 @@ export interface PageHeaderProps {
   onTabChange?: (tabId: string) => void;
   tabs?: PageHeaderTab[];
   rightElement?: ReactNode;
+  /** pill = raised segment control; underline = flat ledger-style tabs */
+  tabVariant?: PageHeaderTabVariant;
 }
 
 export function PageHeader({
@@ -35,9 +39,12 @@ export function PageHeader({
   onTabChange,
   tabs,
   rightElement,
+  tabVariant = "pill",
 }: PageHeaderProps) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
+  const isUnderline = tabVariant === "underline";
+  const activeColor = theme.colors.success;
 
   const handleTabPress = (tabId: string) => {
     if (tabId === activeTab) return;
@@ -47,7 +54,6 @@ export function PageHeader({
 
   return (
     <View style={styles.container}>
-      {/* Title & Icon Row */}
       <View style={styles.titleRow}>
         <View style={styles.titleLeft}>
           {icon ? (
@@ -55,8 +61,12 @@ export function PageHeader({
               style={[
                 styles.iconContainer,
                 {
-                  backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
-                  borderColor: theme.colors.border,
+                  backgroundColor: isDark
+                    ? "rgba(52, 179, 122, 0.14)"
+                    : "rgba(37, 150, 90, 0.1)",
+                  borderColor: isDark
+                    ? "rgba(52, 179, 122, 0.28)"
+                    : "rgba(37, 150, 90, 0.18)",
                 },
               ]}
             >
@@ -68,7 +78,11 @@ export function PageHeader({
             <Text
               style={[
                 styles.titleText,
-                { color: theme.colors.foreground, fontSize: theme.typography.xxl },
+                {
+                  color: theme.colors.foreground,
+                  fontSize: theme.typography.xl,
+                  fontFamily: theme.fontFamily.bold,
+                },
               ]}
               numberOfLines={1}
             >
@@ -78,7 +92,11 @@ export function PageHeader({
               <Text
                 style={[
                   styles.subtitleText,
-                  { color: theme.colors.mutedForeground, fontSize: theme.typography.xs },
+                  {
+                    color: theme.colors.mutedForeground,
+                    fontSize: theme.typography.xs,
+                    fontFamily: theme.fontFamily.semibold,
+                  },
                 ]}
                 numberOfLines={1}
               >
@@ -91,21 +109,83 @@ export function PageHeader({
         {rightElement ? <View style={styles.rightElement}>{rightElement}</View> : null}
       </View>
 
-      {/* Tabs Bar */}
       {tabs && tabs.length > 0 ? (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={[
-            styles.tabsContainer,
-            {
-              backgroundColor: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
-              borderColor: theme.colors.border,
-            },
-          ]}
+          contentContainerStyle={
+            isUnderline
+              ? styles.underlineTabsRow
+              : [
+                  styles.tabsContainer,
+                  {
+                    backgroundColor: isDark
+                      ? "rgba(255,255,255,0.04)"
+                      : "rgba(0,0,0,0.03)",
+                    borderColor: theme.colors.border,
+                  },
+                ]
+          }
         >
           {tabs.map((tab) => {
             const isActive = activeTab === tab.id;
+            if (isUnderline) {
+              return (
+                <Pressable
+                  key={tab.id}
+                  onPress={() => handleTabPress(tab.id)}
+                  android_ripple={{
+                    color: isDark ? "rgba(52,179,122,0.16)" : "rgba(37,150,90,0.12)",
+                    borderless: false,
+                  }}
+                  style={({ pressed }) => [
+                    styles.underlineTab,
+                    isActive && {
+                      backgroundColor: isDark
+                        ? "rgba(52, 179, 122, 0.1)"
+                        : "rgba(37, 150, 90, 0.08)",
+                    },
+                    pressed && { opacity: 0.8 },
+                  ]}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: isActive }}
+                >
+                  {tab.icon ? <View style={styles.tabIcon}>{tab.icon}</View> : null}
+                  <Text
+                    style={[
+                      styles.tabLabel,
+                      {
+                        color: isActive ? activeColor : theme.colors.mutedForeground,
+                        fontWeight: isActive ? "700" : "500",
+                        fontSize: theme.typography.sm,
+                      },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {tab.label}
+                  </Text>
+                  {tab.badge !== undefined ? (
+                    <Text
+                      style={{
+                        color: isActive ? activeColor : theme.colors.mutedForeground,
+                        fontSize: 12,
+                        fontWeight: isActive ? "700" : "500",
+                      }}
+                    >
+                      {tab.badge}
+                    </Text>
+                  ) : null}
+                  {isActive ? (
+                    <View
+                      style={[styles.underlineIndicator, { backgroundColor: activeColor }]}
+                    />
+                  ) : (
+                    <View style={styles.underlineIndicatorPlaceholder} />
+                  )}
+                </Pressable>
+              );
+            }
+
             return (
               <Pressable
                 key={tab.id}
@@ -179,7 +259,7 @@ export function PageHeader({
 const styles = StyleSheet.create({
   container: {
     marginBottom: 16,
-    gap: 12,
+    gap: 14,
   },
   titleRow: {
     flexDirection: "row",
@@ -197,6 +277,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 14,
+    borderCurve: "continuous",
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
@@ -206,8 +287,8 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   titleText: {
-    fontWeight: "900",
-    letterSpacing: -0.5,
+    fontWeight: "800",
+    letterSpacing: -0.4,
   },
   subtitleText: {
     fontWeight: "600",
@@ -223,8 +304,44 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 4,
     borderRadius: 16,
+    borderCurve: "continuous",
     borderWidth: 1,
     gap: 4,
+  },
+  underlineTabsRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 4,
+    paddingBottom: 2,
+  },
+  underlineTab: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 10,
+    minHeight: 44,
+    borderRadius: 12,
+    borderCurve: "continuous",
+    gap: 6,
+    position: "relative",
+  },
+  underlineIndicator: {
+    position: "absolute",
+    left: 12,
+    right: 12,
+    bottom: 2,
+    height: 2.5,
+    borderRadius: 2,
+  },
+  underlineIndicatorPlaceholder: {
+    position: "absolute",
+    left: 12,
+    right: 12,
+    bottom: 2,
+    height: 2.5,
+    opacity: 0,
   },
   tabItem: {
     flexDirection: "row",
@@ -241,7 +358,7 @@ const styles = StyleSheet.create({
     marginRight: 2,
   },
   tabLabel: {
-    letterSpacing: 0.2,
+    letterSpacing: 0.15,
   },
   tabBadge: {
     paddingHorizontal: 6,
