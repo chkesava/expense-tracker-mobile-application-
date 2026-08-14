@@ -47,6 +47,22 @@
         { "fieldPath": "createdBy", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "receivableRepayments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "receivableId", "order": "ASCENDING" },
+        { "fieldPath": "date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "receivables",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "lentDate", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

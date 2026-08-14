@@ -24,9 +24,11 @@ asserted by `lib/duressPath.contract.test.ts`. The shared `vaults`, `splits` and
 `paymentRequests` collections keep their member-based access.
 
 `firestore.indexes.json` declares the composite indexes for queries that filter
-and sort at the same time. The two this feature needs are
+and sort at the same time. Borrowings and Spending Spaces need
 `borrowingRepayments` by `borrowingId` + `date` and `expenses` by `spaceId` +
-`date`.
+`date`. Money Lent (receivables) adds `receivableRepayments` by `receivableId` +
+`date` and `receivables` by `status` + `lentDate` — deploy indexes manually
+after pulling that change; index builds are asynchronous (see below).
 
 ## Deploying
 
