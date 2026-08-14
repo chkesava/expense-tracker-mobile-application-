@@ -384,7 +384,7 @@ const styles = StyleSheet.create({
     borderCurve: "continuous",
   },
   activePill: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     borderRadius: 16,
     borderCurve: "continuous",
   },
