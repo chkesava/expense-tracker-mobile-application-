@@ -2,69 +2,55 @@ import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import {
-  Activity,
-  Calendar,
-  EyeOff,
-  Settings as SettingsIcon,
-} from "lucide-react-native";
+import { Activity, Bell, Search } from "lucide-react-native";
 
+import {
+  APP_BAR_CONTENT_HEIGHT,
+  APP_BAR_HORIZONTAL_PADDING,
+  APP_BAR_ICON_SIZE,
+  APP_BAR_TOUCH_SIZE,
+} from "@/components/layout/chrome";
 import { MonthDrawer } from "@/components/MonthDrawer";
 import { SideDrawer } from "@/components/SideDrawer";
+import { useSmsReviewInbox } from "@/hooks/useSmsReviewInbox";
+import { haptic } from "@/lib/haptics";
 import { useAuth } from "@/providers/AuthProvider";
-import { useModals } from "@/providers/ModalProvider";
-import { useSettings } from "@/providers/SettingsProvider";
-import { currentMonthKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
-import { haptic } from "@/lib/haptics";
-
-function formatMonthLabel(month: string) {
-  if (!month) return "This Month";
-  try {
-    const [year, m] = month.split("-");
-    const date = new Date(parseInt(year, 10), parseInt(m, 10) - 1, 1);
-    return date.toLocaleDateString("en-US", {
-      month: "short",
-      year: "numeric",
-    });
-  } catch {
-    return month;
-  }
-}
 
 export function Header() {
-  const router = useRouter();
+  const { push } = useRouter();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { setIsMonthDrawerOpen, globalMonth } = useModals();
-  const { settings, setGhostMode } = useSettings();
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
+  const { count: inboxCount } = useSmsReviewInbox();
+  const hasUnread = inboxCount > 0;
 
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
-  const selectedMonth = globalMonth || currentMonthKey(settings.timezone);
-
-  const handleToggleGhost = () => {
-    void haptic.selection();
-    setGhostMode(!settings.ghostMode);
-  };
-
-  const handleOpenMonthPicker = () => {
-    void haptic.navigation();
-    setIsMonthDrawerOpen(true);
-  };
-
-  const handleOpenSettings = () => {
-    void haptic.navigation();
-    router.push("/settings" as any);
-  };
-
   const handleLogoPress = () => {
     void haptic.navigation();
-    router.push("/dashboard" as any);
+    push("/dashboard" as never);
   };
+
+  const handleSearch = () => {
+    void haptic.navigation();
+    push("/ledger" as never);
+  };
+
+  const handleNotifications = () => {
+    void haptic.navigation();
+    push("/sms-inbox" as never);
+  };
+
+  const handleOpenProfile = () => {
+    void haptic.navigation();
+    setIsDrawerOpen(true);
+  };
+
+  const iconColor = theme.colors.foreground;
+  const ripple = isDark ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.08)";
 
   return (
     <>
@@ -72,191 +58,100 @@ export function Header() {
         style={[
           styles.container,
           {
-            paddingTop: insets.top + 6,
-            backgroundColor: isDark
-              ? "rgba(8, 10, 20, 0.92)"
-              : "rgba(247, 249, 252, 0.92)",
-            borderBottomColor: isDark
-              ? "rgba(107, 99, 255, 0.12)"
-              : theme.colors.border,
+            paddingTop: insets.top,
+            backgroundColor: isDark ? theme.colors.background : theme.colors.card,
+            borderBottomColor: theme.colors.outlineVariant,
           },
         ]}
       >
         <View style={styles.content}>
-          {/* Left: Brand & Status */}
-          <View style={styles.leftSection}>
-            <Pressable
-              onPress={handleLogoPress}
-              style={({ pressed }) => [
-                styles.logoButton,
-                pressed && { opacity: 0.7 },
+          <Pressable
+            onPress={handleLogoPress}
+            android_ripple={{ color: ripple, borderless: false }}
+            style={({ pressed }) => [styles.logoButton, pressed && styles.pressed]}
+            accessibilityRole="button"
+            accessibilityLabel="Go to dashboard"
+          >
+            <View
+              style={[
+                styles.logoIcon,
+                { backgroundColor: theme.colors.primary },
               ]}
-              accessibilityLabel="Go to dashboard"
             >
-              <View
-                style={[
-                  styles.logoIcon,
-                  {
-                    backgroundColor: isDark ? "#7C3AED" : theme.colors.primary,
-                    shadowColor: "#7C3AED",
-                  },
-                ]}
-              >
-                <Activity size={15} color="#FFFFFF" strokeWidth={2.6} />
-              </View>
-              <Text
-                style={[
-                  styles.logoText,
-                  {
-                    color: theme.colors.foreground,
-                    fontSize: theme.typography.lg,
-                  },
-                ]}
-              >
-                Vault
-              </Text>
-            </Pressable>
-
-            {/* Ghost / Online Mode Indicator */}
-            <Pressable
-              onPress={handleToggleGhost}
-              style={({ pressed }) => [
-                styles.statusBadge,
+              <Activity size={15} color={theme.colors.primaryForeground} strokeWidth={2.6} />
+            </View>
+            <Text
+              style={[
+                styles.logoText,
                 {
-                  backgroundColor: settings.ghostMode
-                    ? isDark
-                      ? "rgba(107, 99, 255, 0.18)"
-                      : "rgba(79, 70, 255, 0.1)"
-                    : isDark
-                      ? "rgba(52, 211, 153, 0.1)"
-                      : "rgba(37, 150, 90, 0.1)",
-                  borderColor: settings.ghostMode
-                    ? theme.colors.primary
-                    : theme.colors.success,
+                  color: theme.colors.foreground,
+                  fontFamily: theme.fontFamily.bold,
                 },
-                pressed && { opacity: 0.7 },
               ]}
-              accessibilityLabel={
-                settings.ghostMode ? "Disable ghost mode" : "Enable ghost mode"
-              }
             >
-              {settings.ghostMode ? (
-                <EyeOff size={10} color={theme.colors.primary} />
-              ) : (
-                <View
-                  style={[
-                    styles.onlineDot,
-                    { backgroundColor: theme.colors.success },
-                  ]}
-                />
-              )}
-              <Text
-                style={[
-                  styles.statusText,
-                  {
-                    color: settings.ghostMode
-                      ? theme.colors.primary
-                      : theme.colors.success,
-                  },
-                ]}
-              >
-                {settings.ghostMode ? "Ghost" : "Online"}
-              </Text>
-            </Pressable>
-          </View>
+              Vault
+            </Text>
+          </Pressable>
 
-          {/* Right: Month Selector, Settings gear, User Avatar */}
           <View style={styles.rightSection}>
             <Pressable
-              onPress={handleOpenMonthPicker}
-              android_ripple={{
-                color: theme.colors.primary + "18",
-                borderless: false,
-              }}
-              style={({ pressed }) => [
-                styles.monthPill,
-                {
-                  backgroundColor: isDark
-                    ? "rgba(107, 99, 255, 0.12)"
-                    : theme.colors.card,
-                  borderColor: isDark
-                    ? "rgba(107, 99, 255, 0.28)"
-                    : theme.colors.border,
-                },
-                pressed && { opacity: 0.8 },
-              ]}
-              accessibilityLabel="Choose month"
+              onPress={handleSearch}
+              android_ripple={{ color: ripple, borderless: true, radius: 24 }}
+              style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
+              accessibilityRole="button"
+              accessibilityLabel="Search transactions"
             >
-              <Calendar
-                size={13}
-                color={theme.colors.primary}
-                strokeWidth={2.2}
-              />
-              <Text
-                style={[
-                  styles.monthLabel,
-                  {
-                    color: theme.colors.foreground,
-                    fontSize: theme.typography.xs,
-                  },
-                ]}
-              >
-                {formatMonthLabel(selectedMonth)}
-              </Text>
-            </Pressable>
-
-            {/* Dedicated Settings — do not fold into profile menu */}
-            <Pressable
-              onPress={handleOpenSettings}
-              android_ripple={{
-                color: theme.colors.primary + "20",
-                borderless: true,
-                radius: 20,
-              }}
-              style={({ pressed }) => [
-                styles.iconButton,
-                {
-                  backgroundColor: isDark
-                    ? "rgba(255,255,255,0.06)"
-                    : theme.colors.card,
-                  borderColor: theme.colors.border,
-                },
-                pressed && { opacity: 0.8 },
-              ]}
-              accessibilityLabel="Open settings"
-            >
-              <SettingsIcon size={17} color={theme.colors.foreground} />
+              <Search size={APP_BAR_ICON_SIZE} color={iconColor} strokeWidth={2} />
             </Pressable>
 
             <Pressable
-              onPress={() => {
-                void haptic.navigation();
-                setIsDrawerOpen(true);
-              }}
+              onPress={handleNotifications}
+              android_ripple={{ color: ripple, borderless: true, radius: 24 }}
+              style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
+              accessibilityRole="button"
+              accessibilityLabel={
+                hasUnread
+                  ? `Notifications, ${inboxCount} unread`
+                  : "Notifications"
+              }
+            >
+              <Bell size={APP_BAR_ICON_SIZE} color={iconColor} strokeWidth={2} />
+              {hasUnread ? (
+                <View
+                  style={[
+                    styles.unreadDot,
+                    {
+                      backgroundColor: theme.colors.success,
+                      borderColor: isDark ? theme.colors.background : theme.colors.card,
+                    },
+                  ]}
+                />
+              ) : null}
+            </Pressable>
+
+            <Pressable
+              onPress={handleOpenProfile}
               android_ripple={{
                 color: "rgba(255,255,255,0.25)",
                 borderless: true,
-                radius: 20,
+                radius: 24,
               }}
               style={({ pressed }) => [
-                styles.avatarButton,
-                {
-                  backgroundColor: "#FBBF24",
-                  borderColor: isDark
-                    ? "rgba(251, 191, 36, 0.5)"
-                    : "rgba(251, 191, 36, 0.35)",
-                },
-                pressed && { opacity: 0.88 },
+                styles.avatarHit,
+                pressed && styles.pressed,
               ]}
-              accessibilityLabel="Open user menu"
+              accessibilityRole="button"
+              accessibilityLabel="Open profile and settings"
             >
-              <Text style={styles.avatarText}>
-                {(
-                  user?.displayName?.[0] ||
-                  user?.email?.[0] ||
-                  "U"
-                ).toUpperCase()}
-              </Text>
+              <View style={styles.avatarButton}>
+                <Text style={styles.avatarText}>
+                  {(
+                    user?.displayName?.[0] ||
+                    user?.email?.[0] ||
+                    "U"
+                  ).toUpperCase()}
+                </Text>
+              </View>
             </Pressable>
           </View>
         </View>
@@ -278,93 +173,71 @@ const styles = StyleSheet.create({
     right: 0,
     zIndex: 80,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    paddingBottom: 10,
+    elevation: 1,
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 2,
   },
   content: {
+    height: APP_BAR_CONTENT_HEIGHT,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
-  },
-  leftSection: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    flexShrink: 1,
-    minWidth: 0,
+    paddingHorizontal: APP_BAR_HORIZONTAL_PADDING,
   },
   logoButton: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+    minHeight: APP_BAR_TOUCH_SIZE,
+    paddingRight: 8,
+    borderRadius: 12,
   },
   logoIcon: {
-    width: 30,
-    height: 30,
-    borderRadius: 10,
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    borderCurve: "continuous",
     alignItems: "center",
     justifyContent: "center",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 8,
-    elevation: 4,
   },
   logoText: {
-    fontWeight: "900",
-    letterSpacing: -0.4,
-  },
-  statusBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    borderWidth: 1,
-    gap: 5,
-  },
-  onlineDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  statusText: {
-    fontSize: 10,
+    fontSize: 18,
     fontWeight: "700",
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
+    letterSpacing: -0.3,
   },
   rightSection: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 7,
-    flexShrink: 0,
-  },
-  monthPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 14,
-    borderWidth: 1,
-    gap: 5,
-  },
-  monthLabel: {
-    fontWeight: "700",
-    letterSpacing: 0.1,
   },
   iconButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    borderWidth: 1,
+    width: APP_BAR_TOUCH_SIZE,
+    height: APP_BAR_TOUCH_SIZE,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: APP_BAR_TOUCH_SIZE / 2,
+  },
+  unreadDot: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    borderWidth: 1.5,
+  },
+  avatarHit: {
+    width: APP_BAR_TOUCH_SIZE,
+    height: APP_BAR_TOUCH_SIZE,
     alignItems: "center",
     justifyContent: "center",
   },
   avatarButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    borderWidth: 1.5,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#FBBF24",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -372,5 +245,8 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "800",
     color: "#1C1917",
+  },
+  pressed: {
+    opacity: 0.72,
   },
 });

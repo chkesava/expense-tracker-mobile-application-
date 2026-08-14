@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isNavItemActive } from "./navigation";
+import { CORE_NAV_ITEMS, isNavItemActive } from "./navigation";
 
 describe("isNavItemActive", () => {
   it("matches home/dashboard paths", () => {
@@ -33,6 +33,13 @@ describe("isNavItemActive", () => {
   it("matches settings", () => {
     expect(isNavItemActive("/settings", "settings")).toBe(true);
     expect(isNavItemActive("/(app)/settings", "settings")).toBe(true);
+  });
+
+  it("keeps ledger as the internal route and shows Transactions", () => {
+    const ledger = CORE_NAV_ITEMS.find((item) => item.id === "ledger");
+    expect(ledger?.path).toBe("/ledger");
+    expect(ledger?.label).toBe("Transactions");
+    expect(ledger?.mobileLabel).toBe("Transactions");
   });
 
   it("matches admin", () => {

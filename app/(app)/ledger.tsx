@@ -157,78 +157,81 @@ export default function LedgerScreen() {
     });
   }, [incomes, activeMonth, query]);
 
+  const tabIconColor = (id: string) =>
+    ledgerTab === id ? theme.colors.success : theme.colors.mutedForeground;
+
   const allTabs: PageHeaderTab[] = [
     {
       id: "expenses",
       label: `Journal (${filteredExpenses.length})`,
-      icon: <History size={16} color={theme.colors.foreground} />,
+      icon: <History size={16} color={tabIconColor("expenses")} />,
     },
     {
       id: "accounts",
       label: `Accounts (${accounts.length})`,
-      icon: <Wallet size={16} color={theme.colors.foreground} />,
+      icon: <Wallet size={16} color={tabIconColor("accounts")} />,
     },
     {
       id: "cards",
       label: "Cards",
-      icon: <CreditCard size={16} color={theme.colors.foreground} />,
+      icon: <CreditCard size={16} color={tabIconColor("cards")} />,
     },
     {
       id: "ccBills",
       label: "CC Bills",
-      icon: <Calendar size={16} color={theme.colors.foreground} />,
+      icon: <Calendar size={16} color={tabIconColor("ccBills")} />,
     },
     {
       id: "borrowings",
       label: "Borrowings",
-      icon: <Landmark size={16} color={theme.colors.foreground} />,
+      icon: <Landmark size={16} color={tabIconColor("borrowings")} />,
     },
     {
       id: "receivables",
       label: "Receivables",
-      icon: <ArrowDownLeft size={16} color={theme.colors.foreground} />,
+      icon: <ArrowDownLeft size={16} color={tabIconColor("receivables")} />,
     },
     {
       id: "spaces",
       label: "Spaces",
-      icon: <LayoutGrid size={16} color={theme.colors.foreground} />,
+      icon: <LayoutGrid size={16} color={tabIconColor("spaces")} />,
     },
     {
       id: "splits",
       label: "Splits",
-      icon: <Users size={16} color={theme.colors.foreground} />,
+      icon: <Users size={16} color={tabIconColor("splits")} />,
     },
     {
       id: "subscriptions",
       label: "Subscriptions",
-      icon: <Repeat size={16} color={theme.colors.foreground} />,
+      icon: <Repeat size={16} color={tabIconColor("subscriptions")} />,
     },
     {
       id: "travel",
       label: "Travel",
-      icon: <Plane size={16} color={theme.colors.foreground} />,
+      icon: <Plane size={16} color={tabIconColor("travel")} />,
     },
     {
       id: "collect",
       label: "Collect",
-      icon: <HandCoins size={16} color={theme.colors.foreground} />,
+      icon: <HandCoins size={16} color={tabIconColor("collect")} />,
     },
     ...(investmentsEnabled
       ? [
           {
             id: "investments",
             label: "Investments",
-            icon: <TrendingUp size={16} color={theme.colors.foreground} />,
+            icon: <TrendingUp size={16} color={tabIconColor("investments")} />,
           },
           {
             id: "portfolio",
             label: "Stocks",
-            icon: <BarChart3 size={16} color={theme.colors.foreground} />,
+            icon: <BarChart3 size={16} color={tabIconColor("portfolio")} />,
           },
           {
             id: "sip",
             label: "Virtual SIPs",
-            icon: <Calendar size={16} color={theme.colors.foreground} />,
+            icon: <Calendar size={16} color={tabIconColor("sip")} />,
           },
         ]
       : []),
@@ -245,10 +248,11 @@ export default function LedgerScreen() {
       <PageHeader
         title="Ledger Hub"
         subtitle="Transactions & Accounts"
-        icon={<Wallet size={22} color={theme.colors.primary} />}
+        icon={<Wallet size={22} color={theme.colors.success} />}
         activeTab={ledgerTab}
         onTabChange={(tab) => setLedgerTab(tab as LedgerTab)}
         tabs={allTabs}
+        tabVariant="underline"
       />
 
       {/* Tab: Expenses (Journal) */}
