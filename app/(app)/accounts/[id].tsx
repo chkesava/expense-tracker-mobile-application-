@@ -28,6 +28,7 @@ import {
 import { AddAccountEntryModal } from "@/components/accounts/AddAccountEntryModal";
 import { EditAccountModal } from "@/components/accounts/EditAccountModal";
 import { PayCreditBillModal } from "@/components/accounts/PayCreditBillModal";
+import { CreateCreditCardBillModal } from "@/components/creditCardBills/CreateCreditCardBillModal";
 import { TransferFundsModal } from "@/components/accounts/TransferFundsModal";
 import { Amount } from "@/components/common/Amount";
 import { Card } from "@/components/ui/Card";
@@ -37,9 +38,11 @@ import { useAccounts } from "@/hooks/useAccounts";
 import { useAccountTransfers } from "@/hooks/useAccountTransfers";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
 import { useBorrowings } from "@/hooks/useBorrowings";
+import { useCreditCardBills } from "@/hooks/useCreditCardBills";
 import { useReceivables } from "@/hooks/useReceivables";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useIncomes } from "@/hooks/useIncomes";
+import { OPEN_BILL_STATUSES } from "@/shared/types/creditCardBill";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import type { AccountActivity } from "@/shared/types/expense";
 import {
@@ -69,6 +72,7 @@ export default function AccountDetailScreen() {
   const { payments } = useAccountPayments();
   const { transfers } = useAccountTransfers();
   const { borrowings, repayments: borrowingRepayments } = useBorrowings();
+  const { bills, applyPaymentToBill } = useCreditCardBills();
   const { receivables, repayments: receivableRepayments } = useReceivables();
 
   // Modals state
@@ -76,6 +80,7 @@ export default function AccountDetailScreen() {
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [isEntryModalOpen, setIsEntryModalOpen] = useState(false);
   const [isPayModalOpen, setIsPayModalOpen] = useState(false);
+  const [isCreateBillOpen, setIsCreateBillOpen] = useState(false);
   const [activityFilter, setActivityFilter] = useState<"all" | "debit" | "credit">("all");
 
   const account = useMemo(() => {
@@ -141,6 +146,18 @@ export default function AccountDetailScreen() {
     if (!account || !isCreditCard) return [];
     return getCreditBillHistory(account, expenses, payments, 4);
   }, [account, isCreditCard, expenses, payments]);
+
+  const openStatementBill = useMemo(() => {
+    if (!account || !isCreditCard) return null;
+    return (
+      bills
+        .filter(
+          (b) =>
+            b.accountId === account.id && OPEN_BILL_STATUSES.includes(b.status)
+        )
+        .sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0] || null
+    );
+  }, [account, isCreditCard, bills]);
 
   // Build full activities timeline
   const activities = useMemo(() => {
@@ -394,7 +411,13 @@ export default function AccountDetailScreen() {
             </View>
 
             <Pressable
-              onPress={() => setIsPayModalOpen(true)}
+              onPress={() => {
+                if (openStatementBill) {
+                  router.push(`/credit-card-bills/${openStatementBill.id}`);
+                  return;
+                }
+                setIsPayModalOpen(true);
+              }}
               style={[
                 styles.heroCtaBtn,
                 { backgroundColor: theme.colors.primary },
@@ -408,7 +431,7 @@ export default function AccountDetailScreen() {
                   fontSize: theme.typography.sm,
                 }}
               >
-                Record Bill Payment
+                {openStatementBill ? "Pay Bill" : "Record Bill Payment"}
               </Text>
             </Pressable>
           </Card>
@@ -543,6 +566,101 @@ export default function AccountDetailScreen() {
             </View>
           </Card>
         )}
+
+        {isCreditCard ? (
+          <Card>
+            <View style={{ gap: 10 }}>
+              <Text
+                style={{
+                  fontSize: theme.typography.xs,
+                  color: theme.colors.mutedForeground,
+                  fontWeight: "700",
+                  textTransform: "uppercase",
+                }}
+              >
+                Statement Bill
+              </Text>
+              {openStatementBill ? (
+                <>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      justifyContent: "space-between",
+                    }}
+                  >
+                    <Text style={{ color: theme.colors.mutedForeground }}>
+                      Statement
+                    </Text>
+                    <Amount value={openStatementBill.statementAmount} ghostable />
+                  </View>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      justifyContent: "space-between",
+                    }}
+                  >
+                    <Text style={{ color: theme.colors.mutedForeground }}>
+                      Minimum Due
+                    </Text>
+                    <Amount
+                      value={openStatementBill.minimumDueAmount}
+                      ghostable
+                    />
+                  </View>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      justifyContent: "space-between",
+                    }}
+                  >
+                    <Text style={{ color: theme.colors.mutedForeground }}>
+                      Due
+                    </Text>
+                    <Text
+                      style={{
+                        color: theme.colors.foreground,
+                        fontWeight: "600",
+                      }}
+                    >
+                      {openStatementBill.dueDate}
+                    </Text>
+                  </View>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      justifyContent: "space-between",
+                    }}
+                  >
+                    <Text style={{ color: theme.colors.mutedForeground }}>
+                      Status
+                    </Text>
+                    <Text
+                      style={{
+                        color: theme.colors.primary,
+                        fontWeight: "700",
+                      }}
+                    >
+                      {openStatementBill.status.replaceAll("_", " ")}
+                    </Text>
+                  </View>
+                </>
+              ) : (
+                <Pressable
+                  onPress={() => {
+                    Haptics.selectionAsync().catch(() => undefined);
+                    setIsCreateBillOpen(true);
+                  }}
+                >
+                  <Text
+                    style={{ color: theme.colors.primary, fontWeight: "600" }}
+                  >
+                    + Add statement bill for reminders
+                  </Text>
+                </Pressable>
+              )}
+            </View>
+          </Card>
+        ) : null}
 
         {/* Past Billing Cycles (for Credit Cards) */}
         {isCreditCard && creditBillHistory.length > 0 ? (
@@ -806,6 +924,20 @@ export default function AccountDetailScreen() {
         defaultCreditCardId={account.id}
         accounts={accounts}
         accountTypes={accountTypes}
+        defaultAmount={openStatementBill?.remainingAmount}
+        onPaid={async (amount, paymentDate) => {
+          if (openStatementBill) {
+            await applyPaymentToBill(openStatementBill.id, amount, paymentDate);
+          }
+        }}
+      />
+
+      <CreateCreditCardBillModal
+        isOpen={isCreateBillOpen}
+        onClose={() => setIsCreateBillOpen(false)}
+        accounts={accounts}
+        accountTypes={accountTypes}
+        defaultAccountId={account.id}
       />
     </View>
   );
