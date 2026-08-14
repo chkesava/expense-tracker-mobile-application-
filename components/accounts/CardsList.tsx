@@ -18,7 +18,9 @@ import {
 } from "lucide-react-native";
 
 import { EditAccountModal } from "@/components/accounts/EditAccountModal";
+import { CreateCreditCardBillModal } from "@/components/creditCardBills/CreateCreditCardBillModal";
 import { PayCreditBillModal } from "@/components/accounts/PayCreditBillModal";
+import { SmsMatchingUnconfiguredText } from "@/components/accounts/SmsMatchingUnconfiguredText";
 import { Amount } from "@/components/common/Amount";
 import { EmptyState } from "@/components/common/EmptyState";
 import { Button } from "@/components/ui/Button";
@@ -26,11 +28,14 @@ import { Card } from "@/components/ui/Card";
 import { useAccountPayments } from "@/hooks/useAccountPayments";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
+import { useCreditCardBills } from "@/hooks/useCreditCardBills";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
+import { OPEN_BILL_STATUSES } from "@/shared/types/creditCardBill";
 import type { Account } from "@/shared/types/expense";
 import { computeCreditUsage } from "@/shared/utils/accountBalance";
 import { getAccountKind } from "@/shared/utils/accountKind";
+import { formatAccountIdentityLine } from "@/shared/utils/accountIdentity";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
@@ -44,11 +49,24 @@ export function CardsList() {
   const { accountTypes } = useAccountTypes();
   const { expenses } = useExpenses();
   const { payments } = useAccountPayments();
+  const { bills } = useCreditCardBills();
 
   const [editingCard, setEditingCard] = useState<Account | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isPayModalOpen, setIsPayModalOpen] = useState(false);
+  const [isCreateBillOpen, setIsCreateBillOpen] = useState(false);
   const [selectedPayCardId, setSelectedPayCardId] = useState<string | undefined>();
+  const [createBillAccountId, setCreateBillAccountId] = useState<string | undefined>();
+
+  const openBillByAccount = useMemo(() => {
+    const map = new Map<string, (typeof bills)[number]>();
+    for (const bill of bills) {
+      if (!OPEN_BILL_STATUSES.includes(bill.status)) continue;
+      const prev = map.get(bill.accountId);
+      if (!prev || bill.dueDate < prev.dueDate) map.set(bill.accountId, bill);
+    }
+    return map;
+  }, [bills]);
 
   const typeMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -373,8 +391,12 @@ export function CardsList() {
                         }}
                         numberOfLines={1}
                       >
-                        {card.accountNumber || "Credit Card"}
+                        {formatAccountIdentityLine(card, "Credit Card")}
                       </Text>
+                      <SmsMatchingUnconfiguredText
+                        account={card}
+                        typeName="Credit Card"
+                      />
                     </View>
                   </View>
 
@@ -478,6 +500,81 @@ export function CardsList() {
                   />
                 </View>
 
+                {/* Open statement bill summary */}
+                {openBillByAccount.get(card.id) ? (
+                  <View
+                    style={{
+                      marginTop: 10,
+                      gap: 4,
+                      paddingTop: 10,
+                      borderTopWidth: StyleSheet.hairlineWidth,
+                      borderTopColor: theme.colors.border,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontSize: theme.typography.xs,
+                        color: theme.colors.mutedForeground,
+                        fontWeight: "700",
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      Statement · {openBillByAccount.get(card.id)!.status.replaceAll("_", " ")}
+                    </Text>
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        justifyContent: "space-between",
+                      }}
+                    >
+                      <Amount
+                        value={openBillByAccount.get(card.id)!.statementAmount}
+                        currency={system.defaultCurrency}
+                        ghostable
+                      />
+                      <Text
+                        style={{
+                          color: theme.colors.mutedForeground,
+                          fontSize: theme.typography.sm,
+                        }}
+                      >
+                        Due {openBillByAccount.get(card.id)!.dueDate}
+                      </Text>
+                    </View>
+                    <Text
+                      style={{
+                        color: theme.colors.mutedForeground,
+                        fontSize: theme.typography.xs,
+                      }}
+                    >
+                      Min due{" "}
+                      {system.defaultCurrency}{" "}
+                      {openBillByAccount
+                        .get(card.id)!
+                        .minimumDueAmount.toLocaleString()}
+                    </Text>
+                  </View>
+                ) : (
+                  <Pressable
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      setCreateBillAccountId(card.id);
+                      setIsCreateBillOpen(true);
+                    }}
+                    style={{ marginTop: 8 }}
+                  >
+                    <Text
+                      style={{
+                        color: theme.colors.primary,
+                        fontSize: theme.typography.xs,
+                        fontWeight: "600",
+                      }}
+                    >
+                      + Add statement bill
+                    </Text>
+                  </Pressable>
+                )}
+
                 {/* Bottom CTA Row */}
                 <View style={styles.cardFooter}>
                   <Text
@@ -492,6 +589,11 @@ export function CardsList() {
                   <Pressable
                     onPress={(e) => {
                       e.stopPropagation();
+                      const openBill = openBillByAccount.get(card.id);
+                      if (openBill) {
+                        router.push(`/credit-card-bills/${openBill.id}`);
+                        return;
+                      }
                       handleOpenPayBill(card.id);
                     }}
                     style={[
@@ -535,6 +637,14 @@ export function CardsList() {
         defaultCreditCardId={selectedPayCardId}
         accounts={accounts}
         accountTypes={accountTypes}
+      />
+
+      <CreateCreditCardBillModal
+        isOpen={isCreateBillOpen}
+        onClose={() => setIsCreateBillOpen(false)}
+        accounts={accounts}
+        accountTypes={accountTypes}
+        defaultAccountId={createBillAccountId}
       />
     </ScrollView>
   );

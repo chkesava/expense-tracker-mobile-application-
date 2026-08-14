@@ -2,34 +2,42 @@ import type { EventSubscription } from "expo-modules-core";
 
 import SmsReader from "@/modules/sms-reader";
 import type { RawSmsMessage } from "@/shared/types/smsTransaction";
+import { toSmsLocalMetadata } from "./smsLocalMetadata";
 import type { SmsInboundListener } from "./smsListener";
 
-function toRaw(row: {
-  id: string;
-  address: string;
-  body: string;
-  receivedAtMs: number;
-  read?: boolean;
-}): RawSmsMessage {
+function toRaw(row: Parameters<typeof toSmsLocalMetadata>[0] & { read?: boolean }): RawSmsMessage {
+  const meta = toSmsLocalMetadata(row);
   return {
-    id: String(row.id),
-    address: row.address ?? "",
-    body: row.body ?? "",
-    receivedAtMs: Number(row.receivedAtMs) || Date.now(),
+    id: meta.smsId,
+    address: meta.sender,
+    body: meta.body,
+    receivedAtMs: meta.timestamp,
     read: Boolean(row.read),
   };
 }
 
 export async function startSmsListening(): Promise<boolean> {
-  return SmsReader.startListening();
+  try {
+    return await SmsReader.startListening();
+  } catch {
+    return false;
+  }
 }
 
 export async function stopSmsListening(): Promise<boolean> {
-  return SmsReader.stopListening();
+  try {
+    return await SmsReader.stopListening();
+  } catch {
+    return false;
+  }
 }
 
 export async function isSmsListening(): Promise<boolean> {
-  return SmsReader.isListening();
+  try {
+    return await SmsReader.isListening();
+  } catch {
+    return false;
+  }
 }
 
 /**

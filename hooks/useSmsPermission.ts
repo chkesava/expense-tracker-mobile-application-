@@ -11,15 +11,18 @@ import {
   SMS_AUTOMATION_PREFS_DEFAULTS,
 } from "@/services/sms/smsAutomationPrefs";
 import {
-  checkSmsPermission,
+  checkSmsPermissionDetails,
+  emptySmsPermissionDetails,
   openSmsPermissionSettings,
   requestSmsPermission,
+  type SmsPermissionDetails,
   type SmsPermissionStatus,
 } from "@/services/sms/smsPermissions";
 
 export type UseSmsPermissionResult = {
   supported: boolean;
   permissionStatus: SmsPermissionStatus;
+  permissionDetails: SmsPermissionDetails;
   permissionLoading: boolean;
   prefs: SmsAutomationPrefs;
   prefsLoading: boolean;
@@ -32,8 +35,10 @@ export type UseSmsPermissionResult = {
 
 export function useSmsPermission(): UseSmsPermissionResult {
   const supported = Platform.OS === "android";
-  const [permissionStatus, setPermissionStatus] =
-    useState<SmsPermissionStatus>(supported ? "denied" : "unavailable");
+  const [permissionDetails, setPermissionDetails] = useState<SmsPermissionDetails>(
+    emptySmsPermissionDetails(supported ? "denied" : "unavailable")
+  );
+  const permissionStatus = permissionDetails.status;
   const [permissionLoading, setPermissionLoading] = useState(supported);
   const [prefs, setPrefs] = useState<SmsAutomationPrefs>(
     SMS_AUTOMATION_PREFS_DEFAULTS
@@ -42,15 +47,15 @@ export function useSmsPermission(): UseSmsPermissionResult {
 
   const refreshPermission = useCallback(async () => {
     if (!supported) {
-      setPermissionStatus("unavailable");
+      setPermissionDetails(emptySmsPermissionDetails("unavailable"));
       setPermissionLoading(false);
       return "unavailable" as const;
     }
     setPermissionLoading(true);
     try {
-      const status = await checkSmsPermission();
-      setPermissionStatus(status);
-      return status;
+      const details = await checkSmsPermissionDetails();
+      setPermissionDetails(details);
+      return details.status;
     } finally {
       setPermissionLoading(false);
     }
@@ -61,7 +66,11 @@ export function useSmsPermission(): UseSmsPermissionResult {
     setPermissionLoading(true);
     try {
       const status = await requestSmsPermission();
-      setPermissionStatus(status);
+      const details = await checkSmsPermissionDetails();
+      setPermissionDetails({
+        ...details,
+        status: status === "blocked" ? "blocked" : details.status,
+      });
       return status;
     } finally {
       setPermissionLoading(false);
@@ -90,10 +99,17 @@ export function useSmsPermission(): UseSmsPermissionResult {
         return "unavailable" as const;
       }
 
-      let status = await checkSmsPermission();
+      let details = await checkSmsPermissionDetails();
+      let status = details.status;
       if (status !== "granted") {
         status = await requestSmsPermission();
-        setPermissionStatus(status);
+        details = await checkSmsPermissionDetails();
+        setPermissionDetails({
+          ...details,
+          status: status === "blocked" ? "blocked" : details.status,
+        });
+      } else {
+        setPermissionDetails(details);
       }
 
       if (status === "granted") {
@@ -152,6 +168,7 @@ export function useSmsPermission(): UseSmsPermissionResult {
   return {
     supported,
     permissionStatus,
+    permissionDetails,
     permissionLoading,
     prefs,
     prefsLoading,

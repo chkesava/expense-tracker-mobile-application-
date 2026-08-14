@@ -59,6 +59,9 @@ type SettingsContextType = {
   setDateFormat: (val: DateFormatOption) => void;
   setNumberFormat: (val: NumberFormatOption) => void;
   setFirstDayOfWeek: (val: FirstDayOfWeekOption) => void;
+  setCreditCardBillReminders: (
+    val: Partial<UserSettings["creditCardBillReminders"]>
+  ) => void;
 };
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
@@ -146,6 +149,16 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       setDateFormat: (val) => void updateSettings({ dateFormat: val }),
       setNumberFormat: (val) => void updateSettings({ numberFormat: val }),
       setFirstDayOfWeek: (val) => void updateSettings({ firstDayOfWeek: val }),
+      setCreditCardBillReminders: (val) => {
+        void updateSettings({
+          creditCardBillReminders: {
+            ...settings.creditCardBillReminders,
+            ...val,
+            daysBefore:
+              val.daysBefore ?? settings.creditCardBillReminders.daysBefore,
+          },
+        });
+      },
     }),
     [settings, loading, updateSettings]
   );

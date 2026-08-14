@@ -25,6 +25,10 @@ export interface PayCreditBillModalProps {
   defaultCreditCardId?: string;
   accounts: Account[];
   accountTypes: AccountType[];
+  /** Prefill amount (e.g. bill remaining). */
+  defaultAmount?: number;
+  /** Called after a successful AccountPayment write. */
+  onPaid?: (amount: number, paymentDate: string) => void | Promise<void>;
 }
 
 export function PayCreditBillModal({
@@ -33,6 +37,8 @@ export function PayCreditBillModal({
   defaultCreditCardId,
   accounts,
   accountTypes,
+  defaultAmount,
+  onPaid,
 }: PayCreditBillModalProps) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
@@ -81,6 +87,13 @@ export function PayCreditBillModal({
       setToCardId(creditCards[0].id);
     }
   }, [defaultCreditCardId, creditCards, toCardId]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (defaultAmount != null && defaultAmount > 0) {
+      setAmount(String(defaultAmount));
+    }
+  }, [isOpen, defaultAmount]);
 
   // Selected card usage
   const selectedCard = useMemo(() => {
@@ -138,6 +151,9 @@ export function PayCreditBillModal({
       }
 
       if (ok) {
+        if (onPaid) {
+          await onPaid(parsedAmount, date.trim());
+        }
         toast.success("Bill payment recorded");
         setAmount("");
         onClose();

@@ -18,6 +18,8 @@ export type SmsSkipReason =
   | "promotional"
   | "transfer"
   | "non_financial"
+  | "unknown"
+  | "credit_card_payment"
   | "low_confidence"
   | "duplicate"
   | "unsupported_platform"
@@ -28,25 +30,30 @@ export type SmsSkipReason =
 
 /** Platform message as returned by the native SMS reader (never uploaded). */
 export interface RawSmsMessage {
-  /** Android SMS `_id` (stringified). */
+  /** Android SMS `_id` (stringified). Same as smsId. */
   id: string;
   address: string;
   body: string;
-  /** Epoch ms when the SMS was received. */
+  /** Epoch ms when the SMS was received. Same as timestamp. */
   receivedAtMs: number;
   read?: boolean;
 }
 
 /**
  * Phase 4 detection classes for an inbound SMS.
- * Only expense/income become write candidates later.
+ * Only expense / income / refund / ATM withdrawal become write candidates.
+ * `unknown` is never treated as an expense.
  */
 export type SmsDetectionKind =
   | "expense"
   | "income"
+  | "refund"
   | "transfer"
+  | "atm_withdrawal"
+  | "credit_card_payment"
   | "otp"
   | "promotional"
+  | "unknown"
   | "non_financial";
 
 /** @deprecated Prefer SmsDetectionKind — kept as an alias for parsed drafts. */
@@ -72,6 +79,8 @@ export interface SmsParsedTransaction {
   bank?: string;
   /** UPI | IMPS | NEFT | RTGS | CARD | ATM | NETBANKING */
   paymentMethod?: string;
+  /** SMS sender / DLT header (local only — never uploaded). */
+  sender?: string;
   /** Masked account last 4 digits when present */
   accountLast4?: string;
   note?: string;

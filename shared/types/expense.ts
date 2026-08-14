@@ -63,15 +63,50 @@ export interface AccountType {
   createdAt?: unknown;
 }
 
+/** Issuer / provider kind — stored separately from the user-facing label. */
+export type InstitutionType =
+  | "bank"
+  | "nbfc"
+  | "wallet"
+  | "card_issuer"
+  | "other";
+
+/**
+ * Canonical product type for matching. Does not replace `typeId`, which remains
+ * the Firestore link to `users/{uid}/accountTypes`.
+ */
+export type CanonicalAccountTypeId =
+  | "bank"
+  | "credit_card"
+  | "cash"
+  | "wallet"
+  | "other";
+
 export interface Account {
   id: string;
+  /** Legacy display label. Prefer `displayName` for new writes; keep in sync. */
   name: string;
+  /** Firestore id of `users/{uid}/accountTypes/{id}`. */
   typeId: string;
+  /** User-facing label only. SMS matching must not rely on this alone. */
+  displayName?: string;
+  /** Stable institution slug, e.g. `super_money`. */
+  institutionId?: string;
+  /** Institution display name, e.g. `Super Money`. */
+  institutionName?: string;
+  institutionType?: InstitutionType;
+  /** Canonical product type derived from the linked account type. */
+  accountTypeId?: CanonicalAccountTypeId;
+  /** Last 4 digits of the account or card. */
+  last4?: string;
+  /** When false, SMS automation must ignore this account. */
+  smsMatchingEnabled?: boolean;
   billGenerationDay?: number;
   creditLimit?: number;
   openingBalance?: number;
   balanceInitialized?: boolean;
   balanceAsOfDate?: string;
+  /** Legacy mask / last4 storage. Prefer `last4` for matching. */
   accountNumber?: string;
   color?: string;
   currency?: string;

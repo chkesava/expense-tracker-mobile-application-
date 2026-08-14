@@ -46,7 +46,10 @@ export function buildSmsDedupeKeys(
   if (
     parsed?.amount != null &&
     parsed.date &&
-    (parsed.kind === "expense" || parsed.kind === "income") &&
+    (parsed.kind === "expense" ||
+      parsed.kind === "income" ||
+      parsed.kind === "refund" ||
+      parsed.kind === "atm_withdrawal") &&
     (parsed.merchant || parsed.accountLast4)
   ) {
     const merchant = (parsed.merchant || "").trim().toLowerCase();

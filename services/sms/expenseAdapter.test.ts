@@ -57,6 +57,46 @@ describe("processRawSmsMessages", () => {
     expect(result.writeReady[0]?.write.collection).toBe("expenses");
   });
 
+  it("attaches an exact accountId only when the resolver auto-matches", () => {
+    const result = processRawSmsMessages(
+      [
+        {
+          id: "sm-1",
+          address: "VM-SUPER",
+          body: "INR 899 spent on Super Card ending 4521",
+          receivedAtMs: Date.parse("2026-08-10T10:00:00+05:30"),
+        },
+      ],
+      {
+        accounts: [
+          {
+            id: "acc-super-cc",
+            name: "Super Money Credit Card",
+            typeId: "type-cc",
+            displayName: "Super Money Credit Card",
+            institutionId: "super_money",
+            accountTypeId: "credit_card",
+            last4: "4521",
+            smsMatchingEnabled: true,
+          },
+        ],
+      }
+    );
+    expect(result.writeReady[0]?.write.payload.accountId).toBe("acc-super-cc");
+  });
+
+  it("leaves accountId null when no user account is an exact match", () => {
+    const result = processRawSmsMessages([
+      {
+        id: "1",
+        address: "VK-HDFCBK",
+        body: "Your account has been debited ₹500",
+        receivedAtMs: Date.parse("2026-08-10T10:00:00+05:30"),
+      },
+    ]);
+    expect(result.writeReady[0]?.write.payload.accountId).toBeNull();
+  });
+
   it("skips OTP messages", () => {
     const result = processRawSmsMessages([
       {

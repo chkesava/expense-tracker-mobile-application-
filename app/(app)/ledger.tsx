@@ -26,6 +26,7 @@ import {
 
 import { AccountsList } from "@/components/accounts/AccountsList";
 import { CardsList } from "@/components/accounts/CardsList";
+import { CreditCardBillsList } from "@/components/creditCardBills/CreditCardBillsList";
 import { BorrowingsList } from "@/components/borrowings/BorrowingsList";
 import { ReceivablesList } from "@/components/receivables/ReceivablesList";
 import { CollectList } from "@/components/collect/CollectList";
@@ -174,6 +175,11 @@ export default function LedgerScreen() {
       id: "cards",
       label: "Cards",
       icon: <CreditCard size={16} color={tabIconColor("cards")} />,
+    },
+    {
+      id: "ccBills",
+      label: "CC Bills",
+      icon: <Calendar size={16} color={tabIconColor("ccBills")} />,
     },
     {
       id: "borrowings",
@@ -417,6 +423,9 @@ export default function LedgerScreen() {
 
       {/* Tab: Cards */}
       {ledgerTab === "cards" && <CardsList />}
+
+      {/* Tab: Credit Card Bills */}
+      {ledgerTab === "ccBills" && <CreditCardBillsList />}
 
       {/* Tab: Borrowings */}
       {ledgerTab === "borrowings" && <BorrowingsList />}

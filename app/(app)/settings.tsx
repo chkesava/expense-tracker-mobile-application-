@@ -19,6 +19,8 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { PersonalizationPreviewCard } from "@/components/settings/PersonalizationPreviewCard";
+import { CreditCardBillReminderSettings } from "@/components/settings/CreditCardBillReminderSettings";
+import { SmsAutomationSettings } from "@/components/settings/SmsAutomationSettings";
 import {
   fetchLatestRelease,
   getInstalledVersionCode,
@@ -60,7 +62,6 @@ import {
   AccountTypesManager,
   AccountsManager,
 } from "@/components/settings/SettingsSubmenus";
-import { SmsAutomationSettings } from "@/components/settings/SmsAutomationSettings";
 import { useCelebration } from "@/providers/CelebrationProvider";
 import { useSetupProgress } from "@/providers/SetupProgressProvider";
 
@@ -650,6 +651,19 @@ export default function SettingsScreen() {
       <AccountsManager />
 
       <SmsAutomationSettings />
+
+      <View style={{ gap: theme.space.sm }}>
+        <Text
+          style={{
+            color: theme.colors.foreground,
+            fontWeight: "700",
+            fontSize: theme.typography.md,
+          }}
+        >
+          Notifications
+        </Text>
+        <CreditCardBillReminderSettings />
+      </View>
 
       <Card title="Privacy" subtitle="PIN, duress, lock, biometrics">
         <View style={{ gap: theme.space.md }}>

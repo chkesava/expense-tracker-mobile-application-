@@ -1,6 +1,6 @@
 /**
- * Phase 4 — SMS transaction detection.
- * Classifies messages as expense / income / transfer / otp / promotional / non_financial.
+ * SMS transaction detection.
+ * Structured keyword rules first. `unknown` is never an expense.
  * Pure JS — no Firebase.
  */
 
@@ -42,6 +42,27 @@ const PROMO_PATTERNS: RegExp[] = [
   /\bwin\s+(?:a|an|the)?\s*(?:prize|voucher|gift)/i,
 ];
 
+const CREDIT_CARD_PAYMENT_PATTERNS: RegExp[] = [
+  /\bcredit\s+card\s+(?:bill\s+)?payment\b/i,
+  /\b(?:cc|card)\s+bill\s+(?:paid|payment|received)\b/i,
+  /\bpayment\s+(?:of\s+.{0,24})?(?:received\s+)?towards\s+your\s+(?:\w+\s+)?credit\s+card\b/i,
+  /\bthank\s+you\s+for\s+(?:your\s+)?(?:card\s+)?payment\b/i,
+  /\bpaid\s+to\s+your\s+credit\s+card\b/i,
+];
+
+const ATM_PATTERNS: RegExp[] = [
+  /\batm\s+wdr\b/i,
+  /\batm\s+(?:cash\s+)?(?:withdrawal|withdrawn|wdr)\b/i,
+  /\bwithdrawn\b.*\batm\b/i,
+  /\batm\b.*\b(?:withdrawn|withdrawal|wdr)\b/i,
+];
+
+const REFUND_PATTERNS: RegExp[] = [
+  /\brefund(?:ed|s)?\b/i,
+  /\breversed\b/i,
+  /\breversal\b/i,
+];
+
 const TRANSFER_PATTERNS: RegExp[] = [
   /\bfund\s+transfer\b/i,
   /\b(?:has\s+been\s+)?transferred\s+(?:to|from)\b/i,
@@ -56,13 +77,13 @@ const EXPENSE_PATTERNS: RegExp[] = [
   /\b(?:has\s+been\s+)?debited\b/i,
   /\bspent\b/i,
   /\bwithdrawn\b/i,
+  /\bdeducted\b/i,
   /\bpurchase(?:d)?\b/i,
-  /\bpaid\s+(?:to|at|for)\b/i,
+  /\bpaid\b/i,
   /\bpayment\s+(?:of|for|to)\b/i,
   /\bsent\s+(?:rs\.?|inr|₹|money)?/i,
   /\bdr\.?\s*(?:amt|amount)?\b/i,
   /\bpos\s+(?:txn|transaction|purchase)\b/i,
-  /\batm\s+wdr\b/i,
 ];
 
 const INCOME_PATTERNS: RegExp[] = [
@@ -70,11 +91,13 @@ const INCOME_PATTERNS: RegExp[] = [
   /\bdeposited\b/i,
   /\breceived\b/i,
   /\bsalary\b/i,
-  /\brefund(?:ed)?\b/i,
   /\bcashback\b/i,
   /\bcr\.?\s*(?:amt|amount)?\b/i,
   /\binward\s+(?:neft|imps|rtgs|upi)\b/i,
 ];
+
+const STRONG_MONEY_MOVE =
+  /\b(?:debited|credited|withdrawn|deposited|spent|purchase|paid|received|deducted|refunded|reversed)\b/i;
 
 function hasMoneySignal(body: string, amount?: number): boolean {
   if (amount != null) return true;
@@ -87,7 +110,8 @@ function firstMatchLabel(body: string, patterns: RegExp[], label: string): strin
 
 /**
  * Classify an SMS body (+ optional sender) into a detection kind.
- * Priority: OTP → promotional → transfer → expense/income → non_financial.
+ * Priority: OTP → promotional → card payment → ATM → refund → transfer
+ * → expense/income → unknown (money, no direction) → non_financial.
  */
 export function detectSmsTransaction(
   message: Pick<RawSmsMessage, "body" | "address">
@@ -100,7 +124,6 @@ export function detectSmsTransaction(
   const amount = extractAmount(body);
   const reasons: string[] = [];
 
-  // 1) OTP — even if amount-like digits appear
   const otpHit = firstMatchLabel(body, OTP_PATTERNS, "otp_keyword");
   const looksLikeOtpCode =
     /\botp\b/i.test(body) ||
@@ -111,17 +134,50 @@ export function detectSmsTransaction(
     return { kind: "otp", confidence: 0.92, reasons, amount };
   }
 
-  // 2) Promotional — exclude when clear debit/credit money movement
   const promoHit = firstMatchLabel(body, PROMO_PATTERNS, "promo_keyword");
-  const strongMoneyMove =
-    /\b(?:debited|credited|withdrawn|deposited|spent|purchase)\b/i.test(body) &&
-    hasMoneySignal(body, amount);
+  const strongMoneyMove = STRONG_MONEY_MOVE.test(body) && hasMoneySignal(body, amount);
   if (promoHit && !strongMoneyMove) {
     reasons.push(promoHit);
     return { kind: "promotional", confidence: 0.85, reasons, amount };
   }
 
-  // 3) Transfer
+  const ccPayHit = firstMatchLabel(
+    body,
+    CREDIT_CARD_PAYMENT_PATTERNS,
+    "credit_card_payment"
+  );
+  if (ccPayHit && hasMoneySignal(body, amount)) {
+    reasons.push(ccPayHit);
+    return {
+      kind: "credit_card_payment",
+      confidence: amount != null ? 0.9 : 0.8,
+      reasons,
+      amount,
+    };
+  }
+
+  const atmHit = firstMatchLabel(body, ATM_PATTERNS, "atm_withdrawal");
+  if (atmHit) {
+    reasons.push(atmHit);
+    return {
+      kind: "atm_withdrawal",
+      confidence: amount != null ? 0.9 : 0.8,
+      reasons,
+      amount,
+    };
+  }
+
+  const refundHit = firstMatchLabel(body, REFUND_PATTERNS, "refund_keyword");
+  if (refundHit) {
+    reasons.push(refundHit);
+    return {
+      kind: "refund",
+      confidence: amount != null ? 0.9 : 0.8,
+      reasons,
+      amount,
+    };
+  }
+
   const transferHit = firstMatchLabel(body, TRANSFER_PATTERNS, "transfer_keyword");
   if (transferHit) {
     reasons.push(transferHit);
@@ -136,7 +192,6 @@ export function detectSmsTransaction(
   const expenseHit = firstMatchLabel(body, EXPENSE_PATTERNS, "expense_keyword");
   const incomeHit = firstMatchLabel(body, INCOME_PATTERNS, "income_keyword");
 
-  // 4) Prefer explicit debit/credit wording
   if (expenseHit && !incomeHit) {
     reasons.push(expenseHit);
     return {
@@ -148,8 +203,11 @@ export function detectSmsTransaction(
   }
   if (incomeHit && !expenseHit) {
     reasons.push(incomeHit);
-    // "credit card" alone is not income
-    if (/\bcredit\s+card\b/i.test(body) && !/\bcredited\b/i.test(body) && !/\breceived\b/i.test(body)) {
+    if (
+      /\bcredit\s+card\b/i.test(body) &&
+      !/\bcredited\b/i.test(body) &&
+      !/\breceived\b/i.test(body)
+    ) {
       reasons.push("credit_card_guard");
       return { kind: "non_financial", confidence: 0.55, reasons, amount };
     }
@@ -161,9 +219,13 @@ export function detectSmsTransaction(
     };
   }
 
-  // Both expense + income keywords (e.g. "debited ... credited to merchant")
   if (expenseHit && incomeHit) {
-    if (/\bdebited\b/i.test(body) || /\bspent\b/i.test(body) || /\bpaid\b/i.test(body)) {
+    if (
+      /\bdebited\b/i.test(body) ||
+      /\bspent\b/i.test(body) ||
+      /\bpaid\b/i.test(body) ||
+      /\bdeducted\b/i.test(body)
+    ) {
       reasons.push("expense_over_income");
       return {
         kind: "expense",
@@ -181,7 +243,6 @@ export function detectSmsTransaction(
     };
   }
 
-  // Money with UPI send/receive without clear verb
   if (hasMoneySignal(body, amount) && /\bupi\b/i.test(body)) {
     if (/\b(?:to|paid)\b/i.test(body)) {
       reasons.push("upi_outgoing");
@@ -195,7 +256,7 @@ export function detectSmsTransaction(
 
   if (hasMoneySignal(body, amount)) {
     reasons.push("money_without_clear_direction");
-    return { kind: "non_financial", confidence: 0.45, reasons, amount };
+    return { kind: "unknown", confidence: 0.45, reasons, amount };
   }
 
   reasons.push("no_financial_signal");
@@ -203,9 +264,25 @@ export function detectSmsTransaction(
 }
 
 export function isMoneyMovementKind(kind: SmsDetectionKind): boolean {
-  return kind === "expense" || kind === "income" || kind === "transfer";
+  return (
+    kind === "expense" ||
+    kind === "income" ||
+    kind === "refund" ||
+    kind === "transfer" ||
+    kind === "atm_withdrawal" ||
+    kind === "credit_card_payment"
+  );
 }
 
 export function isExpenseOrIncomeKind(kind: SmsDetectionKind): boolean {
-  return kind === "expense" || kind === "income";
+  return (
+    kind === "expense" ||
+    kind === "income" ||
+    kind === "refund" ||
+    kind === "atm_withdrawal"
+  );
+}
+
+export function isUnknownSmsKind(kind: SmsDetectionKind): boolean {
+  return kind === "unknown";
 }

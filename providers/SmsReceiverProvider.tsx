@@ -39,6 +39,7 @@ import {
   SMS_INBOUND_STATUS_DEFAULTS,
 } from "@/services/sms/smsInboundStatus";
 import { processIncomingSmsMessages } from "@/services/sms/smsTransactionProcessor";
+import { useAccounts } from "@/hooks/useAccounts";
 import { useSmsRecurringSync } from "@/hooks/useSmsRecurringSync";
 
 type SmsReceiverContextValue = {
@@ -54,6 +55,7 @@ const SmsReceiverContext = createContext<SmsReceiverContextValue | undefined>(
 export function SmsReceiverProvider({ children }: { children: ReactNode }) {
   const supported = Platform.OS === "android";
   const { isDuress, user } = useAuth();
+  const { accounts } = useAccounts();
   const [prefs, setPrefs] = useState<SmsAutomationPrefs>(
     SMS_AUTOMATION_PREFS_DEFAULTS
   );
@@ -121,9 +123,12 @@ export function SmsReceiverProvider({ children }: { children: ReactNode }) {
     void import("expo-notifications").then((Notifications) => {
       if (cancelled) return;
       sub = Notifications.addNotificationResponseReceivedListener((response) => {
-        const data = response.notification.request.content.data;
-        if (data?.source !== "sms") return;
-        const url = data.url;
+        const data = response.notification.request.content.data as
+          | { source?: string; url?: string }
+          | undefined;
+        const source = data?.source;
+        if (source !== "sms" && source !== "credit_card_bill") return;
+        const url = data?.url;
         if (typeof url === "string" && url.startsWith("/")) {
           router.push(url as Href);
         }
@@ -153,6 +158,7 @@ export function SmsReceiverProvider({ children }: { children: ReactNode }) {
         await processIncomingSmsMessages(messages, {
           blockImport: isDuress,
           uid: user?.uid,
+          accounts,
         });
         const status = await loadSmsInboundStatus();
         setInboundStatus(status);
@@ -160,7 +166,7 @@ export function SmsReceiverProvider({ children }: { children: ReactNode }) {
     });
 
     return () => sub.remove();
-  }, [supported, isDuress, user?.uid]);
+  }, [supported, isDuress, user?.uid, accounts]);
 
   // Register receiver only while Enabled + permission granted (and not duress).
   useEffect(() => {

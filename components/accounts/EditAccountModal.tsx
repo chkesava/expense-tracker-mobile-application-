@@ -1,29 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
-  Modal as RNModal,
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import * as Haptics from "expo-haptics";
-import {
-  Calendar,
-  Check,
-  CreditCard,
-  Hash,
-  Palette,
-  Trash2,
-  Wallet,
-  X,
-} from "lucide-react-native";
+import { Check, CreditCard } from "lucide-react-native";
 
+import { InstitutionSearchField } from "@/components/accounts/InstitutionSearchField";
+import { SmsMatchingUnconfiguredText } from "@/components/accounts/SmsMatchingUnconfiguredText";
 import { Modal } from "@/components/common/Modal";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { useAccountEntries } from "@/hooks/useAccountEntries";
 import { useAccountPayments } from "@/hooks/useAccountPayments";
@@ -34,21 +25,28 @@ import { useExpenses } from "@/hooks/useExpenses";
 import { useIncomes } from "@/hooks/useIncomes";
 import { toast } from "@/lib/toast";
 import type { Account } from "@/shared/types/expense";
-import { getAccountKind } from "@/shared/utils/accountKind";
+import { getInstitutionById } from "@/shared/data/institutions";
+import {
+  defaultSmsMatchingEnabled,
+  getAccountLast4,
+  requiresCatalogInstitution,
+  suggestedAccountDisplayName,
+} from "@/shared/utils/accountIdentity";
+import { canonicalAccountTypeId, getAccountKind } from "@/shared/utils/accountKind";
 import { formatDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
 const ACCOUNT_COLORS = [
-  "#4F46E5", // Indigo
-  "#2563EB", // Blue
-  "#0D9488", // Teal
-  "#16A34A", // Green
-  "#D97706", // Amber
-  "#DC2626", // Red
-  "#9333EA", // Purple
-  "#DB2777", // Pink
-  "#475569", // Slate
+  "#4F46E5",
+  "#2563EB",
+  "#0D9488",
+  "#16A34A",
+  "#D97706",
+  "#DC2626",
+  "#9333EA",
+  "#DB2777",
+  "#475569",
 ];
 
 export interface EditAccountModalProps {
@@ -64,8 +62,8 @@ export function EditAccountModal({
 }: EditAccountModalProps) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
-  const { accounts, addAccount, updateAccount, deleteAccount } = useAccounts();
-  const { accountTypes, addAccountType } = useAccountTypes();
+  const { addAccount, updateAccount, deleteAccount } = useAccounts();
+  const { accountTypes } = useAccountTypes();
   const { expenses } = useExpenses();
   const { incomes } = useIncomes();
   const { entries } = useAccountEntries();
@@ -75,29 +73,37 @@ export function EditAccountModal({
   const isEditing = !!account?.id;
 
   const [name, setName] = useState("");
+  const [displayNameTouched, setDisplayNameTouched] = useState(false);
   const [typeId, setTypeId] = useState("");
+  const [institutionId, setInstitutionId] = useState("");
   const [openingBalance, setOpeningBalance] = useState("");
   const [balanceAsOfDate, setBalanceAsOfDate] = useState(
     formatDateKey(new Date())
   );
   const [accountNumber, setAccountNumber] = useState("");
+  const [smsMatchingEnabled, setSmsMatchingEnabled] = useState(true);
   const [creditLimit, setCreditLimit] = useState("");
   const [billGenerationDay, setBillGenerationDay] = useState("1");
   const [color, setColor] = useState(ACCOUNT_COLORS[0]);
   const [saving, setSaving] = useState(false);
 
-  // Sync state on open
   useEffect(() => {
     if (account) {
-      setName(account.name || "");
+      setName(account.displayName || account.name || "");
+      setDisplayNameTouched(true);
       setTypeId(account.typeId || (accountTypes[0]?.id ?? ""));
+      setInstitutionId(getInstitutionById(account.institutionId)?.id ?? "");
       setOpeningBalance(
         account.openingBalance !== undefined ? String(account.openingBalance) : "0"
       );
       setBalanceAsOfDate(
         account.balanceAsOfDate || formatDateKey(new Date())
       );
-      setAccountNumber(account.accountNumber || "");
+      setAccountNumber(getAccountLast4(account) || account.accountNumber || "");
+      setSmsMatchingEnabled(
+        Boolean(getInstitutionById(account.institutionId)) &&
+          account.smsMatchingEnabled !== false
+      );
       setCreditLimit(
         account.creditLimit !== undefined ? String(account.creditLimit) : ""
       );
@@ -109,10 +115,17 @@ export function EditAccountModal({
       setColor(account.color || ACCOUNT_COLORS[0]);
     } else {
       setName("");
+      setDisplayNameTouched(false);
       setTypeId(accountTypes[0]?.id ?? "");
+      setInstitutionId("");
       setOpeningBalance("0");
       setBalanceAsOfDate(formatDateKey(new Date()));
       setAccountNumber("");
+      setSmsMatchingEnabled(
+        defaultSmsMatchingEnabled(
+          canonicalAccountTypeId(accountTypes[0]?.name || "")
+        )
+      );
       setCreditLimit("");
       setBillGenerationDay("1");
       setColor(ACCOUNT_COLORS[0]);
@@ -124,9 +137,17 @@ export function EditAccountModal({
     return t ? t.name : "";
   }, [accountTypes, typeId]);
 
+  const accountTypeId = canonicalAccountTypeId(selectedTypeName);
   const isCreditCard = getAccountKind(selectedTypeName) === "credit";
+  const needsInstitution = requiresCatalogInstitution(accountTypeId);
+  const catalogInstitution = getInstitutionById(institutionId);
+  const catalogConfigured = Boolean(catalogInstitution);
+  const matchingAllowed = !needsInstitution || catalogConfigured;
+  const suggestedName = suggestedAccountDisplayName(
+    catalogInstitution,
+    accountTypeId
+  );
 
-  // Linked items safeguard check
   const linkedStats = useMemo(() => {
     if (!account?.id) return { total: 0, countExp: 0, countInc: 0 };
     const id = account.id;
@@ -151,14 +172,37 @@ export function EditAccountModal({
     };
   }, [account, expenses, incomes, entries, transfers, payments]);
 
+  const applySuggestedName = (
+    nextInstitutionId: string,
+    nextTypeName: string
+  ) => {
+    if (displayNameTouched) return;
+    const nextTypeId = canonicalAccountTypeId(nextTypeName);
+    setName(
+      suggestedAccountDisplayName(
+        getInstitutionById(nextInstitutionId),
+        nextTypeId
+      )
+    );
+  };
+
   const handleSave = async () => {
-    const trimmedName = name.trim();
-    if (!trimmedName) {
-      toast.error("Account name is required");
-      return;
-    }
     if (!typeId) {
       toast.error("Please select an account type");
+      return;
+    }
+    if (needsInstitution && !catalogInstitution && !isEditing) {
+      toast.error("Select an institution from the list");
+      return;
+    }
+    if (needsInstitution && smsMatchingEnabled && !catalogInstitution) {
+      toast.error("Select an institution to enable SMS matching");
+      return;
+    }
+
+    const trimmedName = name.trim() || suggestedName;
+    if (!trimmedName) {
+      toast.error("Display name is required");
       return;
     }
 
@@ -175,7 +219,12 @@ export function EditAccountModal({
       const extras: Partial<Account> = {
         openingBalance: parsedOpening,
         balanceAsOfDate: balanceAsOfDate || formatDateKey(new Date()),
+        last4: accountNumber.trim() || undefined,
         accountNumber: accountNumber.trim() || undefined,
+        institutionId: catalogInstitution?.id || "",
+        smsMatchingEnabled: matchingAllowed && smsMatchingEnabled,
+        displayName: trimmedName,
+        accountTypeId,
         creditLimit: parsedLimit,
         billGenerationDay: parsedBillDay,
         color,
@@ -246,24 +295,24 @@ export function EditAccountModal({
         contentContainerStyle={{ gap: 16, paddingBottom: 24 }}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Name */}
-        <View style={{ gap: 6 }}>
-          <Text
-            style={[
-              styles.label,
-              { color: theme.colors.foreground, fontSize: theme.typography.sm },
-            ]}
-          >
-            Account Name *
-          </Text>
-          <Input
-            value={name}
-            onChangeText={setName}
-            placeholder="e.g. HDFC Salary, SBI Primary, Amazon Pay ICICI"
-          />
-        </View>
+        {isEditing && needsInstitution && !catalogConfigured ? (
+          <View style={{ gap: 4 }}>
+            <SmsMatchingUnconfiguredText
+              account={account ?? { institutionId: "", accountTypeId }}
+              typeName={selectedTypeName}
+            />
+            <Text
+              style={{
+                color: theme.colors.mutedForeground,
+                fontSize: theme.typography.xs,
+              }}
+            >
+              Search and select an institution to enable SMS matching. Other
+              account details can still be saved.
+            </Text>
+          </View>
+        ) : null}
 
-        {/* Account Type Selector */}
         <View style={{ gap: 6 }}>
           <Text
             style={[
@@ -286,6 +335,21 @@ export function EditAccountModal({
                   onPress={() => {
                     Haptics.selectionAsync().catch(() => undefined);
                     setTypeId(t.id);
+                    const nextTypeId = canonicalAccountTypeId(t.name);
+                    if (!requiresCatalogInstitution(nextTypeId)) {
+                      setInstitutionId("");
+                    }
+                    if (!isEditing) {
+                      setSmsMatchingEnabled(
+                        defaultSmsMatchingEnabled(nextTypeId)
+                      );
+                    }
+                    applySuggestedName(
+                      requiresCatalogInstitution(nextTypeId)
+                        ? institutionId
+                        : "",
+                      t.name
+                    );
                   }}
                   style={[
                     styles.typePill,
@@ -320,7 +384,42 @@ export function EditAccountModal({
           </ScrollView>
         </View>
 
-        {/* Opening Balance */}
+        {needsInstitution ? (
+          <InstitutionSearchField
+            selectedId={institutionId}
+            required
+            onSelect={(institution) => {
+              const nextId = institution?.id ?? "";
+              setInstitutionId(nextId);
+              if (institution) {
+                setSmsMatchingEnabled(true);
+              } else if (isEditing) {
+                setSmsMatchingEnabled(false);
+              }
+              applySuggestedName(nextId, selectedTypeName);
+            }}
+          />
+        ) : null}
+
+        {accountTypeId !== "cash" ? (
+          <View style={{ gap: 6 }}>
+            <Text
+              style={[
+                styles.label,
+                { color: theme.colors.foreground, fontSize: theme.typography.sm },
+              ]}
+            >
+              Last 4 digits
+            </Text>
+            <Input
+              value={accountNumber}
+              onChangeText={setAccountNumber}
+              placeholder="e.g. 4521"
+              keyboardType="number-pad"
+            />
+          </View>
+        ) : null}
+
         <View style={{ gap: 6 }}>
           <Text
             style={[
@@ -338,7 +437,6 @@ export function EditAccountModal({
           />
         </View>
 
-        {/* Balance as of Date */}
         <View style={{ gap: 6 }}>
           <Text
             style={[
@@ -355,24 +453,6 @@ export function EditAccountModal({
           />
         </View>
 
-        {/* Masked Account Number */}
-        <View style={{ gap: 6 }}>
-          <Text
-            style={[
-              styles.label,
-              { color: theme.colors.foreground, fontSize: theme.typography.sm },
-            ]}
-          >
-            Account / Card Number Mask (Optional)
-          </Text>
-          <Input
-            value={accountNumber}
-            onChangeText={setAccountNumber}
-            placeholder="e.g. •••• 4242"
-          />
-        </View>
-
-        {/* Credit Card Specific Fields */}
         {isCreditCard ? (
           <View style={[styles.creditCardBox, { borderColor: theme.colors.border }]}>
             <View style={styles.creditHeader}>
@@ -430,7 +510,84 @@ export function EditAccountModal({
           </View>
         ) : null}
 
-        {/* Color Picker */}
+        <View style={{ gap: 6 }}>
+          <Text
+            style={[
+              styles.label,
+              { color: theme.colors.foreground, fontSize: theme.typography.sm },
+            ]}
+          >
+            Display Name
+          </Text>
+          <Input
+            value={name}
+            onChangeText={(value) => {
+              setDisplayNameTouched(true);
+              setName(value);
+            }}
+            placeholder={suggestedName || "e.g. Super Money Credit Card"}
+          />
+          <Text
+            style={{
+              color: theme.colors.mutedForeground,
+              fontSize: theme.typography.xs,
+            }}
+          >
+            Optional. Separate from institution identity. Defaults to Institution +
+            Account Type.
+          </Text>
+        </View>
+
+        <Pressable
+          onPress={() => {
+            if (!matchingAllowed) return;
+            setSmsMatchingEnabled((prev) => !prev);
+          }}
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            minHeight: 52,
+            opacity: matchingAllowed ? 1 : 0.55,
+          }}
+          accessibilityRole="switch"
+          accessibilityState={{
+            checked: matchingAllowed && smsMatchingEnabled,
+            disabled: !matchingAllowed,
+          }}
+        >
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text
+              style={[
+                styles.label,
+                { color: theme.colors.foreground, fontSize: theme.typography.sm },
+              ]}
+            >
+              Use for SMS matching
+            </Text>
+            <Text
+              style={{
+                color: theme.colors.mutedForeground,
+                fontSize: theme.typography.xs,
+              }}
+            >
+              {needsInstitution && !catalogConfigured
+                ? "SMS matching not configured until you select an institution."
+                : accountTypeId === "cash"
+                  ? "Cash accounts are excluded from SMS matching by default."
+                  : "Bank and card accounts are included by default."}
+            </Text>
+          </View>
+          <Switch
+            value={matchingAllowed && smsMatchingEnabled}
+            onValueChange={setSmsMatchingEnabled}
+            disabled={!matchingAllowed}
+            trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
+            thumbColor="#FFFFFF"
+          />
+        </Pressable>
+
         <View style={{ gap: 8 }}>
           <Text
             style={[
@@ -460,7 +617,6 @@ export function EditAccountModal({
           </View>
         </View>
 
-        {/* Buttons */}
         <View style={{ gap: 10, marginTop: 8 }}>
           <Button onPress={handleSave} disabled={saving} size="lg">
             {saving

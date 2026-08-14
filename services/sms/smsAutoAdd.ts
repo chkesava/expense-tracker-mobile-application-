@@ -25,8 +25,11 @@ export function isHighConfidenceForAutoAdd(
   if (!parsed) return false;
   if (parsed.confidence < threshold) return false;
   if (parsed.amount == null || !parsed.date) return false;
-  if (parsed.kind === "income") {
+  if (parsed.kind === "income" || parsed.kind === "refund") {
     return Boolean(parsed.incomeSource || parsed.merchant?.trim());
+  }
+  if (parsed.kind !== "expense" && parsed.kind !== "atm_withdrawal") {
+    return false;
   }
   if (!parsed.merchant?.trim()) return false;
   return true;

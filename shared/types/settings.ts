@@ -3,8 +3,14 @@
  * Privacy fields are seeded for doc parity; UI arrives in Phase 4.
  */
 
+import {
+  DEFAULT_CREDIT_CARD_BILL_REMINDERS,
+  type CreditCardBillRemindersSettings,
+} from "./creditCardBill";
+
 export type DefaultView = "add" | "expenses" | "analytics" | "dashboard";
 export type NavigationStyle = "bottom" | "dock";
+export type { CreditCardBillRemindersSettings };
 
 export type DashboardWidgets = {
   subscriptions: boolean;
@@ -60,6 +66,8 @@ export type UserSettings = {
   numberFormat: NumberFormatOption;
   firstDayOfWeek: FirstDayOfWeekOption;
   themeMode?: string;
+  /** Credit card bill local reminder preferences */
+  creditCardBillReminders: CreditCardBillRemindersSettings;
 };
 
 function deviceTimezone(): string {
@@ -121,6 +129,7 @@ export const SETTINGS_DEFAULTS: UserSettings = {
   numberFormat: "auto",
   firstDayOfWeek: "monday",
   themeMode: "system",
+  creditCardBillReminders: { ...DEFAULT_CREDIT_CARD_BILL_REMINDERS },
 };
 
 export function mergeSettingsFromDoc(
@@ -172,6 +181,14 @@ export function mergeSettingsFromDoc(
       visitedScreens:
         (data.onboarding as Partial<OnboardingState>)?.visitedScreens ||
         SETTINGS_DEFAULTS.onboarding.visitedScreens,
+    },
+    creditCardBillReminders: {
+      ...SETTINGS_DEFAULTS.creditCardBillReminders,
+      ...((data.creditCardBillReminders as Partial<CreditCardBillRemindersSettings>) ||
+        {}),
+      daysBefore:
+        (data.creditCardBillReminders as Partial<CreditCardBillRemindersSettings>)
+          ?.daysBefore || SETTINGS_DEFAULTS.creditCardBillReminders.daysBefore,
     },
   };
 }
