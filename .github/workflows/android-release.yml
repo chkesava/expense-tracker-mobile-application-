@@ -142,14 +142,6 @@ jobs:
           printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "${{ runner.temp }}/service-account.json"
           chmod 600 "${{ runner.temp }}/service-account.json"
 
-      # In-app updates need this bucket. Fail here instead of emailing testers
-      # an APK that Check for updates cannot see.
-      - name: Verify Firebase Storage bucket
-        env:
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/service-account.json
-          EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET: ${{ secrets.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET }}
-        run: node scripts/verify-storage-bucket.js
-
       - name: Resolve version
         id: version
         env:
@@ -220,8 +212,34 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
+      # Public repo: this URL is a real APK file. In-app updates use it when
+      # Firebase Storage is not set up (Spark / no Blaze billing).
+      - name: Publish APK to GitHub Releases
+        id: github_apk
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION_NAME: ${{ steps.version.outputs.name }}
+          VERSION_CODE: ${{ steps.version.outputs.code }}
+          NOTES: ${{ steps.notes.outputs.value }}
+        run: |
+          TAG="android-v${VERSION_NAME}-${VERSION_CODE}"
+          ASSET="Spendly-${VERSION_NAME}-${VERSION_CODE}.apk"
+          cp releases/app-release.apk "releases/${ASSET}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "releases/${ASSET}" --clobber
+          else
+            gh release create "$TAG" "releases/${ASSET}" \
+              --title "Spendly v${VERSION_NAME} (${VERSION_CODE})" \
+              --notes "$NOTES"
+          fi
+          URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${ASSET}"
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Published $ASSET at $URL"
+
       - name: Distribute to Firebase App Distribution
         id: distribute
+        continue-on-error: true
         uses: wzieba/Firebase-Distribution-Github-Action@v1
         with:
           appId: ${{ vars.FIREBASE_ANDROID_APP_ID }}
@@ -232,8 +250,8 @@ jobs:
             v${{ steps.version.outputs.name }} (build ${{ steps.version.outputs.code }})
             ${{ steps.notes.outputs.value }}
 
-      # Tester webpage is kept as a fallback. The in-app updater downloads the
-      # APK from Firebase Storage (uploaded by publish-release-metadata.js).
+      # Tester webpage is a last-resort fallback. In-app download uses the
+      # GitHub Release APK, plus Firebase Storage when that bucket exists.
       - name: Resolve tester URL
         id: download
         env:
@@ -243,17 +261,17 @@ jobs:
         run: |
           URL="${TESTING_URI:-${BINARY_URI:-$CONSOLE_URI}}"
           if [ -z "$URL" ]; then
-            echo "::error::Firebase App Distribution did not emit a download URL."
-            exit 1
+            echo "::warning::App Distribution did not emit a tester URL. In-app updates still use the GitHub Release APK."
           fi
           echo "url=$URL" >> "$GITHUB_OUTPUT"
-          echo "Using tester URL: $URL"
+          echo "Using tester URL: ${URL:-none}"
 
       - name: Publish release metadata to Firestore
         id: publish
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/service-account.json
           RELEASE_APK_PATH: releases/app-release.apk
+          RELEASE_DOWNLOAD_URL: ${{ steps.github_apk.outputs.url }}
           RELEASE_TESTER_URL: ${{ steps.download.outputs.url }}
           RELEASE_NOTES: ${{ steps.notes.outputs.value }}
           RELEASE_MANDATORY: ${{ inputs.mandatory || false }}
@@ -262,10 +280,8 @@ jobs:
           EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET: ${{ secrets.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET }}
         run: node scripts/publish-release-metadata.js
 
-      # Persist the bump even if Storage publish failed, as long as testers
-      # already received the APK — otherwise app.json stays behind the shipped build.
       - name: Commit version bump
-        if: always() && steps.distribute.outcome == 'success'
+        if: always() && (steps.github_apk.outcome == 'success' || steps.distribute.outcome == 'success')
         env:
           VERSION_NAME: ${{ steps.version.outputs.name }}
           VERSION_CODE: ${{ steps.version.outputs.code }}
@@ -289,7 +305,7 @@ jobs:
           rm -f .env
 
       - name: Job summary
-        if: always() && steps.distribute.outcome == 'success'
+        if: always() && (steps.github_apk.outcome == 'success' || steps.distribute.outcome == 'success')
         env:
           PUBLISH_OUTCOME: ${{ steps.publish.outcome }}
         run: |
@@ -299,13 +315,10 @@ jobs:
             echo "- Version: **v${{ steps.version.outputs.name }}** (build ${{ steps.version.outputs.code }})"
             echo "- Notes: ${{ steps.notes.outputs.value }}"
             echo "- Mandatory update: ${{ inputs.mandatory || false }}"
-            echo "- Download: ${{ steps.download.outputs.url }}"
+            echo "- In-app APK: ${{ steps.github_apk.outputs.url }}"
             echo "- Testers link: ${{ steps.distribute.outputs.TESTING_URI }}"
-            echo "- Firestore / Storage publish: ${PUBLISH_OUTCOME}"
-            if [ "$PUBLISH_OUTCOME" != "success" ]; then
-              echo ""
-              echo "> In-app updates will **not** see this build until Storage is set up and Android Release is re-run."
-            fi
+            echo "- Firestore publish: ${PUBLISH_OUTCOME}"
+            echo "- Firebase Storage: optional (used when the bucket exists)"
             echo ""
             echo "### Quality gate (Phase 10)"
             echo "- \`npm test\` — passed before APK"

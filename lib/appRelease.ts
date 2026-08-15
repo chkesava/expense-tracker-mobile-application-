@@ -1,6 +1,7 @@
 /**
  * Shape of `system_settings/latest_release`, written by the Android release
- * workflow after the APK is uploaded to Firebase Storage.
+ * workflow. `downloadUrl` is the GitHub Release APK; `storagePath` is set
+ * only when Firebase Storage also received the file.
  *
  * CI overwrites this document on every release, so it always points at the
  * newest APK — skipped intermediate versions are never installed.
@@ -9,9 +10,9 @@
 export type AppRelease = {
   versionName: string;
   versionCode: number;
-  /** Direct APK URL (Storage download token). May be empty when storagePath is set. */
+  /** Direct APK URL (GitHub Release, or a Storage token). */
   downloadUrl: string;
-  /** Firebase Storage object path, e.g. releases/40/Spendly-2.1.0-40.apk */
+  /** Firebase Storage object path when that optional upload succeeded. */
   storagePath?: string;
   /** App Distribution tester webpage — fallback if in-app install fails. */
   testerUrl?: string;
