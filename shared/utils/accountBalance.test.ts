@@ -1,11 +1,23 @@
-import { describe, expect, it } from "vitest";
-import type { Account, AccountPayment, AccountTransfer } from "../types/expense";
+import { describe, expect, it, vi } from "vitest";
+import type {
+  Account,
+  AccountPayment,
+  AccountTransfer,
+  Expense,
+} from "../types/expense";
 import type { Borrowing, BorrowingRepayment } from "../types/borrowing";
 import type {
   Receivable,
   ReceivableRepayment,
 } from "../types/receivable";
-import { buildAccountActivities, computeBankBalance } from "./accountBalance";
+import {
+  buildAccountActivities,
+  computeBankBalance,
+  computeCreditUsage,
+  getCreditBillHistory,
+  previewBalanceAfterBillPayment,
+  previewBalanceAfterTransaction,
+} from "./accountBalance";
 
 describe("account activity ledger", () => {
   it("shows the final running balance on the first row when same-day activity exists", () => {
@@ -321,5 +333,155 @@ describe("receivable effect on account balances", () => {
       amount: 8000,
       linkedReceivableRepaymentId: "rrp1",
     });
+  });
+});
+
+describe("floating-point safety in money math", () => {
+  const bank: Account = {
+    id: "acc-1",
+    name: "Bank",
+    typeId: "bank-type",
+    openingBalance: 0,
+    balanceInitialized: true,
+  };
+
+  function expenseOf(
+    amount: number,
+    date: string,
+    accountId = "acc-1"
+  ): Expense {
+    return {
+      amount,
+      category: "Food & Dining",
+      note: "",
+      date,
+      month: date.slice(0, 7),
+      accountId,
+      createdAt: null,
+    };
+  }
+
+  it("sums decimal expenses without accumulating float residue", () => {
+    // 0.1 + 0.2 !== 0.3 in raw JS float math; the balance must still land
+    // on an exact 2-decimal value rather than 699.6999999999999-style noise.
+    const expenses = [
+      expenseOf(0.1, "2026-01-01"),
+      expenseOf(0.2, "2026-01-02"),
+    ];
+    const withOpening: Account = { ...bank, openingBalance: 1 };
+    const balance = computeBankBalance(withOpening, expenses, []);
+    expect(balance).toBe(0.7);
+    expect(Number.isInteger(balance * 100)).toBe(true);
+  });
+
+  it("handles a zero-amount expense without changing the balance", () => {
+    const expenses = [expenseOf(0, "2026-01-01")];
+    const withOpening: Account = { ...bank, openingBalance: 500 };
+    expect(computeBankBalance(withOpening, expenses, [])).toBe(500);
+  });
+
+  it("handles very large amounts without precision loss at the cent level", () => {
+    const withOpening: Account = { ...bank, openingBalance: 10_000_000.5 };
+    const expenses = [expenseOf(1_234_567.25, "2026-01-01")];
+    expect(computeBankBalance(withOpening, expenses, [])).toBe(8_765_433.25);
+  });
+
+  it("reflects an edited transaction amount via previewBalanceAfterTransaction", () => {
+    // Simulates editing a 10.10 expense up to 15.75: preview excludes the
+    // original row and re-applies the new amount, same pattern the edit
+    // modal uses to show "what will my balance be after I save this".
+    const withOpening: Account = { ...bank, openingBalance: 100 };
+    const original = { ...expenseOf(10.1, "2026-01-05"), id: "exp-1" };
+    const preview = previewBalanceAfterTransaction(
+      withOpening,
+      "Bank",
+      [original],
+      [],
+      "expense",
+      15.75,
+      [],
+      [],
+      [],
+      "exp-1"
+    );
+    expect(preview).toBe(84.25);
+  });
+
+  it("removes a deleted transaction's effect on the running balance", () => {
+    const withOpening: Account = { ...bank, openingBalance: 100 };
+    const kept = { ...expenseOf(20, "2026-01-01"), id: "exp-keep" };
+    const deleted = { ...expenseOf(30, "2026-01-02"), id: "exp-delete" };
+    // After deletion the app simply stops passing the deleted row in.
+    const balanceAfterDelete = computeBankBalance(withOpening, [kept], []);
+    expect(balanceAfterDelete).toBe(80);
+  });
+
+  it("keeps a credit card cycle marked paid when float noise would otherwise leave a residue", () => {
+    const card: Account = {
+      id: "card-1",
+      name: "Credit Card",
+      typeId: "credit-type",
+      billGenerationDay: 1,
+      creditLimit: 50000,
+    };
+    // 0.1 + 0.2 is the textbook JS float case: it sums to
+    // 0.30000000000000004, not exactly 0.3. Paid off with a single payment
+    // for the exact nominal amount, this must still resolve to "paid".
+    expect(0.1 + 0.2).not.toBe(0.3); // sanity check the repro is real
+    const expenses: Expense[] = [
+      expenseOf(0.1, "2026-01-05", "card-1"),
+      expenseOf(0.2, "2026-01-06", "card-1"),
+    ];
+    const payments: AccountPayment[] = [
+      {
+        id: "pay-1",
+        fromAccountId: "bank-1",
+        toAccountId: "card-1",
+        amount: 0.3,
+        date: "2026-02-01",
+        sourceType: "account",
+        // Explicit cycle tag, same as the app sets when a bill payment is
+        // recorded against a specific statement — avoids the ambiguous
+        // date-range fallback matching used for untagged legacy payments.
+        appliedCycleStart: "2026-01-01",
+        appliedCycleEnd: "2026-02-01",
+      },
+    ];
+
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 2, 15)); // 15 Mar 2026 — a couple cycles after the payment
+    try {
+      const history = getCreditBillHistory(card, expenses, payments, 3);
+      const paidCycle = history.find((c) => c.billedAmount > 0);
+      expect(paidCycle?.status).toBe("paid");
+      expect(paidCycle?.outstandingAmount).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("computes credit usage for decimal charges without a stray fractional cent", () => {
+    const card: Account = {
+      id: "card-1",
+      name: "Credit Card",
+      typeId: "credit-type",
+      billGenerationDay: 1,
+      creditLimit: 1000,
+    };
+    const expenses: Expense[] = [
+      expenseOf(33.33, "2026-01-05", "card-1"),
+      expenseOf(33.33, "2026-01-06", "card-1"),
+      expenseOf(33.34, "2026-01-07", "card-1"),
+    ];
+
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 0, 20));
+    try {
+      const usage = computeCreditUsage(card, expenses, []);
+      expect(usage.usedThisCycle).toBe(100);
+      expect(usage.availableCredit).toBe(900);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
