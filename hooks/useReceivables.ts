@@ -1,20 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  addDoc,
   collection,
-  deleteDoc,
   doc,
   getDocs,
   onSnapshot,
   orderBy,
   query,
   serverTimestamp,
+  setDoc,
   updateDoc,
   where,
   writeBatch,
 } from "firebase/firestore";
 
 import { getFirestoreDb } from "@/lib/firebase";
+import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import type {
@@ -155,22 +155,27 @@ export function useReceivables(options?: { enabled?: boolean }) {
       }
 
       try {
-        const ref = await addDoc(collection(db, "users", uid, "receivables"), {
-          ...input,
-          userId: uid,
-          personId: input.personId ?? null,
-          dueDate: input.dueDate ?? null,
-          purpose: input.purpose ?? "",
-          note: input.note ?? "",
-          ...(input.spaceId ? { spaceId: input.spaceId } : {}),
-          totalReceived: 0,
-          outstandingAmount: input.originalAmount,
-          status: "ACTIVE",
-          settledDate: null,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        });
-        toast.success("Money lent recorded");
+        const ref = doc(collection(db, "users", uid, "receivables"));
+        const outcome = await commitWrite(
+          () =>
+            setDoc(ref, {
+              ...input,
+              userId: uid,
+              personId: input.personId ?? null,
+              dueDate: input.dueDate ?? null,
+              purpose: input.purpose ?? "",
+              note: input.note ?? "",
+              ...(input.spaceId ? { spaceId: input.spaceId } : {}),
+              totalReceived: 0,
+              outstandingAmount: input.originalAmount,
+              status: "ACTIVE",
+              settledDate: null,
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            }),
+          { label: "receivable" }
+        );
+        toast.success(writeSavedMessage(outcome, "Money lent recorded"));
         return ref.id;
       } catch (err) {
         console.error("createReceivable error:", err);
@@ -206,21 +211,24 @@ export function useReceivables(options?: { enabled?: boolean }) {
           payload.spaceId = updates.spaceId ?? null;
         }
 
-        await updateDoc(doc(db, "users", uid, "receivables", id), payload);
-
+        // The edit and its recomputed totals go up as one write: a connection
+        // dropping between two separate updates would leave the receivable
+        // showing a new principal against stale outstanding/status fields.
         if (existing && updates.originalAmount != null) {
           const next = summarizeReceivable(
             { ...existing, ...updates, originalAmount: updates.originalAmount },
             repayments,
             todayDateKey()
           );
-          await updateDoc(
-            doc(db, "users", uid, "receivables", id),
-            denormalizedFields(next)
-          );
+          Object.assign(payload, denormalizedFields(next));
         }
 
-        toast.success("Receivable updated");
+        const outcome = await commitWrite(
+          () => updateDoc(doc(db, "users", uid, "receivables", id), payload),
+          { label: "receivable" }
+        );
+
+        toast.success(writeSavedMessage(outcome, "Receivable updated"));
         return true;
       } catch (err) {
         console.error("updateReceivable error:", err);
@@ -244,12 +252,23 @@ export function useReceivables(options?: { enabled?: boolean }) {
           )
         );
 
+        // Offline this query answers from cache and may not list every
+        // repayment, which would orphan the ones it missed.
+        if (linked.metadata.fromCache) {
+          toast.error(
+            "Can't verify linked repayments while offline. Try again when connected."
+          );
+          return false;
+        }
+
         const batch = writeBatch(db);
         linked.docs.forEach((repaymentDoc) => batch.delete(repaymentDoc.ref));
         batch.delete(doc(db, "users", uid, "receivables", id));
-        await batch.commit();
+        const outcome = await commitWrite(() => batch.commit(), {
+          label: "receivable deletion",
+        });
 
-        toast.success("Receivable deleted");
+        toast.success(writeSavedMessage(outcome, "Receivable deleted"));
         return true;
       } catch (err) {
         console.error("deleteReceivable error:", err);
@@ -289,18 +308,7 @@ export function useReceivables(options?: { enabled?: boolean }) {
       }
 
       try {
-        const ref = await addDoc(
-          collection(db, "users", uid, "receivableRepayments"),
-          {
-            receivableId: input.receivableId,
-            amount: input.amount,
-            receivedAccountId: input.receivedAccountId ?? null,
-            date: input.date,
-            month: monthFromDateKey(input.date),
-            note: input.note ?? "",
-            createdAt: serverTimestamp(),
-          }
-        );
+        const ref = doc(collection(db, "users", uid, "receivableRepayments"));
 
         const nextSummary = summarizeReceivable(
           receivable,
@@ -316,15 +324,34 @@ export function useReceivables(options?: { enabled?: boolean }) {
           todayDateKey()
         );
 
-        await updateDoc(
+        // Repayment + recomputed parent totals commit atomically. Two separate
+        // writes could leave money recorded as received while the receivable
+        // still shows the full amount outstanding if the link drops between.
+        const batch = writeBatch(db);
+        batch.set(ref, {
+          receivableId: input.receivableId,
+          amount: input.amount,
+          receivedAccountId: input.receivedAccountId ?? null,
+          date: input.date,
+          month: monthFromDateKey(input.date),
+          note: input.note ?? "",
+          createdAt: serverTimestamp(),
+        });
+        batch.update(
           doc(db, "users", uid, "receivables", input.receivableId),
           denormalizedFields(nextSummary)
         );
+        const outcome = await commitWrite(() => batch.commit(), {
+          label: "repayment",
+        });
 
         toast.success(
-          nextSummary.status === "FULLY_SETTLED"
-            ? "Receivable settled"
-            : "Repayment recorded"
+          writeSavedMessage(
+            outcome,
+            nextSummary.status === "FULLY_SETTLED"
+              ? "Receivable settled"
+              : "Repayment recorded"
+          )
         );
         return ref.id;
       } catch (err) {
@@ -344,9 +371,8 @@ export function useReceivables(options?: { enabled?: boolean }) {
       const receivable = receivables.find((r) => r.id === receivableId);
 
       try {
-        await deleteDoc(
-          doc(db, "users", uid, "receivableRepayments", repaymentId)
-        );
+        const batch = writeBatch(db);
+        batch.delete(doc(db, "users", uid, "receivableRepayments", repaymentId));
 
         if (receivable) {
           const nextSummary = summarizeReceivable(
@@ -354,13 +380,17 @@ export function useReceivables(options?: { enabled?: boolean }) {
             repayments.filter((r) => r.id !== repaymentId),
             todayDateKey()
           );
-          await updateDoc(
+          batch.update(
             doc(db, "users", uid, "receivables", receivableId),
             denormalizedFields(nextSummary)
           );
         }
 
-        toast.success("Repayment removed");
+        const outcome = await commitWrite(() => batch.commit(), {
+          label: "repayment deletion",
+        });
+
+        toast.success(writeSavedMessage(outcome, "Repayment removed"));
         return true;
       } catch (err) {
         console.error("deleteReceivableRepayment error:", err);

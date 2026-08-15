@@ -35,6 +35,7 @@ import { AssignToSpaceModal } from "@/components/spaces/AssignToSpaceModal";
 import { Button } from "@/components/ui/Button";
 import { useSpaces } from "@/hooks/useSpaces";
 import { getFirestoreDb } from "@/lib/firebase";
+import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import { useSettings } from "@/providers/SettingsProvider";
@@ -206,12 +207,17 @@ export function ExpenseList({
         const collectionName = target.kind === "expense" ? "expenses" : "incomes";
         const docRef = doc(db, "users", uid, collectionName, docId);
 
-        await deleteDoc(docRef);
+        const outcome = await commitWrite(() => deleteDoc(docRef), {
+          label: "transaction deletion",
+        });
         setSelectedTx(null);
         void haptic.delete();
 
         toast.success(
-          `${target.kind === "expense" ? "Expense" : "Income"} deleted`
+          writeSavedMessage(
+            outcome,
+            `${target.kind === "expense" ? "Expense" : "Income"} deleted`
+          )
         );
       } catch (err) {
         console.error("Delete transaction error:", err);

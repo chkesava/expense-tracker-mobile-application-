@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import {
-  addDoc,
   collection,
   deleteDoc,
   doc,
@@ -15,6 +14,7 @@ import {
 } from "firebase/firestore";
 
 import { getFirestoreDb } from "@/lib/firebase";
+import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import type { Participant, Split } from "@/shared/types/split";
@@ -93,9 +93,14 @@ export function useSplits(options?: { enabled?: boolean }) {
         settled: false,
       };
 
-      const docRef = await addDoc(collection(db, "splits"), newSplit);
+      const docRef = doc(collection(db, "splits"));
 
-      // Create linked personal expense if requested
+      // The split and its linked personal expense go up as one batch: as two
+      // sequential writes, a connection lost in between left the split created
+      // with no expense recorded against the user's own ledger.
+      const batch = writeBatch(db);
+      batch.set(docRef, newSplit);
+
       if (options?.createPersonalExpense) {
         const creatorParticipant = splitData.participants.find((p) => p.isCurrentUser);
         const creatorShare = creatorParticipant?.amount || 0;
@@ -105,7 +110,7 @@ export function useSplits(options?: { enabled?: boolean }) {
           const dateStr = now.toISOString().split("T")[0];
           const monthStr = currentMonthKey();
 
-          await addDoc(collection(db, "users", uid, "expenses"), {
+          batch.set(doc(collection(db, "users", uid, "expenses")), {
             amount: creatorShare,
             category: splitData.category || "Food & Dining",
             subcategory: "Dining Out",
@@ -119,7 +124,8 @@ export function useSplits(options?: { enabled?: boolean }) {
         }
       }
 
-      toast.success("Split created successfully");
+      const outcome = await commitWrite(() => batch.commit(), { label: "split" });
+      toast.success(writeSavedMessage(outcome, "Split created successfully"));
       return docRef.id;
     } catch (err) {
       console.error("createSplit error:", err);
@@ -136,8 +142,11 @@ export function useSplits(options?: { enabled?: boolean }) {
     if (!uid || !db || !id) return false;
 
     try {
-      await updateDoc(doc(db, "splits", id), updates);
-      toast.success("Split updated");
+      const outcome = await commitWrite(
+        () => updateDoc(doc(db, "splits", id), updates),
+        { label: "split" }
+      );
+      toast.success(writeSavedMessage(outcome, "Split updated"));
       return true;
     } catch (err) {
       console.error("updateSplit error:", err);
@@ -167,10 +176,14 @@ export function useSplits(options?: { enabled?: boolean }) {
     const isAllPaid = updatedParticipants.every((p) => p.paid);
 
     try {
-      await updateDoc(doc(db, "splits", splitId), {
-        participants: updatedParticipants,
-        settled: isAllPaid,
-      });
+      await commitWrite(
+        () =>
+          updateDoc(doc(db, "splits", splitId), {
+            participants: updatedParticipants,
+            settled: isAllPaid,
+          }),
+        { label: "settlement status" }
+      );
       return true;
     } catch (err) {
       console.error("toggleParticipantPaid error:", err);
@@ -192,11 +205,15 @@ export function useSplits(options?: { enabled?: boolean }) {
     }));
 
     try {
-      await updateDoc(doc(db, "splits", splitId), {
-        participants: updatedParticipants,
-        settled: true,
-      });
-      toast.success("Split marked as fully settled!");
+      const outcome = await commitWrite(
+        () =>
+          updateDoc(doc(db, "splits", splitId), {
+            participants: updatedParticipants,
+            settled: true,
+          }),
+        { label: "split settlement" }
+      );
+      toast.success(writeSavedMessage(outcome, "Split marked as fully settled!"));
       return true;
     } catch (err) {
       console.error("settleAll error:", err);
@@ -210,8 +227,10 @@ export function useSplits(options?: { enabled?: boolean }) {
     if (!uid || !db || !id) return false;
 
     try {
-      await deleteDoc(doc(db, "splits", id));
-      toast.success("Split deleted");
+      const outcome = await commitWrite(() => deleteDoc(doc(db, "splits", id)), {
+        label: "split deletion",
+      });
+      toast.success(writeSavedMessage(outcome, "Split deleted"));
       return true;
     } catch (err) {
       console.error("deleteSplit error:", err);

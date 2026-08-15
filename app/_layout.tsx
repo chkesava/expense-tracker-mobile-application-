@@ -22,6 +22,7 @@ import { CelebrationOverlay } from "@/components/common/CelebrationOverlay";
 import { OfflineBanner } from "@/components/common/OfflineBanner";
 import { SplashAnimationOverlay } from "@/components/common/SplashAnimationOverlay";
 import { perfMark } from "@/lib/perf";
+import { bindQueryClientToNetwork } from "@/lib/queryNetworkBinding";
 import { ToastProvider } from "@/lib/toast";
 import { AuthProvider, useAuth } from "@/providers/AuthProvider";
 import { CelebrationProvider } from "@/providers/CelebrationProvider";
@@ -36,11 +37,22 @@ import { themeUsesDarkPalette, THEME_STORAGE_KEY } from "@/theme/tokens";
 
 export { ErrorBoundary } from "expo-router";
 
+// Must run before any query mounts, so Query never assumes it is online.
+bindQueryClientToNetwork();
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 60_000,
+      // One retry, and only after a full second — a failing request on a weak
+      // connection must not turn into a burst of near-instant repeats.
       retry: 1,
+      retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 15_000),
+      // Polls stay paused while the app is backgrounded (see focusManager).
+      refetchIntervalInBackground: false,
+    },
+    mutations: {
+      retry: 0,
     },
   },
 });

@@ -1,3 +1,4 @@
+import { fetchWithTimeout } from '../lib/fetchWithTimeout';
 import { FoodItem, NutrientTotals } from '../shared/types/nutrition';
 
 interface OFFProductResponse {
@@ -27,10 +28,17 @@ interface OFFProductResponse {
   };
 }
 
-export async function fetchFoodByBarcode(barcode: string): Promise<Omit<FoodItem, 'id'> | null> {
+export async function fetchFoodByBarcode(
+  barcode: string,
+  options: { signal?: AbortSignal | null } = {}
+): Promise<Omit<FoodItem, 'id'> | null> {
   try {
-    const response = await fetch(`https://world.openfoodfacts.org/api/v2/product/${barcode}.json`);
-    
+    // Third-party API on an unknown network path — never wait on it forever.
+    const response = await fetchWithTimeout(
+      `https://world.openfoodfacts.org/api/v2/product/${barcode}.json`,
+      { signal: options.signal }
+    );
+
     if (!response.ok) {
       return null;
     }

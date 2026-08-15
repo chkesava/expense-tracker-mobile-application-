@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import {
-  addDoc,
   collection,
   deleteDoc,
   doc,
@@ -8,12 +7,14 @@ import {
   orderBy,
   query,
   serverTimestamp,
+  setDoc,
   updateDoc,
   where,
   writeBatch,
 } from "firebase/firestore";
 
 import { getFirestoreDb } from "@/lib/firebase";
+import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import type { Trip } from "@/shared/types/trip";
@@ -66,14 +67,19 @@ export function useTrips(options?: { enabled?: boolean }) {
     if (!uid || !db) return null;
 
     try {
-      const docRef = await addDoc(collection(db, "users", uid, "trips"), {
-        ...tripData,
-        userId: uid,
-        spentAmount: 0,
-        status: "active",
-        createdAt: serverTimestamp(),
-      });
-      toast.success("Trip created!");
+      const docRef = doc(collection(db, "users", uid, "trips"));
+      const outcome = await commitWrite(
+        () =>
+          setDoc(docRef, {
+            ...tripData,
+            userId: uid,
+            spentAmount: 0,
+            status: "active",
+            createdAt: serverTimestamp(),
+          }),
+        { label: "trip" }
+      );
+      toast.success(writeSavedMessage(outcome, "Trip created!"));
       return docRef.id;
     } catch (err) {
       console.error("createTrip error:", err);
@@ -90,8 +96,11 @@ export function useTrips(options?: { enabled?: boolean }) {
     if (!uid || !db || !id) return false;
 
     try {
-      await updateDoc(doc(db, "users", uid, "trips", id), updates);
-      toast.success("Trip updated");
+      const outcome = await commitWrite(
+        () => updateDoc(doc(db, "users", uid, "trips", id), updates),
+        { label: "trip" }
+      );
+      toast.success(writeSavedMessage(outcome, "Trip updated"));
       return true;
     } catch (err) {
       console.error("updateTrip error:", err);
@@ -117,6 +126,15 @@ export function useTrips(options?: { enabled?: boolean }) {
       const { getDocs } = await import("firebase/firestore");
       const expensesSnap = await getDocs(expensesQuery);
 
+      // Offline this answers from cache, which may not hold every linked
+      // expense — the ones it misses would keep pointing at a deleted trip.
+      if (expensesSnap.metadata.fromCache) {
+        toast.error(
+          "Can't verify linked expenses while offline. Try again when connected."
+        );
+        return false;
+      }
+
       const batch = writeBatch(db);
 
       // Unlink each expense
@@ -127,8 +145,12 @@ export function useTrips(options?: { enabled?: boolean }) {
       // Delete the trip itself
       batch.delete(doc(db, "users", uid, "trips", tripId));
 
-      await batch.commit();
-      toast.success("Trip deleted and expenses unlinked");
+      const outcome = await commitWrite(() => batch.commit(), {
+        label: "trip deletion",
+      });
+      toast.success(
+        writeSavedMessage(outcome, "Trip deleted and expenses unlinked")
+      );
       return true;
     } catch (err) {
       console.error("deleteTrip error:", err);
@@ -158,7 +180,7 @@ export function useTrips(options?: { enabled?: boolean }) {
         spentAmount: (trip.spentAmount || 0) + expenseAmount,
       });
 
-      await batch.commit();
+      await commitWrite(() => batch.commit(), { label: "trip link" });
       return true;
     } catch (err) {
       console.error("linkExpenseToTrip error:", err);
@@ -189,7 +211,7 @@ export function useTrips(options?: { enabled?: boolean }) {
         spentAmount: Math.max(0, (trip.spentAmount || 0) - expenseAmount),
       });
 
-      await batch.commit();
+      await commitWrite(() => batch.commit(), { label: "trip unlink" });
       return true;
     } catch (err) {
       console.error("unlinkExpense error:", err);

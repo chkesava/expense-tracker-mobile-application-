@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import {
-  addDoc,
   collection,
   deleteDoc,
   doc,
@@ -8,10 +7,12 @@ import {
   orderBy,
   query,
   serverTimestamp,
+  setDoc,
   updateDoc,
 } from "firebase/firestore";
 
 import { getFirestoreDb } from "@/lib/firebase";
+import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import type { Investment } from "@/shared/types/investment";
@@ -72,11 +73,13 @@ export function useInvestments(options?: { enabled?: boolean }) {
           createdAt: serverTimestamp(),
         };
 
-        const docRef = await addDoc(
-          collection(db, "users", uid, "investments"),
-          payload
+        const docRef = doc(collection(db, "users", uid, "investments"));
+        const outcome = await commitWrite(() => setDoc(docRef, payload), {
+          label: "investment",
+        });
+        toast.success(
+          writeSavedMessage(outcome, `Investment "${params.name}" added`)
         );
-        toast.success(`Investment "${params.name}" added`);
         return docRef.id;
       } catch (err: any) {
         console.error("Failed adding investment:", err);
@@ -93,8 +96,11 @@ export function useInvestments(options?: { enabled?: boolean }) {
       if (!uid || !db) return false;
 
       try {
-        await updateDoc(doc(db, "users", uid, "investments", id), updates);
-        toast.success("Investment updated");
+        const outcome = await commitWrite(
+          () => updateDoc(doc(db, "users", uid, "investments", id), updates),
+          { label: "investment" }
+        );
+        toast.success(writeSavedMessage(outcome, "Investment updated"));
         return true;
       } catch (err: any) {
         console.error("Failed updating investment:", err);
@@ -111,8 +117,11 @@ export function useInvestments(options?: { enabled?: boolean }) {
       if (!uid || !db) return false;
 
       try {
-        await deleteDoc(doc(db, "users", uid, "investments", id));
-        toast.success("Investment deleted");
+        const outcome = await commitWrite(
+          () => deleteDoc(doc(db, "users", uid, "investments", id)),
+          { label: "investment deletion" }
+        );
+        toast.success(writeSavedMessage(outcome, "Investment deleted"));
         return true;
       } catch (err: any) {
         console.error("Failed deleting investment:", err);

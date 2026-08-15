@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import {
-  addDoc,
   collection,
   deleteDoc,
   doc,
@@ -8,11 +7,13 @@ import {
   or,
   query,
   serverTimestamp,
+  setDoc,
   updateDoc,
   where,
 } from "firebase/firestore";
 
 import { getFirestoreDb } from "@/lib/firebase";
+import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import type { SharedVault } from "@/shared/types/vault";
@@ -90,8 +91,13 @@ export function useVaults(options?: { enabled?: boolean }) {
           createdAt: serverTimestamp(),
         };
 
-        const docRef = await addDoc(collection(db, "vaults"), newVault);
-        toast.success(`Vault "${params.name}" created!`);
+        const docRef = doc(collection(db, "vaults"));
+        const outcome = await commitWrite(() => setDoc(docRef, newVault), {
+          label: "vault",
+        });
+        toast.success(
+          writeSavedMessage(outcome, `Vault "${params.name}" created!`)
+        );
         return docRef.id;
       } catch (err: any) {
         console.error("Failed creating vault:", err);
@@ -108,8 +114,11 @@ export function useVaults(options?: { enabled?: boolean }) {
       if (!uid || !db) return false;
 
       try {
-        await updateDoc(doc(db, "vaults", id), updates);
-        toast.success("Vault updated");
+        const outcome = await commitWrite(
+          () => updateDoc(doc(db, "vaults", id), updates),
+          { label: "vault" }
+        );
+        toast.success(writeSavedMessage(outcome, "Vault updated"));
         return true;
       } catch (err: any) {
         console.error("Failed updating vault:", err);
@@ -126,8 +135,11 @@ export function useVaults(options?: { enabled?: boolean }) {
       if (!uid || !db) return false;
 
       try {
-        await deleteDoc(doc(db, "vaults", id));
-        toast.success("Vault deleted");
+        const outcome = await commitWrite(
+          () => deleteDoc(doc(db, "vaults", id)),
+          { label: "vault deletion" }
+        );
+        toast.success(writeSavedMessage(outcome, "Vault deleted"));
         return true;
       } catch (err: any) {
         console.error("Failed deleting vault:", err);

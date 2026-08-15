@@ -24,6 +24,8 @@ import {
 } from "react";
 
 import { getFirestoreDb } from "@/lib/firebase";
+import { handleSnapshotError } from "@/lib/firestoreErrors";
+import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
 import {
   canDeleteAccount,
   countLinkedAccountRecords,
@@ -276,7 +278,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         setExpensesLoading(false);
       },
       (error) => {
-        console.error("Error fetching expenses:", error);
+        handleSnapshotError("expenses", error);
         setExpensesLoading(false);
       }
     );
@@ -297,7 +299,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
           setIncomesLoading(false);
         },
         (error) => {
-          console.error("Error fetching incomes:", error);
+          handleSnapshotError("incomes", error);
           setIncomesLoading(false);
         }
       ),
@@ -315,7 +317,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
           setAccountsLoading(false);
         },
         (error) => {
-          console.error("useAccounts snapshot error:", error);
+          handleSnapshotError("accounts", error);
           setAccountsLoading(false);
         }
       ),
@@ -333,7 +335,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
           setAccountTypesLoading(false);
         },
         (error) => {
-          console.error("useAccountTypes snapshot error:", error);
+          handleSnapshotError("accountTypes", error);
           setAccountTypesLoading(false);
         }
       ),
@@ -378,7 +380,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
             setExpensesLoading(false);
           },
           (error) => {
-            console.error("Error fetching full expenses:", error);
+            handleSnapshotError("expenses", error);
             setExpensesLoading(false);
           }
         );
@@ -401,7 +403,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
               setPaymentsLoading(false);
             },
             (error) => {
-              console.error("useAccountPayments snapshot error:", error);
+              handleSnapshotError("accountPayments", error);
               setPaymentsLoading(false);
             }
           ),
@@ -422,7 +424,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
               setEntriesLoading(false);
             },
             (error) => {
-              console.error("useAccountEntries snapshot error:", error);
+              handleSnapshotError("accountEntries", error);
               setEntriesLoading(false);
             }
           ),
@@ -443,7 +445,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
               setTransfersLoading(false);
             },
             (error) => {
-              console.error("useAccountTransfers snapshot error:", error);
+              handleSnapshotError("accountTransfers", error);
               setTransfersLoading(false);
             }
           ),
@@ -480,8 +482,11 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
           createdAt: serverTimestamp(),
         });
 
-        await addDoc(collection(database, "users", u.uid, "accounts"), payload);
-        toast.success("Account added");
+        const outcome = await commitWrite(
+          () => addDoc(collection(database, "users", u.uid, "accounts"), payload),
+          { label: "account" }
+        );
+        toast.success(writeSavedMessage(outcome, "Account added"));
       } catch (err) {
         console.error(err);
         toast.error("Failed to add account");
@@ -514,11 +519,11 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
           typeName,
           extras: hydrated,
         });
-        await updateDoc(
-          doc(database, "users", u.uid, "accounts", id),
-          payload
+        const outcome = await commitWrite(
+          () => updateDoc(doc(database, "users", u.uid, "accounts", id), payload),
+          { label: "account" }
         );
-        toast.success("Account updated");
+        toast.success(writeSavedMessage(outcome, "Account updated"));
       } catch (err) {
         console.error(err);
         toast.error("Failed to update account");
@@ -580,6 +585,26 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         ),
       ]);
 
+      // Offline these queries answer from the local cache, which may not hold
+      // every linked record. Deleting on a partial answer would orphan real
+      // expenses/payments on the server, so the check has to be authoritative.
+      const servedFromCache = [
+        linkedExpensesSnap,
+        linkedIncomesSnap,
+        linkedEntriesSnap,
+        linkedPaymentsFromSnap,
+        linkedPaymentsToSnap,
+        linkedTransfersFromSnap,
+        linkedTransfersToSnap,
+      ].some((snap) => snap.metadata.fromCache);
+
+      if (servedFromCache) {
+        toast.error(
+          "Can't verify linked transactions while offline. Try again when connected."
+        );
+        return;
+      }
+
       const linkedCount = countLinkedAccountRecords([
         linkedExpensesSnap.size,
         linkedIncomesSnap.size,
@@ -597,8 +622,11 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      await deleteDoc(doc(database, "users", u.uid, "accounts", id));
-      toast.success("Account deleted");
+      const outcome = await commitWrite(
+        () => deleteDoc(doc(database, "users", u.uid, "accounts", id)),
+        { label: "account deletion" }
+      );
+      toast.success(writeSavedMessage(outcome, "Account deleted"));
     } catch (err) {
       console.error(err);
       toast.error("Failed to delete account");
@@ -610,11 +638,15 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     const database = getFirestoreDb();
     if (!u || !database || !name.trim()) return;
     try {
-      await addDoc(collection(database, "users", u.uid, "accountTypes"), {
-        name: name.trim(),
-        createdAt: serverTimestamp(),
-      });
-      toast.success("Account type added");
+      const outcome = await commitWrite(
+        () =>
+          addDoc(collection(database, "users", u.uid, "accountTypes"), {
+            name: name.trim(),
+            createdAt: serverTimestamp(),
+          }),
+        { label: "account type" }
+      );
+      toast.success(writeSavedMessage(outcome, "Account type added"));
     } catch (err) {
       console.error(err);
       toast.error("Failed to add account type");
@@ -626,8 +658,11 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     const database = getFirestoreDb();
     if (!u || !database) return;
     try {
-      await deleteDoc(doc(database, "users", u.uid, "accountTypes", id));
-      toast.success("Account type deleted");
+      const outcome = await commitWrite(
+        () => deleteDoc(doc(database, "users", u.uid, "accountTypes", id)),
+        { label: "account type deletion" }
+      );
+      toast.success(writeSavedMessage(outcome, "Account type deleted"));
     } catch (err) {
       console.error(err);
       toast.error("Failed to delete account type");
@@ -657,22 +692,26 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         return false;
       }
       try {
-        await addDoc(collection(database, "users", u.uid, "accountPayments"), {
-          fromAccountId,
-          toAccountId,
-          amount,
-          date,
-          note: note?.trim() || "",
-          sourceType: "account",
-          ...(opts?.appliedCycleStart
-            ? { appliedCycleStart: opts.appliedCycleStart }
-            : {}),
-          ...(opts?.appliedCycleEnd
-            ? { appliedCycleEnd: opts.appliedCycleEnd }
-            : {}),
-          createdAt: serverTimestamp(),
-        });
-        toast.success("Bill payment recorded");
+        const outcome = await commitWrite(
+          () =>
+            addDoc(collection(database, "users", u.uid, "accountPayments"), {
+              fromAccountId,
+              toAccountId,
+              amount,
+              date,
+              note: note?.trim() || "",
+              sourceType: "account",
+              ...(opts?.appliedCycleStart
+                ? { appliedCycleStart: opts.appliedCycleStart }
+                : {}),
+              ...(opts?.appliedCycleEnd
+                ? { appliedCycleEnd: opts.appliedCycleEnd }
+                : {}),
+              createdAt: serverTimestamp(),
+            }),
+          { label: "payment" }
+        );
+        toast.success(writeSavedMessage(outcome, "Bill payment recorded"));
         return true;
       } catch (err) {
         console.error(err);
@@ -699,22 +738,26 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         return false;
       }
       try {
-        await addDoc(collection(database, "users", u.uid, "accountPayments"), {
-          fromAccountId: "external",
-          toAccountId,
-          amount,
-          date,
-          note: note?.trim() || "",
-          sourceType: "external",
-          ...(opts?.appliedCycleStart
-            ? { appliedCycleStart: opts.appliedCycleStart }
-            : {}),
-          ...(opts?.appliedCycleEnd
-            ? { appliedCycleEnd: opts.appliedCycleEnd }
-            : {}),
-          createdAt: serverTimestamp(),
-        });
-        toast.success("Marked as already paid");
+        const outcome = await commitWrite(
+          () =>
+            addDoc(collection(database, "users", u.uid, "accountPayments"), {
+              fromAccountId: "external",
+              toAccountId,
+              amount,
+              date,
+              note: note?.trim() || "",
+              sourceType: "external",
+              ...(opts?.appliedCycleStart
+                ? { appliedCycleStart: opts.appliedCycleStart }
+                : {}),
+              ...(opts?.appliedCycleEnd
+                ? { appliedCycleEnd: opts.appliedCycleEnd }
+                : {}),
+              createdAt: serverTimestamp(),
+            }),
+          { label: "payment" }
+        );
+        toast.success(writeSavedMessage(outcome, "Marked as already paid"));
         return true;
       } catch (err) {
         console.error(err);
@@ -730,8 +773,11 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     const database = getFirestoreDb();
     if (!u || !database) return;
     try {
-      await deleteDoc(doc(database, "users", u.uid, "accountPayments", id));
-      toast.success("Payment removed");
+      const outcome = await commitWrite(
+        () => deleteDoc(doc(database, "users", u.uid, "accountPayments", id)),
+        { label: "payment deletion" }
+      );
+      toast.success(writeSavedMessage(outcome, "Payment removed"));
     } catch (err) {
       console.error(err);
       toast.error("Failed to remove payment");
@@ -757,18 +803,25 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         return false;
       }
       try {
-        await addDoc(collection(database, "users", u.uid, "accountEntries"), {
-          accountId,
-          amount,
-          direction,
-          date,
-          note: note?.trim() || "",
-          createdAt: serverTimestamp(),
-        });
+        const outcome = await commitWrite(
+          () =>
+            addDoc(collection(database, "users", u.uid, "accountEntries"), {
+              accountId,
+              amount,
+              direction,
+              date,
+              note: note?.trim() || "",
+              createdAt: serverTimestamp(),
+            }),
+          { label: "account entry" }
+        );
         toast.success(
-          direction === "credit"
-            ? "Funds added to account"
-            : "Debit recorded in account"
+          writeSavedMessage(
+            outcome,
+            direction === "credit"
+              ? "Funds added to account"
+              : "Debit recorded in account"
+          )
         );
         return true;
       } catch (err) {
@@ -785,8 +838,11 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     const database = getFirestoreDb();
     if (!u || !database) return;
     try {
-      await deleteDoc(doc(database, "users", u.uid, "accountEntries", id));
-      toast.success("Account entry removed");
+      const outcome = await commitWrite(
+        () => deleteDoc(doc(database, "users", u.uid, "accountEntries", id)),
+        { label: "account entry deletion" }
+      );
+      toast.success(writeSavedMessage(outcome, "Account entry removed"));
     } catch (err) {
       console.error(err);
       toast.error("Failed to remove account entry");
@@ -824,15 +880,19 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         return false;
       }
       try {
-        await addDoc(collection(database, "users", u.uid, "accountTransfers"), {
-          fromAccountId,
-          toAccountId,
-          amount,
-          date,
-          note: note?.trim() || "",
-          createdAt: serverTimestamp(),
-        });
-        toast.success("Transfer recorded");
+        const outcome = await commitWrite(
+          () =>
+            addDoc(collection(database, "users", u.uid, "accountTransfers"), {
+              fromAccountId,
+              toAccountId,
+              amount,
+              date,
+              note: note?.trim() || "",
+              createdAt: serverTimestamp(),
+            }),
+          { label: "transfer" }
+        );
+        toast.success(writeSavedMessage(outcome, "Transfer recorded"));
         return true;
       } catch (err) {
         console.error(err);
@@ -848,8 +908,11 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     const database = getFirestoreDb();
     if (!u || !database) return;
     try {
-      await deleteDoc(doc(database, "users", u.uid, "accountTransfers", id));
-      toast.success("Transfer removed");
+      const outcome = await commitWrite(
+        () => deleteDoc(doc(database, "users", u.uid, "accountTransfers", id)),
+        { label: "transfer deletion" }
+      );
+      toast.success(writeSavedMessage(outcome, "Transfer removed"));
     } catch (err) {
       console.error(err);
       toast.error("Failed to remove transfer");

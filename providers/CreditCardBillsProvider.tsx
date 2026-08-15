@@ -5,6 +5,7 @@ import {
   onSnapshot,
   query,
   serverTimestamp,
+  setDoc,
   updateDoc,
 } from "firebase/firestore";
 import {
@@ -20,6 +21,7 @@ import {
 import { AppState } from "react-native";
 
 import { getFirestoreDb } from "@/lib/firebase";
+import { commitWrite } from "@/lib/firestoreWrite";
 import { useAuth } from "@/providers/AuthProvider";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
@@ -165,18 +167,23 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
       const db = getFirestoreDb();
       if (!user || !db) return;
       try {
-        await addDoc(
-          collection(db, "users", user.uid, "creditCardBillReminderLogs"),
-          {
-            billId: entry.billId,
-            notificationType: entry.notificationType,
-            daysBefore: entry.daysBefore ?? null,
-            sentAt: new Date().toISOString(),
-            channel: "local",
-            status: entry.status,
-            reason: entry.reason ?? null,
-            createdAt: serverTimestamp(),
-          }
+        // Diagnostic log only — never block the caller on the network for it.
+        await commitWrite(
+          () =>
+            addDoc(
+              collection(db, "users", user.uid, "creditCardBillReminderLogs"),
+              {
+                billId: entry.billId,
+                notificationType: entry.notificationType,
+                daysBefore: entry.daysBefore ?? null,
+                sentAt: new Date().toISOString(),
+                channel: "local",
+                status: entry.status,
+                reason: entry.reason ?? null,
+                createdAt: serverTimestamp(),
+              }
+            ),
+          { graceMs: 0, onLateFailure: () => undefined }
         );
       } catch {
         // soft-fail — logging must not affect bill state
@@ -250,29 +257,33 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
         globalPrefs.enabled
       );
 
-      const ref = await addDoc(
-        collection(db, "users", user.uid, "creditCardBills"),
-        {
-          accountId: input.accountId,
-          billingPeriodStart: input.billingPeriodStart ?? null,
-          billingPeriodEnd: input.billingPeriodEnd ?? null,
-          statementDate: input.statementDate,
-          dueDate: input.dueDate,
-          statementAmount: input.statementAmount,
-          minimumDueAmount: input.minimumDueAmount,
-          amountPaid,
-          remainingAmount: derived.remainingAmount,
-          currency: input.currency || settings.currency || "INR",
-          status: derived.status,
-          note: input.note ?? null,
-          reminderEnabled: input.reminderEnabled ?? true,
-          reminderFrequency:
-            input.reminderFrequency ?? DEFAULT_BILL_REMINDER_FREQUENCY,
-          nextReminderAt: derived.nextReminderAt ?? null,
-          paymentIds: [],
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        }
+      // Client-generated id: the caller needs it immediately, and offline the
+      // server round-trip that `addDoc` waits on never happens.
+      const ref = doc(collection(db, "users", user.uid, "creditCardBills"));
+      await commitWrite(
+        () =>
+          setDoc(ref, {
+            accountId: input.accountId,
+            billingPeriodStart: input.billingPeriodStart ?? null,
+            billingPeriodEnd: input.billingPeriodEnd ?? null,
+            statementDate: input.statementDate,
+            dueDate: input.dueDate,
+            statementAmount: input.statementAmount,
+            minimumDueAmount: input.minimumDueAmount,
+            amountPaid,
+            remainingAmount: derived.remainingAmount,
+            currency: input.currency || settings.currency || "INR",
+            status: derived.status,
+            note: input.note ?? null,
+            reminderEnabled: input.reminderEnabled ?? true,
+            reminderFrequency:
+              input.reminderFrequency ?? DEFAULT_BILL_REMINDER_FREQUENCY,
+            nextReminderAt: derived.nextReminderAt ?? null,
+            paymentIds: [],
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          }),
+        { label: "credit card bill" }
       );
       return ref.id;
     },
@@ -312,13 +323,17 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
         globalPrefs.enabled
       );
 
-      await updateDoc(doc(db, "users", user.uid, "creditCardBills", id), {
-        ...updates,
-        status: derived.status,
-        remainingAmount: derived.remainingAmount,
-        nextReminderAt: derived.nextReminderAt ?? null,
-        updatedAt: serverTimestamp(),
-      });
+      await commitWrite(
+        () =>
+          updateDoc(doc(db, "users", user.uid, "creditCardBills", id), {
+            ...updates,
+            status: derived.status,
+            remainingAmount: derived.remainingAmount,
+            nextReminderAt: derived.nextReminderAt ?? null,
+            updatedAt: serverTimestamp(),
+          }),
+        { label: "credit card bill" }
+      );
 
       if (derived.status === "PAID" || derived.status === "CANCELLED") {
         await cancelBillReminders(id);

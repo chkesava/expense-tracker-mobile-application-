@@ -1,18 +1,19 @@
 import { useEffect, useState } from "react";
 import {
-  addDoc,
   collection,
   deleteDoc,
   doc,
   onSnapshot,
   orderBy,
   query,
+  setDoc,
   updateDoc,
   where,
 } from "firebase/firestore";
 import { getRandomBytes } from "expo-crypto";
 
 import { getFirestoreDb } from "@/lib/firebase";
+import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import type { PaymentRequest, PaymentRequestInput } from "@/shared/types/paymentRequest";
@@ -88,8 +89,11 @@ export function usePaymentRequests(options?: { enabled?: boolean }) {
         qrStyleId: input.qrStyleId || getStoredQrStyleId(),
       };
 
-      await addDoc(collection(db, "paymentRequests"), newRequest);
-      toast.success("Payment request created!");
+      const outcome = await commitWrite(
+        () => setDoc(doc(collection(db, "paymentRequests")), newRequest),
+        { label: "payment request" }
+      );
+      toast.success(writeSavedMessage(outcome, "Payment request created!"));
       return slug;
     } catch (err) {
       console.error("createPaymentRequest error:", err);
@@ -103,8 +107,11 @@ export function usePaymentRequests(options?: { enabled?: boolean }) {
     if (!uid || !db || !id) return false;
 
     try {
-      await updateDoc(doc(db, "paymentRequests", id), { status: "cancelled" });
-      toast.success("Payment request cancelled");
+      const outcome = await commitWrite(
+        () => updateDoc(doc(db, "paymentRequests", id), { status: "cancelled" }),
+        { label: "payment request" }
+      );
+      toast.success(writeSavedMessage(outcome, "Payment request cancelled"));
       return true;
     } catch (err) {
       console.error("cancelPaymentRequest error:", err);
@@ -118,8 +125,11 @@ export function usePaymentRequests(options?: { enabled?: boolean }) {
     if (!uid || !db || !id) return false;
 
     try {
-      await deleteDoc(doc(db, "paymentRequests", id));
-      toast.success("Payment request deleted");
+      const outcome = await commitWrite(
+        () => deleteDoc(doc(db, "paymentRequests", id)),
+        { label: "payment request deletion" }
+      );
+      toast.success(writeSavedMessage(outcome, "Payment request deleted"));
       return true;
     } catch (err) {
       console.error("deletePaymentRequest error:", err);

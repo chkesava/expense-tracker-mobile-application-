@@ -1,4 +1,5 @@
 import Constants from 'expo-constants';
+import { fetchWithTimeout, isAbortError } from '@/lib/fetchWithTimeout';
 import {
   StockQuoteDTO,
   MutualFundQuoteDTO,
@@ -23,63 +24,79 @@ const getBaseUrl = (): string => {
   return process.env.EXPO_PUBLIC_APP_URL || '';
 };
 
-const fetchWithTimeout = async (url: string, timeout = 8000) => {
-  const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), timeout);
-  try {
-    const response = await fetch(url, { signal: controller.signal });
-    clearTimeout(id);
-    return response;
-  } catch (error) {
-    clearTimeout(id);
-    throw error;
-  }
-};
+/** Cancellation token passed down from React Query so superseded quote
+ *  refetches (and unmounted screens) stop their in-flight requests. */
+export type QuoteRequestOptions = { signal?: AbortSignal | null };
 
-export const fetchStockQuote = async (symbol: string): Promise<StockQuoteDTO | null> => {
+export const fetchStockQuote = async (
+  symbol: string,
+  options: QuoteRequestOptions = {}
+): Promise<StockQuoteDTO | null> => {
   const baseUrl = getBaseUrl();
   if (!baseUrl) return null;
   try {
-    const res = await fetchWithTimeout(`${baseUrl}/api/stock?symbol=${encodeURIComponent(symbol)}`);
+    const res = await fetchWithTimeout(
+      `${baseUrl}/api/stock?symbol=${encodeURIComponent(symbol)}`,
+      { signal: options.signal }
+    );
     if (!res.ok) return null;
     return await res.json();
   } catch (err) {
+    if (isAbortError(err)) throw err;
     console.warn('fetchStockQuote error:', err);
     return null;
   }
 };
 
-export const fetchMutualFundQuote = async (schemeCode: string): Promise<MutualFundQuoteDTO | null> => {
+export const fetchMutualFundQuote = async (
+  schemeCode: string,
+  options: QuoteRequestOptions = {}
+): Promise<MutualFundQuoteDTO | null> => {
   const baseUrl = getBaseUrl();
   if (!baseUrl) return null;
   try {
-    const res = await fetchWithTimeout(`${baseUrl}/api/mutual-funds?schemeCode=${encodeURIComponent(schemeCode)}`);
+    const res = await fetchWithTimeout(
+      `${baseUrl}/api/mutual-funds?schemeCode=${encodeURIComponent(schemeCode)}`,
+      { signal: options.signal }
+    );
     if (!res.ok) return null;
     return await res.json();
   } catch (err) {
+    if (isAbortError(err)) throw err;
     console.warn('fetchMutualFundQuote error:', err);
     return null;
   }
 };
 
-export const fetchCryptoQuote = async (coinId: string): Promise<CryptoQuoteDTO | null> => {
+export const fetchCryptoQuote = async (
+  coinId: string,
+  options: QuoteRequestOptions = {}
+): Promise<CryptoQuoteDTO | null> => {
   const baseUrl = getBaseUrl();
   if (!baseUrl) return null;
   try {
-    const res = await fetchWithTimeout(`${baseUrl}/api/crypto?ids=${encodeURIComponent(coinId)}`);
+    const res = await fetchWithTimeout(
+      `${baseUrl}/api/crypto?ids=${encodeURIComponent(coinId)}`,
+      { signal: options.signal }
+    );
     if (!res.ok) return null;
     const response = await res.json() as { success?: boolean; quotes?: CryptoQuoteDTO[] };
     if (!response.success) return null;
     return response.quotes?.find((quote) => quote.coinId === coinId.toLowerCase()) ?? null;
   } catch (err) {
+    if (isAbortError(err)) throw err;
     console.warn('fetchCryptoQuote error:', err);
     return null;
   }
 };
 
-export const fetchMarketQuote = async (symbol: string, instrumentType: InstrumentType): Promise<MarketQuote | null> => {
+export const fetchMarketQuote = async (
+  symbol: string,
+  instrumentType: InstrumentType,
+  options: QuoteRequestOptions = {}
+): Promise<MarketQuote | null> => {
   if (instrumentType === 'mutual_fund') {
-    const quote = await fetchMutualFundQuote(symbol);
+    const quote = await fetchMutualFundQuote(symbol, options);
     if (!quote || !quote.success) return null;
     return {
       symbol: quote.schemeCode,
@@ -96,7 +113,7 @@ export const fetchMarketQuote = async (symbol: string, instrumentType: Instrumen
       lastUpdated: quote.date,
     };
   } else if (instrumentType === 'crypto') {
-    const quote = await fetchCryptoQuote(symbol);
+    const quote = await fetchCryptoQuote(symbol, options);
     if (!quote || !quote.success) return null;
     return {
       symbol: quote.symbol,
@@ -115,7 +132,7 @@ export const fetchMarketQuote = async (symbol: string, instrumentType: Instrumen
     };
   } else {
     // Stock or ETF
-    const quote = await fetchStockQuote(symbol);
+    const quote = await fetchStockQuote(symbol, options);
     if (!quote || !quote.success) return null;
     return {
       symbol: quote.symbol,
@@ -134,8 +151,11 @@ export const fetchMarketQuote = async (symbol: string, instrumentType: Instrumen
   }
 };
 
-export const searchSymbols = async (query: string): Promise<SearchResult[]> => {
-  const quote = await fetchStockQuote(query);
+export const searchSymbols = async (
+  query: string,
+  options: QuoteRequestOptions = {}
+): Promise<SearchResult[]> => {
+  const quote = await fetchStockQuote(query, options);
   if (!quote?.success) return [];
   return [{
     symbol: quote.symbol,
