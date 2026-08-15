@@ -142,6 +142,14 @@ jobs:
           printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "${{ runner.temp }}/service-account.json"
           chmod 600 "${{ runner.temp }}/service-account.json"
 
+      # In-app updates need this bucket. Fail here instead of emailing testers
+      # an APK that Check for updates cannot see.
+      - name: Verify Firebase Storage bucket
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/service-account.json
+          EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET: ${{ secrets.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET }}
+        run: node scripts/verify-storage-bucket.js
+
       - name: Resolve version
         id: version
         env:
@@ -242,6 +250,7 @@ jobs:
           echo "Using tester URL: $URL"
 
       - name: Publish release metadata to Firestore
+        id: publish
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/service-account.json
           RELEASE_APK_PATH: releases/app-release.apk
@@ -250,11 +259,13 @@ jobs:
           RELEASE_MANDATORY: ${{ inputs.mandatory || false }}
           RELEASE_VERSION_NAME: ${{ steps.version.outputs.name }}
           RELEASE_VERSION_CODE: ${{ steps.version.outputs.code }}
+          EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET: ${{ secrets.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET }}
         run: node scripts/publish-release-metadata.js
 
-      # Persist the bumped version so the next manual release continues 1.1.1 → 1.1.2.
+      # Persist the bump even if Storage publish failed, as long as testers
+      # already received the APK — otherwise app.json stays behind the shipped build.
       - name: Commit version bump
-        if: success()
+        if: always() && steps.distribute.outcome == 'success'
         env:
           VERSION_NAME: ${{ steps.version.outputs.name }}
           VERSION_CODE: ${{ steps.version.outputs.code }}
@@ -278,7 +289,9 @@ jobs:
           rm -f .env
 
       - name: Job summary
-        if: success()
+        if: always() && steps.distribute.outcome == 'success'
+        env:
+          PUBLISH_OUTCOME: ${{ steps.publish.outcome }}
         run: |
           {
             echo "## Android release published"
@@ -288,7 +301,11 @@ jobs:
             echo "- Mandatory update: ${{ inputs.mandatory || false }}"
             echo "- Download: ${{ steps.download.outputs.url }}"
             echo "- Testers link: ${{ steps.distribute.outputs.TESTING_URI }}"
-            echo "- In-app APK: Firebase Storage releases/${{ steps.version.outputs.code }}/"
+            echo "- Firestore / Storage publish: ${PUBLISH_OUTCOME}"
+            if [ "$PUBLISH_OUTCOME" != "success" ]; then
+              echo ""
+              echo "> In-app updates will **not** see this build until Storage is set up and Android Release is re-run."
+            fi
             echo ""
             echo "### Quality gate (Phase 10)"
             echo "- \`npm test\` — passed before APK"
