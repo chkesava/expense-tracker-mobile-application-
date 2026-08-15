@@ -1083,7 +1083,7 @@ function GettingStartedCard() {
         <Pressable
           onPress={() => {
             Haptics.selectionAsync().catch(() => undefined);
-            router.push("/dashboard");
+            router.dismissTo("/dashboard");
           }}
           android_ripple={{
             color: theme.colors.primary + "14",

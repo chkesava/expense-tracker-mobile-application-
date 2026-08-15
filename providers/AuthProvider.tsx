@@ -28,6 +28,7 @@ import {
 import { doc, getDoc } from "firebase/firestore";
 import { GoogleSignin } from "@react-native-google-signin/google-signin";
 
+import { clearSavedRoute } from "@/hooks/useNavigationStateRestoration";
 import { ensureCategoryHierarchy } from "@/lib/ensureCategoryHierarchy";
 import { env } from "@/lib/env";
 import { getFirebaseAuth, getFirestoreDb } from "@/lib/firebase";
@@ -198,8 +199,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(async () => {
     const auth = getFirebaseAuth();
     if (!auth) return;
+    const signedOutUid = auth.currentUser?.uid;
     try {
       privacySession.clearAll();
+      // Otherwise the next account signing in on this device resumes into the
+      // previous user's last screen — including their account detail routes.
+      if (signedOutUid) await clearSavedRoute(signedOutUid);
       await GoogleSignin.signOut().catch(() => {});
       await signOut(auth);
     } catch (error) {

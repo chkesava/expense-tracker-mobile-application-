@@ -542,7 +542,7 @@ export function ExpenseList({
             if (onAddExpense) {
               onAddExpense();
             } else {
-              router.push("/dashboard");
+              router.dismissTo("/dashboard");
             }
           },
         }}
@@ -550,7 +550,7 @@ export function ExpenseList({
           label: "Scan Receipt",
           icon: <ScanLine size={16} color={theme.colors.primary} strokeWidth={2} />,
           onPress: () => {
-            router.push("/dashboard");
+            router.dismissTo("/dashboard");
           },
         }}
         tip="Quick-add cash expenses in under 3 seconds using the bottom dock '+' button anytime."

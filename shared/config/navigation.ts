@@ -81,6 +81,49 @@ function normalizePathname(pathname: string): string {
   return clean;
 }
 
+/**
+ * What the Android hardware back button should do from a given route, once any
+ * open modal has been ruled out.
+ *
+ * - `pop`     — a sub-screen: leave the stack, falling back to home if it is empty
+ * - `home`    — a secondary top-level tab: return to the start destination
+ * - `exit`    — already home: double-press to leave the app
+ * - `default` — let the navigator handle it
+ */
+export type AndroidBackAction = "pop" | "home" | "exit" | "default";
+
+/** Start destination of the app shell. */
+export const HOME_ROUTE = "/dashboard";
+
+const SUB_SCREEN_PREFIXES = [
+  "/accounts/",
+  "/credit-card-bills/",
+];
+
+const SUB_SCREEN_ROUTES = ["/settings", "/sms-inbox", "/app-selector", "/add"];
+
+const SECONDARY_TAB_PREFIXES = ["/ledger", "/vaults", "/insights"];
+
+export function resolveAndroidBackAction(pathname: string): AndroidBackAction {
+  const clean = normalizePathname(pathname);
+
+  if (clean === HOME_ROUTE || clean === "/") return "exit";
+
+  if (
+    SUB_SCREEN_ROUTES.includes(clean) ||
+    SUB_SCREEN_ROUTES.some((route) => clean.startsWith(`${route}?`)) ||
+    SUB_SCREEN_PREFIXES.some((prefix) => clean.startsWith(prefix))
+  ) {
+    return "pop";
+  }
+
+  if (SECONDARY_TAB_PREFIXES.some((prefix) => clean.startsWith(prefix))) {
+    return "home";
+  }
+
+  return "default";
+}
+
 export function isNavItemActive(pathname: string, id: NavSectionId): boolean {
   const clean = normalizePathname(pathname);
   if (id === "home") return clean === "/dashboard" || clean === "/";
