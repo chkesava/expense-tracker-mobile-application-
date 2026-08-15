@@ -12,7 +12,10 @@ import {
   writeBatch,
 } from "firebase/firestore";
 
+import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
+import { snapshotErrorHandler } from "@/lib/firestoreErrors";
+import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import type { Subscription } from "@/shared/types/subscription";
@@ -29,6 +32,7 @@ export function useSubscriptions(options?: { enabled?: boolean }) {
 
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [loading, setLoading] = useState(true);
+  const { error, setError, retry, attempt } = useLoadFailure();
   const isProcessingRef = useRef(false);
 
   // Firestore listener
@@ -54,16 +58,21 @@ export function useSubscriptions(options?: { enabled?: boolean }) {
           ...(docSnap.data() as Omit<Subscription, "id">),
         }));
         setSubscriptions(list);
+        setError(null);
         setLoading(false);
       },
-      (error) => {
-        console.error("useSubscriptions error:", error);
-        setLoading(false);
-      }
+      snapshotErrorHandler(
+        "snapshot.subscriptions",
+        (failure) => {
+          setError(failure);
+          setLoading(false);
+        },
+        "Couldn't load your subscriptions."
+      )
     );
 
     return unsubscribe;
-  }, [uid, enabled]);
+  }, [uid, enabled, attempt]);
 
   // Process due subscriptions in background after idle
   const processDueSubscriptions = useCallback(async () => {
@@ -129,7 +138,7 @@ export function useSubscriptions(options?: { enabled?: boolean }) {
         }
       }
     } catch (err) {
-      console.error("Failed processing due subscriptions:", err);
+      logError("subscriptions.processingDueSubscriptions", err);
     } finally {
       isProcessingRef.current = false;
     }
@@ -161,7 +170,7 @@ export function useSubscriptions(options?: { enabled?: boolean }) {
       toast.success("Subscription added");
       return docRef.id;
     } catch (err) {
-      console.error("addSubscription error:", err);
+      logError("subscriptions.addsubscription", err);
       toast.error("Failed to add subscription");
       return null;
     }
@@ -179,7 +188,7 @@ export function useSubscriptions(options?: { enabled?: boolean }) {
       toast.success("Subscription updated");
       return true;
     } catch (err) {
-      console.error("updateSubscription error:", err);
+      logError("subscriptions.updatesubscription", err);
       toast.error("Failed to update subscription");
       return false;
     }
@@ -200,7 +209,7 @@ export function useSubscriptions(options?: { enabled?: boolean }) {
       toast.success("Subscription deleted");
       return true;
     } catch (err) {
-      console.error("deleteSubscription error:", err);
+      logError("subscriptions.deletesubscription", err);
       toast.error("Failed to delete subscription");
       return false;
     }
@@ -211,6 +220,8 @@ export function useSubscriptions(options?: { enabled?: boolean }) {
   };
 
   return {
+    error,
+    retry,
     subscriptions,
     loading,
     addSubscription,

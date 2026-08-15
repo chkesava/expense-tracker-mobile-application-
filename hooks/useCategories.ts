@@ -12,7 +12,10 @@ import {
   writeBatch,
 } from "firebase/firestore";
 
+import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
+import { snapshotErrorHandler } from "@/lib/firestoreErrors";
+import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import type { Category } from "@/shared/types/expense";
@@ -22,6 +25,7 @@ export const useCategories = () => {
   const uid = user?.uid;
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
+  const { error, setError, retry, attempt } = useLoadFailure();
 
   useEffect(() => {
     const db = getFirestoreDb();
@@ -39,14 +43,19 @@ export const useCategories = () => {
         setCategories(
           snap.docs.map((d) => ({ id: d.id, ...d.data() } as Category))
         );
+        setError(null);
         setLoading(false);
       },
-      (err) => {
-        console.error("useCategories snapshot error:", err);
-        setLoading(false);
-      }
+      snapshotErrorHandler(
+        "snapshot.categories",
+        (failure) => {
+          setError(failure);
+          setLoading(false);
+        },
+        "Couldn't load your categories."
+      )
     );
-  }, [uid]);
+  }, [uid, attempt]);
 
   const parentCategories = useMemo(
     () =>
@@ -152,7 +161,7 @@ export const useCategories = () => {
       toast.success("Category added");
       return parentRef.id;
     } catch (err) {
-      console.error(err);
+      logError("categories.addCategory", err);
       toast.error("Failed to add category");
     }
   };
@@ -174,7 +183,7 @@ export const useCategories = () => {
       });
       toast.success("Subcategory added");
     } catch (err) {
-      console.error(err);
+      logError("categories.addSubcategory", err);
       toast.error("Failed to add subcategory");
     }
   };
@@ -188,7 +197,7 @@ export const useCategories = () => {
       });
       toast.success("Category updated");
     } catch (err) {
-      console.error(err);
+      logError("categories.updateCategory", err);
       toast.error("Failed to update category");
     }
   };
@@ -248,7 +257,7 @@ export const useCategories = () => {
 
       toast.success("Renamed");
     } catch (err) {
-      console.error(err);
+      logError("categories.renameCategory", err);
       toast.error("Failed to rename category");
     }
   };
@@ -258,7 +267,7 @@ export const useCategories = () => {
       await patchCategory(id, { isHidden });
       toast.success(isHidden ? "Hidden from picker" : "Shown in picker");
     } catch (err) {
-      console.error(err);
+      logError("categories.updateVisibility", err);
       toast.error("Failed to update visibility");
     }
   };
@@ -267,7 +276,7 @@ export const useCategories = () => {
     try {
       await patchCategory(id, { isFavorite });
     } catch (err) {
-      console.error(err);
+      logError("categories.updateFavorite", err);
       toast.error("Failed to update favorite");
     }
   };
@@ -280,7 +289,7 @@ export const useCategories = () => {
       await patchCategory(id, style);
       toast.success("Style updated");
     } catch (err) {
-      console.error(err);
+      logError("categories.updateStyle", err);
       toast.error("Failed to update style");
     }
   };
@@ -294,7 +303,7 @@ export const useCategories = () => {
       });
       toast.success(isArchived ? "Category archived" : "Category restored");
     } catch (err) {
-      console.error(err);
+      logError("categories.updateCategoryStatus", err);
       toast.error("Failed to update category status");
     }
   };
@@ -312,7 +321,7 @@ export const useCategories = () => {
       await deleteDoc(doc(db, "users", uid, "categories", id));
       toast.success("Category deleted");
     } catch (err) {
-      console.error(err);
+      logError("categories.deleteCategory", err);
       toast.error("Failed to delete category");
     }
   };
@@ -401,12 +410,14 @@ export const useCategories = () => {
 
       toast.success(`Merged “${source.name}” into “${target.name}”`);
     } catch (err) {
-      console.error(err);
+      logError("categories.merge", err);
       toast.error("Merge failed");
     }
   };
 
   return {
+    error,
+    retry,
     categories,
     parentCategories,
     visibleParents,

@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/Input";
 import { useAccountEntries } from "@/hooks/useAccountEntries";
 import { useAccountTransfers } from "@/hooks/useAccountTransfers";
 import { usePortfolio } from "@/hooks/usePortfolio";
+import { logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
 import type { Account } from "@/shared/types/expense";
 import { formatDateKey } from "@/shared/utils/dates";
@@ -160,7 +161,7 @@ export function TransferFundsModal({
         }
       }
     } catch (err) {
-      console.error("Save transfer error:", err);
+      logError("transferFundsModal.saveTransfer", err);
       toast.error("Failed to save transfer");
     } finally {
       setSaving(false);

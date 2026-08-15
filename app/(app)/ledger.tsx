@@ -39,6 +39,7 @@ import { PortfolioDashboard } from "@/components/portfolio/PortfolioDashboard";
 import { SipDashboard } from "@/components/sip/SipDashboard";
 import { Amount } from "@/components/common/Amount";
 import { EmptyState } from "@/components/common/EmptyState";
+import { ErrorState } from "@/components/common/ErrorState";
 import { SearchBar } from "@/components/common/SearchBar";
 import { Skeleton } from "@/components/common/Skeleton";
 import { ExpenseList } from "@/components/ExpenseList";
@@ -86,7 +87,12 @@ export default function LedgerScreen() {
     setQuery,
   } = useLedgerState();
 
-  const { expenses, loading: expensesLoading } = useExpenses();
+  const {
+    expenses,
+    loading: expensesLoading,
+    error: expensesError,
+    retry: retryExpenses,
+  } = useExpenses();
   const { incomes, loading: incomesLoading } = useIncomes();
   const { accounts, loading: accountsLoading } = useAccounts();
   const { accountTypes } = useAccountTypes();
@@ -342,6 +348,12 @@ export default function LedgerScreen() {
                     <Skeleton key={i} height={64} borderRadius={theme.radius.lg} />
                   ))}
                 </View>
+              ) : expensesError && expenses.length === 0 ? (
+                <ErrorState
+                  title="Couldn't load your transactions"
+                  description={expensesError.message}
+                  onRetry={expensesError.retryable ? retryExpenses : undefined}
+                />
               ) : (
                 <ExpenseList
                   expenses={filteredExpenses}

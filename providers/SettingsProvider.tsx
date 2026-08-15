@@ -15,6 +15,7 @@ import {
 import { View } from "react-native";
 import { doc, setDoc } from "firebase/firestore";
 
+import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
 import { haptic } from "@/lib/haptics";
 import { useAuth } from "@/providers/AuthProvider";
@@ -68,7 +69,7 @@ const SettingsContext = createContext<SettingsContextType | undefined>(undefined
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const { realUser } = useAuth();
-  const { data, exists, loading: userDocLoading } = useUserDoc();
+  const { data, exists, error: userDocError, loading: userDocLoading } = useUserDoc();
   const [settings, setSettings] = useState<UserSettings>(SETTINGS_DEFAULTS);
   const [seedAttempted, setSeedAttempted] = useState(false);
 
@@ -83,6 +84,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       return;
     }
     if (userDocLoading) return;
+    // The profile read failed — keep whatever settings are already applied
+    // rather than snapping the UI back to defaults.
+    if (userDocError) return;
 
     if (exists && data) {
       setSettings(mergeSettingsFromDoc(data as Record<string, unknown>));
@@ -94,7 +98,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       setSeedAttempted(true);
       setSettings(mergeSettingsFromDoc(null));
     }
-  }, [realUser, data, exists, userDocLoading, seedAttempted]);
+  }, [realUser, data, exists, userDocError, userDocLoading, seedAttempted]);
 
   const loading = Boolean(realUser) && userDocLoading;
 
@@ -106,7 +110,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       try {
         await setDoc(doc(db, "users", realUser.uid), updates, { merge: true });
       } catch (err) {
-        console.error("Failed to save settings", err);
+        logError("settingsProvider.saveSettings", err);
       }
     },
     [realUser]

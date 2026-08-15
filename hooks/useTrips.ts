@@ -13,7 +13,10 @@ import {
   writeBatch,
 } from "firebase/firestore";
 
+import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
+import { snapshotErrorHandler } from "@/lib/firestoreErrors";
+import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import type { Trip } from "@/shared/types/trip";
@@ -25,6 +28,7 @@ export function useTrips(options?: { enabled?: boolean }) {
 
   const [trips, setTrips] = useState<Trip[]>([]);
   const [loading, setLoading] = useState(true);
+  const { error, setError, retry, attempt } = useLoadFailure();
 
   useEffect(() => {
     const db = getFirestoreDb();
@@ -48,16 +52,21 @@ export function useTrips(options?: { enabled?: boolean }) {
           ...(docSnap.data() as Omit<Trip, "id">),
         }));
         setTrips(list);
+        setError(null);
         setLoading(false);
       },
-      (error) => {
-        console.error("useTrips error:", error);
-        setLoading(false);
-      }
+      snapshotErrorHandler(
+        "snapshot.trips",
+        (failure) => {
+          setError(failure);
+          setLoading(false);
+        },
+        "Couldn't load your trips."
+      )
     );
 
     return unsubscribe;
-  }, [uid, enabled]);
+  }, [uid, enabled, attempt]);
 
   const createTrip = async (
     tripData: Omit<Trip, "id" | "createdAt" | "userId" | "spentAmount">
@@ -76,7 +85,7 @@ export function useTrips(options?: { enabled?: boolean }) {
       toast.success("Trip created!");
       return docRef.id;
     } catch (err) {
-      console.error("createTrip error:", err);
+      logError("trips.createtrip", err);
       toast.error("Failed to create trip");
       return null;
     }
@@ -94,7 +103,7 @@ export function useTrips(options?: { enabled?: boolean }) {
       toast.success("Trip updated");
       return true;
     } catch (err) {
-      console.error("updateTrip error:", err);
+      logError("trips.updatetrip", err);
       toast.error("Failed to update trip");
       return false;
     }
@@ -131,7 +140,7 @@ export function useTrips(options?: { enabled?: boolean }) {
       toast.success("Trip deleted and expenses unlinked");
       return true;
     } catch (err) {
-      console.error("deleteTrip error:", err);
+      logError("trips.deletetrip", err);
       toast.error("Failed to delete trip");
       return false;
     }
@@ -161,7 +170,7 @@ export function useTrips(options?: { enabled?: boolean }) {
       await batch.commit();
       return true;
     } catch (err) {
-      console.error("linkExpenseToTrip error:", err);
+      logError("trips.linkexpensetotrip", err);
       return false;
     }
   };
@@ -192,7 +201,7 @@ export function useTrips(options?: { enabled?: boolean }) {
       await batch.commit();
       return true;
     } catch (err) {
-      console.error("unlinkExpense error:", err);
+      logError("trips.unlinkexpense", err);
       return false;
     }
   };
@@ -202,6 +211,8 @@ export function useTrips(options?: { enabled?: boolean }) {
   };
 
   return {
+    error,
+    retry,
     trips,
     loading,
     createTrip,

@@ -11,6 +11,7 @@ import {
   getDocs,
   writeBatch,
 } from "firebase/firestore";
+import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
 import { useAuth } from "@/providers/AuthProvider";
 import { toast } from "@/lib/toast";
@@ -150,7 +151,7 @@ export function useSips(options?: { enabled?: boolean }) {
         toast.success("SIP Plan created successfully");
         return newDocRef.id;
       } catch (err: any) {
-        console.error("Failed to create SIP Plan", err);
+        logError("sips.createSipPlan", err);
         toast.error("Failed to create SIP Plan");
         return null;
       }
@@ -169,7 +170,7 @@ export function useSips(options?: { enabled?: boolean }) {
           updatedAt: serverTimestamp(),
         });
       } catch (err) {
-        console.error("Failed to toggle SIP Plan", err);
+        logError("sips.toggleSipPlan", err);
         toast.error("Failed to toggle SIP Plan status");
       }
     },
@@ -184,7 +185,7 @@ export function useSips(options?: { enabled?: boolean }) {
         await deleteDoc(doc(db, `users/${uid}/sipPlans`, id));
         toast.success("SIP Plan deleted");
       } catch (err) {
-        console.error("Failed to delete SIP Plan", err);
+        logError("sips.deleteSipPlan", err);
         toast.error("Failed to delete SIP Plan");
       }
     },
@@ -201,7 +202,7 @@ export function useSips(options?: { enabled?: boolean }) {
           updatedAt: serverTimestamp(),
         });
       } catch (err) {
-        console.error("Failed to skip next execution", err);
+        logError("sips.skipNextExecution", err);
         toast.error("Failed to update execution setting");
       }
     },
@@ -217,7 +218,7 @@ export function useSips(options?: { enabled?: boolean }) {
           read: true,
         });
       } catch (err) {
-        console.error("Failed to mark notification as read", err);
+        logError("sips.markNotificationAsRead", err);
       }
     },
     [uid]
@@ -235,7 +236,7 @@ export function useSips(options?: { enabled?: boolean }) {
       await batch.commit();
       toast.success("Cleared all notifications");
     } catch (err) {
-      console.error("Failed to clear notifications", err);
+      logError("sips.clearNotifications", err);
       toast.error("Failed to clear notifications");
     }
   }, [uid]);
@@ -378,7 +379,7 @@ export function useSips(options?: { enabled?: boolean }) {
         toast.success(`Executed ${executedCount} pending SIP(s)`);
       }
     } catch (err) {
-      console.error("Failed manual execute", err);
+      logError("sips.manualExecute", err);
       toast.error("Failed to run manual execution");
     }
   }, [uid]);

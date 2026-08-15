@@ -28,6 +28,7 @@ import {
 import { doc, getDoc } from "firebase/firestore";
 import { GoogleSignin } from "@react-native-google-signin/google-signin";
 
+import { logError } from "@/lib/errors";
 import { ensureCategoryHierarchy } from "@/lib/ensureCategoryHierarchy";
 import { env } from "@/lib/env";
 import { getFirebaseAuth, getFirestoreDb } from "@/lib/firebase";
@@ -103,7 +104,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         cancelHierarchy = scheduleIdleWork(
           () => {
             void ensureCategoryHierarchy(db, currentUser.uid).catch((error) => {
-              console.error("Error ensuring category hierarchy on login:", error);
+              logError("authProvider.ensuringCategoryHierarchyLogin", error);
             });
           },
           { fallbackDelayMs: 600, timeoutMs: 2500 }
@@ -123,7 +124,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await signInWithEmailAndPassword(auth, email.trim(), password);
     } catch (error) {
-      console.error("Email login failed", error);
+      logError("authProvider.emailLogin", error);
       throw new Error(authErrorMessage(error, "Email login failed"));
     }
   }, []);
@@ -151,7 +152,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         );
         await updateProfile(cred.user, { displayName: displayName.trim() });
       } catch (error) {
-        console.error("Email signup failed", error);
+        logError("authProvider.emailSignup", error);
         throw new Error(authErrorMessage(error, "Email signup failed"));
       }
     },
@@ -164,7 +165,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await sendPasswordResetEmail(auth, email.trim());
     } catch (error) {
-      console.error("Password reset failed", error);
+      logError("authProvider.passwordReset", error);
       throw new Error(authErrorMessage(error, "Password reset failed"));
     }
   }, []);
@@ -190,7 +191,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }
     } catch (error) {
-      console.error("Google login failed", error);
+      logError("authProvider.googleLogin", error);
       throw new Error(authErrorMessage(error, "Google sign-in failed"));
     }
   }, []);
@@ -203,7 +204,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await GoogleSignin.signOut().catch(() => {});
       await signOut(auth);
     } catch (error) {
-      console.error("Logout failed", error);
+      logError("authProvider.logout", error);
       throw new Error(authErrorMessage(error, "Logout failed"));
     }
   }, []);

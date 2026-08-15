@@ -14,7 +14,10 @@ import {
   writeBatch,
 } from "firebase/firestore";
 
+import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
+import { snapshotErrorHandler } from "@/lib/firestoreErrors";
+import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import type { Participant, Split } from "@/shared/types/split";
@@ -28,6 +31,7 @@ export function useSplits(options?: { enabled?: boolean }) {
 
   const [splits, setSplits] = useState<Split[]>([]);
   const [loading, setLoading] = useState(true);
+  const { error, setError, retry, attempt } = useLoadFailure();
 
   useEffect(() => {
     const db = getFirestoreDb();
@@ -57,16 +61,21 @@ export function useSplits(options?: { enabled?: boolean }) {
         // Sort by createdAt descending
         list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
         setSplits(list);
+        setError(null);
         setLoading(false);
       },
-      (error) => {
-        console.error("useSplits error:", error);
-        setLoading(false);
-      }
+      snapshotErrorHandler(
+        "snapshot.splits",
+        (failure) => {
+          setError(failure);
+          setLoading(false);
+        },
+        "Couldn't load your splits."
+      )
     );
 
     return unsubscribe;
-  }, [uid, enabled]);
+  }, [uid, enabled, attempt]);
 
   const createSplit = async (
     splitData: Omit<Split, "id" | "createdAt" | "createdBy" | "participantIds" | "settled">,
@@ -122,7 +131,7 @@ export function useSplits(options?: { enabled?: boolean }) {
       toast.success("Split created successfully");
       return docRef.id;
     } catch (err) {
-      console.error("createSplit error:", err);
+      logError("splits.createsplit", err);
       toast.error("Failed to create split");
       return null;
     }
@@ -140,7 +149,7 @@ export function useSplits(options?: { enabled?: boolean }) {
       toast.success("Split updated");
       return true;
     } catch (err) {
-      console.error("updateSplit error:", err);
+      logError("splits.updatesplit", err);
       toast.error("Failed to update split");
       return false;
     }
@@ -173,7 +182,7 @@ export function useSplits(options?: { enabled?: boolean }) {
       });
       return true;
     } catch (err) {
-      console.error("toggleParticipantPaid error:", err);
+      logError("splits.toggleparticipantpaid", err);
       toast.error("Failed to update settlement status");
       return false;
     }
@@ -199,7 +208,7 @@ export function useSplits(options?: { enabled?: boolean }) {
       toast.success("Split marked as fully settled!");
       return true;
     } catch (err) {
-      console.error("settleAll error:", err);
+      logError("splits.settleall", err);
       toast.error("Failed to settle split");
       return false;
     }
@@ -214,13 +223,15 @@ export function useSplits(options?: { enabled?: boolean }) {
       toast.success("Split deleted");
       return true;
     } catch (err) {
-      console.error("deleteSplit error:", err);
+      logError("splits.deletesplit", err);
       toast.error("Failed to delete split");
       return false;
     }
   };
 
   return {
+    error,
+    retry,
     splits,
     loading,
     createSplit,

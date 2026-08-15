@@ -23,6 +23,7 @@ import {
   type ReactNode,
 } from "react";
 
+import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
 import {
   canDeleteAccount,
@@ -47,6 +48,8 @@ import {
   hydrateAccountIdentity,
 } from "@/shared/utils/accountIdentity";
 import { isValidDateKey } from "@/shared/utils/dates";
+import { snapshotErrorHandler, type LoadFailure } from "@/lib/firestoreErrors";
+import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { scheduleIdleWork } from "@/shared/utils/scheduleIdle";
 
 /** Initial first-paint window — full history loads on idle */
@@ -57,6 +60,10 @@ const INITIAL_EXPENSE_LIMIT = 200;
 export type ExpensesContextType = {
   expenses: Expense[];
   expensesLoading: boolean;
+  /** Non-null when a listener failed. Distinguishes "load failed" from "no rows". */
+  financeError: LoadFailure | null;
+  /** Re-establishes every finance listener. */
+  retryFinanceData: () => void;
   pendingSyncCount: number;
   /** True when data is being served from local cache (offline or first-load). */
   isFromCache: boolean;
@@ -70,6 +77,8 @@ export type IncomesContextType = {
 export type AccountsContextType = {
   accounts: Account[];
   accountsLoading: boolean;
+  financeError: LoadFailure | null;
+  retryFinanceData: () => void;
   accountTypes: AccountType[];
   accountTypesLoading: boolean;
   payments: AccountPayment[];
@@ -150,6 +159,12 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     userRef.current = user;
   }, [user]);
 
+  const {
+    error: financeError,
+    setError: setFinanceError,
+    retry: retryFinanceData,
+    attempt: financeAttempt,
+  } = useLoadFailure();
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [expensesLoading, setExpensesLoading] = useState(true);
   const [incomes, setIncomes] = useState<Income[]>([]);
@@ -273,12 +288,17 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         updatePendingSyncCount();
         setIsFromCache(snap.metadata.fromCache);
         expensesHydratedRef.current = true;
+        setFinanceError(null);
         setExpensesLoading(false);
       },
-      (error) => {
-        console.error("Error fetching expenses:", error);
-        setExpensesLoading(false);
-      }
+      snapshotErrorHandler(
+        "snapshot.expenses",
+        (failure) => {
+          setFinanceError(failure);
+          setExpensesLoading(false);
+        },
+        "Couldn't load your expenses."
+      )
     );
 
     // 2. Incomes, Accounts, and Account Types
@@ -294,12 +314,17 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
           ).length;
           updatePendingSyncCount();
           incomesHydratedRef.current = true;
+          setFinanceError(null);
           setIncomesLoading(false);
         },
-        (error) => {
-          console.error("Error fetching incomes:", error);
-          setIncomesLoading(false);
-        }
+        snapshotErrorHandler(
+          "snapshot.incomes",
+          (failure) => {
+            setFinanceError(failure);
+            setIncomesLoading(false);
+          },
+          "Couldn't load your income."
+        )
       ),
       onSnapshot(
         query(collection(db, ...base, "accounts")),
@@ -312,12 +337,17 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
           ).length;
           updatePendingSyncCount();
           accountsHydratedRef.current = true;
+          setFinanceError(null);
           setAccountsLoading(false);
         },
-        (error) => {
-          console.error("useAccounts snapshot error:", error);
-          setAccountsLoading(false);
-        }
+        snapshotErrorHandler(
+          "snapshot.accounts",
+          (failure) => {
+            setFinanceError(failure);
+            setAccountsLoading(false);
+          },
+          "Couldn't load your accounts."
+        )
       ),
       onSnapshot(
         query(collection(db, ...base, "accountTypes")),
@@ -330,12 +360,17 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
           ).length;
           updatePendingSyncCount();
           accountTypesHydratedRef.current = true;
+          setFinanceError(null);
           setAccountTypesLoading(false);
         },
-        (error) => {
-          console.error("useAccountTypes snapshot error:", error);
-          setAccountTypesLoading(false);
-        }
+        snapshotErrorHandler(
+          "snapshot.accountTypes",
+          (failure) => {
+            setFinanceError(failure);
+            setAccountTypesLoading(false);
+          },
+          "Couldn't load your account types."
+        )
       ),
     ];
 
@@ -344,7 +379,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       limitedExpensesUnsubRef.current = null;
       unsubscribers.forEach((unsub) => unsub());
     };
-  }, [user, db, updatePendingSyncCount]);
+  }, [user, db, updatePendingSyncCount, financeAttempt, setFinanceError]);
 
   // ─── Deferred: Full Expense History + Secondary Collections ──────────────────
 
@@ -375,12 +410,17 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
             ).length;
             updatePendingSyncCount();
             expensesHydratedRef.current = true;
+            setFinanceError(null);
             setExpensesLoading(false);
           },
-          (error) => {
-            console.error("Error fetching full expenses:", error);
-            setExpensesLoading(false);
-          }
+          snapshotErrorHandler(
+            "snapshot.expensesFull",
+            (failure) => {
+              setFinanceError(failure);
+              setExpensesLoading(false);
+            },
+            "Couldn't load your expense history."
+          )
         );
 
         secondaryUnsubs = [
@@ -398,12 +438,17 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
                 (d) => d.metadata.hasPendingWrites
               ).length;
               updatePendingSyncCount();
+              setFinanceError(null);
               setPaymentsLoading(false);
             },
-            (error) => {
-              console.error("useAccountPayments snapshot error:", error);
-              setPaymentsLoading(false);
-            }
+            snapshotErrorHandler(
+              "snapshot.accountPayments",
+              (failure) => {
+                setFinanceError(failure);
+                setPaymentsLoading(false);
+              },
+              "Couldn't load your payments."
+            )
           ),
           onSnapshot(
             query(collection(db, ...base, "accountEntries")),
@@ -419,12 +464,17 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
                 (d) => d.metadata.hasPendingWrites
               ).length;
               updatePendingSyncCount();
+              setFinanceError(null);
               setEntriesLoading(false);
             },
-            (error) => {
-              console.error("useAccountEntries snapshot error:", error);
-              setEntriesLoading(false);
-            }
+            snapshotErrorHandler(
+              "snapshot.accountEntries",
+              (failure) => {
+                setFinanceError(failure);
+                setEntriesLoading(false);
+              },
+              "Couldn't load your account entries."
+            )
           ),
           onSnapshot(
             query(collection(db, ...base, "accountTransfers")),
@@ -440,12 +490,17 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
                 (d) => d.metadata.hasPendingWrites
               ).length;
               updatePendingSyncCount();
+              setFinanceError(null);
               setTransfersLoading(false);
             },
-            (error) => {
-              console.error("useAccountTransfers snapshot error:", error);
-              setTransfersLoading(false);
-            }
+            snapshotErrorHandler(
+              "snapshot.accountTransfers",
+              (failure) => {
+                setFinanceError(failure);
+                setTransfersLoading(false);
+              },
+              "Couldn't load your transfers."
+            )
           ),
         ];
       },
@@ -457,7 +512,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       expensesUpgradeUnsub?.();
       secondaryUnsubs.forEach((unsub) => unsub());
     };
-  }, [user, db, updatePendingSyncCount]);
+  }, [user, db, updatePendingSyncCount, financeAttempt, setFinanceError]);
 
   // ─── Actions ─────────────────────────────────────────────────────────────────
 
@@ -483,7 +538,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         await addDoc(collection(database, "users", u.uid, "accounts"), payload);
         toast.success("Account added");
       } catch (err) {
-        console.error(err);
+        logError("financeDataProvider.addAccount", err);
         toast.error("Failed to add account");
       }
     },
@@ -520,7 +575,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         );
         toast.success("Account updated");
       } catch (err) {
-        console.error(err);
+        logError("financeDataProvider.updateAccount", err);
         toast.error("Failed to update account");
       }
     },
@@ -600,7 +655,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       await deleteDoc(doc(database, "users", u.uid, "accounts", id));
       toast.success("Account deleted");
     } catch (err) {
-      console.error(err);
+      logError("financeDataProvider.deleteAccount", err);
       toast.error("Failed to delete account");
     }
   }, []);
@@ -616,7 +671,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       });
       toast.success("Account type added");
     } catch (err) {
-      console.error(err);
+      logError("financeDataProvider.addAccountType", err);
       toast.error("Failed to add account type");
     }
   }, []);
@@ -629,7 +684,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       await deleteDoc(doc(database, "users", u.uid, "accountTypes", id));
       toast.success("Account type deleted");
     } catch (err) {
-      console.error(err);
+      logError("financeDataProvider.deleteAccountType", err);
       toast.error("Failed to delete account type");
     }
   }, []);
@@ -675,7 +730,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         toast.success("Bill payment recorded");
         return true;
       } catch (err) {
-        console.error(err);
+        logError("financeDataProvider.recordPayment", err);
         toast.error("Failed to record payment");
         return false;
       }
@@ -717,7 +772,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         toast.success("Marked as already paid");
         return true;
       } catch (err) {
-        console.error(err);
+        logError("financeDataProvider.markAsPaid", err);
         toast.error("Failed to mark as paid");
         return false;
       }
@@ -733,7 +788,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       await deleteDoc(doc(database, "users", u.uid, "accountPayments", id));
       toast.success("Payment removed");
     } catch (err) {
-      console.error(err);
+      logError("financeDataProvider.removePayment", err);
       toast.error("Failed to remove payment");
     }
   }, []);
@@ -772,7 +827,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         );
         return true;
       } catch (err) {
-        console.error(err);
+        logError("financeDataProvider.saveAccountEntry", err);
         toast.error("Failed to save account entry");
         return false;
       }
@@ -788,7 +843,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       await deleteDoc(doc(database, "users", u.uid, "accountEntries", id));
       toast.success("Account entry removed");
     } catch (err) {
-      console.error(err);
+      logError("financeDataProvider.removeAccountEntry", err);
       toast.error("Failed to remove account entry");
     }
   }, []);
@@ -835,7 +890,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         toast.success("Transfer recorded");
         return true;
       } catch (err) {
-        console.error(err);
+        logError("financeDataProvider.recordTransfer", err);
         toast.error("Failed to record transfer");
         return false;
       }
@@ -851,7 +906,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       await deleteDoc(doc(database, "users", u.uid, "accountTransfers", id));
       toast.success("Transfer removed");
     } catch (err) {
-      console.error(err);
+      logError("financeDataProvider.removeTransfer", err);
       toast.error("Failed to remove transfer");
     }
   }, []);
@@ -862,10 +917,19 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     () => ({
       expenses,
       expensesLoading,
+      financeError,
+      retryFinanceData,
       pendingSyncCount,
       isFromCache,
     }),
-    [expenses, expensesLoading, pendingSyncCount, isFromCache]
+    [
+      expenses,
+      expensesLoading,
+      financeError,
+      retryFinanceData,
+      pendingSyncCount,
+      isFromCache,
+    ]
   );
 
   const incomesValue = useMemo<IncomesContextType>(
@@ -894,6 +958,8 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     () => ({
       accounts: hydratedAccounts,
       accountsLoading,
+      financeError,
+      retryFinanceData,
       accountTypes,
       accountTypesLoading,
       payments,
@@ -918,6 +984,8 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     [
       hydratedAccounts,
       accountsLoading,
+      financeError,
+      retryFinanceData,
       accountTypes,
       accountTypesLoading,
       payments,

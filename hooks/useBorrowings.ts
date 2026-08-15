@@ -14,7 +14,10 @@ import {
   writeBatch,
 } from "firebase/firestore";
 
+import { logError, logWarning } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
+import { snapshotErrorHandler } from "@/lib/firestoreErrors";
+import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import type {
@@ -68,6 +71,7 @@ export function useBorrowings(options?: { enabled?: boolean }) {
   const [borrowings, setBorrowings] = useState<Borrowing[]>([]);
   const [repayments, setRepayments] = useState<BorrowingRepayment[]>([]);
   const [loading, setLoading] = useState(true);
+  const { error, setError, retry, attempt } = useLoadFailure();
 
   useEffect(() => {
     const db = getFirestoreDb();
@@ -92,12 +96,17 @@ export function useBorrowings(options?: { enabled?: boolean }) {
             ...(docSnap.data() as Omit<Borrowing, "id">),
           }))
         );
+        setError(null);
         setLoading(false);
       },
-      (err) => {
-        console.warn("Error fetching borrowings:", err);
-        setLoading(false);
-      }
+      snapshotErrorHandler(
+        "snapshot.borrowings",
+        (failure) => {
+          setError(failure);
+          setLoading(false);
+        },
+        "Couldn't load your borrowings."
+      )
     );
 
     const unsubRepayments = onSnapshot(
@@ -113,16 +122,14 @@ export function useBorrowings(options?: { enabled?: boolean }) {
           }))
         );
       },
-      (err) => {
-        console.warn("Error fetching borrowing repayments:", err);
-      }
+      (err) => logWarning("snapshot.borrowing.repayments", err)
     );
 
     return () => {
       unsubBorrowings();
       unsubRepayments();
     };
-  }, [uid, enabled]);
+  }, [uid, enabled, attempt]);
 
   const today = todayDateKey();
 
@@ -179,7 +186,7 @@ export function useBorrowings(options?: { enabled?: boolean }) {
         toast.success("Borrowing recorded");
         return ref.id;
       } catch (err) {
-        console.error("createBorrowing error:", err);
+        logError("borrowings.createborrowing", err);
         toast.error("Failed to record borrowing");
         return null;
       }
@@ -200,7 +207,7 @@ export function useBorrowings(options?: { enabled?: boolean }) {
         toast.success("Borrowing updated");
         return true;
       } catch (err) {
-        console.error("updateBorrowing error:", err);
+        logError("borrowings.updateborrowing", err);
         toast.error("Failed to update borrowing");
         return false;
       }
@@ -230,7 +237,7 @@ export function useBorrowings(options?: { enabled?: boolean }) {
         toast.success("Borrowing deleted");
         return true;
       } catch (err) {
-        console.error("deleteBorrowing error:", err);
+        logError("borrowings.deleteborrowing", err);
         toast.error("Failed to delete borrowing");
         return false;
       }
@@ -307,7 +314,7 @@ export function useBorrowings(options?: { enabled?: boolean }) {
         );
         return ref.id;
       } catch (err) {
-        console.error("addRepayment error:", err);
+        logError("borrowings.addrepayment", err);
         toast.error("Failed to record repayment");
         return null;
       }
@@ -342,7 +349,7 @@ export function useBorrowings(options?: { enabled?: boolean }) {
         toast.success("Repayment removed");
         return true;
       } catch (err) {
-        console.error("deleteRepayment error:", err);
+        logError("borrowings.deleterepayment", err);
         toast.error("Failed to remove repayment");
         return false;
       }
@@ -351,6 +358,8 @@ export function useBorrowings(options?: { enabled?: boolean }) {
   );
 
   return {
+    error,
+    retry,
     borrowings,
     repayments,
     summaries,

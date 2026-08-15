@@ -1,3 +1,4 @@
+import { logWarning } from '../lib/errors';
 import { FoodItem, NutrientTotals } from '../shared/types/nutrition';
 
 interface OFFProductResponse {
@@ -66,7 +67,9 @@ export async function fetchFoodByBarcode(barcode: string): Promise<Omit<FoodItem
       nutrients,
     };
   } catch (error) {
-    console.error('Error fetching food by barcode:', error);
+    // Callers treat null as "no match"; log the transport failure so a
+    // persistent outage is visible in diagnostics rather than silent.
+    logWarning('openFoodFacts.fetchByBarcode', error);
     return null;
   }
 }

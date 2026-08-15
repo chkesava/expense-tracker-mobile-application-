@@ -7,6 +7,7 @@ import { Modal } from "@/components/common/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useAccountEntries } from "@/hooks/useAccountEntries";
+import { logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
 import type { Account } from "@/shared/types/expense";
 import { formatDateKey } from "@/shared/utils/dates";
@@ -80,7 +81,7 @@ export function AddAccountEntryModal({
         toast.error("Failed to record entry");
       }
     } catch (err) {
-      console.error("Save entry error:", err);
+      logError("addAccountEntryModal.saveEntry", err);
       toast.error("Failed to save entry");
     } finally {
       setSaving(false);

@@ -83,7 +83,12 @@ export function PortfolioDashboard() {
     [holdings, watchlist]
   );
 
-  const { quotes } = useMarketQuotes(symbolRequests);
+  const {
+    quotes,
+    isError: quotesFailed,
+    errorMessage: quotesErrorMessage,
+    refetch: refetchQuotes,
+  } = useMarketQuotes(symbolRequests);
 
   // Compute HoldingWithMetrics
   const holdingsWithMetrics: HoldingWithMetrics[] = useMemo(() => {
@@ -233,6 +238,29 @@ export function PortfolioDashboard() {
 
   return (
     <View style={styles.container}>
+      {/* Live prices unavailable: the figures below fall back to average buy
+          price, so say so instead of presenting them as current. */}
+      {quotesFailed ? (
+        <Pressable
+          onPress={refetchQuotes}
+          accessibilityRole="button"
+          style={[
+            styles.quoteWarning,
+            {
+              backgroundColor: theme.colors.warning + "1A",
+              borderColor: theme.colors.warning + "55",
+            },
+          ]}
+        >
+          <Text style={{ color: theme.colors.warning, fontSize: 12, fontWeight: "700" }}>
+            {quotesErrorMessage ?? "Live prices are unavailable right now."}
+          </Text>
+          <Text style={{ color: theme.colors.mutedForeground, fontSize: 11 }}>
+            Showing your last known values. Tap to retry.
+          </Text>
+        </Pressable>
+      ) : null}
+
       {/* Portfolio Summary */}
       <PortfolioSummaryCard
         summary={summary}
@@ -331,6 +359,13 @@ export function PortfolioDashboard() {
 }
 
 const styles = StyleSheet.create({
+  quoteWarning: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 2,
+  },
   container: {
     gap: 12,
   },

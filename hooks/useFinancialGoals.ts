@@ -11,7 +11,10 @@ import {
   updateDoc,
 } from "firebase/firestore";
 
+import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
+import { snapshotErrorHandler } from "@/lib/firestoreErrors";
+import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import type { FinancialGoal } from "@/shared/types/expense";
@@ -22,6 +25,7 @@ export const useFinancialGoals = (options?: { enabled?: boolean }) => {
   const uid = user?.uid;
   const [goals, setGoals] = useState<FinancialGoal[]>([]);
   const [loading, setLoading] = useState(true);
+  const { error, setError, retry, attempt } = useLoadFailure();
 
   useEffect(() => {
     const db = getFirestoreDb();
@@ -43,14 +47,19 @@ export const useFinancialGoals = (options?: { enabled?: boolean }) => {
         setGoals(
           snap.docs.map((d) => ({ id: d.id, ...d.data() } as FinancialGoal))
         );
+        setError(null);
         setLoading(false);
       },
-      (err) => {
-        console.error("useFinancialGoals snapshot error:", err);
-        setLoading(false);
-      }
+      snapshotErrorHandler(
+        "snapshot.financialGoals",
+        (failure) => {
+          setError(failure);
+          setLoading(false);
+        },
+        "Couldn't load your goals."
+      )
     );
-  }, [uid, enabled]);
+  }, [uid, enabled, attempt]);
 
   const addGoal = async (
     name: string,
@@ -71,7 +80,7 @@ export const useFinancialGoals = (options?: { enabled?: boolean }) => {
       });
       toast.success("Goal added");
     } catch (err) {
-      console.error(err);
+      logError("financialGoals.addGoal", err);
       toast.error("Failed to add goal");
     }
   };
@@ -89,7 +98,7 @@ export const useFinancialGoals = (options?: { enabled?: boolean }) => {
       );
       toast.success("Goal progress updated");
     } catch (err) {
-      console.error(err);
+      logError("financialGoals.updateGoal", err);
       toast.error("Failed to update goal");
     }
   };
@@ -102,10 +111,10 @@ export const useFinancialGoals = (options?: { enabled?: boolean }) => {
       await deleteDoc(doc(db, "users", uid, "financialGoals", id));
       toast.success("Goal deleted");
     } catch (err) {
-      console.error(err);
+      logError("financialGoals.deleteGoal", err);
       toast.error("Failed to delete goal");
     }
   };
 
-  return { goals, loading, addGoal, updateGoalProgress, deleteGoal };
+  return { goals, loading, addGoal, updateGoalProgress, deleteGoal, error, retry };
 };
