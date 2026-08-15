@@ -46,6 +46,18 @@ describe("SMS notification copy", () => {
     expect(copy.data.url).toBe("/dashboard");
   });
 
+  it("gives detected and auto-added notifications a stable, distinct identifier from the SMS id", () => {
+    const entry = processRawSmsMessages([swiggy]).writeReady[0]!;
+    const detected = buildDetectedNotification(entry);
+    const autoAdded = buildAutoAddedNotification(entry);
+    // Re-presenting the same entry must resolve to the same identifier
+    // (so the OS replaces rather than duplicates), and the two notification
+    // kinds must not collide with each other.
+    expect(detected.identifier).toBe(buildDetectedNotification(entry).identifier);
+    expect(detected.identifier).toContain(entry.record.smsId);
+    expect(detected.identifier).not.toBe(autoAdded.identifier);
+  });
+
   it("formats a detected salary credit", () => {
     const entry = processRawSmsMessages([salary]).writeReady[0];
     expect(entry?.write.collection).toBe("incomes");

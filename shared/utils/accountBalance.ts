@@ -15,6 +15,17 @@ import { parseLocalDate, toLocalDateKey, billDateForMonth } from "./dates";
 
 export { toLocalDateKey } from "./dates";
 
+/**
+ * Rounds to the nearest cent. Every balance/usage figure below is a running
+ * sum of many decimal amounts (float addition/subtraction accumulates
+ * epsilon-level residue, e.g. 0.1 + 0.2 !== 0.3) — without this, exact
+ * comparisons like `outstanding === 0` can stay false for a bill that's
+ * genuinely fully paid.
+ */
+export function roundMoney(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
 function paymentBelongsToCycle(
   payment: AccountPayment,
   cycleStart: Date,
@@ -181,7 +192,7 @@ export function computeBankBalance(
   )
     .filter((repayment) => isOnOrAfter(repayment.date, baseline))
     .reduce((sum, repayment) => sum + repayment.amount, 0);
-  return (
+  return roundMoney(
     opening +
     totalIncomes -
     totalExpenses -
@@ -223,11 +234,11 @@ export function computeCreditUsage(
     nextBillDate
   );
 
-  const expenseTotal = cycleExpenses.reduce((sum, e) => sum + e.amount, 0);
-  const paidThisCycle = cyclePayments.reduce((sum, p) => sum + p.amount, 0);
-  const usedThisCycle = Math.max(0, expenseTotal - paidThisCycle);
+  const expenseTotal = roundMoney(cycleExpenses.reduce((sum, e) => sum + e.amount, 0));
+  const paidThisCycle = roundMoney(cyclePayments.reduce((sum, p) => sum + p.amount, 0));
+  const usedThisCycle = roundMoney(Math.max(0, expenseTotal - paidThisCycle));
   const limit = account.creditLimit ?? 0;
-  const availableCredit = Math.max(0, limit - usedThisCycle);
+  const availableCredit = roundMoney(Math.max(0, limit - usedThisCycle));
 
   return {
     usedThisCycle,
@@ -267,28 +278,32 @@ export function getCreditBillHistory(
     const cycleEnd = billDateForMonth(cycleEndYear, cycleEndMonth, billDay);
     const cycleStart = billDateForMonth(cycleEndYear, cycleEndMonth - 1, billDay);
 
-    const billedAmount = expenses
-      .filter((e) => {
-        if (e.accountId !== account.id) return false;
-        const d = parseLocalDate(e.date);
-        return d >= cycleStart && d < cycleEnd;
-      })
-      .reduce((sum, e) => sum + e.amount, 0);
+    const billedAmount = roundMoney(
+      expenses
+        .filter((e) => {
+          if (e.accountId !== account.id) return false;
+          const d = parseLocalDate(e.date);
+          return d >= cycleStart && d < cycleEnd;
+        })
+        .reduce((sum, e) => sum + e.amount, 0)
+    );
 
-    const paidAmount = payments
-      .filter((p) => {
-        if (p.toAccountId !== account.id) return false;
-        return paymentBelongsToCycle(p, cycleStart, cycleEnd);
-      })
-      .reduce((sum, p) => sum + p.amount, 0);
+    const paidAmount = roundMoney(
+      payments
+        .filter((p) => {
+          if (p.toAccountId !== account.id) return false;
+          return paymentBelongsToCycle(p, cycleStart, cycleEnd);
+        })
+        .reduce((sum, p) => sum + p.amount, 0)
+    );
 
     if (billedAmount <= 0 && paidAmount <= 0) {
       continue;
     }
 
-    const outstandingAmount = Math.max(0, billedAmount - paidAmount);
+    const outstandingAmount = roundMoney(Math.max(0, billedAmount - paidAmount));
     const status: CreditBillStatus =
-      outstandingAmount === 0
+      outstandingAmount <= 0
         ? "paid"
         : paidAmount > 0
           ? "partiallyPaid"
@@ -494,6 +509,7 @@ export function buildAccountActivities(
     for (const act of chronological) {
       if (act.type === "debit") running -= act.amount;
       else running += act.amount;
+      running = roundMoney(running);
       act.runningBalance = running;
     }
   }
@@ -531,11 +547,11 @@ export function previewBalanceAfterTransaction(
     );
     if (transactionType === "expense") balance -= amount;
     else balance += amount;
-    return balance;
+    return roundMoney(balance);
   }
   if (kind === "credit" && transactionType === "expense" && account.billGenerationDay) {
     const { availableCredit } = computeCreditUsage(account, expenses, payments);
-    return availableCredit - amount;
+    return roundMoney(availableCredit - amount);
   }
   return null;
 }
@@ -549,5 +565,7 @@ export function previewBalanceAfterBillPayment(
   transfers: AccountTransfer[] = [],
   amount: number
 ): number {
-  return computeBankBalance(fromAccount, expenses, incomes, payments, entries, transfers) - amount;
+  return roundMoney(
+    computeBankBalance(fromAccount, expenses, incomes, payments, entries, transfers) - amount
+  );
 }

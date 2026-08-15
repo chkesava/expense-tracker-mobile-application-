@@ -147,7 +147,13 @@ export function AddHoldingModal({ visible, onClose, onAdd }: AddHoldingModalProp
           <View style={[styles.modalContent, cardBg]}>
             <View style={styles.header}>
               <Text style={[styles.title, textStyle]}>Add Holding</Text>
-              <TouchableOpacity onPress={handleClose} style={styles.closeBtn}>
+              <TouchableOpacity
+                onPress={handleClose}
+                hitSlop={12}
+                accessibilityRole="button"
+                accessibilityLabel="Close"
+                style={styles.closeBtn}
+              >
                 <X size={24} color={theme.colors.foreground} />
               </TouchableOpacity>
             </View>

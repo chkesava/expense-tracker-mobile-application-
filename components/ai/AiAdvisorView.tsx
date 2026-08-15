@@ -60,6 +60,7 @@ export function AiAdvisorView() {
   const [isTyping, setIsTyping] = useState(false);
 
   const flatListRef = useRef<FlatList>(null);
+  const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const storageKey = useMemo(
     () => `ai_advisor_chat_${user?.uid || "guest"}_${isDuress ? "duress" : "real"}`,
     [user?.uid, isDuress]
@@ -79,7 +80,9 @@ export function AiAdvisorView() {
 
   // Load chat history from AsyncStorage
   useEffect(() => {
+    let cancelled = false;
     AsyncStorage.getItem(storageKey).then((saved) => {
+      if (cancelled) return;
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
@@ -103,7 +106,18 @@ export function AiAdvisorView() {
       };
       setMessages([welcomeMsg]);
     });
+    return () => {
+      cancelled = true;
+    };
   }, [storageKey, context.currentMonth, context.totalExpenses, system.defaultCurrency]);
+
+  // Clear any pending "typing" response timer if the view unmounts mid-response
+  // (e.g. the user switches tabs away from Advisor before the reply arrives).
+  useEffect(() => {
+    return () => {
+      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+    };
+  }, []);
 
   const saveHistory = async (newMessages: ChatMessage[]) => {
     setMessages(newMessages);
@@ -131,7 +145,8 @@ export function AiAdvisorView() {
     setIsTyping(true);
 
     // Simulate conversational intelligence delay
-    setTimeout(async () => {
+    typingTimerRef.current = setTimeout(async () => {
+      typingTimerRef.current = null;
       const response = await generateAdvisorResponse(
         text,
         context,

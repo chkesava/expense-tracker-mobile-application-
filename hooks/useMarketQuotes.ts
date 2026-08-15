@@ -1,9 +1,16 @@
 import { useQueries } from '@tanstack/react-query';
+import { useIsFocused } from 'expo-router';
 import { InstrumentType, MarketQuote } from '@/shared/features/portfolio/types';
 import { fetchMarketQuote } from '@/services/marketDataService';
 import { friendlyErrorMessage } from '@/lib/errors';
 
 export function useMarketQuotes(symbols: Array<{ symbol: string; instrumentType: InstrumentType }>) {
+  // Consumers (dashboard, portfolio, SIP, holdings widgets) can stay mounted
+  // in the navigation stack after the user moves away — without this, the
+  // 60s poll below keeps firing network requests for every symbol
+  // indefinitely in the background.
+  const isFocused = useIsFocused();
+
   const results = useQueries({
     queries: symbols.map((s) => ({
       queryKey: ['market-quote', s.symbol, s.instrumentType],
@@ -12,8 +19,9 @@ export function useMarketQuotes(symbols: Array<{ symbol: string; instrumentType:
       queryFn: ({ signal }: { signal: AbortSignal }) =>
         fetchMarketQuote(s.symbol, s.instrumentType, { signal }),
       staleTime: 60_000,
-      refetchInterval: 60_000,
+      refetchInterval: isFocused ? 60_000 : false,
       refetchIntervalInBackground: false,
+      enabled: isFocused,
       retry: 2,
       retryDelay: (attempt: number) => Math.min(1_000 * 2 ** attempt, 8_000),
     })),

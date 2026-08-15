@@ -192,6 +192,9 @@ export function TripDetailModal({ visible, trip, onClose }: TripDetailModalProps
             </View>
             <Pressable
               onPress={onClose}
+              hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel="Close"
               style={({ pressed }) => [
                 styles.closeButton,
                 pressed && { opacity: 0.6 },

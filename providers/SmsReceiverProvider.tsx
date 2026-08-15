@@ -124,8 +124,10 @@ export function SmsReceiverProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // Tap a transaction notification → inbox (detected) or dashboard (auto-added).
+  // Not gated by `supported`: credit-card-bill reminders (unlike SMS) are
+  // scheduled on every platform, so this has to run on iOS too — otherwise
+  // tapping a bill reminder on iOS would never navigate anywhere.
   useEffect(() => {
-    if (!supported) return;
     let cancelled = false;
     let sub: { remove: () => void } | undefined;
 
@@ -167,7 +169,7 @@ export function SmsReceiverProvider({ children }: { children: ReactNode }) {
       cancelled = true;
       sub?.remove();
     };
-  }, [supported]);
+  }, []);
 
   // Ask for notification permission once SMS listening is on.
   useEffect(() => {

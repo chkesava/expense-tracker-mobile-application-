@@ -13,6 +13,7 @@ import { useAndroidBackHandler } from "@/hooks/useAndroidBackHandler";
 import { useNavigationStateRestoration } from "@/hooks/useNavigationStateRestoration";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAuth } from "@/providers/AuthProvider";
+import { BorrowingsReceivablesProvider } from "@/providers/BorrowingsReceivablesProvider";
 import { FinanceDataProvider } from "@/providers/FinanceDataProvider";
 import { CreditCardBillsProvider } from "@/providers/CreditCardBillsProvider";
 import { LedgerStateProvider } from "@/providers/LedgerStateProvider";
@@ -150,17 +151,19 @@ export default function AppLayout() {
   return (
     <PrivacyLock>
       <FinanceDataProvider>
-        <CreditCardBillsProvider>
-          <ModalProvider>
-            <SetupProgressProvider>
-              <LedgerStateProvider>
-                <SmsReceiverProvider>
-                  <AppShellInner />
-                </SmsReceiverProvider>
-              </LedgerStateProvider>
-            </SetupProgressProvider>
-          </ModalProvider>
-        </CreditCardBillsProvider>
+        <BorrowingsReceivablesProvider>
+          <CreditCardBillsProvider>
+            <ModalProvider>
+              <SetupProgressProvider>
+                <LedgerStateProvider>
+                  <SmsReceiverProvider>
+                    <AppShellInner />
+                  </SmsReceiverProvider>
+                </LedgerStateProvider>
+              </SetupProgressProvider>
+            </ModalProvider>
+          </CreditCardBillsProvider>
+        </BorrowingsReceivablesProvider>
       </FinanceDataProvider>
     </PrivacyLock>
   );

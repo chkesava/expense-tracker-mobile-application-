@@ -16,6 +16,13 @@ export type SmsNotificationCopy = {
     kind: SmsNotificationKind;
     url: string;
   };
+  /**
+   * Stable per-transaction id, passed through as the OS notification
+   * identifier. Re-presenting the same entry (e.g. a retry, or the
+   * BroadcastReceiver redelivering the same SMS) replaces the existing
+   * notification instead of stacking a duplicate.
+   */
+  identifier: string;
 };
 
 function rupee(amount: number): string {
@@ -63,6 +70,7 @@ export function buildDetectedNotification(
       kind: "detected",
       url: "/sms-inbox",
     },
+    identifier: `sms-detected:${entry.record.smsId || entry.record.fingerprint}`,
   };
 }
 
@@ -85,6 +93,7 @@ export function buildAutoAddedNotification(
       kind: "auto_added",
       url: "/dashboard",
     },
+    identifier: `sms-auto-added:${entry.record.smsId || entry.record.fingerprint}`,
   };
 }
 
@@ -101,5 +110,6 @@ export function buildRecurringDetectedNotification(
       kind: "recurring",
       url: "/ledger?tab=subscriptions",
     },
+    identifier: `sms-recurring:${pattern.key}`,
   };
 }
