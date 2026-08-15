@@ -33,6 +33,7 @@ updated every time a new phase is completed.
 | 3 | 2026-08-15 | Performance audit **and optimization** (fixes applied, not diagnostic-only) | [PHASE_3_PERFORMANCE_AUDIT.md](PHASE_3_PERFORMANCE_AUDIT.md) | 0 | 0 |
 | 4 | 2026-08-15 | Memory management & battery/power efficiency audit **and fixes** (fixes applied, not diagnostic-only) | [PHASE_4_MEMORY_POWER_AUDIT.md](PHASE_4_MEMORY_POWER_AUDIT.md) | 0 | 0 |
 | 5 | 2026-08-15 | Financial calculations & data integrity audit **and fixes** (fixes applied, not diagnostic-only) | [PHASE_5_FINANCIAL_INTEGRITY_AUDIT.md](PHASE_5_FINANCIAL_INTEGRITY_AUDIT.md) | 0 | 0 |
+| 6 | 2026-08-15 | UI/UX audit **and fixes** (fixes applied, not diagnostic-only) | [PHASE_6_UI_UX_AUDIT.md](PHASE_6_UI_UX_AUDIT.md) | 0 | 0 |
 
 ## Outstanding Issues Carried Forward
 
@@ -59,6 +60,10 @@ before closing.
 - **[P3]** `ReceiptScannerModal`'s simulated-OCR `setTimeout` isn't cancelled if the modal is closed and reopened mid-delay — low risk (1.2s, single-shot, component doesn't unmount), a correctness nit-pick more than a memory/battery cost. (Phase 4)
 - **[P2]** Credit card billing-cycle "today" uses raw device-local time (`getBillingCycleDates()`), not the user-configurable `settings.timezone` used elsewhere in the app — could misattribute an expense to the wrong billing cycle right at a boundary if a user's app timezone differs from their device's. Needs a product decision (should billing cycles ever follow anything but the device clock?) before fixing, since it touches every caller of `getBillingCycleDates`/`computeCreditUsage`/`getCreditBillHistory`. (Phase 5)
 - **[P3]** `AccountPayment` records with no explicit `appliedCycleStart`/`appliedCycleEnd` fall back to date-range matching that can attribute a payment made exactly on a cycle's close date to the next cycle instead of the one that just closed. Not currently reachable for new payments (the app always sets these fields explicitly), but relevant for any legacy untagged payment records. (Phase 5)
+- **[P2]** The app's `ErrorBoundary` is expo-router's unstyled default — an uncaught render error shows a generic, unthemed crash screen instead of one matching the app's design. Needs a new themed component (with retry action, safe-area/dark-mode support), not a small contained fix. (Phase 6)
+- **[P3]** 9 non-functional `ThemeName` values remain in `theme/tokens.ts` (`midnight`, `midnight-olive`, `vintage-parchment`, `sakura-bloom`, `cyberpunk`, `nordic`, `deep-sea`, `glass-3d`, `claymorphism`) — Phase 6 stopped the Settings picker from offering them, but the type/labels/classification still exist. Needs either real distinct palettes or removal (bigger change — persisted to Firestore/AsyncStorage for any user who already has one stored). (Phase 6)
+- **[P3]** `Card.tsx`'s title uses a magic `fontSize: 17` outside the theme's typography scale (12/14/16/18/22/28) — minor, cosmetic, single occurrence. (Phase 6)
+- **[P3]** Phase 6 reviewed shared design-system components and the highest-traffic patterns in depth but did not do an exhaustive per-screen visual pass over all ~40+ screens; the consistent use of shared `Card`/`Button`/`Modal` components makes drift less likely, but a device-screenshot-based pass would catch more. (Phase 6)
 
 ## Fixed
 
@@ -71,3 +76,5 @@ before closing.
 - **[Phase 4]** `AiAdvisorView` could set state after unmount (chat-history load + simulated-response timer) since it's conditionally unmounted when switching Insights tabs — both now guarded/cleared.
 - **[Phase 4]** `CreditCardBillsProvider`'s debounced reconcile timer wasn't cleared on unmount, so it could fire after logout using stale closures — now cleared.
 - **[Phase 5]** `getCreditBillHistory()` used exact `outstandingAmount === 0` on unroundeded floating-point sums — a bill paid in full could stay stuck as "partiallyPaid" forever due to float residue (e.g. `0.1 + 0.2 !== 0.3`). Added a `roundMoney()` helper (matching the one already used in `borrowingMath.ts`/`receivableMath.ts`) across every computed value in `accountBalance.ts`, and changed the check to `<= 0`. Verified as a real, reproducible bug (not theoretical) by confirming the new regression test fails without the fix.
+- **[Phase 6]** 18 modal close buttons (same copy-pasted pattern across the app) had ~28-36dp touch targets, well under Android's 48dp minimum, and no accessibility label — added `hitSlop={12}` plus `accessibilityRole`/`accessibilityLabel` to all 18, with zero visual change.
+- **[Phase 6]** Settings' "Theme Presets" picker offered 9 named themes (Cyberpunk, Sakura Bloom, Nordic, etc.) that all resolve to the exact same colors as plain Light/Dark — trimmed the picker to the 2 options that actually produce a distinct look.
