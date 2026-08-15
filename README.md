@@ -369,6 +369,7 @@ More day-to-day tips: `docs/react_native_handbook.md`.
 | Stale JS after env change | Restart Expo with `--clear` (env is inlined at bundler start) |
 | CI fails at "Restore .env" or "Restore signing keystore" | The matching repository secret is missing or empty |
 | CI build succeeds but testers get nothing | Enable Firebase App Distribution and create the `testers` group |
+| Workflow red after testers already got the APK | Storage upload failed — in-app updates will not see that build until Storage is set up. Open https://console.firebase.google.com/project/expenseapp-27f94/storage → Get Started, grant CI **Storage Admin**, then re-run Android Release |
 | Update prompt never appears | Confirm `system_settings/latest_release` exists, you are signed in, and Firestore rules for `system_settings` are deployed |
 | Check for updates says no release information | Deploy `firestore.rules` (signed-in read on `system_settings`) and confirm CI published the release doc |
 | In-app download fails / opens the tester webpage | Deploy `storage.rules`, grant CI Storage Admin, and confirm `storagePath` is set on the release doc |

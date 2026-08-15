@@ -136,13 +136,61 @@ function resolveLocalApkPath(options) {
   return fs.existsSync(fallback) ? fallback : '';
 }
 
-function resolveStorageBucket(serviceAccount) {
-  const merged = getMergedEnvFileVars();
+function storageSetupFix(projectId) {
   return (
+    `Open https://console.firebase.google.com/project/${projectId}/storage and click Get Started, ` +
+    'grant the CI service account Storage Admin, then re-run Android Release.'
+  );
+}
+
+function storageBucketCandidates(serviceAccount) {
+  const merged = getMergedEnvFileVars();
+  const projectId = serviceAccount.project_id;
+  const configured =
     process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET ||
     merged.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET ||
-    `${serviceAccount.project_id}.firebasestorage.app`
-  );
+    '';
+  return [...new Set(
+    [configured, `${projectId}.firebasestorage.app`, `${projectId}.appspot.com`].filter(Boolean)
+  )];
+}
+
+function resolveStorageBucket(serviceAccount) {
+  return storageBucketCandidates(serviceAccount)[0];
+}
+
+async function findStorageBucket(serviceAccount) {
+  const { getStorage } = require('firebase-admin/storage');
+  const candidates = storageBucketCandidates(serviceAccount);
+
+  for (const name of candidates) {
+    try {
+      const [exists] = await getStorage().bucket(name).exists();
+      if (exists) {
+        console.log(`   ✅ Storage bucket: ${name}`);
+        return name;
+      }
+      console.log(`   ⚠️  Bucket does not exist: ${name}`);
+    } catch (e) {
+      console.log(`   ⚠️  Could not query bucket ${name}: ${e.message}`);
+    }
+  }
+
+  return null;
+}
+
+async function assertStorageBucket(serviceAccount) {
+  const name = await findStorageBucket(serviceAccount);
+  if (name) return name;
+
+  failFast({
+    step: 'Verify Firebase Storage',
+    error: `No Storage bucket exists (tried: ${storageBucketCandidates(serviceAccount).join(', ')}).`,
+    why: 'Firebase Storage has not been set up on this project. In-app updates upload the APK here, so a missing bucket ships testers an APK they cannot detect in-app.',
+    fix: storageSetupFix(serviceAccount.project_id)
+  });
+
+  return null;
 }
 
 function sha256File(filePath) {
@@ -179,12 +227,9 @@ async function uploadApk({ localPath, storagePath, bucketName }) {
       }
     });
   } catch (e) {
-    failFast({
-      step: 'Upload APK to Storage',
-      error: 'Firebase Storage upload failed.',
-      why: e.message,
-      fix: 'Grant the CI service account the Storage Admin role and deploy storage.rules.'
-    });
+    const err = new Error(e && e.message ? e.message : String(e));
+    err.cause = e;
+    throw err;
   }
 
   const contentLength = fs.statSync(localPath).size;
@@ -281,7 +326,7 @@ async function publishReleaseMetadata(cliOptions = null) {
 
   const { initializeApp, getApps, cert, getFirestore } = loadAdminSdk();
   const serviceAccount = loadServiceAccount();
-  const storageBucket = resolveStorageBucket(serviceAccount);
+  const preferredBucket = resolveStorageBucket(serviceAccount);
 
   let alreadyInitialized = false;
   try {
@@ -295,10 +340,13 @@ async function publishReleaseMetadata(cliOptions = null) {
     initializeApp({
       credential: cert(serviceAccount),
       projectId: serviceAccount.project_id,
-      storageBucket
+      storageBucket: preferredBucket
     });
   }
 
+  console.log(`   Bucket:      ${preferredBucket}`);
+
+  let storageError = null;
   if (localApk) {
     if (!fs.existsSync(localApk)) {
       failFast({
@@ -309,14 +357,24 @@ async function publishReleaseMetadata(cliOptions = null) {
       });
     }
 
-    const uploaded = await uploadApk({
-      localPath: localApk,
-      storagePath,
-      bucketName: storageBucket
-    });
-    payload.downloadUrl = uploaded.downloadUrl;
-    payload.contentLength = uploaded.contentLength;
-    payload.storagePath = storagePath;
+    try {
+      const storageBucket = (await findStorageBucket(serviceAccount)) || preferredBucket;
+      const uploaded = await uploadApk({
+        localPath: localApk,
+        storagePath,
+        bucketName: storageBucket
+      });
+      payload.downloadUrl = uploaded.downloadUrl;
+      payload.contentLength = uploaded.contentLength;
+      payload.storagePath = storagePath;
+    } catch (e) {
+      storageError = e;
+      payload.downloadUrl = options.testerUrl || options.downloadUrl || '';
+      payload.storagePath = '';
+      console.error(
+        `   ⚠️  Storage upload failed (${e.message}). Writing tester URL so Check for updates still sees this release.`
+      );
+    }
   }
 
   if (!payload.downloadUrl && !payload.storagePath) {
@@ -344,6 +402,15 @@ async function publishReleaseMetadata(cliOptions = null) {
 
   saveReleaseState({ published: payload });
 
+  if (storageError) {
+    failFast({
+      step: 'Upload APK to Storage',
+      error: 'Firebase Storage upload failed after the tester APK was already built.',
+      why: storageError.message,
+      fix: storageSetupFix(serviceAccount.project_id)
+    });
+  }
+
   console.log('   ✅ Release metadata published. Installed apps will prompt to update.\n');
   return payload;
 }
@@ -361,4 +428,12 @@ if (require.main === module) {
     });
 }
 
-module.exports = { publishReleaseMetadata, RELEASE_DOC_COLLECTION, RELEASE_DOC_ID };
+module.exports = {
+  publishReleaseMetadata,
+  RELEASE_DOC_COLLECTION,
+  RELEASE_DOC_ID,
+  loadServiceAccount,
+  loadAdminSdk,
+  assertStorageBucket,
+  storageBucketCandidates
+};
