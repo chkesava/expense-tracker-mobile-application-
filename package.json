@@ -1,5 +1,5 @@
 {
-  "name": "expense-tracker-mobile",
+  "name": "spendly",
   "main": "expo-router/entry",
   "version": "2.0.0",
   "dependencies": {
