@@ -34,6 +34,7 @@ updated every time a new phase is completed.
 | 4 | 2026-08-15 | Memory management & battery/power efficiency audit **and fixes** (fixes applied, not diagnostic-only) | [PHASE_4_MEMORY_POWER_AUDIT.md](PHASE_4_MEMORY_POWER_AUDIT.md) | 0 | 0 |
 | 5 | 2026-08-15 | Financial calculations & data integrity audit **and fixes** (fixes applied, not diagnostic-only) | [PHASE_5_FINANCIAL_INTEGRITY_AUDIT.md](PHASE_5_FINANCIAL_INTEGRITY_AUDIT.md) | 0 | 0 |
 | 6 | 2026-08-15 | UI/UX audit **and fixes** (fixes applied, not diagnostic-only) | [PHASE_6_UI_UX_AUDIT.md](PHASE_6_UI_UX_AUDIT.md) | 0 | 0 |
+| 7 | 2026-08-15 | Push/local notifications audit **and fixes** (fixes applied, not diagnostic-only) | [PHASE_7_NOTIFICATIONS_AUDIT.md](PHASE_7_NOTIFICATIONS_AUDIT.md) | 0 | 0 |
 
 ## Outstanding Issues Carried Forward
 
@@ -64,6 +65,9 @@ before closing.
 - **[P3]** 9 non-functional `ThemeName` values remain in `theme/tokens.ts` (`midnight`, `midnight-olive`, `vintage-parchment`, `sakura-bloom`, `cyberpunk`, `nordic`, `deep-sea`, `glass-3d`, `claymorphism`) — Phase 6 stopped the Settings picker from offering them, but the type/labels/classification still exist. Needs either real distinct palettes or removal (bigger change — persisted to Firestore/AsyncStorage for any user who already has one stored). (Phase 6)
 - **[P3]** `Card.tsx`'s title uses a magic `fontSize: 17` outside the theme's typography scale (12/14/16/18/22/28) — minor, cosmetic, single occurrence. (Phase 6)
 - **[P3]** Phase 6 reviewed shared design-system components and the highest-traffic patterns in depth but did not do an exhaustive per-screen visual pass over all ~40+ screens; the consistent use of shared `Card`/`Button`/`Modal` components makes drift less likely, but a device-screenshot-based pass would catch more. (Phase 6)
+- **[P2]** No device-level verification of any Phase 7 notification fix was possible in this environment (identifier-based dedup, cold-start tap handling, dismiss-on-resolve) — verified by code reading and unit-testable pure logic only. A future phase with device access should confirm each on a real Android build. (Phase 7)
+- **[P3]** A theoretical SMS-dedupe race (two overlapping `processIncomingSmsMessages` calls both reading the dedupe-key set before either persists) was not confirmed reachable — the Phase 7 identifier fix closes it as defense-in-depth regardless, but a dedicated concurrency audit of the SMS pipeline would be worth a future phase if duplicate SMS notifications are ever reported. (Phase 7)
+- **[P3]** Notification permission is requested opportunistically at first use (first bill reminder / first SMS event) rather than via one unified onboarding prompt — a product/UX question, not a reliability bug. (Phase 7)
 
 ## Fixed
 
@@ -78,3 +82,7 @@ before closing.
 - **[Phase 5]** `getCreditBillHistory()` used exact `outstandingAmount === 0` on unroundeded floating-point sums — a bill paid in full could stay stuck as "partiallyPaid" forever due to float residue (e.g. `0.1 + 0.2 !== 0.3`). Added a `roundMoney()` helper (matching the one already used in `borrowingMath.ts`/`receivableMath.ts`) across every computed value in `accountBalance.ts`, and changed the check to `<= 0`. Verified as a real, reproducible bug (not theoretical) by confirming the new regression test fails without the fix.
 - **[Phase 6]** 18 modal close buttons (same copy-pasted pattern across the app) had ~28-36dp touch targets, well under Android's 48dp minimum, and no accessibility label — added `hitSlop={12}` plus `accessibilityRole`/`accessibilityLabel` to all 18, with zero visual change.
 - **[Phase 6]** Settings' "Theme Presets" picker offered 9 named themes (Cyberpunk, Sakura Bloom, Nordic, etc.) that all resolve to the exact same colors as plain Light/Dark — trimmed the picker to the 2 options that actually produce a distinct look.
+- **[Phase 7]** SMS transaction notifications (detected/auto-added/recurring) had no stable identifier, unlike the credit-card bill reminder system — added deterministic per-transaction/per-pattern identifiers so a re-presented entry replaces rather than duplicates.
+- **[Phase 7]** Tapping a notification that cold-started the app (fully killed, not backgrounded) never navigated anywhere — added a `getLastNotificationResponseAsync()` check alongside the live listener, with a dedupe guard.
+- **[Phase 7]** Notification-tap navigation was gated to Android-only inside an SMS-specific provider, silently breaking bill-reminder tap navigation on iOS (bill reminders are scheduled on every platform) — un-gated that one effect.
+- **[Phase 7]** Resolving a detected-transaction notification in-app (add or ignore) never cleared the original OS notification, leaving a stale one in the shade — `dismissSmsReviewItem()` now dismisses it via the same stable identifier.
