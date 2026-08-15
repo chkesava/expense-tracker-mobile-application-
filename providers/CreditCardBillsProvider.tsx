@@ -214,6 +214,14 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
     scheduleReconcile();
   }, [bills, billsLoading, globalPrefs, scheduleReconcile]);
 
+  // Clear any pending reconcile timer on unmount — otherwise a scheduled
+  // reconcile can fire after logout using stale accounts/bills closures.
+  useEffect(() => {
+    return () => {
+      if (reconcileTimer.current) clearTimeout(reconcileTimer.current);
+    };
+  }, []);
+
   useEffect(() => {
     const sub = AppState.addEventListener("change", (state) => {
       if (state === "active") scheduleReconcile();
