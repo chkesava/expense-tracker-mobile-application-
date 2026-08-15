@@ -121,7 +121,13 @@ export function MockTradeModal({ visible, holding, onClose, onBuy, onSell, onPla
           <View style={[styles.modalContent, cardBg]}>
             <View style={styles.header}>
               <Text style={[styles.title, textStyle]}>Trade {holding.symbol}</Text>
-              <TouchableOpacity onPress={handleClose} style={styles.closeBtn}>
+              <TouchableOpacity
+                onPress={handleClose}
+                hitSlop={12}
+                accessibilityRole="button"
+                accessibilityLabel="Close"
+                style={styles.closeBtn}
+              >
                 <X size={24} color={theme.colors.foreground} />
               </TouchableOpacity>
             </View>

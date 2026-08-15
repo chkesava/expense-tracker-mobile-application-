@@ -49,7 +49,6 @@ import {
   ACCENT_COLOR_NAMES,
   ACCENT_PALETTES,
   THEME_LABELS,
-  THEME_NAMES,
   type AccentColorName,
   type ThemeMode,
   type ThemeName,
@@ -416,12 +415,16 @@ export default function SettingsScreen() {
             onSelect={(v) => setThemeMode(v as ThemeMode)}
           />
 
-          {/* When Custom Presets is selected, display theme palettes */}
+          {/* When Custom Presets is selected, display theme palettes.
+              Only light/dark are shown: every other THEME_NAMES entry
+              currently resolves to one of those two palettes (see
+              theme/tokens.ts createTheme), so listing them as separate
+              options would offer choices that look identical once picked. */}
           {themeMode === "custom" ? (
             <View style={{ gap: theme.space.xs, marginTop: theme.space.xs }}>
               <FieldLabel label={t("theme_mode_custom", "Theme Presets")} />
               <ChipRow
-                options={THEME_NAMES.map((name) => ({
+                options={(["light", "dark"] as ThemeName[]).map((name) => ({
                   value: name,
                   label: THEME_LABELS[name],
                 }))}

@@ -123,7 +123,13 @@ export function SipPlanFormModal({ visible, onClose, onSubmit }: SipPlanFormModa
         >
           <View style={[styles.header, { borderBottomColor: theme.colors.border }]}>
             <Text style={[styles.headerTitle, { color: theme.colors.foreground }]}>Create SIP Plan</Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+            <TouchableOpacity
+              onPress={onClose}
+              hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel="Close"
+              style={styles.closeBtn}
+            >
               <X size={24} color={theme.colors.foreground} />
             </TouchableOpacity>
           </View>

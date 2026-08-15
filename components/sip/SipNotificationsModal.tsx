@@ -69,7 +69,13 @@ export function SipNotificationsModal({
         <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
           <View style={[styles.header, { borderBottomColor: theme.colors.border }]}>
             <Text style={[styles.headerTitle, { color: theme.colors.foreground }]}>Notifications</Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+            <TouchableOpacity
+              onPress={onClose}
+              hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel="Close"
+              style={styles.closeButton}
+            >
               <X size={24} color={theme.colors.foreground} />
             </TouchableOpacity>
           </View>
