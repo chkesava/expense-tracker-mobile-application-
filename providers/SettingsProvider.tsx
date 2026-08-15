@@ -17,6 +17,7 @@ import { doc, setDoc } from "firebase/firestore";
 
 import { getFirestoreDb } from "@/lib/firebase";
 import { haptic } from "@/lib/haptics";
+import { hashPin } from "@/lib/pinSecurity";
 import { useAuth } from "@/providers/AuthProvider";
 import { useUserDoc } from "@/providers/UserDocProvider";
 import {
@@ -112,6 +113,19 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     [realUser]
   );
 
+  /**
+   * PINs are synced/cached like the rest of settings (Firestore + local
+   * persistence), so they're hashed before storage rather than kept in
+   * plaintext. Empty string (removing a PIN) is stored as-is.
+   */
+  const setPin = useCallback(
+    async (field: "privacyPin" | "fakePin", val: string) => {
+      const stored = val ? await hashPin(val) : "";
+      await updateSettings({ [field]: stored });
+    },
+    [updateSettings]
+  );
+
   const value = useMemo<SettingsContextType>(
     () => ({
       settings,
@@ -136,8 +150,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       setNavigationStyle: (val) => void updateSettings({ navigationStyle: val }),
       setGhostMode: (val) => void updateSettings({ ghostMode: val }),
       setHapticFeedback: (val) => void updateSettings({ hapticFeedback: val }),
-      setPrivacyPin: (val) => void updateSettings({ privacyPin: val }),
-      setFakePin: (val) => void updateSettings({ fakePin: val }),
+      setPrivacyPin: (val) => void setPin("privacyPin", val),
+      setFakePin: (val) => void setPin("fakePin", val),
       setLockOnInactivity: (val) => void updateSettings({ lockOnInactivity: val }),
       setInactivityTimeout: (val) =>
         void updateSettings({ inactivityTimeout: val }),
@@ -160,7 +174,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         });
       },
     }),
-    [settings, loading, updateSettings]
+    [settings, loading, updateSettings, setPin]
   );
 
   return (

@@ -29,6 +29,7 @@ import {
 import { useBiometrics } from "@/hooks/useBiometrics";
 import { getFirestoreDb } from "@/lib/firebase";
 import { haptic } from "@/lib/haptics";
+import { pinMatches } from "@/lib/pinSecurity";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import { useTranslation, SUPPORTED_LANGUAGES, type LanguageCode } from "@/providers/LocalizationProvider";
@@ -229,7 +230,7 @@ export default function SettingsScreen() {
     toast.success("Privacy PIN removed");
   };
 
-  const onEnableFakePin = () => {
+  const onEnableFakePin = async () => {
     if (!settings.privacyPin) {
       toast.error("Set a privacy PIN first");
       return;
@@ -242,7 +243,7 @@ export default function SettingsScreen() {
       toast.error("Duress PIN confirmation does not match");
       return;
     }
-    if (newFakePin === settings.privacyPin) {
+    if (await pinMatches(newFakePin, settings.privacyPin)) {
       toast.error("Duress PIN must differ from your real PIN");
       return;
     }
