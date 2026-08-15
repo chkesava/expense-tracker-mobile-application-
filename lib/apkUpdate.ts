@@ -48,7 +48,11 @@ async function resolveApkUrl(release: AppRelease): Promise<string | null> {
   if (release.storagePath) {
     const storage = getFirebaseStorage();
     if (storage) {
-      return getDownloadURL(ref(storage, release.storagePath));
+      try {
+        return await getDownloadURL(ref(storage, release.storagePath));
+      } catch {
+        // Storage is optional — fall through to the GitHub Release URL.
+      }
     }
   }
 

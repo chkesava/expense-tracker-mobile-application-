@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 
 /**
- * Uploads the signed APK to Firebase Storage and publishes
- * `system_settings/latest_release` so installed apps can download and install
- * the new build in-app.
+ * Publishes `system_settings/latest_release` so installed apps can download
+ * and install the new build in-app.
+ *
+ * The APK URL is the GitHub Release asset (required, free). Firebase Storage
+ * is optional: when the bucket exists the APK is also uploaded there.
  *
  * Credentials come from GOOGLE_APPLICATION_CREDENTIALS (path to a service
  * account JSON) or FIREBASE_SERVICE_ACCOUNT (raw JSON string).
@@ -289,8 +291,8 @@ async function publishReleaseMetadata(cliOptions = null) {
     failFast({
       step: 'Publish Release Metadata',
       error: 'No APK path or download URL supplied.',
-      why: 'In-app updates need a Firebase Storage APK (or a direct download URL).',
-      fix: 'Pass --apk-path=releases/app-release.apk or --download-url=<url>.'
+      why: 'In-app updates need a direct APK URL (GitHub Release) or a local APK to upload.',
+      fix: 'Pass --download-url=https://github.com/.../Spendly-x.apk or --apk-path=releases/app-release.apk.'
     });
   }
 
@@ -299,7 +301,7 @@ async function publishReleaseMetadata(cliOptions = null) {
     versionCode,
     downloadUrl: options.downloadUrl,
     testerUrl: options.testerUrl || '',
-    storagePath: localApk ? storagePath : '',
+    storagePath: '',
     notes: options.notes || '',
     mandatory: options.mandatory,
     apkFileName: localApk ? path.basename(localApk) : resolveApkFileName(),
@@ -364,15 +366,19 @@ async function publishReleaseMetadata(cliOptions = null) {
         storagePath,
         bucketName: storageBucket
       });
-      payload.downloadUrl = uploaded.downloadUrl;
       payload.contentLength = uploaded.contentLength;
       payload.storagePath = storagePath;
+      if (!payload.downloadUrl) {
+        payload.downloadUrl = uploaded.downloadUrl;
+      }
     } catch (e) {
       storageError = e;
-      payload.downloadUrl = options.testerUrl || options.downloadUrl || '';
       payload.storagePath = '';
+      if (!payload.downloadUrl) {
+        payload.downloadUrl = options.downloadUrl || '';
+      }
       console.error(
-        `   ⚠️  Storage upload failed (${e.message}). Writing tester URL so Check for updates still sees this release.`
+        `   ⚠️  Storage upload skipped (${e.message}). In-app updates will use the GitHub Release APK.`
       );
     }
   }
@@ -403,12 +409,9 @@ async function publishReleaseMetadata(cliOptions = null) {
   saveReleaseState({ published: payload });
 
   if (storageError) {
-    failFast({
-      step: 'Upload APK to Storage',
-      error: 'Firebase Storage upload failed after the tester APK was already built.',
-      why: storageError.message,
-      fix: storageSetupFix(serviceAccount.project_id)
-    });
+    console.log(
+      `   ℹ️  Firebase Storage is optional. Set it up later at https://console.firebase.google.com/project/${serviceAccount.project_id}/storage`
+    );
   }
 
   console.log('   ✅ Release metadata published. Installed apps will prompt to update.\n');

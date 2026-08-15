@@ -55,6 +55,11 @@ describe("isTesterWebpageUrl", () => {
     expect(
       isTesterWebpageUrl("https://firebasestorage.googleapis.com/v0/b/app/o/x.apk")
     ).toBe(false);
+    expect(
+      isTesterWebpageUrl(
+        "https://github.com/chkesava/expense-tracker-mobile-application-/releases/download/android-v2.2.1-42/Spendly-2.2.1-42.apk"
+      )
+    ).toBe(false);
   });
 });
 
