@@ -10,7 +10,10 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 
+import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
+import { snapshotErrorHandler } from "@/lib/firestoreErrors";
+import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import type { CategorizationRule } from "@/shared/types/expense";
@@ -21,6 +24,7 @@ export const useCategorizationRules = (options?: { enabled?: boolean }) => {
   const uid = user?.uid;
   const [rules, setRules] = useState<CategorizationRule[]>([]);
   const [loading, setLoading] = useState(true);
+  const { error, setError, retry, attempt } = useLoadFailure();
 
   useEffect(() => {
     const db = getFirestoreDb();
@@ -42,14 +46,19 @@ export const useCategorizationRules = (options?: { enabled?: boolean }) => {
         setRules(
           snap.docs.map((d) => ({ id: d.id, ...d.data() } as CategorizationRule))
         );
+        setError(null);
         setLoading(false);
       },
-      (err) => {
-        console.error("useCategorizationRules snapshot error:", err);
-        setLoading(false);
-      }
+      snapshotErrorHandler(
+        "snapshot.categorizationRules",
+        (failure) => {
+          setError(failure);
+          setLoading(false);
+        },
+        "Couldn't load your categorization rules."
+      )
     );
-  }, [uid, enabled]);
+  }, [uid, enabled, attempt]);
 
   const addRule = async (
     keyword: string,
@@ -71,7 +80,7 @@ export const useCategorizationRules = (options?: { enabled?: boolean }) => {
       );
       toast.success("Auto-category rule added");
     } catch (err) {
-      console.error(err);
+      logError("categorizationRules.addRule", err);
       toast.error("Failed to add rule");
     }
   };
@@ -86,10 +95,10 @@ export const useCategorizationRules = (options?: { enabled?: boolean }) => {
       );
       toast.success("Rule deleted");
     } catch (err) {
-      console.error(err);
+      logError("categorizationRules.deleteRule", err);
       toast.error("Failed to delete rule");
     }
   };
 
-  return { rules, loading, addRule, deleteRule };
+  return { rules, loading, addRule, deleteRule, error, retry };
 };

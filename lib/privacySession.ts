@@ -3,6 +3,8 @@
  * Cleared when the JS process dies — app starts locked if PIN is set.
  */
 
+import { logError } from "./errors";
+
 type Listener = () => void;
 
 const KEYS = {
@@ -20,7 +22,8 @@ function emit() {
     try {
       fn();
     } catch (e) {
-      console.error(e);
+      // One misbehaving subscriber must not stop the rest from being notified.
+      logError("privacySession.notifyListener", e);
     }
   });
 }

@@ -206,7 +206,7 @@ function AddExpenseFab({
  * Compact Android bottom navigation with a raised Add Expense action.
  */
 export function BottomNav() {
-  const { navigate, replace } = useRouter();
+  const { navigate, dismissTo } = useRouter();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
   const { setIsAddExpenseOpen } = useModals();
@@ -254,7 +254,10 @@ export function BottomNav() {
     void haptic.navigation();
     const route = link.path.startsWith("/") ? link.path : `/${link.path}`;
     if (route === "/dashboard") {
-      replace("/dashboard");
+      // Pop back to the home screen already at the root of the stack. `replace`
+      // used to swap the current tab for a *second* dashboard instance, so the
+      // stack grew a new copy on every visit home.
+      dismissTo("/dashboard");
     } else {
       navigate(route as never);
     }

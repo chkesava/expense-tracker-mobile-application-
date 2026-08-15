@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useAccountPayments } from "@/hooks/useAccountPayments";
 import { useCreditCardBills } from "@/hooks/useCreditCardBills";
+import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
 import type { CreditCardBill } from "@/shared/types/creditCardBill";
 import { formatDateKey } from "@/shared/utils/dates";
@@ -87,7 +88,8 @@ export function MarkBillPaidModal({
         toast.error("Failed to update bill");
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to mark paid");
+      logError("creditCardBill.markPaid", err);
+      toast.error(friendlyErrorMessage(err, "Couldn't mark the bill as paid."));
     } finally {
       setSaving(false);
     }

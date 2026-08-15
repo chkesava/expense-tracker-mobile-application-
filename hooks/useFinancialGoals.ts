@@ -11,7 +11,11 @@ import {
   updateDoc,
 } from "firebase/firestore";
 
+import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
+import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
+import { snapshotErrorHandler } from "@/lib/firestoreErrors";
+import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import type { FinancialGoal } from "@/shared/types/expense";
@@ -22,6 +26,7 @@ export const useFinancialGoals = (options?: { enabled?: boolean }) => {
   const uid = user?.uid;
   const [goals, setGoals] = useState<FinancialGoal[]>([]);
   const [loading, setLoading] = useState(true);
+  const { error, setError, retry, attempt } = useLoadFailure();
 
   useEffect(() => {
     const db = getFirestoreDb();
@@ -43,14 +48,19 @@ export const useFinancialGoals = (options?: { enabled?: boolean }) => {
         setGoals(
           snap.docs.map((d) => ({ id: d.id, ...d.data() } as FinancialGoal))
         );
+        setError(null);
         setLoading(false);
       },
-      (err) => {
-        console.error("useFinancialGoals snapshot error:", err);
-        setLoading(false);
-      }
+      snapshotErrorHandler(
+        "snapshot.financialGoals",
+        (failure) => {
+          setError(failure);
+          setLoading(false);
+        },
+        "Couldn't load your goals."
+      )
     );
-  }, [uid, enabled]);
+  }, [uid, enabled, attempt]);
 
   const addGoal = async (
     name: string,
@@ -62,16 +72,20 @@ export const useFinancialGoals = (options?: { enabled?: boolean }) => {
     if (!uid || !db || !name.trim() || targetAmount <= 0) return;
 
     try {
-      await addDoc(collection(db, "users", uid, "financialGoals"), {
-        name: name.trim(),
-        targetAmount: Number(targetAmount),
-        currentAmount: Number(currentAmount) || 0,
-        deadline: deadline || "",
-        createdAt: serverTimestamp(),
-      });
-      toast.success("Goal added");
+      const outcome = await commitWrite(
+        () =>
+          addDoc(collection(db, "users", uid, "financialGoals"), {
+            name: name.trim(),
+            targetAmount: Number(targetAmount),
+            currentAmount: Number(currentAmount) || 0,
+            deadline: deadline || "",
+            createdAt: serverTimestamp(),
+          }),
+        { label: "goal" }
+      );
+      toast.success(writeSavedMessage(outcome, "Goal added"));
     } catch (err) {
-      console.error(err);
+      logError("financialGoals.addGoal", err);
       toast.error("Failed to add goal");
     }
   };
@@ -81,15 +95,16 @@ export const useFinancialGoals = (options?: { enabled?: boolean }) => {
     if (!uid || !db) return;
 
     try {
-      await updateDoc(
-        doc(db, "users", uid, "financialGoals", id),
-        {
-          currentAmount: Number(currentAmount) || 0,
-        }
+      const outcome = await commitWrite(
+        () =>
+          updateDoc(doc(db, "users", uid, "financialGoals", id), {
+            currentAmount: Number(currentAmount) || 0,
+          }),
+        { label: "goal" }
       );
-      toast.success("Goal progress updated");
+      toast.success(writeSavedMessage(outcome, "Goal progress updated"));
     } catch (err) {
-      console.error(err);
+      logError("financialGoals.updateGoal", err);
       toast.error("Failed to update goal");
     }
   };
@@ -99,13 +114,16 @@ export const useFinancialGoals = (options?: { enabled?: boolean }) => {
     if (!uid || !db) return;
 
     try {
-      await deleteDoc(doc(db, "users", uid, "financialGoals", id));
-      toast.success("Goal deleted");
+      const outcome = await commitWrite(
+        () => deleteDoc(doc(db, "users", uid, "financialGoals", id)),
+        { label: "goal deletion" }
+      );
+      toast.success(writeSavedMessage(outcome, "Goal deleted"));
     } catch (err) {
-      console.error(err);
+      logError("financialGoals.deleteGoal", err);
       toast.error("Failed to delete goal");
     }
   };
 
-  return { goals, loading, addGoal, updateGoalProgress, deleteGoal };
+  return { goals, loading, addGoal, updateGoalProgress, deleteGoal, error, retry };
 };

@@ -12,6 +12,7 @@ import {
   doc,
   updateDoc,
 } from "firebase/firestore";
+import { logError } from "@/lib/errors";
 import { haptic } from "@/lib/haptics";
 import {
   ArrowDownLeft,
@@ -46,6 +47,7 @@ import { useExpenses } from "@/hooks/useExpenses";
 import { useIncomes } from "@/hooks/useIncomes";
 import { useSpaces } from "@/hooks/useSpaces";
 import { getFirestoreDb } from "@/lib/firebase";
+import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
 import { toast } from "@/lib/toast";
 import { createExpense, createIncome } from "@/services/ledger/createLedgerTransaction";
 import { useAuth } from "@/providers/AuthProvider";
@@ -370,15 +372,19 @@ export function ExpenseForm({
         };
 
         if (editingExpense) {
-          await updateDoc(
-            doc(db, "users", uid, "expenses", editingExpense.id!.trim()),
-            // An edit must be able to clear the space, which needs an explicit null.
-            { ...payload, spaceId: spaceId || null }
+          const outcome = await commitWrite(
+            () =>
+              updateDoc(
+                doc(db, "users", uid, "expenses", editingExpense.id!.trim()),
+                // An edit must be able to clear the space, which needs an explicit null.
+                { ...payload, spaceId: spaceId || null }
+              ),
+            { label: "expense" }
           );
-          toast.success("Expense updated");
+          toast.success(writeSavedMessage(outcome, "Expense updated"));
         } else {
-          await createExpense(uid, payload);
-          toast.success("Expense logged");
+          const { outcome } = await createExpense(uid, payload);
+          toast.success(writeSavedMessage(outcome, "Expense logged"));
 
           // Celebrate first expense milestone with subtle confetti & animation
           celebrateMilestone("milestone_first_expense", {
@@ -402,20 +408,24 @@ export function ExpenseForm({
         };
 
         if (editingIncome) {
-          await updateDoc(
-            doc(db, "users", uid, "incomes", editingIncome.id!.trim()),
-            payload
+          const outcome = await commitWrite(
+            () =>
+              updateDoc(
+                doc(db, "users", uid, "incomes", editingIncome.id!.trim()),
+                payload
+              ),
+            { label: "income" }
           );
-          toast.success("Income updated");
+          toast.success(writeSavedMessage(outcome, "Income updated"));
         } else {
-          await createIncome(uid, payload);
-          toast.success("Income logged");
+          const { outcome } = await createIncome(uid, payload);
+          toast.success(writeSavedMessage(outcome, "Income logged"));
         }
       }
 
       onSuccess?.();
     } catch (err) {
-      console.error("ExpenseForm submission error:", err);
+      logError("expenseForm.expenseformSubmission", err);
       toast.error("Failed to save transaction");
     } finally {
       isSubmittingRef.current = false;

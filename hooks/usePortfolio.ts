@@ -15,6 +15,7 @@ import {
 } from "firebase/firestore";
 
 import { getFirestoreDb } from "@/lib/firebase";
+import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import { scheduleIdleWork } from "@/shared/utils/scheduleIdle";
@@ -108,7 +109,7 @@ export function usePortfolio(options?: { enabled?: boolean }) {
         );
         setLoading(false);
       }, (error) => {
-        console.error("Failed to load holdings", error);
+        logError("portfolio.loadHoldings", error);
         setLoading(false);
       }),
     ];
@@ -148,7 +149,7 @@ export function usePortfolio(options?: { enabled?: boolean }) {
               );
             },
             (error) => {
-              console.error("Failed to load portfolio snapshots", error);
+              logError("portfolio.loadPortfolioSnapshots", error);
             }
           ),
         ];
@@ -173,7 +174,7 @@ export function usePortfolio(options?: { enabled?: boolean }) {
       toast.success("Holding added");
       return created.id;
     } catch (error) {
-      console.error("Failed to add holding", error);
+      logError("portfolio.addHolding", error);
       toast.error("Failed to add holding");
       return null;
     }
@@ -188,7 +189,7 @@ export function usePortfolio(options?: { enabled?: boolean }) {
       );
       return true;
     } catch (error) {
-      console.error("Failed to update holding", error);
+      logError("portfolio.updateHolding", error);
       toast.error("Failed to update holding");
       return false;
     }
@@ -201,7 +202,7 @@ export function usePortfolio(options?: { enabled?: boolean }) {
       toast.success("Holding removed");
       return true;
     } catch (error) {
-      console.error("Failed to delete holding", error);
+      logError("portfolio.deleteHolding", error);
       toast.error("Failed to remove holding");
       return false;
     }
@@ -221,7 +222,7 @@ export function usePortfolio(options?: { enabled?: boolean }) {
       await batch.commit();
       return true;
     } catch (error) {
-      console.error("Failed to import holdings", error);
+      logError("portfolio.importHoldings", error);
       toast.error("Failed to import CSV");
       return false;
     }
@@ -241,7 +242,7 @@ export function usePortfolio(options?: { enabled?: boolean }) {
       toast.success("Added to watchlist");
       return true;
     } catch (error) {
-      console.error("Failed to add to watchlist", error);
+      logError("portfolio.addWatchlist", error);
       toast.error("Failed to add to watchlist");
       return false;
     }
@@ -254,7 +255,7 @@ export function usePortfolio(options?: { enabled?: boolean }) {
       toast.success("Removed from watchlist");
       return true;
     } catch (error) {
-      console.error("Failed to remove watchlist item", error);
+      logError("portfolio.removeWatchlistItem", error);
       toast.error("Failed to remove from watchlist");
       return false;
     }
@@ -271,7 +272,7 @@ export function usePortfolio(options?: { enabled?: boolean }) {
       toast.success("Alert created");
       return true;
     } catch (error) {
-      console.error("Failed to create alert", error);
+      logError("portfolio.createAlert", error);
       toast.error("Failed to create alert");
       return false;
     }
@@ -283,7 +284,7 @@ export function usePortfolio(options?: { enabled?: boolean }) {
       await updateDoc(doc(db, "users", user.uid, "alerts", id), { isActive });
       return true;
     } catch (error) {
-      console.error("Failed to update alert", error);
+      logError("portfolio.updateAlert", error);
       toast.error("Failed to update alert");
       return false;
     }
@@ -296,7 +297,7 @@ export function usePortfolio(options?: { enabled?: boolean }) {
       toast.success("Alert removed");
       return true;
     } catch (error) {
-      console.error("Failed to delete alert", error);
+      logError("portfolio.deleteAlert", error);
       toast.error("Failed to remove alert");
       return false;
     }
@@ -312,7 +313,7 @@ export function usePortfolio(options?: { enabled?: boolean }) {
       );
       return true;
     } catch (error) {
-      console.error("Failed to save portfolio settings", error);
+      logError("portfolio.savePortfolioSettings", error);
       toast.error("Failed to save portfolio setup");
       return false;
     }
@@ -327,7 +328,7 @@ export function usePortfolio(options?: { enabled?: boolean }) {
       await setDoc(ref, { ...snapshot, date, createdAt: serverTimestamp() });
       return true;
     } catch (error) {
-      console.error("Failed to save portfolio snapshot", error);
+      logError("portfolio.savePortfolioSnapshot", error);
       return false;
     }
   }, [db, user]);
@@ -370,8 +371,9 @@ export function usePortfolio(options?: { enabled?: boolean }) {
       toast.success("Mock buy executed");
       return true;
     } catch (error) {
-      console.error("Failed to execute mock buy", error);
-      toast.error(error instanceof Error ? error.message : "Failed to execute buy");
+      logError("portfolio.executeMockBuy", error);
+      logError("portfolio.buy", error);
+      toast.error(friendlyErrorMessage(error, "Couldn't complete the buy order."));
       return false;
     }
   }, [db, user]);
@@ -411,8 +413,9 @@ export function usePortfolio(options?: { enabled?: boolean }) {
       toast.success("Mock sell executed");
       return true;
     } catch (error) {
-      console.error("Failed to execute mock sell", error);
-      toast.error(error instanceof Error ? error.message : "Failed to execute sell");
+      logError("portfolio.executeMockSell", error);
+      logError("portfolio.sell", error);
+      toast.error(friendlyErrorMessage(error, "Couldn't complete the sell order."));
       return false;
     }
   }, [db, user]);
@@ -437,7 +440,7 @@ export function usePortfolio(options?: { enabled?: boolean }) {
       toast.success("Limit buy order placed");
       return true;
     } catch (error) {
-      console.error("Failed to place limit order", error);
+      logError("portfolio.placeLimitOrder", error);
       toast.error("Failed to place limit order");
       return false;
     }
@@ -450,7 +453,7 @@ export function usePortfolio(options?: { enabled?: boolean }) {
       toast.success("Order cancelled");
       return true;
     } catch (error) {
-      console.error("Failed to cancel order", error);
+      logError("portfolio.cancelOrder", error);
       toast.error("Failed to cancel order");
       return false;
     }
@@ -489,7 +492,7 @@ export function usePortfolio(options?: { enabled?: boolean }) {
       toast.success("Cash deposited to Stocks Demat");
       return true;
     } catch (error) {
-      console.error("Failed to deposit cash", error);
+      logError("portfolio.depositCash", error);
       toast.error("Failed to deposit cash");
       return false;
     }
@@ -531,8 +534,9 @@ export function usePortfolio(options?: { enabled?: boolean }) {
       toast.success("Cash withdrawn from Stocks Demat");
       return true;
     } catch (error) {
-      console.error("Failed to withdraw cash", error);
-      toast.error(error instanceof Error ? error.message : "Failed to withdraw cash");
+      logError("portfolio.withdrawCash", error);
+      logError("portfolio.withdraw", error);
+      toast.error(friendlyErrorMessage(error, "Couldn't withdraw the cash."));
       return false;
     }
   }, [db, user]);

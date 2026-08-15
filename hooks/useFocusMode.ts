@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 
+import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
+import { snapshotErrorHandler } from "@/lib/firestoreErrors";
+import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import type { FocusSession } from "@/shared/types/focus";
@@ -13,6 +16,7 @@ export function useFocusMode() {
 
   const [activeSession, setActiveSession] = useState<FocusSession | null>(null);
   const [loading, setLoading] = useState(true);
+  const { error, setError, retry, attempt } = useLoadFailure();
 
   useEffect(() => {
     const db = getFirestoreDb();
@@ -38,16 +42,21 @@ export function useFocusMode() {
         } else {
           setActiveSession(null);
         }
+        setError(null);
         setLoading(false);
       },
-      (err) => {
-        console.warn("Error reading focus session:", err);
-        setLoading(false);
-      }
+      snapshotErrorHandler(
+        "snapshot.focusMode",
+        (failure) => {
+          setError(failure);
+          setLoading(false);
+        },
+        "Couldn't load your focus session."
+      )
     );
 
     return () => unsubscribe();
-  }, [uid]);
+  }, [uid, attempt]);
 
   const startFocusSession = useCallback(
     async (params: {
@@ -81,7 +90,7 @@ export function useFocusMode() {
         toast.success(`Focus Sprint started for ${params.durationDays} days!`);
         return true;
       } catch (err) {
-        console.error("Failed starting focus sprint:", err);
+        logError("focusMode.startingFocusSprint", err);
         toast.error("Failed to start sprint");
         return false;
       }
@@ -108,7 +117,7 @@ export function useFocusMode() {
         );
         return true;
       } catch (err) {
-        console.error("Failed updating focus session:", err);
+        logError("focusMode.updatingFocusSession", err);
         return false;
       }
     },
@@ -116,6 +125,8 @@ export function useFocusMode() {
   );
 
   return {
+    error,
+    retry,
     activeSession,
     loading,
     startFocusSession,

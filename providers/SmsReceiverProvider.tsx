@@ -41,6 +41,14 @@ import {
 import { processIncomingSmsMessages } from "@/services/sms/smsTransactionProcessor";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useSmsRecurringSync } from "@/hooks/useSmsRecurringSync";
+import { logWarning } from "@/lib/errors";
+
+/**
+ * `getLastNotificationResponseAsync` keeps returning the launch tap for the
+ * lifetime of the process, so a remount of this provider (sign-out and back in,
+ * privacy lock) must not replay that navigation.
+ */
+const handledColdStartResponseIds = new Set<string>();
 
 type SmsReceiverContextValue = {
   listening: boolean;
@@ -122,39 +130,39 @@ export function SmsReceiverProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     let sub: { remove: () => void } | undefined;
-    const handledIds = new Set<string>();
 
-    const handleResponse = (response: {
-      notification: {
-        request: { identifier: string; content: { data?: unknown } };
-      };
+    const navigateToNotification = (response: {
+      notification: { request: { content: { data?: unknown } } };
     }) => {
-      const id = response.notification.request.identifier;
-      if (id && handledIds.has(id)) return;
-      if (id) handledIds.add(id);
-
       const data = response.notification.request.content.data as
         | { source?: string; url?: string }
         | undefined;
       const source = data?.source;
       if (source !== "sms" && source !== "credit_card_bill") return;
       const url = data?.url;
-      if (typeof url === "string" && url.startsWith("/")) {
-        router.push(url as Href);
-      }
+      if (typeof url !== "string" || !url.startsWith("/")) return;
+      // `dismissTo` reuses the screen when it is already in the stack, so
+      // repeated notification taps cannot pile up duplicate copies of it.
+      router.dismissTo(url as Href);
     };
 
-    void import("expo-notifications").then((Notifications) => {
+    void import("expo-notifications").then(async (Notifications) => {
       if (cancelled) return;
-      sub = Notifications.addNotificationResponseReceivedListener(handleResponse);
+      sub = Notifications.addNotificationResponseReceivedListener(
+        navigateToNotification
+      );
 
-      // The live listener above only sees responses while JS is running —
-      // if the notification tap is what cold-started the app, that response
-      // arrived before this listener existed and would otherwise be lost.
-      void Notifications.getLastNotificationResponseAsync().then((last) => {
-        if (cancelled || !last) return;
-        handleResponse(last);
-      });
+      // A tap that launched the app fires before this listener exists, so the
+      // cold-start response has to be collected separately or it is lost.
+      const initial = await Notifications.getLastNotificationResponseAsync().catch(
+        () => null
+      );
+      if (cancelled || !initial) return;
+      if (handledColdStartResponseIds.has(initial.notification.request.identifier)) {
+        return;
+      }
+      handledColdStartResponseIds.add(initial.notification.request.identifier);
+      navigateToNotification(initial);
     });
 
     return () => {
@@ -212,7 +220,7 @@ export function SmsReceiverProvider({ children }: { children: ReactNode }) {
           await stopSmsListening();
         }
       } catch (err) {
-        console.warn("[sms] listener start/stop failed", err);
+        logWarning("smsReceiverProvider.smsListenerStartStop", err);
         try {
           await stopSmsListening();
         } catch {

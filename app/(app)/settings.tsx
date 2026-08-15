@@ -29,6 +29,7 @@ import {
 import { useBiometrics } from "@/hooks/useBiometrics";
 import { getFirestoreDb } from "@/lib/firebase";
 import { haptic } from "@/lib/haptics";
+import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { pinMatches } from "@/lib/pinSecurity";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
@@ -201,7 +202,8 @@ export default function SettingsScreen() {
       );
       toast.success("Profile saved");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to save profile");
+      logError("settings.saveProfile", error);
+      toast.error(friendlyErrorMessage(error, "Couldn't save your profile."));
     } finally {
       setSavingProfile(false);
     }
@@ -268,7 +270,8 @@ export default function SettingsScreen() {
       await logout();
       toast.success("Signed out");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Logout failed");
+      logError("settings.logout", error);
+      toast.error(friendlyErrorMessage(error, "Couldn't sign you out. Please try again."));
     }
   };
 
@@ -1087,7 +1090,7 @@ function GettingStartedCard() {
         <Pressable
           onPress={() => {
             Haptics.selectionAsync().catch(() => undefined);
-            router.push("/dashboard");
+            router.dismissTo("/dashboard");
           }}
           android_ripple={{
             color: theme.colors.primary + "14",

@@ -2,6 +2,10 @@ import { useEffect, useRef } from "react";
 import { BackHandler, Platform, ToastAndroid } from "react-native";
 import { usePathname, useRouter } from "expo-router";
 import { useModals } from "@/providers/ModalProvider";
+import {
+  HOME_ROUTE,
+  resolveAndroidBackAction,
+} from "@/shared/config/navigation";
 
 /**
  * Android Back Button Handler
@@ -11,6 +15,9 @@ import { useModals } from "@/providers/ModalProvider";
  * 2. Pops stack sub-screens back to parent screens (e.g., /accounts/[id] -> /ledger).
  * 3. Returns to the primary start destination (/dashboard) when on secondary tabs (/ledger, /vaults, /insights).
  * 4. Shows exit confirmation / exits gracefully when already on /dashboard.
+ *
+ * The route → action decision lives in `resolveAndroidBackAction` so it can be
+ * tested without a navigator.
  */
 export function useAndroidBackHandler() {
   const router = useRouter();
@@ -50,50 +57,41 @@ export function useAndroidBackHandler() {
         return true;
       }
 
-      // Clean pathname
-      const cleanPath = pathname ? pathname.replace(/^\/\(app\)/, "") : "/dashboard";
+      switch (resolveAndroidBackAction(pathname ?? HOME_ROUTE)) {
+        // 2. Stack sub-screens (/accounts/[id], /settings, /add, …) -> pop.
+        //    A sub-screen entered directly from a deep link has nothing to pop
+        //    back to, so fall through to home rather than exiting the app.
+        case "pop":
+          if (router.canGoBack()) {
+            router.back();
+          } else {
+            router.replace(HOME_ROUTE);
+          }
+          return true;
 
-      // 2. Stack Sub-screens (e.g. /accounts/[id], /settings, /app-selector) -> pop back
-      const isSubScreen =
-        cleanPath.startsWith("/accounts/") ||
-        cleanPath === "/settings" ||
-        cleanPath === "/sms-inbox" ||
-        cleanPath === "/app-selector" ||
-        cleanPath.startsWith("/(nutrition)/");
+        // 3. Secondary top-level tabs -> return to the start destination.
+        //    `dismissTo` pops back to the existing home screen instead of
+        //    stacking a second copy of it, which `replace` used to do on every
+        //    single back press.
+        case "home":
+          router.dismissTo(HOME_ROUTE);
+          return true;
 
-      if (isSubScreen) {
-        if (router.canGoBack()) {
-          router.back();
+        // 4. Already home -> double press to exit.
+        case "exit": {
+          const now = Date.now();
+          if (now - lastBackPressTime.current < 2000) {
+            BackHandler.exitApp();
+            return true;
+          }
+          lastBackPressTime.current = now;
+          ToastAndroid.show("Press back again to exit", ToastAndroid.SHORT);
           return true;
         }
-        router.replace("/dashboard");
-        return true;
-      }
 
-      // 3. Secondary Top-level Tabs (/ledger, /vaults, /insights) -> Return to start destination (/dashboard)
-      if (
-        cleanPath === "/ledger" ||
-        cleanPath === "/vaults" ||
-        cleanPath === "/insights" ||
-        cleanPath.startsWith("/ledger")
-      ) {
-        router.replace("/dashboard");
-        return true;
+        default:
+          return false;
       }
-
-      // 4. On Root / Dashboard -> Double press back to exit app
-      if (cleanPath === "/dashboard" || cleanPath === "/" || !cleanPath) {
-        const now = Date.now();
-        if (now - lastBackPressTime.current < 2000) {
-          BackHandler.exitApp();
-          return true;
-        }
-        lastBackPressTime.current = now;
-        ToastAndroid.show("Press back again to exit", ToastAndroid.SHORT);
-        return true;
-      }
-
-      return false;
     };
 
     const subscription = BackHandler.addEventListener(

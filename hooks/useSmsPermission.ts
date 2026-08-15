@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
+
+import { logError, logWarning } from "@/lib/errors";
+import { toast } from "@/lib/toast";
 import { AppState, Platform, type AppStateStatus } from "react-native";
 
 import {
@@ -56,6 +59,12 @@ export function useSmsPermission(): UseSmsPermissionResult {
       const details = await checkSmsPermissionDetails();
       setPermissionDetails(details);
       return details.status;
+    } catch (error) {
+      // The native module can throw on OEM ROMs. Treat it as "not granted"
+      // rather than letting the rejection escape unhandled.
+      logWarning("sms.refreshPermission", error);
+      setPermissionDetails(emptySmsPermissionDetails("denied"));
+      return "denied" as const;
     } finally {
       setPermissionLoading(false);
     }
@@ -72,19 +81,33 @@ export function useSmsPermission(): UseSmsPermissionResult {
         status: status === "blocked" ? "blocked" : details.status,
       });
       return status;
+    } catch (error) {
+      logWarning("sms.requestPermission", error);
+      setPermissionDetails(emptySmsPermissionDetails("denied"));
+      return "denied" as const;
     } finally {
       setPermissionLoading(false);
     }
   }, [supported]);
 
   const openSystemSettings = useCallback(async () => {
-    await openSmsPermissionSettings();
+    try {
+      await openSmsPermissionSettings();
+    } catch (error) {
+      logWarning("sms.openSettings", error);
+      toast.error("Couldn't open system settings. Open them manually from your device settings.");
+    }
   }, []);
 
   const persistPrefs = useCallback(async (next: SmsAutomationPrefs) => {
     const normalized = normalizeSmsAutomationPrefs(next);
     setPrefs(normalized);
-    await saveSmsAutomationPrefs(normalized);
+    try {
+      await saveSmsAutomationPrefs(normalized);
+    } catch (error) {
+      logError("sms.savePrefs", error);
+      toast.error("Couldn't save your SMS settings. They'll reset next time you open the app.");
+    }
   }, []);
 
   const setEnabled = useCallback(
@@ -135,8 +158,15 @@ export function useSmsPermission(): UseSmsPermissionResult {
   useEffect(() => {
     let cancelled = false;
 
-    (async () => {
-      const storedPrefs = await loadSmsAutomationPrefs();
+    void (async () => {
+      let storedPrefs = SMS_AUTOMATION_PREFS_DEFAULTS;
+      try {
+        storedPrefs = await loadSmsAutomationPrefs();
+      } catch (error) {
+        // Corrupt/unreadable storage must not pin the settings screen on a
+        // spinner forever — fall back to defaults and carry on.
+        logWarning("sms.loadPrefs", error);
+      }
       await refreshPermission();
       if (!cancelled) {
         setPrefs(storedPrefs);

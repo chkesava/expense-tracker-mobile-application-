@@ -10,6 +10,7 @@ import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { useAccountPayments } from "@/hooks/useAccountPayments";
 import { useExpenses } from "@/hooks/useExpenses";
+import { logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import type { Account, AccountType } from "@/shared/types/expense";
@@ -161,7 +162,7 @@ export function PayCreditBillModal({
         toast.error("Failed to record payment");
       }
     } catch (err) {
-      console.error("Save bill payment error:", err);
+      logError("payCreditBillModal.saveBillPayment", err);
       toast.error("Failed to save bill payment");
     } finally {
       setSaving(false);

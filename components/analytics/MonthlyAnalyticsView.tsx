@@ -212,7 +212,7 @@ export function MonthlyAnalyticsView() {
           primaryAction={{
             label: "Log Expense",
             icon: <Plus size={16} color="#FFFFFF" strokeWidth={2.4} />,
-            onPress: () => router.push("/dashboard"),
+            onPress: () => router.dismissTo("/dashboard"),
           }}
           secondaryAction={{
             label: "Previous Month",

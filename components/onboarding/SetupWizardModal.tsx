@@ -33,6 +33,7 @@ import {
 import { InstitutionSearchField } from "@/components/accounts/InstitutionSearchField";
 import { useAccountsContext } from "@/providers/FinanceDataProvider";
 import { getFirestoreDb } from "@/lib/firebase";
+import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
 import { getInstitutionById } from "@/shared/data/institutions";
 import type { CanonicalAccountTypeId } from "@/shared/types/expense";
@@ -252,7 +253,8 @@ export function SetupWizardModal() {
         setIsSetupWizardOpen(false);
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to save");
+      logError("onboarding.setupWizard", err);
+      toast.error(friendlyErrorMessage(err, "Couldn't save your setup."));
     } finally {
       setLoading(false);
     }

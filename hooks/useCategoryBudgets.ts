@@ -10,7 +10,11 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 
+import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
+import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
+import { snapshotErrorHandler } from "@/lib/firestoreErrors";
+import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import type { CategoryBudget } from "@/shared/types/expense";
@@ -21,6 +25,7 @@ export const useCategoryBudgets = (options?: { enabled?: boolean }) => {
   const uid = user?.uid;
   const [budgets, setBudgets] = useState<CategoryBudget[]>([]);
   const [loading, setLoading] = useState(true);
+  const { error, setError, retry, attempt } = useLoadFailure();
 
   useEffect(() => {
     const db = getFirestoreDb();
@@ -42,14 +47,19 @@ export const useCategoryBudgets = (options?: { enabled?: boolean }) => {
         setBudgets(
           snap.docs.map((d) => ({ id: d.id, ...d.data() } as CategoryBudget))
         );
+        setError(null);
         setLoading(false);
       },
-      (err) => {
-        console.error("useCategoryBudgets snapshot error:", err);
-        setLoading(false);
-      }
+      snapshotErrorHandler(
+        "snapshot.categoryBudgets",
+        (failure) => {
+          setError(failure);
+          setLoading(false);
+        },
+        "Couldn't load your budgets."
+      )
     );
-  }, [uid, enabled]);
+  }, [uid, enabled, attempt]);
 
   const addBudget = async (
     category: string,
@@ -61,20 +71,27 @@ export const useCategoryBudgets = (options?: { enabled?: boolean }) => {
     if (!uid || !db || !category.trim() || !month || amount <= 0) return;
 
     try {
-      await addDoc(collection(db, "users", uid, "categoryBudgets"), {
-        category: category.trim(),
-        ...(subcategory?.trim() ? { subcategory: subcategory.trim() } : {}),
-        amount: Number(amount),
-        month,
-        createdAt: serverTimestamp(),
-      });
+      const outcome = await commitWrite(
+        () =>
+          addDoc(collection(db, "users", uid, "categoryBudgets"), {
+            category: category.trim(),
+            ...(subcategory?.trim() ? { subcategory: subcategory.trim() } : {}),
+            amount: Number(amount),
+            month,
+            createdAt: serverTimestamp(),
+          }),
+        { label: "budget" }
+      );
       toast.success(
-        subcategory?.trim()
-          ? "Subcategory budget added"
-          : "Category budget added"
+        writeSavedMessage(
+          outcome,
+          subcategory?.trim()
+            ? "Subcategory budget added"
+            : "Category budget added"
+        )
       );
     } catch (err) {
-      console.error(err);
+      logError("categoryBudgets.addCategoryBudget", err);
       toast.error("Failed to add category budget");
     }
   };
@@ -84,13 +101,16 @@ export const useCategoryBudgets = (options?: { enabled?: boolean }) => {
     if (!uid || !db) return;
 
     try {
-      await deleteDoc(doc(db, "users", uid, "categoryBudgets", id));
-      toast.success("Category budget deleted");
+      const outcome = await commitWrite(
+        () => deleteDoc(doc(db, "users", uid, "categoryBudgets", id)),
+        { label: "budget deletion" }
+      );
+      toast.success(writeSavedMessage(outcome, "Category budget deleted"));
     } catch (err) {
-      console.error(err);
+      logError("categoryBudgets.deleteCategoryBudget", err);
       toast.error("Failed to delete category budget");
     }
   };
 
-  return { budgets, loading, addBudget, deleteBudget };
+  return { budgets, loading, addBudget, deleteBudget, error, retry };
 };

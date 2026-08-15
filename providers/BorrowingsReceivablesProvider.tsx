@@ -14,21 +14,24 @@ import {
   type ReactNode,
 } from "react";
 import {
-  addDoc,
   collection,
-  deleteDoc,
   doc,
   getDocs,
   onSnapshot,
   orderBy,
   query,
   serverTimestamp,
+  setDoc,
   updateDoc,
   where,
   writeBatch,
 } from "firebase/firestore";
 
+import { logError, logWarning } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
+import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
+import { snapshotErrorHandler, type LoadFailure } from "@/lib/firestoreErrors";
+import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import type { Borrowing, BorrowingRepayment } from "@/shared/types/borrowing";
@@ -103,6 +106,8 @@ export type BorrowingsContextType = {
   summaries: Map<string, BorrowingSummary>;
   portfolio: ReturnType<typeof summarizeBorrowings>;
   loading: boolean;
+  error: LoadFailure | null;
+  retry: () => void;
   getSummary: (borrowingId: string) => BorrowingSummary | null;
   getRepayments: (borrowingId: string) => BorrowingRepayment[];
   createBorrowing: (input: CreateBorrowingInput) => Promise<string | null>;
@@ -118,6 +123,8 @@ export type ReceivablesContextType = {
   summaries: Map<string, ReceivableSummary>;
   portfolio: ReturnType<typeof summarizeReceivables>;
   loading: boolean;
+  error: LoadFailure | null;
+  retry: () => void;
   getSummary: (receivableId: string) => ReceivableSummary | null;
   getRepayments: (receivableId: string) => ReceivableRepayment[];
   createReceivable: (input: CreateReceivableInput) => Promise<string | null>;
@@ -152,27 +159,37 @@ export function BorrowingsReceivablesProvider({
     BorrowingRepayment[]
   >([]);
   const [borrowingsLoading, setBorrowingsLoading] = useState(true);
+  const {
+    error: borrowingsError,
+    setError: setBorrowingsError,
+    retry: retryBorrowings,
+    attempt: borrowingsAttempt,
+  } = useLoadFailure();
 
   const [receivables, setReceivables] = useState<Receivable[]>([]);
   const [receivableRepayments, setReceivableRepayments] = useState<
     ReceivableRepayment[]
   >([]);
   const [receivablesLoading, setReceivablesLoading] = useState(true);
+  const {
+    error: receivablesError,
+    setError: setReceivablesError,
+    retry: retryReceivables,
+    attempt: receivablesAttempt,
+  } = useLoadFailure();
 
+  // Separate effects so a retry for one collection pair doesn't tear down
+  // and re-subscribe the other's listeners.
   useEffect(() => {
     const db = getFirestoreDb();
     if (!uid || !db) {
       setBorrowings([]);
       setBorrowingRepayments([]);
       setBorrowingsLoading(false);
-      setReceivables([]);
-      setReceivableRepayments([]);
-      setReceivablesLoading(false);
       return;
     }
 
     setBorrowingsLoading(true);
-    setReceivablesLoading(true);
     const base = ["users", uid] as const;
 
     const unsubBorrowings = onSnapshot(
@@ -184,12 +201,17 @@ export function BorrowingsReceivablesProvider({
             ...(docSnap.data() as Omit<Borrowing, "id">),
           }))
         );
+        setBorrowingsError(null);
         setBorrowingsLoading(false);
       },
-      (err) => {
-        console.warn("Error fetching borrowings:", err);
-        setBorrowingsLoading(false);
-      }
+      snapshotErrorHandler(
+        "snapshot.borrowings",
+        (failure) => {
+          setBorrowingsError(failure);
+          setBorrowingsLoading(false);
+        },
+        "Couldn't load your borrowings."
+      )
     );
 
     const unsubBorrowingRepayments = onSnapshot(
@@ -205,10 +227,26 @@ export function BorrowingsReceivablesProvider({
           }))
         );
       },
-      (err) => {
-        console.warn("Error fetching borrowing repayments:", err);
-      }
+      (err) => logWarning("snapshot.borrowing.repayments", err)
     );
+
+    return () => {
+      unsubBorrowings();
+      unsubBorrowingRepayments();
+    };
+  }, [uid, borrowingsAttempt, setBorrowingsError]);
+
+  useEffect(() => {
+    const db = getFirestoreDb();
+    if (!uid || !db) {
+      setReceivables([]);
+      setReceivableRepayments([]);
+      setReceivablesLoading(false);
+      return;
+    }
+
+    setReceivablesLoading(true);
+    const base = ["users", uid] as const;
 
     const unsubReceivables = onSnapshot(
       query(collection(db, ...base, "receivables"), orderBy("lentDate", "desc")),
@@ -219,12 +257,17 @@ export function BorrowingsReceivablesProvider({
             ...(docSnap.data() as Omit<Receivable, "id">),
           }))
         );
+        setReceivablesError(null);
         setReceivablesLoading(false);
       },
-      (err) => {
-        console.warn("Error fetching receivables:", err);
-        setReceivablesLoading(false);
-      }
+      snapshotErrorHandler(
+        "snapshot.receivables",
+        (failure) => {
+          setReceivablesError(failure);
+          setReceivablesLoading(false);
+        },
+        "Couldn't load your receivables."
+      )
     );
 
     const unsubReceivableRepayments = onSnapshot(
@@ -240,18 +283,14 @@ export function BorrowingsReceivablesProvider({
           }))
         );
       },
-      (err) => {
-        console.warn("Error fetching receivable repayments:", err);
-      }
+      (err) => logWarning("snapshot.receivable.repayments", err)
     );
 
     return () => {
-      unsubBorrowings();
-      unsubBorrowingRepayments();
       unsubReceivables();
       unsubReceivableRepayments();
     };
-  }, [uid]);
+  }, [uid, receivablesAttempt, setReceivablesError]);
 
   const today = todayDateKey();
 
@@ -292,24 +331,29 @@ export function BorrowingsReceivablesProvider({
         return null;
       }
       try {
-        const ref = await addDoc(collection(db, "users", uid, "borrowings"), {
-          ...input,
-          userId: uid,
-          lenderId: input.lenderId ?? null,
-          dueDate: input.dueDate ?? null,
-          creditedAccountId: input.creditedAccountId ?? null,
-          outstandingPrincipal: input.principalAmount,
-          accruedInterest: 0,
-          totalOutstanding: input.principalAmount,
-          status: "ACTIVE",
-          settledDate: null,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        });
-        toast.success("Borrowing recorded");
+        const ref = doc(collection(db, "users", uid, "borrowings"));
+        const outcome = await commitWrite(
+          () =>
+            setDoc(ref, {
+              ...input,
+              userId: uid,
+              lenderId: input.lenderId ?? null,
+              dueDate: input.dueDate ?? null,
+              creditedAccountId: input.creditedAccountId ?? null,
+              outstandingPrincipal: input.principalAmount,
+              accruedInterest: 0,
+              totalOutstanding: input.principalAmount,
+              status: "ACTIVE",
+              settledDate: null,
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            }),
+          { label: "borrowing" }
+        );
+        toast.success(writeSavedMessage(outcome, "Borrowing recorded"));
         return ref.id;
       } catch (err) {
-        console.error("createBorrowing error:", err);
+        logError("borrowings.createborrowing", err);
         toast.error("Failed to record borrowing");
         return null;
       }
@@ -322,14 +366,18 @@ export function BorrowingsReceivablesProvider({
       const db = getFirestoreDb();
       if (!uid || !db || !id) return false;
       try {
-        await updateDoc(doc(db, "users", uid, "borrowings", id), {
-          ...updates,
-          updatedAt: serverTimestamp(),
-        });
-        toast.success("Borrowing updated");
+        const outcome = await commitWrite(
+          () =>
+            updateDoc(doc(db, "users", uid, "borrowings", id), {
+              ...updates,
+              updatedAt: serverTimestamp(),
+            }),
+          { label: "borrowing" }
+        );
+        toast.success(writeSavedMessage(outcome, "Borrowing updated"));
         return true;
       } catch (err) {
-        console.error("updateBorrowing error:", err);
+        logError("borrowings.updateborrowing", err);
         toast.error("Failed to update borrowing");
         return false;
       }
@@ -348,14 +396,27 @@ export function BorrowingsReceivablesProvider({
             where("borrowingId", "==", id)
           )
         );
+
+        // Offline this query answers from cache and may not list every
+        // repayment, which would orphan the ones it missed.
+        if (linked.metadata.fromCache) {
+          toast.error(
+            "Can't verify linked repayments while offline. Try again when connected."
+          );
+          return false;
+        }
+
         const batch = writeBatch(db);
         linked.docs.forEach((repaymentDoc) => batch.delete(repaymentDoc.ref));
         batch.delete(doc(db, "users", uid, "borrowings", id));
-        await batch.commit();
-        toast.success("Borrowing deleted");
+        const outcome = await commitWrite(() => batch.commit(), {
+          label: "borrowing deletion",
+        });
+
+        toast.success(writeSavedMessage(outcome, "Borrowing deleted"));
         return true;
       } catch (err) {
-        console.error("deleteBorrowing error:", err);
+        logError("borrowings.deleteborrowing", err);
         toast.error("Failed to delete borrowing");
         return false;
       }
@@ -385,20 +446,8 @@ export function BorrowingsReceivablesProvider({
       }
       const allocation = allocateRepayment(input.amount, summary);
       try {
-        const ref = await addDoc(
-          collection(db, "users", uid, "borrowingRepayments"),
-          {
-            borrowingId: input.borrowingId,
-            amount: input.amount,
-            principalComponent: allocation.principalComponent,
-            interestComponent: allocation.interestComponent,
-            paymentAccountId: input.paymentAccountId ?? null,
-            date: input.date,
-            month: monthFromDateKey(input.date),
-            note: input.note ?? "",
-            createdAt: serverTimestamp(),
-          }
-        );
+        const ref = doc(collection(db, "users", uid, "borrowingRepayments"));
+
         const nextSummary = summarizeBorrowing(
           borrowing,
           [
@@ -414,18 +463,41 @@ export function BorrowingsReceivablesProvider({
           ],
           todayDateKey()
         );
-        await updateDoc(
+
+        // Repayment + recomputed parent totals commit atomically. Two separate
+        // writes could leave a repayment recorded against a borrowing that
+        // still shows the full amount outstanding if the link drops between.
+        const batch = writeBatch(db);
+        batch.set(ref, {
+          borrowingId: input.borrowingId,
+          amount: input.amount,
+          principalComponent: allocation.principalComponent,
+          interestComponent: allocation.interestComponent,
+          paymentAccountId: input.paymentAccountId ?? null,
+          date: input.date,
+          month: monthFromDateKey(input.date),
+          note: input.note ?? "",
+          createdAt: serverTimestamp(),
+        });
+        batch.update(
           doc(db, "users", uid, "borrowings", input.borrowingId),
           denormalizedBorrowingFields(nextSummary)
         );
+        const outcome = await commitWrite(() => batch.commit(), {
+          label: "repayment",
+        });
+
         toast.success(
-          nextSummary.status === "FULLY_SETTLED"
-            ? "Borrowing settled"
-            : "Repayment recorded"
+          writeSavedMessage(
+            outcome,
+            nextSummary.status === "FULLY_SETTLED"
+              ? "Borrowing settled"
+              : "Repayment recorded"
+          )
         );
         return ref.id;
       } catch (err) {
-        console.error("addRepayment error:", err);
+        logError("borrowings.addrepayment", err);
         toast.error("Failed to record repayment");
         return null;
       }
@@ -439,24 +511,29 @@ export function BorrowingsReceivablesProvider({
       if (!uid || !db) return false;
       const borrowing = borrowings.find((b) => b.id === borrowingId);
       try {
-        await deleteDoc(
-          doc(db, "users", uid, "borrowingRepayments", repaymentId)
-        );
+        const batch = writeBatch(db);
+        batch.delete(doc(db, "users", uid, "borrowingRepayments", repaymentId));
+
         if (borrowing) {
           const nextSummary = summarizeBorrowing(
             borrowing,
             borrowingRepayments.filter((r) => r.id !== repaymentId),
             todayDateKey()
           );
-          await updateDoc(
+          batch.update(
             doc(db, "users", uid, "borrowings", borrowingId),
             denormalizedBorrowingFields(nextSummary)
           );
         }
-        toast.success("Repayment removed");
+
+        const outcome = await commitWrite(() => batch.commit(), {
+          label: "repayment deletion",
+        });
+
+        toast.success(writeSavedMessage(outcome, "Repayment removed"));
         return true;
       } catch (err) {
-        console.error("deleteRepayment error:", err);
+        logError("borrowings.deleterepayment", err);
         toast.error("Failed to remove repayment");
         return false;
       }
@@ -504,25 +581,30 @@ export function BorrowingsReceivablesProvider({
         return null;
       }
       try {
-        const ref = await addDoc(collection(db, "users", uid, "receivables"), {
-          ...input,
-          userId: uid,
-          personId: input.personId ?? null,
-          dueDate: input.dueDate ?? null,
-          purpose: input.purpose ?? "",
-          note: input.note ?? "",
-          ...(input.spaceId ? { spaceId: input.spaceId } : {}),
-          totalReceived: 0,
-          outstandingAmount: input.originalAmount,
-          status: "ACTIVE",
-          settledDate: null,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        });
-        toast.success("Money lent recorded");
+        const ref = doc(collection(db, "users", uid, "receivables"));
+        const outcome = await commitWrite(
+          () =>
+            setDoc(ref, {
+              ...input,
+              userId: uid,
+              personId: input.personId ?? null,
+              dueDate: input.dueDate ?? null,
+              purpose: input.purpose ?? "",
+              note: input.note ?? "",
+              ...(input.spaceId ? { spaceId: input.spaceId } : {}),
+              totalReceived: 0,
+              outstandingAmount: input.originalAmount,
+              status: "ACTIVE",
+              settledDate: null,
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            }),
+          { label: "receivable" }
+        );
+        toast.success(writeSavedMessage(outcome, "Money lent recorded"));
         return ref.id;
       } catch (err) {
-        console.error("createReceivable error:", err);
+        logError("receivables.createreceivable", err);
         toast.error("Failed to record money lent");
         return null;
       }
@@ -559,24 +641,27 @@ export function BorrowingsReceivablesProvider({
           payload.spaceId = updates.spaceId ?? null;
         }
 
-        await updateDoc(doc(db, "users", uid, "receivables", id), payload);
-
+        // The edit and its recomputed totals go up as one write: a connection
+        // dropping between two separate updates would leave the receivable
+        // showing a new principal against stale outstanding/status fields.
         if (existing && updates.originalAmount != null) {
           const next = summarizeReceivable(
             { ...existing, ...updates, originalAmount: updates.originalAmount },
             receivableRepayments,
             todayDateKey()
           );
-          await updateDoc(
-            doc(db, "users", uid, "receivables", id),
-            denormalizedReceivableFields(next)
-          );
+          Object.assign(payload, denormalizedReceivableFields(next));
         }
 
-        toast.success("Receivable updated");
+        const outcome = await commitWrite(
+          () => updateDoc(doc(db, "users", uid, "receivables", id), payload),
+          { label: "receivable" }
+        );
+
+        toast.success(writeSavedMessage(outcome, "Receivable updated"));
         return true;
       } catch (err) {
-        console.error("updateReceivable error:", err);
+        logError("receivables.updatereceivable", err);
         toast.error("Failed to update receivable");
         return false;
       }
@@ -595,14 +680,27 @@ export function BorrowingsReceivablesProvider({
             where("receivableId", "==", id)
           )
         );
+
+        // Offline this query answers from cache and may not list every
+        // repayment, which would orphan the ones it missed.
+        if (linked.metadata.fromCache) {
+          toast.error(
+            "Can't verify linked repayments while offline. Try again when connected."
+          );
+          return false;
+        }
+
         const batch = writeBatch(db);
         linked.docs.forEach((repaymentDoc) => batch.delete(repaymentDoc.ref));
         batch.delete(doc(db, "users", uid, "receivables", id));
-        await batch.commit();
-        toast.success("Receivable deleted");
+        const outcome = await commitWrite(() => batch.commit(), {
+          label: "receivable deletion",
+        });
+
+        toast.success(writeSavedMessage(outcome, "Receivable deleted"));
         return true;
       } catch (err) {
-        console.error("deleteReceivable error:", err);
+        logError("receivables.deletereceivable", err);
         toast.error("Failed to delete receivable");
         return false;
       }
@@ -643,18 +741,7 @@ export function BorrowingsReceivablesProvider({
       }
 
       try {
-        const ref = await addDoc(
-          collection(db, "users", uid, "receivableRepayments"),
-          {
-            receivableId: input.receivableId,
-            amount: input.amount,
-            receivedAccountId: input.receivedAccountId ?? null,
-            date: input.date,
-            month: monthFromDateKey(input.date),
-            note: input.note ?? "",
-            createdAt: serverTimestamp(),
-          }
-        );
+        const ref = doc(collection(db, "users", uid, "receivableRepayments"));
 
         const nextSummary = summarizeReceivable(
           receivable,
@@ -670,19 +757,38 @@ export function BorrowingsReceivablesProvider({
           todayDateKey()
         );
 
-        await updateDoc(
+        // Repayment + recomputed parent totals commit atomically. Two separate
+        // writes could leave money recorded as received while the receivable
+        // still shows the full amount outstanding if the link drops between.
+        const batch = writeBatch(db);
+        batch.set(ref, {
+          receivableId: input.receivableId,
+          amount: input.amount,
+          receivedAccountId: input.receivedAccountId ?? null,
+          date: input.date,
+          month: monthFromDateKey(input.date),
+          note: input.note ?? "",
+          createdAt: serverTimestamp(),
+        });
+        batch.update(
           doc(db, "users", uid, "receivables", input.receivableId),
           denormalizedReceivableFields(nextSummary)
         );
+        const outcome = await commitWrite(() => batch.commit(), {
+          label: "repayment",
+        });
 
         toast.success(
-          nextSummary.status === "FULLY_SETTLED"
-            ? "Receivable settled"
-            : "Repayment recorded"
+          writeSavedMessage(
+            outcome,
+            nextSummary.status === "FULLY_SETTLED"
+              ? "Receivable settled"
+              : "Repayment recorded"
+          )
         );
         return ref.id;
       } catch (err) {
-        console.error("addReceivableRepayment error:", err);
+        logError("receivables.addreceivablerepayment", err);
         toast.error("Failed to record repayment");
         return null;
       }
@@ -696,24 +802,29 @@ export function BorrowingsReceivablesProvider({
       if (!uid || !db) return false;
       const receivable = receivables.find((r) => r.id === receivableId);
       try {
-        await deleteDoc(
-          doc(db, "users", uid, "receivableRepayments", repaymentId)
-        );
+        const batch = writeBatch(db);
+        batch.delete(doc(db, "users", uid, "receivableRepayments", repaymentId));
+
         if (receivable) {
           const nextSummary = summarizeReceivable(
             receivable,
             receivableRepayments.filter((r) => r.id !== repaymentId),
             todayDateKey()
           );
-          await updateDoc(
+          batch.update(
             doc(db, "users", uid, "receivables", receivableId),
             denormalizedReceivableFields(nextSummary)
           );
         }
-        toast.success("Repayment removed");
+
+        const outcome = await commitWrite(() => batch.commit(), {
+          label: "repayment deletion",
+        });
+
+        toast.success(writeSavedMessage(outcome, "Repayment removed"));
         return true;
       } catch (err) {
-        console.error("deleteReceivableRepayment error:", err);
+        logError("receivables.deletereceivablerepayment", err);
         toast.error("Failed to remove repayment");
         return false;
       }
@@ -759,6 +870,8 @@ export function BorrowingsReceivablesProvider({
       summaries: borrowingSummaries,
       portfolio: borrowingPortfolio,
       loading: borrowingsLoading,
+      error: borrowingsError,
+      retry: retryBorrowings,
       getSummary: getBorrowingSummary,
       getRepayments: getBorrowingRepayments,
       createBorrowing,
@@ -773,6 +886,8 @@ export function BorrowingsReceivablesProvider({
       borrowingSummaries,
       borrowingPortfolio,
       borrowingsLoading,
+      borrowingsError,
+      retryBorrowings,
       getBorrowingSummary,
       getBorrowingRepayments,
       createBorrowing,
@@ -790,6 +905,8 @@ export function BorrowingsReceivablesProvider({
       summaries: receivableSummaries,
       portfolio: receivablePortfolio,
       loading: receivablesLoading,
+      error: receivablesError,
+      retry: retryReceivables,
       getSummary: getReceivableSummary,
       getRepayments: getReceivableRepayments,
       createReceivable,
@@ -806,6 +923,8 @@ export function BorrowingsReceivablesProvider({
       receivableSummaries,
       receivablePortfolio,
       receivablesLoading,
+      receivablesError,
+      retryReceivables,
       getReceivableSummary,
       getReceivableRepayments,
       createReceivable,
