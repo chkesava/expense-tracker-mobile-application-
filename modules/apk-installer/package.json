@@ -1,0 +1,13 @@
+{
+  "name": "apk-installer",
+  "version": "0.1.0",
+  "description": "Android PackageInstaller session for in-app APK updates.",
+  "main": "index.ts",
+  "keywords": ["expo", "react-native", "apk"],
+  "license": "UNLICENSED",
+  "peerDependencies": {
+    "expo": "*",
+    "react": "*",
+    "react-native": "*"
+  }
+}

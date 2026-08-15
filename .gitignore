@@ -53,3 +53,7 @@ yarn-error.*
 /android
 android/app/*.keystore
 android/app/*.jks
+
+# Expo module Gradle outputs
+modules/**/android/build/
+modules/**/android/.gradle/

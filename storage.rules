@@ -1,0 +1,16 @@
+rules_version = '2';
+
+// Signed-in testers may download release APKs. Writes go through the Admin SDK
+// in CI — clients must not upload here.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /releases/{allPaths=**} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

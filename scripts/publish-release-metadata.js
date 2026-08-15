@@ -1,27 +1,29 @@
 #!/usr/bin/env node
 
 /**
- * Publishes the latest release metadata to Firestore so installed apps can
- * detect a newer build and prompt the user to update.
- *
- * Document: system_settings/latest_release
+ * Uploads the signed APK to Firebase Storage and publishes
+ * `system_settings/latest_release` so installed apps can download and install
+ * the new build in-app.
  *
  * Credentials come from GOOGLE_APPLICATION_CREDENTIALS (path to a service
  * account JSON) or FIREBASE_SERVICE_ACCOUNT (raw JSON string).
  *
  * Usage:
  *   node scripts/publish-release-metadata.js \
- *     --download-url=https://appdistribution.firebase.dev/i/xxxx \
+ *     --apk-path=releases/app-release.apk \
+ *     --tester-url=https://appdistribution.firebase.dev/i/xxxx \
  *     --notes="Fixed ledger totals" \
  *     --mandatory=false
  */
 
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const {
   RELEASES_DIR,
   failFast,
   getCurrentVersion,
+  getMergedEnvFileVars,
   getReleaseState,
   saveReleaseState
 } = require('./common');
@@ -33,6 +35,8 @@ function parseArgs() {
   const args = process.argv.slice(2);
   const options = {
     downloadUrl: process.env.RELEASE_DOWNLOAD_URL || '',
+    testerUrl: process.env.RELEASE_TESTER_URL || '',
+    apkPath: process.env.RELEASE_APK_PATH || '',
     notes: process.env.RELEASE_NOTES || '',
     mandatory: String(process.env.RELEASE_MANDATORY || '').toLowerCase() === 'true',
     versionName: process.env.RELEASE_VERSION_NAME || '',
@@ -45,6 +49,10 @@ function parseArgs() {
   for (const arg of args) {
     if (arg.startsWith('--download-url=')) {
       options.downloadUrl = arg.slice('--download-url='.length).trim();
+    } else if (arg.startsWith('--tester-url=')) {
+      options.testerUrl = arg.slice('--tester-url='.length).trim();
+    } else if (arg.startsWith('--apk-path=')) {
+      options.apkPath = arg.slice('--apk-path='.length).trim();
     } else if (arg.startsWith('--notes=')) {
       options.notes = arg.slice('--notes='.length).trim();
     } else if (arg.startsWith('--mandatory=')) {
@@ -114,56 +122,79 @@ function resolveApkFileName() {
 
   if (apks.length === 0) return '';
 
-  // Newest archived APK wins when several builds share the folder.
   return apks
     .map((name) => ({ name, mtime: fs.statSync(path.join(RELEASES_DIR, name)).mtimeMs }))
     .sort((a, b) => b.mtime - a.mtime)[0].name;
 }
 
-async function publishReleaseMetadata(cliOptions = null) {
-  const options = cliOptions || parseArgs();
-  const version = getCurrentVersion();
-  const versionName =
-    options.versionName && options.versionName.trim()
-      ? options.versionName.trim()
-      : version.versionName;
-  const versionCode =
-    Number.isInteger(options.versionCode) && options.versionCode > 0
-      ? options.versionCode
-      : version.versionCode;
+function resolveLocalApkPath(options) {
+  if (options.apkPath && options.apkPath.trim()) {
+    return path.resolve(options.apkPath.trim());
+  }
 
-  console.log('\n📡 Publishing release metadata to Firestore...');
+  const fallback = path.join(RELEASES_DIR, 'app-release.apk');
+  return fs.existsSync(fallback) ? fallback : '';
+}
 
-  if (!options.downloadUrl) {
+function resolveStorageBucket(serviceAccount) {
+  const merged = getMergedEnvFileVars();
+  return (
+    process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET ||
+    merged.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET ||
+    `${serviceAccount.project_id}.firebasestorage.app`
+  );
+}
+
+function sha256File(filePath) {
+  return new Promise((resolve, reject) => {
+    const hash = crypto.createHash('sha256');
+    const stream = fs.createReadStream(filePath);
+    stream.on('data', (chunk) => hash.update(chunk));
+    stream.on('end', () => resolve(hash.digest('hex')));
+    stream.on('error', reject);
+  });
+}
+
+function storageDownloadUrl(bucketName, storagePath, token) {
+  const encoded = encodeURIComponent(storagePath);
+  return `https://firebasestorage.googleapis.com/v0/b/${bucketName}/o/${encoded}?alt=media&token=${token}`;
+}
+
+async function uploadApk({ localPath, storagePath, bucketName }) {
+  const { getStorage } = require('firebase-admin/storage');
+  const token = crypto.randomUUID();
+  const bucket = getStorage().bucket(bucketName);
+
+  try {
+    await bucket.upload(localPath, {
+      destination: storagePath,
+      resumable: false,
+      public: false,
+      metadata: {
+        contentType: 'application/vnd.android.package-archive',
+        cacheControl: 'private, max-age=0',
+        metadata: {
+          firebaseStorageDownloadTokens: token
+        }
+      }
+    });
+  } catch (e) {
     failFast({
-      step: 'Publish Release Metadata',
-      error: 'No download URL supplied.',
-      why: 'The in-app update prompt needs a link for users to fetch the new APK.',
-      fix: 'Pass --download-url=<url> or set RELEASE_DOWNLOAD_URL.'
+      step: 'Upload APK to Storage',
+      error: 'Firebase Storage upload failed.',
+      why: e.message,
+      fix: 'Grant the CI service account the Storage Admin role and deploy storage.rules.'
     });
   }
 
-  const payload = {
-    versionName,
-    versionCode,
-    downloadUrl: options.downloadUrl,
-    notes: options.notes || '',
-    mandatory: options.mandatory,
-    apkFileName: resolveApkFileName(),
-    publishedAt: new Date().toISOString()
+  const contentLength = fs.statSync(localPath).size;
+  return {
+    downloadUrl: storageDownloadUrl(bucket.name, storagePath, token),
+    contentLength
   };
+}
 
-  console.log(`   Version:     v${payload.versionName} (build ${payload.versionCode})`);
-  console.log(`   Mandatory:   ${payload.mandatory}`);
-  console.log(`   APK:         ${payload.apkFileName || 'n/a'}`);
-  console.log(`   Doc:         ${RELEASE_DOC_COLLECTION}/${RELEASE_DOC_ID}`);
-
-  if (options.dryRun) {
-    console.log('\n🧪 Dry run — no Firestore write performed.');
-    console.log(JSON.stringify(payload, null, 2));
-    return payload;
-  }
-
+function loadAdminSdk() {
   let initializeApp;
   let getApps;
   let cert;
@@ -189,10 +220,69 @@ async function publishReleaseMetadata(cliOptions = null) {
     });
   }
 
-  const serviceAccount = loadServiceAccount();
+  return { initializeApp, getApps, cert, getFirestore };
+}
 
-  // firebase-admin v14 removed admin.apps on the default export. Guard getApps()
-  // so a missing helper cannot crash with "Cannot read properties of undefined (reading 'length')".
+async function publishReleaseMetadata(cliOptions = null) {
+  const options = cliOptions || parseArgs();
+  const version = getCurrentVersion();
+  const versionName =
+    options.versionName && options.versionName.trim()
+      ? options.versionName.trim()
+      : version.versionName;
+  const versionCode =
+    Number.isInteger(options.versionCode) && options.versionCode > 0
+      ? options.versionCode
+      : version.versionCode;
+
+  const localApk = resolveLocalApkPath(options);
+  const storagePath = `releases/${versionCode}/Spendly-${versionName}-${versionCode}.apk`;
+
+  console.log('\n📡 Publishing release metadata to Firestore...');
+
+  if (!localApk && !options.downloadUrl) {
+    failFast({
+      step: 'Publish Release Metadata',
+      error: 'No APK path or download URL supplied.',
+      why: 'In-app updates need a Firebase Storage APK (or a direct download URL).',
+      fix: 'Pass --apk-path=releases/app-release.apk or --download-url=<url>.'
+    });
+  }
+
+  const payload = {
+    versionName,
+    versionCode,
+    downloadUrl: options.downloadUrl,
+    testerUrl: options.testerUrl || '',
+    storagePath: localApk ? storagePath : '',
+    notes: options.notes || '',
+    mandatory: options.mandatory,
+    apkFileName: localApk ? path.basename(localApk) : resolveApkFileName(),
+    publishedAt: new Date().toISOString(),
+    contentLength: localApk && fs.existsSync(localApk) ? fs.statSync(localApk).size : 0,
+    sha256: ''
+  };
+
+  if (localApk && fs.existsSync(localApk)) {
+    payload.sha256 = await sha256File(localApk);
+  }
+
+  console.log(`   Version:     v${payload.versionName} (build ${payload.versionCode})`);
+  console.log(`   Mandatory:   ${payload.mandatory}`);
+  console.log(`   APK:         ${localApk || payload.apkFileName || 'n/a'}`);
+  console.log(`   Storage:     ${payload.storagePath || 'n/a'}`);
+  console.log(`   Doc:         ${RELEASE_DOC_COLLECTION}/${RELEASE_DOC_ID}`);
+
+  if (options.dryRun) {
+    console.log('\n🧪 Dry run — no Storage upload or Firestore write performed.');
+    console.log(JSON.stringify(payload, null, 2));
+    return payload;
+  }
+
+  const { initializeApp, getApps, cert, getFirestore } = loadAdminSdk();
+  const serviceAccount = loadServiceAccount();
+  const storageBucket = resolveStorageBucket(serviceAccount);
+
   let alreadyInitialized = false;
   try {
     const apps = typeof getApps === 'function' ? getApps() : [];
@@ -204,7 +294,37 @@ async function publishReleaseMetadata(cliOptions = null) {
   if (!alreadyInitialized) {
     initializeApp({
       credential: cert(serviceAccount),
-      projectId: serviceAccount.project_id
+      projectId: serviceAccount.project_id,
+      storageBucket
+    });
+  }
+
+  if (localApk) {
+    if (!fs.existsSync(localApk)) {
+      failFast({
+        step: 'Upload APK to Storage',
+        error: `APK not found at ${localApk}.`,
+        why: 'The release publisher uploads that file to Firebase Storage.',
+        fix: 'Build the signed APK first, or pass --apk-path to the real file.'
+      });
+    }
+
+    const uploaded = await uploadApk({
+      localPath: localApk,
+      storagePath,
+      bucketName: storageBucket
+    });
+    payload.downloadUrl = uploaded.downloadUrl;
+    payload.contentLength = uploaded.contentLength;
+    payload.storagePath = storagePath;
+  }
+
+  if (!payload.downloadUrl && !payload.storagePath) {
+    failFast({
+      step: 'Publish Release Metadata',
+      error: 'Release document is missing a download URL.',
+      why: 'Installed apps cannot fetch the APK without storagePath or downloadUrl.',
+      fix: 'Pass --apk-path or --download-url.'
     });
   }
 
