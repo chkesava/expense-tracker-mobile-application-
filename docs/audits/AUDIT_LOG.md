@@ -31,6 +31,7 @@ updated every time a new phase is completed.
 | 1 | 2026-08-14 | Architecture, build/test status, dependency review | [PHASE_1_ARCHITECTURE_AUDIT.md](PHASE_1_ARCHITECTURE_AUDIT.md) | 2 | 2 |
 | 2 | 2026-08-15 | Security audit **and hardening** (fixes applied, not diagnostic-only) | [PHASE_2_SECURITY_AUDIT.md](PHASE_2_SECURITY_AUDIT.md) | 0 | 2 |
 | 3 | 2026-08-15 | Performance audit **and optimization** (fixes applied, not diagnostic-only) | [PHASE_3_PERFORMANCE_AUDIT.md](PHASE_3_PERFORMANCE_AUDIT.md) | 0 | 0 |
+| 4 | 2026-08-15 | Memory management & battery/power efficiency audit **and fixes** (fixes applied, not diagnostic-only) | [PHASE_4_MEMORY_POWER_AUDIT.md](PHASE_4_MEMORY_POWER_AUDIT.md) | 0 | 0 |
 
 ## Outstanding Issues Carried Forward
 
@@ -54,6 +55,7 @@ before closing.
 - **[P2]** Likely duplicate Firestore listeners for investments/portfolio data (`useInvestments`/`usePortfolio`, via `useUnifiedNetWorth` + direct Ledger tab usage) — same root cause and same fix pattern as the borrowings/receivables duplication fixed in Phase 3, just not applied yet. (Phase 3)
 - **[P3]** Most non-ledger list screens (accounts, borrowings, receivables, spaces, splits, subscriptions, trips, collect) render via unvirtualized `.map()` rather than FlatList/FlashList — acceptable today given naturally small per-user collection sizes, worth revisiting only if that changes. (Phase 3)
 - **[P3]** Most collections besides `expenses` are fetched via unbounded (no `limit`/date-range) real-time listeners — acceptable given naturally small cardinality, but worth monitoring. (Phase 3)
+- **[P3]** `ReceiptScannerModal`'s simulated-OCR `setTimeout` isn't cancelled if the modal is closed and reopened mid-delay — low risk (1.2s, single-shot, component doesn't unmount), a correctness nit-pick more than a memory/battery cost. (Phase 4)
 
 ## Fixed
 
@@ -62,3 +64,6 @@ before closing.
 - **[Phase 2]** Android app data was eligible for Auto Backup/`adb backup` extraction (`allowBackup` defaulted to `true`) — explicitly set to `false`.
 - **[Phase 3]** Dashboard screen ran duplicate real-time Firestore listeners for borrowings/receivables (once directly, once via `useUnifiedNetWorth`) — consolidated into a single shared `BorrowingsReceivablesProvider`.
 - **[Phase 3]** Market-quote polling (`useMarketQuotes`, 60s interval) kept running for screens no longer visible in the navigation stack — gated with `useIsFocused()` so it pauses when unfocused and resumes on refocus.
+- **[Phase 4]** `CelebrationOverlay`'s background glow used an infinite Reanimated `withRepeat(-1)` with no cancellation, on a component that's permanently mounted at the app root — once triggered, it animated on the UI thread forever in the background. Now cancelled when dismissed, plus an unmount safety net.
+- **[Phase 4]** `AiAdvisorView` could set state after unmount (chat-history load + simulated-response timer) since it's conditionally unmounted when switching Insights tabs — both now guarded/cleared.
+- **[Phase 4]** `CreditCardBillsProvider`'s debounced reconcile timer wasn't cleared on unmount, so it could fire after logout using stale closures — now cleared.
