@@ -13,6 +13,7 @@ import { generateUpiLink } from "@/shared/utils/upi";
 import { getQrStyle } from "@/shared/utils/qrStyles";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { logError } from "@/lib/errors";
 
 export interface PaymentRequestCardProps {
   request: PaymentRequest;
@@ -53,7 +54,7 @@ export function PaymentRequestCard({ request }: PaymentRequestCardProps) {
     try {
       await Share.share({ message, title: `Pay ${request.payeeName}` });
     } catch (err) {
-      console.error("Share error:", err);
+      logError("paymentRequestCard.share", err);
     }
   };
 

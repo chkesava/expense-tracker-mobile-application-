@@ -12,6 +12,7 @@ import {
   doc,
   updateDoc,
 } from "firebase/firestore";
+import { logError } from "@/lib/errors";
 import { haptic } from "@/lib/haptics";
 import {
   ArrowDownLeft,
@@ -415,7 +416,7 @@ export function ExpenseForm({
 
       onSuccess?.();
     } catch (err) {
-      console.error("ExpenseForm submission error:", err);
+      logError("expenseForm.expenseformSubmission", err);
       toast.error("Failed to save transaction");
     } finally {
       isSubmittingRef.current = false;

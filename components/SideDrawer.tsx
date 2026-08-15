@@ -31,6 +31,7 @@ import {
 } from "lucide-react-native";
 
 import { useUserRole } from "@/hooks/useUserRole";
+import { logError } from "@/lib/errors";
 import { haptic } from "@/lib/haptics";
 import { useAuth } from "@/providers/AuthProvider";
 import { useSettings } from "@/providers/SettingsProvider";
@@ -113,7 +114,7 @@ export function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
     void haptic.impact();
     runAfterDrawerClose(onClose, () => {
       void logout().catch((error) => {
-        console.error("Logout failed", error);
+        logError("sideDrawer.logout", error);
       });
     });
   };

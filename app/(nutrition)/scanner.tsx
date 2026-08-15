@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Linking } from 'react-native';
 import { Camera, CameraView } from 'expo-camera';
+import { logWarning } from '@/lib/errors';
 import { useTheme } from '@/theme/ThemeProvider';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, ScanLine } from 'lucide-react-native';
@@ -12,11 +13,22 @@ export default function BarcodeScannerScreen() {
   const [scanned, setScanned] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
     const getCameraPermissions = async () => {
-      const { status } = await Camera.requestCameraPermissionsAsync();
-      setHasPermission(status === 'granted');
+      try {
+        const { status } = await Camera.requestCameraPermissionsAsync();
+        if (!cancelled) setHasPermission(status === 'granted');
+      } catch (error) {
+        // An unguarded throw here left `hasPermission` null forever, pinning
+        // the screen on "Requesting camera permission…" with no way out.
+        logWarning('scanner.cameraPermission', error);
+        if (!cancelled) setHasPermission(false);
+      }
     };
-    getCameraPermissions();
+    void getCameraPermissions();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handleBarCodeScanned = ({ type, data }: { type: string, data: string }) => {
@@ -37,10 +49,25 @@ export default function BarcodeScannerScreen() {
   
   if (hasPermission === false) {
     return (
-      <View style={{ flex: 1, backgroundColor: theme.colors.background, justifyContent: 'center', alignItems: 'center' }}>
-        <Text style={{ color: theme.colors.foreground }}>No access to camera</Text>
-        <TouchableOpacity style={{ marginTop: 20 }} onPress={() => router.back()}>
-          <Text style={{ color: theme.colors.primary }}>Go Back</Text>
+      <View style={{ flex: 1, backgroundColor: theme.colors.background, justifyContent: 'center', alignItems: 'center', padding: 24, gap: 8 }}>
+        <Text style={{ color: theme.colors.foreground, fontSize: 17, fontWeight: '700', textAlign: 'center' }}>
+          Camera access is off
+        </Text>
+        <Text style={{ color: theme.colors.mutedForeground, fontSize: 14, textAlign: 'center', lineHeight: 20 }}>
+          Scanning barcodes needs the camera. You can turn it on in system settings.
+        </Text>
+        <TouchableOpacity
+          style={{ marginTop: 16 }}
+          onPress={() => {
+            Linking.openSettings().catch((error) =>
+              logWarning('scanner.openSettings', error)
+            );
+          }}
+        >
+          <Text style={{ color: theme.colors.primary, fontWeight: '700' }}>Open Settings</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={{ marginTop: 8 }} onPress={() => router.back()}>
+          <Text style={{ color: theme.colors.mutedForeground }}>Go Back</Text>
         </TouchableOpacity>
       </View>
     );

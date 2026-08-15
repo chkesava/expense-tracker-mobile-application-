@@ -23,58 +23,85 @@ const getBaseUrl = (): string => {
   return process.env.EXPO_PUBLIC_APP_URL || '';
 };
 
+class MarketDataError extends Error {
+  readonly status?: number;
+  constructor(message: string, options?: { status?: number; cause?: unknown }) {
+    super(message);
+    this.name = "MarketDataError";
+    this.status = options?.status;
+    if (options?.cause !== undefined) this.cause = options.cause;
+  }
+}
+
 const fetchWithTimeout = async (url: string, timeout = 8000) => {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeout);
   try {
     const response = await fetch(url, { signal: controller.signal });
-    clearTimeout(id);
     return response;
-  } catch (error) {
+  } finally {
     clearTimeout(id);
-    throw error;
+  }
+};
+
+/**
+ * Fetch + parse a quote endpoint.
+ *
+ * These used to `catch` everything and return `null`, which made a timeout,
+ * a 500 and "no such symbol" indistinguishable. React Query saw a successful
+ * `null` result, so `retry` never fired and the UI could not tell a stale
+ * price from an unreachable server. Transport and server failures now throw;
+ * only a genuine 404 maps to `null`.
+ */
+const fetchJson = async <T>(url: string, scope: string): Promise<T | null> => {
+  let res: Response;
+  try {
+    res = await fetchWithTimeout(url);
+  } catch (error) {
+    throw new MarketDataError(`${scope} request failed`, { cause: error });
+  }
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    throw new MarketDataError(`${scope} responded with ${res.status}`, {
+      status: res.status,
+    });
+  }
+  try {
+    return (await res.json()) as T;
+  } catch (error) {
+    throw new MarketDataError(`${scope} returned a malformed response`, {
+      cause: error,
+    });
   }
 };
 
 export const fetchStockQuote = async (symbol: string): Promise<StockQuoteDTO | null> => {
   const baseUrl = getBaseUrl();
   if (!baseUrl) return null;
-  try {
-    const res = await fetchWithTimeout(`${baseUrl}/api/stock?symbol=${encodeURIComponent(symbol)}`);
-    if (!res.ok) return null;
-    return await res.json();
-  } catch (err) {
-    console.warn('fetchStockQuote error:', err);
-    return null;
-  }
+  return fetchJson<StockQuoteDTO>(
+    `${baseUrl}/api/stock?symbol=${encodeURIComponent(symbol)}`,
+    'stock quote'
+  );
 };
 
 export const fetchMutualFundQuote = async (schemeCode: string): Promise<MutualFundQuoteDTO | null> => {
   const baseUrl = getBaseUrl();
   if (!baseUrl) return null;
-  try {
-    const res = await fetchWithTimeout(`${baseUrl}/api/mutual-funds?schemeCode=${encodeURIComponent(schemeCode)}`);
-    if (!res.ok) return null;
-    return await res.json();
-  } catch (err) {
-    console.warn('fetchMutualFundQuote error:', err);
-    return null;
-  }
+  return fetchJson<MutualFundQuoteDTO>(
+    `${baseUrl}/api/mutual-funds?schemeCode=${encodeURIComponent(schemeCode)}`,
+    'mutual fund quote'
+  );
 };
 
 export const fetchCryptoQuote = async (coinId: string): Promise<CryptoQuoteDTO | null> => {
   const baseUrl = getBaseUrl();
   if (!baseUrl) return null;
-  try {
-    const res = await fetchWithTimeout(`${baseUrl}/api/crypto?ids=${encodeURIComponent(coinId)}`);
-    if (!res.ok) return null;
-    const response = await res.json() as { success?: boolean; quotes?: CryptoQuoteDTO[] };
-    if (!response.success) return null;
-    return response.quotes?.find((quote) => quote.coinId === coinId.toLowerCase()) ?? null;
-  } catch (err) {
-    console.warn('fetchCryptoQuote error:', err);
-    return null;
-  }
+  const response = await fetchJson<{ success?: boolean; quotes?: CryptoQuoteDTO[] }>(
+    `${baseUrl}/api/crypto?ids=${encodeURIComponent(coinId)}`,
+    'crypto quote'
+  );
+  if (!response?.success) return null;
+  return response.quotes?.find((quote) => quote.coinId === coinId.toLowerCase()) ?? null;
 };
 
 export const fetchMarketQuote = async (symbol: string, instrumentType: InstrumentType): Promise<MarketQuote | null> => {

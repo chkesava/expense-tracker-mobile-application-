@@ -13,7 +13,10 @@ import {
   writeBatch,
 } from "firebase/firestore";
 
+import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
+import { snapshotErrorHandler } from "@/lib/firestoreErrors";
+import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import type { Space } from "@/shared/types/space";
@@ -41,6 +44,7 @@ export function useSpaces(options?: { enabled?: boolean }) {
 
   const [spaces, setSpaces] = useState<Space[]>([]);
   const [loading, setLoading] = useState(true);
+  const { error, setError, retry, attempt } = useLoadFailure();
 
   useEffect(() => {
     const db = getFirestoreDb();
@@ -60,16 +64,21 @@ export function useSpaces(options?: { enabled?: boolean }) {
             ...(docSnap.data() as Omit<Space, "id">),
           }))
         );
+        setError(null);
         setLoading(false);
       },
-      (err) => {
-        console.warn("useSpaces error:", err);
-        setLoading(false);
-      }
+      snapshotErrorHandler(
+        "snapshot.spaces",
+        (failure) => {
+          setError(failure);
+          setLoading(false);
+        },
+        "Couldn't load your spaces."
+      )
     );
 
     return () => unsubscribe();
-  }, [uid, enabled]);
+  }, [uid, enabled, attempt]);
 
   const createSpace = useCallback(
     async (input: CreateSpaceInput): Promise<string | null> => {
@@ -93,7 +102,7 @@ export function useSpaces(options?: { enabled?: boolean }) {
         toast.success(`Space "${input.name}" created`);
         return ref.id;
       } catch (err) {
-        console.error("createSpace error:", err);
+        logError("spaces.createspace", err);
         toast.error("Failed to create space");
         return null;
       }
@@ -114,7 +123,7 @@ export function useSpaces(options?: { enabled?: boolean }) {
         toast.success("Space updated");
         return true;
       } catch (err) {
-        console.error("updateSpace error:", err);
+        logError("spaces.updatespace", err);
         toast.error("Failed to update space");
         return false;
       }
@@ -154,7 +163,7 @@ export function useSpaces(options?: { enabled?: boolean }) {
         toast.success("Space deleted and expenses unlinked");
         return true;
       } catch (err) {
-        console.error("deleteSpace error:", err);
+        logError("spaces.deletespace", err);
         toast.error("Failed to delete space");
         return false;
       }
@@ -189,7 +198,7 @@ export function useSpaces(options?: { enabled?: boolean }) {
         );
         return true;
       } catch (err) {
-        console.error("assignExpensesToSpace error:", err);
+        logError("spaces.assignexpensestospace", err);
         toast.error("Failed to update space assignment");
         return false;
       }
@@ -216,6 +225,8 @@ export function useSpaces(options?: { enabled?: boolean }) {
   );
 
   return {
+    error,
+    retry,
     spaces,
     loading,
     createSpace,

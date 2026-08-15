@@ -11,7 +11,10 @@ import {
   updateDoc,
 } from "firebase/firestore";
 
+import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
+import { snapshotErrorHandler } from "@/lib/firestoreErrors";
+import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import type { Investment } from "@/shared/types/investment";
@@ -24,6 +27,7 @@ export function useInvestments(options?: { enabled?: boolean }) {
 
   const [investments, setInvestments] = useState<Investment[]>([]);
   const [loading, setLoading] = useState(true);
+  const { error, setError, retry, attempt } = useLoadFailure();
 
   useEffect(() => {
     const db = getFirestoreDb();
@@ -47,16 +51,21 @@ export function useInvestments(options?: { enabled?: boolean }) {
           ...(docSnap.data() as Omit<Investment, "id">),
         }));
         setInvestments(list);
+        setError(null);
         setLoading(false);
       },
-      (err) => {
-        console.warn("Error fetching investments:", err);
-        setLoading(false);
-      }
+      snapshotErrorHandler(
+        "snapshot.investments",
+        (failure) => {
+          setError(failure);
+          setLoading(false);
+        },
+        "Couldn't load your investments."
+      )
     );
 
     return () => unsubscribe();
-  }, [uid, enabled]);
+  }, [uid, enabled, attempt]);
 
   const addInvestment = useCallback(
     async (params: Omit<Investment, "id">) => {
@@ -79,7 +88,7 @@ export function useInvestments(options?: { enabled?: boolean }) {
         toast.success(`Investment "${params.name}" added`);
         return docRef.id;
       } catch (err: any) {
-        console.error("Failed adding investment:", err);
+        logError("investments.addingInvestment", err);
         toast.error("Failed to add investment");
         return null;
       }
@@ -97,7 +106,7 @@ export function useInvestments(options?: { enabled?: boolean }) {
         toast.success("Investment updated");
         return true;
       } catch (err: any) {
-        console.error("Failed updating investment:", err);
+        logError("investments.updatingInvestment", err);
         toast.error("Failed to update investment");
         return false;
       }
@@ -115,7 +124,7 @@ export function useInvestments(options?: { enabled?: boolean }) {
         toast.success("Investment deleted");
         return true;
       } catch (err: any) {
-        console.error("Failed deleting investment:", err);
+        logError("investments.deletingInvestment", err);
         toast.error("Failed to delete investment");
         return false;
       }
@@ -135,6 +144,8 @@ export function useInvestments(options?: { enabled?: boolean }) {
   );
 
   return {
+    error,
+    retry,
     investments,
     loading,
     addInvestment,

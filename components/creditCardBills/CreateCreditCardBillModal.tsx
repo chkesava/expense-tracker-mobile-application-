@@ -7,6 +7,7 @@ import { Modal } from "@/components/common/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useCreditCardBills } from "@/hooks/useCreditCardBills";
+import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
 import { useSettings } from "@/providers/SettingsProvider";
 import type { Account, AccountType } from "@/shared/types/expense";
@@ -97,7 +98,8 @@ export function CreateCreditCardBillModal({
         toast.error("Failed to create bill");
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to create bill");
+      logError("creditCardBill.create", err);
+      toast.error(friendlyErrorMessage(err, "Couldn't create the bill."));
     } finally {
       setSaving(false);
     }

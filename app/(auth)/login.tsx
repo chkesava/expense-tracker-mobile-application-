@@ -15,6 +15,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
+import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
@@ -76,7 +77,8 @@ export default function AuthScreen() {
         setMode("login");
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Authentication failed");
+      logError("auth.submit", error, { mode });
+      toast.error(friendlyErrorMessage(error, "Sign-in failed. Please try again."));
     } finally {
       setSubmitting(false);
     }
@@ -107,8 +109,8 @@ export default function AuthScreen() {
       await loginWithGoogleIdToken(idToken);
       toast.success("Welcome!");
     } catch (error) {
-      let message =
-        error instanceof Error ? error.message : "Google sign-in failed";
+      logError("auth.google", error);
+      let message = friendlyErrorMessage(error, "Google sign-in failed.");
 
       try {
         const { isErrorWithCode, statusCodes } = await import(

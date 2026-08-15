@@ -25,6 +25,7 @@ import { useAccountEntries } from "@/hooks/useAccountEntries";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
 import { usePortfolio } from "@/hooks/usePortfolio";
+import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
 import { getAccountKind } from "@/shared/utils/accountKind";
 import { formatDateKey } from "@/shared/utils/dates";
@@ -173,8 +174,9 @@ export function ManageStockCashModal({
         }
       }
     } catch (err: any) {
-      console.error("Manage stock cash error:", err);
-      toast.error(err.message || "Failed to update balance");
+      logError("manageStockCashModal.manageStockCash", err);
+      logError("portfolio.manageCash", err);
+      toast.error(friendlyErrorMessage(err, "Couldn't update the balance."));
     } finally {
       setLoading(false);
     }

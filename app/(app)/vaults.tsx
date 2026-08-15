@@ -20,6 +20,7 @@ import {
 
 import { Amount } from "@/components/common/Amount";
 import { EmptyState } from "@/components/common/EmptyState";
+import { ErrorState } from "@/components/common/ErrorState";
 import { SkeletonCard, SkeletonList } from "@/components/common/Skeleton";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
@@ -40,7 +41,7 @@ export default function VaultsScreen() {
   const isDark = themeUsesDarkPalette(themeName);
   const { settings: system } = useSystemSettings();
 
-  const { vaults, loading, createVault, deleteVault } = useVaults();
+  const { vaults, loading, error, retry, createVault, deleteVault } = useVaults();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -149,6 +150,13 @@ export default function VaultsScreen() {
           <SkeletonCard />
           <SkeletonCard />
         </View>
+      ) : error ? (
+        /* A load failure must not masquerade as "no vaults yet". */
+        <ErrorState
+          title="Couldn't load your vaults"
+          description={error.message}
+          onRetry={error.retryable ? retry : undefined}
+        />
       ) : filteredVaults.length === 0 ? (
         <EmptyState
           illustration="vaults"

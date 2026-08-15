@@ -14,7 +14,10 @@ import {
   writeBatch,
 } from "firebase/firestore";
 
+import { logError, logWarning } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
+import { snapshotErrorHandler } from "@/lib/firestoreErrors";
+import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import type {
@@ -61,6 +64,7 @@ export function useReceivables(options?: { enabled?: boolean }) {
   const [receivables, setReceivables] = useState<Receivable[]>([]);
   const [repayments, setRepayments] = useState<ReceivableRepayment[]>([]);
   const [loading, setLoading] = useState(true);
+  const { error, setError, retry, attempt } = useLoadFailure();
 
   useEffect(() => {
     const db = getFirestoreDb();
@@ -85,12 +89,17 @@ export function useReceivables(options?: { enabled?: boolean }) {
             ...(docSnap.data() as Omit<Receivable, "id">),
           }))
         );
+        setError(null);
         setLoading(false);
       },
-      (err) => {
-        console.warn("Error fetching receivables:", err);
-        setLoading(false);
-      }
+      snapshotErrorHandler(
+        "snapshot.receivables",
+        (failure) => {
+          setError(failure);
+          setLoading(false);
+        },
+        "Couldn't load your receivables."
+      )
     );
 
     const unsubRepayments = onSnapshot(
@@ -106,16 +115,14 @@ export function useReceivables(options?: { enabled?: boolean }) {
           }))
         );
       },
-      (err) => {
-        console.warn("Error fetching receivable repayments:", err);
-      }
+      (err) => logWarning("snapshot.receivable.repayments", err)
     );
 
     return () => {
       unsubReceivables();
       unsubRepayments();
     };
-  }, [uid, enabled]);
+  }, [uid, enabled, attempt]);
 
   const today = todayDateKey();
 
@@ -173,7 +180,7 @@ export function useReceivables(options?: { enabled?: boolean }) {
         toast.success("Money lent recorded");
         return ref.id;
       } catch (err) {
-        console.error("createReceivable error:", err);
+        logError("receivables.createreceivable", err);
         toast.error("Failed to record money lent");
         return null;
       }
@@ -223,7 +230,7 @@ export function useReceivables(options?: { enabled?: boolean }) {
         toast.success("Receivable updated");
         return true;
       } catch (err) {
-        console.error("updateReceivable error:", err);
+        logError("receivables.updatereceivable", err);
         toast.error("Failed to update receivable");
         return false;
       }
@@ -252,7 +259,7 @@ export function useReceivables(options?: { enabled?: boolean }) {
         toast.success("Receivable deleted");
         return true;
       } catch (err) {
-        console.error("deleteReceivable error:", err);
+        logError("receivables.deletereceivable", err);
         toast.error("Failed to delete receivable");
         return false;
       }
@@ -328,7 +335,7 @@ export function useReceivables(options?: { enabled?: boolean }) {
         );
         return ref.id;
       } catch (err) {
-        console.error("addReceivableRepayment error:", err);
+        logError("receivables.addreceivablerepayment", err);
         toast.error("Failed to record repayment");
         return null;
       }
@@ -363,7 +370,7 @@ export function useReceivables(options?: { enabled?: boolean }) {
         toast.success("Repayment removed");
         return true;
       } catch (err) {
-        console.error("deleteReceivableRepayment error:", err);
+        logError("receivables.deletereceivablerepayment", err);
         toast.error("Failed to remove repayment");
         return false;
       }
@@ -397,6 +404,8 @@ export function useReceivables(options?: { enabled?: boolean }) {
   );
 
   return {
+    error,
+    retry,
     receivables,
     repayments,
     summaries,

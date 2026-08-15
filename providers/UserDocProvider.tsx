@@ -14,12 +14,19 @@ import {
 import { doc, onSnapshot, type DocumentData } from "firebase/firestore";
 
 import { getFirestoreDb } from "@/lib/firebase";
+import { snapshotErrorHandler, type LoadFailure } from "@/lib/firestoreErrors";
 import { useAuth } from "@/providers/AuthProvider";
 import type { UserRole } from "@/shared/types/user";
 
 type UserDocContextType = {
   data: DocumentData | null;
+  /**
+   * True only when the document was read and found. Always false while
+   * `error` is set — a failed read tells us nothing about existence.
+   */
   exists: boolean;
+  /** Non-null when the listener failed. */
+  error: LoadFailure | null;
   loading: boolean;
   role: UserRole;
   isAdmin: boolean;
@@ -33,6 +40,7 @@ export function UserDocProvider({ children }: { children: ReactNode }) {
 
   const [data, setData] = useState<DocumentData | null>(null);
   const [exists, setExists] = useState(false);
+  const [error, setError] = useState<LoadFailure | null>(null);
   /** Only equals `uid` after the first snapshot (or error) for that user. */
   const [observedUid, setObservedUid] = useState<string | null>(null);
 
@@ -48,6 +56,7 @@ export function UserDocProvider({ children }: { children: ReactNode }) {
     // Mark this uid as not-yet-observed so Settings cannot seed defaults mid-race.
     setData(null);
     setExists(false);
+    setError(null);
     setObservedUid(null);
 
     const ref = doc(db, "users", uid);
@@ -61,14 +70,21 @@ export function UserDocProvider({ children }: { children: ReactNode }) {
           setData(null);
           setExists(false);
         }
+        setError(null);
         setObservedUid(uid);
       },
-      (error) => {
-        console.error("Error fetching user document:", error);
-        setData(null);
-        setExists(false);
-        setObservedUid(uid);
-      }
+      snapshotErrorHandler(
+        "snapshot.userDoc",
+        (failure) => {
+          // Deliberately does NOT set `exists`/`data`: a read failure is not
+          // evidence the document is missing. Reporting "missing" here made
+          // SettingsProvider fall back to defaults, visibly resetting the
+          // user's currency, budget, theme and accent on a transient error.
+          setError(failure);
+          setObservedUid(uid);
+        },
+        "Couldn't load your profile."
+      )
     );
 
     return unsub;
@@ -87,11 +103,12 @@ export function UserDocProvider({ children }: { children: ReactNode }) {
     () => ({
       data,
       exists,
+      error,
       loading,
       role,
       isAdmin: role === "SUPER_ADMIN",
     }),
-    [data, exists, loading, role]
+    [data, exists, error, loading, role]
   );
 
   return (

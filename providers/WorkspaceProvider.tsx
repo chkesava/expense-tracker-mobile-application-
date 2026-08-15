@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
+import { logError } from "@/lib/errors";
 import {
   resolveWorkspaceRoute,
   type WorkspaceType,
@@ -38,7 +39,7 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({
           setActiveWorkspaceState(stored);
         }
       } catch (error) {
-        console.error("Failed to load workspace", error);
+        logError("workspaceProvider.loadWorkspace", error);
       } finally {
         setIsLoading(false);
       }
@@ -52,7 +53,7 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({
       await AsyncStorage.setItem("@active_workspace", workspace);
       router.replace(resolveWorkspaceRoute(workspace) as never);
     } catch (error) {
-      console.error("Failed to save workspace", error);
+      logError("workspaceProvider.saveWorkspace", error);
     }
   };
 
