@@ -80,9 +80,9 @@ export function SpaceDetailModal({
   const [fromDate, setFromDate] = useState("");
   const [sortMode, setSortMode] = useState<SortMode>("dateDesc");
 
-  const { receivables, repayments } = useReceivables({
-    enabled: visible && !!space?.id,
-  });
+  // Receivables now come from a shared app-wide listener (BorrowingsReceivablesProvider)
+  // rather than a per-modal one, so there's no listener to gate with `enabled` anymore.
+  const { receivables, repayments } = useReceivables();
 
   const spaceReceivables = useMemo(
     () => (space?.id ? receivablesInSpace(receivables, space.id) : []),
