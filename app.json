@@ -14,7 +14,7 @@
       "softwareKeyboardLayoutMode": "pan",
       "package": "com.example.expensetracker",
       "adaptiveIcon": {
-        "backgroundColor": "#0F2F4B",
+        "backgroundColor": "#071A2B",
         "foregroundImage": "./assets/branding/adaptive-icon.png"
       },
       "predictiveBackGestureEnabled": false,
@@ -40,7 +40,7 @@
         {
           "image": "./assets/branding/splash-logo.png",
           "resizeMode": "contain",
-          "backgroundColor": "#0F2F4B"
+          "backgroundColor": "#071A2B"
         }
       ],
       "expo-secure-store",
@@ -50,7 +50,7 @@
         "expo-notifications",
         {
           "icon": "./assets/branding/notification-icon.png",
-          "color": "#0F2F4B"
+          "color": "#071A2B"
         }
       ]
     ],
