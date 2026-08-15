@@ -12,8 +12,10 @@ import {
   where,
 } from "firebase/firestore";
 
+import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
 import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
+import { snapshotErrorHandler, type LoadFailure } from "@/lib/firestoreErrors";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import type { SharedVault } from "@/shared/types/vault";
@@ -25,6 +27,14 @@ export function useVaults(options?: { enabled?: boolean }) {
 
   const [vaults, setVaults] = useState<SharedVault[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<LoadFailure | null>(null);
+  // Bumped by `retry()` to tear down and re-establish the listener.
+  const [attempt, setAttempt] = useState(0);
+
+  const retry = useCallback(() => {
+    setError(null);
+    setAttempt((n) => n + 1);
+  }, []);
 
   useEffect(() => {
     const db = getFirestoreDb();
@@ -35,6 +45,7 @@ export function useVaults(options?: { enabled?: boolean }) {
     }
 
     setLoading(true);
+    setError(null);
     // Query vaults where user is owner or member
     const q = query(
       collection(db, "vaults"),
@@ -53,16 +64,21 @@ export function useVaults(options?: { enabled?: boolean }) {
         }));
         list.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
         setVaults(list);
+        setError(null);
         setLoading(false);
       },
-      (err) => {
-        console.warn("Error fetching vaults:", err);
-        setLoading(false);
-      }
+      snapshotErrorHandler(
+        "snapshot.vaults",
+        (failure) => {
+          setError(failure);
+          setLoading(false);
+        },
+        "Couldn't load your vaults."
+      )
     );
 
     return () => unsubscribe();
-  }, [uid, enabled]);
+  }, [uid, enabled, attempt]);
 
   const createVault = useCallback(
     async (params: {
@@ -99,9 +115,9 @@ export function useVaults(options?: { enabled?: boolean }) {
           writeSavedMessage(outcome, `Vault "${params.name}" created!`)
         );
         return docRef.id;
-      } catch (err: any) {
-        console.error("Failed creating vault:", err);
-        toast.error(err?.message || "Failed to create vault");
+      } catch (err) {
+        logError("vaults.create", err);
+        toast.error(friendlyErrorMessage(err, "Couldn't create the vault."));
         return null;
       }
     },
@@ -120,9 +136,9 @@ export function useVaults(options?: { enabled?: boolean }) {
         );
         toast.success(writeSavedMessage(outcome, "Vault updated"));
         return true;
-      } catch (err: any) {
-        console.error("Failed updating vault:", err);
-        toast.error("Failed to update vault");
+      } catch (err) {
+        logError("vaults.update", err);
+        toast.error(friendlyErrorMessage(err, "Couldn't update the vault."));
         return false;
       }
     },
@@ -141,9 +157,9 @@ export function useVaults(options?: { enabled?: boolean }) {
         );
         toast.success(writeSavedMessage(outcome, "Vault deleted"));
         return true;
-      } catch (err: any) {
-        console.error("Failed deleting vault:", err);
-        toast.error("Failed to delete vault");
+      } catch (err) {
+        logError("vaults.delete", err);
+        toast.error(friendlyErrorMessage(err, "Couldn't delete the vault."));
         return false;
       }
     },
@@ -153,6 +169,8 @@ export function useVaults(options?: { enabled?: boolean }) {
   return {
     vaults,
     loading,
+    error,
+    retry,
     createVault,
     updateVault,
     deleteVault,

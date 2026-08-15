@@ -1,11 +1,16 @@
 import type { User } from "firebase/auth";
 
-/** Map Firebase (or unknown) errors to a user-facing string. */
+import { friendlyErrorMessage } from "./errors";
+
+/**
+ * Map Firebase (or unknown) errors to a user-facing string.
+ *
+ * Delegates to `friendlyErrorMessage`, which resolves `auth/*` codes to plain
+ * language. Previously this returned `error.message` verbatim, which surfaced
+ * strings like `Firebase: Error (auth/invalid-credential).` in a toast.
+ */
 export function authErrorMessage(error: unknown, fallback: string): string {
-  if (error && typeof error === "object" && "message" in error) {
-    return String((error as { message?: string }).message || fallback);
-  }
-  return fallback;
+  return friendlyErrorMessage(error, fallback);
 }
 
 /**

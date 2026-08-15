@@ -1,68 +1,50 @@
 /**
- * Shared handling for Firestore listener failures.
+ * Shared handling for Firestore `onSnapshot` failures.
  *
- * `onSnapshot` error callbacks used to only `console.error`, which meant an
- * expired or revoked session — the listener detaching with `permission-denied`
- * / `unauthenticated` — left the screen showing whatever was last cached, with
- * no indication that it had stopped updating. Network-level errors
- * (`unavailable`) are expected offline and must stay quiet, since the cached
- * data is still correct and the OfflineBanner already says so.
+ * Every listener in the app used to pass an error callback that did nothing but
+ * `console.warn` and `setLoading(false)`. The result was indistinguishable from
+ * success-with-no-rows: a `permission-denied` or a listener that could not be
+ * established rendered the "Nothing here yet" empty state, with no error and no
+ * way to retry.
+ *
+ * `LoadFailure` carries the user-facing message plus enough classification for
+ * a screen to decide between "retry" and "sign in again".
  */
 
-import { toast } from "@/lib/toast";
+import { classifyError, friendlyErrorMessage, logWarning, type ErrorKind } from "./errors";
 
-type FirestoreLikeError = { code?: string; message?: string };
+export type LoadFailure = {
+  /** Safe to render directly. */
+  message: string;
+  kind: ErrorKind;
+  /** False for permission/auth failures, which will fail the same way again. */
+  retryable: boolean;
+};
 
-const AUTH_ERROR_CODES = new Set([
-  "permission-denied",
-  "unauthenticated",
-]);
-
-/** Errors that simply mean "offline" — the cache is still serving good data. */
-const TRANSIENT_ERROR_CODES = new Set([
-  "unavailable",
-  "deadline-exceeded",
-  "cancelled",
-]);
-
-/** Throttles the session-expired toast so seven listeners raise one message. */
-let lastAuthNoticeAt = Number.NEGATIVE_INFINITY;
-const AUTH_NOTICE_INTERVAL_MS = 10_000;
-
-export function isAuthError(error: unknown): boolean {
-  const code = (error as FirestoreLikeError | null)?.code;
-  return typeof code === "string" && AUTH_ERROR_CODES.has(code);
-}
-
-export function isTransientNetworkError(error: unknown): boolean {
-  const code = (error as FirestoreLikeError | null)?.code;
-  return typeof code === "string" && TRANSIENT_ERROR_CODES.has(code);
-}
-
-/** Test seam — resets the throttle between cases. */
-export function resetSnapshotErrorNotices(): void {
-  lastAuthNoticeAt = Number.NEGATIVE_INFINITY;
+export function toLoadFailure(error: unknown, fallback: string): LoadFailure {
+  const kind = classifyError(error);
+  return {
+    message: friendlyErrorMessage(error, fallback),
+    kind,
+    retryable: kind !== "permission" && kind !== "auth" && kind !== "notFound",
+  };
 }
 
 /**
- * Handles a snapshot listener error: silent for offline blips, one visible
- * notice when the session can no longer read, logged otherwise.
+ * Builds an `onSnapshot` error callback that logs (redacted) and hands the
+ * screen a renderable failure.
+ *
+ * @param scope   stable log identifier, e.g. `"snapshot.vaults"`
+ * @param onFail  receives the failure; typically a `setError` setter
+ * @param fallback copy used when the error carries no recognisable code
  */
-export function handleSnapshotError(
-  label: string,
-  error: unknown,
-  now: number = Date.now()
-): void {
-  if (isTransientNetworkError(error)) return;
-
-  if (isAuthError(error)) {
-    console.error(`${label} snapshot error (auth):`, error);
-    if (now - lastAuthNoticeAt >= AUTH_NOTICE_INTERVAL_MS) {
-      lastAuthNoticeAt = now;
-      toast.error("Your session expired. Sign in again to keep syncing.");
-    }
-    return;
-  }
-
-  console.error(`${label} snapshot error:`, error);
+export function snapshotErrorHandler(
+  scope: string,
+  onFail: (failure: LoadFailure) => void,
+  fallback = "Couldn't load your data. Pull to refresh or try again."
+): (error: unknown) => void {
+  return (error: unknown) => {
+    logWarning(scope, error);
+    onFail(toLoadFailure(error, fallback));
+  };
 }

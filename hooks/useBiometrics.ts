@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useState } from "react";
 import * as LocalAuthentication from "expo-local-authentication";
 import * as SecureStore from "expo-secure-store";
+import { logError } from "@/lib/errors";
 
 const BIOMETRIC_KEY = "vault_biometric_id";
 
@@ -56,7 +57,7 @@ export function useBiometrics() {
       setIsSupported(true);
       return true;
     } catch (err) {
-      console.error("Biometric registration failed:", err);
+      logError("biometrics.biometricRegistration", err);
       return false;
     }
   }, []);
@@ -74,7 +75,7 @@ export function useBiometrics() {
 
       return result.success;
     } catch (err) {
-      console.error("Biometric verification failed:", err);
+      logError("biometrics.biometricVerification", err);
       return false;
     }
   }, []);

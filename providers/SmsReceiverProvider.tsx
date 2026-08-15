@@ -41,6 +41,7 @@ import {
 import { processIncomingSmsMessages } from "@/services/sms/smsTransactionProcessor";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useSmsRecurringSync } from "@/hooks/useSmsRecurringSync";
+import { logWarning } from "@/lib/errors";
 
 /**
  * `getLastNotificationResponseAsync` keeps returning the launch tap for the
@@ -217,7 +218,7 @@ export function SmsReceiverProvider({ children }: { children: ReactNode }) {
           await stopSmsListening();
         }
       } catch (err) {
-        console.warn("[sms] listener start/stop failed", err);
+        logWarning("smsReceiverProvider.smsListenerStartStop", err);
         try {
           await stopSmsListening();
         } catch {

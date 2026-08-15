@@ -1,75 +1,69 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/lib/toast", () => ({
-  toast: {
-    show: vi.fn(),
-    success: vi.fn(),
-    error: vi.fn(),
-    info: vi.fn(),
-    warning: vi.fn(),
-    dismiss: vi.fn(),
-  },
-}));
+import { snapshotErrorHandler, toLoadFailure } from "./firestoreErrors";
 
-import { toast } from "@/lib/toast";
-import {
-  handleSnapshotError,
-  isAuthError,
-  isTransientNetworkError,
-  resetSnapshotErrorNotices,
-} from "./firestoreErrors";
+function firestoreError(code: string) {
+  const error = new Error(`Firebase: Error (${code}).`) as Error & { code: string };
+  error.code = code;
+  error.name = "FirebaseError";
+  return error;
+}
 
-const toastError = vi.mocked(toast.error);
-
-describe("handleSnapshotError", () => {
-  beforeEach(() => {
-    toastError.mockClear();
-    resetSnapshotErrorNotices();
-    vi.spyOn(console, "error").mockImplementation(() => undefined);
+describe("toLoadFailure", () => {
+  it("produces a renderable message, never the SDK string", () => {
+    const failure = toLoadFailure(firestoreError("permission-denied"), "fallback");
+    expect(failure.message).not.toMatch(/firebase/i);
+    expect(failure.kind).toBe("permission");
   });
 
-  it("stays silent when the listener drops because the device is offline", () => {
-    handleSnapshotError("expenses", { code: "unavailable" });
-    expect(toastError).not.toHaveBeenCalled();
-    expect(console.error).not.toHaveBeenCalled();
+  it("marks transport failures retryable", () => {
+    expect(toLoadFailure(firestoreError("unavailable"), "f").retryable).toBe(true);
+    expect(toLoadFailure(new Error("Network request failed"), "f").retryable).toBe(
+      true
+    );
   });
 
-  it("tells the user once when the session can no longer read", () => {
-    handleSnapshotError("expenses", { code: "permission-denied" }, 1000);
-    expect(toastError).toHaveBeenCalledTimes(1);
+  it("marks permission and auth failures non-retryable", () => {
+    // Retrying these fails identically until the user re-authenticates.
+    expect(toLoadFailure(firestoreError("permission-denied"), "f").retryable).toBe(
+      false
+    );
+    expect(toLoadFailure(firestoreError("unauthenticated"), "f").retryable).toBe(
+      false
+    );
+    expect(toLoadFailure(firestoreError("not-found"), "f").retryable).toBe(false);
   });
 
-  it("does not repeat the session notice for every listener in the same burst", () => {
-    handleSnapshotError("expenses", { code: "unauthenticated" }, 1000);
-    handleSnapshotError("incomes", { code: "unauthenticated" }, 1200);
-    handleSnapshotError("accounts", { code: "unauthenticated" }, 1400);
-    expect(toastError).toHaveBeenCalledTimes(1);
-  });
-
-  it("notices again once the throttle window has passed", () => {
-    handleSnapshotError("expenses", { code: "unauthenticated" }, 1000);
-    handleSnapshotError("expenses", { code: "unauthenticated" }, 20_000);
-    expect(toastError).toHaveBeenCalledTimes(2);
-  });
-
-  it("logs unexpected errors without a user-facing toast", () => {
-    handleSnapshotError("expenses", { code: "failed-precondition" });
-    expect(console.error).toHaveBeenCalled();
-    expect(toastError).not.toHaveBeenCalled();
+  it("uses the caller's fallback for unrecognised errors", () => {
+    expect(toLoadFailure(new Error(""), "Couldn't load your vaults.").message).toBe(
+      "Couldn't load your vaults."
+    );
   });
 });
 
-describe("error classification", () => {
-  it("recognises the auth codes Firestore uses for a dead session", () => {
-    expect(isAuthError({ code: "permission-denied" })).toBe(true);
-    expect(isAuthError({ code: "unauthenticated" })).toBe(true);
-    expect(isAuthError({ code: "unavailable" })).toBe(false);
-    expect(isAuthError(new Error("boom"))).toBe(false);
+describe("snapshotErrorHandler", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("reports the failure to the caller instead of swallowing it", () => {
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const onFail = vi.fn();
+    snapshotErrorHandler("snapshot.vaults", onFail, "Couldn't load your vaults.")(
+      firestoreError("unavailable")
+    );
+
+    expect(onFail).toHaveBeenCalledTimes(1);
+    const failure = onFail.mock.calls[0][0];
+    expect(failure.kind).toBe("network");
+    expect(failure.retryable).toBe(true);
   });
 
-  it("recognises the codes that just mean the network is down", () => {
-    expect(isTransientNetworkError({ code: "unavailable" })).toBe(true);
-    expect(isTransientNetworkError({ code: "deadline-exceeded" })).toBe(true);
-    expect(isTransientNetworkError({ code: "permission-denied" })).toBe(false);
+  it("logs through the redacting logger", () => {
+    const spy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    snapshotErrorHandler("snapshot.userDoc", () => undefined)(
+      new Error("read failed for user@example.com")
+    );
+    const serialized = JSON.stringify(spy.mock.calls[0]);
+    expect(serialized).toContain("snapshot.userDoc");
+    expect(serialized).not.toContain("user@example.com");
   });
 });

@@ -29,6 +29,7 @@ import {
 import { useBiometrics } from "@/hooks/useBiometrics";
 import { getFirestoreDb } from "@/lib/firebase";
 import { haptic } from "@/lib/haptics";
+import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import { useTranslation, SUPPORTED_LANGUAGES, type LanguageCode } from "@/providers/LocalizationProvider";
@@ -201,7 +202,8 @@ export default function SettingsScreen() {
       );
       toast.success("Profile saved");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to save profile");
+      logError("settings.saveProfile", error);
+      toast.error(friendlyErrorMessage(error, "Couldn't save your profile."));
     } finally {
       setSavingProfile(false);
     }
@@ -268,7 +270,8 @@ export default function SettingsScreen() {
       await logout();
       toast.success("Signed out");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Logout failed");
+      logError("settings.logout", error);
+      toast.error(friendlyErrorMessage(error, "Couldn't sign you out. Please try again."));
     }
   };
 

@@ -12,6 +12,17 @@ function mockUser(uid: string): User {
 
 describe("authHelpers", () => {
   describe("authErrorMessage", () => {
+    it("maps Firebase auth codes instead of leaking the SDK string", () => {
+      const error = new Error("Firebase: Error (auth/invalid-credential).") as Error & {
+        code: string;
+      };
+      error.code = "auth/invalid-credential";
+
+      const message = authErrorMessage(error, "Email login failed");
+      expect(message).toBe("Incorrect email or password.");
+      expect(message).not.toMatch(/firebase/i);
+    });
+
     it("reads message from error-like objects", () => {
       expect(authErrorMessage({ message: "Invalid password" }, "fallback")).toBe(
         "Invalid password"

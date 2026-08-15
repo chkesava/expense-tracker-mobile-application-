@@ -18,9 +18,12 @@ import {
 } from "@expo-google-fonts/inter";
 import "react-native-reanimated";
 
+import { AppErrorBoundary } from "@/components/common/AppErrorBoundary";
 import { CelebrationOverlay } from "@/components/common/CelebrationOverlay";
 import { OfflineBanner } from "@/components/common/OfflineBanner";
 import { SplashAnimationOverlay } from "@/components/common/SplashAnimationOverlay";
+import { isPermissionError, logWarning } from "@/lib/errors";
+import { installGlobalErrorHandlers } from "@/lib/globalErrorHandler";
 import { perfMark } from "@/lib/perf";
 import { bindQueryClientToNetwork } from "@/lib/queryNetworkBinding";
 import { ToastProvider } from "@/lib/toast";
@@ -35,7 +38,30 @@ import { WorkspaceProvider } from "@/providers/WorkspaceProvider";
 import { AppThemeProvider, useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette, THEME_STORAGE_KEY } from "@/theme/tokens";
 
-export { ErrorBoundary } from "expo-router";
+// Uncaught throws / unhandled rejections — installed before any provider mounts.
+installGlobalErrorHandlers();
+
+/** Longest the splash screen may block the UI before we show it regardless. */
+const SPLASH_TIMEOUT_MS = 10_000;
+
+/**
+ * Route-level boundary used by expo-router.
+ *
+ * Replaces expo-router's built-in export, which renders the raw error message
+ * and stack trace to the user in release builds.
+ */
+export function ErrorBoundary({ error, retry }: { error: Error; retry: () => Promise<void> }) {
+  return (
+    <AppErrorBoundary scope="router.route" onReset={() => void retry()}>
+      <ThrowOnce error={error} />
+    </AppErrorBoundary>
+  );
+}
+
+/** Re-throws into the boundary above so both paths share one fallback UI. */
+function ThrowOnce({ error }: { error: Error }): never {
+  throw error;
+}
 
 // Must run before any query mounts, so Query never assumes it is online.
 bindQueryClientToNetwork();
@@ -44,15 +70,18 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 60_000,
-      // One retry, and only after a full second — a failing request on a weak
-      // connection must not turn into a burst of near-instant repeats.
-      retry: 1,
-      retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 15_000),
+      // Retrying a permission/auth failure just burns battery and rate limit —
+      // it will fail identically until the user re-authenticates. Backoff keeps
+      // a failure on a weak connection from becoming a burst of instant repeats.
+      retry: (failureCount, error) => !isPermissionError(error) && failureCount < 2,
+      retryDelay: (attempt) => Math.min(1_000 * 2 ** attempt, 8_000),
       // Polls stay paused while the app is backgrounded (see focusManager).
       refetchIntervalInBackground: false,
     },
     mutations: {
-      retry: 0,
+      // Never auto-retry a financial write: a retry of a mutation whose
+      // response was merely lost is how duplicates get created.
+      retry: false,
     },
   },
 });
@@ -81,12 +110,17 @@ function AppInitializer({ children }: { children: React.ReactNode }) {
   const [navigationReady, setNavigationReady] = useState(false);
   const [appIsReady, setAppIsReady] = useState(false);
   const [animationComplete, setAnimationComplete] = useState(false);
-  const [fontsLoaded] = useFonts({
+  const [fontsLoaded, fontError] = useFonts({
     Inter_400Regular,
     Inter_500Medium,
     Inter_600SemiBold,
     Inter_700Bold,
   });
+  const [readyTimedOut, setReadyTimedOut] = useState(false);
+  // A font that fails to load leaves `fontsLoaded` false forever. Treat a
+  // failure as "done" and fall back to the system font rather than holding
+  // the splash screen up indefinitely.
+  const fontsSettled = fontsLoaded || Boolean(fontError);
 
   useEffect(() => {
     perfMark("app_module");
@@ -128,16 +162,35 @@ function AppInitializer({ children }: { children: React.ReactNode }) {
   }, [navigationRef]);
 
   useEffect(() => {
-    if (fontsLoaded) perfMark("fonts_ready");
-  }, [fontsLoaded]);
+    if (fontError) logWarning("app.fontsLoad", fontError);
+    if (fontsSettled) perfMark("fonts_ready");
+  }, [fontsSettled, fontError]);
+
+  // Hard ceiling on the splash screen. If any single readiness signal never
+  // arrives (font server down, auth listener never fires, navigation container
+  // never mounts) the user would otherwise sit on the splash forever.
+  useEffect(() => {
+    const timer = setTimeout(() => setReadyTimedOut(true), SPLASH_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Critical path: auth + fonts + local stores + nav (not settings/userDoc)
   useEffect(() => {
-    if (!authLoading && localStoresReady && navigationReady && fontsLoaded) {
+    const criticalPathReady =
+      !authLoading && localStoresReady && navigationReady && fontsSettled;
+    if (criticalPathReady || readyTimedOut) {
+      if (readyTimedOut && !criticalPathReady) {
+        logWarning("app.startupTimeout", new Error("Startup gates did not settle"), {
+          authLoading,
+          localStoresReady,
+          navigationReady,
+          fontsSettled,
+        });
+      }
       setAppIsReady(true);
       perfMark("app_ready");
     }
-  }, [authLoading, localStoresReady, navigationReady, fontsLoaded]);
+  }, [authLoading, localStoresReady, navigationReady, fontsSettled, readyTimedOut]);
 
   useEffect(() => {
     if (appIsReady) {
@@ -163,8 +216,10 @@ function AppInitializer({ children }: { children: React.ReactNode }) {
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <SafeAreaProvider>
-        <QueryClientProvider client={queryClient}>
+      {/* Outermost net: a throw inside any provider still paints a usable screen. */}
+      <AppErrorBoundary scope="app.root">
+        <SafeAreaProvider>
+          <QueryClientProvider client={queryClient}>
           <NetworkProvider>
             <SystemSettingsProvider>
               <AuthProvider>
@@ -176,7 +231,11 @@ export default function RootLayout() {
                           <CelebrationProvider>
                             <ToastProvider>
                               <AppInitializer>
-                                <RootNavigator />
+                                {/* Inner net: a screen crash keeps providers,
+                                    session and cached data alive. */}
+                                <AppErrorBoundary scope="app.navigator">
+                                  <RootNavigator />
+                                </AppErrorBoundary>
                                 <CelebrationOverlay />
                               </AppInitializer>
                             </ToastProvider>
@@ -189,8 +248,9 @@ export default function RootLayout() {
               </AuthProvider>
             </SystemSettingsProvider>
           </NetworkProvider>
-        </QueryClientProvider>
-      </SafeAreaProvider>
+          </QueryClientProvider>
+        </SafeAreaProvider>
+      </AppErrorBoundary>
     </GestureHandlerRootView>
   );
 }

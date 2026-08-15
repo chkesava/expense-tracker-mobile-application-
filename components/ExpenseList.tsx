@@ -10,6 +10,7 @@ import {
 import { FlashList } from "@shopify/flash-list";
 import { useRouter } from "expo-router";
 import { deleteDoc, doc } from "firebase/firestore";
+import { logError } from "@/lib/errors";
 import { haptic } from "@/lib/haptics";
 import { sampleScrollFps } from "@/lib/perf";
 import {
@@ -220,7 +221,7 @@ export function ExpenseList({
           )
         );
       } catch (err) {
-        console.error("Delete transaction error:", err);
+        logError("expenseList.deleteTransaction", err);
         toast.error("Failed to delete transaction");
       } finally {
         deletingIdsRef.current.delete(docId);
