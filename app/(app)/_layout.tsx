@@ -26,12 +26,13 @@ import { useTheme } from "@/theme/ThemeProvider";
 function AppShellInner() {
   const { settings } = useSettings();
   const { theme } = useTheme();
+  const { user } = useAuth();
 
   // Android hardware / gesture Back button behavior
   useAndroidBackHandler();
 
-  // Route state restoration across sessions
-  useNavigationStateRestoration(true);
+  // Route state restoration across sessions, scoped to the signed-in user.
+  useNavigationStateRestoration(user?.uid);
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>

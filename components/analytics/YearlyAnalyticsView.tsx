@@ -187,7 +187,7 @@ export function YearlyAnalyticsView() {
           description="Year-over-year analytics and month-over-month comparisons will populate as you track transactions throughout the year."
           primaryAction={{
             label: "Go to Dashboard",
-            onPress: () => router.push("/dashboard"),
+            onPress: () => router.dismissTo("/dashboard"),
           }}
           secondaryAction={{
             label: "Previous Year",

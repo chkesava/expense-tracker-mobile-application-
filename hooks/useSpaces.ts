@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import {
-  addDoc,
   collection,
   doc,
   getDocs,
@@ -8,6 +7,7 @@ import {
   orderBy,
   query,
   serverTimestamp,
+  setDoc,
   updateDoc,
   where,
   writeBatch,
@@ -15,6 +15,7 @@ import {
 
 import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
+import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
 import { snapshotErrorHandler } from "@/lib/firestoreErrors";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { toast } from "@/lib/toast";
@@ -89,17 +90,22 @@ export function useSpaces(options?: { enabled?: boolean }) {
       }
 
       try {
-        const ref = await addDoc(collection(db, "users", uid, "spaces"), {
-          ...input,
-          userId: uid,
-          budget: input.budget ?? null,
-          startDate: input.startDate ?? null,
-          endDate: input.endDate ?? null,
-          status: input.status ?? "ACTIVE",
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        });
-        toast.success(`Space "${input.name}" created`);
+        const ref = doc(collection(db, "users", uid, "spaces"));
+        const outcome = await commitWrite(
+          () =>
+            setDoc(ref, {
+              ...input,
+              userId: uid,
+              budget: input.budget ?? null,
+              startDate: input.startDate ?? null,
+              endDate: input.endDate ?? null,
+              status: input.status ?? "ACTIVE",
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            }),
+          { label: "space" }
+        );
+        toast.success(writeSavedMessage(outcome, `Space "${input.name}" created`));
         return ref.id;
       } catch (err) {
         logError("spaces.createspace", err);
@@ -116,11 +122,15 @@ export function useSpaces(options?: { enabled?: boolean }) {
       if (!uid || !db || !id) return false;
 
       try {
-        await updateDoc(doc(db, "users", uid, "spaces", id), {
-          ...updates,
-          updatedAt: serverTimestamp(),
-        });
-        toast.success("Space updated");
+        const outcome = await commitWrite(
+          () =>
+            updateDoc(doc(db, "users", uid, "spaces", id), {
+              ...updates,
+              updatedAt: serverTimestamp(),
+            }),
+          { label: "space" }
+        );
+        toast.success(writeSavedMessage(outcome, "Space updated"));
         return true;
       } catch (err) {
         logError("spaces.updatespace", err);
@@ -148,19 +158,32 @@ export function useSpaces(options?: { enabled?: boolean }) {
           )
         );
 
+        // Offline this answers from cache and may miss linked expenses, which
+        // would leave them pointing at a space that no longer exists.
+        if (linked.metadata.fromCache) {
+          toast.error(
+            "Can't verify linked expenses while offline. Try again when connected."
+          );
+          return false;
+        }
+
         for (const group of chunk(linked.docs, BATCH_CHUNK_SIZE)) {
           const batch = writeBatch(db);
           group.forEach((expenseDoc) =>
             batch.update(expenseDoc.ref, { spaceId: null })
           );
-          await batch.commit();
+          await commitWrite(() => batch.commit(), { label: "space unlink" });
         }
 
         const finalBatch = writeBatch(db);
         finalBatch.delete(doc(db, "users", uid, "spaces", spaceId));
-        await finalBatch.commit();
+        const outcome = await commitWrite(() => finalBatch.commit(), {
+          label: "space deletion",
+        });
 
-        toast.success("Space deleted and expenses unlinked");
+        toast.success(
+          writeSavedMessage(outcome, "Space deleted and expenses unlinked")
+        );
         return true;
       } catch (err) {
         logError("spaces.deletespace", err);
@@ -188,7 +211,7 @@ export function useSpaces(options?: { enabled?: boolean }) {
               spaceId,
             });
           });
-          await batch.commit();
+          await commitWrite(() => batch.commit(), { label: "space assignment" });
         }
 
         toast.success(

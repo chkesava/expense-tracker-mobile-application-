@@ -7,9 +7,13 @@ export function useMarketQuotes(symbols: Array<{ symbol: string; instrumentType:
   const results = useQueries({
     queries: symbols.map((s) => ({
       queryKey: ['market-quote', s.symbol, s.instrumentType],
-      queryFn: () => fetchMarketQuote(s.symbol, s.instrumentType),
+      // `signal` cancels the in-flight quote when the screen unmounts or the
+      // poll is superseded, instead of leaving it to resolve into nothing.
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        fetchMarketQuote(s.symbol, s.instrumentType, { signal }),
       staleTime: 60_000,
       refetchInterval: 60_000,
+      refetchIntervalInBackground: false,
       retry: 2,
       retryDelay: (attempt: number) => Math.min(1_000 * 2 ** attempt, 8_000),
     })),

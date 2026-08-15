@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import {
-  addDoc,
   collection,
   deleteDoc,
   doc,
@@ -8,11 +7,12 @@ import {
   orderBy,
   query,
   serverTimestamp,
-  updateDoc,
+  setDoc,
 } from "firebase/firestore";
 
 import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
+import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
 import { snapshotErrorHandler } from "@/lib/firestoreErrors";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { toast } from "@/lib/toast";
@@ -94,11 +94,16 @@ export function useVaultExpenses(vaultId?: string) {
           createdAt: serverTimestamp(),
         };
 
-        const docRef = await addDoc(
-          collection(db, "vaults", vaultId, "expenses"),
-          payload
+        const docRef = doc(collection(db, "vaults", vaultId, "expenses"));
+        const outcome = await commitWrite(() => setDoc(docRef, payload), {
+          label: "vault transaction",
+        });
+        toast.success(
+          writeSavedMessage(
+            outcome,
+            params.type === "deposit" ? "Deposit recorded" : "Withdrawal recorded"
+          )
         );
-        toast.success(params.type === "deposit" ? "Deposit recorded" : "Withdrawal recorded");
         return docRef.id;
       } catch (err: any) {
         logError("vaultExpenses.addingVaultTransaction", err);
@@ -115,8 +120,11 @@ export function useVaultExpenses(vaultId?: string) {
       if (!vaultId || !db) return false;
 
       try {
-        await deleteDoc(doc(db, "vaults", vaultId, "expenses", expenseId));
-        toast.success("Transaction removed");
+        const outcome = await commitWrite(
+          () => deleteDoc(doc(db, "vaults", vaultId, "expenses", expenseId)),
+          { label: "vault transaction deletion" }
+        );
+        toast.success(writeSavedMessage(outcome, "Transaction removed"));
         return true;
       } catch (err: any) {
         logError("vaultExpenses.deletingVaultTransaction", err);

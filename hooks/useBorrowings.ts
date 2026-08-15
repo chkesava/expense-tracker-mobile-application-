@@ -1,14 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  addDoc,
   collection,
-  deleteDoc,
   doc,
   getDocs,
   onSnapshot,
   orderBy,
   query,
   serverTimestamp,
+  setDoc,
   updateDoc,
   where,
   writeBatch,
@@ -16,6 +15,7 @@ import {
 
 import { logError, logWarning } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
+import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
 import { snapshotErrorHandler } from "@/lib/firestoreErrors";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { toast } from "@/lib/toast";
@@ -169,21 +169,26 @@ export function useBorrowings(options?: { enabled?: boolean }) {
       }
 
       try {
-        const ref = await addDoc(collection(db, "users", uid, "borrowings"), {
-          ...input,
-          userId: uid,
-          lenderId: input.lenderId ?? null,
-          dueDate: input.dueDate ?? null,
-          creditedAccountId: input.creditedAccountId ?? null,
-          outstandingPrincipal: input.principalAmount,
-          accruedInterest: 0,
-          totalOutstanding: input.principalAmount,
-          status: "ACTIVE",
-          settledDate: null,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        });
-        toast.success("Borrowing recorded");
+        const ref = doc(collection(db, "users", uid, "borrowings"));
+        const outcome = await commitWrite(
+          () =>
+            setDoc(ref, {
+              ...input,
+              userId: uid,
+              lenderId: input.lenderId ?? null,
+              dueDate: input.dueDate ?? null,
+              creditedAccountId: input.creditedAccountId ?? null,
+              outstandingPrincipal: input.principalAmount,
+              accruedInterest: 0,
+              totalOutstanding: input.principalAmount,
+              status: "ACTIVE",
+              settledDate: null,
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            }),
+          { label: "borrowing" }
+        );
+        toast.success(writeSavedMessage(outcome, "Borrowing recorded"));
         return ref.id;
       } catch (err) {
         logError("borrowings.createborrowing", err);
@@ -200,11 +205,15 @@ export function useBorrowings(options?: { enabled?: boolean }) {
       if (!uid || !db || !id) return false;
 
       try {
-        await updateDoc(doc(db, "users", uid, "borrowings", id), {
-          ...updates,
-          updatedAt: serverTimestamp(),
-        });
-        toast.success("Borrowing updated");
+        const outcome = await commitWrite(
+          () =>
+            updateDoc(doc(db, "users", uid, "borrowings", id), {
+              ...updates,
+              updatedAt: serverTimestamp(),
+            }),
+          { label: "borrowing" }
+        );
+        toast.success(writeSavedMessage(outcome, "Borrowing updated"));
         return true;
       } catch (err) {
         logError("borrowings.updateborrowing", err);
@@ -229,12 +238,23 @@ export function useBorrowings(options?: { enabled?: boolean }) {
           )
         );
 
+        // Offline this query answers from cache and may not list every
+        // repayment, which would orphan the ones it missed.
+        if (linked.metadata.fromCache) {
+          toast.error(
+            "Can't verify linked repayments while offline. Try again when connected."
+          );
+          return false;
+        }
+
         const batch = writeBatch(db);
         linked.docs.forEach((repaymentDoc) => batch.delete(repaymentDoc.ref));
         batch.delete(doc(db, "users", uid, "borrowings", id));
-        await batch.commit();
+        const outcome = await commitWrite(() => batch.commit(), {
+          label: "borrowing deletion",
+        });
 
-        toast.success("Borrowing deleted");
+        toast.success(writeSavedMessage(outcome, "Borrowing deleted"));
         return true;
       } catch (err) {
         logError("borrowings.deleteborrowing", err);
@@ -271,20 +291,7 @@ export function useBorrowings(options?: { enabled?: boolean }) {
       const allocation = allocateRepayment(input.amount, summary);
 
       try {
-        const ref = await addDoc(
-          collection(db, "users", uid, "borrowingRepayments"),
-          {
-            borrowingId: input.borrowingId,
-            amount: input.amount,
-            principalComponent: allocation.principalComponent,
-            interestComponent: allocation.interestComponent,
-            paymentAccountId: input.paymentAccountId ?? null,
-            date: input.date,
-            month: monthFromDateKey(input.date),
-            note: input.note ?? "",
-            createdAt: serverTimestamp(),
-          }
-        );
+        const ref = doc(collection(db, "users", uid, "borrowingRepayments"));
 
         const nextSummary = summarizeBorrowing(
           borrowing,
@@ -302,15 +309,36 @@ export function useBorrowings(options?: { enabled?: boolean }) {
           todayDateKey()
         );
 
-        await updateDoc(
+        // Repayment + recomputed parent totals commit atomically. Two separate
+        // writes could leave a repayment recorded against a borrowing that
+        // still shows the full amount outstanding if the link drops between.
+        const batch = writeBatch(db);
+        batch.set(ref, {
+          borrowingId: input.borrowingId,
+          amount: input.amount,
+          principalComponent: allocation.principalComponent,
+          interestComponent: allocation.interestComponent,
+          paymentAccountId: input.paymentAccountId ?? null,
+          date: input.date,
+          month: monthFromDateKey(input.date),
+          note: input.note ?? "",
+          createdAt: serverTimestamp(),
+        });
+        batch.update(
           doc(db, "users", uid, "borrowings", input.borrowingId),
           denormalizedFields(nextSummary)
         );
+        const outcome = await commitWrite(() => batch.commit(), {
+          label: "repayment",
+        });
 
         toast.success(
-          nextSummary.status === "FULLY_SETTLED"
-            ? "Borrowing settled"
-            : "Repayment recorded"
+          writeSavedMessage(
+            outcome,
+            nextSummary.status === "FULLY_SETTLED"
+              ? "Borrowing settled"
+              : "Repayment recorded"
+          )
         );
         return ref.id;
       } catch (err) {
@@ -330,9 +358,8 @@ export function useBorrowings(options?: { enabled?: boolean }) {
       const borrowing = borrowings.find((b) => b.id === borrowingId);
 
       try {
-        await deleteDoc(
-          doc(db, "users", uid, "borrowingRepayments", repaymentId)
-        );
+        const batch = writeBatch(db);
+        batch.delete(doc(db, "users", uid, "borrowingRepayments", repaymentId));
 
         if (borrowing) {
           const nextSummary = summarizeBorrowing(
@@ -340,13 +367,17 @@ export function useBorrowings(options?: { enabled?: boolean }) {
             repayments.filter((r) => r.id !== repaymentId),
             todayDateKey()
           );
-          await updateDoc(
+          batch.update(
             doc(db, "users", uid, "borrowings", borrowingId),
             denormalizedFields(nextSummary)
           );
         }
 
-        toast.success("Repayment removed");
+        const outcome = await commitWrite(() => batch.commit(), {
+          label: "repayment deletion",
+        });
+
+        toast.success(writeSavedMessage(outcome, "Repayment removed"));
         return true;
       } catch (err) {
         logError("borrowings.deleterepayment", err);

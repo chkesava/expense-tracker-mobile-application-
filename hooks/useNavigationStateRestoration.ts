@@ -1,53 +1,88 @@
 import { useEffect, useRef } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Linking from "expo-linking";
 import { usePathname, useRouter } from "expo-router";
 
-const LAST_ROUTE_KEY = "@vault_last_active_route";
+import {
+  isPersistableRoute,
+  isRestorableRoute,
+  lastRouteStorageKey,
+  normalizeStoredRoute,
+  shouldRestoreRoute,
+} from "@/shared/config/routeRestoration";
 
-export function useNavigationStateRestoration(isAuthenticated: boolean) {
+/**
+ * Remembers the last screen per user and resumes it on a plain cold start.
+ *
+ * Two rules keep this from fighting the rest of navigation: the key is scoped
+ * to the signed-in uid (a saved route must never survive into another account),
+ * and restoration is skipped whenever a deep link or notification already
+ * decided where the app should open.
+ */
+export function useNavigationStateRestoration(uid: string | undefined) {
   const pathname = usePathname();
   const router = useRouter();
-  const restored = useRef(false);
+  const restoredForUid = useRef<string | null>(null);
+  // Read inside the async restore without making it a dependency.
+  const pathnameRef = useRef(pathname);
+  pathnameRef.current = pathname;
 
-  // 1. Save last active route on change
+  // 1. Remember the active route.
   useEffect(() => {
-    if (!isAuthenticated || !pathname) return;
-    const clean = pathname.replace(/^\/\(app\)/, "");
-    if (
-      clean &&
-      clean !== "/" &&
-      clean !== "/(auth)/login" &&
-      !clean.includes("login")
-    ) {
-      AsyncStorage.setItem(LAST_ROUTE_KEY, clean).catch(() => undefined);
-    }
-  }, [pathname, isAuthenticated]);
+    if (!uid || !pathname) return;
+    const route = normalizeStoredRoute(pathname);
+    if (!isPersistableRoute(route)) return;
+    AsyncStorage.setItem(lastRouteStorageKey(uid), route).catch(() => undefined);
+  }, [pathname, uid]);
 
-  // 2. Restore last active route on launch (if on default dashboard/root)
+  // 2. Resume it once per signed-in user, only on an unremarkable launch.
   useEffect(() => {
-    if (!isAuthenticated || restored.current) return;
-    restored.current = true;
+    if (!uid || restoredForUid.current === uid) return;
+    restoredForUid.current = uid;
 
-    AsyncStorage.getItem(LAST_ROUTE_KEY)
-      .then((savedRoute) => {
-        if (savedRoute && savedRoute !== "/dashboard" && savedRoute !== "/") {
-          // Only restore if user was on a top-level tab or sub-screen
-          const validRoutes = [
-            "/ledger",
-            "/vaults",
-            "/insights",
-            "/settings",
-            "/sms-inbox",
-            "/app-selector",
-          ];
-          if (
-            validRoutes.some((r) => savedRoute.startsWith(r)) ||
-            savedRoute.startsWith("/accounts/")
-          ) {
-            router.replace(savedRoute as any);
-          }
-        }
-      })
-      .catch(() => undefined);
-  }, [isAuthenticated, router]);
+    let cancelled = false;
+
+    void (async () => {
+      const [savedRoute, initialUrl] = await Promise.all([
+        AsyncStorage.getItem(lastRouteStorageKey(uid)).catch(() => null),
+        // A deep link (or a notification carrying one) is a more specific
+        // intent than "wherever you were last time".
+        Linking.getInitialURL().catch(() => null),
+      ]);
+      if (cancelled) return;
+
+      const openedFromLink = Boolean(initialUrl && !isBareLaunchUrl(initialUrl));
+
+      if (
+        shouldRestoreRoute({
+          savedRoute,
+          currentRoute: normalizeStoredRoute(pathnameRef.current),
+          openedFromLink,
+        })
+      ) {
+        router.replace(savedRoute as never);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [uid, router]);
 }
+
+/**
+ * Launching from the home screen still reports a URL on Android
+ * (`scheme:///` or the bare host); only a path means a real destination.
+ */
+function isBareLaunchUrl(url: string): boolean {
+  const parsed = Linking.parse(url);
+  const path = parsed.path?.replace(/^\/+|\/+$/g, "") ?? "";
+  return path.length === 0;
+}
+
+/** Clears the remembered route for a user — called on sign-out. */
+export async function clearSavedRoute(uid: string): Promise<void> {
+  await AsyncStorage.removeItem(lastRouteStorageKey(uid)).catch(() => undefined);
+}
+
+export { isRestorableRoute };

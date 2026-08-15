@@ -1,13 +1,22 @@
 import React from 'react';
-import { Tabs } from 'expo-router';
+import { Redirect, Tabs } from 'expo-router';
 import { useTheme } from '@/theme/ThemeProvider';
 import { Activity, User, PlusCircle, ArrowLeft } from 'lucide-react-native';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import {
+  ActivityIndicator,
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+} from 'react-native';
 import { useRouter } from 'expo-router';
+import { useAuth } from '@/providers/AuthProvider';
+import { useWorkspace } from '@/providers/WorkspaceProvider';
 
 function CustomTabBar({ state, descriptors, navigation }: any) {
   const { theme } = useTheme();
   const router = useRouter();
+  const { setActiveWorkspace } = useWorkspace();
 
   const styles = StyleSheet.create({
     container: {
@@ -93,7 +102,12 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
 
       <TouchableOpacity
         style={styles.tabItem}
-        onPress={() => router.replace('/')} // Back to workspace
+        // Switching the workspace is what actually leaves nutrition. Replacing
+        // to "/" only bounced off the launch router, which reads the persisted
+        // workspace and sent the user straight back here.
+        onPress={() => {
+          void setActiveWorkspace('expense');
+        }}
       >
         <ArrowLeft color={theme.colors.tabIconDefault} size={24} />
         <Text style={[styles.label, { color: theme.colors.tabIconDefault }]}>Exit</Text>
@@ -104,6 +118,28 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
 
 export default function NutritionLayout() {
   const { theme } = useTheme();
+  const { user, loading } = useAuth();
+
+  // The nutrition workspace is reachable directly (deep link, restored
+  // workspace) and used to render its whole shell with no session at all.
+  if (loading) {
+    return (
+      <View
+        style={{
+          flex: 1,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: theme.colors.background,
+        }}
+      >
+        <ActivityIndicator color={theme.colors.primary} />
+      </View>
+    );
+  }
+
+  if (!user) {
+    return <Redirect href="/(auth)/login" />;
+  }
 
   return (
     <Tabs

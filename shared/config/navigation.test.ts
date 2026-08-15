@@ -1,5 +1,42 @@
 import { describe, expect, it } from "vitest";
-import { CORE_NAV_ITEMS, isNavItemActive } from "./navigation";
+import {
+  CORE_NAV_ITEMS,
+  isNavItemActive,
+  resolveAndroidBackAction,
+} from "./navigation";
+
+describe("resolveAndroidBackAction", () => {
+  it("asks for exit confirmation on the start destination", () => {
+    expect(resolveAndroidBackAction("/dashboard")).toBe("exit");
+    expect(resolveAndroidBackAction("/(app)/dashboard")).toBe("exit");
+    expect(resolveAndroidBackAction("/")).toBe("exit");
+  });
+
+  it("pops out of stack sub-screens", () => {
+    expect(resolveAndroidBackAction("/settings")).toBe("pop");
+    expect(resolveAndroidBackAction("/sms-inbox")).toBe("pop");
+    expect(resolveAndroidBackAction("/app-selector")).toBe("pop");
+    expect(resolveAndroidBackAction("/accounts/abc123")).toBe("pop");
+  });
+
+  it("pops out of screens that used to fall through to the navigator", () => {
+    // `/add` and a bill detail reached from a deep link had no rule, so back
+    // could exit the app instead of returning to the shell.
+    expect(resolveAndroidBackAction("/add")).toBe("pop");
+    expect(resolveAndroidBackAction("/credit-card-bills/bill-1")).toBe("pop");
+  });
+
+  it("returns to the start destination from secondary tabs", () => {
+    expect(resolveAndroidBackAction("/ledger")).toBe("home");
+    expect(resolveAndroidBackAction("/ledger?tab=splits")).toBe("home");
+    expect(resolveAndroidBackAction("/vaults")).toBe("home");
+    expect(resolveAndroidBackAction("/insights")).toBe("home");
+  });
+
+  it("defers to the navigator for anything unrecognised", () => {
+    expect(resolveAndroidBackAction("/some-future-screen")).toBe("default");
+  });
+});
 
 describe("isNavItemActive", () => {
   it("matches home/dashboard paths", () => {

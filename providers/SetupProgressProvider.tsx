@@ -164,7 +164,7 @@ export function SetupProgressProvider({ children }: { children: ReactNode }) {
         id: "explore_dashboard",
         label: "Explore the dashboard",
         completed: visitedScreens.includes("dashboard"),
-        onNavigate: () => router.push("/dashboard"),
+        onNavigate: () => router.dismissTo("/dashboard"),
       },
       {
         id: "explore_insights",

@@ -12,6 +12,7 @@ import {
 
 import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
+import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
 import { snapshotErrorHandler } from "@/lib/firestoreErrors";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { toast } from "@/lib/toast";
@@ -70,17 +71,24 @@ export const useCategoryBudgets = (options?: { enabled?: boolean }) => {
     if (!uid || !db || !category.trim() || !month || amount <= 0) return;
 
     try {
-      await addDoc(collection(db, "users", uid, "categoryBudgets"), {
-        category: category.trim(),
-        ...(subcategory?.trim() ? { subcategory: subcategory.trim() } : {}),
-        amount: Number(amount),
-        month,
-        createdAt: serverTimestamp(),
-      });
+      const outcome = await commitWrite(
+        () =>
+          addDoc(collection(db, "users", uid, "categoryBudgets"), {
+            category: category.trim(),
+            ...(subcategory?.trim() ? { subcategory: subcategory.trim() } : {}),
+            amount: Number(amount),
+            month,
+            createdAt: serverTimestamp(),
+          }),
+        { label: "budget" }
+      );
       toast.success(
-        subcategory?.trim()
-          ? "Subcategory budget added"
-          : "Category budget added"
+        writeSavedMessage(
+          outcome,
+          subcategory?.trim()
+            ? "Subcategory budget added"
+            : "Category budget added"
+        )
       );
     } catch (err) {
       logError("categoryBudgets.addCategoryBudget", err);
@@ -93,8 +101,11 @@ export const useCategoryBudgets = (options?: { enabled?: boolean }) => {
     if (!uid || !db) return;
 
     try {
-      await deleteDoc(doc(db, "users", uid, "categoryBudgets", id));
-      toast.success("Category budget deleted");
+      const outcome = await commitWrite(
+        () => deleteDoc(doc(db, "users", uid, "categoryBudgets", id)),
+        { label: "budget deletion" }
+      );
+      toast.success(writeSavedMessage(outcome, "Category budget deleted"));
     } catch (err) {
       logError("categoryBudgets.deleteCategoryBudget", err);
       toast.error("Failed to delete category budget");

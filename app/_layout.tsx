@@ -25,6 +25,7 @@ import { SplashAnimationOverlay } from "@/components/common/SplashAnimationOverl
 import { isPermissionError, logWarning } from "@/lib/errors";
 import { installGlobalErrorHandlers } from "@/lib/globalErrorHandler";
 import { perfMark } from "@/lib/perf";
+import { bindQueryClientToNetwork } from "@/lib/queryNetworkBinding";
 import { ToastProvider } from "@/lib/toast";
 import { AuthProvider, useAuth } from "@/providers/AuthProvider";
 import { CelebrationProvider } from "@/providers/CelebrationProvider";
@@ -62,16 +63,24 @@ function ThrowOnce({ error }: { error: Error }): never {
   throw error;
 }
 
+// Must run before any query mounts, so Query never assumes it is online.
+bindQueryClientToNetwork();
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 60_000,
       // Retrying a permission/auth failure just burns battery and rate limit —
-      // it will fail identically until the user re-authenticates.
+      // it will fail identically until the user re-authenticates. Backoff keeps
+      // a failure on a weak connection from becoming a burst of instant repeats.
       retry: (failureCount, error) => !isPermissionError(error) && failureCount < 2,
       retryDelay: (attempt) => Math.min(1_000 * 2 ** attempt, 8_000),
+      // Polls stay paused while the app is backgrounded (see focusManager).
+      refetchIntervalInBackground: false,
     },
     mutations: {
+      // Never auto-retry a financial write: a retry of a mutation whose
+      // response was merely lost is how duplicates get created.
       retry: false,
     },
   },

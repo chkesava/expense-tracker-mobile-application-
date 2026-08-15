@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  addDoc,
   collection,
   deleteDoc,
   doc,
@@ -8,12 +7,14 @@ import {
   orderBy,
   query,
   serverTimestamp,
+  setDoc,
   updateDoc,
   writeBatch,
 } from "firebase/firestore";
 
 import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
+import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
 import { snapshotErrorHandler } from "@/lib/firestoreErrors";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { toast } from "@/lib/toast";
@@ -121,7 +122,9 @@ export function useSubscriptions(options?: { enabled?: boolean }) {
           subUpdates.isActive = false;
         }
         batch.update(subRef, subUpdates);
-        await batch.commit();
+        // The charge and its `lastProcessed` marker are one atomic batch, so a
+        // queued commit can never double-charge a subscription on replay.
+        await commitWrite(() => batch.commit(), { label: "subscription charge" });
       }
 
       for (const sub of subscriptions) {
@@ -131,10 +134,14 @@ export function useSubscriptions(options?: { enabled?: boolean }) {
         const evaluation = evaluateSubscriptionDue(sub, now);
         if (evaluation.isCompleted && !sub.isCompleted) {
           const subRef = doc(db, "users", uid, "subscriptions", sub.id);
-          await updateDoc(subRef, {
-            isCompleted: true,
-            isActive: false,
-          });
+          await commitWrite(
+            () =>
+              updateDoc(subRef, {
+                isCompleted: true,
+                isActive: false,
+              }),
+            { label: "subscription" }
+          );
         }
       }
     } catch (err) {
@@ -163,11 +170,12 @@ export function useSubscriptions(options?: { enabled?: boolean }) {
     if (!uid || !db) return null;
 
     try {
-      const docRef = await addDoc(collection(db, "users", uid, "subscriptions"), {
-        ...sub,
-        createdAt: serverTimestamp(),
-      });
-      toast.success("Subscription added");
+      const docRef = doc(collection(db, "users", uid, "subscriptions"));
+      const outcome = await commitWrite(
+        () => setDoc(docRef, { ...sub, createdAt: serverTimestamp() }),
+        { label: "subscription" }
+      );
+      toast.success(writeSavedMessage(outcome, "Subscription added"));
       return docRef.id;
     } catch (err) {
       logError("subscriptions.addsubscription", err);
@@ -184,8 +192,11 @@ export function useSubscriptions(options?: { enabled?: boolean }) {
     if (!uid || !db || !id) return false;
 
     try {
-      await updateDoc(doc(db, "users", uid, "subscriptions", id), updates);
-      toast.success("Subscription updated");
+      const outcome = await commitWrite(
+        () => updateDoc(doc(db, "users", uid, "subscriptions", id), updates),
+        { label: "subscription" }
+      );
+      toast.success(writeSavedMessage(outcome, "Subscription updated"));
       return true;
     } catch (err) {
       logError("subscriptions.updatesubscription", err);
@@ -200,13 +211,16 @@ export function useSubscriptions(options?: { enabled?: boolean }) {
 
     try {
       const existing = subscriptions.find((sub) => sub.id === id);
-      await deleteDoc(doc(db, "users", uid, "subscriptions", id));
+      const outcome = await commitWrite(
+        () => deleteDoc(doc(db, "users", uid, "subscriptions", id)),
+        { label: "subscription deletion" }
+      );
       if (existing?.source === "sms") {
         void import("@/services/sms/smsRecurringSync").then((m) =>
           m.rememberDeletedSmsSubscription(existing)
         );
       }
-      toast.success("Subscription deleted");
+      toast.success(writeSavedMessage(outcome, "Subscription deleted"));
       return true;
     } catch (err) {
       logError("subscriptions.deletesubscription", err);

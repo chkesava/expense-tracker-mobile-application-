@@ -23,9 +23,9 @@ export async function commitSmsWritePayload(
     throw new Error("SMS commit blocked");
   }
   if (write.collection === "expenses") {
-    const id = await createExpense(uid, write.payload);
+    const { id } = await createExpense(uid, write.payload);
     return { collection: "expenses", id };
   }
-  const id = await createIncome(uid, write.payload);
+  const { id } = await createIncome(uid, write.payload);
   return { collection: "incomes", id };
 }

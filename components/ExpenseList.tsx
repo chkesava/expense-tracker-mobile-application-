@@ -36,6 +36,7 @@ import { AssignToSpaceModal } from "@/components/spaces/AssignToSpaceModal";
 import { Button } from "@/components/ui/Button";
 import { useSpaces } from "@/hooks/useSpaces";
 import { getFirestoreDb } from "@/lib/firebase";
+import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import { useSettings } from "@/providers/SettingsProvider";
@@ -207,12 +208,17 @@ export function ExpenseList({
         const collectionName = target.kind === "expense" ? "expenses" : "incomes";
         const docRef = doc(db, "users", uid, collectionName, docId);
 
-        await deleteDoc(docRef);
+        const outcome = await commitWrite(() => deleteDoc(docRef), {
+          label: "transaction deletion",
+        });
         setSelectedTx(null);
         void haptic.delete();
 
         toast.success(
-          `${target.kind === "expense" ? "Expense" : "Income"} deleted`
+          writeSavedMessage(
+            outcome,
+            `${target.kind === "expense" ? "Expense" : "Income"} deleted`
+          )
         );
       } catch (err) {
         logError("expenseList.deleteTransaction", err);
@@ -537,7 +543,7 @@ export function ExpenseList({
             if (onAddExpense) {
               onAddExpense();
             } else {
-              router.push("/dashboard");
+              router.dismissTo("/dashboard");
             }
           },
         }}
@@ -545,7 +551,7 @@ export function ExpenseList({
           label: "Scan Receipt",
           icon: <ScanLine size={16} color={theme.colors.primary} strokeWidth={2} />,
           onPress: () => {
-            router.push("/dashboard");
+            router.dismissTo("/dashboard");
           },
         }}
         tip="Quick-add cash expenses in under 3 seconds using the bottom dock '+' button anytime."
