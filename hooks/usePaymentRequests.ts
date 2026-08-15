@@ -1,18 +1,22 @@
 import { useEffect, useState } from "react";
 import {
-  addDoc,
   collection,
   deleteDoc,
   doc,
   onSnapshot,
   orderBy,
   query,
+  setDoc,
   updateDoc,
   where,
 } from "firebase/firestore";
 import { getRandomBytes } from "expo-crypto";
 
+import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
+import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
+import { snapshotErrorHandler } from "@/lib/firestoreErrors";
+import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import type { PaymentRequest, PaymentRequestInput } from "@/shared/types/paymentRequest";
@@ -36,6 +40,7 @@ export function usePaymentRequests(options?: { enabled?: boolean }) {
 
   const [requests, setRequests] = useState<PaymentRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  const { error, setError, retry, attempt } = useLoadFailure();
 
   useEffect(() => {
     const db = getFirestoreDb();
@@ -60,16 +65,21 @@ export function usePaymentRequests(options?: { enabled?: boolean }) {
           ...(docSnap.data() as Omit<PaymentRequest, "id">),
         }));
         setRequests(list);
+        setError(null);
         setLoading(false);
       },
-      (error) => {
-        console.error("usePaymentRequests error:", error);
-        setLoading(false);
-      }
+      snapshotErrorHandler(
+        "snapshot.paymentRequests",
+        (failure) => {
+          setError(failure);
+          setLoading(false);
+        },
+        "Couldn't load your payment requests."
+      )
     );
 
     return unsubscribe;
-  }, [uid, enabled]);
+  }, [uid, enabled, attempt]);
 
   const createPaymentRequest = async (
     input: PaymentRequestInput
@@ -88,11 +98,14 @@ export function usePaymentRequests(options?: { enabled?: boolean }) {
         qrStyleId: input.qrStyleId || getStoredQrStyleId(),
       };
 
-      await addDoc(collection(db, "paymentRequests"), newRequest);
-      toast.success("Payment request created!");
+      const outcome = await commitWrite(
+        () => setDoc(doc(collection(db, "paymentRequests")), newRequest),
+        { label: "payment request" }
+      );
+      toast.success(writeSavedMessage(outcome, "Payment request created!"));
       return slug;
     } catch (err) {
-      console.error("createPaymentRequest error:", err);
+      logError("paymentRequests.createpaymentrequest", err);
       toast.error("Failed to create payment request");
       return null;
     }
@@ -103,11 +116,14 @@ export function usePaymentRequests(options?: { enabled?: boolean }) {
     if (!uid || !db || !id) return false;
 
     try {
-      await updateDoc(doc(db, "paymentRequests", id), { status: "cancelled" });
-      toast.success("Payment request cancelled");
+      const outcome = await commitWrite(
+        () => updateDoc(doc(db, "paymentRequests", id), { status: "cancelled" }),
+        { label: "payment request" }
+      );
+      toast.success(writeSavedMessage(outcome, "Payment request cancelled"));
       return true;
     } catch (err) {
-      console.error("cancelPaymentRequest error:", err);
+      logError("paymentRequests.cancelpaymentrequest", err);
       toast.error("Failed to cancel");
       return false;
     }
@@ -118,17 +134,22 @@ export function usePaymentRequests(options?: { enabled?: boolean }) {
     if (!uid || !db || !id) return false;
 
     try {
-      await deleteDoc(doc(db, "paymentRequests", id));
-      toast.success("Payment request deleted");
+      const outcome = await commitWrite(
+        () => deleteDoc(doc(db, "paymentRequests", id)),
+        { label: "payment request deletion" }
+      );
+      toast.success(writeSavedMessage(outcome, "Payment request deleted"));
       return true;
     } catch (err) {
-      console.error("deletePaymentRequest error:", err);
+      logError("paymentRequests.deletepaymentrequest", err);
       toast.error("Failed to delete");
       return false;
     }
   };
 
   return {
+    error,
+    retry,
     requests,
     loading,
     createPaymentRequest,

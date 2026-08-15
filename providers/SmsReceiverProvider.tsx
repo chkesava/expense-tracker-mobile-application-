@@ -41,6 +41,14 @@ import {
 import { processIncomingSmsMessages } from "@/services/sms/smsTransactionProcessor";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useSmsRecurringSync } from "@/hooks/useSmsRecurringSync";
+import { logWarning } from "@/lib/errors";
+
+/**
+ * `getLastNotificationResponseAsync` keeps returning the launch tap for the
+ * lifetime of the process, so a remount of this provider (sign-out and back in,
+ * privacy lock) must not replay that navigation.
+ */
+const handledColdStartResponseIds = new Set<string>();
 
 type SmsReceiverContextValue = {
   listening: boolean;
@@ -116,29 +124,52 @@ export function SmsReceiverProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // Tap a transaction notification → inbox (detected) or dashboard (auto-added).
+  // Not gated by `supported`: credit-card-bill reminders (unlike SMS) are
+  // scheduled on every platform, so this has to run on iOS too — otherwise
+  // tapping a bill reminder on iOS would never navigate anywhere.
   useEffect(() => {
-    if (!supported) return;
     let cancelled = false;
     let sub: { remove: () => void } | undefined;
-    void import("expo-notifications").then((Notifications) => {
+
+    const navigateToNotification = (response: {
+      notification: { request: { content: { data?: unknown } } };
+    }) => {
+      const data = response.notification.request.content.data as
+        | { source?: string; url?: string }
+        | undefined;
+      const source = data?.source;
+      if (source !== "sms" && source !== "credit_card_bill") return;
+      const url = data?.url;
+      if (typeof url !== "string" || !url.startsWith("/")) return;
+      // `dismissTo` reuses the screen when it is already in the stack, so
+      // repeated notification taps cannot pile up duplicate copies of it.
+      router.dismissTo(url as Href);
+    };
+
+    void import("expo-notifications").then(async (Notifications) => {
       if (cancelled) return;
-      sub = Notifications.addNotificationResponseReceivedListener((response) => {
-        const data = response.notification.request.content.data as
-          | { source?: string; url?: string }
-          | undefined;
-        const source = data?.source;
-        if (source !== "sms" && source !== "credit_card_bill") return;
-        const url = data?.url;
-        if (typeof url === "string" && url.startsWith("/")) {
-          router.push(url as Href);
-        }
-      });
+      sub = Notifications.addNotificationResponseReceivedListener(
+        navigateToNotification
+      );
+
+      // A tap that launched the app fires before this listener exists, so the
+      // cold-start response has to be collected separately or it is lost.
+      const initial = await Notifications.getLastNotificationResponseAsync().catch(
+        () => null
+      );
+      if (cancelled || !initial) return;
+      if (handledColdStartResponseIds.has(initial.notification.request.identifier)) {
+        return;
+      }
+      handledColdStartResponseIds.add(initial.notification.request.identifier);
+      navigateToNotification(initial);
     });
+
     return () => {
       cancelled = true;
       sub?.remove();
     };
-  }, [supported]);
+  }, []);
 
   // Ask for notification permission once SMS listening is on.
   useEffect(() => {
@@ -189,7 +220,7 @@ export function SmsReceiverProvider({ children }: { children: ReactNode }) {
           await stopSmsListening();
         }
       } catch (err) {
-        console.warn("[sms] listener start/stop failed", err);
+        logWarning("smsReceiverProvider.smsListenerStartStop", err);
         try {
           await stopSmsListening();
         } catch {

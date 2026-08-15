@@ -12,6 +12,7 @@ import {
 } from "react";
 import { doc, onSnapshot } from "firebase/firestore";
 
+import { logWarning } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
 
 export type SystemSettings = {
@@ -65,7 +66,8 @@ export function SystemSettingsProvider({ children }: { children: ReactNode }) {
         setLoading(false);
       },
       (error) => {
-        console.error("Error fetching system settings:", error);
+        // Non-fatal: DEFAULT_SETTINGS already applied, so the app stays usable.
+        logWarning("snapshot.systemSettings", error);
         setLoading(false);
       }
     );

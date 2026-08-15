@@ -12,6 +12,9 @@ import {
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import * as Haptics from "expo-haptics";
+
+import { friendlyErrorMessage, logWarning } from "@/lib/errors";
+import { toast } from "@/lib/toast";
 import {
   Camera,
   Check,
@@ -74,7 +77,9 @@ export function ReceiptScannerModal({
         processImage(result.assets[0].uri);
       }
     } catch (err) {
-      console.warn("Failed picking receipt", err);
+      // Previously silent: the user tapped, nothing happened, no explanation.
+      logWarning("receiptScanner.pickImage", err);
+      toast.error(friendlyErrorMessage(err, "Couldn't open your photo library."));
     }
   };
 
@@ -98,7 +103,8 @@ export function ReceiptScannerModal({
         processImage(result.assets[0].uri);
       }
     } catch (err) {
-      console.warn("Failed taking photo", err);
+      logWarning("receiptScanner.takePhoto", err);
+      toast.error(friendlyErrorMessage(err, "Couldn't open the camera."));
     }
   };
 
@@ -182,6 +188,9 @@ Thank you for visiting!`;
 
             <Pressable
               onPress={onClose}
+              hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel="Close"
               style={({ pressed }) => [styles.closeBtn, pressed && { opacity: 0.6 }]}
             >
               <X size={20} color={theme.colors.mutedForeground} />

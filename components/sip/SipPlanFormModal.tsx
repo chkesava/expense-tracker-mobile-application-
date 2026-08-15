@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { View, Text, StyleSheet, Modal, ScrollView, TouchableOpacity, Alert } from "react-native";
 import { X } from "lucide-react-native";
+import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -80,7 +81,8 @@ export function SipPlanFormModal({ visible, onClose, onSubmit }: SipPlanFormModa
         onClose();
       }
     } catch (e: any) {
-      Alert.alert("Error", e.message || "Failed to create SIP");
+      logError("sip.create", e);
+      Alert.alert("Couldn't create SIP", friendlyErrorMessage(e, "Please check the details and try again."));
     } finally {
       setLoading(false);
     }
@@ -123,7 +125,13 @@ export function SipPlanFormModal({ visible, onClose, onSubmit }: SipPlanFormModa
         >
           <View style={[styles.header, { borderBottomColor: theme.colors.border }]}>
             <Text style={[styles.headerTitle, { color: theme.colors.foreground }]}>Create SIP Plan</Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+            <TouchableOpacity
+              onPress={onClose}
+              hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel="Close"
+              style={styles.closeBtn}
+            >
               <X size={24} color={theme.colors.foreground} />
             </TouchableOpacity>
           </View>

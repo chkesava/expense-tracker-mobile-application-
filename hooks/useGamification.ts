@@ -3,6 +3,8 @@ import { doc, onSnapshot, setDoc } from "firebase/firestore";
 
 import { useExpenses } from "@/hooks/useExpenses";
 import { getFirestoreDb } from "@/lib/firebase";
+import { snapshotErrorHandler } from "@/lib/firestoreErrors";
+import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { useAuth } from "@/providers/AuthProvider";
 import type { UserStats } from "@/shared/types/stats";
 import { LEVEL_THRESHOLDS } from "@/shared/types/stats";
@@ -15,6 +17,7 @@ export function useGamification() {
 
   const [stats, setStats] = useState<UserStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const { error, setError, retry, attempt } = useLoadFailure();
 
   useEffect(() => {
     const db = getFirestoreDb();
@@ -50,16 +53,21 @@ export function useGamification() {
           setDoc(statsRef, defaultStats).catch(() => undefined);
           setStats(defaultStats);
         }
+        setError(null);
         setLoading(false);
       },
-      (err) => {
-        console.warn("Error fetching user stats:", err);
-        setLoading(false);
-      }
+      snapshotErrorHandler(
+        "snapshot.gamification",
+        (failure) => {
+          setError(failure);
+          setLoading(false);
+        },
+        "Couldn't load your progress."
+      )
     );
 
     return () => unsubscribe();
-  }, [uid]);
+  }, [uid, attempt]);
 
   // Derived user level & XP
   const levelInfo = useMemo(() => {
@@ -107,6 +115,8 @@ export function useGamification() {
   }, [stats]);
 
   return {
+    error,
+    retry,
     stats,
     levelInfo,
     loading,

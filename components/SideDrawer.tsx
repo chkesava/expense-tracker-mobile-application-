@@ -31,6 +31,7 @@ import {
 } from "lucide-react-native";
 
 import { useUserRole } from "@/hooks/useUserRole";
+import { logError } from "@/lib/errors";
 import { haptic } from "@/lib/haptics";
 import { useAuth } from "@/providers/AuthProvider";
 import { useSettings } from "@/providers/SettingsProvider";
@@ -59,7 +60,7 @@ function runAfterDrawerClose(onClose: () => void, action: () => void) {
 }
 
 export function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
-  const { push } = useRouter();
+  const { navigate, dismissTo } = useRouter();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
   const { user, logout } = useAuth();
@@ -98,14 +99,20 @@ export function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
     void haptic.navigation();
     const route = path.startsWith("/") ? path : `/${path}`;
     runAfterDrawerClose(onClose, () => {
-      push(route as never);
+      // Drawer destinations are top-level sections, not a drill-down: reuse the
+      // screen if it is already in the stack rather than pushing a second copy.
+      if (route === "/dashboard") {
+        dismissTo("/dashboard");
+      } else {
+        navigate(route as never);
+      }
     });
   };
 
   const handleSwitchApp = () => {
     void haptic.navigation();
     runAfterDrawerClose(onClose, () => {
-      push("/app-selector" as never);
+      navigate("/app-selector" as never);
     });
   };
 
@@ -113,7 +120,7 @@ export function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
     void haptic.impact();
     runAfterDrawerClose(onClose, () => {
       void logout().catch((error) => {
-        console.error("Logout failed", error);
+        logError("sideDrawer.logout", error);
       });
     });
   };

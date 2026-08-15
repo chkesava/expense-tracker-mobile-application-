@@ -23,6 +23,7 @@ import {
 import { currentMonthKey, todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { logWarning } from "@/lib/errors";
 
 export interface ExportDataModalProps {
   visible: boolean;
@@ -113,7 +114,7 @@ export function ExportDataModal({ visible, onClose }: ExportDataModalProps) {
       );
       onClose();
     } catch (err) {
-      console.warn("Export failed", err);
+      logWarning("exportDataModal.export", err);
     } finally {
       setIsExporting(false);
     }
@@ -143,6 +144,9 @@ export function ExportDataModal({ visible, onClose }: ExportDataModalProps) {
             </View>
             <Pressable
               onPress={onClose}
+              hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel="Close"
               style={({ pressed }) => [styles.closeBtn, pressed && { opacity: 0.6 }]}
             >
               <X size={20} color={theme.colors.mutedForeground} />

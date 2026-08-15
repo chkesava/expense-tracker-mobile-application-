@@ -54,7 +54,18 @@ service cloud.firestore {
               || request.auth.uid in resource.data.memberIds);
       }
 
-      allow read, update, delete: if isVaultMember();
+      // Membership/ownership are only ever set by the owner. Without this, any
+      // member could rewrite ownerId/memberIds on a plain update and hijack or
+      // lock others out of the vault — the app UI never does this, but nothing
+      // stopped a direct Firestore write from doing it.
+      function keepsOwnershipStable() {
+        return request.resource.data.ownerId == resource.data.ownerId
+          && (request.resource.data.memberIds == resource.data.memberIds
+              || request.auth.uid == resource.data.ownerId);
+      }
+
+      allow read, delete: if isVaultMember();
+      allow update: if isVaultMember() && keepsOwnershipStable();
       allow create: if signedIn()
         && request.resource.data.ownerId == request.auth.uid;
 
@@ -70,9 +81,23 @@ service cloud.firestore {
     }
 
     match /splits/{splitId} {
-      allow read, update, delete: if signedIn()
-        && (resource.data.createdBy == request.auth.uid
-            || request.auth.uid in resource.data.participantIds);
+      function isSplitParticipant() {
+        return signedIn()
+          && (resource.data.createdBy == request.auth.uid
+              || request.auth.uid in resource.data.participantIds);
+      }
+
+      // Same rationale as vaults above: createdBy/participantIds must stay
+      // stable on a plain update so a participant can't add/remove other
+      // participants or reassign the split to themselves.
+      function keepsParticipantsStable() {
+        return request.resource.data.createdBy == resource.data.createdBy
+          && (request.resource.data.participantIds == resource.data.participantIds
+              || request.auth.uid == resource.data.createdBy);
+      }
+
+      allow read, delete: if isSplitParticipant();
+      allow update: if isSplitParticipant() && keepsParticipantsStable();
       allow create: if signedIn()
         && request.resource.data.createdBy == request.auth.uid;
     }

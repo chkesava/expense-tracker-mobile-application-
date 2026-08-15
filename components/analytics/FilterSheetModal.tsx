@@ -116,6 +116,9 @@ export function FilterSheetModal({
             </View>
             <Pressable
               onPress={onClose}
+              hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel="Close"
               style={({ pressed }) => [styles.closeBtn, pressed && { opacity: 0.6 }]}
             >
               <X size={20} color={theme.colors.mutedForeground} />

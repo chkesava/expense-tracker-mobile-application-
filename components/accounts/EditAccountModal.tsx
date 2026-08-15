@@ -23,6 +23,7 @@ import { useAccountTransfers } from "@/hooks/useAccountTransfers";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useIncomes } from "@/hooks/useIncomes";
+import { logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
 import type { Account } from "@/shared/types/expense";
 import { getInstitutionById } from "@/shared/data/institutions";
@@ -243,7 +244,7 @@ export function EditAccountModal({
       }
       onClose();
     } catch (err) {
-      console.error("Save account error:", err);
+      logError("editAccountModal.saveAccount", err);
       toast.error("Failed to save account");
     } finally {
       setSaving(false);
@@ -276,7 +277,7 @@ export function EditAccountModal({
               toast.success("Account deleted");
               onClose();
             } catch (err) {
-              console.error("Delete account error:", err);
+              logError("editAccountModal.deleteAccount", err);
               toast.error("Failed to delete account");
             }
           },

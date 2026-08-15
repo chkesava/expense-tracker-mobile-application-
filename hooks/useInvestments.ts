@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import {
-  addDoc,
   collection,
   deleteDoc,
   doc,
@@ -8,10 +7,15 @@ import {
   orderBy,
   query,
   serverTimestamp,
+  setDoc,
   updateDoc,
 } from "firebase/firestore";
 
+import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
+import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
+import { snapshotErrorHandler } from "@/lib/firestoreErrors";
+import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import type { Investment } from "@/shared/types/investment";
@@ -24,6 +28,7 @@ export function useInvestments(options?: { enabled?: boolean }) {
 
   const [investments, setInvestments] = useState<Investment[]>([]);
   const [loading, setLoading] = useState(true);
+  const { error, setError, retry, attempt } = useLoadFailure();
 
   useEffect(() => {
     const db = getFirestoreDb();
@@ -47,16 +52,21 @@ export function useInvestments(options?: { enabled?: boolean }) {
           ...(docSnap.data() as Omit<Investment, "id">),
         }));
         setInvestments(list);
+        setError(null);
         setLoading(false);
       },
-      (err) => {
-        console.warn("Error fetching investments:", err);
-        setLoading(false);
-      }
+      snapshotErrorHandler(
+        "snapshot.investments",
+        (failure) => {
+          setError(failure);
+          setLoading(false);
+        },
+        "Couldn't load your investments."
+      )
     );
 
     return () => unsubscribe();
-  }, [uid, enabled]);
+  }, [uid, enabled, attempt]);
 
   const addInvestment = useCallback(
     async (params: Omit<Investment, "id">) => {
@@ -72,14 +82,16 @@ export function useInvestments(options?: { enabled?: boolean }) {
           createdAt: serverTimestamp(),
         };
 
-        const docRef = await addDoc(
-          collection(db, "users", uid, "investments"),
-          payload
+        const docRef = doc(collection(db, "users", uid, "investments"));
+        const outcome = await commitWrite(() => setDoc(docRef, payload), {
+          label: "investment",
+        });
+        toast.success(
+          writeSavedMessage(outcome, `Investment "${params.name}" added`)
         );
-        toast.success(`Investment "${params.name}" added`);
         return docRef.id;
       } catch (err: any) {
-        console.error("Failed adding investment:", err);
+        logError("investments.addingInvestment", err);
         toast.error("Failed to add investment");
         return null;
       }
@@ -93,11 +105,14 @@ export function useInvestments(options?: { enabled?: boolean }) {
       if (!uid || !db) return false;
 
       try {
-        await updateDoc(doc(db, "users", uid, "investments", id), updates);
-        toast.success("Investment updated");
+        const outcome = await commitWrite(
+          () => updateDoc(doc(db, "users", uid, "investments", id), updates),
+          { label: "investment" }
+        );
+        toast.success(writeSavedMessage(outcome, "Investment updated"));
         return true;
       } catch (err: any) {
-        console.error("Failed updating investment:", err);
+        logError("investments.updatingInvestment", err);
         toast.error("Failed to update investment");
         return false;
       }
@@ -111,11 +126,14 @@ export function useInvestments(options?: { enabled?: boolean }) {
       if (!uid || !db) return false;
 
       try {
-        await deleteDoc(doc(db, "users", uid, "investments", id));
-        toast.success("Investment deleted");
+        const outcome = await commitWrite(
+          () => deleteDoc(doc(db, "users", uid, "investments", id)),
+          { label: "investment deletion" }
+        );
+        toast.success(writeSavedMessage(outcome, "Investment deleted"));
         return true;
       } catch (err: any) {
-        console.error("Failed deleting investment:", err);
+        logError("investments.deletingInvestment", err);
         toast.error("Failed to delete investment");
         return false;
       }
@@ -135,6 +153,8 @@ export function useInvestments(options?: { enabled?: boolean }) {
   );
 
   return {
+    error,
+    retry,
     investments,
     loading,
     addInvestment,

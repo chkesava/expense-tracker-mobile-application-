@@ -85,6 +85,16 @@ export async function dismissSmsReviewItem(id: string): Promise<SmsReviewInboxIt
   const next = removeReviewInboxItem(current, id);
   if (next.length !== current.length) {
     await saveSmsReviewInbox(next);
+    // The item was actioned (added or ignored) in-app — clear its "Transaction
+    // detected" notification so it doesn't linger in the shade as if still
+    // pending. Uses the same `sms-detected:{smsId}` id the notification was
+    // presented with (see smsNotificationCopy.ts). Fire-and-forget: callers
+    // (and tests) shouldn't wait on this best-effort OS side effect.
+    void import("expo-notifications")
+      .then((Notifications) =>
+        Notifications.dismissNotificationAsync(`sms-detected:${id}`)
+      )
+      .catch(() => undefined);
   }
   return next;
 }

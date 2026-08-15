@@ -2,6 +2,7 @@ import React, { useEffect } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { Sparkles, Trophy, X } from "lucide-react-native";
 import Animated, {
+  cancelAnimation,
   FadeIn,
   FadeOut,
   useAnimatedStyle,
@@ -47,8 +48,20 @@ export function CelebrationOverlay() {
         -1,
         true
       );
+    } else {
+      // This overlay stays mounted for the whole app session (rendered once
+      // at the root), so an infinite withRepeat left running after dismiss
+      // would animate on the UI thread forever in the background. Stop it
+      // and reset to the resting value once there's nothing to show.
+      cancelAnimation(glowPulse);
+      glowPulse.value = 1;
     }
   }, [currentCelebration, emojiScale, glowPulse]);
+
+  // Safety net: stop the repeating animation if the overlay itself ever unmounts.
+  useEffect(() => {
+    return () => cancelAnimation(glowPulse);
+  }, [glowPulse]);
 
   const animatedEmojiStyle = useAnimatedStyle(() => ({
     transform: [{ scale: emojiScale.value }],

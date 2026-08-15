@@ -1,3 +1,5 @@
+import { fetchWithTimeout } from '../lib/fetchWithTimeout';
+import { logWarning } from '../lib/errors';
 import { FoodItem, NutrientTotals } from '../shared/types/nutrition';
 
 interface OFFProductResponse {
@@ -27,10 +29,17 @@ interface OFFProductResponse {
   };
 }
 
-export async function fetchFoodByBarcode(barcode: string): Promise<Omit<FoodItem, 'id'> | null> {
+export async function fetchFoodByBarcode(
+  barcode: string,
+  options: { signal?: AbortSignal | null } = {}
+): Promise<Omit<FoodItem, 'id'> | null> {
   try {
-    const response = await fetch(`https://world.openfoodfacts.org/api/v2/product/${barcode}.json`);
-    
+    // Third-party API on an unknown network path — never wait on it forever.
+    const response = await fetchWithTimeout(
+      `https://world.openfoodfacts.org/api/v2/product/${barcode}.json`,
+      { signal: options.signal }
+    );
+
     if (!response.ok) {
       return null;
     }
@@ -66,7 +75,9 @@ export async function fetchFoodByBarcode(barcode: string): Promise<Omit<FoodItem
       nutrients,
     };
   } catch (error) {
-    console.error('Error fetching food by barcode:', error);
+    // Callers treat null as "no match"; log the transport failure so a
+    // persistent outage is visible in diagnostics rather than silent.
+    logWarning('openFoodFacts.fetchByBarcode', error);
     return null;
   }
 }

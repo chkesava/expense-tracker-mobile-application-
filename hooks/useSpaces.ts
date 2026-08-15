@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import {
-  addDoc,
   collection,
   doc,
   getDocs,
@@ -8,12 +7,17 @@ import {
   orderBy,
   query,
   serverTimestamp,
+  setDoc,
   updateDoc,
   where,
   writeBatch,
 } from "firebase/firestore";
 
+import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
+import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
+import { snapshotErrorHandler } from "@/lib/firestoreErrors";
+import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import type { Space } from "@/shared/types/space";
@@ -41,6 +45,7 @@ export function useSpaces(options?: { enabled?: boolean }) {
 
   const [spaces, setSpaces] = useState<Space[]>([]);
   const [loading, setLoading] = useState(true);
+  const { error, setError, retry, attempt } = useLoadFailure();
 
   useEffect(() => {
     const db = getFirestoreDb();
@@ -60,16 +65,21 @@ export function useSpaces(options?: { enabled?: boolean }) {
             ...(docSnap.data() as Omit<Space, "id">),
           }))
         );
+        setError(null);
         setLoading(false);
       },
-      (err) => {
-        console.warn("useSpaces error:", err);
-        setLoading(false);
-      }
+      snapshotErrorHandler(
+        "snapshot.spaces",
+        (failure) => {
+          setError(failure);
+          setLoading(false);
+        },
+        "Couldn't load your spaces."
+      )
     );
 
     return () => unsubscribe();
-  }, [uid, enabled]);
+  }, [uid, enabled, attempt]);
 
   const createSpace = useCallback(
     async (input: CreateSpaceInput): Promise<string | null> => {
@@ -80,20 +90,25 @@ export function useSpaces(options?: { enabled?: boolean }) {
       }
 
       try {
-        const ref = await addDoc(collection(db, "users", uid, "spaces"), {
-          ...input,
-          userId: uid,
-          budget: input.budget ?? null,
-          startDate: input.startDate ?? null,
-          endDate: input.endDate ?? null,
-          status: input.status ?? "ACTIVE",
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        });
-        toast.success(`Space "${input.name}" created`);
+        const ref = doc(collection(db, "users", uid, "spaces"));
+        const outcome = await commitWrite(
+          () =>
+            setDoc(ref, {
+              ...input,
+              userId: uid,
+              budget: input.budget ?? null,
+              startDate: input.startDate ?? null,
+              endDate: input.endDate ?? null,
+              status: input.status ?? "ACTIVE",
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            }),
+          { label: "space" }
+        );
+        toast.success(writeSavedMessage(outcome, `Space "${input.name}" created`));
         return ref.id;
       } catch (err) {
-        console.error("createSpace error:", err);
+        logError("spaces.createspace", err);
         toast.error("Failed to create space");
         return null;
       }
@@ -107,14 +122,18 @@ export function useSpaces(options?: { enabled?: boolean }) {
       if (!uid || !db || !id) return false;
 
       try {
-        await updateDoc(doc(db, "users", uid, "spaces", id), {
-          ...updates,
-          updatedAt: serverTimestamp(),
-        });
-        toast.success("Space updated");
+        const outcome = await commitWrite(
+          () =>
+            updateDoc(doc(db, "users", uid, "spaces", id), {
+              ...updates,
+              updatedAt: serverTimestamp(),
+            }),
+          { label: "space" }
+        );
+        toast.success(writeSavedMessage(outcome, "Space updated"));
         return true;
       } catch (err) {
-        console.error("updateSpace error:", err);
+        logError("spaces.updatespace", err);
         toast.error("Failed to update space");
         return false;
       }
@@ -139,22 +158,35 @@ export function useSpaces(options?: { enabled?: boolean }) {
           )
         );
 
+        // Offline this answers from cache and may miss linked expenses, which
+        // would leave them pointing at a space that no longer exists.
+        if (linked.metadata.fromCache) {
+          toast.error(
+            "Can't verify linked expenses while offline. Try again when connected."
+          );
+          return false;
+        }
+
         for (const group of chunk(linked.docs, BATCH_CHUNK_SIZE)) {
           const batch = writeBatch(db);
           group.forEach((expenseDoc) =>
             batch.update(expenseDoc.ref, { spaceId: null })
           );
-          await batch.commit();
+          await commitWrite(() => batch.commit(), { label: "space unlink" });
         }
 
         const finalBatch = writeBatch(db);
         finalBatch.delete(doc(db, "users", uid, "spaces", spaceId));
-        await finalBatch.commit();
+        const outcome = await commitWrite(() => finalBatch.commit(), {
+          label: "space deletion",
+        });
 
-        toast.success("Space deleted and expenses unlinked");
+        toast.success(
+          writeSavedMessage(outcome, "Space deleted and expenses unlinked")
+        );
         return true;
       } catch (err) {
-        console.error("deleteSpace error:", err);
+        logError("spaces.deletespace", err);
         toast.error("Failed to delete space");
         return false;
       }
@@ -179,7 +211,7 @@ export function useSpaces(options?: { enabled?: boolean }) {
               spaceId,
             });
           });
-          await batch.commit();
+          await commitWrite(() => batch.commit(), { label: "space assignment" });
         }
 
         toast.success(
@@ -189,7 +221,7 @@ export function useSpaces(options?: { enabled?: boolean }) {
         );
         return true;
       } catch (err) {
-        console.error("assignExpensesToSpace error:", err);
+        logError("spaces.assignexpensestospace", err);
         toast.error("Failed to update space assignment");
         return false;
       }
@@ -216,6 +248,8 @@ export function useSpaces(options?: { enabled?: boolean }) {
   );
 
   return {
+    error,
+    retry,
     spaces,
     loading,
     createSpace,

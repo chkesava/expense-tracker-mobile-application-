@@ -35,6 +35,7 @@ import {
 import { generateUpiLink } from "@/shared/utils/upi";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { logError } from "@/lib/errors";
 
 export interface SplitDetailModalProps {
   visible: boolean;
@@ -85,7 +86,7 @@ export function SplitDetailModal({
         title: `Payment Reminder: ${split.title}`,
       });
     } catch (err) {
-      console.error("Share error:", err);
+      logError("splitDetailModal.share", err);
     }
   };
 
@@ -221,6 +222,9 @@ export function SplitDetailModal({
 
             <Pressable
               onPress={onClose}
+              hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel="Close"
               style={({ pressed }) => [
                 styles.closeButton,
                 pressed && { opacity: 0.6 },

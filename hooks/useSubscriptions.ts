@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  addDoc,
   collection,
   deleteDoc,
   doc,
@@ -8,11 +7,16 @@ import {
   orderBy,
   query,
   serverTimestamp,
+  setDoc,
   updateDoc,
   writeBatch,
 } from "firebase/firestore";
 
+import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
+import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
+import { snapshotErrorHandler } from "@/lib/firestoreErrors";
+import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import type { Subscription } from "@/shared/types/subscription";
@@ -29,6 +33,7 @@ export function useSubscriptions(options?: { enabled?: boolean }) {
 
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [loading, setLoading] = useState(true);
+  const { error, setError, retry, attempt } = useLoadFailure();
   const isProcessingRef = useRef(false);
 
   // Firestore listener
@@ -54,16 +59,21 @@ export function useSubscriptions(options?: { enabled?: boolean }) {
           ...(docSnap.data() as Omit<Subscription, "id">),
         }));
         setSubscriptions(list);
+        setError(null);
         setLoading(false);
       },
-      (error) => {
-        console.error("useSubscriptions error:", error);
-        setLoading(false);
-      }
+      snapshotErrorHandler(
+        "snapshot.subscriptions",
+        (failure) => {
+          setError(failure);
+          setLoading(false);
+        },
+        "Couldn't load your subscriptions."
+      )
     );
 
     return unsubscribe;
-  }, [uid, enabled]);
+  }, [uid, enabled, attempt]);
 
   // Process due subscriptions in background after idle
   const processDueSubscriptions = useCallback(async () => {
@@ -112,7 +122,9 @@ export function useSubscriptions(options?: { enabled?: boolean }) {
           subUpdates.isActive = false;
         }
         batch.update(subRef, subUpdates);
-        await batch.commit();
+        // The charge and its `lastProcessed` marker are one atomic batch, so a
+        // queued commit can never double-charge a subscription on replay.
+        await commitWrite(() => batch.commit(), { label: "subscription charge" });
       }
 
       for (const sub of subscriptions) {
@@ -122,14 +134,18 @@ export function useSubscriptions(options?: { enabled?: boolean }) {
         const evaluation = evaluateSubscriptionDue(sub, now);
         if (evaluation.isCompleted && !sub.isCompleted) {
           const subRef = doc(db, "users", uid, "subscriptions", sub.id);
-          await updateDoc(subRef, {
-            isCompleted: true,
-            isActive: false,
-          });
+          await commitWrite(
+            () =>
+              updateDoc(subRef, {
+                isCompleted: true,
+                isActive: false,
+              }),
+            { label: "subscription" }
+          );
         }
       }
     } catch (err) {
-      console.error("Failed processing due subscriptions:", err);
+      logError("subscriptions.processingDueSubscriptions", err);
     } finally {
       isProcessingRef.current = false;
     }
@@ -154,14 +170,15 @@ export function useSubscriptions(options?: { enabled?: boolean }) {
     if (!uid || !db) return null;
 
     try {
-      const docRef = await addDoc(collection(db, "users", uid, "subscriptions"), {
-        ...sub,
-        createdAt: serverTimestamp(),
-      });
-      toast.success("Subscription added");
+      const docRef = doc(collection(db, "users", uid, "subscriptions"));
+      const outcome = await commitWrite(
+        () => setDoc(docRef, { ...sub, createdAt: serverTimestamp() }),
+        { label: "subscription" }
+      );
+      toast.success(writeSavedMessage(outcome, "Subscription added"));
       return docRef.id;
     } catch (err) {
-      console.error("addSubscription error:", err);
+      logError("subscriptions.addsubscription", err);
       toast.error("Failed to add subscription");
       return null;
     }
@@ -175,11 +192,14 @@ export function useSubscriptions(options?: { enabled?: boolean }) {
     if (!uid || !db || !id) return false;
 
     try {
-      await updateDoc(doc(db, "users", uid, "subscriptions", id), updates);
-      toast.success("Subscription updated");
+      const outcome = await commitWrite(
+        () => updateDoc(doc(db, "users", uid, "subscriptions", id), updates),
+        { label: "subscription" }
+      );
+      toast.success(writeSavedMessage(outcome, "Subscription updated"));
       return true;
     } catch (err) {
-      console.error("updateSubscription error:", err);
+      logError("subscriptions.updatesubscription", err);
       toast.error("Failed to update subscription");
       return false;
     }
@@ -191,16 +211,19 @@ export function useSubscriptions(options?: { enabled?: boolean }) {
 
     try {
       const existing = subscriptions.find((sub) => sub.id === id);
-      await deleteDoc(doc(db, "users", uid, "subscriptions", id));
+      const outcome = await commitWrite(
+        () => deleteDoc(doc(db, "users", uid, "subscriptions", id)),
+        { label: "subscription deletion" }
+      );
       if (existing?.source === "sms") {
         void import("@/services/sms/smsRecurringSync").then((m) =>
           m.rememberDeletedSmsSubscription(existing)
         );
       }
-      toast.success("Subscription deleted");
+      toast.success(writeSavedMessage(outcome, "Subscription deleted"));
       return true;
     } catch (err) {
-      console.error("deleteSubscription error:", err);
+      logError("subscriptions.deletesubscription", err);
       toast.error("Failed to delete subscription");
       return false;
     }
@@ -211,6 +234,8 @@ export function useSubscriptions(options?: { enabled?: boolean }) {
   };
 
   return {
+    error,
+    retry,
     subscriptions,
     loading,
     addSubscription,

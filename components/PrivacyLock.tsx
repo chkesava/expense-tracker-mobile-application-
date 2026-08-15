@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { haptic } from "@/lib/haptics";
 
 import { useBiometrics } from "@/hooks/useBiometrics";
+import { pinMatches } from "@/lib/pinSecurity";
 import { privacySession } from "@/lib/privacySession";
 import { useAuth } from "@/providers/AuthProvider";
 import { useSettings } from "@/providers/SettingsProvider";
@@ -194,10 +195,10 @@ export function PrivacyLock({ children }: { children: ReactNode }) {
     await haptic.impact();
   };
 
-  const handleUnlock = useCallback(() => {
-    if (pinInput === settings.privacyPin) {
+  const handleUnlock = useCallback(async () => {
+    if (await pinMatches(pinInput, settings.privacyPin)) {
       completeUnlock(false);
-    } else if (settings.fakePin && pinInput === settings.fakePin) {
+    } else if (settings.fakePin && (await pinMatches(pinInput, settings.fakePin))) {
       completeUnlock(true);
     } else {
       setError(true);
@@ -211,7 +212,7 @@ export function PrivacyLock({ children }: { children: ReactNode }) {
   }, [pinInput, settings.privacyPin, settings.fakePin, completeUnlock]);
 
   useEffect(() => {
-    if (pinInput.length === 4) handleUnlock();
+    if (pinInput.length === 4) void handleUnlock();
   }, [pinInput, handleUnlock]);
 
   const handlePinClick = (num: string) => {

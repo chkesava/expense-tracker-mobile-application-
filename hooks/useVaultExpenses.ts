@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import {
-  addDoc,
   collection,
   deleteDoc,
   doc,
@@ -8,10 +7,14 @@ import {
   orderBy,
   query,
   serverTimestamp,
-  updateDoc,
+  setDoc,
 } from "firebase/firestore";
 
+import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
+import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
+import { snapshotErrorHandler } from "@/lib/firestoreErrors";
+import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import type { VaultExpense } from "@/shared/types/vaultExpense";
@@ -24,6 +27,7 @@ export function useVaultExpenses(vaultId?: string) {
 
   const [expenses, setExpenses] = useState<VaultExpense[]>([]);
   const [loading, setLoading] = useState(true);
+  const { error, setError, retry, attempt } = useLoadFailure();
 
   useEffect(() => {
     const db = getFirestoreDb();
@@ -47,16 +51,21 @@ export function useVaultExpenses(vaultId?: string) {
           ...(docSnap.data() as Omit<VaultExpense, "id">),
         }));
         setExpenses(list);
+        setError(null);
         setLoading(false);
       },
-      (err) => {
-        console.warn("Error fetching vault expenses:", err);
-        setLoading(false);
-      }
+      snapshotErrorHandler(
+        "snapshot.vaultExpenses",
+        (failure) => {
+          setError(failure);
+          setLoading(false);
+        },
+        "Couldn't load vault expenses."
+      )
     );
 
     return () => unsubscribe();
-  }, [vaultId]);
+  }, [vaultId, attempt]);
 
   const addVaultExpense = useCallback(
     async (params: {
@@ -85,14 +94,19 @@ export function useVaultExpenses(vaultId?: string) {
           createdAt: serverTimestamp(),
         };
 
-        const docRef = await addDoc(
-          collection(db, "vaults", vaultId, "expenses"),
-          payload
+        const docRef = doc(collection(db, "vaults", vaultId, "expenses"));
+        const outcome = await commitWrite(() => setDoc(docRef, payload), {
+          label: "vault transaction",
+        });
+        toast.success(
+          writeSavedMessage(
+            outcome,
+            params.type === "deposit" ? "Deposit recorded" : "Withdrawal recorded"
+          )
         );
-        toast.success(params.type === "deposit" ? "Deposit recorded" : "Withdrawal recorded");
         return docRef.id;
       } catch (err: any) {
-        console.error("Failed adding vault transaction:", err);
+        logError("vaultExpenses.addingVaultTransaction", err);
         toast.error("Failed to record transaction");
         return null;
       }
@@ -106,11 +120,14 @@ export function useVaultExpenses(vaultId?: string) {
       if (!vaultId || !db) return false;
 
       try {
-        await deleteDoc(doc(db, "vaults", vaultId, "expenses", expenseId));
-        toast.success("Transaction removed");
+        const outcome = await commitWrite(
+          () => deleteDoc(doc(db, "vaults", vaultId, "expenses", expenseId)),
+          { label: "vault transaction deletion" }
+        );
+        toast.success(writeSavedMessage(outcome, "Transaction removed"));
         return true;
       } catch (err: any) {
-        console.error("Failed deleting vault transaction:", err);
+        logError("vaultExpenses.deletingVaultTransaction", err);
         toast.error("Failed to delete transaction");
         return false;
       }
@@ -119,6 +136,8 @@ export function useVaultExpenses(vaultId?: string) {
   );
 
   return {
+    error,
+    retry,
     expenses,
     loading,
     addVaultExpense,

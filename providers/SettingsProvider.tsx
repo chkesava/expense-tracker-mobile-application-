@@ -15,8 +15,10 @@ import {
 import { View } from "react-native";
 import { doc, setDoc } from "firebase/firestore";
 
+import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
 import { haptic } from "@/lib/haptics";
+import { hashPin } from "@/lib/pinSecurity";
 import { useAuth } from "@/providers/AuthProvider";
 import { useUserDoc } from "@/providers/UserDocProvider";
 import {
@@ -68,7 +70,7 @@ const SettingsContext = createContext<SettingsContextType | undefined>(undefined
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const { realUser } = useAuth();
-  const { data, exists, loading: userDocLoading } = useUserDoc();
+  const { data, exists, error: userDocError, loading: userDocLoading } = useUserDoc();
   const [settings, setSettings] = useState<UserSettings>(SETTINGS_DEFAULTS);
   const [seedAttempted, setSeedAttempted] = useState(false);
 
@@ -83,6 +85,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       return;
     }
     if (userDocLoading) return;
+    // The profile read failed — keep whatever settings are already applied
+    // rather than snapping the UI back to defaults.
+    if (userDocError) return;
 
     if (exists && data) {
       setSettings(mergeSettingsFromDoc(data as Record<string, unknown>));
@@ -94,7 +99,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       setSeedAttempted(true);
       setSettings(mergeSettingsFromDoc(null));
     }
-  }, [realUser, data, exists, userDocLoading, seedAttempted]);
+  }, [realUser, data, exists, userDocError, userDocLoading, seedAttempted]);
 
   const loading = Boolean(realUser) && userDocLoading;
 
@@ -106,10 +111,23 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       try {
         await setDoc(doc(db, "users", realUser.uid), updates, { merge: true });
       } catch (err) {
-        console.error("Failed to save settings", err);
+        logError("settingsProvider.saveSettings", err);
       }
     },
     [realUser]
+  );
+
+  /**
+   * PINs are synced/cached like the rest of settings (Firestore + local
+   * persistence), so they're hashed before storage rather than kept in
+   * plaintext. Empty string (removing a PIN) is stored as-is.
+   */
+  const setPin = useCallback(
+    async (field: "privacyPin" | "fakePin", val: string) => {
+      const stored = val ? await hashPin(val) : "";
+      await updateSettings({ [field]: stored });
+    },
+    [updateSettings]
   );
 
   const value = useMemo<SettingsContextType>(
@@ -136,8 +154,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       setNavigationStyle: (val) => void updateSettings({ navigationStyle: val }),
       setGhostMode: (val) => void updateSettings({ ghostMode: val }),
       setHapticFeedback: (val) => void updateSettings({ hapticFeedback: val }),
-      setPrivacyPin: (val) => void updateSettings({ privacyPin: val }),
-      setFakePin: (val) => void updateSettings({ fakePin: val }),
+      setPrivacyPin: (val) => void setPin("privacyPin", val),
+      setFakePin: (val) => void setPin("fakePin", val),
       setLockOnInactivity: (val) => void updateSettings({ lockOnInactivity: val }),
       setInactivityTimeout: (val) =>
         void updateSettings({ inactivityTimeout: val }),
@@ -160,7 +178,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         });
       },
     }),
-    [settings, loading, updateSettings]
+    [settings, loading, updateSettings, setPin]
   );
 
   return (

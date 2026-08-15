@@ -13,6 +13,7 @@ import { useAndroidBackHandler } from "@/hooks/useAndroidBackHandler";
 import { useNavigationStateRestoration } from "@/hooks/useNavigationStateRestoration";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAuth } from "@/providers/AuthProvider";
+import { BorrowingsReceivablesProvider } from "@/providers/BorrowingsReceivablesProvider";
 import { FinanceDataProvider } from "@/providers/FinanceDataProvider";
 import { CreditCardBillsProvider } from "@/providers/CreditCardBillsProvider";
 import { LedgerStateProvider } from "@/providers/LedgerStateProvider";
@@ -26,12 +27,13 @@ import { useTheme } from "@/theme/ThemeProvider";
 function AppShellInner() {
   const { settings } = useSettings();
   const { theme } = useTheme();
+  const { user } = useAuth();
 
   // Android hardware / gesture Back button behavior
   useAndroidBackHandler();
 
-  // Route state restoration across sessions
-  useNavigationStateRestoration(true);
+  // Route state restoration across sessions, scoped to the signed-in user.
+  useNavigationStateRestoration(user?.uid);
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
@@ -149,17 +151,19 @@ export default function AppLayout() {
   return (
     <PrivacyLock>
       <FinanceDataProvider>
-        <CreditCardBillsProvider>
-          <ModalProvider>
-            <SetupProgressProvider>
-              <LedgerStateProvider>
-                <SmsReceiverProvider>
-                  <AppShellInner />
-                </SmsReceiverProvider>
-              </LedgerStateProvider>
-            </SetupProgressProvider>
-          </ModalProvider>
-        </CreditCardBillsProvider>
+        <BorrowingsReceivablesProvider>
+          <CreditCardBillsProvider>
+            <ModalProvider>
+              <SetupProgressProvider>
+                <LedgerStateProvider>
+                  <SmsReceiverProvider>
+                    <AppShellInner />
+                  </SmsReceiverProvider>
+                </LedgerStateProvider>
+              </SetupProgressProvider>
+            </ModalProvider>
+          </CreditCardBillsProvider>
+        </BorrowingsReceivablesProvider>
       </FinanceDataProvider>
     </PrivacyLock>
   );

@@ -29,6 +29,8 @@ import {
 import { useBiometrics } from "@/hooks/useBiometrics";
 import { getFirestoreDb } from "@/lib/firebase";
 import { haptic } from "@/lib/haptics";
+import { friendlyErrorMessage, logError } from "@/lib/errors";
+import { pinMatches } from "@/lib/pinSecurity";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import { useTranslation, SUPPORTED_LANGUAGES, type LanguageCode } from "@/providers/LocalizationProvider";
@@ -48,7 +50,6 @@ import {
   ACCENT_COLOR_NAMES,
   ACCENT_PALETTES,
   THEME_LABELS,
-  THEME_NAMES,
   type AccentColorName,
   type ThemeMode,
   type ThemeName,
@@ -201,7 +202,8 @@ export default function SettingsScreen() {
       );
       toast.success("Profile saved");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to save profile");
+      logError("settings.saveProfile", error);
+      toast.error(friendlyErrorMessage(error, "Couldn't save your profile."));
     } finally {
       setSavingProfile(false);
     }
@@ -229,7 +231,7 @@ export default function SettingsScreen() {
     toast.success("Privacy PIN removed");
   };
 
-  const onEnableFakePin = () => {
+  const onEnableFakePin = async () => {
     if (!settings.privacyPin) {
       toast.error("Set a privacy PIN first");
       return;
@@ -242,7 +244,7 @@ export default function SettingsScreen() {
       toast.error("Duress PIN confirmation does not match");
       return;
     }
-    if (newFakePin === settings.privacyPin) {
+    if (await pinMatches(newFakePin, settings.privacyPin)) {
       toast.error("Duress PIN must differ from your real PIN");
       return;
     }
@@ -268,7 +270,8 @@ export default function SettingsScreen() {
       await logout();
       toast.success("Signed out");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Logout failed");
+      logError("settings.logout", error);
+      toast.error(friendlyErrorMessage(error, "Couldn't sign you out. Please try again."));
     }
   };
 
@@ -415,12 +418,16 @@ export default function SettingsScreen() {
             onSelect={(v) => setThemeMode(v as ThemeMode)}
           />
 
-          {/* When Custom Presets is selected, display theme palettes */}
+          {/* When Custom Presets is selected, display theme palettes.
+              Only light/dark are shown: every other THEME_NAMES entry
+              currently resolves to one of those two palettes (see
+              theme/tokens.ts createTheme), so listing them as separate
+              options would offer choices that look identical once picked. */}
           {themeMode === "custom" ? (
             <View style={{ gap: theme.space.xs, marginTop: theme.space.xs }}>
               <FieldLabel label={t("theme_mode_custom", "Theme Presets")} />
               <ChipRow
-                options={THEME_NAMES.map((name) => ({
+                options={(["light", "dark"] as ThemeName[]).map((name) => ({
                   value: name,
                   label: THEME_LABELS[name],
                 }))}
@@ -1083,7 +1090,7 @@ function GettingStartedCard() {
         <Pressable
           onPress={() => {
             Haptics.selectionAsync().catch(() => undefined);
-            router.push("/dashboard");
+            router.dismissTo("/dashboard");
           }}
           android_ripple={{
             color: theme.colors.primary + "14",
