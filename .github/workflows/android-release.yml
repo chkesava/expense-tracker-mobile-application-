@@ -224,9 +224,9 @@ jobs:
             v${{ steps.version.outputs.name }} (build ${{ steps.version.outputs.code }})
             ${{ steps.notes.outputs.value }}
 
-      # Prefer the durable tester / console share link. Binary download URIs from
-      # App Distribution often expire and break the in-app update button later.
-      - name: Resolve download URL
+      # Tester webpage is kept as a fallback. The in-app updater downloads the
+      # APK from Firebase Storage (uploaded by publish-release-metadata.js).
+      - name: Resolve tester URL
         id: download
         env:
           TESTING_URI: ${{ steps.distribute.outputs.TESTING_URI }}
@@ -239,12 +239,13 @@ jobs:
             exit 1
           fi
           echo "url=$URL" >> "$GITHUB_OUTPUT"
-          echo "Using download URL: $URL"
+          echo "Using tester URL: $URL"
 
       - name: Publish release metadata to Firestore
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/service-account.json
-          RELEASE_DOWNLOAD_URL: ${{ steps.download.outputs.url }}
+          RELEASE_APK_PATH: releases/app-release.apk
+          RELEASE_TESTER_URL: ${{ steps.download.outputs.url }}
           RELEASE_NOTES: ${{ steps.notes.outputs.value }}
           RELEASE_MANDATORY: ${{ inputs.mandatory || false }}
           RELEASE_VERSION_NAME: ${{ steps.version.outputs.name }}
@@ -287,6 +288,7 @@ jobs:
             echo "- Mandatory update: ${{ inputs.mandatory || false }}"
             echo "- Download: ${{ steps.download.outputs.url }}"
             echo "- Testers link: ${{ steps.distribute.outputs.TESTING_URI }}"
+            echo "- In-app APK: Firebase Storage releases/${{ steps.version.outputs.code }}/"
             echo ""
             echo "### Quality gate (Phase 10)"
             echo "- \`npm test\` — passed before APK"

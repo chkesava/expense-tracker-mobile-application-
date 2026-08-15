@@ -188,6 +188,7 @@ Android releases are **manual**. From GitHub: **Actions → Android Release → 
 ```text
 Actions → Run workflow  ->  GitHub Actions  ->  signed APK  ->  Firebase App Distribution  ->  tester notification
                                                   |
+                                                  +->  Firebase Storage releases/{versionCode}/  ->  in-app download
                                                   +->  Firestore system_settings/latest_release  ->  in-app update prompt
 ```
 
@@ -234,6 +235,7 @@ Google Cloud Console → IAM & Admin → Service Accounts → create one for CI,
 
 - `Firebase App Distribution Admin` (upload builds)
 - `Cloud Datastore User` (write the release doc)
+- `Storage Admin` (upload the APK the in-app updater downloads)
 
 Create a JSON key and paste the whole file into `FIREBASE_SERVICE_ACCOUNT`. Do not reuse an Owner-level key.
 
@@ -256,24 +258,26 @@ Actions tab → **Android Release** → **Run workflow**, with optional inputs:
 
 ### How users get the update
 
-`scripts/publish-release-metadata.js` writes `system_settings/latest_release` in Firestore:
+`scripts/publish-release-metadata.js` uploads the APK to Firebase Storage and writes `system_settings/latest_release` in Firestore:
 
 ```json
 {
   "versionName": "1.2.0",
   "versionCode": 42,
-  "downloadUrl": "https://appdistribution.firebase.dev/i/...",
+  "downloadUrl": "https://firebasestorage.googleapis.com/v0/b/.../o/releases%2F42%2FSpendly-1.2.0-42.apk?alt=media&token=...",
+  "storagePath": "releases/42/Spendly-1.2.0-42.apk",
+  "testerUrl": "https://appdistribution.firebase.dev/i/...",
   "notes": "Fixed ledger totals",
   "mandatory": false
 }
 ```
 
-The app compares that `versionCode` against its own (`hooks/useAppUpdate.ts`) and shows `components/UpdateAvailableSheet.tsx`. Optional updates can be dismissed once per version; mandatory ones cannot. Settings → App version also offers a manual "Check for updates".
+The app compares that `versionCode` against its own (`hooks/useAppUpdate.ts`) and shows `components/UpdateAvailableSheet.tsx`. Tapping **Update** downloads the APK and opens the system Install sheet. Optional updates can be dismissed once per version; mandatory ones cannot. Settings → App version also offers a manual "Check for updates".
 
 You can test the publisher without writing to Firestore:
 
 ```bash
-node scripts/publish-release-metadata.js --download-url=https://example.com/a.apk --dry-run
+node scripts/publish-release-metadata.js --apk-path=releases/app-release.apk --dry-run
 ```
 
 ### Cost and quota notes
@@ -365,7 +369,9 @@ More day-to-day tips: `docs/react_native_handbook.md`.
 | Stale JS after env change | Restart Expo with `--clear` (env is inlined at bundler start) |
 | CI fails at "Restore .env" or "Restore signing keystore" | The matching repository secret is missing or empty |
 | CI build succeeds but testers get nothing | Enable Firebase App Distribution and create the `testers` group |
-| Update prompt never appears | Confirm `system_settings/latest_release` exists and its `versionCode` is higher than the installed build |
+| Update prompt never appears | Confirm `system_settings/latest_release` exists, you are signed in, and Firestore rules for `system_settings` are deployed |
+| Check for updates says no release information | Deploy `firestore.rules` (signed-in read on `system_settings`) and confirm CI published the release doc |
+| In-app download fails / opens the tester webpage | Deploy `storage.rules`, grant CI Storage Admin, and confirm `storagePath` is set on the release doc |
 | Update install fails with a signature error | The APK was signed with a different keystore — CI must use the same upload keystore |
 
 ---

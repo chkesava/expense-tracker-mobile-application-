@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import {
-  Linking,
   Modal,
   Pressable,
   Switch,
@@ -25,12 +24,18 @@ import {
   fetchLatestRelease,
   getInstalledVersionCode,
   getInstalledVersionName,
+  useAppUpdate,
 } from "@/hooks/useAppUpdate";
 import { useBiometrics } from "@/hooks/useBiometrics";
 import { getFirestoreDb } from "@/lib/firebase";
 import { haptic } from "@/lib/haptics";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { pinMatches } from "@/lib/pinSecurity";
+import {
+  installAppRelease,
+  installProgressLabel,
+  type InstallProgress,
+} from "@/lib/apkUpdate";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import { useTranslation, SUPPORTED_LANGUAGES, type LanguageCode } from "@/providers/LocalizationProvider";
@@ -855,10 +860,13 @@ export default function SettingsScreen() {
 
 function AppVersionCard() {
   const { theme } = useTheme();
+  const { resetDismissal } = useAppUpdate();
   const [checking, setChecking] = useState(false);
+  const [progress, setProgress] = useState<InstallProgress>({ phase: "idle" });
 
   const versionName = getInstalledVersionName();
   const versionCode = getInstalledVersionCode();
+  const busy = checking || progress.phase !== "idle";
 
   const onCheck = async () => {
     setChecking(true);
@@ -871,28 +879,39 @@ function AppVersionCard() {
       }
 
       if (versionCode !== null && release.versionCode > versionCode) {
+        resetDismissal();
         toast.success(`Version ${release.versionName} is available`);
-        await Linking.openURL(release.downloadUrl);
+        const outcome = await installAppRelease(release, setProgress);
+        if (outcome === "needs-permission") {
+          toast.info("Allow Spendly to install updates, then tap Check for updates again");
+        } else if (outcome === "aborted") {
+          toast.info("Update cancelled");
+        } else if (outcome === "fallback") {
+          toast.info("Opened the download page");
+        } else if (outcome === "up-to-date") {
+          toast.success("You are on the latest version");
+        }
         return;
       }
 
       toast.success("You are on the latest version");
-    } catch {
-      toast.error("Could not check for updates");
+    } catch (error) {
+      toast.error(friendlyErrorMessage(error, "Could not check for updates"));
     } finally {
       setChecking(false);
+      setProgress({ phase: "idle" });
     }
   };
 
   return (
-    <Card title="App version" subtitle="Updates are delivered as signed APK builds">
+    <Card title="App version" subtitle="Updates download and install inside the app">
       <View style={{ gap: theme.space.md }}>
         <Text style={{ color: theme.colors.mutedForeground, fontSize: theme.typography.sm }}>
           Installed: v{versionName}
           {versionCode !== null ? ` (build ${versionCode})` : ""}
         </Text>
-        <Button variant="outline" loading={checking} onPress={onCheck}>
-          Check for updates
+        <Button variant="outline" loading={busy} disabled={busy} onPress={onCheck}>
+          {progress.phase !== "idle" ? installProgressLabel(progress) : "Check for updates"}
         </Button>
       </View>
     </Card>

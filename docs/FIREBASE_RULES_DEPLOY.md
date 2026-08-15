@@ -1,9 +1,10 @@
 # Firestore rules and indexes — manual deploy
 
 `firestore.rules` and `firestore.indexes.json` live at the repo root as the
-reference source of truth. Neither is deployed automatically: CI only runs the
-type checks and the test suite, and the Android release workflow never touches
-Firebase. Deploying is a deliberate manual step.
+reference source of truth. `storage.rules` covers the signed APK objects used
+by in-app updates. None of these files are deployed automatically: CI only runs
+the type checks and the test suite, and the Android release workflow never
+touches Firebase rules. Deploying is a deliberate manual step.
 
 ## Why these files exist
 
@@ -30,6 +31,11 @@ and sort at the same time. Borrowings and Spending Spaces need
 `date` and `receivables` by `status` + `lentDate` — deploy indexes manually
 after pulling that change; index builds are asynchronous (see below).
 
+Signed-in users may read `system_settings/global` and
+`system_settings/latest_release`. Only `global` is writable from the client.
+Release APKs live under Storage `releases/**` and are readable by signed-in
+users; clients cannot write them.
+
 ## Deploying
 
 Requires the Firebase CLI and access to the project.
@@ -39,6 +45,7 @@ npm install -g firebase-tools
 firebase login
 firebase deploy --only firestore:rules --project <project-id>
 firebase deploy --only firestore:indexes --project <project-id>
+firebase deploy --only storage --project <project-id>
 ```
 
 Preview the rules change before it goes live:

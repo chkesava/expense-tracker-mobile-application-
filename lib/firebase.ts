@@ -17,6 +17,7 @@ import {
   persistentSingleTabManager,
   type Firestore,
 } from "firebase/firestore";
+import { getStorage, type FirebaseStorage } from "firebase/storage";
 import { Platform } from "react-native";
 
 import { createAuth } from "./createAuth";
@@ -25,6 +26,7 @@ import { env, isFirebaseEnvConfigured } from "./env";
 let app: FirebaseApp | null = null;
 let auth: Auth | null = null;
 let db: Firestore | null = null;
+let storage: FirebaseStorage | null = null;
 let initError: string | null = null;
 
 function createApp(): FirebaseApp {
@@ -99,12 +101,14 @@ export function getFirebaseClients(): FirebaseClients {
       app = createApp();
       auth = createAuth(app);
       db = createDb(app);
+      storage = getStorage(app);
       initError = null;
     } catch (e) {
       initError = e instanceof Error ? e.message : String(e);
       app = null;
       auth = null;
       db = null;
+      storage = null;
     }
   }
 
@@ -138,4 +142,9 @@ export function getFirebaseAuth(): Auth | null {
 
 export function getFirestoreDb(): Firestore | null {
   return getFirebaseClients().db;
+}
+
+export function getFirebaseStorage(): FirebaseStorage | null {
+  getFirebaseClients();
+  return storage;
 }

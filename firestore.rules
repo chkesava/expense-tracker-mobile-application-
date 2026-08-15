@@ -113,6 +113,14 @@ service cloud.firestore {
         && request.resource.data.createdBy == request.auth.uid;
     }
 
+    // App-wide flags (`global`) and the sideloaded APK pointer (`latest_release`).
+    // Clients may read both. Only `global` is writable from the app (onboarding
+    // currency). `latest_release` is written by the Admin SDK in CI.
+    match /system_settings/{docId} {
+      allow read: if signedIn();
+      allow write: if signedIn() && docId == "global";
+    }
+
     // Anything not matched above is denied.
   }
 }

@@ -1,32 +1,40 @@
 /**
  * Detects newer sideloaded builds published by the release workflow.
  *
- * CI writes `system_settings/latest_release` after uploading the APK to
- * Firebase App Distribution. The app compares that versionCode against the
- * installed one and prompts the user to download the new build.
+ * CI overwrites `system_settings/latest_release` with the newest APK on every
+ * release. The prompt reappears each time the user opens the app while behind.
+ * Tapping Update always installs that latest APK — skipped versions are jumped.
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Platform } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { AppState, Platform } from "react-native";
 import Constants from "expo-constants";
 import * as Application from "expo-application";
 import { doc, getDoc, onSnapshot } from "firebase/firestore";
 
+import {
+  parseRelease,
+  RELEASE_DOC_PATH,
+  type AppRelease,
+} from "@/lib/appRelease";
+import { logWarning } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
 
-export type AppRelease = {
-  versionName: string;
-  versionCode: number;
-  downloadUrl: string;
-  notes: string;
-  mandatory: boolean;
-  apkFileName?: string;
-  publishedAt?: string;
-};
+export type { AppRelease };
 
-const RELEASE_DOC_PATH = ["system_settings", "latest_release"] as const;
-const DISMISSED_KEY_PREFIX = "@update_dismissed_v";
+/** One-shot read, used by the manual "Check for updates" action. */
+export async function fetchLatestRelease(): Promise<AppRelease | null> {
+  const db = getFirestoreDb();
+  if (!db) {
+    const error = new Error("Firebase is not configured.");
+    (error as { code?: string }).code = "unavailable";
+    throw error;
+  }
+
+  const snapshot = await getDoc(doc(db, ...RELEASE_DOC_PATH));
+  if (!snapshot.exists()) return null;
+  return parseRelease(snapshot.data());
+}
 
 /** Build number of the running app, or null when it cannot be determined. */
 export function getInstalledVersionCode(): number | null {
@@ -50,42 +58,9 @@ export function getInstalledVersionName(): string {
   );
 }
 
-function parseRelease(data: Record<string, unknown> | undefined): AppRelease | null {
-  if (!data) return null;
-
-  const versionCode = Number(data.versionCode);
-  const downloadUrl = typeof data.downloadUrl === "string" ? data.downloadUrl : "";
-
-  if (!Number.isInteger(versionCode) || !downloadUrl) return null;
-
-  return {
-    versionName: typeof data.versionName === "string" ? data.versionName : "",
-    versionCode,
-    downloadUrl,
-    notes: typeof data.notes === "string" ? data.notes : "",
-    mandatory: data.mandatory === true,
-    apkFileName: typeof data.apkFileName === "string" ? data.apkFileName : undefined,
-    publishedAt: typeof data.publishedAt === "string" ? data.publishedAt : undefined,
-  };
-}
-
-/** One-shot read, used by the manual "Check for updates" action. */
-export async function fetchLatestRelease(): Promise<AppRelease | null> {
-  const db = getFirestoreDb();
-  if (!db) return null;
-
-  try {
-    const snapshot = await getDoc(doc(db, ...RELEASE_DOC_PATH));
-    if (!snapshot.exists()) return null;
-    return parseRelease(snapshot.data());
-  } catch {
-    return null;
-  }
-}
-
 export function useAppUpdate() {
   const [release, setRelease] = useState<AppRelease | null>(null);
-  const [dismissedCode, setDismissedCode] = useState<number | null>(null);
+  const [dismissedThisSession, setDismissedThisSession] = useState(false);
 
   // Only Android receives sideloaded APK builds from the release workflow.
   const supported = Platform.OS === "android";
@@ -103,8 +78,8 @@ export function useAppUpdate() {
       (snapshot) => {
         setRelease(snapshot.exists() ? parseRelease(snapshot.data()) : null);
       },
-      () => {
-        // A missing doc or denied read simply means "no update to show".
+      (error) => {
+        logWarning("snapshot.latestRelease", error);
         setRelease(null);
       }
     );
@@ -112,22 +87,16 @@ export function useAppUpdate() {
     return unsubscribe;
   }, [supported]);
 
-  const availableCode = release?.versionCode ?? null;
-
+  // "Not now" only hides the sheet until they leave and open the app again.
   useEffect(() => {
-    if (availableCode === null) return;
+    if (!supported) return;
 
-    let active = true;
-    AsyncStorage.getItem(`${DISMISSED_KEY_PREFIX}${availableCode}`)
-      .then((stored) => {
-        if (active && stored) setDismissedCode(availableCode);
-      })
-      .catch(() => undefined);
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") setDismissedThisSession(false);
+    });
 
-    return () => {
-      active = false;
-    };
-  }, [availableCode]);
+    return () => subscription.remove();
+  }, [supported]);
 
   const updateAvailable = Boolean(
     supported &&
@@ -138,28 +107,17 @@ export function useAppUpdate() {
 
   const visible =
     updateAvailable && release
-      ? release.mandatory || dismissedCode !== release.versionCode
+      ? release.mandatory || !dismissedThisSession
       : false;
 
   const dismiss = useCallback(() => {
     if (!release || release.mandatory) return;
-
-    setDismissedCode(release.versionCode);
-    AsyncStorage.setItem(
-      `${DISMISSED_KEY_PREFIX}${release.versionCode}`,
-      new Date().toISOString()
-    ).catch(() => undefined);
+    setDismissedThisSession(true);
   }, [release]);
 
-  /** Re-show the prompt for a release the user previously dismissed. */
   const resetDismissal = useCallback(() => {
-    setDismissedCode(null);
-    if (release) {
-      AsyncStorage.removeItem(`${DISMISSED_KEY_PREFIX}${release.versionCode}`).catch(
-        () => undefined
-      );
-    }
-  }, [release]);
+    setDismissedThisSession(false);
+  }, []);
 
   return {
     release,
