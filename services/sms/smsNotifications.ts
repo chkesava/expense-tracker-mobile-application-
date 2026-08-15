@@ -76,6 +76,7 @@ export async function presentSmsNotification(
     if (!granted) return;
     const Notifications = await loadNotifications();
     await Notifications.scheduleNotificationAsync({
+      identifier: copy.identifier,
       content: {
         title: copy.title,
         body: copy.body,

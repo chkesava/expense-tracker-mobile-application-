@@ -116,29 +116,52 @@ export function SmsReceiverProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // Tap a transaction notification → inbox (detected) or dashboard (auto-added).
+  // Not gated by `supported`: credit-card-bill reminders (unlike SMS) are
+  // scheduled on every platform, so this has to run on iOS too — otherwise
+  // tapping a bill reminder on iOS would never navigate anywhere.
   useEffect(() => {
-    if (!supported) return;
     let cancelled = false;
     let sub: { remove: () => void } | undefined;
+    const handledIds = new Set<string>();
+
+    const handleResponse = (response: {
+      notification: {
+        request: { identifier: string; content: { data?: unknown } };
+      };
+    }) => {
+      const id = response.notification.request.identifier;
+      if (id && handledIds.has(id)) return;
+      if (id) handledIds.add(id);
+
+      const data = response.notification.request.content.data as
+        | { source?: string; url?: string }
+        | undefined;
+      const source = data?.source;
+      if (source !== "sms" && source !== "credit_card_bill") return;
+      const url = data?.url;
+      if (typeof url === "string" && url.startsWith("/")) {
+        router.push(url as Href);
+      }
+    };
+
     void import("expo-notifications").then((Notifications) => {
       if (cancelled) return;
-      sub = Notifications.addNotificationResponseReceivedListener((response) => {
-        const data = response.notification.request.content.data as
-          | { source?: string; url?: string }
-          | undefined;
-        const source = data?.source;
-        if (source !== "sms" && source !== "credit_card_bill") return;
-        const url = data?.url;
-        if (typeof url === "string" && url.startsWith("/")) {
-          router.push(url as Href);
-        }
+      sub = Notifications.addNotificationResponseReceivedListener(handleResponse);
+
+      // The live listener above only sees responses while JS is running —
+      // if the notification tap is what cold-started the app, that response
+      // arrived before this listener existed and would otherwise be lost.
+      void Notifications.getLastNotificationResponseAsync().then((last) => {
+        if (cancelled || !last) return;
+        handleResponse(last);
       });
     });
+
     return () => {
       cancelled = true;
       sub?.remove();
     };
-  }, [supported]);
+  }, []);
 
   // Ask for notification permission once SMS listening is on.
   useEffect(() => {
