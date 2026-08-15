@@ -32,6 +32,7 @@ updated every time a new phase is completed.
 | 2 | 2026-08-15 | Security audit **and hardening** (fixes applied, not diagnostic-only) | [PHASE_2_SECURITY_AUDIT.md](PHASE_2_SECURITY_AUDIT.md) | 0 | 2 |
 | 3 | 2026-08-15 | Performance audit **and optimization** (fixes applied, not diagnostic-only) | [PHASE_3_PERFORMANCE_AUDIT.md](PHASE_3_PERFORMANCE_AUDIT.md) | 0 | 0 |
 | 4 | 2026-08-15 | Memory management & battery/power efficiency audit **and fixes** (fixes applied, not diagnostic-only) | [PHASE_4_MEMORY_POWER_AUDIT.md](PHASE_4_MEMORY_POWER_AUDIT.md) | 0 | 0 |
+| 5 | 2026-08-15 | Financial calculations & data integrity audit **and fixes** (fixes applied, not diagnostic-only) | [PHASE_5_FINANCIAL_INTEGRITY_AUDIT.md](PHASE_5_FINANCIAL_INTEGRITY_AUDIT.md) | 0 | 0 |
 
 ## Outstanding Issues Carried Forward
 
@@ -56,6 +57,8 @@ before closing.
 - **[P3]** Most non-ledger list screens (accounts, borrowings, receivables, spaces, splits, subscriptions, trips, collect) render via unvirtualized `.map()` rather than FlatList/FlashList — acceptable today given naturally small per-user collection sizes, worth revisiting only if that changes. (Phase 3)
 - **[P3]** Most collections besides `expenses` are fetched via unbounded (no `limit`/date-range) real-time listeners — acceptable given naturally small cardinality, but worth monitoring. (Phase 3)
 - **[P3]** `ReceiptScannerModal`'s simulated-OCR `setTimeout` isn't cancelled if the modal is closed and reopened mid-delay — low risk (1.2s, single-shot, component doesn't unmount), a correctness nit-pick more than a memory/battery cost. (Phase 4)
+- **[P2]** Credit card billing-cycle "today" uses raw device-local time (`getBillingCycleDates()`), not the user-configurable `settings.timezone` used elsewhere in the app — could misattribute an expense to the wrong billing cycle right at a boundary if a user's app timezone differs from their device's. Needs a product decision (should billing cycles ever follow anything but the device clock?) before fixing, since it touches every caller of `getBillingCycleDates`/`computeCreditUsage`/`getCreditBillHistory`. (Phase 5)
+- **[P3]** `AccountPayment` records with no explicit `appliedCycleStart`/`appliedCycleEnd` fall back to date-range matching that can attribute a payment made exactly on a cycle's close date to the next cycle instead of the one that just closed. Not currently reachable for new payments (the app always sets these fields explicitly), but relevant for any legacy untagged payment records. (Phase 5)
 
 ## Fixed
 
@@ -67,3 +70,4 @@ before closing.
 - **[Phase 4]** `CelebrationOverlay`'s background glow used an infinite Reanimated `withRepeat(-1)` with no cancellation, on a component that's permanently mounted at the app root — once triggered, it animated on the UI thread forever in the background. Now cancelled when dismissed, plus an unmount safety net.
 - **[Phase 4]** `AiAdvisorView` could set state after unmount (chat-history load + simulated-response timer) since it's conditionally unmounted when switching Insights tabs — both now guarded/cleared.
 - **[Phase 4]** `CreditCardBillsProvider`'s debounced reconcile timer wasn't cleared on unmount, so it could fire after logout using stale closures — now cleared.
+- **[Phase 5]** `getCreditBillHistory()` used exact `outstandingAmount === 0` on unroundeded floating-point sums — a bill paid in full could stay stuck as "partiallyPaid" forever due to float residue (e.g. `0.1 + 0.2 !== 0.3`). Added a `roundMoney()` helper (matching the one already used in `borrowingMath.ts`/`receivableMath.ts`) across every computed value in `accountBalance.ts`, and changed the check to `<= 0`. Verified as a real, reproducible bug (not theoretical) by confirming the new regression test fails without the fix.
