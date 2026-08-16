@@ -29,6 +29,13 @@ export function monthFromDateKey(dateKey: string): string {
   return dateKey.slice(0, 7);
 }
 
+/** Shift a YYYY-MM-DD key by a number of calendar days. */
+export function shiftDateKey(dateStr: string, days: number): string {
+  const date = parseLocalDate(dateStr);
+  date.setDate(date.getDate() + days);
+  return toLocalDateKey(date);
+}
+
 /** Parse YYYY-MM-DD as local calendar midnight (avoids UTC shift from `new Date(str)`). */
 export function parseLocalDate(dateStr: string): Date {
   const [y, m, d] = dateStr.split("-").map(Number);

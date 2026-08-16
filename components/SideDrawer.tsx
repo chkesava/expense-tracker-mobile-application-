@@ -95,6 +95,13 @@ function SideDrawerPanel({ onClose }: { onClose: () => void }) {
   const { navigate, dismissTo } = useRouter();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
+  // Android Modals often report 0 insets; fall back to the launch metrics.
+  const topInset = Math.max(insets.top, initialWindowMetrics?.insets.top ?? 0);
+  const bottomInset = Math.max(
+    insets.bottom,
+    initialWindowMetrics?.insets.bottom ?? 0,
+    16
+  );
   const { user, logout } = useAuth();
   const { isAdmin } = useUserRole();
   const { settings, setGhostMode } = useSettings();
@@ -164,310 +171,304 @@ function SideDrawerPanel({ onClose }: { onClose: () => void }) {
 
   return (
     <View style={styles.root} pointerEvents="box-none">
-        <AnimatedPressable
-          entering={FadeIn.duration(180)}
-          exiting={FadeOut.duration(120)}
-          style={[styles.scrim, { backgroundColor: scrimBg }]}
-          onPress={onClose}
-          accessibilityLabel="Close navigation drawer"
-        />
+      <AnimatedPressable
+        entering={FadeIn.duration(180)}
+        exiting={FadeOut.duration(120)}
+        style={[styles.scrim, { backgroundColor: scrimBg }]}
+        onPress={onClose}
+        accessibilityLabel="Close navigation drawer"
+      />
 
-        <Animated.View
-          entering={SlideInRight.springify().damping(24).stiffness(250)}
-          style={[
-            styles.panel,
-            {
-              backgroundColor: panelBg,
-              borderLeftColor: theme.colors.border,
-              paddingTop: insets.top + 12,
-              paddingBottom: Math.max(
-                insets.bottom,
-                initialWindowMetrics?.insets.bottom ?? 0,
-                20
-              ),
-            },
-          ]}
+      <Animated.View
+        entering={SlideInRight.springify().damping(24).stiffness(250)}
+        style={[
+          styles.panel,
+          {
+            backgroundColor: panelBg,
+            borderLeftColor: theme.colors.border,
+            paddingTop: topInset + 12,
+            paddingBottom: bottomInset,
+          },
+        ]}
+      >
+        <View style={[styles.panelSolidFill, { backgroundColor: panelBg }]} />
+
+        <View style={styles.header}>
+          <View style={styles.brandContainer}>
+            <View
+              style={[
+                styles.brandIcon,
+                { backgroundColor: theme.colors.foreground },
+              ]}
+            >
+              <Activity
+                size={18}
+                color={theme.colors.background}
+                strokeWidth={2.5}
+              />
+            </View>
+            <Text
+              style={[
+                styles.brandTitle,
+                {
+                  color: theme.colors.foreground,
+                  fontSize: theme.typography.lg,
+                },
+              ]}
+            >
+              VAULT
+            </Text>
+          </View>
+
+          <Pressable
+            onPress={onClose}
+            style={({ pressed }) => [
+              styles.closeButton,
+              {
+                backgroundColor: isDark
+                  ? "rgba(255,255,255,0.08)"
+                  : "rgba(0,0,0,0.06)",
+              },
+              pressed && { opacity: 0.7 },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Close menu"
+          >
+            <X size={18} color={theme.colors.mutedForeground} />
+          </Pressable>
+        </View>
+
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          style={styles.linksScroll}
+          contentContainerStyle={styles.linksContainer}
+          keyboardShouldPersistTaps="handled"
         >
-          <View style={[styles.panelSolidFill, { backgroundColor: panelBg }]} />
+          {navLinks.map((link, idx) => {
+            const isActive = isNavItemActive(pathname, link.id);
+            const Icon = iconMap[link.id];
 
-          <View style={styles.header}>
-            <View style={styles.brandContainer}>
-              <View
-                style={[
-                  styles.brandIcon,
-                  { backgroundColor: theme.colors.foreground },
-                ]}
+            return (
+              <Animated.View
+                key={link.id}
+                entering={FadeInRight.delay(idx * 35).springify().damping(18)}
               >
-                <Activity
-                  size={18}
-                  color={theme.colors.background}
-                  strokeWidth={2.5}
-                />
-              </View>
+                <Pressable
+                  onPress={() => handleNavigate(link.path)}
+                  style={({ pressed }) => [
+                    styles.navItem,
+                    {
+                      backgroundColor: isActive
+                        ? isDark
+                          ? "rgba(52, 179, 122, 0.16)"
+                          : "rgba(37, 150, 90, 0.1)"
+                        : "transparent",
+                    },
+                    pressed && { opacity: 0.8 },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={link.label}
+                >
+                  <Icon
+                    size={20}
+                    color={
+                      isActive
+                        ? theme.colors.success
+                        : theme.colors.mutedForeground
+                    }
+                  />
+                  <Text
+                    style={[
+                      styles.navItemLabel,
+                      {
+                        color: isActive
+                          ? theme.colors.success
+                          : theme.colors.foreground,
+                        fontWeight: isActive ? "800" : "600",
+                        fontSize: theme.typography.md,
+                      },
+                    ]}
+                  >
+                    {link.label}
+                  </Text>
+                </Pressable>
+              </Animated.View>
+            );
+          })}
+        </ScrollView>
+
+        <View style={[styles.footerBlock, { backgroundColor: panelBg }]}>
+          <Pressable
+            onPress={handleToggleGhost}
+            style={({ pressed }) => [
+              styles.ghostRow,
+              {
+                backgroundColor: settings.ghostMode
+                  ? isDark
+                    ? "rgba(107, 99, 255, 0.14)"
+                    : "rgba(79, 70, 255, 0.08)"
+                  : isDark
+                    ? "rgba(255,255,255,0.06)"
+                    : "rgba(0,0,0,0.04)",
+                borderColor: settings.ghostMode
+                  ? theme.colors.primary
+                  : theme.colors.border,
+              },
+              pressed && { opacity: 0.8 },
+            ]}
+            accessibilityRole="switch"
+            accessibilityState={{ checked: settings.ghostMode }}
+            accessibilityLabel={
+              settings.ghostMode ? "Disable ghost mode" : "Enable ghost mode"
+            }
+          >
+            {settings.ghostMode ? (
+              <EyeOff size={18} color={theme.colors.primary} />
+            ) : (
+              <Eye size={18} color={theme.colors.mutedForeground} />
+            )}
+            <View style={{ flex: 1 }}>
               <Text
                 style={[
-                  styles.brandTitle,
+                  styles.ghostTitle,
                   {
-                    color: theme.colors.foreground,
-                    fontSize: theme.typography.lg,
+                    color: settings.ghostMode
+                      ? theme.colors.primary
+                      : theme.colors.foreground,
                   },
                 ]}
               >
-                VAULT
+                {settings.ghostMode ? "Ghost mode on" : "Ghost mode"}
+              </Text>
+              <Text
+                style={[
+                  styles.ghostSubtitle,
+                  { color: theme.colors.mutedForeground },
+                ]}
+              >
+                Hide amounts across the app
               </Text>
             </View>
+          </Pressable>
 
-            <Pressable
-              onPress={onClose}
-              style={({ pressed }) => [
-                styles.closeButton,
-                {
-                  backgroundColor: isDark
-                    ? "rgba(255,255,255,0.08)"
-                    : "rgba(0,0,0,0.06)",
-                },
-                pressed && { opacity: 0.7 },
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel="Close menu"
-            >
-              <X size={18} color={theme.colors.mutedForeground} />
-            </Pressable>
-          </View>
-
-          <ScrollView
-            showsVerticalScrollIndicator={false}
-            style={styles.linksScroll}
-            contentContainerStyle={styles.linksContainer}
-            keyboardShouldPersistTaps="handled"
-          >
-            {navLinks.map((link, idx) => {
-              const isActive = isNavItemActive(pathname, link.id);
-              const Icon = iconMap[link.id];
-
-              return (
-                <Animated.View
-                  key={link.id}
-                  entering={FadeInRight.delay(idx * 35).springify().damping(18)}
-                >
-                  <Pressable
-                    onPress={() => handleNavigate(link.path)}
-                    style={({ pressed }) => [
-                      styles.navItem,
-                      {
-                        backgroundColor: isActive
-                          ? isDark
-                            ? "rgba(52, 179, 122, 0.16)"
-                            : "rgba(37, 150, 90, 0.1)"
-                          : "transparent",
-                      },
-                      pressed && { opacity: 0.8 },
-                    ]}
-                    accessibilityRole="button"
-                    accessibilityLabel={link.label}
-                  >
-                    <Icon
-                      size={20}
-                      color={
-                        isActive
-                          ? theme.colors.success
-                          : theme.colors.mutedForeground
-                      }
-                    />
-                    <Text
-                      style={[
-                        styles.navItemLabel,
-                        {
-                          color: isActive
-                            ? theme.colors.success
-                            : theme.colors.foreground,
-                          fontWeight: isActive ? "800" : "600",
-                          fontSize: theme.typography.md,
-                        },
-                      ]}
-                    >
-                      {link.label}
-                    </Text>
-                  </Pressable>
-                </Animated.View>
-              );
-            })}
-          </ScrollView>
-
-          <View style={[styles.footerBlock, { backgroundColor: panelBg }]}>
-            <Pressable
-              onPress={handleToggleGhost}
-              style={({ pressed }) => [
-                styles.ghostRow,
-                {
-                  backgroundColor: settings.ghostMode
-                    ? isDark
-                      ? "rgba(107, 99, 255, 0.14)"
-                      : "rgba(79, 70, 255, 0.08)"
-                    : isDark
-                      ? "rgba(255,255,255,0.06)"
-                      : "rgba(0,0,0,0.04)",
-                  borderColor: settings.ghostMode
-                    ? theme.colors.primary
-                    : theme.colors.border,
-                },
-                pressed && { opacity: 0.8 },
-              ]}
-              accessibilityRole="switch"
-              accessibilityState={{ checked: settings.ghostMode }}
-              accessibilityLabel={
-                settings.ghostMode ? "Disable ghost mode" : "Enable ghost mode"
-              }
-            >
-              {settings.ghostMode ? (
-                <EyeOff size={18} color={theme.colors.primary} />
-              ) : (
-                <Eye size={18} color={theme.colors.mutedForeground} />
-              )}
-              <View style={{ flex: 1 }}>
+          <View style={[styles.footer, { borderTopColor: theme.colors.border }]}>
+            <View style={styles.userProfile}>
+              <View
+                style={[
+                  styles.avatar,
+                  { backgroundColor: theme.colors.success },
+                ]}
+              >
                 <Text
                   style={[
-                    styles.ghostTitle,
-                    {
-                      color: settings.ghostMode
-                        ? theme.colors.primary
-                        : theme.colors.foreground,
-                    },
+                    styles.avatarText,
+                    { color: theme.colors.successForeground },
                   ]}
                 >
-                  {settings.ghostMode ? "Ghost mode on" : "Ghost mode"}
+                  {(
+                    user?.displayName?.[0] ||
+                    user?.email?.[0] ||
+                    "U"
+                  ).toUpperCase()}
+                </Text>
+              </View>
+
+              <View style={styles.userInfo}>
+                <Text
+                  style={[
+                    styles.userName,
+                    {
+                      color: theme.colors.foreground,
+                      fontSize: theme.typography.sm,
+                    },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {user?.displayName || "User"}
                 </Text>
                 <Text
                   style={[
-                    styles.ghostSubtitle,
-                    { color: theme.colors.mutedForeground },
+                    styles.userEmail,
+                    {
+                      color: theme.colors.mutedForeground,
+                      fontSize: theme.typography.xs,
+                    },
                   ]}
+                  numberOfLines={1}
                 >
-                  Hide amounts across the app
+                  {user?.email || ""}
                 </Text>
-              </View>
-            </Pressable>
-
-            <View
-              style={[styles.footer, { borderTopColor: theme.colors.border }]}
-            >
-              <View style={styles.userProfile}>
-                <View
-                  style={[
-                    styles.avatar,
-                    { backgroundColor: theme.colors.success },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.avatarText,
-                      { color: theme.colors.successForeground },
-                    ]}
-                  >
-                    {(
-                      user?.displayName?.[0] ||
-                      user?.email?.[0] ||
-                      "U"
-                    ).toUpperCase()}
-                  </Text>
-                </View>
-
-                <View style={styles.userInfo}>
-                  <Text
-                    style={[
-                      styles.userName,
-                      {
-                        color: theme.colors.foreground,
-                        fontSize: theme.typography.sm,
-                      },
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {user?.displayName || "User"}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.userEmail,
-                      {
-                        color: theme.colors.mutedForeground,
-                        fontSize: theme.typography.xs,
-                      },
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {user?.email || ""}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.actionButtons}>
-                <Pressable
-                  onPress={handleSwitchApp}
-                  android_ripple={{
-                    color: "rgba(16, 185, 129, 0.2)",
-                    borderless: false,
-                  }}
-                  style={({ pressed }) => [
-                    styles.actionButton,
-                    {
-                      backgroundColor: isDark
-                        ? "rgba(52, 211, 153, 0.16)"
-                        : "rgba(16, 185, 129, 0.12)",
-                    },
-                    pressed && { opacity: 0.85 },
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityLabel="Switch Space"
-                >
-                  <ArrowLeftRight size={16} color={theme.colors.success} />
-                  <Text
-                    style={[
-                      styles.actionButtonText,
-                      {
-                        color: theme.colors.success,
-                        fontSize: theme.typography.xs,
-                      },
-                    ]}
-                  >
-                    Switch Space
-                  </Text>
-                </Pressable>
-
-                <Pressable
-                  onPress={handleLogout}
-                  android_ripple={{
-                    color: "rgba(239, 68, 68, 0.2)",
-                    borderless: false,
-                  }}
-                  style={({ pressed }) => [
-                    styles.actionButton,
-                    {
-                      backgroundColor: isDark
-                        ? "rgba(239, 68, 68, 0.16)"
-                        : "rgba(239, 68, 68, 0.12)",
-                    },
-                    pressed && { opacity: 0.85 },
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityLabel="Sign Out"
-                >
-                  <LogOut size={16} color={theme.colors.destructive} />
-                  <Text
-                    style={[
-                      styles.actionButtonText,
-                      {
-                        color: theme.colors.destructive,
-                        fontSize: theme.typography.xs,
-                      },
-                    ]}
-                  >
-                    Sign Out
-                  </Text>
-                </Pressable>
               </View>
             </View>
+
+            <View style={styles.actionButtons}>
+              <Pressable
+                onPress={handleSwitchApp}
+                android_ripple={{
+                  color: "rgba(16, 185, 129, 0.2)",
+                  borderless: false,
+                }}
+                style={({ pressed }) => [
+                  styles.actionButton,
+                  {
+                    backgroundColor: isDark
+                      ? "rgba(52, 211, 153, 0.16)"
+                      : "rgba(16, 185, 129, 0.12)",
+                  },
+                  pressed && { opacity: 0.85 },
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Switch Space"
+              >
+                <ArrowLeftRight size={16} color={theme.colors.success} />
+                <Text
+                  style={[
+                    styles.actionButtonText,
+                    {
+                      color: theme.colors.success,
+                      fontSize: theme.typography.xs,
+                    },
+                  ]}
+                >
+                  Switch Space
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={handleLogout}
+                android_ripple={{
+                  color: "rgba(239, 68, 68, 0.2)",
+                  borderless: false,
+                }}
+                style={({ pressed }) => [
+                  styles.actionButton,
+                  {
+                    backgroundColor: isDark
+                      ? "rgba(239, 68, 68, 0.16)"
+                      : "rgba(239, 68, 68, 0.12)",
+                  },
+                  pressed && { opacity: 0.85 },
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Sign Out"
+              >
+                <LogOut size={16} color={theme.colors.destructive} />
+                <Text
+                  style={[
+                    styles.actionButtonText,
+                    {
+                      color: theme.colors.destructive,
+                      fontSize: theme.typography.xs,
+                    },
+                  ]}
+                >
+                  Sign Out
+                </Text>
+              </Pressable>
+            </View>
           </View>
-        </Animated.View>
+        </View>
+      </Animated.View>
     </View>
   );
 }
@@ -544,7 +545,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     gap: 4,
-    paddingBottom: 16,
   },
   navItem: {
     flexDirection: "row",
@@ -563,13 +563,14 @@ const styles = StyleSheet.create({
     zIndex: 2,
     elevation: 4,
     flexShrink: 0,
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    gap: 8,
   },
   ghostRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    marginHorizontal: 12,
-    marginBottom: 8,
     paddingHorizontal: 16,
     paddingVertical: 12,
     minHeight: 52,
@@ -586,8 +587,8 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   footer: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
+    paddingHorizontal: 4,
+    paddingTop: 12,
     borderTopWidth: StyleSheet.hairlineWidth,
     gap: 14,
   },
