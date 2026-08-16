@@ -1,0 +1,124 @@
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  Activity,
+  PieChart,
+  Scale,
+  User,
+  type LucideIcon,
+} from "lucide-react-native";
+
+import { BOTTOM_NAV_BAR_HEIGHT } from "@/components/layout/chrome";
+import { useTheme } from "@/theme/ThemeProvider";
+import { themeUsesDarkPalette } from "@/theme/tokens";
+
+const TABS: Array<{ name: string; label: string; Icon: LucideIcon }> = [
+  { name: "index", label: "Home", Icon: Activity },
+  { name: "analytics", label: "Analytics", Icon: PieChart },
+  { name: "body", label: "Body", Icon: Scale },
+  { name: "profile", label: "Profile", Icon: User },
+];
+
+export function NutritionTabBar({
+  state,
+  navigation,
+}: {
+  state: { routes: Array<{ key: string; name: string }>; index: number };
+  navigation: {
+    emit: (event: object) => { defaultPrevented?: boolean };
+    navigate: (name: string, params?: object) => void;
+  };
+}) {
+  const { theme, themeName } = useTheme();
+  const insets = useSafeAreaInsets();
+  const isDark = themeUsesDarkPalette(themeName);
+  const visibleRoutes = state.routes.filter((route) =>
+    TABS.some((tab) => tab.name === route.name)
+  );
+
+  return (
+    <View
+      style={[
+        styles.bar,
+        {
+          backgroundColor: isDark ? "rgba(12, 15, 26, 0.94)" : "rgba(255,255,255,0.94)",
+          borderTopColor: theme.colors.border,
+          paddingBottom: Math.max(insets.bottom, 8),
+          height: BOTTOM_NAV_BAR_HEIGHT + Math.max(insets.bottom, 8),
+        },
+      ]}
+    >
+      {visibleRoutes.map((route) => {
+        const meta = TABS.find((tab) => tab.name === route.name);
+        if (!meta) return null;
+        const isFocused =
+          state.routes[state.index]?.name === route.name;
+        const color = isFocused ? theme.colors.success : theme.colors.mutedForeground;
+        const { Icon } = meta;
+
+        return (
+          <Pressable
+            key={route.key}
+            accessibilityRole="button"
+            accessibilityState={{ selected: isFocused }}
+            accessibilityLabel={meta.label}
+            onPress={() => {
+              const event = navigation.emit({
+                type: "tabPress",
+                target: route.key,
+                canPreventDefault: true,
+              });
+              if (!isFocused && !event.defaultPrevented) {
+                navigation.navigate(route.name);
+              }
+            }}
+            style={({ pressed }) => [styles.item, pressed && { opacity: 0.8 }]}
+          >
+            <Icon size={22} color={color} strokeWidth={isFocused ? 2.5 : 2} />
+            <Text
+              style={{
+                color,
+                fontSize: 10,
+                fontWeight: isFocused ? "700" : "600",
+                marginTop: 4,
+              }}
+            >
+              {meta.label}
+            </Text>
+            {isFocused ? (
+              <View style={[styles.dot, { backgroundColor: theme.colors.success }]} />
+            ) : (
+              <View style={styles.dotPlaceholder} />
+            )}
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  bar: {
+    flexDirection: "row",
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingTop: 8,
+    paddingHorizontal: 8,
+  },
+  item: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  dot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    marginTop: 4,
+  },
+  dotPlaceholder: {
+    width: 4,
+    height: 4,
+    marginTop: 4,
+    opacity: 0,
+  },
+});

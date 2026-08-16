@@ -1,105 +1,152 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { useTheme } from '@/theme/ThemeProvider';
-import { Card } from '@/components/ui';
-import { Plus, Search, ScanBarcode } from 'lucide-react-native';
-import { useRouter } from 'expo-router';
-import { Meal, FoodItem } from '@/shared/types/nutrition';
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { ScanBarcode, Sparkles } from "lucide-react-native";
 
-interface MealPlannerCardProps {
+import { NutritionValue } from "@/components/nutrition/NutritionValue";
+import { Card } from "@/components/ui";
+import { useTheme } from "@/theme/ThemeProvider";
+import type { Meal } from "@/shared/types/nutrition";
+
+export function MealPlannerCard({
+  meal,
+  onOpen,
+  onScan,
+}: {
   meal: Meal;
-  onAddFood: (mealId: string) => void;
-}
-
-export function MealPlannerCard({ meal, onAddFood }: MealPlannerCardProps) {
+  onOpen: () => void;
+  onScan: () => void;
+}) {
   const { theme } = useTheme();
-  const router = useRouter();
-
-  const styles = StyleSheet.create({
-    card: {
-      marginBottom: theme.space.md,
-      padding: theme.space.md,
-    },
-    header: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: theme.space.sm,
-    },
-    title: {
-      fontSize: theme.typography.md,
-      fontWeight: 'bold',
-      color: theme.colors.foreground,
-    },
-    totals: {
-      fontSize: theme.typography.sm,
-      color: theme.colors.mutedForeground,
-    },
-    foodItem: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      paddingVertical: theme.space.xs,
-      borderBottomWidth: 1,
-      borderBottomColor: theme.colors.border,
-    },
-    foodName: {
-      fontSize: theme.typography.sm,
-      color: theme.colors.foreground,
-    },
-    foodDetails: {
-      fontSize: theme.typography.xs,
-      color: theme.colors.mutedForeground,
-    },
-    actions: {
-      flexDirection: 'row',
-      marginTop: theme.space.md,
-      gap: theme.space.sm,
-    },
-    actionBtn: {
-      flex: 1,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: theme.space.sm,
-      backgroundColor: theme.colors.secondary,
-      borderRadius: theme.radius.sm,
-      gap: theme.space.xs,
-    },
-    actionText: {
-      fontSize: theme.typography.sm,
-      color: theme.colors.secondaryForeground,
-      fontWeight: '500',
-    },
-  });
+  const foodCount = meal.foods?.length ?? 0;
 
   return (
-    <Card style={styles.card}>
-      <View style={styles.header}>
-        <Text style={styles.title}>{meal.name}</Text>
-        <Text style={styles.totals}>{Math.round(meal.totals.calories)} kcal</Text>
-      </View>
-
-      {meal.foods.map((food, idx) => (
-        <View key={food.id || idx.toString()} style={styles.foodItem}>
-          <View>
-            <Text style={styles.foodName}>{food.name}</Text>
-            <Text style={styles.foodDetails}>{food.quantity}</Text>
-          </View>
-          <Text style={styles.foodDetails}>{Math.round(food.nutrients.calories)} kcal</Text>
+    <Card
+      title={meal.name}
+      subtitle={foodCount > 0 ? `${foodCount} item${foodCount === 1 ? "" : "s"}` : "Nothing logged yet"}
+      headerRight={
+        <NutritionValue
+          value={meal.totals?.calories ?? 0}
+          unit="kcal"
+          style={{
+            color: theme.colors.mutedForeground,
+            fontSize: 13,
+            fontWeight: "700",
+          }}
+        />
+      }
+      onPress={onOpen}
+    >
+      {foodCount > 0 ? (
+        <View style={styles.foods}>
+          {meal.foods.slice(0, 3).map((food) => (
+            <View key={food.id} style={styles.foodRow}>
+              <View style={styles.foodCopy}>
+                <Text
+                  style={[styles.foodName, { color: theme.colors.foreground }]}
+                  numberOfLines={1}
+                >
+                  {food.name}
+                </Text>
+                <Text
+                  style={[styles.foodMeta, { color: theme.colors.mutedForeground }]}
+                  numberOfLines={1}
+                >
+                  {food.quantity}
+                </Text>
+              </View>
+              <NutritionValue
+                value={food.nutrients.calories}
+                unit="kcal"
+                style={[styles.foodMeta, { color: theme.colors.mutedForeground }]}
+              />
+            </View>
+          ))}
+          {foodCount > 3 ? (
+            <Text style={[styles.foodMeta, { color: theme.colors.mutedForeground }]}>
+              +{foodCount - 3} more
+            </Text>
+          ) : null}
         </View>
-      ))}
+      ) : null}
 
       <View style={styles.actions}>
-        <TouchableOpacity style={styles.actionBtn} onPress={() => onAddFood(meal.id)}>
-          <Search size={16} color={theme.colors.secondaryForeground} />
-          <Text style={styles.actionText}>Add Food</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.actionBtn} onPress={() => router.push('/(nutrition)/scanner')}>
+        <Pressable
+          onPress={onOpen}
+          style={({ pressed }) => [
+            styles.action,
+            { backgroundColor: theme.colors.secondary },
+            pressed && { opacity: 0.8 },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel={`Log food in ${meal.name}`}
+        >
+          <Sparkles size={16} color={theme.colors.secondaryForeground} />
+          <Text
+            style={[styles.actionText, { color: theme.colors.secondaryForeground }]}
+          >
+            AI log
+          </Text>
+        </Pressable>
+        <Pressable
+          onPress={onScan}
+          style={({ pressed }) => [
+            styles.action,
+            { backgroundColor: theme.colors.secondary },
+            pressed && { opacity: 0.8 },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel={`Scan barcode for ${meal.name}`}
+        >
           <ScanBarcode size={16} color={theme.colors.secondaryForeground} />
-          <Text style={styles.actionText}>Scan</Text>
-        </TouchableOpacity>
+          <Text
+            style={[styles.actionText, { color: theme.colors.secondaryForeground }]}
+          >
+            Scan
+          </Text>
+        </Pressable>
       </View>
     </Card>
   );
 }
+
+const styles = StyleSheet.create({
+  foods: {
+    gap: 8,
+    marginBottom: 12,
+  },
+  foodRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  foodCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  foodName: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  foodMeta: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  actions: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  action: {
+    flex: 1,
+    minHeight: 44,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    borderRadius: 12,
+    borderCurve: "continuous",
+  },
+  actionText: {
+    fontSize: 13,
+    fontWeight: "700",
+  },
+});

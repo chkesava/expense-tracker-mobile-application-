@@ -1,252 +1,379 @@
-import React, { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
-  ScrollView,
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
   ActivityIndicator,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
 } from "react-native";
-import { useTheme } from "@/theme/ThemeProvider";
-import { Card } from "@/components/ui";
+import { useRouter } from "expo-router";
+import { ChevronLeft, ChevronRight, Leaf, Plus } from "lucide-react-native";
+
 import { MacroProgressBar } from "@/components/nutrition/MacroProgressBar";
 import { MealPlannerCard } from "@/components/nutrition/MealPlannerCard";
-import { Droplet, Activity, TrendingDown } from "lucide-react-native";
-import type { Meal } from "@/shared/types/nutrition";
-import { useRouter } from "expo-router";
-import { useNutrition } from "@/hooks/useNutrition";
-import { todayDateKey } from "@/shared/utils/dates";
+import { WaterCard } from "@/components/nutrition/WaterCard";
+import { WorkoutCard } from "@/components/nutrition/WorkoutCard";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { PageShell } from "@/components/layout/PageShell";
+import { Button, Card } from "@/components/ui";
+import { useDailyLog } from "@/hooks/useDailyLog";
+import { useNutritionProfile } from "@/hooks/useNutritionProfile";
+import { haptic } from "@/lib/haptics";
+import { toast } from "@/lib/toast";
+import { parseLocalDate, shiftDateKey, todayDateKey } from "@/shared/utils/dates";
+import { useTheme } from "@/theme/ThemeProvider";
 
-const EMPTY_MEALS: Meal[] = [
-  {
-    id: "breakfast",
-    name: "Breakfast",
-    order: 1,
-    totals: { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 },
-    foods: [],
-  },
-  {
-    id: "lunch",
-    name: "Lunch",
-    order: 2,
-    totals: { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 },
-    foods: [],
-  },
-  {
-    id: "dinner",
-    name: "Dinner",
-    order: 3,
-    totals: { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 },
-    foods: [],
-  },
-];
+const MEAL_COUNTS = [2, 3, 4, 5, 6];
+
+function formatDayLabel(dateStr: string): string {
+  return parseLocalDate(dateStr).toLocaleDateString(undefined, {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  });
+}
 
 export default function NutritionDashboard() {
   const { theme } = useTheme();
   const router = useRouter();
   const today = todayDateKey();
-  const { profile, goals, dailyLog, loading, logWater } = useNutrition(today);
+  const [dateStr, setDateStr] = useState(today);
+  const { profile, goals, loading: profileLoading } = useNutritionProfile();
+  const {
+    dailyLog,
+    meals,
+    loading,
+    initializeDay,
+    addMealSlot,
+    addWater,
+    saveWorkout,
+  } = useDailyLog(dateStr);
 
-  const meals: Meal[] = useMemo(() => {
-    if (dailyLog?.meals && dailyLog.meals.length > 0) return dailyLog.meals;
-    return EMPTY_MEALS;
-  }, [dailyLog]);
+  const isToday = dateStr === today;
+  const calories = dailyLog?.nutritionSummary.calories ?? 0;
+  const protein = dailyLog?.nutritionSummary.protein ?? 0;
+  const carbs = dailyLog?.nutritionSummary.carbs ?? 0;
+  const fat = dailyLog?.nutritionSummary.fat ?? 0;
 
-  const macros = {
-    calories: {
-      consumed: dailyLog?.nutritionSummary.calories ?? 0,
-      target: goals?.targetCalories ?? 2000,
-      color: theme.colors.primary,
-    },
-    protein: {
-      consumed: dailyLog?.nutritionSummary.protein ?? 0,
-      target: goals?.proteinGrams ?? 100,
-      color: "#34B37A",
-    },
-    carbs: {
-      consumed: dailyLog?.nutritionSummary.carbs ?? 0,
-      target: goals?.carbsGrams ?? 200,
-      color: "#F59E0B",
-    },
-    fats: {
-      consumed: dailyLog?.nutritionSummary.fat ?? 0,
-      target: goals?.fatGrams ?? 70,
-      color: "#EF4444",
-    },
+  const subtitle = useMemo(() => formatDayLabel(dateStr), [dateStr]);
+
+  const openMeal = (mealId: string) => {
+    router.push({
+      pathname: "/(nutrition)/meal",
+      params: { dateStr, mealId },
+    } as never);
   };
 
-  const waterLogged = dailyLog?.waterLoggedMl ?? 0;
-  const waterTarget = goals?.waterMl ?? 3000;
+  const openScanner = (mealId: string) => {
+    router.push({
+      pathname: "/(nutrition)/scanner",
+      params: { dateStr, mealId },
+    } as never);
+  };
 
-  const styles = StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: theme.colors.background,
-    },
-    content: {
-      padding: theme.space.md,
-    },
-    sectionTitle: {
-      fontSize: theme.typography.lg,
-      fontWeight: "bold",
-      color: theme.colors.foreground,
-      marginTop: theme.space.md,
-      marginBottom: theme.space.sm,
-    },
-    macrosCard: {
-      padding: theme.space.md,
-      marginBottom: theme.space.md,
-      flexDirection: "row",
-      justifyContent: "space-around",
-      flexWrap: "wrap",
-    },
-    waterCard: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-      padding: theme.space.md,
-      marginBottom: theme.space.md,
-    },
-    waterInfo: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: theme.space.md,
-    },
-    waterText: {
-      color: theme.colors.foreground,
-      fontSize: theme.typography.md,
-      fontWeight: "600",
-    },
-    waterSubText: {
-      color: theme.colors.mutedForeground,
-      fontSize: theme.typography.sm,
-    },
-    addWaterBtn: {
-      backgroundColor: theme.colors.primary,
-      paddingHorizontal: theme.space.md,
-      paddingVertical: theme.space.sm,
-      borderRadius: theme.radius.full,
-    },
-    addWaterText: {
-      color: theme.colors.primaryForeground,
-      fontWeight: "bold",
-    },
-    summaryCards: {
-      flexDirection: "row",
-      gap: theme.space.md,
-      marginBottom: theme.space.md,
-    },
-    summaryCard: {
-      flex: 1,
-      padding: theme.space.md,
-      alignItems: "center",
-    },
-    summaryValue: {
-      fontSize: theme.typography.xl,
-      fontWeight: "bold",
-      color: theme.colors.foreground,
-      marginVertical: theme.space.xs,
-    },
-    summaryLabel: {
-      fontSize: theme.typography.xs,
-      color: theme.colors.mutedForeground,
-    },
-    hint: {
-      color: theme.colors.mutedForeground,
-      marginBottom: theme.space.md,
-    },
-  });
-
-  if (loading) {
+  if (profileLoading || loading) {
     return (
-      <View style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
+      <View style={[styles.centered, { backgroundColor: theme.colors.background }]}>
         <ActivityIndicator color={theme.colors.primary} />
       </View>
     );
   }
 
-  return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.sectionTitle}>Today's Progress</Text>
-      {!profile ? (
-        <Text style={styles.hint}>
-          Complete your nutrition profile to personalize targets.
-        </Text>
-      ) : null}
-      <Card style={styles.macrosCard}>
-        <MacroProgressBar
-          label="Calories"
-          consumed={macros.calories.consumed}
-          target={macros.calories.target}
-          color={macros.calories.color}
-          size={100}
-          strokeWidth={10}
+  if (!profile) {
+    return (
+      <PageShell hideHeaderOffset>
+        <PageHeader
+          title="Nutrition"
+          subtitle="Set up your profile"
+          icon={<Leaf size={22} color={theme.colors.success} />}
         />
-        <MacroProgressBar
-          label="Protein"
-          consumed={macros.protein.consumed}
-          target={macros.protein.target}
-          color={macros.protein.color}
-        />
-        <MacroProgressBar
-          label="Carbs"
-          consumed={macros.carbs.consumed}
-          target={macros.carbs.target}
-          color={macros.carbs.color}
-        />
-        <MacroProgressBar
-          label="Fats"
-          consumed={macros.fats.consumed}
-          target={macros.fats.target}
-          color={macros.fats.color}
-        />
-      </Card>
+        <Card
+          title="Welcome"
+          subtitle="Save your age, weight, and goal so we can load your existing Firebase targets — same data as the web app."
+        >
+          <Button onPress={() => router.push("/(nutrition)/profile" as never)}>
+            Set up profile
+          </Button>
+        </Card>
+      </PageShell>
+    );
+  }
 
-      <Card style={styles.waterCard}>
-        <View style={styles.waterInfo}>
-          <Droplet color="#3b82f6" size={32} />
-          <View>
-            <Text style={styles.waterText}>
-              {waterLogged} / {waterTarget} ml
-            </Text>
-            <Text style={styles.waterSubText}>Daily Water Goal</Text>
-          </View>
-        </View>
-        <TouchableOpacity
-          style={styles.addWaterBtn}
+  return (
+    <PageShell hideHeaderOffset>
+      <PageHeader
+        title="Nutrition"
+        subtitle={subtitle}
+        icon={<Leaf size={22} color={theme.colors.success} />}
+        rightElement={
+          isToday ? (
+            <View
+              style={[
+                styles.todayBadge,
+                { backgroundColor: "rgba(52, 179, 122, 0.14)" },
+              ]}
+            >
+              <Text style={{ color: theme.colors.success, fontWeight: "800", fontSize: 11 }}>
+                TODAY
+              </Text>
+            </View>
+          ) : null
+        }
+      />
+
+      <View
+        style={[
+          styles.dateRow,
+          {
+            backgroundColor: theme.colors.card,
+            borderColor: theme.colors.border,
+          },
+        ]}
+      >
+        <Pressable
           onPress={() => {
-            void logWater(250);
+            void haptic.selection();
+            setDateStr(shiftDateKey(dateStr, -1));
+          }}
+          accessibilityRole="button"
+          accessibilityLabel="Previous day"
+          style={({ pressed }) => [styles.dateBtn, pressed && { opacity: 0.7 }]}
+        >
+          <ChevronLeft size={20} color={theme.colors.mutedForeground} />
+        </Pressable>
+        <Text
+          style={{
+            color: theme.colors.foreground,
+            fontFamily: theme.fontFamily.semibold,
+            fontSize: theme.typography.sm,
           }}
         >
-          <Text style={styles.addWaterText}>+ 250ml</Text>
-        </TouchableOpacity>
-      </Card>
-
-      <View style={styles.summaryCards}>
-        <Card style={styles.summaryCard}>
-          <Activity color={theme.colors.success} size={24} />
-          <Text style={styles.summaryValue}>
-            {dailyLog?.workoutSummary?.caloriesBurned ?? 0}
-          </Text>
-          <Text style={styles.summaryLabel}>Active Cals</Text>
-        </Card>
-        <Card style={styles.summaryCard}>
-          <TrendingDown color={theme.colors.primary} size={24} />
-          <Text style={styles.summaryValue}>
-            {profile?.weightKg != null ? `${profile.weightKg} kg` : "—"}
-          </Text>
-          <Text style={styles.summaryLabel}>Current Weight</Text>
-        </Card>
+          {dateStr}
+        </Text>
+        <Pressable
+          onPress={() => {
+            void haptic.selection();
+            setDateStr(shiftDateKey(dateStr, 1));
+          }}
+          accessibilityRole="button"
+          accessibilityLabel="Next day"
+          style={({ pressed }) => [styles.dateBtn, pressed && { opacity: 0.7 }]}
+        >
+          <ChevronRight size={20} color={theme.colors.mutedForeground} />
+        </Pressable>
       </View>
 
-      <Text style={styles.sectionTitle}>Meals</Text>
-      {meals.map((meal) => (
-        <MealPlannerCard
-          key={meal.id}
-          meal={meal}
-          onAddFood={() => router.push("/(nutrition)/log")}
+      <Card>
+        <View style={styles.macros}>
+          <MacroProgressBar
+            label="Calories"
+            consumed={calories}
+            target={goals?.targetCalories ?? 2000}
+            color={theme.colors.success}
+            size={96}
+            strokeWidth={10}
+          />
+          <MacroProgressBar
+            label="Protein"
+            consumed={protein}
+            target={goals?.proteinGrams ?? 150}
+            color="#3B82F6"
+          />
+          <MacroProgressBar
+            label="Carbs"
+            consumed={carbs}
+            target={goals?.carbsGrams ?? 200}
+            color="#F59E0B"
+          />
+          <MacroProgressBar
+            label="Fat"
+            consumed={fat}
+            target={goals?.fatGrams ?? 65}
+            color="#EF4444"
+          />
+        </View>
+      </Card>
+
+      <View style={styles.stack}>
+        <WaterCard
+          currentMl={dailyLog?.waterLoggedMl ?? 0}
+          targetMl={goals?.waterMl ?? 2500}
+          onAdd={(amount) => {
+            if (!dailyLog) {
+              toast.info("Start the day first so water can be saved.");
+              return;
+            }
+            void addWater(amount);
+          }}
         />
-      ))}
-    </ScrollView>
+        <WorkoutCard
+          durationMinutes={dailyLog?.workoutSummary?.durationMinutes ?? 0}
+          caloriesBurned={dailyLog?.workoutSummary?.caloriesBurned ?? 0}
+          onSave={async (mins, cals) => {
+            if (!dailyLog) {
+              toast.info("Start the day first so workouts can be saved.");
+              return;
+            }
+            await saveWorkout(mins, cals);
+          }}
+        />
+      </View>
+
+      {!dailyLog ? (
+        <Card
+          title="Ready for this day?"
+          subtitle="How many meals are you planning? You can add more later. This writes to the same Firebase daily log as the web app."
+        >
+          <View style={styles.mealCounts}>
+            {MEAL_COUNTS.map((count) => (
+              <Pressable
+                key={count}
+                onPress={() => {
+                  void haptic.impact();
+                  void initializeDay(count).catch(() =>
+                    toast.error("Could not start the day")
+                  );
+                }}
+                style={({ pressed }) => [
+                  styles.countBtn,
+                  {
+                    backgroundColor: "rgba(52, 179, 122, 0.12)",
+                    borderColor: theme.colors.border,
+                  },
+                  pressed && { opacity: 0.8 },
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel={`Start day with ${count} meals`}
+              >
+                <Text
+                  style={{
+                    color: theme.colors.success,
+                    fontWeight: "800",
+                    fontSize: 16,
+                  }}
+                >
+                  {count}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          <Button
+            variant="ghost"
+            onPress={() => {
+              void initializeDay(1).catch(() =>
+                toast.error("Could not start the day")
+              );
+            }}
+          >
+            Just 1 meal
+          </Button>
+        </Card>
+      ) : (
+        <View style={styles.stack}>
+          <View style={styles.sectionHead}>
+            <Text
+              style={{
+                color: theme.colors.foreground,
+                fontFamily: theme.fontFamily.bold,
+                fontSize: theme.typography.md,
+              }}
+            >
+              Meals
+            </Text>
+            <Pressable
+              onPress={() => {
+                void haptic.selection();
+                void addMealSlot().catch(() => toast.error("Could not add meal"));
+              }}
+              style={({ pressed }) => [
+                styles.addMeal,
+                pressed && { opacity: 0.8 },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Add meal slot"
+            >
+              <Plus size={16} color={theme.colors.success} />
+              <Text style={{ color: theme.colors.success, fontWeight: "700" }}>
+                Add
+              </Text>
+            </Pressable>
+          </View>
+          {meals.map((meal) => (
+            <MealPlannerCard
+              key={meal.id}
+              meal={meal}
+              onOpen={() => openMeal(meal.id)}
+              onScan={() => openScanner(meal.id)}
+            />
+          ))}
+        </View>
+      )}
+    </PageShell>
   );
 }
+
+const styles = StyleSheet.create({
+  centered: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  todayBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+  dateRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderWidth: 1,
+    borderRadius: 999,
+    borderCurve: "continuous",
+    paddingHorizontal: 8,
+    minHeight: 48,
+    marginBottom: 16,
+  },
+  dateBtn: {
+    width: 44,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  macros: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  stack: {
+    gap: 12,
+    marginTop: 12,
+  },
+  mealCounts: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginBottom: 12,
+  },
+  countBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sectionHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  addMeal: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    minHeight: 44,
+    paddingHorizontal: 8,
+  },
+});

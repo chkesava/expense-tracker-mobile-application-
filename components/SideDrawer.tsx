@@ -1,13 +1,18 @@
 import {
+  Dimensions,
   InteractionManager,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  initialWindowMetrics,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import { usePathname, useRouter } from "expo-router";
 import Animated, {
   FadeIn,
@@ -63,6 +68,13 @@ export function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
   const { navigate, dismissTo } = useRouter();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
+  // Android Modals often report 0 insets; fall back to the launch metrics.
+  const topInset = Math.max(insets.top, initialWindowMetrics?.insets.top ?? 0);
+  const bottomInset = Math.max(
+    insets.bottom,
+    initialWindowMetrics?.insets.bottom ?? 0,
+    16
+  );
   const { user, logout } = useAuth();
   const { isAdmin } = useUserRole();
   const { settings, setGhostMode } = useSettings();
@@ -137,8 +149,17 @@ export function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
       animationType="none"
       onRequestClose={onClose}
       statusBarTranslucent
+      navigationBarTranslucent
     >
-      <View style={styles.root} pointerEvents="box-none">
+      <View
+        style={[
+          styles.root,
+          Platform.OS === "android"
+            ? { height: Dimensions.get("screen").height }
+            : null,
+        ]}
+        pointerEvents="box-none"
+      >
         <AnimatedPressable
           entering={FadeIn.duration(180)}
           exiting={FadeOut.duration(120)}
@@ -154,8 +175,8 @@ export function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
             {
               backgroundColor: panelBg,
               borderLeftColor: theme.colors.border,
-              paddingTop: insets.top + 12,
-              paddingBottom: Math.max(insets.bottom, 16),
+              paddingTop: topInset + 12,
+              paddingBottom: bottomInset,
             },
           ]}
         >
@@ -209,63 +230,62 @@ export function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
           <ScrollView
             showsVerticalScrollIndicator={false}
             style={styles.linksScroll}
-            contentContainerStyle={[styles.linksContainer, { flexGrow: 1 }]}
+            contentContainerStyle={styles.linksContainer}
           >
-            <View style={{ gap: 4 }}>
-              {navLinks.map((link, idx) => {
-                const isActive = isNavItemActive(pathname, link.id);
-                const Icon = iconMap[link.id];
+            {navLinks.map((link, idx) => {
+              const isActive = isNavItemActive(pathname, link.id);
+              const Icon = iconMap[link.id];
 
-                return (
-                  <Animated.View
-                    key={link.id}
-                    entering={FadeInRight.delay(idx * 35).springify().damping(18)}
+              return (
+                <Animated.View
+                  key={link.id}
+                  entering={FadeInRight.delay(idx * 35).springify().damping(18)}
+                >
+                  <Pressable
+                    onPress={() => handleNavigate(link.path)}
+                    style={({ pressed }) => [
+                      styles.navItem,
+                      {
+                        backgroundColor: isActive
+                          ? isDark
+                            ? "rgba(52, 179, 122, 0.16)"
+                            : "rgba(37, 150, 90, 0.1)"
+                          : "transparent",
+                      },
+                      pressed && { opacity: 0.8 },
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel={link.label}
                   >
-                    <Pressable
-                      onPress={() => handleNavigate(link.path)}
-                      style={({ pressed }) => [
-                        styles.navItem,
+                    <Icon
+                      size={20}
+                      color={
+                        isActive
+                          ? theme.colors.success
+                          : theme.colors.mutedForeground
+                      }
+                    />
+                    <Text
+                      style={[
+                        styles.navItemLabel,
                         {
-                          backgroundColor: isActive
-                            ? isDark
-                              ? "rgba(52, 179, 122, 0.16)"
-                              : "rgba(37, 150, 90, 0.1)"
-                            : "transparent",
-                        },
-                        pressed && { opacity: 0.8 },
-                      ]}
-                      accessibilityRole="button"
-                      accessibilityLabel={link.label}
-                    >
-                      <Icon
-                        size={20}
-                        color={
-                          isActive
+                          color: isActive
                             ? theme.colors.success
-                            : theme.colors.mutedForeground
-                        }
-                      />
-                      <Text
-                        style={[
-                          styles.navItemLabel,
-                          {
-                            color: isActive
-                              ? theme.colors.success
-                              : theme.colors.foreground,
-                            fontWeight: isActive ? "800" : "600",
-                            fontSize: theme.typography.md,
-                          },
-                        ]}
-                      >
-                        {link.label}
-                      </Text>
-                    </Pressable>
-                  </Animated.View>
-                );
-              })}
-            </View>
+                            : theme.colors.foreground,
+                          fontWeight: isActive ? "800" : "600",
+                          fontSize: theme.typography.md,
+                        },
+                      ]}
+                    >
+                      {link.label}
+                    </Text>
+                  </Pressable>
+                </Animated.View>
+              );
+            })}
+          </ScrollView>
 
-            <View style={[styles.footerBlock, { marginTop: "auto", paddingTop: 24 }]}>
+          <View style={styles.footerBlock}>
               <Pressable
                 onPress={handleToggleGhost}
                 style={({ pressed }) => [
@@ -438,7 +458,6 @@ export function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
                 </View>
               </View>
             </View>
-          </ScrollView>
         </Animated.View>
       </View>
     </Modal>
@@ -478,6 +497,7 @@ const styles = StyleSheet.create({
   },
   header: {
     zIndex: 1,
+    flexShrink: 0,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -515,7 +535,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     gap: 4,
-    paddingBottom: 16,
   },
   navItem: {
     flexDirection: "row",
@@ -532,14 +551,15 @@ const styles = StyleSheet.create({
   },
   footerBlock: {
     zIndex: 2,
-    elevation: 4,
+    flexShrink: 0,
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    gap: 8,
   },
   ghostRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    marginHorizontal: 12,
-    marginBottom: 8,
     paddingHorizontal: 16,
     paddingVertical: 12,
     minHeight: 52,
@@ -556,8 +576,8 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   footer: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
+    paddingHorizontal: 4,
+    paddingTop: 12,
     borderTopWidth: StyleSheet.hairlineWidth,
     gap: 14,
   },
