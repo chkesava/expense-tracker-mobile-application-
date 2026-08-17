@@ -1,9 +1,7 @@
 import React, { createContext, useContext, useMemo, useState, type ReactNode } from "react";
 
 export type ExpensesTab = "history" | "income" | "audit" | "data";
-export type SplitTab = "activity" | "management";
 export type SubTab = "recurring" | "stats";
-export type CollectTab = "requests" | "new";
 export type LedgerTab =
   | "expenses"
   | "accounts"
@@ -11,17 +9,10 @@ export type LedgerTab =
   | "ccBills"
   | "borrowings"
   | "receivables"
-  | "spaces"
-  | "splits"
-  | "subscriptions"
-  | "travel"
-  | "collect"
-  | "investments"
-  | "portfolio"
-  | "sip";
+  | "subscriptions";
 
 export interface LedgerStateContextType {
-  // Active Ledger Hub tab
+  // Active Transactions hub tab
   ledgerTab: LedgerTab;
   setLedgerTab: (tab: LedgerTab) => void;
 
@@ -43,19 +34,9 @@ export interface LedgerStateContextType {
   sortOrder: "asc" | "desc";
   setSortOrder: (order: "asc" | "desc") => void;
 
-  // Splits tabs & filters
-  splitTab: SplitTab;
-  setSplitTab: (tab: SplitTab) => void;
-  splitActivityFilter: "active" | "settled";
-  setSplitActivityFilter: (filter: "active" | "settled") => void;
-
   // Subscriptions tabs
   subscriptionsTab: SubTab;
   setSubscriptionsTab: (tab: SubTab) => void;
-
-  // Collect (Payment Requests) tabs
-  collectTab: CollectTab;
-  setCollectTab: (tab: CollectTab) => void;
 }
 
 const LedgerStateContext = createContext<LedgerStateContextType | undefined>(undefined);
@@ -71,11 +52,7 @@ export function LedgerStateProvider({ children }: { children: ReactNode }) {
   const [sortField, setSortField] = useState<"date" | "amount">("date");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
 
-  const [splitTab, setSplitTab] = useState<SplitTab>("activity");
-  const [splitActivityFilter, setSplitActivityFilter] = useState<"active" | "settled">("active");
-
   const [subscriptionsTab, setSubscriptionsTab] = useState<SubTab>("recurring");
-  const [collectTab, setCollectTab] = useState<CollectTab>("requests");
 
   const value = useMemo(
     () => ({
@@ -97,14 +74,8 @@ export function LedgerStateProvider({ children }: { children: ReactNode }) {
       setSortField,
       sortOrder,
       setSortOrder,
-      splitTab,
-      setSplitTab,
-      splitActivityFilter,
-      setSplitActivityFilter,
       subscriptionsTab,
       setSubscriptionsTab,
-      collectTab,
-      setCollectTab,
     }),
     [
       ledgerTab,
@@ -116,10 +87,7 @@ export function LedgerStateProvider({ children }: { children: ReactNode }) {
       query,
       sortField,
       sortOrder,
-      splitTab,
-      splitActivityFilter,
       subscriptionsTab,
-      collectTab,
     ]
   );
 

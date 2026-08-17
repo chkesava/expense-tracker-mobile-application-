@@ -13,7 +13,7 @@ import {
  * Follows Material Design 3 and Android navigation standards:
  * 1. Closes any open modal, bottom sheet, or drawer first.
  * 2. Pops stack sub-screens back to parent screens (e.g., /accounts/[id] -> /ledger).
- * 3. Returns to the primary start destination (/dashboard) when on secondary tabs (/ledger, /vaults, /insights).
+ * 3. Returns to the primary start destination (/dashboard) when on secondary tabs (/ledger, /vaults, /investments, /insights).
  * 4. Shows exit confirmation / exits gracefully when already on /dashboard.
  *
  * The route → action decision lives in `resolveAndroidBackAction` so it can be

@@ -1,42 +1,112 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
-  FlatList,
   Pressable,
-  RefreshControl,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
+import { useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
 import {
-  FolderPlus,
+  HandCoins,
+  LayoutGrid,
+  Plane,
   Plus,
   Search,
   Shield,
   Users,
-  Wallet,
 } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
-import { SkeletonCard, SkeletonList } from "@/components/common/Skeleton";
-import { PageHeader } from "@/components/layout/PageHeader";
+import { SkeletonCard } from "@/components/common/Skeleton";
+import { CollectList } from "@/components/collect/CollectList";
+import { SpacesList } from "@/components/spaces/SpacesList";
+import { SplitsList } from "@/components/splits/SplitsList";
+import { TripsList } from "@/components/trips/TripsList";
+import { PageHeader, type PageHeaderTab } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
-import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { CreateVaultModal } from "@/components/vaults/CreateVaultModal";
 import { VaultCard } from "@/components/vaults/VaultCard";
 import { VaultDetailModal } from "@/components/vaults/VaultDetailModal";
 import { useVaults } from "@/hooks/useVaults";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
+import {
+  VAULT_HUB_TAB_IDS,
+} from "@/shared/config/navigation";
 import type { SharedVault, VaultStats } from "@/shared/types/vault";
-import { calculateVaultStats } from "@/shared/utils/vaultMath";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
+export type VaultsTab = (typeof VAULT_HUB_TAB_IDS)[number];
+
 export default function VaultsScreen() {
+  const { theme } = useTheme();
+  const params = useLocalSearchParams<{ tab?: string }>();
+  const [activeTab, setActiveTab] = useState<VaultsTab>("shared");
+
+  useEffect(() => {
+    if (params.tab && (VAULT_HUB_TAB_IDS as readonly string[]).includes(params.tab)) {
+      setActiveTab(params.tab as VaultsTab);
+    }
+  }, [params.tab]);
+
+  const tabIconColor = (id: VaultsTab) =>
+    activeTab === id ? theme.colors.success : theme.colors.mutedForeground;
+
+  const tabs: PageHeaderTab[] = [
+    {
+      id: "shared",
+      label: "Shared Vaults",
+      icon: <Shield size={16} color={tabIconColor("shared")} />,
+    },
+    {
+      id: "spaces",
+      label: "Spaces",
+      icon: <LayoutGrid size={16} color={tabIconColor("spaces")} />,
+    },
+    {
+      id: "splits",
+      label: "Splits",
+      icon: <Users size={16} color={tabIconColor("splits")} />,
+    },
+    {
+      id: "travel",
+      label: "Travel",
+      icon: <Plane size={16} color={tabIconColor("travel")} />,
+    },
+    {
+      id: "collect",
+      label: "Collect",
+      icon: <HandCoins size={16} color={tabIconColor("collect")} />,
+    },
+  ];
+
+  return (
+    <PageShell contentContainerStyle={styles.container}>
+      <PageHeader
+        title="Vaults"
+        subtitle="Shared money, spaces & splits"
+        icon={<Shield size={22} color={theme.colors.primary} />}
+        activeTab={activeTab}
+        onTabChange={(tab) => setActiveTab(tab as VaultsTab)}
+        tabs={tabs}
+        tabVariant="underline"
+      />
+
+      {activeTab === "shared" ? <SharedVaultsPanel /> : null}
+      {activeTab === "spaces" ? <SpacesList /> : null}
+      {activeTab === "splits" ? <SplitsList /> : null}
+      {activeTab === "travel" ? <TripsList /> : null}
+      {activeTab === "collect" ? <CollectList /> : null}
+    </PageShell>
+  );
+}
+
+function SharedVaultsPanel() {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const { settings: system } = useSystemSettings();
@@ -57,7 +127,6 @@ export default function VaultsScreen() {
     );
   }, [vaults, searchQuery]);
 
-  // Aggregate stats across all vaults
   const aggregateStats = useMemo(() => {
     const totalBudget = vaults.reduce((sum, v) => sum + (v.budget || 0), 0);
     return {
@@ -67,33 +136,27 @@ export default function VaultsScreen() {
   }, [vaults]);
 
   return (
-    <PageShell contentContainerStyle={styles.container}>
-      <PageHeader
-        title="Shared Vaults"
-        subtitle="Collaborative Group Budgets"
-        icon={<Users size={22} color={theme.colors.primary} />}
-        rightElement={
-          <Pressable
-            onPress={() => {
-              Haptics.selectionAsync().catch(() => undefined);
-              setIsCreateModalOpen(true);
-            }}
-            style={({ pressed }) => [
-              styles.headerActionBtn,
-              {
-                backgroundColor: theme.colors.primary,
-                opacity: pressed ? 0.8 : 1,
-              },
-            ]}
-          >
-            <Plus size={16} color="#FFFFFF" />
-            <Text style={styles.headerActionText}>Create</Text>
-          </Pressable>
-        }
-      />
+    <View style={styles.panel}>
+      <View style={styles.panelHeaderRow}>
+        <Pressable
+          onPress={() => {
+            Haptics.selectionAsync().catch(() => undefined);
+            setIsCreateModalOpen(true);
+          }}
+          style={({ pressed }) => [
+            styles.headerActionBtn,
+            {
+              backgroundColor: theme.colors.primary,
+              opacity: pressed ? 0.8 : 1,
+            },
+          ]}
+        >
+          <Plus size={16} color="#FFFFFF" />
+          <Text style={styles.headerActionText}>Create</Text>
+        </Pressable>
+      </View>
 
-      {/* Aggregate Overview Card */}
-      {vaults.length > 0 && (
+      {vaults.length > 0 ? (
         <Card style={styles.summaryCard}>
           <View style={styles.summaryRow}>
             <View style={styles.summaryBlock}>
@@ -117,10 +180,9 @@ export default function VaultsScreen() {
             </View>
           </View>
         </Card>
-      )}
+      ) : null}
 
-      {/* Search Bar */}
-      {vaults.length > 2 && (
+      {vaults.length > 2 ? (
         <View
           style={[
             styles.searchBar,
@@ -141,9 +203,8 @@ export default function VaultsScreen() {
             style={[styles.searchInput, { color: theme.colors.foreground }]}
           />
         </View>
-      )}
+      ) : null}
 
-      {/* Vault List / Empty State */}
       {loading ? (
         <View style={{ gap: 12, marginTop: 4 }}>
           <SkeletonCard />
@@ -151,7 +212,6 @@ export default function VaultsScreen() {
           <SkeletonCard />
         </View>
       ) : error ? (
-        /* A load failure must not masquerade as "no vaults yet". */
         <ErrorState
           title="Couldn't load your vaults"
           description={error.message}
@@ -184,7 +244,6 @@ export default function VaultsScreen() {
       ) : (
         <View style={{ gap: 12 }}>
           {filteredVaults.map((vault) => {
-            // Default initial stats calculation
             const initialStats: VaultStats = {
               totalDeposits: 0,
               totalWithdrawals: 0,
@@ -208,21 +267,19 @@ export default function VaultsScreen() {
         </View>
       )}
 
-      {/* Create Vault Modal */}
       <CreateVaultModal
         visible={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
         onSubmit={createVault}
       />
 
-      {/* Vault Detail Sheet */}
       <VaultDetailModal
         visible={!!selectedVault}
         vault={selectedVault}
         onClose={() => setSelectedVault(null)}
         onDeleteVault={deleteVault}
       />
-    </PageShell>
+    </View>
   );
 }
 
@@ -230,6 +287,13 @@ const styles = StyleSheet.create({
   container: {
     gap: 16,
     paddingBottom: 32,
+  },
+  panel: {
+    gap: 16,
+  },
+  panelHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
   },
   headerActionBtn: {
     flexDirection: "row",
@@ -278,10 +342,5 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     padding: 0,
-  },
-  loadingContainer: {
-    padding: 40,
-    alignItems: "center",
-    justifyContent: "center",
   },
 });
