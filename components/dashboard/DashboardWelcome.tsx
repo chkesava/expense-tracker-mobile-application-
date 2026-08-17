@@ -1,10 +1,10 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Calendar, Wallet } from "lucide-react-native";
 
+import { useSurfaces, withAlpha } from "@/components/dashboard/primitives";
 import { haptic } from "@/lib/haptics";
 import { useAuth } from "@/providers/AuthProvider";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
 
 function greetingForHour(hour: number): string {
   if (hour < 12) return "Good morning";
@@ -12,6 +12,10 @@ function greetingForHour(hour: number): string {
   return "Good evening";
 }
 
+/**
+ * Compact dashboard hero. Deliberately lightweight — it establishes identity
+ * and the active month, then hands vertical space to the data below.
+ */
 export function DashboardWelcome({
   monthLabel,
   onOpenMonthPicker,
@@ -20,8 +24,8 @@ export function DashboardWelcome({
   onOpenMonthPicker?: () => void;
 }) {
   const { user } = useAuth();
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
 
   const firstName =
     user?.displayName?.trim()?.split(/\s+/)[0] ||
@@ -33,26 +37,42 @@ export function DashboardWelcome({
     <View style={styles.container}>
       <View style={styles.textCol}>
         <Text
-          style={[styles.greeting, { color: theme.colors.mutedForeground }]}
+          style={[
+            styles.greeting,
+            {
+              color: theme.colors.mutedForeground,
+              fontFamily: theme.fontFamily.medium,
+            },
+          ]}
           numberOfLines={1}
         >
-          {greeting}, {firstName}! 👋
+          {greeting}, {firstName}
         </Text>
         <Text
           style={[
             styles.title,
-            { color: theme.colors.foreground, fontSize: theme.typography.xxl },
+            {
+              color: theme.colors.foreground,
+              fontFamily: theme.fontFamily.bold,
+            },
           ]}
           numberOfLines={1}
         >
           Dashboard
         </Text>
         <Text
-          style={[styles.subtitle, { color: theme.colors.mutedForeground }]}
+          style={[
+            styles.subtitle,
+            {
+              color: theme.colors.mutedForeground,
+              fontFamily: theme.fontFamily.regular,
+            },
+          ]}
           numberOfLines={1}
         >
           Your financial overview
         </Text>
+
         {!!monthLabel && onOpenMonthPicker ? (
           <Pressable
             onPress={() => {
@@ -60,26 +80,27 @@ export function DashboardWelcome({
               onOpenMonthPicker();
             }}
             android_ripple={{
-              color: theme.colors.success + "20",
+              color: withAlpha(theme.colors.success, 0.16),
               borderless: false,
             }}
             style={({ pressed }) => [
               styles.monthChip,
-              {
-                backgroundColor: isDark
-                  ? "rgba(52, 179, 122, 0.14)"
-                  : "rgba(37, 150, 90, 0.1)",
-                borderColor: isDark
-                  ? "rgba(52, 179, 122, 0.28)"
-                  : "rgba(37, 150, 90, 0.2)",
-              },
+              { backgroundColor: surfaces.wash(theme.colors.success) },
               pressed && { opacity: 0.8 },
             ]}
             accessibilityRole="button"
             accessibilityLabel={`Change month, currently ${monthLabel}`}
           >
             <Calendar size={13} color={theme.colors.success} strokeWidth={2.2} />
-            <Text style={[styles.monthChipText, { color: theme.colors.success }]}>
+            <Text
+              style={[
+                styles.monthChipText,
+                {
+                  color: theme.colors.success,
+                  fontFamily: theme.fontFamily.semibold,
+                },
+              ]}
+            >
               {monthLabel}
             </Text>
           </Pressable>
@@ -88,41 +109,23 @@ export function DashboardWelcome({
 
       <View
         style={[
-          styles.visual,
-          {
-            backgroundColor: isDark
-              ? "rgba(124, 58, 237, 0.18)"
-              : "rgba(79, 70, 255, 0.1)",
-            borderColor: isDark
-              ? "rgba(168, 85, 247, 0.35)"
-              : "rgba(79, 70, 255, 0.2)",
-          },
+          styles.mark,
+          { backgroundColor: withAlpha(theme.colors.primary, 0.92) },
         ]}
       >
+        <Wallet size={22} color="#FFFFFF" strokeWidth={2.2} />
         <View
           style={[
-            styles.visualInner,
-            {
-              backgroundColor: isDark
-                ? "rgba(124, 58, 237, 0.45)"
-                : "rgba(79, 70, 255, 0.85)",
-            },
-          ]}
-        >
-          <Wallet size={26} color="#FFFFFF" strokeWidth={2.2} />
-        </View>
-        <View
-          style={[
-            styles.coin,
-            styles.coinTop,
-            { backgroundColor: "#FBBF24", borderColor: "#F59E0B" },
+            styles.dot,
+            styles.dotTop,
+            { backgroundColor: theme.colors.warning },
           ]}
         />
         <View
           style={[
-            styles.coin,
-            styles.coinBottom,
-            { backgroundColor: "#34D399", borderColor: "#059669" },
+            styles.dot,
+            styles.dotBottom,
+            { backgroundColor: theme.colors.success },
           ]}
         />
       </View>
@@ -135,76 +138,62 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 18,
     gap: 12,
+    marginBottom: 14,
   },
   textCol: {
     flex: 1,
     minWidth: 0,
-    gap: 2,
   },
   greeting: {
     fontSize: 13,
-    fontWeight: "600",
-    marginBottom: 4,
+    marginBottom: 2,
   },
   title: {
-    fontWeight: "900",
-    letterSpacing: -0.6,
+    fontSize: 28,
+    lineHeight: 34,
+    letterSpacing: -1,
   },
   subtitle: {
     fontSize: 13,
-    fontWeight: "500",
-    marginTop: 2,
+    marginTop: 1,
   },
   monthChip: {
     alignSelf: "flex-start",
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    marginTop: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    minHeight: 32,
-    borderRadius: 16,
-    borderCurve: "continuous",
-    borderWidth: 1,
+    marginTop: 10,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    minHeight: 34,
+    borderRadius: 999,
     overflow: "hidden",
   },
   monthChipText: {
-    fontSize: 12,
-    fontWeight: "700",
-    letterSpacing: 0.1,
+    fontSize: 12.5,
   },
-  visual: {
-    width: 72,
-    height: 72,
-    borderRadius: 22,
-    borderWidth: 1,
+  mark: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    borderCurve: "continuous",
     alignItems: "center",
     justifyContent: "center",
     position: "relative",
   },
-  visualInner: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  coin: {
+  dot: {
     position: "absolute",
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    borderWidth: 1.5,
+    width: 11,
+    height: 11,
+    borderRadius: 6,
   },
-  coinTop: {
-    top: 8,
-    right: 8,
+  dotTop: {
+    top: -3,
+    right: -3,
   },
-  coinBottom: {
-    bottom: 10,
-    left: 8,
+  dotBottom: {
+    bottom: -3,
+    left: -3,
   },
 });

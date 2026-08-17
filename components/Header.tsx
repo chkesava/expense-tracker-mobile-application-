@@ -72,13 +72,14 @@ export function Header() {
             accessibilityRole="button"
             accessibilityLabel="Go to dashboard"
           >
+            {/* Deep navy mark — the brand anchor, deliberately not the accent. */}
             <View
               style={[
                 styles.logoIcon,
-                { backgroundColor: theme.colors.primary },
+                { backgroundColor: isDark ? theme.colors.secondary : "#1E293B" },
               ]}
             >
-              <Activity size={15} color={theme.colors.primaryForeground} strokeWidth={2.6} />
+              <Activity size={15} color="#FFFFFF" strokeWidth={2.6} />
             </View>
             <Text
               style={[

@@ -1,10 +1,15 @@
 import { StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import { AlertCircle, CheckCircle2, Flame, ShieldAlert } from "lucide-react-native";
+import { Wallet } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
 import { EmptyState } from "@/components/common/EmptyState";
-import { Card } from "@/components/ui/Card";
+import {
+  MetaLabel,
+  ProgressTrack,
+  Section,
+  useSurfaces,
+} from "@/components/dashboard/primitives";
 import { useTheme } from "@/theme/ThemeProvider";
 
 export interface CategoryBudgetAlertItem {
@@ -35,18 +40,27 @@ export function BudgetAlertsWidget({
 }: BudgetAlertsWidgetProps) {
   const router = useRouter();
   const { theme } = useTheme();
+  const surfaces = useSurfaces();
 
+  /** Uncapped so "148% used" stays truthful; the bar itself clamps. */
   const budgetProgress =
-    monthlyBudget > 0
-      ? Math.min(100, Math.round((monthlySpent / monthlyBudget) * 100))
-      : 0;
+    monthlyBudget > 0 ? Math.round((monthlySpent / monthlyBudget) * 100) : 0;
 
-  const remaining = Math.max(0, monthlyBudget - monthlySpent);
   const isOverBudget = monthlyBudget > 0 && monthlySpent > monthlyBudget;
+  const remaining = Math.abs(monthlyBudget - monthlySpent);
+
+  const statusColor = isOverBudget
+    ? theme.colors.destructive
+    : budgetProgress >= 80
+      ? theme.colors.warning
+      : theme.colors.success;
 
   if (monthlyBudget === 0 && activeCategoryBudgets.length === 0) {
     return (
-      <Card title="Monthly Budget">
+      <Section
+        title="Monthly Budget"
+        icon={<Wallet size={16} color={theme.colors.mutedForeground} strokeWidth={2.3} />}
+      >
         <EmptyState
           illustration="budgets"
           compact
@@ -58,172 +72,151 @@ export function BudgetAlertsWidget({
           }}
           tip="Budgets help prevent overspending by alerting you at 80% and 100% thresholds."
         />
-      </Card>
+      </Section>
     );
   }
 
   return (
-    <View style={{ gap: 14 }}>
-      {/* Monthly Budget Card */}
+    <View style={styles.stack}>
       {monthlyBudget > 0 ? (
-        <Card
+        <Section
           title="Monthly Budget"
-          subtitle={`Target: ${currency} ${monthlyBudget.toLocaleString()}`}
-        >
-          <View style={styles.budgetProgressContainer}>
-            <View
+          subtitle={`Target ${currency} ${monthlyBudget.toLocaleString()}`}
+          icon={<Wallet size={16} color={statusColor} strokeWidth={2.3} />}
+          iconTint={surfaces.wash(statusColor)}
+          badge={
+            <Text
               style={[
-                styles.progressBarBg,
-                { backgroundColor: theme.colors.muted },
+                styles.usedPct,
+                { color: statusColor, fontFamily: theme.fontFamily.bold },
               ]}
             >
-              <View
-                style={[
-                  styles.progressBarFill,
-                  {
-                    width: `${Math.min(100, Math.max(2, budgetProgress))}%`,
-                    backgroundColor: isOverBudget
-                      ? theme.colors.destructive
-                      : budgetProgress >= 80
-                        ? theme.colors.warning
-                        : theme.colors.primary,
-                  },
-                ]}
+              {budgetProgress}%
+            </Text>
+          }
+        >
+          <ProgressTrack pct={budgetProgress} color={statusColor} height={8} />
+
+          <View style={styles.footerRow}>
+            <View style={styles.footerItem}>
+              <MetaLabel>Spent</MetaLabel>
+              <Amount
+                value={monthlySpent}
+                currency={currency}
+                ghostable
+                style={{
+                  fontSize: 14.5,
+                  fontFamily: theme.fontFamily.semibold,
+                  color: theme.colors.foreground,
+                }}
               />
             </View>
-            <View style={styles.budgetFooter}>
-              <View style={styles.statusRow}>
-                {isOverBudget ? (
-                  <ShieldAlert size={14} color={theme.colors.destructive} />
-                ) : (
-                  <CheckCircle2 size={14} color={theme.colors.success} />
-                )}
-                <Text
-                  style={[
-                    styles.budgetText,
-                    {
-                      color: isOverBudget
-                        ? theme.colors.destructive
-                        : theme.colors.mutedForeground,
-                      fontWeight: "700",
-                    },
-                  ]}
-                >
-                  {budgetProgress}% used {isOverBudget ? "(Over limit)" : ""}
-                </Text>
-              </View>
-
+            <View style={[styles.footerItem, styles.footerRight]}>
+              <MetaLabel>{isOverBudget ? "Over budget" : "Remaining"}</MetaLabel>
               <Amount
                 value={remaining}
                 currency={currency}
                 ghostable
                 style={{
-                  fontSize: theme.typography.sm,
-                  fontWeight: "700",
+                  fontSize: 14.5,
+                  fontFamily: theme.fontFamily.semibold,
                   color: isOverBudget
                     ? theme.colors.destructive
-                    : theme.colors.foreground,
+                    : theme.colors.success,
                 }}
               />
             </View>
           </View>
-        </Card>
+        </Section>
       ) : null}
 
-      {/* Category Budgets & Warnings Card */}
       {activeCategoryBudgets.length > 0 ? (
-        <Card
+        <Section
           title="Category Budgets"
           subtitle={`${activeMonth} · ${activeCategoryBudgets.length} budgeted`}
+          contentStyle={styles.categoryList}
         >
-          <View style={{ gap: 12 }}>
-            {activeCategoryBudgets.map((b) => (
-              <View key={b.id} style={{ gap: 4 }}>
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                  }}
-                >
+          {activeCategoryBudgets.map((b) => {
+            const color = b.isOver
+              ? theme.colors.destructive
+              : b.isWarning
+                ? theme.colors.warning
+                : theme.colors.success;
+            return (
+              <View key={b.id} style={styles.categoryItem}>
+                <View style={styles.categoryTop}>
                   <Text
-                    style={{
-                      fontSize: theme.typography.sm,
-                      fontWeight: "700",
-                      color: theme.colors.foreground,
-                    }}
+                    style={[
+                      styles.categoryName,
+                      {
+                        color: theme.colors.foreground,
+                        fontFamily: theme.fontFamily.medium,
+                      },
+                    ]}
+                    numberOfLines={1}
                   >
                     {b.category}
                     {b.subcategory ? ` › ${b.subcategory}` : ""}
                   </Text>
                   <Text
-                    style={{
-                      fontSize: theme.typography.xs,
-                      fontWeight: "600",
-                      color: b.isOver
-                        ? theme.colors.destructive
-                        : b.isWarning
-                          ? theme.colors.warning
-                          : theme.colors.mutedForeground,
-                    }}
+                    style={[
+                      styles.categoryMeta,
+                      { color, fontFamily: theme.fontFamily.medium },
+                    ]}
                   >
-                    {b.pct}% · {currency} {b.spent.toLocaleString()} / {currency}{" "}
+                    {b.pct}% · {currency} {b.spent.toLocaleString()} /{" "}
                     {b.amount.toLocaleString()}
                   </Text>
                 </View>
-                <View
-                  style={[
-                    styles.progressBarBg,
-                    { backgroundColor: theme.colors.muted },
-                  ]}
-                >
-                  <View
-                    style={[
-                      styles.progressBarFill,
-                      {
-                        width: `${Math.min(100, Math.max(2, b.pct))}%`,
-                        backgroundColor: b.isOver
-                          ? theme.colors.destructive
-                          : b.isWarning
-                            ? theme.colors.warning
-                            : theme.colors.primary,
-                      },
-                    ]}
-                  />
-                </View>
+                <ProgressTrack pct={b.pct} color={color} height={5} />
               </View>
-            ))}
-          </View>
-        </Card>
+            );
+          })}
+        </Section>
       ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  budgetProgressContainer: {
-    gap: 8,
+  stack: {
+    gap: 12,
   },
-  progressBarBg: {
-    height: 8,
-    borderRadius: 4,
-    overflow: "hidden",
+  usedPct: {
+    fontSize: 18,
+    letterSpacing: -0.4,
   },
-  progressBarFill: {
-    height: "100%",
-    borderRadius: 4,
-  },
-  budgetFooter: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  statusRow: {
+  footerRow: {
     flexDirection: "row",
     alignItems: "center",
+    marginTop: 12,
+  },
+  footerItem: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  footerRight: {
+    alignItems: "flex-end",
+  },
+  categoryList: {
+    gap: 12,
+  },
+  categoryItem: {
     gap: 6,
   },
-  budgetText: {
-    fontSize: 12,
+  categoryTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  categoryName: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 13.5,
+  },
+  categoryMeta: {
+    fontSize: 11,
   },
 });

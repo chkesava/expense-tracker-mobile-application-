@@ -1,13 +1,18 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import * as Haptics from "expo-haptics";
-import { ChevronRight, History } from "lucide-react-native";
+import { ChevronRight, Receipt } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
 import { EmptyState } from "@/components/common/EmptyState";
-import { Card } from "@/components/ui/Card";
+import {
+  DataRow,
+  RowGlyph,
+  Section,
+  SectionAction,
+  useSurfaces,
+} from "@/components/dashboard/primitives";
+import { haptic } from "@/lib/haptics";
 import type { Expense } from "@/shared/types/expense";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
 
 export interface RecentActivityWidgetProps {
   expenses: Expense[];
@@ -16,41 +21,52 @@ export interface RecentActivityWidgetProps {
   onViewAll: () => void;
 }
 
+const PREVIEW_LIMIT = 5;
+
 export function RecentActivityWidget({
   expenses,
   currency,
   onEditExpense,
   onViewAll,
 }: RecentActivityWidgetProps) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
 
-  const recentTransactions = expenses.slice(0, 5);
+  const recentTransactions = expenses.slice(0, PREVIEW_LIMIT);
+  const hasMore = expenses.length > PREVIEW_LIMIT;
 
   return (
-    <Card
+    <Section
       title="Recent Transactions"
       subtitle={`${expenses.length} total recorded`}
-      headerRight={
-        expenses.length > 5 ? (
+      icon={<Receipt size={16} color={theme.colors.primary} strokeWidth={2.3} />}
+      iconTint={surfaces.wash(theme.colors.primary)}
+      action={hasMore ? <SectionAction label="View all" onPress={onViewAll} /> : null}
+      footer={
+        hasMore ? (
           <Pressable
             onPress={() => {
-              Haptics.selectionAsync().catch(() => undefined);
+              void haptic.selection();
               onViewAll();
             }}
-            style={styles.viewAllBtn}
+            style={({ pressed }) => [styles.seeAll, pressed && { opacity: 0.6 }]}
+            accessibilityRole="button"
+            accessibilityLabel="See all transactions"
           >
             <Text
               style={[
-                styles.viewAllText,
-                { color: theme.colors.primary, fontSize: theme.typography.xs },
+                styles.seeAllText,
+                {
+                  color: theme.colors.primary,
+                  fontFamily: theme.fontFamily.semibold,
+                },
               ]}
             >
-              View All
+              See all transactions
             </Text>
-            <ChevronRight size={14} color={theme.colors.primary} />
+            <ChevronRight size={14} color={theme.colors.primary} strokeWidth={2.4} />
           </Pressable>
-        ) : undefined
+        ) : null
       }
     >
       {recentTransactions.length === 0 ? (
@@ -62,127 +78,62 @@ export function RecentActivityWidget({
           tip="Tap the bottom '+' button to quickly log your first transaction."
         />
       ) : (
-        <View style={styles.transactionsList}>
+        <View>
           {recentTransactions.map((item, index) => (
-            <Pressable
+            <DataRow
               key={item.id || `tx-${index}`}
-              onPress={() => {
-                Haptics.selectionAsync().catch(() => undefined);
-                onEditExpense(item);
-              }}
-              style={({ pressed }) => [
-                styles.transactionRow,
-                index < recentTransactions.length - 1 && {
-                  borderBottomColor: theme.colors.border,
-                  borderBottomWidth: StyleSheet.hairlineWidth,
-                },
-                pressed && { opacity: 0.7 },
-              ]}
-            >
-              <View style={styles.txLeft}>
-                <View
-                  style={[
-                    styles.categoryDot,
-                    {
-                      backgroundColor: isDark
-                        ? "rgba(107, 99, 255, 0.2)"
-                        : "rgba(79, 70, 255, 0.12)",
-                    },
-                  ]}
-                >
+              onPress={() => onEditExpense(item)}
+              divider={index < recentTransactions.length - 1}
+              leading={
+                <RowGlyph size={34} tint={surfaces.tile}>
                   <Text
                     style={[
-                      styles.categoryDotText,
-                      { color: theme.colors.primary },
+                      styles.initial,
+                      {
+                        color: theme.colors.mutedForeground,
+                        fontFamily: theme.fontFamily.semibold,
+                      },
                     ]}
                   >
                     {item.category?.charAt(0).toUpperCase() || "?"}
                   </Text>
-                </View>
-                <View style={styles.txMeta}>
-                  <Text
-                    style={[
-                      styles.txTitle,
-                      { color: theme.colors.foreground },
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {item.note || item.category || "Expense"}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.txSubtitle,
-                      { color: theme.colors.mutedForeground },
-                    ]}
-                  >
-                    {item.date} • {item.category}
-                  </Text>
-                </View>
-              </View>
-
-              <Amount
-                value={item.amount}
-                currency={currency}
-                ghostable
-                style={{
-                  color: theme.colors.foreground,
-                  fontWeight: "700",
-                  fontSize: theme.typography.md,
-                }}
-              />
-            </Pressable>
+                </RowGlyph>
+              }
+              title={item.note || item.category || "Expense"}
+              meta={[item.date, item.category].filter(Boolean).join(" · ")}
+              value={
+                <Amount
+                  value={item.amount}
+                  currency={currency}
+                  ghostable
+                  style={{
+                    fontSize: 14.5,
+                    fontFamily: theme.fontFamily.semibold,
+                    color: theme.colors.foreground,
+                  }}
+                />
+              }
+              accessibilityLabel={`Edit ${item.note || item.category || "expense"}`}
+            />
           ))}
         </View>
       )}
-    </Card>
+    </Section>
   );
 }
 
 const styles = StyleSheet.create({
-  viewAllBtn: {
+  initial: {
+    fontSize: 13,
+  },
+  seeAll: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 2,
-  },
-  viewAllText: {
-    fontWeight: "700",
-  },
-  transactionsList: {
-    gap: 2,
-  },
-  transactionRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 10,
-  },
-  txLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    flex: 1,
-    marginRight: 12,
-  },
-  categoryDot: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
+    gap: 2,
+    minHeight: 32,
   },
-  categoryDotText: {
-    fontSize: 14,
-    fontWeight: "800",
-  },
-  txMeta: {
-    flex: 1,
-  },
-  txTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    marginBottom: 2,
-  },
-  txSubtitle: {
-    fontSize: 11,
+  seeAllText: {
+    fontSize: 13,
   },
 });
