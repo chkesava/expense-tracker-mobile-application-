@@ -140,6 +140,14 @@ export function SetupWizardModal() {
 
   if (!isSetupWizardOpen) return null;
 
+  /** Flags the currency setup step as genuinely chosen rather than defaulted. */
+  const markCurrencyChosen = async () => {
+    if (settings.onboarding?.currencyChosen) return;
+    await updateSettings({
+      onboarding: { ...settings.onboarding, currencyChosen: true },
+    });
+  };
+
   const handleClose = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
     setIsSetupWizardOpen(false);
@@ -173,6 +181,9 @@ export function SetupWizardModal() {
             { merge: true }
           );
         }
+        // `defaultCurrency` is global and always defaulted, so record the
+        // explicit choice separately or the setup step self-completes.
+        await markCurrencyChosen();
       } else if (currentStep === 2) {
         // Save Monthly Budget
         const num = parseFloat(budgetAmount);

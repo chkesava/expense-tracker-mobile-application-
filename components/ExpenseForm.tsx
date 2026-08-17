@@ -85,6 +85,11 @@ export interface ExpenseFormProps {
    * owns scrolling. Prevents nested ScrollViews from clipping the save button.
    */
   embedded?: boolean;
+  /**
+   * Which tab a fresh form starts on. Ignored when editing, since the record
+   * being edited already determines its own type.
+   */
+  initialType?: "expense" | "income";
 }
 
 export function ExpenseForm({
@@ -93,6 +98,7 @@ export function ExpenseForm({
   onSuccess,
   onCancel,
   embedded = false,
+  initialType = "expense",
 }: ExpenseFormProps) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
@@ -113,7 +119,7 @@ export function ExpenseForm({
   const { transfers } = useAccountTransfers();
 
   const [type, setType] = useState<"expense" | "income">(
-    editingIncome ? "income" : "expense"
+    editingIncome ? "income" : initialType
   );
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState("");
@@ -180,7 +186,7 @@ export function ExpenseForm({
       setSpaceId("");
       setCategoryTouched(true);
     } else {
-      setType("expense");
+      setType(initialType);
       setAmount("");
       setDate(todayDateKey(settings.timezone));
       setCategory(settings.defaultCategory || "Food & Dining");
@@ -192,7 +198,14 @@ export function ExpenseForm({
       setSpaceId("");
       setCategoryTouched(false);
     }
-  }, [editingExpense, editingIncome, settings.defaultCategory, settings.timezone, accounts]);
+  }, [
+    editingExpense,
+    editingIncome,
+    initialType,
+    settings.defaultCategory,
+    settings.timezone,
+    accounts,
+  ]);
 
   // An archived space stays on its existing expenses but is no longer offered.
   const selectableSpaces = useMemo(

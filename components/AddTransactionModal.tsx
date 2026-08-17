@@ -6,6 +6,8 @@ export function AddTransactionModal() {
   const {
     isAddExpenseOpen,
     setIsAddExpenseOpen,
+    addTransactionKind,
+    setAddTransactionKind,
     editingExpense,
     setEditingExpense,
     editingIncome,
@@ -16,6 +18,8 @@ export function AddTransactionModal() {
     setIsAddExpenseOpen(false);
     setEditingExpense(null);
     setEditingIncome(null);
+    // Reset so the next opener gets the default expense tab.
+    setAddTransactionKind("expense");
   };
 
   return (
@@ -27,11 +31,14 @@ export function AddTransactionModal() {
           ? "Edit Expense"
           : editingIncome
             ? "Edit Income"
-            : "Add Transaction"
+            : addTransactionKind === "income"
+              ? "Add Income"
+              : "Add Transaction"
       }
     >
       <ExpenseForm
         embedded
+        initialType={addTransactionKind}
         editingExpense={editingExpense}
         editingIncome={editingIncome}
         onSuccess={handleClose}

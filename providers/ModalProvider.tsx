@@ -2,9 +2,18 @@ import React, { createContext, useContext, useState, type ReactNode } from "reac
 import type { Account, Expense, Income } from "@/shared/types/expense";
 import { currentMonthKey } from "@/shared/utils/dates";
 
+export type TransactionKind = "expense" | "income";
+
 export interface ModalContextType {
   isAddExpenseOpen: boolean;
   setIsAddExpenseOpen: (open: boolean) => void;
+  /**
+   * Which tab the shared Add Transaction sheet opens on. Callers that mean
+   * "log an income" set this to "income"; it resets to "expense" whenever the
+   * sheet closes so the common case is unaffected.
+   */
+  addTransactionKind: TransactionKind;
+  setAddTransactionKind: (kind: TransactionKind) => void;
   isMagicChatOpen: boolean;
   setIsMagicChatOpen: (open: boolean) => void;
   isReceiptScannerOpen: boolean;
@@ -29,6 +38,8 @@ const ModalContext = createContext<ModalContextType | undefined>(undefined);
 
 export function ModalProvider({ children }: { children: ReactNode }) {
   const [isAddExpenseOpen, setIsAddExpenseOpen] = useState(false);
+  const [addTransactionKind, setAddTransactionKind] =
+    useState<TransactionKind>("expense");
   const [isMagicChatOpen, setIsMagicChatOpen] = useState(false);
   const [isReceiptScannerOpen, setIsReceiptScannerOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
@@ -44,6 +55,8 @@ export function ModalProvider({ children }: { children: ReactNode }) {
       value={{
         isAddExpenseOpen,
         setIsAddExpenseOpen,
+        addTransactionKind,
+        setAddTransactionKind,
         isMagicChatOpen,
         setIsMagicChatOpen,
         isReceiptScannerOpen,

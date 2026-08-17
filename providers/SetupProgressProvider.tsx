@@ -19,7 +19,6 @@ import { useSettings } from "@/providers/SettingsProvider";
 import { useUserDoc } from "@/providers/UserDocProvider";
 import { useTheme } from "@/theme/ThemeProvider";
 
-import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 
 export type SetupStep = {
   id: string;
@@ -49,15 +48,19 @@ const SetupProgressContext = createContext<SetupProgressContextType | undefined>
 export function SetupProgressProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const { settings, updateSettings } = useSettings();
-  const { settings: systemSettings } = useSystemSettings();
   const { data: userDoc, loading: userDocLoading } = useUserDoc();
-  const { themeName } = useTheme();
+  const { themeMode } = useTheme();
   const { accounts, loading: accountsLoading } = useAccounts();
   const { expenses, loading: expensesLoading } = useExpenses();
   const { incomes, loading: incomesLoading } = useIncomes();
   const { categories } = useCategories();
   const { celebrate } = useCelebration();
-  const { setIsAddExpenseOpen, setIsSetupWizardOpen, setSetupWizardInitialStep } = useModals();
+  const {
+    setIsAddExpenseOpen,
+    setAddTransactionKind,
+    setIsSetupWizardOpen,
+    setSetupWizardInitialStep,
+  } = useModals();
 
   const launchSetupWizard = useCallback((stepIndex: number = 0) => {
     setSetupWizardInitialStep(stepIndex);
@@ -121,7 +124,10 @@ export function SetupProgressProvider({ children }: { children: ReactNode }) {
       {
         id: "currency",
         label: "Select your default currency",
-        completed: Boolean(systemSettings?.defaultCurrency),
+        // The shared `system_settings/global` currency always carries an "INR"
+        // fallback, so it is truthy before the user has chosen anything. Only
+        // an explicit confirmation in the wizard completes this step.
+        completed: Boolean(onboarding?.currencyChosen),
         onNavigate: () => launchSetupWizard(1),
       },
       {
@@ -146,7 +152,12 @@ export function SetupProgressProvider({ children }: { children: ReactNode }) {
         id: "income",
         label: "Log your first income",
         completed: incomes.length > 0,
-        onNavigate: () => setIsAddExpenseOpen(true),
+        // The Add Transaction sheet is shared; open it on the Income tab so the
+        // step doesn't drop the user on the expense form.
+        onNavigate: () => {
+          setAddTransactionKind("income");
+          setIsAddExpenseOpen(true);
+        },
       },
       {
         id: "first_category",
@@ -157,7 +168,10 @@ export function SetupProgressProvider({ children }: { children: ReactNode }) {
       {
         id: "theme",
         label: "Customize your theme",
-        completed: themeName !== "dark",
+        // Was `themeName !== "dark"`, which self-completed for anyone whose
+        // phone was in light mode. Theme mode starts at "system", so leaving
+        // it means the user has not chosen.
+        completed: themeMode !== "system",
         onNavigate: () => router.push("/settings"),
       },
       {
@@ -175,16 +189,17 @@ export function SetupProgressProvider({ children }: { children: ReactNode }) {
     ];
   }, [
     userDoc?.username,
-    systemSettings?.defaultCurrency,
+    onboarding?.currencyChosen,
     settings.monthlyBudget,
     accounts.length,
     expenses.length,
     incomes.length,
     categories,
-    themeName,
+    themeMode,
     visitedScreens,
     launchSetupWizard,
     setIsAddExpenseOpen,
+    setAddTransactionKind,
     router,
   ]);
 
@@ -201,12 +216,52 @@ export function SetupProgressProvider({ children }: { children: ReactNode }) {
     onboarding?.setupStartedAt || !hasFinancialData
   );
 
-  const isOnboarding = Boolean(
-    !dataLoading &&
-      !onboarding?.onboardingDismissed &&
-      completedCount < totalCount &&
-      isExplicitlyOnboarding
+  /**
+   * Whether this user's setup is still being tracked — same as `isOnboarding`
+   * but *without* the "not yet finished" condition. Milestones must key off
+   * this: gating them on `isOnboarding` made the 100% milestone unreachable,
+   * because reaching 100% is exactly what turns `isOnboarding` false.
+   */
+  const isTrackingSetup = Boolean(
+    !dataLoading && !onboarding?.onboardingDismissed && isExplicitlyOnboarding
   );
+
+  const isOnboarding = Boolean(isTrackingSetup && completedCount < totalCount);
+
+  /**
+   * The currency and theme steps used to complete themselves (a global currency
+   * default, and a light-mode phone). Tightening them would re-open the
+   * checklist for established users who had already finished it, so anyone with
+   * real data whose *only* outstanding steps are those two is treated as done
+   * and dismissed once.
+   */
+  const legacyCompleteRef = useRef(false);
+  useEffect(() => {
+    if (dataLoading || legacyCompleteRef.current) return;
+    if (!isTrackingSetup || !hasFinancialData) return;
+
+    const RELAXED_STEPS = ["currency", "theme"];
+    const onlyRelaxedOutstanding = steps.every(
+      (step) => step.completed || RELAXED_STEPS.includes(step.id)
+    );
+    const someRelaxedOutstanding = steps.some(
+      (step) => !step.completed && RELAXED_STEPS.includes(step.id)
+    );
+
+    if (onlyRelaxedOutstanding && someRelaxedOutstanding) {
+      legacyCompleteRef.current = true;
+      void updateSettings({
+        onboarding: { ...onboarding, onboardingDismissed: true },
+      });
+    }
+  }, [
+    dataLoading,
+    isTrackingSetup,
+    hasFinancialData,
+    steps,
+    onboarding,
+    updateSettings,
+  ]);
 
   // First launch welcome modal shows ONLY if:
   // 1. Data has finished loading
@@ -218,9 +273,9 @@ export function SetupProgressProvider({ children }: { children: ReactNode }) {
       (!hasFinancialData || onboarding?.setupStartedAt)
   );
 
-  // Handle threshold celebrations (only during active onboarding)
+  // Handle threshold celebrations (while setup is still being tracked)
   useEffect(() => {
-    if (dataLoading || !isOnboarding || !onboarding?.welcomeCompleted) return;
+    if (dataLoading || !isTrackingSetup || !onboarding?.welcomeCompleted) return;
 
     const p = progress * 100;
     const completedSet = new Set(completedSteps);
@@ -278,7 +333,7 @@ export function SetupProgressProvider({ children }: { children: ReactNode }) {
   }, [
     progress,
     dataLoading,
-    isOnboarding,
+    isTrackingSetup,
     onboarding,
     completedSteps,
     celebrate,
@@ -309,6 +364,8 @@ export function SetupProgressProvider({ children }: { children: ReactNode }) {
         completedSteps: [],
         setupStartedAt: new Date().toISOString(),
         visitedScreens: [],
+        // Restarting setup should make the currency step actionable again.
+        currencyChosen: false,
       },
     });
   }, [updateSettings]);
