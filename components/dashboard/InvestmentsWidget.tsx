@@ -68,7 +68,7 @@ export function InvestmentsWidget({ currency }: InvestmentsWidgetProps) {
       action={
         <SectionAction
           label="Investments"
-          onPress={() => router.push("/ledger?tab=investments")}
+          onPress={() => router.push("/investments")}
         />
       }
       contentStyle={styles.list}

@@ -3,6 +3,7 @@ import {
   CORE_NAV_ITEMS,
   isNavItemActive,
   resolveAndroidBackAction,
+  resolveLegacyLedgerTabRoute,
 } from "./navigation";
 
 describe("resolveAndroidBackAction", () => {
@@ -28,8 +29,11 @@ describe("resolveAndroidBackAction", () => {
 
   it("returns to the start destination from secondary tabs", () => {
     expect(resolveAndroidBackAction("/ledger")).toBe("home");
-    expect(resolveAndroidBackAction("/ledger?tab=splits")).toBe("home");
+    expect(resolveAndroidBackAction("/ledger?tab=subscriptions")).toBe("home");
     expect(resolveAndroidBackAction("/vaults")).toBe("home");
+    expect(resolveAndroidBackAction("/vaults?tab=splits")).toBe("home");
+    expect(resolveAndroidBackAction("/investments")).toBe("home");
+    expect(resolveAndroidBackAction("/investments?tab=sip")).toBe("home");
     expect(resolveAndroidBackAction("/insights")).toBe("home");
   });
 
@@ -58,7 +62,16 @@ describe("isNavItemActive", () => {
   it("matches vaults", () => {
     expect(isNavItemActive("/vaults", "vaults")).toBe(true);
     expect(isNavItemActive("/(app)/vaults", "vaults")).toBe(true);
+    expect(isNavItemActive("/vaults?tab=splits", "vaults")).toBe(true);
     expect(isNavItemActive("/dashboard", "vaults")).toBe(false);
+  });
+
+  it("matches investments and does not treat it as ledger", () => {
+    expect(isNavItemActive("/investments", "investments")).toBe(true);
+    expect(isNavItemActive("/(app)/investments", "investments")).toBe(true);
+    expect(isNavItemActive("/investments?tab=portfolio", "investments")).toBe(true);
+    expect(isNavItemActive("/investments", "ledger")).toBe(false);
+    expect(isNavItemActive("/ledger", "investments")).toBe(false);
   });
 
   it("matches insights", () => {
@@ -77,6 +90,26 @@ describe("isNavItemActive", () => {
     expect(ledger?.path).toBe("/ledger");
     expect(ledger?.label).toBe("Transactions");
     expect(ledger?.mobileLabel).toBe("Transactions");
+  });
+
+  it("exposes investments as a feature-flagged bottom-nav hub", () => {
+    const investments = CORE_NAV_ITEMS.find((item) => item.id === "investments");
+    expect(investments?.path).toBe("/investments");
+    expect(investments?.label).toBe("Investments");
+    expect(investments?.includeInBottomNav).toBe(true);
+    expect(investments?.requiresInvestmentsFeature).toBe(true);
+  });
+
+  it("remaps legacy ledger tabs onto the vaults and investments hubs", () => {
+    expect(resolveLegacyLedgerTabRoute("splits")).toBe("/vaults?tab=splits");
+    expect(resolveLegacyLedgerTabRoute("spaces")).toBe("/vaults?tab=spaces");
+    expect(resolveLegacyLedgerTabRoute("travel")).toBe("/vaults?tab=travel");
+    expect(resolveLegacyLedgerTabRoute("collect")).toBe("/vaults?tab=collect");
+    expect(resolveLegacyLedgerTabRoute("investments")).toBe("/investments");
+    expect(resolveLegacyLedgerTabRoute("portfolio")).toBe("/investments?tab=portfolio");
+    expect(resolveLegacyLedgerTabRoute("sip")).toBe("/investments?tab=sip");
+    expect(resolveLegacyLedgerTabRoute("subscriptions")).toBe(null);
+    expect(resolveLegacyLedgerTabRoute(undefined)).toBe(null);
   });
 
   it("matches admin", () => {

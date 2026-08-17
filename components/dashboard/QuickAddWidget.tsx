@@ -52,7 +52,7 @@ export function QuickAddWidget({ onAddExpense }: QuickAddWidgetProps) {
       id: "splits",
       label: "Split Bills",
       icon: Users,
-      onPress: go("/ledger?tab=splits"),
+      onPress: go("/vaults?tab=splits"),
     },
     {
       id: "subscriptions",

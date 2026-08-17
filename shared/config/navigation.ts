@@ -36,6 +36,15 @@ export const CORE_NAV_ITEMS: NavigationItem[] = [
     includeInDrawer: true,
   },
   {
+    id: "investments",
+    path: "/investments",
+    label: "Investments",
+    mobileLabel: "Investments",
+    includeInBottomNav: true,
+    includeInDrawer: true,
+    requiresInvestmentsFeature: true,
+  },
+  {
     id: "insights",
     path: "/insights",
     label: "Insights",
@@ -60,19 +69,54 @@ export const ADMIN_NAV_ITEM: NavigationItem = {
   includeInDrawer: true,
 };
 
+export const LEDGER_HUB_TAB_IDS = [
+  "expenses",
+  "accounts",
+  "cards",
+  "ccBills",
+  "borrowings",
+  "receivables",
+  "subscriptions",
+] as const;
+
+export const VAULT_HUB_TAB_IDS = [
+  "shared",
+  "spaces",
+  "splits",
+  "travel",
+  "collect",
+] as const;
+
+export const INVESTMENT_HUB_TAB_IDS = [
+  "investments",
+  "portfolio",
+  "sip",
+] as const;
+
+/**
+ * Old `/ledger?tab=` values that now live on Vaults or Investments.
+ * Returns the replacement href, or null when the tab still belongs on ledger.
+ */
+export function resolveLegacyLedgerTabRoute(tab: string | undefined): string | null {
+  if (!tab) return null;
+  if (tab === "spaces" || tab === "splits" || tab === "travel" || tab === "collect") {
+    return `/vaults?tab=${tab}`;
+  }
+  if (tab === "investments") return "/investments";
+  if (tab === "portfolio" || tab === "sip") return `/investments?tab=${tab}`;
+  return null;
+}
+
 const LEDGER_PREFIXES = [
   "/ledger",
   "/expenses",
-  "/split",
   "/subscriptions",
-  "/travel",
   "/cards",
   "/accounts",
-  "/collect",
-  "/investments",
 ];
 const INSIGHTS_PREFIXES = ["/insights", "/analytics", "/analysis"];
-const VAULT_PREFIXES = ["/vaults"];
+const VAULT_PREFIXES = ["/vaults", "/split", "/travel", "/collect"];
+const INVESTMENTS_PREFIXES = ["/investments"];
 
 function normalizePathname(pathname: string): string {
   if (!pathname) return "/dashboard";
@@ -102,7 +146,7 @@ const SUB_SCREEN_PREFIXES = [
 
 const SUB_SCREEN_ROUTES = ["/settings", "/sms-inbox", "/app-selector", "/add"];
 
-const SECONDARY_TAB_PREFIXES = ["/ledger", "/vaults", "/insights"];
+const SECONDARY_TAB_PREFIXES = ["/ledger", "/vaults", "/investments", "/insights"];
 
 export function resolveAndroidBackAction(pathname: string): AndroidBackAction {
   const clean = normalizePathname(pathname);
@@ -130,7 +174,10 @@ export function isNavItemActive(pathname: string, id: NavSectionId): boolean {
   if (id === "settings") return clean.startsWith("/settings");
   if (id === "admin") return clean.startsWith("/admin");
   if (id === "vaults") return VAULT_PREFIXES.some((prefix) => clean.startsWith(prefix));
+  if (id === "investments") {
+    return INVESTMENTS_PREFIXES.some((prefix) => clean.startsWith(prefix));
+  }
   if (id === "insights") return INSIGHTS_PREFIXES.some((prefix) => clean.startsWith(prefix));
-  return LEDGER_PREFIXES.some((prefix) => clean.startsWith(prefix));
+  if (id === "ledger") return LEDGER_PREFIXES.some((prefix) => clean.startsWith(prefix));
+  return false;
 }
-

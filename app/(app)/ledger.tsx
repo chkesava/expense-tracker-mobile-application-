@@ -8,19 +8,11 @@ import {
 import { useRouter, useLocalSearchParams } from "expo-router";
 import {
   ArrowDownLeft,
-  BarChart3,
   Calendar,
   CreditCard,
-  HandCoins,
   History,
   Landmark,
-  LayoutGrid,
-  Plane,
-  Plus,
   Repeat,
-  Sparkles,
-  TrendingUp,
-  Users,
   Wallet,
 } from "lucide-react-native";
 
@@ -29,15 +21,7 @@ import { CardsList } from "@/components/accounts/CardsList";
 import { CreditCardBillsList } from "@/components/creditCardBills/CreditCardBillsList";
 import { BorrowingsList } from "@/components/borrowings/BorrowingsList";
 import { ReceivablesList } from "@/components/receivables/ReceivablesList";
-import { CollectList } from "@/components/collect/CollectList";
-import { SpacesList } from "@/components/spaces/SpacesList";
-import { SplitsList } from "@/components/splits/SplitsList";
 import { SubscriptionsList } from "@/components/subscriptions/SubscriptionsList";
-import { TripsList } from "@/components/trips/TripsList";
-import { InvestmentsList } from "@/components/investments/InvestmentsList";
-import { PortfolioDashboard } from "@/components/portfolio/PortfolioDashboard";
-import { SipDashboard } from "@/components/sip/SipDashboard";
-import { Amount } from "@/components/common/Amount";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { SearchBar } from "@/components/common/SearchBar";
@@ -45,21 +29,16 @@ import { Skeleton } from "@/components/common/Skeleton";
 import { ExpenseList } from "@/components/ExpenseList";
 import { PageHeader, type PageHeaderTab } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
-import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
-import { useAccountEntries } from "@/hooks/useAccountEntries";
-import { useAccountPayments } from "@/hooks/useAccountPayments";
 import { useAccounts } from "@/hooks/useAccounts";
-import { useAccountTransfers } from "@/hooks/useAccountTransfers";
-import { useAccountTypes } from "@/hooks/useAccountTypes";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useIncomes } from "@/hooks/useIncomes";
 import { useLedgerState, type LedgerTab } from "@/providers/LedgerStateProvider";
 import { useModals } from "@/providers/ModalProvider";
 import { useSettings } from "@/providers/SettingsProvider";
-import { useSystemSettings } from "@/providers/SystemSettingsProvider";
-import { computeBankBalance } from "@/shared/utils/accountBalance";
-import { getAccountKind } from "@/shared/utils/accountKind";
+import {
+  LEDGER_HUB_TAB_IDS,
+  resolveLegacyLedgerTabRoute,
+} from "@/shared/config/navigation";
 import { currentMonthKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
@@ -70,7 +49,6 @@ export default function LedgerScreen() {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const { settings } = useSettings();
-  const { settings: system } = useSystemSettings();
   const {
     setIsAddExpenseOpen,
     globalMonth,
@@ -94,24 +72,21 @@ export default function LedgerScreen() {
     retry: retryExpenses,
   } = useExpenses();
   const { incomes, loading: incomesLoading } = useIncomes();
-  const { accounts, loading: accountsLoading } = useAccounts();
-  const { accountTypes } = useAccountTypes();
-  const { payments } = useAccountPayments();
-  const { entries } = useAccountEntries();
-  const { transfers } = useAccountTransfers();
-  const investmentsEnabled = settings.enableInvestments && system.enableInvestments;
+  const { accounts } = useAccounts();
 
   useEffect(() => {
-    if (params.tab === "subscriptions") {
-      setLedgerTab("subscriptions");
+    const remapped = resolveLegacyLedgerTabRoute(params.tab);
+    if (remapped) {
+      router.replace(remapped as never);
+      return;
     }
-  }, [params.tab, setLedgerTab]);
-
-  useEffect(() => {
-    if (!investmentsEnabled && (ledgerTab === "investments" || ledgerTab === "portfolio")) {
-      setLedgerTab("expenses");
+    if (
+      params.tab &&
+      (LEDGER_HUB_TAB_IDS as readonly string[]).includes(params.tab)
+    ) {
+      setLedgerTab(params.tab as LedgerTab);
     }
-  }, [investmentsEnabled, ledgerTab, setLedgerTab]);
+  }, [params.tab, router, setLedgerTab]);
 
   const [refreshing, setRefreshing] = useState(false);
   const handleRefresh = () => {
@@ -120,12 +95,6 @@ export default function LedgerScreen() {
   };
 
   const activeMonth = globalMonth || currentMonthKey(settings.timezone);
-
-  const typeMap = useMemo(() => {
-    const map = new Map<string, string>();
-    accountTypes.forEach((t) => map.set(t.id, t.name));
-    return map;
-  }, [accountTypes]);
 
   // Filtered expenses for active month + search query
   const filteredExpenses = useMemo(() => {
@@ -198,49 +167,10 @@ export default function LedgerScreen() {
       icon: <ArrowDownLeft size={16} color={tabIconColor("receivables")} />,
     },
     {
-      id: "spaces",
-      label: "Spaces",
-      icon: <LayoutGrid size={16} color={tabIconColor("spaces")} />,
-    },
-    {
-      id: "splits",
-      label: "Splits",
-      icon: <Users size={16} color={tabIconColor("splits")} />,
-    },
-    {
       id: "subscriptions",
       label: "Subscriptions",
       icon: <Repeat size={16} color={tabIconColor("subscriptions")} />,
     },
-    {
-      id: "travel",
-      label: "Travel",
-      icon: <Plane size={16} color={tabIconColor("travel")} />,
-    },
-    {
-      id: "collect",
-      label: "Collect",
-      icon: <HandCoins size={16} color={tabIconColor("collect")} />,
-    },
-    ...(investmentsEnabled
-      ? [
-          {
-            id: "investments",
-            label: "Investments",
-            icon: <TrendingUp size={16} color={tabIconColor("investments")} />,
-          },
-          {
-            id: "portfolio",
-            label: "Stocks",
-            icon: <BarChart3 size={16} color={tabIconColor("portfolio")} />,
-          },
-          {
-            id: "sip",
-            label: "Virtual SIPs",
-            icon: <Calendar size={16} color={tabIconColor("sip")} />,
-          },
-        ]
-      : []),
   ];
 
   const isExpenseListTab =
@@ -252,8 +182,8 @@ export default function LedgerScreen() {
       contentContainerStyle={styles.container}
     >
       <PageHeader
-        title="Ledger Hub"
-        subtitle="Transactions & Accounts"
+        title="Transactions"
+        subtitle="Journal, accounts & bills"
         icon={<Wallet size={22} color={theme.colors.success} />}
         activeTab={ledgerTab}
         onTabChange={(tab) => setLedgerTab(tab as LedgerTab)}
@@ -445,29 +375,8 @@ export default function LedgerScreen() {
       {/* Tab: Receivables */}
       {ledgerTab === "receivables" && <ReceivablesList />}
 
-      {/* Tab: Spaces */}
-      {ledgerTab === "spaces" && <SpacesList />}
-
-      {/* Tab: Splits */}
-      {ledgerTab === "splits" && <SplitsList />}
-
       {/* Tab: Subscriptions */}
       {ledgerTab === "subscriptions" && <SubscriptionsList />}
-
-      {/* Tab: Travel */}
-      {ledgerTab === "travel" && <TripsList />}
-
-      {/* Tab: Collect */}
-      {ledgerTab === "collect" && <CollectList />}
-
-      {/* Tab: Investments */}
-      {ledgerTab === "investments" && investmentsEnabled && <InvestmentsList />}
-
-      {/* Tab: Portfolio / Stocks */}
-      {ledgerTab === "portfolio" && investmentsEnabled && <PortfolioDashboard />}
-
-      {/* Tab: Virtual SIPs */}
-      {ledgerTab === "sip" && investmentsEnabled && <SipDashboard />}
     </PageShell>
   );
 }

@@ -71,6 +71,12 @@ function AppShellInner() {
           }}
         />
         <Stack.Screen
+          name="investments"
+          options={{
+            animation: "fade",
+          }}
+        />
+        <Stack.Screen
           name="settings"
           options={{
             animation: "slide_from_right",

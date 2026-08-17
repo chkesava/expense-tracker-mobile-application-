@@ -453,7 +453,7 @@ export function AccountsList() {
           <Pressable
             onPress={() => {
               Haptics.selectionAsync().catch(() => undefined);
-              push("/ledger?tab=portfolio" as never);
+              push("/investments?tab=portfolio" as never);
             }}
             android_ripple={{ color: ripple, borderless: false }}
             style={styles.stockCardHeader}
@@ -537,7 +537,7 @@ export function AccountsList() {
               size="sm"
               onPress={() => {
                 Haptics.selectionAsync().catch(() => undefined);
-                push("/ledger?tab=portfolio" as never);
+                push("/investments?tab=portfolio" as never);
               }}
               style={{ flex: 1 }}
             >

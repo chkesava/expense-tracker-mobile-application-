@@ -12,6 +12,7 @@
 const RESTORABLE_ROUTES = [
   "/ledger",
   "/vaults",
+  "/investments",
   "/insights",
   "/settings",
   "/sms-inbox",
