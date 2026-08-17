@@ -1,14 +1,19 @@
 import { useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { AlertCircle, CheckCircle2, Sparkles, TrendingUp } from "lucide-react-native";
+import { Gauge } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
 import { EmptyState } from "@/components/common/EmptyState";
-import { Card } from "@/components/ui/Card";
+import {
+  MetaLabel,
+  ProgressTrack,
+  Section,
+  StatTile,
+  useSurfaces,
+} from "@/components/dashboard/primitives";
 import type { Expense } from "@/shared/types/expense";
 import { computeDailySpendingPace } from "@/shared/utils/dashboardWidgets";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
 
 export interface InsightWidgetProps {
   expenses: Expense[];
@@ -23,8 +28,8 @@ export function InsightWidget({
   monthlyBudget = 0,
   currency,
 }: InsightWidgetProps) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
 
   const pace = useMemo(() => {
     return computeDailySpendingPace(expenses, activeMonth, monthlyBudget);
@@ -32,7 +37,10 @@ export function InsightWidget({
 
   if (expenses.length === 0) {
     return (
-      <Card title="Daily Spending Pace">
+      <Section
+        title="Daily Spending Pace"
+        icon={<Gauge size={16} color={theme.colors.mutedForeground} strokeWidth={2.3} />}
+      >
         <EmptyState
           illustration="analytics"
           compact
@@ -40,120 +48,128 @@ export function InsightWidget({
           description="Spending velocity, projected monthly run rate, and pace alerts will calculate automatically."
           tip="Log expenses as they happen for the most accurate daily velocity tracking."
         />
-      </Card>
+      </Section>
     );
   }
 
+  const paceColor = pace.isOverPace
+    ? theme.colors.destructive
+    : theme.colors.success;
+
+  /**
+   * How far through the month we are vs how far through the budget — the
+   * clearest way to show current pace against target pace.
+   */
+  const monthPct = (pace.daysElapsed / pace.daysInMonth) * 100;
+  const budgetPct =
+    monthlyBudget > 0 ? (pace.totalSpent / monthlyBudget) * 100 : monthPct;
+
   return (
-    <Card
+    <Section
       title="Daily Spending Pace"
-      subtitle={`${activeMonth} · ${pace.daysElapsed} of ${pace.daysInMonth} days elapsed`}
+      subtitle={`${activeMonth} · day ${pace.daysElapsed} of ${pace.daysInMonth}`}
+      icon={<Gauge size={16} color={paceColor} strokeWidth={2.3} />}
+      iconTint={surfaces.wash(paceColor)}
     >
-      <View style={styles.grid}>
-        {/* Daily Average Box */}
-        <View
-          style={[
-            styles.statCard,
-            {
-              backgroundColor: isDark
-                ? "rgba(255,255,255,0.04)"
-                : "rgba(0,0,0,0.03)",
-              borderColor: theme.colors.border,
-            },
-          ]}
+      <View style={styles.tiles}>
+        <StatTile
+          label="Daily average"
+          meta={<MetaLabel>per day spent</MetaLabel>}
         >
-          <Text
-            style={[
-              styles.statLabel,
-              { color: theme.colors.mutedForeground },
-            ]}
-          >
-            Daily Average
-          </Text>
           <Amount
             value={pace.averageDailySpend}
             currency={currency}
             ghostable
             style={{
-              fontSize: theme.typography.md,
-              fontWeight: "800",
+              fontSize: 17,
+              letterSpacing: -0.4,
+              fontFamily: theme.fontFamily.bold,
               color: theme.colors.foreground,
             }}
           />
-          <Text
-            style={{
-              fontSize: 10,
-              color: theme.colors.mutedForeground,
-            }}
-          >
-            per day spent
-          </Text>
-        </View>
+        </StatTile>
 
-        {/* Projected Month End Box */}
-        <View
-          style={[
-            styles.statCard,
-            {
-              backgroundColor: isDark
-                ? "rgba(255,255,255,0.04)"
-                : "rgba(0,0,0,0.03)",
-              borderColor: theme.colors.border,
-            },
-          ]}
+        <StatTile
+          label="Projected total"
+          meta={
+            <Text
+              style={[
+                styles.paceMeta,
+                { color: paceColor, fontFamily: theme.fontFamily.medium },
+              ]}
+              numberOfLines={1}
+            >
+              {pace.isOverPace ? "Over budget pace" : "Within pace"}
+            </Text>
+          }
         >
-          <Text
-            style={[
-              styles.statLabel,
-              { color: theme.colors.mutedForeground },
-            ]}
-          >
-            Projected Total
-          </Text>
           <Amount
             value={pace.projectedMonthEnd}
             currency={currency}
             ghostable
             style={{
-              fontSize: theme.typography.md,
-              fontWeight: "800",
+              fontSize: 17,
+              letterSpacing: -0.4,
+              fontFamily: theme.fontFamily.bold,
               color: pace.isOverPace
                 ? theme.colors.destructive
                 : theme.colors.foreground,
             }}
           />
-          <Text
-            style={{
-              fontSize: 10,
-              color: pace.isOverPace
-                ? theme.colors.destructive
-                : theme.colors.success,
-              fontWeight: "600",
-            }}
-          >
-            {pace.isOverPace ? "Over budget pace" : "Within pace"}
-          </Text>
-        </View>
+        </StatTile>
       </View>
-    </Card>
+
+      {monthlyBudget > 0 ? (
+        <View style={styles.compare}>
+          <View style={styles.compareLine}>
+            <MetaLabel>Budget used</MetaLabel>
+            <Text
+              style={[
+                styles.comparePct,
+                { color: paceColor, fontFamily: theme.fontFamily.semibold },
+              ]}
+            >
+              {Math.round(budgetPct)}%
+            </Text>
+          </View>
+          <ProgressTrack pct={budgetPct} color={paceColor} height={6} />
+
+          <View style={styles.compareLine}>
+            <MetaLabel>Month elapsed</MetaLabel>
+            <MetaLabel>{Math.round(monthPct)}%</MetaLabel>
+          </View>
+          <ProgressTrack
+            pct={monthPct}
+            color={theme.colors.mutedForeground}
+            height={6}
+          />
+        </View>
+      ) : null}
+    </Section>
   );
 }
 
 const styles = StyleSheet.create({
-  grid: {
+  tiles: {
     flexDirection: "row",
     gap: 10,
   },
-  statCard: {
-    flex: 1,
-    padding: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    gap: 4,
-  },
-  statLabel: {
+  paceMeta: {
     fontSize: 11,
-    fontWeight: "700",
-    textTransform: "uppercase",
+    lineHeight: 15,
+  },
+  compare: {
+    marginTop: 14,
+    gap: 6,
+  },
+  compareLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    marginTop: 4,
+  },
+  comparePct: {
+    fontSize: 12,
   },
 });

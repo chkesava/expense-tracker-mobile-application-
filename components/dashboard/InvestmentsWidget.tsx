@@ -1,199 +1,163 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import * as Haptics from "expo-haptics";
-import { ChevronRight } from "lucide-react-native";
+import { PieChart } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
-import { Card } from "@/components/ui/Card";
+import {
+  Section,
+  SectionAction,
+  useSurfaces,
+} from "@/components/dashboard/primitives";
 import { useUnifiedNetWorth } from "@/hooks/useUnifiedNetWorth";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
 
 export interface InvestmentsWidgetProps {
   liquidBalance?: number;
   currency: string;
 }
 
-export function InvestmentsWidget({
-  currency,
-}: InvestmentsWidgetProps) {
+export function InvestmentsWidget({ currency }: InvestmentsWidgetProps) {
   const router = useRouter();
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
   const netWorth = useUnifiedNetWorth();
 
-  const red = isDark ? "#f87171" : "#dc2626";
-  const green = isDark ? "#4ade80" : "#16a34a";
-  const blue = isDark ? "#60a5fa" : "#2563eb";
+  const lines: {
+    key: string;
+    label: string;
+    value: number;
+    color: string;
+    prefix?: string;
+  }[] = [
+    {
+      key: "liquid",
+      label: "Liquid holdings",
+      value: netWorth.liquidBankAssets,
+      color: theme.colors.foreground,
+    },
+    {
+      key: "investments",
+      label: "Investments (FD/RD)",
+      value: netWorth.investmentsValue,
+      color: theme.colors.success,
+    },
+    {
+      key: "stocks",
+      label: "Stocks & demat",
+      value: netWorth.totalStocksValue,
+      color: theme.colors.info,
+    },
+  ];
+
+  if (netWorth.totalLiabilities > 0) {
+    lines.push({
+      key: "liabilities",
+      label: "Liabilities (credit cards)",
+      value: netWorth.totalLiabilities,
+      color: theme.colors.destructive,
+      prefix: "-",
+    });
+  }
 
   return (
-    <Card
+    <Section
       title="Asset Allocation"
-      subtitle="Complete net worth & liabilities breakdown"
-      headerRight={
-        <Pressable
-          onPress={() => {
-            Haptics.selectionAsync().catch(() => undefined);
-            router.push("/ledger?tab=investments");
-          }}
-          style={styles.viewBtn}
-        >
+      subtitle="Net worth & liabilities breakdown"
+      icon={<PieChart size={16} color={theme.colors.info} strokeWidth={2.3} />}
+      iconTint={surfaces.wash(theme.colors.info)}
+      action={
+        <SectionAction
+          label="Investments"
+          onPress={() => router.push("/ledger?tab=investments")}
+        />
+      }
+      contentStyle={styles.list}
+    >
+      {lines.map((line) => (
+        <View key={line.key} style={styles.row}>
           <Text
             style={[
-              styles.viewBtnText,
-              { color: theme.colors.primary, fontSize: theme.typography.xs },
+              styles.label,
+              {
+                color: theme.colors.mutedForeground,
+                fontFamily: theme.fontFamily.regular,
+              },
             ]}
+            numberOfLines={1}
           >
-            Investments
-          </Text>
-          <ChevronRight size={14} color={theme.colors.primary} />
-        </Pressable>
-      }
-    >
-      <View style={styles.content}>
-        {/* Liquid Bank Accounts */}
-        <View style={styles.row}>
-          <Text
-            style={{
-              fontSize: theme.typography.sm,
-              color: theme.colors.mutedForeground,
-            }}
-          >
-            Liquid Holdings
+            {line.label}
           </Text>
           <Amount
-            value={netWorth.liquidBankAssets}
+            value={line.value}
             currency={currency}
+            prefix={line.prefix}
             ghostable
             style={{
-              fontSize: theme.typography.sm,
-              fontWeight: "700",
-              color: theme.colors.foreground,
+              fontSize: 14,
+              fontFamily: theme.fontFamily.medium,
+              color: line.color,
             }}
           />
         </View>
+      ))}
 
-        {/* Fixed Investments (FD / RD) */}
-        <View style={styles.row}>
-          <Text
-            style={{
-              fontSize: theme.typography.sm,
-              color: theme.colors.mutedForeground,
-            }}
-          >
-            Investments Value (FD/RD)
-          </Text>
-          <Amount
-            value={netWorth.investmentsValue}
-            currency={currency}
-            ghostable
-            style={{
-              fontSize: theme.typography.sm,
-              fontWeight: "700",
-              color: green,
-            }}
-          />
-        </View>
-
-        {/* Stocks & Demat Cash */}
-        <View style={styles.row}>
-          <Text
-            style={{
-              fontSize: theme.typography.sm,
-              color: theme.colors.mutedForeground,
-            }}
-          >
-            Stocks & Demat
-          </Text>
-          <Amount
-            value={netWorth.totalStocksValue}
-            currency={currency}
-            ghostable
-            style={{
-              fontSize: theme.typography.sm,
-              fontWeight: "700",
-              color: blue,
-            }}
-          />
-        </View>
-
-        {/* Liabilities (Credit Cards & Overdrafts) */}
-        {netWorth.totalLiabilities > 0 && (
-          <View style={styles.row}>
-            <Text
-              style={{
-                fontSize: theme.typography.sm,
-                color: red,
-                fontWeight: "600",
-              }}
-            >
-              Liabilities (Credit Cards)
-            </Text>
-            <Amount
-              value={netWorth.totalLiabilities}
-              currency={currency}
-              prefix="-"
-              ghostable
-              style={{
-                fontSize: theme.typography.sm,
-                fontWeight: "700",
-                color: red,
-              }}
-            />
-          </View>
-        )}
-
-        {/* Total Net Worth */}
-        <View
+      {/* Net worth is the conclusion of the list, so it gets the emphasis. */}
+      <View style={[styles.totalRow, { borderTopColor: surfaces.divider }]}>
+        <Text
           style={[
-            styles.row,
+            styles.totalLabel,
             {
-              paddingTop: 10,
-              borderTopWidth: StyleSheet.hairlineWidth,
-              borderTopColor: theme.colors.border,
+              color: theme.colors.foreground,
+              fontFamily: theme.fontFamily.semibold,
             },
           ]}
         >
-          <Text
-            style={{
-              fontSize: theme.typography.sm,
-              fontWeight: "800",
-              color: theme.colors.foreground,
-            }}
-          >
-            Total Net Worth
-          </Text>
-          <Amount
-            value={netWorth.totalNetWorth}
-            currency={currency}
-            ghostable
-            style={{
-              fontSize: theme.typography.md,
-              fontWeight: "900",
-              color: theme.colors.foreground,
-            }}
-          />
-        </View>
+          Total net worth
+        </Text>
+        <Amount
+          value={netWorth.totalNetWorth}
+          currency={currency}
+          ghostable
+          style={{
+            fontSize: 20,
+            letterSpacing: -0.5,
+            fontFamily: theme.fontFamily.bold,
+            color:
+              netWorth.totalNetWorth >= 0
+                ? theme.colors.foreground
+                : theme.colors.destructive,
+          }}
+        />
       </View>
-    </Card>
+    </Section>
   );
 }
 
 const styles = StyleSheet.create({
-  viewBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 2,
-  },
-  viewBtnText: {
-    fontWeight: "700",
-  },
-  content: {
-    gap: 10,
+  list: {
+    gap: 11,
   },
   row: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    gap: 12,
+  },
+  label: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 13.5,
+  },
+  totalRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    marginTop: 5,
+    paddingTop: 13,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  totalLabel: {
+    fontSize: 14,
   },
 });

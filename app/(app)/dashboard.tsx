@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
-import { ShieldAlert, Sparkles, Inbox } from "lucide-react-native";
+import { ShieldAlert, Sparkles, Inbox, ChevronRight } from "lucide-react-native";
 
 import { BudgetAlertsWidget } from "@/components/dashboard/BudgetAlertsWidget";
 import { DashboardWelcome } from "@/components/dashboard/DashboardWelcome";
@@ -19,6 +19,11 @@ import { RecentActivityWidget } from "@/components/dashboard/RecentActivityWidge
 import { SubscriptionsWidget } from "@/components/dashboard/SubscriptionsWidget";
 import { TopCategoriesWidget } from "@/components/dashboard/TopCategoriesWidget";
 import { SetupChecklistWidget } from "@/components/dashboard/SetupChecklistWidget";
+import {
+  DASH_RADIUS,
+  useSurfaces,
+  withAlpha,
+} from "@/components/dashboard/primitives";
 import { LazyMount } from "@/components/common/LazyMount";
 import { WelcomeScreen } from "@/components/onboarding/WelcomeScreen";
 import { PageShell } from "@/components/layout/PageShell";
@@ -52,7 +57,6 @@ import {
 import { formatDetectedCount } from "@/services/sms/smsReviewInbox";
 import { currentMonthKey, formatDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
 
 /** Soft-pinned hero widgets shown first to match the reference layout. */
 const HERO_WIDGETS: DashboardWidgetId[] = ["focus", "gamification"];
@@ -88,8 +92,8 @@ function formatMonthChipLabel(month: string): string {
 
 export default function DashboardScreen() {
   const router = useRouter();
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
   const { isDuress } = useAuth();
   const { settings: system } = useSystemSettings();
   const { settings } = useSettings();
@@ -465,23 +469,29 @@ export default function DashboardScreen() {
         <View
           style={[
             styles.alertBanner,
-            {
-              backgroundColor: isDark
-                ? "rgba(245, 158, 11, 0.15)"
-                : "rgba(245, 158, 11, 0.1)",
-              borderColor: theme.colors.warning,
-            },
+            { backgroundColor: surfaces.wash(theme.colors.warning) },
           ]}
         >
-          <ShieldAlert size={18} color={theme.colors.warning} />
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.alertTitle, { color: theme.colors.warning }]}>
-              Duress Mode Active
+          <ShieldAlert size={17} color={theme.colors.warning} strokeWidth={2.3} />
+          <View style={styles.alertTextCol}>
+            <Text
+              style={[
+                styles.alertTitle,
+                {
+                  color: theme.colors.warning,
+                  fontFamily: theme.fontFamily.semibold,
+                },
+              ]}
+            >
+              Duress mode active
             </Text>
             <Text
               style={[
                 styles.alertText,
-                { color: theme.colors.mutedForeground },
+                {
+                  color: theme.colors.mutedForeground,
+                  fontFamily: theme.fontFamily.regular,
+                },
               ]}
             >
               Running isolated decoy session. Real ledger data is not loaded.
@@ -496,32 +506,44 @@ export default function DashboardScreen() {
             Haptics.selectionAsync().catch(() => undefined);
             router.push("/sms-inbox" as any);
           }}
-          style={[
+          android_ripple={{
+            color: withAlpha(theme.colors.primary, 0.12),
+            borderless: false,
+          }}
+          style={({ pressed }) => [
             styles.alertBanner,
-            {
-              backgroundColor: isDark
-                ? "rgba(107, 99, 255, 0.15)"
-                : "rgba(79, 70, 255, 0.08)",
-              borderColor: theme.colors.primary,
-            },
+            { backgroundColor: surfaces.wash(theme.colors.primary) },
+            pressed && { opacity: 0.85 },
           ]}
           accessibilityRole="button"
           accessibilityLabel="Open Transaction Inbox"
         >
-          <Inbox size={18} color={theme.colors.primary} />
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.alertTitle, { color: theme.colors.foreground }]}>
-              Transaction Inbox
+          <Inbox size={17} color={theme.colors.primary} strokeWidth={2.3} />
+          <View style={styles.alertTextCol}>
+            <Text
+              style={[
+                styles.alertTitle,
+                {
+                  color: theme.colors.foreground,
+                  fontFamily: theme.fontFamily.semibold,
+                },
+              ]}
+            >
+              Transaction inbox
             </Text>
             <Text
               style={[
                 styles.alertText,
-                { color: theme.colors.mutedForeground },
+                {
+                  color: theme.colors.mutedForeground,
+                  fontFamily: theme.fontFamily.regular,
+                },
               ]}
             >
               {formatDetectedCount(inboxCount)} — tap to Add or Ignore
             </Text>
           </View>
+          <ChevronRight size={16} color={theme.colors.primary} />
         </Pressable>
       ) : null}
 
@@ -529,19 +551,18 @@ export default function DashboardScreen() {
         <View
           style={[
             styles.alertBanner,
-            {
-              backgroundColor: isDark
-                ? "rgba(107, 99, 255, 0.15)"
-                : "rgba(79, 70, 255, 0.08)",
-              borderColor: theme.colors.primary,
-            },
+            { backgroundColor: surfaces.wash(theme.colors.primary) },
           ]}
         >
-          <Sparkles size={18} color={theme.colors.primary} />
+          <Sparkles size={17} color={theme.colors.primary} strokeWidth={2.3} />
           <Text
             style={[
               styles.alertText,
-              { color: theme.colors.foreground, flex: 1 },
+              {
+                color: theme.colors.foreground,
+                fontFamily: theme.fontFamily.regular,
+                flex: 1,
+              },
             ]}
           >
             {system.announcementBanner}
@@ -614,26 +635,30 @@ const styles = StyleSheet.create({
   alertBanner: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    padding: 14,
-    borderRadius: 16,
-    borderWidth: 1,
-    marginBottom: 16,
+    gap: 11,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: DASH_RADIUS.tile,
+    borderCurve: "continuous",
+    marginBottom: 12,
+  },
+  alertTextCol: {
+    flex: 1,
+    minWidth: 0,
+    gap: 1,
   },
   alertTitle: {
-    fontSize: 14,
-    fontWeight: "700",
-    marginBottom: 2,
+    fontSize: 13.5,
   },
   alertText: {
     fontSize: 12,
     lineHeight: 16,
   },
   widgetsGrid: {
-    gap: 14,
+    gap: 12,
   },
   quickInsightsSlot: {
-    marginTop: 14,
-    gap: 14,
+    marginTop: 12,
+    gap: 12,
   },
 });

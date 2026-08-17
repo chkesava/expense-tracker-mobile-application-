@@ -1,12 +1,19 @@
 import { useMemo } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import * as Haptics from "expo-haptics";
-import { ChevronRight, Repeat } from "lucide-react-native";
+import { Landmark, Repeat, Wallet } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
-import { Card } from "@/components/ui/Card";
+import {
+  DataRow,
+  MetaLabel,
+  RowGlyph,
+  Section,
+  SectionAction,
+  useSurfaces,
+} from "@/components/dashboard/primitives";
 import { useSubscriptions } from "@/hooks/useSubscriptions";
+import type { Subscription } from "@/shared/types/subscription";
 import { computeMonthlyCommitments } from "@/shared/utils/subscriptionProcessor";
 import { useTheme } from "@/theme/ThemeProvider";
 
@@ -16,116 +23,132 @@ export interface SubscriptionsWidgetProps {
 
 const PREVIEW_LIMIT = 4;
 
+const TYPE_ICONS: Record<Subscription["type"], typeof Repeat> = {
+  subscription: Repeat,
+  emi: Landmark,
+  transfer: Wallet,
+};
+
+/** Days until the next occurrence of `dayOfMonth`, clamped to real month lengths. */
+function daysUntilDue(dayOfMonth: number, now = new Date()): number {
+  const day = Math.min(Math.max(1, dayOfMonth || 1), 31);
+  const year = now.getFullYear();
+  const month = now.getMonth();
+
+  const daysThisMonth = new Date(year, month + 1, 0).getDate();
+  const thisMonthDay = Math.min(day, daysThisMonth);
+
+  if (thisMonthDay >= now.getDate()) {
+    return thisMonthDay - now.getDate();
+  }
+
+  const daysNextMonth = new Date(year, month + 2, 0).getDate();
+  const nextMonthDay = Math.min(day, daysNextMonth);
+  const target = new Date(year, month + 1, nextMonthDay);
+  const today = new Date(year, month, now.getDate());
+  return Math.round((target.getTime() - today.getTime()) / 86_400_000);
+}
+
+function dueLabel(days: number): string {
+  if (days <= 0) return "Due today";
+  if (days === 1) return "Due tomorrow";
+  return `Due in ${days} days`;
+}
+
 export function SubscriptionsWidget({ currency }: SubscriptionsWidgetProps) {
   const { push } = useRouter();
   const { theme } = useTheme();
+  const surfaces = useSurfaces();
   const { subscriptions } = useSubscriptions();
 
   const commitments = useMemo(() => {
     return computeMonthlyCommitments(subscriptions);
   }, [subscriptions]);
 
+  /** Soonest-due first so the list answers "what's next?". */
   const preview = useMemo(() => {
     return subscriptions
       .filter((sub) => sub.isActive && !sub.isCompleted)
+      .map((sub) => ({ sub, days: daysUntilDue(sub.dayOfMonth) }))
+      .sort((a, b) => a.days - b.days)
       .slice(0, PREVIEW_LIMIT);
   }, [subscriptions]);
 
-  const openSubscriptions = () => {
-    Haptics.selectionAsync().catch(() => undefined);
-    push("/ledger?tab=subscriptions");
-  };
+  const openSubscriptions = () => push("/ledger?tab=subscriptions");
 
   return (
-    <Card
+    <Section
       title="Recurring Payments"
       subtitle={`${commitments.activeCount} active · ${currency} ${commitments.totalMonthly.toLocaleString()} / mo`}
-      headerRight={
-        <Pressable onPress={openSubscriptions} style={styles.viewBtn}>
-          <Text
-            style={[
-              styles.viewBtnText,
-              { color: theme.colors.primary, fontSize: theme.typography.xs },
-            ]}
-          >
-            Manage
-          </Text>
-          <ChevronRight size={14} color={theme.colors.primary} />
-        </Pressable>
-      }
+      icon={<Repeat size={16} color={theme.colors.primary} strokeWidth={2.3} />}
+      iconTint={surfaces.wash(theme.colors.primary)}
+      action={<SectionAction label="Manage" onPress={openSubscriptions} />}
     >
-      <View style={styles.content}>
-        {preview.length > 0 ? (
-          preview.map((sub) => (
-            <Pressable
-              key={sub.id || sub.name}
-              onPress={openSubscriptions}
-              style={styles.row}
-            >
-              <View style={styles.nameRow}>
-                <Repeat size={14} color={theme.colors.primary} />
-                <Text
-                  style={{
-                    fontSize: theme.typography.sm,
-                    color: theme.colors.foreground,
-                    fontWeight: "600",
-                    flex: 1,
-                  }}
-                  numberOfLines={1}
-                >
-                  {sub.name}
-                </Text>
-              </View>
-              <Amount
-                value={sub.amount}
-                currency={currency}
-                ghostable
-                style={{
-                  fontSize: theme.typography.sm,
-                  fontWeight: "700",
-                  color: theme.colors.foreground,
-                }}
+      {preview.length > 0 ? (
+        <View>
+          {preview.map(({ sub, days }, idx) => {
+            const Icon = TYPE_ICONS[sub.type] ?? Repeat;
+            const isImminent = days <= 3;
+            return (
+              <DataRow
+                key={sub.id || sub.name}
+                onPress={openSubscriptions}
+                divider={idx < preview.length - 1}
+                leading={
+                  <RowGlyph size={34} tint={surfaces.tile}>
+                    <Icon
+                      size={15}
+                      color={theme.colors.mutedForeground}
+                      strokeWidth={2.2}
+                    />
+                  </RowGlyph>
+                }
+                title={sub.name}
+                value={
+                  <Amount
+                    value={sub.amount}
+                    currency={currency}
+                    ghostable
+                    style={{
+                      fontSize: 14.5,
+                      fontFamily: theme.fontFamily.semibold,
+                      color: theme.colors.foreground,
+                    }}
+                  />
+                }
+                valueMeta={
+                  <Text
+                    style={[
+                      styles.due,
+                      {
+                        color: isImminent
+                          ? theme.colors.warning
+                          : theme.colors.mutedForeground,
+                        fontFamily: theme.fontFamily.medium,
+                      },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {dueLabel(days)}
+                  </Text>
+                }
+                accessibilityLabel={`${sub.name}, ${dueLabel(days)}`}
               />
-            </Pressable>
-          ))
-        ) : (
-          <Text
-            style={{
-              fontSize: theme.typography.sm,
-              color: theme.colors.mutedForeground,
-            }}
-          >
-            Repeating merchants like Netflix will show up here.
-          </Text>
-        )}
-      </View>
-    </Card>
+            );
+          })}
+        </View>
+      ) : (
+        <MetaLabel numberOfLines={2}>
+          Repeating merchants like Netflix will show up here.
+        </MetaLabel>
+      )}
+    </Section>
   );
 }
 
 const styles = StyleSheet.create({
-  viewBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 2,
-  },
-  viewBtnText: {
-    fontWeight: "700",
-  },
-  content: {
-    paddingVertical: 4,
-    gap: 10,
-  },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-  nameRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    flex: 1,
+  due: {
+    fontSize: 11,
+    lineHeight: 15,
   },
 });

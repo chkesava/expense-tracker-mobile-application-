@@ -1,11 +1,15 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { ArrowDownLeft, ArrowUpRight, Calendar, TrendingUp } from "lucide-react-native";
-import * as Haptics from "expo-haptics";
+import { ArrowDownLeft, ArrowUpRight, Calendar } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
 import { Skeleton } from "@/components/common/Skeleton";
+import {
+  MetaLabel,
+  Section,
+  useSurfaces,
+} from "@/components/dashboard/primitives";
+import { haptic } from "@/lib/haptics";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
 
 export interface OverviewWidgetProps {
   totalBalance: number;
@@ -26,67 +30,52 @@ export function OverviewWidget({
   isLoading,
   onOpenMonthPicker,
 }: OverviewWidgetProps) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
 
   const netSavings = monthlyIncome - monthlySpent;
-  const savingsRate = monthlyIncome > 0 ? Math.max(0, Math.round((netSavings / monthlyIncome) * 100)) : 0;
+  const savingsRate =
+    monthlyIncome > 0
+      ? Math.max(0, Math.round((netSavings / monthlyIncome) * 100))
+      : 0;
 
   return (
-    <View
-      style={[
-        styles.heroCard,
-        theme.elevation[3],
-        {
-          backgroundColor: theme.colors.card,
-          borderColor: isDark ? "rgba(107, 99, 255, 0.25)" : "rgba(79, 70, 255, 0.15)",
-        },
-      ]}
-    >
-      {/* Top Bar: Subtitle & MD3 Month Filter Chip */}
-      <View style={styles.headerRow}>
-        <View style={styles.titleWrap}>
-          <TrendingUp size={16} color={theme.colors.primary} />
-          <Text style={[styles.heroSubtitle, { color: theme.colors.mutedForeground }]}>
-            TOTAL NET BALANCE
-          </Text>
-        </View>
-
+    <Section
+      title="Total Net Balance"
+      action={
         <Pressable
           onPress={() => {
-            Haptics.selectionAsync().catch(() => undefined);
+            void haptic.selection();
             onOpenMonthPicker();
           }}
-          android_ripple={{
-            color: theme.colors.primary + "20",
-            borderless: false,
-          }}
+          hitSlop={6}
           style={({ pressed }) => [
             styles.monthChip,
-            {
-              backgroundColor: isDark
-                ? "rgba(107, 99, 255, 0.15)"
-                : "rgba(79, 70, 255, 0.08)",
-              borderColor: isDark
-                ? "rgba(107, 99, 255, 0.3)"
-                : "rgba(79, 70, 255, 0.2)",
-            },
-            pressed && { opacity: 0.8 },
+            { backgroundColor: surfaces.tile },
+            pressed && { opacity: 0.7 },
           ]}
           accessibilityRole="button"
           accessibilityLabel={`Change month, currently ${activeMonth}`}
         >
-          <Calendar size={13} color={theme.colors.primary} />
-          <Text style={[styles.monthChipText, { color: theme.colors.primary }]}>
+          <Calendar size={12} color={theme.colors.mutedForeground} strokeWidth={2.2} />
+          <Text
+            style={[
+              styles.monthChipText,
+              {
+                color: theme.colors.mutedForeground,
+                fontFamily: theme.fontFamily.medium,
+              },
+            ]}
+          >
             {activeMonth}
           </Text>
         </Pressable>
-      </View>
-
-      {/* Hero Display Amount */}
-      <View style={styles.amountContainer}>
+      }
+    >
+      {/* The single largest number on the dashboard. */}
+      <View style={styles.heroBlock}>
         {isLoading ? (
-          <Skeleton width={180} height={38} borderRadius={8} style={{ marginVertical: 4 }} />
+          <Skeleton width={200} height={40} borderRadius={8} />
         ) : (
           <Amount
             value={totalBalance}
@@ -94,51 +83,44 @@ export function OverviewWidget({
             animated
             ghostable
             style={{
-              fontSize: 34,
-              fontWeight: "900",
-              letterSpacing: -0.5,
-              color: totalBalance >= 0 ? theme.colors.foreground : theme.colors.destructive,
+              fontSize: 36,
+              lineHeight: 44,
+              letterSpacing: -1.2,
+              fontFamily: theme.fontFamily.bold,
+              color:
+                totalBalance >= 0
+                  ? theme.colors.foreground
+                  : theme.colors.destructive,
             }}
           />
         )}
 
         {monthlyIncome > 0 ? (
-          <View style={styles.savingsBadge}>
-            <Text
-              style={[
-                styles.savingsBadgeText,
-                { color: netSavings >= 0 ? theme.colors.success : theme.colors.destructive },
-              ]}
-            >
-              {netSavings >= 0 ? `+${savingsRate}% saved this month` : "Deficit this month"}
-            </Text>
-          </View>
+          <Text
+            style={[
+              styles.status,
+              {
+                color:
+                  netSavings >= 0
+                    ? theme.colors.success
+                    : theme.colors.destructive,
+                fontFamily: theme.fontFamily.medium,
+              },
+            ]}
+          >
+            {netSavings >= 0
+              ? `${savingsRate}% saved this month`
+              : "Deficit this month"}
+          </Text>
         ) : null}
       </View>
 
-      {/* MD3 Tonal Stat Cards (Income vs Spent) */}
-      <View style={styles.tonalGrid}>
-        {/* Income Card */}
-        <View
-          style={[
-            styles.tonalCard,
-            {
-              backgroundColor: isDark
-                ? "rgba(34, 197, 94, 0.12)"
-                : "rgba(34, 197, 94, 0.08)",
-              borderColor: isDark
-                ? "rgba(34, 197, 94, 0.25)"
-                : "rgba(34, 197, 94, 0.2)",
-            },
-          ]}
-        >
-          <View style={styles.tonalHeader}>
-            <View style={[styles.iconCircle, { backgroundColor: "rgba(34, 197, 94, 0.2)" }]}>
-              <ArrowDownLeft size={14} color="#22C55E" />
-            </View>
-            <Text style={[styles.tonalLabel, { color: theme.colors.mutedForeground }]}>
-              Income
-            </Text>
+      {/* Income vs expenses — a split row, not two more cards. */}
+      <View style={[styles.splitRow, { borderTopColor: surfaces.divider }]}>
+        <View style={styles.splitHalf}>
+          <View style={styles.splitLabel}>
+            <ArrowDownLeft size={13} color={theme.colors.success} strokeWidth={2.4} />
+            <MetaLabel>Income</MetaLabel>
           </View>
           <Amount
             value={monthlyIncome}
@@ -146,34 +128,20 @@ export function OverviewWidget({
             animated
             ghostable
             style={{
-              color: isDark ? "#4ade80" : "#16a34a",
               fontSize: 17,
-              fontWeight: "800",
+              letterSpacing: -0.4,
+              fontFamily: theme.fontFamily.semibold,
+              color: theme.colors.success,
             }}
           />
         </View>
 
-        {/* Spent Card */}
-        <View
-          style={[
-            styles.tonalCard,
-            {
-              backgroundColor: isDark
-                ? "rgba(239, 68, 68, 0.12)"
-                : "rgba(239, 68, 68, 0.08)",
-              borderColor: isDark
-                ? "rgba(239, 68, 68, 0.25)"
-                : "rgba(239, 68, 68, 0.2)",
-            },
-          ]}
-        >
-          <View style={styles.tonalHeader}>
-            <View style={[styles.iconCircle, { backgroundColor: "rgba(239, 68, 68, 0.2)" }]}>
-              <ArrowUpRight size={14} color="#EF4444" />
-            </View>
-            <Text style={[styles.tonalLabel, { color: theme.colors.mutedForeground }]}>
-              Expenses
-            </Text>
+        <View style={[styles.divider, { backgroundColor: surfaces.divider }]} />
+
+        <View style={[styles.splitHalf, styles.splitRight]}>
+          <View style={styles.splitLabel}>
+            <ArrowUpRight size={13} color={theme.colors.destructive} strokeWidth={2.4} />
+            <MetaLabel>Expenses</MetaLabel>
           </View>
           <Amount
             value={monthlySpent}
@@ -181,88 +149,60 @@ export function OverviewWidget({
             animated
             ghostable
             style={{
-              color: isDark ? "#f87171" : "#dc2626",
               fontSize: 17,
-              fontWeight: "800",
+              letterSpacing: -0.4,
+              fontFamily: theme.fontFamily.semibold,
+              color: theme.colors.destructive,
             }}
           />
         </View>
       </View>
-    </View>
+    </Section>
   );
 }
 
 const styles = StyleSheet.create({
-  heroCard: {
-    borderRadius: 24,
-    borderWidth: 1,
-    padding: 20,
-    gap: 16,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  titleWrap: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  heroSubtitle: {
-    fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 1,
-  },
   monthChip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 12,
+    gap: 5,
+    paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 16,
-    borderWidth: 1,
+    borderRadius: 999,
     minHeight: 32,
   },
   monthChipText: {
     fontSize: 12,
-    fontWeight: "700",
   },
-  amountContainer: {
-    gap: 4,
+  heroBlock: {
+    gap: 2,
+    marginBottom: 16,
   },
-  savingsBadge: {
-    marginTop: 2,
+  status: {
+    fontSize: 12.5,
   },
-  savingsBadgeText: {
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  tonalGrid: {
+  splitRow: {
     flexDirection: "row",
-    gap: 12,
+    alignItems: "center",
+    paddingTop: 14,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
-  tonalCard: {
+  splitHalf: {
     flex: 1,
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 14,
-    gap: 8,
+    minWidth: 0,
+    gap: 3,
   },
-  tonalHeader: {
+  splitRight: {
+    alignItems: "flex-end",
+  },
+  splitLabel: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 5,
   },
-  iconCircle: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  tonalLabel: {
-    fontSize: 12,
-    fontWeight: "600",
+  divider: {
+    width: StyleSheet.hairlineWidth,
+    alignSelf: "stretch",
+    marginHorizontal: 14,
   },
 });
