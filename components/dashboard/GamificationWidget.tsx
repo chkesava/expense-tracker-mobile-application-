@@ -26,7 +26,7 @@ const BADGE_ICONS: Record<string, typeof Shield> = {
 };
 
 export function GamificationWidget({
-  streak = 1,
+  streak = 0,
   budgetHealthScore = 85,
 }: GamificationWidgetProps) {
   const { theme } = useTheme();
@@ -36,7 +36,7 @@ export function GamificationWidget({
   // budgetHealthScore kept for API parity / future health rings
   void budgetHealthScore;
 
-  const currentStreak = stats?.currentStreak ?? streak;
+  const currentStreak = stats?.currentStreak ?? streak ?? 0;
   const shields = stats?.shields ?? 0;
 
   return (

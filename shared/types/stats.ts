@@ -39,3 +39,19 @@ export const BADGES = {
     STREAK_7: { id: 'streak_7', icon: '🔥', name: '7 Day Streak' },
     SAVER_PRO: { id: 'saver_pro', icon: '💰', name: 'Saver Pro' },
 };
+
+export function createDefaultUserStats(todayKey: string): UserStats {
+    return {
+        currentStreak: 0,
+        longestStreak: 0,
+        lastLoginDate: todayKey,
+        points: 120,
+        level: 1,
+        badges: ["no_spend"],
+        shields: 1,
+        fires: 1,
+        focusStreak: 0,
+        focusWins: 0,
+        monthlyRecords: {},
+    };
+}

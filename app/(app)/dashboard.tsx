@@ -126,7 +126,7 @@ export default function DashboardScreen() {
 
   const activeMonth = globalMonth || currentMonthKey(settings.timezone);
   const previousMonth = getPreviousMonthKey(activeMonth);
-  const todayKey = formatDateKey(new Date());
+  const todayKey = formatDateKey(new Date(), settings.timezone);
 
   const handleRefresh = () => {
     setRefreshing(true);

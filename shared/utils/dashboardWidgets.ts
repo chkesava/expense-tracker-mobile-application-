@@ -161,36 +161,4 @@ export function computeDailySpendingPace(
   };
 }
 
-/**
- * Computes consecutive days with logged expenses up to today.
- */
-export function computeExpenseStreak(
-  expenses: Expense[],
-  todayKey: string
-): number {
-  if (expenses.length === 0) return 0;
-
-  const datesWithExpenses = new Set<string>();
-  for (const e of expenses) {
-    if (e.date) datesWithExpenses.add(e.date);
-  }
-
-  let streak = 0;
-  const currentDate = new Date(todayKey);
-
-  while (true) {
-    const year = currentDate.getFullYear();
-    const month = String(currentDate.getMonth() + 1).padStart(2, "0");
-    const day = String(currentDate.getDate()).padStart(2, "0");
-    const dateStr = `${year}-${month}-${day}`;
-
-    if (datesWithExpenses.has(dateStr)) {
-      streak++;
-      currentDate.setDate(currentDate.getDate() - 1);
-    } else {
-      break;
-    }
-  }
-
-  return streak;
-}
+export { computeExpenseStreak } from "./expenseStreak";

@@ -3,7 +3,6 @@ import type { Expense } from "@/shared/types/expense";
 import type { DashboardWidgets } from "@/shared/types/settings";
 import {
   computeDailySpendingPace,
-  computeExpenseStreak,
   computeTopCategories,
   getOrderedDashboardWidgets,
   KNOWN_DASHBOARD_WIDGETS,
@@ -140,57 +139,4 @@ describe("dashboardWidgets utilities", () => {
     });
   });
 
-  describe("computeExpenseStreak", () => {
-    it("computes consecutive days logged up to target date", () => {
-      const expenses: Expense[] = [
-        {
-          id: "1",
-          amount: 50,
-          category: "Food",
-          note: "Coffee",
-          date: "2026-08-05",
-          month: "2026-08",
-          createdAt: "2026-08-05",
-        },
-        {
-          id: "2",
-          amount: 100,
-          category: "Food",
-          note: "Dinner",
-          date: "2026-08-04",
-          month: "2026-08",
-          createdAt: "2026-08-04",
-        },
-        {
-          id: "3",
-          amount: 75,
-          category: "Food",
-          note: "Groceries",
-          date: "2026-08-03",
-          month: "2026-08",
-          createdAt: "2026-08-03",
-        },
-      ];
-
-      const streak = computeExpenseStreak(expenses, "2026-08-05");
-      expect(streak).toBe(3);
-    });
-
-    it("returns 0 if today has no expense", () => {
-      const expenses: Expense[] = [
-        {
-          id: "1",
-          amount: 50,
-          category: "Food",
-          note: "Coffee",
-          date: "2026-08-04",
-          month: "2026-08",
-          createdAt: "2026-08-04",
-        },
-      ];
-
-      const streak = computeExpenseStreak(expenses, "2026-08-05");
-      expect(streak).toBe(0);
-    });
-  });
 });
