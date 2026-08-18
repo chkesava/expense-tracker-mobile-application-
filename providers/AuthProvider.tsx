@@ -25,7 +25,7 @@ import {
   type User,
   type UserCredential,
 } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 import { GoogleSignin } from "@react-native-google-signin/google-signin";
 
 import { clearSavedRoute } from "@/hooks/useNavigationStateRestoration";
@@ -36,6 +36,9 @@ import { getFirebaseAuth, getFirestoreDb } from "@/lib/firebase";
 import { perfMark } from "@/lib/perf";
 import { privacySession } from "@/lib/privacySession";
 import { authErrorMessage, createDuressUser } from "@/lib/authHelpers";
+import { saveDpdpConsent, readDpdpConsent } from "@/services/privacy/consentStore";
+import type { DpdpConsent } from "@/shared/types/dpdp";
+import { buildAcceptedConsent, needsNoticeAcceptance } from "@/shared/utils/dpdpConsent";
 import { scheduleIdleWork } from "@/shared/utils/scheduleIdle";
 
 const GOOGLE_WEB_CLIENT_ID =
@@ -51,10 +54,14 @@ type AuthContextType = {
   signUpWithEmail: (
     email: string,
     password: string,
-    displayName: string
+    displayName: string,
+    consent?: DpdpConsent
   ) => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
-  loginWithGoogleIdToken: (idToken: string) => Promise<void>;
+  loginWithGoogleIdToken: (
+    idToken: string,
+    consent?: DpdpConsent
+  ) => Promise<void>;
   logout: () => Promise<void>;
 };
 
@@ -131,7 +138,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signUpWithEmail = useCallback(
-    async (email: string, password: string, displayName: string) => {
+    async (
+      email: string,
+      password: string,
+      displayName: string,
+      consent?: DpdpConsent
+    ) => {
       const auth = getFirebaseAuth();
       const db = getFirestoreDb();
       if (!auth) throw new Error("Firebase Auth is not configured.");
@@ -152,6 +164,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           password
         );
         await updateProfile(cred.user, { displayName: displayName.trim() });
+        if (db) {
+          await setDoc(
+            doc(db, "users", cred.user.uid),
+            {
+              uid: cred.user.uid,
+              email: cred.user.email,
+              displayName: displayName.trim(),
+              photoURL: cred.user.photoURL,
+              role: "USER",
+              createdAt: Date.now(),
+              ...(consent ? { dpdp: consent } : {}),
+            },
+            { merge: true }
+          );
+        }
       } catch (error) {
         logError("authProvider.emailSignup", error);
         throw new Error(authErrorMessage(error, "Email signup failed"));
@@ -171,31 +198,54 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const loginWithGoogleIdToken = useCallback(async (idToken: string) => {
-    const auth = getFirebaseAuth();
-    const db = getFirestoreDb();
-    if (!auth) throw new Error("Firebase Auth is not configured.");
-    if (!idToken) throw new Error("Missing Google ID token.");
+  const loginWithGoogleIdToken = useCallback(
+    async (idToken: string, consent?: DpdpConsent) => {
+      const auth = getFirebaseAuth();
+      const db = getFirestoreDb();
+      if (!auth) throw new Error("Firebase Auth is not configured.");
+      if (!idToken) throw new Error("Missing Google ID token.");
 
-    try {
-      const credential = GoogleAuthProvider.credential(idToken);
-      const result: UserCredential = await signInWithCredential(auth, credential);
-      const additionalInfo = getAdditionalUserInfo(result);
+      try {
+        const credential = GoogleAuthProvider.credential(idToken);
+        const result: UserCredential = await signInWithCredential(auth, credential);
+        const additionalInfo = getAdditionalUserInfo(result);
 
-      if (additionalInfo?.isNewUser && db) {
-        const settingsSnap = await getDoc(doc(db, "system_settings", "global"));
-        if (settingsSnap.exists() && settingsSnap.data().disableSignups) {
-          await result.user.delete();
-          throw new Error(
-            "New registrations are temporarily disabled by the administrator."
+        if (additionalInfo?.isNewUser && db) {
+          const settingsSnap = await getDoc(doc(db, "system_settings", "global"));
+          if (settingsSnap.exists() && settingsSnap.data().disableSignups) {
+            await result.user.delete();
+            throw new Error(
+              "New registrations are temporarily disabled by the administrator."
+            );
+          }
+          await setDoc(
+            doc(db, "users", result.user.uid),
+            {
+              uid: result.user.uid,
+              email: result.user.email,
+              displayName: result.user.displayName,
+              photoURL: result.user.photoURL,
+              role: "USER",
+              createdAt: Date.now(),
+              ...(consent ? { dpdp: buildAcceptedConsent(null) } : {}),
+            },
+            { merge: true }
           );
         }
+
+        if (consent) {
+          const existing = await readDpdpConsent(result.user.uid);
+          if (additionalInfo?.isNewUser || needsNoticeAcceptance(existing)) {
+            await saveDpdpConsent(result.user.uid, buildAcceptedConsent(existing));
+          }
+        }
+      } catch (error) {
+        logError("authProvider.googleLogin", error);
+        throw new Error(authErrorMessage(error, "Google sign-in failed"));
       }
-    } catch (error) {
-      logError("authProvider.googleLogin", error);
-      throw new Error(authErrorMessage(error, "Google sign-in failed"));
-    }
-  }, []);
+    },
+    []
+  );
 
   const logout = useCallback(async () => {
     const auth = getFirebaseAuth();

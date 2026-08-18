@@ -3,7 +3,9 @@ import { Pressable, StyleSheet, Switch, Text, View } from "react-native";
 import * as Haptics from "expo-haptics";
 import { Bell } from "lucide-react-native";
 
+import { NotificationConsentDialog } from "@/components/privacy/NotificationConsentDialog";
 import { Card } from "@/components/ui/Card";
+import { useDpdpConsent } from "@/hooks/useDpdpConsent";
 import { useSettings } from "@/providers/SettingsProvider";
 import { requestBillNotificationPermission } from "@/services/creditCardBills/billReminderScheduler";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -18,6 +20,8 @@ export function CreditCardBillReminderSettings() {
   const { settings, setCreditCardBillReminders } = useSettings();
   const prefs = settings.creditCardBillReminders;
   const [permHint, setPermHint] = useState<string | null>(null);
+  const [notifyConsentOpen, setNotifyConsentOpen] = useState(false);
+  const { purposes, setPurposes } = useDpdpConsent();
 
   const toggleDay = (day: number) => {
     Haptics.selectionAsync().catch(() => undefined);
@@ -29,6 +33,7 @@ export function CreditCardBillReminderSettings() {
   };
 
   return (
+    <>
     <Card>
       <View style={{ gap: 14 }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
@@ -46,6 +51,10 @@ export function CreditCardBillReminderSettings() {
           <Switch
             value={prefs.enabled}
             onValueChange={async (enabled) => {
+              if (enabled && !purposes.notifications) {
+                setNotifyConsentOpen(true);
+                return;
+              }
               setCreditCardBillReminders({ enabled });
               if (enabled) {
                 const ok = await requestBillNotificationPermission();
@@ -173,6 +182,24 @@ export function CreditCardBillReminderSettings() {
         </View>
       </View>
     </Card>
+    <NotificationConsentDialog
+      isOpen={notifyConsentOpen}
+      onClose={() => setNotifyConsentOpen(false)}
+      onConfirm={() => {
+        void (async () => {
+          await setPurposes({ notifications: true });
+          setCreditCardBillReminders({ enabled: true });
+          const ok = await requestBillNotificationPermission();
+          setPermHint(
+            ok
+              ? null
+              : "Notification permission is off — enable it in system settings."
+          );
+          setNotifyConsentOpen(false);
+        })();
+      }}
+    />
+    </>
   );
 }
 

@@ -54,6 +54,20 @@
           "icon": "./assets/branding/notification-icon.png",
           "color": "#071A2B"
         }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Spendly uses the camera to scan receipts and food barcodes. Photos stay on your device and are not uploaded.",
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Spendly accesses photos so you can choose a receipt. Images stay on your device and are not uploaded.",
+          "cameraPermission": "Spendly uses the camera to photograph receipts. Photos stay on your device and are not uploaded."
+        }
       ]
     ],
     "experiments": {

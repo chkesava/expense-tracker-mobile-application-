@@ -16,6 +16,7 @@ import { AppState, Platform, type AppStateStatus } from "react-native";
 import { router, type Href } from "expo-router";
 
 import { useAuth } from "@/providers/AuthProvider";
+import { useDpdpConsent } from "@/hooks/useDpdpConsent";
 import {
   checkSmsPermission,
   type SmsPermissionStatus,
@@ -63,6 +64,7 @@ const SmsReceiverContext = createContext<SmsReceiverContextValue | undefined>(
 export function SmsReceiverProvider({ children }: { children: ReactNode }) {
   const supported = Platform.OS === "android";
   const { isDuress, user } = useAuth();
+  const { purposes } = useDpdpConsent();
   const { accounts } = useAccounts();
   const [prefs, setPrefs] = useState<SmsAutomationPrefs>(
     SMS_AUTOMATION_PREFS_DEFAULTS
@@ -171,14 +173,22 @@ export function SmsReceiverProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // Ask for notification permission once SMS listening is on.
+  // Ask for notification permission only after DPDP notification consent.
   useEffect(() => {
     if (!supported || !ready) return;
     if (!prefs.enabled || permissionStatus !== "granted" || isDuress) return;
+    if (!purposes.notifications) return;
     void import("@/services/sms/smsNotifications").then((m) =>
       m.requestSmsNotificationPermission()
     );
-  }, [supported, ready, prefs.enabled, permissionStatus, isDuress]);
+  }, [
+    supported,
+    ready,
+    prefs.enabled,
+    permissionStatus,
+    isDuress,
+    purposes.notifications,
+  ]);
 
   // Subscribe to inbound events once; processor gates on prefs/duress.
   useEffect(() => {
@@ -207,7 +217,10 @@ export function SmsReceiverProvider({ children }: { children: ReactNode }) {
 
     (async () => {
       const shouldListen =
-        prefs.enabled && permissionStatus === "granted" && !isDuress;
+        prefs.enabled &&
+        purposes.sms &&
+        permissionStatus === "granted" &&
+        !isDuress;
 
       await patchSmsInboundStatus({ listeningRequested: shouldListen });
       const status = await loadSmsInboundStatus();
@@ -238,6 +251,7 @@ export function SmsReceiverProvider({ children }: { children: ReactNode }) {
     supported,
     ready,
     prefs.enabled,
+    purposes.sms,
     permissionStatus,
     isDuress,
     refreshListening,
@@ -253,7 +267,8 @@ export function SmsReceiverProvider({ children }: { children: ReactNode }) {
         const latestPrefs = await loadSmsAutomationPrefs();
         setPrefs(latestPrefs);
         const granted = (await checkSmsPermission()) === "granted";
-        const shouldListen = latestPrefs.enabled && granted && !isDuress;
+        const shouldListen =
+          latestPrefs.enabled && granted && !isDuress && purposes.sms;
         if (!shouldListen) {
           await stopSmsListening();
         } else {
@@ -270,7 +285,7 @@ export function SmsReceiverProvider({ children }: { children: ReactNode }) {
     };
     const sub = AppState.addEventListener("change", onChange);
     return () => sub.remove();
-  }, [supported, isDuress, refreshListening, syncPermission]);
+  }, [supported, isDuress, purposes.sms, refreshListening, syncPermission]);
 
   useEffect(() => {
     return () => {

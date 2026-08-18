@@ -4,14 +4,19 @@ import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { ChevronDown, ChevronUp, MessageSquare } from "lucide-react-native";
 
+import { SmsConsentDialog } from "@/components/privacy/SmsConsentDialog";
+import { NotificationConsentDialog } from "@/components/privacy/NotificationConsentDialog";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { useAccounts } from "@/hooks/useAccounts";
+import { useDpdpConsent } from "@/hooks/useDpdpConsent";
 import { useSmsPermission } from "@/hooks/useSmsPermission";
 import { useSmsReviewInbox } from "@/hooks/useSmsReviewInbox";
 import { useAuth } from "@/providers/AuthProvider";
 import { useSmsReceiver } from "@/providers/SmsReceiverProvider";
 import { toast } from "@/lib/toast";
+import { clearSmsLocalStores } from "@/services/privacy/clearLocalUserData";
+import { requestSmsNotificationPermission } from "@/services/sms/smsNotifications";
 import type { SmsHandlingMode } from "@/services/sms/smsAutomationPrefs";
 import { dispatchWriteReady } from "@/services/sms/smsAutoAdd";
 import { defaultSmsReader } from "@/services/sms/smsReader";
@@ -141,6 +146,9 @@ export function SmsAutomationSettings() {
   const router = useRouter();
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
+  const [consentOpen, setConsentOpen] = useState(false);
+  const [notifyConsentOpen, setNotifyConsentOpen] = useState(false);
+  const [consentBusy, setConsentBusy] = useState(false);
   const [readerExpanded, setReaderExpanded] = useState(true);
   const [scanning, setScanning] = useState(false);
   const [lastScan, setLastScan] = useState<{
@@ -161,51 +169,61 @@ export function SmsAutomationSettings() {
     setEnabled,
     setHandlingMode,
   } = useSmsPermission();
+  const { purposes, setPurposes } = useDpdpConsent();
   const { user } = useAuth();
   const { accounts } = useAccounts();
   const { listening, inboundStatus } = useSmsReceiver();
   const { count: inboxCount } = useSmsReviewInbox();
 
   const granted = permissionStatus === "granted";
-  const busy = permissionLoading || prefsLoading || scanning;
+  const busy = permissionLoading || prefsLoading || scanning || consentBusy;
 
-  const onAllowSmsAccess = async () => {
-    const status = await requestPermission();
-    if (status === "granted") {
-      await setEnabled(true);
-      toast.success("SMS access allowed");
-      return;
+  const afterSmsGranted = async () => {
+    await setPurposes({ sms: true });
+    if (!purposes.notifications) {
+      setNotifyConsentOpen(true);
     }
-    if (status === "blocked") {
-      toast.error("SMS permission blocked. Open system settings to enable it.");
-      return;
+  };
+
+  const onAllowSmsAccess = () => {
+    setConsentOpen(true);
+  };
+
+  const onConfirmSmsConsent = async () => {
+    setConsentBusy(true);
+    try {
+      const status = await requestPermission();
+      if (status === "granted") {
+        await setEnabled(true);
+        await afterSmsGranted();
+        setConsentOpen(false);
+        toast.success("SMS access allowed");
+        return;
+      }
+      setConsentOpen(false);
+      if (status === "blocked") {
+        toast.error("SMS permission blocked. Open system settings to enable it.");
+        return;
+      }
+      if (status === "unavailable") {
+        toast.info("SMS tracking is only available on Android.");
+        return;
+      }
+      toast.info("SMS access was not granted. You can try again anytime.");
+    } finally {
+      setConsentBusy(false);
     }
-    if (status === "unavailable") {
-      toast.info("SMS tracking is only available on Android.");
-      return;
-    }
-    toast.info("SMS access was not granted. You can try again anytime.");
   };
 
   const onToggleEnabled = async (next: boolean) => {
-    const status = await setEnabled(next);
     if (!next) {
-      toast.success("SMS reader disabled");
+      await setEnabled(false);
+      await setPurposes({ sms: false });
+      await clearSmsLocalStores();
+      toast.success("SMS reader disabled. Consent withdrawn and local queues cleared.");
       return;
     }
-    if (status === "granted") {
-      toast.success("SMS reader enabled");
-      return;
-    }
-    if (status === "blocked") {
-      toast.error("Permission blocked. Open system settings to grant SMS access.");
-      return;
-    }
-    if (status === "unavailable") {
-      toast.info("SMS tracking is only available on Android.");
-      return;
-    }
-    toast.info("Permission denied. SMS reader stays off.");
+    setConsentOpen(true);
   };
 
   const onScanInboxLocally = async () => {
@@ -557,7 +575,7 @@ export function SmsAutomationSettings() {
           <Button
             variant="tonal"
             loading={scanning}
-            disabled={!supported || !granted || busy}
+            disabled={!supported || !granted || busy || !purposes.sms}
             onPress={() => void onScanInboxLocally()}
           >
             Scan inbox locally
@@ -586,8 +604,9 @@ export function SmsAutomationSettings() {
             Manage SMS permission in system settings
           </Button>
           <Text style={{ color: theme.colors.mutedForeground, fontSize: 12, lineHeight: 18 }}>
-            Raw SMS stays on your device. To revoke access, turn off SMS permission
-            in Android settings.
+            Raw SMS stays on your device and is not uploaded. Turn the reader off here to
+            withdraw consent and clear the local review queue. You can also revoke SMS
+            permission in Android settings.
           </Text>
           {!supported ? (
             <Text style={{ color: theme.colors.mutedForeground, fontSize: 12 }}>
@@ -596,6 +615,23 @@ export function SmsAutomationSettings() {
           ) : null}
         </View>
       </View>
+      <SmsConsentDialog
+        isOpen={consentOpen}
+        onClose={() => setConsentOpen(false)}
+        confirming={consentBusy}
+        onConfirm={() => void onConfirmSmsConsent()}
+      />
+      <NotificationConsentDialog
+        isOpen={notifyConsentOpen}
+        onClose={() => setNotifyConsentOpen(false)}
+        onConfirm={() => {
+          void (async () => {
+            await setPurposes({ notifications: true });
+            await requestSmsNotificationPermission();
+            setNotifyConsentOpen(false);
+          })();
+        }}
+      />
     </Card>
   );
 }

@@ -38,7 +38,15 @@ function normalizeFood(raw: Partial<AnalyzedFood>): AnalyzedFood | null {
  * Estimate nutrients from a natural-language food description via Gemini.
  * Same contract as the web `analyzeNutrition` helper.
  */
-export async function analyzeNutrition(text: string): Promise<AnalyzedFood[]> {
+export async function analyzeNutrition(
+  text: string,
+  options?: { nutritionAiConsent?: boolean }
+): Promise<AnalyzedFood[]> {
+  if (!options?.nutritionAiConsent) {
+    throw new Error(
+      "Nutrition AI needs your consent before food descriptions are sent to Google Gemini."
+    );
+  }
   const apiKey = env.geminiApiKey;
   if (!apiKey) {
     throw new Error(
