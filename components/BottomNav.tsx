@@ -29,7 +29,8 @@ import {
 
 import {
   BOTTOM_NAV_BAR_HEIGHT,
-  BOTTOM_NAV_FAB_OVERHANG,
+  BOTTOM_NAV_FAB_EDGE,
+  BOTTOM_NAV_FAB_GAP,
   BOTTOM_NAV_FAB_SIZE,
 } from "@/components/layout/chrome";
 import { haptic } from "@/lib/haptics";
@@ -130,7 +131,7 @@ function NavDestination({
           ]}
           numberOfLines={1}
           adjustsFontSizeToFit
-          minimumFontScale={0.8}
+          minimumFontScale={0.75}
         >
           {label}
         </Text>
@@ -142,9 +143,11 @@ function NavDestination({
 function AddExpenseFab({
   onPress,
   colors,
+  bottomOffset,
 }: {
   onPress: () => void;
   colors: ThemeColors;
+  bottomOffset: number;
 }) {
   const pressed = useSharedValue(0);
 
@@ -165,14 +168,14 @@ function AddExpenseFab({
     });
 
   const fabStyle = useAnimatedStyle(() => ({
-    transform: [
-      { scale: interpolate(pressed.get(), [0, 1], [1, 0.92]) },
-      { translateY: -12 },
-    ],
+    transform: [{ scale: interpolate(pressed.get(), [0, 1], [1, 0.92]) }],
   }));
 
   return (
-    <View style={styles.fabSlot}>
+    <View
+      pointerEvents="box-none"
+      style={[styles.fabAnchor, { bottom: bottomOffset }]}
+    >
       <GestureDetector gesture={tap}>
         <Animated.View
           accessible
@@ -190,20 +193,12 @@ function AddExpenseFab({
           <Plus size={26} color={colors.successForeground} strokeWidth={2.6} />
         </Animated.View>
       </GestureDetector>
-      <Text
-        style={[styles.fabLabel, { color: colors.mutedForeground }]}
-        numberOfLines={1}
-        adjustsFontSizeToFit
-        minimumFontScale={0.75}
-      >
-        Add Expense
-      </Text>
     </View>
   );
 }
 
 /**
- * Compact Android bottom navigation with a raised Add Expense action.
+ * Compact Android bottom navigation with an even tab row and a trailing FAB.
  */
 export function BottomNav() {
   const { navigate, dismissTo } = useRouter();
@@ -221,10 +216,6 @@ export function BottomNav() {
       item.includeInBottomNav &&
       (!item.requiresInvestmentsFeature || settings.enableInvestments)
   );
-
-  const mid = Math.ceil(navLinks.length / 2);
-  const leftLinks = navLinks.slice(0, mid);
-  const rightLinks = navLinks.slice(mid);
 
   useEffect(() => {
     const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
@@ -254,9 +245,6 @@ export function BottomNav() {
     void haptic.navigation();
     const route = link.path.startsWith("/") ? link.path : `/${link.path}`;
     if (route === "/dashboard") {
-      // Pop back to the home screen already at the root of the stack. `replace`
-      // used to swap the current tab for a *second* dashboard instance, so the
-      // stack grew a new copy on every visit home.
       dismissTo("/dashboard");
     } else {
       navigate(route as never);
@@ -277,15 +265,12 @@ export function BottomNav() {
   }));
 
   const bottomInset = Math.max(insets.bottom, 8);
+  const fabBottomOffset = BOTTOM_NAV_BAR_HEIGHT + bottomInset + BOTTOM_NAV_FAB_GAP;
 
   return (
     <Animated.View
       pointerEvents={keyboardOpen ? "none" : "box-none"}
-      style={[
-        styles.navContainer,
-        { paddingBottom: bottomInset },
-        keyboardStyle,
-      ]}
+      style={[styles.navContainer, keyboardStyle]}
     >
       <View
         pointerEvents="none"
@@ -294,30 +279,18 @@ export function BottomNav() {
           {
             backgroundColor: isDark ? theme.colors.card : "#FFFFFF",
             borderTopColor: theme.colors.outlineVariant,
-            bottom: 0,
-            paddingBottom: bottomInset,
+            height: BOTTOM_NAV_BAR_HEIGHT + bottomInset,
           },
         ]}
       />
 
-      <View style={styles.destinationsRow}>
-        {leftLinks.map((link) => {
-          const isActive = isNavItemActive(pathname, link.id as NavSectionId);
-          return (
-            <NavDestination
-              key={link.id}
-              link={link}
-              isActive={isActive}
-              colors={theme.colors}
-              isDark={isDark}
-              onPress={() => handleTabPress(link, isActive)}
-            />
-          );
-        })}
-
-        <AddExpenseFab onPress={handleAddExpense} colors={theme.colors} />
-
-        {rightLinks.map((link) => {
+      <View
+        style={[
+          styles.destinationsRow,
+          { marginBottom: bottomInset },
+        ]}
+      >
+        {navLinks.map((link) => {
           const isActive = isNavItemActive(pathname, link.id as NavSectionId);
           return (
             <NavDestination
@@ -331,6 +304,12 @@ export function BottomNav() {
           );
         })}
       </View>
+
+      <AddExpenseFab
+        onPress={handleAddExpense}
+        colors={theme.colors}
+        bottomOffset={fabBottomOffset}
+      />
     </Animated.View>
   );
 }
@@ -344,14 +323,13 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     zIndex: 90,
-    paddingTop: BOTTOM_NAV_FAB_OVERHANG,
     overflow: "visible",
   },
   barFill: {
     position: "absolute",
     left: 0,
     right: 0,
-    top: BOTTOM_NAV_FAB_OVERHANG,
+    bottom: 0,
     zIndex: 0,
     borderTopWidth: StyleSheet.hairlineWidth,
     elevation: 2,
@@ -365,7 +343,6 @@ const styles = StyleSheet.create({
     alignItems: "stretch",
     height: BOTTOM_NAV_BAR_HEIGHT,
     paddingHorizontal: 4,
-    overflow: "visible",
     zIndex: 2,
   },
   tabButton: {
@@ -379,10 +356,11 @@ const styles = StyleSheet.create({
   tabInner: {
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 8,
+    paddingHorizontal: 4,
     paddingVertical: 6,
     gap: 2,
-    minWidth: 56,
+    minWidth: 0,
+    width: "100%",
     borderRadius: 16,
     borderCurve: "continuous",
   },
@@ -396,14 +374,10 @@ const styles = StyleSheet.create({
     letterSpacing: 0.1,
     textAlign: "center",
   },
-  fabSlot: {
-    flex: 1,
-    minWidth: 0,
-    alignItems: "center",
-    justifyContent: "flex-end",
-    paddingBottom: 6,
-    gap: 2,
-    overflow: "visible",
+  fabAnchor: {
+    position: "absolute",
+    right: BOTTOM_NAV_FAB_EDGE,
+    zIndex: 4,
   },
   fab: {
     width: BOTTOM_NAV_FAB_SIZE,
@@ -415,11 +389,5 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.28,
     shadowRadius: 8,
-  },
-  fabLabel: {
-    fontSize: 10,
-    fontWeight: "600",
-    letterSpacing: 0.1,
-    textAlign: "center",
   },
 });

@@ -67,7 +67,7 @@ export function PageShell({
   const minTop = hideHeaderOffset
     ? insets.top + theme.space.md
     : insets.top + APP_BAR_CONTENT_HEIGHT + theme.space.sm;
-  // Bottom offset: nav bar + raised FAB overhang + clearance + system inset
+  // Bottom offset: nav bar + clearance + system inset
   const minBottom = hideBottomOffset
     ? insets.bottom + theme.space.md
     : insets.bottom + BOTTOM_NAV_SCROLL_PADDING;
