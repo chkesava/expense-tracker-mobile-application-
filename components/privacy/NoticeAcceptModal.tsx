@@ -49,6 +49,12 @@ export function NoticeAcceptModal() {
   const canAccept = isAdult && acceptedLegal && !saving;
 
   const onAccept = async () => {
+    if (!isAdult || !acceptedLegal) {
+      toast.info(
+        "Please tick: (1) 18+ confirmation and (2) Privacy Notice + Terms acceptance."
+      );
+      return;
+    }
     try {
       await acceptNotice();
       toast.success("Privacy Notice accepted");
@@ -99,7 +105,11 @@ export function NoticeAcceptModal() {
             onOpenNotice={() => setShowNotice(true)}
             onOpenTerms={() => setShowTerms(true)}
           />
-          <Button onPress={() => void onAccept()} disabled={!canAccept} loading={saving}>
+          <Button
+            onPress={() => void onAccept()}
+            disabled={saving}
+            loading={saving}
+          >
             Agree and continue
           </Button>
           <Button variant="ghost" onPress={() => void onSignOut()} loading={signingOut}>
