@@ -2,7 +2,7 @@
   "expo": {
     "name": "Spendly",
     "slug": "spendly",
-    "version": "2.4.1",
+    "version": "2.3.q",
     "orientation": "portrait",
     "icon": "./assets/branding/icon.png",
     "scheme": "spendly",
@@ -28,7 +28,7 @@
         "android.permission.POST_NOTIFICATIONS",
         "android.permission.REQUEST_INSTALL_PACKAGES"
       ],
-      "versionCode": 46
+      "versionCode": 45
     },
     "web": {
       "bundler": "metro",
@@ -53,20 +53,6 @@
         {
           "icon": "./assets/branding/notification-icon.png",
           "color": "#071A2B"
-        }
-      ],
-      [
-        "expo-camera",
-        {
-          "cameraPermission": "Spendly uses the camera to scan receipts and food barcodes. Photos stay on your device and are not uploaded.",
-          "recordAudioAndroid": false
-        }
-      ],
-      [
-        "expo-image-picker",
-        {
-          "photosPermission": "Spendly accesses photos so you can choose a receipt. Images stay on your device and are not uploaded.",
-          "cameraPermission": "Spendly uses the camera to photograph receipts. Photos stay on your device and are not uploaded."
         }
       ]
     ],

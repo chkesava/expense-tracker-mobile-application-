@@ -9,7 +9,7 @@ import {
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { doc, setDoc } from "firebase/firestore";
-import { ListChecks, RotateCcw, EyeOff, Settings as SettingsIcon, Shield, X } from "lucide-react-native";
+import { ListChecks, RotateCcw, EyeOff, Settings as SettingsIcon, X } from "lucide-react-native";
 
 import { CategoryManager } from "@/components/categories/CategoryManager";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -142,7 +142,6 @@ export default function SettingsScreen() {
   const { user, realUser, logout } = useAuth();
   const { data, role, isAdmin } = useUserDoc();
   const { t } = useTranslation();
-  const router = useRouter();
   const {
     settings,
     setTimezone,
@@ -315,16 +314,6 @@ export default function SettingsScreen() {
             Sign out
           </Button>
         </View>
-      </Card>
-
-      <Card
-        title="Data & privacy"
-        subtitle="Notice, consents, download, delete"
-        icon={<Shield size={18} color={theme.colors.primary} />}
-      >
-        <Button variant="outline" onPress={() => router.push("/data-privacy" as any)}>
-          Open data and privacy
-        </Button>
       </Card>
 
       <Card title="General" subtitle={`Currency from system: ${system.defaultCurrency}`}>
@@ -820,8 +809,6 @@ export default function SettingsScreen() {
 
       <AppVersionCard />
 
-      <SettingsLegalFooter />
-
       <Modal
         visible={showCategoryManagerModal}
         animationType="slide"
@@ -868,45 +855,6 @@ export default function SettingsScreen() {
         </View>
       </Modal>
     </PageShell>
-  );
-}
-
-function SettingsLegalFooter() {
-  const { theme } = useTheme();
-  const year = new Date().getFullYear();
-  const versionName = getInstalledVersionName();
-  const versionCode = getInstalledVersionCode();
-
-  return (
-    <View
-      style={{
-        alignItems: "center",
-        gap: 6,
-        paddingVertical: theme.space.md,
-        paddingBottom: theme.space.lg,
-      }}
-    >
-      <Text
-        style={{
-          color: theme.colors.foreground,
-          fontFamily: theme.fontFamily.semibold,
-          fontSize: theme.typography.sm,
-          textAlign: "center",
-        }}
-      >
-        Spendly. All rights reserved © {year}
-      </Text>
-      <Text
-        style={{
-          color: theme.colors.mutedForeground,
-          fontSize: theme.typography.xs,
-          textAlign: "center",
-        }}
-      >
-        Version {versionName}
-        {versionCode !== null ? ` (${versionCode})` : ""}
-      </Text>
-    </View>
   );
 }
 

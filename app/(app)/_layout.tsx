@@ -83,12 +83,6 @@ function AppShellInner() {
           }}
         />
         <Stack.Screen
-          name="data-privacy"
-          options={{
-            animation: "slide_from_right",
-          }}
-        />
-        <Stack.Screen
           name="sms-inbox"
           options={{
             animation: "slide_from_right",

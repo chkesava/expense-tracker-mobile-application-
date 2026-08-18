@@ -65,28 +65,19 @@ export async function checkSmsPermission(): Promise<SmsPermissionStatus> {
   return details.status;
 }
 
-const SMS_RATIONALE = {
-  title: "SMS access for transaction tracking",
-  message:
-    "Spendly reads bank and UPI SMS on this device to detect transactions. Raw SMS stays on the device and is not uploaded.",
-  buttonPositive: "Allow",
-  buttonNegative: "Deny",
-} as const;
-
 export async function requestSmsPermission(): Promise<SmsPermissionStatus> {
   const keys = smsPermissionKeys();
   if (!keys) return "unavailable";
 
   try {
-    const readResult = await PermissionsAndroid.request(keys.read, SMS_RATIONALE);
-    const receiveResult = await PermissionsAndroid.request(
+    const result = await PermissionsAndroid.requestMultiple([
+      keys.read,
       keys.receive,
-      SMS_RATIONALE
-    );
+    ]);
     return resolveSmsRequestStatus({
       platformSupported: true,
-      readResult,
-      receiveResult,
+      readResult: result[keys.read],
+      receiveResult: result[keys.receive],
     });
   } catch {
     return "denied";

@@ -15,27 +15,12 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Mail, Lock, Eye, EyeOff } from "lucide-react-native";
 import Animated, { FadeInUp, FadeInDown } from "react-native-reanimated";
 
-import { ConsentCheckboxes } from "@/components/legal/ConsentCheckboxes";
-import { LegalDocumentModal } from "@/components/legal/LegalDocumentModal";
 import { Input } from "@/components/ui/Input";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
-import {
-  getPrivacyNoticeIntro,
-  getPrivacyNoticeSections,
-  getPrivacyNoticeTitle,
-  getPrivacyNoticeVersion,
-} from "@/legal/privacyNotice";
-import {
-  getTermsIntro,
-  getTermsSections,
-  getTermsTitle,
-  getTermsVersion,
-} from "@/legal/termsOfUse";
 import { useAuth } from "@/providers/AuthProvider";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import { useTheme } from "@/theme/ThemeProvider";
-import { buildAcceptedConsent } from "@/shared/utils/dpdpConsent";
 
 import { SpendlyLogo } from "@/components/auth/SpendlyLogo";
 import { AuthBackground } from "@/components/auth/AuthBackground";
@@ -55,10 +40,6 @@ export default function AuthScreen() {
   const [displayName, setDisplayName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [secureText, setSecureText] = useState(true);
-  const [isAdult, setIsAdult] = useState(false);
-  const [acceptedLegal, setAcceptedLegal] = useState(false);
-  const [showNotice, setShowNotice] = useState(false);
-  const [showTerms, setShowTerms] = useState(false);
 
   if (authLoading) {
     return (
@@ -86,10 +67,7 @@ export default function AuthScreen() {
           throw new Error("New registrations are temporarily disabled by the administrator.");
         }
         if (!displayName.trim()) throw new Error("Please enter your name");
-        if (!isAdult || !acceptedLegal) {
-          throw new Error("Please confirm you are 18+ and accept the Privacy Notice and Terms.");
-        }
-        await signUpWithEmail(email, password, displayName, buildAcceptedConsent(null));
+        await signUpWithEmail(email, password, displayName);
         toast.success("Account created successfully!");
       } else {
         await resetPassword(email);
@@ -105,10 +83,6 @@ export default function AuthScreen() {
   };
 
   const onGoogle = async () => {
-    if (mode === "signup" && (!isAdult || !acceptedLegal)) {
-      toast.error("Please confirm you are 18+ and accept the Privacy Notice and Terms.");
-      return;
-    }
     setSubmitting(true);
     try {
       const { GoogleSignin, isSuccessResponse } = await import("@react-native-google-signin/google-signin");
@@ -123,9 +97,7 @@ export default function AuthScreen() {
         throw new Error("Google did not return an ID token. Check that the Web client ID is configured.");
       }
 
-      const consent =
-        mode === "signup" ? buildAcceptedConsent(null) : undefined;
-      await loginWithGoogleIdToken(idToken, consent);
+      await loginWithGoogleIdToken(idToken);
       toast.success("Welcome!");
     } catch (error) {
       logError("auth.google", error);
@@ -147,12 +119,7 @@ export default function AuthScreen() {
     }
   };
 
-  const signupConsentReady = isAdult && acceptedLegal;
-  const ctaDisabled =
-    submitting ||
-    !email.trim() ||
-    (mode !== "forgot" && !password) ||
-    (mode === "signup" && (settings.disableSignups || !signupConsentReady));
+  const ctaDisabled = submitting || !email.trim() || (mode !== "forgot" && !password) || (mode === "signup" && settings.disableSignups);
 
   return (
     <SafeAreaView style={{ flex: 1 }} edges={["top", "bottom"]}>
@@ -244,17 +211,6 @@ export default function AuthScreen() {
               </View>
             )}
 
-            {mode === "signup" ? (
-              <ConsentCheckboxes
-                isAdult={isAdult}
-                onAdultChange={setIsAdult}
-                acceptedLegal={acceptedLegal}
-                onAcceptedLegalChange={setAcceptedLegal}
-                onOpenNotice={() => setShowNotice(true)}
-                onOpenTerms={() => setShowTerms(true)}
-              />
-            ) : null}
-
             {/* Primary Gradient Button */}
             <Pressable onPress={onSubmit} disabled={ctaDisabled} style={{ marginTop: 8 }}>
               {({ pressed }) => (
@@ -285,30 +241,8 @@ export default function AuthScreen() {
                   <View style={[styles.dividerLine, { backgroundColor: isDark ? "#334155" : "#E2E8F0" }]} />
                 </View>
                 <SocialLoginButton onPress={onGoogle} loading={submitting} disabled={submitting} />
-                <View style={{ flexDirection: "row", justifyContent: "center", gap: 16 }}>
-                  <Pressable onPress={() => setShowNotice(true)} hitSlop={8}>
-                    <Text style={{ color: "#19C79A", fontSize: 13 }}>Privacy Notice</Text>
-                  </Pressable>
-                  <Pressable onPress={() => setShowTerms(true)} hitSlop={8}>
-                    <Text style={{ color: "#19C79A", fontSize: 13 }}>Terms</Text>
-                  </Pressable>
-                </View>
               </>
             )}
-            {mode === "signup" && !settings.disableSignups ? (
-              <>
-                <View style={styles.dividerBox}>
-                  <View style={[styles.dividerLine, { backgroundColor: isDark ? "#334155" : "#E2E8F0" }]} />
-                  <Text style={[styles.dividerText, { color: isDark ? "#64748B" : "#94A3B8" }]}>or</Text>
-                  <View style={[styles.dividerLine, { backgroundColor: isDark ? "#334155" : "#E2E8F0" }]} />
-                </View>
-                <SocialLoginButton
-                  onPress={onGoogle}
-                  loading={submitting}
-                  disabled={submitting || !signupConsentReady}
-                />
-              </>
-            ) : null}
           </Animated.View>
 
           {/* Footer toggle */}
@@ -322,15 +256,7 @@ export default function AuthScreen() {
           ) : (
             <Animated.View entering={FadeInUp.duration(700).delay(300)} style={styles.footer}>
               <Text style={{ color: isDark ? "#94A3B8" : "#64748B", fontSize: 15 }}>Don't have an account?</Text>
-              <Pressable
-                onPress={() => {
-                  setIsAdult(false);
-                  setAcceptedLegal(false);
-                  setMode("signup");
-                }}
-                disabled={settings.disableSignups}
-                hitSlop={8}
-              >
+              <Pressable onPress={() => setMode("signup")} disabled={settings.disableSignups} hitSlop={8}>
                 <Text style={{ color: settings.disableSignups ? "#94A3B8" : "#19C79A", fontSize: 15, fontFamily: theme.fontFamily.semibold, marginLeft: 4 }}>
                   Create account
                 </Text>
@@ -339,22 +265,6 @@ export default function AuthScreen() {
           )}
         </ScrollView>
       </KeyboardAvoidingView>
-      <LegalDocumentModal
-        visible={showNotice}
-        title={getPrivacyNoticeTitle()}
-        version={getPrivacyNoticeVersion()}
-        intro={getPrivacyNoticeIntro()}
-        sections={getPrivacyNoticeSections()}
-        onClose={() => setShowNotice(false)}
-      />
-      <LegalDocumentModal
-        visible={showTerms}
-        title={getTermsTitle()}
-        version={getTermsVersion()}
-        intro={getTermsIntro()}
-        sections={getTermsSections()}
-        onClose={() => setShowTerms(false)}
-      />
     </SafeAreaView>
   );
 }

@@ -22,7 +22,6 @@ import { AppErrorBoundary } from "@/components/common/AppErrorBoundary";
 import { CelebrationOverlay } from "@/components/common/CelebrationOverlay";
 import { OfflineBanner } from "@/components/common/OfflineBanner";
 import { SplashAnimationOverlay } from "@/components/common/SplashAnimationOverlay";
-import { NoticeAcceptModal } from "@/components/privacy/NoticeAcceptModal";
 import { isPermissionError, logWarning } from "@/lib/errors";
 import { installGlobalErrorHandlers } from "@/lib/globalErrorHandler";
 import { perfMark } from "@/lib/perf";
@@ -237,7 +236,6 @@ export default function RootLayout() {
                                 <AppErrorBoundary scope="app.navigator">
                                   <RootNavigator />
                                 </AppErrorBoundary>
-                                <NoticeAcceptModal />
                                 <CelebrationOverlay />
                               </AppInitializer>
                             </ToastProvider>
@@ -276,9 +274,6 @@ function RootNavigator() {
         <Stack.Screen name="(app)" />
         <Stack.Screen name="(nutrition)" options={{ animation: "slide_from_right" }} />
         <Stack.Screen name="google-auth" options={{ animation: "none" }} />
-        <Stack.Screen name="privacy" options={{ animation: "slide_from_right" }} />
-        <Stack.Screen name="terms" options={{ animation: "slide_from_right" }} />
-        <Stack.Screen name="account-deletion" options={{ animation: "slide_from_right" }} />
         <Stack.Screen name="+not-found" options={{ animation: "fade" }} />
       </Stack>
       <OfflineBanner />

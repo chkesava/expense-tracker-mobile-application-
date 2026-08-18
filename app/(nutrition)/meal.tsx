@@ -12,10 +12,8 @@ import { ArrowLeft, ScanBarcode, Trash2 } from "lucide-react-native";
 import { NutritionValue } from "@/components/nutrition/NutritionValue";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
-import { NutritionAiConsentDialog } from "@/components/privacy/NutritionAiConsentDialog";
 import { Button, Card, Input } from "@/components/ui";
 import { useDailyLog } from "@/hooks/useDailyLog";
-import { useDpdpConsent } from "@/hooks/useDpdpConsent";
 import { subscribeNutritionScan } from "@/lib/nutritionScanBridge";
 import { logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
@@ -36,8 +34,6 @@ export default function NutritionMealScreen() {
   const [analyzing, setAnalyzing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [parsedFoods, setParsedFoods] = useState<AnalyzedFood[]>([]);
-  const [aiConsentOpen, setAiConsentOpen] = useState(false);
-  const { purposes, setPurposes, saving: consentSaving } = useDpdpConsent();
 
   const meal = meals.find((item) => item.id === mealId);
 
@@ -48,13 +44,11 @@ export default function NutritionMealScreen() {
     });
   }, []);
 
-  const runAnalyze = async () => {
+  const handleAnalyze = async () => {
     if (!inputText.trim()) return;
     setAnalyzing(true);
     try {
-      const foods = await analyzeNutrition(inputText.trim(), {
-        nutritionAiConsent: true,
-      });
+      const foods = await analyzeNutrition(inputText.trim());
       setParsedFoods(foods);
       setInputText("");
     } catch (error) {
@@ -65,15 +59,6 @@ export default function NutritionMealScreen() {
     } finally {
       setAnalyzing(false);
     }
-  };
-
-  const handleAnalyze = async () => {
-    if (!inputText.trim()) return;
-    if (!purposes.nutritionAi) {
-      setAiConsentOpen(true);
-      return;
-    }
-    await runAnalyze();
   };
 
   const handleSave = async () => {
@@ -254,18 +239,6 @@ export default function NutritionMealScreen() {
           ))}
         </View>
       </Card>
-      <NutritionAiConsentDialog
-        isOpen={aiConsentOpen}
-        onClose={() => setAiConsentOpen(false)}
-        confirming={consentSaving || analyzing}
-        onConfirm={() => {
-          void (async () => {
-            await setPurposes({ nutritionAi: true });
-            setAiConsentOpen(false);
-            await runAnalyze();
-          })();
-        }}
-      />
     </PageShell>
   );
 }
