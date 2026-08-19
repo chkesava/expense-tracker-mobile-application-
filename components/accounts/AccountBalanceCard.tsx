@@ -317,7 +317,7 @@ const styles = StyleSheet.create({
     opacity: 0.55,
   },
   pattern: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   safeSlot: {
     position: "absolute",
