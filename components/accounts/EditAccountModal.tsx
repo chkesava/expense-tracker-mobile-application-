@@ -30,6 +30,7 @@ import { getInstitutionById } from "@/shared/data/institutions";
 import {
   defaultSmsMatchingEnabled,
   getAccountLast4,
+  normalizeLast4,
   requiresCatalogInstitution,
   suggestedAccountDisplayName,
 } from "@/shared/utils/accountIdentity";
@@ -196,7 +197,12 @@ export function EditAccountModal({
       toast.error("Select an institution from the list");
       return;
     }
-    if (needsInstitution && smsMatchingEnabled && !catalogInstitution) {
+    if (
+      !isEditing &&
+      needsInstitution &&
+      smsMatchingEnabled &&
+      !catalogInstitution
+    ) {
       toast.error("Select an institution to enable SMS matching");
       return;
     }
@@ -217,11 +223,12 @@ export function EditAccountModal({
         ? Math.min(31, Math.max(1, parseInt(billGenerationDay, 10) || 1))
         : undefined;
 
+      const last4 = normalizeLast4(accountNumber);
       const extras: Partial<Account> = {
         openingBalance: parsedOpening,
         balanceAsOfDate: balanceAsOfDate || formatDateKey(new Date()),
-        last4: accountNumber.trim() || undefined,
-        accountNumber: accountNumber.trim() || undefined,
+        last4,
+        accountNumber: last4,
         institutionId: catalogInstitution?.id || "",
         smsMatchingEnabled: matchingAllowed && smsMatchingEnabled,
         displayName: trimmedName,
@@ -403,22 +410,17 @@ export function EditAccountModal({
         ) : null}
 
         {accountTypeId !== "cash" ? (
-          <View style={{ gap: 6 }}>
-            <Text
-              style={[
-                styles.label,
-                { color: theme.colors.foreground, fontSize: theme.typography.sm },
-              ]}
-            >
-              Last 4 digits
-            </Text>
-            <Input
-              value={accountNumber}
-              onChangeText={setAccountNumber}
-              placeholder="e.g. 4521"
-              keyboardType="number-pad"
-            />
-          </View>
+          <Input
+            label="Card / account number"
+            value={accountNumber}
+            onChangeText={(value) => setAccountNumber(value.replace(/\D/g, ""))}
+            onBlur={() => {
+              setAccountNumber((prev) => normalizeLast4(prev) || prev);
+            }}
+            placeholder="Last 4, or paste the full number"
+            keyboardType="number-pad"
+            helperText="Only the last 4 digits are saved. Used to match bank SMS."
+          />
         ) : null}
 
         <View style={{ gap: 6 }}>

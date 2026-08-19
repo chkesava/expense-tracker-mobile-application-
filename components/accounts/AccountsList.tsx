@@ -16,6 +16,7 @@ import {
 } from "lucide-react-native";
 
 import { AddAccountEntryModal } from "@/components/accounts/AddAccountEntryModal";
+import { AccountEditButton } from "@/components/accounts/AccountEditButton";
 import { EditAccountModal } from "@/components/accounts/EditAccountModal";
 import { PayCreditBillModal } from "@/components/accounts/PayCreditBillModal";
 import { TransferFundsModal } from "@/components/accounts/TransferFundsModal";
@@ -644,6 +645,11 @@ export function AccountsList() {
                                 : theme.colors.destructive,
                           }}
                         />
+                        <AccountEditButton
+                          label={`Edit ${account.name}`}
+                          color={theme.colors.mutedForeground}
+                          onPress={() => handleOpenEditAccount(account)}
+                        />
                         <ChevronRight
                           size={16}
                           color={theme.colors.mutedForeground}
@@ -741,6 +747,11 @@ export function AccountsList() {
                         Used this cycle
                       </Text>
                     </View>
+                    <AccountEditButton
+                      label={`Edit ${account.name}`}
+                      color={theme.colors.mutedForeground}
+                      onPress={() => handleOpenEditAccount(account)}
+                    />
                     <ChevronRight size={16} color={theme.colors.mutedForeground} />
                   </View>
                 </Pressable>

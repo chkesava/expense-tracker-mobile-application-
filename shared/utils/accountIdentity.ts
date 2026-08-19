@@ -151,14 +151,20 @@ export function getAccountConfigurationStatus(
  * expenses but cannot participate in SMS matching.
  */
 export function smsMatchingUnconfiguredLabel(
-  account: Pick<Account, "institutionId" | "accountTypeId">,
+  account: Pick<
+    Account,
+    "institutionId" | "accountTypeId" | "last4" | "accountNumber"
+  >,
   typeName?: string
 ): string | null {
   const accountTypeId =
     account.accountTypeId || canonicalAccountTypeId(typeName || "");
   if (!requiresCatalogInstitution(accountTypeId)) return null;
-  if (hasCatalogInstitution(account)) return null;
-  return "SMS matching not configured";
+  if (!hasCatalogInstitution(account)) return "SMS matching not configured";
+  if (requiresSmsLast4(accountTypeId) && !getAccountLast4(account)) {
+    return "Add last 4 digits for SMS matching";
+  }
+  return null;
 }
 
 export type AccountIdentityMigrationReport = {
@@ -375,7 +381,7 @@ export function buildAccountWritePayload(
   };
 
   put(payload, "last4", last4);
-  put(payload, "accountNumber", extras.accountNumber?.trim() || last4);
+  put(payload, "accountNumber", last4);
   payload.institutionId = institution.institutionId ?? null;
   payload.institutionName = institution.institutionName ?? null;
   payload.institutionType = institution.institutionType ?? null;

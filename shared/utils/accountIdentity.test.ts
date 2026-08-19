@@ -27,6 +27,11 @@ describe("normalizeLast4", () => {
     expect(normalizeLast4("XX4521")).toBe("4521");
     expect(normalizeLast4("12")).toBeUndefined();
   });
+
+  it("keeps only the last four digits from a full card number", () => {
+    expect(normalizeLast4("4111222233334521")).toBe("4521");
+    expect(normalizeLast4("4111 2222 3333 4521")).toBe("4521");
+  });
 });
 
 describe("hydrateAccountIdentity", () => {
@@ -84,6 +89,21 @@ describe("hydrateAccountIdentity", () => {
     expect(hydrated.institutionId).toBe("super_money");
     expect(hydrated.institutionName).toBe("Super Money");
     expect(smsMatchingUnconfiguredLabel(hydrated, "Credit Card")).toBeNull();
+  });
+
+  it("prompts for last 4 when a catalog institution is already set", () => {
+    const hydrated = hydrateAccountIdentity(
+      {
+        id: "acc-sm",
+        name: "Travel card",
+        typeId: "type-cc",
+        institutionId: "super_money",
+      },
+      "Credit Card"
+    );
+    expect(smsMatchingUnconfiguredLabel(hydrated, "Credit Card")).toBe(
+      "Add last 4 digits for SMS matching"
+    );
   });
 
   it("disables SMS matching for cash by default", () => {
@@ -205,6 +225,22 @@ describe("buildAccountWritePayload", () => {
       smsMatchingEnabled: true,
       color: "#2563EB",
     });
+  });
+
+  it("never persists a full card number", () => {
+    const payload = buildAccountWritePayload({
+      name: "Travel card",
+      typeId: "type-cc",
+      typeName: "Credit Card",
+      extras: {
+        accountNumber: "4111222233334521",
+        institutionId: "super_money",
+      },
+    });
+
+    expect(payload.last4).toBe("4521");
+    expect(payload.accountNumber).toBe("4521");
+    expect(JSON.stringify(payload)).not.toContain("4111222233334521");
   });
 
   it("does not save an arbitrary institution string for a credit card", () => {

@@ -8,7 +8,10 @@ export function SmsMatchingUnconfiguredText({
   account,
   typeName,
 }: {
-  account: Pick<Account, "institutionId" | "accountTypeId">;
+  account: Pick<
+    Account,
+    "institutionId" | "accountTypeId" | "last4" | "accountNumber"
+  >;
   typeName?: string;
 }) {
   const { theme } = useTheme();
