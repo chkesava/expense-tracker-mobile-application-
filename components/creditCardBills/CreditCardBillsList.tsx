@@ -197,7 +197,7 @@ export function CreditCardBillsList() {
       ) : filtered.length === 0 ? (
         <EmptyState
           title="No bills yet"
-          description="Add a statement bill for a credit card to track due dates and reminders."
+          description="Statements are created automatically on each card’s bill generation day from that cycle’s spend. Due date is 5 days later. Set a bill generation day on the card if nothing appears. You can still add a bill manually."
         />
       ) : (
         <>
