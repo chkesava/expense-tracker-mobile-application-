@@ -9,6 +9,7 @@ import type {
 } from "../types/expense";
 import type { Borrowing, BorrowingRepayment } from "../types/borrowing";
 import type { Receivable, ReceivableRepayment } from "../types/receivable";
+import { resolveActivityClockTime } from "./activityDisplay";
 import { getAccountKind } from "./accountKind";
 import { getBillingCycleDates, getDaysUntilReset } from "./billingCycle";
 import { parseLocalDate, toLocalDateKey, billDateForMonth } from "./dates";
@@ -391,6 +392,7 @@ export function buildAccountActivities(
     ...accountExpenses.map((e, idx) => ({
       id: e.id ?? `expense-${e.date}-${idx}`,
       date: e.date,
+      time: resolveActivityClockTime(e.time, e.createdAt),
       amount: e.amount,
       type: "debit" as const,
       note: e.note,
@@ -400,6 +402,7 @@ export function buildAccountActivities(
     ...accountIncomes.map((i, idx) => ({
       id: i.id ?? `income-${i.date}-${idx}`,
       date: i.date,
+      time: resolveActivityClockTime(undefined, i.createdAt),
       amount: i.amount,
       type: "credit" as const,
       note: i.note,
@@ -409,6 +412,7 @@ export function buildAccountActivities(
     ...accountEntries.map((entry) => ({
       id: `entry-${entry.id}`,
       date: entry.date,
+      time: resolveActivityClockTime(undefined, entry.createdAt),
       amount: entry.amount,
       type: entry.direction,
       note:
@@ -420,6 +424,7 @@ export function buildAccountActivities(
     ...outgoingPayments.map((p) => ({
       id: p.id,
       date: p.date,
+      time: resolveActivityClockTime(undefined, p.createdAt),
       amount: p.amount,
       type: "debit" as const,
       note: p.note || "Credit card bill payment",
@@ -431,6 +436,7 @@ export function buildAccountActivities(
       ? incomingPayments.map((p) => ({
           id: `payment-in-${p.id}`,
           date: p.date,
+          time: resolveActivityClockTime(undefined, p.createdAt),
           amount: p.amount,
           type: "credit" as const,
           note: p.note || "Bill payment received",
@@ -442,6 +448,7 @@ export function buildAccountActivities(
     ...outgoingTransfers.map((transfer) => ({
       id: `transfer-out-${transfer.id}`,
       date: transfer.date,
+      time: resolveActivityClockTime(undefined, transfer.createdAt),
       amount: transfer.amount,
       type: "debit" as const,
       note: transfer.note || "Transfer to account",
@@ -452,6 +459,7 @@ export function buildAccountActivities(
     ...incomingTransfers.map((transfer) => ({
       id: `transfer-in-${transfer.id}`,
       date: transfer.date,
+      time: resolveActivityClockTime(undefined, transfer.createdAt),
       amount: transfer.amount,
       type: "credit" as const,
       note: transfer.note || "Transfer from account",
@@ -462,6 +470,7 @@ export function buildAccountActivities(
     ...incomingBorrowings.map((borrowing, idx) => ({
       id: `borrowing-in-${borrowing.id ?? idx}`,
       date: borrowing.borrowedDate,
+      time: resolveActivityClockTime(undefined, borrowing.createdAt),
       amount: borrowing.principalAmount,
       type: "credit" as const,
       note: borrowing.note || "Money borrowed",
@@ -472,6 +481,7 @@ export function buildAccountActivities(
     ...outgoingRepayments.map((repayment, idx) => ({
       id: `repayment-out-${repayment.id ?? idx}`,
       date: repayment.date,
+      time: resolveActivityClockTime(undefined, repayment.createdAt),
       amount: repayment.amount,
       type: "debit" as const,
       note: repayment.note || "Loan repayment",
@@ -482,6 +492,7 @@ export function buildAccountActivities(
     ...outgoingLends.map((receivable, idx) => ({
       id: `receivable-out-${receivable.id ?? idx}`,
       date: receivable.lentDate,
+      time: resolveActivityClockTime(undefined, receivable.createdAt),
       amount: receivable.originalAmount,
       type: "debit" as const,
       note: receivable.note || receivable.purpose || "Money lent",
@@ -492,6 +503,7 @@ export function buildAccountActivities(
     ...incomingCollections.map((repayment, idx) => ({
       id: `receivable-repay-in-${repayment.id ?? idx}`,
       date: repayment.date,
+      time: resolveActivityClockTime(undefined, repayment.createdAt),
       amount: repayment.amount,
       type: "credit" as const,
       note: repayment.note || "Receivable repayment",

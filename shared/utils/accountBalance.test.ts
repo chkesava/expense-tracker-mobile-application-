@@ -484,4 +484,32 @@ describe("floating-point safety in money math", () => {
       vi.useRealTimers();
     }
   });
+
+  it("carries explicit expense clock time onto the activity without changing the ledger", () => {
+    const account: Account = {
+      id: "bank-1",
+      name: "Bank",
+      typeId: "bank-type",
+      openingBalance: 16452,
+      balanceInitialized: true,
+      balanceAsOfDate: "2026-08-16",
+    };
+    const expenses: Expense[] = [
+      {
+        id: "exp-gym",
+        amount: 1600,
+        category: "Health",
+        note: "[Subscription] GYM PERSONAL TRAINER",
+        date: "2026-08-16",
+        month: "2026-08",
+        accountId: "bank-1",
+        time: "20:12",
+        createdAt: null,
+      },
+    ];
+    const activities = buildAccountActivities(account, "Bank", expenses, []);
+    expect(activities[0]?.time).toBe("08:12 PM");
+    expect(activities[0]?.runningBalance).toBe(14852);
+    expect(activities[0]?.category).toBe("Health");
+  });
 });

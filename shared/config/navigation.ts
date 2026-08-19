@@ -125,6 +125,12 @@ function normalizePathname(pathname: string): string {
   return clean;
 }
 
+/** Account detail (`/accounts/:id`), not the accounts list hub. */
+export function isAccountDetailRoute(pathname: string): boolean {
+  const clean = normalizePathname(pathname).split("?")[0];
+  return /^\/accounts\/[^/]+$/.test(clean);
+}
+
 /**
  * What the Android hardware back button should do from a given route, once any
  * open modal has been ruled out.

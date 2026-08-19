@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   CORE_NAV_ITEMS,
+  isAccountDetailRoute,
   isNavItemActive,
   resolveAndroidBackAction,
   resolveLegacyLedgerTabRoute,
@@ -115,5 +116,14 @@ describe("isNavItemActive", () => {
   it("matches admin", () => {
     expect(isNavItemActive("/admin", "admin")).toBe(true);
     expect(isNavItemActive("/(app)/admin", "admin")).toBe(true);
+  });
+});
+
+describe("isAccountDetailRoute", () => {
+  it("matches an account id and ignores the accounts list hub", () => {
+    expect(isAccountDetailRoute("/accounts/abc123")).toBe(true);
+    expect(isAccountDetailRoute("/(app)/accounts/abc123")).toBe(true);
+    expect(isAccountDetailRoute("/accounts")).toBe(false);
+    expect(isAccountDetailRoute("/ledger")).toBe(false);
   });
 });

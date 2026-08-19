@@ -1,37 +1,37 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from "react-native";
+import { FlashList } from "@shopify/flash-list";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
-import {
-  ArrowDownLeft,
-  ArrowLeft,
-  ArrowLeftRight,
-  ArrowUpRight,
-  Calendar,
-  CheckCircle2,
-  CreditCard,
-  Edit2,
-  FolderTree,
-  Landmark,
-  Plus,
-  SlidersHorizontal,
-  Wallet,
-} from "lucide-react-native";
 
+import { AccountBalanceCard } from "@/components/accounts/AccountBalanceCard";
+import { AccountCreditHero } from "@/components/accounts/AccountCreditHero";
+import { AccountHeader } from "@/components/accounts/AccountHeader";
 import { AddAccountEntryModal } from "@/components/accounts/AddAccountEntryModal";
 import { EditAccountModal } from "@/components/accounts/EditAccountModal";
 import { PayCreditBillModal } from "@/components/accounts/PayCreditBillModal";
 import { SmsMatchingUnconfiguredText } from "@/components/accounts/SmsMatchingUnconfiguredText";
-import { CreateCreditCardBillModal } from "@/components/creditCardBills/CreateCreditCardBillModal";
 import { TransferFundsModal } from "@/components/accounts/TransferFundsModal";
+import {
+  TransactionColumnHeaders,
+  TransactionFilters,
+  type ActivityFilter,
+} from "@/components/accounts/TransactionFilters";
+import { TransactionRow } from "@/components/accounts/TransactionRow";
+import { CreateCreditCardBillModal } from "@/components/creditCardBills/CreateCreditCardBillModal";
 import { Amount } from "@/components/common/Amount";
+import {
+  BOTTOM_NAV_BAR_HEIGHT,
+  BOTTOM_NAV_FAB_GAP,
+  BOTTOM_NAV_FAB_SIZE,
+} from "@/components/layout/chrome";
 import { Card } from "@/components/ui/Card";
 import { useAccountEntries } from "@/hooks/useAccountEntries";
 import { useAccountPayments } from "@/hooks/useAccountPayments";
@@ -40,31 +40,47 @@ import { useAccountTransfers } from "@/hooks/useAccountTransfers";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
 import { useBorrowings } from "@/hooks/useBorrowings";
 import { useCreditCardBills } from "@/hooks/useCreditCardBills";
-import { useReceivables } from "@/hooks/useReceivables";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useIncomes } from "@/hooks/useIncomes";
-import { OPEN_BILL_STATUSES } from "@/shared/types/creditCardBill";
+import { useReceivables } from "@/hooks/useReceivables";
+import { useModals } from "@/providers/ModalProvider";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
-import type { AccountActivity } from "@/shared/types/expense";
+import { OPEN_BILL_STATUSES } from "@/shared/types/creditCardBill";
+import type { AccountActivity, Expense, Income } from "@/shared/types/expense";
 import {
   buildAccountActivities,
   computeBankBalance,
   computeCreditUsage,
   getCreditBillHistory,
 } from "@/shared/utils/accountBalance";
+import { smsMatchingUnconfiguredLabel } from "@/shared/utils/accountIdentity";
 import { getAccountKind } from "@/shared/utils/accountKind";
-import { formatAccountIdentityLine } from "@/shared/utils/accountIdentity";
+import {
+  accountKindSubtitle,
+  activitySubtypeLabel,
+  activityTitle,
+  formatActivityDateLabel,
+} from "@/shared/utils/activityDisplay";
 import { formatDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
+const WIDE_ROW_BREAKPOINT = 420;
+
+function ActivitySeparator() {
+  return <View style={styles.separator} />;
+}
+
 export default function AccountDetailScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const compact = width < WIDE_ROW_BREAKPOINT;
   const { id } = useLocalSearchParams<{ id: string }>();
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const { settings: system } = useSystemSettings();
+  const { setEditingExpense, setEditingIncome } = useModals();
 
   const { accounts } = useAccounts();
   const { accountTypes } = useAccountTypes();
@@ -77,17 +93,14 @@ export default function AccountDetailScreen() {
   const { bills, applyPaymentToBill } = useCreditCardBills();
   const { receivables, repayments: receivableRepayments } = useReceivables();
 
-  // Modals state
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [isEntryModalOpen, setIsEntryModalOpen] = useState(false);
   const [isPayModalOpen, setIsPayModalOpen] = useState(false);
   const [isCreateBillOpen, setIsCreateBillOpen] = useState(false);
-  const [activityFilter, setActivityFilter] = useState<"all" | "debit" | "credit">("all");
+  const [activityFilter, setActivityFilter] = useState<ActivityFilter>("all");
 
-  const account = useMemo(() => {
-    return accounts.find((a) => a.id === id);
-  }, [accounts, id]);
+  const account = useMemo(() => accounts.find((a) => a.id === id), [accounts, id]);
 
   const typeMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -109,8 +122,8 @@ export default function AccountDetailScreen() {
   }, [account, typeMap]);
 
   const isCreditCard = getAccountKind(typeName) === "credit";
+  const currency = system.defaultCurrency;
 
-  // Balance or Credit calculation
   const bankBalance = useMemo(() => {
     if (!account || isCreditCard) return 0;
     return computeBankBalance(
@@ -161,10 +174,9 @@ export default function AccountDetailScreen() {
     );
   }, [account, isCreditCard, bills]);
 
-  // Build full activities timeline
   const activities = useMemo(() => {
     if (!account) return [];
-    const list = buildAccountActivities(
+    return buildAccountActivities(
       account,
       typeName,
       expenses,
@@ -175,10 +187,6 @@ export default function AccountDetailScreen() {
       accountNameById,
       { borrowings, borrowingRepayments },
       { receivables, receivableRepayments }
-    );
-    // Sort descending by date
-    return list.sort(
-      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
     );
   }, [
     account,
@@ -195,612 +203,303 @@ export default function AccountDetailScreen() {
     receivableRepayments,
   ]);
 
+  const debitCount = useMemo(
+    () => activities.reduce((sum, act) => sum + (act.type === "debit" ? 1 : 0), 0),
+    [activities]
+  );
+  const creditCount = activities.length - debitCount;
+
   const filteredActivities = useMemo(() => {
     if (activityFilter === "all") return activities;
     return activities.filter((a) => a.type === activityFilter);
   }, [activities, activityFilter]);
 
+  const expenseById = useMemo(() => {
+    const map = new Map<string, Expense>();
+    for (const expense of expenses) {
+      if (expense.id) map.set(expense.id, expense);
+    }
+    return map;
+  }, [expenses]);
+
+  const incomeById = useMemo(() => {
+    const map = new Map<string, Income>();
+    for (const income of incomes) {
+      if (income.id) map.set(income.id, income);
+    }
+    return map;
+  }, [incomes]);
+
+  const onPressActivity = useCallback(
+    (activityId: string) => {
+      const act = activities.find((item) => item.id === activityId);
+      if (!act) return;
+      if (act.linkedExpenseId) {
+        const expense = expenseById.get(act.linkedExpenseId);
+        if (expense) setEditingExpense(expense);
+        return;
+      }
+      if (act.linkedIncomeId) {
+        const income = incomeById.get(act.linkedIncomeId);
+        if (income) setEditingIncome(income);
+      }
+    },
+    [activities, expenseById, incomeById, setEditingExpense, setEditingIncome]
+  );
+
+  const renderItem = useCallback(
+    ({ item }: { item: AccountActivity }) => (
+      <TransactionRow
+        id={item.id}
+        title={activityTitle(item)}
+        subtype={activitySubtypeLabel(item)}
+        isCredit={item.type === "credit"}
+        dateLabel={formatActivityDateLabel(item.date)}
+        timeLabel={item.time}
+        amount={item.amount}
+        runningBalance={item.runningBalance}
+        currency={currency}
+        compact={compact}
+        showRunningBalance={!isCreditCard}
+        onPress={onPressActivity}
+      />
+    ),
+    [compact, currency, isCreditCard, onPressActivity]
+  );
+
+  const keyExtractor = useCallback((item: AccountActivity) => item.id, []);
+
+  const listPaddingBottom =
+    insets.bottom + BOTTOM_NAV_BAR_HEIGHT + BOTTOM_NAV_FAB_GAP + BOTTOM_NAV_FAB_SIZE + 20;
+
   if (!account) {
     return (
-      <View
-        style={[
-          styles.container,
-          {
-            backgroundColor: theme.colors.background,
-            paddingTop: insets.top + 16,
-            alignItems: "center",
-            justifyContent: "center",
-          },
-        ]}
-      >
-        <Text
-          style={{
-            fontSize: theme.typography.lg,
-            color: theme.colors.mutedForeground,
-          }}
-        >
-          Account not found
-        </Text>
-        <Pressable onPress={() => router.back()} style={{ marginTop: 12 }}>
+      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <AccountHeader
+          title="Account"
+          subtitle=""
+          onBack={() => router.back()}
+        />
+        <View style={styles.missing}>
           <Text
             style={{
-              fontSize: theme.typography.sm,
-              fontWeight: "700",
-              color: theme.colors.primary,
+              fontSize: theme.typography.lg,
+              color: theme.colors.mutedForeground,
             }}
           >
-            Go Back
+            Account not found
           </Text>
-        </Pressable>
+          <Pressable onPress={() => router.back()} style={{ marginTop: 12 }}>
+            <Text
+              style={{
+                fontSize: theme.typography.sm,
+                fontWeight: "700",
+                color: theme.colors.primary,
+              }}
+            >
+              Go Back
+            </Text>
+          </Pressable>
+        </View>
       </View>
     );
   }
 
-  const accountColor = account.color || theme.colors.primary;
-
-  return (
-    <View
-      style={[
-        styles.container,
-        {
-          backgroundColor: theme.colors.background,
-          paddingTop: insets.top,
-        },
-      ]}
-    >
-      {/* Header */}
-      <View
-        style={[
-          styles.header,
-          {
-            backgroundColor: theme.colors.background,
-            borderBottomColor: theme.colors.border,
-          },
-        ]}
-      >
-        <Pressable
-          onPress={() => {
-            Haptics.selectionAsync().catch(() => undefined);
-            router.back();
+  const listHeader = (
+    <View style={styles.headerBlock}>
+      {isCreditCard && creditUsage ? (
+        <AccountCreditHero
+          usedThisCycle={creditUsage.usedThisCycle}
+          availableCredit={creditUsage.availableCredit}
+          creditLimit={account.creditLimit || 0}
+          daysRemaining={creditUsage.daysRemaining}
+          currency={currency}
+          payLabel={openStatementBill ? "Pay Bill" : "Record Bill Payment"}
+          onPay={() => {
+            if (openStatementBill) {
+              router.push(`/credit-card-bills/${openStatementBill.id}` as never);
+              return;
+            }
+            setIsPayModalOpen(true);
           }}
-          style={styles.headerBtn}
-        >
-          <ArrowLeft size={20} color={theme.colors.foreground} />
-        </Pressable>
+        />
+      ) : (
+        <AccountBalanceCard
+          availableBalance={bankBalance}
+          currency={currency}
+          openingBalance={account.openingBalance || 0}
+          baselineLabel={account.balanceAsOfDate || "Creation"}
+          onTransfer={() => setIsTransferModalOpen(true)}
+          onAdjust={() => setIsEntryModalOpen(true)}
+        />
+      )}
 
-        <View style={styles.headerCenter}>
-          <Text
-            style={[
-              styles.headerTitle,
-              {
-                color: theme.colors.foreground,
-                fontSize: theme.typography.lg,
-              },
-            ]}
-            numberOfLines={1}
-          >
-            {account.name}
-          </Text>
+      {isCreditCard ? (
+        <Card>
+          <View style={{ gap: 10 }}>
+            <Text
+              style={{
+                fontSize: theme.typography.xs,
+                color: theme.colors.mutedForeground,
+                fontWeight: "700",
+                textTransform: "uppercase",
+              }}
+            >
+              Statement Bill
+            </Text>
+            {openStatementBill ? (
+              <>
+                <View style={styles.billRow}>
+                  <Text style={{ color: theme.colors.mutedForeground }}>Statement</Text>
+                  <Amount value={openStatementBill.statementAmount} ghostable />
+                </View>
+                <View style={styles.billRow}>
+                  <Text style={{ color: theme.colors.mutedForeground }}>Minimum Due</Text>
+                  <Amount value={openStatementBill.minimumDueAmount} ghostable />
+                </View>
+                <View style={styles.billRow}>
+                  <Text style={{ color: theme.colors.mutedForeground }}>Due</Text>
+                  <Text style={{ color: theme.colors.foreground, fontWeight: "600" }}>
+                    {openStatementBill.dueDate}
+                  </Text>
+                </View>
+                <View style={styles.billRow}>
+                  <Text style={{ color: theme.colors.mutedForeground }}>Status</Text>
+                  <Text style={{ color: theme.colors.primary, fontWeight: "700" }}>
+                    {openStatementBill.status.replaceAll("_", " ")}
+                  </Text>
+                </View>
+              </>
+            ) : (
+              <Pressable
+                onPress={() => {
+                  Haptics.selectionAsync().catch(() => undefined);
+                  setIsCreateBillOpen(true);
+                }}
+              >
+                <Text style={{ color: theme.colors.primary, fontWeight: "600" }}>
+                  + Add statement bill for reminders
+                </Text>
+              </Pressable>
+            )}
+          </View>
+        </Card>
+      ) : null}
+
+      {isCreditCard && creditBillHistory.length > 0 ? (
+        <View style={{ gap: 8 }}>
           <Text
             style={{
               color: theme.colors.mutedForeground,
               fontSize: theme.typography.xs,
+              fontWeight: "800",
+              letterSpacing: 0.8,
             }}
           >
-            {formatAccountIdentityLine(account, typeName)}
+            PAST BILLING CYCLES
           </Text>
-          <SmsMatchingUnconfiguredText
-            account={account}
-            typeName={typeName}
-          />
-        </View>
-
-        <Pressable
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
-            setIsEditModalOpen(true);
-          }}
-          style={styles.headerBtn}
-        >
-          <Edit2 size={18} color={theme.colors.foreground} />
-        </Pressable>
-      </View>
-
-      <ScrollView
-        contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 50 }}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Balance / Credit Overview Hero Card */}
-        {isCreditCard && creditUsage ? (
-          <Card
-            style={[
-              styles.heroCard,
-              {
-                backgroundColor: isDark
-                  ? "rgba(49, 46, 129, 0.4)"
-                  : "rgba(243, 232, 255, 0.9)",
-                borderColor: accountColor,
-              },
-            ]}
-          >
-            <View style={styles.heroTop}>
-              <View>
-                <Text
-                  style={{
-                    fontSize: theme.typography.xs,
-                    color: theme.colors.mutedForeground,
-                    fontWeight: "700",
-                    textTransform: "uppercase",
-                  }}
-                >
-                  Current Used (This Cycle)
-                </Text>
-                <Amount
-                  value={creditUsage.usedThisCycle}
-                  currency={system.defaultCurrency}
-                  ghostable
-                  style={{
-                    fontSize: 28,
-                    fontWeight: "800",
-                    color: theme.colors.destructive,
-                  }}
-                />
-              </View>
-
-              <View
-                style={[
-                  styles.countdownBadge,
-                  {
-                    backgroundColor: isDark
-                      ? "rgba(255,255,255,0.06)"
-                      : "rgba(0,0,0,0.04)",
-                  },
-                ]}
-              >
-                <Calendar size={12} color={theme.colors.mutedForeground} />
-                <Text
-                  style={{
-                    fontSize: 11,
-                    fontWeight: "700",
-                    color: theme.colors.mutedForeground,
-                  }}
-                >
-                  Resets in {creditUsage.daysRemaining}d
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.heroStatsRow}>
-              <View>
-                <Text
-                  style={{
-                    fontSize: theme.typography.xs,
-                    color: theme.colors.mutedForeground,
-                  }}
-                >
-                  Available Credit
-                </Text>
-                <Amount
-                  value={creditUsage.availableCredit}
-                  currency={system.defaultCurrency}
-                  ghostable
-                  style={{
-                    fontSize: theme.typography.md,
-                    fontWeight: "800",
-                    color: theme.colors.success,
-                  }}
-                />
-              </View>
-
-              <View style={{ alignItems: "flex-end" }}>
-                <Text
-                  style={{
-                    fontSize: theme.typography.xs,
-                    color: theme.colors.mutedForeground,
-                  }}
-                >
-                  Credit Limit
-                </Text>
-                <Amount
-                  value={account.creditLimit || 0}
-                  currency={system.defaultCurrency}
-                  ghostable
-                  style={{
-                    fontSize: theme.typography.md,
-                    fontWeight: "800",
-                    color: theme.colors.foreground,
-                  }}
-                />
-              </View>
-            </View>
-
-            <Pressable
-              onPress={() => {
-                if (openStatementBill) {
-                  router.push(`/credit-card-bills/${openStatementBill.id}`);
-                  return;
-                }
-                setIsPayModalOpen(true);
-              }}
+          {creditBillHistory.map((bill) => (
+            <Card
+              key={bill.id}
               style={[
-                styles.heroCtaBtn,
-                { backgroundColor: theme.colors.primary },
-              ]}
-            >
-              <CheckCircle2 size={16} color={theme.colors.primaryForeground} />
-              <Text
-                style={{
-                  color: theme.colors.primaryForeground,
-                  fontWeight: "700",
-                  fontSize: theme.typography.sm,
-                }}
-              >
-                {openStatementBill ? "Pay Bill" : "Record Bill Payment"}
-              </Text>
-            </Pressable>
-          </Card>
-        ) : (
-          <Card
-            style={[
-              styles.heroCard,
-              {
-                backgroundColor: isDark
-                  ? "rgba(30, 27, 75, 0.4)"
-                  : "rgba(238, 242, 255, 0.9)",
-                borderColor: accountColor,
-              },
-            ]}
-          >
-            <View style={styles.heroTop}>
-              <View>
-                <Text
-                  style={{
-                    fontSize: theme.typography.xs,
-                    color: theme.colors.mutedForeground,
-                    fontWeight: "700",
-                    textTransform: "uppercase",
-                  }}
-                >
-                  Available Balance
-                </Text>
-                <Amount
-                  value={bankBalance}
-                  currency={system.defaultCurrency}
-                  ghostable
-                  style={{
-                    fontSize: 28,
-                    fontWeight: "800",
-                    color:
-                      bankBalance >= 0
-                        ? theme.colors.foreground
-                        : theme.colors.destructive,
-                  }}
-                />
-              </View>
-            </View>
-
-            <View style={styles.heroStatsRow}>
-              <View>
-                <Text
-                  style={{
-                    fontSize: theme.typography.xs,
-                    color: theme.colors.mutedForeground,
-                  }}
-                >
-                  Opening Balance
-                </Text>
-                <Amount
-                  value={account.openingBalance || 0}
-                  currency={system.defaultCurrency}
-                  ghostable
-                  style={{
-                    fontSize: theme.typography.sm,
-                    fontWeight: "700",
-                    color: theme.colors.mutedForeground,
-                  }}
-                />
-              </View>
-
-              <View style={{ alignItems: "flex-end" }}>
-                <Text
-                  style={{
-                    fontSize: theme.typography.xs,
-                    color: theme.colors.mutedForeground,
-                  }}
-                >
-                  Baseline Date
-                </Text>
-                <Text
-                  style={{
-                    fontSize: theme.typography.sm,
-                    fontWeight: "700",
-                    color: theme.colors.foreground,
-                  }}
-                >
-                  {account.balanceAsOfDate || "Creation"}
-                </Text>
-              </View>
-            </View>
-
-            {/* Action Buttons */}
-            <View style={styles.actionRow}>
-              <Pressable
-                onPress={() => setIsTransferModalOpen(true)}
-                style={[
-                  styles.actionBtn,
-                  {
-                    backgroundColor: theme.colors.card,
-                    borderColor: theme.colors.border,
-                  },
-                ]}
-              >
-                <ArrowLeftRight size={15} color={theme.colors.primary} />
-                <Text
-                  style={{
-                    fontSize: 12,
-                    fontWeight: "700",
-                    color: theme.colors.foreground,
-                  }}
-                >
-                  Transfer
-                </Text>
-              </Pressable>
-
-              <Pressable
-                onPress={() => setIsEntryModalOpen(true)}
-                style={[
-                  styles.actionBtn,
-                  {
-                    backgroundColor: theme.colors.card,
-                    borderColor: theme.colors.border,
-                  },
-                ]}
-              >
-                <SlidersHorizontal size={15} color={theme.colors.primary} />
-                <Text
-                  style={{
-                    fontSize: 12,
-                    fontWeight: "700",
-                    color: theme.colors.foreground,
-                  }}
-                >
-                  Adjust
-                </Text>
-              </Pressable>
-            </View>
-          </Card>
-        )}
-
-        {isCreditCard ? (
-          <Card>
-            <View style={{ gap: 10 }}>
-              <Text
-                style={{
-                  fontSize: theme.typography.xs,
-                  color: theme.colors.mutedForeground,
-                  fontWeight: "700",
-                  textTransform: "uppercase",
-                }}
-              >
-                Statement Bill
-              </Text>
-              {openStatementBill ? (
-                <>
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      justifyContent: "space-between",
-                    }}
-                  >
-                    <Text style={{ color: theme.colors.mutedForeground }}>
-                      Statement
-                    </Text>
-                    <Amount value={openStatementBill.statementAmount} ghostable />
-                  </View>
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      justifyContent: "space-between",
-                    }}
-                  >
-                    <Text style={{ color: theme.colors.mutedForeground }}>
-                      Minimum Due
-                    </Text>
-                    <Amount
-                      value={openStatementBill.minimumDueAmount}
-                      ghostable
-                    />
-                  </View>
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      justifyContent: "space-between",
-                    }}
-                  >
-                    <Text style={{ color: theme.colors.mutedForeground }}>
-                      Due
-                    </Text>
-                    <Text
-                      style={{
-                        color: theme.colors.foreground,
-                        fontWeight: "600",
-                      }}
-                    >
-                      {openStatementBill.dueDate}
-                    </Text>
-                  </View>
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      justifyContent: "space-between",
-                    }}
-                  >
-                    <Text style={{ color: theme.colors.mutedForeground }}>
-                      Status
-                    </Text>
-                    <Text
-                      style={{
-                        color: theme.colors.primary,
-                        fontWeight: "700",
-                      }}
-                    >
-                      {openStatementBill.status.replaceAll("_", " ")}
-                    </Text>
-                  </View>
-                </>
-              ) : (
-                <Pressable
-                  onPress={() => {
-                    Haptics.selectionAsync().catch(() => undefined);
-                    setIsCreateBillOpen(true);
-                  }}
-                >
-                  <Text
-                    style={{ color: theme.colors.primary, fontWeight: "600" }}
-                  >
-                    + Add statement bill for reminders
-                  </Text>
-                </Pressable>
-              )}
-            </View>
-          </Card>
-        ) : null}
-
-        {/* Past Billing Cycles (for Credit Cards) */}
-        {isCreditCard && creditBillHistory.length > 0 ? (
-          <View style={{ gap: 8 }}>
-            <Text
-              style={[
-                styles.sectionTitle,
+                styles.billCard,
                 {
-                  color: theme.colors.mutedForeground,
-                  fontSize: theme.typography.xs,
+                  backgroundColor: theme.colors.card,
+                  borderColor: theme.colors.border,
                 },
               ]}
             >
-              PAST BILLING CYCLES
-            </Text>
-            <View style={{ gap: 8 }}>
-              {creditBillHistory.map((bill) => (
-                <Card
-                  key={bill.id}
-                  style={[
-                    styles.billCard,
-                    {
-                      backgroundColor: theme.colors.card,
-                      borderColor: theme.colors.border,
-                    },
-                  ]}
-                >
-                  <View style={{ flex: 1, gap: 2 }}>
-                    <Text
-                      style={{
-                        fontWeight: "700",
-                        fontSize: theme.typography.sm,
-                        color: theme.colors.foreground,
-                      }}
-                    >
-                      {formatDateKey(bill.cycleStart)} →{" "}
-                      {formatDateKey(bill.cycleEnd)}
-                    </Text>
-                    <Text
-                      style={{
-                        fontSize: theme.typography.xs,
-                        color: theme.colors.mutedForeground,
-                      }}
-                    >
-                      Billed: {system.defaultCurrency} {bill.billedAmount.toLocaleString()} • Paid: {system.defaultCurrency} {bill.paidAmount.toLocaleString()}
-                    </Text>
-                  </View>
-                  <View
-                    style={[
-                      styles.billStatusBadge,
-                      {
-                        backgroundColor:
-                          bill.status === "paid"
-                            ? "rgba(34, 197, 94, 0.15)"
-                            : "rgba(239, 68, 68, 0.15)",
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={{
-                        fontSize: 10,
-                        fontWeight: "800",
-                        color:
-                          bill.status === "paid"
-                            ? theme.colors.success
-                            : theme.colors.destructive,
-                        textTransform: "uppercase",
-                      }}
-                    >
-                      {bill.status}
-                    </Text>
-                  </View>
-                </Card>
-              ))}
-            </View>
-          </View>
-        ) : null}
-
-        {/* Activity Timeline Header & Filter Pills */}
-        <View style={styles.activityHeaderRow}>
-          <Text
-            style={[
-              styles.sectionTitle,
-              {
-                color: theme.colors.mutedForeground,
-                fontSize: theme.typography.xs,
-              },
-            ]}
-          >
-            RUNNING ACTIVITY ({filteredActivities.length})
-          </Text>
-
-          <View style={styles.filterPills}>
-            {(["all", "debit", "credit"] as const).map((filter) => {
-              const isSelected = activityFilter === filter;
-              return (
-                <Pressable
-                  key={filter}
-                  onPress={() => {
-                    Haptics.selectionAsync().catch(() => undefined);
-                    setActivityFilter(filter);
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text
+                  style={{
+                    fontWeight: "700",
+                    fontSize: theme.typography.sm,
+                    color: theme.colors.foreground,
                   }}
-                  style={[
-                    styles.filterPill,
-                    {
-                      backgroundColor: isSelected
-                        ? theme.colors.primary
-                        : isDark
-                          ? "rgba(255,255,255,0.06)"
-                          : "rgba(0,0,0,0.04)",
-                    },
-                  ]}
                 >
-                  <Text
-                    style={{
-                      fontSize: 10,
-                      fontWeight: "700",
-                      color: isSelected
-                        ? theme.colors.primaryForeground
-                        : theme.colors.mutedForeground,
-                      textTransform: "capitalize",
-                    }}
-                  >
-                    {filter}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
+                  {formatDateKey(bill.cycleStart)} → {formatDateKey(bill.cycleEnd)}
+                </Text>
+                <Text
+                  style={{
+                    fontSize: theme.typography.xs,
+                    color: theme.colors.mutedForeground,
+                  }}
+                >
+                  Billed: {currency} {bill.billedAmount.toLocaleString()} • Paid:{" "}
+                  {currency} {bill.paidAmount.toLocaleString()}
+                </Text>
+              </View>
+              <View
+                style={[
+                  styles.billStatusBadge,
+                  {
+                    backgroundColor:
+                      bill.status === "paid"
+                        ? "rgba(34, 197, 94, 0.15)"
+                        : "rgba(239, 68, 68, 0.15)",
+                  },
+                ]}
+              >
+                <Text
+                  style={{
+                    fontSize: 10,
+                    fontWeight: "800",
+                    color:
+                      bill.status === "paid"
+                        ? theme.colors.success
+                        : theme.colors.destructive,
+                    textTransform: "uppercase",
+                  }}
+                >
+                  {bill.status}
+                </Text>
+              </View>
+            </Card>
+          ))}
         </View>
+      ) : null}
 
-        {/* Activity Items List */}
-        {filteredActivities.length === 0 ? (
-          <Card
+      <TransactionFilters
+        filter={activityFilter}
+        allCount={activities.length}
+        debitCount={debitCount}
+        creditCount={creditCount}
+        compact={compact}
+        onChange={setActivityFilter}
+      />
+      {compact ? null : (
+        <TransactionColumnHeaders showBalanceAfter={!isCreditCard} />
+      )}
+    </View>
+  );
+
+  return (
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <AccountHeader
+        title={account.name}
+        subtitle={accountKindSubtitle(isCreditCard, typeName)}
+        warning={
+          smsMatchingUnconfiguredLabel(account, typeName) ? (
+            <SmsMatchingUnconfiguredText account={account} typeName={typeName} />
+          ) : undefined
+        }
+        onBack={() => router.back()}
+        onEdit={() => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+          setIsEditModalOpen(true);
+        }}
+      />
+
+      <FlashList
+        style={styles.list}
+        data={filteredActivities}
+        renderItem={renderItem}
+        keyExtractor={keyExtractor}
+        ListHeaderComponent={listHeader}
+        ListEmptyComponent={
+          <View
             style={[
-              styles.emptyActivityCard,
+              styles.emptyCard,
               {
                 backgroundColor: theme.colors.card,
                 borderColor: theme.colors.border,
@@ -815,113 +514,34 @@ export default function AccountDetailScreen() {
             >
               No activities found for this account.
             </Text>
-          </Card>
-        ) : (
-          <View style={{ gap: 8 }}>
-            {filteredActivities.map((act) => {
-              const isCredit = act.type === "credit";
-
-              return (
-                <Card
-                  key={act.id}
-                  style={[
-                    styles.activityRow,
-                    {
-                      backgroundColor: theme.colors.card,
-                      borderColor: theme.colors.border,
-                    },
-                  ]}
-                >
-                  {/* Icon */}
-                  <View
-                    style={[
-                      styles.actIcon,
-                      {
-                        backgroundColor: isCredit
-                          ? "rgba(34, 197, 94, 0.12)"
-                          : "rgba(239, 68, 68, 0.12)",
-                      },
-                    ]}
-                  >
-                    {isCredit ? (
-                      <ArrowDownLeft size={16} color={theme.colors.success} />
-                    ) : (
-                      <ArrowUpRight size={16} color={theme.colors.destructive} />
-                    )}
-                  </View>
-
-                  {/* Description & Date */}
-                  <View style={{ flex: 1, gap: 2 }}>
-                    <Text
-                      style={[
-                        styles.actNote,
-                        {
-                          color: theme.colors.foreground,
-                          fontSize: theme.typography.sm,
-                        },
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {act.note || act.category || act.source || "Transaction"}
-                    </Text>
-                    <Text
-                      style={{
-                        fontSize: 11,
-                        color: theme.colors.mutedForeground,
-                      }}
-                    >
-                      {act.date}
-                      {act.counterpartyName
-                        ? ` • ${act.counterpartyName}`
-                        : act.category
-                          ? ` • ${act.category}`
-                          : act.source
-                            ? ` • ${act.source}`
-                            : ""}
-                    </Text>
-                  </View>
-
-                  {/* Amount */}
-                  <Amount
-                    value={act.amount}
-                    currency={system.defaultCurrency}
-                    ghostable
-                    style={{
-                      fontSize: theme.typography.sm,
-                      fontWeight: "800",
-                      color: isCredit
-                        ? theme.colors.success
-                        : theme.colors.foreground,
-                    }}
-                  />
-                </Card>
-              );
-            })}
           </View>
-        )}
-      </ScrollView>
+        }
+        ItemSeparatorComponent={ActivitySeparator}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{
+          paddingHorizontal: 16,
+          paddingBottom: listPaddingBottom,
+        }}
+        extraData={`${activityFilter}-${compact}-${isDark}`}
+      />
 
-      {/* Modals */}
       <EditAccountModal
         isOpen={isEditModalOpen}
         onClose={() => setIsEditModalOpen(false)}
         account={account}
       />
-
       <TransferFundsModal
         isOpen={isTransferModalOpen}
         onClose={() => setIsTransferModalOpen(false)}
         defaultFromAccountId={account.id}
         accounts={accounts}
       />
-
       <AddAccountEntryModal
         isOpen={isEntryModalOpen}
         onClose={() => setIsEntryModalOpen(false)}
         defaultAccountId={account.id}
         accounts={accounts}
       />
-
       <PayCreditBillModal
         isOpen={isPayModalOpen}
         onClose={() => setIsPayModalOpen(false)}
@@ -935,7 +555,6 @@ export default function AccountDetailScreen() {
           }
         }}
       />
-
       <CreateCreditCardBillModal
         isOpen={isCreateBillOpen}
         onClose={() => setIsCreateBillOpen(false)}
@@ -951,83 +570,26 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-  },
-  headerBtn: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  headerCenter: {
-    alignItems: "center",
+  list: {
     flex: 1,
   },
-  headerTitle: {
-    fontWeight: "800",
+  missing: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 16,
   },
-  heroCard: {
-    padding: 20,
-    borderRadius: 22,
-    borderWidth: 1.5,
+  headerBlock: {
     gap: 16,
+    paddingTop: 8,
+    paddingBottom: 8,
   },
-  heroTop: {
+  separator: {
+    height: 8,
+  },
+  billRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
     justifyContent: "space-between",
-  },
-  countdownBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 12,
-    gap: 6,
-  },
-  heroStatsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: "rgba(255,255,255,0.08)",
-  },
-  heroCtaBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    height: 48,
-    borderRadius: 14,
-    gap: 8,
-    marginTop: 4,
-  },
-  actionRow: {
-    flexDirection: "row",
-    gap: 12,
-    marginTop: 4,
-  },
-  actionBtn: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    height: 48,
-    borderRadius: 14,
-    borderWidth: 1,
-    gap: 8,
-  },
-  sectionTitle: {
-    fontWeight: "800",
-    letterSpacing: 0.8,
-    marginLeft: 4,
   },
   billCard: {
     flexDirection: "row",
@@ -1042,43 +604,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 10,
   },
-  activityHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginTop: 8,
-  },
-  filterPills: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  filterPill: {
-    paddingHorizontal: 14,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  activityRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 14,
-    borderRadius: 16,
-    borderWidth: 1,
-    gap: 14,
-    minHeight: 64,
-  },
-  actIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  actNote: {
-    fontWeight: "700",
-  },
-  emptyActivityCard: {
+  emptyCard: {
     padding: 32,
     alignItems: "center",
     justifyContent: "center",

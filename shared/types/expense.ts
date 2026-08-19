@@ -163,6 +163,8 @@ export interface AccountTransfer {
 export interface AccountActivity {
   id: string;
   date: string;
+  /** Clock time when known (`09:35 AM`). Never invented for display. */
+  time?: string;
   amount: number;
   type: "debit" | "credit";
   note?: string;
