@@ -1,5 +1,5 @@
 /**
- * Detect recurring merchants from the live expense list and upsert Subscriptions.
+ * Detect recurring merchants from the live expense list and queue them for review.
  */
 
 import { useEffect, useRef } from "react";

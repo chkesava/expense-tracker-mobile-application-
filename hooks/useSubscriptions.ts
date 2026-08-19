@@ -117,6 +117,9 @@ export function useSubscriptions(options?: { enabled?: boolean }) {
         const subUpdates: Record<string, unknown> = {
           lastProcessed: action.monthKey,
         };
+        if (action.lastProcessedDate) {
+          subUpdates.lastProcessedDate = action.lastProcessedDate;
+        }
         if (action.markCompleted) {
           subUpdates.isCompleted = true;
           subUpdates.isActive = false;
@@ -215,9 +218,9 @@ export function useSubscriptions(options?: { enabled?: boolean }) {
         () => deleteDoc(doc(db, "users", uid, "subscriptions", id)),
         { label: "subscription deletion" }
       );
-      if (existing?.source === "sms") {
+      if (existing?.name) {
         void import("@/services/sms/smsRecurringSync").then((m) =>
-          m.rememberDeletedSmsSubscription(existing)
+          m.rememberDeletedSubscription(uid, existing)
         );
       }
       toast.success(writeSavedMessage(outcome, "Subscription deleted"));

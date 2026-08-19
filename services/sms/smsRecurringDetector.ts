@@ -5,12 +5,21 @@
 
 import { foldMerchantKey, normalizeMerchantName } from "./smsMerchantNormalizer";
 import { parseLocalDate } from "@/shared/utils/dates";
-import type { Subscription } from "@/shared/types/subscription";
+import type {
+  Subscription,
+  SubscriptionFrequency,
+} from "@/shared/types/subscription";
+import { subscriptionFrequency } from "@/shared/types/subscription";
 
 export const SMS_RECURRING_MIN_OCCURRENCES = 3;
 export const SMS_RECURRING_MIN_MONTHS = 3;
 export const SMS_RECURRING_MIN_INTERVAL_DAYS = 20;
 export const SMS_RECURRING_MAX_INTERVAL_DAYS = 40;
+export const SMS_RECURRING_MAX_SHORT_INTERVAL_DAYS = 19;
+export const SMS_RECURRING_SHORT_MIN_OCCURRENCES = 4;
+export const SMS_RECURRING_SHORT_MIN_SPAN_DAYS = 14;
+export const SMS_RECURRING_GAP_TOLERANCE = 0.5;
+export const SMS_RECURRING_DAY_OF_MONTH_SLACK = 3;
 
 export type RecurringExpenseInput = {
   amount: number;
@@ -33,14 +42,21 @@ export type RecurringPattern = {
   occurrences: number;
   dates: string[];
   dayOfMonth: number;
+  frequency: SubscriptionFrequency;
+  intervalDays?: number;
   key: string;
 };
 
 const AUTO_NOTE = /^\[(Subscription|EMI|Auto-Transfer)\]/i;
 
 export function recurringPatternKey(merchant: string, amount: number): string {
+  return `${recurringMerchantKey(merchant)}|${amount.toFixed(2)}`;
+}
+
+/** Folded merchant identity used for permanent dismissals. */
+export function recurringMerchantKey(merchant: string): string {
   const canonical = normalizeMerchantName(merchant).merchant || merchant;
-  return `${foldMerchantKey(canonical)}|${amount.toFixed(2)}`;
+  return foldMerchantKey(canonical);
 }
 
 export function merchantFromExpense(
@@ -92,20 +108,79 @@ function mostCommon(values: string[]): string | undefined {
   return best;
 }
 
-function isMonthlyCadence(dates: string[]): boolean {
-  const months = new Set(dates.map((d) => d.slice(0, 7)));
-  if (months.size >= SMS_RECURRING_MIN_MONTHS) return true;
-  if (dates.length < 2) return false;
+function dateGaps(dates: string[]): number[] {
   const gaps: number[] = [];
   for (let i = 1; i < dates.length; i++) {
     gaps.push(daysBetween(dates[i - 1]!, dates[i]!));
   }
-  const mid = median(gaps);
-  return (
-    months.size >= 2 &&
-    mid >= SMS_RECURRING_MIN_INTERVAL_DAYS &&
-    mid <= SMS_RECURRING_MAX_INTERVAL_DAYS
+  return gaps;
+}
+
+function gapsAreConsistent(gaps: number[], mid: number): boolean {
+  if (mid <= 0) return false;
+  const lo = mid * (1 - SMS_RECURRING_GAP_TOLERANCE);
+  const hi = mid * (1 + SMS_RECURRING_GAP_TOLERANCE);
+  return gaps.every((gap) => gap >= lo && gap <= hi);
+}
+
+function sameishDayOfMonth(dates: string[]): boolean {
+  const days = dates.map((d) => Number(d.slice(8, 10))).filter(Number.isFinite);
+  if (days.length < SMS_RECURRING_MIN_MONTHS) return false;
+  const mid = median(days);
+  return days.every(
+    (day) => Math.abs(day - mid) <= SMS_RECURRING_DAY_OF_MONTH_SLACK
   );
+}
+
+function medianDayOfMonth(dates: string[]): number {
+  const days = dates.map((d) => Number(d.slice(8, 10))).filter(Number.isFinite);
+  return Math.min(31, Math.max(1, Math.round(median(days)) || 1));
+}
+
+type Cadence =
+  | { frequency: "monthly"; dayOfMonth: number }
+  | { frequency: "every_n_days"; intervalDays: number; dayOfMonth: number };
+
+/**
+ * Classify a sorted unique-date series. Spanning three calendar months is not
+ * enough on its own — chicken every two days over a quarter is still interval.
+ */
+export function classifyRecurringCadence(dates: string[]): Cadence | null {
+  if (dates.length < SMS_RECURRING_MIN_OCCURRENCES) return null;
+  const gaps = dateGaps(dates);
+  if (!gaps.length) return null;
+  const mid = median(gaps);
+  const span = daysBetween(dates[0]!, dates[dates.length - 1]!);
+  const months = new Set(dates.map((d) => d.slice(0, 7)));
+  const dayOfMonth = medianDayOfMonth(dates);
+
+  const monthlyByGap =
+    mid >= SMS_RECURRING_MIN_INTERVAL_DAYS &&
+    mid <= SMS_RECURRING_MAX_INTERVAL_DAYS;
+  const monthlyByDayOfMonth =
+    months.size >= SMS_RECURRING_MIN_MONTHS &&
+    mid >= SMS_RECURRING_MIN_INTERVAL_DAYS &&
+    sameishDayOfMonth(dates);
+
+  if (monthlyByGap || monthlyByDayOfMonth) {
+    return { frequency: "monthly", dayOfMonth };
+  }
+
+  const shortEnough =
+    mid >= 1 && mid <= SMS_RECURRING_MAX_SHORT_INTERVAL_DAYS;
+  const enoughHistory =
+    dates.length >= SMS_RECURRING_SHORT_MIN_OCCURRENCES ||
+    span >= SMS_RECURRING_SHORT_MIN_SPAN_DAYS;
+
+  if (shortEnough && gapsAreConsistent(gaps, mid) && enoughHistory) {
+    return {
+      frequency: "every_n_days",
+      intervalDays: Math.max(1, Math.round(mid)),
+      dayOfMonth,
+    };
+  }
+
+  return null;
 }
 
 export function detectRecurringPatterns(
@@ -136,11 +211,11 @@ export function detectRecurringPatterns(
     );
     if (unique.length < SMS_RECURRING_MIN_OCCURRENCES) continue;
     const dates = unique.map((item) => item.date);
-    if (!isMonthlyCadence(dates)) continue;
+    const cadence = classifyRecurringCadence(dates);
+    if (!cadence) continue;
 
     const merchant = merchantFromExpense(unique[unique.length - 1]!) as string;
     const amount = unique[0]!.amount;
-    const days = dates.map((d) => Number(d.slice(8, 10))).filter(Number.isFinite);
     const category =
       mostCommon(unique.map((item) => item.category).filter(Boolean)) ||
       "Entertainment";
@@ -159,7 +234,10 @@ export function detectRecurringPatterns(
       accountId,
       occurrences: unique.length,
       dates,
-      dayOfMonth: Math.min(31, Math.max(1, Math.round(median(days)) || 1)),
+      dayOfMonth: cadence.dayOfMonth,
+      frequency: cadence.frequency,
+      intervalDays:
+        cadence.frequency === "every_n_days" ? cadence.intervalDays : undefined,
       key: recurringPatternKey(merchant, amount),
     });
   }
@@ -186,17 +264,65 @@ export function matchesExistingSubscription(
   return foldedNamesMatch(sub.name, pattern.merchant);
 }
 
+export function matchesExistingMerchant(
+  subName: string,
+  merchant: string
+): boolean {
+  return foldedNamesMatch(subName, merchant);
+}
+
+export function isMerchantDismissed(
+  dismissedKeys: Iterable<string>,
+  merchant: string
+): boolean {
+  const key = recurringMerchantKey(merchant);
+  if (!key) return false;
+  const set = dismissedKeys instanceof Set ? dismissedKeys : new Set(dismissedKeys);
+  return set.has(key);
+}
+
+/** Patterns the user should review — not already subscribed and not declined. */
+export function filterPatternsForReview(
+  patterns: RecurringPattern[],
+  existing: Pick<Subscription, "name">[],
+  dismissedMerchants: Iterable<string>
+): RecurringPattern[] {
+  const dismissed = new Set(dismissedMerchants);
+  return patterns.filter((pattern) => {
+    if (isMerchantDismissed(dismissed, pattern.merchant)) return false;
+    if (existing.some((sub) => matchesExistingMerchant(sub.name, pattern.merchant))) {
+      return false;
+    }
+    return true;
+  });
+}
+
+export function formatRecurringCadence(
+  pattern: Pick<RecurringPattern, "frequency" | "intervalDays">
+): string {
+  if (pattern.frequency === "every_n_days") {
+    const n = Math.max(1, pattern.intervalDays || 1);
+    return n === 1 ? "every day" : `every ${n} days`;
+  }
+  return "month";
+}
+
 export function patternToSubscription(
   pattern: RecurringPattern
 ): Omit<Subscription, "id"> {
-  const latestMonth = pattern.dates[pattern.dates.length - 1]?.slice(0, 7) || "";
+  const latest = pattern.dates[pattern.dates.length - 1] || "";
+  const latestMonth = latest.slice(0, 7);
+  const frequency = subscriptionFrequency(pattern);
   return {
     name: pattern.merchant,
     amount: pattern.amount,
     category: pattern.category,
     dayOfMonth: pattern.dayOfMonth,
+    frequency,
+    intervalDays: frequency === "every_n_days" ? pattern.intervalDays : undefined,
     isActive: true,
     lastProcessed: latestMonth,
+    lastProcessedDate: latest || undefined,
     type: "subscription",
     source: "sms",
     accountId: pattern.accountId,

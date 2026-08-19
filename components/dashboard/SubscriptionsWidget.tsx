@@ -14,7 +14,7 @@ import {
 } from "@/components/dashboard/primitives";
 import { useSubscriptions } from "@/hooks/useSubscriptions";
 import type { Subscription } from "@/shared/types/subscription";
-import { computeMonthlyCommitments } from "@/shared/utils/subscriptionProcessor";
+import { computeMonthlyCommitments, getNextRenewalDate } from "@/shared/utils/subscriptionProcessor";
 import { useTheme } from "@/theme/ThemeProvider";
 
 export interface SubscriptionsWidgetProps {
@@ -28,26 +28,6 @@ const TYPE_ICONS: Record<Subscription["type"], typeof Repeat> = {
   emi: Landmark,
   transfer: Wallet,
 };
-
-/** Days until the next occurrence of `dayOfMonth`, clamped to real month lengths. */
-function daysUntilDue(dayOfMonth: number, now = new Date()): number {
-  const day = Math.min(Math.max(1, dayOfMonth || 1), 31);
-  const year = now.getFullYear();
-  const month = now.getMonth();
-
-  const daysThisMonth = new Date(year, month + 1, 0).getDate();
-  const thisMonthDay = Math.min(day, daysThisMonth);
-
-  if (thisMonthDay >= now.getDate()) {
-    return thisMonthDay - now.getDate();
-  }
-
-  const daysNextMonth = new Date(year, month + 2, 0).getDate();
-  const nextMonthDay = Math.min(day, daysNextMonth);
-  const target = new Date(year, month + 1, nextMonthDay);
-  const today = new Date(year, month, now.getDate());
-  return Math.round((target.getTime() - today.getTime()) / 86_400_000);
-}
 
 function dueLabel(days: number): string {
   if (days <= 0) return "Due today";
@@ -69,7 +49,7 @@ export function SubscriptionsWidget({ currency }: SubscriptionsWidgetProps) {
   const preview = useMemo(() => {
     return subscriptions
       .filter((sub) => sub.isActive && !sub.isCompleted)
-      .map((sub) => ({ sub, days: daysUntilDue(sub.dayOfMonth) }))
+      .map((sub) => ({ sub, days: getNextRenewalDate(sub).daysRemaining }))
       .sort((a, b) => a.days - b.days)
       .slice(0, PREVIEW_LIMIT);
   }, [subscriptions]);

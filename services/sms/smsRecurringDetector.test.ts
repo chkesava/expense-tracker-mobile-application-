@@ -1,13 +1,18 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  classifyRecurringCadence,
   detectRecurringPatterns,
+  filterPatternsForReview,
+  formatRecurringCadence,
   matchesExistingSubscription,
   merchantFromExpense,
   patternToSubscription,
+  recurringMerchantKey,
   recurringPatternKey,
   type RecurringExpenseInput,
 } from "@/services/sms/smsRecurringDetector";
+import { parseLocalDate, toLocalDateKey } from "@/shared/utils/dates";
 
 function netflix(date: string): RecurringExpenseInput {
   return {
@@ -17,6 +22,28 @@ function netflix(date: string): RecurringExpenseInput {
     category: "Entertainment",
     subcategory: "OTT",
   };
+}
+
+function everyNDays(
+  note: string,
+  amount: number,
+  start: string,
+  count: number,
+  step: number,
+  category = "Food & Dining"
+): RecurringExpenseInput[] {
+  const items: RecurringExpenseInput[] = [];
+  const date = parseLocalDate(start);
+  for (let i = 0; i < count; i++) {
+    items.push({
+      amount,
+      date: toLocalDateKey(date),
+      note,
+      category,
+    });
+    date.setDate(date.getDate() + step);
+  }
+  return items;
 }
 
 describe("merchantFromExpense", () => {
@@ -64,8 +91,30 @@ describe("merchantFromExpense", () => {
   });
 });
 
+describe("classifyRecurringCadence", () => {
+  it("classifies monthly Netflix-style gaps", () => {
+    const cadence = classifyRecurringCadence([
+      "2026-05-12",
+      "2026-06-12",
+      "2026-07-12",
+    ]);
+    expect(cadence).toEqual({ frequency: "monthly", dayOfMonth: 12 });
+  });
+
+  it("classifies a consistent every-2-days series", () => {
+    const dates = everyNDays("Chicken", 200, "2026-08-01", 8, 2).map(
+      (item) => item.date
+    );
+    expect(classifyRecurringCadence(dates)).toEqual({
+      frequency: "every_n_days",
+      intervalDays: 2,
+      dayOfMonth: 8,
+    });
+  });
+});
+
 describe("detectRecurringPatterns", () => {
-  it("detects Netflix at ₹649 across four months", () => {
+  it("detects Netflix at ₹649 across four months as monthly", () => {
     const patterns = detectRecurringPatterns([
       netflix("2026-05-12"),
       netflix("2026-06-12"),
@@ -77,7 +126,20 @@ describe("detectRecurringPatterns", () => {
     expect(patterns[0]?.amount).toBe(649);
     expect(patterns[0]?.occurrences).toBe(4);
     expect(patterns[0]?.dayOfMonth).toBe(12);
+    expect(patterns[0]?.frequency).toBe("monthly");
     expect(patterns[0]?.category).toBe("Entertainment");
+    expect(formatRecurringCadence(patterns[0]!)).toBe("month");
+  });
+
+  it("detects chicken every two days even when the series spans three months", () => {
+    const patterns = detectRecurringPatterns(
+      everyNDays("Chicken", 200, "2026-05-01", 40, 2)
+    );
+    expect(patterns).toHaveLength(1);
+    expect(patterns[0]?.merchant).toBe("Chicken");
+    expect(patterns[0]?.frequency).toBe("every_n_days");
+    expect(patterns[0]?.intervalDays).toBe(2);
+    expect(formatRecurringCadence(patterns[0]!)).toBe("every 2 days");
   });
 
   it("ignores the same amount three times in one week", () => {
@@ -156,7 +218,30 @@ describe("subscription matching", () => {
     expect(sub.amount).toBe(649);
     expect(sub.source).toBe("sms");
     expect(sub.type).toBe("subscription");
+    expect(sub.frequency).toBe("monthly");
     expect(sub.lastProcessed).toBe("2026-07");
+    expect(sub.lastProcessedDate).toBe("2026-07-12");
     expect(sub.isActive).toBe(true);
+  });
+});
+
+describe("filterPatternsForReview", () => {
+  it("drops dismissed merchants and names that already have a subscription", () => {
+    const chicken = detectRecurringPatterns(
+      everyNDays("Chicken", 200, "2026-08-01", 8, 2)
+    )[0]!;
+    const netflixPattern = detectRecurringPatterns([
+      netflix("2026-05-12"),
+      netflix("2026-06-12"),
+      netflix("2026-07-12"),
+    ])[0]!;
+
+    expect(
+      filterPatternsForReview(
+        [chicken, netflixPattern],
+        [{ name: "Netflix 4K" }],
+        [recurringMerchantKey("Chicken")]
+      )
+    ).toEqual([]);
   });
 });

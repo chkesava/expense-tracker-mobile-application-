@@ -81,10 +81,27 @@ describe("SMS notification copy", () => {
       occurrences: 4,
       dates: ["2026-05-12", "2026-06-12", "2026-07-12", "2026-08-12"],
       dayOfMonth: 12,
+      frequency: "monthly",
       key: "netflix|649.00",
     });
-    expect(copy.title).toBe("🔄 Recurring payment detected");
+    expect(copy.title).toBe("🔄 Recurring payment to review");
     expect(copy.body).toBe("Netflix · ₹649 / month");
     expect(copy.data.url).toBe("/ledger?tab=subscriptions");
+  });
+
+  it("formats an every-N-days chicken detection", () => {
+    const copy = buildRecurringDetectedNotification({
+      merchant: "Chicken",
+      amount: 200,
+      category: "Food & Dining",
+      occurrences: 8,
+      dates: ["2026-08-01", "2026-08-03", "2026-08-05"],
+      dayOfMonth: 3,
+      frequency: "every_n_days",
+      intervalDays: 2,
+      key: "chicken|200.00",
+    });
+    expect(copy.title).toBe("🔄 Recurring payment to review");
+    expect(copy.body).toBe("Chicken · ₹200 / every 2 days");
   });
 });

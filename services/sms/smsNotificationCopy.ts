@@ -3,7 +3,10 @@
  */
 
 import type { SmsWriteReadyEntry } from "./smsAutoAdd";
-import type { RecurringPattern } from "./smsRecurringDetector";
+import {
+  formatRecurringCadence,
+  type RecurringPattern,
+} from "./smsRecurringDetector";
 import { formatAmount } from "@/shared/utils/formatCurrency";
 
 export type SmsNotificationKind = "detected" | "auto_added" | "recurring";
@@ -97,14 +100,15 @@ export function buildAutoAddedNotification(
   };
 }
 
-/** Recurring pattern: 🔄 Recurring payment detected / Netflix · ₹649 / month */
+/** Recurring pattern: 🔄 Recurring payment to review / Netflix · ₹649 / month */
 export function buildRecurringDetectedNotification(
   pattern: RecurringPattern
 ): SmsNotificationCopy {
   const amount = rupee(pattern.amount);
+  const cadence = formatRecurringCadence(pattern);
   return {
-    title: "🔄 Recurring payment detected",
-    body: `${pattern.merchant} · ${amount} / month`,
+    title: "🔄 Recurring payment to review",
+    body: `${pattern.merchant} · ${amount} / ${cadence}`,
     data: {
       source: "sms",
       kind: "recurring",

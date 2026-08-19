@@ -186,6 +186,8 @@ export {
   matchesExistingSubscription,
   patternToSubscription,
   type RecurringPattern,
+  filterPatternsForReview,
+  formatRecurringCadence,
 } from "./smsRecurringDetector";
 
 export { commitSmsWritePayload } from "./smsExpenseWriter";

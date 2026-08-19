@@ -210,4 +210,56 @@ describe("subscriptionProcessor utilities", () => {
       expect(planDueSubscriptionPosts(updated, evalDate)).toHaveLength(0);
     });
   });
+
+  describe("every_n_days cadence", () => {
+    const chicken: Subscription = {
+      id: "sub-chicken",
+      name: "Chicken",
+      amount: 200,
+      category: "Food & Dining",
+      dayOfMonth: 1,
+      frequency: "every_n_days",
+      intervalDays: 2,
+      isActive: true,
+      lastProcessed: "2026-08",
+      lastProcessedDate: "2026-08-10",
+      type: "subscription",
+    };
+
+    it("is due when interval days have elapsed", () => {
+      const result = evaluateSubscriptionDue(
+        chicken,
+        new Date(2026, 7, 12, 12, 0, 0)
+      );
+      expect(result.isDue).toBe(true);
+      expect(result.targetDateStr).toBe("2026-08-12");
+      expect(result.lastProcessedDate).toBe("2026-08-12");
+    });
+
+    it("is not due before the next interval", () => {
+      const result = evaluateSubscriptionDue(
+        chicken,
+        new Date(2026, 7, 11, 12, 0, 0)
+      );
+      expect(result.isDue).toBe(false);
+    });
+
+    it("posts at most once per run and is idempotent after apply", () => {
+      const evalDate = new Date(2026, 7, 16, 12, 0, 0);
+      const firstPlan = planDueSubscriptionPosts([chicken], evalDate);
+      expect(firstPlan).toHaveLength(1);
+      expect(firstPlan[0]?.kind).toBe("expense");
+      expect(firstPlan[0]?.lastProcessedDate).toBe("2026-08-12");
+
+      const afterPost = applyPostPlanToSubscriptions([chicken], firstPlan);
+      expect(afterPost[0]?.lastProcessedDate).toBe("2026-08-12");
+      expect(planDueSubscriptionPosts(afterPost, new Date(2026, 7, 12, 12, 0, 0))).toHaveLength(0);
+    });
+
+    it("includes interval items in monthly commitments as a 30-day equivalent", () => {
+      const summary = computeMonthlyCommitments([chicken]);
+      expect(summary.subscriptionsTotal).toBe(200 * (30 / 2));
+      expect(summary.totalMonthly).toBe(3000);
+    });
+  });
 });

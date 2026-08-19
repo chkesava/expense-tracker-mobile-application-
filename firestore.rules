@@ -30,7 +30,7 @@ service cloud.firestore {
     //   holdings, incomes, investments, meta, portfolioOrders,
     //   portfolioSettings, portfolioSnapshots, portfolioTransactions,
     //   receivableRepayments, receivables, spaces,
-    //   stats, subscriptions, trips, watchlist
+    //   stats, subscriptions, recurringDismissals, trips, watchlist
     //
     // The recursive match keeps a new collection from silently becoming
     // unreadable the moment it ships, while still confining everything to the

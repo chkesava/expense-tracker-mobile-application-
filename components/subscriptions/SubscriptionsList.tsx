@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   Pressable,
   StyleSheet,
@@ -21,14 +21,18 @@ import { Amount } from "@/components/common/Amount";
 import { EmptyState } from "@/components/common/EmptyState";
 import { SkeletonHero, SkeletonList } from "@/components/common/Skeleton";
 import { EditSubscriptionModal } from "@/components/subscriptions/EditSubscriptionModal";
-import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
+import { RecurringReviewItem } from "@/components/subscriptions/RecurringReviewItem";
 import { useAccounts } from "@/hooks/useAccounts";
+import { useRecurringSuggestions } from "@/hooks/useRecurringSuggestions";
 import { useSubscriptions } from "@/hooks/useSubscriptions";
+import { useAuth } from "@/providers/AuthProvider";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
+import { toast } from "@/lib/toast";
+import { patternToSubscription } from "@/services/sms/smsRecurringDetector";
 import type { Subscription } from "@/shared/types/subscription";
 import {
   computeMonthlyCommitments,
+  formatSubscriptionSchedule,
   getNextRenewalDate,
 } from "@/shared/utils/subscriptionProcessor";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -37,13 +41,20 @@ import { themeUsesDarkPalette } from "@/theme/tokens";
 export function SubscriptionsList() {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
+  const { user } = useAuth();
   const { settings: system } = useSystemSettings();
   const { accounts } = useAccounts();
   const { subscriptions, loading, toggleActive } = useSubscriptions();
+  const {
+    items: reviewItems,
+    actingKey,
+    decline: declineSuggestion,
+  } = useRecurringSuggestions();
 
   const [activeTab, setActiveTab] = useState<"active" | "completed">("active");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedSub, setSelectedSub] = useState<Subscription | null>(null);
+  const [suggestionKey, setSuggestionKey] = useState<string | null>(null);
 
   const accountMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -64,13 +75,35 @@ export function SubscriptionsList() {
 
   const handleOpenAdd = () => {
     setSelectedSub(null);
+    setSuggestionKey(null);
     setIsModalOpen(true);
   };
 
   const handleOpenEdit = (sub: Subscription) => {
     setSelectedSub(sub);
+    setSuggestionKey(null);
     setIsModalOpen(true);
   };
+
+  const handleReview = useCallback((key: string) => {
+    const pattern = reviewItems.find((item) => item.key === key);
+    if (!pattern) return;
+    Haptics.selectionAsync().catch(() => undefined);
+    setSelectedSub(patternToSubscription(pattern));
+    setSuggestionKey(pattern.key);
+    setIsModalOpen(true);
+  }, [reviewItems]);
+
+  const handleDecline = useCallback(
+    (key: string) => {
+      const pattern = reviewItems.find((item) => item.key === key);
+      if (!pattern) return;
+      void declineSuggestion(user?.uid, pattern)
+        .then(() => toast.info("Won't suggest this again"))
+        .catch(() => toast.error("Could not decline"));
+    },
+    [declineSuggestion, reviewItems, user?.uid]
+  );
 
   if (loading) {
     return (
@@ -208,6 +241,29 @@ export function SubscriptionsList() {
         </View>
       </View>
 
+      {reviewItems.length > 0 ? (
+        <View style={{ gap: 10 }}>
+          <Text
+            style={[
+              styles.heroSubtitle,
+              { color: theme.colors.mutedForeground },
+            ]}
+          >
+            NEEDS REVIEW ({reviewItems.length})
+          </Text>
+          {reviewItems.map((pattern) => (
+            <RecurringReviewItem
+              key={pattern.key}
+              pattern={pattern}
+              currency={system.defaultCurrency}
+              busy={actingKey === pattern.key}
+              onReview={handleReview}
+              onDecline={handleDecline}
+            />
+          ))}
+        </View>
+      ) : null}
+
       {/* Tabs / Filter Pills */}
       <View style={styles.filterRow}>
         <Pressable
@@ -276,7 +332,7 @@ export function SubscriptionsList() {
       </View>
 
       {/* Subscriptions List */}
-      {filteredSubscriptions.length === 0 ? (
+      {filteredSubscriptions.length === 0 && reviewItems.length === 0 ? (
         <EmptyState
           illustration="subscriptions"
           title="No Subscriptions Yet"
@@ -483,7 +539,7 @@ export function SubscriptionsList() {
                     >
                       {sub.isCompleted
                         ? "Term Completed"
-                        : `Billed on day ${sub.dayOfMonth} · Renews ${renewal.dateStr}`}
+                        : formatSubscriptionSchedule(sub, renewal.dateStr)}
                     </Text>
                   </View>
 
@@ -508,9 +564,11 @@ export function SubscriptionsList() {
       <EditSubscriptionModal
         visible={isModalOpen}
         subscription={selectedSub}
+        suggestionKey={suggestionKey}
         onClose={() => {
           setIsModalOpen(false);
           setSelectedSub(null);
+          setSuggestionKey(null);
         }}
       />
     </View>

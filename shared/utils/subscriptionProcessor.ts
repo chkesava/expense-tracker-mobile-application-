@@ -1,11 +1,19 @@
 import type { Subscription } from "@/shared/types/subscription";
+import { subscriptionFrequency } from "@/shared/types/subscription";
 import type { Expense, AccountTransfer } from "@/shared/types/expense";
+import {
+  isValidDateKey,
+  parseLocalDate,
+  shiftDateKey,
+  toLocalDateKey,
+} from "@/shared/utils/dates";
 
 export interface DueEvaluationResult {
   isDue: boolean;
   isCompleted: boolean;
   targetDateStr: string;
   monthKey: string;
+  lastProcessedDate?: string;
 }
 
 /**
@@ -22,6 +30,48 @@ export function isEmiTermCompleted(
   return false;
 }
 
+function intervalDaysOf(sub: Subscription): number {
+  return Math.max(1, Math.round(sub.intervalDays || 1));
+}
+
+function evaluateIntervalDue(
+  sub: Subscription,
+  evaluationDate: Date
+): DueEvaluationResult {
+  const todayKey = toLocalDateKey(evaluationDate);
+  const monthKey = todayKey.slice(0, 7);
+  const year = evaluationDate.getFullYear();
+  const month = evaluationDate.getMonth() + 1;
+
+  if (!sub.isActive || sub.isCompleted) {
+    return {
+      isDue: false,
+      isCompleted: !!sub.isCompleted,
+      targetDateStr: "",
+      monthKey,
+    };
+  }
+
+  if (isEmiTermCompleted(sub, year, month)) {
+    return { isDue: false, isCompleted: true, targetDateStr: "", monthKey };
+  }
+
+  const lastDate =
+    sub.lastProcessedDate && isValidDateKey(sub.lastProcessedDate)
+      ? sub.lastProcessedDate
+      : todayKey;
+  const nextDue = shiftDateKey(lastDate, intervalDaysOf(sub));
+  const isDue = todayKey >= nextDue;
+
+  return {
+    isDue,
+    isCompleted: false,
+    targetDateStr: isDue ? nextDue : "",
+    monthKey,
+    lastProcessedDate: isDue ? nextDue : undefined,
+  };
+}
+
 /**
  * Evaluates whether a subscription is currently due for posting in the given evaluation date.
  */
@@ -29,6 +79,10 @@ export function evaluateSubscriptionDue(
   sub: Subscription,
   evaluationDate = new Date()
 ): DueEvaluationResult {
+  if (subscriptionFrequency(sub) === "every_n_days") {
+    return evaluateIntervalDue(sub, evaluationDate);
+  }
+
   const year = evaluationDate.getFullYear();
   const month = evaluationDate.getMonth() + 1;
   const day = evaluationDate.getDate();
@@ -111,12 +165,9 @@ export function buildTransferFromSubscription(
   };
 }
 
-/**
- * Computes the next scheduled payment date and countdown days for a subscription.
- */
-export function getNextRenewalDate(
+function nextMonthlyRenewal(
   sub: Subscription,
-  fromDate = new Date()
+  fromDate: Date
 ): { dateStr: string; daysRemaining: number } {
   const year = fromDate.getFullYear();
   const month = fromDate.getMonth() + 1;
@@ -130,7 +181,6 @@ export function getNextRenewalDate(
   let nextDay = targetDay;
 
   if (day > targetDay || sub.lastProcessed === `${year}-${String(month).padStart(2, "0")}`) {
-    // Moves to next month
     if (month === 12) {
       nextYear = year + 1;
       nextMonth = 1;
@@ -152,6 +202,54 @@ export function getNextRenewalDate(
   return { dateStr: nextDateStr, daysRemaining };
 }
 
+function nextIntervalRenewal(
+  sub: Subscription,
+  fromDate: Date
+): { dateStr: string; daysRemaining: number } {
+  const todayKey = toLocalDateKey(fromDate);
+  const lastDate =
+    sub.lastProcessedDate && isValidDateKey(sub.lastProcessedDate)
+      ? sub.lastProcessedDate
+      : todayKey;
+  const nextDateStr = shiftDateKey(lastDate, intervalDaysOf(sub));
+  const diff = Math.round(
+    (parseLocalDate(nextDateStr).getTime() - parseLocalDate(todayKey).getTime()) /
+      (1000 * 60 * 60 * 24)
+  );
+  return { dateStr: nextDateStr, daysRemaining: Math.max(0, diff) };
+}
+
+/**
+ * Computes the next scheduled payment date and countdown days for a subscription.
+ */
+export function getNextRenewalDate(
+  sub: Subscription,
+  fromDate = new Date()
+): { dateStr: string; daysRemaining: number } {
+  if (subscriptionFrequency(sub) === "every_n_days") {
+    return nextIntervalRenewal(sub, fromDate);
+  }
+  return nextMonthlyRenewal(sub, fromDate);
+}
+
+export function formatSubscriptionSchedule(
+  sub: Subscription,
+  renewalDateStr: string
+): string {
+  if (subscriptionFrequency(sub) === "every_n_days") {
+    const n = intervalDaysOf(sub);
+    const cadence = n === 1 ? "Every day" : `Every ${n} days`;
+    return `${cadence} · next ${renewalDateStr}`;
+  }
+  return `Billed on day ${sub.dayOfMonth} · Renews ${renewalDateStr}`;
+}
+
+function monthlyEquivalentAmount(sub: Subscription): number {
+  const amount = sub.amount || 0;
+  if (subscriptionFrequency(sub) !== "every_n_days") return amount;
+  return amount * (30 / intervalDaysOf(sub));
+}
+
 export interface MonthlyCommitmentSummary {
   totalMonthly: number;
   activeCount: number;
@@ -166,6 +264,7 @@ export type DuePostAction =
       kind: "expense";
       subscriptionId: string;
       monthKey: string;
+      lastProcessedDate?: string;
       expense: Omit<Expense, "id">;
       markCompleted: boolean;
     }
@@ -173,6 +272,7 @@ export type DuePostAction =
       kind: "transfer";
       subscriptionId: string;
       monthKey: string;
+      lastProcessedDate?: string;
       transfer: Omit<AccountTransfer, "id">;
       markCompleted: boolean;
     };
@@ -194,13 +294,14 @@ export function planDueSubscriptionPosts(
     if (!evaluation.isDue || !evaluation.targetDateStr) continue;
 
     const subscriptionId = sub.id;
-    const { monthKey, targetDateStr, isCompleted } = evaluation;
+    const { monthKey, targetDateStr, isCompleted, lastProcessedDate } = evaluation;
 
     if (sub.type === "transfer") {
       actions.push({
         kind: "transfer",
         subscriptionId,
         monthKey,
+        lastProcessedDate,
         transfer: buildTransferFromSubscription(sub, targetDateStr),
         markCompleted: isCompleted,
       });
@@ -211,6 +312,7 @@ export function planDueSubscriptionPosts(
       kind: "expense",
       subscriptionId,
       monthKey,
+      lastProcessedDate,
       expense: buildExpenseFromSubscription(sub, targetDateStr, monthKey),
       markCompleted: isCompleted,
     });
@@ -235,6 +337,9 @@ export function applyPostPlanToSubscriptions(
     return {
       ...sub,
       lastProcessed: action.monthKey,
+      ...(action.lastProcessedDate
+        ? { lastProcessedDate: action.lastProcessedDate }
+        : {}),
       ...(action.markCompleted ? { isCompleted: true, isActive: false } : {}),
     };
   });
@@ -261,7 +366,7 @@ export function computeMonthlyCommitments(
 
     if (sub.isActive) {
       activeCount++;
-      const amount = sub.amount || 0;
+      const amount = monthlyEquivalentAmount(sub);
       totalMonthly += amount;
 
       if (sub.type === "emi") {

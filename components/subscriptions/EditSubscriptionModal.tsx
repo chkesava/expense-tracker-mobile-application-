@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Alert,
   Modal,
@@ -24,19 +24,24 @@ import { useAccounts } from "@/hooks/useAccounts";
 import { useCategories } from "@/hooks/useCategories";
 import { useSubscriptions } from "@/hooks/useSubscriptions";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
-import type { Subscription } from "@/shared/types/subscription";
+import type { Subscription, SubscriptionFrequency } from "@/shared/types/subscription";
+import { subscriptionFrequency } from "@/shared/types/subscription";
+import { todayDateKey } from "@/shared/utils/dates";
+import { acceptRecurringSuggestion } from "@/services/sms/smsRecurringSync";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
 export interface EditSubscriptionModalProps {
   visible: boolean;
   subscription?: Subscription | null;
+  suggestionKey?: string | null;
   onClose: () => void;
 }
 
 export function EditSubscriptionModal({
   visible,
   subscription,
+  suggestionKey,
   onClose,
 }: EditSubscriptionModalProps) {
   const { theme, themeName } = useTheme();
@@ -53,6 +58,8 @@ export function EditSubscriptionModal({
     "subscription"
   );
   const [dayOfMonth, setDayOfMonth] = useState("1");
+  const [frequency, setFrequency] = useState<SubscriptionFrequency>("monthly");
+  const [intervalDays, setIntervalDays] = useState("2");
   const [category, setCategory] = useState("Subscriptions");
   const [accountId, setAccountId] = useState("");
   const [toAccountId, setToAccountId] = useState("");
@@ -66,6 +73,8 @@ export function EditSubscriptionModal({
       setAmount(subscription.amount ? String(subscription.amount) : "");
       setType(subscription.type || "subscription");
       setDayOfMonth(String(subscription.dayOfMonth || 1));
+      setFrequency(subscriptionFrequency(subscription));
+      setIntervalDays(String(subscription.intervalDays || 2));
       setCategory(subscription.category || "Subscriptions");
       setAccountId(subscription.accountId || "");
       setToAccountId(subscription.toAccountId || "");
@@ -76,6 +85,8 @@ export function EditSubscriptionModal({
       setAmount("");
       setType("subscription");
       setDayOfMonth("1");
+      setFrequency("monthly");
+      setIntervalDays("2");
       setCategory("Subscriptions");
       setAccountId(accounts.length > 0 ? accounts[0].id : "");
       setToAccountId(accounts.length > 1 ? accounts[1].id : "");
@@ -96,11 +107,26 @@ export function EditSubscriptionModal({
       return;
     }
 
-    const numDay = parseInt(dayOfMonth, 10);
-    if (isNaN(numDay) || numDay < 1 || numDay > 31) {
-      Alert.alert("Error", "Day of month must be between 1 and 31.");
-      return;
+    const effectiveFrequency: SubscriptionFrequency =
+      type === "emi" ? "monthly" : frequency;
+
+    if (effectiveFrequency === "monthly") {
+      const numDay = parseInt(dayOfMonth, 10);
+      if (isNaN(numDay) || numDay < 1 || numDay > 31) {
+        Alert.alert("Error", "Day of month must be between 1 and 31.");
+        return;
+      }
     }
+
+    const numInterval = parseInt(intervalDays, 10);
+    if (effectiveFrequency === "every_n_days") {
+      if (isNaN(numInterval) || numInterval < 1 || numInterval > 365) {
+        Alert.alert("Error", "Repeat every N days must be between 1 and 365.");
+        return;
+      }
+    }
+
+    const numDay = parseInt(dayOfMonth, 10);
 
     if (type === "transfer" && accountId && toAccountId && accountId === toAccountId) {
       Alert.alert("Error", "Source and destination accounts must be different.");
@@ -113,20 +139,30 @@ export function EditSubscriptionModal({
         name: name.trim(),
         amount: numAmount,
         type,
-        dayOfMonth: numDay,
+        dayOfMonth: Number.isFinite(numDay) && numDay >= 1 ? Math.min(31, numDay) : 1,
+        frequency: effectiveFrequency,
+        intervalDays:
+          effectiveFrequency === "every_n_days" ? numInterval : undefined,
         category: type === "transfer" ? "Transfers" : category || "Subscriptions",
         isActive: subscription ? subscription.isActive : true,
         lastProcessed: subscription?.lastProcessed || "",
+        lastProcessedDate:
+          subscription?.lastProcessedDate ||
+          (effectiveFrequency === "every_n_days" ? todayDateKey() : undefined),
         accountId: accountId || undefined,
         toAccountId: type === "transfer" ? toAccountId || undefined : undefined,
         endMonth: type === "emi" && endMonth ? parseInt(endMonth, 10) : undefined,
         endYear: type === "emi" && endYear ? parseInt(endYear, 10) : undefined,
+        source: subscription?.source,
       };
 
       if (subscription?.id) {
         await updateSubscription(subscription.id, payload);
       } else {
-        await addSubscription(payload);
+        const id = await addSubscription(payload);
+        if (id && suggestionKey) {
+          await acceptRecurringSuggestion(suggestionKey);
+        }
       }
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(
@@ -180,7 +216,11 @@ export function EditSubscriptionModal({
               <Text
                 style={[styles.title, { color: theme.colors.cardForeground }]}
               >
-                {subscription ? "Edit Recurring" : "New Recurring"}
+                {subscription?.id
+                  ? "Edit Recurring"
+                  : suggestionKey
+                    ? "Review Recurring"
+                    : "New Recurring"}
               </Text>
               <Text
                 style={[
@@ -244,6 +284,7 @@ export function EditSubscriptionModal({
                       onPress={() => {
                         Haptics.selectionAsync().catch(() => undefined);
                         setType(item.key);
+                        if (item.key === "emi") setFrequency("monthly");
                       }}
                       style={[
                         styles.segmentBtn,
@@ -330,35 +371,127 @@ export function EditSubscriptionModal({
               />
             </View>
 
-            {/* Day of Month */}
-            <View style={{ gap: 6 }}>
-              <Text
-                style={[
-                  styles.fieldLabel,
-                  { color: theme.colors.mutedForeground },
-                ]}
-              >
-                BILLING DAY OF MONTH (1–31)
-              </Text>
-              <TextInput
-                value={dayOfMonth}
-                onChangeText={setDayOfMonth}
-                placeholder="1"
-                keyboardType="number-pad"
-                maxLength={2}
-                placeholderTextColor={theme.colors.mutedForeground}
-                style={[
-                  styles.input,
-                  {
-                    backgroundColor: isDark
-                      ? "rgba(255,255,255,0.04)"
-                      : "rgba(0,0,0,0.02)",
-                    borderColor: theme.colors.border,
-                    color: theme.colors.foreground,
-                  },
-                ]}
-              />
-            </View>
+            {/* Frequency */}
+            {type !== "emi" ? (
+              <View style={{ gap: 6 }}>
+                <Text
+                  style={[
+                    styles.fieldLabel,
+                    { color: theme.colors.mutedForeground },
+                  ]}
+                >
+                  FREQUENCY
+                </Text>
+                <View
+                  style={[
+                    styles.segmentRow,
+                    {
+                      backgroundColor: isDark
+                        ? "rgba(255,255,255,0.06)"
+                        : "rgba(0,0,0,0.04)",
+                    },
+                  ]}
+                >
+                  {(
+                    [
+                      { key: "every_n_days", label: "Every N days" },
+                      { key: "monthly", label: "Monthly" },
+                    ] as const
+                  ).map((item) => {
+                    const isSelected = frequency === item.key;
+                    return (
+                      <Pressable
+                        key={item.key}
+                        onPress={() => {
+                          Haptics.selectionAsync().catch(() => undefined);
+                          setFrequency(item.key);
+                        }}
+                        style={[
+                          styles.segmentBtn,
+                          isSelected && {
+                            backgroundColor: theme.colors.primary,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.segmentText,
+                            {
+                              color: isSelected
+                                ? theme.colors.primaryForeground
+                                : theme.colors.mutedForeground,
+                              fontWeight: isSelected ? "700" : "500",
+                            },
+                          ]}
+                        >
+                          {item.label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            ) : null}
+
+            {type !== "emi" && frequency === "every_n_days" ? (
+              <View style={{ gap: 6 }}>
+                <Text
+                  style={[
+                    styles.fieldLabel,
+                    { color: theme.colors.mutedForeground },
+                  ]}
+                >
+                  REPEAT EVERY N DAYS
+                </Text>
+                <TextInput
+                  value={intervalDays}
+                  onChangeText={setIntervalDays}
+                  placeholder="2"
+                  keyboardType="number-pad"
+                  maxLength={3}
+                  placeholderTextColor={theme.colors.mutedForeground}
+                  style={[
+                    styles.input,
+                    {
+                      backgroundColor: isDark
+                        ? "rgba(255,255,255,0.04)"
+                        : "rgba(0,0,0,0.02)",
+                      borderColor: theme.colors.border,
+                      color: theme.colors.foreground,
+                    },
+                  ]}
+                />
+              </View>
+            ) : (
+              <View style={{ gap: 6 }}>
+                <Text
+                  style={[
+                    styles.fieldLabel,
+                    { color: theme.colors.mutedForeground },
+                  ]}
+                >
+                  BILLING DAY OF MONTH (1–31)
+                </Text>
+                <TextInput
+                  value={dayOfMonth}
+                  onChangeText={setDayOfMonth}
+                  placeholder="1"
+                  keyboardType="number-pad"
+                  maxLength={2}
+                  placeholderTextColor={theme.colors.mutedForeground}
+                  style={[
+                    styles.input,
+                    {
+                      backgroundColor: isDark
+                        ? "rgba(255,255,255,0.04)"
+                        : "rgba(0,0,0,0.02)",
+                      borderColor: theme.colors.border,
+                      color: theme.colors.foreground,
+                    },
+                  ]}
+                />
+              </View>
+            )}
 
             {/* Category (if not transfer) */}
             {type !== "transfer" && (
@@ -583,7 +716,7 @@ export function EditSubscriptionModal({
 
           {/* Action Buttons */}
           <View style={styles.actionFooter}>
-            {subscription ? (
+            {subscription?.id ? (
               <Button
                 variant="destructive"
                 onPress={handleDelete}
@@ -596,13 +729,15 @@ export function EditSubscriptionModal({
               variant="primary"
               onPress={handleSave}
               disabled={isSubmitting}
-              style={{ flex: subscription ? 2 : 1 }}
+              style={{ flex: subscription?.id ? 2 : 1 }}
             >
               {isSubmitting
                 ? "Saving..."
-                : subscription
+                : subscription?.id
                   ? "Update Recurring"
-                  : "Save Recurring"}
+                  : suggestionKey
+                    ? "Add Recurring"
+                    : "Save Recurring"}
             </Button>
           </View>
         </View>
