@@ -24,6 +24,7 @@ export function SmsMatchingUnconfiguredText({
         color: theme.colors.warning,
         fontSize: theme.typography.xs,
         fontWeight: "700",
+        textAlign: "center",
       }}
     >
       {label}

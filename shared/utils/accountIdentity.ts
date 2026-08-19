@@ -70,6 +70,17 @@ export function formatAccountIdentityLine(
   return parts.filter(Boolean).join(" • ");
 }
 
+/** Header line for a credit card: institution (if any) plus masked last4. Never invents a network brand. */
+export function formatCreditCardHeaderLine(
+  account: Pick<Account, "institutionName" | "last4" | "accountNumber">
+): string {
+  const last4 = getAccountLast4(account);
+  const last4Label = last4 ? `•••• ${last4}` : "";
+  const institution = account.institutionName?.trim();
+  if (institution && last4Label) return `${institution}  ${last4Label}`;
+  return last4Label || institution || "Credit Card";
+}
+
 export function defaultSmsMatchingEnabled(
   accountTypeId: CanonicalAccountTypeId
 ): boolean {

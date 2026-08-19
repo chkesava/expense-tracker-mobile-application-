@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   accountMatchesSmsHint,
   buildAccountWritePayload,
+  formatCreditCardHeaderLine,
   hydrateAccountIdentity,
   normalizeLast4,
   smsMatchingUnconfiguredLabel,
@@ -257,5 +258,28 @@ describe("buildAccountWritePayload", () => {
     expect(payload.institutionId).toBeNull();
     expect(payload.institutionName).toBeNull();
     expect(payload.smsMatchingEnabled).toBe(false);
+  });
+});
+
+describe("formatCreditCardHeaderLine", () => {
+  it("shows masked last4 without inventing a card network", () => {
+    expect(
+      formatCreditCardHeaderLine({
+        last4: "4567",
+      })
+    ).toBe("•••• 4567");
+  });
+
+  it("includes catalog institution name when present", () => {
+    expect(
+      formatCreditCardHeaderLine({
+        institutionName: "Super Money",
+        last4: "4521",
+      })
+    ).toBe("Super Money  •••• 4521");
+  });
+
+  it("falls back to Credit Card when identity is missing", () => {
+    expect(formatCreditCardHeaderLine({})).toBe("Credit Card");
   });
 });
