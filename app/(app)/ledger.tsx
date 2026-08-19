@@ -184,7 +184,7 @@ export default function LedgerScreen() {
       <PageHeader
         title="Transactions"
         subtitle="Journal, accounts & bills"
-        icon={<Wallet size={22} color={theme.colors.success} />}
+        icon={<Wallet size={22} color={isDark ? "#FFFFFF" : theme.colors.success} />}
         activeTab={ledgerTab}
         onTabChange={(tab) => setLedgerTab(tab as LedgerTab)}
         tabs={allTabs}
