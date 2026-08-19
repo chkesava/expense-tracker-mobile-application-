@@ -1,7 +1,7 @@
 {
   "name": "spendly",
   "main": "expo-router/entry",
-  "version": "2.4.3",
+  "version": "3.0.0",
   "dependencies": {
     "@expo-google-fonts/inter": "^0.4.2",
     "@gorhom/bottom-sheet": "^5.2.14",
