@@ -1,38 +1,41 @@
-import React, { useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import * as Haptics from "expo-haptics";
-import { Plus } from "lucide-react-native";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
+import {
+  Alert,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import { FlashList } from "@shopify/flash-list";
+import { Plus, Search, SlidersHorizontal, X } from "lucide-react-native";
 
-import { Amount } from "@/components/common/Amount";
-import { EmptyState } from "@/components/common/EmptyState";
-import { SearchBar } from "@/components/common/SearchBar";
-import { SkeletonCard } from "@/components/common/Skeleton";
+import {
+  ACCOUNT_GREEN,
+  ACCOUNT_GREEN_BORDER,
+} from "@/components/accounts/accountScreenTheme";
 import { BorrowingCard } from "@/components/borrowings/BorrowingCard";
 import { BorrowingDetailModal } from "@/components/borrowings/BorrowingDetailModal";
+import {
+  BorrowingFilters,
+  type BorrowingDateFilter,
+  type BorrowingStatusFilter,
+} from "@/components/borrowings/BorrowingFilters";
+import { BorrowingSummaryCard } from "@/components/borrowings/BorrowingSummaryCard";
 import { CreateBorrowingModal } from "@/components/borrowings/CreateBorrowingModal";
-import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
+import { EmptyState } from "@/components/common/EmptyState";
+import { SkeletonCard } from "@/components/common/Skeleton";
+import { BOTTOM_NAV_FAB_GAP, BOTTOM_NAV_FAB_SIZE } from "@/components/layout/chrome";
+import { haptic } from "@/lib/haptics";
 import { useBorrowings } from "@/hooks/useBorrowings";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
-import type { Borrowing, BorrowingStatus } from "@/shared/types/borrowing";
-import { LENDER_TYPES, LENDER_TYPE_LABELS } from "@/shared/types/borrowing";
+import type { Borrowing } from "@/shared/types/borrowing";
 import { summarizeBorrowings } from "@/shared/utils/borrowingMath";
 import { todayDateKey, toLocalDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
-type StatusFilter = "all" | "outstanding" | BorrowingStatus;
-type DateFilter = "all" | "thisMonth" | "last6Months" | "thisYear";
-
-const DATE_FILTERS: { id: DateFilter; label: string }[] = [
-  { id: "all", label: "All time" },
-  { id: "thisMonth", label: "This month" },
-  { id: "last6Months", label: "Last 6 months" },
-  { id: "thisYear", label: "This year" },
-];
-
-/** Earliest borrowed date included by a date filter, or null for all time. */
-function dateFilterCutoff(filter: DateFilter, today: string): string | null {
+function dateFilterCutoff(filter: BorrowingDateFilter, today: string): string | null {
   if (filter === "all") return null;
   const [year, month] = today.split("-").map(Number);
 
@@ -43,16 +46,7 @@ function dateFilterCutoff(filter: DateFilter, today: string): string | null {
   return toLocalDateKey(start);
 }
 
-const STATUS_FILTERS: { id: StatusFilter; label: string }[] = [
-  { id: "all", label: "All" },
-  { id: "outstanding", label: "Outstanding" },
-  { id: "ACTIVE", label: "Active" },
-  { id: "PARTIALLY_SETTLED", label: "Partial" },
-  { id: "OVERDUE", label: "Overdue" },
-  { id: "FULLY_SETTLED", label: "Settled" },
-];
-
-export function BorrowingsList() {
+export function BorrowingsList({ listHeader }: { listHeader?: ReactNode }) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const { settings: system } = useSystemSettings();
@@ -70,14 +64,21 @@ export function BorrowingsList() {
     deleteRepayment,
   } = useBorrowings();
 
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [lenderTypeFilter, setLenderTypeFilter] = useState<string>("all");
-  const [dateFilter, setDateFilter] = useState<DateFilter>("all");
+  const [statusFilter, setStatusFilter] = useState<BorrowingStatusFilter>("all");
+  const [lenderTypeFilter, setLenderTypeFilter] = useState("all");
+  const [dateFilter, setDateFilter] = useState<BorrowingDateFilter>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [startRepaying, setStartRepaying] = useState(false);
+  const [searchFocused, setSearchFocused] = useState(false);
 
   const today = todayDateKey();
+  const filtersActive =
+    statusFilter !== "all" ||
+    lenderTypeFilter !== "all" ||
+    dateFilter !== "all" ||
+    searchQuery.trim().length > 0;
 
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -94,10 +95,7 @@ export function BorrowingsList() {
         return false;
       }
 
-      if (
-        lenderTypeFilter !== "all" &&
-        borrowing.lenderType !== lenderTypeFilter
-      ) {
+      if (lenderTypeFilter !== "all" && borrowing.lenderType !== lenderTypeFilter) {
         return false;
       }
 
@@ -119,7 +117,6 @@ export function BorrowingsList() {
     today,
   ]);
 
-  // Summary cards follow the active filters so the numbers match the list.
   const portfolio = useMemo(
     () => summarizeBorrowings(filtered, repayments, today),
     [filtered, repayments, today]
@@ -130,245 +127,257 @@ export function BorrowingsList() {
     [borrowings, selectedId]
   );
 
-  const pillStyle = (isActive: boolean) => ({
-    backgroundColor: isActive
-      ? theme.colors.primary
-      : isDark
-        ? "rgba(255,255,255,0.06)"
-        : "rgba(0,0,0,0.04)",
-    borderColor: isActive ? theme.colors.primary : theme.colors.border,
-  });
+  const clearFilters = useCallback(() => {
+    setStatusFilter("all");
+    setLenderTypeFilter("all");
+    setDateFilter("all");
+    setSearchQuery("");
+  }, []);
 
-  const pillTextStyle = (isActive: boolean) => ({
-    color: isActive ? theme.colors.primaryForeground : theme.colors.foreground,
-    fontWeight: isActive ? ("700" as const) : ("500" as const),
-  });
+  const openCreate = useCallback(() => {
+    void haptic.impact();
+    setIsCreateOpen(true);
+  }, []);
+
+  const onPressCard = useCallback((id: string) => {
+    setStartRepaying(false);
+    setSelectedId(id);
+  }, []);
+
+  const confirmDelete = useCallback(
+    (id: string) => {
+      Alert.alert(
+        "Delete borrowing?",
+        "This removes the borrowing and all of its repayment records. Expenses and accounts are not affected.",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Delete",
+            style: "destructive",
+            onPress: () => {
+              void deleteBorrowing(id);
+            },
+          },
+        ]
+      );
+    },
+    [deleteBorrowing]
+  );
+
+  const onMenuCard = useCallback(
+    (id: string) => {
+      const borrowing = borrowings.find((item) => item.id === id);
+      const summary = summaries.get(id);
+      if (!borrowing || !summary) return;
+      const settled =
+        summary.status === "FULLY_SETTLED" || summary.status === "CLOSED";
+      Alert.alert(borrowing.lenderName, undefined, [
+        {
+          text: "View",
+          onPress: () => {
+            setStartRepaying(false);
+            setSelectedId(id);
+          },
+        },
+        ...(settled
+          ? []
+          : [
+              {
+                text: "Record repayment",
+                onPress: () => {
+                  setStartRepaying(true);
+                  setSelectedId(id);
+                },
+              },
+            ]),
+        {
+          text: "Delete",
+          style: "destructive" as const,
+          onPress: () => confirmDelete(id),
+        },
+        { text: "Cancel", style: "cancel" as const },
+      ]);
+    },
+    [borrowings, summaries, confirmDelete]
+  );
+
+  const renderItem = useCallback(
+    ({ item }: { item: Borrowing }) => {
+      const summary = item.id ? summaries.get(item.id) : null;
+      if (!item.id || !summary) return null;
+      return (
+        <BorrowingCard
+          borrowing={item}
+          summary={summary}
+          currency={system.defaultCurrency}
+          onPress={onPressCard}
+          onMenu={onMenuCard}
+        />
+      );
+    },
+    [summaries, system.defaultCurrency, onPressCard, onMenuCard]
+  );
+
+  const keyExtractor = useCallback((item: Borrowing) => item.id ?? "", []);
+
+  const controls = borrowings.length > 0 ? (
+    <View style={styles.controls}>
+      <BorrowingSummaryCard
+        totalBorrowed={portfolio.totalBorrowed}
+        totalOutstanding={portfolio.totalOutstanding}
+        totalInterest={portfolio.totalInterest}
+        totalRepaid={portfolio.totalRepaid}
+        overdueCount={portfolio.overdueCount}
+        currency={system.defaultCurrency}
+      />
+
+      <BorrowingFilters
+        statusFilter={statusFilter}
+        lenderTypeFilter={lenderTypeFilter}
+        dateFilter={dateFilter}
+        onStatusChange={setStatusFilter}
+        onLenderChange={setLenderTypeFilter}
+        onDateChange={setDateFilter}
+      />
+
+      <View style={styles.searchRow}>
+        <View
+          style={[
+            styles.searchField,
+            {
+              backgroundColor: isDark ? "#10141C" : theme.colors.card,
+              borderColor: searchFocused
+                ? ACCOUNT_GREEN_BORDER
+                : isDark
+                  ? "rgba(148,163,184,0.14)"
+                  : theme.colors.border,
+            },
+          ]}
+        >
+          <Search size={18} color={theme.colors.mutedForeground} />
+          <TextInput
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder="Search lender or note..."
+            placeholderTextColor={theme.colors.mutedForeground}
+            accessibilityLabel="Search lender or note"
+            onFocus={() => setSearchFocused(true)}
+            onBlur={() => setSearchFocused(false)}
+            style={[styles.searchInput, { color: theme.colors.foreground }]}
+          />
+          {searchQuery.length > 0 ? (
+            <Pressable
+              onPress={() => setSearchQuery("")}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Clear search"
+            >
+              <X size={16} color={theme.colors.mutedForeground} />
+            </Pressable>
+          ) : null}
+        </View>
+        <Pressable
+          onPress={() => {
+            void haptic.selection();
+            if (filtersActive) clearFilters();
+          }}
+          style={({ pressed }) => [
+            styles.filterBtn,
+            {
+              backgroundColor: isDark ? "#10141C" : theme.colors.card,
+              borderColor: filtersActive
+                ? ACCOUNT_GREEN_BORDER
+                : isDark
+                  ? "rgba(148,163,184,0.14)"
+                  : theme.colors.border,
+            },
+            pressed && styles.pressed,
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel={filtersActive ? "Clear filters" : "Filters"}
+        >
+          <SlidersHorizontal
+            size={18}
+            color={filtersActive ? ACCOUNT_GREEN : theme.colors.mutedForeground}
+          />
+          {filtersActive ? <View style={styles.filterDot} /> : null}
+        </Pressable>
+      </View>
+
+      <Pressable
+        onPress={openCreate}
+        style={({ pressed }) => [
+          styles.recordBtn,
+          {
+            borderColor: isDark ? ACCOUNT_GREEN_BORDER : "rgba(22,163,74,0.35)",
+            backgroundColor: isDark ? "rgba(14, 22, 18, 0.7)" : "rgba(240,253,244,0.9)",
+          },
+          pressed && styles.pressed,
+        ]}
+        accessibilityRole="button"
+        accessibilityLabel="Record borrowing"
+      >
+        <Plus size={16} color={isDark ? ACCOUNT_GREEN : theme.colors.success} strokeWidth={2.4} />
+        <Text style={[styles.recordLabel, { color: theme.colors.foreground }]}>
+          Record Borrowing
+        </Text>
+      </Pressable>
+    </View>
+  ) : null;
+
+  const empty = loading ? (
+    <View style={styles.skeleton}>
+      <SkeletonCard />
+      <SkeletonCard />
+    </View>
+  ) : (
+    <EmptyState
+      illustration="general"
+      title={
+        borrowings.length === 0 ? "No borrowings found" : "No matching borrowings"
+      }
+      description={
+        borrowings.length === 0
+          ? "Record your first borrowing to start tracking it."
+          : "Try a different status, lender type, period, or search term."
+      }
+      primaryAction={{
+        label: "Record Borrowing",
+        icon: <Plus size={16} color="#FFFFFF" strokeWidth={2.4} />,
+        onPress: openCreate,
+      }}
+      secondaryAction={
+        borrowings.length > 0
+          ? {
+              label: "Clear Filters",
+              onPress: clearFilters,
+            }
+          : undefined
+      }
+      compact
+    />
+  );
 
   return (
     <View style={styles.container}>
-      {borrowings.length > 0 ? (
-        <Card style={styles.summaryCard}>
-          <View style={styles.summaryGrid}>
-            <View style={styles.summaryCell}>
-              <Text
-                style={[styles.summaryLabel, { color: theme.colors.mutedForeground }]}
-              >
-                TOTAL BORROWED
-              </Text>
-              <Amount
-                value={portfolio.totalBorrowed}
-                currency={system.defaultCurrency}
-                style={{
-                  fontSize: 18,
-                  fontWeight: "900",
-                  color: theme.colors.foreground,
-                }}
-              />
-            </View>
-
-            <View style={styles.summaryCell}>
-              <Text
-                style={[styles.summaryLabel, { color: theme.colors.mutedForeground }]}
-              >
-                OUTSTANDING
-              </Text>
-              <Amount
-                value={portfolio.totalOutstanding}
-                currency={system.defaultCurrency}
-                style={{ fontSize: 18, fontWeight: "900", color: "#EF4444" }}
-              />
-            </View>
-
-            <View style={styles.summaryCell}>
-              <Text
-                style={[styles.summaryLabel, { color: theme.colors.mutedForeground }]}
-              >
-                INTEREST
-              </Text>
-              <Amount
-                value={portfolio.totalInterest}
-                currency={system.defaultCurrency}
-                style={{ fontSize: 18, fontWeight: "900", color: "#F59E0B" }}
-              />
-            </View>
-
-            <View style={styles.summaryCell}>
-              <Text
-                style={[styles.summaryLabel, { color: theme.colors.mutedForeground }]}
-              >
-                REPAID
-              </Text>
-              <Amount
-                value={portfolio.totalRepaid}
-                currency={system.defaultCurrency}
-                style={{ fontSize: 18, fontWeight: "900", color: "#10B981" }}
-              />
-            </View>
+      <FlashList
+        style={styles.list}
+        data={filtered}
+        renderItem={renderItem}
+        keyExtractor={keyExtractor}
+        ItemSeparatorComponent={ItemSeparator}
+        ListHeaderComponent={
+          <View>
+            {listHeader}
+            {controls}
           </View>
-
-          {portfolio.overdueCount > 0 ? (
-            <Text style={[styles.overdueNote, { color: "#EF4444" }]}>
-              {portfolio.overdueCount} borrowing
-              {portfolio.overdueCount === 1 ? "" : "s"} past the due date
-            </Text>
-          ) : null}
-        </Card>
-      ) : null}
-
-      {borrowings.length > 0 ? (
-        <>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.pillRow}
-          >
-            {STATUS_FILTERS.map((filter) => {
-              const isActive = statusFilter === filter.id;
-              return (
-                <Pressable
-                  key={filter.id}
-                  onPress={() => {
-                    Haptics.selectionAsync().catch(() => undefined);
-                    setStatusFilter(filter.id);
-                  }}
-                  style={[styles.pill, pillStyle(isActive)]}
-                >
-                  <Text style={[styles.pillText, pillTextStyle(isActive)]}>
-                    {filter.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.pillRow}
-          >
-            {[
-              { id: "all", label: "Any lender" },
-              ...LENDER_TYPES.map((type) => ({
-                id: type as string,
-                label: LENDER_TYPE_LABELS[type],
-              })),
-            ].map((filter) => {
-              const isActive = lenderTypeFilter === filter.id;
-              return (
-                <Pressable
-                  key={filter.id}
-                  onPress={() => {
-                    Haptics.selectionAsync().catch(() => undefined);
-                    setLenderTypeFilter(filter.id);
-                  }}
-                  style={[styles.pill, pillStyle(isActive)]}
-                >
-                  <Text style={[styles.pillText, pillTextStyle(isActive)]}>
-                    {filter.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.pillRow}
-          >
-            {DATE_FILTERS.map((filter) => {
-              const isActive = dateFilter === filter.id;
-              return (
-                <Pressable
-                  key={filter.id}
-                  onPress={() => {
-                    Haptics.selectionAsync().catch(() => undefined);
-                    setDateFilter(filter.id);
-                  }}
-                  style={[styles.pill, pillStyle(isActive)]}
-                >
-                  <Text style={[styles.pillText, pillTextStyle(isActive)]}>
-                    {filter.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-        </>
-      ) : null}
-
-      {borrowings.length > 2 ? (
-        <SearchBar
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          placeholder="Search lender or note..."
-        />
-      ) : null}
-
-      {borrowings.length > 0 ? (
-        <Button onPress={() => setIsCreateOpen(true)} variant="outline">
-          <Plus size={16} color={theme.colors.foreground} />
-          <Text style={{ fontWeight: "700", color: theme.colors.foreground }}>
-            Record Borrowing
-          </Text>
-        </Button>
-      ) : null}
-
-      {loading ? (
-        <View style={{ gap: 12 }}>
-          <SkeletonCard />
-          <SkeletonCard />
-        </View>
-      ) : filtered.length === 0 ? (
-        <EmptyState
-          illustration="general"
-          title={
-            borrowings.length === 0
-              ? "No Borrowings Tracked"
-              : "No Matching Borrowings"
-          }
-          description={
-            borrowings.length === 0
-              ? "Track money borrowed from banks, finance companies, friends or family, with interest and repayments."
-              : "Try a different status, lender type or search term."
-          }
-          primaryAction={{
-            label: "Record Borrowing",
-            icon: <Plus size={16} color="#FFFFFF" strokeWidth={2.4} />,
-            onPress: () => setIsCreateOpen(true),
-          }}
-          secondaryAction={
-            borrowings.length > 0
-              ? {
-                  label: "Clear Filters",
-                  onPress: () => {
-                    setStatusFilter("all");
-                    setLenderTypeFilter("all");
-                    setDateFilter("all");
-                    setSearchQuery("");
-                  },
-                }
-              : undefined
-          }
-          tip="Borrowed money increases your account balance but is recorded as a liability, never as income."
-        />
-      ) : (
-        <View style={{ gap: 12 }}>
-          {filtered.map((borrowing) => {
-            const summary = borrowing.id ? summaries.get(borrowing.id) : null;
-            if (!borrowing.id || !summary) return null;
-            return (
-              <BorrowingCard
-                key={borrowing.id}
-                borrowing={borrowing}
-                summary={summary}
-                currency={system.defaultCurrency}
-                onPress={() => setSelectedId(borrowing.id ?? null)}
-              />
-            );
-          })}
-        </View>
-      )}
+        }
+        ListEmptyComponent={empty}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={styles.listContent}
+        extraData={`${statusFilter}-${lenderTypeFilter}-${dateFilter}-${searchQuery}-${isDark}`}
+      />
 
       <CreateBorrowingModal
         visible={isCreateOpen}
@@ -382,12 +391,19 @@ export function BorrowingsList() {
         summary={selectedId ? getSummary(selectedId) : null}
         repayments={selectedId ? getRepayments(selectedId) : []}
         currency={system.defaultCurrency}
-        onClose={() => setSelectedId(null)}
+        startRepaying={startRepaying}
+        onClose={() => {
+          setSelectedId(null);
+          setStartRepaying(false);
+        }}
         onAddRepayment={addRepayment}
         onDeleteRepayment={deleteRepayment}
         onDeleteBorrowing={async (id) => {
           const ok = await deleteBorrowing(id);
-          if (ok) setSelectedId(null);
+          if (ok) {
+            setSelectedId(null);
+            setStartRepaying(false);
+          }
           return ok;
         }}
       />
@@ -395,45 +411,86 @@ export function BorrowingsList() {
   );
 }
 
+function ItemSeparator() {
+  return <View style={styles.separator} />;
+}
+
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+    minHeight: 0,
+  },
+  list: {
+    flex: 1,
+  },
+  listContent: {
+    paddingBottom: BOTTOM_NAV_FAB_SIZE + BOTTOM_NAV_FAB_GAP + 8,
+  },
+  controls: {
     gap: 14,
+    paddingBottom: 14,
   },
-  summaryCard: {
-    borderRadius: 18,
-    borderCurve: "continuous",
-  },
-  summaryGrid: {
+  searchRow: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    rowGap: 14,
-  },
-  summaryCell: {
-    width: "50%",
-    gap: 2,
-  },
-  summaryLabel: {
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-  },
-  overdueNote: {
-    fontSize: 11,
-    fontWeight: "700",
-    marginTop: 12,
-  },
-  pillRow: {
-    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
   },
-  pill: {
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 20,
+  searchField: {
+    flex: 1,
+    minHeight: 48,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 14,
+    borderRadius: 16,
     borderCurve: "continuous",
     borderWidth: 1,
   },
-  pillText: {
-    fontSize: 12,
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    paddingVertical: 0,
+  },
+  filterBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    borderCurve: "continuous",
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  filterDot: {
+    position: "absolute",
+    top: 10,
+    right: 10,
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: ACCOUNT_GREEN,
+  },
+  recordBtn: {
+    minHeight: 48,
+    borderRadius: 16,
+    borderCurve: "continuous",
+    borderWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  recordLabel: {
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  skeleton: {
+    gap: 12,
+    paddingTop: 8,
+  },
+  separator: {
+    height: 10,
+  },
+  pressed: {
+    opacity: 0.84,
   },
 });

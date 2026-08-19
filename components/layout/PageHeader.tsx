@@ -159,7 +159,6 @@ export function PageHeader({
                         fontSize: theme.typography.sm,
                       },
                     ]}
-                    numberOfLines={1}
                   >
                     {tab.label}
                   </Text>
@@ -322,6 +321,7 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     paddingBottom: 10,
     minHeight: 44,
+    flexShrink: 0,
     borderRadius: 12,
     borderCurve: "continuous",
     gap: 6,
@@ -359,6 +359,7 @@ const styles = StyleSheet.create({
   },
   tabLabel: {
     letterSpacing: 0.15,
+    flexShrink: 0,
   },
   tabBadge: {
     paddingHorizontal: 6,

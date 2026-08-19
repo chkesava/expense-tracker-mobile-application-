@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Pressable,
@@ -49,6 +49,7 @@ export interface BorrowingDetailModalProps {
     borrowingId: string
   ) => Promise<boolean>;
   onDeleteBorrowing: (id: string) => Promise<boolean>;
+  startRepaying?: boolean;
 }
 
 export function BorrowingDetailModal({
@@ -61,6 +62,7 @@ export function BorrowingDetailModal({
   onAddRepayment,
   onDeleteRepayment,
   onDeleteBorrowing,
+  startRepaying = false,
 }: BorrowingDetailModalProps) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
@@ -72,6 +74,18 @@ export function BorrowingDetailModal({
   const [date, setDate] = useState(todayDateKey());
   const [note, setNote] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!visible) {
+      setIsRepaying(false);
+      setAmount("");
+      setPaymentAccountId("");
+      setDate(todayDateKey());
+      setNote("");
+      return;
+    }
+    if (startRepaying) setIsRepaying(true);
+  }, [visible, startRepaying]);
 
   const numericAmount = Number(amount);
 

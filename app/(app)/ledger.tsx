@@ -175,12 +175,9 @@ export default function LedgerScreen() {
 
   const isExpenseListTab =
     ledgerTab === "expenses" && (expensesTab === "history" || expensesTab === "income");
+  const isBorrowingsTab = ledgerTab === "borrowings";
 
-  return (
-    <PageShell
-      scrollable={!isExpenseListTab}
-      contentContainerStyle={styles.container}
-    >
+  const pageHeader = (
       <PageHeader
         title="Transactions"
         subtitle="Journal, accounts & bills"
@@ -190,6 +187,18 @@ export default function LedgerScreen() {
         tabs={allTabs}
         tabVariant="underline"
       />
+  );
+
+  return (
+    <PageShell
+      scrollable={!isExpenseListTab && !isBorrowingsTab}
+      contentContainerStyle={styles.container}
+    >
+      {isBorrowingsTab ? (
+        <BorrowingsList listHeader={pageHeader} />
+      ) : (
+        <>
+      {pageHeader}
 
       {/* Tab: Expenses (Journal) */}
       {ledgerTab === "expenses" && (
@@ -369,14 +378,13 @@ export default function LedgerScreen() {
       {/* Tab: Credit Card Bills */}
       {ledgerTab === "ccBills" && <CreditCardBillsList />}
 
-      {/* Tab: Borrowings */}
-      {ledgerTab === "borrowings" && <BorrowingsList />}
-
       {/* Tab: Receivables */}
       {ledgerTab === "receivables" && <ReceivablesList />}
 
       {/* Tab: Subscriptions */}
       {ledgerTab === "subscriptions" && <SubscriptionsList />}
+        </>
+      )}
     </PageShell>
   );
 }
