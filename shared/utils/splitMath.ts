@@ -1,5 +1,29 @@
-import type { Participant, Split } from "@/shared/types/split";
+import type { Participant, Split, SplitKind } from "@/shared/types/split";
+import { generatePaymentSlug } from "./paymentSlug";
 import { generateUpiLink } from "./upi";
+
+export const BILL_DEFAULT_CATEGORY = "Food & Dining";
+export const COLLECT_DEFAULT_CATEGORY = "Gifts & Donations";
+
+export function createParticipantKey(): string {
+  return `p_${generatePaymentSlug(10)}`;
+}
+
+export function getSplitKind(split: Pick<Split, "kind">): SplitKind {
+  return split.kind === "collect" ? "collect" : "bill";
+}
+
+export function isCollectSplit(split: Pick<Split, "kind">): boolean {
+  return getSplitKind(split) === "collect";
+}
+
+export function isCollectSpent(split: Split): boolean {
+  return isCollectSplit(split) && split.status === "spent";
+}
+
+function roundMoney(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
 
 /**
  * Calculates equal share amounts for a list of participants, allocating fractional cents cleanly.
@@ -9,6 +33,7 @@ export function calculateEqualSplits(
   participants: Array<{
     name: string;
     isCurrentUser: boolean;
+    key?: string;
     upiId?: string;
     userId?: string;
     photoURL?: string;
@@ -21,17 +46,18 @@ export function calculateEqualSplits(
   const remainder = Math.round((totalAmount - baseShare * count) * 100) / 100;
 
   return participants.map((p, index) => {
-    // Allocate the penny/cent remainder to the first participant (usually the payer)
     const amount = index === 0 ? Number((baseShare + remainder).toFixed(2)) : baseShare;
-    return {
+    const participant: Participant = {
+      key: p.key || createParticipantKey(),
       name: p.name,
       amount,
-      paid: p.isCurrentUser, // Creator/payer starts marked as paid
-      upiId: p.upiId || "",
+      paid: p.isCurrentUser,
       isCurrentUser: p.isCurrentUser,
-      userId: p.userId,
-      photoURL: p.photoURL,
     };
+    if (p.upiId) participant.upiId = p.upiId;
+    if (p.userId) participant.userId = p.userId;
+    if (p.photoURL) participant.photoURL = p.photoURL;
+    return participant;
   });
 }
 
@@ -78,7 +104,8 @@ export function computeSplitProgress(split: Split): {
 
   const roundedSettled = Math.min(total, Math.round(settledAmount * 100) / 100);
   const percentage = Math.min(100, Math.max(0, Math.round((roundedSettled / total) * 100)));
-  const isFullySettled = unpaidCount === 0 || roundedSettled >= total;
+  const isFullySettled =
+    isCollectSpent(split) || unpaidCount === 0 || roundedSettled >= total;
 
   return {
     settledAmount: roundedSettled,
@@ -87,6 +114,44 @@ export function computeSplitProgress(split: Split): {
     isFullySettled,
     unpaidCount,
   };
+}
+
+export function othersFullyCollected(split: Split): boolean {
+  const others = (split.participants || []).filter((p) => !p.isCurrentUser);
+  return others.length > 0 && others.every((p) => p.paid);
+}
+
+export function collectedFromOthers(split: Split): number {
+  return roundMoney(
+    (split.participants || [])
+      .filter((p) => !p.isCurrentUser && p.paid)
+      .reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
+  );
+}
+
+export function uniqueCollectedAccountIds(split: Split): string[] {
+  const ids: string[] = [];
+  for (const p of split.participants || []) {
+    if (!p.isCurrentUser && p.paid && p.receivedAccountId) {
+      if (!ids.includes(p.receivedAccountId)) ids.push(p.receivedAccountId);
+    }
+  }
+  return ids;
+}
+
+export function computeCollectSpendBreakdown(
+  split: Split,
+  spendAmount: number
+): {
+  othersCollected: number;
+  passThroughDebit: number;
+  ownExpense: number;
+} {
+  const othersCollected = collectedFromOthers(split);
+  const spend = roundMoney(Math.max(0, spendAmount));
+  const passThroughDebit = roundMoney(Math.min(othersCollected, spend));
+  const ownExpense = roundMoney(Math.max(0, spend - passThroughDebit));
+  return { othersCollected, passThroughDebit, ownExpense };
 }
 
 export interface SplitsAggregateSummary {
@@ -111,27 +176,27 @@ export function computeSplitSummary(
   for (const split of splits) {
     const isCreator = split.createdBy === currentUserId;
     const progress = computeSplitProgress(split);
+    const closed = split.settled || progress.isFullySettled || isCollectSpent(split);
 
-    if (split.settled || progress.isFullySettled) {
+    if (closed) {
       settledCount++;
     } else {
       activeCount++;
     }
 
+    if (closed) continue;
+
     if (isCreator) {
-      // Creator paid: others owe creator their unpaid portions
       for (const p of split.participants || []) {
-        if (!p.isCurrentUser && !p.paid && (!split.settled)) {
+        if (!p.isCurrentUser && !p.paid) {
           totalOwedToYou += Number(p.amount) || 0;
         }
       }
     } else {
-      // Someone else created: check if current user owes anything
       for (const p of split.participants || []) {
         if (
           (p.isCurrentUser || p.userId === currentUserId) &&
-          !p.paid &&
-          !split.settled
+          !p.paid
         ) {
           totalYouOwe += Number(p.amount) || 0;
         }
@@ -154,10 +219,17 @@ export function generateSplitShareMessage(
   split: Split,
   participant: Participant,
   creatorUpiId?: string,
-  currency = "INR"
+  currency = "INR",
+  shareUrl?: string
 ): string {
+  const payeeName = split.createdByName || "Split Organizer";
   const upiLink = creatorUpiId
-    ? generateUpiLink(creatorUpiId, split.createdByName || "Split Organizer", participant.amount, `Split: ${split.title}`)
+    ? generateUpiLink(
+        creatorUpiId,
+        payeeName,
+        participant.amount,
+        `Split: ${split.title}`
+      )
     : "";
 
   let message = `Hi ${participant.name},\n\nHere is the reminder for "${split.title}":\nAmount Due: ${currency} ${participant.amount.toFixed(2)}`;
@@ -166,5 +238,16 @@ export function generateSplitShareMessage(
     message += `\n\nPay via UPI:\n${upiLink}`;
   }
 
+  if (shareUrl) {
+    message += `\n\nOr open payment page:\n${shareUrl}`;
+  }
+
   return message;
+}
+
+export function findParticipantIndex(
+  split: Split,
+  participantKey: string
+): number {
+  return (split.participants || []).findIndex((p) => p.key === participantKey);
 }

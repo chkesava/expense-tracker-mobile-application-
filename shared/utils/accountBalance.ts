@@ -415,7 +415,7 @@ export function buildAccountActivities(
         entry.note ||
         (entry.direction === "credit" ? "Manual funds added" : "Manual account debit"),
       linkedAccountEntryId: entry.id,
-      isManualEntry: true,
+      isManualEntry: !entry.linkedSplitId,
     })),
     ...outgoingPayments.map((p) => ({
       id: p.id,

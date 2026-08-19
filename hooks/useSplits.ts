@@ -1,11 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   collection,
   deleteDoc,
   doc,
   onSnapshot,
   or,
-  orderBy,
   query,
   serverTimestamp,
   updateDoc,
@@ -13,16 +12,31 @@ import {
   writeBatch,
 } from "firebase/firestore";
 
-import { logError } from "@/lib/errors";
+import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
 import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
 import { snapshotErrorHandler } from "@/lib/firestoreErrors";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
-import type { Participant, Split } from "@/shared/types/split";
-import { currentMonthKey } from "@/shared/utils/dates";
-import { computeSplitProgress } from "@/shared/utils/splitMath";
+import type { Split } from "@/shared/types/split";
+import type { QrStyleId } from "@/shared/utils/qrStyles";
+import { getStoredQrStyleId } from "@/shared/utils/qrStyles";
+import { currentMonthKey, todayDateKey } from "@/shared/utils/dates";
+import { omitUndefined } from "@/shared/utils/firestorePayload";
+import {
+  applyShareRequestsToParticipants,
+  buildCollectShareRequests,
+  buildCreateSplitPayload,
+  buildMarkCollectedWrites,
+  buildSpendGiftWrites,
+  buildUnmarkCollectedWrites,
+  linkedLedgerIds,
+  toFirestoreParticipant,
+  withParticipantKeys,
+  type CreateSplitInput,
+} from "@/shared/utils/splitLedger";
+import { isCollectSplit } from "@/shared/utils/splitMath";
 
 export function useSplits(options?: { enabled?: boolean }) {
   const enabled = options?.enabled !== false;
@@ -42,7 +56,6 @@ export function useSplits(options?: { enabled?: boolean }) {
     }
 
     setLoading(true);
-    // Query splits where user is the creator OR a participant
     const q = query(
       collection(db, "splits"),
       or(
@@ -58,7 +71,6 @@ export function useSplits(options?: { enabled?: boolean }) {
           id: docSnap.id,
           ...(docSnap.data() as Omit<Split, "id">),
         }));
-        // Sort by createdAt descending
         list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
         setSplits(list);
         setError(null);
@@ -78,59 +90,86 @@ export function useSplits(options?: { enabled?: boolean }) {
   }, [uid, enabled, attempt]);
 
   const createSplit = async (
-    splitData: Omit<Split, "id" | "createdAt" | "createdBy" | "participantIds" | "settled">,
-    options?: { createPersonalExpense?: boolean; accountId?: string }
+    splitData: CreateSplitInput,
+    createOptions?: {
+      createPersonalExpense?: boolean;
+      accountId?: string;
+      organizerUpiId?: string;
+      payeePhotoUrl?: string;
+      qrStyleId?: QrStyleId;
+    }
   ): Promise<string | null> => {
     const db = getFirestoreDb();
-    if (!uid || !db) return null;
+    if (!uid || !db) {
+      toast.error("You're not signed in. Sign in and try again.");
+      return null;
+    }
 
     try {
-      const participantIds = splitData.participants
-        .map((p) => p.userId)
-        .filter((id): id is string => Boolean(id));
+      const keyedParticipants = withParticipantKeys(splitData.participants);
+      const docRef = doc(collection(db, "splits"));
+      const createdAt = Date.now();
+      const createdByName =
+        user?.displayName || user?.email?.split("@")[0] || "Me";
 
-      if (!participantIds.includes(uid)) {
-        participantIds.push(uid);
+      const batch = writeBatch(db);
+      const paymentRequestIds: string[] = [];
+      let participants = keyedParticipants;
+
+      if (splitData.kind === "collect" && createOptions?.organizerUpiId) {
+        const shares = buildCollectShareRequests({
+          splitId: docRef.id,
+          splitTitle: splitData.title,
+          createdBy: uid,
+          createdAt,
+          payeeName: createdByName,
+          payeePhotoUrl: createOptions.payeePhotoUrl,
+          upiId: createOptions.organizerUpiId,
+          qrStyleId: createOptions.qrStyleId || getStoredQrStyleId(),
+          participants: keyedParticipants,
+        });
+
+        const applied = shares.map((share) => {
+          const requestRef = doc(collection(db, "paymentRequests"));
+          batch.set(requestRef, {
+            ...share.payload,
+            createdAt,
+          });
+          paymentRequestIds.push(requestRef.id);
+          return {
+            participantKey: share.participantKey,
+            slug: share.slug,
+            requestId: requestRef.id,
+          };
+        });
+        participants = applyShareRequestsToParticipants(
+          keyedParticipants,
+          applied
+        );
       }
 
-      const newSplit: Omit<Split, "id"> = {
-        ...splitData,
-        createdBy: uid,
-        createdByName: user?.displayName || user?.email?.split("@")[0] || "Me",
-        createdAt: Date.now(),
-        participantIds,
-        settled: false,
-      };
+      const { split, expense } = buildCreateSplitPayload({
+        uid,
+        createdByName,
+        createdAt,
+        data: {
+          ...splitData,
+          participants,
+          paymentRequestIds,
+        },
+        options: createOptions,
+        dateKey: todayDateKey(),
+        monthKey: currentMonthKey(),
+        splitId: docRef.id,
+      });
 
-      const docRef = doc(collection(db, "splits"));
+      batch.set(docRef, split);
 
-      // The split and its linked personal expense go up as one batch: as two
-      // sequential writes, a connection lost in between left the split created
-      // with no expense recorded against the user's own ledger.
-      const batch = writeBatch(db);
-      batch.set(docRef, newSplit);
-
-      if (options?.createPersonalExpense) {
-        const creatorParticipant = splitData.participants.find((p) => p.isCurrentUser);
-        const creatorShare = creatorParticipant?.amount || 0;
-
-        if (creatorShare > 0) {
-          const now = new Date();
-          const dateStr = now.toISOString().split("T")[0];
-          const monthStr = currentMonthKey();
-
-          batch.set(doc(collection(db, "users", uid, "expenses")), {
-            amount: creatorShare,
-            category: splitData.category || "Food & Dining",
-            subcategory: "Dining Out",
-            note: `[Split Share] ${splitData.title}`,
-            date: dateStr,
-            month: monthStr,
-            splitId: docRef.id,
-            accountId: options.accountId || undefined,
-            createdAt: serverTimestamp(),
-          });
-        }
+      if (expense) {
+        batch.set(doc(collection(db, "users", uid, "expenses")), {
+          ...expense,
+          createdAt: serverTimestamp(),
+        });
       }
 
       const outcome = await commitWrite(() => batch.commit(), { label: "split" });
@@ -138,7 +177,7 @@ export function useSplits(options?: { enabled?: boolean }) {
       return docRef.id;
     } catch (err) {
       logError("splits.createsplit", err);
-      toast.error("Failed to create split");
+      toast.error(friendlyErrorMessage(err, "Failed to create split"));
       return null;
     }
   };
@@ -152,14 +191,14 @@ export function useSplits(options?: { enabled?: boolean }) {
 
     try {
       const outcome = await commitWrite(
-        () => updateDoc(doc(db, "splits", id), updates),
+        () => updateDoc(doc(db, "splits", id), omitUndefined(updates)),
         { label: "split" }
       );
       toast.success(writeSavedMessage(outcome, "Split updated"));
       return true;
     } catch (err) {
       logError("splits.updatesplit", err);
-      toast.error("Failed to update split");
+      toast.error(friendlyErrorMessage(err, "Failed to update split"));
       return false;
     }
   };
@@ -175,6 +214,11 @@ export function useSplits(options?: { enabled?: boolean }) {
     const split = splits.find((s) => s.id === splitId);
     if (!split) return false;
 
+    if (isCollectSplit(split)) {
+      toast.error("Mark collected and choose the account that received the money.");
+      return false;
+    }
+
     const updatedParticipants = split.participants.map((p, idx) => {
       if (idx === participantIndex) {
         return { ...p, paid: newPaid };
@@ -187,16 +231,156 @@ export function useSplits(options?: { enabled?: boolean }) {
     try {
       await commitWrite(
         () =>
-          updateDoc(doc(db, "splits", splitId), {
-            participants: updatedParticipants,
-            settled: isAllPaid,
-          }),
+          updateDoc(
+            doc(db, "splits", splitId),
+            omitUndefined({
+              participants: updatedParticipants.map(toFirestoreParticipant),
+              settled: isAllPaid,
+            })
+          ),
         { label: "settlement status" }
       );
       return true;
     } catch (err) {
       logError("splits.toggleparticipantpaid", err);
-      toast.error("Failed to update settlement status");
+      toast.error(friendlyErrorMessage(err, "Failed to update settlement status"));
+      return false;
+    }
+  };
+
+  const markParticipantCollected = async (
+    splitId: string,
+    participantKey: string,
+    accountId: string
+  ): Promise<boolean> => {
+    const db = getFirestoreDb();
+    if (!uid || !db || !splitId) return false;
+
+    const split = splits.find((s) => s.id === splitId);
+    if (!split) return false;
+
+    const entryRef = doc(collection(db, "users", uid, "accountEntries"));
+    const built = buildMarkCollectedWrites({
+      split,
+      participantKey,
+      accountId,
+      entryId: entryRef.id,
+      dateKey: todayDateKey(),
+    });
+    if ("error" in built) {
+      toast.error(built.error);
+      return false;
+    }
+
+    try {
+      const batch = writeBatch(db);
+      batch.set(entryRef, { ...built.entry, createdAt: serverTimestamp() });
+      batch.update(
+        doc(db, "splits", splitId),
+        omitUndefined({
+          participants: built.participants.map(toFirestoreParticipant),
+          settled: built.settled,
+        })
+      );
+      await commitWrite(() => batch.commit(), { label: "collection" });
+      toast.success("Marked as collected");
+      return true;
+    } catch (err) {
+      logError("splits.markcollected", err);
+      toast.error(friendlyErrorMessage(err, "Failed to mark collected"));
+      return false;
+    }
+  };
+
+  const unmarkParticipantCollected = async (
+    splitId: string,
+    participantKey: string
+  ): Promise<boolean> => {
+    const db = getFirestoreDb();
+    if (!uid || !db || !splitId) return false;
+
+    const split = splits.find((s) => s.id === splitId);
+    if (!split) return false;
+
+    const built = buildUnmarkCollectedWrites({ split, participantKey });
+    if ("error" in built) {
+      toast.error(built.error);
+      return false;
+    }
+
+    try {
+      const batch = writeBatch(db);
+      if (built.entryIdToDelete) {
+        batch.delete(
+          doc(db, "users", uid, "accountEntries", built.entryIdToDelete)
+        );
+      }
+      batch.update(
+        doc(db, "splits", splitId),
+        omitUndefined({
+          participants: built.participants.map(toFirestoreParticipant),
+          settled: built.settled,
+        })
+      );
+      await commitWrite(() => batch.commit(), { label: "collection" });
+      return true;
+    } catch (err) {
+      logError("splits.unmarkcollected", err);
+      toast.error(friendlyErrorMessage(err, "Failed to undo collection"));
+      return false;
+    }
+  };
+
+  const spendCollectPot = async (
+    splitId: string,
+    spendAmount: number,
+    payingAccountId: string
+  ): Promise<boolean> => {
+    const db = getFirestoreDb();
+    if (!uid || !db || !splitId) return false;
+
+    const split = splits.find((s) => s.id === splitId);
+    if (!split) return false;
+
+    const expenseRef = doc(collection(db, "users", uid, "expenses"));
+    const passRef = doc(collection(db, "users", uid, "accountEntries"));
+    const built = buildSpendGiftWrites({
+      split,
+      spendAmount,
+      payingAccountId,
+      dateKey: todayDateKey(),
+      monthKey: currentMonthKey(),
+      expenseId: expenseRef.id,
+      passThroughEntryId: passRef.id,
+    });
+    if ("error" in built) {
+      toast.error(built.error);
+      return false;
+    }
+
+    try {
+      const batch = writeBatch(db);
+      if (built.expense) {
+        batch.set(expenseRef, {
+          ...built.expense,
+          createdAt: serverTimestamp(),
+        });
+      }
+      if (built.passThroughEntry) {
+        batch.set(passRef, {
+          ...built.passThroughEntry,
+          createdAt: serverTimestamp(),
+        });
+      }
+      batch.update(doc(db, "splits", splitId), built.splitUpdates);
+      const outcome = await commitWrite(() => batch.commit(), {
+        label: "gift purchase",
+      });
+      toast.success(writeSavedMessage(outcome, "Gift purchase recorded"));
+      return true;
+    } catch (err) {
+      logError("splits.spendcollect", err);
+      toast.error(friendlyErrorMessage(err, "Failed to record gift purchase"));
       return false;
     }
   };
@@ -208,6 +392,11 @@ export function useSplits(options?: { enabled?: boolean }) {
     const split = splits.find((s) => s.id === splitId);
     if (!split) return false;
 
+    if (isCollectSplit(split)) {
+      toast.error("Use “Use money for gift” after collecting — Settle All is for bill splits.");
+      return false;
+    }
+
     const updatedParticipants = split.participants.map((p) => ({
       ...p,
       paid: true,
@@ -216,17 +405,20 @@ export function useSplits(options?: { enabled?: boolean }) {
     try {
       const outcome = await commitWrite(
         () =>
-          updateDoc(doc(db, "splits", splitId), {
-            participants: updatedParticipants,
-            settled: true,
-          }),
+          updateDoc(
+            doc(db, "splits", splitId),
+            omitUndefined({
+              participants: updatedParticipants.map(toFirestoreParticipant),
+              settled: true,
+            })
+          ),
         { label: "split settlement" }
       );
       toast.success(writeSavedMessage(outcome, "Split marked as fully settled!"));
       return true;
     } catch (err) {
       logError("splits.settleall", err);
-      toast.error("Failed to settle split");
+      toast.error(friendlyErrorMessage(err, "Failed to settle split"));
       return false;
     }
   };
@@ -235,15 +427,31 @@ export function useSplits(options?: { enabled?: boolean }) {
     const db = getFirestoreDb();
     if (!uid || !db || !id) return false;
 
+    const split = splits.find((s) => s.id === id);
+
     try {
-      const outcome = await commitWrite(() => deleteDoc(doc(db, "splits", id)), {
+      const batch = writeBatch(db);
+      if (split) {
+        const linked = linkedLedgerIds(split);
+        for (const entryId of linked.entryIds) {
+          batch.delete(doc(db, "users", uid, "accountEntries", entryId));
+        }
+        for (const expenseId of linked.expenseIds) {
+          batch.delete(doc(db, "users", uid, "expenses", expenseId));
+        }
+        for (const requestId of linked.paymentRequestIds) {
+          batch.delete(doc(db, "paymentRequests", requestId));
+        }
+      }
+      batch.delete(doc(db, "splits", id));
+      const outcome = await commitWrite(() => batch.commit(), {
         label: "split deletion",
       });
       toast.success(writeSavedMessage(outcome, "Split deleted"));
       return true;
     } catch (err) {
       logError("splits.deletesplit", err);
-      toast.error("Failed to delete split");
+      toast.error(friendlyErrorMessage(err, "Failed to delete split"));
       return false;
     }
   };
@@ -256,6 +464,9 @@ export function useSplits(options?: { enabled?: boolean }) {
     createSplit,
     updateSplit,
     toggleParticipantPaid,
+    markParticipantCollected,
+    unmarkParticipantCollected,
+    spendCollectPot,
     settleAll,
     deleteSplit,
   };

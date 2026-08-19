@@ -14,6 +14,9 @@ export type PaymentRequest = {
   upiId: string;
   qrStyleId: QrStyleId;
   status: "active" | "cancelled";
+  /** Set when this request was created for a collect-mode split. */
+  splitId?: string;
+  participantKey?: string;
 };
 
 export type PaymentRequestInput = Omit<

@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import type { Participant, Split } from "@/shared/types/split";
 import {
   calculateEqualSplits,
+  computeCollectSpendBreakdown,
   computeSplitProgress,
   computeSplitSummary,
   generateSplitShareMessage,
+  othersFullyCollected,
   validateCustomSplits,
 } from "./splitMath";
 
@@ -217,6 +219,68 @@ describe("splitMath utilities", () => {
       expect(message).toContain("Dinner");
       expect(message).toContain("250.00");
       expect(message).not.toContain("upi://pay");
+    });
+
+    it("appends a payment page URL when provided", () => {
+      const split: Split = {
+        id: "s1",
+        title: "Wedding gift",
+        totalAmount: 4000,
+        splitType: "equal",
+        createdBy: "user-me",
+        createdByName: "Kesava",
+        createdAt: Date.now(),
+        settled: false,
+        participantIds: [],
+        participants: [],
+      };
+      const participant: Participant = {
+        name: "Alice",
+        amount: 1000,
+        paid: false,
+        isCurrentUser: false,
+      };
+      const message = generateSplitShareMessage(
+        split,
+        participant,
+        "kesava@okaxis",
+        "INR",
+        "https://app.example/payment/abc"
+      );
+      expect(message).toContain("https://app.example/payment/abc");
+      expect(message).toContain("upi://pay");
+    });
+  });
+
+  describe("collect spend math", () => {
+    it("treats organizer share as out-of-pocket after friends are collected", () => {
+      const split: Split = {
+        id: "s1",
+        title: "Gift",
+        totalAmount: 4000,
+        splitType: "equal",
+        createdBy: "me",
+        createdAt: 1,
+        settled: false,
+        participantIds: [],
+        kind: "collect",
+        participants: [
+          { name: "You", amount: 1000, paid: true, isCurrentUser: true },
+          { name: "A", amount: 1000, paid: true, isCurrentUser: false },
+          { name: "B", amount: 1000, paid: true, isCurrentUser: false },
+          { name: "C", amount: 1000, paid: false, isCurrentUser: false },
+        ],
+      };
+      expect(othersFullyCollected(split)).toBe(false);
+      const full = {
+        ...split,
+        participants: split.participants.map((p) => ({ ...p, paid: true })),
+      };
+      expect(othersFullyCollected(full)).toBe(true);
+      const math = computeCollectSpendBreakdown(full, 4000);
+      expect(math.othersCollected).toBe(3000);
+      expect(math.ownExpense).toBe(1000);
+      expect(math.passThroughDebit).toBe(3000);
     });
   });
 });

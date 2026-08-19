@@ -9,9 +9,7 @@ import * as Haptics from "expo-haptics";
 import {
   ArrowDownLeft,
   ArrowUpRight,
-  CheckCircle2,
   Plus,
-  Users,
 } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
@@ -22,7 +20,6 @@ import { SplitDetailModal } from "@/components/splits/SplitDetailModal";
 import { useAuth } from "@/providers/AuthProvider";
 import { useSplits } from "@/hooks/useSplits";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
-import type { Split } from "@/shared/types/split";
 import {
   computeSplitProgress,
   computeSplitSummary,
@@ -39,7 +36,11 @@ export function SplitsList() {
 
   const [activeTab, setActiveTab] = useState<"active" | "settled">("active");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [selectedSplit, setSelectedSplit] = useState<Split | null>(null);
+  const [selectedSplitId, setSelectedSplitId] = useState<string | null>(null);
+  const selectedSplit = useMemo(
+    () => splits.find((s) => s.id === selectedSplitId) ?? null,
+    [splits, selectedSplitId]
+  );
 
   const summary = useMemo(() => {
     return computeSplitSummary(splits, user?.uid || "");
@@ -103,7 +104,7 @@ export function SplitsList() {
                 { color: theme.colors.primaryForeground },
               ]}
             >
-              Split Bill
+              New Split
             </Text>
           </Pressable>
         </View>
@@ -220,8 +221,8 @@ export function SplitsList() {
       {filteredSplits.length === 0 ? (
         <EmptyState
           illustration="splits"
-          title="No Split Bills Yet"
-          description="Split group dinners, house rent, or shared trips with friends and track settlements in real-time."
+          title="No Splits Yet"
+          description="Split a bill you already paid, or collect money for a gift and spend it later."
           primaryAction={{
             label: "Create First Split",
             icon: <Plus size={16} color="#FFFFFF" strokeWidth={2.4} />,
@@ -240,7 +241,7 @@ export function SplitsList() {
                 key={split.id}
                 onPress={() => {
                   Haptics.selectionAsync().catch(() => undefined);
-                  setSelectedSplit(split);
+                  setSelectedSplitId(split.id ?? null);
                 }}
                 style={({ pressed }) => [
                   styles.splitCard,
@@ -266,7 +267,9 @@ export function SplitsList() {
                             { color: theme.colors.primary },
                           ]}
                         >
-                          {split.category || "GENERAL"}
+                          {split.kind === "collect"
+                            ? "COLLECT"
+                            : split.category || "GENERAL"}
                         </Text>
                       </View>
 
@@ -378,7 +381,7 @@ export function SplitsList() {
       <SplitDetailModal
         visible={!!selectedSplit}
         split={selectedSplit}
-        onClose={() => setSelectedSplit(null)}
+        onClose={() => setSelectedSplitId(null)}
       />
     </View>
   );

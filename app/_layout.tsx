@@ -274,6 +274,7 @@ function RootNavigator() {
         <Stack.Screen name="(app)" />
         <Stack.Screen name="(nutrition)" options={{ animation: "slide_from_right" }} />
         <Stack.Screen name="google-auth" options={{ animation: "none" }} />
+        <Stack.Screen name="payment/[slug]" options={{ animation: "fade" }} />
         <Stack.Screen name="+not-found" options={{ animation: "fade" }} />
       </Stack>
       <OfflineBanner />

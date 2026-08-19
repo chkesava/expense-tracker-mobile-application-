@@ -11,17 +11,22 @@ import {
   View,
 } from "react-native";
 import * as Haptics from "expo-haptics";
-import { Plus, Trash2, Users, X } from "lucide-react-native";
+import { Plus, Trash2, X } from "lucide-react-native";
 
 import { Button } from "@/components/ui/Button";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useAuth } from "@/providers/AuthProvider";
 import { useCategories } from "@/hooks/useCategories";
 import { useSplits } from "@/hooks/useSplits";
+import { useSettings } from "@/providers/SettingsProvider";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
-import type { Participant, SplitType } from "@/shared/types/split";
+import type { Participant, SplitKind, SplitType } from "@/shared/types/split";
+import { getStoredQrStyleId } from "@/shared/utils/qrStyles";
 import {
+  BILL_DEFAULT_CATEGORY,
+  COLLECT_DEFAULT_CATEGORY,
   calculateEqualSplits,
+  createParticipantKey,
   validateCustomSplits,
 } from "@/shared/utils/splitMath";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -34,10 +39,15 @@ export interface CreateSplitModalProps {
 
 interface TempParticipant {
   id: string;
+  key: string;
   name: string;
   amount: string;
   upiId: string;
   isCurrentUser: boolean;
+}
+
+function organizerLabelFor(kind: SplitKind): string {
+  return kind === "collect" ? "You (Organizer)" : "You (Payer)";
 }
 
 export function CreateSplitModal({ visible, onClose }: CreateSplitModalProps) {
@@ -45,38 +55,45 @@ export function CreateSplitModal({ visible, onClose }: CreateSplitModalProps) {
   const isDark = themeUsesDarkPalette(themeName);
   const { user } = useAuth();
   const { settings: system } = useSystemSettings();
+  const { settings: userSettings } = useSettings();
   const { accounts } = useAccounts();
   const { categories } = useCategories();
   const { createSplit } = useSplits();
 
+  const [kind, setKind] = useState<SplitKind>("bill");
   const [title, setTitle] = useState("");
   const [totalAmount, setTotalAmount] = useState("");
   const [splitType, setSplitType] = useState<SplitType>("equal");
-  const [category, setCategory] = useState("Food & Dining");
+  const [category, setCategory] = useState(BILL_DEFAULT_CATEGORY);
   const [logPersonalExpense, setLogPersonalExpense] = useState(true);
   const [selectedAccountId, setSelectedAccountId] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [participants, setParticipants] = useState<TempParticipant[]>([]);
+  const isCollect = kind === "collect";
+  const organizerLabel = isCollect ? "You (Organizer)" : "You (Payer)";
 
   useEffect(() => {
     if (visible) {
+      setKind("bill");
       setTitle("");
       setTotalAmount("");
       setSplitType("equal");
-      setCategory("Food & Dining");
+      setCategory(BILL_DEFAULT_CATEGORY);
       setLogPersonalExpense(true);
       setSelectedAccountId(accounts.length > 0 ? accounts[0].id : "");
       setParticipants([
         {
           id: "curr-user",
-          name: "You (Payer)",
+          key: createParticipantKey(),
+          name: organizerLabelFor("bill"),
           amount: "",
           upiId: "",
           isCurrentUser: true,
         },
         {
           id: "p-2",
+          key: createParticipantKey(),
           name: "",
           amount: "",
           upiId: "",
@@ -85,6 +102,13 @@ export function CreateSplitModal({ visible, onClose }: CreateSplitModalProps) {
       ]);
     }
   }, [visible, accounts]);
+
+  const categoryOptions = useMemo(() => {
+    const names = categories.map((c) => c.name);
+    const extra = isCollect ? COLLECT_DEFAULT_CATEGORY : BILL_DEFAULT_CATEGORY;
+    if (!names.includes(extra)) return [...names, extra];
+    return names;
+  }, [categories, isCollect]);
 
   const numTotal = parseFloat(totalAmount) || 0;
 
@@ -115,6 +139,7 @@ export function CreateSplitModal({ visible, onClose }: CreateSplitModalProps) {
       ...prev,
       {
         id: `p-${Date.now()}`,
+        key: createParticipantKey(),
         name: "",
         amount: "",
         upiId: "",
@@ -142,6 +167,25 @@ export function CreateSplitModal({ visible, onClose }: CreateSplitModalProps) {
     );
   };
 
+  const handleSelectKind = (next: SplitKind) => {
+    Haptics.selectionAsync().catch(() => undefined);
+    setKind(next);
+    setCategory(
+      next === "collect" ? COLLECT_DEFAULT_CATEGORY : BILL_DEFAULT_CATEGORY
+    );
+    setLogPersonalExpense(next === "bill");
+    setParticipants((prev) =>
+      prev.map((p) =>
+        p.isCurrentUser &&
+        (p.name === "" ||
+          p.name === "You (Payer)" ||
+          p.name === "You (Organizer)")
+          ? { ...p, name: organizerLabelFor(next) }
+          : p
+      )
+    );
+  };
+
   const handleSave = async () => {
     if (!title.trim()) {
       Alert.alert("Error", "Please enter a split title.");
@@ -159,6 +203,14 @@ export function CreateSplitModal({ visible, onClose }: CreateSplitModalProps) {
       return;
     }
 
+    if (isCollect && !userSettings.upiId.trim()) {
+      Alert.alert(
+        "UPI ID Required",
+        "Set your UPI ID in Settings so friends can pay with a QR code or link."
+      );
+      return;
+    }
+
     let finalParticipants: Participant[] = [];
 
     if (splitType === "equal") {
@@ -173,30 +225,46 @@ export function CreateSplitModal({ visible, onClose }: CreateSplitModalProps) {
         );
         return;
       }
-      finalParticipants = namedParticipants.map((p) => ({
-        name: p.name.trim(),
-        amount: parseFloat(p.amount) || 0,
-        paid: p.isCurrentUser,
-        upiId: p.upiId.trim() || undefined,
-        isCurrentUser: p.isCurrentUser,
-      }));
+      finalParticipants = namedParticipants.map((p) => {
+        const row: Participant = {
+          key: p.key,
+          name: p.name.trim(),
+          amount: parseFloat(p.amount) || 0,
+          paid: p.isCurrentUser,
+          isCurrentUser: p.isCurrentUser,
+        };
+        if (!isCollect && p.upiId.trim()) {
+          row.upiId = p.upiId.trim();
+        }
+        return row;
+      });
     }
 
     setIsSubmitting(true);
     try {
-      await createSplit(
+      const createdId = await createSplit(
         {
           title: title.trim(),
           totalAmount: numTotal,
           splitType,
           category,
+          kind,
           participants: finalParticipants,
         },
-        {
-          createPersonalExpense: logPersonalExpense,
-          accountId: selectedAccountId || undefined,
-        }
+        isCollect
+          ? {
+              createPersonalExpense: false,
+              organizerUpiId: userSettings.upiId.trim(),
+              payeePhotoUrl: user?.photoURL || undefined,
+              qrStyleId: getStoredQrStyleId(),
+            }
+          : {
+              createPersonalExpense: logPersonalExpense,
+              accountId: selectedAccountId || undefined,
+            }
       );
+
+      if (!createdId) return;
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(
         () => undefined
@@ -238,7 +306,9 @@ export function CreateSplitModal({ visible, onClose }: CreateSplitModalProps) {
                   { color: theme.colors.mutedForeground },
                 ]}
               >
-                Divide costs with friends & request UPI payments
+                {isCollect
+                  ? "Collect money first, then spend it on the gift"
+                  : "Divide a bill you already paid & request UPI payments"}
               </Text>
             </View>
             <Pressable
@@ -260,6 +330,63 @@ export function CreateSplitModal({ visible, onClose }: CreateSplitModalProps) {
             contentContainerStyle={{ gap: 16, paddingBottom: 16 }}
             keyboardShouldPersistTaps="handled"
           >
+            {/* Mode */}
+            <View style={{ gap: 6 }}>
+              <Text
+                style={[
+                  styles.fieldLabel,
+                  { color: theme.colors.mutedForeground },
+                ]}
+              >
+                WHAT IS THIS FOR
+              </Text>
+              <View
+                style={[
+                  styles.segmentRow,
+                  {
+                    backgroundColor: isDark
+                      ? "rgba(255,255,255,0.06)"
+                      : "rgba(0,0,0,0.04)",
+                  },
+                ]}
+              >
+                {(
+                  [
+                    { key: "bill", label: "Split a bill" },
+                    { key: "collect", label: "Collect for a gift" },
+                  ] as const
+                ).map((item) => {
+                  const isSelected = kind === item.key;
+                  return (
+                    <Pressable
+                      key={item.key}
+                      onPress={() => handleSelectKind(item.key)}
+                      style={[
+                        styles.segmentBtn,
+                        isSelected && {
+                          backgroundColor: theme.colors.primary,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.segmentText,
+                          {
+                            color: isSelected
+                              ? theme.colors.primaryForeground
+                              : theme.colors.mutedForeground,
+                            fontWeight: isSelected ? "700" : "500",
+                          },
+                        ]}
+                      >
+                        {item.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+
             {/* Title */}
             <View style={{ gap: 6 }}>
               <Text
@@ -273,7 +400,11 @@ export function CreateSplitModal({ visible, onClose }: CreateSplitModalProps) {
               <TextInput
                 value={title}
                 onChangeText={setTitle}
-                placeholder="e.g. Weekend BBQ, Goa Trip Hotel, Movie Night"
+                placeholder={
+                  isCollect
+                    ? "e.g. Rahul's wedding gift"
+                    : "e.g. Weekend BBQ, Goa Trip Hotel, Movie Night"
+                }
                 placeholderTextColor={theme.colors.mutedForeground}
                 style={[
                   styles.input,
@@ -296,7 +427,7 @@ export function CreateSplitModal({ visible, onClose }: CreateSplitModalProps) {
                   { color: theme.colors.mutedForeground },
                 ]}
               >
-                TOTAL BILL ({system.defaultCurrency})
+                {isCollect ? "TARGET AMOUNT" : "TOTAL BILL"} ({system.defaultCurrency})
               </Text>
               <TextInput
                 value={totalAmount}
@@ -439,7 +570,7 @@ export function CreateSplitModal({ visible, onClose }: CreateSplitModalProps) {
                         }
                         placeholder={
                           p.isCurrentUser
-                            ? "You (Payer)"
+                            ? organizerLabel
                             : `Friend ${index}`
                         }
                         placeholderTextColor={theme.colors.mutedForeground}
@@ -493,7 +624,7 @@ export function CreateSplitModal({ visible, onClose }: CreateSplitModalProps) {
                       )}
                     </View>
 
-                    {!p.isCurrentUser && (
+                    {!p.isCurrentUser && !isCollect && (
                       <TextInput
                         value={p.upiId}
                         onChangeText={(val) =>
@@ -538,12 +669,12 @@ export function CreateSplitModal({ visible, onClose }: CreateSplitModalProps) {
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={{ gap: 8 }}
               >
-                {categories.map((c) => {
-                  const isSelected = category === c.name;
+                {categoryOptions.map((name) => {
+                  const isSelected = category === name;
                   return (
                     <Pressable
-                      key={c.id}
-                      onPress={() => setCategory(c.name)}
+                      key={name}
+                      onPress={() => setCategory(name)}
                       style={[
                         styles.chip,
                         {
@@ -569,7 +700,7 @@ export function CreateSplitModal({ visible, onClose }: CreateSplitModalProps) {
                           },
                         ]}
                       >
-                        {c.name}
+                        {name}
                       </Text>
                     </Pressable>
                   );
@@ -577,49 +708,61 @@ export function CreateSplitModal({ visible, onClose }: CreateSplitModalProps) {
               </ScrollView>
             </View>
 
-            {/* Log Personal Share Toggle */}
-            <View
-              style={[
-                styles.toggleCard,
-                {
-                  backgroundColor: isDark
-                    ? "rgba(255,255,255,0.03)"
-                    : "rgba(0,0,0,0.02)",
-                  borderColor: theme.colors.border,
-                },
-              ]}
-            >
-              <View style={{ flex: 1 }}>
-                <Text
-                  style={{
-                    fontSize: theme.typography.sm,
-                    fontWeight: "700",
-                    color: theme.colors.foreground,
+            {/* Log Personal Share Toggle — bill splits only */}
+            {!isCollect ? (
+              <View
+                style={[
+                  styles.toggleCard,
+                  {
+                    backgroundColor: isDark
+                      ? "rgba(255,255,255,0.03)"
+                      : "rgba(0,0,0,0.02)",
+                    borderColor: theme.colors.border,
+                  },
+                ]}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text
+                    style={{
+                      fontSize: theme.typography.sm,
+                      fontWeight: "700",
+                      color: theme.colors.foreground,
+                    }}
+                  >
+                    Record my share as expense
+                  </Text>
+                  <Text
+                    style={{
+                      fontSize: theme.typography.xs,
+                      color: theme.colors.mutedForeground,
+                    }}
+                  >
+                    Auto-adds your portion to this month's ledger
+                  </Text>
+                </View>
+                <Switch
+                  value={logPersonalExpense}
+                  onValueChange={setLogPersonalExpense}
+                  trackColor={{
+                    true: theme.colors.primary,
+                    false: theme.colors.muted,
                   }}
-                >
-                  Record my share as expense
-                </Text>
-                <Text
-                  style={{
-                    fontSize: theme.typography.xs,
-                    color: theme.colors.mutedForeground,
-                  }}
-                >
-                  Auto-adds your portion to this month's ledger
-                </Text>
+                />
               </View>
-              <Switch
-                value={logPersonalExpense}
-                onValueChange={setLogPersonalExpense}
-                trackColor={{
-                  true: theme.colors.primary,
-                  false: theme.colors.muted,
+            ) : (
+              <Text
+                style={{
+                  fontSize: theme.typography.xs,
+                  color: theme.colors.mutedForeground,
                 }}
-              />
-            </View>
+              >
+                Your share is not debited yet. Friends pay you first; you record
+                the gift when you buy it.
+              </Text>
+            )}
 
             {/* Account Selector if logging personal share */}
-            {logPersonalExpense && (
+            {!isCollect && logPersonalExpense && (
               <View style={{ gap: 6 }}>
                 <Text
                   style={[

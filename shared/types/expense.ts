@@ -129,6 +129,8 @@ export interface AccountPayment {
   createdAt?: unknown;
 }
 
+export type AccountEntrySource = "split_collection" | "split_spend";
+
 /** Manual account adjustment entry for non-credit account tracking */
 export interface AccountEntry {
   id: string;
@@ -138,6 +140,9 @@ export interface AccountEntry {
   date: string;
   note?: string;
   createdAt?: unknown;
+  /** Present when this entry was posted by a collect-mode split. */
+  linkedSplitId?: string;
+  source?: AccountEntrySource;
 }
 
 /** A movement of money between two non-credit accounts. It is never income or an expense. */

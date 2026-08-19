@@ -1,7 +1,6 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   Alert,
-  Linking,
   Modal,
   Pressable,
   ScrollView,
@@ -11,28 +10,28 @@ import {
   View,
 } from "react-native";
 import * as Haptics from "expo-haptics";
-import {
-  Check,
-  CreditCard,
-  QrCode,
-  Send,
-  Share2,
-  Trash2,
-  Users,
-  X,
-} from "lucide-react-native";
+import { Check, Share2, X } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
+import { SplitPayQrCard } from "@/components/splits/SplitPayQrCard";
+import { UseGiftMoneyModal } from "@/components/splits/UseGiftMoneyModal";
 import { Button } from "@/components/ui/Button";
+import { useAccountTypes } from "@/hooks/useAccountTypes";
+import { useAccounts } from "@/hooks/useAccounts";
 import { useAuth } from "@/providers/AuthProvider";
+import { useSettings } from "@/providers/SettingsProvider";
 import { useSplits } from "@/hooks/useSplits";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import type { Participant, Split } from "@/shared/types/split";
+import { getAccountKind } from "@/shared/utils/accountKind";
 import {
   computeSplitProgress,
   generateSplitShareMessage,
+  isCollectSpent,
+  isCollectSplit,
+  othersFullyCollected,
 } from "@/shared/utils/splitMath";
-import { generateUpiLink } from "@/shared/utils/upi";
+import { getPaymentRequestShareUrl, getPublicAppOrigin } from "@/shared/utils/paymentRequestUrl";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { logError } from "@/lib/errors";
@@ -52,32 +51,105 @@ export function SplitDetailModal({
   const isDark = themeUsesDarkPalette(themeName);
   const { user } = useAuth();
   const { settings: system } = useSystemSettings();
-  const { toggleParticipantPaid, settleAll, deleteSplit } = useSplits();
+  const { settings: userSettings } = useSettings();
+  const { accounts } = useAccounts();
+  const { accountTypes } = useAccountTypes();
+  const {
+    toggleParticipantPaid,
+    settleAll,
+    deleteSplit,
+    markParticipantCollected,
+    unmarkParticipantCollected,
+    spendCollectPot,
+  } = useSplits();
+
+  const [collectingKey, setCollectingKey] = useState<string | null>(null);
+  const [spendOpen, setSpendOpen] = useState(false);
 
   const progress = useMemo(() => {
     if (!split) {
-      return { settledAmount: 0, totalAmount: 0, percentage: 0, isFullySettled: false, unpaidCount: 0 };
+      return {
+        settledAmount: 0,
+        totalAmount: 0,
+        percentage: 0,
+        isFullySettled: false,
+        unpaidCount: 0,
+      };
     }
     return computeSplitProgress(split);
   }, [split]);
 
+  const typeMap = useMemo(
+    () => new Map(accountTypes.map((t) => [t.id, t.name])),
+    [accountTypes]
+  );
+  const receiveAccounts = useMemo(() => {
+    const banks = accounts.filter(
+      (a) => getAccountKind(typeMap.get(a.typeId) || "") !== "credit"
+    );
+    return banks.length > 0 ? banks : accounts;
+  }, [accounts, typeMap]);
+
   if (!split) return null;
 
   const isCreator = split.createdBy === user?.uid;
+  const collect = isCollectSplit(split);
+  const spent = isCollectSpent(split);
+  const creatorUpiId = userSettings.upiId.trim();
+  const qrTarget =
+    split.participants.find((p) => !p.isCurrentUser && !p.paid) ||
+    split.participants.find((p) => !p.isCurrentUser);
 
-  const handleTogglePaid = async (index: number, currentPaid: boolean) => {
+  const handleTogglePaid = async (participant: Participant, index: number) => {
     if (!split.id) return;
     Haptics.selectionAsync().catch(() => undefined);
-    await toggleParticipantPaid(split.id, index, !currentPaid);
+
+    if (collect) {
+      if (participant.isCurrentUser || spent) return;
+      const key = participant.key;
+      if (!key) return;
+      if (participant.paid) {
+        Alert.alert(
+          "Undo collection?",
+          `Remove ${participant.name}'s collection and reverse the credit on the receiving account?`,
+          [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "Undo",
+              style: "destructive",
+              onPress: () => unmarkParticipantCollected(split.id!, key),
+            },
+          ]
+        );
+        return;
+      }
+      setCollectingKey(key);
+      return;
+    }
+
+    await toggleParticipantPaid(split.id, index, !participant.paid);
+  };
+
+  const handleConfirmCollected = async (accountId: string) => {
+    if (!split.id || !collectingKey) return;
+    Haptics.selectionAsync().catch(() => undefined);
+    const ok = await markParticipantCollected(split.id, collectingKey, accountId);
+    if (ok) setCollectingKey(null);
   };
 
   const handleShareReminder = async (participant: Participant) => {
     Haptics.selectionAsync().catch(() => undefined);
+    const origin = getPublicAppOrigin();
+    const shareUrl =
+      origin && participant.paymentSlug
+        ? getPaymentRequestShareUrl(participant.paymentSlug)
+        : undefined;
     const message = generateSplitShareMessage(
       split,
       participant,
-      undefined,
-      system.defaultCurrency
+      creatorUpiId || undefined,
+      system.defaultCurrency,
+      shareUrl
     );
 
     try {
@@ -87,31 +159,6 @@ export function SplitDetailModal({
       });
     } catch (err) {
       logError("splitDetailModal.share", err);
-    }
-  };
-
-  const handlePayUpi = async (participant: Participant) => {
-    if (!participant.upiId) {
-      Alert.alert("No UPI ID", "This participant hasn't specified a UPI ID.");
-      return;
-    }
-
-    Haptics.selectionAsync().catch(() => undefined);
-    const link = generateUpiLink(
-      participant.upiId,
-      participant.name,
-      participant.amount,
-      `Split: ${split.title}`
-    );
-
-    const canOpen = await Linking.canOpenURL(link).catch(() => false);
-    if (canOpen) {
-      await Linking.openURL(link);
-    } else {
-      Alert.alert(
-        "UPI Not Supported",
-        "Could not launch a UPI app on this device."
-      );
     }
   };
 
@@ -130,6 +177,21 @@ export function SplitDetailModal({
         },
       ]
     );
+  };
+
+  const handleUseGift = () => {
+    if (!othersFullyCollected(split)) {
+      Alert.alert(
+        "Some people haven't paid",
+        "You can still buy the gift now. Unpaid shares won't be credited.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Continue", onPress: () => setSpendOpen(true) },
+        ]
+      );
+      return;
+    }
+    setSpendOpen(true);
   };
 
   const handleDelete = () => {
@@ -151,6 +213,14 @@ export function SplitDetailModal({
     );
   };
 
+  const statusLabel = spent
+    ? "SPENT"
+    : split.settled || progress.isFullySettled
+      ? "SETTLED"
+      : collect
+        ? "COLLECTING"
+        : null;
+
   return (
     <Modal
       visible={visible}
@@ -168,7 +238,6 @@ export function SplitDetailModal({
             },
           ]}
         >
-          {/* Header */}
           <View style={styles.header}>
             <View style={{ flex: 1 }}>
               <View style={styles.badgeRow}>
@@ -184,21 +253,34 @@ export function SplitDetailModal({
                       { color: theme.colors.primary },
                     ]}
                   >
-                    {split.category || "SPLIT EXPENSE"}
+                    {split.category || (collect ? "GIFT POT" : "SPLIT EXPENSE")}
                   </Text>
                 </View>
 
-                {split.settled || progress.isFullySettled ? (
+                {statusLabel ? (
                   <View
                     style={[
                       styles.settledBadge,
-                      { backgroundColor: "rgba(34, 197, 94, 0.15)" },
+                      {
+                        backgroundColor:
+                          statusLabel === "COLLECTING"
+                            ? "rgba(107, 99, 255, 0.15)"
+                            : "rgba(34, 197, 94, 0.15)",
+                      },
                     ]}
                   >
                     <Text
-                      style={[styles.settledBadgeText, { color: "#22C55E" }]}
+                      style={[
+                        styles.settledBadgeText,
+                        {
+                          color:
+                            statusLabel === "COLLECTING"
+                              ? theme.colors.primary
+                              : "#22C55E",
+                        },
+                      ]}
                     >
-                      SETTLED
+                      {statusLabel}
                     </Text>
                   </View>
                 ) : null}
@@ -238,8 +320,8 @@ export function SplitDetailModal({
             style={styles.scrollArea}
             contentContainerStyle={{ gap: 16, paddingBottom: 16 }}
             showsVerticalScrollIndicator={false}
+            contentInsetAdjustmentBehavior="automatic"
           >
-            {/* Progress Card */}
             <View
               style={[
                 styles.progressCard,
@@ -259,7 +341,7 @@ export function SplitDetailModal({
                       { color: theme.colors.mutedForeground },
                     ]}
                   >
-                    TOTAL SPLIT AMOUNT
+                    {collect ? "TARGET AMOUNT" : "TOTAL SPLIT AMOUNT"}
                   </Text>
                   <Amount
                     value={split.totalAmount}
@@ -280,7 +362,7 @@ export function SplitDetailModal({
                       { color: theme.colors.mutedForeground },
                     ]}
                   >
-                    SETTLED
+                    {collect ? "COLLECTED" : "SETTLED"}
                   </Text>
                   <Text
                     style={{
@@ -296,7 +378,6 @@ export function SplitDetailModal({
                 </View>
               </View>
 
-              {/* Progress Bar Track */}
               <View
                 style={[
                   styles.progressTrack,
@@ -317,7 +398,26 @@ export function SplitDetailModal({
               </View>
             </View>
 
-            {/* Participants Breakdown List */}
+            {isCreator && qrTarget && !spent ? (
+              creatorUpiId ? (
+                <SplitPayQrCard
+                  split={split}
+                  participant={qrTarget}
+                  creatorUpiId={creatorUpiId}
+                  currency={system.defaultCurrency}
+                />
+              ) : (
+                <Text
+                  style={{
+                    fontSize: 12,
+                    color: theme.colors.mutedForeground,
+                  }}
+                >
+                  Set your UPI ID in Settings to show a QR code friends can scan.
+                </Text>
+              )
+            ) : null}
+
             <View style={{ gap: 8 }}>
               <Text
                 style={[
@@ -329,9 +429,11 @@ export function SplitDetailModal({
               </Text>
 
               {split.participants.map((p, index) => {
+                const rowKey = p.key || `${p.name}-${index}`;
+                const picking = collect && collectingKey === p.key;
                 return (
                   <View
-                    key={`${p.name}-${index}`}
+                    key={rowKey}
                     style={[
                       styles.participantRow,
                       {
@@ -342,136 +444,188 @@ export function SplitDetailModal({
                       },
                     ]}
                   >
-                    <Pressable
-                      onPress={() => handleTogglePaid(index, p.paid)}
-                      style={styles.participantLeft}
-                    >
-                      <View
-                        style={[
-                          styles.checkbox,
-                          {
-                            backgroundColor: p.paid
-                              ? "#22C55E"
-                              : "transparent",
-                            borderColor: p.paid
-                              ? "#22C55E"
-                              : theme.colors.mutedForeground,
-                          },
-                        ]}
+                    <View style={styles.participantMain}>
+                      <Pressable
+                        onPress={() => handleTogglePaid(p, index)}
+                        style={styles.participantLeft}
+                        disabled={collect && (p.isCurrentUser || spent)}
                       >
-                        {p.paid ? (
-                          <Check size={12} color="#FFFFFF" strokeWidth={3} />
-                        ) : null}
-                      </View>
-
-                      <View style={{ flex: 1 }}>
                         <View
-                          style={{
-                            flexDirection: "row",
-                            alignItems: "center",
-                            gap: 6,
-                          }}
+                          style={[
+                            styles.checkbox,
+                            {
+                              backgroundColor: p.paid
+                                ? "#22C55E"
+                                : "transparent",
+                              borderColor: p.paid
+                                ? "#22C55E"
+                                : theme.colors.mutedForeground,
+                            },
+                          ]}
                         >
-                          <Text
-                            style={[
-                              styles.participantName,
-                              {
-                                color: theme.colors.foreground,
-                                textDecorationLine: p.paid
-                                  ? "line-through"
-                                  : "none",
-                                opacity: p.paid ? 0.7 : 1,
-                              },
-                            ]}
-                            numberOfLines={1}
+                          {p.paid ? (
+                            <Check size={12} color="#FFFFFF" strokeWidth={3} />
+                          ) : null}
+                        </View>
+
+                        <View style={{ flex: 1 }}>
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              alignItems: "center",
+                              gap: 6,
+                            }}
                           >
-                            {p.name}
-                          </Text>
-                          {p.isCurrentUser ? (
                             <Text
-                              style={{
-                                fontSize: 10,
-                                color: theme.colors.primary,
-                                fontWeight: "700",
-                              }}
+                              style={[
+                                styles.participantName,
+                                {
+                                  color: theme.colors.foreground,
+                                  textDecorationLine: p.paid
+                                    ? "line-through"
+                                    : "none",
+                                  opacity: p.paid ? 0.7 : 1,
+                                },
+                              ]}
+                              numberOfLines={1}
                             >
-                              (YOU)
+                              {p.name}
+                            </Text>
+                            {p.isCurrentUser ? (
+                              <Text
+                                style={{
+                                  fontSize: 10,
+                                  color: theme.colors.primary,
+                                  fontWeight: "700",
+                                }}
+                              >
+                                {collect ? "(YOU · PLEDGED)" : "(YOU)"}
+                              </Text>
+                            ) : null}
+                          </View>
+
+                          {collect && p.paid && !p.isCurrentUser ? (
+                            <Text
+                              style={[
+                                styles.participantUpi,
+                                { color: theme.colors.mutedForeground },
+                              ]}
+                            >
+                              Collected
+                              {p.receivedAccountId
+                                ? ` · ${
+                                    accounts.find(
+                                      (a) => a.id === p.receivedAccountId
+                                    )?.name || "account"
+                                  }`
+                                : ""}
                             </Text>
                           ) : null}
                         </View>
+                      </Pressable>
 
-                        {p.upiId ? (
-                          <Text
-                            style={[
-                              styles.participantUpi,
-                              { color: theme.colors.mutedForeground },
-                            ]}
-                          >
-                            {p.upiId}
-                          </Text>
-                        ) : null}
-                      </View>
-                    </Pressable>
+                      <View style={styles.participantRight}>
+                        <Amount
+                          value={p.amount}
+                          currency={system.defaultCurrency}
+                          ghostable
+                          style={{
+                            fontSize: theme.typography.sm,
+                            fontWeight: "800",
+                            color: p.paid
+                              ? theme.colors.mutedForeground
+                              : theme.colors.foreground,
+                          }}
+                        />
 
-                    <View style={styles.participantRight}>
-                      <Amount
-                        value={p.amount}
-                        currency={system.defaultCurrency}
-                        ghostable
-                        style={{
-                          fontSize: theme.typography.sm,
-                          fontWeight: "800",
-                          color: p.paid
-                            ? theme.colors.mutedForeground
-                            : theme.colors.foreground,
-                        }}
-                      />
-
-                      {!p.isCurrentUser && !p.paid ? (
-                        <View style={styles.actionRow}>
-                          {p.upiId ? (
+                        {!p.isCurrentUser && !p.paid && !spent ? (
+                          <View style={styles.actionRow}>
                             <Pressable
-                              onPress={() => handlePayUpi(p)}
+                              onPress={() => handleShareReminder(p)}
                               style={({ pressed }) => [
                                 styles.iconActionBtn,
-                                { backgroundColor: theme.colors.primary },
+                                {
+                                  backgroundColor: isDark
+                                    ? "rgba(255,255,255,0.08)"
+                                    : "rgba(0,0,0,0.06)",
+                                },
                                 pressed && { opacity: 0.8 },
                               ]}
                             >
-                              <CreditCard
+                              <Share2
                                 size={12}
-                                color={theme.colors.primaryForeground}
+                                color={theme.colors.foreground}
                               />
                             </Pressable>
-                          ) : null}
-
-                          <Pressable
-                            onPress={() => handleShareReminder(p)}
-                            style={({ pressed }) => [
-                              styles.iconActionBtn,
-                              {
-                                backgroundColor: isDark
-                                  ? "rgba(255,255,255,0.08)"
-                                  : "rgba(0,0,0,0.06)",
-                              },
-                              pressed && { opacity: 0.8 },
-                            ]}
-                          >
-                            <Share2
-                              size={12}
-                              color={theme.colors.foreground}
-                            />
-                          </Pressable>
-                        </View>
-                      ) : null}
+                          </View>
+                        ) : null}
+                      </View>
                     </View>
+
+                    {picking ? (
+                      <View style={{ gap: 8, paddingTop: 8 }}>
+                        <Text
+                          style={[
+                            styles.sectionHeading,
+                            { color: theme.colors.mutedForeground },
+                          ]}
+                        >
+                          RECEIVED INTO ACCOUNT
+                        </Text>
+                        <ScrollView
+                          horizontal
+                          showsHorizontalScrollIndicator={false}
+                          contentContainerStyle={{ gap: 8 }}
+                        >
+                          {receiveAccounts.map((acc) => (
+                            <Pressable
+                              key={acc.id}
+                              onPress={() => handleConfirmCollected(acc.id)}
+                              style={[
+                                styles.chip,
+                                {
+                                  backgroundColor: isDark
+                                    ? "rgba(255,255,255,0.06)"
+                                    : "rgba(0,0,0,0.04)",
+                                  borderColor: theme.colors.border,
+                                },
+                              ]}
+                            >
+                              <Text
+                                style={{
+                                  fontSize: 12,
+                                  fontWeight: "600",
+                                  color: theme.colors.foreground,
+                                }}
+                              >
+                                {acc.name}
+                              </Text>
+                            </Pressable>
+                          ))}
+                        </ScrollView>
+                        <Pressable
+                          onPress={() => setCollectingKey(null)}
+                          style={({ pressed }) => [
+                            pressed && { opacity: 0.7 },
+                          ]}
+                        >
+                          <Text
+                            style={{
+                              fontSize: 12,
+                              color: theme.colors.mutedForeground,
+                            }}
+                          >
+                            Cancel
+                          </Text>
+                        </Pressable>
+                      </View>
+                    ) : null}
                   </View>
                 );
               })}
             </View>
           </ScrollView>
 
-          {/* Action Buttons */}
           <View style={styles.actionFooter}>
             <Button
               variant="destructive"
@@ -481,7 +635,15 @@ export function SplitDetailModal({
               Delete
             </Button>
 
-            {!split.settled && !progress.isFullySettled ? (
+            {collect && isCreator && !spent ? (
+              <Button
+                variant="primary"
+                onPress={handleUseGift}
+                style={{ flex: 2 }}
+              >
+                Use money for gift
+              </Button>
+            ) : !collect && !split.settled && !progress.isFullySettled ? (
               <Button
                 variant="primary"
                 onPress={handleSettleAll}
@@ -490,17 +652,23 @@ export function SplitDetailModal({
                 Settle All
               </Button>
             ) : (
-              <Button
-                variant="outline"
-                onPress={onClose}
-                style={{ flex: 2 }}
-              >
+              <Button variant="outline" onPress={onClose} style={{ flex: 2 }}>
                 Done
               </Button>
             )}
           </View>
         </View>
       </View>
+
+      <UseGiftMoneyModal
+        visible={spendOpen}
+        split={split}
+        onClose={() => setSpendOpen(false)}
+        onConfirm={async (amount, accountId) => {
+          if (!split.id) return false;
+          return spendCollectPot(split.id, amount, accountId);
+        }}
+      />
     </Modal>
   );
 }
@@ -596,12 +764,15 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
   },
   participantRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
     padding: 12,
     borderRadius: 14,
     borderWidth: 1,
+    gap: 4,
+  },
+  participantMain: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
   participantLeft: {
     flex: 1,
@@ -636,6 +807,12 @@ const styles = StyleSheet.create({
   iconActionBtn: {
     padding: 6,
     borderRadius: 8,
+  },
+  chip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
   },
   actionFooter: {
     flexDirection: "row",
