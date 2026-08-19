@@ -7,6 +7,7 @@ import {
   View,
 } from "react-native";
 import * as Haptics from "expo-haptics";
+import { ArrowLeft } from "lucide-react-native";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
@@ -27,6 +28,7 @@ export interface PageHeaderProps {
   onTabChange?: (tabId: string) => void;
   tabs?: PageHeaderTab[];
   rightElement?: ReactNode;
+  onBack?: () => void;
   /** pill = raised segment control; underline = flat ledger-style tabs */
   tabVariant?: PageHeaderTabVariant;
 }
@@ -39,6 +41,7 @@ export function PageHeader({
   onTabChange,
   tabs,
   rightElement,
+  onBack,
   tabVariant = "pill",
 }: PageHeaderProps) {
   const { theme, themeName } = useTheme();
@@ -55,6 +58,20 @@ export function PageHeader({
   return (
     <View style={styles.container}>
       <View style={styles.titleRow}>
+        {onBack ? (
+          <Pressable
+            onPress={() => {
+              Haptics.selectionAsync().catch(() => undefined);
+              onBack();
+            }}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+            style={({ pressed }) => [styles.backButton, pressed && { opacity: 0.8 }]}
+          >
+            <ArrowLeft size={22} color={theme.colors.foreground} strokeWidth={2.2} />
+          </Pressable>
+        ) : null}
         <View style={styles.titleLeft}>
           {icon ? (
             <View
@@ -263,6 +280,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    gap: 8,
+  },
+  backButton: {
+    width: 44,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
   },
   titleLeft: {
     flexDirection: "row",

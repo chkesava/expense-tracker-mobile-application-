@@ -25,6 +25,7 @@ import {
   Sparkles,
 } from "lucide-react-native";
 
+import { ACCOUNT_GREEN } from "@/components/accounts/accountScreenTheme";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { useCelebration } from "@/providers/CelebrationProvider";
@@ -60,7 +61,7 @@ function CollapsibleSection({
 }) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
 
   const toggleExpand = () => {
     Haptics.selectionAsync().catch(() => undefined);
@@ -95,12 +96,12 @@ function CollapsibleSection({
                 styles.iconContainer,
                 {
                   backgroundColor: isDark
-                    ? "rgba(107, 99, 255, 0.15)"
-                    : "rgba(79, 70, 255, 0.08)",
+                    ? "rgba(74, 222, 128, 0.12)"
+                    : "rgba(22, 163, 74, 0.1)",
                 },
               ]}
             >
-              <Icon size={18} color={theme.colors.primary} />
+              <Icon size={18} color={isDark ? ACCOUNT_GREEN : theme.colors.success} />
             </View>
           ) : null}
           <View style={{ flex: 1 }}>

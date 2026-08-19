@@ -68,7 +68,7 @@ export function BudgetAlertsWidget({
           description="Set a monthly target to receive spending alerts and pacing forecasts."
           primaryAction={{
             label: "Configure Budget",
-            onPress: () => router.push("/settings"),
+            onPress: () => router.push("/settings/money" as never),
           }}
           tip="Budgets help prevent overspending by alerting you at 80% and 100% thresholds."
         />
