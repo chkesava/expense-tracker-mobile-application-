@@ -12,6 +12,7 @@ import {
   Calendar,
   CheckCircle2,
   CreditCard,
+  Pencil,
   Plus,
   ShieldAlert,
   Sparkles,
@@ -586,6 +587,34 @@ export function CardsList() {
                     Limit: {system.defaultCurrency} {limit.toLocaleString()}
                   </Text>
 
+                  <View style={styles.footerActions}>
+                  <Pressable
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      handleOpenEditCard(card);
+                    }}
+                    style={[
+                      styles.payBtn,
+                      {
+                        backgroundColor: isDark
+                          ? "rgba(255,255,255,0.06)"
+                          : "rgba(0,0,0,0.04)",
+                        borderColor: theme.colors.border,
+                      },
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Edit ${card.name}`}
+                  >
+                    <Pencil size={13} color={theme.colors.foreground} />
+                    <Text
+                      style={[
+                        styles.actionButtonText,
+                        { color: theme.colors.foreground, fontSize: 12 },
+                      ]}
+                    >
+                      Edit
+                    </Text>
+                  </Pressable>
                   <Pressable
                     onPress={(e) => {
                       e.stopPropagation();
@@ -617,6 +646,7 @@ export function CardsList() {
                       Pay Bill
                     </Text>
                   </Pressable>
+                  </View>
                 </View>
               </Pressable>
             );
@@ -775,6 +805,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingTop: 4,
+  },
+  footerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   payBtn: {
     flexDirection: "row",

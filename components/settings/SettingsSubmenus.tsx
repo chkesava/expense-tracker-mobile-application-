@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -6,13 +6,13 @@ import {
   Pressable,
   Switch,
   ScrollView,
-  Modal,
   TextInput,
 } from "react-native";
 import * as Haptics from "expo-haptics";
 import {
   Trash2,
   Plus,
+  Pencil,
   ChevronDown,
   ChevronUp,
   FolderPlus,
@@ -35,21 +35,14 @@ import { useFinancialGoals } from "@/hooks/useFinancialGoals";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
 import { useAccounts } from "@/hooks/useAccounts";
 import { CategoryPicker } from "@/components/categories/CategoryPicker";
+import { EditAccountModal } from "@/components/accounts/EditAccountModal";
+import { SmsMatchingUnconfiguredText } from "@/components/accounts/SmsMatchingUnconfiguredText";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { InstitutionSearchField } from "@/components/accounts/InstitutionSearchField";
-import { SmsMatchingUnconfiguredText } from "@/components/accounts/SmsMatchingUnconfiguredText";
-import { getInstitutionById } from "@/shared/data/institutions";
-import {
-  requiresCatalogInstitution,
-  suggestedAccountDisplayName,
-} from "@/shared/utils/accountIdentity";
-import {
-  canonicalAccountTypeId,
-  isCreditAccount,
-} from "@/shared/utils/accountKind";
 import { Amount } from "@/components/common/Amount";
+import type { Account } from "@/shared/types/expense";
+import { getAccountLast4 } from "@/shared/utils/accountIdentity";
 
 // -------------------------------------------------------------
 // Helper Component: Material 3 Collapsible Section
@@ -749,71 +742,21 @@ export function AccountTypesManager() {
 export function AccountsManager() {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
-  const { accounts, addAccount, deleteAccount } = useAccounts();
+  const { accounts, deleteAccount } = useAccounts();
   const { accountTypes } = useAccountTypes();
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingAccount, setEditingAccount] = useState<Account | null>(null);
 
-  const [name, setName] = useState("");
-  const [displayNameTouched, setDisplayNameTouched] = useState(false);
-  const [typeId, setTypeId] = useState("");
-  const [openingBalance, setOpeningBalance] = useState("");
-  const [creditLimit, setCreditLimit] = useState("");
-  const [billGenerationDay, setBillGenerationDay] = useState("");
-  const [last4, setLast4] = useState("");
-  const [institutionId, setInstitutionId] = useState("");
-  const [showTypePicker, setShowTypePicker] = useState(false);
+  const handleOpenCreate = () => {
+    Haptics.selectionAsync().catch(() => undefined);
+    setEditingAccount(null);
+    setIsModalOpen(true);
+  };
 
-  const selectedTypeName = useMemo(() => {
-    const match = accountTypes.find((t) => t.id === typeId);
-    return match ? match.name : "";
-  }, [accountTypes, typeId]);
-
-  const isCredit = useMemo(() => {
-    return isCreditAccount(selectedTypeName);
-  }, [selectedTypeName]);
-
-  const accountTypeId = canonicalAccountTypeId(selectedTypeName);
-  const needsInstitution = requiresCatalogInstitution(accountTypeId);
-  const catalogInstitution = getInstitutionById(institutionId);
-  const suggestedName = suggestedAccountDisplayName(
-    catalogInstitution,
-    accountTypeId
-  );
-  const canAdd =
-    Boolean(typeId) && (!needsInstitution || Boolean(catalogInstitution));
-
-  const handleAdd = () => {
-    if (!canAdd) return;
-    const displayName = name.trim() || suggestedName;
-    if (!displayName) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
-
-    const extras: any = {
-      displayName,
-      last4: last4.trim() || undefined,
-      institutionId: catalogInstitution?.id || "",
-      accountTypeId,
-    };
-    if (isCredit) {
-      if (creditLimit) extras.creditLimit = Number(creditLimit);
-      if (billGenerationDay) extras.billGenerationDay = Number(billGenerationDay);
-    } else {
-      if (openingBalance) {
-        extras.openingBalance = Number(openingBalance);
-        extras.balanceInitialized = true;
-        extras.balanceAsOfDate = new Date().toISOString().split("T")[0];
-      }
-    }
-
-    void addAccount(displayName, typeId, extras);
-
-    setName("");
-    setDisplayNameTouched(false);
-    setTypeId("");
-    setOpeningBalance("");
-    setCreditLimit("");
-    setBillGenerationDay("");
-    setLast4("");
-    setInstitutionId("");
+  const handleOpenEdit = (account: Account) => {
+    Haptics.selectionAsync().catch(() => undefined);
+    setEditingAccount(account);
+    setIsModalOpen(true);
   };
 
   const handleDelete = (id?: string) => {
@@ -823,105 +766,32 @@ export function AccountsManager() {
   };
 
   return (
+    <>
     <CollapsibleSection
       title="Financial Accounts"
       subtitle={`Configure bank accounts, wallets, and cards (${accounts.length} active)`}
       icon={CreditCard}
     >
       <View style={{ gap: 14 }}>
-        <Pressable
-          onPress={() => {
-            Haptics.selectionAsync().catch(() => undefined);
-            setShowTypePicker(true);
+        <Text
+          style={{
+            color: theme.colors.mutedForeground,
+            fontSize: 13,
+            lineHeight: 18,
           }}
         >
-          <Input
-            label="Account Type"
-            value={selectedTypeName || "Tap to select type..."}
-            editable={false}
-            pointerEvents="none"
-          />
-        </Pressable>
-
-        {needsInstitution ? (
-          <InstitutionSearchField
-            selectedId={institutionId}
-            required
-            disabled={!typeId}
-            onSelect={(institution) => {
-              const nextId = institution?.id ?? "";
-              setInstitutionId(nextId);
-              if (!displayNameTouched) {
-                setName(
-                  suggestedAccountDisplayName(
-                    institution ?? undefined,
-                    accountTypeId
-                  )
-                );
-              }
-            }}
-          />
-        ) : null}
-
-        {typeId && accountTypeId !== "cash" ? (
-          <Input
-            label="Last 4 digits"
-            placeholder="e.g. 4521"
-            value={last4}
-            onChangeText={setLast4}
-            keyboardType="numeric"
-          />
-        ) : null}
-
-        {typeId && !isCredit ? (
-          <Input
-            label="Starting Balance"
-            placeholder="e.g. 5000"
-            value={openingBalance}
-            onChangeText={setOpeningBalance}
-            keyboardType="numeric"
-          />
-        ) : null}
-
-        {typeId && isCredit ? (
-          <>
-            <Input
-              label="Credit Limit"
-              placeholder="e.g. 100000"
-              value={creditLimit}
-              onChangeText={setCreditLimit}
-              keyboardType="numeric"
-            />
-            <Input
-              label="Bill Generation Day (1-28)"
-              placeholder="e.g. 15"
-              value={billGenerationDay}
-              onChangeText={setBillGenerationDay}
-              keyboardType="numeric"
-            />
-          </>
-        ) : null}
-
-        <Input
-          label="Display Name"
-          placeholder={suggestedName || "e.g. Super Money Credit Card"}
-          value={name}
-          onChangeText={(value) => {
-            setDisplayNameTouched(true);
-            setName(value);
-          }}
-          helperText="Optional. Separate from institution identity."
-        />
+          Add institution, card last 4, limit, and billing day. Tap an existing
+          account to fill in fields that were missing when it was created.
+        </Text>
 
         <Button
-          onPress={handleAdd}
-          disabled={!canAdd}
+          onPress={handleOpenCreate}
           style={{ height: 48, borderRadius: 12 }}
         >
           Add Account
         </Button>
 
-        <View style={{ gap: 8, marginTop: 8 }}>
+        <View style={{ gap: 8 }}>
           {accounts.length === 0 ? (
             <Text
               style={{
@@ -938,6 +808,7 @@ export function AccountsManager() {
             accounts.map((acc) => {
               const typeName =
                 accountTypes.find((t) => t.id === acc.typeId)?.name || "Account";
+              const last4 = getAccountLast4(acc);
               return (
                 <View
                   key={acc.id}
@@ -951,15 +822,32 @@ export function AccountsManager() {
                     },
                   ]}
                 >
-                  <View style={{ flex: 1, marginRight: 12 }}>
-                    <Text style={{ color: theme.colors.foreground, fontWeight: "800", fontSize: 15 }}>
+                  <Pressable
+                    onPress={() => handleOpenEdit(acc)}
+                    style={{ flex: 1, marginRight: 8 }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Edit account ${acc.name}`}
+                  >
+                    <Text
+                      style={{
+                        color: theme.colors.foreground,
+                        fontWeight: "800",
+                        fontSize: 15,
+                      }}
+                    >
                       {acc.name}
                     </Text>
-                    <Text style={{ color: theme.colors.mutedForeground, fontSize: 12, marginTop: 3 }}>
+                    <Text
+                      style={{
+                        color: theme.colors.mutedForeground,
+                        fontSize: 12,
+                        marginTop: 3,
+                      }}
+                    >
                       {[
                         typeName,
                         acc.institutionName,
-                        acc.last4 ? `•••• ${acc.last4}` : null,
+                        last4 ? `•••• ${last4}` : null,
                         acc.creditLimit
                           ? `Limit: ${acc.creditLimit.toLocaleString()}`
                           : null,
@@ -971,9 +859,31 @@ export function AccountsManager() {
                       account={acc}
                       typeName={typeName}
                     />
-                  </View>
+                  </Pressable>
 
-                  {/* 48x48dp Touch Target Delete Button */}
+                  <Pressable
+                    onPress={() => handleOpenEdit(acc)}
+                    android_ripple={{
+                      color: theme.colors.primary + "1A",
+                      borderless: true,
+                      radius: 24,
+                    }}
+                    style={styles.editActionBtn}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Edit account ${acc.name}`}
+                  >
+                    <Pencil size={18} color={theme.colors.foreground} />
+                    <Text
+                      style={{
+                        color: theme.colors.mutedForeground,
+                        fontSize: 10,
+                        fontWeight: "700",
+                      }}
+                    >
+                      Edit
+                    </Text>
+                  </Pressable>
+
                   <Pressable
                     onPress={() => handleDelete(acc.id)}
                     android_ripple={{
@@ -993,91 +903,14 @@ export function AccountsManager() {
           )}
         </View>
 
-        {/* Material 3 Bottom Sheet Type Selector */}
-        <Modal
-          visible={showTypePicker}
-          transparent
-          animationType="slide"
-          onRequestClose={() => setShowTypePicker(false)}
-        >
-          <View style={[styles.modalOverlay, { backgroundColor: "rgba(0,0,0,0.65)" }]}>
-            <Pressable style={styles.modalBackdrop} onPress={() => setShowTypePicker(false)} />
-            <View
-              style={[
-                styles.modalBottomSheet,
-                {
-                  backgroundColor: theme.colors.card,
-                  borderColor: theme.colors.border,
-                },
-              ]}
-            >
-              <View style={styles.sheetHandle} />
-              <Text style={[styles.modalTitle, { color: theme.colors.foreground }]}>
-                Select Account Type
-              </Text>
-              <ScrollView style={{ maxHeight: 320 }}>
-                {accountTypes.length === 0 ? (
-                  <Text style={{ color: theme.colors.mutedForeground, padding: 16, textAlign: "center" }}>
-                    No custom types defined yet. Add an account type first.
-                  </Text>
-                ) : (
-                  accountTypes.map((type) => (
-                    <Pressable
-                      key={type.id}
-                      onPress={() => {
-                        Haptics.selectionAsync().catch(() => undefined);
-                        setTypeId(type.id);
-                        const nextTypeId = canonicalAccountTypeId(type.name);
-                        if (!requiresCatalogInstitution(nextTypeId)) {
-                          setInstitutionId("");
-                        }
-                        if (!displayNameTouched) {
-                          setName(
-                            suggestedAccountDisplayName(
-                              requiresCatalogInstitution(nextTypeId)
-                                ? getInstitutionById(institutionId)
-                                : undefined,
-                              nextTypeId
-                            )
-                          );
-                        }
-                        setShowTypePicker(false);
-                      }}
-                      android_ripple={{
-                        color: theme.colors.primary + "1A",
-                        borderless: false,
-                      }}
-                      style={({ pressed }) => [
-                        styles.pickerItem,
-                        {
-                          borderBottomColor: theme.colors.border,
-                          backgroundColor: pressed
-                            ? isDark
-                              ? "rgba(255,255,255,0.06)"
-                              : "rgba(0,0,0,0.04)"
-                            : "transparent",
-                        },
-                      ]}
-                    >
-                      <Text style={{ color: theme.colors.foreground, fontSize: 16, fontWeight: "600" }}>
-                        {type.name}
-                      </Text>
-                    </Pressable>
-                  ))
-                )}
-              </ScrollView>
-              <Button
-                onPress={() => setShowTypePicker(false)}
-                variant="outline"
-                style={{ marginTop: 12, height: 48, borderRadius: 12 }}
-              >
-                Cancel
-              </Button>
-            </View>
-          </View>
-        </Modal>
       </View>
     </CollapsibleSection>
+    <EditAccountModal
+      isOpen={isModalOpen}
+      onClose={() => setIsModalOpen(false)}
+      account={editingAccount}
+    />
+    </>
   );
 }
 
@@ -1154,6 +987,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  editActionBtn: {
+    minWidth: 48,
+    height: 48,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 2,
+  },
   goalProgressBarBg: {
     height: 4,
     borderRadius: 2,
@@ -1164,37 +1004,5 @@ const styles = StyleSheet.create({
   goalProgressBarFill: {
     height: "100%",
     borderRadius: 2,
-  },
-  modalOverlay: {
-    flex: 1,
-    justifyContent: "flex-end",
-  },
-  modalBackdrop: {
-    flex: 1,
-  },
-  modalBottomSheet: {
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    borderWidth: 1,
-    padding: 20,
-    paddingBottom: 32,
-  },
-  sheetHandle: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: "rgba(128,128,128,0.4)",
-    alignSelf: "center",
-    marginBottom: 16,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: "900",
-    marginBottom: 12,
-  },
-  pickerItem: {
-    paddingVertical: 16,
-    paddingHorizontal: 8,
-    borderBottomWidth: 1,
   },
 });
