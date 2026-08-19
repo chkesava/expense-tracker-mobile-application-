@@ -22,9 +22,13 @@ import { AppState } from "react-native";
 
 import { getFirestoreDb } from "@/lib/firebase";
 import { commitWrite } from "@/lib/firestoreWrite";
+import { logError } from "@/lib/errors";
+import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import { useAccounts } from "@/hooks/useAccounts";
+import { useAccountPayments } from "@/hooks/useAccountPayments";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
+import { useExpenses } from "@/hooks/useExpenses";
 import { useSettings } from "@/providers/SettingsProvider";
 import {
   DEFAULT_BILL_REMINDER_FREQUENCY,
@@ -41,6 +45,7 @@ import {
   computeRemainingAmount,
 } from "@/shared/utils/creditCardBillStatus";
 import { validateCreateCreditCardBillInput } from "@/shared/utils/creditCardBillValidate";
+import { collectAutoCreditCardBillDrafts } from "@/shared/utils/autoCreditCardBills";
 import { todayDateKey } from "@/shared/utils/dates";
 import {
   cancelBillReminders,
@@ -130,13 +135,22 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const { accounts } = useAccounts();
   const { accountTypes } = useAccountTypes();
+  const { expenses, loading: expensesLoading } = useExpenses();
+  const { payments, loading: paymentsLoading } = useAccountPayments();
   const { settings } = useSettings();
   const [bills, setBills] = useState<CreditCardBill[]>([]);
   const [billsLoading, setBillsLoading] = useState(true);
   const reconcileTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoGenerateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoGenerateInFlight = useRef(false);
+  const autoGenerateToastShown = useRef(false);
 
   const globalPrefs = settings.creditCardBillReminders;
   const timezone = settings.timezone;
+
+  useEffect(() => {
+    autoGenerateToastShown.current = false;
+  }, [user?.uid]);
 
   useEffect(() => {
     const db = getFirestoreDb();
@@ -226,6 +240,7 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     return () => {
       if (reconcileTimer.current) clearTimeout(reconcileTimer.current);
+      if (autoGenerateTimer.current) clearTimeout(autoGenerateTimer.current);
     };
   }, []);
 
@@ -304,6 +319,84 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
       settings.currency,
     ]
   );
+
+  const generateAutoBills = useCallback(async () => {
+    if (!user || billsLoading || expensesLoading || paymentsLoading) return;
+    if (autoGenerateInFlight.current) return;
+    autoGenerateInFlight.current = true;
+    try {
+      const typeNameById = new Map(
+        accountTypes.map((type) => [type.id, type.name])
+      );
+      const drafts = collectAutoCreditCardBillDrafts({
+        accounts,
+        typeNameById,
+        expenses,
+        payments,
+        existingBills: bills,
+        today: todayDateKey(timezone),
+      });
+      let created = 0;
+      for (const draft of drafts) {
+        try {
+          const id = await createBill(draft);
+          if (id) created += 1;
+        } catch (err) {
+          logError("creditCardBills.autoCreate", err);
+        }
+      }
+      if (created > 0 && !autoGenerateToastShown.current) {
+        autoGenerateToastShown.current = true;
+        toast.success(
+          created === 1
+            ? "Credit card statement created"
+            : `${created} credit card statements created`
+        );
+      }
+    } finally {
+      autoGenerateInFlight.current = false;
+    }
+  }, [
+    user,
+    billsLoading,
+    expensesLoading,
+    paymentsLoading,
+    accountTypes,
+    accounts,
+    expenses,
+    payments,
+    bills,
+    timezone,
+    createBill,
+  ]);
+
+  const scheduleAutoGenerate = useCallback(() => {
+    if (autoGenerateTimer.current) clearTimeout(autoGenerateTimer.current);
+    autoGenerateTimer.current = setTimeout(() => {
+      void generateAutoBills();
+    }, 400);
+  }, [generateAutoBills]);
+
+  useEffect(() => {
+    if (billsLoading || expensesLoading || paymentsLoading) return;
+    scheduleAutoGenerate();
+  }, [
+    billsLoading,
+    expensesLoading,
+    paymentsLoading,
+    accounts,
+    bills,
+    expenses,
+    payments,
+    scheduleAutoGenerate,
+  ]);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") scheduleAutoGenerate();
+    });
+    return () => sub.remove();
+  }, [scheduleAutoGenerate]);
 
   const updateBill = useCallback(
     async (id: string, updates: Partial<CreditCardBill>): Promise<boolean> => {
