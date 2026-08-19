@@ -29,7 +29,7 @@ export function FinancialGoalsWidget({
 
   const openGoals = () => {
     void haptic.selection();
-    router.push("/settings");
+    router.push("/settings/money" as never);
   };
 
   /**

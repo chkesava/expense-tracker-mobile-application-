@@ -163,7 +163,7 @@ export function SetupProgressProvider({ children }: { children: ReactNode }) {
         id: "first_category",
         label: "Create a custom category",
         completed: categories.some((c) => !c.isDefault),
-        onNavigate: () => router.push("/settings"),
+        onNavigate: () => router.push("/settings/money" as never),
       },
       {
         id: "theme",
@@ -172,7 +172,7 @@ export function SetupProgressProvider({ children }: { children: ReactNode }) {
         // phone was in light mode. Theme mode starts at "system", so leaving
         // it means the user has not chosen.
         completed: themeMode !== "system",
-        onNavigate: () => router.push("/settings"),
+        onNavigate: () => router.push("/settings/appearance" as never),
       },
       {
         id: "explore_dashboard",

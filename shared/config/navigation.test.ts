@@ -16,6 +16,7 @@ describe("resolveAndroidBackAction", () => {
 
   it("pops out of stack sub-screens", () => {
     expect(resolveAndroidBackAction("/settings")).toBe("pop");
+    expect(resolveAndroidBackAction("/settings/privacy")).toBe("pop");
     expect(resolveAndroidBackAction("/sms-inbox")).toBe("pop");
     expect(resolveAndroidBackAction("/app-selector")).toBe("pop");
     expect(resolveAndroidBackAction("/accounts/abc123")).toBe("pop");
@@ -84,6 +85,7 @@ describe("isNavItemActive", () => {
   it("matches settings", () => {
     expect(isNavItemActive("/settings", "settings")).toBe(true);
     expect(isNavItemActive("/(app)/settings", "settings")).toBe(true);
+    expect(isNavItemActive("/settings/privacy", "settings")).toBe(true);
   });
 
   it("keeps ledger as the internal route and shows Transactions", () => {

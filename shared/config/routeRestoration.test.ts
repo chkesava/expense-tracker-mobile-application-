@@ -56,6 +56,7 @@ describe("isRestorableRoute", () => {
     expect(isRestorableRoute("/investments")).toBe(true);
     expect(isRestorableRoute("/investments?tab=sip")).toBe(true);
     expect(isRestorableRoute("/settings")).toBe(true);
+    expect(isRestorableRoute("/settings/privacy")).toBe(true);
     expect(isRestorableRoute("/accounts/abc123")).toBe(true);
     expect(isRestorableRoute("/credit-card-bills/bill-1")).toBe(true);
   });
