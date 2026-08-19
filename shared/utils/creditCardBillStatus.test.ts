@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   computeCreditCardBillStatus,
   computeRemainingAmount,
+  findCreditCardBillForCycle,
   shouldSendBillReminder,
 } from "./creditCardBillStatus";
 
@@ -154,5 +155,60 @@ describe("shouldSendBillReminder", () => {
         globalRemindersEnabled: true,
       })
     ).toBe(true);
+  });
+});
+
+describe("findCreditCardBillForCycle", () => {
+  const cycleStart = new Date(2026, 6, 1);
+  const cycleEnd = new Date(2026, 7, 1);
+
+  it("matches an exact billing period", () => {
+    const matched = findCreditCardBillForCycle(
+      [
+        {
+          id: "bill-1",
+          accountId: "card-1",
+          billingPeriodStart: "2026-07-01",
+          billingPeriodEnd: "2026-08-01",
+          statementDate: "2026-08-01",
+        },
+      ],
+      "card-1",
+      cycleStart,
+      cycleEnd
+    );
+    expect(matched?.id).toBe("bill-1");
+  });
+
+  it("falls back to statement date on the cycle end", () => {
+    const matched = findCreditCardBillForCycle(
+      [
+        {
+          id: "bill-2",
+          accountId: "card-1",
+          statementDate: "2026-08-01",
+        },
+      ],
+      "card-1",
+      cycleStart,
+      cycleEnd
+    );
+    expect(matched?.id).toBe("bill-2");
+  });
+
+  it("ignores bills for other cards", () => {
+    const matched = findCreditCardBillForCycle(
+      [
+        {
+          id: "bill-other",
+          accountId: "card-2",
+          statementDate: "2026-08-01",
+        },
+      ],
+      "card-1",
+      cycleStart,
+      cycleEnd
+    );
+    expect(matched).toBeUndefined();
   });
 });

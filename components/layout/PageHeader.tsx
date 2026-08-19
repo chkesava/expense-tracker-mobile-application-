@@ -80,7 +80,6 @@ export function PageHeader({
                 styles.titleText,
                 {
                   color: theme.colors.foreground,
-                  fontSize: theme.typography.xl,
                   fontFamily: theme.fontFamily.bold,
                 },
               ]}
@@ -142,8 +141,8 @@ export function PageHeader({
                     styles.underlineTab,
                     isActive && {
                       backgroundColor: isDark
-                        ? "rgba(52, 179, 122, 0.1)"
-                        : "rgba(37, 150, 90, 0.08)",
+                        ? "rgba(52, 179, 122, 0.16)"
+                        : "rgba(37, 150, 90, 0.1)",
                     },
                     pressed && { opacity: 0.8 },
                   ]}
@@ -160,7 +159,6 @@ export function PageHeader({
                         fontSize: theme.typography.sm,
                       },
                     ]}
-                    numberOfLines={1}
                   >
                     {tab.label}
                   </Text>
@@ -274,9 +272,9 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   iconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
+    width: 48,
+    height: 48,
+    borderRadius: 16,
     borderCurve: "continuous",
     borderWidth: 1,
     alignItems: "center",
@@ -288,12 +286,13 @@ const styles = StyleSheet.create({
   },
   titleText: {
     fontWeight: "800",
-    letterSpacing: -0.4,
+    letterSpacing: -0.5,
+    fontSize: 24,
   },
   subtitleText: {
     fontWeight: "600",
     textTransform: "uppercase",
-    letterSpacing: 0.8,
+    letterSpacing: 1.4,
     marginTop: 2,
   },
   rightElement: {
@@ -322,6 +321,7 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     paddingBottom: 10,
     minHeight: 44,
+    flexShrink: 0,
     borderRadius: 12,
     borderCurve: "continuous",
     gap: 6,
@@ -332,7 +332,7 @@ const styles = StyleSheet.create({
     left: 12,
     right: 12,
     bottom: 2,
-    height: 2.5,
+    height: 3,
     borderRadius: 2,
   },
   underlineIndicatorPlaceholder: {
@@ -359,6 +359,7 @@ const styles = StyleSheet.create({
   },
   tabLabel: {
     letterSpacing: 0.15,
+    flexShrink: 0,
   },
   tabBadge: {
     paddingHorizontal: 6,

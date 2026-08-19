@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { StyleSheet } from "react-native";
 import { Redirect, useLocalSearchParams } from "expo-router";
 import { BarChart3, Calendar, TrendingUp } from "lucide-react-native";
 
@@ -11,11 +12,13 @@ import { useSettings } from "@/providers/SettingsProvider";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import { INVESTMENT_HUB_TAB_IDS } from "@/shared/config/navigation";
 import { useTheme } from "@/theme/ThemeProvider";
+import { themeUsesDarkPalette } from "@/theme/tokens";
 
 export type InvestmentsTab = (typeof INVESTMENT_HUB_TAB_IDS)[number];
 
 export default function InvestmentsScreen() {
-  const { theme } = useTheme();
+  const { theme, themeName } = useTheme();
+  const isDark = themeUsesDarkPalette(themeName);
   const { settings } = useSettings();
   const { settings: system } = useSystemSettings();
   const params = useLocalSearchParams<{ tab?: string }>();
@@ -57,21 +60,52 @@ export default function InvestmentsScreen() {
     },
   ];
 
-  return (
-    <PageShell contentContainerStyle={{ gap: 16, paddingBottom: 40 }}>
-      <PageHeader
-        title="Investments"
-        subtitle="Holdings, stocks & SIPs"
-        icon={<TrendingUp size={22} color={theme.colors.success} />}
-        activeTab={activeTab}
-        onTabChange={(tab) => setActiveTab(tab as InvestmentsTab)}
-        tabs={tabs}
-        tabVariant="underline"
-      />
+  const isPortfolioTab = activeTab === "portfolio";
 
-      {activeTab === "investments" ? <InvestmentsList /> : null}
-      {activeTab === "portfolio" ? <PortfolioDashboard /> : null}
-      {activeTab === "sip" ? <SipDashboard /> : null}
+  const pageHeader = (
+    <PageHeader
+      title="Investments"
+      subtitle="Holdings, stocks & SIPs"
+      icon={
+        <TrendingUp
+          size={22}
+          color={isDark ? "#FFFFFF" : theme.colors.success}
+        />
+      }
+      activeTab={activeTab}
+      onTabChange={(tab) => setActiveTab(tab as InvestmentsTab)}
+      tabs={tabs}
+      tabVariant="underline"
+    />
+  );
+
+  return (
+    <PageShell
+      scrollable={!isPortfolioTab}
+      contentContainerStyle={
+        isPortfolioTab ? styles.portfolioShell : styles.container
+      }
+    >
+      {isPortfolioTab ? (
+        <PortfolioDashboard listHeader={pageHeader} />
+      ) : (
+        <>
+          {pageHeader}
+          {activeTab === "investments" ? <InvestmentsList /> : null}
+          {activeTab === "sip" ? <SipDashboard /> : null}
+        </>
+      )}
     </PageShell>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    gap: 16,
+    paddingBottom: 40,
+  },
+  portfolioShell: {
+    flex: 1,
+    minHeight: 0,
+  },
+});

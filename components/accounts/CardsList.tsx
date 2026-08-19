@@ -1,31 +1,19 @@
-import { useMemo, useState } from "react";
-import {
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { useCallback, useMemo, useState } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
-import {
-  Calendar,
-  CheckCircle2,
-  CreditCard,
-  Pencil,
-  Plus,
-  ShieldAlert,
-  Sparkles,
-} from "lucide-react-native";
+import { CheckCircle2, Plus } from "lucide-react-native";
 
+import { CreditCardListItem, type CreditCardRowModel } from "@/components/accounts/CreditCardListItem";
+import { CreditSummaryCard } from "@/components/accounts/CreditSummaryCard";
 import { EditAccountModal } from "@/components/accounts/EditAccountModal";
 import { CreateCreditCardBillModal } from "@/components/creditCardBills/CreateCreditCardBillModal";
 import { PayCreditBillModal } from "@/components/accounts/PayCreditBillModal";
-import { SmsMatchingUnconfiguredText } from "@/components/accounts/SmsMatchingUnconfiguredText";
-import { Amount } from "@/components/common/Amount";
+import {
+  ACCOUNT_GREEN,
+  CARD_ORANGE,
+} from "@/components/accounts/accountScreenTheme";
 import { EmptyState } from "@/components/common/EmptyState";
-import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
 import { useAccountPayments } from "@/hooks/useAccountPayments";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
@@ -36,9 +24,14 @@ import { OPEN_BILL_STATUSES } from "@/shared/types/creditCardBill";
 import type { Account } from "@/shared/types/expense";
 import { computeCreditUsage } from "@/shared/utils/accountBalance";
 import { getAccountKind } from "@/shared/utils/accountKind";
-import { formatAccountIdentityLine } from "@/shared/utils/accountIdentity";
+import {
+  formatAccountIdentityLine,
+  smsMatchingUnconfiguredLabel,
+} from "@/shared/utils/accountIdentity";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+
+const DEFAULT_CARD_ACCENT = "#6D5AE6";
 
 export function CardsList() {
   const router = useRouter();
@@ -75,7 +68,6 @@ export function CardsList() {
     return map;
   }, [accountTypes]);
 
-  // Filter credit card accounts
   const creditCards = useMemo(() => {
     return accounts.filter((a) => {
       const typeName = typeMap.get(a.typeId) || "";
@@ -83,7 +75,6 @@ export function CardsList() {
     });
   }, [accounts, typeMap]);
 
-  // Aggregate stats across all credit cards
   const creditOverview = useMemo(() => {
     let totalLimit = 0;
     let totalUsed = 0;
@@ -101,227 +92,123 @@ export function CardsList() {
     return { totalLimit, totalUsed, totalAvailable, utilizationRate };
   }, [creditCards, expenses, payments]);
 
-  const handleOpenCardDetail = (card: Account) => {
-    Haptics.selectionAsync().catch(() => undefined);
-    router.push({
-      pathname: "/accounts/[id]",
-      params: { id: card.id },
+  const cardRows = useMemo((): CreditCardRowModel[] => {
+    return creditCards.map((card) => {
+      const usage = computeCreditUsage(card, expenses, payments);
+      const limit = card.creditLimit || 0;
+      return {
+        id: card.id,
+        name: card.name,
+        identityLine: formatAccountIdentityLine(card, "Credit Card"),
+        smsWarning: smsMatchingUnconfiguredLabel(card, "Credit Card"),
+        daysRemaining: usage.daysRemaining,
+        usedThisCycle: usage.usedThisCycle,
+        availableCredit: usage.availableCredit,
+        limit,
+        utilization: limit > 0 ? (usage.usedThisCycle / limit) * 100 : 0,
+        accent: card.color || DEFAULT_CARD_ACCENT,
+        openBill: openBillByAccount.get(card.id) ?? null,
+      };
     });
-  };
+  }, [creditCards, expenses, payments, openBillByAccount]);
 
-  const handleOpenPayBill = (cardId?: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
-    setSelectedPayCardId(cardId || creditCards[0]?.id);
-    setIsPayModalOpen(true);
-  };
+  const handleOpenCardDetail = useCallback(
+    (cardId: string) => {
+      Haptics.selectionAsync().catch(() => undefined);
+      router.push({
+        pathname: "/accounts/[id]",
+        params: { id: cardId },
+      });
+    },
+    [router]
+  );
 
-  const handleOpenAddCard = () => {
+  const handleOpenPayBill = useCallback(
+    (cardId?: string) => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+      const openBill = cardId ? openBillByAccount.get(cardId) : undefined;
+      if (openBill) {
+        router.push(`/credit-card-bills/${openBill.id}` as never);
+        return;
+      }
+      setSelectedPayCardId(cardId || creditCards[0]?.id);
+      setIsPayModalOpen(true);
+    },
+    [creditCards, openBillByAccount, router]
+  );
+
+  const handleOpenAddCard = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
     setEditingCard(null);
     setIsEditModalOpen(true);
-  };
+  }, []);
 
-  const handleOpenEditCard = (card: Account) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
-    setEditingCard(card);
-    setIsEditModalOpen(true);
-  };
+  const handleOpenEditCard = useCallback(
+    (cardId: string) => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+      const card = creditCards.find((item) => item.id === cardId) ?? null;
+      setEditingCard(card);
+      setIsEditModalOpen(true);
+    },
+    [creditCards]
+  );
+
+  const handleAddStatement = useCallback((cardId: string) => {
+    Haptics.selectionAsync().catch(() => undefined);
+    setCreateBillAccountId(cardId);
+    setIsCreateBillOpen(true);
+  }, []);
 
   return (
-    <ScrollView
-      contentContainerStyle={styles.container}
-      showsVerticalScrollIndicator={false}
-    >
-      {/* Credit Overview Hero Banner */}
-      <Card
-        style={[
-          styles.overviewCard,
-          {
-            backgroundColor: isDark
-              ? "rgba(49, 46, 129, 0.45)"
-              : "rgba(243, 232, 255, 0.9)",
-            borderColor: theme.colors.primary,
-          },
-        ]}
-      >
-        <View style={styles.overviewHeader}>
-          <View style={styles.overviewTitleRow}>
-            <CreditCard size={18} color={theme.colors.primary} />
-            <Text
-              style={[
-                styles.overviewLabel,
-                { color: theme.colors.mutedForeground },
-              ]}
-            >
-              Total Credit Used
-            </Text>
-          </View>
-          <View
-            style={[
-              styles.utilizationBadge,
-              {
-                backgroundColor:
-                  creditOverview.utilizationRate > 70
-                    ? "rgba(239, 68, 68, 0.15)"
-                    : creditOverview.utilizationRate > 30
-                      ? "rgba(245, 158, 11, 0.15)"
-                      : "rgba(34, 197, 94, 0.15)",
-              },
-            ]}
-          >
-            <Text
-              style={{
-                fontSize: 11,
-                fontWeight: "700",
-                color:
-                  creditOverview.utilizationRate > 70
-                    ? theme.colors.destructive
-                    : creditOverview.utilizationRate > 30
-                      ? theme.colors.warning
-                      : theme.colors.success,
-              }}
-            >
-              {creditOverview.utilizationRate.toFixed(0)}% Utilized
-            </Text>
-          </View>
-        </View>
+    <View style={styles.container}>
+      <CreditSummaryCard
+        totalUsed={creditOverview.totalUsed}
+        totalLimit={creditOverview.totalLimit}
+        totalAvailable={creditOverview.totalAvailable}
+        utilizationRate={creditOverview.utilizationRate}
+        currency={system.defaultCurrency}
+      />
 
-        <Amount
-          value={creditOverview.totalUsed}
-          currency={system.defaultCurrency}
-          ghostable
-          style={{
-          fontSize: 28,
-            fontWeight: "800",
-            color: theme.colors.destructive,
-          }}
-        />
-
-        {/* Aggregate Progress Bar */}
-        <View
-          style={[
-            styles.progressBarBg,
-            {
-              backgroundColor: isDark
-                ? "rgba(255,255,255,0.1)"
-                : "rgba(0,0,0,0.06)",
-            },
-          ]}
-        >
-          <View
-            style={[
-              styles.progressBarFill,
-              {
-                width: `${creditOverview.utilizationRate}%`,
-                backgroundColor:
-                  creditOverview.utilizationRate > 70
-                    ? theme.colors.destructive
-                    : creditOverview.utilizationRate > 30
-                      ? theme.colors.warning
-                      : theme.colors.primary,
-              },
-            ]}
-          />
-        </View>
-
-        <View style={styles.overviewSubRow}>
-          <View style={styles.overviewStat}>
-            <Text
-              style={{
-                fontSize: theme.typography.xs,
-                color: theme.colors.mutedForeground,
-              }}
-            >
-              Total Limit
-            </Text>
-            <Amount
-              value={creditOverview.totalLimit}
-              currency={system.defaultCurrency}
-              ghostable
-              style={{
-                fontSize: theme.typography.sm,
-                fontWeight: "700",
-                color: theme.colors.foreground,
-              }}
-            />
-          </View>
-
-          <View
-            style={[
-              styles.overviewDivider,
-              { backgroundColor: theme.colors.border },
-            ]}
-          />
-
-          <View style={styles.overviewStat}>
-            <Text
-              style={{
-                fontSize: theme.typography.xs,
-                color: theme.colors.mutedForeground,
-              }}
-            >
-              Available Credit
-            </Text>
-            <Amount
-              value={creditOverview.totalAvailable}
-              currency={system.defaultCurrency}
-              ghostable
-              style={{
-                fontSize: theme.typography.sm,
-                fontWeight: "700",
-                color: theme.colors.success,
-              }}
-            />
-          </View>
-        </View>
-      </Card>
-
-      {/* Quick Action Buttons */}
       <View style={styles.actionRow}>
         <Pressable
           onPress={handleOpenAddCard}
-          style={[
+          style={({ pressed }) => [
             styles.actionButton,
             {
-              backgroundColor: theme.colors.card,
-              borderColor: theme.colors.border,
+              backgroundColor: isDark ? "rgba(12, 16, 24, 0.92)" : theme.colors.card,
+              borderColor: isDark ? "rgba(148, 163, 184, 0.16)" : theme.colors.border,
             },
+            pressed && styles.pressed,
           ]}
+          accessibilityRole="button"
+          accessibilityLabel="Add card"
         >
-          <Plus size={16} color={theme.colors.primary} />
-          <Text
-            style={[
-              styles.actionButtonText,
-              { color: theme.colors.foreground },
-            ]}
-          >
+          <Plus size={16} color={CARD_ORANGE} strokeWidth={2.4} />
+          <Text style={[styles.actionButtonText, { color: theme.colors.foreground }]}>
             Add Card
           </Text>
         </Pressable>
 
         <Pressable
           onPress={() => handleOpenPayBill()}
-          style={[
+          style={({ pressed }) => [
             styles.actionButton,
             {
-              backgroundColor: theme.colors.card,
-              borderColor: theme.colors.border,
+              backgroundColor: isDark ? "rgba(12, 16, 24, 0.92)" : theme.colors.card,
+              borderColor: isDark ? "rgba(148, 163, 184, 0.16)" : theme.colors.border,
             },
+            pressed && styles.pressed,
           ]}
+          accessibilityRole="button"
+          accessibilityLabel="Pay bill"
         >
-          <CheckCircle2 size={16} color={theme.colors.success} />
-          <Text
-            style={[
-              styles.actionButtonText,
-              { color: theme.colors.foreground },
-            ]}
-          >
+          <CheckCircle2 size={16} color={isDark ? ACCOUNT_GREEN : theme.colors.success} />
+          <Text style={[styles.actionButtonText, { color: theme.colors.foreground }]}>
             Pay Bill
           </Text>
         </Pressable>
       </View>
 
-      {/* Cards List */}
       {creditCards.length === 0 ? (
         <EmptyState
           illustration="cards"
@@ -340,321 +227,21 @@ export function CardsList() {
           tip="Setting your billing cycle reset date enables automated payment countdowns and credit health tracking."
         />
       ) : (
-        <View style={{ gap: 14 }}>
-          {creditCards.map((card) => {
-            const usage = computeCreditUsage(card, expenses, payments);
-            const limit = card.creditLimit || 0;
-            const util = limit > 0 ? (usage.usedThisCycle / limit) * 100 : 0;
-            const cardColor = card.color || "#4F46E5";
-
-            return (
-              <Pressable
-                key={card.id}
-                onPress={() => handleOpenCardDetail(card)}
-                onLongPress={() => handleOpenEditCard(card)}
-                style={({ pressed }) => [
-                  styles.cardBox,
-                  {
-                    backgroundColor: theme.colors.card,
-                    borderColor: theme.colors.border,
-                    opacity: pressed ? 0.9 : 1,
-                  },
-                ]}
-              >
-                {/* Header Strip */}
-                <View style={styles.cardTopRow}>
-                  <View style={styles.cardBrandRow}>
-                    <View
-                      style={[
-                        styles.cardIconBox,
-                        { backgroundColor: cardColor },
-                      ]}
-                    >
-                      <CreditCard size={18} color="#FFF" />
-                    </View>
-                    <View style={{ gap: 2, flex: 1, minWidth: 0 }}>
-                      <Text
-                        style={[
-                          styles.cardName,
-                          {
-                            color: theme.colors.foreground,
-                            fontSize: theme.typography.md,
-                          },
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {card.name}
-                      </Text>
-                      <Text
-                        style={{
-                          color: theme.colors.mutedForeground,
-                          fontSize: theme.typography.xs,
-                        }}
-                        numberOfLines={1}
-                      >
-                        {formatAccountIdentityLine(card, "Credit Card")}
-                      </Text>
-                      <SmsMatchingUnconfiguredText
-                        account={card}
-                        typeName="Credit Card"
-                      />
-                    </View>
-                  </View>
-
-                  {/* Reset Countdown Badge */}
-                  <View
-                    style={[
-                      styles.resetBadge,
-                      {
-                        backgroundColor: isDark
-                          ? "rgba(255,255,255,0.06)"
-                          : "rgba(0,0,0,0.04)",
-                        borderColor: theme.colors.border,
-                      },
-                    ]}
-                  >
-                    <Calendar size={12} color={theme.colors.mutedForeground} />
-                    <Text
-                      style={{
-                        fontSize: 10,
-                        fontWeight: "700",
-                        color: theme.colors.mutedForeground,
-                      }}
-                    >
-                      Resets in {usage.daysRemaining}d
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Used vs Limit Metrics */}
-                <View style={styles.metricsRow}>
-                  <View>
-                    <Text
-                      style={{
-                        fontSize: theme.typography.xs,
-                        color: theme.colors.mutedForeground,
-                      }}
-                    >
-                      Current Used
-                    </Text>
-                    <Amount
-                      value={usage.usedThisCycle}
-                      currency={system.defaultCurrency}
-                      ghostable
-                      style={{
-                        fontSize: theme.typography.lg,
-                        fontWeight: "800",
-                        color:
-                          usage.usedThisCycle > 0
-                            ? theme.colors.destructive
-                            : theme.colors.foreground,
-                      }}
-                    />
-                  </View>
-
-                  <View style={{ alignItems: "flex-end" }}>
-                    <Text
-                      style={{
-                        fontSize: theme.typography.xs,
-                        color: theme.colors.mutedForeground,
-                      }}
-                    >
-                      Available Limit
-                    </Text>
-                    <Amount
-                      value={usage.availableCredit}
-                      currency={system.defaultCurrency}
-                      ghostable
-                      style={{
-                        fontSize: theme.typography.lg,
-                        fontWeight: "800",
-                        color: theme.colors.success,
-                      }}
-                    />
-                  </View>
-                </View>
-
-                {/* Card Progress Bar */}
-                <View
-                  style={[
-                    styles.progressBarBg,
-                    {
-                      backgroundColor: isDark
-                        ? "rgba(255,255,255,0.08)"
-                        : "rgba(0,0,0,0.05)",
-                    },
-                  ]}
-                >
-                  <View
-                    style={[
-                      styles.progressBarFill,
-                      {
-                        width: `${Math.min(100, util)}%`,
-                        backgroundColor:
-                          util > 70
-                            ? theme.colors.destructive
-                            : util > 30
-                              ? theme.colors.warning
-                              : cardColor,
-                      },
-                    ]}
-                  />
-                </View>
-
-                {/* Open statement bill summary */}
-                {openBillByAccount.get(card.id) ? (
-                  <View
-                    style={{
-                      marginTop: 10,
-                      gap: 4,
-                      paddingTop: 10,
-                      borderTopWidth: StyleSheet.hairlineWidth,
-                      borderTopColor: theme.colors.border,
-                    }}
-                  >
-                    <Text
-                      style={{
-                        fontSize: theme.typography.xs,
-                        color: theme.colors.mutedForeground,
-                        fontWeight: "700",
-                        textTransform: "uppercase",
-                      }}
-                    >
-                      Statement · {openBillByAccount.get(card.id)!.status.replaceAll("_", " ")}
-                    </Text>
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        justifyContent: "space-between",
-                      }}
-                    >
-                      <Amount
-                        value={openBillByAccount.get(card.id)!.statementAmount}
-                        currency={system.defaultCurrency}
-                        ghostable
-                      />
-                      <Text
-                        style={{
-                          color: theme.colors.mutedForeground,
-                          fontSize: theme.typography.sm,
-                        }}
-                      >
-                        Due {openBillByAccount.get(card.id)!.dueDate}
-                      </Text>
-                    </View>
-                    <Text
-                      style={{
-                        color: theme.colors.mutedForeground,
-                        fontSize: theme.typography.xs,
-                      }}
-                    >
-                      Min due{" "}
-                      {system.defaultCurrency}{" "}
-                      {openBillByAccount
-                        .get(card.id)!
-                        .minimumDueAmount.toLocaleString()}
-                    </Text>
-                  </View>
-                ) : (
-                  <Pressable
-                    onPress={(e) => {
-                      e.stopPropagation();
-                      setCreateBillAccountId(card.id);
-                      setIsCreateBillOpen(true);
-                    }}
-                    style={{ marginTop: 8 }}
-                  >
-                    <Text
-                      style={{
-                        color: theme.colors.primary,
-                        fontSize: theme.typography.xs,
-                        fontWeight: "600",
-                      }}
-                    >
-                      + Add statement bill
-                    </Text>
-                  </Pressable>
-                )}
-
-                {/* Bottom CTA Row */}
-                <View style={styles.cardFooter}>
-                  <Text
-                    style={{
-                      fontSize: theme.typography.xs,
-                      color: theme.colors.mutedForeground,
-                    }}
-                  >
-                    Limit: {system.defaultCurrency} {limit.toLocaleString()}
-                  </Text>
-
-                  <View style={styles.footerActions}>
-                  <Pressable
-                    onPress={(e) => {
-                      e.stopPropagation();
-                      handleOpenEditCard(card);
-                    }}
-                    style={[
-                      styles.payBtn,
-                      {
-                        backgroundColor: isDark
-                          ? "rgba(255,255,255,0.06)"
-                          : "rgba(0,0,0,0.04)",
-                        borderColor: theme.colors.border,
-                      },
-                    ]}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Edit ${card.name}`}
-                  >
-                    <Pencil size={13} color={theme.colors.foreground} />
-                    <Text
-                      style={[
-                        styles.actionButtonText,
-                        { color: theme.colors.foreground, fontSize: 12 },
-                      ]}
-                    >
-                      Edit
-                    </Text>
-                  </Pressable>
-                  <Pressable
-                    onPress={(e) => {
-                      e.stopPropagation();
-                      const openBill = openBillByAccount.get(card.id);
-                      if (openBill) {
-                        router.push(`/credit-card-bills/${openBill.id}`);
-                        return;
-                      }
-                      handleOpenPayBill(card.id);
-                    }}
-                    style={[
-                      styles.payBtn,
-                      {
-                        backgroundColor: isDark
-                          ? "rgba(34, 197, 94, 0.15)"
-                          : "rgba(34, 197, 94, 0.1)",
-                        borderColor: theme.colors.success,
-                      },
-                    ]}
-                  >
-                    <CheckCircle2 size={13} color={theme.colors.success} />
-                    <Text
-                      style={{
-                        fontSize: 11,
-                        fontWeight: "700",
-                        color: theme.colors.success,
-                      }}
-                    >
-                      Pay Bill
-                    </Text>
-                  </Pressable>
-                  </View>
-                </View>
-              </Pressable>
-            );
-          })}
+        <View style={styles.list}>
+          {cardRows.map((row) => (
+            <CreditCardListItem
+              key={row.id}
+              row={row}
+              currency={system.defaultCurrency}
+              onPress={handleOpenCardDetail}
+              onLongPress={handleOpenEditCard}
+              onAddStatement={handleAddStatement}
+              onPay={handleOpenPayBill}
+            />
+          ))}
         </View>
       )}
 
-      {/* Modals */}
       <EditAccountModal
         isOpen={isEditModalOpen}
         onClose={() => setIsEditModalOpen(false)}
@@ -676,67 +263,13 @@ export function CardsList() {
         accountTypes={accountTypes}
         defaultAccountId={createBillAccountId}
       />
-    </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    padding: 16,
-    gap: 18,
-    paddingBottom: 40,
-  },
-  overviewCard: {
-    padding: 18,
-    borderRadius: 20,
-    borderWidth: 1.5,
-    gap: 12,
-  },
-  overviewHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  overviewTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  overviewLabel: {
-    fontWeight: "700",
-    textTransform: "uppercase",
-    fontSize: 11,
-    letterSpacing: 0.5,
-  },
-  utilizationBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  progressBarBg: {
-    height: 6,
-    borderRadius: 3,
-    overflow: "hidden",
-  },
-  progressBarFill: {
-    height: "100%",
-    borderRadius: 3,
-  },
-  overviewSubRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-around",
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: "rgba(255,255,255,0.08)",
-  },
-  overviewStat: {
-    alignItems: "center",
-    gap: 2,
-  },
-  overviewDivider: {
-    width: 1,
-    height: 24,
+    gap: 16,
   },
   actionRow: {
     flexDirection: "row",
@@ -744,97 +277,23 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     flex: 1,
+    minHeight: 48,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 12,
-    borderRadius: 14,
+    borderRadius: 16,
+    borderCurve: "continuous",
     borderWidth: 1,
-    gap: 6,
-  },
-  actionButtonText: {
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  cardBox: {
-    padding: 16,
-    borderRadius: 18,
-    borderWidth: 1,
-    gap: 14,
-  },
-  cardTopRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  cardBrandRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    flex: 1,
-    minWidth: 0,
-    marginRight: 8,
-  },
-  cardIconBox: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  cardName: {
-    fontWeight: "700",
-  },
-  resetBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 10,
-    borderWidth: 1,
-    gap: 4,
-    flexShrink: 0,
-  },
-  metricsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  cardFooter: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingTop: 4,
-  },
-  footerActions: {
-    flexDirection: "row",
-    alignItems: "center",
     gap: 8,
   },
-  payBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-    borderWidth: 1,
-    gap: 4,
+  actionButtonText: {
+    fontSize: 14,
+    fontWeight: "700",
   },
-  emptyCard: {
-    padding: 32,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 20,
-    borderWidth: 1,
+  pressed: {
+    opacity: 0.78,
+  },
+  list: {
     gap: 12,
-    marginTop: 20,
-  },
-  emptyTitle: {
-    fontWeight: "800",
-  },
-  emptyDesc: {
-    textAlign: "center",
-    lineHeight: 18,
-    marginBottom: 8,
   },
 });

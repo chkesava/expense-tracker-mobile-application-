@@ -1,4 +1,5 @@
-import type { CreditCardBillStatus } from "../types/creditCardBill";
+import type { CreditCardBill, CreditCardBillStatus } from "../types/creditCardBill";
+import { toLocalDateKey } from "./dates";
 
 export type ComputeBillStatusInput = {
   today: string;
@@ -55,6 +56,36 @@ export function computeRemainingAmount(
   amountPaid: number
 ): number {
   return Math.max(0, (Number(statementAmount) || 0) - (Number(amountPaid) || 0));
+}
+
+/**
+ * Match a stored statement bill to a computed billing cycle.
+ * Prefers exact period keys, then statement date on the cycle end/start.
+ */
+export function findCreditCardBillForCycle<
+  T extends Pick<
+    CreditCardBill,
+    "accountId" | "billingPeriodStart" | "billingPeriodEnd" | "statementDate"
+  >,
+>(
+  bills: T[],
+  accountId: string,
+  cycleStart: Date,
+  cycleEnd: Date
+): T | undefined {
+  const startKey = toLocalDateKey(cycleStart);
+  const endKey = toLocalDateKey(cycleEnd);
+  const forAccount = bills.filter((bill) => bill.accountId === accountId);
+  return (
+    forAccount.find(
+      (bill) =>
+        bill.billingPeriodStart === startKey && bill.billingPeriodEnd === endKey
+    ) ||
+    forAccount.find((bill) => bill.billingPeriodStart === startKey) ||
+    forAccount.find(
+      (bill) => bill.statementDate === endKey || bill.statementDate === startKey
+    )
+  );
 }
 
 export function shouldSendBillReminder(opts: {

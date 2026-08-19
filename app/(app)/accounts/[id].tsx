@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   Pressable,
   StyleSheet,
   Text,
@@ -16,7 +17,9 @@ import { AccountCreditHero } from "@/components/accounts/AccountCreditHero";
 import { AccountHeader } from "@/components/accounts/AccountHeader";
 import { AddAccountEntryModal } from "@/components/accounts/AddAccountEntryModal";
 import { EditAccountModal } from "@/components/accounts/EditAccountModal";
+import { PastBillingCycles } from "@/components/accounts/PastBillingCycles";
 import { PayCreditBillModal } from "@/components/accounts/PayCreditBillModal";
+import { CreditStatementCard } from "@/components/accounts/CreditStatementCard";
 import { SmsMatchingUnconfiguredText } from "@/components/accounts/SmsMatchingUnconfiguredText";
 import { TransferFundsModal } from "@/components/accounts/TransferFundsModal";
 import {
@@ -26,13 +29,12 @@ import {
 } from "@/components/accounts/TransactionFilters";
 import { TransactionRow } from "@/components/accounts/TransactionRow";
 import { CreateCreditCardBillModal } from "@/components/creditCardBills/CreateCreditCardBillModal";
-import { Amount } from "@/components/common/Amount";
 import {
   BOTTOM_NAV_BAR_HEIGHT,
   BOTTOM_NAV_FAB_GAP,
   BOTTOM_NAV_FAB_SIZE,
 } from "@/components/layout/chrome";
-import { Card } from "@/components/ui/Card";
+import { haptic } from "@/lib/haptics";
 import { useAccountEntries } from "@/hooks/useAccountEntries";
 import { useAccountPayments } from "@/hooks/useAccountPayments";
 import { useAccounts } from "@/hooks/useAccounts";
@@ -53,7 +55,10 @@ import {
   computeCreditUsage,
   getCreditBillHistory,
 } from "@/shared/utils/accountBalance";
-import { smsMatchingUnconfiguredLabel } from "@/shared/utils/accountIdentity";
+import {
+  formatCreditCardHeaderLine,
+  smsMatchingUnconfiguredLabel,
+} from "@/shared/utils/accountIdentity";
 import { getAccountKind } from "@/shared/utils/accountKind";
 import {
   accountKindSubtitle,
@@ -61,7 +66,8 @@ import {
   activityTitle,
   formatActivityDateLabel,
 } from "@/shared/utils/activityDisplay";
-import { formatDateKey } from "@/shared/utils/dates";
+import { findCreditCardBillForCycle } from "@/shared/utils/creditCardBillStatus";
+import { toLocalDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
@@ -82,7 +88,7 @@ export default function AccountDetailScreen() {
   const { settings: system } = useSystemSettings();
   const { setEditingExpense, setEditingIncome } = useModals();
 
-  const { accounts } = useAccounts();
+  const { accounts, loading: accountsLoading } = useAccounts();
   const { accountTypes } = useAccountTypes();
   const { expenses } = useExpenses();
   const { incomes } = useIncomes();
@@ -269,6 +275,50 @@ export default function AccountDetailScreen() {
 
   const keyExtractor = useCallback((item: AccountActivity) => item.id, []);
 
+  const pastCycleItems = useMemo(() => {
+    if (!account || !isCreditCard) return [];
+    return creditBillHistory.map((cycle) => {
+      const matched = findCreditCardBillForCycle(
+        bills,
+        account.id,
+        cycle.cycleStart,
+        cycle.cycleEnd
+      );
+      return {
+        id: cycle.id,
+        rangeLabel: `${toLocalDateKey(cycle.cycleStart)} → ${toLocalDateKey(cycle.cycleEnd)}`,
+        billedAmount: cycle.billedAmount,
+        paidAmount: cycle.paidAmount,
+        remainingAmount: cycle.outstandingAmount,
+        paymentDate: matched?.paymentDate,
+        status: cycle.status,
+        overdue: matched?.status === "OVERDUE",
+        billId: matched?.id,
+      };
+    });
+  }, [account, isCreditCard, creditBillHistory, bills]);
+
+  const onRecordBillPayment = useCallback(() => {
+    if (openStatementBill) {
+      router.push(`/credit-card-bills/${openStatementBill.id}` as never);
+      return;
+    }
+    setIsPayModalOpen(true);
+  }, [openStatementBill, router]);
+
+  const onOpenStatementBill = useCallback(() => {
+    if (!openStatementBill) return;
+    router.push(`/credit-card-bills/${openStatementBill.id}` as never);
+  }, [openStatementBill, router]);
+
+  const onOpenBillingCycle = useCallback(
+    (billId: string) => {
+      void haptic.selection();
+      router.push(`/credit-card-bills/${billId}` as never);
+    },
+    [router]
+  );
+
   const listPaddingBottom =
     insets.bottom + BOTTOM_NAV_BAR_HEIGHT + BOTTOM_NAV_FAB_GAP + BOTTOM_NAV_FAB_SIZE + 20;
 
@@ -281,25 +331,31 @@ export default function AccountDetailScreen() {
           onBack={() => router.back()}
         />
         <View style={styles.missing}>
-          <Text
-            style={{
-              fontSize: theme.typography.lg,
-              color: theme.colors.mutedForeground,
-            }}
-          >
-            Account not found
-          </Text>
-          <Pressable onPress={() => router.back()} style={{ marginTop: 12 }}>
-            <Text
-              style={{
-                fontSize: theme.typography.sm,
-                fontWeight: "700",
-                color: theme.colors.primary,
-              }}
-            >
-              Go Back
-            </Text>
-          </Pressable>
+          {accountsLoading ? (
+            <ActivityIndicator color={theme.colors.primary} />
+          ) : (
+            <>
+              <Text
+                style={{
+                  fontSize: theme.typography.lg,
+                  color: theme.colors.mutedForeground,
+                }}
+              >
+                Account not found
+              </Text>
+              <Pressable onPress={() => router.back()} style={{ marginTop: 12 }}>
+                <Text
+                  style={{
+                    fontSize: theme.typography.sm,
+                    fontWeight: "700",
+                    color: theme.colors.primary,
+                  }}
+                >
+                  Go Back
+                </Text>
+              </Pressable>
+            </>
+          )}
         </View>
       </View>
     );
@@ -314,14 +370,8 @@ export default function AccountDetailScreen() {
           creditLimit={account.creditLimit || 0}
           daysRemaining={creditUsage.daysRemaining}
           currency={currency}
-          payLabel={openStatementBill ? "Pay Bill" : "Record Bill Payment"}
-          onPay={() => {
-            if (openStatementBill) {
-              router.push(`/credit-card-bills/${openStatementBill.id}` as never);
-              return;
-            }
-            setIsPayModalOpen(true);
-          }}
+          payLabel="Record Bill Payment"
+          onPay={onRecordBillPayment}
         />
       ) : (
         <AccountBalanceCard
@@ -335,128 +385,20 @@ export default function AccountDetailScreen() {
       )}
 
       {isCreditCard ? (
-        <Card>
-          <View style={{ gap: 10 }}>
-            <Text
-              style={{
-                fontSize: theme.typography.xs,
-                color: theme.colors.mutedForeground,
-                fontWeight: "700",
-                textTransform: "uppercase",
-              }}
-            >
-              Statement Bill
-            </Text>
-            {openStatementBill ? (
-              <>
-                <View style={styles.billRow}>
-                  <Text style={{ color: theme.colors.mutedForeground }}>Statement</Text>
-                  <Amount value={openStatementBill.statementAmount} ghostable />
-                </View>
-                <View style={styles.billRow}>
-                  <Text style={{ color: theme.colors.mutedForeground }}>Minimum Due</Text>
-                  <Amount value={openStatementBill.minimumDueAmount} ghostable />
-                </View>
-                <View style={styles.billRow}>
-                  <Text style={{ color: theme.colors.mutedForeground }}>Due</Text>
-                  <Text style={{ color: theme.colors.foreground, fontWeight: "600" }}>
-                    {openStatementBill.dueDate}
-                  </Text>
-                </View>
-                <View style={styles.billRow}>
-                  <Text style={{ color: theme.colors.mutedForeground }}>Status</Text>
-                  <Text style={{ color: theme.colors.primary, fontWeight: "700" }}>
-                    {openStatementBill.status.replaceAll("_", " ")}
-                  </Text>
-                </View>
-              </>
-            ) : (
-              <Pressable
-                onPress={() => {
-                  Haptics.selectionAsync().catch(() => undefined);
-                  setIsCreateBillOpen(true);
-                }}
-              >
-                <Text style={{ color: theme.colors.primary, fontWeight: "600" }}>
-                  + Add statement bill for reminders
-                </Text>
-              </Pressable>
-            )}
-          </View>
-        </Card>
+        <CreditStatementCard
+          bill={openStatementBill}
+          currency={currency}
+          onAdd={() => setIsCreateBillOpen(true)}
+          onOpen={onOpenStatementBill}
+        />
       ) : null}
 
-      {isCreditCard && creditBillHistory.length > 0 ? (
-        <View style={{ gap: 8 }}>
-          <Text
-            style={{
-              color: theme.colors.mutedForeground,
-              fontSize: theme.typography.xs,
-              fontWeight: "800",
-              letterSpacing: 0.8,
-            }}
-          >
-            PAST BILLING CYCLES
-          </Text>
-          {creditBillHistory.map((bill) => (
-            <Card
-              key={bill.id}
-              style={[
-                styles.billCard,
-                {
-                  backgroundColor: theme.colors.card,
-                  borderColor: theme.colors.border,
-                },
-              ]}
-            >
-              <View style={{ flex: 1, gap: 2 }}>
-                <Text
-                  style={{
-                    fontWeight: "700",
-                    fontSize: theme.typography.sm,
-                    color: theme.colors.foreground,
-                  }}
-                >
-                  {formatDateKey(bill.cycleStart)} → {formatDateKey(bill.cycleEnd)}
-                </Text>
-                <Text
-                  style={{
-                    fontSize: theme.typography.xs,
-                    color: theme.colors.mutedForeground,
-                  }}
-                >
-                  Billed: {currency} {bill.billedAmount.toLocaleString()} • Paid:{" "}
-                  {currency} {bill.paidAmount.toLocaleString()}
-                </Text>
-              </View>
-              <View
-                style={[
-                  styles.billStatusBadge,
-                  {
-                    backgroundColor:
-                      bill.status === "paid"
-                        ? "rgba(34, 197, 94, 0.15)"
-                        : "rgba(239, 68, 68, 0.15)",
-                  },
-                ]}
-              >
-                <Text
-                  style={{
-                    fontSize: 10,
-                    fontWeight: "800",
-                    color:
-                      bill.status === "paid"
-                        ? theme.colors.success
-                        : theme.colors.destructive,
-                    textTransform: "uppercase",
-                  }}
-                >
-                  {bill.status}
-                </Text>
-              </View>
-            </Card>
-          ))}
-        </View>
+      {isCreditCard ? (
+        <PastBillingCycles
+          cycles={pastCycleItems}
+          currency={currency}
+          onOpenCycle={onOpenBillingCycle}
+        />
       ) : null}
 
       <TransactionFilters
@@ -477,7 +419,13 @@ export default function AccountDetailScreen() {
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <AccountHeader
         title={account.name}
-        subtitle={accountKindSubtitle(isCreditCard, typeName)}
+        subtitle={
+          isCreditCard
+            ? formatCreditCardHeaderLine(account)
+            : accountKindSubtitle(isCreditCard, typeName)
+        }
+        variant={isCreditCard ? "credit" : "default"}
+        accentColor={account.color}
         warning={
           smsMatchingUnconfiguredLabel(account, typeName) ? (
             <SmsMatchingUnconfiguredText account={account} typeName={typeName} />
@@ -522,7 +470,7 @@ export default function AccountDetailScreen() {
           paddingHorizontal: 16,
           paddingBottom: listPaddingBottom,
         }}
-        extraData={`${activityFilter}-${compact}-${isDark}`}
+        extraData={`${activityFilter}-${compact}-${isDark}-${openStatementBill?.id ?? ""}-${pastCycleItems.length}`}
       />
 
       <EditAccountModal
@@ -586,23 +534,6 @@ const styles = StyleSheet.create({
   },
   separator: {
     height: 8,
-  },
-  billRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  billCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: 14,
-    borderRadius: 16,
-    borderWidth: 1,
-  },
-  billStatusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 10,
   },
   emptyCard: {
     padding: 32,
