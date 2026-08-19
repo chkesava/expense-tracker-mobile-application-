@@ -6,7 +6,11 @@ export const BILL_DEFAULT_CATEGORY = "Food & Dining";
 export const COLLECT_DEFAULT_CATEGORY = "Gifts & Donations";
 
 export function createParticipantKey(): string {
-  return `p_${generatePaymentSlug(10)}`;
+  try {
+    return `p_${generatePaymentSlug(10)}`;
+  } catch {
+    return `p_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+  }
 }
 
 export function getSplitKind(split: Pick<Split, "kind">): SplitKind {

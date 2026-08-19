@@ -203,7 +203,7 @@ export function CreateSplitModal({ visible, onClose }: CreateSplitModalProps) {
       return;
     }
 
-    if (isCollect && !userSettings.upiId.trim()) {
+    if (isCollect && !(userSettings.upiId || "").trim()) {
       Alert.alert(
         "UPI ID Required",
         "Set your UPI ID in Settings so friends can pay with a QR code or link."
@@ -254,7 +254,7 @@ export function CreateSplitModal({ visible, onClose }: CreateSplitModalProps) {
         isCollect
           ? {
               createPersonalExpense: false,
-              organizerUpiId: userSettings.upiId.trim(),
+              organizerUpiId: (userSettings.upiId || "").trim(),
               payeePhotoUrl: user?.photoURL || undefined,
               qrStyleId: getStoredQrStyleId(),
             }
