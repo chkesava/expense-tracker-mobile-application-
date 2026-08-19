@@ -1,10 +1,9 @@
 import { billDateForMonth, clampBillDay } from "./dates";
 
-export function getBillingCycleDates(billDay: number) {
-  const today = new Date();
-  const currentMonth = today.getMonth();
-  const currentYear = today.getFullYear();
-  const currentDate = today.getDate();
+export function getBillingCycleDates(billDay: number, asOf: Date = new Date()) {
+  const currentMonth = asOf.getMonth();
+  const currentYear = asOf.getFullYear();
+  const currentDate = asOf.getDate();
   const effectiveBillDay = clampBillDay(currentYear, currentMonth, billDay);
 
   let previousBillDate: Date;

@@ -76,6 +76,17 @@ export const DEFAULT_BILL_REMINDER_FREQUENCY: CreditCardBillReminderFrequency = 
   overdueEveryDays: 1,
 };
 
+/** Auto-created statements are due this many calendar days after generation. */
+export const CREDIT_CARD_PAYMENT_WINDOW_DAYS = 5;
+
+/** Reminder cadence that fits the 5-day repayment window. */
+export const AUTO_CREDIT_CARD_BILL_REMINDER_FREQUENCY: CreditCardBillReminderFrequency =
+  {
+    daysBefore: [3, 1],
+    onDueDate: true,
+    overdueEveryDays: 1,
+  };
+
 export const DEFAULT_CREDIT_CARD_BILL_REMINDERS: CreditCardBillRemindersSettings =
   {
     enabled: true,

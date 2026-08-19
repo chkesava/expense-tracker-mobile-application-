@@ -508,6 +508,7 @@ export function EditAccountModal({
                 onChangeText={setBillGenerationDay}
                 keyboardType="number-pad"
                 placeholder="e.g. 15"
+                helperText="A statement is created on this day from cycle spend. Due date is 5 days later."
               />
             </View>
           </View>
