@@ -19,6 +19,7 @@ function expense(date: string, amount: number): Expense {
     date,
     month: date.slice(0, 7),
     accountId: creditCard.id,
+    createdAt: date,
   };
 }
 
