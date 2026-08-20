@@ -14,6 +14,7 @@ export type TransactionInboxItemProps = {
   busy: boolean;
   onAdd: (id: string) => void;
   onIgnore: (id: string) => void;
+  ignoreLabel?: string;
 };
 
 export const TransactionInboxItem = memo(function TransactionInboxItem({
@@ -24,6 +25,7 @@ export const TransactionInboxItem = memo(function TransactionInboxItem({
   busy,
   onAdd,
   onIgnore,
+  ignoreLabel = "Ignore",
 }: TransactionInboxItemProps) {
   const { theme } = useTheme();
 
@@ -68,7 +70,7 @@ export const TransactionInboxItem = memo(function TransactionInboxItem({
             onPress={() => onIgnore(id)}
             style={styles.actionButton}
           >
-            Ignore
+            {ignoreLabel}
           </Button>
         </View>
       </View>

@@ -29,6 +29,7 @@ import {
 } from "@/components/accounts/TransactionFilters";
 import { TransactionRow } from "@/components/accounts/TransactionRow";
 import { CreateCreditCardBillModal } from "@/components/creditCardBills/CreateCreditCardBillModal";
+import { ReconcileStatementModal } from "@/components/creditCardBills/ReconcileStatementModal";
 import {
   BOTTOM_NAV_BAR_HEIGHT,
   BOTTOM_NAV_FAB_GAP,
@@ -104,6 +105,7 @@ export default function AccountDetailScreen() {
   const [isEntryModalOpen, setIsEntryModalOpen] = useState(false);
   const [isPayModalOpen, setIsPayModalOpen] = useState(false);
   const [isCreateBillOpen, setIsCreateBillOpen] = useState(false);
+  const [isReconcileOpen, setIsReconcileOpen] = useState(false);
   const [activityFilter, setActivityFilter] = useState<ActivityFilter>("all");
 
   const account = useMemo(() => accounts.find((a) => a.id === id), [accounts, id]);
@@ -385,12 +387,36 @@ export default function AccountDetailScreen() {
       )}
 
       {isCreditCard ? (
-        <CreditStatementCard
-          bill={openStatementBill}
-          currency={currency}
-          onAdd={() => setIsCreateBillOpen(true)}
-          onOpen={onOpenStatementBill}
-        />
+        <>
+          <CreditStatementCard
+            bill={openStatementBill}
+            currency={currency}
+            onAdd={() => setIsCreateBillOpen(true)}
+            onOpen={onOpenStatementBill}
+          />
+          <Pressable
+            onPress={() => {
+              void haptic.selection();
+              setIsReconcileOpen(true);
+            }}
+            style={({ pressed }) => [
+              styles.reconcileBtn,
+              {
+                backgroundColor: isDark ? "#10141C" : theme.colors.card,
+                borderColor: isDark
+                  ? "rgba(148, 163, 184, 0.12)"
+                  : theme.colors.border,
+              },
+              pressed ? styles.reconcilePressed : null,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Reconcile statement"
+          >
+            <Text style={[styles.reconcileLabel, { color: theme.colors.primary }]}>
+              Reconcile statement
+            </Text>
+          </Pressable>
+        </>
       ) : null}
 
       {isCreditCard ? (
@@ -510,6 +536,15 @@ export default function AccountDetailScreen() {
         accountTypes={accountTypes}
         defaultAccountId={account.id}
       />
+      <ReconcileStatementModal
+        visible={isReconcileOpen}
+        onClose={() => setIsReconcileOpen(false)}
+        accountId={account.id}
+        accountName={account.name}
+        currency={currency}
+        openBill={openStatementBill}
+        usedThisCycle={creditUsage?.usedThisCycle ?? 0}
+      />
     </View>
   );
 }
@@ -541,5 +576,21 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderRadius: 16,
     borderWidth: 1,
+  },
+  reconcileBtn: {
+    borderRadius: 20,
+    borderCurve: "continuous",
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    minHeight: 48,
+    justifyContent: "center",
+  },
+  reconcileLabel: {
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  reconcilePressed: {
+    opacity: 0.86,
   },
 });
