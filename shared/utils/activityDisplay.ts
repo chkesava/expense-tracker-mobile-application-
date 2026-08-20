@@ -96,6 +96,33 @@ export function resolveActivityClockTime(
   return formatClockFromParts(date.getHours(), date.getMinutes());
 }
 
+/** Minutes from midnight for a clock label such as `08:12 PM` or `20:12`. */
+export function clockLabelToMinutes(raw?: string): number | null {
+  if (!raw) return null;
+  const formatted = formatClockLabel(raw);
+  if (!formatted) return null;
+  const match = formatted.match(/^(\d{2}):(\d{2}) (AM|PM)$/);
+  if (!match) return null;
+  let hour = Number(match[1]) % 12;
+  if (match[3] === "PM") hour += 12;
+  return hour * 60 + Number(match[2]);
+}
+
+/**
+ * Sort key for bank-statement order: calendar date, then real clock time.
+ * Missing clocks sort at the start of that day (never invent 12:00 AM on screen).
+ */
+export function postingSortMs(
+  dateKey: string,
+  explicitTime?: string,
+  createdAt?: unknown
+): number {
+  const dayMs = isValidDateKey(dateKey) ? parseLocalDate(dateKey).getTime() : 0;
+  const clock = resolveActivityClockTime(explicitTime, createdAt);
+  const minutes = clockLabelToMinutes(clock);
+  return dayMs + (minutes ?? 0) * 60 * 1000;
+}
+
 export function activityTitle(
   activity: Pick<AccountActivity, "note" | "category" | "source">
 ): string {

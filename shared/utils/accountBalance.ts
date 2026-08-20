@@ -9,7 +9,7 @@ import type {
 } from "../types/expense";
 import type { Borrowing, BorrowingRepayment } from "../types/borrowing";
 import type { Receivable, ReceivableRepayment } from "../types/receivable";
-import { resolveActivityClockTime } from "./activityDisplay";
+import { postingSortMs, resolveActivityClockTime } from "./activityDisplay";
 import { getAccountKind } from "./accountKind";
 import { getBillingCycleDates, getDaysUntilReset } from "./billingCycle";
 import { parseLocalDate, toLocalDateKey, billDateForMonth } from "./dates";
@@ -125,10 +125,9 @@ function receivableRepaymentsInto(
 }
 
 function compareActivitiesChronologically(a: AccountActivity, b: AccountActivity) {
-  const dateDiff = parseLocalDate(a.date).getTime() - parseLocalDate(b.date).getTime();
-  if (dateDiff !== 0) return dateDiff;
-  if (a.type !== b.type) return a.type === "credit" ? -1 : 1;
-  return 0;
+  const timeDiff = postingSortMs(a.date, a.time) - postingSortMs(b.date, b.time);
+  if (timeDiff !== 0) return timeDiff;
+  return a.id.localeCompare(b.id);
 }
 
 function paymentsInBillingCycle(
@@ -402,7 +401,7 @@ export function buildAccountActivities(
     ...accountIncomes.map((i, idx) => ({
       id: i.id ?? `income-${i.date}-${idx}`,
       date: i.date,
-      time: resolveActivityClockTime(undefined, i.createdAt),
+      time: resolveActivityClockTime(i.time, i.createdAt),
       amount: i.amount,
       type: "credit" as const,
       note: i.note,
@@ -539,7 +538,11 @@ export function previewBalanceAfterTransaction(
   payments: AccountPayment[] = [],
   entries: AccountEntry[] = [],
   transfers: AccountTransfer[] = [],
-  excludeId?: string
+  excludeId?: string,
+  borrowings: Borrowing[] = [],
+  borrowingRepayments: BorrowingRepayment[] = [],
+  receivables: Receivable[] = [],
+  receivableRepayments: ReceivableRepayment[] = []
 ): number | null {
   const kind = getAccountKind(typeName);
   if (kind !== "credit") {
@@ -555,7 +558,11 @@ export function previewBalanceAfterTransaction(
       filteredIncomes,
       payments,
       entries,
-      transfers
+      transfers,
+      borrowings,
+      borrowingRepayments,
+      receivables,
+      receivableRepayments
     );
     if (transactionType === "expense") balance -= amount;
     else balance += amount;

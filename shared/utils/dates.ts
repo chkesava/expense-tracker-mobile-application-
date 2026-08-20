@@ -19,6 +19,20 @@ export function todayDateKey(timezone?: string): string {
   return formatDateKey(new Date(), timezone);
 }
 
+/** Current clock as HH:mm in the given timezone (24-hour, for posting time). */
+export function nowTimeHm(timezone?: string): string {
+  const tz = timezone ?? getBrowserTimezone();
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: tz,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date());
+  const hour = parts.find((part) => part.type === "hour")?.value ?? "00";
+  const minute = parts.find((part) => part.type === "minute")?.value ?? "00";
+  return `${hour}:${minute}`;
+}
+
 /** Current calendar month as YYYY-MM. */
 export function currentMonthKey(timezone?: string): string {
   return todayDateKey(timezone).slice(0, 7);

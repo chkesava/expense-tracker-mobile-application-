@@ -19,6 +19,8 @@ export type CreateExpenseInput = {
   tags: string[];
   /** Optional Spending Space. Omitted from the document when unset. */
   spaceId?: string | null;
+  /** HH:mm posting clock when known. */
+  time?: string;
 };
 
 export type CreateIncomeInput = {
@@ -28,6 +30,8 @@ export type CreateIncomeInput = {
   month: string;
   accountId: string | null;
   note: string;
+  /** HH:mm posting clock when known. */
+  time?: string;
 };
 
 export type LedgerWriteResult = {
@@ -74,6 +78,7 @@ export async function createExpense(
         // Firestore rejects undefined, so an unassigned expense stays
         // byte-identical to what this function wrote before Spaces existed.
         ...(payload.spaceId ? { spaceId: payload.spaceId } : {}),
+        ...(payload.time ? { time: payload.time } : {}),
         createdAt: serverTimestamp(),
       }),
     { label: "expense" }
@@ -97,6 +102,7 @@ export async function createIncome(
         month: payload.month,
         accountId: payload.accountId,
         note: payload.note,
+        ...(payload.time ? { time: payload.time } : {}),
         createdAt: serverTimestamp(),
       }),
     { label: "income" }

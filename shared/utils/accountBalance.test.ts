@@ -4,6 +4,7 @@ import type {
   AccountPayment,
   AccountTransfer,
   Expense,
+  Income,
 } from "../types/expense";
 import type { Borrowing, BorrowingRepayment } from "../types/borrowing";
 import type {
@@ -407,6 +408,38 @@ describe("floating-point safety in money math", () => {
     expect(preview).toBe(84.25);
   });
 
+  it("includes borrowings when previewing the balance after a new expense", () => {
+    const withOpening: Account = { ...bank, openingBalance: 600 };
+    const borrowing: Borrowing = {
+      id: "b-cash",
+      userId: "u1",
+      lenderType: "FRIEND",
+      lenderName: "Ravi",
+      principalAmount: 10000,
+      interestRate: 0,
+      interestType: "SIMPLE",
+      interestFrequency: "ONE_TIME",
+      interestBasis: "OUTSTANDING_PRINCIPAL",
+      borrowedDate: "2026-01-02",
+      creditedAccountId: bank.id,
+      status: "ACTIVE",
+    };
+    const preview = previewBalanceAfterTransaction(
+      withOpening,
+      "Cash",
+      [],
+      [],
+      "expense",
+      112,
+      [],
+      [],
+      [],
+      undefined,
+      [borrowing]
+    );
+    expect(preview).toBe(10488);
+  });
+
   it("removes a deleted transaction's effect on the running balance", () => {
     const withOpening: Account = { ...bank, openingBalance: 100 };
     const kept = { ...expenseOf(20, "2026-01-01"), id: "exp-keep" };
@@ -511,5 +544,51 @@ describe("floating-point safety in money math", () => {
     expect(activities[0]?.time).toBe("08:12 PM");
     expect(activities[0]?.runningBalance).toBe(14852);
     expect(activities[0]?.category).toBe("Health");
+  });
+
+  it("sorts same-day rows by clock time, not credit-before-debit, and keeps running balances", () => {
+    const account: Account = {
+      id: "bank-1",
+      name: "Bank",
+      typeId: "bank-type",
+      openingBalance: 1000,
+      balanceInitialized: true,
+      balanceAsOfDate: "2026-08-20",
+    };
+    const expenses: Expense[] = [
+      {
+        id: "exp-morning",
+        amount: 200,
+        category: "Food",
+        note: "Breakfast",
+        date: "2026-08-20",
+        month: "2026-08",
+        accountId: "bank-1",
+        time: "08:00",
+        createdAt: "2026-08-20T08:00:00",
+      },
+    ];
+    const incomes: Income[] = [
+      {
+        id: "inc-evening",
+        amount: 500,
+        source: "UPI",
+        note: "Mom gave money",
+        date: "2026-08-20",
+        month: "2026-08",
+        accountId: "bank-1",
+        time: "21:00",
+        createdAt: "2026-08-20T21:00:00",
+      },
+    ];
+
+    const activities = buildAccountActivities(account, "Bank", expenses, incomes);
+    expect(activities.map((row) => row.note)).toEqual([
+      "Mom gave money",
+      "Breakfast",
+    ]);
+    // Newest first: evening income leaves 1300, morning expense left 800.
+    expect(activities[0]?.runningBalance).toBe(1300);
+    expect(activities[1]?.runningBalance).toBe(800);
   });
 });

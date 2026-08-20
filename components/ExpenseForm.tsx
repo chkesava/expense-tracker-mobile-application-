@@ -42,9 +42,11 @@ import { useAccountPayments } from "@/hooks/useAccountPayments";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useAccountTransfers } from "@/hooks/useAccountTransfers";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
+import { useBorrowings } from "@/hooks/useBorrowings";
 import { useCategorizationRules } from "@/hooks/useCategorizationRules";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useIncomes } from "@/hooks/useIncomes";
+import { useReceivables } from "@/hooks/useReceivables";
 import { useSpaces } from "@/hooks/useSpaces";
 import { getFirestoreDb } from "@/lib/firebase";
 import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
@@ -70,6 +72,7 @@ import { pushRecentCategoryPair } from "@/shared/utils/categoryPreferences";
 import {
   currentMonthKey,
   monthFromDateKey,
+  nowTimeHm,
   todayDateKey,
 } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -117,6 +120,8 @@ export function ExpenseForm({
   const { payments } = useAccountPayments();
   const { entries } = useAccountEntries();
   const { transfers } = useAccountTransfers();
+  const { borrowings, repayments: borrowingRepayments } = useBorrowings();
+  const { receivables, repayments: receivableRepayments } = useReceivables();
 
   const [type, setType] = useState<"expense" | "income">(
     editingIncome ? "income" : initialType
@@ -282,7 +287,11 @@ export function ExpenseForm({
       payments,
       entries,
       transfers,
-      excludeId
+      excludeId,
+      borrowings,
+      borrowingRepayments,
+      receivables,
+      receivableRepayments
     );
   }, [
     selectedAccount,
@@ -294,6 +303,10 @@ export function ExpenseForm({
     payments,
     entries,
     transfers,
+    borrowings,
+    borrowingRepayments,
+    receivables,
+    receivableRepayments,
     editingExpense?.id,
     editingIncome?.id,
   ]);
@@ -382,6 +395,7 @@ export function ExpenseForm({
           note: note.trim(),
           tags: tags.length > 0 ? tags : [],
           ...(spaceId ? { spaceId } : {}),
+          ...(!editingExpense ? { time: nowTimeHm(settings.timezone) } : {}),
         };
 
         if (editingExpense) {
@@ -418,6 +432,7 @@ export function ExpenseForm({
           month: txMonth,
           accountId: accountId || null,
           note: note.trim(),
+          ...(!editingIncome ? { time: nowTimeHm(settings.timezone) } : {}),
         };
 
         if (editingIncome) {
@@ -911,21 +926,43 @@ export function ExpenseForm({
           )}
 
           {balancePreview != null && selectedAccount ? (
-            <Text
+            <View
               style={{
-                fontSize: theme.typography.xs,
-                fontWeight: "700",
-                color:
-                  balancePreview < 0
-                    ? theme.colors.destructive
-                    : theme.colors.mutedForeground,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 6,
                 marginTop: 2,
+                flexWrap: "wrap",
               }}
             >
-              {getAccountKind(selectedTypeName) === "credit"
-                ? `Available credit after: ${system.defaultCurrency}${balancePreview.toLocaleString()}`
-                : `Balance after: ${system.defaultCurrency}${balancePreview.toLocaleString()}`}
-            </Text>
+              <Text
+                style={{
+                  fontSize: theme.typography.xs,
+                  fontWeight: "700",
+                  color:
+                    balancePreview < 0
+                      ? theme.colors.destructive
+                      : theme.colors.mutedForeground,
+                }}
+              >
+                {getAccountKind(selectedTypeName) === "credit"
+                  ? "Available credit after"
+                  : "Balance after"}
+              </Text>
+              <Amount
+                value={balancePreview}
+                currency={system.defaultCurrency}
+                ghostable
+                style={{
+                  fontSize: theme.typography.xs,
+                  fontWeight: "700",
+                  color:
+                    balancePreview < 0
+                      ? theme.colors.destructive
+                      : theme.colors.mutedForeground,
+                }}
+              />
+            </View>
           ) : null}
         </View>
       </Card>

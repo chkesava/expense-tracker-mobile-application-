@@ -3,8 +3,10 @@ import {
   accountKindSubtitle,
   activitySubtypeLabel,
   activityTitle,
+  clockLabelToMinutes,
   formatActivityDateLabel,
   formatClockLabel,
+  postingSortMs,
   resolveActivityClockTime,
 } from "./activityDisplay";
 
@@ -35,6 +37,16 @@ describe("activityDisplay", () => {
       undefined
     );
     expect(resolveActivityClockTime(undefined, undefined)).toBeUndefined();
+  });
+
+  it("orders postings by calendar date then clock time", () => {
+    expect(clockLabelToMinutes("08:12 PM")).toBe(20 * 60 + 12);
+    expect(clockLabelToMinutes("09:00 AM")).toBe(9 * 60);
+    const morning = postingSortMs("2026-08-20", "08:12 AM");
+    const evening = postingSortMs("2026-08-20", "08:12 PM");
+    const nextDay = postingSortMs("2026-08-21", "07:00 AM");
+    expect(morning).toBeLessThan(evening);
+    expect(evening).toBeLessThan(nextDay);
   });
 
   it("labels transfer vs category subtypes without inventing titles", () => {

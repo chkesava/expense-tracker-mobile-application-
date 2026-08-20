@@ -254,5 +254,6 @@ export interface Income {
   date: string;
   month: string;
   accountId?: string;
+  time?: string;
   createdAt: unknown;
 }

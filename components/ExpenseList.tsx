@@ -43,6 +43,7 @@ import { useSettings } from "@/providers/SettingsProvider";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import { getCategoryIcon } from "@/shared/data/categoryTaxonomy";
 import type { Account, Expense, Income } from "@/shared/types/expense";
+import { postingSortMs } from "@/shared/utils/activityDisplay";
 import { formatDateKey, parseLocalDate } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
@@ -143,7 +144,13 @@ export function ExpenseList({
       }
     });
 
-    return list.sort((a, b) => (b.date > a.date ? 1 : b.date < a.date ? -1 : 0));
+    return list.sort((a, b) => {
+      const diff =
+        postingSortMs(b.date, b.data.time, b.data.createdAt) -
+        postingSortMs(a.date, a.data.time, a.data.createdAt);
+      if (diff !== 0) return diff;
+      return b.id.localeCompare(a.id);
+    });
   }, [expenses, incomes]);
 
   // Total summary metrics
