@@ -1,4 +1,6 @@
+import { useEffect, useRef, useState, useCallback } from "react";
 import { Text, View } from "react-native";
+import { useFocusEffect } from "expo-router";
 
 import {
   ChipRow,
@@ -88,6 +90,52 @@ export function PreferencesSection() {
     ? COMMON_TIMEZONES
     : [settings.timezone, ...COMMON_TIMEZONES];
 
+  const [categoryText, setCategoryText] = useState(settings.defaultCategory);
+  const [upiText, setUpiText] = useState(settings.upiId);
+  const categoryFocusedRef = useRef(false);
+  const upiFocusedRef = useRef(false);
+  const categoryTextRef = useRef(categoryText);
+  const upiTextRef = useRef(upiText);
+  const cloudCategoryRef = useRef(settings.defaultCategory);
+  const cloudUpiRef = useRef(settings.upiId);
+  categoryTextRef.current = categoryText;
+  upiTextRef.current = upiText;
+  cloudCategoryRef.current = settings.defaultCategory;
+  cloudUpiRef.current = settings.upiId;
+
+  useEffect(() => {
+    if (!categoryFocusedRef.current) setCategoryText(settings.defaultCategory);
+  }, [settings.defaultCategory]);
+
+  useEffect(() => {
+    if (!upiFocusedRef.current) setUpiText(settings.upiId);
+  }, [settings.upiId]);
+
+  useEffect(() => {
+    if (categoryText === settings.defaultCategory) return;
+    const timer = setTimeout(() => setDefaultCategory(categoryText), 500);
+    return () => clearTimeout(timer);
+  }, [categoryText, setDefaultCategory, settings.defaultCategory]);
+
+  useEffect(() => {
+    if (upiText === settings.upiId) return;
+    const timer = setTimeout(() => setUpiId(upiText), 500);
+    return () => clearTimeout(timer);
+  }, [setUpiId, settings.upiId, upiText]);
+
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        if (categoryTextRef.current !== cloudCategoryRef.current) {
+          setDefaultCategory(categoryTextRef.current);
+        }
+        if (upiTextRef.current !== cloudUpiRef.current) {
+          setUpiId(upiTextRef.current);
+        }
+      };
+    }, [setDefaultCategory, setUpiId])
+  );
+
   return (
     <View style={{ gap: 16 }}>
       <SettingsPanel
@@ -96,9 +144,16 @@ export function PreferencesSection() {
       >
         <Input
           label="Default category"
-          value={settings.defaultCategory}
-          onChangeText={setDefaultCategory}
+          value={categoryText}
+          onChangeText={setCategoryText}
           placeholder="Food & Dining"
+          onFocus={() => {
+            categoryFocusedRef.current = true;
+          }}
+          onBlur={() => {
+            categoryFocusedRef.current = false;
+            setDefaultCategory(categoryText);
+          }}
         />
 
         <FieldLabel label="Timezone" />
@@ -117,10 +172,17 @@ export function PreferencesSection() {
 
         <Input
           label="UPI ID"
-          value={settings.upiId}
-          onChangeText={setUpiId}
+          value={upiText}
+          onChangeText={setUpiText}
           autoCapitalize="none"
           placeholder="name@bank"
+          onFocus={() => {
+            upiFocusedRef.current = true;
+          }}
+          onBlur={() => {
+            upiFocusedRef.current = false;
+            setUpiId(upiText);
+          }}
         />
 
         <RowSwitch

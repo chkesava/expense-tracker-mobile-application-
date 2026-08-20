@@ -9,21 +9,26 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
 import { View } from "react-native";
 import { doc, setDoc } from "firebase/firestore";
 
-import { logError } from "@/lib/errors";
+import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
+import { commitWrite } from "@/lib/firestoreWrite";
 import { haptic } from "@/lib/haptics";
 import { hashPin } from "@/lib/pinSecurity";
+import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import { useUserDoc } from "@/providers/UserDocProvider";
 import {
   SETTINGS_DEFAULTS,
   mergeSettingsFromDoc,
+  overlayPendingSettings,
+  remainingPendingSettings,
   type DateFormatOption,
   type DefaultView,
   type FirstDayOfWeekOption,
@@ -73,6 +78,11 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const { data, exists, error: userDocError, loading: userDocLoading } = useUserDoc();
   const [settings, setSettings] = useState<UserSettings>(SETTINGS_DEFAULTS);
   const [seedAttempted, setSeedAttempted] = useState(false);
+  const overlayRef = useRef<Partial<UserSettings>>({});
+  const pendingRef = useRef<Partial<UserSettings>>({});
+  const drainPromiseRef = useRef(Promise.resolve());
+  const realUserRef = useRef(realUser);
+  realUserRef.current = realUser;
 
   useEffect(() => {
     haptic.setEnabled(settings.hapticFeedback);
@@ -80,6 +90,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!realUser) {
+      overlayRef.current = {};
+      pendingRef.current = {};
       setSettings(SETTINGS_DEFAULTS);
       setSeedAttempted(false);
       return;
@@ -90,31 +102,67 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     if (userDocError) return;
 
     if (exists && data) {
-      setSettings(mergeSettingsFromDoc(data as Record<string, unknown>));
+      const cloud = mergeSettingsFromDoc(data as Record<string, unknown>);
+      overlayRef.current = remainingPendingSettings(cloud, overlayRef.current);
+      setSettings(overlayPendingSettings(cloud, overlayRef.current));
       setSeedAttempted(false);
     } else if (!exists && !seedAttempted) {
       // Doc is confirmed missing after the first snapshot. Apply defaults in
       // memory only — never write SETTINGS_DEFAULTS to Firestore. A merge seed
       // previously raced ahead of the snapshot and wiped budget/accent/theme.
       setSeedAttempted(true);
-      setSettings(mergeSettingsFromDoc(null));
+      const cloud = mergeSettingsFromDoc(null);
+      overlayRef.current = remainingPendingSettings(cloud, overlayRef.current);
+      setSettings(overlayPendingSettings(cloud, overlayRef.current));
     }
   }, [realUser, data, exists, userDocError, userDocLoading, seedAttempted]);
 
   const loading = Boolean(realUser) && userDocLoading;
 
+  const drainPendingWrites = useCallback(() => {
+    drainPromiseRef.current = drainPromiseRef.current.then(async () => {
+      const user = realUserRef.current;
+      const db = getFirestoreDb();
+      if (!user || !db) return;
+
+      while (Object.keys(pendingRef.current).length > 0) {
+        const batch = pendingRef.current;
+        pendingRef.current = {};
+        try {
+          await commitWrite(
+            () => setDoc(doc(db, "users", user.uid), batch, { merge: true }),
+            { label: "settings" }
+          );
+        } catch (err) {
+          pendingRef.current = { ...batch, ...pendingRef.current };
+          logError("settingsProvider.saveSettings", err);
+          toast.error(friendlyErrorMessage(err, "Couldn't save settings."));
+          break;
+        }
+      }
+    });
+    return drainPromiseRef.current;
+  }, []);
+
   const updateSettings = useCallback(
     async (updates: Partial<UserSettings>) => {
-      const db = getFirestoreDb();
-      if (!realUser || !db) return;
+      overlayRef.current = { ...overlayRef.current, ...updates };
+      pendingRef.current = { ...pendingRef.current, ...updates };
       setSettings((prev) => ({ ...prev, ...updates }));
-      try {
-        await setDoc(doc(db, "users", realUser.uid), updates, { merge: true });
-      } catch (err) {
-        logError("settingsProvider.saveSettings", err);
+
+      const db = getFirestoreDb();
+      if (!realUser || !db) {
+        logError(
+          "settingsProvider.saveSettings",
+          new Error("Not signed in or Firebase unavailable")
+        );
+        toast.error("Couldn't save settings. Check your connection and try again.");
+        return;
       }
+
+      await drainPendingWrites();
     },
-    [realUser]
+    [drainPendingWrites, realUser]
   );
 
   /**

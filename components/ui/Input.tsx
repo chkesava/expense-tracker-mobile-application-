@@ -80,6 +80,7 @@ export function Input({
         <TextInput
           placeholderTextColor={theme.colors.mutedForeground}
           accessibilityLabel={label ?? props.placeholder}
+          {...props}
           onFocus={(e) => {
             setFocused(true);
             onFocus?.(e);
@@ -97,7 +98,6 @@ export function Input({
             },
             style,
           ]}
-          {...props}
         />
 
         {trailingIcon ? <View style={styles.iconSlot}>{trailingIcon}</View> : null}

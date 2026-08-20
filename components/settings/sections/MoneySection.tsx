@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Modal, Pressable, Text, View } from "react-native";
+import { useFocusEffect } from "expo-router";
 import { X } from "lucide-react-native";
 
 import { CategoryManager } from "@/components/categories/CategoryManager";
@@ -10,20 +11,111 @@ import {
 } from "@/components/settings/SettingsSubmenus";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { toast } from "@/lib/toast";
 import { useCelebration } from "@/providers/CelebrationProvider";
 import { useSettings } from "@/providers/SettingsProvider";
+import { useSystemSettings } from "@/providers/SystemSettingsProvider";
+import {
+  formatMonthlyBudgetInput,
+  parseMonthlyBudgetInput,
+} from "@/shared/types/settings";
+import { formatAmount } from "@/shared/utils/formatCurrency";
 import { useTheme } from "@/theme/ThemeProvider";
 
 export function MoneySection() {
   const { theme } = useTheme();
-  const { settings, setMonthlyBudget } = useSettings();
+  const { settings, updateSettings } = useSettings();
+  const { settings: system } = useSystemSettings();
   const { celebrateMilestone } = useCelebration();
-  const [budgetText, setBudgetText] = useState(String(settings.monthlyBudget || 0));
+  const [budgetText, setBudgetText] = useState(() =>
+    formatMonthlyBudgetInput(settings.monthlyBudget)
+  );
+  const [budgetFocused, setBudgetFocused] = useState(false);
+  const [savingBudget, setSavingBudget] = useState(false);
   const [showCategoryManagerModal, setShowCategoryManagerModal] = useState(false);
 
+  const budgetTextRef = useRef(budgetText);
+  budgetTextRef.current = budgetText;
+  const cloudBudgetRef = useRef(settings.monthlyBudget);
+  cloudBudgetRef.current = settings.monthlyBudget;
+
   useEffect(() => {
-    setBudgetText(String(settings.monthlyBudget || 0));
-  }, [settings.monthlyBudget]);
+    if (budgetFocused) return;
+    setBudgetText(formatMonthlyBudgetInput(settings.monthlyBudget));
+  }, [budgetFocused, settings.monthlyBudget]);
+
+  const persistBudget = useCallback(
+    async (amount: number, options?: { notify?: boolean }) => {
+      if (amount === cloudBudgetRef.current) return true;
+      const hadBudget = cloudBudgetRef.current > 0;
+      await updateSettings({ monthlyBudget: amount });
+      if (amount > 0 && !hadBudget) {
+        celebrateMilestone("milestone_first_budget", {
+          title: "First Budget Set!",
+          subtitle: "Setting limits is the secret to financial freedom.",
+          badgeEmoji: "🎯",
+          pointsEarned: 25,
+        });
+      }
+      if (options?.notify) {
+        toast.success(
+          amount > 0
+            ? `Monthly budget saved · ${formatAmount(amount, system.defaultCurrency)}`
+            : "Monthly budget cleared"
+        );
+      }
+      return true;
+    },
+    [celebrateMilestone, system.defaultCurrency, updateSettings]
+  );
+
+  const flushBudget = useCallback(
+    async (options?: { notify?: boolean; allowClear?: boolean }) => {
+      const parsed = parseMonthlyBudgetInput(budgetTextRef.current);
+      if (parsed === null) {
+        if (options?.allowClear && budgetTextRef.current.trim() === "") {
+          await persistBudget(0, options);
+          return true;
+        }
+        return false;
+      }
+      await persistBudget(parsed, options);
+      return true;
+    },
+    [persistBudget]
+  );
+
+  useEffect(() => {
+    const parsed = parseMonthlyBudgetInput(budgetText);
+    if (parsed === null || parsed === settings.monthlyBudget) return;
+    const timer = setTimeout(() => {
+      void persistBudget(parsed);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [budgetText, persistBudget, settings.monthlyBudget]);
+
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        void flushBudget();
+      };
+    }, [flushBudget])
+  );
+
+  const onSaveBudget = async () => {
+    setSavingBudget(true);
+    try {
+      const ok = await flushBudget({ notify: true, allowClear: true });
+      if (!ok) toast.error("Enter a valid monthly budget amount");
+    } finally {
+      setSavingBudget(false);
+    }
+  };
+
+  const savedLabel =
+    settings.monthlyBudget > 0
+      ? `Saved in your account: ${formatAmount(settings.monthlyBudget, system.defaultCurrency)}`
+      : "No monthly budget saved in your account yet";
 
   return (
     <View style={{ gap: 16 }}>
@@ -33,20 +125,17 @@ export function MoneySection() {
           value={budgetText}
           onChangeText={setBudgetText}
           keyboardType="numeric"
+          placeholder="e.g. 30000"
+          helperText={savedLabel}
+          onFocus={() => setBudgetFocused(true)}
           onBlur={() => {
-            const n = Number(budgetText);
-            const validAmount = Number.isFinite(n) ? Math.max(0, n) : 0;
-            setMonthlyBudget(validAmount);
-            if (validAmount > 0) {
-              celebrateMilestone("milestone_first_budget", {
-                title: "First Budget Set!",
-                subtitle: "Setting limits is the secret to financial freedom.",
-                badgeEmoji: "🎯",
-                pointsEarned: 25,
-              });
-            }
+            setBudgetFocused(false);
+            void flushBudget();
           }}
         />
+        <Button loading={savingBudget} onPress={() => void onSaveBudget()}>
+          Save monthly budget
+        </Button>
       </SettingsPanel>
 
       <SettingsPanel

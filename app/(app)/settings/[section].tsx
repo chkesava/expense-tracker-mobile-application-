@@ -1,3 +1,4 @@
+import { Keyboard } from "react-native";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -43,7 +44,10 @@ export default function SettingsSectionScreen() {
       <PageHeader
         title={meta.title}
         subtitle={meta.subtitle}
-        onBack={() => back()}
+        onBack={() => {
+          Keyboard.dismiss();
+          back();
+        }}
         icon={
           <Icon
             size={22}

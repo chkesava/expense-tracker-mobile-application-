@@ -100,6 +100,7 @@ export function PageShell({
       {scrollable ? (
         <ScrollView
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
           contentContainerStyle={resolvedContentStyle}
           onScrollBeginDrag={onScrollBeginDrag}
           refreshControl={

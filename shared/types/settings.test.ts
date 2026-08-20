@@ -2,7 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   SETTINGS_DEFAULTS,
+  coerceFiniteNumber,
+  formatMonthlyBudgetInput,
   mergeSettingsFromDoc,
+  overlayPendingSettings,
+  parseMonthlyBudgetInput,
+  remainingPendingSettings,
 } from "./settings";
 
 describe("mergeSettingsFromDoc", () => {
@@ -81,5 +86,51 @@ describe("mergeSettingsFromDoc", () => {
   it("uses default dashboardOrder when doc omits it", () => {
     const merged = mergeSettingsFromDoc({ monthlyBudget: 1 });
     expect(merged.dashboardOrder).toEqual(SETTINGS_DEFAULTS.dashboardOrder);
+  });
+
+  it("coerces string monthlyBudget values from Firestore", () => {
+    const merged = mergeSettingsFromDoc({ monthlyBudget: "25,000" });
+    expect(merged.monthlyBudget).toBe(25000);
+  });
+
+  it("reads monthlyBudget from a nested settings object", () => {
+    const merged = mergeSettingsFromDoc({
+      settings: { monthlyBudget: 18000, upiId: "me@upi" },
+    });
+    expect(merged.monthlyBudget).toBe(18000);
+    expect(merged.upiId).toBe("me@upi");
+  });
+
+  it("prefers top-level monthlyBudget over nested settings", () => {
+    const merged = mergeSettingsFromDoc({
+      monthlyBudget: 9000,
+      settings: { monthlyBudget: 18000 },
+    });
+    expect(merged.monthlyBudget).toBe(9000);
+  });
+
+  it("keeps optimistic budget on top of a stale cloud snapshot", () => {
+    const cloud = mergeSettingsFromDoc({ monthlyBudget: 0, upiId: "old@upi" });
+    const next = overlayPendingSettings(cloud, { monthlyBudget: 40000 });
+    expect(next.monthlyBudget).toBe(40000);
+    expect(next.upiId).toBe("old@upi");
+  });
+
+  it("drops pending fields once the cloud snapshot matches", () => {
+    const cloud = mergeSettingsFromDoc({ monthlyBudget: 40000 });
+    const still = remainingPendingSettings(cloud, {
+      monthlyBudget: 40000,
+      upiId: "a@b",
+    });
+    expect(still.monthlyBudget).toBeUndefined();
+    expect(still.upiId).toBe("a@b");
+  });
+
+  it("parses and formats monthly budget input", () => {
+    expect(parseMonthlyBudgetInput("")).toBeNull();
+    expect(parseMonthlyBudgetInput("12,500")).toBe(12500);
+    expect(formatMonthlyBudgetInput(0)).toBe("");
+    expect(formatMonthlyBudgetInput(12500)).toBe("12500");
+    expect(coerceFiniteNumber("3,000", 0)).toBe(3000);
   });
 });
