@@ -86,6 +86,81 @@ function deviceTimezone(): string {
   }
 }
 
+function asPlainRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+/** Firestore sometimes stores amounts as strings; treat those as numbers. */
+export function coerceFiniteNumber(value: unknown, fallback: number): number {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const trimmed = value.trim().replace(/,/g, "");
+    if (trimmed === "") return fallback;
+    const n = Number(trimmed);
+    if (Number.isFinite(n)) return n;
+  }
+  return fallback;
+}
+
+export function parseMonthlyBudgetInput(text: string): number | null {
+  const trimmed = text.trim().replace(/,/g, "");
+  if (trimmed === "") return null;
+  const n = Number(trimmed);
+  if (!Number.isFinite(n) || n < 0) return null;
+  return n;
+}
+
+export function formatMonthlyBudgetInput(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) return "";
+  return String(value);
+}
+
+function pickSettingValue(
+  source: Record<string, unknown>,
+  keys: string[]
+): unknown {
+  for (const key of keys) {
+    if (source[key] !== undefined && source[key] !== null) return source[key];
+  }
+  return undefined;
+}
+
+export function settingsFieldEquals(a: unknown, b: unknown): boolean {
+  if (Object.is(a, b)) return true;
+  if (typeof a !== typeof b) return false;
+  if (a && b && typeof a === "object") {
+    try {
+      return JSON.stringify(a) === JSON.stringify(b);
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
+/** Keep optimistic writes on top of a cloud snapshot so a stale listener cannot reset them. */
+export function overlayPendingSettings(
+  cloud: UserSettings,
+  pending: Partial<UserSettings>
+): UserSettings {
+  if (Object.keys(pending).length === 0) return cloud;
+  return { ...cloud, ...pending };
+}
+
+export function remainingPendingSettings(
+  cloud: UserSettings,
+  pending: Partial<UserSettings>
+): Partial<UserSettings> {
+  const still: Partial<UserSettings> = {};
+  (Object.keys(pending) as (keyof UserSettings)[]).forEach((key) => {
+    if (!settingsFieldEquals(cloud[key], pending[key])) {
+      still[key] = pending[key] as never;
+    }
+  });
+  return still;
+}
+
 export const SETTINGS_DEFAULTS: UserSettings = {
   lockPastMonths: true,
   compactListMode: false,
@@ -146,58 +221,81 @@ export function mergeSettingsFromDoc(
 ): UserSettings {
   if (!data) return { ...SETTINGS_DEFAULTS, timezone: deviceTimezone() };
 
+  const nested = asPlainRecord(data.settings);
+  const source: Record<string, unknown> = nested ? { ...nested, ...data } : data;
+  const widgetsSource =
+    asPlainRecord(source.dashboardWidgets) ?? asPlainRecord(data.dashboardWidgets);
+  const onboardingSource =
+    asPlainRecord(source.onboarding) ?? asPlainRecord(data.onboarding);
+  const remindersSource =
+    asPlainRecord(source.creditCardBillReminders) ??
+    asPlainRecord(data.creditCardBillReminders);
+
   return {
     ...SETTINGS_DEFAULTS,
-    ...(data as Partial<UserSettings>),
+    ...(source as Partial<UserSettings>),
+    monthlyBudget: coerceFiniteNumber(
+      pickSettingValue(source, ["monthlyBudget", "monthly_budget"]),
+      SETTINGS_DEFAULTS.monthlyBudget
+    ),
+    exportYear: coerceFiniteNumber(
+      source.exportYear,
+      SETTINGS_DEFAULTS.exportYear
+    ),
+    inactivityTimeout: coerceFiniteNumber(
+      source.inactivityTimeout,
+      SETTINGS_DEFAULTS.inactivityTimeout
+    ),
     dashboardWidgets: {
       ...SETTINGS_DEFAULTS.dashboardWidgets,
-      ...((data.dashboardWidgets as Partial<DashboardWidgets>) || {}),
+      ...((widgetsSource as Partial<DashboardWidgets>) || {}),
     },
     dashboardOrder:
-      (data.dashboardOrder as string[] | undefined) ||
+      (source.dashboardOrder as string[] | undefined) ||
       SETTINGS_DEFAULTS.dashboardOrder,
     ghostMode:
-      (data.ghostMode as boolean | undefined) ?? SETTINGS_DEFAULTS.ghostMode,
+      (source.ghostMode as boolean | undefined) ?? SETTINGS_DEFAULTS.ghostMode,
     hapticFeedback:
-      (data.hapticFeedback as boolean | undefined) ??
+      (source.hapticFeedback as boolean | undefined) ??
       SETTINGS_DEFAULTS.hapticFeedback,
     timezone:
-      typeof data.timezone === "string" && data.timezone
-        ? data.timezone
+      typeof source.timezone === "string" && source.timezone
+        ? source.timezone
         : SETTINGS_DEFAULTS.timezone,
     currency:
-      typeof data.currency === "string" && data.currency
-        ? data.currency
+      typeof source.currency === "string" && source.currency
+        ? source.currency
         : SETTINGS_DEFAULTS.currency,
     language:
-      typeof data.language === "string" && data.language
-        ? data.language
+      typeof source.language === "string" && source.language
+        ? source.language
         : SETTINGS_DEFAULTS.language,
     dateFormat:
-      (data.dateFormat as DateFormatOption) || SETTINGS_DEFAULTS.dateFormat,
+      (source.dateFormat as DateFormatOption) || SETTINGS_DEFAULTS.dateFormat,
     numberFormat:
-      (data.numberFormat as NumberFormatOption) ||
+      (source.numberFormat as NumberFormatOption) ||
       SETTINGS_DEFAULTS.numberFormat,
     firstDayOfWeek:
-      (data.firstDayOfWeek as FirstDayOfWeekOption) ||
+      (source.firstDayOfWeek as FirstDayOfWeekOption) ||
       SETTINGS_DEFAULTS.firstDayOfWeek,
     onboarding: {
       ...SETTINGS_DEFAULTS.onboarding,
-      ...((data.onboarding as Partial<OnboardingState>) || {}),
+      ...((onboardingSource as Partial<OnboardingState>) || {}),
       completedSteps:
-        (data.onboarding as Partial<OnboardingState>)?.completedSteps ||
+        (onboardingSource as Partial<OnboardingState>)?.completedSteps ||
         SETTINGS_DEFAULTS.onboarding.completedSteps,
       visitedScreens:
-        (data.onboarding as Partial<OnboardingState>)?.visitedScreens ||
+        (onboardingSource as Partial<OnboardingState>)?.visitedScreens ||
         SETTINGS_DEFAULTS.onboarding.visitedScreens,
     },
     creditCardBillReminders: {
       ...SETTINGS_DEFAULTS.creditCardBillReminders,
-      ...((data.creditCardBillReminders as Partial<CreditCardBillRemindersSettings>) ||
-        {}),
+      ...((remindersSource as Partial<CreditCardBillRemindersSettings>) || {}),
       daysBefore:
-        (data.creditCardBillReminders as Partial<CreditCardBillRemindersSettings>)
-          ?.daysBefore || SETTINGS_DEFAULTS.creditCardBillReminders.daysBefore,
+        Array.isArray(remindersSource?.daysBefore) &&
+        remindersSource.daysBefore.length > 0
+          ? (remindersSource.daysBefore as number[])
+          : SETTINGS_DEFAULTS.creditCardBillReminders.daysBefore,
     },
   };
 }
