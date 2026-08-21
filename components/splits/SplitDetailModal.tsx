@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Modal,
   Pressable,
@@ -13,6 +14,7 @@ import * as Haptics from "expo-haptics";
 import { Check, Share2, UserMinus, X } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
+import { SplitClaimsSection } from "@/components/splits/SplitClaimsSection";
 import { SplitPayQrCard } from "@/components/splits/SplitPayQrCard";
 import { UseGiftMoneyModal } from "@/components/splits/UseGiftMoneyModal";
 import { Button } from "@/components/ui/Button";
@@ -21,6 +23,7 @@ import { useAccounts } from "@/hooks/useAccounts";
 import { useAuth } from "@/providers/AuthProvider";
 import { useSettings } from "@/providers/SettingsProvider";
 import { useSplits } from "@/hooks/useSplits";
+import { useSplitShareClaims } from "@/hooks/useSplitShareClaims";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import type { Participant, Split } from "@/shared/types/split";
 import { getAccountKind } from "@/shared/utils/accountKind";
@@ -37,11 +40,12 @@ import {
   participantPaidAmount,
   participantRemainingDue,
 } from "@/shared/utils/splitMath";
-import {
-  getPaymentRequestShareUrl,
-  getPublicAppOrigin,
-  getSplitShareUrl,
-} from "@/shared/utils/paymentRequestUrl";
+import { getPaymentRequestShareUrl } from "@/shared/utils/paymentRequestUrl";
+import { getStoredQrStyleId } from "@/shared/utils/qrStyles";
+import { NO_UPI_PAY_LINK_REASON } from "@/shared/utils/splitShareLink";
+import { splitClaimDocId } from "@/shared/utils/splitClaims";
+import type { SplitShareClaim } from "@/shared/types/splitShareClaim";
+import { toast } from "@/lib/toast";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { logError } from "@/lib/errors";
@@ -72,10 +76,24 @@ export function SplitDetailModal({
     unmarkParticipantCollected,
     spendCollectPot,
     optOutParticipant,
+    ensureSplitSharing,
+    applyPaidClaim,
+    dismissClaim,
+    setSplitClaimsEnabled,
+    planClaim,
   } = useSplits();
 
   const [collectingKey, setCollectingKey] = useState<string | null>(null);
   const [spendOpen, setSpendOpen] = useState(false);
+  // "split" while sharing the group link, otherwise the participant key.
+  const [sharing, setSharing] = useState<string | null>(null);
+  const [claimWorkingKey, setClaimWorkingKey] = useState<string | null>(null);
+  const [togglePending, setTogglePending] = useState(false);
+  // Claim being applied through the account picker, so it clears in the same
+  // batch as the credit it produces.
+  const [pendingCollectClaimKey, setPendingCollectClaimKey] = useState<string | null>(
+    null
+  );
 
   const progress = useMemo(() => {
     if (!split) {
@@ -167,56 +185,101 @@ export function SplitDetailModal({
   const handleConfirmCollected = async (accountId: string) => {
     if (!split.id || !collectingKey) return;
     Haptics.selectionAsync().catch(() => undefined);
-    const ok = await markParticipantCollected(split.id, collectingKey, accountId);
-    if (ok) setCollectingKey(null);
+    // When this picker was opened from a claim, clearing the claim belongs in
+    // the same batch as the credit so the two can never diverge.
+    const claimId =
+      pendingCollectClaimKey === collectingKey && claimShareId
+        ? splitClaimDocId(claimShareId, collectingKey)
+        : undefined;
+    const ok = await markParticipantCollected(split.id, collectingKey, accountId, {
+      claimId,
+    });
+    if (ok) {
+      setCollectingKey(null);
+      setPendingCollectClaimKey(null);
+    }
+  };
+
+  /**
+   * Repairs the split's sharing state, then hands back the links. Returns null
+   * when there is nothing shareable, and the caller must not open a share sheet
+   * in that case -- that was the bug: a missing link silently produced a share
+   * message with no URL and no error.
+   */
+  const prepareSharing = async () => {
+    if (!split.id) return null;
+    const res = await ensureSplitSharing(split.id, {
+      upiId: creatorUpiId,
+      payeePhotoUrl: user?.photoURL || undefined,
+      qrStyleId: getStoredQrStyleId(),
+    });
+    if (!res.ok) {
+      toast.error(res.message);
+      return null;
+    }
+    return res;
   };
 
   const handleShareReminder = async (participant: Participant) => {
+    if (sharing) return;
     Haptics.selectionAsync().catch(() => undefined);
-    const origin = getPublicAppOrigin();
-    const shareUrl =
-      origin && participant.paymentSlug
-        ? getPaymentRequestShareUrl(participant.paymentSlug)
-        : undefined;
-    const message = generateSplitShareMessage(
-      split,
-      participant,
-      creatorUpiId || undefined,
-      system.defaultCurrency,
-      shareUrl
-    );
-
+    setSharing(participant.key || "person");
     try {
+      const prepared = await prepareSharing();
+      if (!prepared) return;
+
+      const paymentSlug =
+        (participant.key ? prepared.paySlugByKey[participant.key] : undefined) ||
+        participant.paymentSlug;
+      if (!paymentSlug) {
+        // No UPI id means no pay page can exist. Say so, rather than sharing a
+        // reminder the recipient has no way to act on.
+        toast.error(prepared.payLinkBlockedReason || NO_UPI_PAY_LINK_REASON);
+        return;
+      }
+
+      const message = generateSplitShareMessage(
+        split,
+        participant,
+        creatorUpiId || undefined,
+        system.defaultCurrency,
+        getPaymentRequestShareUrl(paymentSlug)
+      );
       await Share.share({
         message,
         title: `Payment Reminder: ${split.title}`,
       });
     } catch (err) {
       logError("splitDetailModal.share", err);
+    } finally {
+      setSharing(null);
     }
   };
 
   const handleShareSplit = async () => {
+    if (sharing) return;
     Haptics.selectionAsync().catch(() => undefined);
-    const origin = getPublicAppOrigin();
-    const shareUrl =
-      origin && split.publicSlug ? getSplitShareUrl(split.publicSlug) : undefined;
-    const message = generateSplitGroupShareMessage(
-      split,
-      system.defaultCurrency,
-      shareUrl
-    );
+    setSharing("split");
     try {
+      const prepared = await prepareSharing();
+      if (!prepared) return;
+      const message = generateSplitGroupShareMessage(
+        split,
+        system.defaultCurrency,
+        prepared.url
+      );
       await Share.share({
         message,
         title: split.title,
       });
     } catch (err) {
       logError("splitDetailModal.shareSplit", err);
+    } finally {
+      setSharing(null);
     }
   };
 
-  const handleOptOut = (participant: Participant) => {
+  const handleOptOut = (participant: Participant, claimDocId?: string) => {
     if (!split.id || !participant.key) return;
     const blocked = optOutBlockedReason(split, participant.key);
     if (blocked) {
@@ -234,10 +297,102 @@ export function SplitDetailModal({
         {
           text: "Drop & recalculate",
           style: "destructive",
-          onPress: () => optOutParticipant(split.id!, participant.key as string),
+          onPress: () =>
+            optOutParticipant(split.id!, participant.key as string, {
+              claimId: claimDocId,
+            }),
         },
       ]
     );
+  };
+
+  const claimShareId = split.publicShareId;
+  const participantKeys = useMemo(
+    () => split.participants.map((p) => p.key),
+    [split.participants]
+  );
+  const { claims } = useSplitShareClaims(claimShareId, participantKeys, {
+    enabled: visible && isCreator,
+  });
+  const claimsEnabled = split.claimsEnabled !== false;
+
+  const claimDocIdFor = (claim: SplitShareClaim) =>
+    claimShareId ? splitClaimDocId(claimShareId, claim.participantKey) : undefined;
+
+  const handleApplyClaim = async (claim: SplitShareClaim) => {
+    if (!split.id || claimWorkingKey) return;
+    const plan = planClaim(split.id, claim);
+
+    if (plan.action === "dismiss") {
+      Alert.alert("Can't apply this", plan.reason, [
+        { text: "Keep", style: "cancel" },
+        {
+          text: "Dismiss",
+          style: "destructive",
+          onPress: () => handleDismissClaim(claim, { skipConfirm: true }),
+        },
+      ]);
+      return;
+    }
+
+    if (plan.action === "markCollected") {
+      // Reuse the account picker already on that participant's row: the credit
+      // needs an account id, which only the organizer can supply.
+      setPendingCollectClaimKey(claim.participantKey);
+      setCollectingKey(claim.participantKey);
+      return;
+    }
+
+    if (plan.action === "optOut") {
+      const target = split.participants.find((p) => p.key === claim.participantKey);
+      if (target) handleOptOut(target, claimDocIdFor(claim));
+      return;
+    }
+
+    Haptics.selectionAsync().catch(() => undefined);
+    setClaimWorkingKey(claim.participantKey);
+    try {
+      await applyPaidClaim(split.id, claim);
+    } finally {
+      setClaimWorkingKey(null);
+    }
+  };
+
+  const handleDismissClaim = (
+    claim: SplitShareClaim,
+    options?: { skipConfirm?: boolean }
+  ) => {
+    if (!split.id) return;
+    const run = async () => {
+      setClaimWorkingKey(claim.participantKey);
+      try {
+        await dismissClaim(split.id as string, claim);
+      } finally {
+        setClaimWorkingKey(null);
+      }
+    };
+    if (options?.skipConfirm) {
+      run();
+      return;
+    }
+    Alert.alert(
+      "Dismiss this update?",
+      "Nothing changes on the split, and that person can send another one.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Dismiss", style: "destructive", onPress: run },
+      ]
+    );
+  };
+
+  const handleToggleClaims = async (enabled: boolean) => {
+    if (!split.id || togglePending) return;
+    setTogglePending(true);
+    try {
+      await setSplitClaimsEnabled(split.id, enabled);
+    } finally {
+      setTogglePending(false);
+    }
   };
 
   const handleSettleAll = async () => {
@@ -384,14 +539,24 @@ export function SplitDetailModal({
               <Pressable
                 onPress={handleShareSplit}
                 hitSlop={12}
+                disabled={sharing !== null}
                 accessibilityRole="button"
                 accessibilityLabel="Share split"
+                accessibilityState={{
+                  busy: sharing === "split",
+                  disabled: sharing !== null,
+                }}
                 style={({ pressed }) => [
                   styles.closeButton,
+                  sharing !== null && { opacity: 0.5 },
                   pressed && { opacity: 0.6 },
                 ]}
               >
-                <Share2 size={20} color={theme.colors.foreground} />
+                {sharing === "split" ? (
+                  <ActivityIndicator size="small" color={theme.colors.foreground} />
+                ) : (
+                  <Share2 size={20} color={theme.colors.foreground} />
+                )}
               </Pressable>
               <Pressable
                 onPress={onClose}
@@ -508,6 +673,20 @@ export function SplitDetailModal({
                   Set your UPI ID in Settings to show a QR code friends can scan.
                 </Text>
               )
+            ) : null}
+
+            {isCreator ? (
+              <SplitClaimsSection
+                split={split}
+                claims={claims}
+                currency={system.defaultCurrency}
+                workingKey={claimWorkingKey}
+                claimsEnabled={claimsEnabled}
+                togglePending={togglePending}
+                onApply={handleApplyClaim}
+                onDismiss={handleDismissClaim}
+                onToggleClaims={handleToggleClaims}
+              />
             ) : null}
 
             <View style={{ gap: 8 }}>
@@ -681,8 +860,13 @@ export function SplitDetailModal({
                             {canSharePerson ? (
                               <Pressable
                                 onPress={() => handleShareReminder(p)}
+                                disabled={sharing !== null}
                                 accessibilityRole="button"
                                 accessibilityLabel={`Share with ${p.name}`}
+                                accessibilityState={{
+                                  busy: sharing === p.key,
+                                  disabled: sharing !== null,
+                                }}
                                 style={({ pressed }) => [
                                   styles.iconActionBtn,
                                   {
@@ -690,13 +874,21 @@ export function SplitDetailModal({
                                       ? "rgba(255,255,255,0.08)"
                                       : "rgba(0,0,0,0.06)",
                                   },
+                                  sharing !== null && { opacity: 0.5 },
                                   pressed && { opacity: 0.8 },
                                 ]}
                               >
-                                <Share2
-                                  size={12}
-                                  color={theme.colors.foreground}
-                                />
+                                {sharing === p.key ? (
+                                  <ActivityIndicator
+                                    size="small"
+                                    color={theme.colors.foreground}
+                                  />
+                                ) : (
+                                  <Share2
+                                    size={12}
+                                    color={theme.colors.foreground}
+                                  />
+                                )}
                               </Pressable>
                             ) : null}
                             {canOptOut ? (

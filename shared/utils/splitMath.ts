@@ -400,10 +400,14 @@ export function recalibrateSplitAfterOptOut(
     const amount = newAmounts[n];
     const paidAmount = participantPaidAmount(p);
     const due = roundMoney(Math.max(0, amount - paidAmount));
+    // Sticky: shares only ever rise on an opt-out, and the flag is only read
+    // while something is still due, so a stale `true` is never visible.
+    const shareRaised = amount > (Number(p.amount) || 0) ? true : p.shareRaised;
     next[participantIndex] = {
       ...p,
       amount,
       paid: due <= 0.009,
+      ...(shareRaised ? { shareRaised: true } : {}),
     };
   });
 

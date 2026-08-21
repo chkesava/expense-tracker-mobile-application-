@@ -54,6 +54,7 @@ export function toFirestoreParticipant(p: Participant): Record<string, unknown> 
     collectedEntryIds: p.collectedEntryIds?.length ? p.collectedEntryIds : undefined,
     paymentSlug: p.paymentSlug || undefined,
     paymentRequestId: p.paymentRequestId || undefined,
+    shareRaised: p.shareRaised ? true : undefined,
   });
 }
 
@@ -137,6 +138,13 @@ export function buildParticipantShareRequests(params: {
   payeePhotoUrl?: string;
   upiId: string;
   qrStyleId: QrStyleId;
+  currency?: string;
+  /**
+   * Back-fill mode: skip participants that already have a request, so this can
+   * repair a split whose organizer had no UPI id when it was created without
+   * duplicating the links that do exist.
+   */
+  skipExisting?: boolean;
   participants: Participant[];
 }): Array<{
   participantKey: string;
@@ -147,6 +155,7 @@ export function buildParticipantShareRequests(params: {
 
   return params.participants
     .filter((p) => !p.isCurrentUser && p.key && isParticipantContributing(p))
+    .filter((p) => !params.skipExisting || !(p.paymentRequestId || p.paymentSlug))
     .map((p) => {
       const slug = generatePaymentSlug(10);
       const key = p.key as string;
@@ -172,6 +181,7 @@ export function buildParticipantShareRequests(params: {
           status: "active" as const,
           splitId: params.splitId,
           participantKey: key,
+          currency: params.currency || undefined,
         }) as Omit<PaymentRequest, "id">,
       };
     });
@@ -203,7 +213,8 @@ export function applyShareRequestsToParticipants(
 }
 
 export function buildPaymentRequestSyncPatches(
-  participants: Participant[]
+  participants: Participant[],
+  options?: { currency?: string }
 ): Array<{ requestId: string; fields: Record<string, unknown> }> {
   return participants
     .filter((p) => Boolean(p.paymentRequestId))
@@ -216,6 +227,9 @@ export function buildPaymentRequestSyncPatches(
           shareAmount: Number(p.amount) || 0,
           paidAmount: participantPaidAmount(p),
           status: optedOut ? ("cancelled" as const) : ("active" as const),
+          // The public pay page has no signed-in user, so it cannot read
+          // system settings for a currency. Carry it on the doc.
+          currency: options?.currency || undefined,
         }),
       };
     });

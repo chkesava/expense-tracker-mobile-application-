@@ -487,6 +487,79 @@ describe("splitMath utilities", () => {
       });
     });
 
+    it("flags every contributor whose share rose, and only them", () => {
+      const split = tenWayDinner(8);
+      const result = recalibrateSplitAfterOptOut(split, "p9");
+      expect("error" in result).toBe(false);
+      if ("error" in result) return;
+
+      // Both the already-paid and the never-paid contributors get flagged:
+      // the label on the public page depends on it, and `paidAmount` alone
+      // cannot distinguish a top-up from a genuine partial payment.
+      for (let i = 0; i < 9; i += 1) {
+        expect(result.participants[i].shareRaised).toBe(true);
+      }
+      // The person who dropped out did not have their share raised.
+      expect(result.participants[9].shareRaised).toBeUndefined();
+    });
+
+    it("keeps the flag set across a second drop-out", () => {
+      const split = tenWayDinner(8);
+      const first = recalibrateSplitAfterOptOut(split, "p8");
+      expect("error" in first).toBe(false);
+      if ("error" in first) return;
+      const second = recalibrateSplitAfterOptOut(
+        { ...split, participants: first.participants },
+        "p9"
+      );
+      expect("error" in second).toBe(false);
+      if ("error" in second) return;
+      for (let i = 0; i < 8; i += 1) {
+        expect(second.participants[i].shareRaised).toBe(true);
+      }
+    });
+
+    it("flags a rescaled custom split too", () => {
+      const split: Split = {
+        id: "s-custom-flag",
+        title: "Custom",
+        totalAmount: 1000,
+        splitType: "custom",
+        createdBy: "me",
+        createdAt: 1,
+        settled: false,
+        participantIds: [],
+        participants: [
+          { key: "you", name: "You", amount: 400, paid: true, paidAmount: 400, isCurrentUser: true },
+          { key: "a", name: "A", amount: 350, paid: false, paidAmount: 0, isCurrentUser: false },
+          { key: "b", name: "B", amount: 250, paid: false, paidAmount: 0, isCurrentUser: false },
+        ],
+      };
+      const result = recalibrateSplitAfterOptOut(split, "b");
+      expect("error" in result).toBe(false);
+      if ("error" in result) return;
+      expect(result.participants[0].shareRaised).toBe(true);
+      expect(result.participants[1].shareRaised).toBe(true);
+      expect(result.participants[2].shareRaised).toBeUndefined();
+    });
+
+    it("leaves the flag off when a share does not rise", () => {
+      // Dropping someone whose share was already 0 redistributes nothing.
+      const split: Split = {
+        ...tenWayDinner(0),
+        totalAmount: 100,
+        participants: [
+          { key: "you", name: "You", amount: 100, paid: false, paidAmount: 0, isCurrentUser: true },
+          { key: "zero", name: "Zero", amount: 0, paid: false, paidAmount: 0, isCurrentUser: false },
+        ],
+      };
+      const result = recalibrateSplitAfterOptOut(split, "zero");
+      expect("error" in result).toBe(false);
+      if ("error" in result) return;
+      expect(result.participants[0].amount).toBe(100);
+      expect(result.participants[0].shareRaised).toBeUndefined();
+    });
+
     it("blocks opt-out after a collect pot is spent", () => {
       const split = tenWayDinner(8);
       split.kind = "collect";
