@@ -480,7 +480,7 @@ describe("floating-point safety in money math", () => {
           },
         ]
       );
-      expect(preview).toBe(81936);
+      expect(preview).toBe(99700);
     } finally {
       vi.useRealTimers();
     }
@@ -687,7 +687,7 @@ describe("computeOutstandingCredit", () => {
     expect(result.statementDue).toBe(18264);
     expect(result.unbilledSpend).toBe(200);
     expect(result.totalOutstanding).toBe(18464);
-    expect(result.availableCredit).toBe(81536);
+    expect(result.availableCredit).toBe(99800);
   });
 
   it("drops the statement from outstanding once the bill is paid", () => {

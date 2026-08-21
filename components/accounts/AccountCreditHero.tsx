@@ -41,7 +41,7 @@ export function AccountCreditHero({
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const utilizationRate =
-    creditLimit > 0 ? Math.min(100, (totalOutstanding / creditLimit) * 100) : 0;
+    creditLimit > 0 ? Math.min(100, (usedThisCycle / creditLimit) * 100) : 0;
   const usedColor = isDark ? ACCOUNT_RED : theme.colors.destructive;
   const availableColor = isDark ? ACCOUNT_GREEN : theme.colors.success;
 
