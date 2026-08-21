@@ -35,6 +35,7 @@ updated every time a new phase is completed.
 | 5 | 2026-08-15 | Financial calculations & data integrity audit **and fixes** (fixes applied, not diagnostic-only) | [PHASE_5_FINANCIAL_INTEGRITY_AUDIT.md](PHASE_5_FINANCIAL_INTEGRITY_AUDIT.md) | 0 | 0 |
 | 6 | 2026-08-15 | UI/UX audit **and fixes** (fixes applied, not diagnostic-only) | [PHASE_6_UI_UX_AUDIT.md](PHASE_6_UI_UX_AUDIT.md) | 0 | 0 |
 | 7 | 2026-08-15 | Push/local notifications audit **and fixes** (fixes applied, not diagnostic-only) | [PHASE_7_NOTIFICATIONS_AUDIT.md](PHASE_7_NOTIFICATIONS_AUDIT.md) | 0 | 0 |
+| — | 2026-08-22 | Public split share links audit **and hardening** (feature-scoped, not a numbered phase) | [SPLIT_SHARE_LINK_AUDIT_2026-08-22.md](SPLIT_SHARE_LINK_AUDIT_2026-08-22.md) | 0 | 1 |
 
 ## Outstanding Issues Carried Forward
 
@@ -69,6 +70,8 @@ before closing.
 - **[P3]** A theoretical SMS-dedupe race (two overlapping `processIncomingSmsMessages` calls both reading the dedupe-key set before either persists) was not confirmed reachable — the Phase 7 identifier fix closes it as defense-in-depth regardless, but a dedicated concurrency audit of the SMS pipeline would be worth a future phase if duplicate SMS notifications are ever reported. (Phase 7)
 - **[P3]** Notification permission is requested opportunistically at first use (first bill reminder / first SMS event) rather than via one unified onboarding prompt — a product/UX question, not a reliability bug. (Phase 7)
 
+- **[P1]** `allow read: if true` on `paymentRequests` and `splitPublicShares` covers `list`, not just `get`, so anyone holding the Firebase project id can enumerate both collections without knowing a slug — including every `upiId`. Confirmed live and unauthenticated on 2026-08-22 (19 payment requests readable). The permission is load-bearing because both public hooks query `where("slug", "==", …)`, which *is* a `list`. Fix is to make the slug the document id for both, then `allow get: if true; allow list: if false;` (what `splitShareClaims` does from day one) with the hooks reading by id — a data migration plus every `doc(collection(db, …))` mint site, so it needs its own phase. (Split share links, 2026-08-22)
+
 ## Fixed
 
 - **[Phase 2]** Firestore rules let any vault member/split participant rewrite `ownerId`/`memberIds`/`createdBy`/`participantIds` on update — tightened to owner/creator-only.
@@ -86,3 +89,10 @@ before closing.
 - **[Phase 7]** Tapping a notification that cold-started the app (fully killed, not backgrounded) never navigated anywhere — added a `getLastNotificationResponseAsync()` check alongside the live listener, with a dedupe guard.
 - **[Phase 7]** Notification-tap navigation was gated to Android-only inside an SMS-specific provider, silently breaking bill-reminder tap navigation on iOS (bill reminders are scheduled on every platform) — un-gated that one effect.
 - **[Phase 7]** Resolving a detected-transaction notification in-app (add or ignore) never cleared the original OS notification, leaving a stale one in the shade — `dismissSmsReviewItem()` now dismisses it via the same stable identifier.
+- **[Split share links]** The public `/split/:slug` and `/payment/:slug` pages were never built or deployed anywhere — `EXPO_PUBLIC_APP_URL` pointed at a *different repo's* deployed Vite app, so every share link ever sent landed the recipient on a login screen. Added the Expo web build pipeline (`netlify.toml`, `public/index.html`, `build:web`) and switched `web.output` from `"static"` (which silently cannot render a runtime slug without `generateStaticParams`) to `"single"`.
+- **[Split share links]** Splits created before public links existed had no `publicSlug`, so Share opened a share sheet containing a message and no URL, with the button never disabled and no error raised. Share now repairs the split first via `ensureSplitSharing` and never reaches the share sheet without a link.
+- **[Split share links]** Per-person Pay buttons could never appear when the organizer had no UPI id at creation time, and adding one later never repaired it (the sync path only patched requests that already existed). Back-filled idempotently, with the reason surfaced when there is genuinely no UPI id.
+- **[Split share links]** Anonymous visitors always saw INR: the public pages fell back to `system_settings/global`, which requires sign-in, and the currency was never written onto the public snapshot. Threaded at the source; the public screens no longer read system settings at all.
+- **[Split share links]** After a drop-out, people who had already paid in full were labelled plain "Unpaid" on the public page rather than owing a top-up — the exact case that prompted the work. `Participant.shareRaised` is now recorded by `recalibrateSplitAfterOptOut` and rendered as "Extra ₹25.00 due after Friend 8 dropped out".
+- **[Split share links]** Both public pages were one-shot `getDocs` reads, so a friend watching the page never saw other payments land — converted to `onSnapshot` with retry.
+- **[Split share links]** `/_sitemap` would have been publicly browsable on the new host (expo-router appends it in production too) — disabled via the router plugin options.
