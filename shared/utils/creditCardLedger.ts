@@ -421,10 +421,33 @@ export function buildCreditCardLedger(
     if (left > 0) freeCredit = roundMoney(freeCredit + left);
   }
 
+  // The stored `amountPaid` floor exists for out-of-band settlements only —
+  // mark-as-paid with no ledger row. Money that *is* a ledger payment has
+  // already been placed by the allocation above (or deliberately withheld
+  // because the payment predates the statement), so crediting it again here
+  // would count the same rupees twice: once on the statement, once as free
+  // credit. Only the part of `amountPaid` no linked payment explains counts,
+  // and never on a statement that has not closed yet.
+  const paymentAmountById = new Map(
+    cardPayments.map((payment) => [payment.id || "", payment.amount])
+  );
   for (const statement of working) {
     if (statement.cancelled) continue;
     if (statement.isAuto && statement.storedStatus !== "PAID") continue;
-    const floor = roundMoney(Math.min(statement.storedAmountPaid, statement.billed));
+    if (statement.statementDate > today) continue;
+    const explainedByPayments = roundMoney(
+      statement.linkedIds.reduce(
+        (sum, id) => sum + (paymentAmountById.get(id) ?? 0),
+        0
+      )
+    );
+    const outOfBand = roundMoney(
+      Math.max(0, statement.storedAmountPaid - explainedByPayments)
+    );
+    if (outOfBand <= 0) continue;
+    const floor = roundMoney(
+      Math.min(statement.billed, statement.credit + outOfBand)
+    );
     if (floor > statement.credit) statement.credit = floor;
   }
 
