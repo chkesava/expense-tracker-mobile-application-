@@ -1,7 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { parseNaturalLanguageTransaction } from "./magicParser";
 
 describe("parseNaturalLanguageTransaction", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   const mockAccounts = [
     { id: "acc_hdfc", name: "HDFC" },
     { id: "acc_sbi", name: "SBI" },
@@ -29,6 +33,13 @@ describe("parseNaturalLanguageTransaction", () => {
   });
 
   it("parses account name and relative date", () => {
+    // The parser resolves "yesterday" against the *local* calendar day. Freeze
+    // local noon so the expected key is a literal in any timezone — building it
+    // from `toISOString()` compares a local date to a UTC one and fails for
+    // every hour of the day that straddles the UTC date boundary.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 7, 20, 12, 0, 0)); // 20 Aug 2026, local noon
+
     const res = parseNaturalLanguageTransaction(
       "Paid 1200 for electricity bill yesterday with HDFC",
       { accounts: mockAccounts }
@@ -37,11 +48,26 @@ describe("parseNaturalLanguageTransaction", () => {
     expect(res.amount).toBe(1200);
     expect(res.accountId).toBe("acc_hdfc");
     expect(res.accountName).toBe("HDFC");
+    expect(res.date).toBe("2026-08-19");
+  });
 
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yStr = yesterday.toISOString().slice(0, 10);
-    expect(res.date).toBe(yStr);
+  it("resolves today and day-before-yesterday on the local calendar too", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 2, 1, 23, 30, 0)); // 1 Mar 2026, late local
+
+    expect(
+      parseNaturalLanguageTransaction("Spent 100 on coffee today", {
+        accounts: mockAccounts,
+      }).date
+    ).toBe("2026-03-01");
+
+    expect(
+      parseNaturalLanguageTransaction(
+        "Spent 100 on coffee day before yesterday",
+        { accounts: mockAccounts }
+      ).date
+      // 1 Mar minus two days crosses a month boundary into a 28-day February.
+    ).toBe("2026-02-27");
   });
 
   it("parses k notation amounts (e.g. 5k, 50k)", () => {
