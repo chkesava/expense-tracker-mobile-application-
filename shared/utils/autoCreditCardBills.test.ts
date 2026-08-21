@@ -134,6 +134,65 @@ describe("buildAutoCreditCardBillDraft", () => {
     expect(draft?.statementAmount).toBe(800);
   });
 
+  it("clamps a 31st card to February 28 and April 30", () => {
+    const monthEndCard = { ...creditCard, billGenerationDay: 31 };
+
+    const feb = buildAutoCreditCardBillDraft({
+      ...baseInput,
+      account: monthEndCard,
+      today: "2026-02-28",
+      expenses: [
+        expense("2026-01-31", 10),
+        expense("2026-02-01", 400),
+        expense("2026-02-28", 50),
+        expense("2026-03-01", 9),
+      ],
+    });
+    expect(feb).toMatchObject({
+      statementDate: "2026-02-28",
+      billingPeriodStart: "2026-02-01",
+      billingPeriodEnd: "2026-02-28",
+      statementAmount: 450,
+      dueDate: "2026-03-05",
+    });
+
+    const apr = buildAutoCreditCardBillDraft({
+      ...baseInput,
+      account: monthEndCard,
+      today: "2026-04-30",
+      expenses: [
+        expense("2026-03-31", 10),
+        expense("2026-04-01", 200),
+        expense("2026-04-30", 25),
+        expense("2026-05-01", 9),
+      ],
+    });
+    expect(apr).toMatchObject({
+      statementDate: "2026-04-30",
+      billingPeriodStart: "2026-04-01",
+      billingPeriodEnd: "2026-04-30",
+      statementAmount: 225,
+    });
+  });
+
+  it("keeps a 30th card off January 31 spend", () => {
+    const draft = buildAutoCreditCardBillDraft({
+      ...baseInput,
+      account: { ...creditCard, billGenerationDay: 30 },
+      today: "2026-01-31",
+      expenses: [
+        expense("2026-01-30", 100),
+        expense("2026-01-31", 999),
+      ],
+    });
+    expect(draft).toMatchObject({
+      statementDate: "2026-01-30",
+      billingPeriodStart: "2025-12-31",
+      billingPeriodEnd: "2026-01-30",
+      statementAmount: 100,
+    });
+  });
+
   it("closes on the generation day and starts the day after the previous one", () => {
     const draft = buildAutoCreditCardBillDraft({
       ...baseInput,

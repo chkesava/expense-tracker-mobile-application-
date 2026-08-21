@@ -93,6 +93,21 @@ export function PayCreditBillModal({
   const [note, setNote] = useState("Credit card bill payment");
   const [saving, setSaving] = useState(false);
 
+  const selectedCard = useMemo(() => {
+    return creditCards.find((c) => c.id === toCardId);
+  }, [creditCards, toCardId]);
+
+  const usageInfo = useMemo(() => {
+    if (!selectedCard) return null;
+    return computeOutstandingCredit(
+      selectedCard,
+      expenses,
+      payments,
+      bills,
+      todayDateKey(settings.timezone)
+    );
+  }, [selectedCard, expenses, payments, bills, settings.timezone]);
+
   // Sync default credit card
   useEffect(() => {
     if (defaultCreditCardId) {
@@ -113,22 +128,6 @@ export function PayCreditBillModal({
       setAmount((prev) => (prev.trim() ? prev : String(ledgerRemaining)));
     }
   }, [isOpen, defaultAmount, usageInfo]);
-
-  // Selected card usage
-  const selectedCard = useMemo(() => {
-    return creditCards.find((c) => c.id === toCardId);
-  }, [creditCards, toCardId]);
-
-  const usageInfo = useMemo(() => {
-    if (!selectedCard) return null;
-    return computeOutstandingCredit(
-      selectedCard,
-      expenses,
-      payments,
-      bills,
-      todayDateKey(settings.timezone)
-    );
-  }, [selectedCard, expenses, payments, bills, settings.timezone]);
 
   const openBill = useMemo(() => {
     if (applyToBillId) {

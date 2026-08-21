@@ -54,6 +54,30 @@ describe("billingCycle", () => {
       expect(toLocalDateKey(nextBillDate)).toBe("2026-03-31");
     });
 
+    it("closes a 31st card on the last calendar day of each month", () => {
+      const jan = getClosedBillingCycle(31, new Date(2026, 0, 31));
+      expect(toLocalDateKey(jan.cycleStart)).toBe("2026-01-01");
+      expect(toLocalDateKey(jan.cycleEnd)).toBe("2026-01-31");
+
+      const feb = getClosedBillingCycle(31, new Date(2026, 1, 28));
+      expect(toLocalDateKey(feb.cycleStart)).toBe("2026-02-01");
+      expect(toLocalDateKey(feb.cycleEnd)).toBe("2026-02-28");
+
+      const apr = getClosedBillingCycle(31, new Date(2026, 3, 30));
+      expect(toLocalDateKey(apr.cycleStart)).toBe("2026-04-01");
+      expect(toLocalDateKey(apr.cycleEnd)).toBe("2026-04-30");
+    });
+
+    it("keeps a 30th card on the 30th in 31-day months, and last day in February", () => {
+      const jan = getClosedBillingCycle(30, new Date(2026, 0, 31));
+      expect(toLocalDateKey(jan.cycleStart)).toBe("2025-12-31");
+      expect(toLocalDateKey(jan.cycleEnd)).toBe("2026-01-30");
+
+      const feb = getClosedBillingCycle(30, new Date(2026, 1, 28));
+      expect(toLocalDateKey(feb.cycleStart)).toBe("2026-01-31");
+      expect(toLocalDateKey(feb.cycleEnd)).toBe("2026-02-28");
+    });
+
     it("rolls December bill cycles into the next year", () => {
       vi.useFakeTimers();
       vi.setSystemTime(new Date(2026, 11, 20, 12, 0, 0)); // 20 Dec
