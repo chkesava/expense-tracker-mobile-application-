@@ -440,9 +440,7 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
                 {
                   amountPaid: allocation.amountPaid,
                   paymentIds: allocation.paymentIds,
-                  ...(allocation.paymentDate
-                    ? { paymentDate: allocation.paymentDate }
-                    : {}),
+                  paymentDate: allocation.paymentDate ?? null,
                   status: derived.status,
                   remainingAmount: derived.remainingAmount,
                   nextReminderAt: derived.nextReminderAt ?? null,
