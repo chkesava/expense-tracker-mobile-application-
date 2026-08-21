@@ -2,7 +2,7 @@
   "expo": {
     "name": "Spendly",
     "slug": "spendly",
-    "version": "3.2.2",
+    "version": "3.2.3",
     "orientation": "portrait",
     "icon": "./assets/branding/icon.png",
     "scheme": "spendly",
@@ -28,7 +28,7 @@
         "android.permission.POST_NOTIFICATIONS",
         "android.permission.REQUEST_INSTALL_PACKAGES"
       ],
-      "versionCode": 58
+      "versionCode": 60
     },
     "web": {
       "bundler": "metro",

@@ -119,19 +119,22 @@ export function parseNaturalLanguageTransaction(
       pattern: /\btoday\b/i,
       getOffset: () => new Date(now),
     },
-    {
-      pattern: /\byesterday\b/i,
-      getOffset: () => {
-        const d = new Date(now);
-        d.setDate(d.getDate() - 1);
-        return d;
-      },
-    },
+    // Longest match first: this loop breaks on the first hit, so a bare
+    // /\byesterday\b/ ahead of this would claim "day before yesterday" and
+    // resolve it to -1 day (and leave "day before" behind in the note).
     {
       pattern: /\bday before yesterday\b/i,
       getOffset: () => {
         const d = new Date(now);
         d.setDate(d.getDate() - 2);
+        return d;
+      },
+    },
+    {
+      pattern: /\byesterday\b/i,
+      getOffset: () => {
+        const d = new Date(now);
+        d.setDate(d.getDate() - 1);
         return d;
       },
     },

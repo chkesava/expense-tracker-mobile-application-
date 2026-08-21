@@ -85,8 +85,8 @@ export function CardsList() {
 
     creditCards.forEach((c) => {
       const usage = computeOutstandingCredit(c, expenses, payments, bills, today);
-      totalLimit += c.creditLimit || 0;
-      totalUsed += usage.totalOutstanding;
+        totalLimit += c.creditLimit || 0;
+      totalUsed += usage.unbilledSpend;
     });
 
     const totalAvailable = Math.max(0, totalLimit - totalUsed);
@@ -113,11 +113,12 @@ export function CardsList() {
         smsWarning: smsMatchingUnconfiguredLabel(card, "Credit Card"),
         daysRemaining: usage.daysRemaining,
         usedThisCycle: usage.unbilledSpend,
+        cancelledSpend: usage.cancelledSpend,
         statementDue: usage.statementDue,
         outstanding: usage.totalOutstanding,
         availableCredit: usage.availableCredit,
         limit,
-        utilization: limit > 0 ? (usage.totalOutstanding / limit) * 100 : 0,
+        utilization: limit > 0 ? (usage.unbilledSpend / limit) * 100 : 0,
         accent: card.color || DEFAULT_CARD_ACCENT,
         openBill: openBillByAccount.get(card.id) ?? null,
       };

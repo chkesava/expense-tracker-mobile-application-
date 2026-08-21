@@ -7,6 +7,7 @@ import {
   oldestOpenStatement,
   type LedgerBillSlice,
 } from "./creditCardLedger";
+import { AUTO_CREDIT_CARD_BILL_NOTE } from "./autoCreditCardBills";
 
 /**
  * The reported bug, with the user's real numbers. Slice card, statement closes
@@ -91,12 +92,12 @@ describe("buildCreditCardLedger — reported Slice scenario", () => {
       periodStart: "2026-07-21",
       periodEnd: "2026-08-20",
       billed: 27875,
-      // Leftover after settling July (19,000 − 10,301) reduces remaining,
-      // never the gross billed amount.
-      paid: 8699,
-      remaining: 19176,
-      status: "partiallyPaid",
+      paid: 0,
+      remaining: 27875,
+      status: "unpaid",
     });
+    expect(ledger.unappliedCredit).toBe(8699);
+    expect(ledger.availableCredit).toBe(89000);
   });
 
   it("applies the payment to the statement it was actually for", () => {
@@ -117,9 +118,11 @@ describe("buildCreditCardLedger — reported Slice scenario", () => {
       remaining: 0,
       status: "paid",
     });
-    // 19,000 − 10,301 follows into the new statement remaining, not billed.
-    expect(ledger.statementDue).toBe(19176);
-    expect(ledger.unappliedCredit).toBe(0);
+    // Leftover after the July bill stays as unapplied credit — it does not
+    // stamp the newly generated August statement as partially paid.
+    expect(ledger.statementDue).toBe(27875);
+    expect(ledger.unappliedCredit).toBe(8699);
+    expect(ledger.availableCredit).toBe(89000);
   });
 
   it("resets the cycle to zero on the close date and holds the statement as due", () => {
@@ -134,7 +137,7 @@ describe("buildCreditCardLedger — reported Slice scenario", () => {
     expect(ledger.unbilledSpend).toBe(0);
     expect(ledger.statementDue).toBe(27875);
     expect(ledger.totalOutstanding).toBe(27875);
-    expect(ledger.availableCredit).toBe(89000 - 27875);
+    expect(ledger.availableCredit).toBe(89000);
   });
 
   it("counts only post-close spend in the new cycle", () => {
@@ -152,7 +155,7 @@ describe("buildCreditCardLedger — reported Slice scenario", () => {
     });
     expect(ledger.unbilledSpend).toBe(1500);
     expect(ledger.totalOutstanding).toBe(29375);
-    expect(ledger.availableCredit).toBe(89000 - 29375);
+    expect(ledger.availableCredit).toBe(89000 - 1500);
   });
 
   it("frees the limit only when the statement is actually paid", () => {
@@ -446,6 +449,40 @@ describe("collectCreditBillAllocationPatches", () => {
     expect(patches).toEqual([]);
   });
 
+  it("walks leftover credit off an auto bill the user has not paid", () => {
+    const patches = collectCreditBillAllocationPatches({
+      accounts: [slice],
+      isCreditAccount: () => true,
+      expenses: [expense("2026-08-05", 28101), expense("2026-06-25", 10301)],
+      payments: [payment("pay-july", "2026-08-13", 19000)],
+      bills: [
+        statement("2026-07-20", "2026-06-21", 10301, {
+          amountPaid: 10301,
+          paymentIds: ["pay-july"],
+          status: "PAID",
+          note: AUTO_CREDIT_CARD_BILL_NOTE,
+        }),
+        statement("2026-08-20", "2026-07-21", 28101, {
+          amountPaid: 7497,
+          remainingAmount: 20604,
+          paymentIds: ["pay-july"],
+          status: "PARTIALLY_PAID",
+          note: AUTO_CREDIT_CARD_BILL_NOTE,
+        }),
+      ],
+      today: "2026-08-21",
+    });
+
+    expect(patches).toEqual([
+      {
+        billId: "bill-2026-08-20",
+        amountPaid: 0,
+        paymentIds: [],
+        paymentDate: undefined,
+      },
+    ]);
+  });
+
   it("skips non-credit accounts", () => {
     const patches = collectCreditBillAllocationPatches({
       accounts: [slice],
@@ -457,5 +494,217 @@ describe("collectCreditBillAllocationPatches", () => {
     });
 
     expect(patches).toEqual([]);
+  });
+});
+
+/**
+ * The stored `amountPaid` floor is for out-of-band settlements only. When the
+ * stamp came from a real AccountPayment, the allocation above has already
+ * decided where that money goes — crediting it again through the floor counted
+ * the same rupees twice, once on the statement and once as free credit, and
+ * showed a statement the user never paid as PARTIALLY PAID.
+ */
+describe("buildCreditCardLedger — stored amountPaid floor", () => {
+  it("does not settle a manual statement from a payment dated before it closed", () => {
+    const ledger = buildCreditCardLedger({
+      account: slice,
+      expenses: [expense("2026-08-05", 28101)],
+      payments: [payment("pay-aug-13", "2026-08-13", 19000)],
+      bills: [
+        // Stamped by applyPaymentToBill; the payment predates the close date.
+        statement("2026-08-20", "2026-07-21", 28101, {
+          amountPaid: 19000,
+          paymentIds: ["pay-aug-13"],
+          status: "PARTIALLY_PAID",
+        }),
+      ],
+      today: "2026-08-21",
+    });
+
+    const august = ledger.statements.find((s) => s.statementDate === "2026-08-20");
+    expect(august).toMatchObject({
+      billed: 28101,
+      paid: 0,
+      remaining: 28101,
+      status: "unpaid",
+    });
+    // The 19,000 is counted once, as credit against the next cycle.
+    expect(ledger.statementDue).toBe(28101);
+    expect(ledger.unappliedCredit).toBe(19000);
+    expect(ledger.availableCredit).toBe(89000);
+  });
+
+  it("does not carry a partial leftover stamp onto a manual statement", () => {
+    const ledger = buildCreditCardLedger({
+      account: slice,
+      expenses: [expense("2026-08-05", 28101), expense("2026-06-25", 11503)],
+      payments: [payment("pay-aug-13", "2026-08-13", 19000)],
+      bills: [
+        statement("2026-08-20", "2026-07-21", 28101, {
+          amountPaid: 7497,
+          paymentIds: ["pay-aug-13"],
+          status: "PARTIALLY_PAID",
+        }),
+      ],
+      today: "2026-08-21",
+    });
+
+    expect(ledger.statementDue).toBe(28101);
+    expect(ledger.unappliedCredit).toBe(7497);
+    expect(ledger.availableCredit).toBe(89000);
+  });
+
+  it("still honours a mark-as-paid settlement with no linked payment", () => {
+    const ledger = buildCreditCardLedger({
+      account: slice,
+      expenses: [expense("2026-08-05", 28101)],
+      payments: [],
+      bills: [
+        statement("2026-08-20", "2026-07-21", 28101, {
+          amountPaid: 28101,
+          status: "PAID",
+        }),
+      ],
+      today: "2026-08-21",
+    });
+
+    expect(ledger.statementDue).toBe(0);
+  });
+
+  it("adds an out-of-band top-up on top of the allocated payment", () => {
+    const ledger = buildCreditCardLedger({
+      account: slice,
+      expenses: [expense("2026-08-05", 10000)],
+      payments: [payment("pay-aug-21", "2026-08-21", 4000)],
+      bills: [
+        // 4,000 came through the ledger; the other 6,000 was settled off-app.
+        statement("2026-08-20", "2026-07-21", 10000, {
+          amountPaid: 10000,
+          paymentIds: ["pay-aug-21"],
+          status: "PAID",
+        }),
+      ],
+      today: "2026-08-22",
+    });
+
+    expect(ledger.statementDue).toBe(0);
+    expect(ledger.unappliedCredit).toBe(0);
+  });
+
+  it("never settles a statement that has not closed yet", () => {
+    const ledger = buildCreditCardLedger({
+      account: slice,
+      expenses: [expense("2026-08-25", 5000)],
+      payments: [],
+      bills: [
+        statement("2026-09-20", "2026-08-21", 5000, {
+          amountPaid: 5000,
+          status: "PAID",
+        }),
+      ],
+      today: "2026-08-26",
+    });
+
+    const september = ledger.statements.find(
+      (s) => s.statementDate === "2026-09-20"
+    );
+    expect(september).toMatchObject({ paid: 0, remaining: 5000, status: "unpaid" });
+  });
+});
+
+/**
+ * Cancelling a statement voids the document, not the debt — the spend it covered
+ * is still owed. But it is not *this cycle's* spend, so it must not eat the
+ * limit: `availableCredit` is `limit − unbilledSpend` and unbilled means the
+ * open window only.
+ */
+describe("buildCreditCardLedger — cancelled statements", () => {
+  it("keeps cancelled statement spend owed without eating the limit", () => {
+    const ledger = buildCreditCardLedger({
+      account: slice,
+      expenses: [expense("2026-08-05", 6000)],
+      payments: [],
+      bills: [
+        statement("2026-08-20", "2026-07-21", 6000, { status: "CANCELLED" }),
+      ],
+      today: "2026-08-21",
+    });
+
+    expect(ledger.cancelledSpend).toBe(6000);
+    expect(ledger.unbilledSpend).toBe(0);
+    expect(ledger.statementDue).toBe(0);
+    // Still owed...
+    expect(ledger.totalOutstanding).toBe(6000);
+    // ...but the limit is intact, because none of it is this-cycle spend.
+    expect(ledger.availableCredit).toBe(89000);
+  });
+
+  it("separates cancelled spend from open-cycle spend", () => {
+    const ledger = buildCreditCardLedger({
+      account: slice,
+      expenses: [expense("2026-08-05", 6000), expense("2026-08-25", 1500)],
+      payments: [],
+      bills: [
+        statement("2026-08-20", "2026-07-21", 6000, { status: "CANCELLED" }),
+      ],
+      today: "2026-08-26",
+    });
+
+    expect(ledger.cancelledSpend).toBe(6000);
+    expect(ledger.unbilledSpend).toBe(1500);
+    expect(ledger.totalOutstanding).toBe(7500);
+    expect(ledger.availableCredit).toBe(89000 - 1500);
+    expect(ledger.openCycle.spend).toBe(1500);
+  });
+
+  it("settles the cancelled bucket before the open cycle", () => {
+    const ledger = buildCreditCardLedger({
+      account: slice,
+      expenses: [expense("2026-08-05", 6000), expense("2026-08-25", 1500)],
+      payments: [payment("pay-1", "2026-08-26", 6500)],
+      bills: [
+        statement("2026-08-20", "2026-07-21", 6000, { status: "CANCELLED" }),
+      ],
+      today: "2026-08-26",
+    });
+
+    // 6,000 clears the cancelled bucket, the remaining 500 reduces this cycle.
+    expect(ledger.cancelledSpend).toBe(0);
+    expect(ledger.unbilledSpend).toBe(1000);
+    expect(ledger.totalOutstanding).toBe(1000);
+    expect(ledger.availableCredit).toBe(89000 - 1000);
+  });
+
+  it("leaves credit unapplied once both buckets are clear", () => {
+    const ledger = buildCreditCardLedger({
+      account: slice,
+      expenses: [expense("2026-08-05", 6000)],
+      payments: [payment("pay-1", "2026-08-26", 8000)],
+      bills: [
+        statement("2026-08-20", "2026-07-21", 6000, { status: "CANCELLED" }),
+      ],
+      today: "2026-08-26",
+    });
+
+    expect(ledger.cancelledSpend).toBe(0);
+    expect(ledger.unbilledSpend).toBe(0);
+    expect(ledger.unappliedCredit).toBe(2000);
+    expect(ledger.totalOutstanding).toBe(0);
+    expect(ledger.availableCredit).toBe(89000);
+  });
+
+  it("reports no cancelled spend when every statement is live", () => {
+    const ledger = buildCreditCardLedger({
+      account: slice,
+      expenses: [expense("2026-08-05", 6000), expense("2026-08-25", 1500)],
+      payments: [],
+      bills: [statement("2026-08-20", "2026-07-21", 6000)],
+      today: "2026-08-26",
+    });
+
+    expect(ledger.cancelledSpend).toBe(0);
+    expect(ledger.statementDue).toBe(6000);
+    expect(ledger.unbilledSpend).toBe(1500);
+    expect(ledger.totalOutstanding).toBe(7500);
   });
 });

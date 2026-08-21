@@ -10,7 +10,7 @@ import type {
 import {
   buildAccountActivities,
   computeBankBalance,
-  computeCreditUsage,
+  computeOutstandingCredit,
   getCreditBillHistory,
   previewBalanceAfterBillPayment,
   previewBalanceAfterTransaction,
@@ -258,13 +258,16 @@ describe("accountActivities and balance utilities", () => {
       },
     ];
 
-    const usage = computeCreditUsage(mockCard, expenses, payments);
+    const usage = computeOutstandingCredit(mockCard, expenses, payments);
 
-    // Cycle usage is gross spend — a bill payment settles a statement, it does
-    // not shrink what was charged this cycle.
+    // Cycle usage is this-cycle spend only. The 5,000 charged on 14 Jul belongs
+    // to the statement that closed on 15 Jul, and the 2,000 paid on 5 Aug
+    // settles that statement rather than shrinking this cycle.
     expect(usage.usedThisCycle).toBe(8000);
     expect(usage.paidThisCycle).toBe(2000);
     expect(usage.availableCredit).toBe(92000);
+    expect(usage.statementDue).toBe(3000);
+    expect(usage.totalOutstanding).toBe(11000);
     expect(toLocalDateKey(usage.nextResetDate)).toBe("2026-08-15");
     expect(usage.daysRemaining).toBe(5);
   });
@@ -304,9 +307,14 @@ describe("accountActivities and balance utilities", () => {
       },
     ];
 
-    const usage = computeCreditUsage(mockCard, expenses, payments);
+    const usage = computeOutstandingCredit(mockCard, expenses, payments);
+    // Both land in the open window, external included.
     expect(usage.paidThisCycle).toBe(6500);
-    expect(usage.usedThisCycle).toBe(5000);
+    // 6,500 paid against 5,000 of open-cycle spend clears the cycle and leaves
+    // 1,500 of credit on the card, so the limit is fully restored.
+    expect(usage.usedThisCycle).toBe(0);
+    expect(usage.availableCredit).toBe(100000);
+    expect(usage.unappliedCredit).toBe(1500);
   });
 
   it("evaluates credit card bill history status across cycles", () => {

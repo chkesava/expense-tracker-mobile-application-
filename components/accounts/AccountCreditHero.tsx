@@ -15,6 +15,7 @@ import { themeUsesDarkPalette } from "@/theme/tokens";
 export function AccountCreditHero({
   usedThisCycle,
   statementDue,
+  cancelledSpend = 0,
   totalOutstanding,
   unappliedCredit = 0,
   availableCredit,
@@ -28,6 +29,8 @@ export function AccountCreditHero({
   usedThisCycle: number;
   /** Still owed on closed statements. */
   statementDue: number;
+  /** Owed under a cancelled statement — not this cycle, so it never eats the limit. */
+  cancelledSpend?: number;
   totalOutstanding: number;
   /** Paid beyond every statement and this cycle's spend. */
   unappliedCredit?: number;
@@ -41,7 +44,7 @@ export function AccountCreditHero({
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const utilizationRate =
-    creditLimit > 0 ? Math.min(100, (totalOutstanding / creditLimit) * 100) : 0;
+    creditLimit > 0 ? Math.min(100, (usedThisCycle / creditLimit) * 100) : 0;
   const usedColor = isDark ? ACCOUNT_RED : theme.colors.destructive;
   const availableColor = isDark ? ACCOUNT_GREEN : theme.colors.success;
 
@@ -118,6 +121,19 @@ export function AccountCreditHero({
             ]}
           />
         </View>
+        {cancelledSpend > 0 ? (
+          <View style={styles.dueRow}>
+            <Text style={[styles.dueLabel, { color: theme.colors.mutedForeground }]}>
+              Cancelled statements
+            </Text>
+            <Amount
+              value={cancelledSpend}
+              currency={currency}
+              ghostable
+              style={[styles.dueValue, { color: usedColor }]}
+            />
+          </View>
+        ) : null}
         <View style={styles.dueRow}>
           <Text style={[styles.dueLabel, { color: theme.colors.mutedForeground }]}>
             Total outstanding

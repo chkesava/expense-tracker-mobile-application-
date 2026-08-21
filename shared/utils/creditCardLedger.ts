@@ -4,6 +4,7 @@ import {
   CREDIT_CARD_PAYMENT_WINDOW_DAYS,
   OPEN_BILL_STATUSES,
 } from "../types/creditCardBill";
+import { AUTO_CREDIT_CARD_BILL_NOTE } from "./autoCreditCardBills";
 import { roundMoney } from "./money";
 import {
   billingCycleEndingOn,
@@ -78,6 +79,12 @@ export type CreditCardLedger = {
   statementDue: number;
   /** Current cycle spend, net of credit left over after settling statements. */
   unbilledSpend: number;
+  /**
+   * Spend a cancelled statement covered, net of credit. Still owed, so it stays
+   * in `totalOutstanding` — but it is not this-cycle spend, so it must not eat
+   * the limit via `availableCredit`.
+   */
+  cancelledSpend: number;
   totalOutstanding: number;
   availableCredit: number;
   creditLimit: number;
@@ -111,6 +118,7 @@ function emptyLedger(account: Account, today: string): CreditCardLedger {
     statements: [],
     statementDue: 0,
     unbilledSpend: 0,
+    cancelledSpend: 0,
     totalOutstanding: 0,
     availableCredit: limit,
     creditLimit: limit,
@@ -244,10 +252,11 @@ function claimBillForWindow(
  * Single source of truth for a credit card's position.
  *
  * Statements are gross spend for their window — a payment never shrinks a
- * statement amount. Payments settle statements oldest-first (the way an issuer
- * applies them), and anything left over reduces the still-open cycle. So the
- * cycle usage resets at generation while the statement stays a liability until
- * it is actually paid.
+ * statement amount. Payments settle statements that already existed on the
+ * payment date, oldest-first. Leftover reduces the still-open cycle (and
+ * becomes unapplied credit once that cycle closes). It does not silently
+ * mark the next generated statement as paid. Available credit is limit minus
+ * unbilled cycle spend; an unpaid statement is tracked separately until paid.
  */
 export function buildCreditCardLedger(
   input: BuildCreditCardLedgerInput
@@ -319,6 +328,8 @@ export function buildCreditCardLedger(
     credit: number;
     storedStatus?: LedgerBillSlice["status"];
     storedAmountPaid: number;
+    isAuto: boolean;
+    linkedIds: string[];
   };
   const working: WorkingStatement[] = windows.map((window) => {
     const bill = claimBillForWindow(
@@ -364,19 +375,22 @@ export function buildCreditCardLedger(
       cancelled,
       status: cancelled ? "cancelled" : "unpaid",
       source: bill ? "bill" : "derived",
-      paymentIds: cancelled ? [] : [...(bill?.paymentIds || [])].filter(Boolean),
+      paymentIds: [],
       credit: 0,
       storedStatus: bill?.status,
       storedAmountPaid: bill ? Math.max(0, Number(bill.amountPaid) || 0) : 0,
+      isAuto: (bill?.note || "") === AUTO_CREDIT_CARD_BILL_NOTE,
+      linkedIds: cancelled ? [] : [...(bill?.paymentIds || [])].filter(Boolean),
     };
   });
 
   // Allocate payments oldest statement first. A payment listed on a bill is
   // applied there first so "pay this statement" still wins; leftover then
-  // fills older/newer statements the way an issuer posts it. After that, any
-  // remaining free credit follows into statements that closed later — so a
-  // mid-cycle overpayment reduces unbilled until generation, then remaining.
-  // `amountPaid` is a floor for mark-as-paid settlements with no ledger row.
+  // fills older statements, then newer ones that had already closed on the
+  // payment date. Leftover from a payment made *before* the next close stays
+  // as cycle credit / unapplied credit — it must not stamp PARTIALLY PAID on
+  // a statement the user has not paid. `amountPaid` is a floor for mark-as-paid
+  // settlements with no ledger row (skipped on auto bills still in flight).
   let freeCredit = 0;
   for (const payment of cardPayments) {
     let left = payment.amount;
@@ -384,12 +398,16 @@ export function buildCreditCardLedger(
       for (const statement of working) {
         if (left <= 0) break;
         if (statement.cancelled) continue;
-        if (!statement.paymentIds.includes(payment.id)) continue;
+        if (statement.statementDate > payment.date) continue;
+        if (!statement.linkedIds.includes(payment.id)) continue;
         const room = roundMoney(statement.billed - statement.credit);
         if (room <= 0) continue;
         const applied = Math.min(room, left);
         statement.credit = roundMoney(statement.credit + applied);
         statement.lastPaymentDate = payment.date;
+        if (payment.id && !statement.paymentIds.includes(payment.id)) {
+          statement.paymentIds.push(payment.id);
+        }
         left = roundMoney(left - applied);
       }
     }
@@ -410,21 +428,33 @@ export function buildCreditCardLedger(
     if (left > 0) freeCredit = roundMoney(freeCredit + left);
   }
 
-  if (freeCredit > 0) {
-    for (const statement of working) {
-      if (freeCredit <= 0) break;
-      if (statement.cancelled) continue;
-      const room = roundMoney(statement.billed - statement.credit);
-      if (room <= 0) continue;
-      const applied = Math.min(room, freeCredit);
-      statement.credit = roundMoney(statement.credit + applied);
-      freeCredit = roundMoney(freeCredit - applied);
-    }
-  }
-
+  // The stored `amountPaid` floor exists for out-of-band settlements only —
+  // mark-as-paid with no ledger row. Money that *is* a ledger payment has
+  // already been placed by the allocation above (or deliberately withheld
+  // because the payment predates the statement), so crediting it again here
+  // would count the same rupees twice: once on the statement, once as free
+  // credit. Only the part of `amountPaid` no linked payment explains counts,
+  // and never on a statement that has not closed yet.
+  const paymentAmountById = new Map(
+    cardPayments.map((payment) => [payment.id || "", payment.amount])
+  );
   for (const statement of working) {
     if (statement.cancelled) continue;
-    const floor = roundMoney(Math.min(statement.storedAmountPaid, statement.billed));
+    if (statement.isAuto && statement.storedStatus !== "PAID") continue;
+    if (statement.statementDate > today) continue;
+    const explainedByPayments = roundMoney(
+      statement.linkedIds.reduce(
+        (sum, id) => sum + (paymentAmountById.get(id) ?? 0),
+        0
+      )
+    );
+    const outOfBand = roundMoney(
+      Math.max(0, statement.storedAmountPaid - explainedByPayments)
+    );
+    if (outOfBand <= 0) continue;
+    const floor = roundMoney(
+      Math.min(statement.billed, statement.credit + outOfBand)
+    );
     if (floor > statement.credit) statement.credit = floor;
   }
 
@@ -467,32 +497,51 @@ export function buildCreditCardLedger(
       .reduce((sum, statement) => sum + statement.remaining, 0)
   );
 
-  // Unbilled = anything no live statement covers. Spend under a cancelled
-  // statement is still owed, so it falls back here rather than vanishing.
+  // Anything no live statement covers is still owed, but it is not all the same
+  // kind of debt. Spend in the open window is this cycle's unbilled spend and
+  // is the only thing that eats the limit. Spend a cancelled statement covered
+  // sits outside the open window: still owed, so it falls back here rather than
+  // vanishing, but it is not this-cycle spend and must not reduce available
+  // credit. Leftover credit settles the older (cancelled) bucket first.
   const billedWindows = statements
     .filter((statement) => !statement.cancelled)
     .map((statement) => ({ start: statement.periodStart, end: statement.periodEnd }));
-  const openCycleSpend = roundMoney(
-    cardExpenses
-      .filter(
-        (expense) =>
-          !billedWindows.some(
-            (window) => expense.date >= window.start && expense.date <= window.end
-          )
+  const uncovered = cardExpenses.filter(
+    (expense) =>
+      !billedWindows.some(
+        (window) => expense.date >= window.start && expense.date <= window.end
       )
+  );
+  const openCycleSpend = roundMoney(
+    uncovered
+      .filter((expense) => expense.date >= openStart)
+      .reduce((sum, expense) => sum + expense.amount, 0)
+  );
+  const voidedSpend = roundMoney(
+    uncovered
+      .filter((expense) => expense.date < openStart)
       .reduce((sum, expense) => sum + expense.amount, 0)
   );
 
-  const unbilledSpend = roundMoney(Math.max(0, openCycleSpend - freeCredit));
-  const unappliedCredit = roundMoney(Math.max(0, freeCredit - openCycleSpend));
-  const totalOutstanding = roundMoney(statementDue + unbilledSpend);
+  const cancelledSpend = roundMoney(Math.max(0, voidedSpend - freeCredit));
+  const creditAfterVoided = roundMoney(Math.max(0, freeCredit - voidedSpend));
+  const unbilledSpend = roundMoney(
+    Math.max(0, openCycleSpend - creditAfterVoided)
+  );
+  const unappliedCredit = roundMoney(
+    Math.max(0, creditAfterVoided - openCycleSpend)
+  );
+  const totalOutstanding = roundMoney(
+    statementDue + unbilledSpend + cancelledSpend
+  );
 
   return {
     statements: [...statements].reverse(),
     statementDue,
     unbilledSpend,
+    cancelledSpend,
     totalOutstanding,
-    availableCredit: roundMoney(Math.max(0, limit - totalOutstanding)),
+    availableCredit: roundMoney(Math.max(0, limit - unbilledSpend)),
     creditLimit: limit,
     unappliedCredit,
     openCycle: {
@@ -514,8 +563,9 @@ export type CreditBillAllocationPatch = {
 /**
  * Bring stored statements in line with the ledger's allocation. Payments that
  * were recorded before statements were linked (no `paymentIds`) get attached to
- * the statement they actually settled, so the bill list, bill detail and the
- * card hero all agree.
+ * the statement they actually settled. Auto bills can also walk a leftover
+ * stamp back so a generated statement is not marked PARTIALLY PAID by credit
+ * that belonged to the previous cycle.
  */
 export function collectCreditBillAllocationPatches(input: {
   accounts: Account[];
@@ -544,8 +594,25 @@ export function collectCreditBillAllocationPatches(input: {
       if (!bill) continue;
       const storedPaid = Math.max(0, Number(bill.amountPaid) || 0);
       const storedIds = (bill.paymentIds || []).filter(Boolean);
-      const newIds = statement.paymentIds.filter((id) => !storedIds.includes(id));
-      // Never walk a settlement backwards — only add what the ledger found.
+      const ledgerIds = statement.paymentIds.filter(Boolean);
+      const isAuto = (bill.note || "") === AUTO_CREDIT_CARD_BILL_NOTE;
+      const canWalkBack = isAuto && bill.status !== "PAID";
+
+      if (canWalkBack) {
+        const idsUnchanged =
+          storedIds.length === ledgerIds.length &&
+          storedIds.every((id) => ledgerIds.includes(id));
+        if (idsUnchanged && storedPaid === statement.paid) continue;
+        patches.push({
+          billId: statement.billId,
+          amountPaid: statement.paid,
+          paymentIds: ledgerIds,
+          paymentDate: statement.lastPaymentDate,
+        });
+        continue;
+      }
+
+      const newIds = ledgerIds.filter((id) => !storedIds.includes(id));
       if (newIds.length === 0 && statement.paid <= storedPaid) continue;
       patches.push({
         billId: statement.billId,
