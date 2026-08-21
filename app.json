@@ -32,11 +32,16 @@
     },
     "web": {
       "bundler": "metro",
-      "output": "static",
+      "output": "single",
       "favicon": "./assets/branding/logo.png"
     },
     "plugins": [
-      "expo-router",
+      [
+        "expo-router",
+        {
+          "sitemap": false
+        }
+      ],
       [
         "expo-splash-screen",
         {
