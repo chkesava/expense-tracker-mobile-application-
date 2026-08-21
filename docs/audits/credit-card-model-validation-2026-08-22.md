@@ -8,8 +8,8 @@ credit vs. limit, and every UI / net-worth consumer.
 merges `origin/main` (`1e6765a`) and therefore includes `3ce02b3`
 ("fix: keep generated statements unpaid and restore available credit", PR #33).
 
-**Type:** audit **and fix** pass. Three findings were fixed with regression
-tests (CC-1, CC-2, CC-3). Everything else was verified and is reported below as
+**Type:** audit **and fix** pass. Five findings were fixed with regression tests
+(CC-1 through CC-5). Everything else was verified and is reported below as
 pass/fail with file:line, including the things that turned out to be correct.
 
 ---
@@ -57,8 +57,8 @@ unbilledSpend` is what liabilities/net worth consume.
 | CC-1 | **P0** | `shared/utils/creditCardLedger.ts:425` | The stored-`amountPaid` floor had no date guard and no provenance check, so on a non-auto (or PAID) statement it credited money that the allocation had *deliberately withheld* because the payment predated the statement — while the same money also stayed in `freeCredit`. The same rupees were counted twice. | The floor covers out-of-band settlements only (mark-as-paid with no ledger row), never money a linked `AccountPayment` already explains, and never on a statement that has not closed yet. | **Yes** |
 | CC-2 | **P1** | `components/accounts/PayCreditBillModal.tsx:193` | The payment target came from `earliestOpenCreditCardBill` (sorted by `dueDate`, no date guard) and the **full** payment amount was stamped onto it. A backdated payment, or a manually created future-dated statement, wrote `amountPaid > 0` onto a statement the payment cannot settle; an overpayment wrote `amountPaid > statementAmount`. | Only stamp a statement whose `statementDate <= payment date`, and only up to what that statement still owes. The remainder is the ledger's cycle credit. | **Yes** |
 | CC-3 | P2 | `shared/utils/autoCreditCardBills.ts:59` | `previewClosedCycleCreditCardBill` only ever drafted the *latest* closed cycle. If the app was not opened for two or more cycles, the older closed cycles never got a bill **document** — so no reminder was scheduled for them. | Draft every closed cycle that has spend but no document yet, bounded to 12 cycles. Position math was already unaffected (the ledger derives those windows regardless), so this is purely additive. | **Yes** |
-| CC-4 | P2 | `shared/utils/accountBalance.ts:178` | `computeCreditUsage()` still computes `availableCredit = limit − gross cycle spend`, ignoring statements, leftover credit and the ledger. | It is **not** used by any UI any more (only `accountActivities.test.ts:261,307` and `accountBalance.test.ts:554`). Dead-ish export retained by tests. | No — no live call site, deleting it is a refactor |
-| CC-5 | P3 | `shared/utils/creditCardLedger.ts:559` | Spend under a **cancelled** statement falls back into `unbilledSpend`, so it does reduce `availableCredit` even though it is not this-cycle spend. | This is the documented intent (the comment says the spend "is still owed, so it falls back here rather than vanishing"). Flagged because it is the one place `availableCredit` moves for non-current-cycle spend. | No — deliberate, and the alternative (vanishing) is worse |
+| CC-4 | P2 | `shared/utils/accountBalance.ts:178` | `computeCreditUsage()` computed `availableCredit = limit − gross cycle spend`, ignoring statements, leftover credit and the ledger. No UI used it, but three tests did — and one of them asserted its wrong answer. | Delete it; the ledger via `computeOutstandingCredit` is the only source of truth. | **Yes** |
+| CC-5 | P3 | `shared/utils/creditCardLedger.ts:559` | Spend under a **cancelled** statement fell back into `unbilledSpend`, so it reduced `availableCredit` even though it is not this-cycle spend — contradicting the spec rule `availableCredit = limit − unbilled (this cycle only)`. | Keep it owed (the existing intent) but in its own `cancelledSpend` bucket: counted in `totalOutstanding`, excluded from `unbilledSpend` and therefore from `availableCredit`. | **Yes** |
 | CC-6 | P3 | `components/creditCardBills/CreateCreditCardBillModal.tsx:59` | `statementDate` / `dueDate` are free-text with no validation, so a manual statement can be dated arbitrarily (including the future). This is what made CC-1 and CC-2 reachable in practice. | Date validation on manual statement creation. Not a math defect once CC-1/CC-2 are fixed. | No — input-validation scope, not model scope |
 | CC-7 | P3 | `shared/utils/magicParser.test.ts:44` | Pre-existing, unrelated flake: the test builds "yesterday" with `toISOString()` (UTC) and compares against a local-date parser, so it fails every day after 18:30 IST. Confirmed failing on the un-patched tree. | Use a local date key. | No — unrelated to credit cards |
 
@@ -75,7 +75,7 @@ unbilledSpend` is what liabilities/net worth consume.
 | 7. Month-end `D=31` / Feb / 30-vs-31 | **PASS** — `D=31`: Jan 1–31, Feb 1–28, Mar 1–31, Apr 1–30. `D=30`: Dec 31–Jan 30, Jan 31–Feb 28, Mar 1–30, Mar 31–Apr 30. `D=30` never becomes the 31st. |
 | 8. Timezone (`todayDateKey(user tz)` vs UTC) | **PASS** — every credit consumer passes the user setting: `CardsList.tsx:44`, `AccountsList.tsx:129`, `accounts/[id].tsx:92`, `useUnifiedNetWorth.ts:75`, `PayCreditBillModal.tsx:107`, and the provider uses `todayDateKey(timezone)` on all three passes. |
 | 9. Card with no `billGenerationDay` | **PASS** — `creditCardLedger.ts:275`: all spend unbilled, payments offset it, no statements emitted (even when bill documents exist). |
-| 10. Cancelled statement spend | **PASS (by design)** — falls back to `unbilledSpend` rather than vanishing. See CC-5. |
+| 10. Cancelled statement spend | **PASS after CC-5 fix** — still owed (never vanishes), now in its own `cancelledSpend` bucket so it no longer eats the limit. |
 | 11. Net worth dropping available-limit style instead of outstanding | **PASS** — `useUnifiedNetWorth.ts:110` and `AccountsList.tsx:179` both use `totalOutstanding`. |
 | 12. Utilization using outstanding instead of unbilled | **PASS** — `CardsList.tsx:93,119` and `AccountCreditHero.tsx:44` both use unbilled. |
 | 13. Web cron vs mobile repair | **NOT VERIFIABLE HERE** — no `netlify/` dir and no cron function in this checkout. Production statement generation still depends on the app being opened unless the `expense-tracker` web repo's cron is merged and deployed; that was not confirmable from this repo. |
@@ -160,6 +160,53 @@ Two properties made this safe, both verified rather than assumed:
 Backfilled statements are created normally (unpaid, reminders enabled), which is
 consistent with the ledger already counting them as due.
 
+### CC-4 — stale `computeCreditUsage` deleted
+
+`shared/utils/accountBalance.ts` — removed. It defined available credit as
+`limit − gross cycle spend`, which ignores statements, leftover credit and the
+whole ledger. It had no live call site (verified again before deleting), but
+three tests still exercised it and were migrated to `computeOutstandingCredit`.
+
+Two of the three migrated with identical expectations. The third had been
+asserting the stale function's wrong answer:
+
+| scenario | `computeCreditUsage` | ledger |
+|---|---|---|
+| 5,000 spend, 6,500 paid (incl. external) | used 5,000, available 95,000 | used **0**, available **100,000**, credit balance 1,500 |
+
+The card is fully paid with 1,500 of credit sitting on it, so 95,000 available
+was simply wrong. Four now-unused imports in `accountBalance.ts` were dropped
+with it.
+
+### CC-5 — cancelled statement spend ate the limit
+
+Cancelling a statement voids the document, not the debt — the existing comment
+says the spend "is still owed, so it falls back here rather than vanishing", and
+that intent is preserved. But it fell back into `unbilledSpend`, which is what
+`availableCredit` subtracts, so cancelling a statement quietly reduced the
+available limit by spend from a *closed* cycle. That contradicts the spec rule
+"`availableCredit = creditLimit − unbilledSpend` (this-cycle unbilled only)".
+
+`shared/utils/creditCardLedger.ts` now splits the spend no live statement covers
+into two buckets at the open-window boundary:
+
+- inside the open window → `unbilledSpend` (the only thing that eats the limit)
+- before it → `cancelledSpend` (owed, in `totalOutstanding`, never in
+  `availableCredit`)
+
+Leftover credit settles the older `cancelledSpend` bucket first, then the open
+cycle, then becomes `unappliedCredit`. `openCycle.spend` is now genuinely
+open-window spend, which its own doc comment already claimed.
+
+The available-credit **rule** is unchanged — `limit − unbilledSpend`. What
+changed is that `unbilledSpend` now means what the spec says it means.
+
+Because `AccountCreditHero` and `CreditCardListItem` both render a breakdown
+that reads as a sum (unbilled + statement due = total outstanding), a
+`Cancelled statements` row was added to the hero and a `· Cancelled` segment to
+the card row, shown only when the bucket is non-zero. Without those the
+displayed numbers would visibly stop adding up.
+
 ### Tests
 
 `shared/utils/creditCardLedger.test.ts` — new
@@ -178,6 +225,16 @@ backfilled older statement when spend is backdated into it; two cycles never
 fight over the same document. `collectAutoCreditCardBillDrafts` had no test
 coverage at all before this.
 
+`shared/utils/creditCardLedger.test.ts` — new
+`buildCreditCardLedger — cancelled statements` block, 5 cases: cancelled spend
+owed without eating the limit; separated from open-cycle spend; leftover credit
+settles the cancelled bucket before the open cycle; credit left unapplied once
+both buckets clear; zero cancelled spend when every statement is live.
+
+`shared/utils/accountActivities.test.ts` / `accountBalance.test.ts` — three
+`computeCreditUsage` call sites migrated to `computeOutstandingCredit`, one with
+a corrected expectation (see CC-4).
+
 `shared/utils/billingCycle.test.ts` — new
 `getClosedBillingCycle — cyclesAgo (statement backfill)` block, 5 cases:
 contiguous walk-back; `cyclesAgo` 0 is the latest closed cycle; `D=31` clamps
@@ -191,18 +248,29 @@ npx vitest run shared/utils/creditCardLedger.test.ts \
   shared/utils/accountBalance.test.ts \
   shared/utils/autoCreditCardBills.test.ts \
   shared/utils/billingCycle.test.ts
-→ 4 files, 100 passed (82 pre-existing + 18 new)
+→ 5 files (incl. accountActivities), 113 passed
 ```
 
-Full suite: 846 passed, 1 failed — `magicParser.test.ts` (CC-7), confirmed
+Full suite: 851 passed, 1 failed — `magicParser.test.ts` (CC-7), confirmed
 pre-existing on the un-patched tree. `npx tsc --noEmit` clean.
 
 ---
 
-## 4. Not changed, deliberately
+## 4. Still open
 
-- The available-credit rule (`limit − unbilledSpend` only) is untouched and is
-  internally consistent with `statementDue` / `totalOutstanding` and with every
-  consumer.
-- No refactors. `computeCreditUsage` (CC-4) is left in place because it has no
-  live call site to break and removing it is a cleanup, not a defect fix.
+- **CC-6** — manual statement dates are unvalidated. Now harmless to the math
+  (CC-1 and CC-2 mean a strange date can no longer corrupt available credit or
+  statement due), but a user can still create a statement dated anywhere.
+- **CC-7** — pre-existing timezone flake in `magicParser.test.ts`, unrelated to
+  credit cards. Worth fixing because a daily-failing test masks real breakage.
+
+## 5. Not changed, deliberately
+
+- The available-credit **rule** (`limit − unbilledSpend`) is untouched. CC-5
+  changed which spend counts as unbilled, not the rule.
+- Cancelling a statement still leaves its spend owed. That was the existing
+  intent and CC-5 preserved it; only the available-credit contamination was
+  fixed. Note the consequence: that spend is never re-statemented, so it sits in
+  `cancelledSpend` indefinitely. Whether cancelling should instead write the debt
+  off, or roll it into the next statement, is a product decision this pass did
+  not take.
