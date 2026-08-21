@@ -35,6 +35,7 @@ updated every time a new phase is completed.
 | 5 | 2026-08-15 | Financial calculations & data integrity audit **and fixes** (fixes applied, not diagnostic-only) | [PHASE_5_FINANCIAL_INTEGRITY_AUDIT.md](PHASE_5_FINANCIAL_INTEGRITY_AUDIT.md) | 0 | 0 |
 | 6 | 2026-08-15 | UI/UX audit **and fixes** (fixes applied, not diagnostic-only) | [PHASE_6_UI_UX_AUDIT.md](PHASE_6_UI_UX_AUDIT.md) | 0 | 0 |
 | 7 | 2026-08-15 | Push/local notifications audit **and fixes** (fixes applied, not diagnostic-only) | [PHASE_7_NOTIFICATIONS_AUDIT.md](PHASE_7_NOTIFICATIONS_AUDIT.md) | 0 | 0 |
+| — | 2026-08-22 | Credit card model revalidation (cycles, statements, payment allocation, available credit, net-worth consumers) **and fixes** | [credit-card-model-validation-2026-08-22.md](credit-card-model-validation-2026-08-22.md) | 0 | 0 |
 
 ## Outstanding Issues Carried Forward
 
@@ -70,6 +71,9 @@ before closing.
 - **[P3]** Notification permission is requested opportunistically at first use (first bill reminder / first SMS event) rather than via one unified onboarding prompt — a product/UX question, not a reliability bug. (Phase 7)
 
 ## Fixed
+- **[Credit card revalidation 2026-08-22]** The stored `amountPaid` floor in `buildCreditCardLedger` had no date guard and no provenance check, so on a non-auto (or PAID) statement it credited money that allocation had deliberately withheld because the payment predated the statement — while the same money also stayed in `freeCredit`. A ₹19,000 payment dated 13 Aug against a ₹28,101 statement closing 20 Aug showed the statement as PARTIALLY PAID with ₹9,101 remaining *and* kept ₹19,000 as unapplied credit, understating the card liability in net worth by ₹19,000. The floor now covers out-of-band settlements only (the part of `amountPaid` no linked payment explains) and never applies to a statement that has not closed yet.
+- **[Credit card revalidation 2026-08-22]** Auto statement generation only ever drafted the *latest* closed cycle, so a user who did not open the app for two or more cycles never got statement documents (or reminders) for the cycles they missed — the ledger already derived and billed those windows, so the position was right but the documents were absent. `collectAutoCreditCardBillDrafts` now backfills the last 12 closed cycles (matching the ledger's derived-cycle depth), skipping cycles with no spend, and the refresh pass repairs the backfilled documents too. Purely additive: verified that the ledger already reported those cycles as due, and that the 30-day reminder horizon means backfilled statements more than a month past due schedule zero notifications.
+- **[Credit card revalidation 2026-08-22]** `PayCreditBillModal` picked its payment target by `dueDate` with no date guard and stamped the **full** payment amount onto it, so a backdated payment or a manually created future-dated statement wrote `amountPaid > 0` onto a statement the payment cannot settle, and an overpayment wrote `amountPaid > statementAmount` (rendered raw as "Amount paid" on the bill detail screen). It now only stamps a statement whose `statementDate <= payment date`, and only up to what that statement still owes.
 
 - **[Phase 2]** Firestore rules let any vault member/split participant rewrite `ownerId`/`memberIds`/`createdBy`/`participantIds` on update — tightened to owner/creator-only.
 - **[Phase 2]** Privacy-lock PIN and duress PIN were stored in plaintext in Firestore — now hashed (SHA-256) before storage, with backward-compatible comparison.
