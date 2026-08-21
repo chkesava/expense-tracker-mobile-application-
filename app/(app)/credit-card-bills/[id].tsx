@@ -107,6 +107,12 @@ export default function CreditCardBillDetailScreen() {
               <AmountRow label="Amount paid" value={bill.amountPaid} />
               <AmountRow label="Remaining" value={bill.remainingAmount} />
               <Row label="Statement date" value={bill.statementDate} />
+              {bill.billingPeriodStart && bill.billingPeriodEnd ? (
+                <Row
+                  label="Billing period"
+                  value={`${bill.billingPeriodStart} → ${bill.billingPeriodEnd}`}
+                />
+              ) : null}
               <Row label="Due date" value={bill.dueDate} />
               {bill.paymentDate ? (
                 <Row label="Payment date" value={bill.paymentDate} />

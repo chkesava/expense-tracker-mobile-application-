@@ -45,7 +45,10 @@ import {
   computeRemainingAmount,
 } from "@/shared/utils/creditCardBillStatus";
 import { validateCreateCreditCardBillInput } from "@/shared/utils/creditCardBillValidate";
-import { collectAutoCreditCardBillDrafts } from "@/shared/utils/autoCreditCardBills";
+import {
+  collectAutoCreditCardBillDrafts,
+  collectAutoCreditCardBillRefreshPatches,
+} from "@/shared/utils/autoCreditCardBills";
 import { todayDateKey } from "@/shared/utils/dates";
 import {
   cancelBillReminders,
@@ -322,6 +325,8 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
 
   const generateAutoBills = useCallback(async () => {
     if (!user || billsLoading || expensesLoading || paymentsLoading) return;
+    const db = getFirestoreDb();
+    if (!db) return;
     if (autoGenerateInFlight.current) return;
     autoGenerateInFlight.current = true;
     try {
@@ -353,6 +358,50 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
             : `${created} credit card statements created`
         );
       }
+
+      const patches = collectAutoCreditCardBillRefreshPatches({
+        accounts,
+        typeNameById,
+        expenses,
+        payments,
+        existingBills: bills,
+        today: todayDateKey(timezone),
+      });
+      for (const patch of patches) {
+        const existing = bills.find((bill) => bill.id === patch.billId);
+        if (!existing) continue;
+        const derived = refreshDerivedFields(
+          {
+            ...existing,
+            statementAmount: patch.statementAmount,
+            dueDate: patch.dueDate,
+          },
+          timezone,
+          globalPrefs.enabled
+        );
+        try {
+          await commitWrite(
+            () =>
+              updateDoc(
+                doc(db, "users", user.uid, "creditCardBills", patch.billId),
+                {
+                  statementAmount: patch.statementAmount,
+                  minimumDueAmount: patch.minimumDueAmount,
+                  billingPeriodStart: patch.billingPeriodStart,
+                  billingPeriodEnd: patch.billingPeriodEnd,
+                  dueDate: patch.dueDate,
+                  status: derived.status,
+                  remainingAmount: derived.remainingAmount,
+                  nextReminderAt: derived.nextReminderAt ?? null,
+                  updatedAt: serverTimestamp(),
+                }
+              ),
+            { label: "credit card bill" }
+          );
+        } catch (err) {
+          logError("creditCardBills.autoRefresh", err);
+        }
+      }
     } finally {
       autoGenerateInFlight.current = false;
     }
@@ -367,6 +416,7 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
     payments,
     bills,
     timezone,
+    globalPrefs.enabled,
     createBill,
   ]);
 

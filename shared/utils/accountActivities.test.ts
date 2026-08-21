@@ -129,6 +129,43 @@ describe("accountActivities and balance utilities", () => {
     expect(computeBankBalance(mockBank, expenses, [])).toBe(49900);
   });
 
+  it("still shows yesterday's transactions after an accidental today baseline", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 7, 21, 12, 0, 0));
+
+    const rebased: Account = {
+      ...mockBank,
+      openingBalance: 1000,
+      balanceAsOfDate: "2026-08-21",
+    };
+    const expenses: Expense[] = [
+      {
+        id: "yesterday",
+        amount: 200,
+        date: "2026-08-20",
+        month: "2026-08",
+        category: "Food",
+        accountId: "acc-bank-1",
+        note: "Dinner",
+        createdAt: "2026-08-20",
+      },
+      {
+        id: "today",
+        amount: 50,
+        date: "2026-08-21",
+        month: "2026-08",
+        category: "Food",
+        accountId: "acc-bank-1",
+        note: "Coffee",
+        createdAt: "2026-08-21",
+      },
+    ];
+
+    expect(computeBankBalance(rebased, expenses, [])).toBe(750);
+    const activities = buildAccountActivities(rebased, "Bank Account", expenses, []);
+    expect(activities.map((row) => row.id).sort()).toEqual(["today", "yesterday"].sort());
+  });
+
   it("builds account activities with correct credit/debit types and counterparty names", () => {
     const expenses: Expense[] = [
       {

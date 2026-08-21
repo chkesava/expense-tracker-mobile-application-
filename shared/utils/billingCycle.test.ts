@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getBillingCycleDates, getDaysUntilReset } from "./billingCycle";
+import { getBillingCycleDates, getClosedBillingCycle, getDaysUntilReset, isDateKeyInInclusiveRange } from "./billingCycle";
 import { toLocalDateKey } from "./dates";
 
 describe("billingCycle", () => {
@@ -56,6 +56,30 @@ describe("billingCycle", () => {
 
       expect(toLocalDateKey(previousBillDate)).toBe("2026-12-01");
       expect(toLocalDateKey(nextBillDate)).toBe("2027-01-01");
+    });
+
+    it("closes a 21st-cycle statement from last generation date through today", () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(2026, 7, 21, 12, 0, 0));
+
+      const { cycleStart, cycleEnd } = getClosedBillingCycle(21);
+      expect(toLocalDateKey(cycleStart)).toBe("2026-07-21");
+      expect(toLocalDateKey(cycleEnd)).toBe("2026-08-21");
+      expect(isDateKeyInInclusiveRange("2026-07-20", cycleStart, cycleEnd)).toBe(
+        false
+      );
+      expect(isDateKeyInInclusiveRange("2026-07-21", cycleStart, cycleEnd)).toBe(
+        true
+      );
+      expect(isDateKeyInInclusiveRange("2026-08-01", cycleStart, cycleEnd)).toBe(
+        true
+      );
+      expect(isDateKeyInInclusiveRange("2026-08-21", cycleStart, cycleEnd)).toBe(
+        true
+      );
+      expect(isDateKeyInInclusiveRange("2026-08-22", cycleStart, cycleEnd)).toBe(
+        false
+      );
     });
   });
 

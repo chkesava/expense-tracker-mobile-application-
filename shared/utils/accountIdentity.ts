@@ -360,7 +360,9 @@ export type AccountWriteInput = {
   name: string;
   typeId: string;
   typeName?: string;
-  extras?: Partial<Omit<Account, "id" | "name" | "typeId" | "createdAt">>;
+  extras?: Partial<Omit<Account, "id" | "name" | "typeId" | "createdAt">> & {
+    balanceAsOfDate?: string | null;
+  };
   createdAt?: unknown;
 };
 

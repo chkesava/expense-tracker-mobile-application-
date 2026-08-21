@@ -60,6 +60,7 @@ import {
   formatCreditCardHeaderLine,
   smsMatchingUnconfiguredLabel,
 } from "@/shared/utils/accountIdentity";
+import { effectiveBalanceAsOfDate } from "@/shared/utils/accountBaseline";
 import { getAccountKind } from "@/shared/utils/accountKind";
 import {
   accountKindSubtitle,
@@ -68,7 +69,7 @@ import {
   formatActivityDateLabel,
 } from "@/shared/utils/activityDisplay";
 import { findCreditCardBillForCycle } from "@/shared/utils/creditCardBillStatus";
-import { toLocalDateKey } from "@/shared/utils/dates";
+import { todayDateKey, toLocalDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
@@ -380,7 +381,13 @@ export default function AccountDetailScreen() {
           availableBalance={bankBalance}
           currency={currency}
           openingBalance={account.openingBalance || 0}
-          baselineLabel={account.balanceAsOfDate || "Creation"}
+          baselineLabel={
+            effectiveBalanceAsOfDate(
+              account.balanceAsOfDate,
+              [],
+              todayDateKey()
+            ) || "Creation"
+          }
           onTransfer={() => setIsTransferModalOpen(true)}
           onAdjust={() => setIsEntryModalOpen(true)}
         />

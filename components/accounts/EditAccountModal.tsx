@@ -35,6 +35,7 @@ import {
   suggestedAccountDisplayName,
 } from "@/shared/utils/accountIdentity";
 import { canonicalAccountTypeId, getAccountKind } from "@/shared/utils/accountKind";
+import { effectiveBalanceAsOfDate } from "@/shared/utils/accountBaseline";
 import { formatDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
@@ -79,13 +80,11 @@ export function EditAccountModal({
   const [typeId, setTypeId] = useState("");
   const [institutionId, setInstitutionId] = useState("");
   const [openingBalance, setOpeningBalance] = useState("");
-  const [balanceAsOfDate, setBalanceAsOfDate] = useState(
-    formatDateKey(new Date())
-  );
+  const [balanceAsOfDate, setBalanceAsOfDate] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
   const [smsMatchingEnabled, setSmsMatchingEnabled] = useState(true);
   const [creditLimit, setCreditLimit] = useState("");
-  const [billGenerationDay, setBillGenerationDay] = useState("1");
+  const [billGenerationDay, setBillGenerationDay] = useState("");
   const [color, setColor] = useState(ACCOUNT_COLORS[0]);
   const [saving, setSaving] = useState(false);
 
@@ -98,8 +97,26 @@ export function EditAccountModal({
       setOpeningBalance(
         account.openingBalance !== undefined ? String(account.openingBalance) : "0"
       );
+      const today = formatDateKey(new Date());
+      const ledgerDates = [
+        ...expenses.filter((item) => item.accountId === account.id).map((item) => item.date),
+        ...incomes.filter((item) => item.accountId === account.id).map((item) => item.date),
+        ...entries.filter((item) => item.accountId === account.id).map((item) => item.date),
+        ...payments
+          .filter(
+            (item) =>
+              item.fromAccountId === account.id || item.toAccountId === account.id
+          )
+          .map((item) => item.date),
+        ...transfers
+          .filter(
+            (item) =>
+              item.fromAccountId === account.id || item.toAccountId === account.id
+          )
+          .map((item) => item.date),
+      ];
       setBalanceAsOfDate(
-        account.balanceAsOfDate || formatDateKey(new Date())
+        effectiveBalanceAsOfDate(account.balanceAsOfDate, ledgerDates, today) || ""
       );
       setAccountNumber(getAccountLast4(account) || account.accountNumber || "");
       setSmsMatchingEnabled(
@@ -110,9 +127,9 @@ export function EditAccountModal({
         account.creditLimit !== undefined ? String(account.creditLimit) : ""
       );
       setBillGenerationDay(
-        account.billGenerationDay !== undefined
+        account.billGenerationDay != null
           ? String(account.billGenerationDay)
-          : "1"
+          : ""
       );
       setColor(account.color || ACCOUNT_COLORS[0]);
     } else {
@@ -121,7 +138,7 @@ export function EditAccountModal({
       setTypeId(accountTypes[0]?.id ?? "");
       setInstitutionId("");
       setOpeningBalance("0");
-      setBalanceAsOfDate(formatDateKey(new Date()));
+      setBalanceAsOfDate("");
       setAccountNumber("");
       setSmsMatchingEnabled(
         defaultSmsMatchingEnabled(
@@ -129,7 +146,7 @@ export function EditAccountModal({
         )
       );
       setCreditLimit("");
-      setBillGenerationDay("1");
+      setBillGenerationDay("");
       setColor(ACCOUNT_COLORS[0]);
     }
   }, [account, accountTypes, isOpen]);
@@ -220,13 +237,18 @@ export function EditAccountModal({
         ? parseFloat(creditLimit) || 0
         : undefined;
       const parsedBillDay = isCreditCard
-        ? Math.min(31, Math.max(1, parseInt(billGenerationDay, 10) || 1))
+        ? (() => {
+            const raw = billGenerationDay.trim();
+            if (!raw) return isEditing ? account?.billGenerationDay : undefined;
+            return Math.min(31, Math.max(1, parseInt(raw, 10) || 1));
+          })()
         : undefined;
 
+      const trimmedBaseline = balanceAsOfDate.trim();
       const last4 = normalizeLast4(accountNumber);
-      const extras: Partial<Account> = {
+      const extras: Partial<Account> & { balanceAsOfDate?: string | null } = {
         openingBalance: parsedOpening,
-        balanceAsOfDate: balanceAsOfDate || formatDateKey(new Date()),
+        balanceAsOfDate: trimmedBaseline || null,
         last4,
         accountNumber: last4,
         institutionId: catalogInstitution?.id || "",
@@ -452,7 +474,7 @@ export function EditAccountModal({
           <Input
             value={balanceAsOfDate}
             onChangeText={setBalanceAsOfDate}
-            placeholder="YYYY-MM-DD"
+            helperText="Leave blank to keep every past transaction. Only set this if the opening balance is a bank snapshot from that date."
           />
         </View>
 
@@ -507,8 +529,8 @@ export function EditAccountModal({
                 value={billGenerationDay}
                 onChangeText={setBillGenerationDay}
                 keyboardType="number-pad"
-                placeholder="e.g. 15"
-                helperText="A statement is created on this day from cycle spend. Due date is 5 days later."
+                placeholder="e.g. 21"
+                helperText="Spend from the previous generation date through this date is billed. A 21st statement covers last month's 21st through this month's 21st."
               />
             </View>
           </View>

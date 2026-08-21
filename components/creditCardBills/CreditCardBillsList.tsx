@@ -137,6 +137,16 @@ export function CreditCardBillsList() {
               Due {bill.dueDate}
             </Text>
           </View>
+          {bill.billingPeriodStart && bill.billingPeriodEnd ? (
+            <Text
+              style={{
+                color: theme.colors.mutedForeground,
+                fontSize: theme.typography.sm,
+              }}
+            >
+              {bill.billingPeriodStart} → {bill.billingPeriodEnd}
+            </Text>
+          ) : null}
           {bill.remainingAmount > 0 && bill.amountPaid > 0 ? (
             <View style={{ flexDirection: "row", gap: 4, alignItems: "center" }}>
               <Text

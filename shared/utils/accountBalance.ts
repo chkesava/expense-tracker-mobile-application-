@@ -10,9 +10,20 @@ import type {
 import type { Borrowing, BorrowingRepayment } from "../types/borrowing";
 import type { Receivable, ReceivableRepayment } from "../types/receivable";
 import { postingSortMs, resolveActivityClockTime } from "./activityDisplay";
+import { effectiveBalanceAsOfDate } from "./accountBaseline";
 import { getAccountKind } from "./accountKind";
-import { getBillingCycleDates, getDaysUntilReset } from "./billingCycle";
-import { parseLocalDate, toLocalDateKey, billDateForMonth } from "./dates";
+import {
+  getBillingCycleDates,
+  getDaysUntilReset,
+  isDateKeyInHalfOpenRange,
+  isDateKeyInInclusiveRange,
+  normalizeBillGenerationDay,
+} from "./billingCycle";
+import {
+  billDateForMonth,
+  todayDateKey,
+  toLocalDateKey,
+} from "./dates";
 
 export { toLocalDateKey } from "./dates";
 
@@ -30,7 +41,8 @@ export function roundMoney(value: number): number {
 function paymentBelongsToCycle(
   payment: AccountPayment,
   cycleStart: Date,
-  cycleEnd: Date
+  cycleEnd: Date,
+  inclusiveEnd = false
 ): boolean {
   const startKey = toLocalDateKey(cycleStart);
   const endKey = toLocalDateKey(cycleEnd);
@@ -55,8 +67,9 @@ function paymentBelongsToCycle(
       );
     }
   }
-  const d = parseLocalDate(payment.date);
-  return d >= cycleStart && d < cycleEnd;
+  return inclusiveEnd
+    ? isDateKeyInInclusiveRange(payment.date, cycleStart, cycleEnd)
+    : isDateKeyInHalfOpenRange(payment.date, cycleStart, cycleEnd);
 }
 
 function paymentsFromAccount(accountId: string, payments: AccountPayment[]) {
@@ -154,7 +167,11 @@ export function computeBankBalance(
   receivableRepayments: ReceivableRepayment[] = []
 ): number {
   const opening = account.openingBalance ?? 0;
-  const baseline = account.balanceAsOfDate;
+  const baseline = effectiveBalanceAsOfDate(
+    account.balanceAsOfDate,
+    [],
+    todayDateKey()
+  );
   const totalExpenses = expenses
     .filter((e) => e.accountId === account.id && isOnOrAfter(e.date, baseline))
     .reduce((sum, e) => sum + e.amount, 0);
@@ -218,13 +235,12 @@ export function computeCreditUsage(
   daysRemaining: number;
   paidThisCycle: number;
 } {
-  const billDay = account.billGenerationDay ?? 1;
+  const billDay = normalizeBillGenerationDay(account.billGenerationDay) ?? 1;
   const { previousBillDate, nextBillDate } = getBillingCycleDates(billDay);
 
   const cycleExpenses = expenses.filter((e) => {
     if (e.accountId !== account.id) return false;
-    const expDate = parseLocalDate(e.date);
-    return expDate >= previousBillDate && expDate < nextBillDate;
+    return isDateKeyInHalfOpenRange(e.date, previousBillDate, nextBillDate);
   });
 
   const cyclePayments = paymentsInBillingCycle(
@@ -268,7 +284,7 @@ export function getCreditBillHistory(
   payments: AccountPayment[] = [],
   cycles = 6
 ): CreditBillSummary[] {
-  const billDay = account.billGenerationDay ?? 1;
+  const billDay = normalizeBillGenerationDay(account.billGenerationDay) ?? 1;
   const { previousBillDate } = getBillingCycleDates(billDay);
   const history: CreditBillSummary[] = [];
 
@@ -282,8 +298,7 @@ export function getCreditBillHistory(
       expenses
         .filter((e) => {
           if (e.accountId !== account.id) return false;
-          const d = parseLocalDate(e.date);
-          return d >= cycleStart && d < cycleEnd;
+          return isDateKeyInInclusiveRange(e.date, cycleStart, cycleEnd);
         })
         .reduce((sum, e) => sum + e.amount, 0)
     );
@@ -292,7 +307,7 @@ export function getCreditBillHistory(
       payments
         .filter((p) => {
           if (p.toAccountId !== account.id) return false;
-          return paymentBelongsToCycle(p, cycleStart, cycleEnd);
+          return paymentBelongsToCycle(p, cycleStart, cycleEnd, true);
         })
         .reduce((sum, p) => sum + p.amount, 0)
     );
@@ -342,50 +357,34 @@ export function buildAccountActivities(
     receivableRepayments?: ReceivableRepayment[];
   }
 ): AccountActivity[] {
-  const baseline = account.balanceAsOfDate;
-  const shouldApplyBaseline = getAccountKind(typeName) !== "credit";
-  const withinBaseline = (date: string) =>
-    !shouldApplyBaseline || isOnOrAfter(date, baseline);
-
-  const accountExpenses = expenses.filter(
-    (e) => e.accountId === account.id && withinBaseline(e.date)
-  );
-  const accountIncomes = incomes.filter(
-    (i) => i.accountId === account.id && withinBaseline(i.date)
-  );
-  const accountEntries = entriesForAccount(account.id, entries).filter((entry) =>
-    withinBaseline(entry.date)
-  );
+  // Never hide ledger rows. A "balance as of" date only affects the running
+  // header balance (via computeBankBalance), not whether history is listed.
   const kind = getAccountKind(typeName);
 
-  const outgoingPayments = paymentsFromAccount(account.id, payments).filter((p) =>
-    withinBaseline(p.date)
-  );
-  const incomingPayments = paymentsToAccount(account.id, payments).filter((p) =>
-    withinBaseline(p.date)
-  );
-  const outgoingTransfers = transfersFromAccount(account.id, transfers).filter((transfer) =>
-    withinBaseline(transfer.date)
-  );
-  const incomingTransfers = transfersToAccount(account.id, transfers).filter((transfer) =>
-    withinBaseline(transfer.date)
-  );
+  const accountExpenses = expenses.filter((e) => e.accountId === account.id);
+  const accountIncomes = incomes.filter((i) => i.accountId === account.id);
+  const accountEntries = entriesForAccount(account.id, entries);
+
+  const outgoingPayments = paymentsFromAccount(account.id, payments);
+  const incomingPayments = paymentsToAccount(account.id, payments);
+  const outgoingTransfers = transfersFromAccount(account.id, transfers);
+  const incomingTransfers = transfersToAccount(account.id, transfers);
   const incomingBorrowings = borrowingsCreditedTo(
     account.id,
     liabilities?.borrowings ?? []
-  ).filter((borrowing) => withinBaseline(borrowing.borrowedDate));
+  );
   const outgoingRepayments = repaymentsPaidFrom(
     account.id,
     liabilities?.borrowingRepayments ?? []
-  ).filter((repayment) => withinBaseline(repayment.date));
+  );
   const outgoingLends = receivablesPaidFrom(
     account.id,
     receivableFlows?.receivables ?? []
-  ).filter((receivable) => withinBaseline(receivable.lentDate));
+  );
   const incomingCollections = receivableRepaymentsInto(
     account.id,
     receivableFlows?.receivableRepayments ?? []
-  ).filter((repayment) => withinBaseline(repayment.date));
+  );
 
   const activities: AccountActivity[] = [
     ...accountExpenses.map((e, idx) => ({

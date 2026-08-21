@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import type { Account, AccountPayment, Expense } from "../types/expense";
 import { AUTO_CREDIT_CARD_BILL_REMINDER_FREQUENCY } from "../types/creditCardBill";
-import { buildAutoCreditCardBillDraft } from "./autoCreditCardBills";
+import {
+  AUTO_CREDIT_CARD_BILL_NOTE,
+  buildAutoCreditCardBillDraft,
+  collectAutoCreditCardBillRefreshPatches,
+} from "./autoCreditCardBills";
 
 const creditCard: Account = {
   id: "cc-slice",
@@ -55,8 +59,8 @@ describe("buildAutoCreditCardBillDraft", () => {
 
     expect(draft).toMatchObject({
       accountId: "cc-slice",
-      statementAmount: 1400,
-      minimumDueAmount: 70,
+      statementAmount: 1450,
+      minimumDueAmount: 72.5,
       statementDate: "2026-08-15",
       dueDate: "2026-08-20",
       billingPeriodStart: "2026-07-15",
@@ -139,5 +143,79 @@ describe("buildAutoCreditCardBillDraft", () => {
     expect(draft?.statementDate).toBe("2026-08-28");
     expect(draft?.dueDate).toBe("2026-09-02");
     expect(draft?.statementAmount).toBe(800);
+  });
+
+  it("bills previous generation date through this generation date for a 21st cycle", () => {
+    const draft = buildAutoCreditCardBillDraft({
+      ...baseInput,
+      account: { ...creditCard, billGenerationDay: 21 },
+      today: "2026-08-21",
+      expenses: [
+        expense("2026-07-20", 90),
+        expense("2026-07-21", 1100),
+        expense("2026-08-01", 400),
+        expense("2026-08-20", 50),
+        expense("2026-08-21", 25),
+        expense("2026-08-22", 999),
+      ],
+    });
+
+    expect(draft).toMatchObject({
+      statementDate: "2026-08-21",
+      dueDate: "2026-08-26",
+      billingPeriodStart: "2026-07-21",
+      billingPeriodEnd: "2026-08-21",
+      statementAmount: 1575,
+    });
+  });
+
+  it("accepts a string billGenerationDay from Firestore", () => {
+    const draft = buildAutoCreditCardBillDraft({
+      ...baseInput,
+      account: { ...creditCard, billGenerationDay: "21" as unknown as number },
+      today: "2026-08-21",
+      expenses: [expense("2026-08-01", 300)],
+    });
+    expect(draft?.statementAmount).toBe(300);
+    expect(draft?.billingPeriodStart).toBe("2026-07-21");
+  });
+});
+
+describe("collectAutoCreditCardBillRefreshPatches", () => {
+  it("updates an unpaid auto bill when the cycle window was too short", () => {
+    const patches = collectAutoCreditCardBillRefreshPatches({
+      accounts: [{ ...creditCard, billGenerationDay: 21 }],
+      typeNameById: new Map([["t-credit", "Credit Card"]]),
+      expenses: [
+        expense("2026-07-21", 1000),
+        expense("2026-08-21", 200),
+      ],
+      payments: [],
+      existingBills: [
+        {
+          id: "bill-1",
+          accountId: creditCard.id,
+          statementDate: "2026-08-21",
+          statementAmount: 1000,
+          billingPeriodStart: "2026-08-01",
+          billingPeriodEnd: "2026-08-20",
+          note: AUTO_CREDIT_CARD_BILL_NOTE,
+          amountPaid: 0,
+          status: "UPCOMING",
+        },
+      ],
+      today: "2026-08-21",
+    });
+
+    expect(patches).toEqual([
+      {
+        billId: "bill-1",
+        statementAmount: 1200,
+        minimumDueAmount: 60,
+        billingPeriodStart: "2026-07-21",
+        billingPeriodEnd: "2026-08-21",
+        dueDate: "2026-08-26",
+      },
+    ]);
   });
 });

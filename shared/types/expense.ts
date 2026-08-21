@@ -105,7 +105,7 @@ export interface Account {
   creditLimit?: number;
   openingBalance?: number;
   balanceInitialized?: boolean;
-  balanceAsOfDate?: string;
+  balanceAsOfDate?: string | null;
   /** Legacy mask / last4 storage. Prefer `last4` for matching. */
   accountNumber?: string;
   color?: string;

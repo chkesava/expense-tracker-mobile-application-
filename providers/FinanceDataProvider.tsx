@@ -44,11 +44,12 @@ import type {
   Expense,
   Income,
 } from "@/shared/types/expense";
+import { isAccidentalBalanceBaseline } from "@/shared/utils/accountBaseline";
 import {
   buildAccountWritePayload,
   hydrateAccountIdentity,
 } from "@/shared/utils/accountIdentity";
-import { isValidDateKey } from "@/shared/utils/dates";
+import { isValidDateKey, todayDateKey } from "@/shared/utils/dates";
 import { snapshotErrorHandler, type LoadFailure } from "@/lib/firestoreErrors";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { scheduleIdleWork } from "@/shared/utils/scheduleIdle";
@@ -219,6 +220,40 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     setPendingSyncCount(total);
     setGlobalPendingSyncCount(total);
   }, []);
+
+  const repairedTodayBaselinesRef = useRef(new Set<string>());
+
+  useEffect(() => {
+    if (!user) repairedTodayBaselinesRef.current.clear();
+  }, [user]);
+
+  useEffect(() => {
+    if (!user || !db || accountsLoading) return;
+    const today = todayDateKey();
+    for (const account of accounts) {
+      if (!account.id) continue;
+      if (!isAccidentalBalanceBaseline(account.balanceAsOfDate, today)) continue;
+      if (repairedTodayBaselinesRef.current.has(account.id)) continue;
+      repairedTodayBaselinesRef.current.add(account.id);
+      const accountId = account.id;
+      void commitWrite(
+        () =>
+          updateDoc(doc(db, "users", user.uid, "accounts", accountId), {
+            balanceAsOfDate: null,
+          }),
+        {
+          label: "account baseline",
+          onLateFailure: (error) => {
+            repairedTodayBaselinesRef.current.delete(accountId);
+            logError("financeDataProvider.clearAccidentalBaseline", error);
+          },
+        }
+      ).catch((error) => {
+        repairedTodayBaselinesRef.current.delete(accountId);
+        logError("financeDataProvider.clearAccidentalBaseline", error);
+      });
+    }
+  }, [accounts, accountsLoading, db, user]);
 
   // ─── Critical listeners (First paint) ────────────────────────────────────────
 
