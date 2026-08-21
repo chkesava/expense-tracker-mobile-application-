@@ -7,6 +7,7 @@ import {
   oldestOpenStatement,
   type LedgerBillSlice,
 } from "./creditCardLedger";
+import { AUTO_CREDIT_CARD_BILL_NOTE } from "./autoCreditCardBills";
 
 /**
  * The reported bug, with the user's real numbers. Slice card, statement closes
@@ -91,12 +92,12 @@ describe("buildCreditCardLedger — reported Slice scenario", () => {
       periodStart: "2026-07-21",
       periodEnd: "2026-08-20",
       billed: 27875,
-      // Leftover after settling July (19,000 − 10,301) reduces remaining,
-      // never the gross billed amount.
-      paid: 8699,
-      remaining: 19176,
-      status: "partiallyPaid",
+      paid: 0,
+      remaining: 27875,
+      status: "unpaid",
     });
+    expect(ledger.unappliedCredit).toBe(8699);
+    expect(ledger.availableCredit).toBe(89000);
   });
 
   it("applies the payment to the statement it was actually for", () => {
@@ -117,9 +118,11 @@ describe("buildCreditCardLedger — reported Slice scenario", () => {
       remaining: 0,
       status: "paid",
     });
-    // 19,000 − 10,301 follows into the new statement remaining, not billed.
-    expect(ledger.statementDue).toBe(19176);
-    expect(ledger.unappliedCredit).toBe(0);
+    // Leftover after the July bill stays as unapplied credit — it does not
+    // stamp the newly generated August statement as partially paid.
+    expect(ledger.statementDue).toBe(27875);
+    expect(ledger.unappliedCredit).toBe(8699);
+    expect(ledger.availableCredit).toBe(89000);
   });
 
   it("resets the cycle to zero on the close date and holds the statement as due", () => {
@@ -134,7 +137,7 @@ describe("buildCreditCardLedger — reported Slice scenario", () => {
     expect(ledger.unbilledSpend).toBe(0);
     expect(ledger.statementDue).toBe(27875);
     expect(ledger.totalOutstanding).toBe(27875);
-    expect(ledger.availableCredit).toBe(89000 - 27875);
+    expect(ledger.availableCredit).toBe(89000);
   });
 
   it("counts only post-close spend in the new cycle", () => {
@@ -152,7 +155,7 @@ describe("buildCreditCardLedger — reported Slice scenario", () => {
     });
     expect(ledger.unbilledSpend).toBe(1500);
     expect(ledger.totalOutstanding).toBe(29375);
-    expect(ledger.availableCredit).toBe(89000 - 29375);
+    expect(ledger.availableCredit).toBe(89000 - 1500);
   });
 
   it("frees the limit only when the statement is actually paid", () => {
@@ -444,6 +447,40 @@ describe("collectCreditBillAllocationPatches", () => {
     });
 
     expect(patches).toEqual([]);
+  });
+
+  it("walks leftover credit off an auto bill the user has not paid", () => {
+    const patches = collectCreditBillAllocationPatches({
+      accounts: [slice],
+      isCreditAccount: () => true,
+      expenses: [expense("2026-08-05", 28101), expense("2026-06-25", 10301)],
+      payments: [payment("pay-july", "2026-08-13", 19000)],
+      bills: [
+        statement("2026-07-20", "2026-06-21", 10301, {
+          amountPaid: 10301,
+          paymentIds: ["pay-july"],
+          status: "PAID",
+          note: AUTO_CREDIT_CARD_BILL_NOTE,
+        }),
+        statement("2026-08-20", "2026-07-21", 28101, {
+          amountPaid: 7497,
+          remainingAmount: 20604,
+          paymentIds: ["pay-july"],
+          status: "PARTIALLY_PAID",
+          note: AUTO_CREDIT_CARD_BILL_NOTE,
+        }),
+      ],
+      today: "2026-08-21",
+    });
+
+    expect(patches).toEqual([
+      {
+        billId: "bill-2026-08-20",
+        amountPaid: 0,
+        paymentIds: [],
+        paymentDate: undefined,
+      },
+    ]);
   });
 
   it("skips non-credit accounts", () => {
