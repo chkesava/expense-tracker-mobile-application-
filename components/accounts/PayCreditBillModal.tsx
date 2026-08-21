@@ -13,11 +13,14 @@ import { useCreditCardBills } from "@/hooks/useCreditCardBills";
 import { useExpenses } from "@/hooks/useExpenses";
 import { logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
+import { useSettings } from "@/providers/SettingsProvider";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
+import { OPEN_BILL_STATUSES } from "@/shared/types/creditCardBill";
 import type { Account, AccountType } from "@/shared/types/expense";
 import { computeOutstandingCredit } from "@/shared/utils/accountBalance";
 import { getAccountKind } from "@/shared/utils/accountKind";
-import { formatDateKey } from "@/shared/utils/dates";
+import { earliestOpenCreditCardBill } from "@/shared/utils/creditCardBillStatus";
+import { formatDateKey, todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
@@ -29,8 +32,14 @@ export interface PayCreditBillModalProps {
   accountTypes: AccountType[];
   /** Prefill amount (e.g. bill remaining). */
   defaultAmount?: number;
+  /** Apply the payment to this open statement when set. */
+  applyToBillId?: string;
   /** Called after a successful AccountPayment write. */
-  onPaid?: (amount: number, paymentDate: string) => void | Promise<void>;
+  onPaid?: (
+    amount: number,
+    paymentDate: string,
+    paymentId?: string
+  ) => void | Promise<void>;
 }
 
 export function PayCreditBillModal({
@@ -40,14 +49,16 @@ export function PayCreditBillModal({
   accounts,
   accountTypes,
   defaultAmount,
+  applyToBillId,
   onPaid,
 }: PayCreditBillModalProps) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const { settings: system } = useSystemSettings();
+  const { settings } = useSettings();
   const { addPayment, addExternalPayment, payments } = useAccountPayments();
   const { expenses } = useExpenses();
-  const { bills } = useCreditCardBills();
+  const { bills, applyPaymentToBill } = useCreditCardBills();
 
   const typeMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -105,10 +116,31 @@ export function PayCreditBillModal({
 
   const usageInfo = useMemo(() => {
     if (!selectedCard) return null;
-    return computeOutstandingCredit(selectedCard, expenses, payments, bills);
-  }, [selectedCard, expenses, payments, bills]);
+    return computeOutstandingCredit(
+      selectedCard,
+      expenses,
+      payments,
+      bills,
+      todayDateKey(settings.timezone)
+    );
+  }, [selectedCard, expenses, payments, bills, settings.timezone]);
+
+  const openBill = useMemo(() => {
+    if (applyToBillId) {
+      const targeted = bills.find((bill) => bill.id === applyToBillId);
+      if (targeted && OPEN_BILL_STATUSES.includes(targeted.status)) {
+        return targeted;
+      }
+    }
+    if (!toCardId) return undefined;
+    return earliestOpenCreditCardBill(bills, toCardId);
+  }, [applyToBillId, bills, toCardId]);
 
   const handleFillOutstanding = () => {
+    if (openBill && openBill.remainingAmount > 0) {
+      setAmount(String(openBill.remainingAmount));
+      return;
+    }
     if (usageInfo && usageInfo.outstanding > 0) {
       setAmount(String(usageInfo.outstanding));
     }
@@ -135,16 +167,16 @@ export function PayCreditBillModal({
 
     setSaving(true);
     try {
-      let ok = false;
+      let paymentId: string | null = null;
       if (isExternal || fromAccountId === "external") {
-        ok = await addExternalPayment(
+        paymentId = await addExternalPayment(
           toCardId,
           parsedAmount,
           date.trim(),
           note.trim() || undefined
         );
       } else {
-        ok = await addPayment(
+        paymentId = await addPayment(
           fromAccountId,
           toCardId,
           parsedAmount,
@@ -153,9 +185,17 @@ export function PayCreditBillModal({
         );
       }
 
-      if (ok) {
+      if (paymentId) {
+        if (openBill && openBill.remainingAmount > 0) {
+          await applyPaymentToBill(
+            openBill.id,
+            parsedAmount,
+            date.trim(),
+            paymentId
+          );
+        }
         if (onPaid) {
-          await onPaid(parsedAmount, date.trim());
+          await onPaid(parsedAmount, date.trim(), paymentId);
         }
         toast.success("Bill payment recorded");
         setAmount("");
@@ -242,7 +282,7 @@ export function PayCreditBillModal({
           </ScrollView>
         </View>
 
-        {/* Current Cycle Usage Card */}
+        {/* Outstanding = unpaid statements + unbilled cycle spend */}
         {usageInfo ? (
           <View
             style={[
@@ -273,6 +313,26 @@ export function PayCreditBillModal({
                   color: theme.colors.destructive,
                 }}
               />
+              <View style={styles.splitRow}>
+                <Text style={[styles.splitLabel, { color: theme.colors.mutedForeground }]}>
+                  Statement due
+                </Text>
+                <Amount
+                  value={usageInfo.statementDue}
+                  currency={system.defaultCurrency}
+                  ghostable
+                  style={[styles.splitValue, { color: theme.colors.foreground }]}
+                />
+                <Text style={[styles.splitLabel, { color: theme.colors.mutedForeground }]}>
+                  · Unbilled
+                </Text>
+                <Amount
+                  value={usageInfo.unbilledSpend}
+                  currency={system.defaultCurrency}
+                  ghostable
+                  style={[styles.splitValue, { color: theme.colors.foreground }]}
+                />
+              </View>
             </View>
 
             {usageInfo.outstanding > 0 ? (
@@ -502,6 +562,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 10,
+  },
+  splitRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 5,
+    marginTop: 2,
+  },
+  splitLabel: {
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  splitValue: {
+    fontSize: 11,
+    fontWeight: "700",
+    fontVariant: ["tabular-nums"],
   },
   sourceHeader: {
     flexDirection: "row",

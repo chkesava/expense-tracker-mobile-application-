@@ -47,6 +47,7 @@ import { useExpenses } from "@/hooks/useExpenses";
 import { useIncomes } from "@/hooks/useIncomes";
 import { useReceivables } from "@/hooks/useReceivables";
 import { useModals } from "@/providers/ModalProvider";
+import { useSettings } from "@/providers/SettingsProvider";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import { OPEN_BILL_STATUSES } from "@/shared/types/creditCardBill";
 import type { AccountActivity, Expense, Income } from "@/shared/types/expense";
@@ -68,7 +69,6 @@ import {
   activityTitle,
   formatActivityDateLabel,
 } from "@/shared/utils/activityDisplay";
-import { findCreditCardBillForCycle } from "@/shared/utils/creditCardBillStatus";
 import { todayDateKey, toLocalDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
@@ -88,6 +88,8 @@ export default function AccountDetailScreen() {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const { settings: system } = useSystemSettings();
+  const { settings } = useSettings();
+  const today = todayDateKey(settings.timezone);
   const { setEditingExpense, setEditingIncome } = useModals();
 
   const { accounts, loading: accountsLoading } = useAccounts();
@@ -98,7 +100,7 @@ export default function AccountDetailScreen() {
   const { payments } = useAccountPayments();
   const { transfers } = useAccountTransfers();
   const { borrowings, repayments: borrowingRepayments } = useBorrowings();
-  const { bills, applyPaymentToBill } = useCreditCardBills();
+  const { bills } = useCreditCardBills();
   const { receivables, repayments: receivableRepayments } = useReceivables();
 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -163,13 +165,13 @@ export default function AccountDetailScreen() {
 
   const creditUsage = useMemo(() => {
     if (!account || !isCreditCard) return null;
-    return computeOutstandingCredit(account, expenses, payments, bills);
-  }, [account, isCreditCard, expenses, payments, bills]);
+    return computeOutstandingCredit(account, expenses, payments, bills, today);
+  }, [account, isCreditCard, expenses, payments, bills, today]);
 
   const creditBillHistory = useMemo(() => {
     if (!account || !isCreditCard) return [];
-    return getCreditBillHistory(account, expenses, payments, 4);
-  }, [account, isCreditCard, expenses, payments]);
+    return getCreditBillHistory(account, expenses, payments, 4, bills, today);
+  }, [account, isCreditCard, expenses, payments, bills, today]);
 
   const openStatementBill = useMemo(() => {
     if (!account || !isCreditCard) return null;
@@ -280,13 +282,9 @@ export default function AccountDetailScreen() {
 
   const pastCycleItems = useMemo(() => {
     if (!account || !isCreditCard) return [];
+    const billById = new Map(bills.map((bill) => [bill.id, bill]));
     return creditBillHistory.map((cycle) => {
-      const matched = findCreditCardBillForCycle(
-        bills,
-        account.id,
-        cycle.cycleStart,
-        cycle.cycleEnd
-      );
+      const matched = cycle.billId ? billById.get(cycle.billId) : undefined;
       return {
         id: cycle.id,
         rangeLabel: `${toLocalDateKey(cycle.cycleStart)} → ${toLocalDateKey(cycle.cycleEnd)}`,
@@ -295,8 +293,8 @@ export default function AccountDetailScreen() {
         remainingAmount: cycle.outstandingAmount,
         paymentDate: matched?.paymentDate,
         status: cycle.status,
-        overdue: matched?.status === "OVERDUE",
-        billId: matched?.id,
+        overdue: matched?.status === "OVERDUE" && cycle.outstandingAmount > 0,
+        billId: cycle.billId,
       };
     });
   }, [account, isCreditCard, creditBillHistory, bills]);
@@ -368,7 +366,10 @@ export default function AccountDetailScreen() {
     <View style={styles.headerBlock}>
       {isCreditCard && creditUsage ? (
         <AccountCreditHero
-          usedThisCycle={creditUsage.outstanding}
+          usedThisCycle={creditUsage.unbilledSpend}
+          statementDue={creditUsage.statementDue}
+          totalOutstanding={creditUsage.totalOutstanding}
+          unappliedCredit={creditUsage.unappliedCredit}
           availableCredit={creditUsage.availableCredit}
           creditLimit={account.creditLimit || 0}
           daysRemaining={creditUsage.daysRemaining}
@@ -530,11 +531,7 @@ export default function AccountDetailScreen() {
         accounts={accounts}
         accountTypes={accountTypes}
         defaultAmount={openStatementBill?.remainingAmount}
-        onPaid={async (amount, paymentDate) => {
-          if (openStatementBill) {
-            await applyPaymentToBill(openStatementBill.id, amount, paymentDate);
-          }
-        }}
+        applyToBillId={openStatementBill?.id}
       />
       <CreateCreditCardBillModal
         isOpen={isCreateBillOpen}

@@ -222,7 +222,7 @@ describe("accountActivities and balance utilities", () => {
 
   it("computes credit card cycle usage and available credit with frozen bill cycle", () => {
     vi.useFakeTimers();
-    // Mid-cycle: 10 Aug, bill day 15 → cycle [15 Jul, 15 Aug)
+    // Mid-cycle: 10 Aug, bill day 15 → open window [16 Jul, 15 Aug]
     vi.setSystemTime(new Date(2026, 7, 10, 12, 0, 0));
 
     const expenses: Expense[] = [
@@ -255,21 +255,21 @@ describe("accountActivities and balance utilities", () => {
         toAccountId: "acc-card-1",
         amount: 2000,
         date: "2026-08-05",
-        appliedCycleStart: "2026-07-15",
-        appliedCycleEnd: "2026-08-15",
       },
     ];
 
     const usage = computeCreditUsage(mockCard, expenses, payments);
 
-    expect(usage.usedThisCycle).toBe(6000);
+    // Cycle usage is gross spend — a bill payment settles a statement, it does
+    // not shrink what was charged this cycle.
+    expect(usage.usedThisCycle).toBe(8000);
     expect(usage.paidThisCycle).toBe(2000);
-    expect(usage.availableCredit).toBe(94000);
+    expect(usage.availableCredit).toBe(92000);
     expect(toLocalDateKey(usage.nextResetDate)).toBe("2026-08-15");
     expect(usage.daysRemaining).toBe(5);
   });
 
-  it("matches cycle payments via structured appliedCycle fields over note parsing", () => {
+  it("reports every payment landing in the open window, whichever statement it settles", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(2026, 7, 10, 12, 0, 0));
 
@@ -288,29 +288,25 @@ describe("accountActivities and balance utilities", () => {
 
     const payments: AccountPayment[] = [
       {
-        id: "wrong-cycle",
+        id: "for-last-statement",
         fromAccountId: "acc-bank-1",
         toAccountId: "acc-card-1",
         amount: 5000,
         date: "2026-08-05",
-        appliedCycleStart: "2026-06-15",
-        appliedCycleEnd: "2026-07-15",
       },
       {
-        id: "right-cycle",
+        id: "external-top-up",
         fromAccountId: "external",
         toAccountId: "acc-card-1",
         amount: 1500,
         date: "2026-08-06",
         sourceType: "external",
-        appliedCycleStart: "2026-07-15",
-        appliedCycleEnd: "2026-08-15",
       },
     ];
 
     const usage = computeCreditUsage(mockCard, expenses, payments);
-    expect(usage.paidThisCycle).toBe(1500);
-    expect(usage.usedThisCycle).toBe(3500);
+    expect(usage.paidThisCycle).toBe(6500);
+    expect(usage.usedThisCycle).toBe(5000);
   });
 
   it("evaluates credit card bill history status across cycles", () => {
@@ -341,23 +337,21 @@ describe("accountActivities and balance utilities", () => {
     ];
 
     const payments: AccountPayment[] = [
+      // Settles the statement that closed on 15 Jul.
       {
         id: "pay-full",
         fromAccountId: "acc-bank-1",
         toAccountId: "acc-card-1",
         amount: 4000,
-        date: "2026-07-10",
-        appliedCycleStart: "2026-06-15",
-        appliedCycleEnd: "2026-07-15",
+        date: "2026-07-16",
       },
+      // Part payment toward the statement that closed on 15 Aug.
       {
         id: "pay-partial",
         fromAccountId: "acc-bank-1",
         toAccountId: "acc-card-1",
         amount: 1000,
-        date: "2026-08-01",
-        appliedCycleStart: "2026-07-15",
-        appliedCycleEnd: "2026-08-15",
+        date: "2026-08-16",
       },
     ];
 

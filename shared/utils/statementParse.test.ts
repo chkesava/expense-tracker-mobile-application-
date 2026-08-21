@@ -214,7 +214,7 @@ describe("matchStatementLines", () => {
 });
 
 describe("sumCardSpendInRange", () => {
-  it("subtracts in-range payments to the card", () => {
+  it("sums gross in-range spend and ignores bill payments", () => {
     expect(
       sumCardSpendInRange(
         "cc-1",
@@ -230,11 +230,10 @@ describe("sumCardSpendInRange", () => {
             amount: 100,
           },
         ],
-        [{ toAccountId: "cc-1", date: "2026-08-14", amount: 50 }],
         "2026-08-13",
         "2026-08-15"
       )
-    ).toBe(400);
+    ).toBe(450);
   });
 });
 

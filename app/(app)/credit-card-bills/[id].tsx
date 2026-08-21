@@ -24,7 +24,7 @@ export default function CreditCardBillDetailScreen() {
   const insets = useSafeAreaInsets();
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
-  const { bills, applyPaymentToBill, snoozeBillReminder } = useCreditCardBills();
+  const { bills, snoozeBillReminder } = useCreditCardBills();
   const { accounts } = useAccounts();
   const { accountTypes } = useAccountTypes();
   const [payOpen, setPayOpen] = useState(false);
@@ -158,9 +158,7 @@ export default function CreditCardBillDetailScreen() {
             accounts={accounts}
             accountTypes={accountTypes}
             defaultAmount={bill.remainingAmount}
-            onPaid={async (amount, paymentDate) => {
-              await applyPaymentToBill(bill.id, amount, paymentDate);
-            }}
+            applyToBillId={bill.id}
           />
           <MarkBillPaidModal
             isOpen={markPaidOpen}

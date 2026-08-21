@@ -1,8 +1,4 @@
-import type {
-  Account,
-  AccountPayment,
-  Expense,
-} from "../types/expense";
+import type { Account, Expense } from "../types/expense";
 import type {
   CreateCreditCardBillInput,
   CreditCardBill,
@@ -18,6 +14,7 @@ import {
   isDateKeyInInclusiveRange,
   normalizeBillGenerationDay,
 } from "./billingCycle";
+import { daysBetweenDateKeys } from "./creditCardBillStatus";
 import { parseLocalDate, shiftDateKey, toLocalDateKey } from "./dates";
 
 const AUTO_BILL_MIN_DUE_RATE = 0.05;
@@ -27,7 +24,6 @@ export type BuildAutoCreditCardBillDraftInput = {
   account: Account;
   typeName?: string;
   expenses: Expense[];
-  payments: AccountPayment[];
   existingBills: Pick<CreditCardBill, "accountId" | "statementDate">[];
   today: string;
   /** When true, still return a draft if a bill already exists for this cycle. */
@@ -44,17 +40,23 @@ function minimumDueForStatement(statementAmount: number): number {
 type ClosedCycleDraftInput = Omit<
   BuildAutoCreditCardBillDraftInput,
   "existingBills" | "ignoreExisting"
->;
+> & {
+  existingBills?: BuildAutoCreditCardBillDraftInput["existingBills"];
+};
 
 /**
- * Latest closed cycle for a card as of `today`: previous generation date
- * through this generation date (inclusive). A 21st bill day uses
- * last month's 21st through this month's 21st. Amount may be 0.
+ * Latest closed cycle for a card as of `today`: the day after the previous
+ * generation date through this generation date. A card that closes on the 20th
+ * bills 21 Jul → 20 Aug.
+ *
+ * The statement is the *gross* spend for that window. Payments never reduce a
+ * statement amount — they settle statements (see `buildCreditCardLedger`), so
+ * clearing last month's bill mid-cycle can no longer shrink this one.
  */
 export function previewClosedCycleCreditCardBill(
   input: ClosedCycleDraftInput
 ): CreateCreditCardBillInput | null {
-  const { account, typeName, expenses, payments, today } = input;
+  const { account, typeName, expenses, today } = input;
   if (getAccountKind(typeName || "") !== "credit") return null;
   const billDay = normalizeBillGenerationDay(account.billGenerationDay);
   if (billDay == null) return null;
@@ -64,7 +66,7 @@ export function previewClosedCycleCreditCardBill(
   const statementDate = toLocalDateKey(cycleEnd);
   if (today < statementDate) return null;
 
-  const billedAmount = roundMoney(
+  const statementAmount = roundMoney(
     expenses
       .filter((expense) => {
         if (expense.accountId !== account.id) return false;
@@ -72,17 +74,6 @@ export function previewClosedCycleCreditCardBill(
       })
       .reduce((sum, expense) => sum + expense.amount, 0)
   );
-
-  const paidAmount = roundMoney(
-    payments
-      .filter((payment) => {
-        if (payment.toAccountId !== account.id) return false;
-        return isDateKeyInInclusiveRange(payment.date, cycleStart, cycleEnd);
-      })
-      .reduce((sum, payment) => sum + payment.amount, 0)
-  );
-
-  const statementAmount = roundMoney(Math.max(0, billedAmount - paidAmount));
 
   return {
     accountId: account.id,
@@ -125,7 +116,6 @@ export function collectAutoCreditCardBillDrafts(input: {
   accounts: Account[];
   typeNameById: Map<string, string>;
   expenses: Expense[];
-  payments: AccountPayment[];
   existingBills: Pick<CreditCardBill, "accountId" | "statementDate">[];
   today: string;
 }): CreateCreditCardBillInput[] {
@@ -139,7 +129,6 @@ export function collectAutoCreditCardBillDrafts(input: {
       account,
       typeName: input.typeNameById.get(account.typeId) || "",
       expenses: input.expenses,
-      payments: input.payments,
       existingBills: input.existingBills,
       today: input.today,
     });
@@ -157,6 +146,7 @@ export type AutoBillRefreshPatch = {
   billId: string;
   statementAmount: number;
   minimumDueAmount: number;
+  statementDate: string;
   billingPeriodStart: string;
   billingPeriodEnd: string;
   dueDate: string;
@@ -175,15 +165,23 @@ type RefreshableBill = Pick<
   | "status"
 >;
 
+/** How far a stored close date may drift and still be re-dated in place. */
+const REDATE_TOLERANCE_DAYS = 3;
+
+function isAutoCreated(bill: Pick<CreditCardBill, "note">): boolean {
+  return (bill.note || "") === AUTO_CREDIT_CARD_BILL_NOTE;
+}
+
 /**
- * Recompute unpaid auto-created statements when the cycle window changes
- * (bill generation day, inclusive generation-day spend).
+ * Recompute auto-created statements when the cycle window changes (bill day
+ * edited, new spend backdated into a closed cycle). A statement whose close
+ * date drifted by a few days is re-dated in place instead of leaving a
+ * duplicate behind. Manual and reconciled statements are never touched.
  */
 export function collectAutoCreditCardBillRefreshPatches(input: {
   accounts: Account[];
   typeNameById: Map<string, string>;
   expenses: Expense[];
-  payments: AccountPayment[];
   existingBills: RefreshableBill[];
   today: string;
 }): AutoBillRefreshPatch[] {
@@ -194,23 +192,30 @@ export function collectAutoCreditCardBillRefreshPatches(input: {
       account,
       typeName: input.typeNameById.get(account.typeId) || "",
       expenses: input.expenses,
-      payments: input.payments,
       existingBills: input.existingBills,
       today: input.today,
       ignoreExisting: true,
     });
     if (!draft?.billingPeriodStart || !draft.billingPeriodEnd) continue;
 
-    const existing = input.existingBills.find(
+    const candidates = input.existingBills.filter(
       (bill) =>
         bill.accountId === account.id &&
-        bill.statementDate === draft.statementDate &&
-        Boolean(bill.id)
+        Boolean(bill.id) &&
+        bill.status !== "PAID" &&
+        bill.status !== "CANCELLED" &&
+        isAutoCreated(bill)
     );
+
+    const existing =
+      candidates.find((bill) => bill.statementDate === draft.statementDate) ||
+      candidates.find(
+        (bill) =>
+          Math.abs(
+            daysBetweenDateKeys(bill.statementDate, draft.statementDate)
+          ) <= REDATE_TOLERANCE_DAYS
+      );
     if (!existing?.id) continue;
-    if (existing.note !== AUTO_CREDIT_CARD_BILL_NOTE) continue;
-    if ((existing.amountPaid || 0) > 0) continue;
-    if (existing.status === "PAID" || existing.status === "CANCELLED") continue;
 
     const unchanged =
       existing.statementAmount === draft.statementAmount &&
@@ -223,6 +228,7 @@ export function collectAutoCreditCardBillRefreshPatches(input: {
       billId: existing.id,
       statementAmount: draft.statementAmount,
       minimumDueAmount: draft.minimumDueAmount,
+      statementDate: draft.statementDate,
       billingPeriodStart: draft.billingPeriodStart,
       billingPeriodEnd: draft.billingPeriodEnd,
       dueDate: draft.dueDate,

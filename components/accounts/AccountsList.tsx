@@ -35,6 +35,7 @@ import { useCreditCardBills } from "@/hooks/useCreditCardBills";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useIncomes } from "@/hooks/useIncomes";
 import { useUnifiedNetWorth } from "@/hooks/useUnifiedNetWorth";
+import { useSettings } from "@/providers/SettingsProvider";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import type { Account } from "@/shared/types/expense";
 import {
@@ -45,6 +46,7 @@ import { getAccountKind } from "@/shared/utils/accountKind";
 import {
   formatAccountIdentityLine,
 } from "@/shared/utils/accountIdentity";
+import { todayDateKey } from "@/shared/utils/dates";
 import { SmsMatchingUnconfiguredText } from "@/components/accounts/SmsMatchingUnconfiguredText";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
@@ -123,6 +125,8 @@ export function AccountsList() {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const { settings: system } = useSystemSettings();
+  const { settings } = useSettings();
+  const today = todayDateKey(settings.timezone);
 
   const { accounts } = useAccounts();
   const { accountTypes } = useAccountTypes();
@@ -171,8 +175,8 @@ export function AccountsList() {
       const typeName = typeMap.get(a.typeId) || "";
       const kind = getAccountKind(typeName);
       if (kind === "credit") {
-        const usage = computeOutstandingCredit(a, expenses, payments, bills);
-        map.set(a.id, -usage.outstanding);
+        const usage = computeOutstandingCredit(a, expenses, payments, bills, today);
+        map.set(a.id, -usage.totalOutstanding);
       } else {
         const bal = computeBankBalance(
           a,
@@ -203,6 +207,7 @@ export function AccountsList() {
     borrowingRepayments,
     receivables,
     receivableRepayments,
+    today,
   ]);
 
   const groupedAccounts = useMemo(() => {
@@ -675,7 +680,13 @@ export function AccountsList() {
           </Text>
           <View style={styles.accountList}>
             {creditAccounts.map((account) => {
-              const usage = computeOutstandingCredit(account, expenses, payments, bills);
+              const usage = computeOutstandingCredit(
+                account,
+                expenses,
+                payments,
+                bills,
+                today
+              );
               const accent = accentForTypeName("credit", isDark);
               const cardColor = account.color || accent.icon;
 
@@ -727,15 +738,15 @@ export function AccountsList() {
                   <View style={styles.accountRight}>
                     <View style={{ alignItems: "flex-end" }}>
                       <Amount
-                        value={usage.outstanding}
+                        value={usage.totalOutstanding}
                         currency={system.defaultCurrency}
-                        prefix={usage.outstanding > 0 ? "-" : ""}
+                        prefix={usage.totalOutstanding > 0 ? "-" : ""}
                         ghostable
                         style={{
                           fontSize: theme.typography.md,
                           fontWeight: "700",
                           color:
-                            usage.outstanding > 0
+                            usage.totalOutstanding > 0
                               ? red
                               : theme.colors.foreground,
                         }}
@@ -747,7 +758,7 @@ export function AccountsList() {
                           fontWeight: "600",
                         }}
                       >
-                        Used this cycle
+                        Outstanding
                       </Text>
                     </View>
                     <AccountEditButton

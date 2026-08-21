@@ -1,7 +1,8 @@
 import type { Account, AccountType } from "../types/expense";
-import type { CreateCreditCardBillInput } from "../types/creditCardBill";
+import type { CreateCreditCardBillInput, CreditCardBill } from "../types/creditCardBill";
 import { getAccountKind } from "./accountKind";
 import { isValidDateKey } from "./dates";
+import { hasCreditCardBillForStatementDate } from "./creditCardBillStatus";
 
 export type BillValidationResult =
   | { ok: true }
@@ -41,7 +42,11 @@ export function validateCreditCardBillAccount(
 export function validateCreateCreditCardBillInput(
   input: CreateCreditCardBillInput,
   accounts: Account[],
-  accountTypes: AccountType[]
+  accountTypes: AccountType[],
+  existingBills: Pick<
+    CreditCardBill,
+    "accountId" | "statementDate" | "status"
+  >[] = []
 ): BillValidationResult {
   const accountCheck = validateCreditCardBillAccount(
     input.accountId,
@@ -49,6 +54,19 @@ export function validateCreateCreditCardBillInput(
     accountTypes
   );
   if (!accountCheck.ok) return accountCheck;
+
+  if (
+    hasCreditCardBillForStatementDate(
+      existingBills,
+      input.accountId,
+      input.statementDate
+    )
+  ) {
+    return {
+      ok: false,
+      error: "A statement bill already exists for this date",
+    };
+  }
 
   const statementAmount = Number(input.statementAmount);
   if (!Number.isFinite(statementAmount) || statementAmount <= 0) {

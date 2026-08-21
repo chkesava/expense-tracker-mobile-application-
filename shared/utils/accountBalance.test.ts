@@ -442,6 +442,50 @@ describe("floating-point safety in money math", () => {
     expect(preview).toBe(10488);
   });
 
+  it("previews remaining credit after an unpaid statement", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 7, 22));
+    try {
+      const preview = previewBalanceAfterTransaction(
+        {
+          id: "slice",
+          name: "Slice",
+          typeId: "credit-type",
+          billGenerationDay: 21,
+          creditLimit: 100000,
+        },
+        "Credit Card",
+        [{ ...expenseOf(200, "2026-08-22"), accountId: "slice" }],
+        [],
+        "expense",
+        100,
+        [],
+        [],
+        [],
+        undefined,
+        [],
+        [],
+        [],
+        [],
+        [
+          {
+            id: "bill-aug",
+            accountId: "slice",
+            status: "UPCOMING",
+            statementAmount: 17764,
+            amountPaid: 0,
+            statementDate: "2026-08-21",
+            billingPeriodStart: "2026-07-22",
+            billingPeriodEnd: "2026-08-21",
+          },
+        ]
+      );
+      expect(preview).toBe(81936);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("removes a deleted transaction's effect on the running balance", () => {
     const withOpening: Account = { ...bank, openingBalance: 100 };
     const kept = { ...expenseOf(20, "2026-01-01"), id: "exp-keep" };
@@ -475,11 +519,6 @@ describe("floating-point safety in money math", () => {
         amount: 0.3,
         date: "2026-02-01",
         sourceType: "account",
-        // Explicit cycle tag, same as the app sets when a bill payment is
-        // recorded against a specific statement — avoids the ambiguous
-        // date-range fallback matching used for untagged legacy payments.
-        appliedCycleStart: "2026-01-01",
-        appliedCycleEnd: "2026-02-01",
       },
     ];
 
@@ -616,89 +655,144 @@ describe("computeOutstandingCredit", () => {
     };
   }
 
+  /** Statement for the closed 22 Jul → 21 Aug window. */
   function openBill(overrides: Partial<OpenCreditBillSlice> = {}): OpenCreditBillSlice {
     return {
+      id: "bill-aug",
       accountId: "slice",
       status: "UPCOMING",
-      remainingAmount: 17764,
+      statementAmount: 18264,
+      amountPaid: 0,
       statementDate: "2026-08-21",
+      billingPeriodStart: "2026-07-22",
       billingPeriodEnd: "2026-08-21",
       ...overrides,
     };
   }
 
-  it("keeps an unpaid statement in outstanding and does not double-count generation-day spend", () => {
-    const expenses: Expense[] = [
-      expenseOf(17764, "2026-08-10"),
-      expenseOf(500, "2026-08-21"),
-      expenseOf(200, "2026-08-22"),
-    ];
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date(2026, 7, 22));
-    try {
-      const result = computeOutstandingCredit(card, expenses, [], [openBill()]);
-      expect(result.unpaidBills).toBe(17764);
-      expect(result.unbilledSpend).toBe(200);
-      expect(result.outstanding).toBe(17964);
-      expect(result.availableCredit).toBe(82036);
-      expect(result.outstanding).not.toBe(result.usedThisCycle + 17764);
-    } finally {
-      vi.useRealTimers();
-    }
+  const cycleExpenses: Expense[] = [
+    expenseOf(17764, "2026-08-10"),
+    expenseOf(500, "2026-08-21"),
+    expenseOf(200, "2026-08-22"),
+  ];
+
+  it("keeps an unpaid statement in outstanding and bills the close date only once", () => {
+    const result = computeOutstandingCredit(
+      card,
+      cycleExpenses,
+      [],
+      [openBill()],
+      "2026-08-22"
+    );
+    expect(result.statementDue).toBe(18264);
+    expect(result.unbilledSpend).toBe(200);
+    expect(result.totalOutstanding).toBe(18464);
+    expect(result.availableCredit).toBe(81536);
   });
 
   it("drops the statement from outstanding once the bill is paid", () => {
-    const expenses: Expense[] = [
-      expenseOf(17764, "2026-08-10"),
-      expenseOf(500, "2026-08-21"),
-      expenseOf(200, "2026-08-22"),
-    ];
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date(2026, 7, 22));
-    try {
-      const result = computeOutstandingCredit(card, expenses, [], [
-        openBill({ status: "PAID", remainingAmount: 0 }),
-      ]);
-      expect(result.unpaidBills).toBe(0);
-      expect(result.outstanding).toBe(result.usedThisCycle);
-      expect(result.outstanding).toBe(700);
-    } finally {
-      vi.useRealTimers();
-    }
+    const result = computeOutstandingCredit(
+      card,
+      cycleExpenses,
+      [],
+      [openBill({ status: "PAID", amountPaid: 18264 })],
+      "2026-08-22"
+    );
+    expect(result.statementDue).toBe(0);
+    expect(result.unbilledSpend).toBe(200);
+    expect(result.totalOutstanding).toBe(200);
   });
 
-  it("on generation day counts only the unpaid bill, not the same-day spend twice", () => {
-    const expenses: Expense[] = [
-      expenseOf(17764, "2026-08-10"),
-      expenseOf(500, "2026-08-21"),
-    ];
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date(2026, 7, 21));
-    try {
-      const result = computeOutstandingCredit(card, expenses, [], [openBill()]);
-      expect(result.unbilledSpend).toBe(0);
-      expect(result.outstanding).toBe(17764);
-    } finally {
-      vi.useRealTimers();
-    }
+  it("resets the cycle to zero on the close date and keeps the statement due", () => {
+    const result = computeOutstandingCredit(
+      card,
+      [expenseOf(17764, "2026-08-10"), expenseOf(500, "2026-08-21")],
+      [],
+      [openBill()],
+      "2026-08-21"
+    );
+    expect(result.usedThisCycle).toBe(0);
+    expect(result.unbilledSpend).toBe(0);
+    expect(result.totalOutstanding).toBe(18264);
   });
 
-  it("uses remainingAmount for a partial payment plus later unbilled spend", () => {
-    const expenses: Expense[] = [
-      expenseOf(17764, "2026-08-10"),
-      expenseOf(200, "2026-08-22"),
+  it("uses the settled amount for a partial payment plus later unbilled spend", () => {
+    const result = computeOutstandingCredit(
+      card,
+      [expenseOf(17764, "2026-08-10"), expenseOf(200, "2026-08-22")],
+      [],
+      [
+        openBill({
+          status: "PARTIALLY_PAID",
+          statementAmount: 17764,
+          amountPaid: 13764,
+        }),
+      ],
+      "2026-08-22"
+    );
+    expect(result.statementDue).toBe(4000);
+    expect(result.unbilledSpend).toBe(200);
+    expect(result.totalOutstanding).toBe(4200);
+  });
+
+  it("does not let a statement payment wipe later unbilled spend", () => {
+    const payments: AccountPayment[] = [
+      {
+        id: "pay-statement",
+        fromAccountId: "bank-1",
+        toAccountId: "slice",
+        amount: 18264,
+        date: "2026-08-22",
+      },
     ];
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date(2026, 7, 22));
-    try {
-      const result = computeOutstandingCredit(card, expenses, [], [
-        openBill({ status: "PARTIALLY_PAID", remainingAmount: 4000 }),
-      ]);
-      expect(result.unpaidBills).toBe(4000);
-      expect(result.unbilledSpend).toBe(200);
-      expect(result.outstanding).toBe(4200);
-    } finally {
-      vi.useRealTimers();
-    }
+    const result = computeOutstandingCredit(
+      card,
+      cycleExpenses,
+      payments,
+      [
+        openBill({
+          status: "PAID",
+          amountPaid: 18264,
+          paymentIds: ["pay-statement"],
+        }),
+      ],
+      "2026-08-22"
+    );
+    expect(result.statementDue).toBe(0);
+    expect(result.unbilledSpend).toBe(200);
+    expect(result.totalOutstanding).toBe(200);
+  });
+
+  it("settles a statement from an unlinked payment made after it closed", () => {
+    const payments: AccountPayment[] = [
+      {
+        id: "pay-legacy",
+        fromAccountId: "bank-1",
+        toAccountId: "slice",
+        amount: 18264,
+        date: "2026-08-22",
+      },
+    ];
+    const result = computeOutstandingCredit(
+      card,
+      cycleExpenses,
+      payments,
+      [openBill()],
+      "2026-08-22"
+    );
+    expect(result.statementDue).toBe(0);
+    expect(result.unbilledSpend).toBe(200);
+  });
+
+  it("keeps closed-cycle spend in outstanding after the statement is cancelled", () => {
+    const result = computeOutstandingCredit(
+      card,
+      cycleExpenses,
+      [],
+      [openBill({ status: "CANCELLED", amountPaid: 0 })],
+      "2026-08-22"
+    );
+    expect(result.statementDue).toBe(0);
+    expect(result.totalOutstanding).toBe(18464);
   });
 });

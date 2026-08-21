@@ -9,6 +9,7 @@ import {
   orderBy,
   query,
   serverTimestamp,
+  setDoc,
   updateDoc,
   where,
 } from "firebase/firestore";
@@ -105,14 +106,14 @@ export type AccountsContextType = {
     date: string,
     note?: string,
     opts?: { appliedCycleStart?: string; appliedCycleEnd?: string }
-  ) => Promise<boolean>;
+  ) => Promise<string | null>;
   addExternalPayment: (
     toAccountId: string,
     amount: number,
     date: string,
     note?: string,
     opts?: { appliedCycleStart?: string; appliedCycleEnd?: string }
-  ) => Promise<boolean>;
+  ) => Promise<string | null>;
   deletePayment: (id: string) => Promise<void>;
   addEntry: (
     accountId: string,
@@ -769,7 +770,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     ) => {
       const u = userRef.current;
       const database = getFirestoreDb();
-      if (!u || !database) return false;
+      if (!u || !database) return null;
       const validation = validateAccountMoneyMove({
         fromAccountId,
         toAccountId,
@@ -778,12 +779,13 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       });
       if (!validation.ok) {
         toast.error(validation.error);
-        return false;
+        return null;
       }
       try {
+        const ref = doc(collection(database, "users", u.uid, "accountPayments"));
         const outcome = await commitWrite(
           () =>
-            addDoc(collection(database, "users", u.uid, "accountPayments"), {
+            setDoc(ref, {
               fromAccountId,
               toAccountId,
               amount,
@@ -801,11 +803,11 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
           { label: "payment" }
         );
         toast.success(writeSavedMessage(outcome, "Bill payment recorded"));
-        return true;
+        return ref.id;
       } catch (err) {
         logError("financeDataProvider.recordPayment", err);
         toast.error("Failed to record payment");
-        return false;
+        return null;
       }
     },
     []
@@ -821,15 +823,16 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     ) => {
       const u = userRef.current;
       const database = getFirestoreDb();
-      if (!u || !database || !toAccountId || amount <= 0) return false;
+      if (!u || !database || !toAccountId || amount <= 0) return null;
       if (!isValidDateKey(date)) {
         toast.error("Invalid payment date");
-        return false;
+        return null;
       }
       try {
+        const ref = doc(collection(database, "users", u.uid, "accountPayments"));
         const outcome = await commitWrite(
           () =>
-            addDoc(collection(database, "users", u.uid, "accountPayments"), {
+            setDoc(ref, {
               fromAccountId: "external",
               toAccountId,
               amount,
@@ -847,11 +850,11 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
           { label: "payment" }
         );
         toast.success(writeSavedMessage(outcome, "Marked as already paid"));
-        return true;
+        return ref.id;
       } catch (err) {
         logError("financeDataProvider.markAsPaid", err);
         toast.error("Failed to mark as paid");
-        return false;
+        return null;
       }
     },
     []

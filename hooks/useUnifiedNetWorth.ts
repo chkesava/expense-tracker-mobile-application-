@@ -12,11 +12,13 @@ import { useInvestments } from "@/hooks/useInvestments";
 import { useMarketQuotes } from "@/hooks/useMarketQuotes";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useReceivables } from "@/hooks/useReceivables";
+import { useSettings } from "@/providers/SettingsProvider";
 import {
   computeBankBalance,
   computeOutstandingCredit,
 } from "@/shared/utils/accountBalance";
 import { getAccountKind } from "@/shared/utils/accountKind";
+import { todayDateKey } from "@/shared/utils/dates";
 import { totalPortfolioValue } from "@/shared/utils/investmentInterest";
 
 export interface UnifiedNetWorthSummary {
@@ -69,6 +71,8 @@ export function useUnifiedNetWorth(): UnifiedNetWorthSummary {
     portfolio: receivablePortfolio,
     loading: receivablesLoading,
   } = useReceivables();
+  const { settings } = useSettings();
+  const today = todayDateKey(settings.timezone);
   const { investments, loading: investmentsLoading } = useInvestments();
   const {
     holdings,
@@ -102,8 +106,8 @@ export function useUnifiedNetWorth(): UnifiedNetWorthSummary {
       const kind = getAccountKind(typeName);
 
       if (kind === "credit") {
-        const usage = computeOutstandingCredit(a, expenses, payments, bills);
-        creditCardLiabilities += usage.outstanding;
+        const usage = computeOutstandingCredit(a, expenses, payments, bills, today);
+        creditCardLiabilities += usage.totalOutstanding;
       } else {
         const bal = computeBankBalance(
           a,
@@ -179,6 +183,7 @@ export function useUnifiedNetWorth(): UnifiedNetWorthSummary {
     holdings,
     quotes,
     portfolioSettings,
+    today,
   ]);
 
   const loading =

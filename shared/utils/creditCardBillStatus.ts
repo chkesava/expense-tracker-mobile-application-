@@ -1,4 +1,5 @@
 import type { CreditCardBill, CreditCardBillStatus } from "../types/creditCardBill";
+import { OPEN_BILL_STATUSES } from "../types/creditCardBill";
 import { toLocalDateKey } from "./dates";
 
 export type ComputeBillStatusInput = {
@@ -58,33 +59,27 @@ export function computeRemainingAmount(
   return Math.max(0, (Number(statementAmount) || 0) - (Number(amountPaid) || 0));
 }
 
-/**
- * Match a stored statement bill to a computed billing cycle.
- * Prefers exact period keys, then statement date on the cycle end/start.
- */
-export function findCreditCardBillForCycle<
-  T extends Pick<
-    CreditCardBill,
-    "accountId" | "billingPeriodStart" | "billingPeriodEnd" | "statementDate"
-  >,
->(
-  bills: T[],
-  accountId: string,
-  cycleStart: Date,
-  cycleEnd: Date
-): T | undefined {
-  const startKey = toLocalDateKey(cycleStart);
-  const endKey = toLocalDateKey(cycleEnd);
-  const forAccount = bills.filter((bill) => bill.accountId === accountId);
-  return (
-    forAccount.find(
+export function earliestOpenCreditCardBill<
+  T extends Pick<CreditCardBill, "accountId" | "status" | "dueDate">,
+>(bills: T[], accountId: string): T | undefined {
+  return bills
+    .filter(
       (bill) =>
-        bill.billingPeriodStart === startKey && bill.billingPeriodEnd === endKey
-    ) ||
-    forAccount.find((bill) => bill.billingPeriodStart === startKey) ||
-    forAccount.find(
-      (bill) => bill.statementDate === endKey || bill.statementDate === startKey
+        bill.accountId === accountId && OPEN_BILL_STATUSES.includes(bill.status)
     )
+    .sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0];
+}
+
+export function hasCreditCardBillForStatementDate(
+  bills: Pick<CreditCardBill, "accountId" | "statementDate" | "status">[],
+  accountId: string,
+  statementDate: string
+): boolean {
+  return bills.some(
+    (bill) =>
+      bill.accountId === accountId &&
+      bill.statementDate === statementDate &&
+      bill.status !== "CANCELLED"
   );
 }
 

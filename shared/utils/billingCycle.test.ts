@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getBillingCycleDates, getClosedBillingCycle, getDaysUntilReset, isDateKeyInInclusiveRange } from "./billingCycle";
+import {
+  getBillingCycleDates,
+  getClosedBillingCycle,
+  getDaysUntilReset,
+  getOpenBillingCycle,
+  isDateKeyInInclusiveRange,
+} from "./billingCycle";
 import { toLocalDateKey } from "./dates";
 
 describe("billingCycle", () => {
@@ -58,17 +64,18 @@ describe("billingCycle", () => {
       expect(toLocalDateKey(nextBillDate)).toBe("2027-01-01");
     });
 
-    it("closes a 21st-cycle statement from last generation date through today", () => {
+    it("closes a 21st-cycle statement the day after the last generation date", () => {
       vi.useFakeTimers();
       vi.setSystemTime(new Date(2026, 7, 21, 12, 0, 0));
 
       const { cycleStart, cycleEnd } = getClosedBillingCycle(21);
-      expect(toLocalDateKey(cycleStart)).toBe("2026-07-21");
+      expect(toLocalDateKey(cycleStart)).toBe("2026-07-22");
       expect(toLocalDateKey(cycleEnd)).toBe("2026-08-21");
-      expect(isDateKeyInInclusiveRange("2026-07-20", cycleStart, cycleEnd)).toBe(
+      // 21 Jul closed the previous statement, so it must not appear here too.
+      expect(isDateKeyInInclusiveRange("2026-07-21", cycleStart, cycleEnd)).toBe(
         false
       );
-      expect(isDateKeyInInclusiveRange("2026-07-21", cycleStart, cycleEnd)).toBe(
+      expect(isDateKeyInInclusiveRange("2026-07-22", cycleStart, cycleEnd)).toBe(
         true
       );
       expect(isDateKeyInInclusiveRange("2026-08-01", cycleStart, cycleEnd)).toBe(
@@ -80,6 +87,15 @@ describe("billingCycle", () => {
       expect(isDateKeyInInclusiveRange("2026-08-22", cycleStart, cycleEnd)).toBe(
         false
       );
+    });
+
+    it("opens the unbilled window the day after the last generation date", () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(2026, 7, 25, 12, 0, 0));
+
+      const { cycleStart, cycleEnd } = getOpenBillingCycle(21);
+      expect(toLocalDateKey(cycleStart)).toBe("2026-08-22");
+      expect(toLocalDateKey(cycleEnd)).toBe("2026-09-21");
     });
   });
 

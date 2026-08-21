@@ -66,4 +66,26 @@ describe("validateCreateCreditCardBillInput", () => {
     );
     expect(r.ok).toBe(false);
   });
+
+  it("rejects a second bill for the same statement date", () => {
+    const r = validateCreateCreditCardBillInput(base, accounts, types, [
+      {
+        accountId: "cc1",
+        statementDate: "2026-08-01",
+        status: "UPCOMING",
+      },
+    ]);
+    expect(r.ok).toBe(false);
+  });
+
+  it("allows recreating a cancelled statement date", () => {
+    const r = validateCreateCreditCardBillInput(base, accounts, types, [
+      {
+        accountId: "cc1",
+        statementDate: "2026-08-01",
+        status: "CANCELLED",
+      },
+    ]);
+    expect(r.ok).toBe(true);
+  });
 });

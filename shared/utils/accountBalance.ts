@@ -9,70 +9,24 @@ import type {
 } from "../types/expense";
 import type { Borrowing, BorrowingRepayment } from "../types/borrowing";
 import type { Receivable, ReceivableRepayment } from "../types/receivable";
-import type { CreditCardBill } from "../types/creditCardBill";
-import { OPEN_BILL_STATUSES } from "../types/creditCardBill";
 import { postingSortMs, resolveActivityClockTime } from "./activityDisplay";
 import { effectiveBalanceAsOfDate } from "./accountBaseline";
 import { getAccountKind } from "./accountKind";
 import {
   getBillingCycleDates,
   getDaysUntilReset,
-  isDateKeyInHalfOpenRange,
   isDateKeyInInclusiveRange,
   normalizeBillGenerationDay,
 } from "./billingCycle";
 import {
-  billDateForMonth,
-  todayDateKey,
-  toLocalDateKey,
-} from "./dates";
+  buildCreditCardLedger,
+  type LedgerBillSlice,
+} from "./creditCardLedger";
+import { parseLocalDate, todayDateKey, toLocalDateKey } from "./dates";
+import { roundMoney } from "./money";
 
 export { toLocalDateKey } from "./dates";
-
-/**
- * Rounds to the nearest cent. Every balance/usage figure below is a running
- * sum of many decimal amounts (float addition/subtraction accumulates
- * epsilon-level residue, e.g. 0.1 + 0.2 !== 0.3) — without this, exact
- * comparisons like `outstanding === 0` can stay false for a bill that's
- * genuinely fully paid.
- */
-export function roundMoney(value: number): number {
-  return Math.round((value + Number.EPSILON) * 100) / 100;
-}
-
-function paymentBelongsToCycle(
-  payment: AccountPayment,
-  cycleStart: Date,
-  cycleEnd: Date,
-  inclusiveEnd = false
-): boolean {
-  const startKey = toLocalDateKey(cycleStart);
-  const endKey = toLocalDateKey(cycleEnd);
-  if (payment.appliedCycleStart || payment.appliedCycleEnd) {
-    return (
-      payment.appliedCycleStart === startKey &&
-      payment.appliedCycleEnd === endKey
-    );
-  }
-  const note = payment.note || "";
-  const noteRangeMatch = note.match(/(.+?)\s-\s(.+)$/);
-  if (noteRangeMatch) {
-    const parsedStart = new Date(noteRangeMatch[1].replace(/^.*?—\s*/, "").trim());
-    const parsedEnd = new Date(noteRangeMatch[2].trim());
-    if (
-      Number.isFinite(parsedStart.getTime()) &&
-      Number.isFinite(parsedEnd.getTime())
-    ) {
-      return (
-        toLocalDateKey(parsedStart) === startKey &&
-        toLocalDateKey(parsedEnd) === endKey
-      );
-    }
-  }
-  return inclusiveEnd
-    ? isDateKeyInInclusiveRange(payment.date, cycleStart, cycleEnd)
-    : isDateKeyInHalfOpenRange(payment.date, cycleStart, cycleEnd);
-}
+export { roundMoney } from "./money";
 
 function paymentsFromAccount(accountId: string, payments: AccountPayment[]) {
   return payments.filter((p) => p.fromAccountId === accountId);
@@ -145,17 +99,6 @@ function compareActivitiesChronologically(a: AccountActivity, b: AccountActivity
   return a.id.localeCompare(b.id);
 }
 
-function paymentsInBillingCycle(
-  accountId: string,
-  payments: AccountPayment[],
-  cycleStart: Date,
-  cycleEnd: Date
-) {
-  return paymentsToAccount(accountId, payments).filter((p) => {
-    return paymentBelongsToCycle(p, cycleStart, cycleEnd);
-  });
-}
-
 export function computeBankBalance(
   account: Account,
   expenses: Expense[],
@@ -226,10 +169,16 @@ export function computeBankBalance(
   );
 }
 
+/**
+ * Spend in the still-open (unbilled) window. This is the number that resets to
+ * zero the moment a statement is cut — it never includes an earlier statement,
+ * and a payment toward an earlier statement never reduces it.
+ */
 export function computeCreditUsage(
   account: Account,
   expenses: Expense[],
-  payments: AccountPayment[] = []
+  payments: AccountPayment[] = [],
+  today: string = todayDateKey()
 ): {
   usedThisCycle: number;
   availableCredit: number;
@@ -238,200 +187,162 @@ export function computeCreditUsage(
   paidThisCycle: number;
 } {
   const billDay = normalizeBillGenerationDay(account.billGenerationDay) ?? 1;
-  const { previousBillDate, nextBillDate } = getBillingCycleDates(billDay);
-
-  const cycleExpenses = expenses.filter((e) => {
-    if (e.accountId !== account.id) return false;
-    return isDateKeyInHalfOpenRange(e.date, previousBillDate, nextBillDate);
-  });
-
-  const cyclePayments = paymentsInBillingCycle(
-    account.id,
-    payments,
-    previousBillDate,
-    nextBillDate
+  const asOf = parseLocalDate(today);
+  const { previousBillDate, nextBillDate } = getBillingCycleDates(billDay, asOf);
+  const cycleStart = parseLocalDate(
+    toLocalDateKey(previousBillDate)
   );
+  cycleStart.setDate(cycleStart.getDate() + 1);
 
-  const expenseTotal = roundMoney(cycleExpenses.reduce((sum, e) => sum + e.amount, 0));
-  const paidThisCycle = roundMoney(cyclePayments.reduce((sum, p) => sum + p.amount, 0));
-  const usedThisCycle = roundMoney(Math.max(0, expenseTotal - paidThisCycle));
+  const usedThisCycle = roundMoney(
+    expenses
+      .filter(
+        (e) =>
+          e.accountId === account.id &&
+          isDateKeyInInclusiveRange(e.date, cycleStart, nextBillDate)
+      )
+      .reduce((sum, e) => sum + e.amount, 0)
+  );
+  const paidThisCycle = roundMoney(
+    payments
+      .filter(
+        (p) =>
+          p.toAccountId === account.id &&
+          isDateKeyInInclusiveRange(p.date, cycleStart, nextBillDate)
+      )
+      .reduce((sum, p) => sum + p.amount, 0)
+  );
   const limit = account.creditLimit ?? 0;
-  const availableCredit = roundMoney(Math.max(0, limit - usedThisCycle));
 
   return {
     usedThisCycle,
-    availableCredit,
+    availableCredit: roundMoney(Math.max(0, limit - usedThisCycle)),
     nextResetDate: nextBillDate,
-    daysRemaining: getDaysUntilReset(nextBillDate),
+    daysRemaining: getDaysUntilReset(nextBillDate, asOf),
     paidThisCycle,
   };
 }
 
 /** Fields needed to keep an unpaid statement in card used / liabilities. */
-export type OpenCreditBillSlice = Pick<
-  CreditCardBill,
-  | "accountId"
-  | "status"
-  | "remainingAmount"
-  | "statementDate"
-  | "billingPeriodEnd"
-  | "paymentIds"
->;
+export type OpenCreditBillSlice = LedgerBillSlice;
 
 /**
- * What is still owed on a card: unpaid statement remaining plus spend after
- * that billed window. Do not add `usedThisCycle` on top — generation-day
- * charges sit in both the inclusive bill and the new cycle.
+ * What is still owed on a card. Thin wrapper over {@link buildCreditCardLedger}:
+ * `usedThisCycle` is unbilled spend only, `statementDue` is what closed
+ * statements still owe, and `outstanding` is the sum of the two.
  */
 export function computeOutstandingCredit(
   account: Account,
   expenses: Expense[],
   payments: AccountPayment[] = [],
-  bills: OpenCreditBillSlice[] = []
+  bills: OpenCreditBillSlice[] = [],
+  today: string = todayDateKey()
 ): {
   unpaidBills: number;
+  statementDue: number;
   unbilledSpend: number;
   outstanding: number;
+  totalOutstanding: number;
   availableCredit: number;
   usedThisCycle: number;
   paidThisCycle: number;
+  unappliedCredit: number;
   nextResetDate: Date;
   daysRemaining: number;
 } {
-  const usage = computeCreditUsage(account, expenses, payments);
-  const open = bills.filter(
-    (bill) =>
-      bill.accountId === account.id && OPEN_BILL_STATUSES.includes(bill.status)
-  );
-
-  if (open.length === 0) {
-    return {
-      unpaidBills: 0,
-      unbilledSpend: usage.usedThisCycle,
-      outstanding: usage.usedThisCycle,
-      availableCredit: usage.availableCredit,
-      usedThisCycle: usage.usedThisCycle,
-      paidThisCycle: usage.paidThisCycle,
-      nextResetDate: usage.nextResetDate,
-      daysRemaining: usage.daysRemaining,
-    };
-  }
-
-  const unpaidBills = roundMoney(
-    open.reduce((sum, bill) => sum + (Number(bill.remainingAmount) || 0), 0)
-  );
-  const latestBilledEnd = open.reduce((max, bill) => {
-    const end = bill.billingPeriodEnd || bill.statementDate || "";
-    return end > max ? end : max;
-  }, "");
-  const billPaymentIds = new Set(
-    open.flatMap((bill) => bill.paymentIds || []).filter(Boolean)
-  );
-
-  const expenseTotal = roundMoney(
-    expenses
-      .filter((expense) => expense.accountId === account.id && expense.date > latestBilledEnd)
-      .reduce((sum, expense) => sum + expense.amount, 0)
-  );
-  const paymentTotal = roundMoney(
+  const ledger = buildCreditCardLedger({
+    account,
+    expenses,
+    payments,
+    bills,
+    today,
+  });
+  const paidThisCycle = roundMoney(
     payments
       .filter(
         (payment) =>
           payment.toAccountId === account.id &&
-          payment.date > latestBilledEnd &&
-          !(payment.id && billPaymentIds.has(payment.id))
+          payment.date >= ledger.openCycle.start &&
+          payment.date <= ledger.openCycle.end
       )
       .reduce((sum, payment) => sum + payment.amount, 0)
   );
-  const unbilledSpend = roundMoney(Math.max(0, expenseTotal - paymentTotal));
-  const outstanding = roundMoney(unpaidBills + unbilledSpend);
-  const limit = account.creditLimit ?? 0;
-  const availableCredit = roundMoney(Math.max(0, limit - outstanding));
 
   return {
-    unpaidBills,
-    unbilledSpend,
-    outstanding,
-    availableCredit,
-    usedThisCycle: usage.usedThisCycle,
-    paidThisCycle: usage.paidThisCycle,
-    nextResetDate: usage.nextResetDate,
-    daysRemaining: usage.daysRemaining,
+    unpaidBills: ledger.statementDue,
+    statementDue: ledger.statementDue,
+    unbilledSpend: ledger.unbilledSpend,
+    outstanding: ledger.totalOutstanding,
+    totalOutstanding: ledger.totalOutstanding,
+    availableCredit: ledger.availableCredit,
+    usedThisCycle: ledger.unbilledSpend,
+    paidThisCycle,
+    unappliedCredit: ledger.unappliedCredit,
+    nextResetDate: parseLocalDate(ledger.openCycle.end),
+    daysRemaining: ledger.openCycle.daysRemaining,
   };
 }
 
-export type CreditBillStatus = "unpaid" | "partiallyPaid" | "paid";
+export type CreditBillStatus = "unpaid" | "partiallyPaid" | "paid" | "cancelled";
 
 export interface CreditBillSummary {
   id: string;
   accountId: string;
+  billId?: string;
   cycleStart: Date;
   cycleEnd: Date;
+  statementDate: string;
+  dueDate: string;
   billedAmount: number;
   paidAmount: number;
   outstandingAmount: number;
   status: CreditBillStatus;
+  /** True when a stored statement document backs this cycle. */
+  hasStatement: boolean;
 }
 
+/**
+ * Closed statement history, newest first, derived from the same ledger the
+ * hero uses — so a cycle can never show more paid than billed and a payment
+ * can never appear in two cycles.
+ */
 export function getCreditBillHistory(
   account: Account,
   expenses: Expense[],
   payments: AccountPayment[] = [],
-  cycles = 6
+  cycles = 6,
+  bills: OpenCreditBillSlice[] = [],
+  today: string = todayDateKey()
 ): CreditBillSummary[] {
-  const billDay = normalizeBillGenerationDay(account.billGenerationDay) ?? 1;
-  const { previousBillDate } = getBillingCycleDates(billDay);
-  const history: CreditBillSummary[] = [];
+  const ledger = buildCreditCardLedger({
+    account,
+    expenses,
+    payments,
+    bills,
+    today,
+    cycles,
+  });
 
-  for (let i = 0; i < cycles; i += 1) {
-    const cycleEndMonth = previousBillDate.getMonth() - i;
-    const cycleEndYear = previousBillDate.getFullYear();
-    const cycleEnd = billDateForMonth(cycleEndYear, cycleEndMonth, billDay);
-    const cycleStart = billDateForMonth(cycleEndYear, cycleEndMonth - 1, billDay);
-
-    const billedAmount = roundMoney(
-      expenses
-        .filter((e) => {
-          if (e.accountId !== account.id) return false;
-          return isDateKeyInInclusiveRange(e.date, cycleStart, cycleEnd);
-        })
-        .reduce((sum, e) => sum + e.amount, 0)
-    );
-
-    const paidAmount = roundMoney(
-      payments
-        .filter((p) => {
-          if (p.toAccountId !== account.id) return false;
-          return paymentBelongsToCycle(p, cycleStart, cycleEnd, true);
-        })
-        .reduce((sum, p) => sum + p.amount, 0)
-    );
-
-    if (billedAmount <= 0 && paidAmount <= 0) {
-      continue;
-    }
-
-    const outstandingAmount = roundMoney(Math.max(0, billedAmount - paidAmount));
-    const status: CreditBillStatus =
-      outstandingAmount <= 0
-        ? "paid"
-        : paidAmount > 0
-          ? "partiallyPaid"
-          : "unpaid";
-
-    history.push({
-      id: `${account.id}-${toLocalDateKey(cycleStart)}`,
+  return ledger.statements
+    .filter(
+      (statement) =>
+        statement.billed > 0 || statement.paid > 0 || Boolean(statement.billId)
+    )
+    .slice(0, cycles)
+    .map((statement) => ({
+      id: statement.billId || `${account.id}-${statement.statementDate}`,
       accountId: account.id,
-      cycleStart,
-      cycleEnd,
-      billedAmount,
-      paidAmount,
-      outstandingAmount,
-      status,
-    });
-  }
-
-  return history;
+      billId: statement.billId,
+      cycleStart: parseLocalDate(statement.periodStart),
+      cycleEnd: parseLocalDate(statement.periodEnd),
+      statementDate: statement.statementDate,
+      dueDate: statement.dueDate,
+      billedAmount: statement.billed,
+      paidAmount: statement.paid,
+      outstandingAmount: statement.remaining,
+      status: statement.status,
+      hasStatement: Boolean(statement.billId),
+    }));
 }
 
 export function buildAccountActivities(
@@ -636,7 +547,9 @@ export function previewBalanceAfterTransaction(
   borrowings: Borrowing[] = [],
   borrowingRepayments: BorrowingRepayment[] = [],
   receivables: Receivable[] = [],
-  receivableRepayments: ReceivableRepayment[] = []
+  receivableRepayments: ReceivableRepayment[] = [],
+  bills: OpenCreditBillSlice[] = [],
+  today: string = todayDateKey()
 ): number | null {
   const kind = getAccountKind(typeName);
   if (kind !== "credit") {
@@ -663,7 +576,13 @@ export function previewBalanceAfterTransaction(
     return roundMoney(balance);
   }
   if (kind === "credit" && transactionType === "expense" && account.billGenerationDay) {
-    const { availableCredit } = computeCreditUsage(account, expenses, payments);
+    const { availableCredit } = computeOutstandingCredit(
+      account,
+      expenses,
+      payments,
+      bills,
+      today
+    );
     return roundMoney(availableCredit - amount);
   }
   return null;

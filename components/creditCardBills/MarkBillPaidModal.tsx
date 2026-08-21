@@ -64,16 +64,17 @@ export function MarkBillPaidModal({
     try {
       let paymentId: string | undefined;
       if (recordExternal) {
-        const ok = await addExternalPayment(
+        const createdId = await addExternalPayment(
           bill.accountId,
           parsed,
           paymentDate.trim(),
           `Bill ${bill.id} marked paid`
         );
-        if (!ok) {
+        if (!createdId) {
           toast.error("Failed to record external payment");
           return;
         }
+        paymentId = createdId;
       }
       const ok = await markBillPaid(bill.id, {
         amount: Math.max(parsed, bill.statementAmount),

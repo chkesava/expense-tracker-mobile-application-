@@ -24,7 +24,11 @@ export type CreditCardRowModel = {
   identityLine: string;
   smsWarning: string | null;
   daysRemaining: number;
+  /** Unbilled spend in the open cycle. */
   usedThisCycle: number;
+  /** Still owed on closed statements. */
+  statementDue: number;
+  outstanding: number;
   availableCredit: number;
   limit: number;
   utilization: number;
@@ -49,7 +53,7 @@ export const CreditCardListItem = memo(function CreditCardListItem({
 }) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
-  const usedColor = row.usedThisCycle > 0
+  const usedColor = row.outstanding > 0
     ? isDark
       ? ACCOUNT_RED
       : theme.colors.destructive
@@ -124,10 +128,10 @@ export const CreditCardListItem = memo(function CreditCardListItem({
       <View style={styles.metrics}>
         <View style={styles.metricCol}>
           <Text style={[styles.metricLabel, { color: theme.colors.mutedForeground }]}>
-            Current Used
+            Outstanding
           </Text>
           <Amount
-            value={row.usedThisCycle}
+            value={row.outstanding}
             currency={currency}
             ghostable
             style={[styles.metricValue, { color: usedColor }]}
@@ -147,6 +151,27 @@ export const CreditCardListItem = memo(function CreditCardListItem({
             ]}
           />
         </View>
+      </View>
+
+      <View style={styles.splitRow}>
+        <Text style={[styles.splitLabel, { color: theme.colors.mutedForeground }]}>
+          Statement due
+        </Text>
+        <Amount
+          value={row.statementDue}
+          currency={currency}
+          ghostable
+          style={[styles.splitValue, { color: theme.colors.foreground }]}
+        />
+        <Text style={[styles.splitLabel, { color: theme.colors.mutedForeground }]}>
+          · Unbilled
+        </Text>
+        <Amount
+          value={row.usedThisCycle}
+          currency={currency}
+          ghostable
+          style={[styles.splitValue, { color: theme.colors.foreground }]}
+        />
       </View>
 
       <View style={styles.utilRow}>
@@ -360,6 +385,21 @@ const styles = StyleSheet.create({
   metricValue: {
     fontSize: 18,
     fontWeight: "800",
+    fontVariant: ["tabular-nums"],
+  },
+  splitRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  splitLabel: {
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  splitValue: {
+    fontSize: 11,
+    fontWeight: "700",
     fontVariant: ["tabular-nums"],
   },
   utilRow: {

@@ -25,6 +25,13 @@ function statusPresentation(
       color: "#111111",
     };
   }
+  if (status === "cancelled") {
+    return {
+      label: "CANCELLED",
+      backgroundColor: "#64748B",
+      color: "#FFFFFF",
+    };
+  }
   if (overdue) {
     return { label: "OVERDUE", backgroundColor: "#DC2626", color: "#FFFFFF" };
   }

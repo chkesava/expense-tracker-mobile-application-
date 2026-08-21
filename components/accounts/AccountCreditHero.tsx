@@ -14,6 +14,9 @@ import { themeUsesDarkPalette } from "@/theme/tokens";
 
 export function AccountCreditHero({
   usedThisCycle,
+  statementDue,
+  totalOutstanding,
+  unappliedCredit = 0,
   availableCredit,
   creditLimit,
   daysRemaining,
@@ -21,7 +24,13 @@ export function AccountCreditHero({
   payLabel,
   onPay,
 }: {
+  /** Unbilled spend in the open cycle — resets when a statement is cut. */
   usedThisCycle: number;
+  /** Still owed on closed statements. */
+  statementDue: number;
+  totalOutstanding: number;
+  /** Paid beyond every statement and this cycle's spend. */
+  unappliedCredit?: number;
   availableCredit: number;
   creditLimit: number;
   daysRemaining: number;
@@ -32,7 +41,7 @@ export function AccountCreditHero({
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const utilizationRate =
-    creditLimit > 0 ? Math.min(100, (usedThisCycle / creditLimit) * 100) : 0;
+    creditLimit > 0 ? Math.min(100, (totalOutstanding / creditLimit) * 100) : 0;
   const usedColor = isDark ? ACCOUNT_RED : theme.colors.destructive;
   const availableColor = isDark ? ACCOUNT_GREEN : theme.colors.success;
 
@@ -71,7 +80,7 @@ export function AccountCreditHero({
             style={[styles.kicker, { color: theme.colors.mutedForeground }]}
             numberOfLines={1}
           >
-            CURRENT USED (THIS CYCLE)
+            UNBILLED (THIS CYCLE)
           </Text>
           <View
             style={[
@@ -94,6 +103,45 @@ export function AccountCreditHero({
           ghostable
           style={[styles.heroAmount, { color: usedColor }]}
         />
+
+        <View style={styles.dueRow}>
+          <Text style={[styles.dueLabel, { color: theme.colors.mutedForeground }]}>
+            Statement due
+          </Text>
+          <Amount
+            value={statementDue}
+            currency={currency}
+            ghostable
+            style={[
+              styles.dueValue,
+              { color: statementDue > 0 ? usedColor : theme.colors.foreground },
+            ]}
+          />
+        </View>
+        <View style={styles.dueRow}>
+          <Text style={[styles.dueLabel, { color: theme.colors.mutedForeground }]}>
+            Total outstanding
+          </Text>
+          <Amount
+            value={totalOutstanding}
+            currency={currency}
+            ghostable
+            style={[styles.dueValue, { color: theme.colors.foreground }]}
+          />
+        </View>
+        {unappliedCredit > 0 ? (
+          <View style={styles.dueRow}>
+            <Text style={[styles.dueLabel, { color: theme.colors.mutedForeground }]}>
+              Credit balance
+            </Text>
+            <Amount
+              value={unappliedCredit}
+              currency={currency}
+              ghostable
+              style={[styles.dueValue, { color: availableColor }]}
+            />
+          </View>
+        ) : null}
 
         <View
           style={[
@@ -210,6 +258,21 @@ const styles = StyleSheet.create({
   resetText: {
     fontSize: 11,
     fontWeight: "700",
+  },
+  dueRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  dueLabel: {
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  dueValue: {
+    fontSize: 14,
+    fontWeight: "700",
+    fontVariant: ["tabular-nums"],
   },
   track: {
     height: 6,

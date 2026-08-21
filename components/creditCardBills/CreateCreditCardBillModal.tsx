@@ -38,7 +38,7 @@ export function CreateCreditCardBillModal({
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const { settings } = useSettings();
-  const { createBill } = useCreditCardBills();
+  const { createBill, bills } = useCreditCardBills();
   const { expenses } = useExpenses();
   const { payments } = useAccountPayments();
 
@@ -86,17 +86,9 @@ export function CreateCreditCardBillModal({
       account,
       typeName: typeNameById.get(account.typeId) || "",
       expenses,
-      payments,
       today: todayDateKey(settings.timezone),
     });
-  }, [
-    accountId,
-    creditCards,
-    expenses,
-    payments,
-    settings.timezone,
-    typeNameById,
-  ]);
+  }, [accountId, creditCards, expenses, settings.timezone, typeNameById]);
 
   useEffect(() => {
     if (!isOpen) {

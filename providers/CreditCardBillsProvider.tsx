@@ -45,10 +45,12 @@ import {
   computeRemainingAmount,
 } from "@/shared/utils/creditCardBillStatus";
 import { validateCreateCreditCardBillInput } from "@/shared/utils/creditCardBillValidate";
+import { getAccountKind } from "@/shared/utils/accountKind";
 import {
   collectAutoCreditCardBillDrafts,
   collectAutoCreditCardBillRefreshPatches,
 } from "@/shared/utils/autoCreditCardBills";
+import { collectCreditBillAllocationPatches } from "@/shared/utils/creditCardLedger";
 import { todayDateKey } from "@/shared/utils/dates";
 import {
   cancelBillReminders,
@@ -262,7 +264,8 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
       const validation = validateCreateCreditCardBillInput(
         input,
         accounts,
-        accountTypes
+        accountTypes,
+        bills
       );
       if (!validation.ok) {
         throw new Error(validation.error);
@@ -317,6 +320,7 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
       user,
       accounts,
       accountTypes,
+      bills,
       timezone,
       globalPrefs.enabled,
       settings.currency,
@@ -337,7 +341,6 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
         accounts,
         typeNameById,
         expenses,
-        payments,
         existingBills: bills,
         today: todayDateKey(timezone),
       });
@@ -363,22 +366,28 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
         accounts,
         typeNameById,
         expenses,
-        payments,
         existingBills: bills,
         today: todayDateKey(timezone),
       });
+      const patchedBills = new Map(bills.map((bill) => [bill.id, bill]));
       for (const patch of patches) {
-        const existing = bills.find((bill) => bill.id === patch.billId);
+        const existing = patchedBills.get(patch.billId);
         if (!existing) continue;
-        const derived = refreshDerivedFields(
-          {
-            ...existing,
-            statementAmount: patch.statementAmount,
-            dueDate: patch.dueDate,
-          },
-          timezone,
-          globalPrefs.enabled
-        );
+        const next = {
+          ...existing,
+          statementAmount: patch.statementAmount,
+          minimumDueAmount: patch.minimumDueAmount,
+          statementDate: patch.statementDate,
+          billingPeriodStart: patch.billingPeriodStart,
+          billingPeriodEnd: patch.billingPeriodEnd,
+          dueDate: patch.dueDate,
+        };
+        const derived = refreshDerivedFields(next, timezone, globalPrefs.enabled);
+        patchedBills.set(patch.billId, {
+          ...next,
+          status: derived.status,
+          remainingAmount: derived.remainingAmount,
+        });
         try {
           await commitWrite(
             () =>
@@ -387,6 +396,7 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
                 {
                   statementAmount: patch.statementAmount,
                   minimumDueAmount: patch.minimumDueAmount,
+                  statementDate: patch.statementDate,
                   billingPeriodStart: patch.billingPeriodStart,
                   billingPeriodEnd: patch.billingPeriodEnd,
                   dueDate: patch.dueDate,
@@ -400,6 +410,49 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
           );
         } catch (err) {
           logError("creditCardBills.autoRefresh", err);
+        }
+      }
+
+      // Attach payments recorded before statements were linked to the
+      // statement they actually settled, so stored bills match the ledger.
+      const allocations = collectCreditBillAllocationPatches({
+        accounts,
+        isCreditAccount: (account) =>
+          getAccountKind(typeNameById.get(account.typeId) || "") === "credit",
+        expenses,
+        payments,
+        bills: [...patchedBills.values()],
+        today: todayDateKey(timezone),
+      });
+      for (const allocation of allocations) {
+        const existing = patchedBills.get(allocation.billId);
+        if (!existing) continue;
+        const derived = refreshDerivedFields(
+          { ...existing, amountPaid: allocation.amountPaid },
+          timezone,
+          globalPrefs.enabled
+        );
+        try {
+          await commitWrite(
+            () =>
+              updateDoc(
+                doc(db, "users", user.uid, "creditCardBills", allocation.billId),
+                {
+                  amountPaid: allocation.amountPaid,
+                  paymentIds: allocation.paymentIds,
+                  ...(allocation.paymentDate
+                    ? { paymentDate: allocation.paymentDate }
+                    : {}),
+                  status: derived.status,
+                  remainingAmount: derived.remainingAmount,
+                  nextReminderAt: derived.nextReminderAt ?? null,
+                  updatedAt: serverTimestamp(),
+                }
+              ),
+            { label: "credit card bill" }
+          );
+        } catch (err) {
+          logError("creditCardBills.allocatePayments", err);
         }
       }
     } finally {

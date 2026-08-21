@@ -120,25 +120,25 @@ export function matchStatementLines(
   return { matched, missingInApp, unloggedCredits, extraInApp };
 }
 
-/** Inclusive date window spend on a card (expenses minus payments to the card). */
+/**
+ * Gross spend on a card in an inclusive date window. Bill payments are not
+ * subtracted — a statement lists what was charged, so this is what the parsed
+ * statement total is compared against.
+ */
 export function sumCardSpendInRange(
   accountId: string,
   expenses: Pick<Expense, "accountId" | "date" | "amount">[],
-  payments: Pick<AccountPayment, "toAccountId" | "date" | "amount">[],
   start: string,
   end: string
 ): number {
-  const billed = expenses
-    .filter(
-      (expense) =>
-        expense.accountId === accountId && expense.date >= start && expense.date <= end
-    )
-    .reduce((sum, expense) => sum + expense.amount, 0);
-  const paid = payments
-    .filter(
-      (payment) =>
-        payment.toAccountId === accountId && payment.date >= start && payment.date <= end
-    )
-    .reduce((sum, payment) => sum + payment.amount, 0);
-  return roundMoney(Math.max(0, billed - paid));
+  return roundMoney(
+    expenses
+      .filter(
+        (expense) =>
+          expense.accountId === accountId &&
+          expense.date >= start &&
+          expense.date <= end
+      )
+      .reduce((sum, expense) => sum + expense.amount, 0)
+  );
 }

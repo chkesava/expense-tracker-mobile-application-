@@ -284,14 +284,8 @@ export function ReconcileStatementModal({
 
   const appCycleTotal = useMemo(() => {
     if (!window) return usedThisCycle;
-    return sumCardSpendInRange(
-      accountId,
-      expenses,
-      payments,
-      window.start,
-      window.end
-    );
-  }, [accountId, expenses, payments, usedThisCycle, window]);
+    return sumCardSpendInRange(accountId, expenses, window.start, window.end);
+  }, [accountId, expenses, usedThisCycle, window]);
 
   const parsedStatementTotal = statementTotal ?? (lines.length > 0 ? sumStatementDebits(lines) : undefined);
   const gap =

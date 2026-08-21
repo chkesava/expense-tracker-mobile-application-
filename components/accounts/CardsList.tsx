@@ -19,6 +19,7 @@ import { useAccounts } from "@/hooks/useAccounts";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
 import { useCreditCardBills } from "@/hooks/useCreditCardBills";
 import { useExpenses } from "@/hooks/useExpenses";
+import { useSettings } from "@/providers/SettingsProvider";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import { OPEN_BILL_STATUSES } from "@/shared/types/creditCardBill";
 import type { Account } from "@/shared/types/expense";
@@ -28,6 +29,7 @@ import {
   formatAccountIdentityLine,
   smsMatchingUnconfiguredLabel,
 } from "@/shared/utils/accountIdentity";
+import { todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
@@ -38,6 +40,8 @@ export function CardsList() {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const { settings: system } = useSystemSettings();
+  const { settings } = useSettings();
+  const today = todayDateKey(settings.timezone);
 
   const { accounts } = useAccounts();
   const { accountTypes } = useAccountTypes();
@@ -80,9 +84,9 @@ export function CardsList() {
     let totalUsed = 0;
 
     creditCards.forEach((c) => {
-      const usage = computeOutstandingCredit(c, expenses, payments, bills);
+      const usage = computeOutstandingCredit(c, expenses, payments, bills, today);
       totalLimit += c.creditLimit || 0;
-      totalUsed += usage.outstanding;
+      totalUsed += usage.totalOutstanding;
     });
 
     const totalAvailable = Math.max(0, totalLimit - totalUsed);
@@ -90,28 +94,35 @@ export function CardsList() {
       totalLimit > 0 ? Math.min(100, (totalUsed / totalLimit) * 100) : 0;
 
     return { totalLimit, totalUsed, totalAvailable, utilizationRate };
-  }, [creditCards, expenses, payments, bills]);
+  }, [creditCards, expenses, payments, bills, today]);
 
   const cardRows = useMemo((): CreditCardRowModel[] => {
     return creditCards.map((card) => {
-      const usage = computeOutstandingCredit(card, expenses, payments, bills);
+      const usage = computeOutstandingCredit(
+        card,
+        expenses,
+        payments,
+        bills,
+        today
+      );
       const limit = card.creditLimit || 0;
-      const used = usage.outstanding;
       return {
         id: card.id,
         name: card.name,
         identityLine: formatAccountIdentityLine(card, "Credit Card"),
         smsWarning: smsMatchingUnconfiguredLabel(card, "Credit Card"),
         daysRemaining: usage.daysRemaining,
-        usedThisCycle: used,
+        usedThisCycle: usage.unbilledSpend,
+        statementDue: usage.statementDue,
+        outstanding: usage.totalOutstanding,
         availableCredit: usage.availableCredit,
         limit,
-        utilization: limit > 0 ? (used / limit) * 100 : 0,
+        utilization: limit > 0 ? (usage.totalOutstanding / limit) * 100 : 0,
         accent: card.color || DEFAULT_CARD_ACCENT,
         openBill: openBillByAccount.get(card.id) ?? null,
       };
     });
-  }, [creditCards, expenses, payments, bills, openBillByAccount]);
+  }, [creditCards, expenses, payments, bills, openBillByAccount, today]);
 
   const handleOpenCardDetail = useCallback(
     (cardId: string) => {

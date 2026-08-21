@@ -44,6 +44,7 @@ import { useAccountTransfers } from "@/hooks/useAccountTransfers";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
 import { useBorrowings } from "@/hooks/useBorrowings";
 import { useCategorizationRules } from "@/hooks/useCategorizationRules";
+import { useCreditCardBills } from "@/hooks/useCreditCardBills";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useIncomes } from "@/hooks/useIncomes";
 import { useReceivables } from "@/hooks/useReceivables";
@@ -122,6 +123,7 @@ export function ExpenseForm({
   const { transfers } = useAccountTransfers();
   const { borrowings, repayments: borrowingRepayments } = useBorrowings();
   const { receivables, repayments: receivableRepayments } = useReceivables();
+  const { bills } = useCreditCardBills();
 
   const [type, setType] = useState<"expense" | "income">(
     editingIncome ? "income" : initialType
@@ -291,7 +293,9 @@ export function ExpenseForm({
       borrowings,
       borrowingRepayments,
       receivables,
-      receivableRepayments
+      receivableRepayments,
+      bills,
+      todayDateKey(settings.timezone)
     );
   }, [
     selectedAccount,
@@ -307,6 +311,8 @@ export function ExpenseForm({
     borrowingRepayments,
     receivables,
     receivableRepayments,
+    bills,
+    settings.timezone,
     editingExpense?.id,
     editingIncome?.id,
   ]);
