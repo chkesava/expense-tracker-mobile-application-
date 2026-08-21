@@ -52,7 +52,7 @@ export function InvestmentsWidget({ currency }: InvestmentsWidgetProps) {
   if (netWorth.totalLiabilities > 0) {
     lines.push({
       key: "liabilities",
-      label: "Liabilities (credit cards)",
+      label: "Liabilities (credit cards & borrowings)",
       value: netWorth.totalLiabilities,
       color: theme.colors.destructive,
       prefix: "-",

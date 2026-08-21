@@ -9,12 +9,13 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { useAccountPayments } from "@/hooks/useAccountPayments";
+import { useCreditCardBills } from "@/hooks/useCreditCardBills";
 import { useExpenses } from "@/hooks/useExpenses";
 import { logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import type { Account, AccountType } from "@/shared/types/expense";
-import { computeCreditUsage } from "@/shared/utils/accountBalance";
+import { computeOutstandingCredit } from "@/shared/utils/accountBalance";
 import { getAccountKind } from "@/shared/utils/accountKind";
 import { formatDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -46,6 +47,7 @@ export function PayCreditBillModal({
   const { settings: system } = useSystemSettings();
   const { addPayment, addExternalPayment, payments } = useAccountPayments();
   const { expenses } = useExpenses();
+  const { bills } = useCreditCardBills();
 
   const typeMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -103,12 +105,12 @@ export function PayCreditBillModal({
 
   const usageInfo = useMemo(() => {
     if (!selectedCard) return null;
-    return computeCreditUsage(selectedCard, expenses, payments);
-  }, [selectedCard, expenses, payments]);
+    return computeOutstandingCredit(selectedCard, expenses, payments, bills);
+  }, [selectedCard, expenses, payments, bills]);
 
   const handleFillOutstanding = () => {
-    if (usageInfo && usageInfo.usedThisCycle > 0) {
-      setAmount(String(usageInfo.usedThisCycle));
+    if (usageInfo && usageInfo.outstanding > 0) {
+      setAmount(String(usageInfo.outstanding));
     }
   };
 
@@ -260,10 +262,10 @@ export function PayCreditBillModal({
                   color: theme.colors.mutedForeground,
                 }}
               >
-                Current Cycle Used
+                Outstanding
               </Text>
               <Amount
-                value={usageInfo.usedThisCycle}
+                value={usageInfo.outstanding}
                 currency={system.defaultCurrency}
                 style={{
                   fontSize: theme.typography.md,
@@ -273,7 +275,7 @@ export function PayCreditBillModal({
               />
             </View>
 
-            {usageInfo.usedThisCycle > 0 ? (
+            {usageInfo.outstanding > 0 ? (
               <Pressable
                 onPress={handleFillOutstanding}
                 style={[

@@ -5,6 +5,7 @@ import { useAccounts } from "@/hooks/useAccounts";
 import { useAccountTransfers } from "@/hooks/useAccountTransfers";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
 import { useBorrowings } from "@/hooks/useBorrowings";
+import { useCreditCardBills } from "@/hooks/useCreditCardBills";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useIncomes } from "@/hooks/useIncomes";
 import { useInvestments } from "@/hooks/useInvestments";
@@ -13,7 +14,7 @@ import { usePortfolio } from "@/hooks/usePortfolio";
 import { useReceivables } from "@/hooks/useReceivables";
 import {
   computeBankBalance,
-  computeCreditUsage,
+  computeOutstandingCredit,
 } from "@/shared/utils/accountBalance";
 import { getAccountKind } from "@/shared/utils/accountKind";
 import { totalPortfolioValue } from "@/shared/utils/investmentInterest";
@@ -31,7 +32,7 @@ export interface UnifiedNetWorthSummary {
   totalStocksValue: number;
   /** Total sum of all financial assets */
   totalAssets: number;
-  /** Outstanding credit card dues used in active billing cycle */
+  /** Outstanding credit card dues (unpaid statements plus new charges) */
   creditCardLiabilities: number;
   /** Any negative bank account overdrafts */
   bankOverdraftLiabilities: number;
@@ -61,6 +62,7 @@ export function useUnifiedNetWorth(): UnifiedNetWorthSummary {
     portfolio: borrowingPortfolio,
     loading: borrowingsLoading,
   } = useBorrowings();
+  const { bills, loading: billsLoading } = useCreditCardBills();
   const {
     receivables,
     repayments: receivableRepayments,
@@ -100,8 +102,8 @@ export function useUnifiedNetWorth(): UnifiedNetWorthSummary {
       const kind = getAccountKind(typeName);
 
       if (kind === "credit") {
-        const usage = computeCreditUsage(a, expenses, payments);
-        creditCardLiabilities += usage.usedThisCycle;
+        const usage = computeOutstandingCredit(a, expenses, payments, bills);
+        creditCardLiabilities += usage.outstanding;
       } else {
         const bal = computeBankBalance(
           a,
@@ -164,6 +166,7 @@ export function useUnifiedNetWorth(): UnifiedNetWorthSummary {
     expenses,
     incomes,
     payments,
+    bills,
     entries,
     transfers,
     borrowings,
@@ -190,7 +193,8 @@ export function useUnifiedNetWorth(): UnifiedNetWorthSummary {
     receivablesLoading ||
     investmentsLoading ||
     portfolioLoading ||
-    quotesLoading;
+    quotesLoading ||
+    billsLoading;
 
   return {
     ...summary,

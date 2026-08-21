@@ -41,23 +41,20 @@ function minimumDueForStatement(statementAmount: number): number {
   );
 }
 
+type ClosedCycleDraftInput = Omit<
+  BuildAutoCreditCardBillDraftInput,
+  "existingBills" | "ignoreExisting"
+>;
+
 /**
  * Latest closed cycle for a card as of `today`: previous generation date
- * through this generation date (inclusive). Spend in that window is the
- * statement amount.
+ * through this generation date (inclusive). A 21st bill day uses
+ * last month's 21st through this month's 21st. Amount may be 0.
  */
-export function buildAutoCreditCardBillDraft(
-  input: BuildAutoCreditCardBillDraftInput
+export function previewClosedCycleCreditCardBill(
+  input: ClosedCycleDraftInput
 ): CreateCreditCardBillInput | null {
-  const {
-    account,
-    typeName,
-    expenses,
-    payments,
-    existingBills,
-    today,
-    ignoreExisting,
-  } = input;
+  const { account, typeName, expenses, payments, today } = input;
   if (getAccountKind(typeName || "") !== "credit") return null;
   const billDay = normalizeBillGenerationDay(account.billGenerationDay);
   if (billDay == null) return null;
@@ -66,13 +63,6 @@ export function buildAutoCreditCardBillDraft(
   const { cycleStart, cycleEnd } = getClosedBillingCycle(billDay, asOf);
   const statementDate = toLocalDateKey(cycleEnd);
   if (today < statementDate) return null;
-
-  if (!ignoreExisting) {
-    const alreadyExists = existingBills.some(
-      (bill) => bill.accountId === account.id && bill.statementDate === statementDate
-    );
-    if (alreadyExists) return null;
-  }
 
   const billedAmount = roundMoney(
     expenses
@@ -93,7 +83,6 @@ export function buildAutoCreditCardBillDraft(
   );
 
   const statementAmount = roundMoney(Math.max(0, billedAmount - paidAmount));
-  if (statementAmount <= 0) return null;
 
   return {
     accountId: account.id,
@@ -107,6 +96,29 @@ export function buildAutoCreditCardBillDraft(
     reminderEnabled: true,
     reminderFrequency: AUTO_CREDIT_CARD_BILL_REMINDER_FREQUENCY,
   };
+}
+
+/**
+ * Auto-create draft: same closed cycle as {@link previewClosedCycleCreditCardBill},
+ * skipped when the amount is 0 or a bill already exists for this statement date.
+ */
+export function buildAutoCreditCardBillDraft(
+  input: BuildAutoCreditCardBillDraftInput
+): CreateCreditCardBillInput | null {
+  const { existingBills, ignoreExisting } = input;
+  const draft = previewClosedCycleCreditCardBill(input);
+  if (!draft || draft.statementAmount <= 0) return null;
+
+  if (!ignoreExisting) {
+    const alreadyExists = existingBills.some(
+      (bill) =>
+        bill.accountId === draft.accountId &&
+        bill.statementDate === draft.statementDate
+    );
+    if (alreadyExists) return null;
+  }
+
+  return draft;
 }
 
 export function collectAutoCreditCardBillDrafts(input: {

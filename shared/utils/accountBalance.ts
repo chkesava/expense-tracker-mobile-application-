@@ -9,6 +9,8 @@ import type {
 } from "../types/expense";
 import type { Borrowing, BorrowingRepayment } from "../types/borrowing";
 import type { Receivable, ReceivableRepayment } from "../types/receivable";
+import type { CreditCardBill } from "../types/creditCardBill";
+import { OPEN_BILL_STATUSES } from "../types/creditCardBill";
 import { postingSortMs, resolveActivityClockTime } from "./activityDisplay";
 import { effectiveBalanceAsOfDate } from "./accountBaseline";
 import { getAccountKind } from "./accountKind";
@@ -262,6 +264,99 @@ export function computeCreditUsage(
     nextResetDate: nextBillDate,
     daysRemaining: getDaysUntilReset(nextBillDate),
     paidThisCycle,
+  };
+}
+
+/** Fields needed to keep an unpaid statement in card used / liabilities. */
+export type OpenCreditBillSlice = Pick<
+  CreditCardBill,
+  | "accountId"
+  | "status"
+  | "remainingAmount"
+  | "statementDate"
+  | "billingPeriodEnd"
+  | "paymentIds"
+>;
+
+/**
+ * What is still owed on a card: unpaid statement remaining plus spend after
+ * that billed window. Do not add `usedThisCycle` on top — generation-day
+ * charges sit in both the inclusive bill and the new cycle.
+ */
+export function computeOutstandingCredit(
+  account: Account,
+  expenses: Expense[],
+  payments: AccountPayment[] = [],
+  bills: OpenCreditBillSlice[] = []
+): {
+  unpaidBills: number;
+  unbilledSpend: number;
+  outstanding: number;
+  availableCredit: number;
+  usedThisCycle: number;
+  paidThisCycle: number;
+  nextResetDate: Date;
+  daysRemaining: number;
+} {
+  const usage = computeCreditUsage(account, expenses, payments);
+  const open = bills.filter(
+    (bill) =>
+      bill.accountId === account.id && OPEN_BILL_STATUSES.includes(bill.status)
+  );
+
+  if (open.length === 0) {
+    return {
+      unpaidBills: 0,
+      unbilledSpend: usage.usedThisCycle,
+      outstanding: usage.usedThisCycle,
+      availableCredit: usage.availableCredit,
+      usedThisCycle: usage.usedThisCycle,
+      paidThisCycle: usage.paidThisCycle,
+      nextResetDate: usage.nextResetDate,
+      daysRemaining: usage.daysRemaining,
+    };
+  }
+
+  const unpaidBills = roundMoney(
+    open.reduce((sum, bill) => sum + (Number(bill.remainingAmount) || 0), 0)
+  );
+  const latestBilledEnd = open.reduce((max, bill) => {
+    const end = bill.billingPeriodEnd || bill.statementDate || "";
+    return end > max ? end : max;
+  }, "");
+  const billPaymentIds = new Set(
+    open.flatMap((bill) => bill.paymentIds || []).filter(Boolean)
+  );
+
+  const expenseTotal = roundMoney(
+    expenses
+      .filter((expense) => expense.accountId === account.id && expense.date > latestBilledEnd)
+      .reduce((sum, expense) => sum + expense.amount, 0)
+  );
+  const paymentTotal = roundMoney(
+    payments
+      .filter(
+        (payment) =>
+          payment.toAccountId === account.id &&
+          payment.date > latestBilledEnd &&
+          !(payment.id && billPaymentIds.has(payment.id))
+      )
+      .reduce((sum, payment) => sum + payment.amount, 0)
+  );
+  const unbilledSpend = roundMoney(Math.max(0, expenseTotal - paymentTotal));
+  const outstanding = roundMoney(unpaidBills + unbilledSpend);
+  const limit = account.creditLimit ?? 0;
+  const availableCredit = roundMoney(Math.max(0, limit - outstanding));
+
+  return {
+    unpaidBills,
+    unbilledSpend,
+    outstanding,
+    availableCredit,
+    usedThisCycle: usage.usedThisCycle,
+    paidThisCycle: usage.paidThisCycle,
+    nextResetDate: usage.nextResetDate,
+    daysRemaining: usage.daysRemaining,
   };
 }
 

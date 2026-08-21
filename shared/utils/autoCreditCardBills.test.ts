@@ -6,6 +6,7 @@ import {
   AUTO_CREDIT_CARD_BILL_NOTE,
   buildAutoCreditCardBillDraft,
   collectAutoCreditCardBillRefreshPatches,
+  previewClosedCycleCreditCardBill,
 } from "./autoCreditCardBills";
 
 const creditCard: Account = {
@@ -178,6 +179,31 @@ describe("buildAutoCreditCardBillDraft", () => {
     });
     expect(draft?.statementAmount).toBe(300);
     expect(draft?.billingPeriodStart).toBe("2026-07-21");
+  });
+
+  it("previews a 21st-cycle window even when statement amount is 0", () => {
+    const preview = previewClosedCycleCreditCardBill({
+      account: { ...creditCard, billGenerationDay: 21 },
+      typeName: "Credit Card",
+      today: "2026-08-21",
+      expenses: [expense("2026-07-20", 90), expense("2026-08-22", 999)],
+      payments: [],
+    });
+
+    expect(preview).toMatchObject({
+      statementDate: "2026-08-21",
+      billingPeriodStart: "2026-07-21",
+      billingPeriodEnd: "2026-08-21",
+      statementAmount: 0,
+    });
+    expect(
+      buildAutoCreditCardBillDraft({
+        ...baseInput,
+        account: { ...creditCard, billGenerationDay: 21 },
+        today: "2026-08-21",
+        expenses: [expense("2026-07-20", 90), expense("2026-08-22", 999)],
+      })
+    ).toBeNull();
   });
 });
 

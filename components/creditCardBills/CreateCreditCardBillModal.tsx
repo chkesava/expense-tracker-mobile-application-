@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import * as Haptics from "expo-haptics";
 import { CreditCard } from "lucide-react-native";
@@ -6,14 +6,17 @@ import { CreditCard } from "lucide-react-native";
 import { Modal } from "@/components/common/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { useAccountPayments } from "@/hooks/useAccountPayments";
 import { useCreditCardBills } from "@/hooks/useCreditCardBills";
+import { useExpenses } from "@/hooks/useExpenses";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
 import { useSettings } from "@/providers/SettingsProvider";
 import type { Account, AccountType } from "@/shared/types/expense";
 import { DEFAULT_BILL_REMINDER_FREQUENCY } from "@/shared/types/creditCardBill";
 import { getAccountKind } from "@/shared/utils/accountKind";
-import { formatDateKey } from "@/shared/utils/dates";
+import { previewClosedCycleCreditCardBill } from "@/shared/utils/autoCreditCardBills";
+import { todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
@@ -36,37 +39,110 @@ export function CreateCreditCardBillModal({
   const isDark = themeUsesDarkPalette(themeName);
   const { settings } = useSettings();
   const { createBill } = useCreditCardBills();
+  const { expenses } = useExpenses();
+  const { payments } = useAccountPayments();
+
+  const typeNameById = useMemo(
+    () => new Map(accountTypes.map((t) => [t.id, t.name])),
+    [accountTypes]
+  );
 
   const creditCards = useMemo(() => {
-    const typeMap = new Map(accountTypes.map((t) => [t.id, t.name]));
     return accounts.filter(
-      (a) => getAccountKind(typeMap.get(a.typeId) || "") === "credit"
+      (a) => getAccountKind(typeNameById.get(a.typeId) || "") === "credit"
     );
-  }, [accounts, accountTypes]);
+  }, [accounts, typeNameById]);
 
   const [accountId, setAccountId] = useState(defaultAccountId || "");
   const [statementAmount, setStatementAmount] = useState("");
   const [minimumDue, setMinimumDue] = useState("");
-  const [statementDate, setStatementDate] = useState(formatDateKey(new Date()));
+  const [statementDate, setStatementDate] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [periodStart, setPeriodStart] = useState("");
   const [periodEnd, setPeriodEnd] = useState("");
   const [note, setNote] = useState("");
   const [reminderEnabled, setReminderEnabled] = useState(true);
   const [saving, setSaving] = useState(false);
+  const appliedPrefillRef = useRef<{ accountId: string; filledAmount: number } | null>(
+    null
+  );
 
   useEffect(() => {
     if (!isOpen) return;
     setAccountId(defaultAccountId || creditCards[0]?.id || "");
-    setStatementAmount("");
-    setMinimumDue("");
-    setStatementDate(formatDateKey(new Date()));
-    setDueDate("");
-    setPeriodStart("");
-    setPeriodEnd("");
     setNote("");
     setReminderEnabled(settings.creditCardBillReminders.enabled);
-  }, [isOpen, defaultAccountId, creditCards, settings.creditCardBillReminders.enabled]);
+  }, [
+    isOpen,
+    defaultAccountId,
+    creditCards,
+    settings.creditCardBillReminders.enabled,
+  ]);
+
+  const cyclePreview = useMemo(() => {
+    const account = creditCards.find((card) => card.id === accountId);
+    if (!account) return null;
+    return previewClosedCycleCreditCardBill({
+      account,
+      typeName: typeNameById.get(account.typeId) || "",
+      expenses,
+      payments,
+      today: todayDateKey(settings.timezone),
+    });
+  }, [
+    accountId,
+    creditCards,
+    expenses,
+    payments,
+    settings.timezone,
+    typeNameById,
+  ]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      appliedPrefillRef.current = null;
+      return;
+    }
+
+    const applied = appliedPrefillRef.current;
+    const sameCard = applied?.accountId === accountId;
+    if (
+      sameCard &&
+      (applied.filledAmount > 0 ||
+        !cyclePreview ||
+        cyclePreview.statementAmount <= 0)
+    ) {
+      return;
+    }
+
+    if (!cyclePreview) {
+      appliedPrefillRef.current = { accountId, filledAmount: 0 };
+      setStatementAmount("");
+      setMinimumDue("");
+      setStatementDate(todayDateKey(settings.timezone));
+      setDueDate("");
+      setPeriodStart("");
+      setPeriodEnd("");
+      return;
+    }
+
+    appliedPrefillRef.current = {
+      accountId,
+      filledAmount: cyclePreview.statementAmount,
+    };
+    setStatementDate(cyclePreview.statementDate);
+    setDueDate(cyclePreview.dueDate);
+    setPeriodStart(cyclePreview.billingPeriodStart ?? "");
+    setPeriodEnd(cyclePreview.billingPeriodEnd ?? "");
+    setStatementAmount(
+      cyclePreview.statementAmount > 0 ? String(cyclePreview.statementAmount) : ""
+    );
+    setMinimumDue(
+      cyclePreview.minimumDueAmount > 0
+        ? String(cyclePreview.minimumDueAmount)
+        : ""
+    );
+  }, [isOpen, accountId, cyclePreview, settings.timezone]);
 
   const handleSubmit = async () => {
     const parsedStatement = parseFloat(statementAmount);
@@ -192,30 +268,40 @@ export function CreateCreditCardBillModal({
           label="Statement Date * (YYYY-MM-DD)"
           value={statementDate}
           onChangeText={setStatementDate}
-          placeholder="2026-08-01"
+          placeholder="2026-08-21"
           autoCapitalize="none"
         />
         <Input
           label="Due Date * (YYYY-MM-DD)"
           value={dueDate}
           onChangeText={setDueDate}
-          placeholder="2026-08-21"
+          placeholder="2026-08-26"
           autoCapitalize="none"
         />
         <Input
           label="Billing Period Start (optional)"
           value={periodStart}
           onChangeText={setPeriodStart}
-          placeholder="2026-07-01"
+          placeholder="2026-07-21"
           autoCapitalize="none"
         />
         <Input
           label="Billing Period End (optional)"
           value={periodEnd}
           onChangeText={setPeriodEnd}
-          placeholder="2026-07-31"
+          placeholder="2026-08-21"
           autoCapitalize="none"
         />
+        {cyclePreview ? (
+          <Text style={{ color: theme.colors.mutedForeground, fontSize: theme.typography.sm }}>
+            Filled from this card's bill day: expenses {cyclePreview.billingPeriodStart} →{" "}
+            {cyclePreview.billingPeriodEnd} (inclusive).
+          </Text>
+        ) : accountId ? (
+          <Text style={{ color: theme.colors.mutedForeground, fontSize: theme.typography.sm }}>
+            Set a bill generation day on this card to auto-fill last statement window (e.g. 21st → 21st).
+          </Text>
+        ) : null}
         <Input
           label="Note (optional)"
           value={note}

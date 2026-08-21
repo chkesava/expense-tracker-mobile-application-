@@ -53,7 +53,7 @@ import type { AccountActivity, Expense, Income } from "@/shared/types/expense";
 import {
   buildAccountActivities,
   computeBankBalance,
-  computeCreditUsage,
+  computeOutstandingCredit,
   getCreditBillHistory,
 } from "@/shared/utils/accountBalance";
 import {
@@ -163,8 +163,8 @@ export default function AccountDetailScreen() {
 
   const creditUsage = useMemo(() => {
     if (!account || !isCreditCard) return null;
-    return computeCreditUsage(account, expenses, payments);
-  }, [account, isCreditCard, expenses, payments]);
+    return computeOutstandingCredit(account, expenses, payments, bills);
+  }, [account, isCreditCard, expenses, payments, bills]);
 
   const creditBillHistory = useMemo(() => {
     if (!account || !isCreditCard) return [];
@@ -368,7 +368,7 @@ export default function AccountDetailScreen() {
     <View style={styles.headerBlock}>
       {isCreditCard && creditUsage ? (
         <AccountCreditHero
-          usedThisCycle={creditUsage.usedThisCycle}
+          usedThisCycle={creditUsage.outstanding}
           availableCredit={creditUsage.availableCredit}
           creditLimit={account.creditLimit || 0}
           daysRemaining={creditUsage.daysRemaining}

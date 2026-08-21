@@ -15,10 +15,12 @@ import {
   buildAccountActivities,
   computeBankBalance,
   computeCreditUsage,
+  computeOutstandingCredit,
   getCreditBillHistory,
   previewBalanceAfterBillPayment,
   previewBalanceAfterTransaction,
 } from "./accountBalance";
+import type { OpenCreditBillSlice } from "./accountBalance";
 
 describe("account activity ledger", () => {
   it("shows the final running balance on the first row when same-day activity exists", () => {
@@ -590,5 +592,113 @@ describe("floating-point safety in money math", () => {
     // Newest first: evening income leaves 1300, morning expense left 800.
     expect(activities[0]?.runningBalance).toBe(1300);
     expect(activities[1]?.runningBalance).toBe(800);
+  });
+});
+
+describe("computeOutstandingCredit", () => {
+  const card: Account = {
+    id: "slice",
+    name: "Slice",
+    typeId: "credit-type",
+    billGenerationDay: 21,
+    creditLimit: 100000,
+  };
+
+  function expenseOf(amount: number, date: string): Expense {
+    return {
+      amount,
+      category: "Shopping",
+      note: "",
+      date,
+      month: date.slice(0, 7),
+      accountId: "slice",
+      createdAt: null,
+    };
+  }
+
+  function openBill(overrides: Partial<OpenCreditBillSlice> = {}): OpenCreditBillSlice {
+    return {
+      accountId: "slice",
+      status: "UPCOMING",
+      remainingAmount: 17764,
+      statementDate: "2026-08-21",
+      billingPeriodEnd: "2026-08-21",
+      ...overrides,
+    };
+  }
+
+  it("keeps an unpaid statement in outstanding and does not double-count generation-day spend", () => {
+    const expenses: Expense[] = [
+      expenseOf(17764, "2026-08-10"),
+      expenseOf(500, "2026-08-21"),
+      expenseOf(200, "2026-08-22"),
+    ];
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 7, 22));
+    try {
+      const result = computeOutstandingCredit(card, expenses, [], [openBill()]);
+      expect(result.unpaidBills).toBe(17764);
+      expect(result.unbilledSpend).toBe(200);
+      expect(result.outstanding).toBe(17964);
+      expect(result.availableCredit).toBe(82036);
+      expect(result.outstanding).not.toBe(result.usedThisCycle + 17764);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("drops the statement from outstanding once the bill is paid", () => {
+    const expenses: Expense[] = [
+      expenseOf(17764, "2026-08-10"),
+      expenseOf(500, "2026-08-21"),
+      expenseOf(200, "2026-08-22"),
+    ];
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 7, 22));
+    try {
+      const result = computeOutstandingCredit(card, expenses, [], [
+        openBill({ status: "PAID", remainingAmount: 0 }),
+      ]);
+      expect(result.unpaidBills).toBe(0);
+      expect(result.outstanding).toBe(result.usedThisCycle);
+      expect(result.outstanding).toBe(700);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("on generation day counts only the unpaid bill, not the same-day spend twice", () => {
+    const expenses: Expense[] = [
+      expenseOf(17764, "2026-08-10"),
+      expenseOf(500, "2026-08-21"),
+    ];
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 7, 21));
+    try {
+      const result = computeOutstandingCredit(card, expenses, [], [openBill()]);
+      expect(result.unbilledSpend).toBe(0);
+      expect(result.outstanding).toBe(17764);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("uses remainingAmount for a partial payment plus later unbilled spend", () => {
+    const expenses: Expense[] = [
+      expenseOf(17764, "2026-08-10"),
+      expenseOf(200, "2026-08-22"),
+    ];
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 7, 22));
+    try {
+      const result = computeOutstandingCredit(card, expenses, [], [
+        openBill({ status: "PARTIALLY_PAID", remainingAmount: 4000 }),
+      ]);
+      expect(result.unpaidBills).toBe(4000);
+      expect(result.unbilledSpend).toBe(200);
+      expect(result.outstanding).toBe(4200);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

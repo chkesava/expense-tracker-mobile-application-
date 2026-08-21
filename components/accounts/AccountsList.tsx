@@ -31,6 +31,7 @@ import { useAccountTransfers } from "@/hooks/useAccountTransfers";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
 import { useBorrowings } from "@/hooks/useBorrowings";
 import { useReceivables } from "@/hooks/useReceivables";
+import { useCreditCardBills } from "@/hooks/useCreditCardBills";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useIncomes } from "@/hooks/useIncomes";
 import { useUnifiedNetWorth } from "@/hooks/useUnifiedNetWorth";
@@ -38,7 +39,7 @@ import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import type { Account } from "@/shared/types/expense";
 import {
   computeBankBalance,
-  computeCreditUsage,
+  computeOutstandingCredit,
 } from "@/shared/utils/accountBalance";
 import { getAccountKind } from "@/shared/utils/accountKind";
 import {
@@ -132,6 +133,7 @@ export function AccountsList() {
   const { transfers } = useAccountTransfers();
   const { borrowings, repayments: borrowingRepayments } = useBorrowings();
   const { receivables, repayments: receivableRepayments } = useReceivables();
+  const { bills } = useCreditCardBills();
 
   const netWorth = useUnifiedNetWorth();
 
@@ -169,8 +171,8 @@ export function AccountsList() {
       const typeName = typeMap.get(a.typeId) || "";
       const kind = getAccountKind(typeName);
       if (kind === "credit") {
-        const usage = computeCreditUsage(a, expenses, payments);
-        map.set(a.id, -usage.usedThisCycle);
+        const usage = computeOutstandingCredit(a, expenses, payments, bills);
+        map.set(a.id, -usage.outstanding);
       } else {
         const bal = computeBankBalance(
           a,
@@ -194,6 +196,7 @@ export function AccountsList() {
     expenses,
     incomes,
     payments,
+    bills,
     entries,
     transfers,
     borrowings,
@@ -313,7 +316,7 @@ export function AccountsList() {
 
           <View style={styles.netWorthStat}>
             <Text style={[styles.statCaption, { color: theme.colors.mutedForeground }]}>
-              Liabilities
+              Liabilities (credit cards & borrowings)
             </Text>
             <Amount
               value={netWorth.totalLiabilities}
@@ -672,7 +675,7 @@ export function AccountsList() {
           </Text>
           <View style={styles.accountList}>
             {creditAccounts.map((account) => {
-              const usage = computeCreditUsage(account, expenses, payments);
+              const usage = computeOutstandingCredit(account, expenses, payments, bills);
               const accent = accentForTypeName("credit", isDark);
               const cardColor = account.color || accent.icon;
 
@@ -724,15 +727,15 @@ export function AccountsList() {
                   <View style={styles.accountRight}>
                     <View style={{ alignItems: "flex-end" }}>
                       <Amount
-                        value={usage.usedThisCycle}
+                        value={usage.outstanding}
                         currency={system.defaultCurrency}
-                        prefix={usage.usedThisCycle > 0 ? "-" : ""}
+                        prefix={usage.outstanding > 0 ? "-" : ""}
                         ghostable
                         style={{
                           fontSize: theme.typography.md,
                           fontWeight: "700",
                           color:
-                            usage.usedThisCycle > 0
+                            usage.outstanding > 0
                               ? red
                               : theme.colors.foreground,
                         }}
