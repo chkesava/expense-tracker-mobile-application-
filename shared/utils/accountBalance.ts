@@ -13,17 +13,11 @@ import { postingSortMs, resolveActivityClockTime } from "./activityDisplay";
 import { effectiveBalanceAsOfDate } from "./accountBaseline";
 import { getAccountKind } from "./accountKind";
 import {
-  getBillingCycleDates,
-  getDaysUntilReset,
-  isDateKeyInInclusiveRange,
-  normalizeBillGenerationDay,
-} from "./billingCycle";
-import {
   buildCreditCardLedger,
   oldestOpenStatement,
   type LedgerBillSlice,
 } from "./creditCardLedger";
-import { parseLocalDate, todayDateKey, toLocalDateKey } from "./dates";
+import { parseLocalDate, todayDateKey } from "./dates";
 import { roundMoney } from "./money";
 
 export { toLocalDateKey } from "./dates";
@@ -170,60 +164,6 @@ export function computeBankBalance(
   );
 }
 
-/**
- * Spend in the still-open (unbilled) window. This is the number that resets to
- * zero the moment a statement is cut — it never includes an earlier statement,
- * and a payment toward an earlier statement never reduces it.
- */
-export function computeCreditUsage(
-  account: Account,
-  expenses: Expense[],
-  payments: AccountPayment[] = [],
-  today: string = todayDateKey()
-): {
-  usedThisCycle: number;
-  availableCredit: number;
-  nextResetDate: Date;
-  daysRemaining: number;
-  paidThisCycle: number;
-} {
-  const billDay = normalizeBillGenerationDay(account.billGenerationDay) ?? 1;
-  const asOf = parseLocalDate(today);
-  const { previousBillDate, nextBillDate } = getBillingCycleDates(billDay, asOf);
-  const cycleStart = parseLocalDate(
-    toLocalDateKey(previousBillDate)
-  );
-  cycleStart.setDate(cycleStart.getDate() + 1);
-
-  const usedThisCycle = roundMoney(
-    expenses
-      .filter(
-        (e) =>
-          e.accountId === account.id &&
-          isDateKeyInInclusiveRange(e.date, cycleStart, nextBillDate)
-      )
-      .reduce((sum, e) => sum + e.amount, 0)
-  );
-  const paidThisCycle = roundMoney(
-    payments
-      .filter(
-        (p) =>
-          p.toAccountId === account.id &&
-          isDateKeyInInclusiveRange(p.date, cycleStart, nextBillDate)
-      )
-      .reduce((sum, p) => sum + p.amount, 0)
-  );
-  const limit = account.creditLimit ?? 0;
-
-  return {
-    usedThisCycle,
-    availableCredit: roundMoney(Math.max(0, limit - usedThisCycle)),
-    nextResetDate: nextBillDate,
-    daysRemaining: getDaysUntilReset(nextBillDate, asOf),
-    paidThisCycle,
-  };
-}
-
 /** Fields needed to keep an unpaid statement in card used / liabilities. */
 export type OpenCreditBillSlice = LedgerBillSlice;
 
@@ -242,6 +182,8 @@ export function computeOutstandingCredit(
   unpaidBills: number;
   statementDue: number;
   unbilledSpend: number;
+  /** Spend a cancelled statement covered — owed, but not this-cycle spend. */
+  cancelledSpend: number;
   outstanding: number;
   totalOutstanding: number;
   availableCredit: number;
@@ -276,6 +218,7 @@ export function computeOutstandingCredit(
     unpaidBills: ledger.statementDue,
     statementDue: ledger.statementDue,
     unbilledSpend: ledger.unbilledSpend,
+    cancelledSpend: ledger.cancelledSpend,
     outstanding: ledger.totalOutstanding,
     totalOutstanding: ledger.totalOutstanding,
     availableCredit: ledger.availableCredit,

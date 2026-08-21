@@ -26,6 +26,8 @@ export type CreditCardRowModel = {
   daysRemaining: number;
   /** Unbilled spend in the open cycle. */
   usedThisCycle: number;
+  /** Owed under a cancelled statement — not this cycle, so it never eats the limit. */
+  cancelledSpend?: number;
   /** Still owed on closed statements. */
   statementDue: number;
   outstanding: number;
@@ -172,6 +174,21 @@ export const CreditCardListItem = memo(function CreditCardListItem({
           ghostable
           style={[styles.splitValue, { color: theme.colors.foreground }]}
         />
+        {row.cancelledSpend ? (
+          <>
+            <Text
+              style={[styles.splitLabel, { color: theme.colors.mutedForeground }]}
+            >
+              · Cancelled
+            </Text>
+            <Amount
+              value={row.cancelledSpend}
+              currency={currency}
+              ghostable
+              style={[styles.splitValue, { color: theme.colors.foreground }]}
+            />
+          </>
+        ) : null}
       </View>
 
       <View style={styles.utilRow}>

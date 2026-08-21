@@ -42,14 +42,27 @@ function dayAfter(date: Date): Date {
 }
 
 /**
- * Latest closed statement as of `asOf`. The statement closes ON the generation
- * day, and the window starts the day after the previous generation day, so
- * consecutive statements never share a date. A card that closes on the 20th
- * bills 21 Jul → 20 Aug.
+ * A closed statement window as of `asOf`. The statement closes ON the
+ * generation day, and the window starts the day after the previous generation
+ * day, so consecutive statements never share a date. A card that closes on the
+ * 20th bills 21 Jul → 20 Aug.
+ *
+ * `cyclesAgo` walks back through earlier closed cycles: 0 is the latest closed
+ * cycle, 1 the one before it, and so on. Uses the same month-offset derivation
+ * as the ledger's window collection, so a backfilled statement lands on exactly
+ * the window the ledger already derives for that cycle.
  */
-export function getClosedBillingCycle(billDay: number, asOf: Date = new Date()) {
+export function getClosedBillingCycle(
+  billDay: number,
+  asOf: Date = new Date(),
+  cyclesAgo = 0
+) {
   const { previousBillDate } = getBillingCycleDates(billDay, asOf);
-  const cycleEnd = previousBillDate;
+  const cycleEnd = billDateForMonth(
+    previousBillDate.getFullYear(),
+    previousBillDate.getMonth() - Math.max(0, cyclesAgo),
+    billDay
+  );
   const cycleStart = dayAfter(
     billDateForMonth(cycleEnd.getFullYear(), cycleEnd.getMonth() - 1, billDay)
   );

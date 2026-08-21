@@ -140,4 +140,60 @@ describe("billingCycle", () => {
       expect(getDaysUntilReset(next)).toBeLessThanOrEqual(0);
     });
   });
+
+  describe("getClosedBillingCycle — cyclesAgo (statement backfill)", () => {
+    const window = (billDay: number, today: string, cyclesAgo: number) => {
+      const { cycleStart, cycleEnd } = getClosedBillingCycle(
+        billDay,
+        new Date(today + "T12:00:00"),
+        cyclesAgo
+      );
+      return `${toLocalDateKey(cycleStart)}..${toLocalDateKey(cycleEnd)}`;
+    };
+
+    it("walks back one contiguous cycle at a time", () => {
+      expect(window(20, "2026-08-22", 0)).toBe("2026-07-21..2026-08-20");
+      expect(window(20, "2026-08-22", 1)).toBe("2026-06-21..2026-07-20");
+      expect(window(20, "2026-08-22", 2)).toBe("2026-05-21..2026-06-20");
+    });
+
+    it("treats cyclesAgo 0 as the latest closed cycle", () => {
+      expect(window(20, "2026-08-22", 0)).toBe(
+        window(20, "2026-08-22", -1)
+      );
+    });
+
+    it("clamps month-end days when walking back through February", () => {
+      // D=31 backfilling from Apr: Mar 1-31, Feb 1-28, Jan 1-31.
+      expect(window(31, "2026-04-15", 0)).toBe("2026-03-01..2026-03-31");
+      expect(window(31, "2026-04-15", 1)).toBe("2026-02-01..2026-02-28");
+      expect(window(31, "2026-04-15", 2)).toBe("2026-01-01..2026-01-31");
+    });
+
+    it("keeps D=30 on the 30th in 31-day months while walking back", () => {
+      expect(window(30, "2026-05-15", 0)).toBe("2026-03-31..2026-04-30");
+      expect(window(30, "2026-05-15", 1)).toBe("2026-03-01..2026-03-30");
+      expect(window(30, "2026-05-15", 2)).toBe("2026-01-31..2026-02-28");
+    });
+
+    it("never shares or skips a day across backfilled cycles", () => {
+      for (const billDay of [1, 20, 28, 29, 30, 31]) {
+        for (let i = 0; i < 11; i += 1) {
+          const newer = getClosedBillingCycle(
+            billDay,
+            new Date("2026-08-22T12:00:00"),
+            i
+          );
+          const older = getClosedBillingCycle(
+            billDay,
+            new Date("2026-08-22T12:00:00"),
+            i + 1
+          );
+          const gapMs =
+            newer.cycleStart.getTime() - older.cycleEnd.getTime();
+          expect(gapMs).toBe(24 * 3600 * 1000);
+        }
+      }
+    });
+  });
 });

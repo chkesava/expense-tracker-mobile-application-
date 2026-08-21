@@ -79,6 +79,12 @@ export type CreditCardLedger = {
   statementDue: number;
   /** Current cycle spend, net of credit left over after settling statements. */
   unbilledSpend: number;
+  /**
+   * Spend a cancelled statement covered, net of credit. Still owed, so it stays
+   * in `totalOutstanding` — but it is not this-cycle spend, so it must not eat
+   * the limit via `availableCredit`.
+   */
+  cancelledSpend: number;
   totalOutstanding: number;
   availableCredit: number;
   creditLimit: number;
@@ -112,6 +118,7 @@ function emptyLedger(account: Account, today: string): CreditCardLedger {
     statements: [],
     statementDue: 0,
     unbilledSpend: 0,
+    cancelledSpend: 0,
     totalOutstanding: 0,
     availableCredit: limit,
     creditLimit: limit,
@@ -421,10 +428,33 @@ export function buildCreditCardLedger(
     if (left > 0) freeCredit = roundMoney(freeCredit + left);
   }
 
+  // The stored `amountPaid` floor exists for out-of-band settlements only —
+  // mark-as-paid with no ledger row. Money that *is* a ledger payment has
+  // already been placed by the allocation above (or deliberately withheld
+  // because the payment predates the statement), so crediting it again here
+  // would count the same rupees twice: once on the statement, once as free
+  // credit. Only the part of `amountPaid` no linked payment explains counts,
+  // and never on a statement that has not closed yet.
+  const paymentAmountById = new Map(
+    cardPayments.map((payment) => [payment.id || "", payment.amount])
+  );
   for (const statement of working) {
     if (statement.cancelled) continue;
     if (statement.isAuto && statement.storedStatus !== "PAID") continue;
-    const floor = roundMoney(Math.min(statement.storedAmountPaid, statement.billed));
+    if (statement.statementDate > today) continue;
+    const explainedByPayments = roundMoney(
+      statement.linkedIds.reduce(
+        (sum, id) => sum + (paymentAmountById.get(id) ?? 0),
+        0
+      )
+    );
+    const outOfBand = roundMoney(
+      Math.max(0, statement.storedAmountPaid - explainedByPayments)
+    );
+    if (outOfBand <= 0) continue;
+    const floor = roundMoney(
+      Math.min(statement.billed, statement.credit + outOfBand)
+    );
     if (floor > statement.credit) statement.credit = floor;
   }
 
@@ -467,30 +497,49 @@ export function buildCreditCardLedger(
       .reduce((sum, statement) => sum + statement.remaining, 0)
   );
 
-  // Unbilled = anything no live statement covers. Spend under a cancelled
-  // statement is still owed, so it falls back here rather than vanishing.
+  // Anything no live statement covers is still owed, but it is not all the same
+  // kind of debt. Spend in the open window is this cycle's unbilled spend and
+  // is the only thing that eats the limit. Spend a cancelled statement covered
+  // sits outside the open window: still owed, so it falls back here rather than
+  // vanishing, but it is not this-cycle spend and must not reduce available
+  // credit. Leftover credit settles the older (cancelled) bucket first.
   const billedWindows = statements
     .filter((statement) => !statement.cancelled)
     .map((statement) => ({ start: statement.periodStart, end: statement.periodEnd }));
-  const openCycleSpend = roundMoney(
-    cardExpenses
-      .filter(
-        (expense) =>
-          !billedWindows.some(
-            (window) => expense.date >= window.start && expense.date <= window.end
-          )
+  const uncovered = cardExpenses.filter(
+    (expense) =>
+      !billedWindows.some(
+        (window) => expense.date >= window.start && expense.date <= window.end
       )
+  );
+  const openCycleSpend = roundMoney(
+    uncovered
+      .filter((expense) => expense.date >= openStart)
+      .reduce((sum, expense) => sum + expense.amount, 0)
+  );
+  const voidedSpend = roundMoney(
+    uncovered
+      .filter((expense) => expense.date < openStart)
       .reduce((sum, expense) => sum + expense.amount, 0)
   );
 
-  const unbilledSpend = roundMoney(Math.max(0, openCycleSpend - freeCredit));
-  const unappliedCredit = roundMoney(Math.max(0, freeCredit - openCycleSpend));
-  const totalOutstanding = roundMoney(statementDue + unbilledSpend);
+  const cancelledSpend = roundMoney(Math.max(0, voidedSpend - freeCredit));
+  const creditAfterVoided = roundMoney(Math.max(0, freeCredit - voidedSpend));
+  const unbilledSpend = roundMoney(
+    Math.max(0, openCycleSpend - creditAfterVoided)
+  );
+  const unappliedCredit = roundMoney(
+    Math.max(0, creditAfterVoided - openCycleSpend)
+  );
+  const totalOutstanding = roundMoney(
+    statementDue + unbilledSpend + cancelledSpend
+  );
 
   return {
     statements: [...statements].reverse(),
     statementDue,
     unbilledSpend,
+    cancelledSpend,
     totalOutstanding,
     availableCredit: roundMoney(Math.max(0, limit - unbilledSpend)),
     creditLimit: limit,

@@ -190,21 +190,32 @@ export function PayCreditBillModal({
       }
 
       if (paymentId) {
+        const paymentDate = date.trim();
         const targetBillId =
           (openBill && openBill.remainingAmount > 0 ? openBill.id : undefined) ||
           (usageInfo && usageInfo.oldestOpenRemaining > 0
             ? usageInfo.oldestOpenBillId
             : undefined);
-        if (targetBillId) {
+        // A payment can only settle a statement that had already closed on the
+        // payment date, and only up to what that statement still owes. Stamping
+        // a not-yet-closed statement (or the overpaid remainder) would show it
+        // as PARTIALLY PAID for money the ledger holds as cycle credit.
+        const targetBill = targetBillId
+          ? bills.find((bill) => bill.id === targetBillId)
+          : undefined;
+        const settleable = targetBill
+          ? Math.min(parsedAmount, Math.max(0, targetBill.remainingAmount))
+          : 0;
+        if (targetBill && targetBill.statementDate <= paymentDate && settleable > 0) {
           await applyPaymentToBill(
-            targetBillId,
-            parsedAmount,
-            date.trim(),
+            targetBill.id,
+            settleable,
+            paymentDate,
             paymentId
           );
         }
         if (onPaid) {
-          await onPaid(parsedAmount, date.trim(), paymentId);
+          await onPaid(parsedAmount, paymentDate, paymentId);
         }
         toast.success("Bill payment recorded");
         setAmount("");

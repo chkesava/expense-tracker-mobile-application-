@@ -16,6 +16,7 @@ import type { Account, AccountType } from "@/shared/types/expense";
 import { DEFAULT_BILL_REMINDER_FREQUENCY } from "@/shared/types/creditCardBill";
 import { getAccountKind } from "@/shared/utils/accountKind";
 import { previewClosedCycleCreditCardBill } from "@/shared/utils/autoCreditCardBills";
+import { validateCreditCardBillInput } from "@/shared/utils/creditCardBillInput";
 import { todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
@@ -137,14 +138,32 @@ export function CreateCreditCardBillModal({
   }, [isOpen, accountId, cyclePreview, settings.timezone]);
 
   const handleSubmit = async () => {
-    const parsedStatement = parseFloat(statementAmount);
-    const parsedMin = parseFloat(minimumDue || "0");
+    // Hand-entered statements feed the same ledger as generated ones, so a
+    // future date, a window past its own close date, or a NaN amount would
+    // corrupt the card's position rather than just looking odd.
+    const validation = validateCreditCardBillInput(
+      {
+        accountId,
+        statementAmount,
+        minimumDue,
+        statementDate,
+        dueDate,
+        periodStart,
+        periodEnd,
+      },
+      todayDateKey(settings.timezone)
+    );
+    if (!validation.ok) {
+      toast.error(validation.message);
+      return;
+    }
+
     setSaving(true);
     try {
       const id = await createBill({
         accountId,
-        statementAmount: parsedStatement,
-        minimumDueAmount: Number.isFinite(parsedMin) ? parsedMin : 0,
+        statementAmount: validation.statementAmount,
+        minimumDueAmount: validation.minimumDueAmount,
         statementDate: statementDate.trim(),
         dueDate: dueDate.trim(),
         billingPeriodStart: periodStart.trim() || undefined,

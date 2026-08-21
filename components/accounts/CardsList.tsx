@@ -113,6 +113,7 @@ export function CardsList() {
         smsWarning: smsMatchingUnconfiguredLabel(card, "Credit Card"),
         daysRemaining: usage.daysRemaining,
         usedThisCycle: usage.unbilledSpend,
+        cancelledSpend: usage.cancelledSpend,
         statementDue: usage.statementDue,
         outstanding: usage.totalOutstanding,
         availableCredit: usage.availableCredit,

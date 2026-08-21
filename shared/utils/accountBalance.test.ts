@@ -14,7 +14,6 @@ import type {
 import {
   buildAccountActivities,
   computeBankBalance,
-  computeCreditUsage,
   computeOutstandingCredit,
   getCreditBillHistory,
   previewBalanceAfterBillPayment,
@@ -551,7 +550,7 @@ describe("floating-point safety in money math", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(2026, 0, 20));
     try {
-      const usage = computeCreditUsage(card, expenses, []);
+      const usage = computeOutstandingCredit(card, expenses, []);
       expect(usage.usedThisCycle).toBe(100);
       expect(usage.availableCredit).toBe(900);
     } finally {
