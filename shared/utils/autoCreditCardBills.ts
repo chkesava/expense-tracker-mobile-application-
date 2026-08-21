@@ -20,6 +20,15 @@ import { parseLocalDate, shiftDateKey, toLocalDateKey } from "./dates";
 const AUTO_BILL_MIN_DUE_RATE = 0.05;
 export const AUTO_CREDIT_CARD_BILL_NOTE = "Auto-created from cycle spend";
 
+/**
+ * How many closed cycles get a statement document. Statements only generate
+ * while the app is open, so a user who skips a few months would otherwise never
+ * get documents (or reminders) for the cycles they missed — the ledger already
+ * derives and bills those windows either way. Matches the ledger's derived-cycle
+ * depth so documents cover exactly the windows it already shows.
+ */
+export const AUTO_CREDIT_CARD_BILL_BACKFILL_CYCLES = 12;
+
 export type BuildAutoCreditCardBillDraftInput = {
   account: Account;
   typeName?: string;
@@ -28,6 +37,8 @@ export type BuildAutoCreditCardBillDraftInput = {
   today: string;
   /** When true, still return a draft if a bill already exists for this cycle. */
   ignoreExisting?: boolean;
+  /** 0 = latest closed cycle, 1 = the one before it, and so on. */
+  cyclesAgo?: number;
 };
 
 function minimumDueForStatement(statementAmount: number): number {
@@ -62,7 +73,11 @@ export function previewClosedCycleCreditCardBill(
   if (billDay == null) return null;
 
   const asOf = parseLocalDate(today);
-  const { cycleStart, cycleEnd } = getClosedBillingCycle(billDay, asOf);
+  const { cycleStart, cycleEnd } = getClosedBillingCycle(
+    billDay,
+    asOf,
+    input.cyclesAgo ?? 0
+  );
   const statementDate = toLocalDateKey(cycleEnd);
   if (today < statementDate) return null;
 
@@ -112,31 +127,45 @@ export function buildAutoCreditCardBillDraft(
   return draft;
 }
 
+/**
+ * Statement drafts for every closed cycle that has spend but no document yet,
+ * oldest first. Cycles with no spend produce nothing, so a sparse history does
+ * not generate empty statements. Backfilled statements more than ~30 days past
+ * due schedule no reminders (the reminder horizon filters them), so this cannot
+ * produce a burst of notifications.
+ */
 export function collectAutoCreditCardBillDrafts(input: {
   accounts: Account[];
   typeNameById: Map<string, string>;
   expenses: Expense[];
   existingBills: Pick<CreditCardBill, "accountId" | "statementDate">[];
   today: string;
+  /** How many closed cycles back to cover. Defaults to the backfill depth. */
+  cycles?: number;
 }): CreateCreditCardBillInput[] {
   const drafts: CreateCreditCardBillInput[] = [];
   const seen = new Set(
     input.existingBills.map((bill) => `${bill.accountId}:${bill.statementDate}`)
   );
+  const depth = Math.max(1, input.cycles ?? AUTO_CREDIT_CARD_BILL_BACKFILL_CYCLES);
 
   for (const account of input.accounts) {
-    const draft = buildAutoCreditCardBillDraft({
-      account,
-      typeName: input.typeNameById.get(account.typeId) || "",
-      expenses: input.expenses,
-      existingBills: input.existingBills,
-      today: input.today,
-    });
-    if (!draft) continue;
-    const key = `${draft.accountId}:${draft.statementDate}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    drafts.push(draft);
+    const typeName = input.typeNameById.get(account.typeId) || "";
+    for (let cyclesAgo = depth - 1; cyclesAgo >= 0; cyclesAgo -= 1) {
+      const draft = buildAutoCreditCardBillDraft({
+        account,
+        typeName,
+        expenses: input.expenses,
+        existingBills: input.existingBills,
+        today: input.today,
+        cyclesAgo,
+      });
+      if (!draft) continue;
+      const key = `${draft.accountId}:${draft.statementDate}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      drafts.push(draft);
+    }
   }
 
   return drafts;
@@ -184,20 +213,14 @@ export function collectAutoCreditCardBillRefreshPatches(input: {
   expenses: Expense[];
   existingBills: RefreshableBill[];
   today: string;
+  /** How many closed cycles back to repair. Defaults to the backfill depth. */
+  cycles?: number;
 }): AutoBillRefreshPatch[] {
   const patches: AutoBillRefreshPatch[] = [];
+  const depth = Math.max(1, input.cycles ?? AUTO_CREDIT_CARD_BILL_BACKFILL_CYCLES);
 
   for (const account of input.accounts) {
-    const draft = buildAutoCreditCardBillDraft({
-      account,
-      typeName: input.typeNameById.get(account.typeId) || "",
-      expenses: input.expenses,
-      existingBills: input.existingBills,
-      today: input.today,
-      ignoreExisting: true,
-    });
-    if (!draft?.billingPeriodStart || !draft.billingPeriodEnd) continue;
-
+    const typeName = input.typeNameById.get(account.typeId) || "";
     const candidates = input.existingBills.filter(
       (bill) =>
         bill.accountId === account.id &&
@@ -206,33 +229,53 @@ export function collectAutoCreditCardBillRefreshPatches(input: {
         bill.status !== "CANCELLED" &&
         isAutoCreated(bill)
     );
+    // One statement can only be repaired by one cycle, or a near-miss match
+    // would let two adjacent drafts fight over the same document.
+    const claimed = new Set<string>();
 
-    const existing =
-      candidates.find((bill) => bill.statementDate === draft.statementDate) ||
-      candidates.find(
-        (bill) =>
-          Math.abs(
-            daysBetweenDateKeys(bill.statementDate, draft.statementDate)
-          ) <= REDATE_TOLERANCE_DAYS
+    for (let cyclesAgo = depth - 1; cyclesAgo >= 0; cyclesAgo -= 1) {
+      const draft = buildAutoCreditCardBillDraft({
+        account,
+        typeName,
+        expenses: input.expenses,
+        existingBills: input.existingBills,
+        today: input.today,
+        ignoreExisting: true,
+        cyclesAgo,
+      });
+      if (!draft?.billingPeriodStart || !draft.billingPeriodEnd) continue;
+
+      const unclaimed = candidates.filter(
+        (bill) => bill.id && !claimed.has(bill.id)
       );
-    if (!existing?.id) continue;
+      const existing =
+        unclaimed.find((bill) => bill.statementDate === draft.statementDate) ||
+        unclaimed.find(
+          (bill) =>
+            Math.abs(
+              daysBetweenDateKeys(bill.statementDate, draft.statementDate)
+            ) <= REDATE_TOLERANCE_DAYS
+        );
+      if (!existing?.id) continue;
+      claimed.add(existing.id);
 
-    const unchanged =
-      existing.statementAmount === draft.statementAmount &&
-      existing.billingPeriodStart === draft.billingPeriodStart &&
-      existing.billingPeriodEnd === draft.billingPeriodEnd &&
-      existing.statementDate === draft.statementDate;
-    if (unchanged) continue;
+      const unchanged =
+        existing.statementAmount === draft.statementAmount &&
+        existing.billingPeriodStart === draft.billingPeriodStart &&
+        existing.billingPeriodEnd === draft.billingPeriodEnd &&
+        existing.statementDate === draft.statementDate;
+      if (unchanged) continue;
 
-    patches.push({
-      billId: existing.id,
-      statementAmount: draft.statementAmount,
-      minimumDueAmount: draft.minimumDueAmount,
-      statementDate: draft.statementDate,
-      billingPeriodStart: draft.billingPeriodStart,
-      billingPeriodEnd: draft.billingPeriodEnd,
-      dueDate: draft.dueDate,
-    });
+      patches.push({
+        billId: existing.id,
+        statementAmount: draft.statementAmount,
+        minimumDueAmount: draft.minimumDueAmount,
+        statementDate: draft.statementDate,
+        billingPeriodStart: draft.billingPeriodStart,
+        billingPeriodEnd: draft.billingPeriodEnd,
+        dueDate: draft.dueDate,
+      });
+    }
   }
 
   return patches;

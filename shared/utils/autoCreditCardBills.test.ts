@@ -5,6 +5,7 @@ import { AUTO_CREDIT_CARD_BILL_REMINDER_FREQUENCY } from "../types/creditCardBil
 import {
   AUTO_CREDIT_CARD_BILL_NOTE,
   buildAutoCreditCardBillDraft,
+  collectAutoCreditCardBillDrafts,
   collectAutoCreditCardBillRefreshPatches,
   previewClosedCycleCreditCardBill,
 } from "./autoCreditCardBills";
@@ -364,5 +365,171 @@ describe("collectAutoCreditCardBillRefreshPatches", () => {
     });
 
     expect(patches).toEqual([]);
+  });
+});
+
+/**
+ * Statements only generate while the app is open, so a user who skips a couple
+ * of months would otherwise never get documents (or reminders) for the cycles
+ * they missed. The ledger already derives and bills those windows either way —
+ * backfill just gives them documents.
+ */
+describe("collectAutoCreditCardBillDrafts — backfill", () => {
+  const typeNameById = new Map([["t-credit", "Credit Card"]]);
+
+  it("drafts every closed cycle with spend, oldest first", () => {
+    const drafts = collectAutoCreditCardBillDrafts({
+      accounts: [creditCard],
+      typeNameById,
+      expenses: [
+        expense("2026-06-01", 1000),
+        expense("2026-07-01", 2000),
+        expense("2026-08-01", 3000),
+      ],
+      existingBills: [],
+      today: "2026-08-20",
+    });
+
+    expect(drafts.map((d) => [d.statementDate, d.statementAmount])).toEqual([
+      ["2026-06-15", 1000],
+      ["2026-07-15", 2000],
+      ["2026-08-15", 3000],
+    ]);
+  });
+
+  it("skips cycles with no spend instead of creating empty statements", () => {
+    const drafts = collectAutoCreditCardBillDrafts({
+      accounts: [creditCard],
+      typeNameById,
+      expenses: [expense("2026-06-01", 1000), expense("2026-08-01", 3000)],
+      existingBills: [],
+      today: "2026-08-20",
+    });
+
+    expect(drafts.map((d) => d.statementDate)).toEqual([
+      "2026-06-15",
+      "2026-08-15",
+    ]);
+  });
+
+  it("does not redraft a cycle that already has a statement", () => {
+    const drafts = collectAutoCreditCardBillDrafts({
+      accounts: [creditCard],
+      typeNameById,
+      expenses: [expense("2026-07-01", 2000), expense("2026-08-01", 3000)],
+      existingBills: [
+        { accountId: creditCard.id, statementDate: "2026-07-15" },
+      ],
+      today: "2026-08-20",
+    });
+
+    expect(drafts.map((d) => d.statementDate)).toEqual(["2026-08-15"]);
+  });
+
+  it("never drafts a cycle that has not closed yet", () => {
+    const drafts = collectAutoCreditCardBillDrafts({
+      accounts: [creditCard],
+      typeNameById,
+      expenses: [expense("2026-08-16", 500)],
+      existingBills: [],
+      today: "2026-08-20",
+    });
+
+    expect(drafts).toEqual([]);
+  });
+
+  it("stays bounded by the requested cycle depth", () => {
+    const drafts = collectAutoCreditCardBillDrafts({
+      accounts: [creditCard],
+      typeNameById,
+      expenses: [
+        expense("2026-06-01", 1000),
+        expense("2026-07-01", 2000),
+        expense("2026-08-01", 3000),
+      ],
+      existingBills: [],
+      today: "2026-08-20",
+      cycles: 2,
+    });
+
+    expect(drafts.map((d) => d.statementDate)).toEqual([
+      "2026-07-15",
+      "2026-08-15",
+    ]);
+  });
+
+  it("skips a card with no generation day", () => {
+    const drafts = collectAutoCreditCardBillDrafts({
+      accounts: [{ ...creditCard, billGenerationDay: undefined }],
+      typeNameById,
+      expenses: [expense("2026-07-01", 2000)],
+      existingBills: [],
+      today: "2026-08-20",
+    });
+
+    expect(drafts).toEqual([]);
+  });
+
+  it("repairs a backfilled older statement when spend is backdated into it", () => {
+    const patches = collectAutoCreditCardBillRefreshPatches({
+      accounts: [creditCard],
+      typeNameById,
+      expenses: [expense("2026-06-01", 1000), expense("2026-06-02", 750)],
+      existingBills: [
+        {
+          id: "bill-june",
+          accountId: creditCard.id,
+          statementDate: "2026-06-15",
+          statementAmount: 1000,
+          billingPeriodStart: "2026-05-16",
+          billingPeriodEnd: "2026-06-15",
+          note: AUTO_CREDIT_CARD_BILL_NOTE,
+          amountPaid: 0,
+          status: "OVERDUE",
+        },
+      ],
+      today: "2026-08-20",
+    });
+
+    expect(patches).toEqual([
+      {
+        billId: "bill-june",
+        statementAmount: 1750,
+        minimumDueAmount: 87.5,
+        statementDate: "2026-06-15",
+        billingPeriodStart: "2026-05-16",
+        billingPeriodEnd: "2026-06-15",
+        dueDate: "2026-06-20",
+      },
+    ]);
+  });
+
+  it("does not let two cycles fight over the same statement document", () => {
+    const patches = collectAutoCreditCardBillRefreshPatches({
+      accounts: [creditCard],
+      typeNameById,
+      expenses: [expense("2026-07-01", 2000), expense("2026-08-01", 3000)],
+      existingBills: [
+        {
+          id: "bill-only",
+          accountId: creditCard.id,
+          statementDate: "2026-07-15",
+          statementAmount: 1,
+          billingPeriodStart: "2026-06-16",
+          billingPeriodEnd: "2026-07-15",
+          note: AUTO_CREDIT_CARD_BILL_NOTE,
+          amountPaid: 0,
+          status: "OVERDUE",
+        },
+      ],
+      today: "2026-08-20",
+    });
+
+    expect(patches).toHaveLength(1);
+    expect(patches[0]).toMatchObject({
+      billId: "bill-only",
+      statementDate: "2026-07-15",
+      statementAmount: 2000,
+    });
   });
 });
