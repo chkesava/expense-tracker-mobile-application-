@@ -106,8 +106,13 @@ export function PayCreditBillModal({
     if (!isOpen) return;
     if (defaultAmount != null && defaultAmount > 0) {
       setAmount(String(defaultAmount));
+      return;
     }
-  }, [isOpen, defaultAmount]);
+    const ledgerRemaining = usageInfo?.oldestOpenRemaining ?? 0;
+    if (ledgerRemaining > 0) {
+      setAmount((prev) => (prev.trim() ? prev : String(ledgerRemaining)));
+    }
+  }, [isOpen, defaultAmount, usageInfo]);
 
   // Selected card usage
   const selectedCard = useMemo(() => {
@@ -137,12 +142,12 @@ export function PayCreditBillModal({
   }, [applyToBillId, bills, toCardId]);
 
   const handleFillOutstanding = () => {
-    if (openBill && openBill.remainingAmount > 0) {
-      setAmount(String(openBill.remainingAmount));
-      return;
-    }
     if (usageInfo && usageInfo.outstanding > 0) {
       setAmount(String(usageInfo.outstanding));
+      return;
+    }
+    if (openBill && openBill.remainingAmount > 0) {
+      setAmount(String(openBill.remainingAmount));
     }
   };
 
@@ -186,9 +191,14 @@ export function PayCreditBillModal({
       }
 
       if (paymentId) {
-        if (openBill && openBill.remainingAmount > 0) {
+        const targetBillId =
+          (openBill && openBill.remainingAmount > 0 ? openBill.id : undefined) ||
+          (usageInfo && usageInfo.oldestOpenRemaining > 0
+            ? usageInfo.oldestOpenBillId
+            : undefined);
+        if (targetBillId) {
           await applyPaymentToBill(
-            openBill.id,
+            targetBillId,
             parsedAmount,
             date.trim(),
             paymentId

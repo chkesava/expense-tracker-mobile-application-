@@ -12,6 +12,7 @@ import {
   isDateKeyInInclusiveRange,
   normalizeBillGenerationDay,
 } from "./billingCycle";
+import { daysBetweenDateKeys } from "./creditCardBillStatus";
 import {
   billDateForMonth,
   parseLocalDate,
@@ -19,6 +20,9 @@ import {
   todayDateKey,
   toLocalDateKey,
 } from "./dates";
+
+/** Same window as auto-bill re-date: a close date this close is the same cycle. */
+const STATEMENT_SNAP_DAYS = 3;
 
 /** Statement fields the ledger reads. Accepts partial bills from any caller. */
 export type LedgerBillSlice = Pick<
@@ -175,9 +179,17 @@ function collectStatementWindows(input: {
   }
 
   // A stored statement whose close date drifted from the card's generation day
-  // (bill day edited, manual bill) still has to appear exactly once.
+  // (bill day edited) is the same cycle — don't add a second window or spend
+  // is billed twice until the repair pass re-dates it. A genuinely distinct
+  // manual bill still has to appear exactly once.
   for (const bill of input.bills) {
     if (windows.has(bill.statementDate)) continue;
+    const snapsToDerived = [...windows.keys()].some(
+      (key) =>
+        Math.abs(daysBetweenDateKeys(bill.statementDate, key)) <=
+        STATEMENT_SNAP_DAYS
+    );
+    if (snapsToDerived) continue;
     const periodEnd = bill.billingPeriodEnd || bill.statementDate;
     const periodStart =
       bill.billingPeriodStart ||
@@ -194,6 +206,38 @@ function collectStatementWindows(input: {
   return [...windows.values()].sort((a, b) =>
     a.statementDate.localeCompare(b.statementDate)
   );
+}
+
+/**
+ * Prefer an exact statementDate match; otherwise the closest stored bill
+ * within {@link STATEMENT_SNAP_DAYS} that hasn't already been claimed.
+ */
+function claimBillForWindow(
+  statementDate: string,
+  bills: LedgerBillSlice[],
+  claimed: Set<string>
+): LedgerBillSlice | undefined {
+  const exact = bills.find(
+    (bill) => bill.statementDate === statementDate && !claimed.has(bill.id)
+  );
+  if (exact) {
+    claimed.add(exact.id);
+    return exact;
+  }
+
+  let nearest: LedgerBillSlice | undefined;
+  let nearestDist = STATEMENT_SNAP_DAYS + 1;
+  for (const bill of bills) {
+    if (claimed.has(bill.id) || bill.status === "CANCELLED") continue;
+    const dist = Math.abs(daysBetweenDateKeys(bill.statementDate, statementDate));
+    if (dist === 0 || dist > STATEMENT_SNAP_DAYS) continue;
+    if (dist < nearestDist) {
+      nearest = bill;
+      nearestDist = dist;
+    }
+  }
+  if (nearest) claimed.add(nearest.id);
+  return nearest;
 }
 
 /**
@@ -264,19 +308,31 @@ export function buildCreditCardLedger(
       billByStatementDate.set(bill.statementDate, bill);
     }
   }
+  const billsForClaim = [...billByStatementDate.values()];
+  const claimedBillIds = new Set<string>();
 
   const linkedPaymentIds = new Set(
     cardBills.flatMap((bill) => bill.paymentIds || []).filter(Boolean)
   );
-  const paymentById = new Map(
-    cardPayments.filter((payment) => payment.id).map((p) => [p.id as string, p])
-  );
 
-  type WorkingStatement = LedgerStatement & { credit: number };
+  type WorkingStatement = LedgerStatement & {
+    credit: number;
+    storedStatus?: LedgerBillSlice["status"];
+    storedAmountPaid: number;
+  };
   const working: WorkingStatement[] = windows.map((window) => {
-    const bill = billByStatementDate.get(window.statementDate);
-    const periodStart = bill?.billingPeriodStart || window.periodStart;
-    const periodEnd = bill?.billingPeriodEnd || window.periodEnd;
+    const bill = claimBillForWindow(
+      window.statementDate,
+      billsForClaim,
+      claimedBillIds
+    );
+    // A snapped (re-dated) bill keeps its stored amount until repair rewrites
+    // it, but the window itself is the card's current generation-day cycle.
+    const snapped = Boolean(bill && bill.statementDate !== window.statementDate);
+    const periodStart =
+      snapped ? window.periodStart : bill?.billingPeriodStart || window.periodStart;
+    const periodEnd =
+      snapped ? window.periodEnd : bill?.billingPeriodEnd || window.periodEnd;
     const windowSpend = roundMoney(
       cardExpenses
         .filter((expense) =>
@@ -291,20 +347,6 @@ export function buildCreditCardLedger(
     // A stored amount wins so manual edits and statement reconciliation stick.
     const billed = bill ? Math.max(0, Number(bill.statementAmount) || 0) : windowSpend;
     const cancelled = bill?.status === "CANCELLED";
-
-    const linkedPaid = bill
-      ? roundMoney(
-          (bill.paymentIds || [])
-            .map((id) => paymentById.get(id))
-            .filter(Boolean)
-            .reduce((sum, payment) => sum + (payment as AccountPayment).amount, 0)
-        )
-      : 0;
-    // "Mark as paid" can settle a statement without a ledger payment; keep that
-    // as a floor so it is not double counted against linked payments.
-    const outOfBandPaid = bill
-      ? roundMoney(Math.max(0, (Number(bill.amountPaid) || 0) - linkedPaid))
-      : 0;
 
     return {
       billId: bill?.id,
@@ -323,16 +365,34 @@ export function buildCreditCardLedger(
       status: cancelled ? "cancelled" : "unpaid",
       source: bill ? "bill" : "derived",
       paymentIds: cancelled ? [] : [...(bill?.paymentIds || [])].filter(Boolean),
-      credit: cancelled ? 0 : roundMoney(linkedPaid + outOfBandPaid),
+      credit: 0,
+      storedStatus: bill?.status,
+      storedAmountPaid: bill ? Math.max(0, Number(bill.amountPaid) || 0) : 0,
     };
   });
 
-  // Allocate unlinked payments oldest statement first, the way an issuer posts
-  // them: a payment can only settle a statement that had already closed.
+  // Allocate payments oldest statement first. A payment listed on a bill is
+  // applied there first so "pay this statement" still wins; leftover then
+  // fills older/newer statements the way an issuer posts it. After that, any
+  // remaining free credit follows into statements that closed later — so a
+  // mid-cycle overpayment reduces unbilled until generation, then remaining.
+  // `amountPaid` is a floor for mark-as-paid settlements with no ledger row.
   let freeCredit = 0;
   for (const payment of cardPayments) {
-    if (payment.id && linkedPaymentIds.has(payment.id)) continue;
     let left = payment.amount;
+    if (payment.id && linkedPaymentIds.has(payment.id)) {
+      for (const statement of working) {
+        if (left <= 0) break;
+        if (statement.cancelled) continue;
+        if (!statement.paymentIds.includes(payment.id)) continue;
+        const room = roundMoney(statement.billed - statement.credit);
+        if (room <= 0) continue;
+        const applied = Math.min(room, left);
+        statement.credit = roundMoney(statement.credit + applied);
+        statement.lastPaymentDate = payment.date;
+        left = roundMoney(left - applied);
+      }
+    }
     for (const statement of working) {
       if (left <= 0) break;
       if (statement.cancelled) continue;
@@ -341,19 +401,37 @@ export function buildCreditCardLedger(
       if (room <= 0) continue;
       const applied = Math.min(room, left);
       statement.credit = roundMoney(statement.credit + applied);
-      if (payment.id) statement.paymentIds.push(payment.id);
+      if (payment.id && !statement.paymentIds.includes(payment.id)) {
+        statement.paymentIds.push(payment.id);
+      }
       statement.lastPaymentDate = payment.date;
       left = roundMoney(left - applied);
     }
     if (left > 0) freeCredit = roundMoney(freeCredit + left);
   }
 
+  if (freeCredit > 0) {
+    for (const statement of working) {
+      if (freeCredit <= 0) break;
+      if (statement.cancelled) continue;
+      const room = roundMoney(statement.billed - statement.credit);
+      if (room <= 0) continue;
+      const applied = Math.min(room, freeCredit);
+      statement.credit = roundMoney(statement.credit + applied);
+      freeCredit = roundMoney(freeCredit - applied);
+    }
+  }
+
+  for (const statement of working) {
+    if (statement.cancelled) continue;
+    const floor = roundMoney(Math.min(statement.storedAmountPaid, statement.billed));
+    if (floor > statement.credit) statement.credit = floor;
+  }
+
   const statements: LedgerStatement[] = working.map((statement) => {
     const paid = roundMoney(Math.min(statement.billed, statement.credit));
     const remaining = roundMoney(Math.max(0, statement.billed - paid));
-    const storedStatus = statement.billId
-      ? billByStatementDate.get(statement.statementDate)?.status
-      : undefined;
+    const storedStatus = statement.storedStatus;
     const status: LedgerStatement["status"] = statement.cancelled
       ? "cancelled"
       : remaining <= 0

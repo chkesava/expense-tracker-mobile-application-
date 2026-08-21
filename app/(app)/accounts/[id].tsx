@@ -530,8 +530,14 @@ export default function AccountDetailScreen() {
         defaultCreditCardId={account.id}
         accounts={accounts}
         accountTypes={accountTypes}
-        defaultAmount={openStatementBill?.remainingAmount}
-        applyToBillId={openStatementBill?.id}
+        defaultAmount={
+          creditUsage && creditUsage.oldestOpenRemaining > 0
+            ? creditUsage.oldestOpenRemaining
+            : openStatementBill?.remainingAmount
+        }
+        applyToBillId={
+          creditUsage?.oldestOpenBillId || openStatementBill?.id
+        }
       />
       <CreateCreditCardBillModal
         isOpen={isCreateBillOpen}

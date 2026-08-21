@@ -20,6 +20,7 @@ import {
 } from "./billingCycle";
 import {
   buildCreditCardLedger,
+  oldestOpenStatement,
   type LedgerBillSlice,
 } from "./creditCardLedger";
 import { parseLocalDate, todayDateKey, toLocalDateKey } from "./dates";
@@ -247,6 +248,8 @@ export function computeOutstandingCredit(
   usedThisCycle: number;
   paidThisCycle: number;
   unappliedCredit: number;
+  oldestOpenRemaining: number;
+  oldestOpenBillId?: string;
   nextResetDate: Date;
   daysRemaining: number;
 } {
@@ -257,6 +260,7 @@ export function computeOutstandingCredit(
     bills,
     today,
   });
+  const oldest = oldestOpenStatement(ledger);
   const paidThisCycle = roundMoney(
     payments
       .filter(
@@ -278,6 +282,8 @@ export function computeOutstandingCredit(
     usedThisCycle: ledger.unbilledSpend,
     paidThisCycle,
     unappliedCredit: ledger.unappliedCredit,
+    oldestOpenRemaining: oldest?.remaining ?? 0,
+    oldestOpenBillId: oldest?.billId,
     nextResetDate: parseLocalDate(ledger.openCycle.end),
     daysRemaining: ledger.openCycle.daysRemaining,
   };

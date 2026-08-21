@@ -8,7 +8,7 @@ import {
   CREDIT_CARD_PAYMENT_WINDOW_DAYS,
 } from "../types/creditCardBill";
 import { getAccountKind } from "./accountKind";
-import { roundMoney } from "./accountBalance";
+import { roundMoney } from "./money";
 import {
   getClosedBillingCycle,
   isDateKeyInInclusiveRange,

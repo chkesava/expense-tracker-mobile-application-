@@ -91,10 +91,11 @@ describe("buildCreditCardLedger — reported Slice scenario", () => {
       periodStart: "2026-07-21",
       periodEnd: "2026-08-20",
       billed: 27875,
-      // The payment predates this statement, so it cannot settle it.
-      paid: 0,
-      remaining: 27875,
-      status: "unpaid",
+      // Leftover after settling July (19,000 − 10,301) reduces remaining,
+      // never the gross billed amount.
+      paid: 8699,
+      remaining: 19176,
+      status: "partiallyPaid",
     });
   });
 
@@ -116,8 +117,9 @@ describe("buildCreditCardLedger — reported Slice scenario", () => {
       remaining: 0,
       status: "paid",
     });
-    // 19,000 − 10,301 spills forward as credit, not into the new statement.
-    expect(ledger.statementDue).toBe(27875);
+    // 19,000 − 10,301 follows into the new statement remaining, not billed.
+    expect(ledger.statementDue).toBe(19176);
+    expect(ledger.unappliedCredit).toBe(0);
   });
 
   it("resets the cycle to zero on the close date and holds the statement as due", () => {
@@ -166,6 +168,26 @@ describe("buildCreditCardLedger — reported Slice scenario", () => {
     expect(ledger.unbilledSpend).toBe(1500);
     expect(ledger.availableCredit).toBe(89000 - 1500);
   });
+
+  it("reduces unbilled spend while the cycle is still open", () => {
+    const postedThroughToday = julyToAugustSpend.filter(
+      (item) => item.date <= "2026-08-13"
+    );
+    const ledger = buildCreditCardLedger({
+      account: slice,
+      expenses: [...postedThroughToday, expense("2026-06-25", 10301)],
+      payments: [augustPayment],
+      bills: [],
+      today: "2026-08-13",
+    });
+
+    expect(
+      ledger.statements.find((item) => item.statementDate === "2026-08-20")
+    ).toBeUndefined();
+    // 10,000 + 7,875 + 6,000 posted through Aug 13; leftover 8,699.
+    expect(ledger.unbilledSpend).toBe(15176);
+    expect(ledger.statementDue).toBe(0);
+  });
 });
 
 describe("buildCreditCardLedger — windows and allocation", () => {
@@ -187,6 +209,38 @@ describe("buildCreditCardLedger — windows and allocation", () => {
     expect(july?.billed).toBe(500);
     expect(august?.billed).toBe(500);
     expect(august?.periodStart).toBe("2026-07-21");
+  });
+
+  it("snaps a drifted close date onto the current cycle instead of double-billing", () => {
+    const ledger = buildCreditCardLedger({
+      account: slice,
+      expenses: [
+        expense("2026-07-21", 10000),
+        expense("2026-08-05", 7764),
+        expense("2026-08-21", 500),
+      ],
+      payments: [],
+      bills: [
+        statement("2026-08-21", "2026-07-21", 17764, {
+          billingPeriodEnd: "2026-08-21",
+        }),
+      ],
+      today: "2026-08-21",
+    });
+
+    const augustStatements = ledger.statements.filter(
+      (item) =>
+        item.statementDate === "2026-08-20" || item.statementDate === "2026-08-21"
+    );
+    expect(augustStatements).toHaveLength(1);
+    expect(augustStatements[0]).toMatchObject({
+      statementDate: "2026-08-20",
+      periodStart: "2026-07-21",
+      periodEnd: "2026-08-20",
+      billId: "bill-2026-08-21",
+      billed: 17764,
+    });
+    expect(ledger.unbilledSpend).toBe(500);
   });
 
   it("never reports more paid than billed on a cycle", () => {
@@ -273,6 +327,29 @@ describe("buildCreditCardLedger — windows and allocation", () => {
     expect(ledger.statementDue).toBe(0);
     expect(ledger.unbilledSpend).toBe(400);
     expect(ledger.unappliedCredit).toBe(0);
+  });
+
+  it("lets a linked overpayment settle the next statement", () => {
+    const ledger = buildCreditCardLedger({
+      account: slice,
+      expenses: [expense("2026-07-25", 3000), expense("2026-08-05", 5000)],
+      payments: [payment("pay-july", "2026-08-22", 8000)],
+      bills: [
+        statement("2026-07-20", "2026-06-21", 3000, {
+          amountPaid: 3000,
+          paymentIds: ["pay-july"],
+          status: "PAID",
+        }),
+        statement("2026-08-20", "2026-07-21", 5000),
+      ],
+      today: "2026-08-25",
+    });
+
+    const july = ledger.statements.find((s) => s.statementDate === "2026-07-20");
+    const august = ledger.statements.find((s) => s.statementDate === "2026-08-20");
+    expect(july).toMatchObject({ paid: 3000, remaining: 0, status: "paid" });
+    expect(august).toMatchObject({ billed: 5000, paid: 5000, remaining: 0 });
+    expect(ledger.statementDue).toBe(0);
   });
 
   it("falls back to plain spend minus payments without a generation day", () => {

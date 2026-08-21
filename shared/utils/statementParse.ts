@@ -1,5 +1,5 @@
 import { isValidDateKey } from "./dates";
-import { roundMoney } from "./accountBalance";
+import { roundMoney } from "./money";
 
 export type StatementLineKind = "debit" | "credit";
 
