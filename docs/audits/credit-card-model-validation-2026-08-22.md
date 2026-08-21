@@ -8,9 +8,13 @@ credit vs. limit, and every UI / net-worth consumer.
 merges `origin/main` (`1e6765a`) and therefore includes `3ce02b3`
 ("fix: keep generated statements unpaid and restore available credit", PR #33).
 
-**Type:** audit **and fix** pass. Five findings were fixed with regression tests
-(CC-1 through CC-5). Everything else was verified and is reported below as
+**Type:** audit **and fix** pass. All seven findings are fixed with regression
+tests, plus CC-8 — a bug in the natural-language parser found while fixing
+CC-7's flaky test. Everything else was verified and is reported below as
 pass/fail with file:line, including the things that turned out to be correct.
+
+The full test suite now passes clean (871 tests, 0 failures); it had a
+permanently failing test before this pass.
 
 ---
 
@@ -59,8 +63,9 @@ unbilledSpend` is what liabilities/net worth consume.
 | CC-3 | P2 | `shared/utils/autoCreditCardBills.ts:59` | `previewClosedCycleCreditCardBill` only ever drafted the *latest* closed cycle. If the app was not opened for two or more cycles, the older closed cycles never got a bill **document** — so no reminder was scheduled for them. | Draft every closed cycle that has spend but no document yet, bounded to 12 cycles. Position math was already unaffected (the ledger derives those windows regardless), so this is purely additive. | **Yes** |
 | CC-4 | P2 | `shared/utils/accountBalance.ts:178` | `computeCreditUsage()` computed `availableCredit = limit − gross cycle spend`, ignoring statements, leftover credit and the ledger. No UI used it, but three tests did — and one of them asserted its wrong answer. | Delete it; the ledger via `computeOutstandingCredit` is the only source of truth. | **Yes** |
 | CC-5 | P3 | `shared/utils/creditCardLedger.ts:559` | Spend under a **cancelled** statement fell back into `unbilledSpend`, so it reduced `availableCredit` even though it is not this-cycle spend — contradicting the spec rule `availableCredit = limit − unbilled (this cycle only)`. | Keep it owed (the existing intent) but in its own `cancelledSpend` bucket: counted in `totalOutstanding`, excluded from `unbilledSpend` and therefore from `availableCredit`. | **Yes** |
-| CC-6 | P3 | `components/creditCardBills/CreateCreditCardBillModal.tsx:59` | `statementDate` / `dueDate` are free-text with no validation, so a manual statement can be dated arbitrarily (including the future). This is what made CC-1 and CC-2 reachable in practice. | Date validation on manual statement creation. Not a math defect once CC-1/CC-2 are fixed. | No — input-validation scope, not model scope |
-| CC-7 | P3 | `shared/utils/magicParser.test.ts:44` | Pre-existing, unrelated flake: the test builds "yesterday" with `toISOString()` (UTC) and compares against a local-date parser, so it fails every day after 18:30 IST. Confirmed failing on the un-patched tree. | Use a local date key. | No — unrelated to credit cards |
+| CC-6 | P3 | `components/creditCardBills/CreateCreditCardBillModal.tsx:139` | `handleSubmit` had **no validation of any kind** — not just dates. `parseFloat` could hand `createBill` a `NaN` statement amount, and a statement could be dated in the future or given a window running past its own close date. This is what made CC-1 and CC-2 reachable in practice. | Validate the whole form before writing: card selected, amount > 0, minimum due within the statement, real dates, statement date not in the future, due date on/after it, and a billing period that does not extend past the close date. | **Yes** |
+| CC-7 | P3 | `shared/utils/magicParser.test.ts:44` | Pre-existing, unrelated flake: the test built "yesterday" with `toISOString()` (UTC) and compared it against a local-date parser, so it failed every day after 18:30 IST. A permanently-red test masks real breakage in CI. | Freeze local noon and assert a literal date key, so the test is deterministic in any timezone. | **Yes** |
+| CC-8 | **P1** | `shared/utils/magicParser.ts:117` | **Found while fixing CC-7.** In the first-match-wins `dateMap` loop, `/\byesterday\b/` was ordered *before* `/\bday before yesterday\b/` — and `\byesterday\b` matches inside "day before yesterday". So "day before yesterday" resolved to **−1 day instead of −2**, and only "yesterday" was stripped from the text, leaving "day before" polluting the extracted note. | Order the longest pattern first. | **Yes** |
 
 ### Explicit pass/fail on the requested hunt list
 
@@ -207,6 +212,60 @@ that reads as a sum (unbilled + statement due = total outstanding), a
 the card row, shown only when the bucket is non-zero. Without those the
 displayed numbers would visibly stop adding up.
 
+### CC-6 — manual statement form had no validation
+
+`shared/utils/creditCardBillInput.ts` (new) — `validateCreditCardBillInput` is a
+pure function, so the rules are testable without mounting the modal.
+`CreateCreditCardBillModal.handleSubmit` calls it and surfaces the first failure
+as a toast instead of writing.
+
+`handleSubmit` previously validated **nothing**. Beyond the dates CC-6 was filed
+for, `parseFloat(statementAmount)` on an empty or non-numeric field passed `NaN`
+straight into `createBill`. The rules now enforced:
+
+- a card is selected
+- statement amount parses and is > 0
+- minimum due parses, is >= 0, and does not exceed the statement
+- statement date is a real `YYYY-MM-DD` and is **not in the future** — a
+  statement closes ON its date, so a later date describes one that has not been
+  cut and cannot be owed
+- due date is a real date on or after the statement date
+- the optional billing period is real, correctly ordered, and does not extend
+  past the statement date — a window running past its own close date would bill
+  spend belonging to the next statement
+
+Hand-entered statements feed the same ledger as generated ones, which is why
+this is a correctness guard and not cosmetic polish.
+
+### CC-7 — permanently failing test in the suite
+
+`shared/utils/magicParser.test.ts` built "yesterday" with `toISOString()` (UTC)
+and compared it against a parser that resolves relative dates on the *local*
+calendar, so it failed for every hour of the day that straddles the UTC date
+boundary — from 18:30 IST onward, every day. Confirmed failing on the un-patched
+tree before touching it.
+
+Now freezes local noon (`new Date(2026, 7, 20, 12, 0, 0)`) and asserts the
+literal `"2026-08-19"`. Local noon is unambiguous in any timezone, and asserting
+a literal rather than recomputing with the implementation's own helper keeps the
+test independent of it.
+
+### CC-8 — "day before yesterday" parsed as yesterday
+
+Found by an assertion added while fixing CC-7, not by inspection. In
+`shared/utils/magicParser.ts` the relative-date patterns are evaluated in array
+order and the loop breaks on the first hit. `/\byesterday\b/` sat before
+`/\bday before yesterday\b/`, and `\byesterday\b` matches inside the longer
+phrase — so:
+
+- the date came out **one day** back instead of two
+- `remaining.replace(pattern, " ")` stripped only "yesterday", leaving
+  "day before" in the extracted note
+
+Fixed by ordering the longest pattern first, with a comment recording why the
+order is load-bearing. Covered by a new test that also crosses a month boundary
+into a 28-day February (1 Mar → 27 Feb).
+
 ### Tests
 
 `shared/utils/creditCardLedger.test.ts` — new
@@ -235,6 +294,15 @@ both buckets clear; zero cancelled spend when every statement is live.
 `computeCreditUsage` call sites migrated to `computeOutstandingCredit`, one with
 a corrected expectation (see CC-4).
 
+`shared/utils/creditCardBillInput.test.ts` (new) — 18 cases covering every
+rule above plus the accepted shapes: a statement closing today, a blank minimum
+due treated as zero, an omitted billing period, and a future *due* date (which
+is legitimate — only the statement date is bounded).
+
+`shared/utils/magicParser.test.ts` — the flaky assertion is now deterministic,
+plus a new case for today / day-before-yesterday across a month boundary that
+locks CC-8.
+
 `shared/utils/billingCycle.test.ts` — new
 `getClosedBillingCycle — cyclesAgo (statement backfill)` block, 5 cases:
 contiguous walk-back; `cyclesAgo` 0 is the latest closed cycle; `D=31` clamps
@@ -251,18 +319,25 @@ npx vitest run shared/utils/creditCardLedger.test.ts \
 → 5 files (incl. accountActivities), 113 passed
 ```
 
-Full suite: 851 passed, 1 failed — `magicParser.test.ts` (CC-7), confirmed
-pre-existing on the un-patched tree. `npx tsc --noEmit` clean.
+Full suite: **871 passed, 0 failed, 107 files** — clean for the first time; the
+suite had a permanently failing test before this pass. `npx tsc --noEmit` clean.
 
 ---
 
 ## 4. Still open
 
-- **CC-6** — manual statement dates are unvalidated. Now harmless to the math
-  (CC-1 and CC-2 mean a strange date can no longer corrupt available credit or
-  statement due), but a user can still create a statement dated anywhere.
-- **CC-7** — pre-existing timezone flake in `magicParser.test.ts`, unrelated to
-  credit cards. Worth fixing because a daily-failing test masks real breakage.
+Nothing from this audit. All eight findings are fixed.
+
+Two items remain outside its scope, unchanged from the original report:
+
+- **Server-side generation (hunt item 13)** — no `netlify/` directory or cron
+  function exists in this checkout, so production statement generation still
+  depends on the app being opened. Whether the `expense-tracker` web repo's cron
+  is merged and deployed could not be confirmed from here. CC-3's backfill limits
+  the damage (a skipped month now catches up on next open) but does not remove
+  the dependency.
+- **Reminders are local-only (hunt item 14)** — scheduled on-device via
+  `nextReminderAt`; there is no push path. Noted, not expanded.
 
 ## 5. Not changed, deliberately
 
