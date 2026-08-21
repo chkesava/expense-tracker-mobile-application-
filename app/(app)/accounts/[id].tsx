@@ -368,6 +368,7 @@ export default function AccountDetailScreen() {
         <AccountCreditHero
           usedThisCycle={creditUsage.unbilledSpend}
           statementDue={creditUsage.statementDue}
+          cancelledSpend={creditUsage.cancelledSpend}
           totalOutstanding={creditUsage.totalOutstanding}
           unappliedCredit={creditUsage.unappliedCredit}
           availableCredit={creditUsage.availableCredit}
