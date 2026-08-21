@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { getPaymentRequestShareUrl, getPublicAppOrigin } from "./paymentRequestUrl";
+import { getPaymentRequestShareUrl, getPublicAppOrigin, getSplitShareUrl } from "./paymentRequestUrl";
 import { generateUpiLink } from "./upi";
 
 describe("paymentRequestUrl utilities", () => {
@@ -33,6 +33,15 @@ describe("paymentRequestUrl utilities", () => {
       delete process.env.EXPO_PUBLIC_APP_URL;
       const url = getPaymentRequestShareUrl("xyz789");
       expect(url).toContain("xyz789");
+      process.env.EXPO_PUBLIC_APP_URL = original;
+    });
+  });
+
+  describe("getSplitShareUrl", () => {
+    it("constructs the public split page URL", () => {
+      const original = process.env.EXPO_PUBLIC_APP_URL;
+      process.env.EXPO_PUBLIC_APP_URL = "https://myapp.com";
+      expect(getSplitShareUrl("dinner42")).toBe("https://myapp.com/split/dinner42");
       process.env.EXPO_PUBLIC_APP_URL = original;
     });
   });

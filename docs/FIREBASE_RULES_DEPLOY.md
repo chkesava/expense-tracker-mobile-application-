@@ -22,7 +22,9 @@ including the three collections this feature adds:
 `users/{uid}/spaces`. Duress mode writes to `<uid>_duress`, so the ownership
 helper accepts the auth uid and that uid with the duress suffix — the contract
 asserted by `lib/duressPath.contract.test.ts`. The shared `vaults`, `splits` and
-`paymentRequests` collections keep their member-based access.
+`paymentRequests` collections keep their member-based access. Public split
+pages use a world-readable `splitPublicShares` snapshot (creator-only writes);
+the private `splits` collection is not opened to the world.
 
 `firestore.indexes.json` declares the composite indexes for queries that filter
 and sort at the same time. Borrowings and Spending Spaces need

@@ -23,18 +23,29 @@ export default function PublicPaymentScreen() {
   const fullNote = request
     ? `${request.notePrefix}${request.note ? ` ${request.note}` : ""}`
     : "";
+  const shareAmount = request
+    ? typeof request.shareAmount === "number"
+      ? request.shareAmount
+      : request.amount
+    : 0;
+  const paidAmount = request?.paidAmount ?? 0;
+  const remainingDue = request?.status === "cancelled" ? 0 : request?.amount ?? 0;
+  const showBreakdown =
+    Boolean(request) &&
+    (typeof request?.shareAmount === "number" || paidAmount > 0.009);
   const upiLink = request
     ? generateUpiLink(
         request.upiId,
         request.payeeName,
-        request.amount,
+        remainingDue,
         fullNote
       )
     : "";
   const cancelled = request?.status === "cancelled";
+  const fullyPaid = !cancelled && remainingDue <= 0.009;
 
   const handlePay = async () => {
-    if (!upiLink || cancelled) return;
+    if (!upiLink || cancelled || fullyPaid) return;
     Haptics.selectionAsync().catch(() => undefined);
     const canOpen = await Linking.canOpenURL(upiLink).catch(() => false);
     if (canOpen) {
@@ -77,13 +88,19 @@ export default function PublicPaymentScreen() {
           <Text
             style={[
               styles.status,
-              { color: cancelled ? theme.colors.destructive : "#22C55E" },
+              {
+                color: cancelled
+                  ? theme.colors.destructive
+                  : fullyPaid
+                    ? "#22C55E"
+                    : "#22C55E",
+              },
             ]}
           >
-            {cancelled ? "CANCELLED" : "PAY"}
+            {cancelled ? "CANCELLED" : fullyPaid ? "PAID" : "PAY"}
           </Text>
           <Amount
-            value={request.amount}
+            value={showBreakdown ? remainingDue : request.amount}
             currency={system.defaultCurrency}
             ghostable
             style={{
@@ -92,6 +109,43 @@ export default function PublicPaymentScreen() {
               color: theme.colors.foreground,
             }}
           />
+          {showBreakdown ? (
+            <View style={styles.breakdown}>
+              <View style={styles.breakdownRow}>
+                <Text style={[styles.breakdownLabel, { color: theme.colors.mutedForeground }]}>
+                  Share
+                </Text>
+                <Amount
+                  value={shareAmount}
+                  currency={system.defaultCurrency}
+                  ghostable
+                  style={styles.breakdownValue}
+                />
+              </View>
+              <View style={styles.breakdownRow}>
+                <Text style={[styles.breakdownLabel, { color: theme.colors.mutedForeground }]}>
+                  Paid
+                </Text>
+                <Amount
+                  value={paidAmount}
+                  currency={system.defaultCurrency}
+                  ghostable
+                  style={styles.breakdownValue}
+                />
+              </View>
+              <View style={styles.breakdownRow}>
+                <Text style={[styles.breakdownLabel, { color: theme.colors.mutedForeground }]}>
+                  Remaining
+                </Text>
+                <Amount
+                  value={remainingDue}
+                  currency={system.defaultCurrency}
+                  ghostable
+                  style={[styles.breakdownValue, { fontWeight: "800" }]}
+                />
+              </View>
+            </View>
+          ) : null}
           <Text style={[styles.payee, { color: theme.colors.foreground }]}>
             {request.payeeName}
           </Text>
@@ -102,7 +156,7 @@ export default function PublicPaymentScreen() {
             {request.upiId}
           </Text>
 
-          {!cancelled && upiLink ? (
+          {!cancelled && !fullyPaid && upiLink ? (
             <View
               style={[
                 styles.qrWrap,
@@ -121,7 +175,7 @@ export default function PublicPaymentScreen() {
             </View>
           ) : null}
 
-          {!cancelled ? (
+          {!cancelled && !fullyPaid ? (
             <Pressable
               onPress={handlePay}
               style={({ pressed }) => [
@@ -139,9 +193,13 @@ export default function PublicPaymentScreen() {
                 Pay via UPI
               </Text>
             </Pressable>
-          ) : (
+          ) : cancelled ? (
             <Text style={{ color: theme.colors.mutedForeground, fontSize: 13 }}>
               This request is no longer active.
+            </Text>
+          ) : (
+            <Text style={{ color: theme.colors.mutedForeground, fontSize: 13 }}>
+              This share is paid.
             </Text>
           )}
         </View>
@@ -176,6 +234,7 @@ const styles = StyleSheet.create({
     width: "100%",
     maxWidth: 400,
     borderRadius: 24,
+    borderCurve: "continuous",
     borderWidth: 1,
     padding: 24,
     gap: 10,
@@ -185,6 +244,24 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "800",
     letterSpacing: 1,
+  },
+  breakdown: {
+    width: "100%",
+    gap: 6,
+    marginTop: 4,
+  },
+  breakdownRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  breakdownLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  breakdownValue: {
+    fontSize: 13,
+    fontWeight: "700",
   },
   payee: {
     fontSize: 18,

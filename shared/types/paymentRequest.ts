@@ -7,6 +7,10 @@ export type PaymentRequest = {
   createdBy: string;
   createdAt: number;
   amount: number;
+  /** Full current share. `amount` is remaining due (UPI QR). */
+  shareAmount?: number;
+  /** Already marked paid/collected toward `shareAmount`. */
+  paidAmount?: number;
   note?: string;
   notePrefix: string;
   payeeName: string;

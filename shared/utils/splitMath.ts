@@ -29,6 +29,49 @@ function roundMoney(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
+export function isParticipantContributing(p: Participant): boolean {
+  return p.contributing !== false;
+}
+
+/** Money already marked paid/collected. Legacy docs with only `paid` count as the full share. */
+export function participantPaidAmount(p: Participant): number {
+  if (typeof p.paidAmount === "number" && Number.isFinite(p.paidAmount)) {
+    return roundMoney(Math.max(0, p.paidAmount));
+  }
+  return p.paid ? roundMoney(Number(p.amount) || 0) : 0;
+}
+
+export function participantRemainingDue(p: Participant): number {
+  if (!isParticipantContributing(p)) return 0;
+  return roundMoney(Math.max(0, (Number(p.amount) || 0) - participantPaidAmount(p)));
+}
+
+export function isParticipantShareSettled(p: Participant): boolean {
+  return participantRemainingDue(p) <= 0.009;
+}
+
+/**
+ * Equal share amounts for `count` people, remainder cents on the first share.
+ */
+export function equalShareAmounts(totalAmount: number, count: number): number[] {
+  if (count <= 0 || totalAmount <= 0) return [];
+  const baseShare = Math.floor((totalAmount / count) * 100) / 100;
+  const remainder = Math.round((totalAmount - baseShare * count) * 100) / 100;
+  return Array.from({ length: count }, (_, index) =>
+    index === 0 ? roundMoney(baseShare + remainder) : baseShare
+  );
+}
+
+function rescaleAmountsToTotal(amounts: number[], totalAmount: number): number[] {
+  if (amounts.length === 0) return [];
+  const sum = amounts.reduce((acc, n) => acc + n, 0);
+  if (sum <= 0) return equalShareAmounts(totalAmount, amounts.length);
+  const scaled = amounts.map((n) => Math.floor((n / sum) * totalAmount * 100) / 100);
+  const remainder = roundMoney(totalAmount - scaled.reduce((acc, n) => acc + n, 0));
+  scaled[0] = roundMoney(scaled[0] + remainder);
+  return scaled;
+}
+
 /**
  * Calculates equal share amounts for a list of participants, allocating fractional cents cleanly.
  */
@@ -45,17 +88,17 @@ export function calculateEqualSplits(
 ): Participant[] {
   if (participants.length === 0 || totalAmount <= 0) return [];
 
-  const count = participants.length;
-  const baseShare = Math.floor((totalAmount / count) * 100) / 100;
-  const remainder = Math.round((totalAmount - baseShare * count) * 100) / 100;
+  const shares = equalShareAmounts(totalAmount, participants.length);
 
   return participants.map((p, index) => {
-    const amount = index === 0 ? Number((baseShare + remainder).toFixed(2)) : baseShare;
+    const amount = shares[index];
     const participant: Participant = {
       key: p.key || createParticipantKey(),
       name: p.name,
       amount,
       paid: p.isCurrentUser,
+      paidAmount: p.isCurrentUser ? amount : 0,
+      contributing: true,
       isCurrentUser: p.isCurrentUser,
     };
     if (p.upiId) participant.upiId = p.upiId;
@@ -82,6 +125,7 @@ export function validateCustomSplits(
 
 /**
  * Computes settlement progress for a single split.
+ * Uses `paidAmount` so a top-up after someone drops out is not treated as fully settled.
  */
 export function computeSplitProgress(split: Split): {
   settledAmount: number;
@@ -99,17 +143,15 @@ export function computeSplitProgress(split: Split): {
   let unpaidCount = 0;
 
   for (const p of split.participants || []) {
-    if (p.paid) {
-      settledAmount += Number(p.amount) || 0;
-    } else {
+    settledAmount += participantPaidAmount(p);
+    if (isParticipantContributing(p) && !isParticipantShareSettled(p)) {
       unpaidCount++;
     }
   }
 
   const roundedSettled = Math.min(total, Math.round(settledAmount * 100) / 100);
   const percentage = Math.min(100, Math.max(0, Math.round((roundedSettled / total) * 100)));
-  const isFullySettled =
-    isCollectSpent(split) || unpaidCount === 0 || roundedSettled >= total;
+  const isFullySettled = isCollectSpent(split) || unpaidCount === 0;
 
   return {
     settledAmount: roundedSettled,
@@ -121,22 +163,24 @@ export function computeSplitProgress(split: Split): {
 }
 
 export function othersFullyCollected(split: Split): boolean {
-  const others = (split.participants || []).filter((p) => !p.isCurrentUser);
-  return others.length > 0 && others.every((p) => p.paid);
+  const others = (split.participants || []).filter(
+    (p) => !p.isCurrentUser && isParticipantContributing(p)
+  );
+  return others.length > 0 && others.every((p) => isParticipantShareSettled(p));
 }
 
 export function collectedFromOthers(split: Split): number {
   return roundMoney(
     (split.participants || [])
-      .filter((p) => !p.isCurrentUser && p.paid)
-      .reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
+      .filter((p) => !p.isCurrentUser)
+      .reduce((sum, p) => sum + participantPaidAmount(p), 0)
   );
 }
 
 export function uniqueCollectedAccountIds(split: Split): string[] {
   const ids: string[] = [];
   for (const p of split.participants || []) {
-    if (!p.isCurrentUser && p.paid && p.receivedAccountId) {
+    if (!p.isCurrentUser && participantPaidAmount(p) > 0 && p.receivedAccountId) {
       if (!ids.includes(p.receivedAccountId)) ids.push(p.receivedAccountId);
     }
   }
@@ -192,17 +236,14 @@ export function computeSplitSummary(
 
     if (isCreator) {
       for (const p of split.participants || []) {
-        if (!p.isCurrentUser && !p.paid) {
-          totalOwedToYou += Number(p.amount) || 0;
+        if (!p.isCurrentUser) {
+          totalOwedToYou += participantRemainingDue(p);
         }
       }
     } else {
       for (const p of split.participants || []) {
-        if (
-          (p.isCurrentUser || p.userId === currentUserId) &&
-          !p.paid
-        ) {
-          totalYouOwe += Number(p.amount) || 0;
+        if (p.isCurrentUser || p.userId === currentUserId) {
+          totalYouOwe += participantRemainingDue(p);
         }
       }
     }
@@ -216,6 +257,10 @@ export function computeSplitSummary(
   };
 }
 
+function moneyLabel(currency: string, value: number): string {
+  return `${currency} ${value.toFixed(2)}`;
+}
+
 /**
  * Formats a shareable reminder message with UPI deep link.
  */
@@ -227,16 +272,24 @@ export function generateSplitShareMessage(
   shareUrl?: string
 ): string {
   const payeeName = split.createdByName || "Split Organizer";
+  const due = participantRemainingDue(participant);
+  const paid = participantPaidAmount(participant);
+  const share = Number(participant.amount) || 0;
   const upiLink = creatorUpiId
     ? generateUpiLink(
         creatorUpiId,
         payeeName,
-        participant.amount,
+        due,
         `Split: ${split.title}`
       )
     : "";
 
-  let message = `Hi ${participant.name},\n\nHere is the reminder for "${split.title}":\nAmount Due: ${currency} ${participant.amount.toFixed(2)}`;
+  let message = `Hi ${participant.name},\n\nHere is the reminder for "${split.title}":`;
+  if (paid > 0.009 && due > 0.009) {
+    message += `\nShare: ${moneyLabel(currency, share)}\nPaid: ${moneyLabel(currency, paid)}\nAmount still due: ${moneyLabel(currency, due)}`;
+  } else {
+    message += `\nAmount Due: ${moneyLabel(currency, due > 0.009 ? due : share)}`;
+  }
 
   if (upiLink) {
     message += `\n\nPay via UPI:\n${upiLink}`;
@@ -249,9 +302,123 @@ export function generateSplitShareMessage(
   return message;
 }
 
+/** Group link + who still owes. */
+export function generateSplitGroupShareMessage(
+  split: Split,
+  currency = "INR",
+  shareUrl?: string
+): string {
+  const owing = (split.participants || []).filter(
+    (p) => isParticipantContributing(p) && participantRemainingDue(p) > 0.009
+  );
+  let message = `"${split.title}" · ${moneyLabel(currency, split.totalAmount || 0)}`;
+  if (owing.length > 0) {
+    message += "\n\nStill due:";
+    for (const p of owing) {
+      message += `\n• ${p.name}: ${moneyLabel(currency, participantRemainingDue(p))}`;
+    }
+  } else {
+    message += "\n\nEveryone is settled.";
+  }
+  if (shareUrl) {
+    message += `\n\nDetails:\n${shareUrl}`;
+  }
+  return message;
+}
+
 export function findParticipantIndex(
   split: Split,
   participantKey: string
 ): number {
   return (split.participants || []).findIndex((p) => p.key === participantKey);
+}
+
+export function optOutBlockedReason(
+  split: Split,
+  participantKey: string
+): string | null {
+  if (isCollectSpent(split)) {
+    return "This pot has already been spent.";
+  }
+  const index = findParticipantIndex(split, participantKey);
+  if (index < 0) return "Participant not found.";
+  const target = split.participants[index];
+  if (target.isCurrentUser) {
+    return "You can't drop yourself from a split you organized.";
+  }
+  if (!isParticipantContributing(target)) {
+    return "This person is already marked as not contributing.";
+  }
+  const remaining = (split.participants || []).filter(
+    (p, i) => i !== index && isParticipantContributing(p)
+  );
+  if (remaining.length < 1) {
+    return "At least one person has to stay in the split.";
+  }
+  return null;
+}
+
+/**
+ * Mark someone as not contributing and redistribute the total among people who still are.
+ * Equal: new equal shares. Custom: rescale remaining amounts so they still sum to the total.
+ * Keeps `paidAmount`; anyone who already paid may owe a top-up.
+ */
+export function recalibrateSplitAfterOptOut(
+  split: Split,
+  participantKey: string
+):
+  | { participants: Participant[]; settled: boolean }
+  | { error: string } {
+  const blocked = optOutBlockedReason(split, participantKey);
+  if (blocked) return { error: blocked };
+
+  const index = findParticipantIndex(split, participantKey);
+  const next = split.participants.map((p, i) => {
+    if (i !== index) return { ...p };
+    return {
+      ...p,
+      contributing: false,
+      amount: 0,
+      paid: true,
+    };
+  });
+
+  const contributorIndexes = next
+    .map((p, i) => (isParticipantContributing(p) ? i : -1))
+    .filter((i) => i >= 0);
+
+  const newAmounts =
+    split.splitType === "custom"
+      ? rescaleAmountsToTotal(
+          contributorIndexes.map((i) => Number(next[i].amount) || 0),
+          split.totalAmount
+        )
+      : equalShareAmounts(split.totalAmount, contributorIndexes.length);
+
+  contributorIndexes.forEach((participantIndex, n) => {
+    const p = next[participantIndex];
+    const amount = newAmounts[n];
+    const paidAmount = participantPaidAmount(p);
+    const due = roundMoney(Math.max(0, amount - paidAmount));
+    next[participantIndex] = {
+      ...p,
+      amount,
+      paid: due <= 0.009,
+    };
+  });
+
+  return {
+    participants: next,
+    settled: next.every((p) => isParticipantShareSettled(p)),
+  };
+}
+
+export function publicSplitStatus(
+  split: Pick<Split, "kind" | "status" | "settled">,
+  settled: boolean
+): string {
+  if (isCollectSplit(split) && split.status === "spent") return "spent";
+  if (settled || split.settled) return "settled";
+  if (isCollectSplit(split)) return "collecting";
+  return "open";
 }

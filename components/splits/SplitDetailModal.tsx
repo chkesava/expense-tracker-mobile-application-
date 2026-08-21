@@ -10,7 +10,7 @@ import {
   View,
 } from "react-native";
 import * as Haptics from "expo-haptics";
-import { Check, Share2, X } from "lucide-react-native";
+import { Check, Share2, UserMinus, X } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
 import { SplitPayQrCard } from "@/components/splits/SplitPayQrCard";
@@ -26,12 +26,22 @@ import type { Participant, Split } from "@/shared/types/split";
 import { getAccountKind } from "@/shared/utils/accountKind";
 import {
   computeSplitProgress,
+  generateSplitGroupShareMessage,
   generateSplitShareMessage,
   isCollectSpent,
   isCollectSplit,
+  isParticipantContributing,
+  isParticipantShareSettled,
+  optOutBlockedReason,
   othersFullyCollected,
+  participantPaidAmount,
+  participantRemainingDue,
 } from "@/shared/utils/splitMath";
-import { getPaymentRequestShareUrl, getPublicAppOrigin } from "@/shared/utils/paymentRequestUrl";
+import {
+  getPaymentRequestShareUrl,
+  getPublicAppOrigin,
+  getSplitShareUrl,
+} from "@/shared/utils/paymentRequestUrl";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { logError } from "@/lib/errors";
@@ -61,6 +71,7 @@ export function SplitDetailModal({
     markParticipantCollected,
     unmarkParticipantCollected,
     spendCollectPot,
+    optOutParticipant,
   } = useSplits();
 
   const [collectingKey, setCollectingKey] = useState<string | null>(null);
@@ -97,15 +108,38 @@ export function SplitDetailModal({
   const spent = isCollectSpent(split);
   const creatorUpiId = userSettings.upiId.trim();
   const qrTarget =
-    split.participants.find((p) => !p.isCurrentUser && !p.paid) ||
-    split.participants.find((p) => !p.isCurrentUser);
+    split.participants.find(
+      (p) =>
+        !p.isCurrentUser &&
+        isParticipantContributing(p) &&
+        participantRemainingDue(p) > 0.009
+    ) ||
+    split.participants.find(
+      (p) => !p.isCurrentUser && isParticipantContributing(p)
+    );
 
   const handleTogglePaid = async (participant: Participant, index: number) => {
     if (!split.id) return;
     Haptics.selectionAsync().catch(() => undefined);
 
     if (collect) {
-      if (participant.isCurrentUser || spent) return;
+      if (spent) return;
+      if (participant.isCurrentUser) {
+        if (participantRemainingDue(participant) > 0.009) {
+          Alert.alert(
+            "Mark your extra share?",
+            "This records that you are covering the top-up after someone dropped out. It does not move money between accounts.",
+            [
+              { text: "Cancel", style: "cancel" },
+              {
+                text: "Mark covered",
+                onPress: () => toggleParticipantPaid(split.id!, index, true),
+              },
+            ]
+          );
+        }
+        return;
+      }
       const key = participant.key;
       if (!key) return;
       if (participant.paid) {
@@ -127,7 +161,7 @@ export function SplitDetailModal({
       return;
     }
 
-    await toggleParticipantPaid(split.id, index, !participant.paid);
+    await toggleParticipantPaid(split.id, index, !isParticipantShareSettled(participant));
   };
 
   const handleConfirmCollected = async (accountId: string) => {
@@ -160,6 +194,50 @@ export function SplitDetailModal({
     } catch (err) {
       logError("splitDetailModal.share", err);
     }
+  };
+
+  const handleShareSplit = async () => {
+    Haptics.selectionAsync().catch(() => undefined);
+    const origin = getPublicAppOrigin();
+    const shareUrl =
+      origin && split.publicSlug ? getSplitShareUrl(split.publicSlug) : undefined;
+    const message = generateSplitGroupShareMessage(
+      split,
+      system.defaultCurrency,
+      shareUrl
+    );
+    try {
+      await Share.share({
+        message,
+        title: split.title,
+      });
+    } catch (err) {
+      logError("splitDetailModal.shareSplit", err);
+    }
+  };
+
+  const handleOptOut = (participant: Participant) => {
+    if (!split.id || !participant.key) return;
+    const blocked = optOutBlockedReason(split, participant.key);
+    if (blocked) {
+      Alert.alert("Can't drop this person", blocked);
+      return;
+    }
+    const alreadyPaid = participantPaidAmount(participant) > 0.009;
+    Alert.alert(
+      `${participant.name} won’t contribute?`,
+      alreadyPaid
+        ? `${participant.name} already paid. That money stays collected — we won't refund it. They’ll stay on the list as not contributing, with nothing extra due. Everyone still in will cover the rest.`
+        : `Their share will be split among everyone still in. People who already paid may owe a small top-up.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Drop & recalculate",
+          style: "destructive",
+          onPress: () => optOutParticipant(split.id!, participant.key as string),
+        },
+      ]
+    );
   };
 
   const handleSettleAll = async () => {
@@ -302,18 +380,32 @@ export function SplitDetailModal({
               </Text>
             </View>
 
-            <Pressable
-              onPress={onClose}
-              hitSlop={12}
-              accessibilityRole="button"
-              accessibilityLabel="Close"
-              style={({ pressed }) => [
-                styles.closeButton,
-                pressed && { opacity: 0.6 },
-              ]}
-            >
-              <X size={20} color={theme.colors.mutedForeground} />
-            </Pressable>
+            <View style={styles.headerActions}>
+              <Pressable
+                onPress={handleShareSplit}
+                hitSlop={12}
+                accessibilityRole="button"
+                accessibilityLabel="Share split"
+                style={({ pressed }) => [
+                  styles.closeButton,
+                  pressed && { opacity: 0.6 },
+                ]}
+              >
+                <Share2 size={20} color={theme.colors.foreground} />
+              </Pressable>
+              <Pressable
+                onPress={onClose}
+                hitSlop={12}
+                accessibilityRole="button"
+                accessibilityLabel="Close"
+                style={({ pressed }) => [
+                  styles.closeButton,
+                  pressed && { opacity: 0.6 },
+                ]}
+              >
+                <X size={20} color={theme.colors.mutedForeground} />
+              </Pressable>
+            </View>
           </View>
 
           <ScrollView
@@ -431,6 +523,22 @@ export function SplitDetailModal({
               {split.participants.map((p, index) => {
                 const rowKey = p.key || `${p.name}-${index}`;
                 const picking = collect && collectingKey === p.key;
+                const contributing = isParticipantContributing(p);
+                const settledShare = isParticipantShareSettled(p);
+                const remainingDue = participantRemainingDue(p);
+                const paidSoFar = participantPaidAmount(p);
+                const showTopUp = contributing && paidSoFar > 0.009 && remainingDue > 0.009;
+                const canSharePerson =
+                  !p.isCurrentUser &&
+                  contributing &&
+                  remainingDue > 0.009 &&
+                  !spent;
+                const canOptOut =
+                  isCreator &&
+                  !p.isCurrentUser &&
+                  contributing &&
+                  !spent &&
+                  Boolean(p.key);
                 return (
                   <View
                     key={rowKey}
@@ -448,22 +556,25 @@ export function SplitDetailModal({
                       <Pressable
                         onPress={() => handleTogglePaid(p, index)}
                         style={styles.participantLeft}
-                        disabled={collect && (p.isCurrentUser || spent)}
+                        disabled={
+                          (collect && ((p.isCurrentUser && remainingDue <= 0.009) || spent)) ||
+                          !contributing
+                        }
                       >
                         <View
                           style={[
                             styles.checkbox,
                             {
-                              backgroundColor: p.paid
+                              backgroundColor: settledShare
                                 ? "#22C55E"
                                 : "transparent",
-                              borderColor: p.paid
+                              borderColor: settledShare
                                 ? "#22C55E"
                                 : theme.colors.mutedForeground,
                             },
                           ]}
                         >
-                          {p.paid ? (
+                          {settledShare ? (
                             <Check size={12} color="#FFFFFF" strokeWidth={3} />
                           ) : null}
                         </View>
@@ -481,10 +592,10 @@ export function SplitDetailModal({
                                 styles.participantName,
                                 {
                                   color: theme.colors.foreground,
-                                  textDecorationLine: p.paid
+                                  textDecorationLine: settledShare || !contributing
                                     ? "line-through"
                                     : "none",
-                                  opacity: p.paid ? 0.7 : 1,
+                                  opacity: settledShare || !contributing ? 0.7 : 1,
                                 },
                               ]}
                               numberOfLines={1}
@@ -504,7 +615,25 @@ export function SplitDetailModal({
                             ) : null}
                           </View>
 
-                          {collect && p.paid && !p.isCurrentUser ? (
+                          {!contributing ? (
+                            <Text
+                              style={[
+                                styles.participantUpi,
+                                { color: theme.colors.mutedForeground },
+                              ]}
+                            >
+                              Won’t contribute
+                            </Text>
+                          ) : showTopUp ? (
+                            <Text
+                              style={[
+                                styles.participantUpi,
+                                { color: theme.colors.mutedForeground },
+                              ]}
+                            >
+                              Paid {paidSoFar.toFixed(2)} · new share {p.amount.toFixed(2)} · collect extra {remainingDue.toFixed(2)}
+                            </Text>
+                          ) : collect && p.paid && !p.isCurrentUser ? (
                             <Text
                               style={[
                                 styles.participantUpi,
@@ -520,43 +649,77 @@ export function SplitDetailModal({
                                   }`
                                 : ""}
                             </Text>
+                          ) : remainingDue > 0.009 && paidSoFar <= 0.009 ? (
+                            <Text
+                              style={[
+                                styles.participantUpi,
+                                { color: theme.colors.mutedForeground },
+                              ]}
+                            >
+                              Remaining due
+                            </Text>
                           ) : null}
                         </View>
                       </Pressable>
 
                       <View style={styles.participantRight}>
                         <Amount
-                          value={p.amount}
+                          value={contributing ? p.amount : paidSoFar}
                           currency={system.defaultCurrency}
                           ghostable
                           style={{
                             fontSize: theme.typography.sm,
                             fontWeight: "800",
-                            color: p.paid
+                            color: settledShare
                               ? theme.colors.mutedForeground
                               : theme.colors.foreground,
                           }}
                         />
 
-                        {!p.isCurrentUser && !p.paid && !spent ? (
+                        {canSharePerson || canOptOut ? (
                           <View style={styles.actionRow}>
-                            <Pressable
-                              onPress={() => handleShareReminder(p)}
-                              style={({ pressed }) => [
-                                styles.iconActionBtn,
-                                {
-                                  backgroundColor: isDark
-                                    ? "rgba(255,255,255,0.08)"
-                                    : "rgba(0,0,0,0.06)",
-                                },
-                                pressed && { opacity: 0.8 },
-                              ]}
-                            >
-                              <Share2
-                                size={12}
-                                color={theme.colors.foreground}
-                              />
-                            </Pressable>
+                            {canSharePerson ? (
+                              <Pressable
+                                onPress={() => handleShareReminder(p)}
+                                accessibilityRole="button"
+                                accessibilityLabel={`Share with ${p.name}`}
+                                style={({ pressed }) => [
+                                  styles.iconActionBtn,
+                                  {
+                                    backgroundColor: isDark
+                                      ? "rgba(255,255,255,0.08)"
+                                      : "rgba(0,0,0,0.06)",
+                                  },
+                                  pressed && { opacity: 0.8 },
+                                ]}
+                              >
+                                <Share2
+                                  size={12}
+                                  color={theme.colors.foreground}
+                                />
+                              </Pressable>
+                            ) : null}
+                            {canOptOut ? (
+                              <Pressable
+                                onPress={() => handleOptOut(p)}
+                                accessibilityRole="button"
+                                accessibilityLabel={`${p.name} won’t contribute`}
+                                style={({ pressed }) => [
+                                  styles.iconActionBtn,
+                                  {
+                                    backgroundColor: isDark
+                                      ? "rgba(255,255,255,0.08)"
+                                      : "rgba(0,0,0,0.06)",
+                                  },
+                                  pressed && { opacity: 0.8 },
+                                ]}
+                              >
+                                <UserMinus
+                                  size={12}
+                                  color={theme.colors.destructive}
+                                />
+                              </Pressable>
+                            ) : null}
                           </View>
                         ) : null}
                       </View>
@@ -687,12 +850,18 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     borderWidth: 1,
     padding: 20,
+    borderCurve: "continuous",
   },
   header: {
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
     marginBottom: 16,
+  },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
   },
   badgeRow: {
     flexDirection: "row",
@@ -737,6 +906,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: 16,
     gap: 12,
+    borderCurve: "continuous",
   },
   progressHeader: {
     flexDirection: "row",
@@ -766,6 +936,7 @@ const styles = StyleSheet.create({
   participantRow: {
     padding: 12,
     borderRadius: 14,
+    borderCurve: "continuous",
     borderWidth: 1,
     gap: 4,
   },

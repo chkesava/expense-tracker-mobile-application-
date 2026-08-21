@@ -7,7 +7,7 @@ import { Amount } from "@/components/common/Amount";
 import type { Participant, Split } from "@/shared/types/split";
 import { getPaymentRequestShareUrl, getPublicAppOrigin } from "@/shared/utils/paymentRequestUrl";
 import { getQrStyle, getStoredQrStyleId } from "@/shared/utils/qrStyles";
-import { generateSplitShareMessage } from "@/shared/utils/splitMath";
+import { generateSplitShareMessage, participantRemainingDue } from "@/shared/utils/splitMath";
 import { generateUpiLink } from "@/shared/utils/upi";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
@@ -30,10 +30,11 @@ export function SplitPayQrCard({
   const isDark = themeUsesDarkPalette(themeName);
   const qrStyle = getQrStyle(getStoredQrStyleId());
   const payeeName = split.createdByName || "Split Organizer";
+  const remainingDue = participantRemainingDue(participant);
   const upiLink = generateUpiLink(
     creatorUpiId,
     payeeName,
-    participant.amount,
+    remainingDue,
     `Split: ${split.title}`
   );
   const origin = getPublicAppOrigin();
@@ -61,7 +62,7 @@ export function SplitPayQrCard({
     }
   };
 
-  if (!creatorUpiId || participant.amount <= 0) return null;
+  if (!creatorUpiId || remainingDue <= 0) return null;
 
   return (
     <View
@@ -92,7 +93,7 @@ export function SplitPayQrCard({
         </View>
         <View style={styles.info}>
           <Amount
-            value={participant.amount}
+            value={remainingDue}
             currency={currency}
             ghostable
             style={{
@@ -137,6 +138,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: 14,
     gap: 10,
+    borderCurve: "continuous",
   },
   label: {
     fontSize: 10,

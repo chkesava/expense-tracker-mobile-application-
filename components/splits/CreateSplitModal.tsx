@@ -231,6 +231,8 @@ export function CreateSplitModal({ visible, onClose }: CreateSplitModalProps) {
           name: p.name.trim(),
           amount: parseFloat(p.amount) || 0,
           paid: p.isCurrentUser,
+          paidAmount: p.isCurrentUser ? parseFloat(p.amount) || 0 : 0,
+          contributing: true,
           isCurrentUser: p.isCurrentUser,
         };
         if (!isCollect && p.upiId.trim()) {
@@ -261,6 +263,9 @@ export function CreateSplitModal({ visible, onClose }: CreateSplitModalProps) {
           : {
               createPersonalExpense: logPersonalExpense,
               accountId: selectedAccountId || undefined,
+              organizerUpiId: (userSettings.upiId || "").trim(),
+              payeePhotoUrl: user?.photoURL || undefined,
+              qrStyleId: getStoredQrStyleId(),
             }
       );
 

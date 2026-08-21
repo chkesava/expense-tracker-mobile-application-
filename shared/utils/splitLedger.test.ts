@@ -6,13 +6,16 @@ import {
   buildCollectShareRequests,
   buildCreateSplitPayload,
   buildMarkCollectedWrites,
+  buildParticipantShareRequests,
+  buildPaymentRequestSyncPatches,
   buildSpendGiftWrites,
   buildUnmarkCollectedWrites,
   linkedLedgerIds,
   toFirestoreParticipant,
   withParticipantKeys,
 } from "./splitLedger";
-import { calculateEqualSplits } from "./splitMath";
+import { buildSplitPublicSharePayloadFromSplit } from "./splitPublicShare";
+import { calculateEqualSplits, participantRemainingDue, recalibrateSplitAfterOptOut } from "./splitMath";
 
 function collectPot(overrides: Partial<Split> = {}): Split {
   const participants: Participant[] = [
@@ -71,6 +74,8 @@ describe("buildCreateSplitPayload", () => {
         splitType: "equal",
         participants: parts,
         kind: "bill",
+        publicSlug: "pub-1",
+        publicShareId: "share-1",
       },
       options: { createPersonalExpense: true },
       dateKey: "2026-08-19",
@@ -84,6 +89,8 @@ describe("buildCreateSplitPayload", () => {
     expect(expense).not.toHaveProperty("accountId");
     expect(split.kind).toBe("bill");
     expect(split).not.toHaveProperty("status");
+    expect(split.publicSlug).toBe("pub-1");
+    expect(split.publicShareId).toBe("share-1");
   });
 
   it("does not create an expense for collect pots, even if the toggle is on", () => {
@@ -211,6 +218,7 @@ describe("mark / unmark collected", () => {
     expect("error" in marked).toBe(false);
     if ("error" in marked) return;
     expect(marked.participants[1].paid).toBe(true);
+    expect(marked.participants[1].paidAmount).toBe(1000);
     expect(marked.participants[1].receivedAccountId).toBe("hdfc");
     expect(marked.participants[1].collectedEntryId).toBe("entry-1");
     expect(marked.entry).toMatchObject({
@@ -230,6 +238,37 @@ describe("mark / unmark collected", () => {
       dateKey: "2026-08-19",
     });
     expect("error" in self).toBe(true);
+  });
+
+  it("credits only the remaining due when collecting a top-up after shares increase", () => {
+    const split = collectPot({
+      participants: [
+        { key: "you", name: "You", amount: 125, paid: false, paidAmount: 100, isCurrentUser: true },
+        {
+          key: "alice",
+          name: "Alice",
+          amount: 125,
+          paid: false,
+          paidAmount: 100,
+          isCurrentUser: false,
+          receivedAccountId: "hdfc",
+          collectedEntryId: "entry-1",
+        },
+      ],
+    });
+    const marked = buildMarkCollectedWrites({
+      split,
+      participantKey: "alice",
+      accountId: "hdfc",
+      entryId: "entry-2",
+      dateKey: "2026-08-19",
+    });
+    expect("error" in marked).toBe(false);
+    if ("error" in marked) return;
+    expect(marked.entry.amount).toBe(25);
+    expect(marked.participants[1].paidAmount).toBe(125);
+    expect(marked.participants[1].paid).toBe(true);
+    expect(marked.participants[1].collectedEntryIds).toEqual(["entry-1", "entry-2"]);
   });
 
   it("unmark deletes the credit entry id", () => {
@@ -255,6 +294,7 @@ describe("mark / unmark collected", () => {
     expect("error" in unmarked).toBe(false);
     if ("error" in unmarked) return;
     expect(unmarked.entryIdToDelete).toBe("entry-1");
+    expect(unmarked.entryIdsToDelete).toEqual(["entry-1"]);
     expect(unmarked.participants[1].paid).toBe(false);
     expect(unmarked.participants[1].collectedEntryId).toBeUndefined();
   });
@@ -391,5 +431,96 @@ describe("linkedLedgerIds", () => {
     expect(ids.entryIds.sort()).toEqual(["e1", "pass-1"]);
     expect(ids.expenseIds).toEqual(["exp-1"]);
     expect(ids.paymentRequestIds.sort()).toEqual(["pr-1", "pr-2"]);
+    expect(ids.publicShareId).toBeUndefined();
+  });
+});
+
+describe("bill share requests and public snapshot", () => {
+  it("builds person payment requests for bill splits the same way as collect", () => {
+    const participants = withParticipantKeys([
+      { key: "you", name: "You", amount: 500, paid: true, isCurrentUser: true },
+      { key: "alice", name: "Alice", amount: 500, paid: false, isCurrentUser: false },
+    ]);
+    const requests = buildParticipantShareRequests({
+      splitId: "bill-1",
+      splitTitle: "Dinner",
+      createdBy: "user-me",
+      createdAt: 1,
+      payeeName: "Kesava",
+      upiId: "kesava@okaxis",
+      qrStyleId: "indigo",
+      participants,
+    });
+    expect(requests).toHaveLength(1);
+    expect(requests[0].payload.amount).toBe(500);
+    expect(requests[0].payload.shareAmount).toBe(500);
+    expect(requests[0].payload.splitId).toBe("bill-1");
+  });
+
+  it("writes a sanitized public snapshot and updates remaining-due amounts after opt-out", () => {
+    const split: Split = {
+      id: "split-1",
+      title: "Dinner",
+      totalAmount: 1000,
+      splitType: "equal",
+      createdBy: "user-me",
+      createdByName: "Kesava",
+      createdAt: 1,
+      settled: false,
+      participantIds: ["user-me"],
+      kind: "bill",
+      publicSlug: "dinner42",
+      publicShareId: "share-1",
+      participants: [
+        {
+          key: "you",
+          name: "You",
+          amount: 100,
+          paid: true,
+          paidAmount: 100,
+          isCurrentUser: true,
+        },
+        {
+          key: "alice",
+          name: "Alice",
+          amount: 100,
+          paid: true,
+          paidAmount: 100,
+          isCurrentUser: false,
+          paymentSlug: "alice-pay",
+          paymentRequestId: "pr-alice",
+        },
+        {
+          key: "bob",
+          name: "Bob",
+          amount: 100,
+          paid: false,
+          paidAmount: 0,
+          isCurrentUser: false,
+          paymentSlug: "bob-pay",
+          paymentRequestId: "pr-bob",
+        },
+      ],
+    };
+
+    const snapshot = buildSplitPublicSharePayloadFromSplit(split);
+    expect(containsUndefined(snapshot)).toBe(false);
+    expect(snapshot.slug).toBe("dinner42");
+    expect(snapshot).not.toHaveProperty("upiId");
+    const rows = snapshot.participants as Record<string, unknown>[];
+    expect(rows[1]).not.toHaveProperty("userId");
+    expect(rows[1]).not.toHaveProperty("paymentRequestId");
+    expect(rows[1].personSlug).toBe("alice-pay");
+
+    const dropped = recalibrateSplitAfterOptOut(split, "bob");
+    expect("error" in dropped).toBe(false);
+    if ("error" in dropped) return;
+    const patches = buildPaymentRequestSyncPatches(dropped.participants);
+    const alice = patches.find((p) => p.requestId === "pr-alice");
+    const bob = patches.find((p) => p.requestId === "pr-bob");
+    expect(alice?.fields.amount).toBe(participantRemainingDue(dropped.participants[1]));
+    expect(alice?.fields.status).toBe("active");
+    expect(bob?.fields.status).toBe("cancelled");
+    expect(bob?.fields.amount).toBe(0);
   });
 });

@@ -12,6 +12,10 @@ import {
   getSplitKind,
   isCollectSpent,
   isCollectSplit,
+  isParticipantContributing,
+  isParticipantShareSettled,
+  participantPaidAmount,
+  participantRemainingDue,
 } from "./splitMath";
 
 export type CreateSplitInput = Omit<
@@ -27,17 +31,27 @@ export function withParticipantKeys(participants: Participant[]): Participant[] 
 }
 
 export function toFirestoreParticipant(p: Participant): Record<string, unknown> {
+  const amount = Number(p.amount) || 0;
+  const paidAmount =
+    typeof p.paidAmount === "number" && Number.isFinite(p.paidAmount)
+      ? Number(p.paidAmount)
+      : p.paid
+        ? amount
+        : 0;
   return omitUndefined({
     key: p.key || createParticipantKey(),
     name: p.name,
-    amount: Number(p.amount) || 0,
+    amount,
     paid: Boolean(p.paid),
+    paidAmount,
+    contributing: p.contributing !== false,
     isCurrentUser: Boolean(p.isCurrentUser),
     upiId: p.upiId || undefined,
     userId: p.userId || undefined,
     photoURL: p.photoURL || undefined,
     receivedAccountId: p.receivedAccountId || undefined,
     collectedEntryId: p.collectedEntryId || undefined,
+    collectedEntryIds: p.collectedEntryIds?.length ? p.collectedEntryIds : undefined,
     paymentSlug: p.paymentSlug || undefined,
     paymentRequestId: p.paymentRequestId || undefined,
   });
@@ -87,6 +101,8 @@ export function buildCreateSplitPayload(params: {
     paymentRequestIds: params.data.paymentRequestIds?.length
       ? params.data.paymentRequestIds
       : undefined,
+    publicSlug: params.data.publicSlug || undefined,
+    publicShareId: params.data.publicShareId || undefined,
   });
 
   let expense: Record<string, unknown> | null = null;
@@ -112,7 +128,7 @@ export function buildCreateSplitPayload(params: {
   return { split, expense };
 }
 
-export function buildCollectShareRequests(params: {
+export function buildParticipantShareRequests(params: {
   splitId: string;
   splitTitle: string;
   createdBy: string;
@@ -130,10 +146,13 @@ export function buildCollectShareRequests(params: {
   if (!params.upiId) return [];
 
   return params.participants
-    .filter((p) => !p.isCurrentUser && p.key)
+    .filter((p) => !p.isCurrentUser && p.key && isParticipantContributing(p))
     .map((p) => {
       const slug = generatePaymentSlug(10);
       const key = p.key as string;
+      const shareAmount = Number(p.amount) || 0;
+      const paidAmount = participantPaidAmount(p);
+      const remaining = participantRemainingDue(p);
       return {
         participantKey: key,
         slug,
@@ -141,7 +160,9 @@ export function buildCollectShareRequests(params: {
           slug,
           createdBy: params.createdBy,
           createdAt: params.createdAt,
-          amount: Number(p.amount) || 0,
+          amount: remaining,
+          shareAmount,
+          paidAmount,
           note: params.splitTitle,
           notePrefix: "Split",
           payeeName: params.payeeName,
@@ -155,6 +176,9 @@ export function buildCollectShareRequests(params: {
       };
     });
 }
+
+/** @deprecated Use buildParticipantShareRequests — kept for existing tests. */
+export const buildCollectShareRequests = buildParticipantShareRequests;
 
 export function applyShareRequestsToParticipants(
   participants: Participant[],
@@ -176,6 +200,33 @@ export function applyShareRequestsToParticipants(
       paymentRequestId: match.requestId,
     };
   });
+}
+
+export function buildPaymentRequestSyncPatches(
+  participants: Participant[]
+): Array<{ requestId: string; fields: Record<string, unknown> }> {
+  return participants
+    .filter((p) => Boolean(p.paymentRequestId))
+    .map((p) => {
+      const optedOut = !isParticipantContributing(p);
+      return {
+        requestId: p.paymentRequestId as string,
+        fields: omitUndefined({
+          amount: participantRemainingDue(p),
+          shareAmount: Number(p.amount) || 0,
+          paidAmount: participantPaidAmount(p),
+          status: optedOut ? ("cancelled" as const) : ("active" as const),
+        }),
+      };
+    });
+}
+
+function collectedEntryIdList(p: Participant): string[] {
+  const ids = [...(p.collectedEntryIds || [])];
+  if (p.collectedEntryId && !ids.includes(p.collectedEntryId)) {
+    ids.push(p.collectedEntryId);
+  }
+  return ids;
 }
 
 export function buildMarkCollectedWrites(params: {
@@ -201,28 +252,42 @@ export function buildMarkCollectedWrites(params: {
   if (target.isCurrentUser) {
     return { error: "Your own share stays in your account — nothing to collect." };
   }
-  if (target.paid && target.collectedEntryId) {
+  if (!isParticipantContributing(target)) {
+    return { error: "This person isn't contributing." };
+  }
+  const due = participantRemainingDue(target);
+  if (due <= 0.009) {
     return { error: "Already marked collected." };
   }
   if (!params.accountId) return { error: "Choose the account that received the money." };
+
+  const alreadyPaid = participantPaidAmount(target);
+  const nextPaidAmount = alreadyPaid + due;
+  const priorIds = collectedEntryIdList(target);
+  const collectedEntryIds = [...priorIds, params.entryId];
 
   const participants = params.split.participants.map((p, idx) => {
     if (idx !== index) return p;
     return {
       ...p,
       paid: true,
+      paidAmount: nextPaidAmount,
       receivedAccountId: params.accountId,
       collectedEntryId: params.entryId,
+      collectedEntryIds,
     };
   });
-  const settled = participants.every((p) => p.paid);
+  const settled = participants.every((p) => isParticipantShareSettled(p));
 
   const entry = omitUndefined({
     accountId: params.accountId,
-    amount: Number(target.amount) || 0,
+    amount: due,
     direction: "credit" as const,
     date: params.dateKey,
-    note: `Collected from ${target.name} — ${params.split.title}`,
+    note:
+      alreadyPaid > 0.009
+        ? `Top-up from ${target.name} — ${params.split.title}`
+        : `Collected from ${target.name} — ${params.split.title}`,
     linkedSplitId: params.split.id,
     source: "split_collection" as const,
   });
@@ -237,6 +302,7 @@ export function buildUnmarkCollectedWrites(params: {
   | {
       participants: Participant[];
       settled: boolean;
+      entryIdsToDelete: string[];
       entryIdToDelete?: string;
     }
   | { error: string } {
@@ -251,20 +317,25 @@ export function buildUnmarkCollectedWrites(params: {
     return { error: "Your pledged share cannot be unmarked." };
   }
 
+  const entryIdsToDelete = collectedEntryIdList(target);
+
   const participants = params.split.participants.map((p, idx) => {
     if (idx !== index) return p;
     const next: Participant = {
       ...p,
       paid: false,
+      paidAmount: 0,
     };
     delete next.receivedAccountId;
     delete next.collectedEntryId;
+    delete next.collectedEntryIds;
     return next;
   });
 
   return {
     participants,
-    settled: participants.every((p) => p.paid),
+    settled: participants.every((p) => isParticipantShareSettled(p)),
+    entryIdsToDelete,
     entryIdToDelete: target.collectedEntryId,
   };
 }
@@ -342,10 +413,9 @@ export function linkedLedgerIds(split: Split): {
   entryIds: string[];
   expenseIds: string[];
   paymentRequestIds: string[];
+  publicShareId?: string;
 } {
-  const entryIds = (split.participants || [])
-    .map((p) => p.collectedEntryId)
-    .filter((id): id is string => Boolean(id));
+  const entryIds = (split.participants || []).flatMap((p) => collectedEntryIdList(p));
   if (split.spendPassThroughEntryId) {
     entryIds.push(split.spendPassThroughEntryId);
   }
@@ -360,5 +430,6 @@ export function linkedLedgerIds(split: Split): {
     entryIds: [...new Set(entryIds)],
     expenseIds,
     paymentRequestIds: [...new Set(paymentRequestIds)],
+    publicShareId: split.publicShareId,
   };
 }

@@ -5,8 +5,12 @@ import {
   computeCollectSpendBreakdown,
   computeSplitProgress,
   computeSplitSummary,
+  generateSplitGroupShareMessage,
   generateSplitShareMessage,
   othersFullyCollected,
+  participantPaidAmount,
+  participantRemainingDue,
+  recalibrateSplitAfterOptOut,
   validateCustomSplits,
 } from "./splitMath";
 
@@ -113,6 +117,41 @@ describe("splitMath utilities", () => {
       expect(result.percentage).toBe(100);
       expect(result.isFullySettled).toBe(true);
       expect(result.unpaidCount).toBe(0);
+    });
+
+    it("does not treat a top-up as settled when paidAmount is below the new share", () => {
+      const split: Split = {
+        id: "s-partial",
+        title: "Dinner",
+        totalAmount: 1000,
+        splitType: "equal",
+        createdBy: "user-1",
+        createdAt: Date.now(),
+        settled: false,
+        participantIds: [],
+        participants: [
+          {
+            key: "you",
+            name: "You",
+            amount: 125,
+            paid: false,
+            paidAmount: 100,
+            isCurrentUser: true,
+          },
+          {
+            key: "a",
+            name: "Alice",
+            amount: 125,
+            paid: false,
+            paidAmount: 100,
+            isCurrentUser: false,
+          },
+        ],
+      };
+      const result = computeSplitProgress(split);
+      expect(result.settledAmount).toBe(200);
+      expect(result.isFullySettled).toBe(false);
+      expect(result.unpaidCount).toBe(2);
     });
   });
 
@@ -250,6 +289,61 @@ describe("splitMath utilities", () => {
       expect(message).toContain("https://app.example/payment/abc");
       expect(message).toContain("upi://pay");
     });
+
+    it("includes remaining due when someone already paid part of a new share", () => {
+      const split: Split = {
+        id: "s1",
+        title: "Dinner",
+        totalAmount: 1000,
+        splitType: "equal",
+        createdBy: "user-me",
+        createdByName: "Kesava",
+        createdAt: Date.now(),
+        settled: false,
+        participantIds: [],
+        participants: [],
+      };
+      const participant: Participant = {
+        name: "Alice",
+        amount: 125,
+        paid: false,
+        paidAmount: 100,
+        isCurrentUser: false,
+      };
+      const message = generateSplitShareMessage(split, participant, undefined, "INR");
+      expect(message).toContain("Amount still due");
+      expect(message).toContain("25.00");
+      expect(message).toContain("125.00");
+      expect(message).toContain("100.00");
+    });
+  });
+
+  describe("generateSplitGroupShareMessage", () => {
+    it("lists remaining dues and the public split URL", () => {
+      const split: Split = {
+        id: "s1",
+        title: "Goa",
+        totalAmount: 1000,
+        splitType: "equal",
+        createdBy: "me",
+        createdAt: 1,
+        settled: false,
+        participantIds: [],
+        participants: [
+          { name: "You", amount: 500, paid: true, paidAmount: 500, isCurrentUser: true },
+          { name: "Alice", amount: 500, paid: false, paidAmount: 0, isCurrentUser: false },
+        ],
+      };
+      const message = generateSplitGroupShareMessage(
+        split,
+        "INR",
+        "https://app.example/split/abc"
+      );
+      expect(message).toContain("Goa");
+      expect(message).toContain("Alice");
+      expect(message).toContain("500.00");
+      expect(message).toContain("https://app.example/split/abc");
+    });
   });
 
   describe("collect spend math", () => {
@@ -281,6 +375,125 @@ describe("splitMath utilities", () => {
       expect(math.othersCollected).toBe(3000);
       expect(math.ownExpense).toBe(1000);
       expect(math.passThroughDebit).toBe(3000);
+    });
+  });
+
+  describe("recalibrateSplitAfterOptOut", () => {
+    function tenWayDinner(paidCount: number): Split {
+      const participants: Participant[] = Array.from({ length: 10 }, (_, i) => ({
+        key: `p${i}`,
+        name: i === 0 ? "You" : `Friend ${i}`,
+        amount: 100,
+        paid: i < paidCount,
+        paidAmount: i < paidCount ? 100 : 0,
+        isCurrentUser: i === 0,
+      }));
+      return {
+        id: "s-10",
+        title: "Dinner",
+        totalAmount: 1000,
+        splitType: "equal",
+        createdBy: "me",
+        createdAt: 1,
+        settled: false,
+        participantIds: [],
+        participants,
+      };
+    }
+
+    it("moves 10 equal ₹100 shares to 8 at ₹125 with ₹25 still due after two unpaid dropouts", () => {
+      const split = tenWayDinner(8);
+      const first = recalibrateSplitAfterOptOut(split, "p8");
+      expect("error" in first).toBe(false);
+      if ("error" in first) return;
+      const second = recalibrateSplitAfterOptOut(
+        { ...split, participants: first.participants },
+        "p9"
+      );
+      expect("error" in second).toBe(false);
+      if ("error" in second) return;
+
+      const contributing = second.participants.filter((p) => p.contributing !== false);
+      expect(contributing).toHaveLength(8);
+      expect(contributing.reduce((sum, p) => sum + p.amount, 0)).toBeCloseTo(1000, 2);
+      for (const p of contributing) {
+        expect(p.amount).toBe(125);
+        expect(participantPaidAmount(p)).toBe(100);
+        expect(participantRemainingDue(p)).toBe(25);
+        expect(p.paid).toBe(false);
+      }
+      expect(second.participants[8].contributing).toBe(false);
+      expect(second.participants[9].amount).toBe(0);
+      expect(second.settled).toBe(false);
+    });
+
+    it("rescales custom amounts so remaining people still sum to the total", () => {
+      const split: Split = {
+        id: "s-custom",
+        title: "Custom",
+        totalAmount: 1000,
+        splitType: "custom",
+        createdBy: "me",
+        createdAt: 1,
+        settled: false,
+        participantIds: [],
+        participants: [
+          { key: "you", name: "You", amount: 400, paid: true, paidAmount: 400, isCurrentUser: true },
+          { key: "a", name: "A", amount: 350, paid: false, paidAmount: 0, isCurrentUser: false },
+          { key: "b", name: "B", amount: 250, paid: false, paidAmount: 0, isCurrentUser: false },
+        ],
+      };
+      const result = recalibrateSplitAfterOptOut(split, "b");
+      expect("error" in result).toBe(false);
+      if ("error" in result) return;
+      const contributing = result.participants.filter((p) => p.contributing !== false);
+      expect(contributing).toHaveLength(2);
+      expect(contributing.reduce((sum, p) => sum + p.amount, 0)).toBeCloseTo(1000, 2);
+      expect(result.participants[2].contributing).toBe(false);
+      expect(result.participants[0].amount).toBeGreaterThan(400);
+      expect(participantRemainingDue(result.participants[0])).toBeCloseTo(
+        result.participants[0].amount - 400,
+        2
+      );
+    });
+
+    it("blocks opting out the organizer or the last contributor", () => {
+      const split = tenWayDinner(1);
+      expect(recalibrateSplitAfterOptOut(split, "p0")).toEqual({
+        error: "You can't drop yourself from a split you organized.",
+      });
+      const lastOnly: Split = {
+        ...split,
+        participants: [
+          {
+            key: "gone",
+            name: "Gone",
+            amount: 0,
+            paid: true,
+            contributing: false,
+            isCurrentUser: false,
+          },
+          {
+            key: "last",
+            name: "Last",
+            amount: 1000,
+            paid: false,
+            isCurrentUser: false,
+          },
+        ],
+      };
+      expect(recalibrateSplitAfterOptOut(lastOnly, "last")).toEqual({
+        error: "At least one person has to stay in the split.",
+      });
+    });
+
+    it("blocks opt-out after a collect pot is spent", () => {
+      const split = tenWayDinner(8);
+      split.kind = "collect";
+      split.status = "spent";
+      expect(recalibrateSplitAfterOptOut(split, "p9")).toEqual({
+        error: "This pot has already been spent.",
+      });
     });
   });
 });

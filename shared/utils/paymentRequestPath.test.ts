@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getPaymentSlugFromLocation } from "./paymentRequestPath";
+import { getPaymentSlugFromLocation, getSplitSlugFromLocation } from "./paymentRequestPath";
 
 describe("paymentRequestPath", () => {
   it("prefers explicit param slug", () => {
@@ -15,5 +15,11 @@ describe("paymentRequestPath", () => {
   it("returns undefined for unrelated paths", () => {
     expect(getPaymentSlugFromLocation("/settings")).toBeUndefined();
     expect(getPaymentSlugFromLocation("/payment/")).toBeUndefined();
+  });
+
+  it("parses /split/:slug", () => {
+    expect(getSplitSlugFromLocation("/split/abc123")).toBe("abc123");
+    expect(getSplitSlugFromLocation("/split/ignored", "explicit")).toBe("explicit");
+    expect(getSplitSlugFromLocation("/payment/abc")).toBeUndefined();
   });
 });

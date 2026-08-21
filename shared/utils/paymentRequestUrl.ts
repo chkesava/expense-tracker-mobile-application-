@@ -14,3 +14,7 @@ export function getPublicAppOrigin(): string {
 export function getPaymentRequestShareUrl(slug: string): string {
   return `${getPublicAppOrigin()}/payment/${slug}`;
 }
+
+export function getSplitShareUrl(slug: string): string {
+  return `${getPublicAppOrigin()}/split/${slug}`;
+}

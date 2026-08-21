@@ -113,6 +113,17 @@ service cloud.firestore {
         && request.resource.data.createdBy == request.auth.uid;
     }
 
+    // Public split summary for /split/:slug. Same write pattern as payment
+    // requests. Splits themselves stay private — this snapshot has no account
+    // ids, user ids, or UPI.
+    match /splitPublicShares/{shareId} {
+      allow read: if true;
+      allow update, delete: if signedIn()
+        && resource.data.createdBy == request.auth.uid;
+      allow create: if signedIn()
+        && request.resource.data.createdBy == request.auth.uid;
+    }
+
     // App-wide flags (`global`) and the sideloaded APK pointer (`latest_release`).
     // Clients may read both. Only `global` is writable from the app (onboarding
     // currency). `latest_release` is written by the Admin SDK in CI.

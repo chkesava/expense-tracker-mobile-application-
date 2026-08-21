@@ -12,6 +12,14 @@ export interface Participant {
   name: string;
   amount: number;
   paid: boolean;
+  /**
+   * Money already marked collected/paid toward `amount`.
+   * After someone drops out, remaining people may owe a top-up on top of this.
+   * Missing on legacy docs: treat `paid` as the whole `amount`.
+   */
+  paidAmount?: number;
+  /** False = will not pay; stays on the list for history. Default true. */
+  contributing?: boolean;
   upiId?: string;
   isCurrentUser: boolean;
   userId?: string;
@@ -20,6 +28,8 @@ export interface Participant {
   receivedAccountId?: string;
   /** `users/{uid}/accountEntries` credit created when marked collected. */
   collectedEntryId?: string;
+  /** Extra credits from top-ups after a share increase. */
+  collectedEntryIds?: string[];
   /** Public `/payment/:slug` for this friend's share. */
   paymentSlug?: string;
   paymentRequestId?: string;
@@ -46,4 +56,7 @@ export interface Split {
   spentExpenseId?: string;
   spendPassThroughEntryId?: string;
   paymentRequestIds?: string[];
+  /** Public `/split/:slug` snapshot. */
+  publicSlug?: string;
+  publicShareId?: string;
 }

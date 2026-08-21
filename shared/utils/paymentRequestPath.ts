@@ -13,3 +13,16 @@ export function getPaymentSlugFromLocation(
 
   return undefined;
 }
+
+/** Resolve slug from pathname (and optional param) for /split/:slug. */
+export function getSplitSlugFromLocation(
+  pathname: string,
+  paramSlug?: string
+): string | undefined {
+  if (paramSlug) return paramSlug;
+
+  const match = pathname.match(/^\/split\/([^/]+)\/?$/);
+  if (match?.[1]) return decodeURIComponent(match[1]);
+
+  return undefined;
+}

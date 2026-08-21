@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import {
   collection,
-  deleteDoc,
   doc,
   onSnapshot,
   or,
@@ -10,6 +9,8 @@ import {
   updateDoc,
   where,
   writeBatch,
+  type Firestore,
+  type WriteBatch,
 } from "firebase/firestore";
 
 import { friendlyErrorMessage, logError } from "@/lib/errors";
@@ -19,16 +20,18 @@ import { snapshotErrorHandler } from "@/lib/firestoreErrors";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
-import type { Split } from "@/shared/types/split";
+import type { Participant, Split } from "@/shared/types/split";
 import type { QrStyleId } from "@/shared/utils/qrStyles";
 import { getStoredQrStyleId } from "@/shared/utils/qrStyles";
 import { currentMonthKey, todayDateKey } from "@/shared/utils/dates";
 import { omitUndefined } from "@/shared/utils/firestorePayload";
+import { generatePaymentSlug } from "@/shared/utils/paymentSlug";
 import {
   applyShareRequestsToParticipants,
-  buildCollectShareRequests,
   buildCreateSplitPayload,
   buildMarkCollectedWrites,
+  buildParticipantShareRequests,
+  buildPaymentRequestSyncPatches,
   buildSpendGiftWrites,
   buildUnmarkCollectedWrites,
   linkedLedgerIds,
@@ -36,7 +39,60 @@ import {
   withParticipantKeys,
   type CreateSplitInput,
 } from "@/shared/utils/splitLedger";
-import { isCollectSplit } from "@/shared/utils/splitMath";
+import { buildSplitPublicSharePayloadFromSplit } from "@/shared/utils/splitPublicShare";
+import {
+  isCollectSplit,
+  isParticipantContributing,
+  isParticipantShareSettled,
+  participantRemainingDue,
+  recalibrateSplitAfterOptOut,
+} from "@/shared/utils/splitMath";
+
+function applyShareSideEffects(
+  batch: WriteBatch,
+  db: Firestore,
+  split: Split,
+  participants: Participant[],
+  extraSplitFields: Record<string, unknown>
+) {
+  const publicSlug = split.publicSlug || generatePaymentSlug(10);
+  const shareRef = split.publicShareId
+    ? doc(db, "splitPublicShares", split.publicShareId)
+    : doc(collection(db, "splitPublicShares"));
+  const settled = Boolean(extraSplitFields.settled ?? split.settled);
+
+  batch.update(
+    doc(db, "splits", split.id as string),
+    omitUndefined({
+      participants: participants.map(toFirestoreParticipant),
+      publicSlug,
+      publicShareId: shareRef.id,
+      ...extraSplitFields,
+    })
+  );
+
+  batch.set(
+    shareRef,
+    buildSplitPublicSharePayloadFromSplit(
+      {
+        ...split,
+        participants,
+        settled,
+        status: (extraSplitFields.status as Split["status"]) ?? split.status,
+      },
+      {
+        slug: publicSlug,
+        settled,
+        updatedAt: Date.now(),
+      }
+    ),
+    { merge: true }
+  );
+
+  for (const patch of buildPaymentRequestSyncPatches(participants)) {
+    batch.update(doc(db, "paymentRequests", patch.requestId), patch.fields);
+  }
+}
 
 export function useSplits(options?: { enabled?: boolean }) {
   const enabled = options?.enabled !== false;
@@ -108,6 +164,8 @@ export function useSplits(options?: { enabled?: boolean }) {
     try {
       const keyedParticipants = withParticipantKeys(splitData.participants);
       const docRef = doc(collection(db, "splits"));
+      const publicShareRef = doc(collection(db, "splitPublicShares"));
+      const publicSlug = generatePaymentSlug(10);
       const createdAt = Date.now();
       const createdByName =
         user?.displayName || user?.email?.split("@")[0] || "Me";
@@ -116,8 +174,8 @@ export function useSplits(options?: { enabled?: boolean }) {
       const paymentRequestIds: string[] = [];
       let participants = keyedParticipants;
 
-      if (splitData.kind === "collect" && createOptions?.organizerUpiId) {
-        const shares = buildCollectShareRequests({
+      if (createOptions?.organizerUpiId) {
+        const shares = buildParticipantShareRequests({
           splitId: docRef.id,
           splitTitle: splitData.title,
           createdBy: uid,
@@ -156,6 +214,8 @@ export function useSplits(options?: { enabled?: boolean }) {
           ...splitData,
           participants,
           paymentRequestIds,
+          publicSlug,
+          publicShareId: publicShareRef.id,
         },
         options: createOptions,
         dateKey: todayDateKey(),
@@ -164,6 +224,28 @@ export function useSplits(options?: { enabled?: boolean }) {
       });
 
       batch.set(docRef, split);
+      batch.set(
+        publicShareRef,
+        buildSplitPublicSharePayloadFromSplit(
+          {
+            id: docRef.id,
+            title: splitData.title,
+            totalAmount: splitData.totalAmount,
+            splitType: splitData.splitType,
+            participants,
+            createdBy: uid,
+            createdByName,
+            createdAt,
+            settled: false,
+            participantIds: [],
+            kind: splitData.kind,
+            status: splitData.kind === "collect" ? "collecting" : undefined,
+            publicSlug,
+            publicShareId: publicShareRef.id,
+          },
+          { slug: publicSlug, settled: false, updatedAt: createdAt }
+        )
+      );
 
       if (expense) {
         batch.set(doc(collection(db, "users", uid, "expenses")), {
@@ -214,32 +296,38 @@ export function useSplits(options?: { enabled?: boolean }) {
     const split = splits.find((s) => s.id === splitId);
     if (!split) return false;
 
+    const target = split.participants[participantIndex];
+    if (!target) return false;
+
     if (isCollectSplit(split)) {
-      toast.error("Mark collected and choose the account that received the money.");
-      return false;
+      const organizerTopUp =
+        target.isCurrentUser &&
+        newPaid &&
+        isParticipantContributing(target) &&
+        participantRemainingDue(target) > 0.009;
+      if (!organizerTopUp) {
+        toast.error("Mark collected and choose the account that received the money.");
+        return false;
+      }
     }
 
     const updatedParticipants = split.participants.map((p, idx) => {
-      if (idx === participantIndex) {
-        return { ...p, paid: newPaid };
+      if (idx !== participantIndex) return p;
+      if (!isParticipantContributing(p)) return p;
+      if (newPaid) {
+        return { ...p, paid: true, paidAmount: Number(p.amount) || 0 };
       }
-      return p;
+      return { ...p, paid: false, paidAmount: 0 };
     });
 
-    const isAllPaid = updatedParticipants.every((p) => p.paid);
+    const isAllPaid = updatedParticipants.every((p) => isParticipantShareSettled(p));
 
     try {
-      await commitWrite(
-        () =>
-          updateDoc(
-            doc(db, "splits", splitId),
-            omitUndefined({
-              participants: updatedParticipants.map(toFirestoreParticipant),
-              settled: isAllPaid,
-            })
-          ),
-        { label: "settlement status" }
-      );
+      const batch = writeBatch(db);
+      applyShareSideEffects(batch, db, split, updatedParticipants, {
+        settled: isAllPaid,
+      });
+      await commitWrite(() => batch.commit(), { label: "settlement status" });
       return true;
     } catch (err) {
       logError("splits.toggleparticipantpaid", err);
@@ -275,13 +363,9 @@ export function useSplits(options?: { enabled?: boolean }) {
     try {
       const batch = writeBatch(db);
       batch.set(entryRef, { ...built.entry, createdAt: serverTimestamp() });
-      batch.update(
-        doc(db, "splits", splitId),
-        omitUndefined({
-          participants: built.participants.map(toFirestoreParticipant),
-          settled: built.settled,
-        })
-      );
+      applyShareSideEffects(batch, db, split, built.participants, {
+        settled: built.settled,
+      });
       await commitWrite(() => batch.commit(), { label: "collection" });
       toast.success("Marked as collected");
       return true;
@@ -310,18 +394,12 @@ export function useSplits(options?: { enabled?: boolean }) {
 
     try {
       const batch = writeBatch(db);
-      if (built.entryIdToDelete) {
-        batch.delete(
-          doc(db, "users", uid, "accountEntries", built.entryIdToDelete)
-        );
+      for (const entryId of built.entryIdsToDelete) {
+        batch.delete(doc(db, "users", uid, "accountEntries", entryId));
       }
-      batch.update(
-        doc(db, "splits", splitId),
-        omitUndefined({
-          participants: built.participants.map(toFirestoreParticipant),
-          settled: built.settled,
-        })
-      );
+      applyShareSideEffects(batch, db, split, built.participants, {
+        settled: built.settled,
+      });
       await commitWrite(() => batch.commit(), { label: "collection" });
       return true;
     } catch (err) {
@@ -372,7 +450,7 @@ export function useSplits(options?: { enabled?: boolean }) {
           createdAt: serverTimestamp(),
         });
       }
-      batch.update(doc(db, "splits", splitId), built.splitUpdates);
+      applyShareSideEffects(batch, db, split, split.participants, built.splitUpdates);
       const outcome = await commitWrite(() => batch.commit(), {
         label: "gift purchase",
       });
@@ -397,28 +475,60 @@ export function useSplits(options?: { enabled?: boolean }) {
       return false;
     }
 
-    const updatedParticipants = split.participants.map((p) => ({
-      ...p,
-      paid: true,
-    }));
+    const updatedParticipants = split.participants.map((p) =>
+      isParticipantContributing(p)
+        ? { ...p, paid: true, paidAmount: Number(p.amount) || 0 }
+        : p
+    );
 
     try {
-      const outcome = await commitWrite(
-        () =>
-          updateDoc(
-            doc(db, "splits", splitId),
-            omitUndefined({
-              participants: updatedParticipants.map(toFirestoreParticipant),
-              settled: true,
-            })
-          ),
-        { label: "split settlement" }
-      );
+      const batch = writeBatch(db);
+      applyShareSideEffects(batch, db, split, updatedParticipants, {
+        settled: true,
+      });
+      const outcome = await commitWrite(() => batch.commit(), {
+        label: "split settlement",
+      });
       toast.success(writeSavedMessage(outcome, "Split marked as fully settled!"));
       return true;
     } catch (err) {
       logError("splits.settleall", err);
       toast.error(friendlyErrorMessage(err, "Failed to settle split"));
+      return false;
+    }
+  };
+
+  const optOutParticipant = async (
+    splitId: string,
+    participantKey: string
+  ): Promise<boolean> => {
+    const db = getFirestoreDb();
+    if (!uid || !db || !splitId) return false;
+
+    const split = splits.find((s) => s.id === splitId);
+    if (!split) return false;
+    if (split.createdBy !== uid) {
+      toast.error("Only the organizer can drop someone from this split.");
+      return false;
+    }
+
+    const built = recalibrateSplitAfterOptOut(split, participantKey);
+    if ("error" in built) {
+      toast.error(built.error);
+      return false;
+    }
+
+    try {
+      const batch = writeBatch(db);
+      applyShareSideEffects(batch, db, split, built.participants, {
+        settled: built.settled,
+      });
+      await commitWrite(() => batch.commit(), { label: "split opt-out" });
+      toast.success("Shares updated");
+      return true;
+    } catch (err) {
+      logError("splits.optout", err);
+      toast.error(friendlyErrorMessage(err, "Failed to update shares"));
       return false;
     }
   };
@@ -441,6 +551,9 @@ export function useSplits(options?: { enabled?: boolean }) {
         }
         for (const requestId of linked.paymentRequestIds) {
           batch.delete(doc(db, "paymentRequests", requestId));
+        }
+        if (linked.publicShareId) {
+          batch.delete(doc(db, "splitPublicShares", linked.publicShareId));
         }
       }
       batch.delete(doc(db, "splits", id));
@@ -468,6 +581,7 @@ export function useSplits(options?: { enabled?: boolean }) {
     unmarkParticipantCollected,
     spendCollectPot,
     settleAll,
+    optOutParticipant,
     deleteSplit,
   };
 }
