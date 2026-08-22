@@ -32,7 +32,7 @@ export function AccountCreditHero({
   /** Owed under a cancelled statement — not this cycle, so it never eats the limit. */
   cancelledSpend?: number;
   totalOutstanding: number;
-  /** Paid beyond every statement and this cycle's spend. */
+  /** Already paid in advance — netted out of `totalOutstanding`. */
   unappliedCredit?: number;
   availableCredit: number;
   creditLimit: number;
@@ -148,7 +148,7 @@ export function AccountCreditHero({
         {unappliedCredit > 0 ? (
           <View style={styles.dueRow}>
             <Text style={[styles.dueLabel, { color: theme.colors.mutedForeground }]}>
-              Credit balance
+              Already paid in advance
             </Text>
             <Amount
               value={unappliedCredit}

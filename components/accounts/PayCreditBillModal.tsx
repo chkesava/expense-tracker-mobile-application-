@@ -168,6 +168,22 @@ export function PayCreditBillModal({
       toast.error("Please enter a payment date");
       return;
     }
+    // Paying more than the card owes leaves an advance no statement can absorb,
+    // which is confusing to read and easy to create by accident. Cap the payment
+    // at what is actually owed and say what that is.
+    const owed = usageInfo?.totalOutstanding ?? 0;
+    if (owed <= 0) {
+      toast.error(
+        `Nothing is owed on ${selectedCard?.name || "this card"} right now`
+      );
+      return;
+    }
+    if (parsedAmount > owed + 0.005) {
+      toast.error(
+        `That is more than the ${displayCurrency} ${owed.toLocaleString()} owed on this card`
+      );
+      return;
+    }
 
     setSaving(true);
     try {
