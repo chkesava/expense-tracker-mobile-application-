@@ -5,7 +5,6 @@ import {
   Text,
   View,
 } from "react-native";
-import * as Haptics from "expo-haptics";
 import { MapPin, Plane, Plus } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
@@ -14,7 +13,6 @@ import { SkeletonHero, SkeletonList } from "@/components/common/Skeleton";
 import { CreateTripModal } from "@/components/trips/CreateTripModal";
 import { TripDetailModal } from "@/components/trips/TripDetailModal";
 import { useTrips } from "@/hooks/useTrips";
-import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import type { Trip } from "@/shared/types/trip";
 import {
   computeTripSummary,
@@ -24,13 +22,15 @@ import {
 } from "@/shared/utils/tripCalculations";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
 type TripTab = "active" | "upcoming" | "completed";
 
 export function TripsList() {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
-  const { settings: system } = useSystemSettings();
+  const displayCurrency = useDisplayCurrency();
   const { trips, loading } = useTrips();
 
   const [activeTab, setActiveTab] = useState<TripTab>("active");
@@ -82,7 +82,7 @@ export function TripsList() {
           </Text>
           <Pressable
             onPress={() => {
-              Haptics.selectionAsync().catch(() => undefined);
+              haptic.selection().catch(() => undefined);
               setIsCreateOpen(true);
             }}
             style={({ pressed }) => [
@@ -189,7 +189,7 @@ export function TripsList() {
             <Pressable
               key={tab}
               onPress={() => {
-                Haptics.selectionAsync().catch(() => undefined);
+                haptic.selection().catch(() => undefined);
                 setActiveTab(tab);
               }}
               style={[
@@ -261,7 +261,7 @@ export function TripsList() {
               <Pressable
                 key={trip.id}
                 onPress={() => {
-                  Haptics.selectionAsync().catch(() => undefined);
+                  haptic.selection().catch(() => undefined);
                   setSelectedTrip(trip);
                 }}
                 style={({ pressed }) => [
@@ -361,7 +361,7 @@ export function TripsList() {
                   <View style={{ alignItems: "flex-end", gap: 4 }}>
                     <Amount
                       value={trip.spentAmount || 0}
-                      currency={system.defaultCurrency}
+                      currency={displayCurrency}
                       ghostable
                       style={{
                         fontSize: theme.typography.md,
@@ -375,7 +375,7 @@ export function TripsList() {
                         color: theme.colors.mutedForeground,
                       }}
                     >
-                      of {system.defaultCurrency}{" "}
+                      of {displayCurrency}{" "}
                       {trip.totalBudget.toLocaleString()}
                     </Text>
                     <Text

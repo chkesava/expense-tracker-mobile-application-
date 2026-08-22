@@ -5,6 +5,8 @@ export type NavigationItem = {
   path: string;
   label: string;
   mobileLabel?: string;
+  /** Key into `TRANSLATIONS` so nav chrome follows the `language` preference. */
+  translationKey: string;
   includeInBottomNav?: boolean;
   includeInDrawer?: boolean;
   requiresInvestmentsFeature?: boolean;
@@ -13,6 +15,7 @@ export type NavigationItem = {
 export const CORE_NAV_ITEMS: NavigationItem[] = [
   {
     id: "home",
+    translationKey: "nav_dashboard",
     path: "/dashboard",
     label: "Home",
     mobileLabel: "Home",
@@ -21,6 +24,7 @@ export const CORE_NAV_ITEMS: NavigationItem[] = [
   },
   {
     id: "ledger",
+    translationKey: "nav_expenses",
     path: "/ledger",
     label: "Transactions",
     mobileLabel: "Transactions",
@@ -29,6 +33,7 @@ export const CORE_NAV_ITEMS: NavigationItem[] = [
   },
   {
     id: "vaults",
+    translationKey: "nav_vaults",
     path: "/vaults",
     label: "Vaults",
     mobileLabel: "Vaults",
@@ -37,6 +42,7 @@ export const CORE_NAV_ITEMS: NavigationItem[] = [
   },
   {
     id: "investments",
+    translationKey: "nav_investments",
     path: "/investments",
     label: "Investments",
     mobileLabel: "Investments",
@@ -46,6 +52,7 @@ export const CORE_NAV_ITEMS: NavigationItem[] = [
   },
   {
     id: "insights",
+    translationKey: "nav_analytics",
     path: "/insights",
     label: "Insights",
     mobileLabel: "Insights",
@@ -54,6 +61,7 @@ export const CORE_NAV_ITEMS: NavigationItem[] = [
   },
   {
     id: "settings",
+    translationKey: "nav_settings",
     path: "/settings",
     label: "Settings",
     includeInBottomNav: false,
@@ -65,6 +73,7 @@ export const ADMIN_NAV_ITEM: NavigationItem = {
   id: "admin",
   path: "/admin",
   label: "Admin",
+  translationKey: "nav_admin",
   includeInBottomNav: false,
   includeInDrawer: true,
 };
@@ -187,4 +196,27 @@ export function isNavItemActive(pathname: string, id: NavSectionId): boolean {
   if (id === "insights") return INSIGHTS_PREFIXES.some((prefix) => clean.startsWith(prefix));
   if (id === "ledger") return LEDGER_PREFIXES.some((prefix) => clean.startsWith(prefix));
   return false;
+}
+
+/**
+ * Primary bottom-nav tabs in swipe order, keyed by section id. A route only
+ * participates in horizontal tab swiping when it *is* one of these tabs — sub
+ * screens such as `/accounts/:id` or `/settings` deliberately opt out even
+ * though they highlight a bottom-nav item.
+ */
+const PRIMARY_TAB_ROUTES: Partial<Record<NavSectionId, string[]>> = {
+  home: ["/dashboard", "/"],
+  ledger: ["/ledger"],
+  vaults: ["/vaults"],
+  investments: ["/investments"],
+  insights: ["/insights"],
+};
+
+/** Section id of the primary tab a pathname *is*, or null for sub screens. */
+export function resolvePrimaryTabId(pathname: string): NavSectionId | null {
+  const clean = normalizePathname(pathname).split("?")[0].replace(/\/$/, "");
+  for (const [id, routes] of Object.entries(PRIMARY_TAB_ROUTES)) {
+    if (routes?.includes(clean || "/")) return id as NavSectionId;
+  }
+  return null;
 }

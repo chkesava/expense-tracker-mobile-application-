@@ -1,0 +1,80 @@
+# Netlify build for the Expo web export.
+#
+# This site serves the public share pages — /split/:slug and /payment/:slug —
+# for people who have no account. It is self-contained: the app addresses it via
+# EXPO_PUBLIC_SHARE_URL, and nothing here depends on, or redirects to, any other
+# origin. (EXPO_PUBLIC_APP_URL still points at the legacy web app, but only for
+# the /api/* market functions and /mobile-google-auth, which are unrelated to
+# sharing.)
+#
+# web.output is "single" (SPA): `expo export` emits one index.html plus /_expo/**
+# and /assets/**. Dynamic routes ([slug]) cannot be statically rendered without
+# generateStaticParams, and split slugs are minted at runtime, so there is no
+# build-time list to generate from.
+
+[build]
+  command = "npm run build:web"
+  publish = "dist"
+
+[build.environment]
+  # Matches .github/workflows/pr-checks.yml and android-release.yml.
+  NODE_VERSION = "22"
+  # EXPO_PUBLIC_* values are inlined into the client bundle by design. Without
+  # this, Netlify's secrets scanner fails the build on finding a declared env
+  # var value inside dist/.
+  SECRETS_SCAN_OMIT_KEYS = "EXPO_PUBLIC_FIREBASE_API_KEY,EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,EXPO_PUBLIC_FIREBASE_PROJECT_ID,EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER,EXPO_PUBLIC_FIREBASE_APP_ID,EXPO_PUBLIC_APP_URL,EXPO_PUBLIC_SHARE_URL"
+
+# Share links are semi-private. Keep the whole site out of search indexes.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Robots-Tag = "noindex, nofollow"
+
+# Content-hashed bundles and assets.
+[[headers]]
+  for = "/_expo/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# SPA fallback, deliberately scoped to the two public routes rather than "/*".
+# expo-router does client-side routing, so a share path has to be served
+# index.html for the slug to resolve -- but index.html boots the WHOLE app, so a
+# blanket fallback would make this host a second, fully sign-in-able copy of it
+# (/dashboard, /settings, ... all reachable). Only these two exist to be public.
+[[redirects]]
+  from = "/split/*"
+  to = "/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/payment/*"
+  to = "/index.html"
+  status = 200
+
+# `/` has to be forced: it resolves to the real index.html, and Netlify will not
+# shadow an existing file otherwise, so without this the bare domain boots the
+# whole app.
+#
+# It must also answer 200, which is less obvious. netinfo's web reachability
+# check is a same-origin `HEAD /` tested for `status === 200` (see its
+# internal/defaultConfiguration.web.js). A 404 here therefore makes NetInfo
+# report the internet as unreachable, and every visitor to /split/:slug gets the
+# app's "No Internet Connection" banner on a page that loaded fine. So: a static
+# 200 page that is still not the app shell.
+[[redirects]]
+  from = "/"
+  to = "/home.html"
+  status = 200
+  force = true
+
+# There is deliberately NO catch-all. Every other path (/dashboard, /settings,
+# ...) has no file behind it, so Netlify serves public/404.html by itself, with a
+# real 404. That leaves no app surface on this host and no dependency on any
+# other origin. Real files -- /_expo/**, /assets/**, /favicon.ico, /robots.txt --
+# keep being served, which matters because index.html references those bundles
+# absolutely.

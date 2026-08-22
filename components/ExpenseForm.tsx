@@ -78,6 +78,7 @@ import {
 } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
 export interface ExpenseFormProps {
   editingExpense?: Expense | null;
@@ -110,6 +111,7 @@ export function ExpenseForm({
   const uid = user?.uid;
   const { settings } = useSettings();
   const { settings: system } = useSystemSettings();
+  const displayCurrency = useDisplayCurrency();
   const { celebrateMilestone } = useCelebration();
 
   const { accounts } = useAccounts();
@@ -633,7 +635,7 @@ export function ExpenseForm({
               color: theme.colors.mutedForeground,
             }}
           >
-            AMOUNT ({system.defaultCurrency})
+            AMOUNT ({displayCurrency})
           </Text>
           <View style={styles.amountInputRow}>
             <Text
@@ -646,7 +648,7 @@ export function ExpenseForm({
                     : theme.colors.primary,
               }}
             >
-              {system.defaultCurrency}
+              {displayCurrency}
             </Text>
             <TextInput
               value={amount}
@@ -957,7 +959,7 @@ export function ExpenseForm({
               </Text>
               <Amount
                 value={balancePreview}
-                currency={system.defaultCurrency}
+                currency={displayCurrency}
                 ghostable
                 style={{
                   fontSize: theme.typography.xs,

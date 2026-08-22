@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import * as Haptics from "expo-haptics";
 import { ShieldAlert, Sparkles, Inbox, ChevronRight } from "lucide-react-native";
 
 import { BudgetAlertsWidget } from "@/components/dashboard/BudgetAlertsWidget";
@@ -44,7 +43,12 @@ import { useIncomes } from "@/hooks/useIncomes";
 import { useSmsReviewInbox } from "@/hooks/useSmsReviewInbox";
 import { useAuth } from "@/providers/AuthProvider";
 import { useModals } from "@/providers/ModalProvider";
+import { useInvestmentsEnabled } from "@/hooks/useInvestmentsEnabled";
 import { useSettings } from "@/providers/SettingsProvider";
+import {
+  formatMonthLabel,
+  type DateFormatOption,
+} from "@/shared/utils/dateDisplay";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import type { Expense } from "@/shared/types/expense";
 import { computeBankBalance } from "@/shared/utils/accountBalance";
@@ -57,6 +61,8 @@ import {
 import { formatDetectedCount } from "@/services/sms/smsReviewInbox";
 import { currentMonthKey, formatDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
+import { haptic } from "@/lib/haptics";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
 /** Soft-pinned hero widgets shown first to match the reference layout. */
 const HERO_WIDGETS: DashboardWidgetId[] = ["focus", "gamification"];
@@ -80,14 +86,11 @@ function getPreviousMonthKey(month: string): string {
   return `${y}-${m}`;
 }
 
-function formatMonthChipLabel(month: string): string {
-  try {
-    const [year, m] = month.split("-");
-    const date = new Date(parseInt(year, 10), parseInt(m, 10) - 1, 1);
-    return date.toLocaleDateString("en-US", { month: "short", year: "numeric" });
-  } catch {
-    return "This Month";
-  }
+function formatMonthChipLabel(
+  month: string,
+  dateFormat: DateFormatOption
+): string {
+  return formatMonthLabel(month, dateFormat) || "This Month";
 }
 
 export default function DashboardScreen() {
@@ -96,7 +99,9 @@ export default function DashboardScreen() {
   const surfaces = useSurfaces();
   const { isDuress } = useAuth();
   const { settings: system } = useSystemSettings();
+  const displayCurrency = useDisplayCurrency();
   const { settings } = useSettings();
+  const investmentsEnabled = useInvestmentsEnabled();
   const {
     globalMonth,
     setIsAddExpenseOpen,
@@ -293,13 +298,9 @@ export default function DashboardScreen() {
     return getOrderedDashboardWidgets(
       settings.dashboardOrder,
       settings.dashboardWidgets,
-      settings.enableInvestments
+      investmentsEnabled
     );
-  }, [
-    settings.dashboardOrder,
-    settings.dashboardWidgets,
-    settings.enableInvestments,
-  ]);
+  }, [settings.dashboardOrder, settings.dashboardWidgets, investmentsEnabled]);
 
   /** Hero widgets first (when enabled), then remaining widgets in user order. */
   const displayWidgetIds = useMemo(() => {
@@ -326,7 +327,7 @@ export default function DashboardScreen() {
               monthlyIncome={monthlyIncome}
               monthlySpent={monthlySpent}
               activeMonth={activeMonth}
-              currency={system.defaultCurrency}
+              currency={displayCurrency}
               isLoading={isLoading}
               onOpenMonthPicker={() => setIsMonthDrawerOpen(true)}
             />
@@ -346,7 +347,7 @@ export default function DashboardScreen() {
               key="budgetAlerts"
               monthlyBudget={settings.monthlyBudget}
               monthlySpent={monthlySpent}
-              currency={system.defaultCurrency}
+              currency={displayCurrency}
               activeCategoryBudgets={activeCategoryBudgets}
               activeMonth={activeMonth}
             />
@@ -357,7 +358,7 @@ export default function DashboardScreen() {
             <TopCategoriesWidget
               key="topCategories"
               expenses={monthlyExpenses}
-              currency={system.defaultCurrency}
+              currency={displayCurrency}
               activeMonth={activeMonth}
             />
           );
@@ -367,7 +368,7 @@ export default function DashboardScreen() {
             <RecentActivityWidget
               key="recentActivity"
               expenses={expenses}
-              currency={system.defaultCurrency}
+              currency={displayCurrency}
               onEditExpense={handleEditExpense}
               onViewAll={() => router.push("/ledger")}
             />
@@ -378,7 +379,7 @@ export default function DashboardScreen() {
             <FinancialGoalsWidget
               key="financialGoals"
               goals={goals}
-              currency={system.defaultCurrency}
+              currency={displayCurrency}
             />
           );
 
@@ -389,7 +390,7 @@ export default function DashboardScreen() {
               expenses={monthlyExpenses}
               activeMonth={activeMonth}
               monthlyBudget={settings.monthlyBudget}
-              currency={system.defaultCurrency}
+              currency={displayCurrency}
             />
           );
 
@@ -398,7 +399,7 @@ export default function DashboardScreen() {
             <InvestmentsWidget
               key="investments"
               liquidBalance={totalBalance}
-              currency={system.defaultCurrency}
+              currency={displayCurrency}
             />
           );
 
@@ -406,7 +407,7 @@ export default function DashboardScreen() {
           return (
             <SubscriptionsWidget
               key="subscriptions"
-              currency={system.defaultCurrency}
+              currency={displayCurrency}
             />
           );
 
@@ -416,7 +417,7 @@ export default function DashboardScreen() {
               key="focus"
               todaySpent={todaySpent}
               dailyTarget={dailyBudgetTarget}
-              currency={system.defaultCurrency}
+              currency={displayCurrency}
             />
           );
 
@@ -461,7 +462,7 @@ export default function DashboardScreen() {
       onScrollBeginDrag={() => sampleScrollFps("dashboard")}
     >
       <DashboardWelcome
-        monthLabel={formatMonthChipLabel(activeMonth)}
+        monthLabel={formatMonthChipLabel(activeMonth, settings.dateFormat)}
         onOpenMonthPicker={() => setIsMonthDrawerOpen(true)}
       />
 
@@ -503,7 +504,7 @@ export default function DashboardScreen() {
       {!isDuress && inboxCount > 0 ? (
         <Pressable
           onPress={() => {
-            Haptics.selectionAsync().catch(() => undefined);
+            haptic.selection().catch(() => undefined);
             router.push("/sms-inbox" as any);
           }}
           android_ripple={{
@@ -587,14 +588,14 @@ export default function DashboardScreen() {
                     monthlyIncome={monthlyIncome}
                     previousSpent={previousSpent}
                     previousIncome={previousIncome}
-                    currency={system.defaultCurrency}
-                    monthLabel={formatMonthChipLabel(activeMonth)}
+                    currency={displayCurrency}
+                    monthLabel={formatMonthChipLabel(activeMonth, settings.dateFormat)}
                     onOpenMonthPicker={() => setIsMonthDrawerOpen(true)}
                   />
                   <SmartInsightsWidget
                     expenses={expenses}
                     monthlyBudget={settings.monthlyBudget}
-                    currency={system.defaultCurrency}
+                    currency={displayCurrency}
                     todayKey={todayKey}
                   />
                 </View>
@@ -610,14 +611,14 @@ export default function DashboardScreen() {
                 monthlyIncome={monthlyIncome}
                 previousSpent={previousSpent}
                 previousIncome={previousIncome}
-                currency={system.defaultCurrency}
-                monthLabel={formatMonthChipLabel(activeMonth)}
+                currency={displayCurrency}
+                monthLabel={formatMonthChipLabel(activeMonth, settings.dateFormat)}
                 onOpenMonthPicker={() => setIsMonthDrawerOpen(true)}
               />
               <SmartInsightsWidget
                 expenses={expenses}
                 monthlyBudget={settings.monthlyBudget}
-                currency={system.defaultCurrency}
+                currency={displayCurrency}
                 todayKey={todayKey}
               />
             </>

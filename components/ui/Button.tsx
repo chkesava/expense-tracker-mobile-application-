@@ -10,7 +10,6 @@ import {
   type ViewStyle,
 } from "react-native";
 import type { ReactNode } from "react";
-import * as Haptics from "expo-haptics";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -18,6 +17,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { useTheme } from "@/theme/ThemeProvider";
+import { haptic as hapticFeedback } from "@/lib/haptics";
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -136,7 +136,7 @@ export function Button({
   const handlePress = (e: GestureResponderEvent) => {
     if (isDisabled) return;
     if (haptic) {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+      hapticFeedback.light().catch(() => undefined);
     }
     onPress?.(e);
   };

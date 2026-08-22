@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import * as Haptics from "expo-haptics";
 import { CreditCard, Landmark, Wallet } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
@@ -14,7 +13,6 @@ import { useExpenses } from "@/hooks/useExpenses";
 import { logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
 import { useSettings } from "@/providers/SettingsProvider";
-import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import { OPEN_BILL_STATUSES } from "@/shared/types/creditCardBill";
 import type { Account, AccountType } from "@/shared/types/expense";
 import { computeOutstandingCredit } from "@/shared/utils/accountBalance";
@@ -23,6 +21,8 @@ import { earliestOpenCreditCardBill } from "@/shared/utils/creditCardBillStatus"
 import { formatDateKey, todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
 export interface PayCreditBillModalProps {
   isOpen: boolean;
@@ -54,7 +54,7 @@ export function PayCreditBillModal({
 }: PayCreditBillModalProps) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
-  const { settings: system } = useSystemSettings();
+  const displayCurrency = useDisplayCurrency();
   const { settings } = useSettings();
   const { addPayment, addExternalPayment, payments } = useAccountPayments();
   const { expenses } = useExpenses();
@@ -180,7 +180,7 @@ export function PayCreditBillModal({
     }
     if (parsedAmount > owed + 0.005) {
       toast.error(
-        `That is more than the ${settings.currency} ${owed.toLocaleString()} owed on this card`
+        `That is more than the ${displayCurrency} ${owed.toLocaleString()} owed on this card`
       );
       return;
     }
@@ -274,7 +274,7 @@ export function PayCreditBillModal({
                 <Pressable
                   key={c.id}
                   onPress={() => {
-                    Haptics.selectionAsync().catch(() => undefined);
+                    haptic.selection().catch(() => undefined);
                     setToCardId(c.id);
                   }}
                   style={[
@@ -342,7 +342,7 @@ export function PayCreditBillModal({
               </Text>
               <Amount
                 value={usageInfo.outstanding}
-                currency={system.defaultCurrency}
+                currency={displayCurrency}
                 style={{
                   fontSize: theme.typography.md,
                   fontWeight: "700",
@@ -355,7 +355,7 @@ export function PayCreditBillModal({
                 </Text>
                 <Amount
                   value={usageInfo.statementDue}
-                  currency={system.defaultCurrency}
+                  currency={displayCurrency}
                   ghostable
                   style={[styles.splitValue, { color: theme.colors.foreground }]}
                 />
@@ -364,7 +364,7 @@ export function PayCreditBillModal({
                 </Text>
                 <Amount
                   value={usageInfo.unbilledSpend}
-                  currency={system.defaultCurrency}
+                  currency={displayCurrency}
                   ghostable
                   style={[styles.splitValue, { color: theme.colors.foreground }]}
                 />
@@ -449,7 +449,7 @@ export function PayCreditBillModal({
                   <Pressable
                     key={b.id}
                     onPress={() => {
-                      Haptics.selectionAsync().catch(() => undefined);
+                      haptic.selection().catch(() => undefined);
                       setFromAccountId(b.id);
                     }}
                     style={[

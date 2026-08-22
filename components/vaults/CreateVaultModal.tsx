@@ -8,17 +8,17 @@ import {
   TextInput,
   View,
 } from "react-native";
-import * as Haptics from "expo-haptics";
 import { Check, Plus, Shield, Users, X } from "lucide-react-native";
 
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { toast } from "@/lib/toast";
 import { useCelebration } from "@/providers/CelebrationProvider";
-import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import type { SharedVault } from "@/shared/types/vault";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
 export interface CreateVaultModalProps {
   visible: boolean;
@@ -50,7 +50,7 @@ export function CreateVaultModal({
 }: CreateVaultModalProps) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
-  const { settings: system } = useSystemSettings();
+  const displayCurrency = useDisplayCurrency();
   const { celebrateMilestone } = useCelebration();
 
   const [name, setName] = useState("");
@@ -72,7 +72,7 @@ export function CreateVaultModal({
         name: name.trim(),
         description: description.trim(),
         budget: numBudget,
-        currency: system.defaultCurrency,
+        currency: displayCurrency,
         themeColor,
       });
       celebrateMilestone("milestone_first_goal", {
@@ -163,7 +163,7 @@ export function CreateVaultModal({
             {/* Target Budget */}
             <View style={styles.inputGroup}>
               <Text style={[styles.label, { color: theme.colors.foreground }]}>
-                Monthly Budget Limit ({system.defaultCurrency})
+                Monthly Budget Limit ({displayCurrency})
               </Text>
               <Input
                 value={budget}
@@ -185,7 +185,7 @@ export function CreateVaultModal({
                     <Pressable
                       key={c}
                       onPress={() => {
-                        Haptics.selectionAsync().catch(() => undefined);
+                        haptic.selection().catch(() => undefined);
                         setThemeColor(c);
                       }}
                       style={[

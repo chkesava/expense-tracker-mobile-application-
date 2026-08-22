@@ -22,7 +22,6 @@ import { OrdersTab } from "@/components/portfolio/OrdersTab";
 import { haptic } from "@/lib/haptics";
 import { useMarketQuotes } from "@/hooks/useMarketQuotes";
 import { usePortfolio } from "@/hooks/usePortfolio";
-import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import { computePositionMetrics } from "@/shared/types/market";
 import type {
   AllocationSlice,
@@ -31,6 +30,8 @@ import type {
 } from "@/shared/features/portfolio/types";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
+import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
 
 type PortfolioSubTab = "holdings" | "watchlist" | "orders" | "alerts" | "charts";
 
@@ -79,7 +80,7 @@ function PortfolioDashboardSkeleton({ isDark }: { isDark: boolean }) {
 export function PortfolioDashboard({ listHeader }: { listHeader?: ReactNode }) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
-  const { settings: system } = useSystemSettings();
+  const displayCurrency = useDisplayCurrency();
 
   const {
     holdings,
@@ -237,7 +238,7 @@ export function PortfolioDashboard({ listHeader }: { listHeader?: ReactNode }) {
     <ManageStockCashModal
       visible={isCashModalOpen}
       onClose={() => setIsCashModalOpen(false)}
-      currency={system.defaultCurrency}
+      currency={displayCurrency}
     />
   );
 
@@ -257,7 +258,7 @@ export function PortfolioDashboard({ listHeader }: { listHeader?: ReactNode }) {
         {listHeader}
         <OnboardingFlow
           visible={true}
-          currency={system.defaultCurrency}
+          currency={displayCurrency}
           onComplete={async (s) => {
             await saveSettings(s);
           }}
@@ -324,63 +325,65 @@ export function PortfolioDashboard({ listHeader }: { listHeader?: ReactNode }) {
 
       <PortfolioSummaryCard
         summary={summary}
-        currency={system.defaultCurrency}
+        currency={displayCurrency}
         onManageCash={() => setIsCashModalOpen(true)}
       />
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.subTabRow}
-      >
-        {subTabs.map((tab) => {
-          const active = subTab === tab.id;
-          const iconColor = active
-            ? ACTIVE_ACTION_FG
-            : isDark
-              ? "#F8FAFC"
-              : theme.colors.foreground;
-          return (
-            <Pressable
-              key={tab.id}
-              onPress={() => {
-                void haptic.selection();
-                setSubTab(tab.id);
-              }}
-              style={({ pressed }) => [
-                styles.subTabPill,
-                {
-                  backgroundColor: active
-                    ? CARD_ORANGE
-                    : isDark
-                      ? "rgba(255,255,255,0.05)"
-                      : "rgba(0,0,0,0.04)",
-                  borderColor: active
-                    ? CARD_ORANGE
-                    : isDark
-                      ? "rgba(148,163,184,0.16)"
-                      : theme.colors.border,
-                },
-                pressed && styles.pressed,
-              ]}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: active }}
-              accessibilityLabel={tab.label}
-            >
-              {tab.icon(iconColor)}
-              <Text
-                style={{
-                  fontSize: 13,
-                  fontWeight: active ? "800" : "600",
-                  color: active ? ACTIVE_ACTION_FG : theme.colors.foreground,
+      <HorizontalSwipeBoundary>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.subTabRow}
+        >
+          {subTabs.map((tab) => {
+            const active = subTab === tab.id;
+            const iconColor = active
+              ? ACTIVE_ACTION_FG
+              : isDark
+                ? "#F8FAFC"
+                : theme.colors.foreground;
+            return (
+              <Pressable
+                key={tab.id}
+                onPress={() => {
+                  void haptic.selection();
+                  setSubTab(tab.id);
                 }}
+                style={({ pressed }) => [
+                  styles.subTabPill,
+                  {
+                    backgroundColor: active
+                      ? CARD_ORANGE
+                      : isDark
+                        ? "rgba(255,255,255,0.05)"
+                        : "rgba(0,0,0,0.04)",
+                    borderColor: active
+                      ? CARD_ORANGE
+                      : isDark
+                        ? "rgba(148,163,184,0.16)"
+                        : theme.colors.border,
+                  },
+                  pressed && styles.pressed,
+                ]}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: active }}
+                accessibilityLabel={tab.label}
               >
-                {tab.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
+                {tab.icon(iconColor)}
+                <Text
+                  style={{
+                    fontSize: 13,
+                    fontWeight: active ? "800" : "600",
+                    color: active ? ACTIVE_ACTION_FG : theme.colors.foreground,
+                  }}
+                >
+                  {tab.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      </HorizontalSwipeBoundary>
     </View>
   );
 
@@ -389,14 +392,14 @@ export function PortfolioDashboard({ listHeader }: { listHeader?: ReactNode }) {
       <WatchlistTab
         watchlist={watchlist}
         quotes={quotes}
-        currency={system.defaultCurrency}
+        currency={displayCurrency}
         onAdd={addToWatchlist}
         onRemove={removeFromWatchlist}
       />
     ) : subTab === "orders" ? (
       <OrdersTab
         orders={orders}
-        currency={system.defaultCurrency}
+        currency={displayCurrency}
         onCancel={cancelOrder}
       />
     ) : subTab === "alerts" ? (
@@ -410,7 +413,7 @@ export function PortfolioDashboard({ listHeader }: { listHeader?: ReactNode }) {
       <PortfolioCharts
         allocations={allocations}
         sparklineData={sparklineData}
-        currency={system.defaultCurrency}
+        currency={displayCurrency}
       />
     ) : null;
 

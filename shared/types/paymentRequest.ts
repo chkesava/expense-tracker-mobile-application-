@@ -21,6 +21,12 @@ export type PaymentRequest = {
   /** Set when this request was created for a collect-mode split. */
   splitId?: string;
   participantKey?: string;
+  /**
+   * Currency the amounts were entered in. Carried on the doc because the
+   * public page is read by people who are not signed in and therefore cannot
+   * read `system_settings/global`.
+   */
+  currency?: string;
 };
 
 export type PaymentRequestInput = Omit<

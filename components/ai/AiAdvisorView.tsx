@@ -10,7 +10,6 @@ import {
   View,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as Haptics from "expo-haptics";
 import {
   Bot,
   CornerDownLeft,
@@ -28,7 +27,6 @@ import { useExpenses } from "@/hooks/useExpenses";
 import { useIncomes } from "@/hooks/useIncomes";
 import { useAuth } from "@/providers/AuthProvider";
 import { useSettings } from "@/providers/SettingsProvider";
-import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import {
   buildAdvisorContext,
   generateAdvisorResponse,
@@ -36,6 +34,9 @@ import {
 } from "@/services/aiAdvisorService";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
+import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
 
 const INITIAL_SUGGESTIONS = [
   "How much did I spend on food this month?",
@@ -48,7 +49,7 @@ const INITIAL_SUGGESTIONS = [
 export function AiAdvisorView() {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
-  const { settings: system } = useSystemSettings();
+  const displayCurrency = useDisplayCurrency();
   const { settings } = useSettings();
   const { user, isDuress } = useAuth();
 
@@ -72,10 +73,10 @@ export function AiAdvisorView() {
       buildAdvisorContext(
         expenses,
         incomes,
-        system.defaultCurrency,
+        displayCurrency,
         settings.monthlyBudget
       ),
-    [expenses, incomes, system.defaultCurrency, settings.monthlyBudget]
+    [expenses, incomes, displayCurrency, settings.monthlyBudget]
   );
 
   // Load chat history from AsyncStorage
@@ -99,7 +100,7 @@ export function AiAdvisorView() {
         role: "assistant",
         content:
           `Hello! I am your **AI Financial Advisor**.\n\n` +
-          `I have analyzed your **${context.currentMonth}** records with **${system.defaultCurrency} ${context.totalExpenses.toLocaleString()}** in expenses.\n\n` +
+          `I have analyzed your **${context.currentMonth}** records with **${displayCurrency} ${context.totalExpenses.toLocaleString()}** in expenses.\n\n` +
           `How can I assist your financial planning today?`,
         timestamp: Date.now(),
         quickActions: INITIAL_SUGGESTIONS.slice(0, 3),
@@ -109,7 +110,7 @@ export function AiAdvisorView() {
     return () => {
       cancelled = true;
     };
-  }, [storageKey, context.currentMonth, context.totalExpenses, system.defaultCurrency]);
+  }, [storageKey, context.currentMonth, context.totalExpenses, displayCurrency]);
 
   // Clear any pending "typing" response timer if the view unmounts mid-response
   // (e.g. the user switches tabs away from Advisor before the reply arrives).
@@ -130,7 +131,7 @@ export function AiAdvisorView() {
     const text = (textToSend || inputText).trim();
     if (!text || isTyping) return;
 
-    Haptics.selectionAsync().catch(() => undefined);
+    haptic.selection().catch(() => undefined);
     setInputText("");
 
     const userMsg: ChatMessage = {
@@ -154,14 +155,14 @@ export function AiAdvisorView() {
       );
       setIsTyping(false);
       await saveHistory([...updatedHistory, response]);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(
+      haptic.success().catch(
         () => undefined
       );
     }, 650);
   };
 
   const handleClearHistory = async () => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(
+    haptic.warning().catch(
       () => undefined
     );
     await AsyncStorage.removeItem(storageKey);
@@ -346,39 +347,41 @@ export function AiAdvisorView() {
       </View>
 
       {/* Suggested Questions Horizontal Bar */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.suggestionsScroll}
-      >
-        {INITIAL_SUGGESTIONS.map((sug, idx) => (
-          <Pressable
-            key={idx}
-            onPress={() => handleSendMessage(sug)}
-            style={({ pressed }) => [
-              styles.suggestionChip,
-              {
-                backgroundColor: isDark
-                  ? "rgba(255,255,255,0.05)"
-                  : "rgba(0,0,0,0.03)",
-                borderColor: theme.colors.border,
-                opacity: pressed ? 0.7 : 1,
-              },
-            ]}
-          >
-            <Sparkles size={12} color={theme.colors.primary} />
-            <Text
-              style={[
-                styles.suggestionChipText,
-                { color: theme.colors.foreground },
+      <HorizontalSwipeBoundary>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.suggestionsScroll}
+        >
+          {INITIAL_SUGGESTIONS.map((sug, idx) => (
+            <Pressable
+              key={idx}
+              onPress={() => handleSendMessage(sug)}
+              style={({ pressed }) => [
+                styles.suggestionChip,
+                {
+                  backgroundColor: isDark
+                    ? "rgba(255,255,255,0.05)"
+                    : "rgba(0,0,0,0.03)",
+                  borderColor: theme.colors.border,
+                  opacity: pressed ? 0.7 : 1,
+                },
               ]}
-              numberOfLines={1}
             >
-              {sug}
-            </Text>
-          </Pressable>
-        ))}
-      </ScrollView>
+              <Sparkles size={12} color={theme.colors.primary} />
+              <Text
+                style={[
+                  styles.suggestionChipText,
+                  { color: theme.colors.foreground },
+                ]}
+                numberOfLines={1}
+              >
+                {sug}
+              </Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+      </HorizontalSwipeBoundary>
 
       {/* Message Input Strip */}
       <View

@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import * as Haptics from "expo-haptics";
 import { ArrowLeft } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
@@ -17,6 +16,7 @@ import { toast } from "@/lib/toast";
 import { formatCardLabel } from "@/services/creditCardBills/billNotificationCopy";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
 
 export default function CreditCardBillDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -50,7 +50,7 @@ export default function CreditCardBillDetailScreen() {
       >
         <Pressable
           onPress={() => {
-            Haptics.selectionAsync().catch(() => undefined);
+            haptic.selection().catch(() => undefined);
             router.back();
           }}
           style={{

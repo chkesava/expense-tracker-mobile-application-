@@ -95,6 +95,44 @@ export const haptic = {
   },
 
   /**
+   * Light impact — row taps, card presses, incremental controls.
+   * Exists so callers never need to import `expo-haptics` (and therefore never
+   * bypass the user's `hapticFeedback` preference) just to name a style.
+   */
+  async light(): Promise<void> {
+    if (!isHapticsEnabled || Platform.OS === "web") return;
+    try {
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch {
+      // Ignore unsupported devices
+    }
+  },
+
+  /**
+   * Medium impact — confirmations, sheet open/close, mode switches
+   */
+  async medium(): Promise<void> {
+    if (!isHapticsEnabled || Platform.OS === "web") return;
+    try {
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    } catch {
+      // Ignore unsupported devices
+    }
+  },
+
+  /**
+   * Warning notification — non-blocking validation and cautionary states
+   */
+  async warning(): Promise<void> {
+    if (!isHapticsEnabled || Platform.OS === "web") return;
+    try {
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    } catch {
+      // Ignore unsupported devices
+    }
+  },
+
+  /**
    * Custom impact feedback
    */
   async impact(

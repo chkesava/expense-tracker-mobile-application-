@@ -14,6 +14,12 @@ function trimEnv(value: string | undefined): string {
 export const env = {
   /** Public app origin for payment share links (ex-VITE_PUBLIC_APP_URL). */
   publicAppUrl: trimEnv(process.env.EXPO_PUBLIC_APP_URL),
+  /**
+   * Origin hosting the public share pages. Separate from `publicAppUrl`, which
+   * still addresses the `/api/*` market functions and the Google auth bridge.
+   * Empty means "fall back to publicAppUrl" — see `getPublicAppOrigin`.
+   */
+  shareUrl: trimEnv(process.env.EXPO_PUBLIC_SHARE_URL),
 
   /** Google OAuth Web client ID (Firebase Console → Auth → Google). */
   googleWebClientId: trimEnv(process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID),

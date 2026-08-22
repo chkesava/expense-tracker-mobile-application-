@@ -7,7 +7,6 @@ import {
   Text,
   View,
 } from "react-native";
-import * as Haptics from "expo-haptics";
 import {
   Compass,
   Flame,
@@ -21,10 +20,11 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useCategories } from "@/hooks/useCategories";
 import { toast } from "@/lib/toast";
-import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import { FOCUS_DURATIONS } from "@/shared/types/focus";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
 export interface FocusConfigModalProps {
   visible: boolean;
@@ -44,7 +44,7 @@ export function FocusConfigModal({
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const { categories } = useCategories();
-  const { settings: system } = useSystemSettings();
+  const displayCurrency = useDisplayCurrency();
 
   const [selectedDuration, setSelectedDuration] = useState<number>(7);
   const [selectedCategory, setSelectedCategory] = useState<string>("Dining & Drinks");
@@ -150,7 +150,7 @@ export function FocusConfigModal({
                     <Pressable
                       key={days}
                       onPress={() => {
-                        Haptics.selectionAsync().catch(() => undefined);
+                        haptic.selection().catch(() => undefined);
                         setSelectedDuration(days);
                       }}
                       style={[
@@ -198,7 +198,7 @@ export function FocusConfigModal({
                     <Pressable
                       key={cat}
                       onPress={() => {
-                        Haptics.selectionAsync().catch(() => undefined);
+                        haptic.selection().catch(() => undefined);
                         setSelectedCategory(cat);
                       }}
                       style={[
@@ -235,7 +235,7 @@ export function FocusConfigModal({
             {/* Daily Limit */}
             <View style={styles.section}>
               <Text style={[styles.sectionTitle, { color: theme.colors.foreground }]}>
-                Daily Spend Limit ({system.defaultCurrency})
+                Daily Spend Limit ({displayCurrency})
               </Text>
               <Input
                 value={dailyLimit}

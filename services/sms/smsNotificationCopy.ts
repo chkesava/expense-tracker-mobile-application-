@@ -7,6 +7,10 @@ import {
   formatRecurringCadence,
   type RecurringPattern,
 } from "./smsRecurringDetector";
+import {
+  getDisplayCurrency,
+  getDisplayNumberFormat,
+} from "@/shared/utils/displayCurrency";
 import { formatAmount } from "@/shared/utils/formatCurrency";
 
 export type SmsNotificationKind = "detected" | "auto_added" | "recurring";
@@ -28,8 +32,11 @@ export type SmsNotificationCopy = {
   identifier: string;
 };
 
-function rupee(amount: number): string {
-  return formatAmount(amount, "INR");
+/** Money in the user's chosen currency + number format (was hardcoded to INR). */
+function money(amount: number): string {
+  return formatAmount(amount, getDisplayCurrency(), {
+    numberFormatStyle: getDisplayNumberFormat(),
+  });
 }
 
 function expenseMerchant(entry: SmsWriteReadyEntry): string {
@@ -62,7 +69,7 @@ function categoryLine(entry: SmsWriteReadyEntry): string {
 export function buildDetectedNotification(
   entry: SmsWriteReadyEntry
 ): SmsNotificationCopy {
-  const amount = rupee(entry.write.payload.amount);
+  const amount = money(entry.write.payload.amount);
   const party =
     entry.write.collection === "incomes" ? "Income" : expenseMerchant(entry);
   return {
@@ -81,7 +88,7 @@ export function buildDetectedNotification(
 export function buildAutoAddedNotification(
   entry: SmsWriteReadyEntry
 ): SmsNotificationCopy {
-  const amount = rupee(entry.write.payload.amount);
+  const amount = money(entry.write.payload.amount);
   const party =
     entry.write.collection === "incomes"
       ? incomeSource(entry)
@@ -104,7 +111,7 @@ export function buildAutoAddedNotification(
 export function buildRecurringDetectedNotification(
   pattern: RecurringPattern
 ): SmsNotificationCopy {
-  const amount = rupee(pattern.amount);
+  const amount = money(pattern.amount);
   const cadence = formatRecurringCadence(pattern);
   return {
     title: "🔄 Recurring payment to review",

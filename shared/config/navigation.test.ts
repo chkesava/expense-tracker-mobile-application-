@@ -5,6 +5,7 @@ import {
   isNavItemActive,
   resolveAndroidBackAction,
   resolveLegacyLedgerTabRoute,
+  resolvePrimaryTabId,
 } from "./navigation";
 
 describe("resolveAndroidBackAction", () => {
@@ -127,5 +128,38 @@ describe("isAccountDetailRoute", () => {
     expect(isAccountDetailRoute("/(app)/accounts/abc123")).toBe(true);
     expect(isAccountDetailRoute("/accounts")).toBe(false);
     expect(isAccountDetailRoute("/ledger")).toBe(false);
+  });
+});
+
+describe("resolvePrimaryTabId", () => {
+  it("maps each primary tab route to its section id", () => {
+    expect(resolvePrimaryTabId("/dashboard")).toBe("home");
+    expect(resolvePrimaryTabId("/")).toBe("home");
+    expect(resolvePrimaryTabId("/(app)/dashboard")).toBe("home");
+    expect(resolvePrimaryTabId("/ledger")).toBe("ledger");
+    expect(resolvePrimaryTabId("/vaults")).toBe("vaults");
+    expect(resolvePrimaryTabId("/investments")).toBe("investments");
+    expect(resolvePrimaryTabId("/insights")).toBe("insights");
+  });
+
+  it("keeps the tab identity when a hub sub-tab is selected", () => {
+    expect(resolvePrimaryTabId("/vaults?tab=splits")).toBe("vaults");
+    expect(resolvePrimaryTabId("/investments?tab=portfolio")).toBe("investments");
+  });
+
+  it("opts sub-screens out of tab swiping", () => {
+    expect(resolvePrimaryTabId("/accounts/abc123")).toBeNull();
+    expect(resolvePrimaryTabId("/settings")).toBeNull();
+    expect(resolvePrimaryTabId("/settings/privacy")).toBeNull();
+    expect(resolvePrimaryTabId("/sms-inbox")).toBeNull();
+    expect(resolvePrimaryTabId("/add")).toBeNull();
+    expect(resolvePrimaryTabId("/credit-card-bills/xyz")).toBeNull();
+  });
+
+  it("agrees with the bottom-nav order used for swiping", () => {
+    const swipeOrder = CORE_NAV_ITEMS.filter((item) => item.includeInBottomNav).map(
+      (item) => item.id
+    );
+    expect(swipeOrder).toEqual(["home", "ledger", "vaults", "investments", "insights"]);
   });
 });

@@ -9,7 +9,6 @@ import {
   TextInput,
   View,
 } from "react-native";
-import * as Haptics from "expo-haptics";
 import {
   Archive,
   Check,
@@ -36,6 +35,8 @@ import {
 } from "@/shared/utils/categoryPreferences";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
+import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
 
 export function CategoryManager() {
   const { theme, themeName } = useTheme();
@@ -242,7 +243,7 @@ export function CategoryManager() {
               <View style={styles.parentRow}>
                 <Pressable
                   onPress={() => {
-                    Haptics.selectionAsync().catch(() => undefined);
+                    haptic.selection().catch(() => undefined);
                     setExpandedId(isExpanded ? null : parent.id);
                   }}
                   style={styles.parentTitleArea}
@@ -654,46 +655,48 @@ export function CategoryManager() {
             >
               SOURCE CATEGORY (Will be deleted)
             </Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.mergePillsRow}
-            >
-              {parentCategories.map((p) => (
-                <Pressable
-                  key={`src-${p.id}`}
-                  onPress={() => setMergeSourceId(p.id)}
-                  style={[
-                    styles.mergePill,
-                    {
-                      backgroundColor:
-                        mergeSourceId === p.id
-                          ? theme.colors.destructive
-                          : isDark
-                            ? "rgba(255,255,255,0.06)"
-                            : "rgba(0,0,0,0.04)",
-                      borderColor:
-                        mergeSourceId === p.id
-                          ? theme.colors.destructive
-                          : theme.colors.border,
-                    },
-                  ]}
-                >
-                  <Text
-                    style={{
-                      color:
-                        mergeSourceId === p.id
-                          ? "#fff"
-                          : theme.colors.foreground,
-                      fontSize: 12,
-                      fontWeight: mergeSourceId === p.id ? "700" : "500",
-                    }}
+            <HorizontalSwipeBoundary>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.mergePillsRow}
+              >
+                {parentCategories.map((p) => (
+                  <Pressable
+                    key={`src-${p.id}`}
+                    onPress={() => setMergeSourceId(p.id)}
+                    style={[
+                      styles.mergePill,
+                      {
+                        backgroundColor:
+                          mergeSourceId === p.id
+                            ? theme.colors.destructive
+                            : isDark
+                              ? "rgba(255,255,255,0.06)"
+                              : "rgba(0,0,0,0.04)",
+                        borderColor:
+                          mergeSourceId === p.id
+                            ? theme.colors.destructive
+                            : theme.colors.border,
+                      },
+                    ]}
                   >
-                    {p.name}
-                  </Text>
-                </Pressable>
-              ))}
-            </ScrollView>
+                    <Text
+                      style={{
+                        color:
+                          mergeSourceId === p.id
+                            ? "#fff"
+                            : theme.colors.foreground,
+                        fontSize: 12,
+                        fontWeight: mergeSourceId === p.id ? "700" : "500",
+                      }}
+                    >
+                      {p.name}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </HorizontalSwipeBoundary>
 
             <Text
               style={[
@@ -703,48 +706,50 @@ export function CategoryManager() {
             >
               TARGET CATEGORY (Will receive data)
             </Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.mergePillsRow}
-            >
-              {parentCategories
-                .filter((p) => p.id !== mergeSourceId)
-                .map((p) => (
-                  <Pressable
-                    key={`tgt-${p.id}`}
-                    onPress={() => setMergeTargetId(p.id)}
-                    style={[
-                      styles.mergePill,
-                      {
-                        backgroundColor:
-                          mergeTargetId === p.id
-                            ? theme.colors.primary
-                            : isDark
-                              ? "rgba(255,255,255,0.06)"
-                              : "rgba(0,0,0,0.04)",
-                        borderColor:
-                          mergeTargetId === p.id
-                            ? theme.colors.primary
-                            : theme.colors.border,
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={{
-                        color:
-                          mergeTargetId === p.id
-                            ? theme.colors.primaryForeground
-                            : theme.colors.foreground,
-                        fontSize: 12,
-                        fontWeight: mergeTargetId === p.id ? "700" : "500",
-                      }}
+            <HorizontalSwipeBoundary>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.mergePillsRow}
+              >
+                {parentCategories
+                  .filter((p) => p.id !== mergeSourceId)
+                  .map((p) => (
+                    <Pressable
+                      key={`tgt-${p.id}`}
+                      onPress={() => setMergeTargetId(p.id)}
+                      style={[
+                        styles.mergePill,
+                        {
+                          backgroundColor:
+                            mergeTargetId === p.id
+                              ? theme.colors.primary
+                              : isDark
+                                ? "rgba(255,255,255,0.06)"
+                                : "rgba(0,0,0,0.04)",
+                          borderColor:
+                            mergeTargetId === p.id
+                              ? theme.colors.primary
+                              : theme.colors.border,
+                        },
+                      ]}
                     >
-                      {p.name}
-                    </Text>
-                  </Pressable>
-                ))}
-            </ScrollView>
+                      <Text
+                        style={{
+                          color:
+                            mergeTargetId === p.id
+                              ? theme.colors.primaryForeground
+                              : theme.colors.foreground,
+                          fontSize: 12,
+                          fontWeight: mergeTargetId === p.id ? "700" : "500",
+                        }}
+                      >
+                        {p.name}
+                      </Text>
+                    </Pressable>
+                  ))}
+              </ScrollView>
+            </HorizontalSwipeBoundary>
 
             <View style={styles.dialogButtonsRow}>
               <Pressable

@@ -1,22 +1,43 @@
+import { useMemo } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import * as Haptics from "expo-haptics";
 
 import { Amount } from "@/components/common/Amount";
+import { ErrorState } from "@/components/common/ErrorState";
+import { PublicSplitClaimRow } from "@/components/splits/PublicSplitClaimRow";
+import { usePublicSplitClaimActions } from "@/hooks/usePublicSplitClaimActions";
 import { usePublicSplitShare } from "@/hooks/usePublicSplitShare";
-import { useSystemSettings } from "@/providers/SystemSettingsProvider";
+import { useSplitShareClaims } from "@/hooks/useSplitShareClaims";
+import { mergePendingClaims } from "@/shared/utils/splitClaims";
+import {
+  publicParticipantStatusLabel,
+  publicShareCurrency,
+} from "@/shared/utils/splitPublicShare";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
 
 export default function PublicSplitScreen() {
   const { slug: slugParam } = useLocalSearchParams<{ slug?: string | string[] }>();
   const slug = Array.isArray(slugParam) ? slugParam[0] : slugParam;
-  const { share, loading, error } = usePublicSplitShare(slug);
+  const { share, loading, error, retry } = usePublicSplitShare(slug);
   const { push } = useRouter();
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
-  const { settings: system } = useSystemSettings();
-  const currency = share?.currency || system.defaultCurrency;
+  // Never read system settings here: `system_settings/global` requires
+  // sign-in, so an anonymous visitor's read always fails and every share
+  // would silently render as INR.
+  const currency = publicShareCurrency(share);
+
+  const claimKeys = useMemo(() => share?.claimKeys || [], [share?.claimKeys]);
+  const { claims } = useSplitShareClaims(share?.id, claimKeys, {
+    enabled: share?.claimsEnabled === true,
+  });
+  const { submitting, submitClaim } = usePublicSplitClaimActions(share);
+  const rows = useMemo(
+    () => (share ? mergePendingClaims(share, claims) : []),
+    [share, claims]
+  );
 
   const statusLabel = share?.status ? share.status.toUpperCase() : "";
 
@@ -33,9 +54,11 @@ export default function PublicSplitScreen() {
       {loading ? (
         <Text style={{ color: theme.colors.mutedForeground }}>Loading…</Text>
       ) : error || !share ? (
-        <Text style={{ color: theme.colors.destructive, fontWeight: "600" }}>
-          {error || "Split not found."}
-        </Text>
+        <ErrorState
+          title="Can't open this split"
+          description={error?.message || "Split not found."}
+          onRetry={error?.retryable ? retry : undefined}
+        />
       ) : (
         <View
           style={[
@@ -80,7 +103,7 @@ export default function PublicSplitScreen() {
           />
 
           <View style={styles.people}>
-            {share.participants.map((p, index) => {
+            {rows.map((p, index) => {
               const rowKey = `${p.name}-${index}`;
               const canPay =
                 !p.optedOut &&
@@ -100,6 +123,7 @@ export default function PublicSplitScreen() {
                     },
                   ]}
                 >
+                  <View style={styles.personTop}>
                   <View style={{ flex: 1, gap: 2 }}>
                     <Text
                       style={[
@@ -115,23 +139,24 @@ export default function PublicSplitScreen() {
                       {p.name}
                       {p.isOrganizer ? " · organizer" : ""}
                     </Text>
-                    {p.optedOut ? (
-                      <Text style={[styles.personMeta, { color: theme.colors.mutedForeground }]}>
-                        Won’t contribute
-                      </Text>
-                    ) : p.remainingDue <= 0.009 ? (
-                      <Text style={[styles.personMeta, { color: "#22C55E" }]}>
-                        Paid
-                      </Text>
-                    ) : p.paidAmount > 0.009 ? (
-                      <Text style={[styles.personMeta, { color: theme.colors.mutedForeground }]}>
-                        Paid part · remaining due
-                      </Text>
-                    ) : (
-                      <Text style={[styles.personMeta, { color: theme.colors.mutedForeground }]}>
-                        Unpaid
-                      </Text>
-                    )}
+                    <Text
+                      style={[
+                        styles.personMeta,
+                        {
+                          color:
+                            !p.optedOut && p.remainingDue <= 0.009
+                              ? "#22C55E"
+                              : p.shareRaised && !p.optedOut
+                                ? theme.colors.primary
+                                : theme.colors.mutedForeground,
+                        },
+                      ]}
+                    >
+                      {publicParticipantStatusLabel(p, {
+                        optedOutNames: share.optedOutNames,
+                        currency,
+                      })}
+                    </Text>
                   </View>
                   <View style={{ alignItems: "flex-end", gap: 8 }}>
                     <Amount
@@ -147,7 +172,7 @@ export default function PublicSplitScreen() {
                     {canPay ? (
                       <Pressable
                         onPress={() => {
-                          Haptics.selectionAsync().catch(() => undefined);
+                          haptic.selection().catch(() => undefined);
                           push(`/payment/${p.personSlug}` as never);
                         }}
                         accessibilityRole="button"
@@ -170,6 +195,34 @@ export default function PublicSplitScreen() {
                       </Pressable>
                     ) : null}
                   </View>
+                  </View>
+                  {p.isOrganizer ? null : (
+                    <PublicSplitClaimRow
+                      row={p}
+                      share={share}
+                      currency={currency}
+                      submitting={submitting}
+                      onSubmit={(params) =>
+                        submitClaim({
+                          ...params,
+                          existing:
+                            claims.find(
+                              (c) => c.participantKey === params.participantKey
+                            ) || null,
+                        })
+                      }
+                    />
+                  )}
+                  {!p.optedOut && !p.personSlug && p.remainingDue > 0.009 ? (
+                    <Text
+                      style={[
+                        styles.personMeta,
+                        { color: theme.colors.mutedForeground },
+                      ]}
+                    >
+                      Ask {share.organizerName} for a pay link.
+                    </Text>
+                  ) : null}
                 </View>
               );
             })}
@@ -183,7 +236,11 @@ export default function PublicSplitScreen() {
           { color: isDark ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.4)" },
         ]}
       >
-        No app account needed. Pay via UPI on each person’s page.
+        {share?.claimsEnabled === true
+          ? "No app account needed. Pay via UPI, or tell the organizer you’ve paid."
+          : share?.claimsEnabled === false
+            ? "No app account needed. The organizer has turned off updates for this link."
+            : "No app account needed. Pay via UPI on each person’s page."}
       </Text>
     </ScrollView>
   );
@@ -228,14 +285,17 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   personRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
     padding: 12,
     borderRadius: 14,
     borderCurve: "continuous",
     borderWidth: 1,
+    gap: 4,
+  },
+  personTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
   },
   personName: {
     fontSize: 14,

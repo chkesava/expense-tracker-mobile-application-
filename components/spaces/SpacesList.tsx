@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import * as Haptics from "expo-haptics";
 import { Plus } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
@@ -14,11 +13,13 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useSpaces } from "@/hooks/useSpaces";
-import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import type { Space } from "@/shared/types/space";
 import { summarizeSpace, summarizeSpaces } from "@/shared/utils/spaceMath";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
+import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
 
 type StatusFilter = "ACTIVE" | "ARCHIVED" | "all";
 
@@ -31,7 +32,7 @@ const STATUS_FILTERS: { id: StatusFilter; label: string }[] = [
 export function SpacesList() {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
-  const { settings: system } = useSystemSettings();
+  const displayCurrency = useDisplayCurrency();
 
   const { expenses } = useExpenses();
   const {
@@ -114,7 +115,7 @@ export function SpacesList() {
               </Text>
               <Amount
                 value={totals.totalSpent}
-                currency={system.defaultCurrency}
+                currency={displayCurrency}
                 style={{
                   fontSize: 20,
                   fontWeight: "900",
@@ -145,29 +146,31 @@ export function SpacesList() {
       ) : null}
 
       {spaces.length > 0 ? (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.pillRow}
-        >
-          {STATUS_FILTERS.map((filter) => {
-            const isActive = statusFilter === filter.id;
-            return (
-              <Pressable
-                key={filter.id}
-                onPress={() => {
-                  Haptics.selectionAsync().catch(() => undefined);
-                  setStatusFilter(filter.id);
-                }}
-                style={[styles.pill, pillStyle(isActive)]}
-              >
-                <Text style={[styles.pillText, pillTextStyle(isActive)]}>
-                  {filter.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+        <HorizontalSwipeBoundary>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.pillRow}
+          >
+            {STATUS_FILTERS.map((filter) => {
+              const isActive = statusFilter === filter.id;
+              return (
+                <Pressable
+                  key={filter.id}
+                  onPress={() => {
+                    haptic.selection().catch(() => undefined);
+                    setStatusFilter(filter.id);
+                  }}
+                  style={[styles.pill, pillStyle(isActive)]}
+                >
+                  <Text style={[styles.pillText, pillTextStyle(isActive)]}>
+                    {filter.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </HorizontalSwipeBoundary>
       ) : null}
 
       {spaces.length > 2 ? (
@@ -218,7 +221,7 @@ export function SpacesList() {
                 key={space.id}
                 space={space}
                 summary={summary}
-                currency={system.defaultCurrency}
+                currency={displayCurrency}
                 onPress={() => setSelectedId(space.id ?? null)}
               />
             );
@@ -241,7 +244,7 @@ export function SpacesList() {
         visible={!!selectedSpace}
         space={selectedSpace}
         expenses={expenses}
-        currency={system.defaultCurrency}
+        currency={displayCurrency}
         onClose={() => setSelectedId(null)}
         onEdit={(space) => {
           setSelectedId(null);

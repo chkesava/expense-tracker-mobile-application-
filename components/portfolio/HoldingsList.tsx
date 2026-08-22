@@ -25,7 +25,6 @@ import { haptic } from "@/lib/haptics";
 import { sampleScrollFps } from "@/lib/perf";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useMarketQuotes } from "@/hooks/useMarketQuotes";
-import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import { computePositionMetrics } from "@/shared/types/market";
 import type {
   Holding,
@@ -34,6 +33,8 @@ import type {
 } from "@/shared/features/portfolio/types";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
+import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
 
 type SortOption = "value" | "pl_percent" | "day_change";
 
@@ -59,7 +60,7 @@ function ItemSeparator() {
 export function HoldingsList({ listHeader }: { listHeader?: ReactNode }) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
-  const { settings: system } = useSystemSettings();
+  const displayCurrency = useDisplayCurrency();
 
   const {
     holdings,
@@ -178,11 +179,11 @@ export function HoldingsList({ listHeader }: { listHeader?: ReactNode }) {
     ({ item }: { item: HoldingWithMetrics }) => (
       <HoldingCard
         holding={item}
-        currency={system.defaultCurrency}
+        currency={displayCurrency}
         onPress={onPressHolding}
       />
     ),
-    [system.defaultCurrency, onPressHolding]
+    [displayCurrency, onPressHolding]
   );
 
   const keyExtractor = useCallback((item: HoldingWithMetrics) => item.id, []);
@@ -262,55 +263,57 @@ export function HoldingsList({ listHeader }: { listHeader?: ReactNode }) {
           </Pressable>
         </View>
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filterRow}
-        >
-          {FILTERS.map((item) => {
-            const active = filter === item.value;
-            return (
-              <Pressable
-                key={item.value}
-                onPress={() => {
-                  void haptic.selection();
-                  setFilter(item.value);
-                }}
-                style={({ pressed }) => [
-                  styles.filterChip,
-                  {
-                    backgroundColor: active
-                      ? CARD_ORANGE
-                      : isDark
-                        ? "rgba(255,255,255,0.05)"
-                        : "rgba(15,23,42,0.04)",
-                    borderColor: active
-                      ? CARD_ORANGE
-                      : isDark
-                        ? "rgba(148,163,184,0.16)"
-                        : theme.colors.border,
-                  },
-                  pressed && styles.pressed,
-                ]}
-                accessibilityRole="button"
-                accessibilityState={{ selected: active }}
-                accessibilityLabel={item.label}
-              >
-                <Text
-                  style={[
-                    styles.filterLabel,
+        <HorizontalSwipeBoundary>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filterRow}
+          >
+            {FILTERS.map((item) => {
+              const active = filter === item.value;
+              return (
+                <Pressable
+                  key={item.value}
+                  onPress={() => {
+                    void haptic.selection();
+                    setFilter(item.value);
+                  }}
+                  style={({ pressed }) => [
+                    styles.filterChip,
                     {
-                      color: active ? "#111827" : theme.colors.mutedForeground,
-                      fontWeight: active ? "800" : "600",
+                      backgroundColor: active
+                        ? CARD_ORANGE
+                        : isDark
+                          ? "rgba(255,255,255,0.05)"
+                          : "rgba(15,23,42,0.04)",
+                      borderColor: active
+                        ? CARD_ORANGE
+                        : isDark
+                          ? "rgba(148,163,184,0.16)"
+                          : theme.colors.border,
                     },
+                    pressed && styles.pressed,
                   ]}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                  accessibilityLabel={item.label}
                 >
-                  {item.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+                  <Text
+                    style={[
+                      styles.filterLabel,
+                      {
+                        color: active ? "#111827" : theme.colors.mutedForeground,
+                        fontWeight: active ? "800" : "600",
+                      },
+                    ]}
+                  >
+                    {item.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </HorizontalSwipeBoundary>
 
         <View style={styles.sortRow}>
           <Text style={[styles.sortLabel, { color: theme.colors.mutedForeground }]}>
@@ -452,7 +455,7 @@ export function HoldingsList({ listHeader }: { listHeader?: ReactNode }) {
         onSell={executeMockSell}
         onPlaceLimitBuy={placeLimitBuyOrder}
         cashBalance={portfolioSettings?.cashBalance ?? 0}
-        currency={system.defaultCurrency}
+        currency={displayCurrency}
       />
     </View>
   );

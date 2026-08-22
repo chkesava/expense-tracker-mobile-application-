@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="%LANG_ISO_CODE%">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <!-- Split share links are semi-private; keep them out of search results. -->
+    <meta name="robots" content="noindex, nofollow" />
+    <title>%WEB_TITLE%</title>
+    <!--
+      This file replaces app/+html.tsx for the web build. With web.output
+      "single" the exporter builds index.html from public/index.html (see
+      @expo/cli webTemplate.js) and never renders +html.tsx, which is only used
+      by the static-render path.
+
+      It reads this file verbatim, substituting the two percent-delimited
+      placeholders and injecting the script tags and link/meta tags at the
+      FIRST occurrence of the closing body and head tags. Keep both of those
+      closing tags, and the root div, present exactly once each — and never
+      name them in prose here, or the injection lands inside this comment and
+      the bundle never runs.
+    -->
+    <!-- The `react-native-web` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element -->
+    <style id="expo-reset">
+      /* These styles make the body full-height */
+      html,
+      body {
+        height: 100%;
+      }
+      /* These styles disable body scrolling if you are using <ScrollView> */
+      body {
+        overflow: hidden;
+      }
+      /* These styles make the root element full-height */
+      #root {
+        display: flex;
+        height: 100%;
+        flex: 1;
+      }
+      /*
+        Escape hatch so the background never flashes white in dark mode before
+        the JS bundle paints the themed background. #071A2B matches the app's
+        splash/adaptive-icon background in app.json.
+      */
+      body {
+        background-color: #fff;
+      }
+      @media (prefers-color-scheme: dark) {
+        body {
+          background-color: #071a2b;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <noscript>You need to enable JavaScript to view this page.</noscript>
+    <!-- The root element for your Expo app. -->
+    <div id="root"></div>
+  </body>
+</html>

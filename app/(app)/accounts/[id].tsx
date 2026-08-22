@@ -10,7 +10,6 @@ import {
 import { FlashList } from "@shopify/flash-list";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import * as Haptics from "expo-haptics";
 
 import { AccountBalanceCard } from "@/components/accounts/AccountBalanceCard";
 import { AccountCreditHero } from "@/components/accounts/AccountCreditHero";
@@ -48,7 +47,6 @@ import { useIncomes } from "@/hooks/useIncomes";
 import { useReceivables } from "@/hooks/useReceivables";
 import { useModals } from "@/providers/ModalProvider";
 import { useSettings } from "@/providers/SettingsProvider";
-import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import { OPEN_BILL_STATUSES } from "@/shared/types/creditCardBill";
 import type { AccountActivity, Expense, Income } from "@/shared/types/expense";
 import {
@@ -72,6 +70,7 @@ import {
 import { todayDateKey, toLocalDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
 const WIDE_ROW_BREAKPOINT = 420;
 
@@ -87,7 +86,7 @@ export default function AccountDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
-  const { settings: system } = useSystemSettings();
+  const displayCurrency = useDisplayCurrency();
   const { settings } = useSettings();
   const today = todayDateKey(settings.timezone);
   const { setEditingExpense, setEditingIncome } = useModals();
@@ -133,7 +132,7 @@ export default function AccountDetailScreen() {
   }, [account, typeMap]);
 
   const isCreditCard = getAccountKind(typeName) === "credit";
-  const currency = system.defaultCurrency;
+  const currency = displayCurrency;
 
   const bankBalance = useMemo(() => {
     if (!account || isCreditCard) return 0;
@@ -468,7 +467,7 @@ export default function AccountDetailScreen() {
         }
         onBack={() => router.back()}
         onEdit={() => {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+          haptic.light().catch(() => undefined);
           setIsEditModalOpen(true);
         }}
       />

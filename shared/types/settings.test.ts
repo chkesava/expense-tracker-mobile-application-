@@ -134,3 +134,84 @@ describe("mergeSettingsFromDoc", () => {
     expect(coerceFiniteNumber("3,000", 0)).toBe(3000);
   });
 });
+
+describe("credit card reminder daysBefore persistence", () => {
+  it("keeps an explicitly emptied daysBefore instead of restoring defaults", () => {
+    // Regression: deselecting all three day pills wrote `[]`, and the merge
+    // treated empty-as-missing and restored [7, 3, 1] on the next snapshot —
+    // so "no pre-due reminders" was unsavable and the pills lit back up.
+    const merged = mergeSettingsFromDoc({
+      creditCardBillReminders: {
+        enabled: true,
+        daysBefore: [],
+        onDueDate: true,
+        overdueEveryDays: 1,
+        quietHoursStart: "08:00",
+        quietHoursEnd: "21:00",
+      },
+    });
+    expect(merged.creditCardBillReminders.daysBefore).toEqual([]);
+  });
+
+  it("still falls back to defaults when daysBefore is absent", () => {
+    const merged = mergeSettingsFromDoc({
+      creditCardBillReminders: { enabled: true },
+    });
+    expect(merged.creditCardBillReminders.daysBefore).toEqual([7, 3, 1]);
+  });
+
+  it("still falls back to defaults when daysBefore is not an array", () => {
+    const merged = mergeSettingsFromDoc({
+      creditCardBillReminders: { enabled: true, daysBefore: "nonsense" },
+    });
+    expect(merged.creditCardBillReminders.daysBefore).toEqual([7, 3, 1]);
+  });
+
+  it("preserves a partial day selection", () => {
+    const merged = mergeSettingsFromDoc({
+      creditCardBillReminders: { enabled: true, daysBefore: [3] },
+    });
+    expect(merged.creditCardBillReminders.daysBefore).toEqual([3]);
+  });
+});
+
+describe("currency seeding", () => {
+  it("seeds a brand-new user from the system default rather than INR", () => {
+    const merged = mergeSettingsFromDoc(null, { fallbackCurrency: "USD" });
+    expect(merged.currency).toBe("USD");
+  });
+
+  it("uses the system default when the doc has no currency of its own", () => {
+    const merged = mergeSettingsFromDoc({ monthlyBudget: 100 }, {
+      fallbackCurrency: "EUR",
+    });
+    expect(merged.currency).toBe("EUR");
+  });
+
+  it("lets an explicit user choice win over the system default", () => {
+    const merged = mergeSettingsFromDoc({ currency: "GBP" }, {
+      fallbackCurrency: "USD",
+    });
+    expect(merged.currency).toBe("GBP");
+  });
+
+  it("falls back to INR when no system default is supplied", () => {
+    expect(mergeSettingsFromDoc(null).currency).toBe("INR");
+  });
+});
+
+describe("merge does not absorb unrelated profile fields", () => {
+  it("drops keys that are not part of UserSettings", () => {
+    const merged = mergeSettingsFromDoc({
+      email: "someone@example.com",
+      displayName: "Someone",
+      photoURL: "https://example.com/a.png",
+      monthlyBudget: 500,
+    }) as Record<string, unknown>;
+
+    expect(merged.monthlyBudget).toBe(500);
+    expect(merged.email).toBeUndefined();
+    expect(merged.displayName).toBeUndefined();
+    expect(merged.photoURL).toBeUndefined();
+  });
+});

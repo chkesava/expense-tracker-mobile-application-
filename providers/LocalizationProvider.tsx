@@ -7,9 +7,13 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   type ReactNode,
 } from "react";
+import { I18nManager } from "react-native";
+
+import { toast } from "@/lib/toast";
 import { useSettings } from "./SettingsProvider";
 
 export type LanguageCode = "en" | "hi" | "es" | "fr" | "de" | "ja" | "ar";
@@ -42,6 +46,8 @@ export const TRANSLATIONS: Record<LanguageCode, Record<string, string>> = {
     nav_settings: "Settings",
     nav_cards: "Cards",
     nav_accounts: "Accounts",
+    nav_investments: "Investments",
+    nav_admin: "Admin",
 
     action_save: "Save",
     action_cancel: "Cancel",
@@ -100,6 +106,8 @@ export const TRANSLATIONS: Record<LanguageCode, Record<string, string>> = {
     nav_settings: "सेटिंग्स",
     nav_cards: "कार्ड्स",
     nav_accounts: "खाते",
+    nav_investments: "निवेश",
+    nav_admin: "एडमिन",
 
     action_save: "सहेजें",
     action_cancel: "रद्द करें",
@@ -158,6 +166,8 @@ export const TRANSLATIONS: Record<LanguageCode, Record<string, string>> = {
     nav_settings: "Ajustes",
     nav_cards: "Tarjetas",
     nav_accounts: "Cuentas",
+    nav_investments: "Inversiones",
+    nav_admin: "Administración",
 
     action_save: "Guardar",
     action_cancel: "Cancelar",
@@ -216,6 +226,8 @@ export const TRANSLATIONS: Record<LanguageCode, Record<string, string>> = {
     nav_settings: "Paramètres",
     nav_cards: "Cartes",
     nav_accounts: "Comptes",
+    nav_investments: "Investissements",
+    nav_admin: "Administration",
 
     action_save: "Enregistrer",
     action_cancel: "Annuler",
@@ -274,6 +286,8 @@ export const TRANSLATIONS: Record<LanguageCode, Record<string, string>> = {
     nav_settings: "Einstellungen",
     nav_cards: "Karten",
     nav_accounts: "Konten",
+    nav_investments: "Investitionen",
+    nav_admin: "Verwaltung",
 
     action_save: "Speichern",
     action_cancel: "Abbrechen",
@@ -332,6 +346,8 @@ export const TRANSLATIONS: Record<LanguageCode, Record<string, string>> = {
     nav_settings: "設定",
     nav_cards: "カード",
     nav_accounts: "口座",
+    nav_investments: "投資",
+    nav_admin: "管理",
 
     action_save: "保存",
     action_cancel: "キャンセル",
@@ -390,6 +406,8 @@ export const TRANSLATIONS: Record<LanguageCode, Record<string, string>> = {
     nav_settings: "الإعدادات",
     nav_cards: "البطاقات",
     nav_accounts: "الحسابات",
+    nav_investments: "الاستثمارات",
+    nav_admin: "الإدارة",
 
     action_save: "حفظ",
     action_cancel: "إلغاء",
@@ -462,6 +480,27 @@ export function LocalizationProvider({ children }: { children: ReactNode }) {
   const isRTL = Boolean(
     SUPPORTED_LANGUAGES.find((l) => l.code === language)?.isRTL
   );
+
+  /**
+   * `isRTL` used to be computed and exposed but never applied, so Arabic
+   * rendered left-to-right. `I18nManager` flips the native layout direction —
+   * it only takes full effect after a reload, so tell the user rather than
+   * leaving them with a half-mirrored UI.
+   */
+  useEffect(() => {
+    if (I18nManager.isRTL === isRTL) return;
+    try {
+      I18nManager.allowRTL(isRTL);
+      I18nManager.forceRTL(isRTL);
+      toast.info(
+        isRTL
+          ? "Restart the app to finish switching to right-to-left layout"
+          : "Restart the app to finish switching back to left-to-right layout"
+      );
+    } catch {
+      /* layout direction is best-effort */
+    }
+  }, [isRTL]);
 
   const t = useCallback(
     (key: string, defaultText?: string): string => {

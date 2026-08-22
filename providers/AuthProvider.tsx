@@ -26,6 +26,7 @@ import {
   type UserCredential,
 } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
+import { Platform } from "react-native";
 import { GoogleSignin } from "@react-native-google-signin/google-signin";
 
 import { clearSavedRoute } from "@/hooks/useNavigationStateRestoration";
@@ -66,6 +67,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isDuress, setIsDuress] = useState(() => privacySession.isDuress());
 
   useEffect(() => {
+    // Native sign-in only. On web every GoogleSignin method is a stub that
+    // logs a sponsorship notice, and the public /split/:slug page renders
+    // inside this provider — so an anonymous visitor would get that warning
+    // in their console for a flow they can never reach.
+    if (Platform.OS === "web") return;
     GoogleSignin.configure({
       webClientId: GOOGLE_WEB_CLIENT_ID,
       offlineAccess: false,

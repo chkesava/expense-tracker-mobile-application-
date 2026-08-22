@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import * as Haptics from "expo-haptics";
 import { HandCoins, Plus } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
@@ -9,16 +8,17 @@ import { SkeletonHero, SkeletonList } from "@/components/common/Skeleton";
 import { CreatePaymentRequestModal } from "@/components/collect/CreatePaymentRequestModal";
 import { PaymentRequestCard } from "@/components/collect/PaymentRequestCard";
 import { usePaymentRequests } from "@/hooks/usePaymentRequests";
-import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
 type CollectTab = "active" | "cancelled";
 
 export function CollectList() {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
-  const { settings: system } = useSystemSettings();
+  const displayCurrency = useDisplayCurrency();
   const { requests, loading } = usePaymentRequests();
 
   const [activeTab, setActiveTab] = useState<CollectTab>("active");
@@ -74,7 +74,7 @@ export function CollectList() {
           </Text>
           <Pressable
             onPress={() => {
-              Haptics.selectionAsync().catch(() => undefined);
+              haptic.selection().catch(() => undefined);
               setIsCreateOpen(true);
             }}
             style={({ pressed }) => [
@@ -97,7 +97,7 @@ export function CollectList() {
             </Text>
             <Amount
               value={totalPending}
-              currency={system.defaultCurrency}
+              currency={displayCurrency}
               ghostable
               style={{ fontSize: 28, fontWeight: "900", color: theme.colors.foreground }}
             />
@@ -123,7 +123,7 @@ export function CollectList() {
             <Pressable
               key={tab}
               onPress={() => {
-                Haptics.selectionAsync().catch(() => undefined);
+                haptic.selection().catch(() => undefined);
                 setActiveTab(tab);
               }}
               style={[

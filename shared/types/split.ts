@@ -33,6 +33,13 @@ export interface Participant {
   /** Public `/payment/:slug` for this friend's share. */
   paymentSlug?: string;
   paymentRequestId?: string;
+  /**
+   * Share went up because someone else dropped out, so `remainingDue` is a
+   * top-up rather than an unpaid original share. Recorded rather than derived
+   * from `0 < paidAmount < amount`: public self-service claims create genuine
+   * partial payments, which look identical.
+   */
+  shareRaised?: boolean;
 }
 
 export interface Split {
@@ -59,4 +66,10 @@ export interface Split {
   /** Public `/split/:slug` snapshot. */
   publicSlug?: string;
   publicShareId?: string;
+  /**
+   * Whether people holding the public link may file self-service updates.
+   * Owned here, mirrored onto the world-readable share (which is where the
+   * Firestore rules read it). Absent means on.
+   */
+  claimsEnabled?: boolean;
 }

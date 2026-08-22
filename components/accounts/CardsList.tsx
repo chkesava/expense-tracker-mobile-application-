@@ -1,7 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import * as Haptics from "expo-haptics";
 import { CheckCircle2, Plus } from "lucide-react-native";
 
 import { CreditCardListItem, type CreditCardRowModel } from "@/components/accounts/CreditCardListItem";
@@ -20,7 +19,6 @@ import { useAccountTypes } from "@/hooks/useAccountTypes";
 import { useCreditCardBills } from "@/hooks/useCreditCardBills";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useSettings } from "@/providers/SettingsProvider";
-import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import { OPEN_BILL_STATUSES } from "@/shared/types/creditCardBill";
 import type { Account } from "@/shared/types/expense";
 import { computeOutstandingCredit } from "@/shared/utils/accountBalance";
@@ -32,6 +30,8 @@ import {
 import { todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
 const DEFAULT_CARD_ACCENT = "#6D5AE6";
 
@@ -39,7 +39,7 @@ export function CardsList() {
   const router = useRouter();
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
-  const { settings: system } = useSystemSettings();
+  const displayCurrency = useDisplayCurrency();
   const { settings } = useSettings();
   const today = todayDateKey(settings.timezone);
 
@@ -127,7 +127,7 @@ export function CardsList() {
 
   const handleOpenCardDetail = useCallback(
     (cardId: string) => {
-      Haptics.selectionAsync().catch(() => undefined);
+      haptic.selection().catch(() => undefined);
       router.push({
         pathname: "/accounts/[id]",
         params: { id: cardId },
@@ -138,7 +138,7 @@ export function CardsList() {
 
   const handleOpenPayBill = useCallback(
     (cardId?: string) => {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+      haptic.light().catch(() => undefined);
       const openBill = cardId ? openBillByAccount.get(cardId) : undefined;
       if (openBill) {
         router.push(`/credit-card-bills/${openBill.id}` as never);
@@ -151,14 +151,14 @@ export function CardsList() {
   );
 
   const handleOpenAddCard = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+    haptic.light().catch(() => undefined);
     setEditingCard(null);
     setIsEditModalOpen(true);
   }, []);
 
   const handleOpenEditCard = useCallback(
     (cardId: string) => {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+      haptic.light().catch(() => undefined);
       const card = creditCards.find((item) => item.id === cardId) ?? null;
       setEditingCard(card);
       setIsEditModalOpen(true);
@@ -167,7 +167,7 @@ export function CardsList() {
   );
 
   const handleAddStatement = useCallback((cardId: string) => {
-    Haptics.selectionAsync().catch(() => undefined);
+    haptic.selection().catch(() => undefined);
     setCreateBillAccountId(cardId);
     setIsCreateBillOpen(true);
   }, []);
@@ -179,7 +179,7 @@ export function CardsList() {
         totalLimit={creditOverview.totalLimit}
         totalAvailable={creditOverview.totalAvailable}
         utilizationRate={creditOverview.utilizationRate}
-        currency={system.defaultCurrency}
+        currency={displayCurrency}
       />
 
       <View style={styles.actionRow}>
@@ -245,7 +245,7 @@ export function CardsList() {
             <CreditCardListItem
               key={row.id}
               row={row}
-              currency={system.defaultCurrency}
+              currency={displayCurrency}
               onPress={handleOpenCardDetail}
               onLongPress={handleOpenEditCard}
               onAddStatement={handleAddStatement}

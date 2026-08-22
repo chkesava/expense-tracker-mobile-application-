@@ -97,7 +97,7 @@ export async function cancelBillReminders(billId: string): Promise<void> {
   }
 }
 
-function dateTriggerFromDateKey(
+export function dateTriggerFromDateKey(
   dateKey: string,
   quietStart: string,
   quietEnd: string,
@@ -105,10 +105,51 @@ function dateTriggerFromDateKey(
 ): Date {
   const quiet = applyQuietHours(9, 0, quietStart, quietEnd);
   const [y, m, d] = dateKey.split("-").map(Number);
-  // Schedule in local device calendar; quiet hours applied to wall clock.
-  // Timezone preference is used for "today" selection by callers.
-  void timezone;
-  return new Date(y, m - 1, d, quiet.hour, quiet.minute, 0, 0);
+
+  // The Settings copy promises reminders follow the user's timezone, so honour
+  // it for the fire *time* too — not just for which calendar day is picked.
+  // `timezone` used to be accepted and discarded (`void timezone`), which meant
+  // a user whose app timezone differed from their device's got notified at the
+  // wrong hour.
+  const naiveLocal = new Date(y, m - 1, d, quiet.hour, quiet.minute, 0, 0);
+  if (!timezone) return naiveLocal;
+
+  const offsetMinutes = timezoneOffsetMinutes(naiveLocal, timezone);
+  const deviceOffsetMinutes = -naiveLocal.getTimezoneOffset();
+  const driftMinutes = deviceOffsetMinutes - offsetMinutes;
+  if (driftMinutes === 0) return naiveLocal;
+
+  return new Date(naiveLocal.getTime() + driftMinutes * 60_000);
+}
+
+/** Minutes east of UTC for `timezone` at the given instant. */
+function timezoneOffsetMinutes(at: Date, timezone: string): number {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      hour12: false,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    }).formatToParts(at);
+    const get = (type: string) =>
+      Number(parts.find((part) => part.type === type)?.value);
+    const asUtc = Date.UTC(
+      get("year"),
+      get("month") - 1,
+      get("day"),
+      get("hour") % 24,
+      get("minute"),
+      get("second")
+    );
+    return Math.round((asUtc - at.getTime()) / 60_000);
+  } catch {
+    // Unknown timezone id — fall back to the device offset (no adjustment).
+    return -at.getTimezoneOffset();
+  }
 }
 
 export async function reconcileBillReminders(opts: {

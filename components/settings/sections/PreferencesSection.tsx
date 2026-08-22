@@ -77,6 +77,7 @@ export function PreferencesSection() {
     setNavigationStyle,
     setDefaultCategory,
     setEnableInvestments,
+    setCompactListMode,
     setHapticFeedback,
     setCurrency,
     setLanguage,
@@ -196,6 +197,21 @@ export function PreferencesSection() {
           value={settings.enableInvestments}
           onValueChange={setEnableInvestments}
         />
+
+        <RowSwitch
+          label="Compact transaction list"
+          value={settings.compactListMode}
+          onValueChange={setCompactListMode}
+        />
+        <Text
+          style={{
+            color: theme.colors.mutedForeground,
+            fontSize: theme.typography.xs,
+          }}
+        >
+          Tighter rows in Transactions — hides the category/account sub-line to
+          fit more on screen.
+        </Text>
       </SettingsPanel>
 
       <SettingsPanel title="Language & formats">

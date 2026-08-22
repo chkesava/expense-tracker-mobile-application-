@@ -5,6 +5,7 @@ import {
   onSnapshot,
   or,
   query,
+  deleteDoc,
   serverTimestamp,
   updateDoc,
   where,
@@ -27,6 +28,23 @@ import { currentMonthKey, todayDateKey } from "@/shared/utils/dates";
 import { omitUndefined } from "@/shared/utils/firestorePayload";
 import { generatePaymentSlug } from "@/shared/utils/paymentSlug";
 import {
+  getPublicAppOrigin,
+  getSplitShareUrl,
+} from "@/shared/utils/paymentRequestUrl";
+import {
+  NO_ORIGIN_SHARE_REASON,
+  isSharingRepairNoop,
+  paySlugsByKey,
+  planSplitSharingRepair,
+} from "@/shared/utils/splitShareLink";
+import {
+  buildApplyPaidClaimWrites,
+  claimApplyPlan,
+  splitClaimDocId,
+  splitClaimDocIdsForSplit,
+} from "@/shared/utils/splitClaims";
+import type { SplitShareClaim } from "@/shared/types/splitShareClaim";
+import {
   applyShareRequestsToParticipants,
   buildCreateSplitPayload,
   buildMarkCollectedWrites,
@@ -47,13 +65,19 @@ import {
   participantRemainingDue,
   recalibrateSplitAfterOptOut,
 } from "@/shared/utils/splitMath";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
 function applyShareSideEffects(
   batch: WriteBatch,
   db: Firestore,
   split: Split,
   participants: Participant[],
-  extraSplitFields: Record<string, unknown>
+  extraSplitFields: Record<string, unknown>,
+  /**
+   * `currency` is required because the public snapshot is the only place an
+   * anonymous visitor can learn it — `system_settings/global` needs sign-in.
+   */
+  options: { currency: string; claimsEnabled?: boolean }
 ) {
   const publicSlug = split.publicSlug || generatePaymentSlug(10);
   const shareRef = split.publicShareId
@@ -84,12 +108,18 @@ function applyShareSideEffects(
         slug: publicSlug,
         settled,
         updatedAt: Date.now(),
+        currency: options.currency,
+        // Falls back to the split's own flag so a routine write (toggle paid,
+        // collect, settle) never silently re-enables a revoked link.
+        claimsEnabled: options.claimsEnabled ?? split.claimsEnabled,
       }
     ),
     { merge: true }
   );
 
-  for (const patch of buildPaymentRequestSyncPatches(participants)) {
+  for (const patch of buildPaymentRequestSyncPatches(participants, {
+    currency: options.currency,
+  })) {
     batch.update(doc(db, "paymentRequests", patch.requestId), patch.fields);
   }
 }
@@ -97,7 +127,11 @@ function applyShareSideEffects(
 export function useSplits(options?: { enabled?: boolean }) {
   const enabled = options?.enabled !== false;
   const { user } = useAuth();
+  const displayCurrency = useDisplayCurrency();
   const uid = user?.uid;
+  // The currency the organizer entered these amounts in. Mirrored onto every
+  // public snapshot and payment request so the login-free pages can render it.
+  const currency = displayCurrency;
 
   const [splits, setSplits] = useState<Split[]>([]);
   const [loading, setLoading] = useState(true);
@@ -184,6 +218,7 @@ export function useSplits(options?: { enabled?: boolean }) {
           payeePhotoUrl: createOptions.payeePhotoUrl,
           upiId: createOptions.organizerUpiId,
           qrStyleId: createOptions.qrStyleId || getStoredQrStyleId(),
+          currency,
           participants: keyedParticipants,
         });
 
@@ -243,7 +278,12 @@ export function useSplits(options?: { enabled?: boolean }) {
             publicSlug,
             publicShareId: publicShareRef.id,
           },
-          { slug: publicSlug, settled: false, updatedAt: createdAt }
+          {
+            slug: publicSlug,
+            settled: false,
+            updatedAt: createdAt,
+            currency,
+          }
         )
       );
 
@@ -261,6 +301,128 @@ export function useSplits(options?: { enabled?: boolean }) {
       logError("splits.createsplit", err);
       toast.error(friendlyErrorMessage(err, "Failed to create split"));
       return null;
+    }
+  };
+
+  /**
+   * Makes a split shareable, repairing whatever is missing first.
+   *
+   * Safe to call on every Share tap: when nothing needs writing it returns the
+   * existing link without committing. Fixes two silent failures — splits made
+   * before public links existed have no `publicSlug`, and splits created while
+   * the organizer had no UPI id have no per-person pay pages (and adding a UPI
+   * id later never repaired them).
+   */
+  const ensureSplitSharing = async (
+    splitId: string,
+    opts: { upiId: string; payeePhotoUrl?: string; qrStyleId?: QrStyleId }
+  ): Promise<
+    | {
+        ok: true;
+        url: string;
+        slug: string;
+        paySlugByKey: Record<string, string>;
+        repaired: boolean;
+        payLinkBlockedReason?: string;
+      }
+    | { ok: false; message: string }
+  > => {
+    const db = getFirestoreDb();
+    if (!uid || !db || !splitId) {
+      return { ok: false, message: "You're not signed in. Sign in and try again." };
+    }
+
+    // Read from the live snapshot, not a caller-held prop, which can be stale.
+    const split = splits.find((s) => s.id === splitId);
+    if (!split) return { ok: false, message: "This split is no longer available." };
+
+    const origin = getPublicAppOrigin();
+    if (!origin) {
+      // Nothing to write: without an origin there is no URL to hand out, and
+      // minting a slug would not change that.
+      return { ok: false, message: NO_ORIGIN_SHARE_REASON };
+    }
+
+    const plan = planSplitSharingRepair(split, { upiId: opts.upiId });
+
+    // Deliberately NOT short-circuited when the plan reports nothing to repair.
+    // The plan only sees publicSlug, publicShareId and missing pay links -- it
+    // cannot tell that the *published snapshot* predates fields this build
+    // writes (currency, claimsEnabled, claimKeys, ...). Skipping the commit here
+    // meant a split shared by an older build could never be brought up to date,
+    // which is exactly what tapping Share is supposed to do. Two documents in
+    // one batch, on an explicit user action, is the right trade.
+
+    try {
+      const batch = writeBatch(db);
+      const publicSlug = split.publicSlug || generatePaymentSlug(10);
+      const newRequestIds: string[] = [];
+      let participants = split.participants;
+
+      if (plan.keysMissingPayLink.length > 0) {
+        const shares = buildParticipantShareRequests({
+          splitId,
+          splitTitle: split.title,
+          createdBy: uid,
+          createdAt: Date.now(),
+          payeeName: split.createdByName || user?.displayName || "Me",
+          payeePhotoUrl: opts.payeePhotoUrl,
+          upiId: opts.upiId,
+          qrStyleId: opts.qrStyleId || getStoredQrStyleId(),
+          currency,
+          skipExisting: true,
+          participants: split.participants,
+        });
+
+        const applied = shares.map((share) => {
+          const requestRef = doc(collection(db, "paymentRequests"));
+          batch.set(requestRef, share.payload);
+          newRequestIds.push(requestRef.id);
+          return {
+            participantKey: share.participantKey,
+            slug: share.slug,
+            requestId: requestRef.id,
+          };
+        });
+        participants = applyShareRequestsToParticipants(split.participants, applied);
+      }
+
+      // Mints publicSlug/publicShareId when absent and rewrites the snapshot,
+      // so the new pay slugs, currency and claim fields land in one commit.
+      applyShareSideEffects(
+        batch,
+        db,
+        { ...split, publicSlug },
+        participants,
+        newRequestIds.length > 0
+          ? {
+              paymentRequestIds: [
+                ...(split.paymentRequestIds || []),
+                ...newRequestIds,
+              ],
+            }
+          : {},
+        { currency }
+      );
+
+      await commitWrite(() => batch.commit(), { label: "share link" });
+
+      return {
+        ok: true,
+        url: getSplitShareUrl(publicSlug),
+        slug: publicSlug,
+        paySlugByKey: paySlugsByKey(participants),
+        // `repaired` means "something was missing and got created", not
+        // "a write happened" -- the snapshot is refreshed either way.
+        repaired: !isSharingRepairNoop(plan),
+        payLinkBlockedReason: plan.payLinkBlockedReason,
+      };
+    } catch (err) {
+      logError("splits.ensuresharing", err);
+      return {
+        ok: false,
+        message: friendlyErrorMessage(err, "Couldn't create the share link."),
+      };
     }
   };
 
@@ -324,9 +486,14 @@ export function useSplits(options?: { enabled?: boolean }) {
 
     try {
       const batch = writeBatch(db);
-      applyShareSideEffects(batch, db, split, updatedParticipants, {
-        settled: isAllPaid,
-      });
+      applyShareSideEffects(
+        batch,
+        db,
+        split,
+        updatedParticipants,
+        { settled: isAllPaid },
+        { currency }
+      );
       await commitWrite(() => batch.commit(), { label: "settlement status" });
       return true;
     } catch (err) {
@@ -339,7 +506,8 @@ export function useSplits(options?: { enabled?: boolean }) {
   const markParticipantCollected = async (
     splitId: string,
     participantKey: string,
-    accountId: string
+    accountId: string,
+    options?: { claimId?: string }
   ): Promise<boolean> => {
     const db = getFirestoreDb();
     if (!uid || !db || !splitId) return false;
@@ -363,9 +531,17 @@ export function useSplits(options?: { enabled?: boolean }) {
     try {
       const batch = writeBatch(db);
       batch.set(entryRef, { ...built.entry, createdAt: serverTimestamp() });
-      applyShareSideEffects(batch, db, split, built.participants, {
-        settled: built.settled,
-      });
+      applyShareSideEffects(
+        batch,
+        db,
+        split,
+        built.participants,
+        { settled: built.settled },
+        { currency }
+      );
+      if (options?.claimId) {
+        batch.delete(doc(db, "splitShareClaims", options.claimId));
+      }
       await commitWrite(() => batch.commit(), { label: "collection" });
       toast.success("Marked as collected");
       return true;
@@ -397,9 +573,14 @@ export function useSplits(options?: { enabled?: boolean }) {
       for (const entryId of built.entryIdsToDelete) {
         batch.delete(doc(db, "users", uid, "accountEntries", entryId));
       }
-      applyShareSideEffects(batch, db, split, built.participants, {
-        settled: built.settled,
-      });
+      applyShareSideEffects(
+        batch,
+        db,
+        split,
+        built.participants,
+        { settled: built.settled },
+        { currency }
+      );
       await commitWrite(() => batch.commit(), { label: "collection" });
       return true;
     } catch (err) {
@@ -450,7 +631,14 @@ export function useSplits(options?: { enabled?: boolean }) {
           createdAt: serverTimestamp(),
         });
       }
-      applyShareSideEffects(batch, db, split, split.participants, built.splitUpdates);
+      applyShareSideEffects(
+        batch,
+        db,
+        split,
+        split.participants,
+        built.splitUpdates,
+        { currency }
+      );
       const outcome = await commitWrite(() => batch.commit(), {
         label: "gift purchase",
       });
@@ -483,9 +671,14 @@ export function useSplits(options?: { enabled?: boolean }) {
 
     try {
       const batch = writeBatch(db);
-      applyShareSideEffects(batch, db, split, updatedParticipants, {
-        settled: true,
-      });
+      applyShareSideEffects(
+        batch,
+        db,
+        split,
+        updatedParticipants,
+        { settled: true },
+        { currency }
+      );
       const outcome = await commitWrite(() => batch.commit(), {
         label: "split settlement",
       });
@@ -500,7 +693,8 @@ export function useSplits(options?: { enabled?: boolean }) {
 
   const optOutParticipant = async (
     splitId: string,
-    participantKey: string
+    participantKey: string,
+    options?: { claimId?: string }
   ): Promise<boolean> => {
     const db = getFirestoreDb();
     if (!uid || !db || !splitId) return false;
@@ -520,9 +714,17 @@ export function useSplits(options?: { enabled?: boolean }) {
 
     try {
       const batch = writeBatch(db);
-      applyShareSideEffects(batch, db, split, built.participants, {
-        settled: built.settled,
-      });
+      applyShareSideEffects(
+        batch,
+        db,
+        split,
+        built.participants,
+        { settled: built.settled },
+        { currency }
+      );
+      if (options?.claimId) {
+        batch.delete(doc(db, "splitShareClaims", options.claimId));
+      }
       await commitWrite(() => batch.commit(), { label: "split opt-out" });
       toast.success("Shares updated");
       return true;
@@ -531,6 +733,161 @@ export function useSplits(options?: { enabled?: boolean }) {
       toast.error(friendlyErrorMessage(err, "Failed to update shares"));
       return false;
     }
+  };
+
+  /**
+   * Records a `bill` + `paid` claim filed from the public link.
+   *
+   * The claim doc is deleted in the SAME batch as the participant update, which
+   * is the idempotency mechanism: either the effect landed and the claim is
+   * gone, or neither happened. `runTransaction` would allow a conditional read
+   * but fails offline, which would break the commitWrite queue model the rest
+   * of this file relies on — so: one batch, and absolute (never incremental)
+   * paidAmount writes, so a replay is a no-op.
+   */
+  const applyPaidClaim = async (
+    splitId: string,
+    claim: SplitShareClaim
+  ): Promise<boolean> => {
+    const db = getFirestoreDb();
+    if (!uid || !db || !splitId) return false;
+
+    const split = splits.find((s) => s.id === splitId);
+    if (!split) return false;
+    if (split.createdBy !== uid) {
+      toast.error("Only the organizer can record this.");
+      return false;
+    }
+
+    const built = buildApplyPaidClaimWrites({ split, claim });
+    if ("error" in built) {
+      toast.error(built.error);
+      return false;
+    }
+
+    const name =
+      split.participants.find((p) => p.key === claim.participantKey)?.name ||
+      "that person";
+
+    try {
+      const batch = writeBatch(db);
+      applyShareSideEffects(
+        batch,
+        db,
+        split,
+        built.participants,
+        { settled: built.settled },
+        { currency }
+      );
+      if (split.publicShareId) {
+        batch.delete(
+          doc(
+            db,
+            "splitShareClaims",
+            splitClaimDocId(split.publicShareId, claim.participantKey)
+          )
+        );
+      }
+      const outcome = await commitWrite(() => batch.commit(), {
+        label: "settlement status",
+      });
+      toast.success(writeSavedMessage(outcome, `Recorded ${name}'s payment`));
+      return true;
+    } catch (err) {
+      logError("splits.applypaidclaim", err);
+      toast.error(friendlyErrorMessage(err, "Failed to record that payment"));
+      return false;
+    }
+  };
+
+  /** Clears a claim without applying it. Re-arms that person's claim slot. */
+  const dismissClaim = async (
+    splitId: string,
+    claim: SplitShareClaim
+  ): Promise<boolean> => {
+    const db = getFirestoreDb();
+    if (!uid || !db || !splitId) return false;
+
+    const split = splits.find((s) => s.id === splitId);
+    if (!split || !split.publicShareId) return false;
+    if (split.createdBy !== uid) {
+      toast.error("Only the organizer can dismiss this.");
+      return false;
+    }
+
+    try {
+      const outcome = await commitWrite(
+        () =>
+          deleteDoc(
+            doc(
+              db,
+              "splitShareClaims",
+              splitClaimDocId(split.publicShareId as string, claim.participantKey)
+            )
+          ),
+        { label: "update" }
+      );
+      toast.success(writeSavedMessage(outcome, "Dismissed"));
+      return true;
+    } catch (err) {
+      logError("splits.dismissclaim", err);
+      toast.error(friendlyErrorMessage(err, "Failed to dismiss that update"));
+      return false;
+    }
+  };
+
+  /**
+   * The revoke lever. Lives on the world-readable share because the Firestore
+   * rules read it there to gate anonymous creates.
+   */
+  const setSplitClaimsEnabled = async (
+    splitId: string,
+    enabled: boolean
+  ): Promise<boolean> => {
+    const db = getFirestoreDb();
+    if (!uid || !db || !splitId) return false;
+
+    const split = splits.find((s) => s.id === splitId);
+    if (!split) return false;
+    if (split.createdBy !== uid) {
+      toast.error("Only the organizer can change this.");
+      return false;
+    }
+
+    try {
+      const batch = writeBatch(db);
+      applyShareSideEffects(
+        batch,
+        db,
+        split,
+        split.participants,
+        // Recorded on the private doc as well, which is what makes the setting
+        // survive every later write.
+        { claimsEnabled: enabled },
+        { currency, claimsEnabled: enabled }
+      );
+      const outcome = await commitWrite(() => batch.commit(), {
+        label: "share link",
+      });
+      toast.success(
+        writeSavedMessage(
+          outcome,
+          enabled ? "Updates from the link are on" : "Updates from the link are off"
+        )
+      );
+      return true;
+    } catch (err) {
+      logError("splits.setclaimsenabled", err);
+      toast.error(friendlyErrorMessage(err, "Failed to change that setting"));
+      return false;
+    }
+  };
+
+  /** What applying this claim would do, so the UI can route or explain it. */
+  const planClaim = (splitId: string, claim: SplitShareClaim) => {
+    const split = splits.find((s) => s.id === splitId);
+    if (!split) return { action: "dismiss" as const, reason: "This split is gone." };
+    return claimApplyPlan(split, claim);
   };
 
   const deleteSplit = async (id: string): Promise<boolean> => {
@@ -555,6 +912,11 @@ export function useSplits(options?: { enabled?: boolean }) {
         if (linked.publicShareId) {
           batch.delete(doc(db, "splitPublicShares", linked.publicShareId));
         }
+        // Rules evaluate the whole batch against pre-batch state, so the share
+        // still exists for the ownership check even though this batch drops it.
+        for (const claimDocId of splitClaimDocIdsForSplit(split)) {
+          batch.delete(doc(db, "splitShareClaims", claimDocId));
+        }
       }
       batch.delete(doc(db, "splits", id));
       const outcome = await commitWrite(() => batch.commit(), {
@@ -576,12 +938,17 @@ export function useSplits(options?: { enabled?: boolean }) {
     loading,
     createSplit,
     updateSplit,
+    ensureSplitSharing,
     toggleParticipantPaid,
     markParticipantCollected,
     unmarkParticipantCollected,
     spendCollectPot,
     settleAll,
     optOutParticipant,
+    applyPaidClaim,
+    dismissClaim,
+    setSplitClaimsEnabled,
+    planClaim,
     deleteSplit,
   };
 }

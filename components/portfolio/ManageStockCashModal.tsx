@@ -7,7 +7,6 @@ import {
   Text,
   View,
 } from "react-native";
-import * as Haptics from "expo-haptics";
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -31,6 +30,7 @@ import { getAccountKind } from "@/shared/utils/accountKind";
 import { formatDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
 
 interface ManageStockCashModalProps {
   visible: boolean;
@@ -273,7 +273,7 @@ export function ManageStockCashModal({
           <View style={styles.modeTabsRow}>
             <Pressable
               onPress={() => {
-                Haptics.selectionAsync().catch(() => undefined);
+                haptic.selection().catch(() => undefined);
                 setMode("deposit");
               }}
               style={[
@@ -316,7 +316,7 @@ export function ManageStockCashModal({
 
             <Pressable
               onPress={() => {
-                Haptics.selectionAsync().catch(() => undefined);
+                haptic.selection().catch(() => undefined);
                 setMode("withdraw");
               }}
               style={[
@@ -359,7 +359,7 @@ export function ManageStockCashModal({
 
             <Pressable
               onPress={() => {
-                Haptics.selectionAsync().catch(() => undefined);
+                haptic.selection().catch(() => undefined);
                 setMode("adjust");
               }}
               style={[
@@ -430,7 +430,7 @@ export function ManageStockCashModal({
                       <Pressable
                         key={a.id}
                         onPress={() => {
-                          Haptics.selectionAsync().catch(() => undefined);
+                          haptic.selection().catch(() => undefined);
                           setSelectedAccountId(a.id);
                         }}
                         style={[

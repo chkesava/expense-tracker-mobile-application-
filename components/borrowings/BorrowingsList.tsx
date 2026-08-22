@@ -28,12 +28,12 @@ import { SkeletonCard } from "@/components/common/Skeleton";
 import { BOTTOM_NAV_FAB_GAP, BOTTOM_NAV_FAB_SIZE } from "@/components/layout/chrome";
 import { haptic } from "@/lib/haptics";
 import { useBorrowings } from "@/hooks/useBorrowings";
-import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import type { Borrowing } from "@/shared/types/borrowing";
 import { summarizeBorrowings } from "@/shared/utils/borrowingMath";
 import { todayDateKey, toLocalDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
 function dateFilterCutoff(filter: BorrowingDateFilter, today: string): string | null {
   if (filter === "all") return null;
@@ -49,7 +49,7 @@ function dateFilterCutoff(filter: BorrowingDateFilter, today: string): string | 
 export function BorrowingsList({ listHeader }: { listHeader?: ReactNode }) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
-  const { settings: system } = useSystemSettings();
+  const displayCurrency = useDisplayCurrency();
 
   const {
     borrowings,
@@ -209,13 +209,13 @@ export function BorrowingsList({ listHeader }: { listHeader?: ReactNode }) {
         <BorrowingCard
           borrowing={item}
           summary={summary}
-          currency={system.defaultCurrency}
+          currency={displayCurrency}
           onPress={onPressCard}
           onMenu={onMenuCard}
         />
       );
     },
-    [summaries, system.defaultCurrency, onPressCard, onMenuCard]
+    [summaries, displayCurrency, onPressCard, onMenuCard]
   );
 
   const keyExtractor = useCallback((item: Borrowing) => item.id ?? "", []);
@@ -228,7 +228,7 @@ export function BorrowingsList({ listHeader }: { listHeader?: ReactNode }) {
         totalInterest={portfolio.totalInterest}
         totalRepaid={portfolio.totalRepaid}
         overdueCount={portfolio.overdueCount}
-        currency={system.defaultCurrency}
+        currency={displayCurrency}
       />
 
       <BorrowingFilters
@@ -390,7 +390,7 @@ export function BorrowingsList({ listHeader }: { listHeader?: ReactNode }) {
         borrowing={selectedBorrowing}
         summary={selectedId ? getSummary(selectedId) : null}
         repayments={selectedId ? getRepayments(selectedId) : []}
-        currency={system.defaultCurrency}
+        currency={displayCurrency}
         startRepaying={startRepaying}
         onClose={() => {
           setSelectedId(null);

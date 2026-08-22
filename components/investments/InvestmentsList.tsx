@@ -7,7 +7,6 @@ import {
   TextInput,
   View,
 } from "react-native";
-import * as Haptics from "expo-haptics";
 import {
   Banknote,
   Landmark,
@@ -25,19 +24,21 @@ import { CreateInvestmentModal } from "@/components/investments/CreateInvestment
 import { InvestmentCard } from "@/components/investments/InvestmentCard";
 import { InvestmentDetailModal } from "@/components/investments/InvestmentDetailModal";
 import { useInvestments } from "@/hooks/useInvestments";
-import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import type { Investment, InvestmentKind } from "@/shared/types/investment";
 import { todayDateKey } from "@/shared/utils/dates";
 import { getInvestmentValuation } from "@/shared/utils/investmentInterest";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
+import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
 
 type FilterTab = "all" | InvestmentKind;
 
 export function InvestmentsList() {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
-  const { settings: system } = useSystemSettings();
+  const displayCurrency = useDisplayCurrency();
 
   const {
     investments,
@@ -104,7 +105,7 @@ export function InvestmentsList() {
               </Text>
               <Amount
                 value={portfolioSummary.totalCurrentValue}
-                currency={system.defaultCurrency}
+                currency={displayCurrency}
                 style={{
                   fontSize: 22,
                   fontWeight: "900",
@@ -124,7 +125,7 @@ export function InvestmentsList() {
                   color: portfolioSummary.netGain >= 0 ? "#10B981" : "#EF4444",
                 }}
               >
-                +{system.defaultCurrency} {Math.round(portfolioSummary.netGain).toLocaleString()} (+{portfolioSummary.gainPct}%)
+                +{displayCurrency} {Math.round(portfolioSummary.netGain).toLocaleString()} (+{portfolioSummary.gainPct}%)
               </Text>
             </View>
           </View>
@@ -133,54 +134,56 @@ export function InvestmentsList() {
 
       {/* Filter Tabs & Add Button */}
       <View style={styles.filterRow}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ gap: 6 }}
-        >
-          {[
-            { id: "all", label: "All Assets" },
-            { id: "fixed_deposit", label: "Fixed Deposits" },
-            { id: "interest_savings", label: "Savings" },
-            { id: "mutual_fund", label: "Mutual Funds" },
-          ].map((tab) => {
-            const isActive = activeFilter === tab.id;
-            return (
-              <Pressable
-                key={tab.id}
-                onPress={() => {
-                  Haptics.selectionAsync().catch(() => undefined);
-                  setActiveFilter(tab.id as FilterTab);
-                }}
-                style={[
-                  styles.filterPill,
-                  {
-                    backgroundColor: isActive
-                      ? theme.colors.primary
-                      : isDark
-                      ? "rgba(255,255,255,0.06)"
-                      : "rgba(0,0,0,0.04)",
-                    borderColor: isActive
-                      ? theme.colors.primary
-                      : theme.colors.border,
-                  },
-                ]}
-              >
-                <Text
+        <HorizontalSwipeBoundary>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ gap: 6 }}
+          >
+            {[
+              { id: "all", label: "All Assets" },
+              { id: "fixed_deposit", label: "Fixed Deposits" },
+              { id: "interest_savings", label: "Savings" },
+              { id: "mutual_fund", label: "Mutual Funds" },
+            ].map((tab) => {
+              const isActive = activeFilter === tab.id;
+              return (
+                <Pressable
+                  key={tab.id}
+                  onPress={() => {
+                    haptic.selection().catch(() => undefined);
+                    setActiveFilter(tab.id as FilterTab);
+                  }}
                   style={[
-                    styles.filterPillText,
+                    styles.filterPill,
                     {
-                      color: isActive ? "#FFFFFF" : theme.colors.foreground,
-                      fontWeight: isActive ? "700" : "500",
+                      backgroundColor: isActive
+                        ? theme.colors.primary
+                        : isDark
+                        ? "rgba(255,255,255,0.06)"
+                        : "rgba(0,0,0,0.04)",
+                      borderColor: isActive
+                        ? theme.colors.primary
+                        : theme.colors.border,
                     },
                   ]}
                 >
-                  {tab.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+                  <Text
+                    style={[
+                      styles.filterPillText,
+                      {
+                        color: isActive ? "#FFFFFF" : theme.colors.foreground,
+                        fontWeight: isActive ? "700" : "500",
+                      },
+                    ]}
+                  >
+                    {tab.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </HorizontalSwipeBoundary>
       </View>
 
       {/* Search Input */}
@@ -244,7 +247,7 @@ export function InvestmentsList() {
             <InvestmentCard
               key={inv.id}
               investment={inv}
-              currency={system.defaultCurrency}
+              currency={displayCurrency}
               onPress={() => setSelectedInvestment(inv)}
             />
           ))}
@@ -261,7 +264,7 @@ export function InvestmentsList() {
       <InvestmentDetailModal
         visible={!!selectedInvestment}
         investment={selectedInvestment}
-        currency={system.defaultCurrency}
+        currency={displayCurrency}
         onClose={() => setSelectedInvestment(null)}
         onCloseInvestment={closeInvestment}
         onDeleteInvestment={deleteInvestment}

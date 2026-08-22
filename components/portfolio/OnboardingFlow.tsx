@@ -7,7 +7,6 @@ import {
   Text,
   View,
 } from "react-native";
-import * as Haptics from "expo-haptics";
 import { Rocket, Wallet, X } from "lucide-react-native";
 
 import { Button } from "@/components/ui/Button";
@@ -16,6 +15,7 @@ import { toast } from "@/lib/toast";
 import type { PortfolioSettings } from "@/shared/features/portfolio/types";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
 
 export interface OnboardingFlowProps {
   visible: boolean;
@@ -144,7 +144,7 @@ export function OnboardingFlow({
                   <Pressable
                     key={String(opt.value)}
                     onPress={() => {
-                      Haptics.selectionAsync().catch(() => undefined);
+                      haptic.selection().catch(() => undefined);
                       setHasExisting(opt.value);
                     }}
                     style={[
