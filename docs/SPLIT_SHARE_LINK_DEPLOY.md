@@ -278,8 +278,17 @@ document's `slug` field, or list them without leaving the shell:
   it ever matters, try `asyncRoutes: { "web": "production" }` in the
   `expo-router` plugin options — it is alpha and web-only, so revert if the
   export misbehaves.
+- **The share host is not a second copy of the app.** `index.html` boots the
+  whole app, so a blanket `/* -> /index.html` fallback would have made
+  `/dashboard`, `/settings` and every other route reachable there — a second
+  origin where someone could sign in. `netlify.toml` therefore scopes the SPA
+  fallback to `/split/*` and `/payment/*` and 302s everything else, including
+  `/`, back to the real app. That last rule is deliberately **not** forced,
+  because Netlify only shadows an existing file when a rule says so, and
+  `/_expo/**` and `/assets/**` must keep being served from this site — the
+  proxied `index.html` references those bundle paths absolutely. Adding `force`
+  there would break the page the rule exists to protect.
 - Firebase **authorized domains** need no change for the share pages: they make
   no auth call, and Firestore authenticates with the API key and project id, not
-  the origin. Add the new domain only if you intend to sign in on it directly —
-  note the SPA fallback means the new site's `/` is a full copy of the app, which
-  is why `netlify.toml` here 302s that root back to the main site.
+  the origin. With the fallback scoped as above there is no sign-in surface on
+  the share host to authorize.

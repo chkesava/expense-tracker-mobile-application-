@@ -39,19 +39,38 @@
   [headers.values]
     Cache-Control = "public, max-age=31536000, immutable"
 
-# The SPA fallback below would otherwise make this host a second, fully
-# functional copy of the whole app (/ -> app/index.tsx -> login). Send the
-# root at the real app instead. Must come before the fallback.
+# SPA fallback, deliberately scoped to the two public routes rather than "/*".
+# expo-router does client-side routing, so a share path has to be served
+# index.html for the slug to resolve -- but index.html boots the WHOLE app, so a
+# blanket fallback would make this host a second, fully sign-in-able copy of it
+# (/dashboard, /settings, ... all reachable). Only these two exist to be public.
+[[redirects]]
+  from = "/split/*"
+  to = "/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/payment/*"
+  to = "/index.html"
+  status = 200
+
+# `/` has to be forced, because it resolves to the real index.html file and the
+# unforced catch-all below will not shadow an existing file -- without this the
+# bare domain still boots the whole app.
 [[redirects]]
   from = "/"
   to = "https://kesavaexpensetracker.netlify.app/"
   status = 302
   force = true
 
-# SPA fallback. MUST be last: expo-router does client-side routing, so every
-# path has to be served index.html. This is what makes the proxy from
-# kesavaexpensetracker.netlify.app/split/:slug resolve to a real page.
+# Everything else belongs to the real app, not this host. MUST be last.
+#
+# Deliberately NOT forced: Netlify does not shadow an existing file unless a
+# rule says force, so /_expo/**, /assets/**, /favicon.ico and /robots.txt are
+# still served from this site -- which matters, because the proxied index.html
+# references those bundle paths absolutely. Adding force here would break the
+# page it is meant to protect.
 [[redirects]]
   from = "/*"
-  to = "/index.html"
-  status = 200
+  to = "https://kesavaexpensetracker.netlify.app/:splat"
+  status = 302
