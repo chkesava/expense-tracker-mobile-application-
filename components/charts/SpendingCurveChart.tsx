@@ -11,6 +11,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { Amount } from "@/components/common/Amount";
+import { compactAxisValue } from "@/components/charts/axis";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
@@ -28,6 +29,10 @@ export interface SpendingCurveChartProps {
   currency?: string;
   lineColor?: string;
   showCumulative?: boolean;
+  /** Render a compact value axis (0, 5K, 10K…) down the left edge. */
+  showYAxis?: boolean;
+  /** How many x-axis date ticks to label. Clamped to the point count. */
+  xTickCount?: number;
 }
 
 function AnimatedCurveDot({
@@ -82,6 +87,8 @@ export function SpendingCurveChart({
   currency = "USD",
   lineColor,
   showCumulative = false,
+  showYAxis = false,
+  xTickCount = 3,
 }: SpendingCurveChartProps) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
@@ -111,9 +118,12 @@ export function SpendingCurveChart({
 
   const chartPaddingTop = 20;
   const chartPaddingBottom = 26;
-  const chartPaddingHorizontal = 16;
-  const chartWidth = containerWidth - chartPaddingHorizontal * 2;
+  const chartPaddingRight = 16;
+  const chartPaddingLeft = showYAxis ? 38 : 16;
+  const chartWidth = containerWidth - chartPaddingLeft - chartPaddingRight;
   const chartHeight = height - chartPaddingTop - chartPaddingBottom;
+
+  const gridRatios = showYAxis ? [0, 0.25, 0.5, 0.75, 1] : [0, 0.5, 1];
 
   const coordinates = useMemo(() => {
     if (processedData.length === 0) return [];
@@ -121,11 +131,11 @@ export function SpendingCurveChart({
     const stepX = n > 1 ? chartWidth / (n - 1) : 0;
 
     return processedData.map((p, i) => {
-      const x = chartPaddingHorizontal + i * stepX;
+      const x = chartPaddingLeft + i * stepX;
       const y = chartPaddingTop + chartHeight - (p.amount / maxAmount) * chartHeight;
       return { x, y, ...p, index: i };
     });
-  }, [processedData, chartWidth, chartHeight, maxAmount, chartPaddingHorizontal, chartPaddingTop]);
+  }, [processedData, chartWidth, chartHeight, maxAmount, chartPaddingLeft, chartPaddingTop]);
 
   // Generate smooth SVG path (catmull-rom or simple bezier)
   const { linePath, areaPath } = useMemo(() => {
@@ -155,6 +165,37 @@ export function SpendingCurveChart({
 
     return { linePath: d, areaPath: area };
   }, [coordinates, chartPaddingTop, chartHeight]);
+
+  const xTicks = useMemo(() => {
+    if (coordinates.length === 0) return [];
+    const desired = Math.max(2, Math.min(xTickCount, coordinates.length));
+    const step = (coordinates.length - 1) / (desired - 1);
+    const seen = new Set<number>();
+    const ticks: {
+      index: number;
+      x: number;
+      date: string;
+      anchor: "start" | "middle" | "end";
+    }[] = [];
+
+    for (let i = 0; i < desired; i += 1) {
+      const index = Math.round(i * step);
+      if (seen.has(index)) continue;
+      seen.add(index);
+      ticks.push({
+        index,
+        x: coordinates[index].x,
+        date: coordinates[index].date,
+        anchor:
+          index === 0
+            ? "start"
+            : index === coordinates.length - 1
+              ? "end"
+              : "middle",
+      });
+    }
+    return ticks;
+  }, [coordinates, xTickCount]);
 
   const selectedPoint = selectedIndex !== null ? coordinates[selectedIndex] : null;
 
@@ -205,20 +246,32 @@ export function SpendingCurveChart({
             </LinearGradient>
           </Defs>
 
-          {/* Grid lines */}
-          {[0, 0.5, 1].map((ratio, i) => {
+          {/* Grid lines (with optional compact value axis) */}
+          {gridRatios.map((ratio, i) => {
             const y = chartPaddingTop + chartHeight * (1 - ratio);
             return (
-              <Line
-                key={i}
-                x1={chartPaddingHorizontal}
-                y1={y}
-                x2={containerWidth - chartPaddingHorizontal}
-                y2={y}
-                stroke={isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)"}
-                strokeDasharray="4 4"
-                strokeWidth={1}
-              />
+              <React.Fragment key={i}>
+                <Line
+                  x1={chartPaddingLeft}
+                  y1={y}
+                  x2={containerWidth - chartPaddingRight}
+                  y2={y}
+                  stroke={isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)"}
+                  strokeDasharray="4 4"
+                  strokeWidth={1}
+                />
+                {showYAxis ? (
+                  <SvgText
+                    x={chartPaddingLeft - 6}
+                    y={y + 3.5}
+                    fontSize={9}
+                    fill={theme.colors.mutedForeground}
+                    textAnchor="end"
+                  >
+                    {compactAxisValue(maxAmount * ratio)}
+                  </SvgText>
+                ) : null}
+              </React.Fragment>
             );
           })}
 
@@ -267,39 +320,18 @@ export function SpendingCurveChart({
           })}
 
           {/* Date labels at bottom */}
-          {coordinates.length > 0 && (
-            <>
-              <SvgText
-                x={coordinates[0].x}
-                y={height - 8}
-                fontSize={10}
-                fill={theme.colors.mutedForeground}
-                textAnchor="start"
-              >
-                {coordinates[0].date}
-              </SvgText>
-              {coordinates.length > 2 && (
-                <SvgText
-                  x={coordinates[Math.floor(coordinates.length / 2)].x}
-                  y={height - 8}
-                  fontSize={10}
-                  fill={theme.colors.mutedForeground}
-                  textAnchor="middle"
-                >
-                  {coordinates[Math.floor(coordinates.length / 2)].date}
-                </SvgText>
-              )}
-              <SvgText
-                x={coordinates[coordinates.length - 1].x}
-                y={height - 8}
-                fontSize={10}
-                fill={theme.colors.mutedForeground}
-                textAnchor="end"
-              >
-                {coordinates[coordinates.length - 1].date}
-              </SvgText>
-            </>
-          )}
+          {xTicks.map((tick) => (
+            <SvgText
+              key={`tick-${tick.index}`}
+              x={tick.x}
+              y={height - 8}
+              fontSize={10}
+              fill={theme.colors.mutedForeground}
+              textAnchor={tick.anchor}
+            >
+              {tick.date}
+            </SvgText>
+          ))}
         </Svg>
       </Animated.View>
     </View>

@@ -31,6 +31,9 @@ export interface PageHeaderProps {
   onBack?: () => void;
   /** pill = raised segment control; underline = flat ledger-style tabs */
   tabVariant?: PageHeaderTabVariant;
+  /** Overrides the default emerald tint of the leading icon container. */
+  iconBackgroundColor?: string;
+  iconBorderColor?: string;
 }
 
 export function PageHeader({
@@ -43,6 +46,8 @@ export function PageHeader({
   rightElement,
   onBack,
   tabVariant = "pill",
+  iconBackgroundColor,
+  iconBorderColor,
 }: PageHeaderProps) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
@@ -78,12 +83,16 @@ export function PageHeader({
               style={[
                 styles.iconContainer,
                 {
-                  backgroundColor: isDark
-                    ? "rgba(52, 179, 122, 0.14)"
-                    : "rgba(37, 150, 90, 0.1)",
-                  borderColor: isDark
-                    ? "rgba(52, 179, 122, 0.28)"
-                    : "rgba(37, 150, 90, 0.18)",
+                  backgroundColor:
+                    iconBackgroundColor ??
+                    (isDark
+                      ? "rgba(52, 179, 122, 0.14)"
+                      : "rgba(37, 150, 90, 0.1)"),
+                  borderColor:
+                    iconBorderColor ??
+                    (isDark
+                      ? "rgba(52, 179, 122, 0.28)"
+                      : "rgba(37, 150, 90, 0.18)"),
                 },
               ]}
             >

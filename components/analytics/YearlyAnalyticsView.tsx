@@ -1,63 +1,125 @@
-import React, { useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import React, {
+  useCallback,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { FlashList } from "@shopify/flash-list";
 import { useRouter } from "expo-router";
 import {
-  Award,
-  BarChart3,
-  Calendar,
-  ChevronLeft,
-  ChevronRight,
-  PieChart,
-  Sparkles,
-  TrendingDown,
-  TrendingUp,
-  Zap,
+  ArrowDownRight,
+  ArrowUpRight,
+  CalendarClock,
+  PiggyBank,
+  Receipt,
 } from "lucide-react-native";
 
+import {
+  AnnualOverviewCard,
+  type AnnualMetric,
+} from "@/components/analytics/yearly/AnnualOverviewCard";
+import { BiggestTransactionCard } from "@/components/analytics/yearly/BiggestTransactionCard";
+import {
+  IncomeVsSpendCard,
+  type MonthHighlight,
+} from "@/components/analytics/yearly/IncomeVsSpendCard";
+import {
+  YearlyInsightGrid,
+  useYearlyTileTextStyles,
+  type YearlyInsightTile,
+} from "@/components/analytics/yearly/YearlyInsightGrid";
+import { CategoryDistributionCard } from "@/components/analytics/shared/CategoryDistributionCard";
+import { PeriodSelector } from "@/components/analytics/shared/PeriodSelector";
+import { insightAccents } from "@/components/analytics/insightsTheme";
 import { Amount } from "@/components/common/Amount";
 import { EmptyState } from "@/components/common/EmptyState";
-import { Card } from "@/components/ui/Card";
-import { BarChart, type BarChartItem } from "@/components/charts/BarChart";
-import { DonutChart } from "@/components/charts/DonutChart";
+import { ErrorState } from "@/components/common/ErrorState";
+import { Skeleton } from "@/components/common/Skeleton";
+import {
+  BOTTOM_NAV_CONTENT_CLEARANCE,
+  BOTTOM_NAV_FAB_GAP,
+  BOTTOM_NAV_FAB_SIZE,
+} from "@/components/layout/chrome";
+import { haptic } from "@/lib/haptics";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useIncomes } from "@/hooks/useIncomes";
+import { useModals } from "@/providers/ModalProvider";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { groupByCategory } from "@/shared/utils/analytics";
 import { COLORS } from "@/shared/utils/chartColors";
+import type { BarChartItem } from "@/components/charts/BarChart";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
-import { haptic } from "@/lib/haptics";
-import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
 const MONTH_NAMES = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
 ];
 
-export function YearlyAnalyticsView() {
+/** Ordered vertical structure of the yearly dashboard. */
+type SectionKey =
+  | "overview"
+  | "monthly"
+  | "distribution"
+  | "biggest"
+  | "insights";
+
+const ALL_SECTIONS: SectionKey[] = [
+  "overview",
+  "monthly",
+  "distribution",
+  "biggest",
+  "insights",
+];
+
+/**
+ * Signed percentage change. Returns null when the previous period can't
+ * support a comparison, so the UI omits the badge instead of inventing one.
+ * `Math.abs` on the denominator keeps the sign meaningful for net savings,
+ * which can itself be negative.
+ */
+function percentChange(current: number, previous: number): number | null {
+  if (!previous || !Number.isFinite(previous)) return null;
+  return ((current - previous) / Math.abs(previous)) * 100;
+}
+
+export interface YearlyAnalyticsViewProps {
+  /** Screen chrome (page header + tabs) scrolled with the dashboard. */
+  listHeader?: ReactNode;
+}
+
+export function YearlyAnalyticsView({ listHeader }: YearlyAnalyticsViewProps) {
   const router = useRouter();
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
-  const displayCurrency = useDisplayCurrency();
+  const accents = insightAccents(isDark);
+  const tileText = useYearlyTileTextStyles();
+  const { setEditingExpense } = useModals();
 
-  const { expenses } = useExpenses();
+  const {
+    expenses,
+    loading: expensesLoading,
+    error: expensesError,
+    retry: retryExpenses,
+  } = useExpenses();
   const { incomes } = useIncomes();
 
   const currentYear = useMemo(() => new Date().getFullYear(), []);
   const [selectedYear, setSelectedYear] = useState<number>(currentYear);
 
-  // Available years from dataset
-  const availableYears = useMemo(() => {
-    const years = new Set<number>([currentYear]);
-    expenses.forEach((e) => {
-      const y = parseInt(e.date?.slice(0, 4), 10);
-      if (!isNaN(y)) years.add(y);
-    });
-    incomes.forEach((inc) => {
-      const y = parseInt(inc.date?.slice(0, 4), 10);
-      if (!isNaN(y)) years.add(y);
-    });
-    return Array.from(years).sort((a, b) => b - a);
-  }, [expenses, incomes, currentYear]);
+  const currency = useDisplayCurrency();
+  const previousYear = selectedYear - 1;
+
+  const handlePrevYear = useCallback(() => {
+    void haptic.selection();
+    setSelectedYear((year) => year - 1);
+  }, []);
+
+  const handleNextYear = useCallback(() => {
+    void haptic.selection();
+    setSelectedYear((year) => year + 1);
+  }, []);
 
   // Year filtered transactions
   const yearExpenses = useMemo(
@@ -68,6 +130,18 @@ export function YearlyAnalyticsView() {
     () => incomes.filter((inc) => inc.date?.startsWith(String(selectedYear))),
     [incomes, selectedYear]
   );
+
+  // Previous year, used only for the year-over-year badges
+  const prevYearTotals = useMemo(() => {
+    const prefix = String(previousYear);
+    const spent = expenses
+      .filter((e) => e.date?.startsWith(prefix))
+      .reduce((sum, e) => sum + e.amount, 0);
+    const income = incomes
+      .filter((inc) => inc.date?.startsWith(prefix))
+      .reduce((sum, inc) => sum + inc.amount, 0);
+    return { spent, income, net: income - spent };
+  }, [expenses, incomes, previousYear]);
 
   // Totals
   const totalAnnualExpense = useMemo(
@@ -80,6 +154,10 @@ export function YearlyAnalyticsView() {
   );
   const netAnnualSavings = totalAnnualIncome - totalAnnualExpense;
   const monthlyAverageExpense = totalAnnualExpense / 12;
+  const savingsRate =
+    totalAnnualIncome > 0
+      ? Math.round((netAnnualSavings / totalAnnualIncome) * 100)
+      : null;
 
   // 12-Month Bar Chart Data
   const monthlyChartData: BarChartItem[] = useMemo(() => {
@@ -100,15 +178,29 @@ export function YearlyAnalyticsView() {
     });
   }, [selectedYear, yearExpenses, yearIncomes]);
 
-  // Peak and lowest spending months
-  const { peakMonth, lowestMonth } = useMemo(() => {
-    const activeMonths = monthlyChartData.filter((m) => m.value > 0);
-    if (activeMonths.length === 0) return { peakMonth: null, lowestMonth: null };
+  // Peak / lowest months. Only months with activity are candidates, so a
+  // year that is still in progress never reports an empty month as "lowest".
+  const { peakSpend, lowestSpend, lowestIncome } = useMemo(() => {
+    const spendMonths = monthlyChartData.filter((m) => m.value > 0);
+    const incomeMonths = monthlyChartData.filter(
+      (m) => (m.secondaryValue ?? 0) > 0
+    );
 
-    const sorted = [...activeMonths].sort((a, b) => b.value - a.value);
+    const spendSorted = [...spendMonths].sort((a, b) => b.value - a.value);
+    const incomeSorted = [...incomeMonths].sort(
+      (a, b) => (a.secondaryValue ?? 0) - (b.secondaryValue ?? 0)
+    );
+
+    const toHighlight = (
+      item: BarChartItem | undefined,
+      key: "value" | "secondaryValue"
+    ): MonthHighlight =>
+      item ? { label: item.label, value: item[key] ?? 0 } : null;
+
     return {
-      peakMonth: sorted[0],
-      lowestMonth: sorted[sorted.length - 1],
+      peakSpend: toHighlight(spendSorted[0], "value"),
+      lowestSpend: toHighlight(spendSorted[spendSorted.length - 1], "value"),
+      lowestIncome: toHighlight(incomeSorted[0], "secondaryValue"),
     };
   }, [monthlyChartData]);
 
@@ -129,398 +221,384 @@ export function YearlyAnalyticsView() {
     return [...yearExpenses].sort((a, b) => b.amount - a.amount)[0];
   }, [yearExpenses]);
 
-  return (
-    <View style={styles.container}>
-      {/* Year Switcher Strip */}
-      <View
-        style={[
-          styles.yearStrip,
-          {
-            backgroundColor: theme.colors.card,
-            borderColor: theme.colors.border,
-          },
-        ]}
-      >
-        <Pressable
-          onPress={() => {
-            haptic.selection().catch(() => undefined);
-            setSelectedYear((y) => y - 1);
-          }}
-          style={({ pressed }) => [styles.navBtn, pressed && { opacity: 0.6 }]}
-        >
-          <ChevronLeft size={20} color={theme.colors.foreground} />
-        </Pressable>
+  const overviewMetrics: AnnualMetric[] = useMemo(() => {
+    const hasPrevYear = prevYearTotals.spent > 0 || prevYearTotals.income > 0;
+    const delta = (current: number, previous: number) => {
+      if (!hasPrevYear) return null;
+      const percent = percentChange(current, previous);
+      return percent === null ? null : { percent, againstYear: previousYear };
+    };
 
-        <View style={styles.yearLabelContainer}>
-          <Text style={[styles.yearLabelText, { color: theme.colors.foreground }]}>
-            {selectedYear}
+    return [
+      {
+        label: "Total Spent",
+        value: totalAnnualExpense,
+        color: accents.pink,
+        delta: delta(totalAnnualExpense, prevYearTotals.spent),
+        riseIsGood: false,
+      },
+      {
+        label: "Total Income",
+        value: totalAnnualIncome,
+        color: accents.green,
+        delta: delta(totalAnnualIncome, prevYearTotals.income),
+        riseIsGood: true,
+      },
+      {
+        label: "Net Savings",
+        value: netAnnualSavings,
+        color: netAnnualSavings >= 0 ? accents.green : accents.pink,
+        delta: delta(netAnnualSavings, prevYearTotals.net),
+        riseIsGood: true,
+      },
+      {
+        // The delta here would restate Total Spent exactly (both are /12), so
+        // the badge is deliberately omitted.
+        label: "Monthly Avg",
+        value: monthlyAverageExpense,
+        color: theme.colors.foreground,
+        delta: null,
+        riseIsGood: false,
+      },
+    ];
+  }, [
+    accents.green,
+    accents.pink,
+    monthlyAverageExpense,
+    netAnnualSavings,
+    prevYearTotals,
+    previousYear,
+    theme.colors.foreground,
+    totalAnnualExpense,
+    totalAnnualIncome,
+  ]);
+
+  const insightTiles: YearlyInsightTile[] = useMemo(() => {
+    const tiles: YearlyInsightTile[] = [];
+
+    if (peakSpend) {
+      tiles.push({
+        id: "highestSpendMonth",
+        label: "Highest Spend Month",
+        icon: <ArrowUpRight size={15} color={accents.pink} strokeWidth={2.5} />,
+        tintRgb: "244, 63, 94",
+        value: <Text style={tileText.value}>{peakSpend.label}</Text>,
+        sub: (
+          <Amount
+            value={peakSpend.value}
+            currency={currency}
+            ghostable
+            numberOfLines={1}
+            style={tileText.sub}
+          />
+        ),
+      });
+    }
+
+    if (lowestSpend) {
+      tiles.push({
+        id: "lowestSpendMonth",
+        label: "Lowest Spend Month",
+        icon: <ArrowDownRight size={15} color={accents.green} strokeWidth={2.5} />,
+        tintRgb: "74, 222, 128",
+        value: <Text style={tileText.value}>{lowestSpend.label}</Text>,
+        sub: (
+          <Amount
+            value={lowestSpend.value}
+            currency={currency}
+            ghostable
+            numberOfLines={1}
+            style={tileText.sub}
+          />
+        ),
+      });
+    }
+
+    tiles.push({
+      id: "avgMonthlySpend",
+      label: "Avg Monthly Spend",
+      icon: <CalendarClock size={15} color={accents.amber} strokeWidth={2.5} />,
+      tintRgb: "251, 191, 36",
+      value: (
+        <Amount
+          value={monthlyAverageExpense}
+          currency={currency}
+          ghostable
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.72}
+          style={tileText.value}
+        />
+      ),
+      sub: <Text style={tileText.sub}>across 12 months</Text>,
+    });
+
+    if (savingsRate !== null) {
+      tiles.push({
+        id: "savingsRate",
+        label: "Savings Rate",
+        icon: (
+          <PiggyBank
+            size={15}
+            color={savingsRate >= 0 ? accents.green : accents.pink}
+            strokeWidth={2.5}
+          />
+        ),
+        tintRgb: savingsRate >= 0 ? "74, 222, 128" : "244, 63, 94",
+        value: (
+          <Text style={savingsRate >= 0 ? tileText.positive : tileText.negative}>
+            {savingsRate}%
           </Text>
-          {selectedYear === currentYear && (
-            <View
-              style={[
-                styles.currentBadge,
-                { backgroundColor: isDark ? "rgba(99,102,241,0.2)" : "rgba(99,102,241,0.1)" },
-              ]}
-            >
-              <Text style={[styles.currentBadgeText, { color: theme.colors.primary }]}>
-                This Year
-              </Text>
-            </View>
-          )}
-        </View>
+        ),
+        sub: <Text style={tileText.sub}>of annual income</Text>,
+      });
+    }
 
-        <Pressable
-          onPress={() => {
-            haptic.selection().catch(() => undefined);
-            setSelectedYear((y) => y + 1);
-          }}
-          style={({ pressed }) => [styles.navBtn, pressed && { opacity: 0.6 }]}
-        >
-          <ChevronRight size={20} color={theme.colors.foreground} />
-        </Pressable>
-      </View>
+    tiles.push({
+      id: "transactionCount",
+      label: "Transactions Logged",
+      icon: <Receipt size={15} color={theme.colors.mutedForeground} strokeWidth={2.5} />,
+      tintRgb: "148, 163, 184",
+      value: <Text style={tileText.value}>{yearExpenses.length}</Text>,
+      sub: (
+        <Text style={tileText.sub}>
+          {yearIncomes.length} income entr{yearIncomes.length === 1 ? "y" : "ies"}
+        </Text>
+      ),
+    });
 
-      {yearExpenses.length === 0 ? (
+    const incomeGrowth = percentChange(totalAnnualIncome, prevYearTotals.income);
+    if (incomeGrowth !== null) {
+      tiles.push({
+        id: "incomeGrowth",
+        label: "Income Growth",
+        icon:
+          incomeGrowth >= 0 ? (
+            <ArrowUpRight size={15} color={accents.green} strokeWidth={2.5} />
+          ) : (
+            <ArrowDownRight size={15} color={accents.pink} strokeWidth={2.5} />
+          ),
+        tintRgb: incomeGrowth >= 0 ? "74, 222, 128" : "244, 63, 94",
+        value: (
+          <Text style={incomeGrowth >= 0 ? tileText.positive : tileText.negative}>
+            {incomeGrowth > 0 ? "+" : ""}
+            {Math.round(incomeGrowth)}%
+          </Text>
+        ),
+        sub: <Text style={tileText.sub}>vs {previousYear}</Text>,
+      });
+    }
+
+    return tiles;
+  }, [
+    accents.amber,
+    accents.green,
+    accents.pink,
+    currency,
+    lowestSpend,
+    monthlyAverageExpense,
+    peakSpend,
+    prevYearTotals.income,
+    previousYear,
+    savingsRate,
+    theme.colors.mutedForeground,
+    tileText,
+    totalAnnualIncome,
+    yearExpenses.length,
+    yearIncomes.length,
+  ]);
+
+  // Skip sections with nothing to render so the separators don't leave gaps.
+  const sections = useMemo(
+    () =>
+      ALL_SECTIONS.filter((section) => {
+        if (section === "biggest") return biggestExpense !== null;
+        if (section === "insights") return insightTiles.length > 0;
+        return true;
+      }),
+    [biggestExpense, insightTiles.length]
+  );
+
+  const yearSelector = (
+    <PeriodSelector
+      label={String(selectedYear)}
+      badge={selectedYear === currentYear ? "THIS YEAR" : null}
+      onPrev={handlePrevYear}
+      onNext={handleNextYear}
+      prevLabel="Previous year"
+      nextLabel="Next year"
+    />
+  );
+
+  const renderSection = useCallback(
+    ({ item }: { item: SectionKey }) => {
+      switch (item) {
+        case "overview":
+          return (
+            <AnnualOverviewCard
+              year={selectedYear}
+              metrics={overviewMetrics}
+              currency={currency}
+            />
+          );
+        case "monthly":
+          return (
+            <IncomeVsSpendCard
+              data={monthlyChartData}
+              peakSpend={peakSpend}
+              lowestIncome={lowestIncome}
+              currency={currency}
+            />
+          );
+        case "distribution":
+          return (
+            <CategoryDistributionCard
+              data={categoryData}
+              total={totalAnnualExpense}
+              currency={currency}
+              title={`${selectedYear} Annual Distribution`}
+              centerTitle="Annual Spend"
+              emptyMessage={`No spending recorded in ${selectedYear}.`}
+            />
+          );
+        case "biggest":
+          if (!biggestExpense) return null;
+          return (
+            <BiggestTransactionCard
+              year={selectedYear}
+              title={biggestExpense.note || biggestExpense.category}
+              date={biggestExpense.date}
+              category={biggestExpense.category}
+              amount={biggestExpense.amount}
+              currency={currency}
+              onPress={() => setEditingExpense(biggestExpense)}
+            />
+          );
+        case "insights":
+          return <YearlyInsightGrid tiles={insightTiles} />;
+        default:
+          return null;
+      }
+    },
+    [
+      biggestExpense,
+      categoryData,
+      currency,
+      insightTiles,
+      lowestIncome,
+      monthlyChartData,
+      overviewMetrics,
+      peakSpend,
+      selectedYear,
+      setEditingExpense,
+      totalAnnualExpense,
+    ]
+  );
+
+  /** Non-list states still need to scroll on short screens. */
+  const stateShell = (children: ReactNode) => (
+    <ScrollView
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={styles.stateWrap}
+    >
+      {children}
+    </ScrollView>
+  );
+
+  // Listener failure — never fall through to an empty state that implies "no data".
+  if (expensesError && expenses.length === 0) {
+    return stateShell(
+      <>
+        {listHeader}
+        {yearSelector}
+        <ErrorState
+          title="Couldn't load your yearly analytics"
+          description={expensesError.message}
+          onRetry={expensesError.retryable ? retryExpenses : undefined}
+        />
+      </>
+    );
+  }
+
+  if (expensesLoading && expenses.length === 0) {
+    return stateShell(
+      <>
+        {listHeader}
+        <Skeleton height={56} borderRadius={18} />
+        <Skeleton height={188} borderRadius={22} />
+        <Skeleton height={300} borderRadius={22} />
+        <Skeleton height={280} borderRadius={22} />
+        <Skeleton height={88} borderRadius={20} />
+      </>
+    );
+  }
+
+  if (yearExpenses.length === 0 && yearIncomes.length === 0) {
+    return stateShell(
+      <>
+        {listHeader}
+        {yearSelector}
         <EmptyState
           illustration="analytics"
-          title="No Annual Data Yet"
-          description="Year-over-year analytics and month-over-month comparisons will populate as you track transactions throughout the year."
+          title={`No financial data for ${selectedYear}`}
+          description="Start recording transactions to see your yearly insights — annual totals, month-by-month trends, and category breakdowns."
           primaryAction={{
             label: "Go to Dashboard",
             onPress: () => router.dismissTo("/dashboard"),
           }}
           secondaryAction={{
-            label: "Previous Year",
-            onPress: () => {
-              haptic.selection().catch(() => undefined);
-              setSelectedYear((y) => y - 1);
-            },
+            label: `View ${previousYear}`,
+            onPress: handlePrevYear,
           }}
-          tip="Annual breakdowns highlight your top 3 annual spending categories and tax deductibles."
+          tip="Annual breakdowns highlight your top spending categories and your biggest financial events of the year."
         />
-      ) : (
-        <>
-      {/* Annual Summary Hero Card */}
-      <Card style={styles.heroCard}>
-        <Text style={[styles.sectionSubtitle, { color: theme.colors.mutedForeground }]}>
-          {selectedYear} ANNUAL OVERVIEW
-        </Text>
-
-        <View style={styles.summaryGrid}>
-          <View style={styles.summaryTile}>
-            <Text style={[styles.summaryTileLabel, { color: theme.colors.mutedForeground }]}>
-              Total Spent
-            </Text>
-            <Amount
-              value={totalAnnualExpense}
-              currency={displayCurrency}
-              ghostable
-              animated
-              style={{ fontSize: 18, fontWeight: "800", color: theme.colors.destructive }}
-            />
-          </View>
-
-          <View style={styles.summaryTile}>
-            <Text style={[styles.summaryTileLabel, { color: theme.colors.mutedForeground }]}>
-              Total Income
-            </Text>
-            <Amount
-              value={totalAnnualIncome}
-              currency={displayCurrency}
-              ghostable
-              animated
-              style={{ fontSize: 18, fontWeight: "800", color: theme.colors.success }}
-            />
-          </View>
-
-          <View style={styles.summaryTile}>
-            <Text style={[styles.summaryTileLabel, { color: theme.colors.mutedForeground }]}>
-              Net Savings
-            </Text>
-            <Amount
-              value={netAnnualSavings}
-              currency={displayCurrency}
-              ghostable
-              animated
-              style={{
-                fontSize: 18,
-                fontWeight: "800",
-                color: netAnnualSavings >= 0 ? theme.colors.foreground : theme.colors.destructive,
-              }}
-            />
-          </View>
-
-          <View style={styles.summaryTile}>
-            <Text style={[styles.summaryTileLabel, { color: theme.colors.mutedForeground }]}>
-              Monthly Avg
-            </Text>
-            <Amount
-              value={monthlyAverageExpense}
-              currency={displayCurrency}
-              ghostable
-              animated
-              style={{ fontSize: 18, fontWeight: "800", color: theme.colors.foreground }}
-            />
-          </View>
-        </View>
-      </Card>
-
-      {/* 12-Month Cashflow Bar Chart */}
-      <Card style={styles.sectionCard}>
-        <View style={styles.cardHeader}>
-          <View style={styles.cardHeaderTitle}>
-            <BarChart3 size={18} color={theme.colors.primary} />
-            <Text style={[styles.cardTitleText, { color: theme.colors.foreground }]}>
-              12-Month Income vs Spend
-            </Text>
-          </View>
-        </View>
-
-        <BarChart
-          data={monthlyChartData}
-          height={190}
-          currency={displayCurrency}
-          primaryLabel="Spend"
-          secondaryLabel="Income"
-          primaryColor={theme.colors.destructive}
-          secondaryColor={theme.colors.success}
-          showLegend
-        />
-
-        {/* Peak & Lowest Spend Badges */}
-        {peakMonth && lowestMonth && (
-          <View style={styles.highlightsRow}>
-            <View
-              style={[
-                styles.highlightBadge,
-                {
-                  backgroundColor: isDark
-                    ? "rgba(239,68,68,0.12)"
-                    : "rgba(239,68,68,0.06)",
-                  borderColor: isDark
-                    ? "rgba(239,68,68,0.3)"
-                    : "rgba(239,68,68,0.2)",
-                },
-              ]}
-            >
-              <TrendingUp size={14} color="#EF4444" />
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={{ fontSize: 10, fontWeight: "700", color: "#EF4444" }}>
-                  Peak: {peakMonth.label}
-                </Text>
-                <Amount
-                  value={peakMonth.value}
-                  currency={displayCurrency}
-                  style={{ fontSize: 12, fontWeight: "800", color: theme.colors.foreground }}
-                />
-              </View>
-            </View>
-
-            <View
-              style={[
-                styles.highlightBadge,
-                {
-                  backgroundColor: isDark
-                    ? "rgba(34,197,94,0.12)"
-                    : "rgba(34,197,94,0.06)",
-                  borderColor: isDark
-                    ? "rgba(34,197,94,0.3)"
-                    : "rgba(34,197,94,0.2)",
-                },
-              ]}
-            >
-              <TrendingDown size={14} color="#22C55E" />
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={{ fontSize: 10, fontWeight: "700", color: "#22C55E" }}>
-                  Lowest: {lowestMonth.label}
-                </Text>
-                <Amount
-                  value={lowestMonth.value}
-                  currency={displayCurrency}
-                  style={{ fontSize: 12, fontWeight: "800", color: theme.colors.foreground }}
-                />
-              </View>
-            </View>
-          </View>
-        )}
-      </Card>
-
-      {/* Annual Category Breakdown Donut */}
-      <Card style={styles.sectionCard}>
-        <View style={styles.cardHeader}>
-          <View style={styles.cardHeaderTitle}>
-            <PieChart size={18} color={theme.colors.primary} />
-            <Text style={[styles.cardTitleText, { color: theme.colors.foreground }]}>
-              {selectedYear} Annual Distribution
-            </Text>
-          </View>
-        </View>
-
-        <DonutChart
-          data={categoryData}
-          size={190}
-          strokeWidth={24}
-          currency={displayCurrency}
-          title="Annual Spend"
-        />
-      </Card>
-
-      {/* Single Largest Transaction Callout */}
-      {biggestExpense && (
-        <Card style={styles.sectionCard}>
-          <View style={styles.cardHeader}>
-            <View style={styles.cardHeaderTitle}>
-              <Award size={18} color="#F59E0B" />
-              <Text style={[styles.cardTitleText, { color: theme.colors.foreground }]}>
-                Biggest Transaction of {selectedYear}
-              </Text>
-            </View>
-          </View>
-
-          <View
-            style={[
-              styles.recordRow,
-              {
-                backgroundColor: isDark
-                  ? "rgba(245,158,11,0.1)"
-                  : "rgba(245,158,11,0.06)",
-                borderColor: isDark
-                  ? "rgba(245,158,11,0.3)"
-                  : "rgba(245,158,11,0.2)",
-              },
-            ]}
-          >
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text
-                style={[styles.recordNote, { color: theme.colors.foreground }]}
-                numberOfLines={1}
-              >
-                {biggestExpense.note || biggestExpense.category}
-              </Text>
-              <Text style={{ fontSize: 11, color: theme.colors.mutedForeground }}>
-                {biggestExpense.date} • {biggestExpense.category}
-              </Text>
-            </View>
-            <Amount
-              value={biggestExpense.amount}
-              currency={displayCurrency}
-              ghostable
-              style={{ fontSize: 16, fontWeight: "900", color: "#F59E0B" }}
-            />
-          </View>
-        </Card>
-      )}
       </>
-      )}
-    </View>
+    );
+  }
+
+  return (
+    <FlashList
+      style={styles.list}
+      data={sections}
+      renderItem={renderSection}
+      keyExtractor={(item) => item}
+      extraData={`${selectedYear}|${themeName}|${yearExpenses.length}|${totalAnnualExpense}|${totalAnnualIncome}`}
+      ItemSeparatorComponent={SectionSeparator}
+      ListHeaderComponent={
+        <View style={styles.header}>
+          {listHeader}
+          {yearSelector}
+        </View>
+      }
+      contentContainerStyle={styles.listContent}
+      showsVerticalScrollIndicator={false}
+    />
   );
 }
 
+function SectionSeparator() {
+  return <View style={styles.separator} />;
+}
+
 const styles = StyleSheet.create({
-  container: {
-    gap: 16,
+  header: {
+    paddingBottom: 14,
   },
-  yearStrip: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 16,
-    borderWidth: 1,
+  separator: {
+    height: 14,
   },
-  navBtn: {
-    padding: 6,
-    borderRadius: 10,
-  },
-  yearLabelContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  yearLabelText: {
-    fontSize: 16,
-    fontWeight: "800",
-  },
-  currentBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 8,
-  },
-  currentBadgeText: {
-    fontSize: 10,
-    fontWeight: "700",
-    textTransform: "uppercase",
-  },
-  heroCard: {
-    padding: 16,
-    gap: 14,
-    borderRadius: 20,
-  },
-  sectionSubtitle: {
-    fontSize: 11,
-    fontWeight: "800",
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-  },
-  summaryGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-  },
-  summaryTile: {
-    width: "48%",
-    padding: 12,
-    borderRadius: 14,
-    gap: 4,
-  },
-  summaryTileLabel: {
-    fontSize: 11,
-    fontWeight: "600",
-  },
-  sectionCard: {
-    padding: 16,
-    gap: 14,
-    borderRadius: 20,
-  },
-  cardHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  cardHeaderTitle: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  cardTitleText: {
-    fontSize: 15,
-    fontWeight: "800",
-  },
-  highlightsRow: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 6,
-  },
-  highlightBadge: {
+  list: {
     flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    padding: 10,
-    borderRadius: 12,
-    borderWidth: 1,
   },
-  recordRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: 14,
-    borderRadius: 14,
-    borderWidth: 1,
+  listContent: {
+    // PageShell already clears the nav bar; this only clears the floating
+    // add button so the last card is never hidden behind it.
+    paddingBottom:
+      BOTTOM_NAV_FAB_SIZE + BOTTOM_NAV_FAB_GAP - BOTTOM_NAV_CONTENT_CLEARANCE,
   },
-  recordNote: {
-    fontSize: 14,
-    fontWeight: "700",
+  stateWrap: {
+    gap: 14,
+    paddingBottom:
+      BOTTOM_NAV_FAB_SIZE + BOTTOM_NAV_FAB_GAP - BOTTOM_NAV_CONTENT_CLEARANCE,
   },
 });

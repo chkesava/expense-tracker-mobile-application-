@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import {
   BarChart3,
@@ -7,9 +7,10 @@ import {
   Calendar,
   Download,
   Search,
+  TrendingUp,
 } from "lucide-react-native";
 
-import { EmptyState } from "@/components/common/EmptyState";
+import { insightAccents } from "@/components/analytics/insightsTheme";
 import { PageHeader, type PageHeaderTab } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { MonthlyAnalyticsView } from "@/components/analytics/MonthlyAnalyticsView";
@@ -17,17 +18,20 @@ import { YearlyAnalyticsView } from "@/components/analytics/YearlyAnalyticsView"
 import { AnalysisLabView } from "@/components/analytics/AnalysisLabView";
 import { ExportDataModal } from "@/components/analytics/ExportDataModal";
 import { AiAdvisorView } from "@/components/ai/AiAdvisorView";
+import { haptic } from "@/lib/haptics";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import { useSetupProgress } from "@/providers/SetupProgressProvider";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
-import { haptic } from "@/lib/haptics";
 
 export type InsightsTab = "analytics" | "yearly" | "search" | "advisor";
+
+const INSIGHTS_TABS: InsightsTab[] = ["analytics", "yearly", "search", "advisor"];
 
 export default function InsightsScreen() {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
+  const accents = insightAccents(isDark);
   const { settings: system } = useSystemSettings();
   const params = useLocalSearchParams<{ tab?: string; q?: string }>();
 
@@ -40,78 +44,97 @@ export default function InsightsScreen() {
   }, [markScreenVisited]);
 
   useEffect(() => {
-    if (params.tab && ["analytics", "yearly", "search", "advisor"].includes(params.tab)) {
+    if (params.tab && INSIGHTS_TABS.includes(params.tab as InsightsTab)) {
       setActiveTab(params.tab as InsightsTab);
     }
   }, [params.tab]);
+
+  const tabIconColor = (tab: InsightsTab) =>
+    activeTab === tab ? theme.colors.success : theme.colors.mutedForeground;
 
   const tabs: PageHeaderTab[] = [
     {
       id: "analytics",
       label: "Analytics",
-      icon: <BarChart3 size={16} color={activeTab === "analytics" ? "#FFFFFF" : theme.colors.foreground} />,
+      icon: <TrendingUp size={16} color={tabIconColor("analytics")} />,
     },
     {
       id: "yearly",
       label: "Yearly",
-      icon: <Calendar size={16} color={activeTab === "yearly" ? "#FFFFFF" : theme.colors.foreground} />,
+      icon: <Calendar size={16} color={tabIconColor("yearly")} />,
     },
     {
       id: "search",
       label: "Search & Lab",
-      icon: <Search size={16} color={activeTab === "search" ? "#FFFFFF" : theme.colors.foreground} />,
+      icon: <Search size={16} color={tabIconColor("search")} />,
     },
     {
       id: "advisor",
       label: "AI Advisor",
-      icon: <Bot size={16} color={activeTab === "advisor" ? "#FFFFFF" : theme.colors.foreground} />,
+      icon: <Bot size={16} color={tabIconColor("advisor")} />,
     },
   ];
 
+  const pageHeader = (
+    <PageHeader
+      title="Insights Hub"
+      subtitle="Analytics, Reports & Discoveries"
+      icon={<BarChart3 size={22} color={accents.pink} strokeWidth={2.4} />}
+      iconBackgroundColor={accents.pinkDim}
+      iconBorderColor={
+        isDark ? "rgba(244, 63, 94, 0.34)" : "rgba(220, 38, 38, 0.2)"
+      }
+      activeTab={activeTab}
+      onTabChange={(tab) => setActiveTab(tab as InsightsTab)}
+      tabs={tabs}
+      tabVariant="underline"
+      rightElement={
+        system.allowDataExport ? (
+          <Pressable
+            onPress={() => {
+              void haptic.selection();
+              setIsExportModalOpen(true);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Export data"
+            style={({ pressed }) => [
+              styles.exportBtn,
+              {
+                backgroundColor: accents.greenDim,
+                borderColor: isDark
+                  ? "rgba(74, 222, 128, 0.34)"
+                  : "rgba(22, 163, 74, 0.24)",
+                opacity: pressed ? 0.7 : 1,
+              },
+            ]}
+          >
+            <Download size={18} color={accents.green} strokeWidth={2.4} />
+          </Pressable>
+        ) : undefined
+      }
+    />
+  );
+
+  // The Analytics, Yearly and Search dashboards own their own virtualised
+  // scroll containers, so the shell must not wrap them in a second ScrollView.
+  const ownsScroll = activeTab !== "advisor";
+
   return (
-    <PageShell contentContainerStyle={styles.container}>
-      <PageHeader
-        title="Insights Hub"
-        subtitle="Analytics, Reports & Discovery"
-        icon={<BarChart3 size={22} color={theme.colors.primary} />}
-        activeTab={activeTab}
-        onTabChange={(tab) => setActiveTab(tab as InsightsTab)}
-        tabs={tabs}
-        rightElement={
-          system.allowDataExport ? (
-            <Pressable
-              onPress={() => {
-                haptic.selection().catch(() => undefined);
-                setIsExportModalOpen(true);
-              }}
-              style={({ pressed }) => [
-                styles.exportBtn,
-                {
-                  backgroundColor: isDark
-                    ? "rgba(255,255,255,0.06)"
-                    : "rgba(0,0,0,0.04)",
-                  borderColor: theme.colors.border,
-                  opacity: pressed ? 0.7 : 1,
-                },
-              ]}
-            >
-              <Download size={16} color={theme.colors.foreground} />
-            </Pressable>
-          ) : undefined
-        }
-      />
+    <PageShell scrollable={!ownsScroll} contentContainerStyle={styles.container}>
+      {activeTab === "analytics" ? (
+        <MonthlyAnalyticsView listHeader={pageHeader} />
+      ) : activeTab === "yearly" ? (
+        <YearlyAnalyticsView listHeader={pageHeader} />
+      ) : activeTab === "search" ? (
+        <AnalysisLabView initialQuery={params.q} listHeader={pageHeader} />
+      ) : (
+        <>
+          {pageHeader}
 
-      {/* Monthly Analytics Tab */}
-      {activeTab === "analytics" && <MonthlyAnalyticsView />}
-
-      {/* Yearly Analytics Tab */}
-      {activeTab === "yearly" && <YearlyAnalyticsView />}
-
-      {/* Analysis Lab & Search Tab */}
-      {activeTab === "search" && <AnalysisLabView initialQuery={params.q} />}
-
-      {/* AI Advisor Tab (Phase 16) */}
-      {activeTab === "advisor" && <AiAdvisorView />}
+          {/* AI Advisor Tab (Phase 16) */}
+          <AiAdvisorView />
+        </>
+      )}
 
       {/* Export Data Modal */}
       <ExportDataModal
@@ -127,8 +150,10 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   exportBtn: {
-    padding: 8,
-    borderRadius: 12,
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    borderCurve: "continuous",
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
