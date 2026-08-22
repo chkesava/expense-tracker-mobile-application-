@@ -124,6 +124,100 @@ service cloud.firestore {
         && request.resource.data.createdBy == request.auth.uid;
     }
 
+    // Self-service updates filed from the public /split/:slug page by people who
+    // are not signed in. This is the only collection in the project that accepts
+    // an unauthenticated write, so every clause below is load-bearing.
+    //
+    // What keeps it bounded with no server and no auth:
+    //  * The document id is derived from (shareId, participantKey), so one
+    //    person on one split has exactly one claim slot. An anonymous writer
+    //    cannot create documents at will -- only fill a slot the organizer
+    //    already published in `claimKeys`.
+    //  * `create` is the only anonymous write. An existing document makes a
+    //    client setDoc an *update*, which is refused, so the lifetime anonymous
+    //    write budget per slot is one. The slot is re-armed only when the
+    //    organizer applies or dismisses the claim (an owner delete).
+    //  * Anonymous delete is refused on purpose: delete-then-create would reset
+    //    that budget and make the write volume unbounded again.
+    //  * The parent share must still exist, still be open, and still carry
+    //    `claimsEnabled` -- the organizer's kill switch. A share with the flag
+    //    absent is closed, so shares written before this feature reject claims
+    //    until the organizer next touches the split.
+    //  * A claim changes nothing. It credits no account and does not alter the
+    //    public share. Applying one is an organizer-only write to `splits`.
+    //    That review step IS the security model: `personSlug` and `claimKeys`
+    //    are already world-readable, so anyone holding the group link can file
+    //    a claim as anyone, and no secret could fix that -- a secret stored in
+    //    a world-readable document is not a secret.
+    //
+    // `list` is closed so the collection cannot be enumerated: the public page
+    // (from `claimKeys`) and the organizer (from the split's participants) both
+    // already know every document id, and read them directly by id.
+    match /splitShareClaims/{claimId} {
+      function claimFields() {
+        return [
+          'shareId', 'slug', 'participantKey', 'type',
+          'amount', 'status', 'createdAt', 'updatedAt'
+        ];
+      }
+
+      function sharePath(shareId) {
+        return /databases/$(database)/documents/splitPublicShares/$(shareId);
+      }
+
+      function isShareOwner() {
+        return signedIn()
+          && exists(sharePath(resource.data.shareId))
+          && get(sharePath(resource.data.shareId)).data.createdBy == request.auth.uid;
+      }
+
+      // Once the organizer deletes the split the parent share is gone, so an
+      // orphan claim would otherwise be undeletable forever. An orphan is inert
+      // (nothing renders it, and `create` needs a live share, so this cannot be
+      // used to re-arm a slot), which makes it safe to let anyone clear it.
+      function isOrphan() {
+        return !exists(sharePath(resource.data.shareId));
+      }
+
+      function wellFormed() {
+        let d = request.resource.data;
+        return d.keys().hasOnly(claimFields())
+          && d.keys().hasAll(claimFields())
+          && d.shareId is string && d.shareId.size() > 0 && d.shareId.size() <= 64
+          && d.slug is string && d.slug.size() >= 6 && d.slug.size() <= 64
+          && d.participantKey is string
+          && d.participantKey.size() > 0 && d.participantKey.size() <= 64
+          && d.type in ['paid', 'optOut']
+          && d.amount is number
+          && d.amount >= 0
+          && d.status == 'pending'
+          && d.createdAt is int
+          && d.updatedAt is int
+          && d.createdAt == d.updatedAt
+          && d.createdAt > request.time.toMillis() - 300000
+          && d.createdAt < request.time.toMillis() + 300000;
+      }
+
+      function matchesLiveShare() {
+        let d = request.resource.data;
+        let s = get(sharePath(d.shareId)).data;
+        return claimId == d.shareId + '__' + d.participantKey
+          && s.claimsEnabled == true
+          && s.slug == d.slug
+          && d.participantKey in s.claimKeys
+          && d.amount <= s.claimAmountMax
+          && s.status != 'settled'
+          && s.status != 'spent';
+      }
+
+      allow get: if true;
+      allow list: if false;
+
+      allow create: if wellFormed() && matchesLiveShare();
+      allow update: if isShareOwner();
+      allow delete: if isShareOwner() || isOrphan();
+    }
+
     // App-wide flags (`global`) and the sideloaded APK pointer (`latest_release`).
     // Clients may read both. Only `global` is writable from the app (onboarding
     // currency). `latest_release` is written by the Admin SDK in CI.

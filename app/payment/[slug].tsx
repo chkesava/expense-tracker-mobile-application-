@@ -4,8 +4,9 @@ import QRCode from "react-native-qrcode-svg";
 import * as Haptics from "expo-haptics";
 
 import { Amount } from "@/components/common/Amount";
+import { ErrorState } from "@/components/common/ErrorState";
 import { usePublicPaymentRequest } from "@/hooks/usePublicPaymentRequest";
-import { useSystemSettings } from "@/providers/SystemSettingsProvider";
+import { PUBLIC_FALLBACK_CURRENCY } from "@/shared/utils/splitPublicShare";
 import { generateUpiLink } from "@/shared/utils/upi";
 import { getQrStyle } from "@/shared/utils/qrStyles";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -14,10 +15,12 @@ import { themeUsesDarkPalette } from "@/theme/tokens";
 export default function PublicPaymentScreen() {
   const { slug: slugParam } = useLocalSearchParams<{ slug?: string | string[] }>();
   const slug = Array.isArray(slugParam) ? slugParam[0] : slugParam;
-  const { request, loading, error } = usePublicPaymentRequest(slug);
+  const { request, loading, error, retry } = usePublicPaymentRequest(slug);
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
-  const { settings: system } = useSystemSettings();
+  // Never read system settings here: `system_settings/global` requires
+  // sign-in, and this page's whole point is that the payer has no account.
+  const currency = request?.currency || PUBLIC_FALLBACK_CURRENCY;
 
   const qrStyle = getQrStyle(request?.qrStyleId || "indigo");
   const fullNote = request
@@ -71,9 +74,11 @@ export default function PublicPaymentScreen() {
       {loading ? (
         <Text style={{ color: theme.colors.mutedForeground }}>Loading…</Text>
       ) : error || !request ? (
-        <Text style={{ color: theme.colors.destructive, fontWeight: "600" }}>
-          {error || "Payment not found."}
-        </Text>
+        <ErrorState
+          title="Can't open this payment"
+          description={error?.message || "Payment not found."}
+          onRetry={error?.retryable ? retry : undefined}
+        />
       ) : (
         <View
           style={[
@@ -101,7 +106,7 @@ export default function PublicPaymentScreen() {
           </Text>
           <Amount
             value={showBreakdown ? remainingDue : request.amount}
-            currency={system.defaultCurrency}
+            currency={currency}
             ghostable
             style={{
               fontSize: 32,
@@ -117,7 +122,7 @@ export default function PublicPaymentScreen() {
                 </Text>
                 <Amount
                   value={shareAmount}
-                  currency={system.defaultCurrency}
+                  currency={currency}
                   ghostable
                   style={styles.breakdownValue}
                 />
@@ -128,7 +133,7 @@ export default function PublicPaymentScreen() {
                 </Text>
                 <Amount
                   value={paidAmount}
-                  currency={system.defaultCurrency}
+                  currency={currency}
                   ghostable
                   style={styles.breakdownValue}
                 />
@@ -139,7 +144,7 @@ export default function PublicPaymentScreen() {
                 </Text>
                 <Amount
                   value={remainingDue}
-                  currency={system.defaultCurrency}
+                  currency={currency}
                   ghostable
                   style={[styles.breakdownValue, { fontWeight: "800" }]}
                 />

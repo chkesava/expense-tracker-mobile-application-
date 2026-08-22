@@ -14,6 +14,21 @@ review a rules change alongside the code change that needed it. These two files
 close that gap. Treat the console as downstream of this repo — if you change a
 rule in the console, mirror it here in the same pull request.
 
+### This repo owns the deploy
+
+The sibling Vite web app (`expense-tracker`) ships its own, incompatible
+`firestore.rules` against the same Firebase project, so only one of the two can
+be live. **The deployed rules are this repo's.** Established on 2026-08-22 by
+observation, not assumption: an anonymous client reads `splitPublicShares`
+successfully (which the Vite file does not permit at all), and both mobile write
+paths mint auto-ids while the Vite file requires `resource.data.slug == <docId>`
+on `paymentRequests`, which would deny every payment request the app creates.
+
+Do not deploy the Vite repo's rules over these. It defines an `isSuperAdmin()`
+model this repo does not have, and this file's `system_settings/global` clause is
+wider than that repo's — deploying either wholesale over the other changes who
+can write what. Reconcile them deliberately if the web app is ever revived.
+
 ## What they cover
 
 `firestore.rules` confines everything under `users/{uid}/...` to its owner,
@@ -25,6 +40,24 @@ asserted by `lib/duressPath.contract.test.ts`. The shared `vaults`, `splits` and
 `paymentRequests` collections keep their member-based access. Public split
 pages use a world-readable `splitPublicShares` snapshot (creator-only writes);
 the private `splits` collection is not opened to the world.
+
+`splitShareClaims` is the one collection that accepts an **unauthenticated
+write** — a self-service update filed from `/split/:slug` by someone with no
+account. It is readable by exact document id and `list` is denied, so the
+collection cannot be enumerated. `create` is the only anonymous verb, and the
+document id must equal `{shareId}__{participantKey}`, which bounds an anonymous
+writer to one claim slot per person per split: an existing document turns a
+client `setDoc` into an `update`, which is refused, and anonymous `delete` is
+refused so the slot cannot be re-armed. Each create also re-reads the parent
+share and requires `claimsEnabled == true`, a matching slug, the participant key
+to be listed in `claimKeys`, and the split not to be settled or spent. A claim
+changes nothing on its own; the organizer applies it with their own credentials.
+`shared/utils/splitClaims.rules.contract.test.ts` mirrors these clauses by hand
+(there is no emulator in CI) and must be updated alongside them. No new indexes
+are needed, because closing `list` means there are no queries on it.
+
+The full reasoning, and the residual risk that is accepted rather than solved,
+is in `docs/audits/SPLIT_SHARE_LINK_AUDIT_2026-08-22.md`.
 
 `firestore.indexes.json` declares the composite indexes for queries that filter
 and sort at the same time. Borrowings and Spending Spaces need

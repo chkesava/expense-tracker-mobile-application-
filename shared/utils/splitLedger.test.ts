@@ -523,4 +523,146 @@ describe("bill share requests and public snapshot", () => {
     expect(bob?.fields.status).toBe("cancelled");
     expect(bob?.fields.amount).toBe(0);
   });
+
+  describe("currency and share-raised threading", () => {
+    function payParticipants(): Participant[] {
+      return [
+        { key: "you", name: "You", amount: 100, paid: true, paidAmount: 100, isCurrentUser: true },
+        { key: "alice", name: "Alice", amount: 100, paid: false, paidAmount: 0, isCurrentUser: false },
+        {
+          key: "bob",
+          name: "Bob",
+          amount: 100,
+          paid: false,
+          paidAmount: 0,
+          isCurrentUser: false,
+          paymentRequestId: "pr-bob",
+          paymentSlug: "bob-pay",
+        },
+        {
+          key: "dana",
+          name: "Dana",
+          amount: 100,
+          paid: false,
+          paidAmount: 0,
+          isCurrentUser: false,
+          paymentSlug: "dana-pay",
+        },
+      ];
+    }
+
+    const shareParams = {
+      splitId: "s1",
+      splitTitle: "Dinner",
+      createdBy: "me",
+      createdAt: 1,
+      payeeName: "Kesava",
+      upiId: "me@upi",
+      qrStyleId: "indigo" as const,
+    };
+
+    it("round-trips shareRaised and omits it when absent", () => {
+      const raised = toFirestoreParticipant({
+        key: "a",
+        name: "A",
+        amount: 125,
+        paid: false,
+        paidAmount: 100,
+        isCurrentUser: false,
+        shareRaised: true,
+      });
+      expect(raised.shareRaised).toBe(true);
+
+      const plain = toFirestoreParticipant({
+        key: "b",
+        name: "B",
+        amount: 100,
+        paid: false,
+        isCurrentUser: false,
+      });
+      expect(plain).not.toHaveProperty("shareRaised");
+      expect(containsUndefined(plain)).toBe(false);
+    });
+
+    it("puts the currency on every sync patch, and omits the key without one", () => {
+      const withCurrency = buildPaymentRequestSyncPatches(payParticipants(), {
+        currency: "USD",
+      });
+      expect(withCurrency).toHaveLength(1);
+      expect(withCurrency[0].fields.currency).toBe("USD");
+
+      const without = buildPaymentRequestSyncPatches(payParticipants());
+      expect(without[0]).not.toHaveProperty("currency");
+      expect(containsUndefined(without[0].fields)).toBe(false);
+    });
+
+    it("stamps the currency onto newly created share requests", () => {
+      const requests = buildParticipantShareRequests({
+        ...shareParams,
+        currency: "USD",
+        participants: payParticipants(),
+      });
+      expect(requests).toHaveLength(3);
+      for (const r of requests) {
+        expect(r.payload.currency).toBe("USD");
+        expect(containsUndefined(r.payload)).toBe(false);
+      }
+    });
+
+    it("skipExisting back-fills only the participants that have no link yet", () => {
+      // Bob has a request id, Dana has only a slug — both already have a page.
+      const requests = buildParticipantShareRequests({
+        ...shareParams,
+        skipExisting: true,
+        participants: payParticipants(),
+      });
+      expect(requests.map((r) => r.participantKey)).toEqual(["alice"]);
+    });
+
+    it("skipExisting returns nothing once every participant is wired", () => {
+      const wired = payParticipants().map((p) =>
+        p.isCurrentUser ? p : { ...p, paymentRequestId: `pr-${p.key}` }
+      );
+      expect(
+        buildParticipantShareRequests({
+          ...shareParams,
+          skipExisting: true,
+          participants: wired,
+        })
+      ).toEqual([]);
+    });
+
+    it("still returns nothing without a UPI id, regardless of skipExisting", () => {
+      // No UPI id means no pay page can exist. The caller has to say so.
+      for (const skipExisting of [true, false]) {
+        expect(
+          buildParticipantShareRequests({
+            ...shareParams,
+            upiId: "",
+            skipExisting,
+            participants: payParticipants(),
+          })
+        ).toEqual([]);
+      }
+    });
+
+    it("mints a distinct slug per participant across a back-fill", () => {
+      const many: Participant[] = Array.from({ length: 5 }, (_, i) => ({
+        key: `p${i}`,
+        name: `P${i}`,
+        amount: 100,
+        paid: false,
+        paidAmount: 0,
+        isCurrentUser: false,
+      }));
+      const requests = buildParticipantShareRequests({
+        ...shareParams,
+        skipExisting: true,
+        participants: many,
+      });
+      const slugs = requests.map((r) => r.slug);
+      expect(slugs).toHaveLength(5);
+      expect(new Set(slugs).size).toBe(5);
+    });
+  });
 });

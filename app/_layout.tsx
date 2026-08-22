@@ -130,7 +130,12 @@ function AppInitializer({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     Promise.all([
-      SecureStore.getItemAsync("vault_biometric_id").catch(() => null),
+      // expo-secure-store has no web implementation, so getItemAsync always
+      // rejects there. The .catch keeps the gate working either way; skipping
+      // the call keeps the public web pages quiet.
+      Platform.OS === "web"
+        ? Promise.resolve(null)
+        : SecureStore.getItemAsync("vault_biometric_id").catch(() => null),
       AsyncStorage.getItem(THEME_STORAGE_KEY).catch(() => null),
       AsyncStorage.getItem("@vault_has_launched_before").catch(() => null),
     ]).finally(() => {

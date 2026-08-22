@@ -1,0 +1,57 @@
+# Netlify build for the Expo web export.
+#
+# This site exists so the public share pages (/split/:slug) render for people
+# who have no account. Share links keep the kesavaexpensetracker.netlify.app
+# origin and are proxied here — those [[redirects]] live in the expense-tracker
+# (Vite) repo, above its /* -> /index.html catch-all.
+#
+# web.output is "single" (SPA): `expo export` emits one index.html plus /_expo/**
+# and /assets/**. Dynamic routes ([slug]) cannot be statically rendered without
+# generateStaticParams, and split slugs are minted at runtime, so there is no
+# build-time list to generate from.
+
+[build]
+  command = "npm run build:web"
+  publish = "dist"
+
+[build.environment]
+  # Matches .github/workflows/pr-checks.yml and android-release.yml.
+  NODE_VERSION = "22"
+  # EXPO_PUBLIC_* values are inlined into the client bundle by design. Without
+  # this, Netlify's secrets scanner fails the build on finding a declared env
+  # var value inside dist/.
+  SECRETS_SCAN_OMIT_KEYS = "EXPO_PUBLIC_FIREBASE_API_KEY,EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,EXPO_PUBLIC_FIREBASE_PROJECT_ID,EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER,EXPO_PUBLIC_FIREBASE_APP_ID,EXPO_PUBLIC_APP_URL"
+
+# Share links are semi-private. Keep the whole site out of search indexes.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Robots-Tag = "noindex, nofollow"
+
+# Content-hashed bundles and assets.
+[[headers]]
+  for = "/_expo/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# The SPA fallback below would otherwise make this host a second, fully
+# functional copy of the whole app (/ -> app/index.tsx -> login). Send the
+# root at the real app instead. Must come before the fallback.
+[[redirects]]
+  from = "/"
+  to = "https://kesavaexpensetracker.netlify.app/"
+  status = 302
+  force = true
+
+# SPA fallback. MUST be last: expo-router does client-side routing, so every
+# path has to be served index.html. This is what makes the proxy from
+# kesavaexpensetracker.netlify.app/split/:slug resolve to a real page.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
