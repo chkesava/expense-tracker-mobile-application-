@@ -369,7 +369,6 @@ export default function AccountDetailScreen() {
           statementDue={creditUsage.statementDue}
           cancelledSpend={creditUsage.cancelledSpend}
           totalOutstanding={creditUsage.totalOutstanding}
-          unappliedCredit={creditUsage.unappliedCredit}
           availableCredit={creditUsage.availableCredit}
           creditLimit={account.creditLimit || 0}
           daysRemaining={creditUsage.daysRemaining}

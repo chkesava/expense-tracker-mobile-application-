@@ -189,7 +189,6 @@ export function computeOutstandingCredit(
   availableCredit: number;
   usedThisCycle: number;
   paidThisCycle: number;
-  unappliedCredit: number;
   oldestOpenRemaining: number;
   oldestOpenBillId?: string;
   nextResetDate: Date;
@@ -224,7 +223,6 @@ export function computeOutstandingCredit(
     availableCredit: ledger.availableCredit,
     usedThisCycle: ledger.unbilledSpend,
     paidThisCycle,
-    unappliedCredit: ledger.unappliedCredit,
     oldestOpenRemaining: oldest?.remaining ?? 0,
     oldestOpenBillId: oldest?.billId,
     nextResetDate: parseLocalDate(ledger.openCycle.end),
