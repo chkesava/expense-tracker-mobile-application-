@@ -8,10 +8,14 @@ import {
   TextInput,
   View,
 } from "react-native";
-import * as Haptics from "expo-haptics";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { RotateCcw, X } from "lucide-react-native";
 
-import { Button } from "@/components/ui/Button";
+import {
+  insightAccents,
+  insightSurface,
+} from "@/components/analytics/insightsTheme";
+import { haptic } from "@/lib/haptics";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
@@ -45,6 +49,9 @@ export function FilterSheetModal({
 }: FilterSheetModalProps) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
+  const surface = insightSurface(isDark);
+  const accents = insightAccents(isDark);
+  const insets = useSafeAreaInsets();
   const { accounts } = useAccounts();
 
   const [draft, setDraft] = React.useState<LabFilters>(filters);
@@ -54,7 +61,7 @@ export function FilterSheetModal({
   }, [visible, filters]);
 
   const toggleCategory = (cat: string) => {
-    Haptics.selectionAsync().catch(() => undefined);
+    void haptic.selection();
     setDraft((prev) => ({
       ...prev,
       categories: prev.categories.includes(cat)
@@ -64,7 +71,7 @@ export function FilterSheetModal({
   };
 
   const toggleAccount = (accId: string) => {
-    Haptics.selectionAsync().catch(() => undefined);
+    void haptic.selection();
     setDraft((prev) => ({
       ...prev,
       accountIds: prev.accountIds.includes(accId)
@@ -74,9 +81,9 @@ export function FilterSheetModal({
   };
 
   const handleReset = () => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => undefined);
+    void haptic.notification();
     setDraft({
-      query: "",
+      query: draft.query,
       type: "all",
       datePreset: "all",
       categories: [],
@@ -87,28 +94,111 @@ export function FilterSheetModal({
   };
 
   const handleSave = () => {
-    Haptics.selectionAsync().catch(() => undefined);
+    void haptic.selection();
     onApply(draft);
     onClose();
   };
 
+  /** Shared chip renderer — emerald when selected, dark surface otherwise. */
+  const chip = (key: string, label: string, selected: boolean, onPress: () => void) => (
+    <Pressable
+      key={key}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      style={({ pressed }) => [
+        styles.chip,
+        {
+          backgroundColor: selected ? accents.greenDim : surface.inset,
+          borderColor: selected
+            ? isDark
+              ? "rgba(74, 222, 128, 0.45)"
+              : "rgba(22, 163, 74, 0.32)"
+            : surface.insetBorder,
+        },
+        pressed && styles.pressed,
+      ]}
+    >
+      <Text
+        style={[
+          styles.chipText,
+          {
+            color: selected ? accents.green : theme.colors.foreground,
+            fontWeight: selected ? "700" : "500",
+          },
+        ]}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+
+  const sectionTitle = (label: string, trailing?: string) => (
+    <View style={styles.sectionHead}>
+      <Text style={[styles.sectionTitle, { color: theme.colors.mutedForeground }]}>
+        {label}
+      </Text>
+      {trailing ? (
+        <Text style={[styles.sectionTrailing, { color: theme.colors.mutedForeground }]}>
+          {trailing}
+        </Text>
+      ) : null}
+    </View>
+  );
+
+  const amountInput = (
+    label: string,
+    value: string,
+    placeholder: string,
+    onChangeText: (next: string) => void
+  ) => (
+    <View style={styles.amountInputCol}>
+      <Text style={[styles.inputLabel, { color: theme.colors.mutedForeground }]}>
+        {label}
+      </Text>
+      <TextInput
+        value={value}
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        placeholderTextColor={theme.colors.mutedForeground}
+        keyboardType="numeric"
+        style={[
+          styles.input,
+          {
+            backgroundColor: surface.inset,
+            borderColor: surface.insetBorder,
+            color: theme.colors.foreground,
+          },
+        ]}
+      />
+    </View>
+  );
+
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.backdrop}>
+        <Pressable
+          style={styles.backdropFill}
+          accessibilityLabel="Dismiss filters"
+          onPress={onClose}
+        />
         <View
           style={[
             styles.sheetContainer,
             {
-              backgroundColor: theme.colors.card,
-              borderColor: theme.colors.border,
+              backgroundColor: surface.card,
+              borderColor: surface.border,
+              paddingBottom: insets.bottom,
             },
           ]}
         >
+          <View style={[styles.grabber, { backgroundColor: surface.hairline }]} />
+
           {/* Header */}
           <View style={styles.header}>
-            <View>
+            <View style={styles.headerCopy}>
               <Text style={[styles.title, { color: theme.colors.foreground }]}>
-                Filter Transactions
+                Filters
               </Text>
               <Text style={[styles.subtitle, { color: theme.colors.mutedForeground }]}>
                 Refine discovery with multi-faceted criteria
@@ -119,63 +209,42 @@ export function FilterSheetModal({
               hitSlop={12}
               accessibilityRole="button"
               accessibilityLabel="Close"
-              style={({ pressed }) => [styles.closeBtn, pressed && { opacity: 0.6 }]}
+              style={({ pressed }) => [
+                styles.closeBtn,
+                { backgroundColor: surface.inset, borderColor: surface.insetBorder },
+                pressed && styles.pressed,
+              ]}
             >
-              <X size={20} color={theme.colors.mutedForeground} />
+              <X size={18} color={theme.colors.mutedForeground} strokeWidth={2.4} />
             </Pressable>
           </View>
 
-          <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            style={styles.body}
+            contentContainerStyle={styles.bodyContent}
+            showsVerticalScrollIndicator={false}
+          >
             {/* Transaction Type */}
             <View style={styles.section}>
-              <Text style={[styles.sectionTitle, { color: theme.colors.mutedForeground }]}>
-                TRANSACTION TYPE
-              </Text>
+              {sectionTitle("TRANSACTION TYPE")}
               <View style={styles.chipRow}>
-                {(["all", "expense", "income"] as const).map((t) => {
-                  const isSelected = draft.type === t;
-                  const label = t === "all" ? "All Types" : t === "expense" ? "Expenses" : "Incomes";
-                  return (
-                    <Pressable
-                      key={t}
-                      onPress={() => {
-                        Haptics.selectionAsync().catch(() => undefined);
-                        setDraft((p) => ({ ...p, type: t }));
-                      }}
-                      style={[
-                        styles.chip,
-                        {
-                          backgroundColor: isSelected
-                            ? theme.colors.primary
-                            : isDark
-                            ? "rgba(255,255,255,0.06)"
-                            : "rgba(0,0,0,0.04)",
-                          borderColor: isSelected ? theme.colors.primary : theme.colors.border,
-                        },
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.chipText,
-                          {
-                            color: isSelected ? "#FFFFFF" : theme.colors.foreground,
-                            fontWeight: isSelected ? "700" : "500",
-                          },
-                        ]}
-                      >
-                        {label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
+                {(["all", "expense", "income"] as const).map((t) =>
+                  chip(
+                    t,
+                    t === "all" ? "All Types" : t === "expense" ? "Expenses" : "Incomes",
+                    draft.type === t,
+                    () => {
+                      void haptic.selection();
+                      setDraft((p) => ({ ...p, type: t }));
+                    }
+                  )
+                )}
               </View>
             </View>
 
             {/* Date Range Preset */}
             <View style={styles.section}>
-              <Text style={[styles.sectionTitle, { color: theme.colors.mutedForeground }]}>
-                DATE RANGE
-              </Text>
+              {sectionTitle("DATE RANGE")}
               <View style={styles.chipRow}>
                 {(
                   [
@@ -184,133 +253,41 @@ export function FilterSheetModal({
                     { id: "last_30_days", label: "Last 30 Days" },
                     { id: "this_year", label: "This Year" },
                   ] as const
-                ).map((dp) => {
-                  const isSelected = draft.datePreset === dp.id;
-                  return (
-                    <Pressable
-                      key={dp.id}
-                      onPress={() => {
-                        Haptics.selectionAsync().catch(() => undefined);
-                        setDraft((p) => ({ ...p, datePreset: dp.id }));
-                      }}
-                      style={[
-                        styles.chip,
-                        {
-                          backgroundColor: isSelected
-                            ? theme.colors.primary
-                            : isDark
-                            ? "rgba(255,255,255,0.06)"
-                            : "rgba(0,0,0,0.04)",
-                          borderColor: isSelected ? theme.colors.primary : theme.colors.border,
-                        },
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.chipText,
-                          {
-                            color: isSelected ? "#FFFFFF" : theme.colors.foreground,
-                            fontWeight: isSelected ? "700" : "500",
-                          },
-                        ]}
-                      >
-                        {dp.label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
+                ).map((dp) =>
+                  chip(dp.id, dp.label, draft.datePreset === dp.id, () => {
+                    void haptic.selection();
+                    setDraft((p) => ({ ...p, datePreset: dp.id }));
+                  })
+                )}
               </View>
             </View>
 
             {/* Amount Range */}
             <View style={styles.section}>
-              <Text style={[styles.sectionTitle, { color: theme.colors.mutedForeground }]}>
-                AMOUNT RANGE
-              </Text>
+              {sectionTitle("AMOUNT RANGE")}
               <View style={styles.amountInputsRow}>
-                <View style={styles.amountInputCol}>
-                  <Text style={[styles.inputLabel, { color: theme.colors.mutedForeground }]}>
-                    Min Amount
-                  </Text>
-                  <TextInput
-                    value={draft.minAmount}
-                    onChangeText={(t) => setDraft((p) => ({ ...p, minAmount: t }))}
-                    placeholder="0"
-                    placeholderTextColor={theme.colors.mutedForeground}
-                    keyboardType="numeric"
-                    style={[
-                      styles.input,
-                      {
-                        backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)",
-                        borderColor: theme.colors.border,
-                        color: theme.colors.foreground,
-                      },
-                    ]}
-                  />
-                </View>
-
-                <View style={styles.amountInputCol}>
-                  <Text style={[styles.inputLabel, { color: theme.colors.mutedForeground }]}>
-                    Max Amount
-                  </Text>
-                  <TextInput
-                    value={draft.maxAmount}
-                    onChangeText={(t) => setDraft((p) => ({ ...p, maxAmount: t }))}
-                    placeholder="No limit"
-                    placeholderTextColor={theme.colors.mutedForeground}
-                    keyboardType="numeric"
-                    style={[
-                      styles.input,
-                      {
-                        backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)",
-                        borderColor: theme.colors.border,
-                        color: theme.colors.foreground,
-                      },
-                    ]}
-                  />
-                </View>
+                {amountInput("Min Amount", draft.minAmount, "0", (t) =>
+                  setDraft((p) => ({ ...p, minAmount: t }))
+                )}
+                {amountInput("Max Amount", draft.maxAmount, "No limit", (t) =>
+                  setDraft((p) => ({ ...p, maxAmount: t }))
+                )}
               </View>
             </View>
 
             {/* Categories */}
             {availableCategories.length > 0 && (
               <View style={styles.section}>
-                <Text style={[styles.sectionTitle, { color: theme.colors.mutedForeground }]}>
-                  CATEGORIES ({draft.categories.length ? draft.categories.length : "All"})
-                </Text>
+                {sectionTitle(
+                  "CATEGORIES",
+                  draft.categories.length ? `${draft.categories.length} selected` : "All"
+                )}
                 <View style={styles.chipRow}>
-                  {availableCategories.map((cat) => {
-                    const isSelected = draft.categories.includes(cat);
-                    return (
-                      <Pressable
-                        key={cat}
-                        onPress={() => toggleCategory(cat)}
-                        style={[
-                          styles.chip,
-                          {
-                            backgroundColor: isSelected
-                              ? theme.colors.primary
-                              : isDark
-                              ? "rgba(255,255,255,0.06)"
-                              : "rgba(0,0,0,0.04)",
-                            borderColor: isSelected ? theme.colors.primary : theme.colors.border,
-                          },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.chipText,
-                            {
-                              color: isSelected ? "#FFFFFF" : theme.colors.foreground,
-                              fontWeight: isSelected ? "700" : "500",
-                            },
-                          ]}
-                        >
-                          {cat}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
+                  {availableCategories.map((cat) =>
+                    chip(cat, cat, draft.categories.includes(cat), () =>
+                      toggleCategory(cat)
+                    )
+                  )}
                 </View>
               </View>
             )}
@@ -318,59 +295,56 @@ export function FilterSheetModal({
             {/* Accounts */}
             {accounts.length > 0 && (
               <View style={styles.section}>
-                <Text style={[styles.sectionTitle, { color: theme.colors.mutedForeground }]}>
-                  ACCOUNTS ({draft.accountIds.length ? draft.accountIds.length : "All"})
-                </Text>
+                {sectionTitle(
+                  "ACCOUNTS",
+                  draft.accountIds.length ? `${draft.accountIds.length} selected` : "All"
+                )}
                 <View style={styles.chipRow}>
-                  {accounts.map((acc) => {
-                    const isSelected = draft.accountIds.includes(acc.id);
-                    return (
-                      <Pressable
-                        key={acc.id}
-                        onPress={() => toggleAccount(acc.id)}
-                        style={[
-                          styles.chip,
-                          {
-                            backgroundColor: isSelected
-                              ? theme.colors.primary
-                              : isDark
-                              ? "rgba(255,255,255,0.06)"
-                              : "rgba(0,0,0,0.04)",
-                            borderColor: isSelected ? theme.colors.primary : theme.colors.border,
-                          },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.chipText,
-                            {
-                              color: isSelected ? "#FFFFFF" : theme.colors.foreground,
-                              fontWeight: isSelected ? "700" : "500",
-                            },
-                          ]}
-                        >
-                          {acc.name}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
+                  {accounts.map((acc) =>
+                    chip(acc.id, acc.name, draft.accountIds.includes(acc.id), () =>
+                      toggleAccount(acc.id)
+                    )
+                  )}
                 </View>
               </View>
             )}
           </ScrollView>
 
           {/* Footer Actions */}
-          <View style={[styles.footer, { borderTopColor: theme.colors.border }]}>
-            <Button variant="outline" onPress={handleReset} style={{ flex: 1 }}>
-              <RotateCcw size={16} color={theme.colors.foreground} />
-              <Text style={{ marginLeft: 6, fontWeight: "700", color: theme.colors.foreground }}>
-                Reset
+          <View style={[styles.footer, { borderTopColor: surface.hairline }]}>
+            <Pressable
+              onPress={handleReset}
+              accessibilityRole="button"
+              style={({ pressed }) => [
+                styles.footerBtn,
+                { backgroundColor: surface.inset, borderColor: surface.insetBorder },
+                pressed && styles.pressed,
+              ]}
+            >
+              <RotateCcw size={15} color={theme.colors.foreground} strokeWidth={2.3} />
+              <Text style={[styles.footerBtnText, { color: theme.colors.foreground }]}>
+                Clear All
               </Text>
-            </Button>
+            </Pressable>
 
-            <Button onPress={handleSave} style={{ flex: 1 }}>
-              <Text style={{ fontWeight: "800", color: "#FFFFFF" }}>Apply Filters</Text>
-            </Button>
+            <Pressable
+              onPress={handleSave}
+              accessibilityRole="button"
+              style={({ pressed }) => [
+                styles.footerBtn,
+                {
+                  backgroundColor: accents.greenDim,
+                  borderColor: isDark
+                    ? "rgba(74, 222, 128, 0.45)"
+                    : "rgba(22, 163, 74, 0.32)",
+                },
+                pressed && styles.pressed,
+              ]}
+            >
+              <Text style={[styles.footerBtnText, { color: accents.green }]}>
+                Apply Filters
+              </Text>
+            </Pressable>
           </View>
         </View>
       </View>
@@ -381,44 +355,83 @@ export function FilterSheetModal({
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
+    backgroundColor: "rgba(0,0,0,0.65)",
     justifyContent: "flex-end",
   },
+  backdropFill: {
+    flex: 1,
+  },
   sheetContainer: {
-    maxHeight: "85%",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    maxHeight: "86%",
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 26,
+    borderCurve: "continuous",
     borderWidth: 1,
-    paddingTop: 18,
+    paddingTop: 10,
+  },
+  grabber: {
+    width: 44,
+    height: 4,
+    borderRadius: 2,
+    alignSelf: "center",
+    marginBottom: 12,
   },
   header: {
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
+    gap: 12,
     paddingHorizontal: 20,
-    marginBottom: 12,
+    paddingBottom: 14,
+  },
+  headerCopy: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
   },
   title: {
-    fontSize: 18,
+    fontSize: 19,
     fontWeight: "800",
+    letterSpacing: -0.3,
   },
   subtitle: {
     fontSize: 12,
+    fontWeight: "500",
   },
   closeBtn: {
-    padding: 4,
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    borderCurve: "continuous",
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
   },
   body: {
     paddingHorizontal: 20,
   },
+  bodyContent: {
+    paddingBottom: 8,
+  },
   section: {
-    marginBottom: 16,
+    marginBottom: 18,
+    gap: 10,
+  },
+  sectionHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     gap: 8,
   },
   sectionTitle: {
     fontSize: 10,
     fontWeight: "800",
-    letterSpacing: 0.5,
+    letterSpacing: 0.8,
+  },
+  sectionTrailing: {
+    fontSize: 10.5,
+    fontWeight: "600",
   },
   chipRow: {
     flexDirection: "row",
@@ -426,13 +439,14 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   chip: {
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 10,
+    paddingHorizontal: 13,
+    paddingVertical: 9,
+    borderRadius: 12,
+    borderCurve: "continuous",
     borderWidth: 1,
   },
   chipText: {
-    fontSize: 12,
+    fontSize: 12.5,
   },
   amountInputsRow: {
     flexDirection: "row",
@@ -440,15 +454,16 @@ const styles = StyleSheet.create({
   },
   amountInputCol: {
     flex: 1,
-    gap: 4,
+    gap: 5,
   },
   inputLabel: {
     fontSize: 11,
     fontWeight: "600",
   },
   input: {
-    height: 44,
-    borderRadius: 10,
+    height: 46,
+    borderRadius: 12,
+    borderCurve: "continuous",
     borderWidth: 1,
     paddingHorizontal: 12,
     fontSize: 14,
@@ -457,7 +472,27 @@ const styles = StyleSheet.create({
   footer: {
     flexDirection: "row",
     gap: 12,
-    padding: 16,
+    paddingHorizontal: 20,
+    paddingTop: 14,
+    paddingBottom: 16,
     borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  footerBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    minHeight: 48,
+    borderRadius: 14,
+    borderCurve: "continuous",
+    borderWidth: 1,
+  },
+  footerBtnText: {
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  pressed: {
+    opacity: 0.75,
   },
 });

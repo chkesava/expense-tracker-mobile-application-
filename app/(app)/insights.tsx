@@ -115,9 +115,9 @@ export default function InsightsScreen() {
     />
   );
 
-  // The Analytics and Yearly dashboards own their own virtualised scroll
-  // containers, so the shell must not wrap them in a second ScrollView.
-  const ownsScroll = activeTab === "analytics" || activeTab === "yearly";
+  // The Analytics, Yearly and Search dashboards own their own virtualised
+  // scroll containers, so the shell must not wrap them in a second ScrollView.
+  const ownsScroll = activeTab !== "advisor";
 
   return (
     <PageShell scrollable={!ownsScroll} contentContainerStyle={styles.container}>
@@ -125,15 +125,14 @@ export default function InsightsScreen() {
         <MonthlyAnalyticsView listHeader={pageHeader} />
       ) : activeTab === "yearly" ? (
         <YearlyAnalyticsView listHeader={pageHeader} />
+      ) : activeTab === "search" ? (
+        <AnalysisLabView initialQuery={params.q} listHeader={pageHeader} />
       ) : (
         <>
           {pageHeader}
 
-          {/* Analysis Lab & Search Tab */}
-          {activeTab === "search" && <AnalysisLabView initialQuery={params.q} />}
-
           {/* AI Advisor Tab (Phase 16) */}
-          {activeTab === "advisor" && <AiAdvisorView />}
+          <AiAdvisorView />
         </>
       )}
 

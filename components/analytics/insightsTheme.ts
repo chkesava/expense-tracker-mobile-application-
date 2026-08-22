@@ -18,6 +18,8 @@ export const INSIGHT_PINK = "#F43F5E";
 export const INSIGHT_PINK_SOFT = "#FB7185";
 /** Amber — secondary/action accent (weekend spend, budgets). */
 export const INSIGHT_AMBER = CARD_ORANGE;
+/** Violet — neutral analytical accent (averages, derived metrics). */
+export const INSIGHT_VIOLET = "#8B5CF6";
 
 export type InsightSurface = {
   /** Card background. */
@@ -62,6 +64,8 @@ export type InsightAccents = {
   pink: string;
   /** Secondary highlight. */
   amber: string;
+  /** Neutral analytical accent. */
+  violet: string;
   /** Tinted fill behind an accent icon. */
   greenDim: string;
   pinkDim: string;
@@ -72,6 +76,7 @@ export function insightAccents(isDark: boolean): InsightAccents {
     green: isDark ? INSIGHT_GREEN : INSIGHT_GREEN_LIGHT,
     pink: isDark ? INSIGHT_PINK_SOFT : "#DC2626",
     amber: INSIGHT_AMBER,
+    violet: isDark ? "#A78BFA" : "#7C3AED",
     greenDim: isDark ? "rgba(74, 222, 128, 0.14)" : "rgba(22, 163, 74, 0.1)",
     pinkDim: isDark ? "rgba(244, 63, 94, 0.16)" : "rgba(220, 38, 38, 0.08)",
   };
