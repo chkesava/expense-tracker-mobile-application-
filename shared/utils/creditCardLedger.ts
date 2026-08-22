@@ -255,9 +255,10 @@ function claimBillForWindow(
  *
  * Statements are gross spend for their window — a payment never shrinks a
  * statement amount. Payments settle statements that already existed on the
- * payment date, oldest-first. Leftover reduces the still-open cycle (and
- * becomes unapplied credit once that cycle closes). It does not silently
- * mark the next generated statement as paid. Available credit is limit minus
+ * payment date, oldest-first. Leftover reduces the still-open cycle. It does
+ * not silently mark the next generated statement as paid. A statement paid on
+ * its own close date releases that day into the new cycle, so same-day charges
+ * after the bill is settled show as unbilled. Available credit is limit minus
  * unbilled cycle spend; an unpaid statement is tracked separately until paid.
  */
 export function buildCreditCardLedger(
@@ -299,7 +300,10 @@ export function buildCreditCardLedger(
 
   const asOf = parseLocalDate(today);
   const { previousBillDate, nextBillDate } = getBillingCycleDates(billDay, asOf);
-  const openStart = shiftDateKey(toLocalDateKey(previousBillDate), 1);
+  const generationDate = toLocalDateKey(previousBillDate);
+  // Payments leftover is keyed off the day after close so a same-day bill
+  // payment cannot silently eat charges posted after the statement was paid.
+  const dayAfterGeneration = shiftDateKey(generationDate, 1);
   const openEnd = toLocalDateKey(nextBillDate);
 
   const windows = collectStatementWindows({
@@ -443,7 +447,7 @@ export function buildCreditCardLedger(
       left = roundMoney(left - applied);
     }
     if (left > 0) {
-      if (payment.date >= openStart) {
+      if (payment.date >= dayAfterGeneration) {
         cycleCredit = roundMoney(cycleCredit + left);
       } else {
         carriedCredit = roundMoney(carriedCredit + left);
@@ -519,6 +523,24 @@ export function buildCreditCardLedger(
       .filter((statement) => statement.isOpen)
       .reduce((sum, statement) => sum + statement.remaining, 0)
   );
+
+  // A statement paid on (or before) its own close date has already been
+  // settled for that cycle. Charges posted on the close date then belong to
+  // the new cycle — the user paid the bill and started spending again the
+  // same day. Leave an unpaid close-day statement inclusive of D so Slice
+  // (and any card still owing) keeps generation-day spend on the statement.
+  const closeStatement = statements.find(
+    (statement) => statement.statementDate === generationDate
+  );
+  const releasedCloseDay =
+    closeStatement != null &&
+    closeStatement.status === "paid" &&
+    Boolean(closeStatement.lastPaymentDate) &&
+    closeStatement.lastPaymentDate <= closeStatement.statementDate;
+  if (releasedCloseDay && closeStatement && closeStatement.periodEnd >= generationDate) {
+    closeStatement.periodEnd = shiftDateKey(generationDate, -1);
+  }
+  const openStart = releasedCloseDay ? generationDate : dayAfterGeneration;
 
   // Anything no live statement covers is still owed, but it is not all the same
   // kind of debt. Spend in the open window is this cycle's unbilled spend and

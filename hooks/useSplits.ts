@@ -3,7 +3,6 @@ import {
   collection,
   doc,
   onSnapshot,
-  or,
   query,
   deleteDoc,
   serverTimestamp,
@@ -11,6 +10,7 @@ import {
   where,
   writeBatch,
   type Firestore,
+  type QuerySnapshot,
   type WriteBatch,
 } from "firebase/firestore";
 
@@ -146,37 +146,74 @@ export function useSplits(options?: { enabled?: boolean }) {
     }
 
     setLoading(true);
-    const q = query(
+    // Two single-field listeners instead of `or()`. The disjunction needs a
+    // composite index that is not deployed, so the old query failed and the
+    // list rendered as empty even when splits existed.
+    const byCreator = query(
       collection(db, "splits"),
-      or(
-        where("createdBy", "==", uid),
-        where("participantIds", "array-contains", uid)
-      )
+      where("createdBy", "==", uid)
+    );
+    const byParticipant = query(
+      collection(db, "splits"),
+      where("participantIds", "array-contains", uid)
     );
 
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        const list: Split[] = snapshot.docs.map((docSnap) => ({
-          id: docSnap.id,
-          ...(docSnap.data() as Omit<Split, "id">),
-        }));
-        list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-        setSplits(list);
-        setError(null);
+    let creatorRows: Split[] = [];
+    let participantRows: Split[] = [];
+    let creatorReady = false;
+    let participantReady = false;
+
+    const readDocs = (snapshot: QuerySnapshot): Split[] =>
+      snapshot.docs.map((docSnap) => ({
+        id: docSnap.id,
+        ...(docSnap.data() as Omit<Split, "id">),
+      }));
+
+    const publish = () => {
+      if (!creatorReady || !participantReady) return;
+      const byId = new Map<string, Split>();
+      for (const split of [...creatorRows, ...participantRows]) {
+        if (split.id) byId.set(split.id, split);
+      }
+      const list = [...byId.values()];
+      list.sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
+      setSplits(list);
+      setError(null);
+      setLoading(false);
+    };
+
+    const onFail = snapshotErrorHandler(
+      "snapshot.splits",
+      (failure) => {
+        setError(failure);
         setLoading(false);
       },
-      snapshotErrorHandler(
-        "snapshot.splits",
-        (failure) => {
-          setError(failure);
-          setLoading(false);
-        },
-        "Couldn't load your splits."
-      )
+      "Couldn't load your splits."
     );
 
-    return unsubscribe;
+    const unsubCreator = onSnapshot(
+      byCreator,
+      (snapshot) => {
+        creatorRows = readDocs(snapshot);
+        creatorReady = true;
+        publish();
+      },
+      onFail
+    );
+    const unsubParticipant = onSnapshot(
+      byParticipant,
+      (snapshot) => {
+        participantRows = readDocs(snapshot);
+        participantReady = true;
+        publish();
+      },
+      onFail
+    );
+
+    return () => {
+      unsubCreator();
+      unsubParticipant();
+    };
   }, [uid, enabled, attempt]);
 
   const createSplit = async (
