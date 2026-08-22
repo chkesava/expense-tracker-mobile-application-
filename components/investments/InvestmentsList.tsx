@@ -7,7 +7,6 @@ import {
   TextInput,
   View,
 } from "react-native";
-import * as Haptics from "expo-haptics";
 import {
   Banknote,
   Landmark,
@@ -25,19 +24,20 @@ import { CreateInvestmentModal } from "@/components/investments/CreateInvestment
 import { InvestmentCard } from "@/components/investments/InvestmentCard";
 import { InvestmentDetailModal } from "@/components/investments/InvestmentDetailModal";
 import { useInvestments } from "@/hooks/useInvestments";
-import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import type { Investment, InvestmentKind } from "@/shared/types/investment";
 import { todayDateKey } from "@/shared/utils/dates";
 import { getInvestmentValuation } from "@/shared/utils/investmentInterest";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
 type FilterTab = "all" | InvestmentKind;
 
 export function InvestmentsList() {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
-  const { settings: system } = useSystemSettings();
+  const displayCurrency = useDisplayCurrency();
 
   const {
     investments,
@@ -104,7 +104,7 @@ export function InvestmentsList() {
               </Text>
               <Amount
                 value={portfolioSummary.totalCurrentValue}
-                currency={system.defaultCurrency}
+                currency={displayCurrency}
                 style={{
                   fontSize: 22,
                   fontWeight: "900",
@@ -124,7 +124,7 @@ export function InvestmentsList() {
                   color: portfolioSummary.netGain >= 0 ? "#10B981" : "#EF4444",
                 }}
               >
-                +{system.defaultCurrency} {Math.round(portfolioSummary.netGain).toLocaleString()} (+{portfolioSummary.gainPct}%)
+                +{displayCurrency} {Math.round(portfolioSummary.netGain).toLocaleString()} (+{portfolioSummary.gainPct}%)
               </Text>
             </View>
           </View>
@@ -149,7 +149,7 @@ export function InvestmentsList() {
               <Pressable
                 key={tab.id}
                 onPress={() => {
-                  Haptics.selectionAsync().catch(() => undefined);
+                  haptic.selection().catch(() => undefined);
                   setActiveFilter(tab.id as FilterTab);
                 }}
                 style={[
@@ -244,7 +244,7 @@ export function InvestmentsList() {
             <InvestmentCard
               key={inv.id}
               investment={inv}
-              currency={system.defaultCurrency}
+              currency={displayCurrency}
               onPress={() => setSelectedInvestment(inv)}
             />
           ))}
@@ -261,7 +261,7 @@ export function InvestmentsList() {
       <InvestmentDetailModal
         visible={!!selectedInvestment}
         investment={selectedInvestment}
-        currency={system.defaultCurrency}
+        currency={displayCurrency}
         onClose={() => setSelectedInvestment(null)}
         onCloseInvestment={closeInvestment}
         onDeleteInvestment={deleteInvestment}

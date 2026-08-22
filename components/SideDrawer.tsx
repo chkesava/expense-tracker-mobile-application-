@@ -40,6 +40,8 @@ import { useUserRole } from "@/hooks/useUserRole";
 import { logError } from "@/lib/errors";
 import { haptic } from "@/lib/haptics";
 import { useAuth } from "@/providers/AuthProvider";
+import { useTranslation } from "@/providers/LocalizationProvider";
+import { useInvestmentsEnabled } from "@/hooks/useInvestmentsEnabled";
 import { useSettings } from "@/providers/SettingsProvider";
 import {
   ADMIN_NAV_ITEM,
@@ -105,6 +107,8 @@ function SideDrawerPanel({ onClose }: { onClose: () => void }) {
   const { user, logout } = useAuth();
   const { isAdmin } = useUserRole();
   const { settings, setGhostMode } = useSettings();
+  const investmentsEnabled = useInvestmentsEnabled();
+  const { t } = useTranslation();
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
 
@@ -129,7 +133,7 @@ function SideDrawerPanel({ onClose }: { onClose: () => void }) {
     ...CORE_NAV_ITEMS.filter(
       (item) =>
         item.includeInDrawer &&
-        (!item.requiresInvestmentsFeature || settings.enableInvestments)
+        (!item.requiresInvestmentsFeature || investmentsEnabled)
     ),
     ...(isAdmin ? [ADMIN_NAV_ITEM] : []),
   ];
@@ -267,7 +271,7 @@ function SideDrawerPanel({ onClose }: { onClose: () => void }) {
                     pressed && { opacity: 0.8 },
                   ]}
                   accessibilityRole="button"
-                  accessibilityLabel={link.label}
+                  accessibilityLabel={t(link.translationKey, link.label)}
                 >
                   <Icon
                     size={20}
@@ -289,7 +293,7 @@ function SideDrawerPanel({ onClose }: { onClose: () => void }) {
                       },
                     ]}
                   >
-                    {link.label}
+                    {t(link.translationKey, link.label)}
                   </Text>
                 </Pressable>
               </Animated.View>

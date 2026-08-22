@@ -10,7 +10,6 @@ import {
   Text,
   View,
 } from "react-native";
-import * as Haptics from "expo-haptics";
 import { Check, Share2, UserMinus, X } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
@@ -24,7 +23,6 @@ import { useAuth } from "@/providers/AuthProvider";
 import { useSettings } from "@/providers/SettingsProvider";
 import { useSplits } from "@/hooks/useSplits";
 import { useSplitShareClaims } from "@/hooks/useSplitShareClaims";
-import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import type { Participant, Split } from "@/shared/types/split";
 import { getAccountKind } from "@/shared/utils/accountKind";
 import {
@@ -49,6 +47,8 @@ import { toast } from "@/lib/toast";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { logError } from "@/lib/errors";
+import { haptic } from "@/lib/haptics";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
 export interface SplitDetailModalProps {
   visible: boolean;
@@ -64,7 +64,7 @@ export function SplitDetailModal({
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const { user } = useAuth();
-  const { settings: system } = useSystemSettings();
+  const displayCurrency = useDisplayCurrency();
   const { settings: userSettings } = useSettings();
   const { accounts } = useAccounts();
   const { accountTypes } = useAccountTypes();
@@ -138,7 +138,7 @@ export function SplitDetailModal({
 
   const handleTogglePaid = async (participant: Participant, index: number) => {
     if (!split.id) return;
-    Haptics.selectionAsync().catch(() => undefined);
+    haptic.selection().catch(() => undefined);
 
     if (collect) {
       if (spent) return;
@@ -184,7 +184,7 @@ export function SplitDetailModal({
 
   const handleConfirmCollected = async (accountId: string) => {
     if (!split.id || !collectingKey) return;
-    Haptics.selectionAsync().catch(() => undefined);
+    haptic.selection().catch(() => undefined);
     // When this picker was opened from a claim, clearing the claim belongs in
     // the same batch as the credit so the two can never diverge.
     const claimId =
@@ -222,7 +222,7 @@ export function SplitDetailModal({
 
   const handleShareReminder = async (participant: Participant) => {
     if (sharing) return;
-    Haptics.selectionAsync().catch(() => undefined);
+    haptic.selection().catch(() => undefined);
     setSharing(participant.key || "person");
     try {
       const prepared = await prepareSharing();
@@ -242,7 +242,7 @@ export function SplitDetailModal({
         split,
         participant,
         creatorUpiId || undefined,
-        system.defaultCurrency,
+        displayCurrency,
         getPaymentRequestShareUrl(paymentSlug)
       );
       await Share.share({
@@ -258,14 +258,14 @@ export function SplitDetailModal({
 
   const handleShareSplit = async () => {
     if (sharing) return;
-    Haptics.selectionAsync().catch(() => undefined);
+    haptic.selection().catch(() => undefined);
     setSharing("split");
     try {
       const prepared = await prepareSharing();
       if (!prepared) return;
       const message = generateSplitGroupShareMessage(
         split,
-        system.defaultCurrency,
+        displayCurrency,
         prepared.url
       );
       await Share.share({
@@ -349,7 +349,7 @@ export function SplitDetailModal({
       return;
     }
 
-    Haptics.selectionAsync().catch(() => undefined);
+    haptic.selection().catch(() => undefined);
     setClaimWorkingKey(claim.participantKey);
     try {
       await applyPaidClaim(split.id, claim);
@@ -602,7 +602,7 @@ export function SplitDetailModal({
                   </Text>
                   <Amount
                     value={split.totalAmount}
-                    currency={system.defaultCurrency}
+                    currency={displayCurrency}
                     ghostable
                     style={{
                       fontSize: 22,
@@ -661,7 +661,7 @@ export function SplitDetailModal({
                   split={split}
                   participant={qrTarget}
                   creatorUpiId={creatorUpiId}
-                  currency={system.defaultCurrency}
+                  currency={displayCurrency}
                 />
               ) : (
                 <Text
@@ -679,7 +679,7 @@ export function SplitDetailModal({
               <SplitClaimsSection
                 split={split}
                 claims={claims}
-                currency={system.defaultCurrency}
+                currency={displayCurrency}
                 workingKey={claimWorkingKey}
                 claimsEnabled={claimsEnabled}
                 togglePending={togglePending}
@@ -844,7 +844,7 @@ export function SplitDetailModal({
                       <View style={styles.participantRight}>
                         <Amount
                           value={contributing ? p.amount : paidSoFar}
-                          currency={system.defaultCurrency}
+                          currency={displayCurrency}
                           ghostable
                           style={{
                             fontSize: theme.typography.sm,

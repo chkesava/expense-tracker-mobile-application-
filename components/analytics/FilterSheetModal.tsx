@@ -81,7 +81,7 @@ export function FilterSheetModal({
   };
 
   const handleReset = () => {
-    void haptic.notification();
+    void haptic.warning();
     setDraft({
       query: draft.query,
       type: "all",

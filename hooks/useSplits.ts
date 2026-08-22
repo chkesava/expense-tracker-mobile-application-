@@ -21,7 +21,6 @@ import { snapshotErrorHandler } from "@/lib/firestoreErrors";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
-import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import type { Participant, Split } from "@/shared/types/split";
 import type { QrStyleId } from "@/shared/utils/qrStyles";
 import { getStoredQrStyleId } from "@/shared/utils/qrStyles";
@@ -67,6 +66,7 @@ import {
   participantRemainingDue,
   recalibrateSplitAfterOptOut,
 } from "@/shared/utils/splitMath";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
 function applyShareSideEffects(
   batch: WriteBatch,
@@ -128,11 +128,11 @@ function applyShareSideEffects(
 export function useSplits(options?: { enabled?: boolean }) {
   const enabled = options?.enabled !== false;
   const { user } = useAuth();
-  const { settings: system } = useSystemSettings();
+  const displayCurrency = useDisplayCurrency();
   const uid = user?.uid;
   // The currency the organizer entered these amounts in. Mirrored onto every
   // public snapshot and payment request so the login-free pages can render it.
-  const currency = system.defaultCurrency;
+  const currency = displayCurrency;
 
   const [splits, setSplits] = useState<Split[]>([]);
   const [loading, setLoading] = useState(true);

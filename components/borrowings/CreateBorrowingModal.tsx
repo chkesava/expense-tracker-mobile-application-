@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import * as Haptics from "expo-haptics";
 
 import { Modal } from "@/components/common/Modal";
 import { Button } from "@/components/ui/Button";
@@ -8,7 +7,6 @@ import { Input } from "@/components/ui/Input";
 import { toast } from "@/lib/toast";
 import { useAccounts } from "@/hooks/useAccounts";
 import type { CreateBorrowingInput } from "@/hooks/useBorrowings";
-import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import {
   INTEREST_BASES,
   INTEREST_BASIS_LABELS,
@@ -23,6 +21,8 @@ import {
 import { isValidDateKey, todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
 export interface CreateBorrowingModalProps {
   visible: boolean;
@@ -37,7 +37,7 @@ export function CreateBorrowingModal({
 }: CreateBorrowingModalProps) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
-  const { settings: system } = useSystemSettings();
+  const displayCurrency = useDisplayCurrency();
   const { accounts } = useAccounts();
 
   const [lenderType, setLenderType] = useState<LenderType>("FINANCE_INSTITUTION");
@@ -147,7 +147,7 @@ export function CreateBorrowingModal({
                 <Pressable
                   key={type}
                   onPress={() => {
-                    Haptics.selectionAsync().catch(() => undefined);
+                    haptic.selection().catch(() => undefined);
                     setLenderType(type);
                   }}
                   style={[styles.pill, pillStyle(isActive)]}
@@ -174,7 +174,7 @@ export function CreateBorrowingModal({
 
         <View style={styles.group}>
           <Text style={[styles.label, { color: theme.colors.foreground }]}>
-            Amount Borrowed ({system.defaultCurrency}) *
+            Amount Borrowed ({displayCurrency}) *
           </Text>
           <Input
             value={principal}
@@ -195,7 +195,7 @@ export function CreateBorrowingModal({
                 <Pressable
                   key={freq}
                   onPress={() => {
-                    Haptics.selectionAsync().catch(() => undefined);
+                    haptic.selection().catch(() => undefined);
                     setInterestFrequency(freq);
                   }}
                   style={[styles.pill, pillStyle(isActive)]}
@@ -236,7 +236,7 @@ export function CreateBorrowingModal({
                     <Pressable
                       key={basis}
                       onPress={() => {
-                        Haptics.selectionAsync().catch(() => undefined);
+                        haptic.selection().catch(() => undefined);
                         setInterestBasis(basis);
                       }}
                       style={[styles.pill, pillStyle(isActive)]}
@@ -302,7 +302,7 @@ export function CreateBorrowingModal({
                   <Pressable
                     key={account.id}
                     onPress={() => {
-                      Haptics.selectionAsync().catch(() => undefined);
+                      haptic.selection().catch(() => undefined);
                       setCreditedAccountId(account.id);
                     }}
                     style={[styles.pill, pillStyle(isActive)]}

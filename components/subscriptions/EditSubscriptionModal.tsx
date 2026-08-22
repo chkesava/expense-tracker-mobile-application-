@@ -9,7 +9,6 @@ import {
   TextInput,
   View,
 } from "react-native";
-import * as Haptics from "expo-haptics";
 import {
   Calendar,
   Check,
@@ -23,13 +22,14 @@ import { Button } from "@/components/ui/Button";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useCategories } from "@/hooks/useCategories";
 import { useSubscriptions } from "@/hooks/useSubscriptions";
-import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import type { Subscription, SubscriptionFrequency } from "@/shared/types/subscription";
 import { subscriptionFrequency } from "@/shared/types/subscription";
 import { todayDateKey } from "@/shared/utils/dates";
 import { acceptRecurringSuggestion } from "@/services/sms/smsRecurringSync";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
 export interface EditSubscriptionModalProps {
   visible: boolean;
@@ -46,7 +46,7 @@ export function EditSubscriptionModal({
 }: EditSubscriptionModalProps) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
-  const { settings: system } = useSystemSettings();
+  const displayCurrency = useDisplayCurrency();
   const { accounts } = useAccounts();
   const { categories } = useCategories();
   const { addSubscription, updateSubscription, deleteSubscription } =
@@ -165,7 +165,7 @@ export function EditSubscriptionModal({
         }
       }
 
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(
+      haptic.success().catch(
         () => undefined
       );
       onClose();
@@ -282,7 +282,7 @@ export function EditSubscriptionModal({
                     <Pressable
                       key={item.key}
                       onPress={() => {
-                        Haptics.selectionAsync().catch(() => undefined);
+                        haptic.selection().catch(() => undefined);
                         setType(item.key);
                         if (item.key === "emi") setFrequency("monthly");
                       }}
@@ -348,7 +348,7 @@ export function EditSubscriptionModal({
                   { color: theme.colors.mutedForeground },
                 ]}
               >
-                AMOUNT ({system.defaultCurrency})
+                AMOUNT ({displayCurrency})
               </Text>
               <TextInput
                 value={amount}
@@ -403,7 +403,7 @@ export function EditSubscriptionModal({
                       <Pressable
                         key={item.key}
                         onPress={() => {
-                          Haptics.selectionAsync().catch(() => undefined);
+                          haptic.selection().catch(() => undefined);
                           setFrequency(item.key);
                         }}
                         style={[

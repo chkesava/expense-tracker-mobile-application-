@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import * as Haptics from "expo-haptics";
 import {
   Banknote,
   BarChart3,
@@ -36,7 +35,6 @@ import { useExpenses } from "@/hooks/useExpenses";
 import { useIncomes } from "@/hooks/useIncomes";
 import { useUnifiedNetWorth } from "@/hooks/useUnifiedNetWorth";
 import { useSettings } from "@/providers/SettingsProvider";
-import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import type { Account } from "@/shared/types/expense";
 import {
   computeBankBalance,
@@ -50,6 +48,8 @@ import { todayDateKey } from "@/shared/utils/dates";
 import { SmsMatchingUnconfiguredText } from "@/components/accounts/SmsMatchingUnconfiguredText";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
 type AccentTone = {
   icon: string;
@@ -124,7 +124,7 @@ export function AccountsList() {
   const { push } = useRouter();
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
-  const { settings: system } = useSystemSettings();
+  const displayCurrency = useDisplayCurrency();
   const { settings } = useSettings();
   const today = todayDateKey(settings.timezone);
 
@@ -231,7 +231,7 @@ export function AccountsList() {
   }, [accountTypes, depositAccounts]);
 
   const handleOpenAccountDetail = (account: Account) => {
-    Haptics.selectionAsync().catch(() => undefined);
+    haptic.selection().catch(() => undefined);
     push({
       pathname: "/accounts/[id]",
       params: { id: account.id },
@@ -239,13 +239,13 @@ export function AccountsList() {
   };
 
   const handleOpenCreateAccount = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+    haptic.light().catch(() => undefined);
     setEditingAccount(null);
     setIsEditModalOpen(true);
   };
 
   const handleOpenEditAccount = (account: Account) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+    haptic.light().catch(() => undefined);
     setEditingAccount(account);
     setIsEditModalOpen(true);
   };
@@ -285,7 +285,7 @@ export function AccountsList() {
 
         <Amount
           value={netWorth.totalNetWorth}
-          currency={system.defaultCurrency}
+          currency={displayCurrency}
           ghostable
           style={{
             fontSize: 32,
@@ -305,7 +305,7 @@ export function AccountsList() {
             </Text>
             <Amount
               value={netWorth.totalAssets}
-              currency={system.defaultCurrency}
+              currency={displayCurrency}
               ghostable
               style={{
                 fontSize: theme.typography.sm,
@@ -325,7 +325,7 @@ export function AccountsList() {
             </Text>
             <Amount
               value={netWorth.totalLiabilities}
-              currency={system.defaultCurrency}
+              currency={displayCurrency}
               prefix={netWorth.totalLiabilities > 0 ? "-" : ""}
               ghostable
               style={{
@@ -356,7 +356,7 @@ export function AccountsList() {
             </Text>
             <Amount
               value={netWorth.liquidBankAssets}
-              currency={system.defaultCurrency}
+              currency={displayCurrency}
               style={{
                 fontSize: 12,
                 fontWeight: "700",
@@ -370,7 +370,7 @@ export function AccountsList() {
             </Text>
             <Amount
               value={netWorth.investmentsValue}
-              currency={system.defaultCurrency}
+              currency={displayCurrency}
               style={{ fontSize: 12, fontWeight: "700", color: green }}
             />
           </View>
@@ -380,7 +380,7 @@ export function AccountsList() {
             </Text>
             <Amount
               value={netWorth.totalStocksValue}
-              currency={system.defaultCurrency}
+              currency={displayCurrency}
               style={{ fontSize: 12, fontWeight: "700", color: blue }}
             />
           </View>
@@ -391,7 +391,7 @@ export function AccountsList() {
       <View style={styles.quickActionsRow}>
         <Pressable
           onPress={() => {
-            Haptics.selectionAsync().catch(() => undefined);
+            haptic.selection().catch(() => undefined);
             setIsStockCashModalOpen(true);
           }}
           android_ripple={{ color: purple + "22", borderless: false }}
@@ -417,7 +417,7 @@ export function AccountsList() {
 
         <Pressable
           onPress={() => {
-            Haptics.selectionAsync().catch(() => undefined);
+            haptic.selection().catch(() => undefined);
             setIsEntryModalOpen(true);
           }}
           android_ripple={{ color: green + "22", borderless: false }}
@@ -461,7 +461,7 @@ export function AccountsList() {
         >
           <Pressable
             onPress={() => {
-              Haptics.selectionAsync().catch(() => undefined);
+              haptic.selection().catch(() => undefined);
               push("/investments?tab=portfolio" as never);
             }}
             android_ripple={{ color: ripple, borderless: false }}
@@ -507,7 +507,7 @@ export function AccountsList() {
               </Text>
               <Amount
                 value={netWorth.stocksCashBalance}
-                currency={system.defaultCurrency}
+                currency={displayCurrency}
                 ghostable
                 style={{
                   fontSize: theme.typography.md,
@@ -522,7 +522,7 @@ export function AccountsList() {
               </Text>
               <Amount
                 value={netWorth.stocksHoldingsValue}
-                currency={system.defaultCurrency}
+                currency={displayCurrency}
                 ghostable
                 style={{
                   fontSize: theme.typography.md,
@@ -545,7 +545,7 @@ export function AccountsList() {
             <Button
               size="sm"
               onPress={() => {
-                Haptics.selectionAsync().catch(() => undefined);
+                haptic.selection().catch(() => undefined);
                 push("/investments?tab=portfolio" as never);
               }}
               style={{ flex: 1 }}
@@ -642,7 +642,7 @@ export function AccountsList() {
                       <View style={styles.accountRight}>
                         <Amount
                           value={balance}
-                          currency={system.defaultCurrency}
+                          currency={displayCurrency}
                           ghostable
                           style={{
                             fontSize: theme.typography.md,
@@ -739,7 +739,7 @@ export function AccountsList() {
                     <View style={{ alignItems: "flex-end" }}>
                       <Amount
                         value={usage.totalOutstanding}
-                        currency={system.defaultCurrency}
+                        currency={displayCurrency}
                         prefix={usage.totalOutstanding > 0 ? "-" : ""}
                         ghostable
                         style={{
@@ -800,7 +800,7 @@ export function AccountsList() {
 
       <Pressable
         onPress={() => {
-          Haptics.selectionAsync().catch(() => undefined);
+          haptic.selection().catch(() => undefined);
           setIsTransferModalOpen(true);
         }}
         style={styles.transferLink}
@@ -833,7 +833,7 @@ export function AccountsList() {
       <ManageStockCashModal
         visible={isStockCashModalOpen}
         onClose={() => setIsStockCashModalOpen(false)}
-        currency={system.defaultCurrency}
+        currency={displayCurrency}
       />
 
       <PayCreditBillModal

@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import * as Haptics from "expo-haptics";
 import { Eye, Plus, Trash2 } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
@@ -11,6 +10,7 @@ import { watchlistSchema } from "@/shared/features/portfolio/schemas";
 import type { MarketQuote, WatchlistItem } from "@/shared/features/portfolio/types";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
 
 export interface WatchlistTabProps {
   watchlist: WatchlistItem[];
@@ -103,7 +103,7 @@ export function WatchlistTab({ watchlist, quotes, currency, onAdd, onRemove }: W
                 <View style={{ alignItems: "flex-end" }}>
                   {price > 0 ? <><Amount value={price} currency={currency} ghostable style={{ color: theme.colors.foreground, fontSize: 14, fontWeight: "800" }} /><Text style={{ color: positive ? "#10B981" : "#EF4444", fontSize: 11, fontWeight: "700" }}>{positive ? "+" : ""}{changePercent.toFixed(2)}%</Text></> : <Text style={{ color: theme.colors.mutedForeground, fontSize: 11 }}>No quote</Text>}
                 </View>
-                <Pressable onPress={() => { Haptics.selectionAsync().catch(() => undefined); void onRemove(item.id); }} style={styles.removeButton} hitSlop={8}><Trash2 size={15} color={theme.colors.destructive} /></Pressable>
+                <Pressable onPress={() => { haptic.selection().catch(() => undefined); void onRemove(item.id); }} style={styles.removeButton} hitSlop={8}><Trash2 size={15} color={theme.colors.destructive} /></Pressable>
               </View>
             );
           })}

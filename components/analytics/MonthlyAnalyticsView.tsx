@@ -30,7 +30,7 @@ import { haptic } from "@/lib/haptics";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useIncomes } from "@/hooks/useIncomes";
 import { useSettings } from "@/providers/SettingsProvider";
-import { useSystemSettings } from "@/providers/SystemSettingsProvider";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { getCategoryIcon } from "@/shared/data/categoryTaxonomy";
 import { COLORS } from "@/shared/utils/chartColors";
 import { getSmartInsight } from "@/shared/utils/insights";
@@ -43,6 +43,7 @@ import {
   getWeekendVsWeekdaySplit,
 } from "@/shared/utils/rangeAnalytics";
 import { groupByCategory } from "@/shared/utils/analytics";
+import { formatMonthLabel } from "@/shared/utils/dateDisplay";
 import { currentMonthKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 
@@ -84,7 +85,6 @@ export function MonthlyAnalyticsView({ listHeader }: MonthlyAnalyticsViewProps) 
   const router = useRouter();
   const { themeName } = useTheme();
   const { settings: userSettings } = useSettings();
-  const { settings: system } = useSystemSettings();
 
   const {
     expenses,
@@ -98,7 +98,7 @@ export function MonthlyAnalyticsView({ listHeader }: MonthlyAnalyticsViewProps) 
   const currentMonthStr = useMemo(() => currentMonthKey(), []);
   const [selectedMonth, setSelectedMonth] = useState<string>(currentMonthStr);
 
-  const currency = system.defaultCurrency;
+  const currency = useDisplayCurrency();
   const monthlyBudget = userSettings.monthlyBudget || 0;
 
   // Month navigation
@@ -112,11 +112,10 @@ export function MonthlyAnalyticsView({ listHeader }: MonthlyAnalyticsViewProps) 
     setSelectedMonth((prev) => shiftMonthKey(prev, 1));
   }, []);
 
-  const formattedMonthLabel = useMemo(() => {
-    const [y, m] = selectedMonth.split("-").map(Number);
-    const date = new Date(y, m - 1, 1);
-    return date.toLocaleDateString(undefined, { month: "long", year: "numeric" });
-  }, [selectedMonth]);
+  const formattedMonthLabel = useMemo(
+    () => formatMonthLabel(selectedMonth, userSettings.dateFormat, { long: true }),
+    [selectedMonth, userSettings.dateFormat]
+  );
 
   // Filtered transactions for selected month
   const monthExpenses = useMemo(
@@ -232,9 +231,12 @@ export function MonthlyAnalyticsView({ listHeader }: MonthlyAnalyticsViewProps) 
   );
 
   const dayOfWeekData = useMemo(() => {
-    const dist = getDayOfWeekDistribution(monthExpenses);
+    const dist = getDayOfWeekDistribution(
+      monthExpenses,
+      userSettings.firstDayOfWeek
+    );
     return dist.map((d) => ({ label: d.name, value: d.amount }));
-  }, [monthExpenses]);
+  }, [monthExpenses, userSettings.firstDayOfWeek]);
 
   const peakDay = useMemo(() => {
     const best = [...dayOfWeekData].sort((a, b) => b.value - a.value)[0];

@@ -1,6 +1,5 @@
 import { Pressable, Share, StyleSheet, Text, View } from "react-native";
 import QRCode from "react-native-qrcode-svg";
-import * as Haptics from "expo-haptics";
 import { Share2 } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
@@ -12,6 +11,7 @@ import { generateUpiLink } from "@/shared/utils/upi";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { logError } from "@/lib/errors";
+import { haptic } from "@/lib/haptics";
 
 export interface SplitPayQrCardProps {
   split: Split;
@@ -44,7 +44,7 @@ export function SplitPayQrCard({
       : "";
 
   const handleShare = async () => {
-    Haptics.selectionAsync().catch(() => undefined);
+    haptic.selection().catch(() => undefined);
     const message = generateSplitShareMessage(
       split,
       participant,

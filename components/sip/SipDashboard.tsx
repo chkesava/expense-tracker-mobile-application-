@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import * as Haptics from "expo-haptics";
 import {
   Bell,
   Calendar,
@@ -13,7 +12,6 @@ import { SkeletonHero, SkeletonList } from "@/components/common/Skeleton";
 
 import { useSips } from "@/hooks/useSips";
 import { useMarketQuotes } from "@/hooks/useMarketQuotes";
-import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import {
   SipSummaryCard,
   SipPlanFormModal,
@@ -26,13 +24,15 @@ import { Card } from "@/components/ui/Card";
 import type { SipPlan, VirtualPositionWithMetrics } from "@/shared/features/sip/types";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
 type SipSubTab = "plans" | "positions" | "history";
 
 export function SipDashboard() {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
-  const { settings: system } = useSystemSettings();
+  const displayCurrency = useDisplayCurrency();
 
   const {
     plans,
@@ -127,7 +127,7 @@ export function SipDashboard() {
   }, [plans]);
 
   const handleManualExecute = async () => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+    haptic.success().catch(() => undefined);
     setExecuting(true);
     try {
       await triggerManualExecute();
@@ -162,7 +162,7 @@ export function SipDashboard() {
       <SipSummaryCard
         summary={summary}
         monthlyCommitment={monthlyCommitment}
-        currency={system.defaultCurrency}
+        currency={displayCurrency}
       />
 
       {/* Manual Trigger & Notifications Controls */}
@@ -181,7 +181,7 @@ export function SipDashboard() {
 
         <Pressable
           onPress={() => {
-            Haptics.selectionAsync().catch(() => undefined);
+            haptic.selection().catch(() => undefined);
             setNotifsOpen(true);
           }}
           style={({ pressed }) => [
@@ -214,7 +214,7 @@ export function SipDashboard() {
             <Pressable
               key={tab.id}
               onPress={() => {
-                Haptics.selectionAsync().catch(() => undefined);
+                haptic.selection().catch(() => undefined);
                 setSubTab(tab.id as SipSubTab);
               }}
               style={[
@@ -295,14 +295,14 @@ export function SipDashboard() {
       {subTab === "positions" && (
         <SipVirtualPositions
           positions={positionsWithMetrics}
-          currency={system.defaultCurrency}
+          currency={displayCurrency}
         />
       )}
 
       {subTab === "history" && (
         <SipHistoryList
           transactions={transactions}
-          currency={system.defaultCurrency}
+          currency={displayCurrency}
         />
       )}
 

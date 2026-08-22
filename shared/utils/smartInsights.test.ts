@@ -106,3 +106,85 @@ describe("buildSmartInsights", () => {
     );
   });
 });
+
+describe("firstDayOfWeek", () => {
+  // 2026-08-16 is a Sunday, 2026-08-17 a Monday, 2026-08-19 a Wednesday.
+  const midweek = "2026-08-19";
+  const expenses = [
+    { amount: 100, date: "2026-08-16", month: "2026-08", category: "Food & Dining" },
+    { amount: 200, date: "2026-08-17", month: "2026-08", category: "Food & Dining" },
+    { amount: 300, date: "2026-08-19", month: "2026-08", category: "Food & Dining" },
+  ];
+
+  it("excludes Sunday from a Monday-first week", () => {
+    const insights = buildSmartInsights({
+      today: midweek,
+      firstDayOfWeek: "monday",
+      expenses,
+    });
+    // Monday 17th + Wednesday 19th only — the 16th belongs to the prior week.
+    expect(insights.find((i) => i.kind === "week_total")?.text).toBe(
+      "💰 You spent ₹500 this week."
+    );
+  });
+
+  it("includes Sunday in a Sunday-first week", () => {
+    const insights = buildSmartInsights({
+      today: midweek,
+      firstDayOfWeek: "sunday",
+      expenses,
+    });
+    expect(insights.find((i) => i.kind === "week_total")?.text).toBe(
+      "💰 You spent ₹600 this week."
+    );
+  });
+
+  it("defaults to Monday when the preference is absent", () => {
+    const withDefault = buildSmartInsights({ today: midweek, expenses });
+    const withMonday = buildSmartInsights({
+      today: midweek,
+      firstDayOfWeek: "monday",
+      expenses,
+    });
+    expect(withDefault.map((i) => i.text)).toEqual(withMonday.map((i) => i.text));
+  });
+
+  it("compares against the same elapsed span of the previous week", () => {
+    // Wednesday => 3 days elapsed, so the baseline is Mon-Wed of last week.
+    // 2026-08-12 (Wed, last week) counts; 2026-08-14 (Fri, last week) must not.
+    const insights = buildSmartInsights({
+      today: midweek,
+      firstDayOfWeek: "monday",
+      expenses: [
+        { amount: 200, date: "2026-08-19", month: "2026-08", category: "Food & Dining" },
+        { amount: 100, date: "2026-08-12", month: "2026-08", category: "Food & Dining" },
+        { amount: 900, date: "2026-08-14", month: "2026-08", category: "Food & Dining" },
+      ],
+    });
+    // 200 vs a 100 baseline = +100%, not 200 vs 1000.
+    expect(insights.find((i) => i.kind === "category_change")?.text).toBe(
+      "📈 Food spending increased 100% this week."
+    );
+  });
+
+  it("applies the numberFormat preference to the week total", () => {
+    const lakhs = buildSmartInsights({
+      today: midweek,
+      firstDayOfWeek: "monday",
+      numberFormat: "lakhs",
+      expenses: [
+        { amount: 1_000_000, date: midweek, month: "2026-08", category: "Shopping" },
+      ],
+    });
+    const standard = buildSmartInsights({
+      today: midweek,
+      firstDayOfWeek: "monday",
+      numberFormat: "standard",
+      expenses: [
+        { amount: 1_000_000, date: midweek, month: "2026-08", category: "Shopping" },
+      ],
+    });
+    expect(lakhs.find((i) => i.kind === "week_total")?.text).toContain("10,00,000");
+    expect(standard.find((i) => i.kind === "week_total")?.text).toContain("1,000,000");
+  });
+});

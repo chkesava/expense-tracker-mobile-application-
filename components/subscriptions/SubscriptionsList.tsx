@@ -5,7 +5,6 @@ import {
   Text,
   View,
 } from "react-native";
-import * as Haptics from "expo-haptics";
 import {
   ArrowRightLeft,
   Calendar,
@@ -26,7 +25,6 @@ import { useAccounts } from "@/hooks/useAccounts";
 import { useRecurringSuggestions } from "@/hooks/useRecurringSuggestions";
 import { useSubscriptions } from "@/hooks/useSubscriptions";
 import { useAuth } from "@/providers/AuthProvider";
-import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import { toast } from "@/lib/toast";
 import { patternToSubscription } from "@/services/sms/smsRecurringDetector";
 import type { Subscription } from "@/shared/types/subscription";
@@ -37,12 +35,14 @@ import {
 } from "@/shared/utils/subscriptionProcessor";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
 export function SubscriptionsList() {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const { user } = useAuth();
-  const { settings: system } = useSystemSettings();
+  const displayCurrency = useDisplayCurrency();
   const { accounts } = useAccounts();
   const { subscriptions, loading, toggleActive } = useSubscriptions();
   const {
@@ -88,7 +88,7 @@ export function SubscriptionsList() {
   const handleReview = useCallback((key: string) => {
     const pattern = reviewItems.find((item) => item.key === key);
     if (!pattern) return;
-    Haptics.selectionAsync().catch(() => undefined);
+    haptic.selection().catch(() => undefined);
     setSelectedSub(patternToSubscription(pattern));
     setSuggestionKey(pattern.key);
     setIsModalOpen(true);
@@ -159,7 +159,7 @@ export function SubscriptionsList() {
 
         <Amount
           value={commitments.totalMonthly}
-          currency={system.defaultCurrency}
+          currency={displayCurrency}
           ghostable
           style={{ fontSize: 28, fontWeight: "900", marginBottom: 16 }}
         />
@@ -179,7 +179,7 @@ export function SubscriptionsList() {
             </Text>
             <Amount
               value={commitments.subscriptionsTotal}
-              currency={system.defaultCurrency}
+              currency={displayCurrency}
               ghostable
               style={{
                 fontSize: theme.typography.sm,
@@ -204,7 +204,7 @@ export function SubscriptionsList() {
             </Text>
             <Amount
               value={commitments.emisTotal}
-              currency={system.defaultCurrency}
+              currency={displayCurrency}
               ghostable
               style={{
                 fontSize: theme.typography.sm,
@@ -229,7 +229,7 @@ export function SubscriptionsList() {
             </Text>
             <Amount
               value={commitments.transfersTotal}
-              currency={system.defaultCurrency}
+              currency={displayCurrency}
               ghostable
               style={{
                 fontSize: theme.typography.sm,
@@ -255,7 +255,7 @@ export function SubscriptionsList() {
             <RecurringReviewItem
               key={pattern.key}
               pattern={pattern}
-              currency={system.defaultCurrency}
+              currency={displayCurrency}
               busy={actingKey === pattern.key}
               onReview={handleReview}
               onDecline={handleDecline}
@@ -268,7 +268,7 @@ export function SubscriptionsList() {
       <View style={styles.filterRow}>
         <Pressable
           onPress={() => {
-            Haptics.selectionAsync().catch(() => undefined);
+            haptic.selection().catch(() => undefined);
             setActiveTab("active");
           }}
           style={[
@@ -300,7 +300,7 @@ export function SubscriptionsList() {
 
         <Pressable
           onPress={() => {
-            Haptics.selectionAsync().catch(() => undefined);
+            haptic.selection().catch(() => undefined);
             setActiveTab("completed");
           }}
           style={[
@@ -467,7 +467,7 @@ export function SubscriptionsList() {
                   <View style={{ alignItems: "flex-end", gap: 6 }}>
                     <Amount
                       value={sub.amount}
-                      currency={system.defaultCurrency}
+                      currency={displayCurrency}
                       ghostable
                       style={{
                         fontSize: theme.typography.md,
@@ -480,7 +480,7 @@ export function SubscriptionsList() {
                       <Pressable
                         onPress={(e) => {
                           e.stopPropagation();
-                          Haptics.selectionAsync().catch(() => undefined);
+                          haptic.selection().catch(() => undefined);
                           toggleActive(sub.id!, sub.isActive);
                         }}
                         style={({ pressed }) => [

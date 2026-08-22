@@ -7,7 +7,6 @@ import {
   View,
 } from "react-native";
 import Animated, { SlideInUp } from "react-native-reanimated";
-import * as Haptics from "expo-haptics";
 import { ArrowRight, Compass, Sparkles, Wand2 } from "lucide-react-native";
 
 import { useAuth } from "@/providers/AuthProvider";
@@ -15,6 +14,7 @@ import { useSetupProgress } from "@/providers/SetupProgressProvider";
 import { useUserDoc } from "@/providers/UserDocProvider";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
 
 function getFriendlyFirstName(rawName?: string): string {
   if (!rawName) return "there";
@@ -46,14 +46,14 @@ export function WelcomeScreen() {
   const firstName = getFriendlyFirstName(rawName);
 
   const handleStartWizard = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
+    haptic.medium().catch(() => undefined);
     setVisible(false);
     completeWelcome();
     launchSetupWizard(0);
   };
 
   const handleExploreOnOwn = () => {
-    Haptics.selectionAsync().catch(() => undefined);
+    haptic.selection().catch(() => undefined);
     setVisible(false);
     completeWelcome();
   };

@@ -1,12 +1,10 @@
 import { Alert, Linking, Pressable, Share, StyleSheet, Text, View } from "react-native";
-import * as Haptics from "expo-haptics";
 import QRCode from "react-native-qrcode-svg";
 import { Ban, Copy, Share2, Trash2 } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
 import { Card } from "@/components/ui/Card";
 import { usePaymentRequests } from "@/hooks/usePaymentRequests";
-import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import type { PaymentRequest } from "@/shared/types/paymentRequest";
 import { getPaymentRequestShareUrl } from "@/shared/utils/paymentRequestUrl";
 import { generateUpiLink } from "@/shared/utils/upi";
@@ -14,6 +12,8 @@ import { getQrStyle } from "@/shared/utils/qrStyles";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { logError } from "@/lib/errors";
+import { haptic } from "@/lib/haptics";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
 export interface PaymentRequestCardProps {
   request: PaymentRequest;
@@ -22,7 +22,7 @@ export interface PaymentRequestCardProps {
 export function PaymentRequestCard({ request }: PaymentRequestCardProps) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
-  const { settings: system } = useSystemSettings();
+  const displayCurrency = useDisplayCurrency();
   const { cancelPaymentRequest, deletePaymentRequest } = usePaymentRequests();
 
   const qrStyle = getQrStyle(request.qrStyleId);
@@ -39,9 +39,9 @@ export function PaymentRequestCard({ request }: PaymentRequestCardProps) {
   const fullNote = `${request.notePrefix}${request.note ? ` ${request.note}` : ""}`;
 
   const handleShare = async () => {
-    Haptics.selectionAsync().catch(() => undefined);
+    haptic.selection().catch(() => undefined);
     const message = [
-      `💸 ${request.payeeName} is requesting ${system.defaultCurrency} ${request.amount.toFixed(2)}`,
+      `💸 ${request.payeeName} is requesting ${displayCurrency} ${request.amount.toFixed(2)}`,
       `📝 ${fullNote}`,
       ``,
       `Pay via UPI:`,
@@ -59,7 +59,7 @@ export function PaymentRequestCard({ request }: PaymentRequestCardProps) {
   };
 
   const handlePayUpi = async () => {
-    Haptics.selectionAsync().catch(() => undefined);
+    haptic.selection().catch(() => undefined);
     const canOpen = await Linking.canOpenURL(upiLink).catch(() => false);
     if (canOpen) {
       await Linking.openURL(upiLink);
@@ -152,7 +152,7 @@ export function PaymentRequestCard({ request }: PaymentRequestCardProps) {
         <View style={styles.infoCol}>
           <Amount
             value={request.amount}
-            currency={system.defaultCurrency}
+            currency={displayCurrency}
             ghostable
             style={{
               fontSize: 22,

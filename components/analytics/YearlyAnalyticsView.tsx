@@ -45,7 +45,7 @@ import { haptic } from "@/lib/haptics";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useIncomes } from "@/hooks/useIncomes";
 import { useModals } from "@/providers/ModalProvider";
-import { useSystemSettings } from "@/providers/SystemSettingsProvider";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { groupByCategory } from "@/shared/utils/analytics";
 import { COLORS } from "@/shared/utils/chartColors";
 import type { BarChartItem } from "@/components/charts/BarChart";
@@ -95,7 +95,6 @@ export function YearlyAnalyticsView({ listHeader }: YearlyAnalyticsViewProps) {
   const isDark = themeUsesDarkPalette(themeName);
   const accents = insightAccents(isDark);
   const tileText = useYearlyTileTextStyles();
-  const { settings: system } = useSystemSettings();
   const { setEditingExpense } = useModals();
 
   const {
@@ -109,7 +108,7 @@ export function YearlyAnalyticsView({ listHeader }: YearlyAnalyticsViewProps) {
   const currentYear = useMemo(() => new Date().getFullYear(), []);
   const [selectedYear, setSelectedYear] = useState<number>(currentYear);
 
-  const currency = system.defaultCurrency;
+  const currency = useDisplayCurrency();
   const previousYear = selectedYear - 1;
 
   const handlePrevYear = useCallback(() => {

@@ -11,7 +11,6 @@ import {
   View,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
-import * as Haptics from "expo-haptics";
 
 import { friendlyErrorMessage, logWarning } from "@/lib/errors";
 import { toast } from "@/lib/toast";
@@ -28,7 +27,6 @@ import {
 import { Amount } from "@/components/common/Amount";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import {
   parseReceiptOcrText,
   type ExtractedReceiptData,
@@ -36,6 +34,8 @@ import {
 import { todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
 export interface ReceiptScannerModalProps {
   visible: boolean;
@@ -50,7 +50,7 @@ export function ReceiptScannerModal({
 }: ReceiptScannerModalProps) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
-  const { settings: system } = useSystemSettings();
+  const displayCurrency = useDisplayCurrency();
 
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -111,7 +111,7 @@ export function ReceiptScannerModal({
   const processImage = (uri: string) => {
     setImageUri(uri);
     setIsProcessing(true);
-    Haptics.selectionAsync().catch(() => undefined);
+    haptic.selection().catch(() => undefined);
 
     // Simulate OCR processing pipeline
     setTimeout(() => {
@@ -130,7 +130,7 @@ Thank you for visiting!`;
       const result = parseReceiptOcrText(sampleOcrLines);
       setExtracted(result);
       setIsProcessing(false);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(
+      haptic.success().catch(
         () => undefined
       );
     }, 1200);
@@ -343,7 +343,7 @@ Thank you for visiting!`;
                           </Text>
                           <Amount
                             value={extracted.total}
-                            currency={system.defaultCurrency}
+                            currency={displayCurrency}
                             style={{ fontSize: 16, fontWeight: "900", color: theme.colors.destructive }}
                           />
                         </View>

@@ -1,7 +1,6 @@
 import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import QRCode from "react-native-qrcode-svg";
-import * as Haptics from "expo-haptics";
 
 import { Amount } from "@/components/common/Amount";
 import { ErrorState } from "@/components/common/ErrorState";
@@ -11,6 +10,7 @@ import { generateUpiLink } from "@/shared/utils/upi";
 import { getQrStyle } from "@/shared/utils/qrStyles";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
 
 export default function PublicPaymentScreen() {
   const { slug: slugParam } = useLocalSearchParams<{ slug?: string | string[] }>();
@@ -49,7 +49,7 @@ export default function PublicPaymentScreen() {
 
   const handlePay = async () => {
     if (!upiLink || cancelled || fullyPaid) return;
-    Haptics.selectionAsync().catch(() => undefined);
+    haptic.selection().catch(() => undefined);
     const canOpen = await Linking.canOpenURL(upiLink).catch(() => false);
     if (canOpen) {
       await Linking.openURL(upiLink);

@@ -7,7 +7,6 @@ import {
   Text,
   View,
 } from "react-native";
-import * as Haptics from "expo-haptics";
 import { CheckCircle2, Trash2 } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
@@ -35,6 +34,7 @@ import {
 import { isValidDateKey, todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
 
 export interface BorrowingDetailModalProps {
   visible: boolean;
@@ -341,7 +341,7 @@ export function BorrowingDetailModal({
                     <Pressable
                       key={account.id}
                       onPress={() => {
-                        Haptics.selectionAsync().catch(() => undefined);
+                        haptic.selection().catch(() => undefined);
                         setPaymentAccountId(account.id);
                       }}
                       style={[styles.pill, pillStyle(isActive)]}

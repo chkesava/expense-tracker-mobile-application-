@@ -38,7 +38,7 @@ import { useAccounts } from "@/hooks/useAccounts";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useIncomes } from "@/hooks/useIncomes";
 import { useModals } from "@/providers/ModalProvider";
-import { useSystemSettings } from "@/providers/SystemSettingsProvider";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import type { Expense, Income } from "@/shared/types/expense";
 import { currentMonthKey, toLocalDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -86,7 +86,6 @@ export function AnalysisLabView({
   listHeader,
 }: AnalysisLabViewProps) {
   const { themeName } = useTheme();
-  const { settings: system } = useSystemSettings();
   const { setEditingExpense, setEditingIncome } = useModals();
 
   const {
@@ -106,7 +105,7 @@ export function AnalysisLabView({
   const [sort, setSort] = useState<SearchSort>("latest");
   const [suggestionsDismissed, setSuggestionsDismissed] = useState(false);
 
-  const currency = system.defaultCurrency;
+  const currency = useDisplayCurrency();
 
   // A deep link can arrive after mount (?q=...), so keep the query in step.
   useEffect(() => {

@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import * as Haptics from "expo-haptics";
 import { Check } from "lucide-react-native";
 
 import { Modal } from "@/components/common/Modal";
@@ -9,6 +8,7 @@ import { useSpaces } from "@/hooks/useSpaces";
 import { SPACE_COLORS } from "@/shared/types/space";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
 
 export interface AssignToSpaceModalProps {
   visible: boolean;
@@ -68,7 +68,7 @@ export function AssignToSpaceModal({
                 key={space.id}
                 disabled={isSubmitting}
                 onPress={() => {
-                  Haptics.selectionAsync().catch(() => undefined);
+                  haptic.selection().catch(() => undefined);
                   void handleAssign(space.id ?? null);
                 }}
                 style={({ pressed }) => [

@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Svg, { Circle, G, Path } from "react-native-svg";
-import * as Haptics from "expo-haptics";
 import Animated, {
   FadeIn,
   useAnimatedProps,
@@ -14,6 +13,7 @@ import Animated, {
 import { Amount } from "@/components/common/Amount";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
@@ -151,7 +151,7 @@ export function DonutChart({
   const activeItem = selectedIndex !== null ? validData[selectedIndex] : null;
 
   const handleSelect = (idx: number) => {
-    Haptics.selectionAsync().catch(() => undefined);
+    haptic.selection().catch(() => undefined);
     setSelectedIndex((prev) => (prev === idx ? null : idx));
   };
 

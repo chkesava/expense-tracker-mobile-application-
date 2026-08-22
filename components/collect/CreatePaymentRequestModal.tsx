@@ -9,18 +9,18 @@ import {
   TextInput,
   View,
 } from "react-native";
-import * as Haptics from "expo-haptics";
 import { X } from "lucide-react-native";
 
 import { Button } from "@/components/ui/Button";
 import { usePaymentRequests } from "@/hooks/usePaymentRequests";
 import { useSettings } from "@/providers/SettingsProvider";
-import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import { useAuth } from "@/providers/AuthProvider";
 import type { QrStyleId } from "@/shared/utils/qrStyles";
 import { QR_STYLES, storeQrStyleId } from "@/shared/utils/qrStyles";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
 const NOTE_PREFIXES = ["For", "Rent", "Split", "EMI", "Advance", "Dues", "Other"];
 
@@ -37,7 +37,7 @@ export function CreatePaymentRequestModal({
   const isDark = themeUsesDarkPalette(themeName);
   const { user } = useAuth();
   const { settings: userSettings } = useSettings();
-  const { settings: system } = useSystemSettings();
+  const displayCurrency = useDisplayCurrency();
   const { createPaymentRequest } = usePaymentRequests();
 
   const [amount, setAmount] = useState("");
@@ -85,7 +85,7 @@ export function CreatePaymentRequestModal({
         payeePhotoUrl: user?.photoURL || undefined,
       });
 
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(
+      haptic.success().catch(
         () => undefined
       );
       onClose();
@@ -186,7 +186,7 @@ export function CreatePaymentRequestModal({
                   { color: theme.colors.mutedForeground },
                 ]}
               >
-                AMOUNT ({system.defaultCurrency})
+                AMOUNT ({displayCurrency})
               </Text>
               <TextInput
                 value={amount}
@@ -230,7 +230,7 @@ export function CreatePaymentRequestModal({
                     <Pressable
                       key={prefix}
                       onPress={() => {
-                        Haptics.selectionAsync().catch(() => undefined);
+                        haptic.selection().catch(() => undefined);
                         setNotePrefix(prefix);
                       }}
                       style={[
@@ -311,7 +311,7 @@ export function CreatePaymentRequestModal({
                     <Pressable
                       key={style.id}
                       onPress={() => {
-                        Haptics.selectionAsync().catch(() => undefined);
+                        haptic.selection().catch(() => undefined);
                         setSelectedStyleId(style.id);
                       }}
                       style={[

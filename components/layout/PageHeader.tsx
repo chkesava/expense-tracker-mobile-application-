@@ -6,10 +6,10 @@ import {
   Text,
   View,
 } from "react-native";
-import * as Haptics from "expo-haptics";
 import { ArrowLeft } from "lucide-react-native";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
 
 export interface PageHeaderTab {
   id: string;
@@ -56,7 +56,7 @@ export function PageHeader({
 
   const handleTabPress = (tabId: string) => {
     if (tabId === activeTab) return;
-    Haptics.selectionAsync().catch(() => undefined);
+    haptic.selection().catch(() => undefined);
     onTabChange?.(tabId);
   };
 
@@ -66,7 +66,7 @@ export function PageHeader({
         {onBack ? (
           <Pressable
             onPress={() => {
-              Haptics.selectionAsync().catch(() => undefined);
+              haptic.selection().catch(() => undefined);
               onBack();
             }}
             hitSlop={8}

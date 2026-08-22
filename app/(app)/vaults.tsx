@@ -7,7 +7,6 @@ import {
   View,
 } from "react-native";
 import { useLocalSearchParams } from "expo-router";
-import * as Haptics from "expo-haptics";
 import {
   HandCoins,
   LayoutGrid,
@@ -33,13 +32,14 @@ import { CreateVaultModal } from "@/components/vaults/CreateVaultModal";
 import { VaultCard } from "@/components/vaults/VaultCard";
 import { VaultDetailModal } from "@/components/vaults/VaultDetailModal";
 import { useVaults } from "@/hooks/useVaults";
-import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import {
   VAULT_HUB_TAB_IDS,
 } from "@/shared/config/navigation";
 import type { SharedVault, VaultStats } from "@/shared/types/vault";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
 export type VaultsTab = (typeof VAULT_HUB_TAB_IDS)[number];
 
@@ -109,7 +109,7 @@ export default function VaultsScreen() {
 function SharedVaultsPanel() {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
-  const { settings: system } = useSystemSettings();
+  const displayCurrency = useDisplayCurrency();
 
   const { vaults, loading, error, retry, createVault, deleteVault } = useVaults();
 
@@ -140,7 +140,7 @@ function SharedVaultsPanel() {
       <View style={styles.panelHeaderRow}>
         <Pressable
           onPress={() => {
-            Haptics.selectionAsync().catch(() => undefined);
+            haptic.selection().catch(() => undefined);
             setIsCreateModalOpen(true);
           }}
           style={({ pressed }) => [
@@ -174,7 +174,7 @@ function SharedVaultsPanel() {
               </Text>
               <Amount
                 value={aggregateStats.totalBudget}
-                currency={system.defaultCurrency}
+                currency={displayCurrency}
                 style={{ fontSize: 18, fontWeight: "900", color: theme.colors.primary }}
               />
             </View>

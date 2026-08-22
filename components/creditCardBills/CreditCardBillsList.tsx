@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import * as Haptics from "expo-haptics";
 import { Plus } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
@@ -15,6 +14,7 @@ import { useCreditCardBills } from "@/hooks/useCreditCardBills";
 import type { CreditCardBill, CreditCardBillStatus } from "@/shared/types/creditCardBill";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
 
 type FilterKey =
   | "all"
@@ -92,7 +92,7 @@ export function CreditCardBillsList() {
     <Pressable
       key={bill.id}
       onPress={() => {
-        Haptics.selectionAsync().catch(() => undefined);
+        haptic.selection().catch(() => undefined);
         router.push(`/credit-card-bills/${bill.id}`);
       }}
       style={{ marginBottom: 10 }}
@@ -186,7 +186,7 @@ export function CreditCardBillsList() {
         <Button
           size="sm"
           onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(
+            haptic.light().catch(
               () => undefined
             );
             setCreateOpen(true);
@@ -270,7 +270,7 @@ function ScrollFilters({
           <Pressable
             key={f.key}
             onPress={() => {
-              Haptics.selectionAsync().catch(() => undefined);
+              haptic.selection().catch(() => undefined);
               onChange(f.key);
             }}
             style={[

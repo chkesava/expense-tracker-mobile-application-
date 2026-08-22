@@ -216,10 +216,70 @@ export const SETTINGS_DEFAULTS: UserSettings = {
   creditCardBillReminders: { ...DEFAULT_CREDIT_CARD_BILL_REMINDERS },
 };
 
+/**
+ * Keys that belong to `UserSettings`. `users/{uid}` also carries profile fields
+ * (email, displayName, photoURL, theme, …); spreading the raw doc used to drag
+ * all of them onto the settings object, so `UserSettings` did not describe its
+ * own runtime shape.
+ */
+const USER_SETTINGS_KEYS: (keyof UserSettings)[] = [
+  "lockPastMonths",
+  "compactListMode",
+  "defaultCategory",
+  "defaultView",
+  "exportYear",
+  "monthlyBudget",
+  "timezone",
+  "upiId",
+  "dashboardWidgets",
+  "enableInvestments",
+  "dashboardOrder",
+  "navigationStyle",
+  "ghostMode",
+  "hapticFeedback",
+  "privacyPin",
+  "fakePin",
+  "lockOnInactivity",
+  "inactivityTimeout",
+  "lockOnAppSwitch",
+  "onboarding",
+  "accentColor",
+  "currency",
+  "language",
+  "dateFormat",
+  "numberFormat",
+  "firstDayOfWeek",
+  "themeMode",
+  "creditCardBillReminders",
+];
+
+function pickKnownSettings(
+  source: Record<string, unknown>
+): Partial<UserSettings> {
+  const picked: Record<string, unknown> = {};
+  for (const key of USER_SETTINGS_KEYS) {
+    if (source[key] !== undefined) picked[key] = source[key];
+  }
+  return picked as Partial<UserSettings>;
+}
+
 export function mergeSettingsFromDoc(
-  data: Record<string, unknown> | null | undefined
+  data: Record<string, unknown> | null | undefined,
+  opts: { fallbackCurrency?: string } = {}
 ): UserSettings {
-  if (!data) return { ...SETTINGS_DEFAULTS, timezone: deviceTimezone() };
+  // A new user's currency should follow the system-wide default rather than the
+  // hardcoded INR — the Preferences panel displays that system value directly
+  // above the picker, so defaulting away from it reads as a bug.
+  const defaultCurrency =
+    opts.fallbackCurrency || SETTINGS_DEFAULTS.currency;
+
+  if (!data) {
+    return {
+      ...SETTINGS_DEFAULTS,
+      currency: defaultCurrency,
+      timezone: deviceTimezone(),
+    };
+  }
 
   const nested = asPlainRecord(data.settings);
   const source: Record<string, unknown> = nested ? { ...nested, ...data } : data;
@@ -233,7 +293,7 @@ export function mergeSettingsFromDoc(
 
   return {
     ...SETTINGS_DEFAULTS,
-    ...(source as Partial<UserSettings>),
+    ...pickKnownSettings(source),
     monthlyBudget: coerceFiniteNumber(
       pickSettingValue(source, ["monthlyBudget", "monthly_budget"]),
       SETTINGS_DEFAULTS.monthlyBudget
@@ -265,7 +325,7 @@ export function mergeSettingsFromDoc(
     currency:
       typeof source.currency === "string" && source.currency
         ? source.currency
-        : SETTINGS_DEFAULTS.currency,
+        : defaultCurrency,
     language:
       typeof source.language === "string" && source.language
         ? source.language
@@ -291,11 +351,13 @@ export function mergeSettingsFromDoc(
     creditCardBillReminders: {
       ...SETTINGS_DEFAULTS.creditCardBillReminders,
       ...((remindersSource as Partial<CreditCardBillRemindersSettings>) || {}),
-      daysBefore:
-        Array.isArray(remindersSource?.daysBefore) &&
-        remindersSource.daysBefore.length > 0
-          ? (remindersSource.daysBefore as number[])
-          : SETTINGS_DEFAULTS.creditCardBillReminders.daysBefore,
+      // An empty array is a deliberate "no pre-due reminders", not a missing
+      // field — only fall back to the default when the key is absent or not an
+      // array. Treating `[]` as missing made that choice unsavable: the write
+      // landed, the next snapshot restored [7, 3, 1], and the pills lit back up.
+      daysBefore: Array.isArray(remindersSource?.daysBefore)
+        ? (remindersSource.daysBefore as number[])
+        : SETTINGS_DEFAULTS.creditCardBillReminders.daysBefore,
     },
   };
 }
