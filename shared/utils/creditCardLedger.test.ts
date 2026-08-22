@@ -708,3 +708,114 @@ describe("buildCreditCardLedger — cancelled statements", () => {
     expect(ledger.totalOutstanding).toBe(7500);
   });
 });
+
+/**
+ * Leftover credit belongs to the cycle the payment was made in. Credit paid
+ * during the open cycle may reduce that cycle's spend; credit left over from a
+ * payment made *before* the cycle opened has outlived the cycle it was paid in
+ * and is a standing credit balance. It must not silently absorb spend charged
+ * after the statement closed — the card would show ₹0 unbilled with a fresh
+ * charge sitting on it.
+ */
+describe("buildCreditCardLedger — leftover credit does not cross a close date", () => {
+  // The spec's worked example, end to end: 21 Jul–20 Aug cycle of 27,875, a
+  // 19,000 payment on 13 Aug against the 20 Jul statement of 10,301, then 1,500
+  // of fresh spend on 21 Aug after the 20 Aug close.
+  const cycleSpend: Expense[] = [
+    expense("2026-07-21", 10000),
+    expense("2026-07-30", 7875),
+    expense("2026-08-05", 6000),
+    expense("2026-08-19", 4000),
+  ];
+
+  it("counts spend charged after the close even with credit carried over", () => {
+    const ledger = buildCreditCardLedger({
+      account: slice,
+      expenses: [...cycleSpend, expense("2026-06-25", 10301), expense("2026-08-21", 1500)],
+      payments: [payment("pay-aug-13", "2026-08-13", 19000)],
+      bills: [],
+      today: "2026-08-25",
+    });
+
+    expect(ledger.statementDue).toBe(27875);
+    expect(ledger.unbilledSpend).toBe(1500);
+    expect(ledger.unappliedCredit).toBe(8699);
+    expect(ledger.availableCredit).toBe(89000 - 1500);
+    expect(ledger.totalOutstanding).toBe(27875 + 1500);
+  });
+
+  it("still lets credit paid inside the open cycle reduce that cycle's spend", () => {
+    const postedThroughToday = cycleSpend.filter((item) => item.date <= "2026-08-13");
+    const ledger = buildCreditCardLedger({
+      account: slice,
+      expenses: [...postedThroughToday, expense("2026-06-25", 10301)],
+      payments: [payment("pay-aug-13", "2026-08-13", 19000)],
+      bills: [],
+      today: "2026-08-13",
+    });
+
+    // 10,000 + 7,875 + 6,000 posted, 8,699 of in-cycle credit left after the
+    // July statement — the cycle is still open, so it does apply here.
+    expect(ledger.unbilledSpend).toBe(15176);
+    expect(ledger.unappliedCredit).toBe(0);
+  });
+
+  it("holds carried credit as a balance rather than discounting new spend", () => {
+    const ledger = buildCreditCardLedger({
+      account: { ...slice, billGenerationDay: 21 },
+      expenses: [
+        expense("2026-07-15", 11503),
+        expense("2026-08-10", 28101),
+        // Charged the day after the statement closed.
+        expense("2026-08-22", 393),
+      ],
+      payments: [payment("pay-aug-13", "2026-08-13", 19000)],
+      bills: [],
+      today: "2026-08-22",
+    });
+
+    expect(ledger.openCycle.start).toBe("2026-08-22");
+    expect(ledger.statementDue).toBe(28101);
+    expect(ledger.unbilledSpend).toBe(393);
+    expect(ledger.unappliedCredit).toBe(7497);
+    expect(ledger.availableCredit).toBe(89000 - 393);
+    // Net position is unchanged by the split: 28,494 owed against 7,497 credit
+    // is the same 20,997 as before, just bucketed truthfully.
+    expect(ledger.totalOutstanding).toBe(28494);
+  });
+
+  it("lets carried credit still settle a cancelled statement's spend", () => {
+    const ledger = buildCreditCardLedger({
+      account: slice,
+      expenses: [expense("2026-08-05", 6000), expense("2026-08-25", 1500)],
+      payments: [payment("pay-aug-10", "2026-08-10", 6000)],
+      bills: [
+        statement("2026-08-20", "2026-07-21", 6000, { status: "CANCELLED" }),
+      ],
+      today: "2026-08-26",
+    });
+
+    // The payment predates the open cycle, but so does the cancelled spend, so
+    // it settles it. The 1,500 charged this cycle stands on its own.
+    expect(ledger.cancelledSpend).toBe(0);
+    expect(ledger.unbilledSpend).toBe(1500);
+    expect(ledger.availableCredit).toBe(89000 - 1500);
+  });
+
+  it("keeps a payment made on the first day of the cycle as cycle credit", () => {
+    const ledger = buildCreditCardLedger({
+      account: slice,
+      expenses: [expense("2026-07-25", 5000), expense("2026-08-21", 2000)],
+      // 2026-08-21 is the first day of the open cycle for a card closing on 20.
+      payments: [payment("pay-boundary", "2026-08-21", 6000)],
+      bills: [],
+      today: "2026-08-25",
+    });
+
+    // 5,000 settles the 20 Aug statement, the remaining 1,000 is in-cycle credit
+    // and reduces the 2,000 charged on 21 Aug.
+    expect(ledger.statementDue).toBe(0);
+    expect(ledger.unbilledSpend).toBe(1000);
+    expect(ledger.unappliedCredit).toBe(0);
+  });
+});

@@ -391,7 +391,13 @@ export function buildCreditCardLedger(
   // as cycle credit / unapplied credit — it must not stamp PARTIALLY PAID on
   // a statement the user has not paid. `amountPaid` is a floor for mark-as-paid
   // settlements with no ledger row (skipped on auto bills still in flight).
-  let freeCredit = 0;
+  // Leftover is split by which cycle the payment landed in. Credit paid *during*
+  // the open cycle is this cycle's credit and may reduce its spend. Credit left
+  // over from a payment made before the cycle opened has already outlived the
+  // cycle it was paid in — it is a standing credit balance, and must not silently
+  // absorb spend charged after the statement closed.
+  let cycleCredit = 0;
+  let carriedCredit = 0;
   for (const payment of cardPayments) {
     let left = payment.amount;
     if (payment.id && linkedPaymentIds.has(payment.id)) {
@@ -425,7 +431,13 @@ export function buildCreditCardLedger(
       statement.lastPaymentDate = payment.date;
       left = roundMoney(left - applied);
     }
-    if (left > 0) freeCredit = roundMoney(freeCredit + left);
+    if (left > 0) {
+      if (payment.date >= openStart) {
+        cycleCredit = roundMoney(cycleCredit + left);
+      } else {
+        carriedCredit = roundMoney(carriedCredit + left);
+      }
+    }
   }
 
   // The stored `amountPaid` floor exists for out-of-band settlements only —
@@ -523,14 +535,27 @@ export function buildCreditCardLedger(
       .reduce((sum, expense) => sum + expense.amount, 0)
   );
 
-  const cancelledSpend = roundMoney(Math.max(0, voidedSpend - freeCredit));
-  const creditAfterVoided = roundMoney(Math.max(0, freeCredit - voidedSpend));
-  const unbilledSpend = roundMoney(
-    Math.max(0, openCycleSpend - creditAfterVoided)
-  );
-  const unappliedCredit = roundMoney(
-    Math.max(0, creditAfterVoided - openCycleSpend)
-  );
+  // Oldest debt first. Cancelled-statement spend predates the open cycle, so
+  // either bucket of credit may settle it. Open-cycle spend may only be reduced
+  // by credit paid within the open cycle — carried credit that survives is a
+  // standing credit balance, reported as `unappliedCredit`, not a discount on
+  // this cycle's spend.
+  let carriedLeft = carriedCredit;
+  let cycleLeft = cycleCredit;
+
+  let voidedLeft = voidedSpend;
+  const carriedOnVoided = Math.min(carriedLeft, voidedLeft);
+  carriedLeft = roundMoney(carriedLeft - carriedOnVoided);
+  voidedLeft = roundMoney(voidedLeft - carriedOnVoided);
+  const cycleOnVoided = Math.min(cycleLeft, voidedLeft);
+  cycleLeft = roundMoney(cycleLeft - cycleOnVoided);
+  voidedLeft = roundMoney(voidedLeft - cycleOnVoided);
+  const cancelledSpend = voidedLeft;
+
+  const cycleOnOpen = Math.min(cycleLeft, openCycleSpend);
+  cycleLeft = roundMoney(cycleLeft - cycleOnOpen);
+  const unbilledSpend = roundMoney(openCycleSpend - cycleOnOpen);
+  const unappliedCredit = roundMoney(carriedLeft + cycleLeft);
   const totalOutstanding = roundMoney(
     statementDue + unbilledSpend + cancelledSpend
   );
