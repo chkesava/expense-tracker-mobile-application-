@@ -354,15 +354,37 @@ where someone could sign in. A `/` redirect was added first, which covered only
 the bare domain: the one path a person is least likely to reach by guessing.
 
 The fallback is now scoped to `/split/*` and `/payment/*`, `/` is **forced** to a
-static `404.html`, and there is no catch-all, so everything else falls through to
-that same static page. The force matters: `/` resolves to the real `index.html`,
-and Netlify will not shadow an existing file otherwise — an unforced rule left the
-bare domain still booting the app. Caught by testing the real config with
+static page, and there is no catch-all, so everything else falls through to
+`404.html`. The force matters: `/` resolves to the real `index.html`, and Netlify
+will not shadow an existing file otherwise — an unforced rule left the bare
+domain still booting the app. Caught by testing the real config with
 `netlify-cli dev` rather than reasoning about Netlify's shadowing rules.
 
-Measured behaviour: `/split/*` and `/payment/*` serve 200 and boot the app; `/`,
-`/dashboard` and `/settings` return 404 with no app bundle; `/robots.txt`,
-bundles and fonts still serve.
+### The 404-at-root regression this introduced
+
+Serving `/` as a **404** looked like the honest choice and was wrong, in a way
+that took a deploy preview to notice: the share page rendered correctly but
+displayed the app's "No Internet Connection" banner.
+
+`@react-native-community/netinfo`'s web reachability check is a same-origin
+`HEAD /` with `reachabilityTest: response.status === 200`
+(`internal/defaultConfiguration.web.js`). A 404 at the root therefore makes
+NetInfo report the internet as unreachable, and `NetworkProvider` derives
+`isOnline` from `isConnected && isInternetReachable !== false`, so `OfflineBanner`
+shows for every visitor of `/split/:slug`. Confirmed by measurement:
+`spendly-share.netlify.app/` returned 404 while `navigator.onLine` was `true`,
+and the legacy origin, which serves 200 at `/`, showed no banner.
+
+Fixed by serving `public/home.html` at `/` with a **200**. That satisfies the
+probe while still not being the app shell, so the second-copy surface stays
+closed. Genuinely unmatched paths keep a real 404 via `public/404.html`.
+
+Worth recording as a general trap: a status code at `/` is not purely
+cosmetic on any host that also runs this app's web bundle.
+
+Measured behaviour: `/split/*` and `/payment/*` serve 200 and boot the app; `/`
+serves 200 as a static page; `/dashboard` and `/settings` return 404; none of the
+non-share paths load the bundle; `/robots.txt`, bundles and fonts still serve.
 
 ## Not yet done
 

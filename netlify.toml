@@ -1,9 +1,11 @@
 # Netlify build for the Expo web export.
 #
-# This site exists so the public share pages (/split/:slug) render for people
-# who have no account. Share links keep the kesavaexpensetracker.netlify.app
-# origin and are proxied here — those [[redirects]] live in the expense-tracker
-# (Vite) repo, above its /* -> /index.html catch-all.
+# This site serves the public share pages — /split/:slug and /payment/:slug —
+# for people who have no account. It is self-contained: the app addresses it via
+# EXPO_PUBLIC_SHARE_URL, and nothing here depends on, or redirects to, any other
+# origin. (EXPO_PUBLIC_APP_URL still points at the legacy web app, but only for
+# the /api/* market functions and /mobile-google-auth, which are unrelated to
+# sharing.)
 #
 # web.output is "single" (SPA): `expo export` emits one index.html plus /_expo/**
 # and /assets/**. Dynamic routes ([slug]) cannot be statically rendered without
@@ -56,16 +58,23 @@
 
 # `/` has to be forced: it resolves to the real index.html, and Netlify will not
 # shadow an existing file otherwise, so without this the bare domain boots the
-# whole app. A 404 rather than a redirect, because this host is self-contained
-# and genuinely has nothing at its root -- public/404.html says so in a line.
+# whole app.
+#
+# It must also answer 200, which is less obvious. netinfo's web reachability
+# check is a same-origin `HEAD /` tested for `status === 200` (see its
+# internal/defaultConfiguration.web.js). A 404 here therefore makes NetInfo
+# report the internet as unreachable, and every visitor to /split/:slug gets the
+# app's "No Internet Connection" banner on a page that loaded fine. So: a static
+# 200 page that is still not the app shell.
 [[redirects]]
   from = "/"
-  to = "/404.html"
-  status = 404
+  to = "/home.html"
+  status = 200
   force = true
 
 # There is deliberately NO catch-all. Every other path (/dashboard, /settings,
-# ...) has no file behind it, so Netlify serves public/404.html by itself. That
-# leaves no app surface on this host and no dependency on any other origin.
-# Real files -- /_expo/**, /assets/**, /favicon.ico, /robots.txt -- keep being
-# served, which matters because index.html references those bundles absolutely.
+# ...) has no file behind it, so Netlify serves public/404.html by itself, with a
+# real 404. That leaves no app surface on this host and no dependency on any
+# other origin. Real files -- /_expo/**, /assets/**, /favicon.ico, /robots.txt --
+# keep being served, which matters because index.html references those bundles
+# absolutely.

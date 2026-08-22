@@ -50,10 +50,13 @@ make `/dashboard`, `/settings` and every other route reachable on the share
 domain — a second origin where someone could sign in. `netlify.toml` therefore:
 
 - serves `index.html` for **only** `/split/*` and `/payment/*`
-- **forces** `/` to `404.html` (forced because `/` resolves to the real
-  `index.html`, and Netlify will not shadow an existing file otherwise)
+- **forces** `/` to `public/home.html` with a **200** — forced because `/`
+  resolves to the real `index.html` and Netlify will not shadow an existing file
+  otherwise; 200 because netinfo's web reachability check is a same-origin
+  `HEAD /` tested for `status === 200`, so a non-200 root makes the app report
+  "No Internet Connection" on a page that loaded fine
 - declares **no catch-all**, so any other path falls through to
-  `public/404.html` — static, dependency-free, no app JS
+  `public/404.html` with a real 404 — static, dependency-free, no app JS
 
 Real files (`/_expo/**`, `/assets/**`, `/favicon.ico`, `/robots.txt`) keep being
 served, which matters because `index.html` references those bundle paths
@@ -64,7 +67,8 @@ Verified against the real config with `netlify-cli dev`:
 | Path | Result |
 |---|---|
 | `/split/:slug`, `/payment/:slug` | 200, boots the app |
-| `/`, `/dashboard`, `/settings` | 404, static page, **does not** boot the app |
+| `/` | 200, `home.html`, **does not** boot the app |
+| `/dashboard`, `/settings`, anything else | 404, `404.html`, **does not** boot the app |
 | `/robots.txt`, bundles, fonts | 200, served |
 
 ---
@@ -160,8 +164,9 @@ curl.exe -s https://spendly-share.netlify.app/split/<slug> | Select-String -Patt
 Bundle paths printed = working. Nothing printed = not working, whatever the
 status code says.
 
-Then confirm the host exposes nothing else — `/` and any app route must be **404
-without the app bundle**:
+Then confirm the host exposes nothing else. No path outside `/split/*` and
+`/payment/*` may boot the app bundle — `/` answers 200 with a static page, the
+rest answer 404:
 
 ```powershell
 foreach ($p in @('/','/dashboard','/settings','/ledger')) {
@@ -169,6 +174,14 @@ foreach ($p in @('/','/dashboard','/settings','/ledger')) {
   $boots = if ((& curl.exe -s --max-time 20 "https://spendly-share.netlify.app$p") -match '_expo/static/js/web') { 'BOOTS APP - wrong' } else { 'static only - ok' }
   '{0,-12} {1}  {2}' -f $p, $code, $boots
 }
+```
+
+`/` must be **200**, not 404. netinfo probes it with a `HEAD` and treats anything
+else as the internet being unreachable, which puts the app's "No Internet
+Connection" banner on every share page:
+
+```powershell
+curl.exe -s -o NUL -X HEAD -w "HEAD / -> %{http_code}  (must be 200)`n" https://spendly-share.netlify.app/
 ```
 
 And that the legacy app is untouched, since nothing was changed there:
