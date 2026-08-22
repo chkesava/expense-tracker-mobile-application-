@@ -194,6 +194,7 @@ export function computeOutstandingCredit(
   oldestOpenBillId?: string;
   nextResetDate: Date;
   daysRemaining: number;
+  openCycleStart: string;
 } {
   const ledger = buildCreditCardLedger({
     account,
@@ -229,6 +230,7 @@ export function computeOutstandingCredit(
     oldestOpenBillId: oldest?.billId,
     nextResetDate: parseLocalDate(ledger.openCycle.end),
     daysRemaining: ledger.openCycle.daysRemaining,
+    openCycleStart: ledger.openCycle.start,
   };
 }
 

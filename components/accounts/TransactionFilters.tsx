@@ -16,6 +16,7 @@ export function TransactionFilters({
   creditCount,
   compact,
   onChange,
+  scopeLabel,
 }: {
   filter: ActivityFilter;
   allCount: number;
@@ -23,6 +24,8 @@ export function TransactionFilters({
   creditCount: number;
   compact: boolean;
   onChange: (filter: ActivityFilter) => void;
+  /** e.g. "this cycle" for a credit card, appended after the activity count. */
+  scopeLabel?: string;
 }) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
@@ -52,6 +55,7 @@ export function TransactionFilters({
           </Text>
           <Text style={[styles.subtitle, { color: theme.colors.mutedForeground }]}>
             {allCount} {allCount === 1 ? "activity" : "activities"}
+            {scopeLabel ? ` · ${scopeLabel}` : ""}
           </Text>
         </View>
         <Pressable

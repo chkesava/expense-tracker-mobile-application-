@@ -184,7 +184,7 @@ export default function AccountDetailScreen() {
     );
   }, [account, isCreditCard, bills]);
 
-  const activities = useMemo(() => {
+  const allActivities = useMemo(() => {
     if (!account) return [];
     return buildAccountActivities(
       account,
@@ -212,6 +212,17 @@ export default function AccountDetailScreen() {
     receivables,
     receivableRepayments,
   ]);
+
+  // Past cycles get their own "Past Billing Cycles" section, so this list is
+  // scoped to the open cycle for credit cards — otherwise it silently mixes
+  // in every prior cycle's spend, which never reconciles with the "unbilled
+  // this cycle" figure shown above it.
+  const activities = useMemo(() => {
+    if (isCreditCard && creditUsage) {
+      return allActivities.filter((a) => a.date >= creditUsage.openCycleStart);
+    }
+    return allActivities;
+  }, [allActivities, isCreditCard, creditUsage]);
 
   const debitCount = useMemo(
     () => activities.reduce((sum, act) => sum + (act.type === "debit" ? 1 : 0), 0),
@@ -442,6 +453,7 @@ export default function AccountDetailScreen() {
         creditCount={creditCount}
         compact={compact}
         onChange={setActivityFilter}
+        scopeLabel={isCreditCard ? "this cycle" : undefined}
       />
       {compact ? null : (
         <TransactionColumnHeaders showBalanceAfter={!isCreditCard} />
