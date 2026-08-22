@@ -5,7 +5,7 @@ import { ArrowDownRight, ArrowUpRight, Wallet } from "lucide-react-native";
 import {
   AnalyticsCard,
   AnalyticsCardMeta,
-} from "@/components/analytics/monthly/AnalyticsCard";
+} from "@/components/analytics/shared/AnalyticsCard";
 import {
   insightAccents,
   insightSurface,

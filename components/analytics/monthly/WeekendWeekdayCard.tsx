@@ -2,7 +2,7 @@ import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { CalendarRange } from "lucide-react-native";
 
-import { AnalyticsCard } from "@/components/analytics/monthly/AnalyticsCard";
+import { AnalyticsCard } from "@/components/analytics/shared/AnalyticsCard";
 import { insightAccents } from "@/components/analytics/insightsTheme";
 import { Amount } from "@/components/common/Amount";
 import { DistributionBar } from "@/components/charts/DistributionBar";

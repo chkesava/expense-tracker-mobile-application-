@@ -10,12 +10,12 @@ import { useRouter } from "expo-router";
 import { Plus } from "lucide-react-native";
 
 import { CashFlowCard } from "@/components/analytics/monthly/CashFlowCard";
-import { CategoryDistributionCard } from "@/components/analytics/monthly/CategoryDistributionCard";
+import { CategoryDistributionCard } from "@/components/analytics/shared/CategoryDistributionCard";
 import { DailySpendingCard } from "@/components/analytics/monthly/DailySpendingCard";
 import { DayOfWeekCard } from "@/components/analytics/monthly/DayOfWeekCard";
 import { HighTicketOutliersCard } from "@/components/analytics/monthly/HighTicketOutliersCard";
 import { InsightAlertCard } from "@/components/analytics/monthly/InsightAlertCard";
-import { MonthSelector } from "@/components/analytics/monthly/MonthSelector";
+import { PeriodSelector } from "@/components/analytics/shared/PeriodSelector";
 import { RecurringMerchantsCard } from "@/components/analytics/monthly/RecurringMerchantsCard";
 import { WeekendWeekdayCard } from "@/components/analytics/monthly/WeekendWeekdayCard";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -242,9 +242,9 @@ export function MonthlyAnalyticsView({ listHeader }: MonthlyAnalyticsViewProps) 
   }, [dayOfWeekData]);
 
   const monthSelector = (
-    <MonthSelector
+    <PeriodSelector
       label={formattedMonthLabel}
-      isCurrent={selectedMonth === currentMonthStr}
+      badge={selectedMonth === currentMonthStr ? "CURRENT" : null}
       onPrev={handlePrevMonth}
       onNext={handleNextMonth}
     />

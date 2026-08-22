@@ -2,7 +2,7 @@ import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { ShoppingBag } from "lucide-react-native";
 
-import { AnalyticsCard } from "@/components/analytics/monthly/AnalyticsCard";
+import { AnalyticsCard } from "@/components/analytics/shared/AnalyticsCard";
 import {
   insightAccents,
   insightSurface,

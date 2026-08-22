@@ -11,7 +11,7 @@ import { ChevronDown, ChevronUp, PieChart } from "lucide-react-native";
 import {
   AnalyticsCard,
   AnalyticsCardMeta,
-} from "@/components/analytics/monthly/AnalyticsCard";
+} from "@/components/analytics/shared/AnalyticsCard";
 import {
   insightAccents,
   insightSurface,
@@ -32,12 +32,21 @@ export interface CategoryDistributionCardProps {
   data: DonutSegment[];
   total: number;
   currency: string;
+  /** Card heading — "Category Distribution", "2026 Annual Distribution". */
+  title?: string;
+  /** Donut centre caption — "Total Spent", "Annual Spend". */
+  centerTitle?: string;
+  /** Copy shown when the period has no spending. */
+  emptyMessage?: string;
 }
 
 export function CategoryDistributionCard({
   data,
   total,
   currency,
+  title = "Category Distribution",
+  centerTitle = "Total Spent",
+  emptyMessage = "No spending data available for this month.",
 }: CategoryDistributionCardProps) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
@@ -85,11 +94,11 @@ export function CategoryDistributionCard({
   if (data.length === 0 || total <= 0) {
     return (
       <AnalyticsCard
-        title="Category Distribution"
+        title={title}
         icon={<PieChart size={16} color={accents.pink} strokeWidth={2.4} />}
       >
         <Text style={[styles.empty, { color: theme.colors.mutedForeground }]}>
-          No spending data available for this month.
+          {emptyMessage}
         </Text>
       </AnalyticsCard>
     );
@@ -164,7 +173,7 @@ export function CategoryDistributionCard({
 
   return (
     <AnalyticsCard
-      title="Category Distribution"
+      title={title}
       icon={<PieChart size={16} color={accents.pink} strokeWidth={2.4} />}
       right={<AnalyticsCardMeta>{data.length} categories</AnalyticsCardMeta>}
     >
@@ -178,7 +187,7 @@ export function CategoryDistributionCard({
             size={donutSize}
             strokeWidth={sideBySide ? 22 : 24}
             currency={currency}
-            title="Total Spent"
+            title={centerTitle}
             showLegend={false}
           />
         </View>

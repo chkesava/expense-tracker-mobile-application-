@@ -12,6 +12,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { Amount } from "@/components/common/Amount";
+import { compactAxisValue } from "@/components/charts/axis";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
@@ -32,20 +33,6 @@ export interface SpendingCurveChartProps {
   showYAxis?: boolean;
   /** How many x-axis date ticks to label. Clamped to the point count. */
   xTickCount?: number;
-}
-
-/** 12500 -> "13K", 1_200_000 -> "1.2M". Axis labels only — never amounts. */
-function compactAxisValue(value: number): string {
-  if (value <= 0) return "0";
-  if (value >= 1_000_000) {
-    const millions = value / 1_000_000;
-    return `${millions >= 10 ? Math.round(millions) : millions.toFixed(1)}M`;
-  }
-  if (value >= 1000) {
-    const thousands = value / 1000;
-    return `${thousands >= 10 ? Math.round(thousands) : thousands.toFixed(1)}K`;
-  }
-  return String(Math.round(value));
 }
 
 function AnimatedCurveDot({

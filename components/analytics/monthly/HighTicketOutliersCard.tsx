@@ -5,7 +5,7 @@ import { Flame } from "lucide-react-native";
 import {
   AnalyticsCard,
   AnalyticsCardMeta,
-} from "@/components/analytics/monthly/AnalyticsCard";
+} from "@/components/analytics/shared/AnalyticsCard";
 import { insightAccents } from "@/components/analytics/insightsTheme";
 import { Amount } from "@/components/common/Amount";
 import { useTheme } from "@/theme/ThemeProvider";

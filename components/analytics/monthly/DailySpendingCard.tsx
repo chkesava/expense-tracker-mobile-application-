@@ -2,7 +2,7 @@ import React from "react";
 import { StyleSheet, Text } from "react-native";
 import { TrendingUp } from "lucide-react-native";
 
-import { AnalyticsCard } from "@/components/analytics/monthly/AnalyticsCard";
+import { AnalyticsCard } from "@/components/analytics/shared/AnalyticsCard";
 import { insightAccents } from "@/components/analytics/insightsTheme";
 import {
   SpendingCurveChart,

@@ -10,21 +10,29 @@ import { haptic } from "@/lib/haptics";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
-export interface MonthSelectorProps {
-  /** Already-formatted month label, e.g. "August 2026". */
+export interface PeriodSelectorProps {
+  /** Already-formatted period label, e.g. "August 2026" or "2026". */
   label: string;
-  /** True only when the selected month is the live calendar month. */
-  isCurrent: boolean;
+  /**
+   * Badge text shown beside the label — "CURRENT", "THIS YEAR". Pass null for
+   * a historical period so no live-period badge appears.
+   */
+  badge?: string | null;
   onPrev: () => void;
   onNext: () => void;
+  prevLabel?: string;
+  nextLabel?: string;
 }
 
-export function MonthSelector({
+/** Shared previous / label / next strip used by the monthly and yearly views. */
+export function PeriodSelector({
   label,
-  isCurrent,
+  badge,
   onPrev,
   onNext,
-}: MonthSelectorProps) {
+  prevLabel = "Previous month",
+  nextLabel = "Next month",
+}: PeriodSelectorProps) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const surface = insightSurface(isDark);
@@ -41,7 +49,7 @@ export function MonthSelector({
       }}
       hitSlop={6}
       accessibilityRole="button"
-      accessibilityLabel={direction === "prev" ? "Previous month" : "Next month"}
+      accessibilityLabel={direction === "prev" ? prevLabel : nextLabel}
       style={({ pressed }) => [
         styles.arrow,
         {
@@ -78,7 +86,7 @@ export function MonthSelector({
         >
           {label}
         </Text>
-        {isCurrent ? (
+        {badge ? (
           <View
             style={[
               styles.badge,
@@ -90,7 +98,9 @@ export function MonthSelector({
               },
             ]}
           >
-            <Text style={[styles.badgeText, { color: accents.pink }]}>CURRENT</Text>
+            <Text style={[styles.badgeText, { color: accents.pink }]} numberOfLines={1}>
+              {badge}
+            </Text>
           </View>
         ) : null}
       </View>

@@ -12,6 +12,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { Amount } from "@/components/common/Amount";
+import { compactAxisValue } from "@/components/charts/axis";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
@@ -34,6 +35,8 @@ export interface BarChartProps {
   primaryColor?: string;
   secondaryColor?: string;
   showLegend?: boolean;
+  /** Render a compact value axis (0, 30K, 60K…) down the left edge. */
+  showYAxis?: boolean;
 }
 
 function AnimatedBarSegment({
@@ -95,6 +98,7 @@ export function BarChart({
   primaryColor,
   secondaryColor,
   showLegend = true,
+  showYAxis = false,
 }: BarChartProps) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
@@ -125,8 +129,11 @@ export function BarChart({
 
   const chartPaddingTop = 20;
   const chartPaddingBottom = 26;
+  const chartPaddingLeft = showYAxis ? 34 : 0;
   const chartHeight = height - chartPaddingTop - chartPaddingBottom;
   const baselineY = chartPaddingTop + chartHeight;
+  const plotWidth = Math.max(containerWidth - chartPaddingLeft, 1);
+  const gridRatios = showYAxis ? [0, 0.25, 0.5, 0.75, 1] : [0, 0.5, 1];
 
   const handleSelectBar = (idx: number) => {
     Haptics.selectionAsync().catch(() => undefined);
@@ -143,8 +150,11 @@ export function BarChart({
     );
   }
 
-  const slotWidth = containerWidth / data.length;
+  const slotWidth = plotWidth / data.length;
   const barWidth = hasSecondary ? Math.min(slotWidth * 0.35, 14) : Math.min(slotWidth * 0.55, 24);
+  // Narrow slots can't fit a label per bar, so label every other slot instead
+  // of letting them collide.
+  const labelStride = slotWidth < 26 ? 2 : 1;
 
   return (
     <View style={styles.container} onLayout={handleLayout}>
@@ -181,20 +191,32 @@ export function BarChart({
 
       {/* SVG Canvas */}
       <Svg width={containerWidth} height={height}>
-        {/* Horizontal grid lines */}
-        {[0, 0.5, 1].map((ratio, i) => {
+        {/* Horizontal grid lines (with optional compact value axis) */}
+        {gridRatios.map((ratio, i) => {
           const y = chartPaddingTop + chartHeight * (1 - ratio);
           return (
-            <Line
-              key={i}
-              x1={0}
-              y1={y}
-              x2={containerWidth}
-              y2={y}
-              stroke={isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)"}
-              strokeDasharray="4 4"
-              strokeWidth={1}
-            />
+            <G key={i}>
+              <Line
+                x1={chartPaddingLeft}
+                y1={y}
+                x2={containerWidth}
+                y2={y}
+                stroke={isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)"}
+                strokeDasharray="4 4"
+                strokeWidth={1}
+              />
+              {showYAxis ? (
+                <SvgText
+                  x={chartPaddingLeft - 6}
+                  y={y + 3.5}
+                  fontSize={9}
+                  fill={theme.colors.mutedForeground}
+                  textAnchor="end"
+                >
+                  {compactAxisValue(maxValue * ratio)}
+                </SvgText>
+              ) : null}
+            </G>
           );
         })}
 
@@ -202,7 +224,7 @@ export function BarChart({
         <G>
           {data.map((item, idx) => {
             const isSelected = selectedIndex === idx;
-            const slotCenterX = idx * slotWidth + slotWidth / 2;
+            const slotCenterX = chartPaddingLeft + idx * slotWidth + slotWidth / 2;
 
             const h1 = Math.max((item.value / maxValue) * chartHeight, 2);
             const color1 = item.color || defaultPrimaryColor;
@@ -240,17 +262,19 @@ export function BarChart({
                     onPress={() => handleSelectBar(idx)}
                   />
                   {/* X-axis Label */}
-                  <SvgText
-                    x={slotCenterX}
-                    y={height - 8}
-                    fontSize={10}
-                    fontWeight={isSelected ? "800" : "500"}
-                    fill={isSelected ? theme.colors.foreground : theme.colors.mutedForeground}
-                    textAnchor="middle"
-                    onPress={() => handleSelectBar(idx)}
-                  >
-                    {item.label}
-                  </SvgText>
+                  {idx % labelStride === 0 || isSelected ? (
+                    <SvgText
+                      x={slotCenterX}
+                      y={height - 8}
+                      fontSize={10}
+                      fontWeight={isSelected ? "800" : "500"}
+                      fill={isSelected ? theme.colors.foreground : theme.colors.mutedForeground}
+                      textAnchor="middle"
+                      onPress={() => handleSelectBar(idx)}
+                    >
+                      {item.label}
+                    </SvgText>
+                  ) : null}
                 </G>
               );
             }
