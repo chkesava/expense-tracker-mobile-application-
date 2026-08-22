@@ -1,55 +1,77 @@
 # Deploying the public split share pages
 
-The public pages (`/split/:slug`, `/payment/:slug`) are the Expo **web** export
-of this repo. Everything in this repo is already wired for it; what remains is
-one new Netlify site and three edits in the sibling Vite repo.
+The public pages (`/split/:slug`, `/payment/:slug`) are the Expo **web** export of
+this repo, hosted on their **own** Netlify site with no dependency on any other
+origin.
 
-Read `docs/audits/SPLIT_SHARE_LINK_AUDIT_2026-08-22.md` first if you want the
-reasoning. This file is just the runbook.
+Read `docs/audits/SPLIT_SHARE_LINK_AUDIT_2026-08-22.md` if you want the history.
+This file is the runbook.
 
 ## Shell note
 
 Commands are given for both bash and PowerShell, because the differences here
 are not cosmetic:
 
-- `curl` in PowerShell is an alias for `Invoke-WebRequest`, which has no `-s`
-  and will stop and prompt you for `Uri:`. Use **`curl.exe`** — real curl ships
-  in `C:\Windows\System32` on Windows 10+.
+- `curl` in PowerShell is an alias for `Invoke-WebRequest`, which has no `-s` and
+  will stop and prompt you for `Uri:`. Use **`curl.exe`** — real curl ships in
+  `C:\Windows\System32` on Windows 10+.
 - There is no `grep`. Use `Select-String`.
 - `/dev/null` is `NUL`, and a literal newline in `-w` is a backtick-n.
 
-**Do not verify any of this with the HTTP status code.** The Vite app's SPA
-catch-all (`/* -> /index.html 200`) returns **200 for every path**, including
-paths that could not possibly exist. A 200 on `/split/<slug>` says nothing about
-whether the proxy works. The only reliable test is which bundle is in the
-response body: `_expo/static/js/web/...` means the Expo page answered,
-`registerSW.js` or `/assets/index-*.js` means you are still getting the Vite
-login page.
+**Never verify a share page by its HTTP status code alone.** A status code tells
+you the host answered, not *which page* it answered with. Check the body — a real
+share page references `_expo/static/js/web/...`.
 
-## Why a second site instead of the obvious thing
+---
 
-`kesavaexpensetracker.netlify.app` serves the **Vite** web app from
-`C:\dev\expense-tracker`, and this mobile app depends on two things that live
-there:
+## Architecture
 
-- `/api/*` → Netlify functions backing `services/marketDataService.ts`
-- `/mobile-google-auth` → the Google sign-in bridge in `lib/googleAuthBridge.ts`
+Two origins, cleanly separated. Nothing about sharing crosses between them.
 
-Deploying the Expo export over that site would take both with it. So the Expo
-export goes to its own site, and `/split/*` is **proxied** in at status 200 from
-the original origin. That keeps `EXPO_PUBLIC_APP_URL` correct for all three of
-its consumers, means links already sent keep working, and needs **no APK
-rebuild**.
+| Origin | Serves | Set by |
+|---|---|---|
+| `spendly-share.netlify.app` | `/split/:slug`, `/payment/:slug` — the login-free share pages, built from this repo | `EXPO_PUBLIC_SHARE_URL` |
+| `kesavaexpensetracker.netlify.app` | `/api/*` market functions and `/mobile-google-auth`, from the legacy Vite repo | `EXPO_PUBLIC_APP_URL` |
 
-`/payment/*` is deliberately **not** proxied: that route is already public on
-the Vite app (`src/App.tsx` mounts `PaymentRequestPage` outside the auth-gated
-tree) and works today.
+`EXPO_PUBLIC_SHARE_URL` exists precisely so those can move independently. It used
+to be one variable doing both jobs, which is why share links pointed at the legacy
+app and had to be proxied across from it. **They no longer are.**
+`getPublicAppOrigin()` in `shared/utils/paymentRequestUrl.ts` prefers the share
+variable, falling back to the app variable only so an older build keeps working.
+
+The legacy app still owns two backend dependencies — market quotes and the Expo Go
+Google bridge. Moving those means porting Netlify functions; it is separate,
+larger work and is not required for sharing.
+
+### The share host is not a second copy of the app
+
+`index.html` boots the whole app, so a blanket `/* -> /index.html` fallback would
+make `/dashboard`, `/settings` and every other route reachable on the share
+domain — a second origin where someone could sign in. `netlify.toml` therefore:
+
+- serves `index.html` for **only** `/split/*` and `/payment/*`
+- **forces** `/` to `404.html` (forced because `/` resolves to the real
+  `index.html`, and Netlify will not shadow an existing file otherwise)
+- declares **no catch-all**, so any other path falls through to
+  `public/404.html` — static, dependency-free, no app JS
+
+Real files (`/_expo/**`, `/assets/**`, `/favicon.ico`, `/robots.txt`) keep being
+served, which matters because `index.html` references those bundle paths
+absolutely.
+
+Verified against the real config with `netlify-cli dev`:
+
+| Path | Result |
+|---|---|
+| `/split/:slug`, `/payment/:slug` | 200, boots the app |
+| `/`, `/dashboard`, `/settings` | 404, static page, **does not** boot the app |
+| `/robots.txt`, bundles, fonts | 200, served |
 
 ---
 
 ## Step 1 — Deploy the Firestore rules
 
-Do this first. Self-service updates from the public page stay inert until the
+Self-service updates from the public page stay inert until the
 `splitShareClaims` block is live; everything else works without it.
 
 ```bash
@@ -60,31 +82,24 @@ npx firebase deploy --only firestore:rules --project expenseapp-27f94 --dry-run
 npx firebase deploy --only firestore:rules --project expenseapp-27f94
 ```
 
-Identical in PowerShell. To confirm afterwards that the `splitShareClaims` rule
-is actually live, read a claim id that does not exist — **404 means the rule
-exists, 403 means it does not**:
+Identical in PowerShell. To confirm afterwards that the rule is live, read a
+claim id that does not exist — **404 means the rule exists, 403 means it does
+not**:
 
 ```powershell
 curl.exe -s -o NUL -w "%{http_code}`n" "https://firestore.googleapis.com/v1/projects/expenseapp-27f94/databases/(default)/documents/splitShareClaims/nonexistent__probe"
 ```
 
-The dry run has already been verified to compile against the live project. See
-`docs/FIREBASE_RULES_DEPLOY.md` for why this repo owns the rules and why the
-Vite repo's copy must not be deployed over them.
-
-## Step 2 — Create the Netlify site for this repo
+## Step 2 — The Netlify site
 
 Netlify → Add new site → Import an existing project → GitHub → this repo.
 
-- **Site name:** `spendly-share` (whatever you pick, the exact subdomain goes
-  into Step 4 — the snippets below assume `spendly-share.netlify.app`)
+- **Site name:** `spendly-share`. It must match `EXPO_PUBLIC_SHARE_URL`.
 - **Build settings:** leave blank. `netlify.toml` in this repo overrides the UI.
-- **Production branch:** `main`. Turn **branch deploys off** — each one is a
-  fresh ~14 MB bundle.
-- **The new site must be in the same Netlify team as the existing one.** Netlify
-  blocks cross-team site-to-site proxying, and Step 4 is a proxy.
+- **Production branch:** `main`. Turn **branch deploys off** — each is a fresh
+  ~14 MB bundle.
 
-**Environment variables** (scope: all, every deploy context) — exactly these:
+**Environment variables** (scope: all, every deploy context):
 
 | Key | Value |
 |---|---|
@@ -94,201 +109,140 @@ Netlify → Add new site → Import an existing project → GitHub → this repo
 | `EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET` | same |
 | `EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER` | same |
 | `EXPO_PUBLIC_FIREBASE_APP_ID` | same |
-| `EXPO_PUBLIC_APP_URL` | `https://kesavaexpensetracker.netlify.app` |
+| `EXPO_PUBLIC_SHARE_URL` | `https://spendly-share.netlify.app` |
 
 Do **not** set `EXPO_PUBLIC_GEMINI_API_KEY`, `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`,
-`EXPO_PUBLIC_MARKET_API_URL`, or any `MYAPP_RELEASE_*`. They are inlined into a
-public bundle and the share pages never use them.
+`EXPO_PUBLIC_MARKET_API_URL`, or any `MYAPP_RELEASE_*` — they are inlined into a
+public bundle and the share pages never use them. `EXPO_PUBLIC_APP_URL` is not
+needed here either; nothing these pages render touches it.
 
-> Missing Firebase vars is the most likely "it deployed but shows nothing"
-> failure: `isFirebaseEnvConfigured()` returns false, `getFirestoreDb()` returns
-> null, and the page renders "Splits aren't configured on this device."
+> A missing Firebase var is the likely "it deployed but shows nothing" failure:
+> `isFirebaseEnvConfigured()` returns false, `getFirestoreDb()` returns null, and
+> the page renders "Splits aren't configured on this device."
 
-Then verify the site directly, before any proxying:
+**Nothing needs to change in the Vite repo.** No proxy, no service-worker
+denylist. That approach is gone.
+
+## Step 3 — Set the share URL for the mobile build
+
+The app generates share links, so the origin has to be compiled into the build.
+
+Add to your local `.env` (see `.env.example`):
+
+```
+EXPO_PUBLIC_SHARE_URL=https://spendly-share.netlify.app
+```
+
+The Android release workflow restores `.env` from repository secrets, so add
+`EXPO_PUBLIC_SHARE_URL` there too — otherwise a release build silently falls back
+to `EXPO_PUBLIC_APP_URL` and emits links to the legacy app again. Confirm it
+landed in a built bundle:
+
+```powershell
+Select-String -Path dist\_expo\static\js\web\entry-*.js -Pattern 'spendly-share\.netlify\.app' -Quiet
+```
+
+**This step needs a new APK.** An existing install keeps using whatever origin it
+was compiled with.
+
+## Step 4 — Verify
+
+Share pages answer on the share host:
 
 ```bash
-curl -s https://spendly-share.netlify.app/split/qccgraks87 | grep -o '_expo/static/js/web/[^"]*'
+curl -s https://spendly-share.netlify.app/split/<slug> | grep -o '_expo/static/js/web/[^"]*'
 ```
 
 ```powershell
-curl.exe -s https://spendly-share.netlify.app/split/qccgraks87 | Select-String -Pattern '_expo/static/js/web/[^"]*' -AllMatches | ForEach-Object { $_.Matches.Value }
+curl.exe -s https://spendly-share.netlify.app/split/<slug> | Select-String -Pattern '_expo/static/js/web/[^"]*' -AllMatches | ForEach-Object { $_.Matches.Value }
 ```
 
-Bundle paths printed = the site is serving the Expo build. Nothing printed =
-it is not, and no amount of proxying will help until it is.
+Bundle paths printed = working. Nothing printed = not working, whatever the
+status code says.
 
-## Step 3 — Service worker fix in the Vite repo (mandatory, do before Step 4)
-
-`C:\dev\expense-tracker\vite.config.ts` uses `VitePWA({ registerType: 'autoUpdate' })`
-and its `workbox` block does not set `navigateFallback`, so `vite-plugin-pwa`
-defaults it to `index.html`. **For anyone who has ever loaded that site, the
-service worker serves the cached Vite shell for `/split/:slug` and the Netlify
-proxy never runs.**
-
-In the `workbox: { ... }` object (around line 375), add:
-
-```ts
-        // /split/* and the Expo bundles are proxied to the Expo web build at
-        // the Netlify edge. Without this the SW's navigateFallback serves this
-        // SPA's cached shell and the proxy is never reached.
-        navigateFallbackDenylist: [/^\/split\//, /^\/_expo\//],
-```
-
-Ship and let it propagate **before** Step 4. Because `registerType` is
-`autoUpdate`, the new SW installs on a visitor's next load and takes over the
-load after that — so an existing user's first hit on `/split/x` may still show
-the Vite page, and a reload fixes it permanently. Confirming exactly that
-behaviour is how you know the denylist landed.
-
-## Step 4 — Proxy rules in the Vite repo
-
-In `C:\dev\expense-tracker\netlify.toml`, insert **after** the
-`/api/twelve-data/*` block and **before** the `from = "/*"` catch-all (currently
-line 57). Order is load-bearing: Netlify takes the first match top to bottom, so
-anything below the catch-all never fires.
-
-```toml
-# ---------------------------------------------------------------------------
-# Public split pages are served by the Expo web build (mobile repo), proxied in
-# at status 200 so links already shared keep this origin.
-#
-# /split/:id in src/App.tsx is inside AppContent (auth-gated) and reads the
-# private `splits` collection, so a recipient without an account lands on the
-# login page. The Expo page reads the world-readable `splitPublicShares`
-# snapshot instead.
-#
-# ORDER MATTERS: these must stay above the `/*  ->  /index.html` catch-all.
-# /payment/:slug is deliberately NOT proxied — it is already a public route in
-# this app (outside AppContent) and works today.
-# ---------------------------------------------------------------------------
-
-[[redirects]]
-  from = "/split/*"
-  to = "https://spendly-share.netlify.app/split/:splat"
-  status = 200
-  force = true
-
-# Expo's JS bundles. The proxied index.html references these as absolute paths,
-# so the browser requests them from THIS origin. The /_expo prefix is
-# Expo-specific and cannot collide with anything Vite emits.
-[[redirects]]
-  from = "/_expo/*"
-  to = "https://spendly-share.netlify.app/_expo/:splat"
-  status = 200
-  force = true
-
-# Metro assets. Verified against a real export: dist/assets/ contains exactly
-# two subtrees, so these two rules cover it without shadowing Vite's own
-# /assets/<name>-<hash>.js build output.
-[[redirects]]
-  from = "/assets/assets/*"
-  to = "https://spendly-share.netlify.app/assets/assets/:splat"
-  status = 200
-  force = true
-
-[[redirects]]
-  from = "/assets/node_modules/*"
-  to = "https://spendly-share.netlify.app/assets/node_modules/:splat"
-  status = 200
-  force = true
-```
-
-Netlify constraints, all relevant here: Netlify→Netlify proxying is one hop
-only, must target the `*.netlify.app` subdomain rather than a custom domain, and
-cannot cross teams.
-
-## Step 5 — Verify
-
-Proxy serves the Expo shell, not the Vite one:
-
-```bash
-curl -s https://kesavaexpensetracker.netlify.app/split/qccgraks87 | grep -o '_expo/static/js/web/[^"]*'
-```
+Then confirm the host exposes nothing else — `/` and any app route must be **404
+without the app bundle**:
 
 ```powershell
-curl.exe -s https://kesavaexpensetracker.netlify.app/split/qccgraks87 | Select-String -Pattern '_expo/static/js/web/[^"]*' -AllMatches | ForEach-Object { $_.Matches.Value }
-```
-
-Bundle paths printed = the proxy is live. Nothing printed = still Vite. Again:
-the status code is 200 either way and tells you nothing.
-
-One PowerShell one-liner that answers "which app is serving this?" outright,
-for both hosts at once:
-
-```powershell
-foreach ($h in @('spendly-share.netlify.app','kesavaexpensetracker.netlify.app')) {
-  $body = & curl.exe -s --max-time 20 "https://$h/split/qccgraks87"
-  $verdict = if ($body -match '_expo/static/js/web/') { 'EXPO  -> split page works' }
-             elseif ($body -match 'registerSW\.js|/assets/index-') { 'VITE  -> login screen' }
-             else { 'unknown' }
-  '{0,-38} {1}' -f $h, $verdict
+foreach ($p in @('/','/dashboard','/settings','/ledger')) {
+  $code = & curl.exe -s -o NUL -w '%{http_code}' --max-time 20 "https://spendly-share.netlify.app$p"
+  $boots = if ((& curl.exe -s --max-time 20 "https://spendly-share.netlify.app$p") -match '_expo/static/js/web') { 'BOOTS APP - wrong' } else { 'static only - ok' }
+  '{0,-12} {1}  {2}' -f $p, $code, $boots
 }
 ```
 
-Open the same URL in a **fresh incognito window** (no service worker) and
-confirm the split renders with participants. In your normal browser expect the
-Vite login page once, then the split page after a reload — that is the SW
-handover from Step 3, and seeing it is how you know the denylist landed.
-
-Then confirm nothing else broke:
-
-```bash
-curl -s "https://kesavaexpensetracker.netlify.app/api/stock?symbol=RELIANCE" | head -c 120
-curl -sI https://kesavaexpensetracker.netlify.app/mobile-google-auth
-```
+And that the legacy app is untouched, since nothing was changed there:
 
 ```powershell
-(& curl.exe -s "https://kesavaexpensetracker.netlify.app/api/stock?symbol=RELIANCE").Substring(0,120)
-& curl.exe -s -I https://kesavaexpensetracker.netlify.app/mobile-google-auth | Select-Object -First 1
+& curl.exe -s -o NUL -w "  api:    %{http_code}`n" "https://kesavaexpensetracker.netlify.app/api/stock?symbol=RELIANCE"
+& curl.exe -s -o NUL -w "  bridge: %{http_code}`n" "https://kesavaexpensetracker.netlify.app/mobile-google-auth"
 ```
 
-Also spot-check `/payment/<a-real-payment-slug>` and `/` on that origin — both
-should be unchanged. Here the status code *is* meaningful, because you are
-asking "does this still respond at all", not "which app answered".
+Finally, open a real share link in a **fresh incognito window** and confirm the
+split renders with participants and no sign-in prompt.
+
+## Step 5 — Light up the app-written fields
+
+The snapshot fields behind currency, top-up labels and self-service are written
+by the app, not the web build. On a build from before this change they are simply
+absent, and the page degrades safely: INR fallback, no "This is me", "Unpaid"
+instead of "Extra ₹25 due after Bob dropped out".
+
+Once you are running a build with `EXPO_PUBLIC_SHARE_URL` set, **open each split
+and tap Share once**. That single write backfills `publicSlug`, `currency`,
+`claimKeys`, `claimAmountMax`, `claimsEnabled` and any missing per-person pay
+links, and rewrites the public snapshot. Check one:
+
+```powershell
+(& curl.exe -s "https://firestore.googleapis.com/v1/projects/expenseapp-27f94/databases/(default)/documents/splitPublicShares?pageSize=20" | ConvertFrom-Json).documents |
+  ForEach-Object {
+    '{0,-14} currency={1,-5} claims={2}' -f $_.fields.slug.stringValue,
+      $_.fields.currency.stringValue,
+      $_.fields.claimsEnabled.booleanValue
+  }
+```
 
 ## Local development
-
-The web export can be exercised without deploying anything:
 
 ```bash
 npm run build:web
 ```
 
-`npx expo serve` will **not** work for this — it has no SPA fallback and 404s on
-`/split/abc`. Use anything with a single-page fallback, e.g.:
+`npx expo serve` will **not** work — it has no SPA fallback and 404s on
+`/split/abc`. Use something that honours `netlify.toml`:
 
 ```bash
-npx netlify-cli dev --dir dist
+npx netlify-cli dev --dir dist --offline --port 8899
 ```
 
-Get a real slug from Firebase Console → Firestore → `splitPublicShares` → any
-document's `slug` field, or list them without leaving the shell:
+Get a real slug from the Firebase console, or without leaving the shell:
 
 ```powershell
 (& curl.exe -s "https://firestore.googleapis.com/v1/projects/expenseapp-27f94/databases/(default)/documents/splitPublicShares?pageSize=20" | ConvertFrom-Json).documents |
   ForEach-Object { '{0}  {1}' -f $_.fields.slug.stringValue, $_.fields.title.stringValue }
 ```
 
+> **Known local-only quirk:** `netlify dev --dir --offline` returns **403 for
+> every nested static path** (`/_expo/**`, `/assets/**`), so the page looks broken
+> locally even when routing is correct. It does this on any config — live Netlify
+> serves the 7.4 MB bundle and the 342 KB fonts as 200. Use it to check
+> *redirects*, not asset delivery. It also writes `.netlify/`, `deno.lock` and a
+> `.gitignore` line; delete those afterwards.
+
 ## Notes
 
 - Entry bundle is ~1.4 MB gzipped, because expo-router's default `sync` import
-  mode pulls every route into the entry chunk (the largest single contributor is
+  mode pulls every route into the entry chunk (largest contributor:
   `lucide-react-native`, whose web entry is a barrel over ~1,700 icon modules
-  that Metro does not tree-shake). Acceptable for a page nobody visits twice. If
-  it ever matters, try `asyncRoutes: { "web": "production" }` in the
-  `expo-router` plugin options — it is alpha and web-only, so revert if the
-  export misbehaves.
-- **The share host is not a second copy of the app.** `index.html` boots the
-  whole app, so a blanket `/* -> /index.html` fallback would have made
-  `/dashboard`, `/settings` and every other route reachable there — a second
-  origin where someone could sign in. `netlify.toml` therefore scopes the SPA
-  fallback to `/split/*` and `/payment/*` and 302s everything else, including
-  `/`, back to the real app. That last rule is deliberately **not** forced,
-  because Netlify only shadows an existing file when a rule says so, and
-  `/_expo/**` and `/assets/**` must keep being served from this site — the
-  proxied `index.html` references those bundle paths absolutely. Adding `force`
-  there would break the page the rule exists to protect.
-- Firebase **authorized domains** need no change for the share pages: they make
-  no auth call, and Firestore authenticates with the API key and project id, not
-  the origin. With the fallback scoped as above there is no sign-in surface on
-  the share host to authorize.
+  Metro does not tree-shake). Acceptable for a page nobody visits twice. If it
+  ever matters, try `asyncRoutes: { "web": "production" }` in the `expo-router`
+  plugin options — alpha and web-only, so revert if the export misbehaves.
+- Firebase **authorized domains** need no change: the share pages make no auth
+  call, and Firestore authenticates with the API key and project id rather than
+  the origin. With the fallback scoped as above there is no sign-in surface on the
+  share host to authorize.
+- Share links issued by builds from before Step 3 point at
+  `kesavaexpensetracker.netlify.app/split/...` and will not resolve, because
+  nothing proxies them. They never worked — that origin has always served the
+  legacy app's login screen for those paths — so nothing regressed. Reshare from a
+  current build to hand out a working link.

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { getPaymentRequestShareUrl, getPublicAppOrigin, getSplitShareUrl } from "./paymentRequestUrl";
 import { generateUpiLink } from "./upi";
 
@@ -44,6 +44,79 @@ describe("paymentRequestUrl utilities", () => {
       expect(getSplitShareUrl("dinner42")).toBe("https://myapp.com/split/dinner42");
       process.env.EXPO_PUBLIC_APP_URL = original;
     });
+  });
+});
+
+describe("share origin precedence", () => {
+  const APP = "EXPO_PUBLIC_APP_URL";
+  const SHARE = "EXPO_PUBLIC_SHARE_URL";
+  const saved: Record<string, string | undefined> = {};
+
+  beforeEach(() => {
+    for (const key of [APP, SHARE, "VITE_PUBLIC_APP_URL", "VITE_PUBLIC_SHARE_URL"]) {
+      saved[key] = process.env[key];
+      delete process.env[key];
+    }
+  });
+
+  afterEach(() => {
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  });
+
+  it("prefers the share origin over the app origin", () => {
+    // The whole point of the split: share pages are hosted independently of the
+    // legacy web app, whose origin still backs /api/* and the Google bridge.
+    process.env[APP] = "https://kesavaexpensetracker.netlify.app";
+    process.env[SHARE] = "https://spendly-share.netlify.app";
+    expect(getPublicAppOrigin()).toBe("https://spendly-share.netlify.app");
+    expect(getSplitShareUrl("dinner42")).toBe(
+      "https://spendly-share.netlify.app/split/dinner42"
+    );
+    expect(getPaymentRequestShareUrl("pay789")).toBe(
+      "https://spendly-share.netlify.app/payment/pay789"
+    );
+  });
+
+  it("never emits a share link against the legacy origin once the share var is set", () => {
+    process.env[APP] = "https://kesavaexpensetracker.netlify.app";
+    process.env[SHARE] = "https://spendly-share.netlify.app";
+    for (const url of [getSplitShareUrl("s"), getPaymentRequestShareUrl("p")]) {
+      expect(url).not.toContain("kesavaexpensetracker");
+    }
+  });
+
+  it("falls back to the app origin when the share origin is unset", () => {
+    // Keeps an older build that has not been given the new variable working.
+    process.env[APP] = "https://kesavaexpensetracker.netlify.app";
+    expect(getSplitShareUrl("dinner42")).toBe(
+      "https://kesavaexpensetracker.netlify.app/split/dinner42"
+    );
+  });
+
+  it("ignores an empty share origin rather than emitting a relative URL", () => {
+    process.env[APP] = "https://kesavaexpensetracker.netlify.app";
+    process.env[SHARE] = "";
+    expect(getPublicAppOrigin()).toBe("https://kesavaexpensetracker.netlify.app");
+  });
+
+  it("strips a trailing slash from the share origin", () => {
+    process.env[SHARE] = "https://spendly-share.netlify.app/";
+    expect(getSplitShareUrl("dinner42")).toBe(
+      "https://spendly-share.netlify.app/split/dinner42"
+    );
+  });
+
+  it("returns empty with neither set, so callers can refuse to share", () => {
+    expect(getPublicAppOrigin()).toBe("");
+  });
+
+  it("honours the VITE_ share variable for a web build sharing this module", () => {
+    process.env.VITE_PUBLIC_SHARE_URL = "https://spendly-share.netlify.app";
+    process.env[APP] = "https://kesavaexpensetracker.netlify.app";
+    expect(getPublicAppOrigin()).toBe("https://spendly-share.netlify.app");
   });
 });
 
