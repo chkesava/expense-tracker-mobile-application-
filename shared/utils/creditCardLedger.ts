@@ -349,10 +349,20 @@ export function buildCreditCardLedger(
     // A snapped (re-dated) bill keeps its stored amount until repair rewrites
     // it, but the window itself is the card's current generation-day cycle.
     const snapped = Boolean(bill && bill.statementDate !== window.statementDate);
+    const storedStart = snapped ? undefined : bill?.billingPeriodStart;
+    const storedEnd = snapped ? undefined : bill?.billingPeriodEnd;
+    // A stored window may not reach outside the cycle it closes. Statements
+    // written before the close-on-D fix used the *previous* generation day as
+    // their start instead of the day after, so consecutive windows shared that
+    // boundary day and any spend on it was billed in both statements. A window
+    // running past its own close date would likewise steal the next cycle's
+    // spend. Clamp both ends; a deliberately narrower stored window is kept.
     const periodStart =
-      snapped ? window.periodStart : bill?.billingPeriodStart || window.periodStart;
+      storedStart && storedStart > window.periodStart
+        ? storedStart
+        : window.periodStart;
     const periodEnd =
-      snapped ? window.periodEnd : bill?.billingPeriodEnd || window.periodEnd;
+      storedEnd && storedEnd < window.periodEnd ? storedEnd : window.periodEnd;
     const windowSpend = roundMoney(
       cardExpenses
         .filter((expense) =>

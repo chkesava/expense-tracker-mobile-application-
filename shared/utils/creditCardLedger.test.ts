@@ -899,3 +899,129 @@ describe("buildCreditCardLedger — an advance is netted out of outstanding", ()
     expect(ledger.unbilledSpend).toBe(393);
   });
 });
+
+/**
+ * A stored window may not reach outside the cycle it closes. Statements written
+ * before the close-on-D fix used the *previous* generation day as their start
+ * instead of the day after, so consecutive windows shared that boundary day —
+ * and spend on it was billed in both statements. The tell in the UI is a cycle
+ * that reads "1 Jul → 1 Aug": 32 days, both ends on a generation day.
+ */
+describe("buildCreditCardLedger — a stored window cannot overlap its neighbour", () => {
+  const firstOfMonth: Account = { ...slice, billGenerationDay: 1, creditLimit: 35000 };
+  const spend = (date: string, amount: number): Expense => ({
+    amount,
+    category: "Food",
+    note: "",
+    date,
+    month: date.slice(0, 7),
+    accountId: firstOfMonth.id,
+    createdAt: null,
+  });
+
+  const legacyBill = (overrides: Partial<LedgerBillSlice> = {}): LedgerBillSlice => ({
+    id: "bill-legacy",
+    accountId: firstOfMonth.id,
+    statementDate: "2026-08-01",
+    // Off by one: the old code used the previous generation day, not the day after.
+    billingPeriodStart: "2026-07-01",
+    billingPeriodEnd: "2026-08-01",
+    statementAmount: 1656,
+    amountPaid: 0,
+    status: "OVERDUE",
+    note: AUTO_CREDIT_CARD_BILL_NOTE,
+    ...overrides,
+  });
+
+  it("clamps a legacy start that would share the previous close date", () => {
+    const ledger = buildCreditCardLedger({
+      account: firstOfMonth,
+      expenses: [spend("2026-07-01", 500), spend("2026-07-15", 1000), spend("2026-08-01", 156)],
+      payments: [],
+      bills: [legacyBill()],
+      today: "2026-08-22",
+    });
+
+    const august = ledger.statements.find((s) => s.statementDate === "2026-08-01");
+    expect(august?.periodStart).toBe("2026-07-02");
+    expect(august?.periodEnd).toBe("2026-08-01");
+  });
+
+  it("never bills the boundary day in two statements", () => {
+    const expenses = [
+      spend("2026-07-01", 500),
+      spend("2026-07-15", 1000),
+      spend("2026-08-01", 156),
+      spend("2026-08-03", 190),
+    ];
+    const ledger = buildCreditCardLedger({
+      account: firstOfMonth,
+      expenses,
+      payments: [],
+      // No stored amount to defer to, so the windows themselves decide.
+      bills: [legacyBill({ statementAmount: 0, status: "UPCOMING" })],
+      today: "2026-08-22",
+    });
+
+    const covering = ledger.statements.filter(
+      (s) => "2026-07-01" >= s.periodStart && "2026-07-01" <= s.periodEnd
+    );
+    expect(covering).toHaveLength(1);
+    expect(covering[0].statementDate).toBe("2026-07-01");
+  });
+
+  it("clamps a stored end that would run past its own close date", () => {
+    const ledger = buildCreditCardLedger({
+      account: firstOfMonth,
+      expenses: [spend("2026-08-03", 190)],
+      payments: [],
+      bills: [legacyBill({ billingPeriodEnd: "2026-08-10", statementAmount: 0 })],
+      today: "2026-08-22",
+    });
+
+    const august = ledger.statements.find((s) => s.statementDate === "2026-08-01");
+    expect(august?.periodEnd).toBe("2026-08-01");
+    // The 3 Aug spend stays in the open cycle rather than being pulled back.
+    expect(ledger.unbilledSpend).toBe(190);
+  });
+
+  it("keeps a deliberately narrower stored window", () => {
+    const ledger = buildCreditCardLedger({
+      account: firstOfMonth,
+      expenses: [spend("2026-07-05", 800), spend("2026-07-20", 300)],
+      payments: [],
+      bills: [
+        legacyBill({
+          billingPeriodStart: "2026-07-10",
+          billingPeriodEnd: "2026-08-01",
+          statementAmount: 0,
+        }),
+      ],
+      today: "2026-08-22",
+    });
+
+    const august = ledger.statements.find((s) => s.statementDate === "2026-08-01");
+    expect(august?.periodStart).toBe("2026-07-10");
+  });
+
+  it("spend charged on the generation day belongs to the statement closing then", () => {
+    const ledger = buildCreditCardLedger({
+      account: firstOfMonth,
+      expenses: [
+        spend("2026-08-01", 156),
+        spend("2026-08-03", 190),
+        spend("2026-08-21", 129),
+      ],
+      payments: [],
+      bills: [],
+      today: "2026-08-22",
+    });
+
+    expect(ledger.openCycle.start).toBe("2026-08-02");
+    // 156 closed with the 1 Aug statement; only the later two are unbilled.
+    expect(ledger.unbilledSpend).toBe(319);
+    expect(
+      ledger.statements.find((s) => s.statementDate === "2026-08-01")?.billed
+    ).toBe(156);
+  });
+});
