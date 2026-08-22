@@ -9,9 +9,11 @@ merges `origin/main` (`1e6765a`) and therefore includes `3ce02b3`
 ("fix: keep generated statements unpaid and restore available credit", PR #33).
 
 **Type:** audit **and fix** pass. All seven findings are fixed with regression
-tests, plus CC-8 — a bug in the natural-language parser found while fixing
-CC-7's flaky test. Everything else was verified and is reported below as
-pass/fail with file:line, including the things that turned out to be correct.
+tests, plus CC-8 (a parser bug found while fixing CC-7's flaky test) and CC-9 —
+**a P0 this audit initially missed**, reported from the device afterwards. See
+CC-9 for what the audit got wrong and why the existing tests did not catch it.
+Everything else was verified and is reported below as pass/fail with file:line,
+including the things that turned out to be correct.
 
 The full test suite now passes clean (871 tests, 0 failures); it had a
 permanently failing test before this pass.
@@ -43,9 +45,11 @@ onto `amountPaid` and appends the payment id.
 **Allocate.** `shared/utils/creditCardLedger.ts:254` (`buildCreditCardLedger`)
 is the single source of truth. Payments sorted by (date, id); cancelled
 statements skipped; never applied to `statementDate > payment.date`; linked ids
-first, then oldest-first fill; leftover → `freeCredit` → reduces open-cycle
-unbilled spend, else `unappliedCredit`. Stored `amountPaid` acts as a floor for
-out-of-band settlements only (see finding CC-1).
+first, then oldest-first fill. Leftover is bucketed by the cycle the payment
+landed in: paid inside the open cycle → `cycleCredit`, which may reduce that
+cycle's spend; paid before it → `carriedCredit`, which is a standing credit
+balance and may not (CC-9). Stored `amountPaid` acts as a floor for out-of-band
+settlements only (see CC-1).
 
 **Available.** `availableCredit = max(0, creditLimit − unbilledSpend)`
 (`shared/utils/creditCardLedger.ts:583`). `statementDue` (open statement
@@ -65,6 +69,7 @@ unbilledSpend` is what liabilities/net worth consume.
 | CC-5 | P3 | `shared/utils/creditCardLedger.ts:559` | Spend under a **cancelled** statement fell back into `unbilledSpend`, so it reduced `availableCredit` even though it is not this-cycle spend — contradicting the spec rule `availableCredit = limit − unbilled (this cycle only)`. | Keep it owed (the existing intent) but in its own `cancelledSpend` bucket: counted in `totalOutstanding`, excluded from `unbilledSpend` and therefore from `availableCredit`. | **Yes** |
 | CC-6 | P3 | `components/creditCardBills/CreateCreditCardBillModal.tsx:139` | `handleSubmit` had **no validation of any kind** — not just dates. `parseFloat` could hand `createBill` a `NaN` statement amount, and a statement could be dated in the future or given a window running past its own close date. This is what made CC-1 and CC-2 reachable in practice. | Validate the whole form before writing: card selected, amount > 0, minimum due within the statement, real dates, statement date not in the future, due date on/after it, and a billing period that does not extend past the close date. | **Yes** |
 | CC-7 | P3 | `shared/utils/magicParser.test.ts:44` | Pre-existing, unrelated flake: the test built "yesterday" with `toISOString()` (UTC) and compared it against a local-date parser, so it failed every day after 18:30 IST. A permanently-red test masks real breakage in CI. | Freeze local noon and assert a literal date key, so the test is deterministic in any timezone. | **Yes** |
+| CC-9 | **P0** | `shared/utils/creditCardLedger.ts:428` | Leftover credit was applied to open-cycle spend regardless of which cycle the payment was made in. Credit left over from a payment made *before* the statement closed silently absorbed spend charged *after* it, so a fresh charge showed ₹0 unbilled. **This audit missed it** — see below. | Bucket leftover by cycle: credit paid inside the open cycle may reduce that cycle's spend, credit carried from an earlier cycle is a standing balance reported as `unappliedCredit`. | **Yes** |
 | CC-8 | **P1** | `shared/utils/magicParser.ts:117` | **Found while fixing CC-7.** In the first-match-wins `dateMap` loop, `/\byesterday\b/` was ordered *before* `/\bday before yesterday\b/` — and `\byesterday\b` matches inside "day before yesterday". So "day before yesterday" resolved to **−1 day instead of −2**, and only "yesterday" was stripped from the text, leaving "day before" polluting the extracted note. | Order the longest pattern first. | **Yes** |
 
 ### Explicit pass/fail on the requested hunt list
@@ -266,6 +271,64 @@ Fixed by ordering the longest pattern first, with a comment recording why the
 order is load-bearing. Covered by a new test that also crosses a month boundary
 into a 28-day February (1 Mar → 27 Feb).
 
+### CC-9 — leftover credit swallowed spend charged after the close
+
+**Reported from the device, not found by this audit.** A Slice card closing on
+the 21st: the statement cut on 21 Aug for ₹28,101 and went unpaid, a ₹393
+expense was charged on 22 Aug and correctly linked to the card — and the hero
+showed **UNBILLED (THIS CYCLE) ₹0** with a ₹7,104 credit balance.
+
+Cause: leftover credit was applied to `openCycleSpend` with no regard for which
+cycle the payment was made in. A ₹19,000 payment on 13 Aug left ₹7,497 over
+after settling earlier statements; that leftover then absorbed the ₹393 charged
+nine days later, in a different cycle.
+
+`shared/utils/creditCardLedger.ts` now buckets leftover by the cycle the payment
+landed in:
+
+- `payment.date >= openStart` → `cycleCredit`, may reduce this cycle's spend
+- `payment.date < openStart` → `carriedCredit`, a standing credit balance
+
+Application is still oldest-debt-first: either bucket may settle
+`cancelledSpend` (which also predates the open cycle), but only `cycleCredit`
+may reduce open-cycle spend. Whatever survives is `unappliedCredit`.
+
+The reported card, before and after:
+
+| | before | after |
+|---|---|---|
+| unbilled (this cycle) | **₹0** | **₹393** |
+| statement due | 28,101 | 28,101 |
+| total outstanding | 28,101 | 28,494 |
+| credit balance | 7,104 | 7,497 |
+| available credit | 89,000 | 88,607 |
+
+No money is invented: 28,494 owed against 7,497 of credit is the same net
+20,997 as 28,101 against 7,104. The buckets are simply truthful now, so a real
+charge is visible instead of being netted away silently.
+
+#### Why the audit missed it
+
+The spec in the brief spelled this case out explicitly — "New spend ₹1,500 on
+21 Aug: unbilledSpend 1500, availableCredit 87500, statementDue still 27875" —
+and the shipped code returned `unbilledSpend 0 / availableCredit 89000` for
+exactly those inputs. Hunt item 3 was about leftover credit *stamping a
+statement*, which did pass; nothing on the list asked whether leftover credit
+leaks across a close date into the next cycle's spend, and I did not add it.
+
+The existing tests covered the two halves separately and neither caught the
+seam:
+
+- "reduces unbilled spend while the cycle is still open" — leftover credit, but
+  the cycle has not closed yet
+- "counts only post-close spend in the new cycle" — spend after a close, but
+  `payments: []`, so no leftover exists
+
+The scenario needs both at once: a payment before the close *and* spend after
+it. The lesson recorded for future passes: when a spec states worked numbers,
+assert those exact numbers end to end rather than testing the properties they
+are built from.
+
 ### Tests
 
 `shared/utils/creditCardLedger.test.ts` — new
@@ -283,6 +346,15 @@ respects the cycle-depth bound; skips a card with no generation day; repairs a
 backfilled older statement when spend is backdated into it; two cycles never
 fight over the same document. `collectAutoCreditCardBillDrafts` had no test
 coverage at all before this.
+
+`shared/utils/creditCardLedger.test.ts` — new
+`buildCreditCardLedger — leftover credit does not cross a close date` block, 5
+cases, opening with the spec's worked example asserted end to end (27,875
+statement, 19,000 payment on 13 Aug, 1,500 charged on 21 Aug → unbilled 1,500 /
+unapplied 8,699 / available 87,500): in-cycle credit still reduces in-cycle
+spend; carried credit is held as a balance instead of discounting new spend; the
+reported device scenario; carried credit still settles cancelled spend; and a
+payment on the cycle's first day counts as cycle credit.
 
 `shared/utils/creditCardLedger.test.ts` — new
 `buildCreditCardLedger — cancelled statements` block, 5 cases: cancelled spend
@@ -316,11 +388,12 @@ npx vitest run shared/utils/creditCardLedger.test.ts \
   shared/utils/accountBalance.test.ts \
   shared/utils/autoCreditCardBills.test.ts \
   shared/utils/billingCycle.test.ts
-→ 5 files (incl. accountActivities), 113 passed
+→ 5 files (incl. accountActivities), 118 passed
 ```
 
-Full suite: **871 passed, 0 failed, 107 files** — clean for the first time; the
-suite had a permanently failing test before this pass. `npx tsc --noEmit` clean.
+Full suite: **876 passed, 0 failed, 107 files** — clean; the suite had a
+permanently failing test before this pass. `npm run typecheck` and
+`npm run typecheck:shared` both clean.
 
 ---
 
