@@ -93,12 +93,6 @@ export type CreditCardLedger = {
   totalOutstanding: number;
   availableCredit: number;
   creditLimit: number;
-  /**
-   * Money already paid to the card that no statement could absorb — an advance.
-   * Netted out of {@link totalOutstanding}; surfaced only so the UI can explain
-   * why outstanding is lower than the statements suggest.
-   */
-  unappliedCredit: number;
   openCycle: {
     start: string;
     end: string;
@@ -131,7 +125,6 @@ function emptyLedger(account: Account, today: string): CreditCardLedger {
     totalOutstanding: 0,
     availableCredit: limit,
     creditLimit: limit,
-    unappliedCredit: 0,
     openCycle: { start: today, end: today, spend: 0, daysRemaining: 0 },
   };
 }
@@ -300,7 +293,6 @@ export function buildCreditCardLedger(
       unbilledSpend,
       totalOutstanding: unbilledSpend,
       availableCredit: roundMoney(Math.max(0, limit - unbilledSpend)),
-      unappliedCredit: roundMoney(Math.max(0, paid - spend)),
       openCycle: { start: today, end: today, spend, daysRemaining: 0 },
     };
   }
@@ -556,31 +548,27 @@ export function buildCreditCardLedger(
 
   // Oldest debt first. Cancelled-statement spend predates the open cycle, so
   // either bucket of credit may settle it. Open-cycle spend may only be reduced
-  // by credit paid within the open cycle — carried credit that survives is a
-  // standing credit balance, reported as `unappliedCredit`, not a discount on
-  // this cycle's spend.
-  let carriedLeft = carriedCredit;
-  let cycleLeft = cycleCredit;
+  // by credit paid within the open cycle.
+  //
+  // Credit that outlives every debt is deliberately dropped rather than carried
+  // as a balance. Paying more than the card owes is blocked at entry, so the only
+  // way to get here is a payment recorded against spend the app never saw — and
+  // calling that "paid in advance" told the user something untrue about their own
+  // money. Nothing here may reduce a debt it cannot be matched to.
+  // Either bucket may settle cancelled spend, which also predates the open cycle.
+  const creditForVoided = roundMoney(carriedCredit + cycleCredit);
+  const cancelledSpend = roundMoney(Math.max(0, voidedSpend - creditForVoided));
 
-  let voidedLeft = voidedSpend;
-  const carriedOnVoided = Math.min(carriedLeft, voidedLeft);
-  carriedLeft = roundMoney(carriedLeft - carriedOnVoided);
-  voidedLeft = roundMoney(voidedLeft - carriedOnVoided);
-  const cycleOnVoided = Math.min(cycleLeft, voidedLeft);
-  cycleLeft = roundMoney(cycleLeft - cycleOnVoided);
-  voidedLeft = roundMoney(voidedLeft - cycleOnVoided);
-  const cancelledSpend = voidedLeft;
-
-  const cycleOnOpen = Math.min(cycleLeft, openCycleSpend);
-  cycleLeft = roundMoney(cycleLeft - cycleOnOpen);
-  const unbilledSpend = roundMoney(openCycleSpend - cycleOnOpen);
-  const unappliedCredit = roundMoney(carriedLeft + cycleLeft);
-  // An advance already paid is not owed twice. Netting it here is what keeps
-  // net worth honest: the bank balance has already dropped by the full payment,
-  // so leaving the advance out of this understated the user's position by
-  // exactly that amount.
+  // Only credit paid inside the open cycle may reduce this cycle's spend, and
+  // only what is left of it after settling the older cancelled bucket.
+  const cycleCreditForOpen = roundMoney(
+    Math.max(0, cycleCredit - Math.max(0, voidedSpend - carriedCredit))
+  );
+  const unbilledSpend = roundMoney(
+    Math.max(0, openCycleSpend - cycleCreditForOpen)
+  );
   const totalOutstanding = roundMoney(
-    Math.max(0, statementDue + unbilledSpend + cancelledSpend - unappliedCredit)
+    statementDue + unbilledSpend + cancelledSpend
   );
 
   return {
@@ -591,7 +579,6 @@ export function buildCreditCardLedger(
     totalOutstanding,
     availableCredit: roundMoney(Math.max(0, limit - unbilledSpend)),
     creditLimit: limit,
-    unappliedCredit,
     openCycle: {
       start: openStart,
       end: openEnd,

@@ -314,7 +314,6 @@ describe("accountActivities and balance utilities", () => {
     // 1,500 of credit on the card, so the limit is fully restored.
     expect(usage.usedThisCycle).toBe(0);
     expect(usage.availableCredit).toBe(100000);
-    expect(usage.unappliedCredit).toBe(1500);
   });
 
   it("evaluates credit card bill history status across cycles", () => {

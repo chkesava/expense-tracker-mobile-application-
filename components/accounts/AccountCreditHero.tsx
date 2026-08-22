@@ -17,7 +17,6 @@ export function AccountCreditHero({
   statementDue,
   cancelledSpend = 0,
   totalOutstanding,
-  unappliedCredit = 0,
   availableCredit,
   creditLimit,
   daysRemaining,
@@ -32,8 +31,6 @@ export function AccountCreditHero({
   /** Owed under a cancelled statement — not this cycle, so it never eats the limit. */
   cancelledSpend?: number;
   totalOutstanding: number;
-  /** Already paid in advance — netted out of `totalOutstanding`. */
-  unappliedCredit?: number;
   availableCredit: number;
   creditLimit: number;
   daysRemaining: number;
@@ -145,19 +142,6 @@ export function AccountCreditHero({
             style={[styles.dueValue, { color: theme.colors.foreground }]}
           />
         </View>
-        {unappliedCredit > 0 ? (
-          <View style={styles.dueRow}>
-            <Text style={[styles.dueLabel, { color: theme.colors.mutedForeground }]}>
-              Already paid in advance
-            </Text>
-            <Amount
-              value={unappliedCredit}
-              currency={currency}
-              ghostable
-              style={[styles.dueValue, { color: availableColor }]}
-            />
-          </View>
-        ) : null}
 
         <View
           style={[

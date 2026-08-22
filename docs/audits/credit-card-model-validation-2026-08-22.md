@@ -72,7 +72,8 @@ unbilledSpend` is what liabilities/net worth consume.
 | CC-6 | P3 | `components/creditCardBills/CreateCreditCardBillModal.tsx:139` | `handleSubmit` had **no validation of any kind** — not just dates. `parseFloat` could hand `createBill` a `NaN` statement amount, and a statement could be dated in the future or given a window running past its own close date. This is what made CC-1 and CC-2 reachable in practice. | Validate the whole form before writing: card selected, amount > 0, minimum due within the statement, real dates, statement date not in the future, due date on/after it, and a billing period that does not extend past the close date. | **Yes** |
 | CC-7 | P3 | `shared/utils/magicParser.test.ts:44` | Pre-existing, unrelated flake: the test built "yesterday" with `toISOString()` (UTC) and compared it against a local-date parser, so it failed every day after 18:30 IST. A permanently-red test masks real breakage in CI. | Freeze local noon and assert a literal date key, so the test is deterministic in any timezone. | **Yes** |
 | CC-11 | **P1** | `shared/utils/creditCardLedger.ts:355` | A stored `billingPeriodStart` was trusted verbatim, and statements written before the close-on-D fix used the *previous* generation day rather than the day after — so consecutive windows shared that boundary day and spend on it was billed in **two** statements. The UI tell is a cycle reading "2026-07-01 → 2026-08-01": 32 days, both ends on a generation day. | A stored window may not reach outside the cycle it closes: clamp the start forward to the derived cycle start and the end back to the statement date. A deliberately narrower stored window is still respected. | **Yes** |
-| CC-10 | P2 | `shared/utils/creditCardLedger.ts:566` | `totalOutstanding` never subtracted `unappliedCredit`, and `useUnifiedNetWorth` consumes `totalOutstanding` — so a card holding an advance reported the user poorer by exactly that amount. Separately, the "Credit balance" row was jargon nobody had asked for. | Net the advance out of `totalOutstanding`, relabel the row in plain language, and cap payments at what the card owes so no new advance accrues by accident. | **Yes** |
+| CC-10 | P2 | `shared/utils/creditCardLedger.ts:566` | The "Credit balance" row was jargon nobody asked for, and `totalOutstanding` never subtracted it while `useUnifiedNetWorth` consumed `totalOutstanding`. | Cap payments at what the card owes so no unmatched credit accrues. The netting half of this fix was **wrong and was reverted** — see CC-12. | Partly — see CC-12 |
+| CC-12 | **P1** | `shared/utils/creditCardLedger.ts:583` | CC-10's netting subtracted unmatched credit from `totalOutstanding` and floored at 0, so a card with ₹393 of real unbilled spend and ₹7,497 of unmatched credit reported **Total outstanding ₹0** — hiding a real debt behind a phantom credit. The credit was never an advance the user paid; it is the residue of a payment recorded against spend the app never saw. | Drop the concept entirely: no `unappliedCredit` field, no row, no netting. Unmatched credit reduces nothing it cannot be matched to. | **Yes** |
 | CC-9 | **P0** | `shared/utils/creditCardLedger.ts:428` | Leftover credit was applied to open-cycle spend regardless of which cycle the payment was made in. Credit left over from a payment made *before* the statement closed silently absorbed spend charged *after* it, so a fresh charge showed ₹0 unbilled. **This audit missed it** — see below. | Bucket leftover by cycle: credit paid inside the open cycle may reduce that cycle's spend, credit carried from an earlier cycle is a standing balance reported as `unappliedCredit`. | **Yes** |
 | CC-8 | **P1** | `shared/utils/magicParser.ts:117` | **Found while fixing CC-7.** In the first-match-wins `dateMap` loop, `/\byesterday\b/` was ordered *before* `/\bday before yesterday\b/` — and `\byesterday\b` matches inside "day before yesterday". So "day before yesterday" resolved to **−1 day instead of −2**, and only "yesterday" was stripped from the text, leaving "day before" polluting the extracted note. | Order the longest pattern first. | **Yes** |
 
@@ -394,6 +395,49 @@ the new cycle — a card closing on the 1st with spend on 1 Aug correctly bills 
 to the 1 Aug statement, which is why it does not appear in the open cycle's
 unbilled figure.
 
+### CC-12 — the "advance" was never an advance, and netting it hid real debt
+
+**Reported from the device, twice.** The user's card showed
+**Already paid in advance ₹7,497** against a ₹393 charge, and insisted — correctly
+— that they had never paid anything ahead.
+
+Two things were wrong, and the first was introduced by CC-10 in this same pass:
+
+1. **Netting hid a real debt.** `totalOutstanding` subtracted the ₹7,497 from
+   ₹393 of genuine unbilled spend and floored the result, so the card reported
+   **Total outstanding ₹0** while money was owed. Worse than the row it was meant
+   to justify.
+2. **The label asserted something untrue.** The ₹7,497 was not money paid ahead.
+   It is the residue of a payment recorded against spend the app never saw — an
+   ₹19,000 payment where the statements it could settle only came to ₹11,503.
+   The honest reading is "our record of what you owed is incomplete", not
+   "you are in credit".
+
+`unappliedCredit` is gone: no ledger field, no hero row, no netting.
+`totalOutstanding` is once again `statementDue + unbilled + cancelled`.
+Credit that outlives every debt is dropped rather than carried, so it can never
+reduce a debt it cannot be matched to.
+
+The payment cap from CC-10 is **kept** — it is what makes dropping safe. Since a
+payment can no longer exceed what the card owes, unmatched credit cannot accrue
+from normal use at all; the only sources are legacy data and externally recorded
+payments.
+
+The cost, accepted deliberately: for a genuine overpayment the excess is not
+credited back in net worth. That was raised before the change and the trade was
+taken knowingly — and where the residue comes from incomplete expense history
+rather than a real overpayment, *not* crediting it is the more accurate answer
+anyway.
+
+#### What this reverses
+
+CC-10 argued the advance had to be netted out to keep net worth honest, and that
+the row had to stay or the hero's figures would not add up. Both were reasoned
+from the assumption that the credit represented real money paid ahead. Once that
+assumption is wrong, the netting is not a correction but a way of hiding debt,
+and a row explaining a phantom is worse than no row. The lesson recorded: before
+building UI to explain a number, establish that the number means what it claims.
+
 ### Tests
 
 `shared/utils/creditCardLedger.test.ts` — new
@@ -424,6 +468,14 @@ generation day belongs to the statement closing that day.
 cases: an advance is netted out; outstanding never goes negative; outstanding
 equals the debt when nothing was overpaid; the advance nets against cancelled
 spend; and `availableCredit` stays on the unbilled rule rather than the advance.
+
+`shared/utils/creditCardLedger.test.ts` — new
+`buildCreditCardLedger — credit beyond every debt is dropped` block, 5 cases
+(CC-12): real unbilled spend still reported when a payment exceeded every
+statement; unmatched credit never hides a debt behind a zero; outstanding equals
+the debt when nothing was overpaid; cancelled spend already settled is not
+resurrected; `availableCredit` stays on the unbilled rule. The obsolete
+`an advance is netted out of outstanding` block was deleted with the concept.
 
 `shared/utils/creditCardLedger.test.ts` — new
 `buildCreditCardLedger — leftover credit does not cross a close date` block, 5

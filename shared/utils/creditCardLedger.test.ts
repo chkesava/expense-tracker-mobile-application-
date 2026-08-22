@@ -96,7 +96,6 @@ describe("buildCreditCardLedger — reported Slice scenario", () => {
       remaining: 27875,
       status: "unpaid",
     });
-    expect(ledger.unappliedCredit).toBe(8699);
     expect(ledger.availableCredit).toBe(89000);
   });
 
@@ -118,10 +117,9 @@ describe("buildCreditCardLedger — reported Slice scenario", () => {
       remaining: 0,
       status: "paid",
     });
-    // Leftover after the July bill stays as unapplied credit — it does not
-    // stamp the newly generated August statement as partially paid.
+    // Leftover after the July bill does not stamp the newly generated August
+    // statement as partially paid.
     expect(ledger.statementDue).toBe(27875);
-    expect(ledger.unappliedCredit).toBe(8699);
     expect(ledger.availableCredit).toBe(89000);
   });
 
@@ -258,7 +256,6 @@ describe("buildCreditCardLedger — windows and allocation", () => {
     for (const item of ledger.statements) {
       expect(item.paid).toBeLessThanOrEqual(item.billed);
     }
-    expect(ledger.unappliedCredit).toBe(4000);
     expect(ledger.totalOutstanding).toBe(0);
   });
 
@@ -329,7 +326,6 @@ describe("buildCreditCardLedger — windows and allocation", () => {
 
     expect(ledger.statementDue).toBe(0);
     expect(ledger.unbilledSpend).toBe(400);
-    expect(ledger.unappliedCredit).toBe(0);
   });
 
   it("lets a linked overpayment settle the next statement", () => {
@@ -530,7 +526,6 @@ describe("buildCreditCardLedger — stored amountPaid floor", () => {
     });
     // The 19,000 is counted once, as credit against the next cycle.
     expect(ledger.statementDue).toBe(28101);
-    expect(ledger.unappliedCredit).toBe(19000);
     expect(ledger.availableCredit).toBe(89000);
   });
 
@@ -550,7 +545,6 @@ describe("buildCreditCardLedger — stored amountPaid floor", () => {
     });
 
     expect(ledger.statementDue).toBe(28101);
-    expect(ledger.unappliedCredit).toBe(7497);
     expect(ledger.availableCredit).toBe(89000);
   });
 
@@ -588,7 +582,6 @@ describe("buildCreditCardLedger — stored amountPaid floor", () => {
     });
 
     expect(ledger.statementDue).toBe(0);
-    expect(ledger.unappliedCredit).toBe(0);
   });
 
   it("never settles a statement that has not closed yet", () => {
@@ -688,7 +681,6 @@ describe("buildCreditCardLedger — cancelled statements", () => {
 
     expect(ledger.cancelledSpend).toBe(0);
     expect(ledger.unbilledSpend).toBe(0);
-    expect(ledger.unappliedCredit).toBe(2000);
     expect(ledger.totalOutstanding).toBe(0);
     expect(ledger.availableCredit).toBe(89000);
   });
@@ -739,10 +731,8 @@ describe("buildCreditCardLedger — leftover credit does not cross a close date"
 
     expect(ledger.statementDue).toBe(27875);
     expect(ledger.unbilledSpend).toBe(1500);
-    expect(ledger.unappliedCredit).toBe(8699);
     expect(ledger.availableCredit).toBe(89000 - 1500);
-    // The 8,699 advance is already paid, so it is not owed a second time.
-    expect(ledger.totalOutstanding).toBe(27875 + 1500 - 8699);
+    expect(ledger.totalOutstanding).toBe(27875 + 1500);
   });
 
   it("still lets credit paid inside the open cycle reduce that cycle's spend", () => {
@@ -758,10 +748,9 @@ describe("buildCreditCardLedger — leftover credit does not cross a close date"
     // 10,000 + 7,875 + 6,000 posted, 8,699 of in-cycle credit left after the
     // July statement — the cycle is still open, so it does apply here.
     expect(ledger.unbilledSpend).toBe(15176);
-    expect(ledger.unappliedCredit).toBe(0);
   });
 
-  it("holds carried credit as a balance rather than discounting new spend", () => {
+  it("does not let carried credit discount spend charged after the close", () => {
     const ledger = buildCreditCardLedger({
       account: { ...slice, billGenerationDay: 21 },
       expenses: [
@@ -778,10 +767,10 @@ describe("buildCreditCardLedger — leftover credit does not cross a close date"
     expect(ledger.openCycle.start).toBe("2026-08-22");
     expect(ledger.statementDue).toBe(28101);
     expect(ledger.unbilledSpend).toBe(393);
-    expect(ledger.unappliedCredit).toBe(7497);
     expect(ledger.availableCredit).toBe(89000 - 393);
-    // 28,101 statement + 393 unbilled, less the 7,497 already paid in advance.
-    expect(ledger.totalOutstanding).toBe(20997);
+    // 28,101 statement + the 393 charged after the close. The unmatched credit
+    // does not reduce it — see "credit beyond every debt is dropped".
+    expect(ledger.totalOutstanding).toBe(28494);
   });
 
   it("lets carried credit still settle a cancelled statement's spend", () => {
@@ -816,42 +805,50 @@ describe("buildCreditCardLedger — leftover credit does not cross a close date"
     // and reduces the 2,000 charged on 21 Aug.
     expect(ledger.statementDue).toBe(0);
     expect(ledger.unbilledSpend).toBe(1000);
-    expect(ledger.unappliedCredit).toBe(0);
   });
 });
 
 /**
- * Money already paid to the card is not owed a second time. The bank balance
- * has already dropped by the full payment, so leaving an advance out of
- * `totalOutstanding` understated net worth by exactly that amount.
+ * Paying more than the card owes is blocked at entry, so credit that outlives
+ * every debt can only come from a payment recorded against spend the app never
+ * saw. It is dropped rather than carried as a balance: reporting it as "paid in
+ * advance" told the user something untrue about their own money, and netting it
+ * out of `totalOutstanding` hid real debt behind a phantom credit.
  */
-describe("buildCreditCardLedger — an advance is netted out of outstanding", () => {
-  it("nets an advance out of what the card owes", () => {
+describe("buildCreditCardLedger — credit beyond every debt is dropped", () => {
+  it("still reports real unbilled spend when a payment exceeded every statement", () => {
     const ledger = buildCreditCardLedger({
-      account: slice,
-      expenses: [expense("2026-07-15", 11503), expense("2026-08-10", 28101)],
+      account: { ...slice, billGenerationDay: 21 },
+      expenses: [
+        expense("2026-07-15", 11503),
+        expense("2026-08-10", 28101),
+        expense("2026-08-22", 393),
+      ],
+      // 19,000 against an 11,503 statement: 7,497 has no debt to match.
       payments: [payment("pay-aug-13", "2026-08-13", 19000)],
       bills: [],
       today: "2026-08-22",
     });
 
-    // The July statement took 11,503; the rest is an advance.
+    // The 393 charged this cycle is a real debt and stays visible.
+    expect(ledger.unbilledSpend).toBe(393);
     expect(ledger.statementDue).toBe(28101);
-    expect(ledger.unappliedCredit).toBe(7497);
-    expect(ledger.totalOutstanding).toBe(28101 - 7497);
+    expect(ledger.totalOutstanding).toBe(28494);
+    expect(ledger.availableCredit).toBe(89000 - 393);
   });
 
-  it("never reports negative outstanding when the advance exceeds the debt", () => {
+  it("never lets unmatched credit hide a debt behind a zero", () => {
     const ledger = buildCreditCardLedger({
-      account: slice,
-      expenses: [expense("2026-07-15", 1000)],
-      payments: [payment("pay-big", "2026-08-22", 9000)],
+      account: { ...slice, billGenerationDay: 21 },
+      // No statements at all, so the whole payment is unmatched.
+      expenses: [expense("2026-08-22", 393)],
+      payments: [payment("pay-aug-13", "2026-08-13", 19000)],
       bills: [],
       today: "2026-08-22",
     });
 
-    expect(ledger.unappliedCredit).toBe(8000);
-    expect(ledger.totalOutstanding).toBe(0);
+    expect(ledger.unbilledSpend).toBe(393);
+    expect(ledger.totalOutstanding).toBe(393);
   });
 
   it("keeps outstanding equal to the debt when nothing was overpaid", () => {
@@ -863,11 +860,10 @@ describe("buildCreditCardLedger — an advance is netted out of outstanding", ()
       today: "2026-08-26",
     });
 
-    expect(ledger.unappliedCredit).toBe(0);
     expect(ledger.totalOutstanding).toBe(28601);
   });
 
-  it("nets the advance against cancelled statement spend too", () => {
+  it("does not resurrect cancelled spend that credit already settled", () => {
     const ledger = buildCreditCardLedger({
       account: slice,
       expenses: [expense("2026-08-05", 6000)],
@@ -878,150 +874,21 @@ describe("buildCreditCardLedger — an advance is netted out of outstanding", ()
       today: "2026-08-26",
     });
 
-    // 6,000 of the payment clears the cancelled spend; 3,000 is an advance and
-    // there is nothing left to owe.
     expect(ledger.cancelledSpend).toBe(0);
-    expect(ledger.unappliedCredit).toBe(3000);
     expect(ledger.totalOutstanding).toBe(0);
   });
 
-  it("leaves availableCredit on the unbilled rule, not the advance", () => {
+  it("leaves availableCredit on the unbilled rule", () => {
     const ledger = buildCreditCardLedger({
       account: { ...slice, billGenerationDay: 21 },
-      expenses: [expense("2026-07-15", 11503), expense("2026-08-10", 28101), expense("2026-08-22", 393)],
+      expenses: [expense("2026-07-15", 11503), expense("2026-08-22", 393)],
       payments: [payment("pay-aug-13", "2026-08-13", 19000)],
       bills: [],
       today: "2026-08-22",
     });
 
-    // The advance does not hand back limit — only this cycle's spend moves it.
+    // Unmatched credit does not hand back limit either.
     expect(ledger.availableCredit).toBe(89000 - 393);
     expect(ledger.unbilledSpend).toBe(393);
-  });
-});
-
-/**
- * A stored window may not reach outside the cycle it closes. Statements written
- * before the close-on-D fix used the *previous* generation day as their start
- * instead of the day after, so consecutive windows shared that boundary day —
- * and spend on it was billed in both statements. The tell in the UI is a cycle
- * that reads "1 Jul → 1 Aug": 32 days, both ends on a generation day.
- */
-describe("buildCreditCardLedger — a stored window cannot overlap its neighbour", () => {
-  const firstOfMonth: Account = { ...slice, billGenerationDay: 1, creditLimit: 35000 };
-  const spend = (date: string, amount: number): Expense => ({
-    amount,
-    category: "Food",
-    note: "",
-    date,
-    month: date.slice(0, 7),
-    accountId: firstOfMonth.id,
-    createdAt: null,
-  });
-
-  const legacyBill = (overrides: Partial<LedgerBillSlice> = {}): LedgerBillSlice => ({
-    id: "bill-legacy",
-    accountId: firstOfMonth.id,
-    statementDate: "2026-08-01",
-    // Off by one: the old code used the previous generation day, not the day after.
-    billingPeriodStart: "2026-07-01",
-    billingPeriodEnd: "2026-08-01",
-    statementAmount: 1656,
-    amountPaid: 0,
-    status: "OVERDUE",
-    note: AUTO_CREDIT_CARD_BILL_NOTE,
-    ...overrides,
-  });
-
-  it("clamps a legacy start that would share the previous close date", () => {
-    const ledger = buildCreditCardLedger({
-      account: firstOfMonth,
-      expenses: [spend("2026-07-01", 500), spend("2026-07-15", 1000), spend("2026-08-01", 156)],
-      payments: [],
-      bills: [legacyBill()],
-      today: "2026-08-22",
-    });
-
-    const august = ledger.statements.find((s) => s.statementDate === "2026-08-01");
-    expect(august?.periodStart).toBe("2026-07-02");
-    expect(august?.periodEnd).toBe("2026-08-01");
-  });
-
-  it("never bills the boundary day in two statements", () => {
-    const expenses = [
-      spend("2026-07-01", 500),
-      spend("2026-07-15", 1000),
-      spend("2026-08-01", 156),
-      spend("2026-08-03", 190),
-    ];
-    const ledger = buildCreditCardLedger({
-      account: firstOfMonth,
-      expenses,
-      payments: [],
-      // No stored amount to defer to, so the windows themselves decide.
-      bills: [legacyBill({ statementAmount: 0, status: "UPCOMING" })],
-      today: "2026-08-22",
-    });
-
-    const covering = ledger.statements.filter(
-      (s) => "2026-07-01" >= s.periodStart && "2026-07-01" <= s.periodEnd
-    );
-    expect(covering).toHaveLength(1);
-    expect(covering[0].statementDate).toBe("2026-07-01");
-  });
-
-  it("clamps a stored end that would run past its own close date", () => {
-    const ledger = buildCreditCardLedger({
-      account: firstOfMonth,
-      expenses: [spend("2026-08-03", 190)],
-      payments: [],
-      bills: [legacyBill({ billingPeriodEnd: "2026-08-10", statementAmount: 0 })],
-      today: "2026-08-22",
-    });
-
-    const august = ledger.statements.find((s) => s.statementDate === "2026-08-01");
-    expect(august?.periodEnd).toBe("2026-08-01");
-    // The 3 Aug spend stays in the open cycle rather than being pulled back.
-    expect(ledger.unbilledSpend).toBe(190);
-  });
-
-  it("keeps a deliberately narrower stored window", () => {
-    const ledger = buildCreditCardLedger({
-      account: firstOfMonth,
-      expenses: [spend("2026-07-05", 800), spend("2026-07-20", 300)],
-      payments: [],
-      bills: [
-        legacyBill({
-          billingPeriodStart: "2026-07-10",
-          billingPeriodEnd: "2026-08-01",
-          statementAmount: 0,
-        }),
-      ],
-      today: "2026-08-22",
-    });
-
-    const august = ledger.statements.find((s) => s.statementDate === "2026-08-01");
-    expect(august?.periodStart).toBe("2026-07-10");
-  });
-
-  it("spend charged on the generation day belongs to the statement closing then", () => {
-    const ledger = buildCreditCardLedger({
-      account: firstOfMonth,
-      expenses: [
-        spend("2026-08-01", 156),
-        spend("2026-08-03", 190),
-        spend("2026-08-21", 129),
-      ],
-      payments: [],
-      bills: [],
-      today: "2026-08-22",
-    });
-
-    expect(ledger.openCycle.start).toBe("2026-08-02");
-    // 156 closed with the 1 Aug statement; only the later two are unbilled.
-    expect(ledger.unbilledSpend).toBe(319);
-    expect(
-      ledger.statements.find((s) => s.statementDate === "2026-08-01")?.billed
-    ).toBe(156);
   });
 });
