@@ -9,7 +9,6 @@ import {
   Text,
   View,
 } from "react-native";
-import * as Haptics from "expo-haptics";
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -33,6 +32,7 @@ import {
 } from "@/shared/utils/vaultMath";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
 
 export interface VaultDetailModalProps {
   visible: boolean;
@@ -346,7 +346,7 @@ export function VaultDetailModal({
           <View style={[styles.footer, { borderTopColor: theme.colors.border }]}>
             <Button
               onPress={() => {
-                Haptics.selectionAsync().catch(() => undefined);
+                haptic.selection().catch(() => undefined);
                 setIsTxModalOpen(true);
               }}
               style={{ flex: 1 }}

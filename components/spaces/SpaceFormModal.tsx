@@ -1,17 +1,17 @@
 import React, { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import * as Haptics from "expo-haptics";
 
 import { Modal } from "@/components/common/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import type { CreateSpaceInput } from "@/hooks/useSpaces";
 import { toast } from "@/lib/toast";
-import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import type { Space } from "@/shared/types/space";
 import { SPACE_COLORS } from "@/shared/types/space";
 import { isValidDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
+import { haptic } from "@/lib/haptics";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
 export interface SpaceFormModalProps {
   visible: boolean;
@@ -30,7 +30,7 @@ export function SpaceFormModal({
   onUpdate,
 }: SpaceFormModalProps) {
   const { theme } = useTheme();
-  const { settings: system } = useSystemSettings();
+  const displayCurrency = useDisplayCurrency();
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -141,7 +141,7 @@ export function SpaceFormModal({
                 <Pressable
                   key={swatch}
                   onPress={() => {
-                    Haptics.selectionAsync().catch(() => undefined);
+                    haptic.selection().catch(() => undefined);
                     setColor(swatch);
                   }}
                   style={[
@@ -164,7 +164,7 @@ export function SpaceFormModal({
 
         <View style={styles.group}>
           <Text style={[styles.label, { color: theme.colors.foreground }]}>
-            Budget ({system.defaultCurrency}, optional)
+            Budget ({displayCurrency}, optional)
           </Text>
           <Input
             value={budget}

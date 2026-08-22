@@ -228,3 +228,59 @@ describe("reconcileBillReminders orchestration", () => {
     expect(mockScheduleNotification).toHaveBeenCalled();
   });
 });
+
+describe("dateTriggerFromDateKey timezone handling", () => {
+  it("fires at the quiet-hours start on the given calendar day", async () => {
+    const { dateTriggerFromDateKey } = await import("./billReminderScheduler");
+    const when = dateTriggerFromDateKey("2026-08-22", "08:00", "21:00");
+    expect(when.getFullYear()).toBe(2026);
+    expect(when.getMonth()).toBe(7); // August
+    expect(when.getDate()).toBe(22);
+  });
+
+  it("is unchanged when no timezone preference is supplied", async () => {
+    const { dateTriggerFromDateKey } = await import("./billReminderScheduler");
+    const bare = dateTriggerFromDateKey("2026-08-22", "08:00", "21:00");
+    const explicitUndefined = dateTriggerFromDateKey(
+      "2026-08-22",
+      "08:00",
+      "21:00",
+      undefined
+    );
+    expect(explicitUndefined.getTime()).toBe(bare.getTime());
+  });
+
+  it("shifts the fire time when the user's timezone differs from the device", async () => {
+    const { dateTriggerFromDateKey } = await import("./billReminderScheduler");
+    // Regression: `timezone` was accepted and discarded (`void timezone`), so a
+    // user whose app timezone differed from their device's was notified at the
+    // wrong hour. Two distant zones must not produce the same instant.
+    const kolkata = dateTriggerFromDateKey(
+      "2026-08-22",
+      "08:00",
+      "21:00",
+      "Asia/Kolkata"
+    );
+    const losAngeles = dateTriggerFromDateKey(
+      "2026-08-22",
+      "08:00",
+      "21:00",
+      "America/Los_Angeles"
+    );
+    expect(kolkata.getTime()).not.toBe(losAngeles.getTime());
+    // Kolkata (UTC+5:30) reaches 08:00 before Los Angeles (UTC-7).
+    expect(kolkata.getTime()).toBeLessThan(losAngeles.getTime());
+  });
+
+  it("falls back to device-local time for an unknown timezone id", async () => {
+    const { dateTriggerFromDateKey } = await import("./billReminderScheduler");
+    const bogus = dateTriggerFromDateKey(
+      "2026-08-22",
+      "08:00",
+      "21:00",
+      "Not/AZone"
+    );
+    const bare = dateTriggerFromDateKey("2026-08-22", "08:00", "21:00");
+    expect(bogus.getTime()).toBe(bare.getTime());
+  });
+})

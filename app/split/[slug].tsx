@@ -1,7 +1,6 @@
 import { useMemo } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import * as Haptics from "expo-haptics";
 
 import { Amount } from "@/components/common/Amount";
 import { ErrorState } from "@/components/common/ErrorState";
@@ -16,6 +15,7 @@ import {
 } from "@/shared/utils/splitPublicShare";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
 
 export default function PublicSplitScreen() {
   const { slug: slugParam } = useLocalSearchParams<{ slug?: string | string[] }>();
@@ -172,7 +172,7 @@ export default function PublicSplitScreen() {
                     {canPay ? (
                       <Pressable
                         onPress={() => {
-                          Haptics.selectionAsync().catch(() => undefined);
+                          haptic.selection().catch(() => undefined);
                           push(`/payment/${p.personSlug}` as never);
                         }}
                         accessibilityRole="button"

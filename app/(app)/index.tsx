@@ -12,5 +12,9 @@ export default function AppIndex() {
     return <Redirect href="/insights" />;
   }
 
+  if (settings.defaultView === "add") {
+    return <Redirect href="/add" />;
+  }
+
   return <Redirect href="/dashboard" />;
 }

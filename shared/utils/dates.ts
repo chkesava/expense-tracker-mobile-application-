@@ -93,3 +93,59 @@ export function billDateForMonth(
 ): Date {
   return new Date(year, monthIndex, clampBillDay(year, monthIndex, billDay));
 }
+
+/* ------------------------------------------------------------------ */
+/* Week boundaries (honour the user's `firstDayOfWeek` preference)     */
+/* ------------------------------------------------------------------ */
+
+export type FirstDayOfWeek = "monday" | "sunday";
+
+/** Day index (0=Sun … 6=Sat) that a week starts on. */
+export function firstDayIndex(firstDay: FirstDayOfWeek): number {
+  return firstDay === "sunday" ? 0 : 1;
+}
+
+/**
+ * First date key of the calendar week containing `dateKey`.
+ * With `monday`, 2026-08-22 (a Saturday) starts on 2026-08-17;
+ * with `sunday` it starts on 2026-08-16.
+ */
+export function startOfWeekDateKey(
+  dateKey: string,
+  firstDay: FirstDayOfWeek = "monday"
+): string {
+  const date = parseLocalDate(dateKey);
+  const offset = (date.getDay() - firstDayIndex(firstDay) + 7) % 7;
+  return shiftDateKey(dateKey, -offset);
+}
+
+/** Last date key of the calendar week containing `dateKey`. */
+export function endOfWeekDateKey(
+  dateKey: string,
+  firstDay: FirstDayOfWeek = "monday"
+): string {
+  return shiftDateKey(startOfWeekDateKey(dateKey, firstDay), 6);
+}
+
+/** Whole calendar days from `from` to `to` (negative when `to` precedes `from`). */
+export function daysBetweenDateKeys(from: string, to: string): number {
+  const a = parseLocalDate(from).getTime();
+  const b = parseLocalDate(to).getTime();
+  return Math.round((b - a) / 86_400_000);
+}
+
+const SHORT_WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+
+/**
+ * Short weekday labels rotated so the user's first day comes first, paired with
+ * the `Date.getDay()` index each label corresponds to.
+ */
+export function orderedWeekdays(
+  firstDay: FirstDayOfWeek = "monday"
+): { index: number; label: string }[] {
+  const start = firstDayIndex(firstDay);
+  return Array.from({ length: 7 }, (_, i) => {
+    const index = (start + i) % 7;
+    return { index, label: SHORT_WEEKDAYS[index] };
+  });
+}

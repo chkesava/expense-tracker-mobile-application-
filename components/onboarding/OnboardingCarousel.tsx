@@ -12,7 +12,6 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as Haptics from "expo-haptics";
 import {
   BarChart3,
   ChevronRight,
@@ -26,6 +25,7 @@ import {
 
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
 
 export const FIRST_LAUNCH_KEY = "@vault_has_launched_before";
 
@@ -98,19 +98,19 @@ export function OnboardingCarousel() {
     );
     if (slideIndex !== activeIndex && slideIndex >= 0 && slideIndex < ONBOARDING_SLIDES.length) {
       setActiveIndex(slideIndex);
-      Haptics.selectionAsync().catch(() => undefined);
+      haptic.selection().catch(() => undefined);
     }
   };
 
   const handleComplete = async () => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+    haptic.success().catch(() => undefined);
     await AsyncStorage.setItem(FIRST_LAUNCH_KEY, "true").catch(() => undefined);
     router.replace("/(auth)/login" as any);
   };
 
   const handleNext = () => {
     if (activeIndex < ONBOARDING_SLIDES.length - 1) {
-      Haptics.selectionAsync().catch(() => undefined);
+      haptic.selection().catch(() => undefined);
       flatListRef.current?.scrollToIndex({
         index: activeIndex + 1,
         animated: true,

@@ -8,7 +8,6 @@ import {
   TextInput,
   View,
 } from "react-native";
-import * as Haptics from "expo-haptics";
 import { ArrowDownLeft, ArrowUpRight, Plus, X } from "lucide-react-native";
 
 import { Button } from "@/components/ui/Button";
@@ -18,6 +17,7 @@ import type { SharedVault } from "@/shared/types/vault";
 import { todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
 
 export interface VaultTransactionModalProps {
   visible: boolean;
@@ -141,7 +141,7 @@ export function VaultTransactionModal({
             >
               <Pressable
                 onPress={() => {
-                  Haptics.selectionAsync().catch(() => undefined);
+                  haptic.selection().catch(() => undefined);
                   setType("deposit");
                 }}
                 style={[
@@ -177,7 +177,7 @@ export function VaultTransactionModal({
 
               <Pressable
                 onPress={() => {
-                  Haptics.selectionAsync().catch(() => undefined);
+                  haptic.selection().catch(() => undefined);
                   setType("withdrawal");
                 }}
                 style={[

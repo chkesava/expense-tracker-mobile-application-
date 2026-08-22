@@ -1,6 +1,5 @@
 import { type ReactNode } from "react";
 import { Pressable, StyleSheet, Switch, Text, View } from "react-native";
-import * as Haptics from "expo-haptics";
 
 import { ACCOUNT_GREEN } from "@/components/accounts/accountScreenTheme";
 import { haptic } from "@/lib/haptics";
@@ -137,7 +136,7 @@ export function ChipRow<T extends string>({
           <Pressable
             key={opt.value}
             onPress={() => {
-              Haptics.selectionAsync().catch(() => undefined);
+              haptic.selection().catch(() => undefined);
               onSelect(opt.value);
             }}
             android_ripple={{

@@ -8,7 +8,6 @@ import {
   Text,
   View,
 } from "react-native";
-import * as Haptics from "expo-haptics";
 import { Check, CreditCard } from "lucide-react-native";
 
 import { InstitutionSearchField } from "@/components/accounts/InstitutionSearchField";
@@ -39,6 +38,7 @@ import { effectiveBalanceAsOfDate } from "@/shared/utils/accountBaseline";
 import { formatDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
 
 const ACCOUNT_COLORS = [
   "#4F46E5",
@@ -363,7 +363,7 @@ export function EditAccountModal({
                 <Pressable
                   key={t.id}
                   onPress={() => {
-                    Haptics.selectionAsync().catch(() => undefined);
+                    haptic.selection().catch(() => undefined);
                     setTypeId(t.id);
                     const nextTypeId = canonicalAccountTypeId(t.name);
                     if (!requiresCatalogInstitution(nextTypeId)) {

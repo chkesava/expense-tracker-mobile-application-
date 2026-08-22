@@ -2,8 +2,8 @@ import React from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import Animated, { Layout, FadeIn, FadeOut } from "react-native-reanimated";
 import { Check, ChevronRight } from "lucide-react-native";
-import * as Haptics from "expo-haptics";
 import { useTheme } from "@/theme/ThemeProvider";
+import { haptic } from "@/lib/haptics";
 
 interface SetupStepItemProps {
   label: string;
@@ -16,7 +16,7 @@ export function SetupStepItem({ label, completed, onPress }: SetupStepItemProps)
 
   const handlePress = () => {
     if (onPress) {
-      Haptics.selectionAsync().catch(() => undefined);
+      haptic.selection().catch(() => undefined);
       onPress();
     }
   };

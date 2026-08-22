@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { useLocalSearchParams } from "expo-router";
-import * as Haptics from "expo-haptics";
 import {
   BarChart3,
   Bot,
@@ -22,6 +21,7 @@ import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import { useSetupProgress } from "@/providers/SetupProgressProvider";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
 
 export type InsightsTab = "analytics" | "yearly" | "search" | "advisor";
 
@@ -81,7 +81,7 @@ export default function InsightsScreen() {
           system.allowDataExport ? (
             <Pressable
               onPress={() => {
-                Haptics.selectionAsync().catch(() => undefined);
+                haptic.selection().catch(() => undefined);
                 setIsExportModalOpen(true);
               }}
               style={({ pressed }) => [

@@ -8,13 +8,11 @@ import {
   TextInput,
   View,
 } from "react-native";
-import * as Haptics from "expo-haptics";
 import { X } from "lucide-react-native";
 
 import { Button } from "@/components/ui/Button";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
-import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import type { Split } from "@/shared/types/split";
 import { getAccountKind } from "@/shared/utils/accountKind";
 import {
@@ -23,6 +21,8 @@ import {
 } from "@/shared/utils/splitMath";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
 export interface UseGiftMoneyModalProps {
   visible: boolean;
@@ -39,7 +39,7 @@ export function UseGiftMoneyModal({
 }: UseGiftMoneyModalProps) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
-  const { settings: system } = useSystemSettings();
+  const displayCurrency = useDisplayCurrency();
   const { accounts } = useAccounts();
   const { accountTypes } = useAccountTypes();
   const [amount, setAmount] = useState("");
@@ -78,7 +78,7 @@ export function UseGiftMoneyModal({
 
   const handleConfirm = async () => {
     if (!split || spendAmount <= 0 || !accountId) return;
-    Haptics.selectionAsync().catch(() => undefined);
+    haptic.selection().catch(() => undefined);
     setSubmitting(true);
     try {
       const ok = await onConfirm(spendAmount, accountId);
@@ -129,7 +129,7 @@ export function UseGiftMoneyModal({
           </Text>
 
           <Text style={[styles.label, { color: theme.colors.mutedForeground }]}>
-            ACTUAL GIFT AMOUNT ({system.defaultCurrency})
+            ACTUAL GIFT AMOUNT ({displayCurrency})
           </Text>
           <TextInput
             value={amount}
@@ -216,17 +216,17 @@ export function UseGiftMoneyModal({
           >
             <Row
               label="Collected from friends"
-              value={`${system.defaultCurrency} ${breakdown.othersCollected.toFixed(2)}`}
+              value={`${displayCurrency} ${breakdown.othersCollected.toFixed(2)}`}
               color={theme.colors.mutedForeground}
             />
             <Row
               label="Friends' money used (not expense)"
-              value={`${system.defaultCurrency} ${breakdown.passThroughDebit.toFixed(2)}`}
+              value={`${displayCurrency} ${breakdown.passThroughDebit.toFixed(2)}`}
               color={theme.colors.mutedForeground}
             />
             <Row
               label="Your expense"
-              value={`${system.defaultCurrency} ${breakdown.ownExpense.toFixed(2)}`}
+              value={`${displayCurrency} ${breakdown.ownExpense.toFixed(2)}`}
               color={theme.colors.foreground}
             />
           </View>

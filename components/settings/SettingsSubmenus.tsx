@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -8,7 +8,6 @@ import {
   ScrollView,
   TextInput,
 } from "react-native";
-import * as Haptics from "expo-haptics";
 import {
   Trash2,
   Plus,
@@ -30,6 +29,9 @@ import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { useCelebration } from "@/providers/CelebrationProvider";
 import { useSettings } from "@/providers/SettingsProvider";
+import {
+  KNOWN_DASHBOARD_WIDGETS,
+} from "@/shared/utils/dashboardWidgets";
 import { useCategorizationRules } from "@/hooks/useCategorizationRules";
 import { useCategoryBudgets } from "@/hooks/useCategoryBudgets";
 import { useFinancialGoals } from "@/hooks/useFinancialGoals";
@@ -44,6 +46,7 @@ import { Card } from "@/components/ui/Card";
 import { Amount } from "@/components/common/Amount";
 import type { Account } from "@/shared/types/expense";
 import { getAccountLast4 } from "@/shared/utils/accountIdentity";
+import { haptic } from "@/lib/haptics";
 
 // -------------------------------------------------------------
 // Helper Component: Material 3 Collapsible Section
@@ -64,7 +67,7 @@ function CollapsibleSection({
   const [expanded, setExpanded] = useState(true);
 
   const toggleExpand = () => {
-    Haptics.selectionAsync().catch(() => undefined);
+    haptic.selection().catch(() => undefined);
     setExpanded(!expanded);
   };
 
@@ -155,7 +158,7 @@ export function DashboardWidgetToggles() {
   const { settings, updateSettings } = useSettings();
 
   const toggleWidget = (id: keyof typeof settings.dashboardWidgets) => {
-    Haptics.selectionAsync().catch(() => undefined);
+    haptic.selection().catch(() => undefined);
     const current = settings.dashboardWidgets || {};
     const updated = {
       ...current,
@@ -221,6 +224,121 @@ export function DashboardWidgetToggles() {
 }
 
 // -------------------------------------------------------------
+// 1b. Dashboard Widget Order (Personalization)
+// -------------------------------------------------------------
+const WIDGET_ORDER_LABELS: Record<string, string> = {
+  focus: "Focus Mode",
+  gamification: "Gamification",
+  subscriptions: "Subscriptions",
+  topCategories: "Top Categories",
+  overview: "Monthly Overview",
+  investments: "Investments",
+  quickAdd: "Quick Add",
+  insight: "Smart Insights",
+  budgetAlerts: "Budget Alerts",
+  financialGoals: "Financial Goals",
+  recentActivity: "Recent Activity",
+};
+
+export function DashboardWidgetOrder() {
+  const { theme, themeName } = useTheme();
+  const isDark = themeUsesDarkPalette(themeName);
+  const { settings, setDashboardOrder } = useSettings();
+
+  // Saved order first, then any widget the saved order predates.
+  const order = useMemo(() => {
+    const saved = (settings.dashboardOrder || []).filter((id) =>
+      KNOWN_DASHBOARD_WIDGETS.includes(id as never)
+    );
+    const missing = KNOWN_DASHBOARD_WIDGETS.filter((id) => !saved.includes(id));
+    return [...saved, ...missing];
+  }, [settings.dashboardOrder]);
+
+  const move = (index: number, direction: -1 | 1) => {
+    const target = index + direction;
+    if (target < 0 || target >= order.length) return;
+    void haptic.selection();
+    const next = [...order];
+    [next[index], next[target]] = [next[target], next[index]];
+    setDashboardOrder(next);
+  };
+
+  return (
+    <View style={{ gap: 12 }}>
+      <View>
+        <Text style={{ color: theme.colors.foreground, fontWeight: "800", fontSize: 16 }}>
+          Dashboard Order
+        </Text>
+        <Text style={{ color: theme.colors.mutedForeground, fontSize: 13, marginTop: 2 }}>
+          Reorder the sections on your home dashboard.
+        </Text>
+      </View>
+
+      <View style={{ gap: 8, marginTop: 4 }}>
+        {order.map((id, index) => (
+          <View
+            key={id}
+            style={[
+              styles.tileRow,
+              {
+                backgroundColor: isDark
+                  ? "rgba(255,255,255,0.03)"
+                  : "rgba(0,0,0,0.02)",
+                borderColor: theme.colors.border,
+              },
+            ]}
+          >
+            <Text
+              style={{
+                color: theme.colors.mutedForeground,
+                fontSize: 13,
+                fontWeight: "700",
+                width: 22,
+              }}
+            >
+              {index + 1}
+            </Text>
+            <Text
+              style={{
+                color: theme.colors.foreground,
+                fontWeight: "600",
+                fontSize: 15,
+                flex: 1,
+              }}
+              numberOfLines={1}
+            >
+              {WIDGET_ORDER_LABELS[id] || id}
+            </Text>
+            <Pressable
+              onPress={() => move(index, -1)}
+              disabled={index === 0}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={`Move ${WIDGET_ORDER_LABELS[id] || id} up`}
+              accessibilityState={{ disabled: index === 0 }}
+              style={{ padding: 6, opacity: index === 0 ? 0.3 : 1 }}
+            >
+              <ChevronUp size={18} color={theme.colors.foreground} />
+            </Pressable>
+            <Pressable
+              onPress={() => move(index, 1)}
+              disabled={index === order.length - 1}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={`Move ${WIDGET_ORDER_LABELS[id] || id} down`}
+              accessibilityState={{ disabled: index === order.length - 1 }}
+              style={{ padding: 6, opacity: index === order.length - 1 ? 0.3 : 1 }}
+            >
+              <ChevronDown size={18} color={theme.colors.foreground} />
+            </Pressable>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+// -------------------------------------------------------------
 // 2. Auto-Categorization Rules (Personalization)
 // -------------------------------------------------------------
 export function AutoCategorizationRulesManager() {
@@ -233,14 +351,14 @@ export function AutoCategorizationRulesManager() {
 
   const handleAdd = () => {
     if (!keyword.trim() || !category) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
+    haptic.medium().catch(() => undefined);
     void addRule(keyword.trim(), category, subcategory);
     setKeyword("");
   };
 
   const handleDelete = (id?: string) => {
     if (!id) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+    haptic.light().catch(() => undefined);
     deleteRule(id);
   };
 
@@ -357,7 +475,7 @@ export function CategoryBudgetsManager() {
   const handleAdd = () => {
     const amt = Number(amount);
     if (!category || !month || isNaN(amt) || amt <= 0) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
+    haptic.medium().catch(() => undefined);
     void addBudget(category, amt, month, subcategory);
     celebrateMilestone("milestone_first_budget", {
       title: "First Budget Set!",
@@ -370,7 +488,7 @@ export function CategoryBudgetsManager() {
 
   const handleDelete = (id?: string) => {
     if (!id) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+    haptic.light().catch(() => undefined);
     deleteBudget(id);
   };
 
@@ -490,7 +608,7 @@ export function FinancialGoalsManager() {
     const tgt = Number(target);
     const cur = Number(current);
     if (!name.trim() || isNaN(tgt) || tgt <= 0) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
+    haptic.medium().catch(() => undefined);
     void addGoal(name.trim(), tgt, cur, deadline);
     celebrateMilestone("milestone_first_goal", {
       title: "First Goal Created!",
@@ -506,7 +624,7 @@ export function FinancialGoalsManager() {
 
   const handleDelete = (id?: string) => {
     if (!id) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+    haptic.light().catch(() => undefined);
     deleteGoal(id);
   };
 
@@ -647,14 +765,14 @@ export function AccountTypesManager() {
 
   const handleAdd = () => {
     if (!newType.trim()) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
+    haptic.medium().catch(() => undefined);
     void addAccountType(newType.trim());
     setNewType("");
   };
 
   const handleDelete = (id?: string) => {
     if (!id) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+    haptic.light().catch(() => undefined);
     deleteAccountType(id);
   };
 
@@ -749,20 +867,20 @@ export function AccountsManager() {
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
 
   const handleOpenCreate = () => {
-    Haptics.selectionAsync().catch(() => undefined);
+    haptic.selection().catch(() => undefined);
     setEditingAccount(null);
     setIsModalOpen(true);
   };
 
   const handleOpenEdit = (account: Account) => {
-    Haptics.selectionAsync().catch(() => undefined);
+    haptic.selection().catch(() => undefined);
     setEditingAccount(account);
     setIsModalOpen(true);
   };
 
   const handleDelete = (id?: string) => {
     if (!id) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+    haptic.light().catch(() => undefined);
     deleteAccount(id);
   };
 

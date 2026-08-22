@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import * as Haptics from "expo-haptics";
 
 import { Modal } from "@/components/common/Modal";
 import { Button } from "@/components/ui/Button";
@@ -9,7 +8,6 @@ import { toast } from "@/lib/toast";
 import { useAccounts } from "@/hooks/useAccounts";
 import type { CreateReceivableInput } from "@/hooks/useReceivables";
 import { useSpaces } from "@/hooks/useSpaces";
-import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import {
   PERSON_TYPES,
   PERSON_TYPE_LABELS,
@@ -18,6 +16,8 @@ import {
 import { isValidDateKey, todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
 export interface CreateReceivableModalProps {
   visible: boolean;
@@ -32,7 +32,7 @@ export function CreateReceivableModal({
 }: CreateReceivableModalProps) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
-  const { settings: system } = useSystemSettings();
+  const displayCurrency = useDisplayCurrency();
   const { accounts } = useAccounts();
   const { spaces } = useSpaces();
 
@@ -145,7 +145,7 @@ export function CreateReceivableModal({
                 <Pressable
                   key={type}
                   onPress={() => {
-                    Haptics.selectionAsync().catch(() => undefined);
+                    haptic.selection().catch(() => undefined);
                     setPersonType(type);
                   }}
                   style={[styles.pill, pillStyle(isActive)]}
@@ -172,7 +172,7 @@ export function CreateReceivableModal({
 
         <View style={styles.group}>
           <Text style={[styles.label, { color: theme.colors.foreground }]}>
-            Amount Lent ({system.defaultCurrency}) *
+            Amount Lent ({displayCurrency}) *
           </Text>
           <Input
             value={originalAmount}
@@ -204,7 +204,7 @@ export function CreateReceivableModal({
                   <Pressable
                     key={account.id}
                     onPress={() => {
-                      Haptics.selectionAsync().catch(() => undefined);
+                      haptic.selection().catch(() => undefined);
                       setSourceAccountId(account.id);
                     }}
                     style={[styles.pill, pillStyle(isActive)]}
@@ -290,7 +290,7 @@ export function CreateReceivableModal({
                   <Pressable
                     key={space.id}
                     onPress={() => {
-                      Haptics.selectionAsync().catch(() => undefined);
+                      haptic.selection().catch(() => undefined);
                       setSpaceId(space.id ?? "");
                     }}
                     style={[styles.pill, pillStyle(isActive)]}

@@ -8,7 +8,6 @@ import {
   TextInput,
   View,
 } from "react-native";
-import * as Haptics from "expo-haptics";
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -29,12 +28,13 @@ import {
 import { useAccounts } from "@/hooks/useAccounts";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useIncomes } from "@/hooks/useIncomes";
-import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import { getCategoryIcon } from "@/shared/data/categoryTaxonomy";
 import type { Expense, Income } from "@/shared/types/expense";
 import { currentMonthKey, toLocalDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
 export interface UnifiedTransaction {
   id: string;
@@ -55,7 +55,7 @@ export interface AnalysisLabViewProps {
 export function AnalysisLabView({ initialQuery = "" }: AnalysisLabViewProps) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
-  const { settings: system } = useSystemSettings();
+  const displayCurrency = useDisplayCurrency();
 
   const { expenses } = useExpenses();
   const { incomes } = useIncomes();
@@ -225,7 +225,7 @@ export function AnalysisLabView({ initialQuery = "" }: AnalysisLabViewProps) {
       <View style={styles.filterRow}>
         <Pressable
           onPress={() => {
-            Haptics.selectionAsync().catch(() => undefined);
+            haptic.selection().catch(() => undefined);
             setIsFilterModalOpen(true);
           }}
           style={({ pressed }) => [
@@ -276,7 +276,7 @@ export function AnalysisLabView({ initialQuery = "" }: AnalysisLabViewProps) {
               <Pressable
                 key={dp.id}
                 onPress={() => {
-                  Haptics.selectionAsync().catch(() => undefined);
+                  haptic.selection().catch(() => undefined);
                   setFilters((p) => ({ ...p, datePreset: dp.id }));
                 }}
                 style={[
@@ -327,7 +327,7 @@ export function AnalysisLabView({ initialQuery = "" }: AnalysisLabViewProps) {
           </Text>
           <Amount
             value={totalAmount}
-            currency={system.defaultCurrency}
+            currency={displayCurrency}
             ghostable
             style={{ fontSize: 16, fontWeight: "800", color: theme.colors.foreground }}
           />
@@ -339,7 +339,7 @@ export function AnalysisLabView({ initialQuery = "" }: AnalysisLabViewProps) {
           </Text>
           <Amount
             value={avgAmount}
-            currency={system.defaultCurrency}
+            currency={displayCurrency}
             ghostable
             style={{ fontSize: 16, fontWeight: "800", color: theme.colors.mutedForeground }}
           />
@@ -431,7 +431,7 @@ export function AnalysisLabView({ initialQuery = "" }: AnalysisLabViewProps) {
 
                 <Amount
                   value={item.amount}
-                  currency={system.defaultCurrency}
+                  currency={displayCurrency}
                   ghostable
                   style={{
                     fontSize: 15,

@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -11,7 +12,9 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { doc, setDoc } from "firebase/firestore";
 import { useColorScheme as useSystemColorScheme } from "react-native";
 
+import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
+import { commitWrite } from "@/lib/firestoreWrite";
 import { useAuth } from "@/providers/AuthProvider";
 import { useUserDoc } from "@/providers/UserDocProvider";
 import { memoryStorage, setSharedStorage } from "@/shared/storage/memoryStorage";
@@ -134,27 +137,55 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
     }
   }, [system, themeMode]);
 
+  /**
+   * Theme fields live on `users/{uid}` alongside the settings document, but this
+   * provider sits *above* `SettingsProvider` and cannot reach its write queue.
+   * Serialising here keeps concurrent theme/accent writes from interleaving, and
+   * routes failures through `lib/errors` instead of a silent `console.error`.
+   */
+  const themeWriteChain = useRef(Promise.resolve());
+  const persistThemeFields = useCallback(
+    (fields: Record<string, string>) => {
+      const user = realUser;
+      const db = getFirestoreDb();
+      if (!user || !db) return Promise.resolve();
+
+      themeWriteChain.current = themeWriteChain.current.then(async () => {
+        try {
+          await commitWrite(
+            () => setDoc(doc(db, "users", user.uid), fields, { merge: true }),
+            { label: "theme" }
+          );
+        } catch (err) {
+          logError("themeProvider.persistThemeFields", err);
+        }
+      });
+      return themeWriteChain.current;
+    },
+    [realUser]
+  );
+
   const setThemeName = useCallback(
     (name: ThemeName) => {
+      const derivedMode: ThemeMode =
+        name === "light" ? "light" : name === "dark" ? "dark" : "custom";
       setThemeNameState(name);
-      setThemeModeState(name === "light" ? "light" : name === "dark" ? "dark" : "custom");
+      setThemeModeState(derivedMode);
       try {
         memoryStorage.setItem(THEME_STORAGE_KEY, name);
       } catch {
         /* ignore */
       }
       void AsyncStorage.setItem(THEME_STORAGE_KEY, name);
+      // Persist the derived mode locally too. AsyncStorage is the only source
+      // available during the first frames and while offline/pre-auth, so
+      // writing the mode to Firestore alone let a preset choice revert on the
+      // next cold start.
+      void AsyncStorage.setItem(THEME_MODE_STORAGE_KEY, derivedMode);
 
-      const db = getFirestoreDb();
-      if (realUser && db) {
-        setDoc(
-          doc(db, "users", realUser.uid),
-          { theme: name, themeMode: name === "light" ? "light" : name === "dark" ? "dark" : "custom" },
-          { merge: true }
-        ).catch((err) => console.error("Failed to sync theme to Firestore", err));
-      }
+      void persistThemeFields({ theme: name, themeMode: derivedMode });
     },
-    [realUser]
+    [persistThemeFields]
   );
 
   const setThemeMode = useCallback(
@@ -173,16 +204,9 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
       void AsyncStorage.setItem(THEME_MODE_STORAGE_KEY, mode);
       void AsyncStorage.setItem(THEME_STORAGE_KEY, targetTheme);
 
-      const db = getFirestoreDb();
-      if (realUser && db) {
-        setDoc(
-          doc(db, "users", realUser.uid),
-          { theme: targetTheme, themeMode: mode },
-          { merge: true }
-        ).catch((err) => console.error("Failed to sync theme mode to Firestore", err));
-      }
+      void persistThemeFields({ theme: targetTheme, themeMode: mode });
     },
-    [realUser, system, themeName]
+    [persistThemeFields, system, themeName]
   );
 
   const setAccentColor = useCallback(
@@ -195,16 +219,9 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
       }
       void AsyncStorage.setItem(ACCENT_STORAGE_KEY, accent);
 
-      const db = getFirestoreDb();
-      if (realUser && db) {
-        setDoc(
-          doc(db, "users", realUser.uid),
-          { accentColor: accent },
-          { merge: true }
-        ).catch((err) => console.error("Failed to sync accent color to Firestore", err));
-      }
+      void persistThemeFields({ accentColor: accent });
     },
-    [realUser]
+    [persistThemeFields]
   );
 
   const toggleTheme = useCallback(() => {
