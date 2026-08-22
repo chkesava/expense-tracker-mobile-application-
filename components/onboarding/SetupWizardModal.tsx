@@ -13,7 +13,6 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { updateProfile } from "firebase/auth";
 import { addDoc, collection, doc, serverTimestamp, setDoc } from "firebase/firestore";
-import * as Haptics from "expo-haptics";
 import {
   ArrowLeft,
   ArrowRight,
@@ -50,6 +49,7 @@ import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import { useUserDoc } from "@/providers/UserDocProvider";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
 
 const CURRENCIES = [
   { code: "INR", symbol: "₹", label: "Indian Rupee" },
@@ -149,7 +149,7 @@ export function SetupWizardModal() {
   };
 
   const handleClose = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+    haptic.light().catch(() => undefined);
     setIsSetupWizardOpen(false);
   };
 
@@ -252,7 +252,7 @@ export function SetupWizardModal() {
         return;
       }
 
-      Haptics.selectionAsync().catch(() => undefined);
+      haptic.selection().catch(() => undefined);
       if (currentStep < WIZARD_STEPS.length - 1) {
         setCurrentStep((prev) => prev + 1);
       } else {
@@ -273,13 +273,13 @@ export function SetupWizardModal() {
 
   const handleBack = () => {
     if (currentStep > 0) {
-      Haptics.selectionAsync().catch(() => undefined);
+      haptic.selection().catch(() => undefined);
       setCurrentStep((prev) => prev - 1);
     }
   };
 
   const handleSkip = () => {
-    Haptics.selectionAsync().catch(() => undefined);
+    haptic.selection().catch(() => undefined);
     if (currentStep < WIZARD_STEPS.length - 1) {
       setCurrentStep((prev) => prev + 1);
     } else {
@@ -407,7 +407,7 @@ export function SetupWizardModal() {
                       <Pressable
                         key={emoji}
                         onPress={() => {
-                          Haptics.selectionAsync().catch(() => undefined);
+                          haptic.selection().catch(() => undefined);
                           setSelectedEmoji(emoji);
                         }}
                         style={[
@@ -447,7 +447,7 @@ export function SetupWizardModal() {
                       <Pressable
                         key={curr.code}
                         onPress={() => {
-                          Haptics.selectionAsync().catch(() => undefined);
+                          haptic.selection().catch(() => undefined);
                           setSelectedCurrency(curr.code);
                         }}
                         style={[
@@ -529,7 +529,7 @@ export function SetupWizardModal() {
                       <Pressable
                         key={amount}
                         onPress={() => {
-                          Haptics.selectionAsync().catch(() => undefined);
+                          haptic.selection().catch(() => undefined);
                           setBudgetAmount(String(amount));
                         }}
                         style={[
@@ -585,7 +585,7 @@ export function SetupWizardModal() {
                         <Pressable
                           key={t.key}
                           onPress={() => {
-                            Haptics.selectionAsync().catch(() => undefined);
+                            haptic.selection().catch(() => undefined);
                             setAccountTypeKey(t.key);
                             const nextTypeId = wizardAccountTypeId(t.key);
                             if (!requiresCatalogInstitution(nextTypeId)) {

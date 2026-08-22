@@ -2,7 +2,10 @@ import { Pressable, Text, View } from "react-native";
 
 import { ChipRow, FieldLabel, SettingsPanel } from "@/components/settings/SettingsControls";
 import { PersonalizationPreviewCard } from "@/components/settings/PersonalizationPreviewCard";
-import { DashboardWidgetToggles } from "@/components/settings/SettingsSubmenus";
+import {
+  DashboardWidgetOrder,
+  DashboardWidgetToggles,
+} from "@/components/settings/SettingsSubmenus";
 import { haptic } from "@/lib/haptics";
 import { useTranslation } from "@/providers/LocalizationProvider";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -129,6 +132,7 @@ export function AppearanceSection() {
       </SettingsPanel>
 
       <DashboardWidgetToggles />
+      <DashboardWidgetOrder />
     </View>
   );
 }

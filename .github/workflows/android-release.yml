@@ -73,6 +73,7 @@ jobs:
         env:
           MOBILE_ENV_FILE: ${{ secrets.MOBILE_ENV_FILE }}
           EXPO_PUBLIC_APP_URL: ${{ secrets.EXPO_PUBLIC_APP_URL }}
+          EXPO_PUBLIC_SHARE_URL: ${{ secrets.EXPO_PUBLIC_SHARE_URL }}
           EXPO_PUBLIC_FIREBASE_API_KEY: ${{ secrets.EXPO_PUBLIC_FIREBASE_API_KEY }}
           EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ secrets.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN }}
           EXPO_PUBLIC_FIREBASE_PROJECT_ID: ${{ secrets.EXPO_PUBLIC_FIREBASE_PROJECT_ID }}
@@ -98,6 +99,7 @@ jobs:
               fi
             }
             write_kv EXPO_PUBLIC_APP_URL "$EXPO_PUBLIC_APP_URL"
+            write_kv EXPO_PUBLIC_SHARE_URL "$EXPO_PUBLIC_SHARE_URL"
             write_kv EXPO_PUBLIC_FIREBASE_API_KEY "$EXPO_PUBLIC_FIREBASE_API_KEY"
             write_kv EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN "$EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN"
             write_kv EXPO_PUBLIC_FIREBASE_PROJECT_ID "$EXPO_PUBLIC_FIREBASE_PROJECT_ID"
@@ -121,6 +123,9 @@ jobs:
           fi
           if ! grep -q '^EXPO_PUBLIC_GEMINI_API_KEY=.' .env; then
             echo "::warning::EXPO_PUBLIC_GEMINI_API_KEY is missing — nutrition AI food parsing will fail in the release APK. Add that secret (same value as web VITE_GEMINI_API_KEY) and re-run."
+          fi
+          if ! grep -q '^EXPO_PUBLIC_SHARE_URL=.' .env; then
+            echo "::warning::EXPO_PUBLIC_SHARE_URL is missing — split share links will fall back to EXPO_PUBLIC_APP_URL, which serves the legacy web app's login screen for /split/:slug. Set it to the share host (e.g. https://spendly-share.netlify.app) and re-run. If you use MOBILE_ENV_FILE, add the line there instead."
           fi
           echo "Wrote .env with $KEY_COUNT EXPO_PUBLIC_* keys."
 

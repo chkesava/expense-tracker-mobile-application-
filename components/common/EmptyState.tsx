@@ -1,6 +1,5 @@
 import React, { type ReactNode } from "react";
 import { View, Text, StyleSheet, StyleProp, ViewStyle, Pressable } from "react-native";
-import * as Haptics from "expo-haptics";
 import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
 import { Lightbulb, Sparkles } from "lucide-react-native";
 
@@ -11,6 +10,7 @@ import {
   EmptyStateIllustration,
   type EmptyIllustrationType,
 } from "./EmptyStateIllustration";
+import { haptic } from "@/lib/haptics";
 
 export type EmptyActionConfig = {
   label: string;
@@ -75,7 +75,7 @@ export function EmptyState({
         size={compact ? "sm" : "md"}
         loading={config.loading}
         onPress={() => {
-          Haptics.selectionAsync().catch(() => undefined);
+          haptic.selection().catch(() => undefined);
           config.onPress();
         }}
         style={compact ? styles.compactBtn : styles.actionBtn}

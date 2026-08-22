@@ -6,7 +6,6 @@ import Animated, {
   useSharedValue,
   withSpring,
 } from "react-native-reanimated";
-import * as Haptics from "expo-haptics";
 import { Sparkles, Wand2 } from "lucide-react-native";
 
 import { SetupStepItem } from "@/components/onboarding/SetupStepItem";
@@ -16,6 +15,7 @@ import {
 } from "@/providers/SetupProgressProvider";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
 
 export function SetupChecklistWidget() {
   const {
@@ -50,12 +50,12 @@ export function SetupChecklistWidget() {
   }
 
   const handleDismiss = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+    haptic.light().catch(() => undefined);
     dismissOnboarding();
   };
 
   const handleStartWizard = () => {
-    Haptics.selectionAsync().catch(() => undefined);
+    haptic.selection().catch(() => undefined);
     // Find the first uncompleted step or start from step 0
     const firstPendingIdx = steps.findIndex((s) => !s.completed);
     launchSetupWizard(firstPendingIdx >= 0 ? Math.min(firstPendingIdx, 4) : 0);

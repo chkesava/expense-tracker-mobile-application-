@@ -20,6 +20,9 @@ export interface AnimatedCounterProps {
   style?: StyleProp<TextStyle>;
   formatter?: (val: number) => string;
   accessibilityLabel?: string;
+  numberOfLines?: number;
+  adjustsFontSizeToFit?: boolean;
+  minimumFontScale?: number;
 }
 
 export function AnimatedCounter({
@@ -32,6 +35,9 @@ export function AnimatedCounter({
   style,
   formatter,
   accessibilityLabel,
+  numberOfLines,
+  adjustsFontSizeToFit,
+  minimumFontScale,
 }: AnimatedCounterProps) {
   const isFirstMount = useRef(true);
   const [displayValue, setDisplayValue] = useState<number>(() =>
@@ -75,6 +81,9 @@ export function AnimatedCounter({
   return (
     <Text
       accessibilityLabel={accessibilityLabel || `Amount ${value}`}
+      numberOfLines={numberOfLines}
+      adjustsFontSizeToFit={adjustsFontSizeToFit}
+      minimumFontScale={minimumFontScale}
       style={[{ fontVariant: ["tabular-nums"] }, style]}
     >
       {formattedText}

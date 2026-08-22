@@ -8,7 +8,6 @@ import {
   TextInput,
   View,
 } from "react-native";
-import * as Haptics from "expo-haptics";
 import {
   Check,
   ChevronDown,
@@ -26,6 +25,7 @@ import {
 } from "@/shared/utils/categoryPreferences";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
 import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
 
 export interface CategoryPickerProps {
@@ -136,7 +136,7 @@ export function CategoryPicker({
   }, [visibleParents, favoriteParents, category, getSubcategories]);
 
   const finishSelection = (cat: string, sub: string) => {
-    Haptics.selectionAsync().catch(() => undefined);
+    haptic.selection().catch(() => undefined);
     onChangeRef.current(cat, sub, { fromUser: true });
     pushRecentCategoryPair(cat, sub);
     setRecentPairs(getRecentCategoryPairs());
@@ -145,7 +145,7 @@ export function CategoryPicker({
   };
 
   const handleSelectParent = (parentName: string) => {
-    Haptics.selectionAsync().catch(() => undefined);
+    haptic.selection().catch(() => undefined);
     setSelectedParentName(parentName);
     setShowAddSub(false);
 

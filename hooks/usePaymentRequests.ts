@@ -19,6 +19,7 @@ import { snapshotErrorHandler } from "@/lib/firestoreErrors";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
+import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import type { PaymentRequest, PaymentRequestInput } from "@/shared/types/paymentRequest";
 import { getStoredQrStyleId } from "@/shared/utils/qrStyles";
 
@@ -37,6 +38,7 @@ export function usePaymentRequests(options?: { enabled?: boolean }) {
   const enabled = options?.enabled !== false;
   const { user } = useAuth();
   const uid = user?.uid;
+  const { settings: system } = useSystemSettings();
 
   const [requests, setRequests] = useState<PaymentRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -96,6 +98,9 @@ export function usePaymentRequests(options?: { enabled?: boolean }) {
         createdAt: Date.now(),
         status: "active",
         qrStyleId: input.qrStyleId || getStoredQrStyleId(),
+        // The public /payment/:slug page is read by someone who is not signed
+        // in, so it cannot resolve a currency from system settings. Carry it.
+        currency: input.currency || system.defaultCurrency,
       };
 
       const outcome = await commitWrite(

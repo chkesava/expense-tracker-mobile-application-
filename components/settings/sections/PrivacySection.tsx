@@ -32,6 +32,7 @@ export function PrivacySection() {
     setLockOnInactivity,
     setInactivityTimeout,
     setLockOnAppSwitch,
+    setGhostMode,
   } = useSettings();
   const {
     isSupported: biometricsSupported,
@@ -102,7 +103,25 @@ export function PrivacySection() {
   };
 
   return (
-    <SettingsPanel title="Privacy" subtitle="PIN, duress, lock & biometrics">
+    <View style={{ gap: 16 }}>
+      <SettingsPanel title="Ghost mode" subtitle="Hide every amount on screen">
+        <RowSwitch
+          label="Ghost mode"
+          value={settings.ghostMode}
+          onValueChange={setGhostMode}
+        />
+        <Text
+          style={{
+            color: theme.colors.mutedForeground,
+            fontSize: theme.typography.xs,
+          }}
+        >
+          Replaces balances and totals with •••••• so you can use the app in
+          public. Also toggleable from the side drawer.
+        </Text>
+      </SettingsPanel>
+
+      <SettingsPanel title="Privacy" subtitle="PIN, duress, lock & biometrics">
       {settings.privacyPin ? (
         <>
           <Text style={{ color: theme.colors.success, fontSize: theme.typography.sm }}>
@@ -226,6 +245,7 @@ export function PrivacySection() {
           <Button onPress={onEnablePin}>Enable privacy PIN</Button>
         </>
       )}
-    </SettingsPanel>
+      </SettingsPanel>
+    </View>
   );
 }

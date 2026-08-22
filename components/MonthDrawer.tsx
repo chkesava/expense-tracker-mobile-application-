@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import * as Haptics from "expo-haptics";
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon } from "lucide-react-native";
 import { Modal } from "@/components/common/Modal";
 import { useModals } from "@/providers/ModalProvider";
 import { currentMonthKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
 
 const MONTH_NAMES = [
   "January",
@@ -50,7 +50,7 @@ export function MonthDrawer() {
   const currentCalMonthKey = currentMonthKey();
 
   const handleSelectMonth = (monthIndex: number) => {
-    Haptics.selectionAsync().catch(() => undefined);
+    haptic.selection().catch(() => undefined);
     const monthFormatted = String(monthIndex + 1).padStart(2, "0");
     const newMonthKey = `${selectedYear}-${monthFormatted}`;
     setGlobalMonth(newMonthKey);
@@ -58,7 +58,7 @@ export function MonthDrawer() {
   };
 
   const handleResetCurrent = () => {
-    Haptics.selectionAsync().catch(() => undefined);
+    haptic.selection().catch(() => undefined);
     const now = new Date();
     setSelectedYear(now.getFullYear());
     setGlobalMonth(currentCalMonthKey);

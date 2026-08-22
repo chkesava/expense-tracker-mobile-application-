@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import * as Haptics from "expo-haptics";
 import { Plus } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
@@ -13,12 +12,13 @@ import { ReceivableDetailModal } from "@/components/receivables/ReceivableDetail
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { useReceivables } from "@/hooks/useReceivables";
-import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import type { Receivable, ReceivableStatus } from "@/shared/types/receivable";
 import { summarizeReceivables } from "@/shared/utils/receivableMath";
 import { todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
 
 type StatusFilter = "all" | "outstanding" | ReceivableStatus;
@@ -36,7 +36,7 @@ const STATUS_FILTERS: { id: StatusFilter; label: string }[] = [
 export function ReceivablesList() {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
-  const { settings: system } = useSystemSettings();
+  const displayCurrency = useDisplayCurrency();
 
   const {
     receivables,
@@ -123,7 +123,7 @@ export function ReceivablesList() {
               </Text>
               <Amount
                 value={portfolio.totalLent}
-                currency={system.defaultCurrency}
+                currency={displayCurrency}
                 style={{
                   fontSize: 18,
                   fontWeight: "900",
@@ -140,7 +140,7 @@ export function ReceivablesList() {
               </Text>
               <Amount
                 value={portfolio.totalOutstanding}
-                currency={system.defaultCurrency}
+                currency={displayCurrency}
                 style={{ fontSize: 18, fontWeight: "900", color: "#EF4444" }}
               />
             </View>
@@ -153,7 +153,7 @@ export function ReceivablesList() {
               </Text>
               <Amount
                 value={portfolio.totalReceived}
-                currency={system.defaultCurrency}
+                currency={displayCurrency}
                 style={{ fontSize: 18, fontWeight: "900", color: "#10B981" }}
               />
             </View>
@@ -181,7 +181,7 @@ export function ReceivablesList() {
                 <Pressable
                   key={filter.id}
                   onPress={() => {
-                    Haptics.selectionAsync().catch(() => undefined);
+                    haptic.selection().catch(() => undefined);
                     setStatusFilter(filter.id);
                   }}
                   style={[styles.pill, pillStyle(isActive)]}
@@ -259,7 +259,7 @@ export function ReceivablesList() {
                 key={receivable.id}
                 receivable={receivable}
                 summary={summary}
-                currency={system.defaultCurrency}
+                currency={displayCurrency}
                 onPress={() => setSelectedId(receivable.id ?? null)}
               />
             );
@@ -278,7 +278,7 @@ export function ReceivablesList() {
         receivable={selectedReceivable}
         summary={selectedId ? getSummary(selectedId) : null}
         repayments={selectedId ? getRepayments(selectedId) : []}
-        currency={system.defaultCurrency}
+        currency={displayCurrency}
         onClose={() => setSelectedId(null)}
         onAddRepayment={addRepayment}
         onDeleteRepayment={deleteRepayment}

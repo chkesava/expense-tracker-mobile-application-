@@ -7,7 +7,6 @@ import {
   Text,
   View,
 } from "react-native";
-import * as Haptics from "expo-haptics";
 import { Pencil, Trash2, X } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
@@ -31,6 +30,7 @@ import {
 } from "@/shared/utils/spaceMath";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
 
 const TIER_COLORS: Record<BudgetProgressTier, string> = {
   none: "#6B7280",
@@ -392,7 +392,7 @@ export function SpaceDetailModal({
                     <Pressable
                       key={filter.id}
                       onPress={() => {
-                        Haptics.selectionAsync().catch(() => undefined);
+                        haptic.selection().catch(() => undefined);
                         setCategoryFilter(filter.id);
                       }}
                       style={[styles.pill, pillStyle(isActive)]}
@@ -416,7 +416,7 @@ export function SpaceDetailModal({
                     <Pressable
                       key={mode.id}
                       onPress={() => {
-                        Haptics.selectionAsync().catch(() => undefined);
+                        haptic.selection().catch(() => undefined);
                         setSortMode(mode.id);
                       }}
                       style={[styles.pill, pillStyle(isActive)]}

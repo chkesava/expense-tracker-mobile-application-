@@ -35,6 +35,8 @@ import {
 } from "@/components/layout/chrome";
 import { haptic } from "@/lib/haptics";
 import { useModals } from "@/providers/ModalProvider";
+import { useTranslation } from "@/providers/LocalizationProvider";
+import { useInvestmentsEnabled } from "@/hooks/useInvestmentsEnabled";
 import { useSettings } from "@/providers/SettingsProvider";
 import {
   CORE_NAV_ITEMS,
@@ -89,7 +91,8 @@ function NavDestination({
     transform: [{ scale: interpolate(progress.get(), [0, 1], [0.88, 1]) }],
   }));
 
-  const label = link.mobileLabel || link.label;
+  const { t } = useTranslation();
+  const label = t(link.translationKey, link.mobileLabel || link.label);
   const activeColor = colors.success;
   const inactiveColor = colors.mutedForeground;
   const ripple = isDark ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.06)";
@@ -206,6 +209,7 @@ export function BottomNav() {
   const insets = useSafeAreaInsets();
   const { setIsAddExpenseOpen } = useModals();
   const { settings } = useSettings();
+  const investmentsEnabled = useInvestmentsEnabled();
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
@@ -214,7 +218,7 @@ export function BottomNav() {
   const navLinks = CORE_NAV_ITEMS.filter(
     (item) =>
       item.includeInBottomNav &&
-      (!item.requiresInvestmentsFeature || settings.enableInvestments)
+      (!item.requiresInvestmentsFeature || investmentsEnabled)
   );
 
   useEffect(() => {

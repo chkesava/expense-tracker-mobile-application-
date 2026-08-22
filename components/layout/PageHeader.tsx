@@ -6,10 +6,10 @@ import {
   Text,
   View,
 } from "react-native";
-import * as Haptics from "expo-haptics";
 import { ArrowLeft } from "lucide-react-native";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
 import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
 
 export interface PageHeaderTab {
@@ -32,6 +32,9 @@ export interface PageHeaderProps {
   onBack?: () => void;
   /** pill = raised segment control; underline = flat ledger-style tabs */
   tabVariant?: PageHeaderTabVariant;
+  /** Overrides the default emerald tint of the leading icon container. */
+  iconBackgroundColor?: string;
+  iconBorderColor?: string;
 }
 
 export function PageHeader({
@@ -44,6 +47,8 @@ export function PageHeader({
   rightElement,
   onBack,
   tabVariant = "pill",
+  iconBackgroundColor,
+  iconBorderColor,
 }: PageHeaderProps) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
@@ -52,7 +57,7 @@ export function PageHeader({
 
   const handleTabPress = (tabId: string) => {
     if (tabId === activeTab) return;
-    Haptics.selectionAsync().catch(() => undefined);
+    haptic.selection().catch(() => undefined);
     onTabChange?.(tabId);
   };
 
@@ -62,7 +67,7 @@ export function PageHeader({
         {onBack ? (
           <Pressable
             onPress={() => {
-              Haptics.selectionAsync().catch(() => undefined);
+              haptic.selection().catch(() => undefined);
               onBack();
             }}
             hitSlop={8}
@@ -79,12 +84,16 @@ export function PageHeader({
               style={[
                 styles.iconContainer,
                 {
-                  backgroundColor: isDark
-                    ? "rgba(52, 179, 122, 0.14)"
-                    : "rgba(37, 150, 90, 0.1)",
-                  borderColor: isDark
-                    ? "rgba(52, 179, 122, 0.28)"
-                    : "rgba(37, 150, 90, 0.18)",
+                  backgroundColor:
+                    iconBackgroundColor ??
+                    (isDark
+                      ? "rgba(52, 179, 122, 0.14)"
+                      : "rgba(37, 150, 90, 0.1)"),
+                  borderColor:
+                    iconBorderColor ??
+                    (isDark
+                      ? "rgba(52, 179, 122, 0.28)"
+                      : "rgba(37, 150, 90, 0.18)"),
                 },
               ]}
             >

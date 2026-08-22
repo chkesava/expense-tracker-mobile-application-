@@ -1,8 +1,8 @@
 import React from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
-import * as Haptics from "expo-haptics";
 import { useTheme } from "@/theme/ThemeProvider";
+import { haptic } from "@/lib/haptics";
 
 interface OnboardingCardProps {
   emoji: string;
@@ -26,13 +26,13 @@ export function OnboardingCard({
   const { theme } = useTheme();
 
   const handleAction = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    haptic.light();
     onAction();
   };
 
   const handleSecondary = () => {
     if (onSecondary) {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      haptic.light();
       onSecondary();
     }
   };

@@ -19,6 +19,7 @@ import {
   type SmartInsight,
 } from "@/shared/utils/smartInsights";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useSettings } from "@/providers/SettingsProvider";
 
 export interface SmartInsightsWidgetProps {
   expenses: Expense[];
@@ -58,6 +59,7 @@ export function SmartInsightsWidget({
 }: SmartInsightsWidgetProps) {
   const { theme } = useTheme();
   const surfaces = useSurfaces();
+  const { settings } = useSettings();
 
   const insights = useMemo(
     () =>
@@ -65,9 +67,18 @@ export function SmartInsightsWidget({
         expenses,
         monthlyBudget,
         currency,
+        numberFormat: settings.numberFormat,
+        firstDayOfWeek: settings.firstDayOfWeek,
         today: todayKey,
       }),
-    [expenses, monthlyBudget, currency, todayKey]
+    [
+      expenses,
+      monthlyBudget,
+      currency,
+      settings.numberFormat,
+      settings.firstDayOfWeek,
+      todayKey,
+    ]
   );
 
   /** Most important first — warnings above movers above informational. */

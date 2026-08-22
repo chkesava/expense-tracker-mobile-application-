@@ -8,7 +8,6 @@ import {
   TextInput,
   View,
 } from "react-native";
-import * as Haptics from "expo-haptics";
 import {
   ArrowRight,
   Check,
@@ -24,13 +23,14 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useCategorizationRules } from "@/hooks/useCategorizationRules";
-import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import {
   parseNaturalLanguageTransaction,
   type ParsedTransaction,
 } from "@/shared/utils/magicParser";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
 export interface MagicChatModalProps {
   visible: boolean;
@@ -53,7 +53,7 @@ export function MagicChatModal({
 }: MagicChatModalProps) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
-  const { settings: system } = useSystemSettings();
+  const displayCurrency = useDisplayCurrency();
   const { accounts } = useAccounts();
   const { rules } = useCategorizationRules();
 
@@ -64,13 +64,13 @@ export function MagicChatModal({
     return parseNaturalLanguageTransaction(input, {
       accounts: accounts.map((a) => ({ id: a.id, name: a.name })),
       rules,
-      defaultCurrency: system.defaultCurrency,
+      defaultCurrency: displayCurrency,
     });
-  }, [input, accounts, rules, system.defaultCurrency]);
+  }, [input, accounts, rules, displayCurrency]);
 
   const handleApply = () => {
     if (!parsed) return;
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(
+    haptic.success().catch(
       () => undefined
     );
     onApplyParsed(parsed);
@@ -79,7 +79,7 @@ export function MagicChatModal({
   };
 
   const handleSelectSample = (sample: string) => {
-    Haptics.selectionAsync().catch(() => undefined);
+    haptic.selection().catch(() => undefined);
     setInput(sample);
   };
 
@@ -272,7 +272,7 @@ export function MagicChatModal({
                       {parsed.amount ? (
                         <Amount
                           value={parsed.amount}
-                          currency={system.defaultCurrency}
+                          currency={displayCurrency}
                           style={{
                             fontSize: 16,
                             fontWeight: "900",

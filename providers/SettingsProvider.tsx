@@ -23,7 +23,12 @@ import { haptic } from "@/lib/haptics";
 import { hashPin } from "@/lib/pinSecurity";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
+import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import { useUserDoc } from "@/providers/UserDocProvider";
+import {
+  resetDisplayCurrencyPreferences,
+  setDisplayCurrencyPreferences,
+} from "@/shared/utils/displayCurrency";
 import {
   SETTINGS_DEFAULTS,
   mergeSettingsFromDoc,
@@ -76,6 +81,8 @@ const SettingsContext = createContext<SettingsContextType | undefined>(undefined
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const { realUser } = useAuth();
   const { data, exists, error: userDocError, loading: userDocLoading } = useUserDoc();
+  const { settings: systemSettings } = useSystemSettings();
+  const fallbackCurrency = systemSettings.defaultCurrency;
   const [settings, setSettings] = useState<UserSettings>(SETTINGS_DEFAULTS);
   const [seedAttempted, setSeedAttempted] = useState(false);
   const overlayRef = useRef<Partial<UserSettings>>({});
@@ -88,12 +95,22 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     haptic.setEnabled(settings.hapticFeedback);
   }, [settings.hapticFeedback]);
 
+  // Mirror money-formatting prefs for code that formats outside the React tree
+  // (SMS notification copy, background handlers).
+  useEffect(() => {
+    setDisplayCurrencyPreferences({
+      currency: settings.currency,
+      numberFormat: settings.numberFormat,
+    });
+  }, [settings.currency, settings.numberFormat]);
+
   useEffect(() => {
     if (!realUser) {
       overlayRef.current = {};
       pendingRef.current = {};
       setSettings(SETTINGS_DEFAULTS);
       setSeedAttempted(false);
+      resetDisplayCurrencyPreferences();
       return;
     }
     if (userDocLoading) return;
@@ -102,7 +119,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     if (userDocError) return;
 
     if (exists && data) {
-      const cloud = mergeSettingsFromDoc(data as Record<string, unknown>);
+      const cloud = mergeSettingsFromDoc(data as Record<string, unknown>, {
+        fallbackCurrency,
+      });
       overlayRef.current = remainingPendingSettings(cloud, overlayRef.current);
       setSettings(overlayPendingSettings(cloud, overlayRef.current));
       setSeedAttempted(false);
@@ -111,11 +130,19 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       // memory only — never write SETTINGS_DEFAULTS to Firestore. A merge seed
       // previously raced ahead of the snapshot and wiped budget/accent/theme.
       setSeedAttempted(true);
-      const cloud = mergeSettingsFromDoc(null);
+      const cloud = mergeSettingsFromDoc(null, { fallbackCurrency });
       overlayRef.current = remainingPendingSettings(cloud, overlayRef.current);
       setSettings(overlayPendingSettings(cloud, overlayRef.current));
     }
-  }, [realUser, data, exists, userDocError, userDocLoading, seedAttempted]);
+  }, [
+    realUser,
+    data,
+    exists,
+    userDocError,
+    userDocLoading,
+    seedAttempted,
+    fallbackCurrency,
+  ]);
 
   const loading = Boolean(realUser) && userDocLoading;
 
@@ -210,7 +237,11 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       setLockOnAppSwitch: (val) => void updateSettings({ lockOnAppSwitch: val }),
       setEnableInvestments: (val) => void updateSettings({ enableInvestments: val }),
       setAccentColor: (val) => void updateSettings({ accentColor: val }),
-      setCurrency: (val) => void updateSettings({ currency: val }),
+      setCurrency: (val) =>
+        void updateSettings({
+          currency: val,
+          onboarding: { ...settings.onboarding, currencyChosen: true },
+        }),
       setLanguage: (val) => void updateSettings({ language: val }),
       setDateFormat: (val) => void updateSettings({ dateFormat: val }),
       setNumberFormat: (val) => void updateSettings({ numberFormat: val }),

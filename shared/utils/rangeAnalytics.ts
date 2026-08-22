@@ -1,5 +1,11 @@
 import type { Expense, CategoryBudget } from "../types/expense";
-import { parseLocalDate, toLocalDateKey, daysInMonth } from "./dates";
+import {
+  daysInMonth,
+  orderedWeekdays,
+  parseLocalDate,
+  toLocalDateKey,
+  type FirstDayOfWeek,
+} from "./dates";
 
 export interface TimeSeriesPoint {
   date: string;
@@ -89,18 +95,23 @@ export const getAnomalies = (expenses: Expense[]) => {
 /**
  * Groups expenses by day of week
  */
-export const getDayOfWeekDistribution = (expenses: Expense[]) => {
-  const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-  const map: Record<string, number> = {};
-  days.forEach(d => map[d] = 0);
+export const getDayOfWeekDistribution = (
+  expenses: Expense[],
+  firstDayOfWeek: FirstDayOfWeek = "monday"
+) => {
+  // Bars are ordered by the user's `firstDayOfWeek` preference rather than
+  // always starting on Sunday.
+  const ordered = orderedWeekdays(firstDayOfWeek);
+  const totals = new Map<number, number>(ordered.map((d) => [d.index, 0]));
 
-  expenses.forEach(e => {
-    const d = new Date(e.date);
-    const dayName = days[d.getDay()];
-    map[dayName] += e.amount;
+  expenses.forEach((e) => {
+    const d = parseLocalDate(e.date);
+    if (Number.isNaN(d.getTime())) return;
+    const key = d.getDay();
+    totals.set(key, (totals.get(key) || 0) + e.amount);
   });
 
-  return Object.entries(map).map(([name, amount]) => ({ name, amount }));
+  return ordered.map((d) => ({ name: d.label, amount: totals.get(d.index) || 0 }));
 };
 
 /**

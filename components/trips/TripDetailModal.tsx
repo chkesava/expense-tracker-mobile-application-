@@ -8,7 +8,6 @@ import {
   Text,
   View,
 } from "react-native";
-import * as Haptics from "expo-haptics";
 import {
   CalendarDays,
   CheckCircle2,
@@ -24,7 +23,6 @@ import { Amount } from "@/components/common/Amount";
 import { Button } from "@/components/ui/Button";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useTrips } from "@/hooks/useTrips";
-import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import type { Trip } from "@/shared/types/trip";
 import {
   computeTripCategoryBreakdown,
@@ -34,6 +32,7 @@ import {
 } from "@/shared/utils/tripCalculations";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
 export interface TripDetailModalProps {
   visible: boolean;
@@ -44,7 +43,7 @@ export interface TripDetailModalProps {
 export function TripDetailModal({ visible, trip, onClose }: TripDetailModalProps) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
-  const { settings: system } = useSystemSettings();
+  const displayCurrency = useDisplayCurrency();
   const { expenses } = useExpenses();
   const { deleteTrip, completeTrip, unlinkExpense } = useTrips();
 
@@ -233,7 +232,7 @@ export function TripDetailModal({ visible, trip, onClose }: TripDetailModalProps
                   </Text>
                   <Amount
                     value={trip.spentAmount || 0}
-                    currency={system.defaultCurrency}
+                    currency={displayCurrency}
                     ghostable
                     style={{
                       fontSize: 22,
@@ -253,7 +252,7 @@ export function TripDetailModal({ visible, trip, onClose }: TripDetailModalProps
                   </Text>
                   <Amount
                     value={trip.totalBudget}
-                    currency={system.defaultCurrency}
+                    currency={displayCurrency}
                     ghostable
                     style={{
                       fontSize: 16,
@@ -288,7 +287,7 @@ export function TripDetailModal({ visible, trip, onClose }: TripDetailModalProps
                   textAlign: "right",
                 }}
               >
-                {spentPercent}% used · {system.defaultCurrency}{" "}
+                {spentPercent}% used · {displayCurrency}{" "}
                 {Math.max(0, trip.totalBudget - (trip.spentAmount || 0)).toLocaleString()} remaining
               </Text>
             </View>
@@ -319,7 +318,7 @@ export function TripDetailModal({ visible, trip, onClose }: TripDetailModalProps
                       <View style={{ flexDirection: "row", gap: 4 }}>
                         <Amount
                           value={cat.spent}
-                          currency={system.defaultCurrency}
+                          currency={displayCurrency}
                           ghostable
                           style={{
                             fontSize: 12,
@@ -334,7 +333,7 @@ export function TripDetailModal({ visible, trip, onClose }: TripDetailModalProps
                               color: theme.colors.mutedForeground,
                             }}
                           >
-                            / {system.defaultCurrency} {cat.limit.toLocaleString()}
+                            / {displayCurrency} {cat.limit.toLocaleString()}
                           </Text>
                         )}
                       </View>
@@ -415,7 +414,7 @@ export function TripDetailModal({ visible, trip, onClose }: TripDetailModalProps
                     >
                       <Amount
                         value={exp.amount}
-                        currency={system.defaultCurrency}
+                        currency={displayCurrency}
                         ghostable
                         style={{
                           fontSize: 13,

@@ -9,7 +9,6 @@ import {
   TextInput,
   View,
 } from "react-native";
-import * as Haptics from "expo-haptics";
 import {
   Calendar,
   ChevronRight,
@@ -20,11 +19,12 @@ import {
 
 import { Button } from "@/components/ui/Button";
 import { useTrips } from "@/hooks/useTrips";
-import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import type { TripCategoryBudget } from "@/shared/types/trip";
 import { TRIP_BUDGET_CATEGORIES } from "@/shared/utils/tripCalculations";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
 export interface CreateTripModalProps {
   visible: boolean;
@@ -36,7 +36,7 @@ type WizardStep = 1 | 2 | 3;
 export function CreateTripModal({ visible, onClose }: CreateTripModalProps) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
-  const { settings: system } = useSystemSettings();
+  const displayCurrency = useDisplayCurrency();
   const { createTrip } = useTrips();
 
   const [step, setStep] = useState<WizardStep>(1);
@@ -90,12 +90,12 @@ export function CreateTripModal({ visible, onClose }: CreateTripModalProps) {
       }
     }
 
-    Haptics.selectionAsync().catch(() => undefined);
+    haptic.selection().catch(() => undefined);
     setStep((prev) => Math.min(3, prev + 1) as WizardStep);
   };
 
   const handleBack = () => {
-    Haptics.selectionAsync().catch(() => undefined);
+    haptic.selection().catch(() => undefined);
     setStep((prev) => Math.max(1, prev - 1) as WizardStep);
   };
 
@@ -119,7 +119,7 @@ export function CreateTripModal({ visible, onClose }: CreateTripModalProps) {
         categoryBudgets: budgets,
       });
 
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(
+      haptic.success().catch(
         () => undefined
       );
       onClose();
@@ -330,7 +330,7 @@ export function CreateTripModal({ visible, onClose }: CreateTripModalProps) {
                       { color: theme.colors.mutedForeground },
                     ]}
                   >
-                    TOTAL TRIP BUDGET ({system.defaultCurrency}) *
+                    TOTAL TRIP BUDGET ({displayCurrency}) *
                   </Text>
                   <TextInput
                     value={totalBudget}
@@ -491,7 +491,7 @@ export function CreateTripModal({ visible, onClose }: CreateTripModalProps) {
                         },
                       ]}
                     >
-                      {system.defaultCurrency} {parseFloat(totalBudget).toLocaleString()}
+                      {displayCurrency} {parseFloat(totalBudget).toLocaleString()}
                     </Text>
                   </View>
                 </View>
@@ -526,7 +526,7 @@ export function CreateTripModal({ visible, onClose }: CreateTripModalProps) {
                               color: theme.colors.foreground,
                             }}
                           >
-                            {system.defaultCurrency} {parseFloat(val).toLocaleString()}
+                            {displayCurrency} {parseFloat(val).toLocaleString()}
                           </Text>
                         </View>
                       ))}

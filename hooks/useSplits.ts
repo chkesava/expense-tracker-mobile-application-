@@ -21,7 +21,6 @@ import { snapshotErrorHandler } from "@/lib/firestoreErrors";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
-import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import type { Participant, Split } from "@/shared/types/split";
 import type { QrStyleId } from "@/shared/utils/qrStyles";
 import { getStoredQrStyleId } from "@/shared/utils/qrStyles";
@@ -37,7 +36,6 @@ import {
   isSharingRepairNoop,
   paySlugsByKey,
   planSplitSharingRepair,
-  resolveSplitShareLink,
 } from "@/shared/utils/splitShareLink";
 import {
   buildApplyPaidClaimWrites,
@@ -67,6 +65,7 @@ import {
   participantRemainingDue,
   recalibrateSplitAfterOptOut,
 } from "@/shared/utils/splitMath";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
 function applyShareSideEffects(
   batch: WriteBatch,
@@ -128,11 +127,11 @@ function applyShareSideEffects(
 export function useSplits(options?: { enabled?: boolean }) {
   const enabled = options?.enabled !== false;
   const { user } = useAuth();
-  const { settings: system } = useSystemSettings();
+  const displayCurrency = useDisplayCurrency();
   const uid = user?.uid;
   // The currency the organizer entered these amounts in. Mirrored onto every
   // public snapshot and payment request so the login-free pages can render it.
-  const currency = system.defaultCurrency;
+  const currency = displayCurrency;
 
   const [splits, setSplits] = useState<Split[]>([]);
   const [loading, setLoading] = useState(true);
@@ -346,18 +345,13 @@ export function useSplits(options?: { enabled?: boolean }) {
 
     const plan = planSplitSharingRepair(split, { upiId: opts.upiId });
 
-    if (isSharingRepairNoop(plan)) {
-      const link = resolveSplitShareLink({ publicSlug: split.publicSlug, origin });
-      if (!link.ready) return { ok: false, message: link.message };
-      return {
-        ok: true,
-        url: link.url,
-        slug: split.publicSlug as string,
-        paySlugByKey: paySlugsByKey(split.participants),
-        repaired: false,
-        payLinkBlockedReason: plan.payLinkBlockedReason,
-      };
-    }
+    // Deliberately NOT short-circuited when the plan reports nothing to repair.
+    // The plan only sees publicSlug, publicShareId and missing pay links -- it
+    // cannot tell that the *published snapshot* predates fields this build
+    // writes (currency, claimsEnabled, claimKeys, ...). Skipping the commit here
+    // meant a split shared by an older build could never be brought up to date,
+    // which is exactly what tapping Share is supposed to do. Two documents in
+    // one batch, on an explicit user action, is the right trade.
 
     try {
       const batch = writeBatch(db);
@@ -418,7 +412,9 @@ export function useSplits(options?: { enabled?: boolean }) {
         url: getSplitShareUrl(publicSlug),
         slug: publicSlug,
         paySlugByKey: paySlugsByKey(participants),
-        repaired: true,
+        // `repaired` means "something was missing and got created", not
+        // "a write happened" -- the snapshot is refreshed either way.
+        repaired: !isSharingRepairNoop(plan),
         payLinkBlockedReason: plan.payLinkBlockedReason,
       };
     } catch (err) {

@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import * as Haptics from "expo-haptics";
 import { ArrowRight, TrendingUp, Wallet } from "lucide-react-native";
 
 import { Modal } from "@/components/common/Modal";
@@ -15,6 +14,7 @@ import type { Account } from "@/shared/types/expense";
 import { formatDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
 
 export const DEMAT_ACCOUNT_ID = "stocks_demat";
 
@@ -196,7 +196,7 @@ export function TransferFundsModal({
                 <Pressable
                   key={a.id}
                   onPress={() => {
-                    Haptics.selectionAsync().catch(() => undefined);
+                    haptic.selection().catch(() => undefined);
                     setFromAccountId(a.id);
                   }}
                   style={[
@@ -296,7 +296,7 @@ export function TransferFundsModal({
                   <Pressable
                     key={a.id}
                     onPress={() => {
-                      Haptics.selectionAsync().catch(() => undefined);
+                      haptic.selection().catch(() => undefined);
                       setToAccountId(a.id);
                     }}
                     style={[

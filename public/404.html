@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Nothing here</title>
+    <!--
+      This host exists only to serve shared split and payment pages, which are
+      reached by a link that carries a slug. Netlify serves this file for any
+      path with nothing behind it, and netlify.toml forces the bare root here
+      too, so the app bundle is never booted outside /split/* and /payment/*.
+
+      Deliberately static and dependency-free: no app JS, no fonts, no calls to
+      any other origin.
+    -->
+    <style>
+      :root { color-scheme: light dark; }
+      html, body { height: 100%; margin: 0; }
+      body {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        background: #fff;
+        color: #1a1a1a;
+        font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Helvetica, Arial, sans-serif;
+        text-align: center;
+      }
+      main { max-width: 30rem; }
+      h1 { margin: 0 0 0.5rem; font-size: 1.25rem; font-weight: 700; }
+      p { margin: 0; color: #666; font-size: 0.9375rem; }
+      @media (prefers-color-scheme: dark) {
+        body { background: #071a2b; color: #f2f5f7; }
+        p { color: #9aa8b4; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Nothing to see here</h1>
+      <p>
+        This page only opens shared splits and payment requests, and it needs the
+        full link to do it. Ask whoever invited you to send it again.
+      </p>
+    </main>
+  </body>
+</html>

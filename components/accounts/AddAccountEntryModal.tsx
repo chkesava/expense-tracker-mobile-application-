@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import * as Haptics from "expo-haptics";
 import { ArrowDownLeft, ArrowUpRight, Wallet } from "lucide-react-native";
 
 import { Modal } from "@/components/common/Modal";
@@ -13,6 +12,7 @@ import type { Account } from "@/shared/types/expense";
 import { formatDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
 
 export interface AddAccountEntryModalProps {
   isOpen: boolean;
@@ -108,7 +108,7 @@ export function AddAccountEntryModal({
         >
           <Pressable
             onPress={() => {
-              Haptics.selectionAsync().catch(() => undefined);
+              haptic.selection().catch(() => undefined);
               setDirection("credit");
             }}
             style={[
@@ -143,7 +143,7 @@ export function AddAccountEntryModal({
 
           <Pressable
             onPress={() => {
-              Haptics.selectionAsync().catch(() => undefined);
+              haptic.selection().catch(() => undefined);
               setDirection("debit");
             }}
             style={[
@@ -198,7 +198,7 @@ export function AddAccountEntryModal({
                 <Pressable
                   key={a.id}
                   onPress={() => {
-                    Haptics.selectionAsync().catch(() => undefined);
+                    haptic.selection().catch(() => undefined);
                     setAccountId(a.id);
                   }}
                   style={[

@@ -21,9 +21,9 @@ import Animated, {
 import { usePathname, useRouter } from "expo-router";
 
 import { TabSwipeGestureProvider } from "@/components/navigation/TabSwipeContext";
+import { useInvestmentsEnabled } from "@/hooks/useInvestmentsEnabled";
 import { haptic } from "@/lib/haptics";
 import { useModals } from "@/providers/ModalProvider";
-import { useSettings } from "@/providers/SettingsProvider";
 import {
   CORE_NAV_ITEMS,
   resolvePrimaryTabId,
@@ -64,7 +64,7 @@ export function TabSwipeArea({ children }: { children: ReactNode }) {
   const { navigate, dismissTo } = useRouter();
   const pathname = usePathname();
   const { width } = useWindowDimensions();
-  const { settings } = useSettings();
+  const investmentsEnabled = useInvestmentsEnabled();
   const modals = useModals();
 
   const gestureRef = useRef<GestureType | undefined>(undefined);
@@ -82,9 +82,9 @@ export function TabSwipeArea({ children }: { children: ReactNode }) {
       CORE_NAV_ITEMS.filter(
         (item) =>
           item.includeInBottomNav &&
-          (!item.requiresInvestmentsFeature || settings.enableInvestments)
+          (!item.requiresInvestmentsFeature || investmentsEnabled)
       ),
-    [settings.enableInvestments]
+    [investmentsEnabled]
   );
 
   const activeTabId = resolvePrimaryTabId(pathname);

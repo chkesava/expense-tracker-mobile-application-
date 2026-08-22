@@ -1,41 +1,47 @@
-import React, { useMemo, useState } from "react";
-import {
-  FlatList,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
-import * as Haptics from "expo-haptics";
-import {
-  ArrowDownLeft,
-  ArrowUpRight,
-  Filter,
-  Layers,
-  Search,
-  SlidersHorizontal,
-  X,
-} from "lucide-react-native";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+import { ScrollView, StyleSheet, View } from "react-native";
+import { FlashList } from "@shopify/flash-list";
 
-import { Amount } from "@/components/common/Amount";
-import { EmptyState } from "@/components/common/EmptyState";
-import { Card } from "@/components/ui/Card";
 import {
   FilterSheetModal,
+  type DatePreset,
   type LabFilters,
 } from "@/components/analytics/FilterSheetModal";
+import {
+  ActiveFilterChips,
+  type ActiveFilterChip,
+} from "@/components/analytics/search/ActiveFilterChips";
+import { PopularSearches } from "@/components/analytics/search/PopularSearches";
+import {
+  ResultsHeader,
+  type SearchSort,
+} from "@/components/analytics/search/ResultsHeader";
+import { SearchField } from "@/components/analytics/search/SearchField";
+import { SearchFilterBar } from "@/components/analytics/search/SearchFilterBar";
+import { SearchResultRow } from "@/components/analytics/search/SearchResultRow";
+import { SearchSummaryCard } from "@/components/analytics/search/SearchSummaryCard";
+import { EmptyState } from "@/components/common/EmptyState";
+import { ErrorState } from "@/components/common/ErrorState";
+import { Skeleton } from "@/components/common/Skeleton";
+import {
+  BOTTOM_NAV_CONTENT_CLEARANCE,
+  BOTTOM_NAV_FAB_GAP,
+  BOTTOM_NAV_FAB_SIZE,
+} from "@/components/layout/chrome";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useIncomes } from "@/hooks/useIncomes";
-import { useSystemSettings } from "@/providers/SystemSettingsProvider";
-import { getCategoryIcon } from "@/shared/data/categoryTaxonomy";
+import { useModals } from "@/providers/ModalProvider";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import type { Expense, Income } from "@/shared/types/expense";
 import { currentMonthKey, toLocalDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
-import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
 
 export interface UnifiedTransaction {
   id: string;
@@ -49,29 +55,64 @@ export interface UnifiedTransaction {
   tags?: string[];
 }
 
+const EMPTY_FILTERS: LabFilters = {
+  query: "",
+  type: "all",
+  datePreset: "all",
+  categories: [],
+  accountIds: [],
+  minAmount: "",
+  maxAmount: "",
+};
+
+const DATE_PRESET_LABELS: Record<DatePreset, string> = {
+  all: "All time",
+  this_month: "This month",
+  last_30_days: "Last 30 days",
+  this_year: "This year",
+};
+
+/** How many popular-search chips to derive from the user's own data. */
+const MAX_SUGGESTIONS = 5;
+
 export interface AnalysisLabViewProps {
   initialQuery?: string;
+  /** Screen chrome (page header + tabs) scrolled with the results. */
+  listHeader?: ReactNode;
 }
 
-export function AnalysisLabView({ initialQuery = "" }: AnalysisLabViewProps) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
-  const { settings: system } = useSystemSettings();
+export function AnalysisLabView({
+  initialQuery = "",
+  listHeader,
+}: AnalysisLabViewProps) {
+  const { themeName } = useTheme();
+  const { setEditingExpense, setEditingIncome } = useModals();
 
-  const { expenses } = useExpenses();
+  const {
+    expenses,
+    loading: expensesLoading,
+    error: expensesError,
+    retry: retryExpenses,
+  } = useExpenses();
   const { incomes } = useIncomes();
   const { accounts } = useAccounts();
 
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
   const [filters, setFilters] = useState<LabFilters>({
+    ...EMPTY_FILTERS,
     query: initialQuery,
-    type: "all",
-    datePreset: "all",
-    categories: [],
-    accountIds: [],
-    minAmount: "",
-    maxAmount: "",
   });
+  const [sort, setSort] = useState<SearchSort>("latest");
+  const [suggestionsDismissed, setSuggestionsDismissed] = useState(false);
+
+  const currency = useDisplayCurrency();
+
+  // A deep link can arrive after mount (?q=...), so keep the query in step.
+  useEffect(() => {
+    if (initialQuery) {
+      setFilters((prev) => ({ ...prev, query: initialQuery }));
+    }
+  }, [initialQuery]);
 
   const accountMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -86,6 +127,23 @@ export function AnalysisLabView({ initialQuery = "" }: AnalysisLabViewProps) {
     });
     return Array.from(cats).sort();
   }, [expenses]);
+
+  // Source records, kept so a tapped result can open the existing editor.
+  const expenseById = useMemo(() => {
+    const map = new Map<string, Expense>();
+    expenses.forEach((e) => {
+      if (e.id) map.set(e.id, e);
+    });
+    return map;
+  }, [expenses]);
+
+  const incomeById = useMemo(() => {
+    const map = new Map<string, Income>();
+    incomes.forEach((inc) => {
+      if (inc.id) map.set(inc.id, inc);
+    });
+    return map;
+  }, [incomes]);
 
   // Combine expenses and incomes into unified collection
   const allTransactions: UnifiedTransaction[] = useMemo(() => {
@@ -174,13 +232,29 @@ export function AnalysisLabView({ initialQuery = "" }: AnalysisLabViewProps) {
     });
   }, [allTransactions, filters, accountMap]);
 
+  /** Client-side ordering of the already-filtered set. */
+  const sortedTransactions = useMemo(() => {
+    if (sort === "latest") return filteredTransactions;
+    const next = [...filteredTransactions];
+    switch (sort) {
+      case "oldest":
+        return next.sort((a, b) => a.date.localeCompare(b.date));
+      case "highest":
+        return next.sort((a, b) => b.amount - a.amount);
+      case "lowest":
+        return next.sort((a, b) => a.amount - b.amount);
+      default:
+        return next;
+    }
+  }, [filteredTransactions, sort]);
+
   // Aggregate stats
   const totalAmount = useMemo(
     () => filteredTransactions.reduce((sum, item) => sum + item.amount, 0),
     [filteredTransactions]
   );
   const avgAmount =
-    filteredTransactions.length > 0 ? totalAmount / filteredTransactions.length : 0;
+    filteredTransactions.length > 0 ? totalAmount / filteredTransactions.length : null;
 
   const activeFiltersCount = useMemo(() => {
     let count = 0;
@@ -192,415 +266,320 @@ export function AnalysisLabView({ initialQuery = "" }: AnalysisLabViewProps) {
     return count;
   }, [filters]);
 
+  /**
+   * Popular searches, derived from the user's own notes and categories —
+   * repeated notes first, then the busiest categories as a fallback.
+   */
+  const suggestions = useMemo(() => {
+    const noteCounts = new Map<string, number>();
+    const categoryCounts = new Map<string, number>();
+
+    expenses.forEach((e) => {
+      const note = e.note?.trim();
+      if (note && note.length >= 3) {
+        noteCounts.set(note, (noteCounts.get(note) || 0) + 1);
+      }
+      if (e.category) {
+        categoryCounts.set(e.category, (categoryCounts.get(e.category) || 0) + 1);
+      }
+    });
+
+    const byCountDesc = (a: [string, number], b: [string, number]) => b[1] - a[1];
+
+    const repeatedNotes = Array.from(noteCounts.entries())
+      .filter(([, count]) => count > 1)
+      .sort(byCountDesc)
+      .map(([note]) => note);
+
+    const topCategories = Array.from(categoryCounts.entries())
+      .sort(byCountDesc)
+      .map(([category]) => category);
+
+    const seen = new Set<string>();
+    const picked: string[] = [];
+    [...repeatedNotes, ...topCategories].forEach((term) => {
+      const key = term.toLowerCase();
+      if (seen.has(key) || picked.length >= MAX_SUGGESTIONS) return;
+      seen.add(key);
+      picked.push(term);
+    });
+    return picked;
+  }, [expenses]);
+
+  const resetFilters = useCallback(() => {
+    setFilters({ ...EMPTY_FILTERS });
+  }, []);
+
+  /** Everything except the free-text query, which has its own clear button. */
+  const clearFiltersOnly = useCallback(() => {
+    setFilters((prev) => ({ ...EMPTY_FILTERS, query: prev.query }));
+  }, []);
+
+  const activeChips: ActiveFilterChip[] = useMemo(() => {
+    const chips: ActiveFilterChip[] = [];
+
+    if (filters.type !== "all") {
+      chips.push({
+        id: "type",
+        label: `Type: ${filters.type === "expense" ? "Expenses" : "Incomes"}`,
+        onRemove: () => setFilters((prev) => ({ ...prev, type: "all" })),
+      });
+    }
+
+    if (filters.datePreset !== "all") {
+      chips.push({
+        id: "date",
+        label: `Date: ${DATE_PRESET_LABELS[filters.datePreset]}`,
+        onRemove: () => setFilters((prev) => ({ ...prev, datePreset: "all" })),
+      });
+    }
+
+    filters.categories.forEach((category) => {
+      chips.push({
+        id: `category-${category}`,
+        label: `Category: ${category}`,
+        onRemove: () =>
+          setFilters((prev) => ({
+            ...prev,
+            categories: prev.categories.filter((c) => c !== category),
+          })),
+      });
+    });
+
+    filters.accountIds.forEach((accountId) => {
+      chips.push({
+        id: `account-${accountId}`,
+        label: `Account: ${accountMap.get(accountId) ?? "Unknown"}`,
+        onRemove: () =>
+          setFilters((prev) => ({
+            ...prev,
+            accountIds: prev.accountIds.filter((id) => id !== accountId),
+          })),
+      });
+    });
+
+    if (filters.minAmount || filters.maxAmount) {
+      const min = filters.minAmount || "0";
+      const max = filters.maxAmount || "∞";
+      chips.push({
+        id: "amount",
+        label: `Amount: ${min} – ${max}`,
+        onRemove: () =>
+          setFilters((prev) => ({ ...prev, minAmount: "", maxAmount: "" })),
+      });
+    }
+
+    return chips;
+  }, [accountMap, filters]);
+
+  const handleOpenTransaction = useCallback(
+    (item: UnifiedTransaction) => {
+      if (item.type === "expense") {
+        const expense = expenseById.get(item.id);
+        if (expense) setEditingExpense(expense);
+        return;
+      }
+      const income = incomeById.get(item.id);
+      if (income) setEditingIncome(income);
+    },
+    [expenseById, incomeById, setEditingExpense, setEditingIncome]
+  );
+
+  const renderRow = useCallback(
+    ({ item }: { item: UnifiedTransaction }) => {
+      const canOpen =
+        item.type === "expense"
+          ? expenseById.has(item.id)
+          : incomeById.has(item.id);
+
+      return (
+        <SearchResultRow
+          type={item.type}
+          title={item.note || item.category}
+          date={item.date}
+          category={item.category}
+          accountName={
+            item.accountId ? accountMap.get(item.accountId) : undefined
+          }
+          amount={item.amount}
+          currency={currency}
+          query={filters.query}
+          onPress={canOpen ? () => handleOpenTransaction(item) : undefined}
+        />
+      );
+    },
+    [
+      accountMap,
+      currency,
+      expenseById,
+      filters.query,
+      handleOpenTransaction,
+      incomeById,
+    ]
+  );
+
+  const controls = (
+    <View style={styles.controls}>
+      <SearchField
+        value={filters.query}
+        onChangeText={(query) => setFilters((prev) => ({ ...prev, query }))}
+      />
+
+      <SearchFilterBar
+        datePreset={filters.datePreset}
+        onDatePresetChange={(datePreset) =>
+          setFilters((prev) => ({ ...prev, datePreset }))
+        }
+        activeFilterCount={activeFiltersCount}
+        onOpenFilters={() => setIsFilterModalOpen(true)}
+      />
+
+      <ActiveFilterChips chips={activeChips} onClearAll={clearFiltersOnly} />
+
+      <SearchSummaryCard
+        matched={filteredTransactions.length}
+        totalSum={totalAmount}
+        average={avgAmount}
+        currency={currency}
+      />
+
+      {!suggestionsDismissed && !filters.query ? (
+        <PopularSearches
+          suggestions={suggestions}
+          onSelect={(query) => setFilters((prev) => ({ ...prev, query }))}
+          onDismiss={() => setSuggestionsDismissed(true)}
+        />
+      ) : null}
+
+      {sortedTransactions.length > 0 ? (
+        <ResultsHeader
+          count={sortedTransactions.length}
+          sort={sort}
+          onSortChange={setSort}
+        />
+      ) : null}
+    </View>
+  );
+
+  const filterSheet = (
+    <FilterSheetModal
+      visible={isFilterModalOpen}
+      onClose={() => setIsFilterModalOpen(false)}
+      filters={filters}
+      onApply={(next) => setFilters(next)}
+      availableCategories={availableCategories}
+    />
+  );
+
+  // Listener failure — never fall through to "no results", which would read as
+  // "you have no matching transactions".
+  if (expensesError && expenses.length === 0) {
+    return (
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.stateWrap}
+      >
+        {listHeader}
+        <ErrorState
+          title="Unable to search transactions"
+          description={expensesError.message}
+          onRetry={expensesError.retryable ? retryExpenses : undefined}
+        />
+      </ScrollView>
+    );
+  }
+
+  if (expensesLoading && expenses.length === 0) {
+    return (
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.stateWrap}
+      >
+        {listHeader}
+        <Skeleton height={52} borderRadius={16} />
+        <Skeleton height={40} borderRadius={20} />
+        <Skeleton height={92} borderRadius={20} />
+        {[0, 1, 2, 3, 4, 5].map((row) => (
+          <Skeleton key={row} height={62} borderRadius={16} />
+        ))}
+      </ScrollView>
+    );
+  }
+
   return (
     <View style={styles.container}>
-      {/* Search Input Bar */}
-      <View
-        style={[
-          styles.searchBar,
-          {
-            backgroundColor: theme.colors.card,
-            borderColor: theme.colors.border,
-          },
-        ]}
-      >
-        <Search size={18} color={theme.colors.mutedForeground} />
-        <TextInput
-          value={filters.query}
-          onChangeText={(q) => setFilters((p) => ({ ...p, query: q }))}
-          placeholder="Search by note, category, tag, account or amount..."
-          placeholderTextColor={theme.colors.mutedForeground}
-          style={[styles.searchInput, { color: theme.colors.foreground }]}
-        />
-        {filters.query.length > 0 && (
-          <Pressable
-            onPress={() => setFilters((p) => ({ ...p, query: "" }))}
-            style={({ pressed }) => [styles.clearBtn, pressed && { opacity: 0.6 }]}
-          >
-            <X size={16} color={theme.colors.mutedForeground} />
-          </Pressable>
-        )}
-      </View>
-
-      {/* Filter Chips Bar */}
-      <View style={styles.filterRow}>
-        <Pressable
-          onPress={() => {
-            Haptics.selectionAsync().catch(() => undefined);
-            setIsFilterModalOpen(true);
-          }}
-          style={({ pressed }) => [
-            styles.filterTriggerBtn,
-            {
-              backgroundColor:
-                activeFiltersCount > 0
-                  ? theme.colors.primary
-                  : isDark
-                  ? "rgba(255,255,255,0.06)"
-                  : "rgba(0,0,0,0.04)",
-              borderColor:
-                activeFiltersCount > 0 ? theme.colors.primary : theme.colors.border,
-              opacity: pressed ? 0.8 : 1,
-            },
-          ]}
-        >
-          <SlidersHorizontal
-            size={14}
-            color={activeFiltersCount > 0 ? "#FFFFFF" : theme.colors.foreground}
+      <FlashList
+        style={styles.list}
+        data={sortedTransactions}
+        renderItem={renderRow}
+        keyExtractor={(item, index) => item.id || `${item.type}-${index}`}
+        extraData={`${themeName}|${sort}|${filters.query}|${activeFiltersCount}`}
+        ItemSeparatorComponent={RowSeparator}
+        ListHeaderComponent={
+          <View>
+            {listHeader}
+            {controls}
+          </View>
+        }
+        ListEmptyComponent={
+          <EmptyState
+            illustration="search"
+            title="No matching transactions"
+            description="Try a different keyword or adjust your filters."
+            primaryAction={
+              filters.query
+                ? {
+                    label: "Clear Search",
+                    onPress: () => setFilters((prev) => ({ ...prev, query: "" })),
+                  }
+                : undefined
+            }
+            secondaryAction={
+              activeFiltersCount > 0
+                ? { label: "Clear Filters", onPress: resetFilters }
+                : undefined
+            }
+            tip="Search & Lab slices notes, categories, tags, accounts and amounts across every ledger account at once."
           />
-          <Text
-            style={[
-              styles.filterTriggerText,
-              { color: activeFiltersCount > 0 ? "#FFFFFF" : theme.colors.foreground },
-            ]}
-          >
-            Filters{activeFiltersCount > 0 ? ` (${activeFiltersCount})` : ""}
-          </Text>
-        </Pressable>
-
-        {/* Quick Date Presets */}
-        <HorizontalSwipeBoundary>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.quickChipsScroll}
-          >
-            {(
-              [
-                { id: "all", label: "All" },
-                { id: "this_month", label: "This Month" },
-                { id: "last_30_days", label: "30D" },
-                { id: "this_year", label: "Year" },
-              ] as const
-            ).map((dp) => {
-              const isSelected = filters.datePreset === dp.id;
-              return (
-                <Pressable
-                  key={dp.id}
-                  onPress={() => {
-                    Haptics.selectionAsync().catch(() => undefined);
-                    setFilters((p) => ({ ...p, datePreset: dp.id }));
-                  }}
-                  style={[
-                    styles.quickChip,
-                    {
-                      backgroundColor: isSelected
-                        ? isDark
-                          ? "rgba(255,255,255,0.12)"
-                          : "rgba(0,0,0,0.08)"
-                        : "transparent",
-                      borderColor: isSelected ? theme.colors.primary : theme.colors.border,
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.quickChipText,
-                      {
-                        color: isSelected
-                          ? theme.colors.primary
-                          : theme.colors.mutedForeground,
-                        fontWeight: isSelected ? "700" : "500",
-                      },
-                    ]}
-                  >
-                    {dp.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-        </HorizontalSwipeBoundary>
-      </View>
-
-      {/* Live Aggregation Summary */}
-      <Card style={styles.summaryCard}>
-        <View style={styles.statCol}>
-          <Text style={[styles.statLabel, { color: theme.colors.mutedForeground }]}>
-            Matched
-          </Text>
-          <Text style={[styles.statValue, { color: theme.colors.foreground }]}>
-            {filteredTransactions.length}
-          </Text>
-        </View>
-        <View style={[styles.statDivider, { backgroundColor: theme.colors.border }]} />
-        <View style={styles.statCol}>
-          <Text style={[styles.statLabel, { color: theme.colors.mutedForeground }]}>
-            Total Sum
-          </Text>
-          <Amount
-            value={totalAmount}
-            currency={system.defaultCurrency}
-            ghostable
-            style={{ fontSize: 16, fontWeight: "800", color: theme.colors.foreground }}
-          />
-        </View>
-        <View style={[styles.statDivider, { backgroundColor: theme.colors.border }]} />
-        <View style={styles.statCol}>
-          <Text style={[styles.statLabel, { color: theme.colors.mutedForeground }]}>
-            Average
-          </Text>
-          <Amount
-            value={avgAmount}
-            currency={system.defaultCurrency}
-            ghostable
-            style={{ fontSize: 16, fontWeight: "800", color: theme.colors.mutedForeground }}
-          />
-        </View>
-      </Card>
-
-      {/* Transaction List */}
-      {filteredTransactions.length === 0 ? (
-        <EmptyState
-          illustration="search"
-          title="No Transactions Found"
-          description="Try broadening your search query, adjusting amount bounds, or resetting filters."
-          primaryAction={{
-            label: "Reset All Filters",
-            onPress: () => {
-              setFilters({
-                query: "",
-                type: "all",
-                datePreset: "all",
-                categories: [],
-                accountIds: [],
-                minAmount: "",
-                maxAmount: "",
-              });
-            },
-          }}
-          tip="The Analytics Lab allows deep multi-attribute slicing across all ledger accounts simultaneously."
-        />
-      ) : (
-        <View style={styles.listContainer}>
-          {filteredTransactions.slice(0, 50).map((item) => {
-            const isExpense = item.type === "expense";
-            const accName = item.accountId ? accountMap.get(item.accountId) : undefined;
-            return (
-              <View
-                key={item.id}
-                style={[
-                  styles.txRow,
-                  {
-                    backgroundColor: theme.colors.card,
-                    borderColor: theme.colors.border,
-                  },
-                ]}
-              >
-                <View style={styles.txLeft}>
-                  <View
-                    style={[
-                      styles.iconCircle,
-                      {
-                        backgroundColor: isExpense
-                          ? isDark
-                            ? "rgba(239,68,68,0.12)"
-                            : "rgba(239,68,68,0.06)"
-                          : isDark
-                          ? "rgba(34,197,94,0.12)"
-                          : "rgba(34,197,94,0.06)",
-                      },
-                    ]}
-                  >
-                    {isExpense ? (
-                      <ArrowUpRight size={18} color="#EF4444" />
-                    ) : (
-                      <ArrowDownLeft size={18} color="#22C55E" />
-                    )}
-                  </View>
-
-                  <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text
-                      style={[styles.txTitle, { color: theme.colors.foreground }]}
-                      numberOfLines={1}
-                    >
-                      {item.note || item.category}
-                    </Text>
-                    <View style={styles.txMetaRow}>
-                      <Text style={[styles.txMetaText, { color: theme.colors.mutedForeground }]}>
-                        {item.date} • {item.category}
-                      </Text>
-                      {accName && (
-                        <Text
-                          style={[styles.accBadge, { color: theme.colors.primary }]}
-                          numberOfLines={1}
-                        >
-                          • {accName}
-                        </Text>
-                      )}
-                    </View>
-                  </View>
-                </View>
-
-                <Amount
-                  value={item.amount}
-                  currency={system.defaultCurrency}
-                  ghostable
-                  style={{
-                    fontSize: 15,
-                    fontWeight: "800",
-                    color: isExpense ? theme.colors.foreground : theme.colors.success,
-                  }}
-                />
-              </View>
-            );
-          })}
-          {filteredTransactions.length > 50 && (
-            <Text
-              style={[
-                styles.limitNotice,
-                { color: theme.colors.mutedForeground },
-              ]}
-            >
-              Showing first 50 of {filteredTransactions.length} results. Refine filters for more specific items.
-            </Text>
-          )}
-        </View>
-      )}
-
-      {/* Filter Bottom Sheet Modal */}
-      <FilterSheetModal
-        visible={isFilterModalOpen}
-        onClose={() => setIsFilterModalOpen(false)}
-        filters={filters}
-        onApply={(f) => setFilters(f)}
-        availableCategories={availableCategories}
+        }
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       />
+
+      {filterSheet}
     </View>
   );
 }
 
+function RowSeparator() {
+  return <View style={styles.separator} />;
+}
+
 const styles = StyleSheet.create({
   container: {
-    gap: 14,
-  },
-  searchBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 14,
-    height: 52,
-    borderRadius: 16,
-    borderWidth: 1,
-  },
-  searchInput: {
     flex: 1,
-    fontSize: 15,
+    minHeight: 0,
   },
-  clearBtn: {
-    width: 40,
-    height: 40,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  filterRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  filterTriggerBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 14,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 1,
-  },
-  filterTriggerText: {
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  quickChipsScroll: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  quickChip: {
-    paddingHorizontal: 16,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  quickChipText: {
-    fontSize: 13,
-  },
-  summaryCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: 16,
-    borderRadius: 18,
-  },
-  statCol: {
+  list: {
     flex: 1,
-    alignItems: "center",
-    gap: 2,
   },
-  statLabel: {
-    fontSize: 11,
-    fontWeight: "700",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-  statValue: {
-    fontSize: 17,
-    fontWeight: "800",
-  },
-  statDivider: {
-    width: 1,
-    height: 28,
-  },
-  listContainer: {
-    gap: 8,
-  },
-  txRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 16,
-    borderWidth: 1,
-    minHeight: 60,
-  },
-  txLeft: {
-    flexDirection: "row",
-    alignItems: "center",
+  controls: {
     gap: 12,
-    flex: 1,
-    marginRight: 10,
-    minWidth: 0,
+    paddingBottom: 12,
   },
-  iconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
+  separator: {
+    height: 8,
   },
-  txTitle: {
-    fontSize: 14,
-    fontWeight: "700",
+  listContent: {
+    // PageShell already clears the nav bar; this only clears the floating
+    // add button so the last row is never hidden behind it.
+    paddingBottom:
+      BOTTOM_NAV_FAB_SIZE + BOTTOM_NAV_FAB_GAP - BOTTOM_NAV_CONTENT_CLEARANCE,
   },
-  txMetaRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    marginTop: 2,
-  },
-  txMetaText: {
-    fontSize: 12,
-  },
-  accBadge: {
-    fontSize: 12,
-    fontWeight: "600",
-    flexShrink: 1,
-  },
-  limitNotice: {
-    fontSize: 12,
-    textAlign: "center",
-    marginVertical: 8,
+  stateWrap: {
+    gap: 12,
+    paddingBottom:
+      BOTTOM_NAV_FAB_SIZE + BOTTOM_NAV_FAB_GAP - BOTTOM_NAV_CONTENT_CLEARANCE,
   },
 });

@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
-import * as Haptics from "expo-haptics";
 import { Sparkles } from "lucide-react-native";
 
 import { Button } from "@/components/ui/Button";
@@ -13,6 +12,7 @@ import {
 } from "@/lib/apkUpdate";
 import { toast } from "@/lib/toast";
 import { useTheme } from "@/theme/ThemeProvider";
+import { haptic } from "@/lib/haptics";
 
 /**
  * Prompts the user to install a newer build published by the release workflow.
@@ -32,7 +32,7 @@ export function UpdateAvailableSheet() {
     progress.phase === "downloading" ? progress.percent : busy ? 100 : 0;
 
   const handleUpdate = async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
+    haptic.medium().catch(() => undefined);
 
     try {
       const outcome = await installAppRelease(release, setProgress);
