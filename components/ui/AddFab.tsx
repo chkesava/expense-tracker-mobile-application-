@@ -1,5 +1,4 @@
 import { Pressable, StyleSheet, Text, type StyleProp, type ViewStyle } from "react-native";
-import * as Haptics from "expo-haptics";
 import { Plus } from "lucide-react-native";
 import Animated, {
   useAnimatedStyle,
@@ -11,6 +10,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { useTheme } from "@/theme/ThemeProvider";
+import { haptic } from "@/lib/haptics";
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -44,7 +44,7 @@ export function AddFab({
   };
 
   const handlePress = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
+    haptic.medium().catch(() => undefined);
     iconRotation.value = withSequence(
       withTiming(45, { duration: 120 }),
       withSpring(0, { damping: 12, stiffness: 200 })

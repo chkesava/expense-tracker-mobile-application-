@@ -12,11 +12,11 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { X } from "lucide-react-native";
-import * as Haptics from "expo-haptics";
 import Animated, { SlideInDown } from "react-native-reanimated";
 
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
 
 export interface ModalProps {
   isOpen: boolean;
@@ -61,7 +61,7 @@ export function Modal({
   const sheetMaxHeight = resolveMaxHeight(maxHeight);
 
   const handleClose = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+    haptic.light().catch(() => undefined);
     onClose();
   };
 

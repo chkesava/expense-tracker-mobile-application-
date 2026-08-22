@@ -14,13 +14,13 @@ import Animated, {
   useSharedValue,
   withSpring,
 } from "react-native-reanimated";
-import * as Haptics from "expo-haptics";
 
 import { EmptyState, type EmptyActionConfig } from "@/components/common/EmptyState";
 import { type EmptyIllustrationType } from "@/components/common/EmptyStateIllustration";
 import { Skeleton } from "@/components/common/Skeleton";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
 
 export type CardVariant = "outlined" | "elevated" | "filled" | "tonal";
 export type CardElevation = 0 | 1 | 2 | 3 | 4 | 5;
@@ -113,13 +113,13 @@ export function Card({
 
   const handlePress = (e: GestureResponderEvent) => {
     if (!onPress || disabled) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+    haptic.light().catch(() => undefined);
     onPress(e);
   };
 
   const handleLongPress = (e: GestureResponderEvent) => {
     if (!onLongPress || disabled) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
+    haptic.medium().catch(() => undefined);
     onLongPress(e);
   };
 

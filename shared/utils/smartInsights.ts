@@ -3,8 +3,14 @@
  * Pure: no Firebase / React Native.
  */
 
-import { parseLocalDate, toLocalDateKey } from "./dates";
-import { formatAmount } from "./formatCurrency";
+import {
+  daysBetweenDateKeys,
+  parseLocalDate,
+  startOfWeekDateKey,
+  toLocalDateKey,
+  type FirstDayOfWeek,
+} from "./dates";
+import { formatAmount, type NumberFormatStyle } from "./formatCurrency";
 
 export type SmartInsightKind = "week_total" | "category_change" | "budget";
 export type SmartInsightTone = "info" | "up" | "down" | "warning";
@@ -27,6 +33,9 @@ export type BuildSmartInsightsInput = {
   expenses: SmartInsightExpense[];
   monthlyBudget?: number;
   currency?: string;
+  numberFormat?: NumberFormatStyle;
+  /** Week boundary for the "this week" figures. Defaults to Monday. */
+  firstDayOfWeek?: FirstDayOfWeek;
   /** YYYY-MM-DD. Defaults to today. */
   today?: string;
 };
@@ -72,9 +81,17 @@ export function buildSmartInsights(
 ): SmartInsight[] {
   const today = input.today || toLocalDateKey(new Date());
   const currency = input.currency || "INR";
-  const weekStart = shiftDateKey(today, -6);
-  const prevEnd = shiftDateKey(weekStart, -1);
-  const prevStart = shiftDateKey(prevEnd, -6);
+  const numberFormatStyle = input.numberFormat || "auto";
+  const firstDayOfWeek = input.firstDayOfWeek || "monday";
+
+  // "This week" means the calendar week the user defined, not a rolling 7 days —
+  // otherwise the `firstDayOfWeek` preference had nothing to act on. The prior
+  // week is compared over the *same number of elapsed days* so a Tuesday is not
+  // measured against a full week.
+  const weekStart = startOfWeekDateKey(today, firstDayOfWeek);
+  const daysElapsed = daysBetweenDateKeys(weekStart, today) + 1;
+  const prevStart = shiftDateKey(weekStart, -7);
+  const prevEnd = shiftDateKey(prevStart, daysElapsed - 1);
   const monthKey = today.slice(0, 7);
 
   const thisWeek = input.expenses.filter((item) =>
@@ -122,7 +139,9 @@ export function buildSmartInsights(
     insights.push({
       id: "week_total",
       kind: "week_total",
-      text: `💰 You spent ${formatAmount(weekTotal, currency)} this week.`,
+      text: `💰 You spent ${formatAmount(weekTotal, currency, {
+        numberFormatStyle,
+      })} this week.`,
       tone: "info",
     });
   }

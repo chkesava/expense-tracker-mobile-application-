@@ -10,7 +10,6 @@ import {
   TextInput,
   View,
 } from "react-native";
-import * as Haptics from "expo-haptics";
 import { Plus, Trash2, X } from "lucide-react-native";
 
 import { Button } from "@/components/ui/Button";
@@ -19,7 +18,6 @@ import { useAuth } from "@/providers/AuthProvider";
 import { useCategories } from "@/hooks/useCategories";
 import { useSplits } from "@/hooks/useSplits";
 import { useSettings } from "@/providers/SettingsProvider";
-import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import type { Participant, SplitKind, SplitType } from "@/shared/types/split";
 import { getStoredQrStyleId } from "@/shared/utils/qrStyles";
 import {
@@ -31,6 +29,8 @@ import {
 } from "@/shared/utils/splitMath";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
 export interface CreateSplitModalProps {
   visible: boolean;
@@ -54,7 +54,7 @@ export function CreateSplitModal({ visible, onClose }: CreateSplitModalProps) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const { user } = useAuth();
-  const { settings: system } = useSystemSettings();
+  const displayCurrency = useDisplayCurrency();
   const { settings: userSettings } = useSettings();
   const { accounts } = useAccounts();
   const { categories } = useCategories();
@@ -134,7 +134,7 @@ export function CreateSplitModal({ visible, onClose }: CreateSplitModalProps) {
   }, [splitType, numTotal, participants]);
 
   const handleAddParticipant = () => {
-    Haptics.selectionAsync().catch(() => undefined);
+    haptic.selection().catch(() => undefined);
     setParticipants((prev) => [
       ...prev,
       {
@@ -153,7 +153,7 @@ export function CreateSplitModal({ visible, onClose }: CreateSplitModalProps) {
       Alert.alert("Notice", "A split requires at least 2 participants.");
       return;
     }
-    Haptics.selectionAsync().catch(() => undefined);
+    haptic.selection().catch(() => undefined);
     setParticipants((prev) => prev.filter((p) => p.id !== id));
   };
 
@@ -168,7 +168,7 @@ export function CreateSplitModal({ visible, onClose }: CreateSplitModalProps) {
   };
 
   const handleSelectKind = (next: SplitKind) => {
-    Haptics.selectionAsync().catch(() => undefined);
+    haptic.selection().catch(() => undefined);
     setKind(next);
     setCategory(
       next === "collect" ? COLLECT_DEFAULT_CATEGORY : BILL_DEFAULT_CATEGORY
@@ -219,7 +219,7 @@ export function CreateSplitModal({ visible, onClose }: CreateSplitModalProps) {
       if (!customValidation.isValid) {
         Alert.alert(
           "Amount Mismatch",
-          `The sum of custom amounts is off by ${system.defaultCurrency} ${Math.abs(
+          `The sum of custom amounts is off by ${displayCurrency} ${Math.abs(
             customValidation.difference
           ).toFixed(2)}.`
         );
@@ -271,7 +271,7 @@ export function CreateSplitModal({ visible, onClose }: CreateSplitModalProps) {
 
       if (!createdId) return;
 
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(
+      haptic.success().catch(
         () => undefined
       );
       onClose();
@@ -432,7 +432,7 @@ export function CreateSplitModal({ visible, onClose }: CreateSplitModalProps) {
                   { color: theme.colors.mutedForeground },
                 ]}
               >
-                {isCollect ? "TARGET AMOUNT" : "TOTAL BILL"} ({system.defaultCurrency})
+                {isCollect ? "TARGET AMOUNT" : "TOTAL BILL"} ({displayCurrency})
               </Text>
               <TextInput
                 value={totalAmount}
@@ -486,7 +486,7 @@ export function CreateSplitModal({ visible, onClose }: CreateSplitModalProps) {
                     <Pressable
                       key={item.key}
                       onPress={() => {
-                        Haptics.selectionAsync().catch(() => undefined);
+                        haptic.selection().catch(() => undefined);
                         setSplitType(item.key);
                       }}
                       style={[
@@ -592,7 +592,7 @@ export function CreateSplitModal({ visible, onClose }: CreateSplitModalProps) {
                             { color: theme.colors.foreground },
                           ]}
                         >
-                          {system.defaultCurrency} {calculatedShare.toFixed(2)}
+                          {displayCurrency} {calculatedShare.toFixed(2)}
                         </Text>
                       ) : (
                         <TextInput
@@ -653,8 +653,8 @@ export function CreateSplitModal({ visible, onClose }: CreateSplitModalProps) {
               {splitType === "custom" && !customValidation.isValid && (
                 <Text style={{ fontSize: 11, color: theme.colors.destructive, fontWeight: "600" }}>
                   {customValidation.difference > 0
-                    ? `Remaining to allocate: ${system.defaultCurrency} ${customValidation.difference.toFixed(2)}`
-                    : `Over allocated by: ${system.defaultCurrency} ${Math.abs(customValidation.difference).toFixed(2)}`}
+                    ? `Remaining to allocate: ${displayCurrency} ${customValidation.difference.toFixed(2)}`
+                    : `Over allocated by: ${displayCurrency} ${Math.abs(customValidation.difference).toFixed(2)}`}
                 </Text>
               )}
             </View>

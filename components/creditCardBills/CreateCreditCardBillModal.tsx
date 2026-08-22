@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
-import * as Haptics from "expo-haptics";
 import { CreditCard } from "lucide-react-native";
 
 import { Modal } from "@/components/common/Modal";
@@ -20,6 +19,7 @@ import { validateCreditCardBillInput } from "@/shared/utils/creditCardBillInput"
 import { todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
 
 export type CreateCreditCardBillModalProps = {
   isOpen: boolean;
@@ -223,7 +223,7 @@ export function CreateCreditCardBillModal({
                   <Pressable
                     key={c.id}
                     onPress={() => {
-                      Haptics.selectionAsync().catch(() => undefined);
+                      haptic.selection().catch(() => undefined);
                       setAccountId(c.id);
                     }}
                     style={[

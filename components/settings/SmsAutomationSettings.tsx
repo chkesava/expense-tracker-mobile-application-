@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Pressable, Switch, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import * as Haptics from "expo-haptics";
 import { ChevronDown, ChevronUp, MessageSquare } from "lucide-react-native";
 
 import { Button } from "@/components/ui/Button";
@@ -25,6 +24,7 @@ import { processRawSmsMessages } from "@/services/sms/smsPipeline";
 import type { RawSmsMessage } from "@/shared/types/smsTransaction";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
 
 const HANDLING_OPTIONS: Array<{
   mode: SmsHandlingMode;
@@ -88,7 +88,7 @@ function RowSwitch({
 
   const handleToggle = () => {
     if (disabled) return;
-    Haptics.selectionAsync().catch(() => undefined);
+    haptic.selection().catch(() => undefined);
     onValueChange(!value);
   };
 
@@ -394,7 +394,7 @@ export function SmsAutomationSettings() {
         >
           <Pressable
             onPress={() => {
-              Haptics.selectionAsync().catch(() => undefined);
+              haptic.selection().catch(() => undefined);
               setReaderExpanded((v) => !v);
             }}
             style={{
@@ -464,7 +464,7 @@ export function SmsAutomationSettings() {
                     key={option.mode}
                     onPress={() => {
                       if (disabled) return;
-                      Haptics.selectionAsync().catch(() => undefined);
+                      haptic.selection().catch(() => undefined);
                       void setHandlingMode(option.mode);
                     }}
                     disabled={disabled}
@@ -546,7 +546,7 @@ export function SmsAutomationSettings() {
           <Button
             variant="primary"
             onPress={() => {
-              Haptics.selectionAsync().catch(() => undefined);
+              haptic.selection().catch(() => undefined);
               router.push("/sms-inbox" as any);
             }}
           >

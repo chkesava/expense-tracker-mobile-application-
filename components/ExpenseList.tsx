@@ -40,13 +40,14 @@ import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import { useSettings } from "@/providers/SettingsProvider";
-import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import { getCategoryIcon } from "@/shared/data/categoryTaxonomy";
 import type { Account, Expense, Income } from "@/shared/types/expense";
 import { postingSortMs } from "@/shared/utils/activityDisplay";
-import { formatDateKey, parseLocalDate } from "@/shared/utils/dates";
+import { formatDateKey } from "@/shared/utils/dates";
+import { formatDayHeading } from "@/shared/utils/dateDisplay";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
 export interface ExpenseListProps {
   expenses: Expense[];
@@ -96,7 +97,8 @@ export function ExpenseList({
   const { user } = useAuth();
   const uid = user?.uid;
   const { settings } = useSettings();
-  const { settings: system } = useSystemSettings();
+  const isCompact = settings.compactListMode;
+  const displayCurrency = useDisplayCurrency();
   const { spaces, removeExpenseFromSpace } = useSpaces();
 
   const [selectedTx, setSelectedTx] = useState<CombinedTransaction | null>(null);
@@ -182,18 +184,9 @@ export function ExpenseList({
     (dateKey: string) => {
       if (dateKey === groupedByDay.todayStr) return "Today";
       if (dateKey === groupedByDay.yesterdayStr) return "Yesterday";
-      try {
-        const d = parseLocalDate(dateKey);
-        return d.toLocaleDateString("en-US", {
-          weekday: "short",
-          month: "short",
-          day: "numeric",
-        });
-      } catch {
-        return dateKey;
-      }
+      return formatDayHeading(dateKey, settings.dateFormat);
     },
-    [groupedByDay.todayStr, groupedByDay.yesterdayStr]
+    [groupedByDay.todayStr, groupedByDay.yesterdayStr, settings.dateFormat]
   );
 
   const handleDelete = useCallback(
@@ -358,6 +351,7 @@ export function ExpenseList({
           }}
           style={({ pressed }) => [
             styles.row,
+            isCompact && styles.rowCompact,
             {
               backgroundColor: theme.colors.card,
               borderTopLeftRadius: isFirstInSection ? theme.radius.lg : 0,
@@ -381,6 +375,7 @@ export function ExpenseList({
           <View
             style={[
               styles.avatar,
+              isCompact && styles.avatarCompact,
               {
                 backgroundColor: isExpense
                   ? theme.colors.primary + "18"
@@ -388,7 +383,7 @@ export function ExpenseList({
               },
             ]}
           >
-            <Text style={{ fontSize: 18 }}>{iconChar}</Text>
+            <Text style={{ fontSize: isCompact ? 14 : 18 }}>{iconChar}</Text>
           </View>
 
           {/* Details */}
@@ -408,6 +403,7 @@ export function ExpenseList({
                 : item.data.note || item.data.source}
             </Text>
 
+            {isCompact ? null : (
             <View style={styles.rowSub}>
               <Text
                 style={[
@@ -453,13 +449,14 @@ export function ExpenseList({
                 </View>
               ) : null}
             </View>
+            )}
           </View>
 
           {/* Amount & Time */}
           <View style={styles.rowRight}>
             <Amount
               value={item.data.amount}
-              currency={system.defaultCurrency}
+              currency={displayCurrency}
               prefix={isExpense ? "-" : "+"}
               ghostable
               style={{
@@ -494,7 +491,8 @@ export function ExpenseList({
       openEditFromRow,
       selectedExpenseIds,
       swipeCloseSignal,
-      system.defaultCurrency,
+      displayCurrency,
+      isCompact,
       theme,
       toggleExpenseSelection,
     ]
@@ -526,7 +524,7 @@ export function ExpenseList({
               ]}
             >
               {item.dayTotal >= 0 ? "+" : "-"}
-              {system.defaultCurrency}
+              {displayCurrency}
               {Math.abs(item.dayTotal).toLocaleString()}
             </Text>
           </View>
@@ -534,7 +532,7 @@ export function ExpenseList({
       }
       return renderTxRow(item.item, item.isFirst, item.isLast);
     },
-    [formatHeaderDate, renderTxRow, system.defaultCurrency, theme]
+    [formatHeaderDate, renderTxRow, displayCurrency, theme]
   );
 
   if (combinedTransactions.length === 0) {
@@ -664,7 +662,7 @@ export function ExpenseList({
                 </Text>
                 <Amount
                   value={totals.totalSpent}
-                  currency={system.defaultCurrency}
+                  currency={displayCurrency}
                   ghostable
                   style={{
                     fontSize: theme.typography.md,
@@ -684,7 +682,7 @@ export function ExpenseList({
                 </Text>
                 <Amount
                   value={totals.totalIncome}
-                  currency={system.defaultCurrency}
+                  currency={displayCurrency}
                   ghostable
                   style={{
                     fontSize: theme.typography.md,
@@ -704,7 +702,7 @@ export function ExpenseList({
                 </Text>
                 <Amount
                   value={totals.net}
-                  currency={system.defaultCurrency}
+                  currency={displayCurrency}
                   ghostable
                   style={{
                     fontSize: theme.typography.md,
@@ -756,7 +754,7 @@ export function ExpenseList({
 
               <Amount
                 value={selectedTx.data.amount}
-                currency={system.defaultCurrency}
+                currency={displayCurrency}
                 prefix={selectedTx.kind === "expense" ? "-" : "+"}
                 ghostable
                 style={{
@@ -1080,6 +1078,15 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
+  },
+  rowCompact: {
+    paddingVertical: 8,
+    gap: 10,
+  },
+  avatarCompact: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
   },
   rowDetails: {
     flex: 1,

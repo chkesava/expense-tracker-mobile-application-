@@ -9,7 +9,6 @@ import {
   TextInput,
   View,
 } from "react-native";
-import * as Haptics from "expo-haptics";
 import {
   Archive,
   Check,
@@ -36,6 +35,7 @@ import {
 } from "@/shared/utils/categoryPreferences";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
 
 export function CategoryManager() {
   const { theme, themeName } = useTheme();
@@ -242,7 +242,7 @@ export function CategoryManager() {
               <View style={styles.parentRow}>
                 <Pressable
                   onPress={() => {
-                    Haptics.selectionAsync().catch(() => undefined);
+                    haptic.selection().catch(() => undefined);
                     setExpandedId(isExpanded ? null : parent.id);
                   }}
                   style={styles.parentTitleArea}

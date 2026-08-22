@@ -1,10 +1,10 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { Animated, StyleSheet, Text, View } from "react-native";
 import { Pressable, Swipeable } from "react-native-gesture-handler";
-import * as Haptics from "expo-haptics";
 import type { LucideIcon } from "lucide-react-native";
 
 import { useTheme } from "@/theme/ThemeProvider";
+import { haptic } from "@/lib/haptics";
 
 export type SwipeAction = {
   icon: LucideIcon;
@@ -72,7 +72,7 @@ export function SwipeableRow({
                 key={action.label}
                 onPress={() => {
                   const run = action.onPress;
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(
+                  haptic.light().catch(
                     () => undefined
                   );
                   // Run the action first, then close — closing before onPress can drop taps

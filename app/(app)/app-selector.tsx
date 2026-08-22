@@ -1,6 +1,5 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import * as Haptics from "expo-haptics";
 import {
   Apple,
   ArrowRight,
@@ -16,6 +15,7 @@ import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
 import { useWorkspace } from "@/providers/WorkspaceProvider";
+import { haptic } from "@/lib/haptics";
 
 export default function AppSelectorScreen() {
   const router = useRouter();
@@ -24,7 +24,7 @@ export default function AppSelectorScreen() {
   const { activeWorkspace, setActiveWorkspace } = useWorkspace();
 
   const handleSelectExpense = () => {
-    Haptics.selectionAsync().catch(() => undefined);
+    haptic.selection().catch(() => undefined);
     setActiveWorkspace("expense");
   };
 
@@ -105,7 +105,7 @@ export default function AppSelectorScreen() {
         {/* Nutrition Space */}
         <Pressable
           onPress={() => {
-            Haptics.selectionAsync().catch(() => undefined);
+            haptic.selection().catch(() => undefined);
             setActiveWorkspace("nutrition");
           }}
           style={({ pressed }) => [

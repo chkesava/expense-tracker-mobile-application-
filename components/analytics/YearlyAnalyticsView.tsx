@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import * as Haptics from "expo-haptics";
 import {
   Award,
   BarChart3,
@@ -22,11 +21,12 @@ import { BarChart, type BarChartItem } from "@/components/charts/BarChart";
 import { DonutChart } from "@/components/charts/DonutChart";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useIncomes } from "@/hooks/useIncomes";
-import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import { groupByCategory } from "@/shared/utils/analytics";
 import { COLORS } from "@/shared/utils/chartColors";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
 const MONTH_NAMES = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -37,7 +37,7 @@ export function YearlyAnalyticsView() {
   const router = useRouter();
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
-  const { settings: system } = useSystemSettings();
+  const displayCurrency = useDisplayCurrency();
 
   const { expenses } = useExpenses();
   const { incomes } = useIncomes();
@@ -143,7 +143,7 @@ export function YearlyAnalyticsView() {
       >
         <Pressable
           onPress={() => {
-            Haptics.selectionAsync().catch(() => undefined);
+            haptic.selection().catch(() => undefined);
             setSelectedYear((y) => y - 1);
           }}
           style={({ pressed }) => [styles.navBtn, pressed && { opacity: 0.6 }]}
@@ -171,7 +171,7 @@ export function YearlyAnalyticsView() {
 
         <Pressable
           onPress={() => {
-            Haptics.selectionAsync().catch(() => undefined);
+            haptic.selection().catch(() => undefined);
             setSelectedYear((y) => y + 1);
           }}
           style={({ pressed }) => [styles.navBtn, pressed && { opacity: 0.6 }]}
@@ -192,7 +192,7 @@ export function YearlyAnalyticsView() {
           secondaryAction={{
             label: "Previous Year",
             onPress: () => {
-              Haptics.selectionAsync().catch(() => undefined);
+              haptic.selection().catch(() => undefined);
               setSelectedYear((y) => y - 1);
             },
           }}
@@ -213,7 +213,7 @@ export function YearlyAnalyticsView() {
             </Text>
             <Amount
               value={totalAnnualExpense}
-              currency={system.defaultCurrency}
+              currency={displayCurrency}
               ghostable
               animated
               style={{ fontSize: 18, fontWeight: "800", color: theme.colors.destructive }}
@@ -226,7 +226,7 @@ export function YearlyAnalyticsView() {
             </Text>
             <Amount
               value={totalAnnualIncome}
-              currency={system.defaultCurrency}
+              currency={displayCurrency}
               ghostable
               animated
               style={{ fontSize: 18, fontWeight: "800", color: theme.colors.success }}
@@ -239,7 +239,7 @@ export function YearlyAnalyticsView() {
             </Text>
             <Amount
               value={netAnnualSavings}
-              currency={system.defaultCurrency}
+              currency={displayCurrency}
               ghostable
               animated
               style={{
@@ -256,7 +256,7 @@ export function YearlyAnalyticsView() {
             </Text>
             <Amount
               value={monthlyAverageExpense}
-              currency={system.defaultCurrency}
+              currency={displayCurrency}
               ghostable
               animated
               style={{ fontSize: 18, fontWeight: "800", color: theme.colors.foreground }}
@@ -279,7 +279,7 @@ export function YearlyAnalyticsView() {
         <BarChart
           data={monthlyChartData}
           height={190}
-          currency={system.defaultCurrency}
+          currency={displayCurrency}
           primaryLabel="Spend"
           secondaryLabel="Income"
           primaryColor={theme.colors.destructive}
@@ -310,7 +310,7 @@ export function YearlyAnalyticsView() {
                 </Text>
                 <Amount
                   value={peakMonth.value}
-                  currency={system.defaultCurrency}
+                  currency={displayCurrency}
                   style={{ fontSize: 12, fontWeight: "800", color: theme.colors.foreground }}
                 />
               </View>
@@ -336,7 +336,7 @@ export function YearlyAnalyticsView() {
                 </Text>
                 <Amount
                   value={lowestMonth.value}
-                  currency={system.defaultCurrency}
+                  currency={displayCurrency}
                   style={{ fontSize: 12, fontWeight: "800", color: theme.colors.foreground }}
                 />
               </View>
@@ -360,7 +360,7 @@ export function YearlyAnalyticsView() {
           data={categoryData}
           size={190}
           strokeWidth={24}
-          currency={system.defaultCurrency}
+          currency={displayCurrency}
           title="Annual Spend"
         />
       </Card>
@@ -403,7 +403,7 @@ export function YearlyAnalyticsView() {
             </View>
             <Amount
               value={biggestExpense.amount}
-              currency={system.defaultCurrency}
+              currency={displayCurrency}
               ghostable
               style={{ fontSize: 16, fontWeight: "900", color: "#F59E0B" }}
             />

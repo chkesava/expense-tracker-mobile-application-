@@ -10,13 +10,13 @@ import {
   ViewStyle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import * as Haptics from "expo-haptics";
 import { useTheme } from "@/theme/ThemeProvider";
 import { AuraBackground } from "./AuraBackground";
 import {
   APP_BAR_CONTENT_HEIGHT,
   BOTTOM_NAV_SCROLL_PADDING,
 } from "./chrome";
+import { haptic } from "@/lib/haptics";
 
 export interface PageShellProps {
   children: ReactNode;
@@ -48,7 +48,7 @@ export function PageShell({
 
   const handleRefresh = () => {
     if (!onRefresh) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
+    haptic.medium().catch(() => undefined);
     onRefresh();
   };
 

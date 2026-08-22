@@ -8,7 +8,6 @@ import {
   TextInput,
   View,
 } from "react-native";
-import * as Haptics from "expo-haptics";
 import {
   Banknote,
   Landmark,
@@ -20,7 +19,6 @@ import {
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { toast } from "@/lib/toast";
-import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import type {
   InterestCreditFrequency,
   InterestMethod,
@@ -30,6 +28,8 @@ import type {
 import { todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
 export interface CreateInvestmentModalProps {
   visible: boolean;
@@ -44,7 +44,7 @@ export function CreateInvestmentModal({
 }: CreateInvestmentModalProps) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
-  const { settings: system } = useSystemSettings();
+  const displayCurrency = useDisplayCurrency();
 
   const [kind, setKind] = useState<InvestmentKind>("fixed_deposit");
   const [name, setName] = useState("");
@@ -179,7 +179,7 @@ export function CreateInvestmentModal({
                   <Pressable
                     key={item.id}
                     onPress={() => {
-                      Haptics.selectionAsync().catch(() => undefined);
+                      haptic.selection().catch(() => undefined);
                       setKind(item.id as InvestmentKind);
                     }}
                     style={[
@@ -238,7 +238,7 @@ export function CreateInvestmentModal({
             {/* Principal Invested */}
             <View style={styles.inputGroup}>
               <Text style={[styles.label, { color: theme.colors.foreground }]}>
-                Principal Amount ({system.defaultCurrency}) *
+                Principal Amount ({displayCurrency}) *
               </Text>
               <Input
                 value={principal}

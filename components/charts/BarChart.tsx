@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { LayoutChangeEvent, StyleSheet, Text, View } from "react-native";
 import Svg, { G, Line, Rect, Text as SvgText } from "react-native-svg";
-import * as Haptics from "expo-haptics";
 import Animated, {
   FadeIn,
   FadeOut,
@@ -14,6 +13,7 @@ import Animated, {
 import { Amount } from "@/components/common/Amount";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
 
 const AnimatedRect = Animated.createAnimatedComponent(Rect);
 
@@ -129,7 +129,7 @@ export function BarChart({
   const baselineY = chartPaddingTop + chartHeight;
 
   const handleSelectBar = (idx: number) => {
-    Haptics.selectionAsync().catch(() => undefined);
+    haptic.selection().catch(() => undefined);
     setSelectedIndex((prev) => (prev === idx ? null : idx));
   };
 

@@ -8,13 +8,13 @@ import {
   TextInput,
   View,
 } from "react-native";
-import * as Haptics from "expo-haptics";
 import { RotateCcw, X } from "lucide-react-native";
 
 import { Button } from "@/components/ui/Button";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
 
 export type DatePreset = "all" | "this_month" | "last_30_days" | "this_year";
 
@@ -54,7 +54,7 @@ export function FilterSheetModal({
   }, [visible, filters]);
 
   const toggleCategory = (cat: string) => {
-    Haptics.selectionAsync().catch(() => undefined);
+    haptic.selection().catch(() => undefined);
     setDraft((prev) => ({
       ...prev,
       categories: prev.categories.includes(cat)
@@ -64,7 +64,7 @@ export function FilterSheetModal({
   };
 
   const toggleAccount = (accId: string) => {
-    Haptics.selectionAsync().catch(() => undefined);
+    haptic.selection().catch(() => undefined);
     setDraft((prev) => ({
       ...prev,
       accountIds: prev.accountIds.includes(accId)
@@ -74,7 +74,7 @@ export function FilterSheetModal({
   };
 
   const handleReset = () => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => undefined);
+    haptic.warning().catch(() => undefined);
     setDraft({
       query: "",
       type: "all",
@@ -87,7 +87,7 @@ export function FilterSheetModal({
   };
 
   const handleSave = () => {
-    Haptics.selectionAsync().catch(() => undefined);
+    haptic.selection().catch(() => undefined);
     onApply(draft);
     onClose();
   };
@@ -139,7 +139,7 @@ export function FilterSheetModal({
                     <Pressable
                       key={t}
                       onPress={() => {
-                        Haptics.selectionAsync().catch(() => undefined);
+                        haptic.selection().catch(() => undefined);
                         setDraft((p) => ({ ...p, type: t }));
                       }}
                       style={[
@@ -190,7 +190,7 @@ export function FilterSheetModal({
                     <Pressable
                       key={dp.id}
                       onPress={() => {
-                        Haptics.selectionAsync().catch(() => undefined);
+                        haptic.selection().catch(() => undefined);
                         setDraft((p) => ({ ...p, datePreset: dp.id }));
                       }}
                       style={[

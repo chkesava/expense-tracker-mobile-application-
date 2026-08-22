@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import * as Haptics from "expo-haptics";
 import {
   AlertTriangle,
   ArrowDownLeft,
@@ -33,7 +32,6 @@ import { useAccounts } from "@/hooks/useAccounts";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useIncomes } from "@/hooks/useIncomes";
 import { useSettings } from "@/providers/SettingsProvider";
-import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import { getCategoryIcon } from "@/shared/data/categoryTaxonomy";
 import { COLORS } from "@/shared/utils/chartColors";
 import { getSmartInsight } from "@/shared/utils/insights";
@@ -49,13 +47,16 @@ import { groupByCategory } from "@/shared/utils/analytics";
 import { currentMonthKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
+import { formatMonthLabel } from "@/shared/utils/dateDisplay";
 
 export function MonthlyAnalyticsView() {
   const router = useRouter();
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const { settings: userSettings } = useSettings();
-  const { settings: system } = useSystemSettings();
+  const displayCurrency = useDisplayCurrency();
 
   const { expenses } = useExpenses();
   const { incomes } = useIncomes();
@@ -69,7 +70,7 @@ export function MonthlyAnalyticsView() {
 
   // Month navigation
   const handlePrevMonth = () => {
-    Haptics.selectionAsync().catch(() => undefined);
+    haptic.selection().catch(() => undefined);
     const [y, m] = selectedMonth.split("-").map(Number);
     const d = new Date(y, m - 2, 1);
     const nextKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -77,18 +78,17 @@ export function MonthlyAnalyticsView() {
   };
 
   const handleNextMonth = () => {
-    Haptics.selectionAsync().catch(() => undefined);
+    haptic.selection().catch(() => undefined);
     const [y, m] = selectedMonth.split("-").map(Number);
     const d = new Date(y, m, 1);
     const nextKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
     setSelectedMonth(nextKey);
   };
 
-  const formattedMonthLabel = useMemo(() => {
-    const [y, m] = selectedMonth.split("-").map(Number);
-    const date = new Date(y, m - 1, 1);
-    return date.toLocaleDateString(undefined, { month: "long", year: "numeric" });
-  }, [selectedMonth]);
+  const formattedMonthLabel = useMemo(
+    () => formatMonthLabel(selectedMonth, userSettings.dateFormat, { long: true }),
+    [selectedMonth, userSettings.dateFormat]
+  );
 
   // Filtered transactions for selected month
   const monthExpenses = useMemo(
@@ -155,7 +155,10 @@ export function MonthlyAnalyticsView() {
   const topVendors = useMemo(() => getTopVendors(monthExpenses).slice(0, 5), [monthExpenses]);
   const anomalies = useMemo(() => getAnomalies(monthExpenses), [monthExpenses]);
   const dayOfWeekData = useMemo(() => {
-    const dist = getDayOfWeekDistribution(monthExpenses);
+    const dist = getDayOfWeekDistribution(
+      monthExpenses,
+      userSettings.firstDayOfWeek
+    );
     return dist.map((d) => ({ label: d.name, value: d.amount }));
   }, [monthExpenses]);
 
@@ -291,7 +294,7 @@ export function MonthlyAnalyticsView() {
           </Text>
           {monthlyBudget > 0 && (
             <Text style={{ fontSize: 11, color: theme.colors.mutedForeground }}>
-              Budget: {system.defaultCurrency} {monthlyBudget}
+              Budget: {displayCurrency} {monthlyBudget}
             </Text>
           )}
         </View>
@@ -303,7 +306,7 @@ export function MonthlyAnalyticsView() {
             </Text>
             <Amount
               value={totalIncome}
-              currency={system.defaultCurrency}
+              currency={displayCurrency}
               ghostable
               animated
               style={{ fontSize: 18, fontWeight: "800", color: theme.colors.success }}
@@ -316,7 +319,7 @@ export function MonthlyAnalyticsView() {
             </Text>
             <Amount
               value={totalExpense}
-              currency={system.defaultCurrency}
+              currency={displayCurrency}
               ghostable
               animated
               style={{ fontSize: 18, fontWeight: "800", color: theme.colors.destructive }}
@@ -329,7 +332,7 @@ export function MonthlyAnalyticsView() {
             </Text>
             <Amount
               value={netSavings}
-              currency={system.defaultCurrency}
+              currency={displayCurrency}
               ghostable
               animated
               style={{
@@ -373,7 +376,7 @@ export function MonthlyAnalyticsView() {
             </Text>
             <Amount
               value={pacing.projectedEndMonthTotal}
-              currency={system.defaultCurrency}
+              currency={displayCurrency}
               ghostable
               animated
               style={{ fontSize: 13, fontWeight: "700", color: theme.colors.foreground }}
@@ -424,7 +427,7 @@ export function MonthlyAnalyticsView() {
           data={categoryData}
           size={190}
           strokeWidth={24}
-          currency={system.defaultCurrency}
+          currency={displayCurrency}
           title="Total Spent"
         />
       </Card>
@@ -446,7 +449,7 @@ export function MonthlyAnalyticsView() {
         <SpendingCurveChart
           points={dailyPoints}
           height={170}
-          currency={system.defaultCurrency}
+          currency={displayCurrency}
           lineColor={theme.colors.primary}
         />
       </Card>
@@ -477,10 +480,10 @@ export function MonthlyAnalyticsView() {
           </View>
           <View style={styles.statSplitRow}>
             <Text style={{ fontSize: 11, color: theme.colors.mutedForeground }}>
-              Weekday: <Amount value={weekendVsWeekday.weekday} currency={system.defaultCurrency} />
+              Weekday: <Amount value={weekendVsWeekday.weekday} currency={displayCurrency} />
             </Text>
             <Text style={{ fontSize: 11, color: theme.colors.mutedForeground }}>
-              Weekend: <Amount value={weekendVsWeekday.weekend} currency={system.defaultCurrency} />
+              Weekend: <Amount value={weekendVsWeekday.weekend} currency={displayCurrency} />
             </Text>
           </View>
         </Card>
@@ -493,7 +496,7 @@ export function MonthlyAnalyticsView() {
           <BarChart
             data={dayOfWeekData}
             height={130}
-            currency={system.defaultCurrency}
+            currency={displayCurrency}
             primaryColor={theme.colors.primary}
             showLegend={false}
           />
@@ -551,7 +554,7 @@ export function MonthlyAnalyticsView() {
                 </View>
                 <Amount
                   value={v.total}
-                  currency={system.defaultCurrency}
+                  currency={displayCurrency}
                   ghostable
                   style={{ fontSize: 13, fontWeight: "700", color: theme.colors.foreground }}
                 />
@@ -605,7 +608,7 @@ export function MonthlyAnalyticsView() {
                 </View>
                 <Amount
                   value={item.amount}
-                  currency={system.defaultCurrency}
+                  currency={displayCurrency}
                   ghostable
                   style={{ fontSize: 14, fontWeight: "800", color: "#EF4444" }}
                 />

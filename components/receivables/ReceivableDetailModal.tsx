@@ -7,7 +7,6 @@ import {
   Text,
   View,
 } from "react-native";
-import * as Haptics from "expo-haptics";
 import { Ban, CheckCircle2, Pencil, Trash2 } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
@@ -30,6 +29,7 @@ import {
 import { isValidDateKey, todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
 
 export interface ReceivableDetailModalProps {
   visible: boolean;
@@ -477,7 +477,7 @@ export function ReceivableDetailModal({
                       <Pressable
                         key={space.id}
                         onPress={() => {
-                          Haptics.selectionAsync().catch(() => undefined);
+                          haptic.selection().catch(() => undefined);
                           setEditSpaceId(space.id ?? "");
                         }}
                         style={[styles.pill, pillStyle(isActive)]}
@@ -559,7 +559,7 @@ export function ReceivableDetailModal({
                     <Pressable
                       key={account.id}
                       onPress={() => {
-                        Haptics.selectionAsync().catch(() => undefined);
+                        haptic.selection().catch(() => undefined);
                         setReceivedAccountId(account.id);
                       }}
                       style={[styles.pill, pillStyle(isActive)]}

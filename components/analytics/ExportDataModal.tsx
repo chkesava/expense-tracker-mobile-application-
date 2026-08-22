@@ -8,7 +8,6 @@ import {
   Text,
   View,
 } from "react-native";
-import * as Haptics from "expo-haptics";
 import { Download, FileSpreadsheet, FileText, Lock, X } from "lucide-react-native";
 
 import { Button } from "@/components/ui/Button";
@@ -24,6 +23,9 @@ import { currentMonthKey, todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { logWarning } from "@/lib/errors";
+import { haptic } from "@/lib/haptics";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
+import { useSettings } from "@/providers/SettingsProvider";
 
 export interface ExportDataModalProps {
   visible: boolean;
@@ -34,6 +36,8 @@ export function ExportDataModal({ visible, onClose }: ExportDataModalProps) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const { settings: system } = useSystemSettings();
+  const displayCurrency = useDisplayCurrency();
+  const { settings, setExportYear } = useSettings();
 
   const { expenses } = useExpenses();
   const { incomes } = useIncomes();
@@ -49,14 +53,28 @@ export function ExportDataModal({ visible, onClose }: ExportDataModalProps) {
     return map;
   }, [accounts]);
 
-  const currentYear = useMemo(() => String(new Date().getFullYear()), []);
   const currentMonth = useMemo(() => currentMonthKey(), []);
+
+  /** Years the user actually has data for, newest first, always including now. */
+  const availableYears = useMemo(() => {
+    const years = new Set<number>([new Date().getFullYear()]);
+    [...expenses, ...incomes].forEach((row) => {
+      const year = Number(row.date?.slice(0, 4));
+      if (Number.isFinite(year) && year > 1970) years.add(year);
+    });
+    return [...years].sort((a, b) => b - a);
+  }, [expenses, incomes]);
+
+  const selectedYear = availableYears.includes(settings.exportYear)
+    ? settings.exportYear
+    : availableYears[0];
+  const selectedYearStr = String(selectedYear);
 
   const filteredData = useMemo(() => {
     if (scope === "year") {
       return {
-        expenses: expenses.filter((e) => e.date?.startsWith(currentYear)),
-        incomes: incomes.filter((inc) => inc.date?.startsWith(currentYear)),
+        expenses: expenses.filter((e) => e.date?.startsWith(selectedYearStr)),
+        incomes: incomes.filter((inc) => inc.date?.startsWith(selectedYearStr)),
       };
     }
     if (scope === "month") {
@@ -66,7 +84,7 @@ export function ExportDataModal({ visible, onClose }: ExportDataModalProps) {
       };
     }
     return { expenses, incomes };
-  }, [expenses, incomes, scope, currentYear, currentMonth]);
+  }, [expenses, incomes, scope, selectedYearStr, currentMonth]);
 
   const handleExport = async () => {
     if (!system.allowDataExport) {
@@ -87,7 +105,7 @@ export function ExportDataModal({ visible, onClose }: ExportDataModalProps) {
           filteredData.expenses,
           filteredData.incomes,
           {
-            currency: system.defaultCurrency,
+            currency: displayCurrency,
             accountMap,
           }
         );
@@ -97,7 +115,7 @@ export function ExportDataModal({ visible, onClose }: ExportDataModalProps) {
           filteredData.expenses,
           filteredData.incomes,
           {
-            currency: system.defaultCurrency,
+            currency: displayCurrency,
             accountMap,
           }
         );
@@ -109,7 +127,7 @@ export function ExportDataModal({ visible, onClose }: ExportDataModalProps) {
         title,
       });
 
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(
+      haptic.success().catch(
         () => undefined
       );
       onClose();
@@ -181,7 +199,7 @@ export function ExportDataModal({ visible, onClose }: ExportDataModalProps) {
                   {(
                     [
                       { id: "all", label: `All History (${expenses.length + incomes.length})` },
-                      { id: "year", label: `This Year (${currentYear})` },
+                      { id: "year", label: `Year (${selectedYearStr})` },
                       { id: "month", label: `This Month (${currentMonth})` },
                     ] as const
                   ).map((s) => {
@@ -190,7 +208,7 @@ export function ExportDataModal({ visible, onClose }: ExportDataModalProps) {
                       <Pressable
                         key={s.id}
                         onPress={() => {
-                          Haptics.selectionAsync().catch(() => undefined);
+                          haptic.selection().catch(() => undefined);
                           setScope(s.id);
                         }}
                         style={[
@@ -220,6 +238,47 @@ export function ExportDataModal({ visible, onClose }: ExportDataModalProps) {
                     );
                   })}
                 </View>
+                {scope === "year" && availableYears.length > 1 ? (
+                  <View style={styles.chipRow}>
+                    {availableYears.map((year) => {
+                      const isSelected = year === selectedYear;
+                      return (
+                        <Pressable
+                          key={year}
+                          onPress={() => {
+                            haptic.selection().catch(() => undefined);
+                            setExportYear(year);
+                          }}
+                          style={[
+                            styles.chip,
+                            {
+                              backgroundColor: isSelected
+                                ? theme.colors.primary
+                                : theme.colors.surfaceVariant,
+                              borderColor: isSelected
+                                ? theme.colors.primary
+                                : theme.colors.border,
+                            },
+                          ]}
+                          accessibilityRole="radio"
+                          accessibilityState={{ selected: isSelected }}
+                        >
+                          <Text
+                            style={{
+                              color: isSelected
+                                ? "#FFFFFF"
+                                : theme.colors.foreground,
+                              fontWeight: isSelected ? "700" : "500",
+                              fontSize: 13,
+                            }}
+                          >
+                            {year}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                ) : null}
               </View>
 
               {/* Format Selection */}
@@ -230,7 +289,7 @@ export function ExportDataModal({ visible, onClose }: ExportDataModalProps) {
                 <View style={styles.formatRow}>
                   <Pressable
                     onPress={() => {
-                      Haptics.selectionAsync().catch(() => undefined);
+                      haptic.selection().catch(() => undefined);
                       setFormat("csv");
                     }}
                     style={[
@@ -264,7 +323,7 @@ export function ExportDataModal({ visible, onClose }: ExportDataModalProps) {
 
                   <Pressable
                     onPress={() => {
-                      Haptics.selectionAsync().catch(() => undefined);
+                      haptic.selection().catch(() => undefined);
                       setFormat("json");
                     }}
                     style={[

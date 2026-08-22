@@ -14,7 +14,6 @@ import { Input } from "@/components/ui/Input";
 import { toast } from "@/lib/toast";
 import { useCelebration } from "@/providers/CelebrationProvider";
 import { useSettings } from "@/providers/SettingsProvider";
-import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import {
   formatMonthlyBudgetInput,
   parseMonthlyBudgetInput,
@@ -25,7 +24,6 @@ import { useTheme } from "@/theme/ThemeProvider";
 export function MoneySection() {
   const { theme } = useTheme();
   const { settings, updateSettings } = useSettings();
-  const { settings: system } = useSystemSettings();
   const { celebrateMilestone } = useCelebration();
   const [budgetText, setBudgetText] = useState(() =>
     formatMonthlyBudgetInput(settings.monthlyBudget)
@@ -60,13 +58,15 @@ export function MoneySection() {
       if (options?.notify) {
         toast.success(
           amount > 0
-            ? `Monthly budget saved · ${formatAmount(amount, system.defaultCurrency)}`
+            ? `Monthly budget saved · ${formatAmount(amount, settings.currency, {
+                numberFormatStyle: settings.numberFormat,
+              })}`
             : "Monthly budget cleared"
         );
       }
       return true;
     },
-    [celebrateMilestone, system.defaultCurrency, updateSettings]
+    [celebrateMilestone, settings.currency, settings.numberFormat, updateSettings]
   );
 
   const flushBudget = useCallback(
@@ -114,7 +114,9 @@ export function MoneySection() {
 
   const savedLabel =
     settings.monthlyBudget > 0
-      ? `Saved in your account: ${formatAmount(settings.monthlyBudget, system.defaultCurrency)}`
+      ? `Saved in your account: ${formatAmount(settings.monthlyBudget, settings.currency, {
+          numberFormatStyle: settings.numberFormat,
+        })}`
       : "No monthly budget saved in your account yet";
 
   return (

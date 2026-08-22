@@ -5,7 +5,6 @@ import {
   Text,
   View,
 } from "react-native";
-import * as Haptics from "expo-haptics";
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -19,19 +18,20 @@ import { CreateSplitModal } from "@/components/splits/CreateSplitModal";
 import { SplitDetailModal } from "@/components/splits/SplitDetailModal";
 import { useAuth } from "@/providers/AuthProvider";
 import { useSplits } from "@/hooks/useSplits";
-import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import {
   computeSplitProgress,
   computeSplitSummary,
 } from "@/shared/utils/splitMath";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { haptic } from "@/lib/haptics";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
 export function SplitsList() {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const { user } = useAuth();
-  const { settings: system } = useSystemSettings();
+  const displayCurrency = useDisplayCurrency();
   const { splits, loading } = useSplits();
 
   const [activeTab, setActiveTab] = useState<"active" | "settled">("active");
@@ -88,7 +88,7 @@ export function SplitsList() {
           </Text>
           <Pressable
             onPress={() => {
-              Haptics.selectionAsync().catch(() => undefined);
+              haptic.selection().catch(() => undefined);
               setIsCreateOpen(true);
             }}
             style={({ pressed }) => [
@@ -120,7 +120,7 @@ export function SplitsList() {
             </View>
             <Amount
               value={summary.totalOwedToYou}
-              currency={system.defaultCurrency}
+              currency={displayCurrency}
               ghostable
               style={{ fontSize: 20, fontWeight: "900", color: "#22C55E" }}
             />
@@ -142,7 +142,7 @@ export function SplitsList() {
             </View>
             <Amount
               value={summary.totalYouOwe}
-              currency={system.defaultCurrency}
+              currency={displayCurrency}
               ghostable
               style={{ fontSize: 20, fontWeight: "900", color: "#F59E0B" }}
             />
@@ -154,7 +154,7 @@ export function SplitsList() {
       <View style={styles.filterRow}>
         <Pressable
           onPress={() => {
-            Haptics.selectionAsync().catch(() => undefined);
+            haptic.selection().catch(() => undefined);
             setActiveTab("active");
           }}
           style={[
@@ -186,7 +186,7 @@ export function SplitsList() {
 
         <Pressable
           onPress={() => {
-            Haptics.selectionAsync().catch(() => undefined);
+            haptic.selection().catch(() => undefined);
             setActiveTab("settled");
           }}
           style={[
@@ -240,7 +240,7 @@ export function SplitsList() {
               <Pressable
                 key={split.id}
                 onPress={() => {
-                  Haptics.selectionAsync().catch(() => undefined);
+                  haptic.selection().catch(() => undefined);
                   setSelectedSplitId(split.id ?? null);
                 }}
                 style={({ pressed }) => [
@@ -325,7 +325,7 @@ export function SplitsList() {
                   <View style={{ alignItems: "flex-end", gap: 4 }}>
                     <Amount
                       value={split.totalAmount}
-                      currency={system.defaultCurrency}
+                      currency={displayCurrency}
                       ghostable
                       style={{
                         fontSize: theme.typography.md,
