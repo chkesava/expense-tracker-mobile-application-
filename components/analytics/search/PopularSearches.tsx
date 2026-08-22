@@ -9,6 +9,7 @@ import {
 import { haptic } from "@/lib/haptics";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
 
 export interface PopularSearchesProps {
   /** Suggestions derived from the user's own transactions. */
@@ -46,38 +47,40 @@ export function PopularSearches({
         </Text>
       </View>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.chipScroll}
-      >
-        {suggestions.map((term) => (
-          <Pressable
-            key={term}
-            onPress={() => {
-              void haptic.selection();
-              onSelect(term);
-            }}
-            accessibilityRole="button"
-            accessibilityLabel={`Search for ${term}`}
-            style={({ pressed }) => [
-              styles.chip,
-              {
-                backgroundColor: surface.inset,
-                borderColor: surface.insetBorder,
-              },
-              pressed && styles.pressed,
-            ]}
-          >
-            <Text
-              style={[styles.chipText, { color: theme.colors.foreground }]}
-              numberOfLines={1}
+      <HorizontalSwipeBoundary>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chipScroll}
+        >
+          {suggestions.map((term) => (
+            <Pressable
+              key={term}
+              onPress={() => {
+                void haptic.selection();
+                onSelect(term);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={`Search for ${term}`}
+              style={({ pressed }) => [
+                styles.chip,
+                {
+                  backgroundColor: surface.inset,
+                  borderColor: surface.insetBorder,
+                },
+                pressed && styles.pressed,
+              ]}
             >
-              {term}
-            </Text>
-          </Pressable>
-        ))}
-      </ScrollView>
+              <Text
+                style={[styles.chipText, { color: theme.colors.foreground }]}
+                numberOfLines={1}
+              >
+                {term}
+              </Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+      </HorizontalSwipeBoundary>
 
       <Pressable
         onPress={onDismiss}

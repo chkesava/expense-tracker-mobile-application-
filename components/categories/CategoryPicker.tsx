@@ -26,6 +26,7 @@ import {
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
+import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
 
 export interface CategoryPickerProps {
   category: string;
@@ -231,37 +232,39 @@ export function CategoryPicker({
           >
             RECENT
           </Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.chipsRow}
-          >
-            {recentPairs.map((p, idx) => (
-              <Pressable
-                key={`recent-${idx}`}
-                onPress={() => finishSelection(p.category, p.subcategory)}
-                style={({ pressed }) => [
-                  styles.chipPill,
-                  {
-                    backgroundColor: isDark
-                      ? "rgba(255,255,255,0.06)"
-                      : "rgba(0,0,0,0.04)",
-                    borderColor: theme.colors.border,
-                  },
-                  pressed && { opacity: 0.75 },
-                ]}
-              >
-                <Text style={styles.chipEmoji}>
-                  {getCategoryIcon(p.category)}
-                </Text>
-                <Text
-                  style={[styles.chipText, { color: theme.colors.foreground }]}
+          <HorizontalSwipeBoundary>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.chipsRow}
+            >
+              {recentPairs.map((p, idx) => (
+                <Pressable
+                  key={`recent-${idx}`}
+                  onPress={() => finishSelection(p.category, p.subcategory)}
+                  style={({ pressed }) => [
+                    styles.chipPill,
+                    {
+                      backgroundColor: isDark
+                        ? "rgba(255,255,255,0.06)"
+                        : "rgba(0,0,0,0.04)",
+                      borderColor: theme.colors.border,
+                    },
+                    pressed && { opacity: 0.75 },
+                  ]}
                 >
-                  {p.category} › {p.subcategory}
-                </Text>
-              </Pressable>
-            ))}
-          </ScrollView>
+                  <Text style={styles.chipEmoji}>
+                    {getCategoryIcon(p.category)}
+                  </Text>
+                  <Text
+                    style={[styles.chipText, { color: theme.colors.foreground }]}
+                  >
+                    {p.category} › {p.subcategory}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </HorizontalSwipeBoundary>
         </View>
       ) : null}
 

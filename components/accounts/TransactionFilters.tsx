@@ -5,6 +5,7 @@ import { accountAccent } from "@/components/accounts/accountScreenTheme";
 import { haptic } from "@/lib/haptics";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
 
 export type ActivityFilter = "all" | "debit" | "credit";
 
@@ -72,68 +73,70 @@ export function TransactionFilters({
         </Pressable>
       </View>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.chips}
-      >
-        {chips.map((chip) => {
-          const selected = filter === chip.id;
-          return (
-            <Pressable
-              key={chip.id}
-              onPress={() => {
-                void haptic.selection();
-                onChange(chip.id);
-              }}
-              style={[
-                styles.chip,
-                {
-                  backgroundColor: isDark
-                    ? "rgba(255,255,255,0.04)"
-                    : "rgba(15,23,42,0.04)",
-                  borderColor: selected ? accent : "transparent",
-                },
-              ]}
-              accessibilityRole="button"
-              accessibilityState={{ selected }}
-              accessibilityLabel={`${chip.label} ${chip.count}`}
-            >
-              <Text
+      <HorizontalSwipeBoundary>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chips}
+        >
+          {chips.map((chip) => {
+            const selected = filter === chip.id;
+            return (
+              <Pressable
+                key={chip.id}
+                onPress={() => {
+                  void haptic.selection();
+                  onChange(chip.id);
+                }}
                 style={[
-                  styles.chipLabel,
-                  { color: selected ? accent : theme.colors.foreground },
-                ]}
-              >
-                {chip.label}
-              </Text>
-              <View
-                style={[
-                  styles.count,
+                  styles.chip,
                   {
-                    backgroundColor: selected
-                      ? isDark
-                        ? "rgba(74,222,128,0.16)"
-                        : "rgba(22,163,74,0.12)"
-                      : isDark
-                        ? "rgba(255,255,255,0.06)"
-                        : "rgba(15,23,42,0.06)",
+                    backgroundColor: isDark
+                      ? "rgba(255,255,255,0.04)"
+                      : "rgba(15,23,42,0.04)",
+                    borderColor: selected ? accent : "transparent",
                   },
                 ]}
+                accessibilityRole="button"
+                accessibilityState={{ selected }}
+                accessibilityLabel={`${chip.label} ${chip.count}`}
               >
                 <Text
                   style={[
-                    styles.countText,
-                    { color: selected ? accent : theme.colors.mutedForeground },
+                    styles.chipLabel,
+                    { color: selected ? accent : theme.colors.foreground },
                   ]}
                 >
-                  {chip.count}
+                  {chip.label}
                 </Text>
-              </View>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
+                <View
+                  style={[
+                    styles.count,
+                    {
+                      backgroundColor: selected
+                        ? isDark
+                          ? "rgba(74,222,128,0.16)"
+                          : "rgba(22,163,74,0.12)"
+                        : isDark
+                          ? "rgba(255,255,255,0.06)"
+                          : "rgba(15,23,42,0.06)",
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.countText,
+                      { color: selected ? accent : theme.colors.mutedForeground },
+                    ]}
+                  >
+                    {chip.count}
+                  </Text>
+                </View>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      </HorizontalSwipeBoundary>
     </View>
   );
 }

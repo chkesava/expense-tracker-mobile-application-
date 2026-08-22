@@ -10,6 +10,7 @@ import { haptic } from "@/lib/haptics";
 import type { DatePreset } from "@/components/analytics/FilterSheetModal";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
 
 /** Quick presets mirror the date options the filter sheet already supports. */
 const DATE_PRESETS: { id: DatePreset; label: string }[] = [
@@ -74,51 +75,53 @@ export function SearchFilterBar({
         ) : null}
       </Pressable>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.chipScroll}
-      >
-        {DATE_PRESETS.map((preset) => {
-          const isActive = datePreset === preset.id;
-          return (
-            <Pressable
-              key={preset.id}
-              onPress={() => {
-                if (isActive) return;
-                void haptic.selection();
-                onDatePresetChange(preset.id);
-              }}
-              accessibilityRole="button"
-              accessibilityState={{ selected: isActive }}
-              style={({ pressed }) => [
-                styles.chip,
-                {
-                  backgroundColor: isActive ? accents.pinkDim : surface.card,
-                  borderColor: isActive
-                    ? isDark
-                      ? "rgba(244, 63, 94, 0.45)"
-                      : "rgba(220, 38, 38, 0.28)"
-                    : surface.border,
-                },
-                pressed && styles.pressed,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.chipText,
+      <HorizontalSwipeBoundary>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chipScroll}
+        >
+          {DATE_PRESETS.map((preset) => {
+            const isActive = datePreset === preset.id;
+            return (
+              <Pressable
+                key={preset.id}
+                onPress={() => {
+                  if (isActive) return;
+                  void haptic.selection();
+                  onDatePresetChange(preset.id);
+                }}
+                accessibilityRole="button"
+                accessibilityState={{ selected: isActive }}
+                style={({ pressed }) => [
+                  styles.chip,
                   {
-                    color: isActive ? accents.pink : theme.colors.mutedForeground,
-                    fontWeight: isActive ? "700" : "600",
+                    backgroundColor: isActive ? accents.pinkDim : surface.card,
+                    borderColor: isActive
+                      ? isDark
+                        ? "rgba(244, 63, 94, 0.45)"
+                        : "rgba(220, 38, 38, 0.28)"
+                      : surface.border,
                   },
+                  pressed && styles.pressed,
                 ]}
               >
-                {preset.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
+                <Text
+                  style={[
+                    styles.chipText,
+                    {
+                      color: isActive ? accents.pink : theme.colors.mutedForeground,
+                      fontWeight: isActive ? "700" : "600",
+                    },
+                  ]}
+                >
+                  {preset.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      </HorizontalSwipeBoundary>
     </View>
   );
 }

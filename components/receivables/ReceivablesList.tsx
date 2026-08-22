@@ -19,6 +19,7 @@ import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
+import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
 
 type StatusFilter = "all" | "outstanding" | ReceivableStatus;
 
@@ -168,29 +169,31 @@ export function ReceivablesList() {
       ) : null}
 
       {receivables.length > 0 ? (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.pillRow}
-        >
-          {STATUS_FILTERS.map((filter) => {
-            const isActive = statusFilter === filter.id;
-            return (
-              <Pressable
-                key={filter.id}
-                onPress={() => {
-                  haptic.selection().catch(() => undefined);
-                  setStatusFilter(filter.id);
-                }}
-                style={[styles.pill, pillStyle(isActive)]}
-              >
-                <Text style={[styles.pillText, pillTextStyle(isActive)]}>
-                  {filter.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+        <HorizontalSwipeBoundary>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.pillRow}
+          >
+            {STATUS_FILTERS.map((filter) => {
+              const isActive = statusFilter === filter.id;
+              return (
+                <Pressable
+                  key={filter.id}
+                  onPress={() => {
+                    haptic.selection().catch(() => undefined);
+                    setStatusFilter(filter.id);
+                  }}
+                  style={[styles.pill, pillStyle(isActive)]}
+                >
+                  <Text style={[styles.pillText, pillTextStyle(isActive)]}>
+                    {filter.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </HorizontalSwipeBoundary>
       ) : null}
 
       {receivables.length > 2 ? (

@@ -31,6 +31,7 @@ import type {
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
+import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
 
 type PortfolioSubTab = "holdings" | "watchlist" | "orders" | "alerts" | "charts";
 
@@ -328,59 +329,61 @@ export function PortfolioDashboard({ listHeader }: { listHeader?: ReactNode }) {
         onManageCash={() => setIsCashModalOpen(true)}
       />
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.subTabRow}
-      >
-        {subTabs.map((tab) => {
-          const active = subTab === tab.id;
-          const iconColor = active
-            ? ACTIVE_ACTION_FG
-            : isDark
-              ? "#F8FAFC"
-              : theme.colors.foreground;
-          return (
-            <Pressable
-              key={tab.id}
-              onPress={() => {
-                void haptic.selection();
-                setSubTab(tab.id);
-              }}
-              style={({ pressed }) => [
-                styles.subTabPill,
-                {
-                  backgroundColor: active
-                    ? CARD_ORANGE
-                    : isDark
-                      ? "rgba(255,255,255,0.05)"
-                      : "rgba(0,0,0,0.04)",
-                  borderColor: active
-                    ? CARD_ORANGE
-                    : isDark
-                      ? "rgba(148,163,184,0.16)"
-                      : theme.colors.border,
-                },
-                pressed && styles.pressed,
-              ]}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: active }}
-              accessibilityLabel={tab.label}
-            >
-              {tab.icon(iconColor)}
-              <Text
-                style={{
-                  fontSize: 13,
-                  fontWeight: active ? "800" : "600",
-                  color: active ? ACTIVE_ACTION_FG : theme.colors.foreground,
+      <HorizontalSwipeBoundary>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.subTabRow}
+        >
+          {subTabs.map((tab) => {
+            const active = subTab === tab.id;
+            const iconColor = active
+              ? ACTIVE_ACTION_FG
+              : isDark
+                ? "#F8FAFC"
+                : theme.colors.foreground;
+            return (
+              <Pressable
+                key={tab.id}
+                onPress={() => {
+                  void haptic.selection();
+                  setSubTab(tab.id);
                 }}
+                style={({ pressed }) => [
+                  styles.subTabPill,
+                  {
+                    backgroundColor: active
+                      ? CARD_ORANGE
+                      : isDark
+                        ? "rgba(255,255,255,0.05)"
+                        : "rgba(0,0,0,0.04)",
+                    borderColor: active
+                      ? CARD_ORANGE
+                      : isDark
+                        ? "rgba(148,163,184,0.16)"
+                        : theme.colors.border,
+                  },
+                  pressed && styles.pressed,
+                ]}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: active }}
+                accessibilityLabel={tab.label}
               >
-                {tab.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
+                {tab.icon(iconColor)}
+                <Text
+                  style={{
+                    fontSize: 13,
+                    fontWeight: active ? "800" : "600",
+                    color: active ? ACTIVE_ACTION_FG : theme.colors.foreground,
+                  }}
+                >
+                  {tab.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      </HorizontalSwipeBoundary>
     </View>
   );
 
