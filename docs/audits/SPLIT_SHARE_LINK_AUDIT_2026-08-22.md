@@ -312,9 +312,62 @@ server would reject, and that each clause is individually violable and caught.
   `[splitClaims.submitLate] permission-denied` was logged through `lib/errors`
   with the redacted payload.
 
+## Decision changed after the first pass: no proxy, independent origin
+
+The fix as first written kept `EXPO_PUBLIC_APP_URL` pointing at
+`kesavaexpensetracker.netlify.app` and proxied `/split/*` across to the new
+Netlify site. The stated benefit was that links already sent would keep working
+and no APK rebuild would be needed.
+
+**That benefit was worth less than it looked.** The feature had never worked, so
+there were no working links to preserve — every link ever sent already resolved
+to the legacy app's login screen. What the proxy did buy was a permanent
+dependency: sharing would have needed the legacy Vite app to stay deployed, to
+keep four redirect rules in the right order above its SPA catch-all, and to carry
+a `workbox.navigateFallbackDenylist` so its service worker did not intercept the
+proxied path. Three coupled failure modes in a repo that has nothing to do with
+splits.
+
+Superseded by hosting the share pages on their own origin:
+
+- `EXPO_PUBLIC_SHARE_URL` now addresses the share pages;
+  `getPublicAppOrigin()` prefers it and falls back to `EXPO_PUBLIC_APP_URL` so an
+  older build is unaffected. This is the variable split described as optional
+  decoupling in the original plan, now load-bearing.
+- `EXPO_PUBLIC_APP_URL` keeps its two genuinely unrelated jobs, the `/api/*`
+  market functions and `/mobile-google-auth`. Those still live on the legacy
+  origin. Moving them means porting Netlify functions and is separate work.
+- The Vite repo needs **no changes at all**. The edits prepared for it were
+  reverted.
+- `netlify.toml` on the share host references no external origin.
+
+Cost of the change, stated plainly: a **new APK is required**, because the app
+compiles the share origin into the links it generates. Under the proxy the links
+would have started working without one.
+
+### Closing the second-copy-of-the-app surface
+
+Worth recording because the first attempt at it was wrong. `index.html` boots the
+whole app, so the initial `/* -> /index.html 200` fallback made `/dashboard`,
+`/settings` and every other route reachable on the share domain — a second origin
+where someone could sign in. A `/` redirect was added first, which covered only
+the bare domain: the one path a person is least likely to reach by guessing.
+
+The fallback is now scoped to `/split/*` and `/payment/*`, `/` is **forced** to a
+static `404.html`, and there is no catch-all, so everything else falls through to
+that same static page. The force matters: `/` resolves to the real `index.html`,
+and Netlify will not shadow an existing file otherwise — an unforced rule left the
+bare domain still booting the app. Caught by testing the real config with
+`netlify-cli dev` rather than reasoning about Netlify's shadowing rules.
+
+Measured behaviour: `/split/*` and `/payment/*` serve 200 and boot the app; `/`,
+`/dashboard` and `/settings` return 404 with no app bundle; `/robots.txt`,
+bundles and fonts still serve.
+
 ## Not yet done
 
 - Deploying `firestore.rules` (the `splitShareClaims` block). Self-service stays
   inert until then; everything else works without it.
-- Creating the new Netlify site and adding the proxy rules plus the
-  `workbox.navigateFallbackDenylist` fix to the Vite repo.
+- Adding `EXPO_PUBLIC_SHARE_URL` to the Android release secrets, and shipping a
+  build that carries it. Until then the app emits share links against
+  `EXPO_PUBLIC_APP_URL` — the old, broken target.
