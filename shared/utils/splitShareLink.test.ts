@@ -10,6 +10,7 @@ import {
   resolvePersonShareLink,
   resolveSplitShareLink,
 } from "./splitShareLink";
+import { buildSplitPublicSharePayloadFromSplit } from "./splitPublicShare";
 
 const ORIGIN = "https://kesavaexpensetracker.netlify.app";
 
@@ -200,6 +201,56 @@ describe("splitShareLink", () => {
       expect(afterUpi.keysMissingPayLink).toEqual(["p_alice", "p_bob"]);
       expect(afterUpi.payLinkBlockedReason).toBeUndefined();
       expect(isSharingRepairNoop(afterUpi)).toBe(false);
+    });
+  });
+
+  describe("a no-op plan does not mean a no-op snapshot", () => {
+    // The bug this guards: `ensureSplitSharing` used to skip its whole commit
+    // when the plan reported nothing to repair. The plan only sees publicSlug,
+    // publicShareId and missing pay links -- it is blind to the *published
+    // snapshot* being stale. A split shared by an older build satisfies all
+    // three and still needs its snapshot rewritten, so tapping Share silently
+    // did nothing and fields like `currency` could never appear.
+    const wired = legacySplit({
+      publicSlug: "abc123",
+      publicShareId: "share1",
+      participants: [
+        participant({ name: "You", key: "p_me", isCurrentUser: true }),
+        participant({ name: "Alice", key: "p_alice", paymentSlug: "alice-pay" }),
+        participant({ name: "Bob", key: "p_bob", paymentSlug: "bob-pay" }),
+      ],
+    });
+
+    it("reports the plan as a no-op", () => {
+      expect(
+        isSharingRepairNoop(planSplitSharingRepair(wired, { upiId: "me@upi" }))
+      ).toBe(true);
+    });
+
+    it("still produces a snapshot carrying the fields the public page needs", () => {
+      const payload = buildSplitPublicSharePayloadFromSplit(wired, {
+        slug: "abc123",
+        currency: "INR",
+        updatedAt: 1,
+      });
+
+      // Exactly the fields a share written by an older build lacks.
+      expect(payload.currency).toBe("INR");
+      expect(payload.claimsEnabled).toBe(true);
+      expect(payload.claimKeys).toEqual(["p_alice", "p_bob"]);
+      expect(payload.claimAmountMax).toBe(wired.totalAmount);
+      expect(payload.optedOutNames).toEqual([]);
+    });
+
+    it("always emits claimsEnabled, even with no currency to write", () => {
+      // `currency` is strippable via omitUndefined; `claimsEnabled` never is.
+      // A live document missing BOTH therefore predates this builder entirely,
+      // which is how a stale share is identified.
+      const payload = buildSplitPublicSharePayloadFromSplit(wired, {
+        slug: "abc123",
+      });
+      expect(payload).not.toHaveProperty("currency");
+      expect(payload.claimsEnabled).toBe(true);
     });
   });
 

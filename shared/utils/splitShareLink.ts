@@ -114,8 +114,14 @@ export function planSplitSharingRepair(
 }
 
 /**
- * True when nothing needs writing, so the caller can skip the commit entirely.
- * This is what makes it cheap to call the repair on every Share tap.
+ * True when nothing is missing that this plan can see: slug, share doc, pay
+ * links.
+ *
+ * Note what it deliberately cannot tell you: whether the *published snapshot*
+ * is stale. A split shared by an older build has all three of those and still
+ * needs its snapshot rewritten, so callers must not use this to skip the
+ * snapshot write -- only to skip creating payment requests, and to report
+ * whether anything was actually created.
  */
 export function isSharingRepairNoop(plan: SplitSharingRepairPlan): boolean {
   return (
