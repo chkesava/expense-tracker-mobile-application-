@@ -11,6 +11,7 @@ import {
 import { useSurfaces, withAlpha } from "@/components/dashboard/primitives";
 import { haptic } from "@/lib/haptics";
 import { useTheme } from "@/theme/ThemeProvider";
+import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
 
 export interface QuickAddWidgetProps {
   onAddExpense: () => void;
@@ -66,57 +67,59 @@ export function QuickAddWidget({ onAddExpense }: QuickAddWidgetProps) {
   const featuredBg = surfaces.isDark ? theme.colors.primary : "#1E293B";
 
   return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={styles.rail}
-    >
-      {chips.map((chip) => {
-        const Icon = chip.icon;
-        const color = chip.featured ? "#FFFFFF" : theme.colors.foreground;
-        return (
-          <Pressable
-            key={chip.id}
-            onPress={chip.onPress}
-            android_ripple={{
-              color: chip.featured
-                ? "rgba(255,255,255,0.2)"
-                : withAlpha(theme.colors.primary, 0.12),
-              borderless: false,
-            }}
-            style={({ pressed }) => [
-              styles.chip,
-              chip.featured
-                ? { backgroundColor: featuredBg }
-                : {
-                    backgroundColor: theme.colors.card,
-                    borderWidth: StyleSheet.hairlineWidth,
-                    borderColor: surfaces.divider,
-                  },
-              pressed && { opacity: 0.9 },
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel={chip.label}
-          >
-            {chip.featured ? (
-              <View style={styles.featuredGlyph}>
-                <Icon size={14} color={color} strokeWidth={2.6} />
-              </View>
-            ) : (
-              <Icon size={16} color={theme.colors.mutedForeground} strokeWidth={2.2} />
-            )}
-            <Text
-              style={[
-                styles.label,
-                { color, fontFamily: theme.fontFamily.semibold },
+    <HorizontalSwipeBoundary>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.rail}
+      >
+        {chips.map((chip) => {
+          const Icon = chip.icon;
+          const color = chip.featured ? "#FFFFFF" : theme.colors.foreground;
+          return (
+            <Pressable
+              key={chip.id}
+              onPress={chip.onPress}
+              android_ripple={{
+                color: chip.featured
+                  ? "rgba(255,255,255,0.2)"
+                  : withAlpha(theme.colors.primary, 0.12),
+                borderless: false,
+              }}
+              style={({ pressed }) => [
+                styles.chip,
+                chip.featured
+                  ? { backgroundColor: featuredBg }
+                  : {
+                      backgroundColor: theme.colors.card,
+                      borderWidth: StyleSheet.hairlineWidth,
+                      borderColor: surfaces.divider,
+                    },
+                pressed && { opacity: 0.9 },
               ]}
+              accessibilityRole="button"
+              accessibilityLabel={chip.label}
             >
-              {chip.label}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </ScrollView>
+              {chip.featured ? (
+                <View style={styles.featuredGlyph}>
+                  <Icon size={14} color={color} strokeWidth={2.6} />
+                </View>
+              ) : (
+                <Icon size={16} color={theme.colors.mutedForeground} strokeWidth={2.2} />
+              )}
+              <Text
+                style={[
+                  styles.label,
+                  { color, fontFamily: theme.fontFamily.semibold },
+                ]}
+              >
+                {chip.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+    </HorizontalSwipeBoundary>
   );
 }
 

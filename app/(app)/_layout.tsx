@@ -7,6 +7,7 @@ import { Header } from "@/components/Header";
 import { MaintenanceScreen } from "@/components/MaintenanceScreen";
 import { MobileActionDock } from "@/components/MobileActionDock";
 import { PrivacyLock } from "@/components/PrivacyLock";
+import { TabSwipeArea } from "@/components/navigation/TabSwipeArea";
 import { SetupWizardModal } from "@/components/onboarding/SetupWizardModal";
 import { UpdateAvailableSheet } from "@/components/UpdateAvailableSheet";
 import { useAndroidBackHandler } from "@/hooks/useAndroidBackHandler";
@@ -38,81 +39,83 @@ function AppShellInner() {
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
       <Header />
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          contentStyle: { backgroundColor: theme.colors.background },
-          animation: "fade_from_bottom",
-        }}
-      >
-        <Stack.Screen name="index" />
-        <Stack.Screen
-          name="dashboard"
-          options={{
-            animation: "fade",
-          }}
-        />
-        <Stack.Screen
-          name="ledger"
-          options={{
-            animation: "fade",
-          }}
-        />
-        <Stack.Screen
-          name="insights"
-          options={{
-            animation: "fade",
-          }}
-        />
-        <Stack.Screen
-          name="vaults"
-          options={{
-            animation: "fade",
-          }}
-        />
-        <Stack.Screen
-          name="investments"
-          options={{
-            animation: "fade",
-          }}
-        />
-        <Stack.Screen
-          name="settings"
-          options={{
-            animation: "slide_from_right",
-          }}
-        />
-        <Stack.Screen
-          name="sms-inbox"
-          options={{
-            animation: "slide_from_right",
-          }}
-        />
-        <Stack.Screen
-          name="app-selector"
-          options={{
-            animation: "slide_from_right",
-          }}
-        />
-        <Stack.Screen
-          name="accounts"
-          options={{
-            animation: "slide_from_right",
-          }}
-        />
-        <Stack.Screen
-          name="credit-card-bills/[id]"
-          options={{
-            animation: "slide_from_right",
-          }}
-        />
-        <Stack.Screen
-          name="add"
-          options={{
+      <TabSwipeArea>
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            contentStyle: { backgroundColor: theme.colors.background },
             animation: "fade_from_bottom",
           }}
-        />
-      </Stack>
+        >
+          <Stack.Screen name="index" />
+          <Stack.Screen
+            name="dashboard"
+            options={{
+              animation: "fade",
+            }}
+          />
+          <Stack.Screen
+            name="ledger"
+            options={{
+              animation: "fade",
+            }}
+          />
+          <Stack.Screen
+            name="insights"
+            options={{
+              animation: "fade",
+            }}
+          />
+          <Stack.Screen
+            name="vaults"
+            options={{
+              animation: "fade",
+            }}
+          />
+          <Stack.Screen
+            name="investments"
+            options={{
+              animation: "fade",
+            }}
+          />
+          <Stack.Screen
+            name="settings"
+            options={{
+              animation: "slide_from_right",
+            }}
+          />
+          <Stack.Screen
+            name="sms-inbox"
+            options={{
+              animation: "slide_from_right",
+            }}
+          />
+          <Stack.Screen
+            name="app-selector"
+            options={{
+              animation: "slide_from_right",
+            }}
+          />
+          <Stack.Screen
+            name="accounts"
+            options={{
+              animation: "slide_from_right",
+            }}
+          />
+          <Stack.Screen
+            name="credit-card-bills/[id]"
+            options={{
+              animation: "slide_from_right",
+            }}
+          />
+          <Stack.Screen
+            name="add"
+            options={{
+              animation: "fade_from_bottom",
+            }}
+          />
+        </Stack>
+      </TabSwipeArea>
 
       {settings.navigationStyle === "dock" ? <MobileActionDock /> : <BottomNav />}
       <AddTransactionModal />

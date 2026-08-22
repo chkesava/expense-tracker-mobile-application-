@@ -31,6 +31,7 @@ import { todayDateKey } from "@/shared/utils/dates";
 import { getInvestmentValuation } from "@/shared/utils/investmentInterest";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
 
 type FilterTab = "all" | InvestmentKind;
 
@@ -133,54 +134,56 @@ export function InvestmentsList() {
 
       {/* Filter Tabs & Add Button */}
       <View style={styles.filterRow}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ gap: 6 }}
-        >
-          {[
-            { id: "all", label: "All Assets" },
-            { id: "fixed_deposit", label: "Fixed Deposits" },
-            { id: "interest_savings", label: "Savings" },
-            { id: "mutual_fund", label: "Mutual Funds" },
-          ].map((tab) => {
-            const isActive = activeFilter === tab.id;
-            return (
-              <Pressable
-                key={tab.id}
-                onPress={() => {
-                  Haptics.selectionAsync().catch(() => undefined);
-                  setActiveFilter(tab.id as FilterTab);
-                }}
-                style={[
-                  styles.filterPill,
-                  {
-                    backgroundColor: isActive
-                      ? theme.colors.primary
-                      : isDark
-                      ? "rgba(255,255,255,0.06)"
-                      : "rgba(0,0,0,0.04)",
-                    borderColor: isActive
-                      ? theme.colors.primary
-                      : theme.colors.border,
-                  },
-                ]}
-              >
-                <Text
+        <HorizontalSwipeBoundary>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ gap: 6 }}
+          >
+            {[
+              { id: "all", label: "All Assets" },
+              { id: "fixed_deposit", label: "Fixed Deposits" },
+              { id: "interest_savings", label: "Savings" },
+              { id: "mutual_fund", label: "Mutual Funds" },
+            ].map((tab) => {
+              const isActive = activeFilter === tab.id;
+              return (
+                <Pressable
+                  key={tab.id}
+                  onPress={() => {
+                    Haptics.selectionAsync().catch(() => undefined);
+                    setActiveFilter(tab.id as FilterTab);
+                  }}
                   style={[
-                    styles.filterPillText,
+                    styles.filterPill,
                     {
-                      color: isActive ? "#FFFFFF" : theme.colors.foreground,
-                      fontWeight: isActive ? "700" : "500",
+                      backgroundColor: isActive
+                        ? theme.colors.primary
+                        : isDark
+                        ? "rgba(255,255,255,0.06)"
+                        : "rgba(0,0,0,0.04)",
+                      borderColor: isActive
+                        ? theme.colors.primary
+                        : theme.colors.border,
                     },
                   ]}
                 >
-                  {tab.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+                  <Text
+                    style={[
+                      styles.filterPillText,
+                      {
+                        color: isActive ? "#FFFFFF" : theme.colors.foreground,
+                        fontWeight: isActive ? "700" : "500",
+                      },
+                    ]}
+                  >
+                    {tab.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </HorizontalSwipeBoundary>
       </View>
 
       {/* Search Input */}

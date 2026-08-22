@@ -19,6 +19,7 @@ import type { Space } from "@/shared/types/space";
 import { summarizeSpace, summarizeSpaces } from "@/shared/utils/spaceMath";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
 
 type StatusFilter = "ACTIVE" | "ARCHIVED" | "all";
 
@@ -145,29 +146,31 @@ export function SpacesList() {
       ) : null}
 
       {spaces.length > 0 ? (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.pillRow}
-        >
-          {STATUS_FILTERS.map((filter) => {
-            const isActive = statusFilter === filter.id;
-            return (
-              <Pressable
-                key={filter.id}
-                onPress={() => {
-                  Haptics.selectionAsync().catch(() => undefined);
-                  setStatusFilter(filter.id);
-                }}
-                style={[styles.pill, pillStyle(isActive)]}
-              >
-                <Text style={[styles.pillText, pillTextStyle(isActive)]}>
-                  {filter.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+        <HorizontalSwipeBoundary>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.pillRow}
+          >
+            {STATUS_FILTERS.map((filter) => {
+              const isActive = statusFilter === filter.id;
+              return (
+                <Pressable
+                  key={filter.id}
+                  onPress={() => {
+                    Haptics.selectionAsync().catch(() => undefined);
+                    setStatusFilter(filter.id);
+                  }}
+                  style={[styles.pill, pillStyle(isActive)]}
+                >
+                  <Text style={[styles.pillText, pillTextStyle(isActive)]}>
+                    {filter.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </HorizontalSwipeBoundary>
       ) : null}
 
       {spaces.length > 2 ? (

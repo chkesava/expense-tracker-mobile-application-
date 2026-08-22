@@ -19,6 +19,7 @@ import { summarizeReceivables } from "@/shared/utils/receivableMath";
 import { todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
 
 type StatusFilter = "all" | "outstanding" | ReceivableStatus;
 
@@ -168,29 +169,31 @@ export function ReceivablesList() {
       ) : null}
 
       {receivables.length > 0 ? (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.pillRow}
-        >
-          {STATUS_FILTERS.map((filter) => {
-            const isActive = statusFilter === filter.id;
-            return (
-              <Pressable
-                key={filter.id}
-                onPress={() => {
-                  Haptics.selectionAsync().catch(() => undefined);
-                  setStatusFilter(filter.id);
-                }}
-                style={[styles.pill, pillStyle(isActive)]}
-              >
-                <Text style={[styles.pillText, pillTextStyle(isActive)]}>
-                  {filter.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+        <HorizontalSwipeBoundary>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.pillRow}
+          >
+            {STATUS_FILTERS.map((filter) => {
+              const isActive = statusFilter === filter.id;
+              return (
+                <Pressable
+                  key={filter.id}
+                  onPress={() => {
+                    Haptics.selectionAsync().catch(() => undefined);
+                    setStatusFilter(filter.id);
+                  }}
+                  style={[styles.pill, pillStyle(isActive)]}
+                >
+                  <Text style={[styles.pillText, pillTextStyle(isActive)]}>
+                    {filter.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </HorizontalSwipeBoundary>
       ) : null}
 
       {receivables.length > 2 ? (

@@ -5,6 +5,7 @@ import { haptic } from "@/lib/haptics";
 import { LENDER_TYPES, LENDER_TYPE_LABELS } from "@/shared/types/borrowing";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
 
 export type BorrowingStatusFilter =
   | "all"
@@ -116,48 +117,54 @@ export function BorrowingFilters({
 }) {
   return (
     <View style={styles.wrap}>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.row}
-      >
-        {BORROWING_STATUS_FILTERS.map((filter) => (
-          <FilterChip
-            key={filter.id}
-            label={filter.label}
-            active={statusFilter === filter.id}
-            onPress={() => onStatusChange(filter.id)}
-          />
-        ))}
-      </ScrollView>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.row}
-      >
-        {BORROWING_LENDER_FILTERS.map((filter) => (
-          <FilterChip
-            key={filter.id}
-            label={filter.label}
-            active={lenderTypeFilter === filter.id}
-            onPress={() => onLenderChange(filter.id)}
-          />
-        ))}
-      </ScrollView>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.row}
-      >
-        {BORROWING_DATE_FILTERS.map((filter) => (
-          <FilterChip
-            key={filter.id}
-            label={filter.label}
-            active={dateFilter === filter.id}
-            onPress={() => onDateChange(filter.id)}
-          />
-        ))}
-      </ScrollView>
+      <HorizontalSwipeBoundary>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.row}
+        >
+          {BORROWING_STATUS_FILTERS.map((filter) => (
+            <FilterChip
+              key={filter.id}
+              label={filter.label}
+              active={statusFilter === filter.id}
+              onPress={() => onStatusChange(filter.id)}
+            />
+          ))}
+        </ScrollView>
+      </HorizontalSwipeBoundary>
+      <HorizontalSwipeBoundary>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.row}
+        >
+          {BORROWING_LENDER_FILTERS.map((filter) => (
+            <FilterChip
+              key={filter.id}
+              label={filter.label}
+              active={lenderTypeFilter === filter.id}
+              onPress={() => onLenderChange(filter.id)}
+            />
+          ))}
+        </ScrollView>
+      </HorizontalSwipeBoundary>
+      <HorizontalSwipeBoundary>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.row}
+        >
+          {BORROWING_DATE_FILTERS.map((filter) => (
+            <FilterChip
+              key={filter.id}
+              label={filter.label}
+              active={dateFilter === filter.id}
+              onPress={() => onDateChange(filter.id)}
+            />
+          ))}
+        </ScrollView>
+      </HorizontalSwipeBoundary>
     </View>
   );
 }

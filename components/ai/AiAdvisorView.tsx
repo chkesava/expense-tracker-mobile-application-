@@ -36,6 +36,7 @@ import {
 } from "@/services/aiAdvisorService";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
 
 const INITIAL_SUGGESTIONS = [
   "How much did I spend on food this month?",
@@ -346,39 +347,41 @@ export function AiAdvisorView() {
       </View>
 
       {/* Suggested Questions Horizontal Bar */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.suggestionsScroll}
-      >
-        {INITIAL_SUGGESTIONS.map((sug, idx) => (
-          <Pressable
-            key={idx}
-            onPress={() => handleSendMessage(sug)}
-            style={({ pressed }) => [
-              styles.suggestionChip,
-              {
-                backgroundColor: isDark
-                  ? "rgba(255,255,255,0.05)"
-                  : "rgba(0,0,0,0.03)",
-                borderColor: theme.colors.border,
-                opacity: pressed ? 0.7 : 1,
-              },
-            ]}
-          >
-            <Sparkles size={12} color={theme.colors.primary} />
-            <Text
-              style={[
-                styles.suggestionChipText,
-                { color: theme.colors.foreground },
+      <HorizontalSwipeBoundary>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.suggestionsScroll}
+        >
+          {INITIAL_SUGGESTIONS.map((sug, idx) => (
+            <Pressable
+              key={idx}
+              onPress={() => handleSendMessage(sug)}
+              style={({ pressed }) => [
+                styles.suggestionChip,
+                {
+                  backgroundColor: isDark
+                    ? "rgba(255,255,255,0.05)"
+                    : "rgba(0,0,0,0.03)",
+                  borderColor: theme.colors.border,
+                  opacity: pressed ? 0.7 : 1,
+                },
               ]}
-              numberOfLines={1}
             >
-              {sug}
-            </Text>
-          </Pressable>
-        ))}
-      </ScrollView>
+              <Sparkles size={12} color={theme.colors.primary} />
+              <Text
+                style={[
+                  styles.suggestionChipText,
+                  { color: theme.colors.foreground },
+                ]}
+                numberOfLines={1}
+              >
+                {sug}
+              </Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+      </HorizontalSwipeBoundary>
 
       {/* Message Input Strip */}
       <View

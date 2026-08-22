@@ -35,6 +35,7 @@ import type { Expense, Income } from "@/shared/types/expense";
 import { currentMonthKey, toLocalDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
 
 export interface UnifiedTransaction {
   id: string;
@@ -258,56 +259,58 @@ export function AnalysisLabView({ initialQuery = "" }: AnalysisLabViewProps) {
         </Pressable>
 
         {/* Quick Date Presets */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.quickChipsScroll}
-        >
-          {(
-            [
-              { id: "all", label: "All" },
-              { id: "this_month", label: "This Month" },
-              { id: "last_30_days", label: "30D" },
-              { id: "this_year", label: "Year" },
-            ] as const
-          ).map((dp) => {
-            const isSelected = filters.datePreset === dp.id;
-            return (
-              <Pressable
-                key={dp.id}
-                onPress={() => {
-                  Haptics.selectionAsync().catch(() => undefined);
-                  setFilters((p) => ({ ...p, datePreset: dp.id }));
-                }}
-                style={[
-                  styles.quickChip,
-                  {
-                    backgroundColor: isSelected
-                      ? isDark
-                        ? "rgba(255,255,255,0.12)"
-                        : "rgba(0,0,0,0.08)"
-                      : "transparent",
-                    borderColor: isSelected ? theme.colors.primary : theme.colors.border,
-                  },
-                ]}
-              >
-                <Text
+        <HorizontalSwipeBoundary>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.quickChipsScroll}
+          >
+            {(
+              [
+                { id: "all", label: "All" },
+                { id: "this_month", label: "This Month" },
+                { id: "last_30_days", label: "30D" },
+                { id: "this_year", label: "Year" },
+              ] as const
+            ).map((dp) => {
+              const isSelected = filters.datePreset === dp.id;
+              return (
+                <Pressable
+                  key={dp.id}
+                  onPress={() => {
+                    Haptics.selectionAsync().catch(() => undefined);
+                    setFilters((p) => ({ ...p, datePreset: dp.id }));
+                  }}
                   style={[
-                    styles.quickChipText,
+                    styles.quickChip,
                     {
-                      color: isSelected
-                        ? theme.colors.primary
-                        : theme.colors.mutedForeground,
-                      fontWeight: isSelected ? "700" : "500",
+                      backgroundColor: isSelected
+                        ? isDark
+                          ? "rgba(255,255,255,0.12)"
+                          : "rgba(0,0,0,0.08)"
+                        : "transparent",
+                      borderColor: isSelected ? theme.colors.primary : theme.colors.border,
                     },
                   ]}
                 >
-                  {dp.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+                  <Text
+                    style={[
+                      styles.quickChipText,
+                      {
+                        color: isSelected
+                          ? theme.colors.primary
+                          : theme.colors.mutedForeground,
+                        fontWeight: isSelected ? "700" : "500",
+                      },
+                    ]}
+                  >
+                    {dp.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </HorizontalSwipeBoundary>
       </View>
 
       {/* Live Aggregation Summary */}

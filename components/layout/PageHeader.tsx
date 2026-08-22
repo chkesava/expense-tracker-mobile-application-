@@ -10,6 +10,7 @@ import * as Haptics from "expo-haptics";
 import { ArrowLeft } from "lucide-react-native";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
 
 export interface PageHeaderTab {
   id: string;
@@ -126,146 +127,148 @@ export function PageHeader({
       </View>
 
       {tabs && tabs.length > 0 ? (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={
-            isUnderline
-              ? styles.underlineTabsRow
-              : [
-                  styles.tabsContainer,
-                  {
-                    backgroundColor: isDark
-                      ? "rgba(255,255,255,0.04)"
-                      : "rgba(0,0,0,0.03)",
-                    borderColor: theme.colors.border,
-                  },
-                ]
-          }
-        >
-          {tabs.map((tab) => {
-            const isActive = activeTab === tab.id;
-            if (isUnderline) {
+        <HorizontalSwipeBoundary>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={
+              isUnderline
+                ? styles.underlineTabsRow
+                : [
+                    styles.tabsContainer,
+                    {
+                      backgroundColor: isDark
+                        ? "rgba(255,255,255,0.04)"
+                        : "rgba(0,0,0,0.03)",
+                      borderColor: theme.colors.border,
+                    },
+                  ]
+            }
+          >
+            {tabs.map((tab) => {
+              const isActive = activeTab === tab.id;
+              if (isUnderline) {
+                return (
+                  <Pressable
+                    key={tab.id}
+                    onPress={() => handleTabPress(tab.id)}
+                    android_ripple={{
+                      color: isDark ? "rgba(52,179,122,0.16)" : "rgba(37,150,90,0.12)",
+                      borderless: false,
+                    }}
+                    style={({ pressed }) => [
+                      styles.underlineTab,
+                      isActive && {
+                        backgroundColor: isDark
+                          ? "rgba(52, 179, 122, 0.16)"
+                          : "rgba(37, 150, 90, 0.1)",
+                      },
+                      pressed && { opacity: 0.8 },
+                    ]}
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected: isActive }}
+                  >
+                    {tab.icon ? <View style={styles.tabIcon}>{tab.icon}</View> : null}
+                    <Text
+                      style={[
+                        styles.tabLabel,
+                        {
+                          color: isActive ? activeColor : theme.colors.mutedForeground,
+                          fontWeight: isActive ? "700" : "500",
+                          fontSize: theme.typography.sm,
+                        },
+                      ]}
+                    >
+                      {tab.label}
+                    </Text>
+                    {tab.badge !== undefined ? (
+                      <Text
+                        style={{
+                          color: isActive ? activeColor : theme.colors.mutedForeground,
+                          fontSize: 12,
+                          fontWeight: isActive ? "700" : "500",
+                        }}
+                      >
+                        {tab.badge}
+                      </Text>
+                    ) : null}
+                    {isActive ? (
+                      <View
+                        style={[styles.underlineIndicator, { backgroundColor: activeColor }]}
+                      />
+                    ) : (
+                      <View style={styles.underlineIndicatorPlaceholder} />
+                    )}
+                  </Pressable>
+                );
+              }
+
               return (
                 <Pressable
                   key={tab.id}
                   onPress={() => handleTabPress(tab.id)}
-                  android_ripple={{
-                    color: isDark ? "rgba(52,179,122,0.16)" : "rgba(37,150,90,0.12)",
-                    borderless: false,
-                  }}
                   style={({ pressed }) => [
-                    styles.underlineTab,
-                    isActive && {
-                      backgroundColor: isDark
-                        ? "rgba(52, 179, 122, 0.16)"
-                        : "rgba(37, 150, 90, 0.1)",
-                    },
+                    styles.tabItem,
+                    isActive && [
+                      styles.tabItemActive,
+                      {
+                        backgroundColor: theme.colors.card,
+                        borderColor: theme.colors.border,
+                        shadowColor: "#000",
+                        shadowOffset: { width: 0, height: 2 },
+                        shadowOpacity: isDark ? 0.3 : 0.08,
+                        shadowRadius: 4,
+                        elevation: 2,
+                      },
+                    ],
                     pressed && { opacity: 0.8 },
                   ]}
-                  accessibilityRole="tab"
-                  accessibilityState={{ selected: isActive }}
                 >
                   {tab.icon ? <View style={styles.tabIcon}>{tab.icon}</View> : null}
                   <Text
                     style={[
                       styles.tabLabel,
                       {
-                        color: isActive ? activeColor : theme.colors.mutedForeground,
-                        fontWeight: isActive ? "700" : "500",
-                        fontSize: theme.typography.sm,
+                        color: isActive
+                          ? theme.colors.foreground
+                          : theme.colors.mutedForeground,
+                        fontWeight: isActive ? "700" : "600",
+                        fontSize: theme.typography.xs,
                       },
                     ]}
                   >
                     {tab.label}
                   </Text>
                   {tab.badge !== undefined ? (
-                    <Text
-                      style={{
-                        color: isActive ? activeColor : theme.colors.mutedForeground,
-                        fontSize: 12,
-                        fontWeight: isActive ? "700" : "500",
-                      }}
-                    >
-                      {tab.badge}
-                    </Text>
-                  ) : null}
-                  {isActive ? (
                     <View
-                      style={[styles.underlineIndicator, { backgroundColor: activeColor }]}
-                    />
-                  ) : (
-                    <View style={styles.underlineIndicatorPlaceholder} />
-                  )}
-                </Pressable>
-              );
-            }
-
-            return (
-              <Pressable
-                key={tab.id}
-                onPress={() => handleTabPress(tab.id)}
-                style={({ pressed }) => [
-                  styles.tabItem,
-                  isActive && [
-                    styles.tabItemActive,
-                    {
-                      backgroundColor: theme.colors.card,
-                      borderColor: theme.colors.border,
-                      shadowColor: "#000",
-                      shadowOffset: { width: 0, height: 2 },
-                      shadowOpacity: isDark ? 0.3 : 0.08,
-                      shadowRadius: 4,
-                      elevation: 2,
-                    },
-                  ],
-                  pressed && { opacity: 0.8 },
-                ]}
-              >
-                {tab.icon ? <View style={styles.tabIcon}>{tab.icon}</View> : null}
-                <Text
-                  style={[
-                    styles.tabLabel,
-                    {
-                      color: isActive
-                        ? theme.colors.foreground
-                        : theme.colors.mutedForeground,
-                      fontWeight: isActive ? "700" : "600",
-                      fontSize: theme.typography.xs,
-                    },
-                  ]}
-                >
-                  {tab.label}
-                </Text>
-                {tab.badge !== undefined ? (
-                  <View
-                    style={[
-                      styles.tabBadge,
-                      {
-                        backgroundColor: isActive
-                          ? theme.colors.primary
-                          : theme.colors.muted,
-                      },
-                    ]}
-                  >
-                    <Text
                       style={[
-                        styles.tabBadgeText,
+                        styles.tabBadge,
                         {
-                          color: isActive
-                            ? theme.colors.primaryForeground
-                            : theme.colors.mutedForeground,
+                          backgroundColor: isActive
+                            ? theme.colors.primary
+                            : theme.colors.muted,
                         },
                       ]}
                     >
-                      {tab.badge}
-                    </Text>
-                  </View>
-                ) : null}
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+                      <Text
+                        style={[
+                          styles.tabBadgeText,
+                          {
+                            color: isActive
+                              ? theme.colors.primaryForeground
+                              : theme.colors.mutedForeground,
+                          },
+                        ]}
+                      >
+                        {tab.badge}
+                      </Text>
+                    </View>
+                  ) : null}
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </HorizontalSwipeBoundary>
       ) : null}
     </View>
   );

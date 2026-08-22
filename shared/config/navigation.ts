@@ -188,3 +188,26 @@ export function isNavItemActive(pathname: string, id: NavSectionId): boolean {
   if (id === "ledger") return LEDGER_PREFIXES.some((prefix) => clean.startsWith(prefix));
   return false;
 }
+
+/**
+ * Primary bottom-nav tabs in swipe order, keyed by section id. A route only
+ * participates in horizontal tab swiping when it *is* one of these tabs — sub
+ * screens such as `/accounts/:id` or `/settings` deliberately opt out even
+ * though they highlight a bottom-nav item.
+ */
+const PRIMARY_TAB_ROUTES: Partial<Record<NavSectionId, string[]>> = {
+  home: ["/dashboard", "/"],
+  ledger: ["/ledger"],
+  vaults: ["/vaults"],
+  investments: ["/investments"],
+  insights: ["/insights"],
+};
+
+/** Section id of the primary tab a pathname *is*, or null for sub screens. */
+export function resolvePrimaryTabId(pathname: string): NavSectionId | null {
+  const clean = normalizePathname(pathname).split("?")[0].replace(/\/$/, "");
+  for (const [id, routes] of Object.entries(PRIMARY_TAB_ROUTES)) {
+    if (routes?.includes(clean || "/")) return id as NavSectionId;
+  }
+  return null;
+}
