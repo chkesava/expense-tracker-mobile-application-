@@ -15,6 +15,11 @@ export type AmountProps = {
   animationDuration?: number;
   startFromZero?: boolean;
   style?: StyleProp<TextStyle>;
+  /** Clamp the rendered line count — keeps tight metric columns from wrapping. */
+  numberOfLines?: number;
+  /** Shrink the glyphs instead of wrapping when the column is narrow. */
+  adjustsFontSizeToFit?: boolean;
+  minimumFontScale?: number;
 };
 
 export function Amount({
@@ -27,6 +32,9 @@ export function Amount({
   animationDuration,
   startFromZero,
   style,
+  numberOfLines,
+  adjustsFontSizeToFit,
+  minimumFontScale,
 }: AmountProps) {
   const { theme } = useTheme();
   const { settings } = useSettings();
@@ -39,6 +47,9 @@ export function Amount({
     return (
       <Text
         accessibilityLabel="Hidden amount"
+        numberOfLines={numberOfLines}
+        adjustsFontSizeToFit={adjustsFontSizeToFit}
+        minimumFontScale={minimumFontScale}
         style={[
           {
             color: theme.colors.foreground,
@@ -64,6 +75,9 @@ export function Amount({
         duration={animationDuration}
         startFromZero={startFromZero}
         accessibilityLabel={`Amount ${value}`}
+        numberOfLines={numberOfLines}
+        adjustsFontSizeToFit={adjustsFontSizeToFit}
+        minimumFontScale={minimumFontScale}
         style={[
           {
             color: theme.colors.foreground,
@@ -79,6 +93,9 @@ export function Amount({
   return (
     <Text
       accessibilityLabel={`Amount ${value}`}
+      numberOfLines={numberOfLines}
+      adjustsFontSizeToFit={adjustsFontSizeToFit}
+      minimumFontScale={minimumFontScale}
       style={[
         {
           color: theme.colors.foreground,
