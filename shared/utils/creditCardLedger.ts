@@ -532,11 +532,12 @@ export function buildCreditCardLedger(
   const closeStatement = statements.find(
     (statement) => statement.statementDate === generationDate
   );
+  const closePaymentDate = closeStatement?.lastPaymentDate;
   const releasedCloseDay =
     closeStatement != null &&
     closeStatement.status === "paid" &&
-    Boolean(closeStatement.lastPaymentDate) &&
-    closeStatement.lastPaymentDate <= closeStatement.statementDate;
+    closePaymentDate != null &&
+    closePaymentDate <= closeStatement.statementDate;
   if (releasedCloseDay && closeStatement && closeStatement.periodEnd >= generationDate) {
     closeStatement.periodEnd = shiftDateKey(generationDate, -1);
   }
