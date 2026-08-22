@@ -7,6 +7,14 @@ origin.
 Read `docs/audits/SPLIT_SHARE_LINK_AUDIT_2026-08-22.md` if you want the history.
 This file is the runbook.
 
+Every step ends with a **Done when** block. If all five pass, sharing works
+end to end — a friend with no account opens the link, sees who owes what, pays by
+UPI, and can tell you they have paid. There is a combined check at the end.
+
+Steps 1 and 2 are server-side and take effect immediately. Steps 3 and 5 need a
+**new build**, because the app compiles the share origin into the links it
+generates.
+
 ## Shell note
 
 Commands are given for both bash and PowerShell, because the differences here
@@ -94,6 +102,9 @@ not**:
 curl.exe -s -o NUL -w "%{http_code}`n" "https://firestore.googleapis.com/v1/projects/expenseapp-27f94/databases/(default)/documents/splitShareClaims/nonexistent__probe"
 ```
 
+> **Done when** that probe returns **404**. A 403 means the rule is not live and
+> self-service will be refused. Nothing else depends on this step.
+
 ## Step 2 — The Netlify site
 
 Netlify → Add new site → Import an existing project → GitHub → this repo.
@@ -113,12 +124,16 @@ Netlify → Add new site → Import an existing project → GitHub → this repo
 | `EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET` | same |
 | `EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER` | same |
 | `EXPO_PUBLIC_FIREBASE_APP_ID` | same |
-| `EXPO_PUBLIC_SHARE_URL` | `https://spendly-share.netlify.app` |
+
+The six Firebase keys are the only ones this site needs. The share pages read
+Firestore and render; they never generate a share URL, so neither
+`EXPO_PUBLIC_SHARE_URL` nor `EXPO_PUBLIC_APP_URL` is required here. Setting
+`EXPO_PUBLIC_SHARE_URL` anyway is harmless if you prefer both hosts configured
+alike.
 
 Do **not** set `EXPO_PUBLIC_GEMINI_API_KEY`, `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`,
 `EXPO_PUBLIC_MARKET_API_URL`, or any `MYAPP_RELEASE_*` — they are inlined into a
-public bundle and the share pages never use them. `EXPO_PUBLIC_APP_URL` is not
-needed here either; nothing these pages render touches it.
+public bundle and the share pages never use them.
 
 > A missing Firebase var is the likely "it deployed but shows nothing" failure:
 > `isFirebaseEnvConfigured()` returns false, `getFirestoreDb()` returns null, and
@@ -127,27 +142,55 @@ needed here either; nothing these pages render touches it.
 **Nothing needs to change in the Vite repo.** No proxy, no service-worker
 denylist. That approach is gone.
 
+> **Done when** a real share link renders. Get a slug with the snippet under
+> *Local development*, then:
+>
+> ```powershell
+> curl.exe -s https://spendly-share.netlify.app/split/<slug> | Select-String -Pattern '_expo/static/js/web/[^"]*' -AllMatches | ForEach-Object { $_.Matches.Value }
+> ```
+>
+> Bundle paths printed = the site serves the app. Then open it in a browser and
+> confirm you see the split's title and participants — **not** "Splits aren't
+> configured on this device", which means a Firebase key is missing.
+
 ## Step 3 — Set the share URL for the mobile build
 
-The app generates share links, so the origin has to be compiled into the build.
+The app compiles the share origin into every link it generates, so this is the
+step that decides whether the links you send actually point anywhere.
 
-Add to your local `.env` (see `.env.example`):
+**Locally**, add to `.env` (see `.env.example`):
 
 ```
 EXPO_PUBLIC_SHARE_URL=https://spendly-share.netlify.app
 ```
 
-The Android release workflow restores `.env` from repository secrets, so add
-`EXPO_PUBLIC_SHARE_URL` there too — otherwise a release build silently falls back
-to `EXPO_PUBLIC_APP_URL` and emits links to the legacy app again. Confirm it
-landed in a built bundle:
+**For release builds**, adding a secret with that name is *not* enough on its
+own — check which of the two paths in `.github/workflows/android-release.yml`
+your repo uses:
 
-```powershell
-Select-String -Path dist\_expo\static\js\web\entry-*.js -Pattern 'spendly-share\.netlify\.app' -Quiet
-```
+- **If the `MOBILE_ENV_FILE` secret is set**, the workflow writes it verbatim as
+  `.env` and ignores every individual secret. Edit that secret's contents and add
+  the `EXPO_PUBLIC_SHARE_URL=...` line to it.
+- **Otherwise** the workflow composes `.env` from individual secrets. Add an
+  `EXPO_PUBLIC_SHARE_URL` repository secret; the workflow already knows to write
+  it.
+
+Either way the workflow now prints a **warning** if the key is missing, so a
+release that would emit legacy-origin links tells you so in the build log.
 
 **This step needs a new APK.** An existing install keeps using whatever origin it
 was compiled with.
+
+> **Done when** the origin is in the bundle you built:
+>
+> ```powershell
+> Select-String -Path dist\_expo\static\js\web\entry-*.js -Pattern 'spendly-share\.netlify\.app' -Quiet
+> ```
+>
+> `True` = compiled in. For the release APK, confirm the build log does **not**
+> contain the `EXPO_PUBLIC_SHARE_URL is missing` warning. Then, on the device,
+> tap Share on any split and check the link in the share sheet starts with
+> `https://spendly-share.netlify.app/split/`.
 
 ## Step 4 — Verify
 
@@ -194,6 +237,12 @@ And that the legacy app is untouched, since nothing was changed there:
 Finally, open a real share link in a **fresh incognito window** and confirm the
 split renders with participants and no sign-in prompt.
 
+> **Done when** all four hold: bundle paths print for `/split/<slug>`; no path
+> outside `/split/*` and `/payment/*` reports `BOOTS APP - wrong`; `HEAD /`
+> returns **200**; and both legacy endpoints still return 200. The incognito page
+> must show no sign-in prompt and **no "No Internet Connection" banner** — that
+> banner means `/` is not answering 200.
+
 ## Step 5 — Light up the app-written fields
 
 The snapshot fields behind currency, top-up labels and self-service are written
@@ -214,6 +263,60 @@ links, and rewrites the public snapshot. Check one:
       $_.fields.claimsEnabled.booleanValue
   }
 ```
+
+> **Done when** each split you shared shows a non-empty `currency` and
+> `claims=True`. On the public page that means amounts in the right currency, a
+> "This is me" control on each unpaid row, and — after you drop someone —
+> "Extra ₹25.00 due after …" instead of "Unpaid" on people who had already paid.
+> A split you have not re-shared keeps showing blanks here; that is expected, not
+> a failure.
+
+---
+
+## Is it working? One combined check
+
+Run this after all five steps. It exercises everything server-side in one go;
+the two device-side confirmations are listed under Steps 3 and 5.
+
+```powershell
+$share = "https://spendly-share.netlify.app"
+$fs = "https://firestore.googleapis.com/v1/projects/expenseapp-27f94/databases/(default)/documents"
+$slug = ((& curl.exe -s "$fs/splitPublicShares?pageSize=1" | ConvertFrom-Json).documents[0].fields.slug.stringValue)
+"slug under test: $slug"
+
+$ok = $true
+function check($label, $cond) {
+  $script:ok = $script:ok -and $cond
+  "{0,-6} {1}" -f $(if ($cond) { "PASS" } else { "FAIL" }), $label
+}
+
+check "rules deployed (claims probe returns 404)" `
+  ((& curl.exe -s -o NUL -w "%{http_code}" "$fs/splitShareClaims/nonexistent__probe") -eq "404")
+check "share page serves the app bundle" `
+  ((& curl.exe -s "$share/split/$slug") -match '_expo/static/js/web')
+check "root answers 200 (no false offline banner)" `
+  ((& curl.exe -s -o NUL -X HEAD -w "%{http_code}" "$share/") -eq "200")
+check "root does not boot the app" `
+  (-not ((& curl.exe -s "$share/") -match '_expo/static/js/web'))
+check "app routes are not exposed here" `
+  (-not ((& curl.exe -s "$share/dashboard") -match '_expo/static/js/web'))
+check "legacy market API still up" `
+  ((& curl.exe -s -o NUL -w "%{http_code}" "https://kesavaexpensetracker.netlify.app/api/stock?symbol=RELIANCE") -eq "200")
+
+$share_doc = (& curl.exe -s "$fs/splitPublicShares?pageSize=20" | ConvertFrom-Json).documents |
+  Where-Object { $_.fields.slug.stringValue -eq $slug }
+check "that split has been re-shared (currency present)" `
+  ([bool]$share_doc.fields.currency.stringValue)
+check "self-service enabled on that split" `
+  ($share_doc.fields.claimsEnabled.booleanValue -eq $true)
+
+""
+if ($ok) { "ALL PASS - sharing is live." } else { "Something above failed - see the matching step." }
+```
+
+The last two can only pass for a split you have re-shared from a build carrying
+`EXPO_PUBLIC_SHARE_URL` (Steps 3 and 5). Everything above them is independent of
+the app build.
 
 ## Local development
 
