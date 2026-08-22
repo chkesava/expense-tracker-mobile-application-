@@ -8,12 +8,14 @@ credit vs. limit, and every UI / net-worth consumer.
 merges `origin/main` (`1e6765a`) and therefore includes `3ce02b3`
 ("fix: keep generated statements unpaid and restore available credit", PR #33).
 
-**Type:** audit **and fix** pass. All seven findings are fixed with regression
-tests, plus CC-8 (a parser bug found while fixing CC-7's flaky test) and CC-9 —
-**a P0 this audit initially missed**, reported from the device afterwards. See
-CC-9 for what the audit got wrong and why the existing tests did not catch it.
-Everything else was verified and is reported below as pass/fail with file:line,
-including the things that turned out to be correct.
+**Type:** audit **and fix** pass. All seven original findings are fixed with
+regression tests, plus three more found afterwards: CC-8 (a parser bug found
+while fixing CC-7's flaky test), CC-9 (**a P0 this audit missed**, reported from
+the device), CC-10 (the advance/credit-balance rework) and CC-11 (legacy
+statement windows overlapping, also reported from the device). See CC-9 for what
+the audit got wrong and why the existing tests did not catch it. Everything else
+was verified and is reported below as pass/fail with file:line, including the
+things that turned out to be correct.
 
 The full test suite now passes clean (871 tests, 0 failures); it had a
 permanently failing test before this pass.
@@ -69,6 +71,8 @@ unbilledSpend` is what liabilities/net worth consume.
 | CC-5 | P3 | `shared/utils/creditCardLedger.ts:559` | Spend under a **cancelled** statement fell back into `unbilledSpend`, so it reduced `availableCredit` even though it is not this-cycle spend — contradicting the spec rule `availableCredit = limit − unbilled (this cycle only)`. | Keep it owed (the existing intent) but in its own `cancelledSpend` bucket: counted in `totalOutstanding`, excluded from `unbilledSpend` and therefore from `availableCredit`. | **Yes** |
 | CC-6 | P3 | `components/creditCardBills/CreateCreditCardBillModal.tsx:139` | `handleSubmit` had **no validation of any kind** — not just dates. `parseFloat` could hand `createBill` a `NaN` statement amount, and a statement could be dated in the future or given a window running past its own close date. This is what made CC-1 and CC-2 reachable in practice. | Validate the whole form before writing: card selected, amount > 0, minimum due within the statement, real dates, statement date not in the future, due date on/after it, and a billing period that does not extend past the close date. | **Yes** |
 | CC-7 | P3 | `shared/utils/magicParser.test.ts:44` | Pre-existing, unrelated flake: the test built "yesterday" with `toISOString()` (UTC) and compared it against a local-date parser, so it failed every day after 18:30 IST. A permanently-red test masks real breakage in CI. | Freeze local noon and assert a literal date key, so the test is deterministic in any timezone. | **Yes** |
+| CC-11 | **P1** | `shared/utils/creditCardLedger.ts:355` | A stored `billingPeriodStart` was trusted verbatim, and statements written before the close-on-D fix used the *previous* generation day rather than the day after — so consecutive windows shared that boundary day and spend on it was billed in **two** statements. The UI tell is a cycle reading "2026-07-01 → 2026-08-01": 32 days, both ends on a generation day. | A stored window may not reach outside the cycle it closes: clamp the start forward to the derived cycle start and the end back to the statement date. A deliberately narrower stored window is still respected. | **Yes** |
+| CC-10 | P2 | `shared/utils/creditCardLedger.ts:566` | `totalOutstanding` never subtracted `unappliedCredit`, and `useUnifiedNetWorth` consumes `totalOutstanding` — so a card holding an advance reported the user poorer by exactly that amount. Separately, the "Credit balance" row was jargon nobody had asked for. | Net the advance out of `totalOutstanding`, relabel the row in plain language, and cap payments at what the card owes so no new advance accrues by accident. | **Yes** |
 | CC-9 | **P0** | `shared/utils/creditCardLedger.ts:428` | Leftover credit was applied to open-cycle spend regardless of which cycle the payment was made in. Credit left over from a payment made *before* the statement closed silently absorbed spend charged *after* it, so a fresh charge showed ₹0 unbilled. **This audit missed it** — see below. | Bucket leftover by cycle: credit paid inside the open cycle may reduce that cycle's spend, credit carried from an earlier cycle is a standing balance reported as `unappliedCredit`. | **Yes** |
 | CC-8 | **P1** | `shared/utils/magicParser.ts:117` | **Found while fixing CC-7.** In the first-match-wins `dateMap` loop, `/\byesterday\b/` was ordered *before* `/\bday before yesterday\b/` — and `\byesterday\b` matches inside "day before yesterday". So "day before yesterday" resolved to **−1 day instead of −2**, and only "yesterday" was stripped from the text, leaving "day before" polluting the extracted note. | Order the longest pattern first. | **Yes** |
 
@@ -329,6 +333,67 @@ it. The lesson recorded for future passes: when a spec states worked numbers,
 assert those exact numbers end to end rather than testing the properties they
 are built from.
 
+### CC-10 — an advance was owed twice, and called "Credit balance"
+
+`totalOutstanding` was `statementDue + unbilled + cancelled`, never subtracting
+`unappliedCredit`. `useUnifiedNetWorth` and the account lists all consume
+`totalOutstanding`, so a card holding an advance reported the user as poorer by
+exactly that amount: ₹19,000 left the bank, only ₹11,503 came off the card, and
+the remaining ₹7,497 was invisible everywhere.
+
+The advance itself is not an invented feature — it is a direct consequence of
+the rule that a payment may never reduce a statement it predates (CC-1). Money
+paid ahead of a statement has nowhere to sit. Deleting the concept would have
+silently destroyed it, since the bank side has already been debited.
+
+Three changes:
+
+- `totalOutstanding` is now
+  `max(0, statementDue + unbilled + cancelled − unappliedCredit)`.
+- The pay-bill modal refuses to record more than the card owes, naming the
+  figure, and refuses outright when nothing is owed. New advances can no longer
+  accrue by accident, so for all new data the advance is zero.
+- The hero row is relabelled from "Credit balance" to "Already paid in advance"
+  and still renders only when non-zero.
+
+The row was kept rather than dropped: without it, statement due + unbilled
+visibly disagrees with total outstanding on the same card with nothing on screen
+to explain the gap — the same incoherence the cancelled-statement split had to
+avoid. `availableCredit` is untouched and still `limit − unbilledSpend`; an
+advance does not hand back limit.
+
+### CC-11 — a legacy statement window overlapped its neighbour
+
+**Reported from the device.** A card closing on the 1st showed a past cycle of
+`2026-07-01 → 2026-08-01` — 32 days, with both ends on a generation day.
+Consecutive statements are never meant to share a calendar day.
+
+Statements written before the close-on-D fix stored `billingPeriodStart` as the
+*previous* generation day rather than the day after it, and the ledger trusted
+that value verbatim whenever the statement date matched its derived window.
+Demonstrated: ₹500 on 1 Jul, ₹1,000 on 15 Jul, ₹156 on 1 Aug — ₹1,656 of spend —
+came out as `billed + unbilled = ₹2,156`, the 1 Jul ₹500 counted by both the
+1 Jul and the 1 Aug statement.
+
+A stored window may now not reach outside the cycle it closes: the start is
+clamped forward to the derived cycle start, the end clamped back to the
+statement date. A deliberately narrower stored window is still respected, so a
+reconciled manual statement keeps its shape.
+
+How stale stored data heals, verified against the refresh pass:
+
+| statement | outcome |
+|---|---|
+| unpaid + auto | self-heals on next open — window *and* amount rewritten (1,656 → 1,156) |
+| PAID | left alone by design, never rewrite a settled statement. Stored amount may keep one boundary day, but remaining is 0 so outstanding is unaffected |
+| manual | never rewritten, and no longer needs to be — the clamp fixes the window the ledger uses regardless of what is stored |
+
+Note this is *not* the same thing as spend on the generation day itself. A
+statement closes ON day D, so spend on D belongs to that statement and not to
+the new cycle — a card closing on the 1st with spend on 1 Aug correctly bills it
+to the 1 Aug statement, which is why it does not appear in the open cycle's
+unbilled figure.
+
 ### Tests
 
 `shared/utils/creditCardLedger.test.ts` — new
@@ -346,6 +411,19 @@ respects the cycle-depth bound; skips a card with no generation day; repairs a
 backfilled older statement when spend is backdated into it; two cycles never
 fight over the same document. `collectAutoCreditCardBillDrafts` had no test
 coverage at all before this.
+
+`shared/utils/creditCardLedger.test.ts` — new
+`buildCreditCardLedger — a stored window cannot overlap its neighbour` block, 5
+cases: a legacy start is clamped off the previous close date; the boundary day
+is covered by exactly one statement; a stored end running past the close date is
+clamped back; a deliberately narrower window is kept; and spend on the
+generation day belongs to the statement closing that day.
+
+`shared/utils/creditCardLedger.test.ts` — new
+`buildCreditCardLedger — an advance is netted out of outstanding` block, 5
+cases: an advance is netted out; outstanding never goes negative; outstanding
+equals the debt when nothing was overpaid; the advance nets against cancelled
+spend; and `availableCredit` stays on the unbilled rule rather than the advance.
 
 `shared/utils/creditCardLedger.test.ts` — new
 `buildCreditCardLedger — leftover credit does not cross a close date` block, 5
@@ -388,10 +466,10 @@ npx vitest run shared/utils/creditCardLedger.test.ts \
   shared/utils/accountBalance.test.ts \
   shared/utils/autoCreditCardBills.test.ts \
   shared/utils/billingCycle.test.ts
-→ 5 files (incl. accountActivities), 118 passed
+→ 5 files (incl. accountActivities), 128 passed
 ```
 
-Full suite: **876 passed, 0 failed, 107 files** — clean; the suite had a
+Full suite: **886 passed, 0 failed, 107 files** — clean; the suite had a
 permanently failing test before this pass. `npm run typecheck` and
 `npm run typecheck:shared` both clean.
 
