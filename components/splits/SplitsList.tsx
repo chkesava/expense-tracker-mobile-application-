@@ -13,6 +13,7 @@ import {
 
 import { Amount } from "@/components/common/Amount";
 import { EmptyState } from "@/components/common/EmptyState";
+import { ErrorState } from "@/components/common/ErrorState";
 import { SkeletonHero, SkeletonList } from "@/components/common/Skeleton";
 import { CreateSplitModal } from "@/components/splits/CreateSplitModal";
 import { SplitDetailModal } from "@/components/splits/SplitDetailModal";
@@ -32,7 +33,7 @@ export function SplitsList() {
   const isDark = themeUsesDarkPalette(themeName);
   const { user } = useAuth();
   const displayCurrency = useDisplayCurrency();
-  const { splits, loading } = useSplits();
+  const { splits, loading, error, retry } = useSplits();
 
   const [activeTab, setActiveTab] = useState<"active" | "settled">("active");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -60,6 +61,16 @@ export function SplitsList() {
         <SkeletonHero />
         <SkeletonList count={3} />
       </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <ErrorState
+        title="Couldn't load your splits"
+        description={error.message}
+        onRetry={error.retryable ? retry : undefined}
+      />
     );
   }
 

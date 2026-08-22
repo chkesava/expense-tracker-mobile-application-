@@ -36,11 +36,16 @@ function expense(date: string, amount: number, accountId = slice.id): Expense {
   };
 }
 
-function payment(id: string, date: string, amount: number): AccountPayment {
+function payment(
+  id: string,
+  date: string,
+  amount: number,
+  toAccountId = slice.id
+): AccountPayment {
   return {
     id,
     fromAccountId: "bank-1",
-    toAccountId: slice.id,
+    toAccountId,
     amount,
     date,
   };
@@ -890,5 +895,94 @@ describe("buildCreditCardLedger — credit beyond every debt is dropped", () => 
     // Unmatched credit does not hand back limit either.
     expect(ledger.availableCredit).toBe(89000 - 393);
     expect(ledger.unbilledSpend).toBe(393);
+  });
+});
+
+/**
+ * Roar (bill day 1): the July statement was paid on 1 Aug, then 1 Aug–today
+ * charges were recorded. Those charges are "clear" in the list but were left
+ * inside the paid window, so unbilled showed ₹1,291 (2 Aug onward) instead of
+ * ₹1,447 (1 Aug grocery + the later five).
+ */
+describe("buildCreditCardLedger — paid close-day spend starts the new cycle", () => {
+  const roar: Account = {
+    ...slice,
+    id: "cc-roar",
+    name: "Roar",
+    billGenerationDay: 1,
+    creditLimit: 35000,
+  };
+  const roarSpend = (date: string, amount: number): Expense =>
+    expense(date, amount, roar.id);
+  const augustCharges: Expense[] = [
+    roarSpend("2026-08-01", 156),
+    roarSpend("2026-08-03", 190),
+    roarSpend("2026-08-04", 299),
+    roarSpend("2026-08-08", 374),
+    roarSpend("2026-08-09", 299),
+    roarSpend("2026-08-21", 129),
+  ];
+  const paidCloseBill: LedgerBillSlice = {
+    id: "bill-roar-aug-1",
+    accountId: roar.id,
+    statementDate: "2026-08-01",
+    billingPeriodStart: "2026-07-01",
+    billingPeriodEnd: "2026-08-01",
+    statementAmount: 4380,
+    amountPaid: 4380,
+    status: "PAID",
+    paymentIds: ["pay-roar-aug-1"],
+  };
+
+  it("counts 1 Aug–today spend as unbilled after the statement is paid on close day", () => {
+    const ledger = buildCreditCardLedger({
+      account: roar,
+      expenses: [roarSpend("2026-07-15", 4380), ...augustCharges],
+      payments: [payment("pay-roar-aug-1", "2026-08-01", 4380, roar.id)],
+      bills: [paidCloseBill],
+      today: "2026-08-22",
+    });
+
+    expect(ledger.statementDue).toBe(0);
+    expect(ledger.unbilledSpend).toBe(1447);
+    expect(ledger.totalOutstanding).toBe(1447);
+    expect(ledger.availableCredit).toBe(33553);
+    expect(ledger.openCycle.start).toBe("2026-08-01");
+    expect(
+      ledger.statements.find((item) => item.statementDate === "2026-08-01")
+        ?.periodEnd
+    ).toBe("2026-07-31");
+  });
+
+  it("keeps generation-day spend on the statement while that bill is still unpaid", () => {
+    const ledger = buildCreditCardLedger({
+      account: roar,
+      expenses: augustCharges,
+      payments: [],
+      bills: [{ ...paidCloseBill, amountPaid: 0, status: "OVERDUE", paymentIds: [] }],
+      today: "2026-08-22",
+    });
+
+    expect(ledger.openCycle.start).toBe("2026-08-02");
+    expect(ledger.unbilledSpend).toBe(1291);
+    expect(ledger.statementDue).toBe(4380);
+    expect(
+      ledger.statements.find((item) => item.statementDate === "2026-08-01")
+        ?.periodEnd
+    ).toBe("2026-08-01");
+  });
+
+  it("does not move close-day spend when the statement is paid after it closed", () => {
+    const ledger = buildCreditCardLedger({
+      account: roar,
+      expenses: [roarSpend("2026-07-15", 4380), ...augustCharges],
+      payments: [payment("pay-roar-aug-5", "2026-08-05", 4380, roar.id)],
+      bills: [{ ...paidCloseBill, paymentIds: ["pay-roar-aug-5"] }],
+      today: "2026-08-22",
+    });
+
+    expect(ledger.openCycle.start).toBe("2026-08-02");
+    expect(ledger.unbilledSpend).toBe(1291);
+    expect(ledger.statementDue).toBe(0);
   });
 });
