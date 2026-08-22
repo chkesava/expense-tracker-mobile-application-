@@ -119,6 +119,21 @@ export function SplitDetailModal({
     return banks.length > 0 ? banks : accounts;
   }, [accounts, typeMap]);
 
+  // These two hooks must run on every render regardless of whether `split` is
+  // null. `SplitsList` mounts this modal once and toggles `split` between null
+  // and a real value as rows open/close, so a hook called only when `split` is
+  // truthy makes the hook count differ between renders -- React throws
+  // "Rendered more hooks than during the previous render," which is exactly
+  // what crashed on tapping into an existing split.
+  const claimShareId = split?.publicShareId;
+  const participantKeys = useMemo(
+    () => split?.participants.map((p) => p.key) ?? [],
+    [split?.participants]
+  );
+  const { claims } = useSplitShareClaims(claimShareId, participantKeys, {
+    enabled: visible && split?.createdBy === user?.uid,
+  });
+
   if (!split) return null;
 
   const isCreator = split.createdBy === user?.uid;
@@ -306,14 +321,6 @@ export function SplitDetailModal({
     );
   };
 
-  const claimShareId = split.publicShareId;
-  const participantKeys = useMemo(
-    () => split.participants.map((p) => p.key),
-    [split.participants]
-  );
-  const { claims } = useSplitShareClaims(claimShareId, participantKeys, {
-    enabled: visible && isCreator,
-  });
   const claimsEnabled = split.claimsEnabled !== false;
 
   const claimDocIdFor = (claim: SplitShareClaim) =>
