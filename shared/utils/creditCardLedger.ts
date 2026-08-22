@@ -85,10 +85,19 @@ export type CreditCardLedger = {
    * the limit via `availableCredit`.
    */
   cancelledSpend: number;
+  /**
+   * What the card actually owes: statements + unbilled + cancelled, less any
+   * money already paid that no statement could absorb. This is the number
+   * liabilities and net worth consume.
+   */
   totalOutstanding: number;
   availableCredit: number;
   creditLimit: number;
-  /** Credit paid beyond every statement and the current cycle spend. */
+  /**
+   * Money already paid to the card that no statement could absorb — an advance.
+   * Netted out of {@link totalOutstanding}; surfaced only so the UI can explain
+   * why outstanding is lower than the statements suggest.
+   */
   unappliedCredit: number;
   openCycle: {
     start: string;
@@ -556,8 +565,12 @@ export function buildCreditCardLedger(
   cycleLeft = roundMoney(cycleLeft - cycleOnOpen);
   const unbilledSpend = roundMoney(openCycleSpend - cycleOnOpen);
   const unappliedCredit = roundMoney(carriedLeft + cycleLeft);
+  // An advance already paid is not owed twice. Netting it here is what keeps
+  // net worth honest: the bank balance has already dropped by the full payment,
+  // so leaving the advance out of this understated the user's position by
+  // exactly that amount.
   const totalOutstanding = roundMoney(
-    statementDue + unbilledSpend + cancelledSpend
+    Math.max(0, statementDue + unbilledSpend + cancelledSpend - unappliedCredit)
   );
 
   return {

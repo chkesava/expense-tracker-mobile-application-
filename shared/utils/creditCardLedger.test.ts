@@ -741,7 +741,8 @@ describe("buildCreditCardLedger — leftover credit does not cross a close date"
     expect(ledger.unbilledSpend).toBe(1500);
     expect(ledger.unappliedCredit).toBe(8699);
     expect(ledger.availableCredit).toBe(89000 - 1500);
-    expect(ledger.totalOutstanding).toBe(27875 + 1500);
+    // The 8,699 advance is already paid, so it is not owed a second time.
+    expect(ledger.totalOutstanding).toBe(27875 + 1500 - 8699);
   });
 
   it("still lets credit paid inside the open cycle reduce that cycle's spend", () => {
@@ -779,9 +780,8 @@ describe("buildCreditCardLedger — leftover credit does not cross a close date"
     expect(ledger.unbilledSpend).toBe(393);
     expect(ledger.unappliedCredit).toBe(7497);
     expect(ledger.availableCredit).toBe(89000 - 393);
-    // Net position is unchanged by the split: 28,494 owed against 7,497 credit
-    // is the same 20,997 as before, just bucketed truthfully.
-    expect(ledger.totalOutstanding).toBe(28494);
+    // 28,101 statement + 393 unbilled, less the 7,497 already paid in advance.
+    expect(ledger.totalOutstanding).toBe(20997);
   });
 
   it("lets carried credit still settle a cancelled statement's spend", () => {
@@ -817,5 +817,85 @@ describe("buildCreditCardLedger — leftover credit does not cross a close date"
     expect(ledger.statementDue).toBe(0);
     expect(ledger.unbilledSpend).toBe(1000);
     expect(ledger.unappliedCredit).toBe(0);
+  });
+});
+
+/**
+ * Money already paid to the card is not owed a second time. The bank balance
+ * has already dropped by the full payment, so leaving an advance out of
+ * `totalOutstanding` understated net worth by exactly that amount.
+ */
+describe("buildCreditCardLedger — an advance is netted out of outstanding", () => {
+  it("nets an advance out of what the card owes", () => {
+    const ledger = buildCreditCardLedger({
+      account: slice,
+      expenses: [expense("2026-07-15", 11503), expense("2026-08-10", 28101)],
+      payments: [payment("pay-aug-13", "2026-08-13", 19000)],
+      bills: [],
+      today: "2026-08-22",
+    });
+
+    // The July statement took 11,503; the rest is an advance.
+    expect(ledger.statementDue).toBe(28101);
+    expect(ledger.unappliedCredit).toBe(7497);
+    expect(ledger.totalOutstanding).toBe(28101 - 7497);
+  });
+
+  it("never reports negative outstanding when the advance exceeds the debt", () => {
+    const ledger = buildCreditCardLedger({
+      account: slice,
+      expenses: [expense("2026-07-15", 1000)],
+      payments: [payment("pay-big", "2026-08-22", 9000)],
+      bills: [],
+      today: "2026-08-22",
+    });
+
+    expect(ledger.unappliedCredit).toBe(8000);
+    expect(ledger.totalOutstanding).toBe(0);
+  });
+
+  it("keeps outstanding equal to the debt when nothing was overpaid", () => {
+    const ledger = buildCreditCardLedger({
+      account: slice,
+      expenses: [expense("2026-08-10", 28101), expense("2026-08-25", 500)],
+      payments: [],
+      bills: [],
+      today: "2026-08-26",
+    });
+
+    expect(ledger.unappliedCredit).toBe(0);
+    expect(ledger.totalOutstanding).toBe(28601);
+  });
+
+  it("nets the advance against cancelled statement spend too", () => {
+    const ledger = buildCreditCardLedger({
+      account: slice,
+      expenses: [expense("2026-08-05", 6000)],
+      payments: [payment("pay-1", "2026-08-26", 9000)],
+      bills: [
+        statement("2026-08-20", "2026-07-21", 6000, { status: "CANCELLED" }),
+      ],
+      today: "2026-08-26",
+    });
+
+    // 6,000 of the payment clears the cancelled spend; 3,000 is an advance and
+    // there is nothing left to owe.
+    expect(ledger.cancelledSpend).toBe(0);
+    expect(ledger.unappliedCredit).toBe(3000);
+    expect(ledger.totalOutstanding).toBe(0);
+  });
+
+  it("leaves availableCredit on the unbilled rule, not the advance", () => {
+    const ledger = buildCreditCardLedger({
+      account: { ...slice, billGenerationDay: 21 },
+      expenses: [expense("2026-07-15", 11503), expense("2026-08-10", 28101), expense("2026-08-22", 393)],
+      payments: [payment("pay-aug-13", "2026-08-13", 19000)],
+      bills: [],
+      today: "2026-08-22",
+    });
+
+    // The advance does not hand back limit — only this cycle's spend moves it.
+    expect(ledger.availableCredit).toBe(89000 - 393);
+    expect(ledger.unbilledSpend).toBe(393);
   });
 });
