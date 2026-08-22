@@ -15,14 +15,40 @@ Steps 1 and 2 are server-side and take effect immediately. Steps 3 and 5 need a
 **new build**, because the app compiles the share origin into the links it
 generates.
 
+## Before you start: paste this once
+
+Every snippet below uses these four variables, so **nothing in this file has a
+placeholder to fill in**. Paste this into PowerShell once per session (it also
+fetches a real split slug for you):
+
+```powershell
+$share  = "https://spendly-share.netlify.app"
+$legacy = "https://kesavaexpensetracker.netlify.app"
+$fs     = "https://firestore.googleapis.com/v1/projects/expenseapp-27f94/databases/(default)/documents"
+$slug   = (& curl.exe -s "$fs/splitPublicShares?pageSize=1" | ConvertFrom-Json).documents[0].fields.slug.stringValue
+"share = $share"
+"slug  = $slug"
+```
+
+If `slug` comes back empty you have no shared splits yet — create one in the app
+first, or list what exists:
+
+```powershell
+(& curl.exe -s "$fs/splitPublicShares?pageSize=20" | ConvertFrom-Json).documents |
+  ForEach-Object { '{0}  {1}' -f $_.fields.slug.stringValue, $_.fields.title.stringValue }
+```
+
+The only other values this runbook needs are the Firebase project id
+(`expenseapp-27f94`, already inside `$fs`) and the site name `spendly-share`.
+
 ## Shell note
 
-Commands are given for both bash and PowerShell, because the differences here
-are not cosmetic:
+Every command block is labelled **PowerShell** or **bash**. On Windows use the
+PowerShell one — the differences are not cosmetic:
 
-- `curl` in PowerShell is an alias for `Invoke-WebRequest`, which has no `-s` and
-  will stop and prompt you for `Uri:`. Use **`curl.exe`** — real curl ships in
-  `C:\Windows\System32` on Windows 10+.
+- `curl` in PowerShell is an alias for `Invoke-WebRequest`, which has no `-s`,
+  stops to prompt you for `Uri:`, and then reads the URL as a drive name. Use
+  **`curl.exe`** — real curl ships in `C:\Windows\System32` on Windows 10+.
 - There is no `grep`. Use `Select-String`.
 - `/dev/null` is `NUL`, and a literal newline in `-w` is a backtick-n.
 
@@ -86,20 +112,20 @@ Verified against the real config with `netlify-cli dev`:
 Self-service updates from the public page stay inert until the
 `splitShareClaims` block is live; everything else works without it.
 
-```bash
-npx firebase deploy --only firestore:rules --project expenseapp-27f94 --dry-run
-```
+Same in both shells:
 
-```bash
+```powershell
+npx firebase deploy --only firestore:rules --project expenseapp-27f94 --dry-run
 npx firebase deploy --only firestore:rules --project expenseapp-27f94
 ```
 
-Identical in PowerShell. To confirm afterwards that the rule is live, read a
-claim id that does not exist — **404 means the rule exists, 403 means it does
-not**:
+To confirm afterwards that the rule is live, read a claim id that does not exist.
+**404 means the rule exists, 403 means it does not:**
+
+**PowerShell:**
 
 ```powershell
-curl.exe -s -o NUL -w "%{http_code}`n" "https://firestore.googleapis.com/v1/projects/expenseapp-27f94/databases/(default)/documents/splitShareClaims/nonexistent__probe"
+curl.exe -s -o NUL -w "%{http_code}`n" "$fs/splitShareClaims/nonexistent__probe"
 ```
 
 > **Done when** that probe returns **404**. A 403 means the rule is not live and
@@ -142,15 +168,19 @@ public bundle and the share pages never use them.
 **Nothing needs to change in the Vite repo.** No proxy, no service-worker
 denylist. That approach is gone.
 
-> **Done when** a real share link renders. Get a slug with the snippet under
-> *Local development*, then:
+> **Done when** a real share link renders. **PowerShell:**
 >
 > ```powershell
-> curl.exe -s https://spendly-share.netlify.app/split/<slug> | Select-String -Pattern '_expo/static/js/web/[^"]*' -AllMatches | ForEach-Object { $_.Matches.Value }
+> curl.exe -s "$share/split/$slug" | Select-String -Pattern '_expo/static/js/web/[^"]*' -AllMatches | ForEach-Object { $_.Matches.Value }
 > ```
 >
-> Bundle paths printed = the site serves the app. Then open it in a browser and
-> confirm you see the split's title and participants — **not** "Splits aren't
+> Bundle paths printed = the site serves the app. Then open the page itself:
+>
+> ```powershell
+> Start-Process "$share/split/$slug"
+> ```
+>
+> Confirm you see the split's title and participants — **not** "Splits aren't
 > configured on this device", which means a Firebase key is missing.
 
 ## Step 3 — Set the share URL for the mobile build
@@ -181,7 +211,8 @@ release that would emit legacy-origin links tells you so in the build log.
 **This step needs a new APK.** An existing install keeps using whatever origin it
 was compiled with.
 
-> **Done when** the origin is in the bundle you built:
+> **Done when** the origin is in the bundle you built. Run `npm run build:web`
+> first, then — **PowerShell:**
 >
 > ```powershell
 > Select-String -Path dist\_expo\static\js\web\entry-*.js -Pattern 'spendly-share\.netlify\.app' -Quiet
@@ -194,50 +225,66 @@ was compiled with.
 
 ## Step 4 — Verify
 
-Share pages answer on the share host:
+If you would rather run one thing than four, skip to
+[*Is it working?*](#is-it-working-one-combined-check) below — it covers
+everything in this step. The four checks are kept separate here so a failure
+points at a cause.
 
-```bash
-curl -s https://spendly-share.netlify.app/split/<slug> | grep -o '_expo/static/js/web/[^"]*'
-```
+**1. Share pages answer on the share host.** Bundle paths printed = working;
+nothing printed = not working, whatever the status code says.
+
+**PowerShell:**
 
 ```powershell
-curl.exe -s https://spendly-share.netlify.app/split/<slug> | Select-String -Pattern '_expo/static/js/web/[^"]*' -AllMatches | ForEach-Object { $_.Matches.Value }
+curl.exe -s "$share/split/$slug" | Select-String -Pattern '_expo/static/js/web/[^"]*' -AllMatches | ForEach-Object { $_.Matches.Value }
 ```
 
-Bundle paths printed = working. Nothing printed = not working, whatever the
-status code says.
+**bash:**
 
-Then confirm the host exposes nothing else. No path outside `/split/*` and
-`/payment/*` may boot the app bundle — `/` answers 200 with a static page, the
-rest answer 404:
+```bash
+curl -s "$share/split/$slug" | grep -o '_expo/static/js/web/[^"]*'
+```
+
+**2. The host exposes nothing else.** No path outside `/split/*` and `/payment/*`
+may boot the app bundle — `/` answers 200 with a static page, the rest answer 404.
+
+**PowerShell:**
 
 ```powershell
 foreach ($p in @('/','/dashboard','/settings','/ledger')) {
-  $code = & curl.exe -s -o NUL -w '%{http_code}' --max-time 20 "https://spendly-share.netlify.app$p"
-  $boots = if ((& curl.exe -s --max-time 20 "https://spendly-share.netlify.app$p") -match '_expo/static/js/web') { 'BOOTS APP - wrong' } else { 'static only - ok' }
+  $code = & curl.exe -s -o NUL -w '%{http_code}' --max-time 20 "$share$p"
+  $boots = if ((& curl.exe -s --max-time 20 "$share$p") -match '_expo/static/js/web') { 'BOOTS APP - wrong' } else { 'static only - ok' }
   '{0,-12} {1}  {2}' -f $p, $code, $boots
 }
 ```
 
-`/` must be **200**, not 404. netinfo probes it with a `HEAD` and treats anything
-else as the internet being unreachable, which puts the app's "No Internet
-Connection" banner on every share page:
+**3. `/` must be 200, not 404.** netinfo probes it with a `HEAD` and treats
+anything else as the internet being unreachable, which puts the app's "No
+Internet Connection" banner on every share page.
+
+**PowerShell:**
 
 ```powershell
-curl.exe -s -o NUL -X HEAD -w "HEAD / -> %{http_code}  (must be 200)`n" https://spendly-share.netlify.app/
+curl.exe -s -o NUL -X HEAD -w "HEAD / -> %{http_code}  (must be 200)`n" "$share/"
 ```
 
-And that the legacy app is untouched, since nothing was changed there:
+**4. The legacy app is untouched**, since nothing was changed there.
+
+**PowerShell:**
 
 ```powershell
-& curl.exe -s -o NUL -w "  api:    %{http_code}`n" "https://kesavaexpensetracker.netlify.app/api/stock?symbol=RELIANCE"
-& curl.exe -s -o NUL -w "  bridge: %{http_code}`n" "https://kesavaexpensetracker.netlify.app/mobile-google-auth"
+& curl.exe -s -o NUL -w "  api:    %{http_code}`n" "$legacy/api/stock?symbol=RELIANCE"
+& curl.exe -s -o NUL -w "  bridge: %{http_code}`n" "$legacy/mobile-google-auth"
 ```
 
-Finally, open a real share link in a **fresh incognito window** and confirm the
-split renders with participants and no sign-in prompt.
+Finally, open the real share link in a **fresh incognito window** and confirm the
+split renders with participants and no sign-in prompt:
 
-> **Done when** all four hold: bundle paths print for `/split/<slug>`; no path
+```powershell
+"$share/split/$slug"
+```
+
+> **Done when** all four hold: bundle paths print for the share link; no path
 > outside `/split/*` and `/payment/*` reports `BOOTS APP - wrong`; `HEAD /`
 > returns **200**; and both legacy endpoints still return 200. The incognito page
 > must show no sign-in prompt and **no "No Internet Connection" banner** — that
@@ -255,8 +302,10 @@ and tap Share once**. That single write backfills `publicSlug`, `currency`,
 `claimKeys`, `claimAmountMax`, `claimsEnabled` and any missing per-person pay
 links, and rewrites the public snapshot. Check one:
 
+**PowerShell:**
+
 ```powershell
-(& curl.exe -s "https://firestore.googleapis.com/v1/projects/expenseapp-27f94/databases/(default)/documents/splitPublicShares?pageSize=20" | ConvertFrom-Json).documents |
+(& curl.exe -s "$fs/splitPublicShares?pageSize=20" | ConvertFrom-Json).documents |
   ForEach-Object {
     '{0,-14} currency={1,-5} claims={2}' -f $_.fields.slug.stringValue,
       $_.fields.currency.stringValue,
@@ -320,23 +369,21 @@ the app build.
 
 ## Local development
 
+Same in both shells:
+
 ```bash
 npm run build:web
 ```
 
 `npx expo serve` will **not** work — it has no SPA fallback and 404s on
-`/split/abc`. Use something that honours `netlify.toml`:
+`/split/abc`. Use something that honours `netlify.toml` — same in both shells:
 
 ```bash
 npx netlify-cli dev --dir dist --offline --port 8899
 ```
 
-Get a real slug from the Firebase console, or without leaving the shell:
-
-```powershell
-(& curl.exe -s "https://firestore.googleapis.com/v1/projects/expenseapp-27f94/databases/(default)/documents/splitPublicShares?pageSize=20" | ConvertFrom-Json).documents |
-  ForEach-Object { '{0}  {1}' -f $_.fields.slug.stringValue, $_.fields.title.stringValue }
-```
+`$slug` from the setup block at the top is a real slug; open
+`http://localhost:8899/split/$slug`.
 
 > **Known local-only quirk:** `netlify dev --dir --offline` returns **403 for
 > every nested static path** (`/_expo/**`, `/assets/**`), so the page looks broken
