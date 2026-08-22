@@ -7,6 +7,25 @@ one new Netlify site and three edits in the sibling Vite repo.
 Read `docs/audits/SPLIT_SHARE_LINK_AUDIT_2026-08-22.md` first if you want the
 reasoning. This file is just the runbook.
 
+## Shell note
+
+Commands are given for both bash and PowerShell, because the differences here
+are not cosmetic:
+
+- `curl` in PowerShell is an alias for `Invoke-WebRequest`, which has no `-s`
+  and will stop and prompt you for `Uri:`. Use **`curl.exe`** — real curl ships
+  in `C:\Windows\System32` on Windows 10+.
+- There is no `grep`. Use `Select-String`.
+- `/dev/null` is `NUL`, and a literal newline in `-w` is a backtick-n.
+
+**Do not verify any of this with the HTTP status code.** The Vite app's SPA
+catch-all (`/* -> /index.html 200`) returns **200 for every path**, including
+paths that could not possibly exist. A 200 on `/split/<slug>` says nothing about
+whether the proxy works. The only reliable test is which bundle is in the
+response body: `_expo/static/js/web/...` means the Expo page answered,
+`registerSW.js` or `/assets/index-*.js` means you are still getting the Vite
+login page.
+
 ## Why a second site instead of the obvious thing
 
 `kesavaexpensetracker.netlify.app` serves the **Vite** web app from
@@ -39,6 +58,14 @@ npx firebase deploy --only firestore:rules --project expenseapp-27f94 --dry-run
 
 ```bash
 npx firebase deploy --only firestore:rules --project expenseapp-27f94
+```
+
+Identical in PowerShell. To confirm afterwards that the `splitShareClaims` rule
+is actually live, read a claim id that does not exist — **404 means the rule
+exists, 403 means it does not**:
+
+```powershell
+curl.exe -s -o NUL -w "%{http_code}`n" "https://firestore.googleapis.com/v1/projects/expenseapp-27f94/databases/(default)/documents/splitShareClaims/nonexistent__probe"
 ```
 
 The dry run has already been verified to compile against the live project. See
@@ -82,6 +109,13 @@ Then verify the site directly, before any proxying:
 ```bash
 curl -s https://spendly-share.netlify.app/split/qccgraks87 | grep -o '_expo/static/js/web/[^"]*'
 ```
+
+```powershell
+curl.exe -s https://spendly-share.netlify.app/split/qccgraks87 | Select-String -Pattern '_expo/static/js/web/[^"]*' -AllMatches | ForEach-Object { $_.Matches.Value }
+```
+
+Bundle paths printed = the site is serving the Expo build. Nothing printed =
+it is not, and no amount of proxying will help until it is.
 
 ## Step 3 — Service worker fix in the Vite repo (mandatory, do before Step 4)
 
@@ -171,23 +205,46 @@ Proxy serves the Expo shell, not the Vite one:
 curl -s https://kesavaexpensetracker.netlify.app/split/qccgraks87 | grep -o '_expo/static/js/web/[^"]*'
 ```
 
+```powershell
+curl.exe -s https://kesavaexpensetracker.netlify.app/split/qccgraks87 | Select-String -Pattern '_expo/static/js/web/[^"]*' -AllMatches | ForEach-Object { $_.Matches.Value }
+```
+
+Bundle paths printed = the proxy is live. Nothing printed = still Vite. Again:
+the status code is 200 either way and tells you nothing.
+
+One PowerShell one-liner that answers "which app is serving this?" outright,
+for both hosts at once:
+
+```powershell
+foreach ($h in @('spendly-share.netlify.app','kesavaexpensetracker.netlify.app')) {
+  $body = & curl.exe -s --max-time 20 "https://$h/split/qccgraks87"
+  $verdict = if ($body -match '_expo/static/js/web/') { 'EXPO  -> split page works' }
+             elseif ($body -match 'registerSW\.js|/assets/index-') { 'VITE  -> login screen' }
+             else { 'unknown' }
+  '{0,-38} {1}' -f $h, $verdict
+}
+```
+
 Open the same URL in a **fresh incognito window** (no service worker) and
 confirm the split renders with participants. In your normal browser expect the
 Vite login page once, then the split page after a reload — that is the SW
-handover from Step 3.
+handover from Step 3, and seeing it is how you know the denylist landed.
 
 Then confirm nothing else broke:
 
 ```bash
 curl -s "https://kesavaexpensetracker.netlify.app/api/stock?symbol=RELIANCE" | head -c 120
-```
-
-```bash
 curl -sI https://kesavaexpensetracker.netlify.app/mobile-google-auth
 ```
 
+```powershell
+(& curl.exe -s "https://kesavaexpensetracker.netlify.app/api/stock?symbol=RELIANCE").Substring(0,120)
+& curl.exe -s -I https://kesavaexpensetracker.netlify.app/mobile-google-auth | Select-Object -First 1
+```
+
 Also spot-check `/payment/<a-real-payment-slug>` and `/` on that origin — both
-should be unchanged.
+should be unchanged. Here the status code *is* meaningful, because you are
+asking "does this still respond at all", not "which app answered".
 
 ## Local development
 
@@ -205,7 +262,12 @@ npx netlify-cli dev --dir dist
 ```
 
 Get a real slug from Firebase Console → Firestore → `splitPublicShares` → any
-document's `slug` field.
+document's `slug` field, or list them without leaving the shell:
+
+```powershell
+(& curl.exe -s "https://firestore.googleapis.com/v1/projects/expenseapp-27f94/databases/(default)/documents/splitPublicShares?pageSize=20" | ConvertFrom-Json).documents |
+  ForEach-Object { '{0}  {1}' -f $_.fields.slug.stringValue, $_.fields.title.stringValue }
+```
 
 ## Notes
 
