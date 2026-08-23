@@ -19,9 +19,11 @@ import {
   ASSET_CATEGORIES,
   assetCategoryLabel,
   assetConditionLabel,
+  assetOwnershipLabel,
   assetStatusLabel,
   assetUnitLabel,
 } from "@/shared/utils/ganeshAssets";
+import { formatInr } from "@/shared/utils/ganeshMoney";
 import { useTheme } from "@/theme/ThemeProvider";
 
 const SCOPE_OPTIONS = [
@@ -151,7 +153,18 @@ export default function PandalAssetsScreen() {
             id={item.id}
             name={item.name}
             qtyLabel={`${item.quantity} ${assetUnitLabel(item.unit, item.quantity)}`}
-            meta={`${assetCategoryLabel(item.category)} · ${assetConditionLabel(item.condition)} · ${assetStatusLabel(item.status)}`}
+            meta={[
+              assetOwnershipLabel(item.ownershipType),
+              assetCategoryLabel(item.category),
+              assetConditionLabel(item.condition),
+              assetStatusLabel(item.status),
+              item.ownershipType === "purchased" && item.acquisitionCost != null
+                ? `Paid ${formatInr(item.acquisitionCost)}`
+                : null,
+              item.estimatedValue > 0 ? `Worth ${formatInr(item.estimatedValue)}` : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
             pending={item.pendingWrite}
             onOpen={onOpen}
           />

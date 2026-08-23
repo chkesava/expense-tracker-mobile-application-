@@ -194,6 +194,8 @@ export type PandalAssetAuditAction =
   | "disposed"
   | "photo";
 
+export type GaneshExpenseType = "normal" | "asset_purchase";
+
 export interface PandalAsset extends GaneshAuditFields {
   id: string;
   name: string;
@@ -211,6 +213,7 @@ export interface PandalAsset extends GaneshAuditFields {
   relatedExpenseId?: string;
   relatedExpenseFestivalId?: string;
   relatedContributionId?: string;
+  acquisitionCost?: number;
   disposeReason?: string;
   pendingWrite?: boolean;
 }
@@ -278,6 +281,7 @@ export interface GaneshSummary {
   sponsoredValue: number;
   collectionCount: number;
   expenseCount: number;
+  assetPurchaseAmount: number;
   transferredToPermanentFund: number;
   receivedFromPermanentFund: number;
   updatedAt?: FirestoreTime;
@@ -402,6 +406,8 @@ export interface GaneshExpense extends GaneshAuditFields, GaneshVoidFields {
   receiptPath?: string;
   receipt?: GaneshFileMeta;
   linkedContributionId?: string;
+  expenseType?: GaneshExpenseType;
+  assetId?: string;
   ledgerType: "EXPENSE";
   pendingWrite?: boolean;
 }
@@ -479,6 +485,7 @@ export const EMPTY_GANESH_SUMMARY: GaneshSummary = {
   sponsoredValue: 0,
   collectionCount: 0,
   expenseCount: 0,
+  assetPurchaseAmount: 0,
   transferredToPermanentFund: 0,
   receivedFromPermanentFund: 0,
 };

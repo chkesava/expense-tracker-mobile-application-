@@ -8,12 +8,14 @@ export function ChoiceChips<T extends string>({
   options,
   onChange,
   disabled,
+  disabledIds,
 }: {
   label?: string;
   value: T;
   options: Array<{ id: T; label: string }>;
   onChange: (value: T) => void;
   disabled?: boolean;
+  disabledIds?: T[];
 }) {
   const { theme } = useTheme();
   return (
@@ -24,16 +26,18 @@ export function ChoiceChips<T extends string>({
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
         {options.map((option) => {
           const selected = value === option.id;
+          const optionDisabled = Boolean(disabled || disabledIds?.includes(option.id));
           return (
             <Pressable
               key={option.id}
-              disabled={disabled}
+              disabled={optionDisabled}
               onPress={() => onChange(option.id)}
               style={{
                 paddingHorizontal: 10,
                 paddingVertical: 6,
                 borderRadius: 999,
                 backgroundColor: selected ? theme.colors.primary : theme.colors.muted,
+                opacity: optionDisabled && !selected ? 0.5 : 1,
               }}
             >
               <Text

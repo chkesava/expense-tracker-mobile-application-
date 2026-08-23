@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Image, Text, View } from "react-native";
-import { useLocalSearchParams } from "expo-router";
+import { Alert, Image, Pressable, Text, View } from "react-native";
+import { useLocalSearchParams, useRouter } from "expo-router";
 
 import { ChoiceChips } from "@/components/ganesh/ChoiceChips";
 import { GaneshImageUploader, type GaneshUploadStatus } from "@/components/ganesh/GaneshImageUploader";
@@ -9,7 +9,8 @@ import { GaneshWriteLock } from "@/components/ganesh/GaneshWriteLock";
 import { PendingHint } from "@/components/ganesh/GaneshSyncChip";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { useGaneshExpenses } from "@/hooks/useGaneshExpenses";
+import { useFestivals } from "@/hooks/useFestivals";
+import { useGaneshExpense } from "@/hooks/useGaneshExpenses";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { useGaneshStorage } from "@/hooks/useGaneshStorage";
 import { useGaneshWrites } from "@/hooks/useGaneshWrites";
@@ -35,12 +36,13 @@ import { useTheme } from "@/theme/ThemeProvider";
 
 export default function AssetDetailScreen() {
   const { theme } = useTheme();
+  const { push } = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { pandalId, festivalId } = useGaneshSession();
+  const { pandalId } = useGaneshSession();
+  const { festivals } = useFestivals(pandalId);
   const { assets } = usePandalAssets(pandalId);
   const { audits } = usePandalAssetAudits(pandalId);
   const { members } = usePandalMembers(pandalId);
-  const { expenses } = useGaneshExpenses(pandalId, festivalId);
   const { can } = useGaneshPermissions();
   const writes = useGaneshWrites();
   const { isOnline, signedUrl, uploadAssetPhoto } = useGaneshStorage();
@@ -62,7 +64,13 @@ export default function AssetDetailScreen() {
   const [photoStatus, setPhotoStatus] = useState<GaneshUploadStatus>("idle");
   const [busy, setBusy] = useState(false);
   const photoPath = ganeshStoredPath(asset?.photo);
-  const relatedExpense = expenses.find((item) => item.id === asset?.relatedExpenseId);
+  const relatedFestivalId = asset?.relatedExpenseFestivalId ?? null;
+  const { expense: relatedExpense } = useGaneshExpense(
+    pandalId,
+    relatedFestivalId,
+    asset?.relatedExpenseId ?? null
+  );
+  const purchaseFestival = festivals.find((item) => item.id === relatedFestivalId);
   const recentAudits = useMemo(
     () => audits.filter((item) => item.assetId === id).slice(0, 12),
     [audits, id]
@@ -150,18 +158,48 @@ export default function AssetDetailScreen() {
         {asset.createdAt ? ` · ${formatGaneshWhen(asset.createdAt)}` : ""}
       </Text>
       <PendingHint pending={asset.pendingWrite} />
-      {asset.estimatedValue > 0 ? (
-        <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>
+      <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>
+        {assetOwnershipLabel(asset.ownershipType)}
+        {asset.sourceName
+          ? ` · ${
+              asset.ownershipType === "sponsored"
+                ? "Sponsored by "
+                : asset.ownershipType === "donated"
+                  ? "Donated by "
+                  : ""
+            }${asset.sourceName}`
+          : ""}
+      </Text>
+      {asset.ownershipType === "purchased" && asset.acquisitionCost != null ? (
+        <Text style={{ color: theme.colors.mutedForeground }}>
+          Acquisition cost {formatInr(asset.acquisitionCost)}
+          {asset.estimatedValue > 0 ? ` · Estimated value ${formatInr(asset.estimatedValue)}` : ""}
+        </Text>
+      ) : asset.estimatedValue > 0 ? (
+        <Text style={{ color: theme.colors.mutedForeground }}>
           Estimated value {formatInr(asset.estimatedValue)}
         </Text>
       ) : null}
-      <Text style={{ color: theme.colors.mutedForeground }}>
-        {assetOwnershipLabel(asset.ownershipType)}
-        {asset.sourceName ? ` · ${asset.sourceName}` : ""}
-      </Text>
-      {relatedExpense ? (
+      {asset.ownershipType === "purchased" && purchaseFestival ? (
         <Text style={{ color: theme.colors.mutedForeground }}>
-          Linked expense: {relatedExpense.name} · {formatInr(relatedExpense.totalAmount)}
+          Purchased during {purchaseFestival.name}
+        </Text>
+      ) : null}
+      {relatedExpense ? (
+        <Pressable
+          onPress={() =>
+            push(
+              `/(ganesh)/expense/${relatedExpense.id}?festivalId=${relatedFestivalId ?? ""}` as never
+            )
+          }
+        >
+          <Text style={{ color: theme.colors.primary, fontWeight: "700" }}>
+            Related expense: {relatedExpense.name} · {formatInr(relatedExpense.totalAmount)}
+          </Text>
+        </Pressable>
+      ) : asset.relatedExpenseId ? (
+        <Text style={{ color: theme.colors.mutedForeground }}>
+          Linked to a festival expense
         </Text>
       ) : null}
 

@@ -53,10 +53,11 @@ export function useGaneshWrites() {
     [hasPerm, isAdmin, permissions]
   );
 
-  const requireFestival = useCallback(() => {
+  const requireFestival = useCallback((overrideFestivalId?: string) => {
     if (!actor) throw new Error("You must be signed in.");
-    if (!pandalId || !festivalId) throw new Error("Select a Pandal and festival first.");
-    return { actor, pandalId, festivalId, db: requireDb() };
+    const targetFestivalId = overrideFestivalId ?? festivalId;
+    if (!pandalId || !targetFestivalId) throw new Error("Select a Pandal and festival first.");
+    return { actor, pandalId, festivalId: targetFestivalId, db: requireDb() };
   }, [actor, pandalId, festivalId]);
 
   const requirePandal = useCallback(() => {
@@ -187,6 +188,7 @@ export function useGaneshWrites() {
     },
     addContribution: (input: Parameters<typeof writes.addContribution>[4]) => {
       requirePerm("contributions.create");
+      if (input.pandalAsset) requirePerm("assets.create");
       const ctx = requireFestival();
       return run("Contribution saved", () =>
         writes.addContribution(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, input)
@@ -228,6 +230,25 @@ export function useGaneshWrites() {
         writes.addExpense(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, input)
       );
     },
+    addAssetPurchase: (input: Parameters<typeof writes.addAssetPurchase>[4]) => {
+      requirePerm("expenses.create");
+      requirePerm("assets.create");
+      const ctx = requireFestival();
+      return run("Asset purchase saved", () =>
+        writes.addAssetPurchase(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, input)
+      );
+    },
+    updateExpenseAmounts: (
+      expenseId: string,
+      input: Parameters<typeof writes.updateExpenseAmounts>[5],
+      options?: { festivalId?: string }
+    ) => {
+      requirePerm("expenses.update");
+      const ctx = requireFestival(options?.festivalId);
+      return run("Expense updated", () =>
+        writes.updateExpenseAmounts(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, expenseId, input)
+      );
+    },
     attachExpenseReceipt: (expenseId: string, receipt: GaneshFileMeta) => {
       requirePerm("expenses.update");
       const ctx = requireFestival();
@@ -247,9 +268,12 @@ export function useGaneshWrites() {
         writes.addReimbursement(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, input)
       );
     },
-    voidFinancialRecord: (input: Parameters<typeof writes.voidFinancialRecord>[4]) => {
+    voidFinancialRecord: (
+      input: Parameters<typeof writes.voidFinancialRecord>[4],
+      options?: { festivalId?: string }
+    ) => {
       requirePerm("expenses.void");
-      const ctx = requireFestival();
+      const ctx = requireFestival(options?.festivalId);
       return run("Record voided", () =>
         writes.voidFinancialRecord(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, input)
       );

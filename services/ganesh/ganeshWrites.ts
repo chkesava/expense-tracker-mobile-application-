@@ -58,6 +58,11 @@ import type {
 import { JOIN_APPROVE_ROLES, ALL_GANESH_PERMISSIONS, ROLE_PERMISSIONS } from "@/shared/utils/ganeshPermissions";
 import { expandPermissions } from "@/shared/utils/ganeshPermissionRegistry";
 import type { PandalMemberAuditAction } from "@/shared/types/ganesh";
+import {
+  appendAssetAcquisitionCost,
+  appendPandalAssetCreate,
+  type CreatePandalAssetInput,
+} from "@/services/ganesh/ganeshAssets";
 import { ensurePandalRoles } from "@/services/ganesh/ganeshRoles";
 import { EMPTY_GANESH_SUMMARY } from "@/shared/types/ganesh";
 import {
@@ -1020,6 +1025,17 @@ export async function updateHousehold(
   await commitWrite(() => householdBatch.commit(), { label: "household" });
 }
 
+export type AssetPurchaseDraft = {
+  name: string;
+  category: CreatePandalAssetInput["category"];
+  quantity: number;
+  unit: CreatePandalAssetInput["unit"];
+  estimatedValue?: number;
+  condition?: CreatePandalAssetInput["condition"];
+  location?: string;
+  description?: string;
+};
+
 export async function addContribution(
   db: Firestore,
   actor: GaneshActor,
@@ -1038,10 +1054,14 @@ export async function addContribution(
     description?: string;
     date: string;
     status?: ContributionStatus;
+    pandalAsset?: AssetPurchaseDraft;
   }
 ): Promise<string> {
   const contributorName = input.contributorName.trim();
   if (!contributorName) throw new Error("Enter the contributor name.");
+  if (input.pandalAsset && input.kind !== "item" && input.kind !== "sponsorship") {
+    throw new Error("Only item or sponsorship contributions can be added as Pandal assets.");
+  }
   const amount = Number(input.amount ?? 0);
   const estimatedValue = Number(input.estimatedValue ?? 0);
   if (input.kind === "money") {
@@ -1120,6 +1140,22 @@ export async function addContribution(
     entityType: "contribution",
     entityId: id,
   });
+  if (input.pandalAsset) {
+    appendPandalAssetCreate(batch, db, actor, pandalId, newId(), {
+      name: input.pandalAsset.name,
+      category: input.pandalAsset.category,
+      quantity: input.pandalAsset.quantity,
+      unit: input.pandalAsset.unit,
+      ownershipType: input.kind === "sponsorship" ? "sponsored" : "donated",
+      estimatedValue: input.pandalAsset.estimatedValue ?? estimatedValue,
+      condition: input.pandalAsset.condition ?? "good",
+      location: input.pandalAsset.location,
+      description: input.pandalAsset.description ?? input.description,
+      sourceName: contributorName,
+      relatedContributionId: id,
+    });
+  }
+
   audit(batch, db, pandalId, festivalId, actor.uid, "created", "contribution", id, {
     newValue: { contributorName, kind: input.kind, amount, estimatedValue },
   });
@@ -1262,6 +1298,7 @@ export async function addExpense(
       date: input.date,
       receiptPath: input.receiptPath,
       linkedContributionId: input.linkedContributionId,
+      expenseType: "normal",
       ledgerType: "EXPENSE",
       voided: false,
       createdBy: actor.uid,
@@ -1299,6 +1336,223 @@ export async function addExpense(
   });
   await commitWrite(() => batch.commit(), { label: "expense" });
   return id;
+}
+
+export async function addAssetPurchase(
+  db: Firestore,
+  actor: GaneshActor,
+  pandalId: string,
+  festivalId: string,
+  input: {
+    name: string;
+    totalAmount: number;
+    godFundAmount: number;
+    personalAmount: number;
+    sponsoredAmount?: number;
+    categoryId: string;
+    categoryName: string;
+    paidByMemberId: string;
+    vendor?: string;
+    description?: string;
+    notes?: string;
+    date: string;
+    receiptPath?: string;
+    asset: AssetPurchaseDraft;
+  }
+): Promise<{ expenseId: string; assetId: string }> {
+  const name = input.name.trim();
+  if (!name) throw new Error("Enter the expense name.");
+  const sponsoredAmount = input.sponsoredAmount ?? 0;
+  const valid = validateExpenseFunding({
+    totalAmount: input.totalAmount,
+    godFundAmount: input.godFundAmount,
+    personalAmount: input.personalAmount,
+    sponsoredAmount,
+  });
+  if (!valid.ok) throw new Error(valid.error);
+  if (input.godFundAmount > 0) {
+    const summarySnap = await getDoc(pathRef(db, summaryDoc(pandalId, festivalId)));
+    const summary = {
+      ...EMPTY_GANESH_SUMMARY,
+      ...(summarySnap.exists() ? summarySnap.data() : {}),
+    };
+    const spendOk = validateGodFundSpend(input.godFundAmount, availableGodFund(summary));
+    if (!spendOk.ok) throw new Error(spendOk.error);
+  }
+  const estimatedValue =
+    input.asset.estimatedValue != null && Number.isFinite(input.asset.estimatedValue)
+      ? input.asset.estimatedValue
+      : input.totalAmount;
+  const expenseId = newId();
+  const assetId = newId();
+  const cashAmount = input.godFundAmount + input.personalAmount;
+  const batch = writeBatch(db);
+  batch.set(
+    pathRef(db, [...festivalCol(pandalId, festivalId, "expenses"), expenseId]),
+    omitUndefined({
+      name,
+      totalAmount: input.totalAmount,
+      godFundAmount: input.godFundAmount,
+      personalAmount: input.personalAmount,
+      sponsoredAmount,
+      categoryId: input.categoryId,
+      categoryName: input.categoryName,
+      paidByMemberId: input.paidByMemberId,
+      vendor: input.vendor?.trim() || undefined,
+      description: input.description?.trim() || undefined,
+      notes: input.notes?.trim() || undefined,
+      date: input.date,
+      receiptPath: input.receiptPath,
+      expenseType: "asset_purchase",
+      assetId,
+      ledgerType: "EXPENSE",
+      voided: false,
+      createdBy: actor.uid,
+      createdAt: serverTimestamp(),
+      updatedBy: actor.uid,
+      updatedAt: serverTimestamp(),
+    })
+  );
+  appendPandalAssetCreate(batch, db, actor, pandalId, assetId, {
+    name: input.asset.name,
+    category: input.asset.category,
+    quantity: input.asset.quantity,
+    unit: input.asset.unit,
+    ownershipType: "purchased",
+    estimatedValue,
+    condition: input.asset.condition ?? "good",
+    location: input.asset.location,
+    description: input.asset.description,
+    relatedExpenseId: expenseId,
+    relatedExpenseFestivalId: festivalId,
+    acquisitionCost: input.totalAmount,
+  });
+  bumpSummary(batch, db, pandalId, festivalId, {
+    godFundExpenses: input.godFundAmount,
+    personalMoneyUsed: input.personalAmount,
+    pendingReimbursements: input.personalAmount,
+    expenseCount: 1,
+    assetPurchaseAmount: cashAmount,
+  });
+  if (input.personalAmount > 0) {
+    batch.set(
+      pathRef(db, [...festivalCol(pandalId, festivalId, "members"), input.paidByMemberId]),
+      {
+        personalExpenses: increment(input.personalAmount),
+        pendingReimbursement: increment(input.personalAmount),
+      },
+      { merge: true }
+    );
+  }
+  activity(batch, db, pandalId, festivalId, {
+    title: name,
+    subtitle: `Asset purchase · Added by ${actor.displayName}`,
+    amount: input.totalAmount,
+    actorId: actor.uid,
+    entityType: "expense",
+    entityId: expenseId,
+  });
+  audit(batch, db, pandalId, festivalId, actor.uid, "created", "expense", expenseId, {
+    newValue: { ...input, expenseType: "asset_purchase", assetId },
+  });
+  await commitWrite(() => batch.commit(), { label: "asset purchase" });
+  return { expenseId, assetId };
+}
+
+export async function updateExpenseAmounts(
+  db: Firestore,
+  actor: GaneshActor,
+  pandalId: string,
+  festivalId: string,
+  expenseId: string,
+  input: {
+    totalAmount: number;
+    godFundAmount: number;
+    personalAmount: number;
+    sponsoredAmount?: number;
+  }
+): Promise<void> {
+  const ref = pathRef(db, [...festivalCol(pandalId, festivalId, "expenses"), expenseId]);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) throw new Error("Expense not found.");
+  const festivalSnap = await getDoc(pathRef(db, festivalDoc(pandalId, festivalId)));
+  if (!festivalSnap.exists() || festivalSnap.data().status !== "open") {
+    throw new Error("This festival is closed.");
+  }
+  const current = snap.data();
+  if (current.voided) throw new Error("This expense is already voided.");
+  const sponsoredAmount = input.sponsoredAmount ?? Number(current.sponsoredAmount ?? 0);
+  const valid = validateExpenseFunding({
+    totalAmount: input.totalAmount,
+    godFundAmount: input.godFundAmount,
+    personalAmount: input.personalAmount,
+    sponsoredAmount,
+  });
+  if (!valid.ok) throw new Error(valid.error);
+  const oldGod = Number(current.godFundAmount ?? 0);
+  const oldPersonal = Number(current.personalAmount ?? 0);
+  const godDelta = input.godFundAmount - oldGod;
+  const personalDelta = input.personalAmount - oldPersonal;
+  if (godDelta > 0) {
+    const summarySnap = await getDoc(pathRef(db, summaryDoc(pandalId, festivalId)));
+    const summary = {
+      ...EMPTY_GANESH_SUMMARY,
+      ...(summarySnap.exists() ? summarySnap.data() : {}),
+    };
+    const spendOk = validateGodFundSpend(godDelta, availableGodFund(summary));
+    if (!spendOk.ok) throw new Error(spendOk.error);
+  }
+  const wasPurchase = current.expenseType === "asset_purchase" || Boolean(current.assetId);
+  const oldCash = oldGod + oldPersonal;
+  const newCash = input.godFundAmount + input.personalAmount;
+  const batch = writeBatch(db);
+  batch.update(
+    ref,
+    omitUndefined({
+      totalAmount: input.totalAmount,
+      godFundAmount: input.godFundAmount,
+      personalAmount: input.personalAmount,
+      sponsoredAmount,
+      updatedBy: actor.uid,
+      updatedAt: serverTimestamp(),
+    })
+  );
+  bumpSummary(batch, db, pandalId, festivalId, {
+    godFundExpenses: godDelta,
+    personalMoneyUsed: personalDelta,
+    pendingReimbursements: personalDelta,
+    assetPurchaseAmount: wasPurchase ? newCash - oldCash : 0,
+  });
+  if (personalDelta !== 0 && current.paidByMemberId) {
+    batch.set(
+      pathRef(db, [...festivalCol(pandalId, festivalId, "members"), String(current.paidByMemberId)]),
+      {
+        personalExpenses: increment(personalDelta),
+        pendingReimbursement: increment(personalDelta),
+      },
+      { merge: true }
+    );
+  }
+  if (wasPurchase && current.assetId) {
+    appendAssetAcquisitionCost(
+      batch,
+      db,
+      actor,
+      pandalId,
+      String(current.assetId),
+      input.totalAmount
+    );
+  }
+  audit(batch, db, pandalId, festivalId, actor.uid, "edited", "expense", expenseId, {
+    oldValue: {
+      totalAmount: current.totalAmount,
+      godFundAmount: oldGod,
+      personalAmount: oldPersonal,
+    },
+    newValue: input,
+    reason: "Amount corrected",
+  });
+  await commitWrite(() => batch.commit(), { label: "expense amount" });
 }
 
 export async function attachExpenseReceipt(
@@ -1479,11 +1733,13 @@ export async function voidFinancialRecord(
   } else if (input.entityType === "expense") {
     const godFundAmount = Number(data.godFundAmount ?? 0);
     const personalAmount = Number(data.personalAmount ?? 0);
+    const wasPurchase = data.expenseType === "asset_purchase" || Boolean(data.assetId);
     bumpSummary(batch, db, pandalId, festivalId, {
       godFundExpenses: -godFundAmount,
       personalMoneyUsed: -personalAmount,
       pendingReimbursements: -personalAmount,
       expenseCount: -1,
+      assetPurchaseAmount: wasPurchase ? -(godFundAmount + personalAmount) : 0,
     });
     if (personalAmount > 0 && data.paidByMemberId) {
       batch.set(
@@ -1590,6 +1846,13 @@ export async function recomputeFestivalSummary(
     godFundExpenses: expenses.docs.filter(notVoided).map((docSnap) => Number(docSnap.data().godFundAmount ?? 0)),
     reimbursements: reimbursements.docs.filter(notVoided).map((docSnap) => Number(docSnap.data().amount ?? 0)),
     personalAmounts: expenses.docs.filter(notVoided).map((docSnap) => Number(docSnap.data().personalAmount ?? 0)),
+    assetPurchaseAmounts: expenses.docs
+      .filter(notVoided)
+      .filter((docSnap) => docSnap.data().expenseType === "asset_purchase" || docSnap.data().assetId)
+      .map(
+        (docSnap) =>
+          Number(docSnap.data().godFundAmount ?? 0) + Number(docSnap.data().personalAmount ?? 0)
+      ),
     inKindValues: contributions.docs
       .filter((docSnap) => received(docSnap) && docSnap.data().kind !== "money" && docSnap.data().kind !== "sponsorship")
       .map((docSnap) => Number(docSnap.data().estimatedValue ?? 0)),

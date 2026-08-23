@@ -4,6 +4,8 @@ import type {
   AssetOwnershipType,
   AssetStatus,
   AssetUnit,
+  GaneshExpense,
+  GaneshExpenseType,
   PandalAsset,
 } from "@/shared/types/ganesh";
 import { validateNonNegativeAmount, validatePositiveAmount } from "@/shared/utils/ganeshMath";
@@ -91,6 +93,7 @@ const PATCH_KEYS = [
   "relatedExpenseId",
   "relatedExpenseFestivalId",
   "relatedContributionId",
+  "acquisitionCost",
 ] as const;
 
 export type AssetPatchFields = Partial<Pick<PandalAsset, (typeof PATCH_KEYS)[number]>>;
@@ -135,7 +138,10 @@ export function validateAssetDraft(input: {
   return { name, quantity: input.quantity, estimatedValue: input.estimatedValue };
 }
 
-export function summarizeAssets(assets: Array<Pick<PandalAsset, "quantity" | "status">>) {
+export function summarizeAssets(
+  assets: Array<Pick<PandalAsset, "quantity" | "status" | "estimatedValue">>
+) {
+  const active = assets.filter((asset) => isActiveAsset(asset));
   return {
     totalItems: assets.reduce((sum, asset) => sum + (asset.quantity || 0), 0),
     totalRecords: assets.length,
@@ -148,5 +154,24 @@ export function summarizeAssets(assets: Array<Pick<PandalAsset, "quantity" | "st
     disposed: assets
       .filter((asset) => asset.status === "disposed" || asset.status === "lost")
       .reduce((sum, asset) => sum + (asset.quantity || 0), 0),
+    estimatedValue: active.reduce((sum, asset) => sum + (asset.estimatedValue || 0), 0),
   };
+}
+
+export function expenseTypeOf(
+  expense?: Pick<GaneshExpense, "expenseType"> | null
+): GaneshExpenseType {
+  return expense?.expenseType === "asset_purchase" ? "asset_purchase" : "normal";
+}
+
+export function isAssetPurchaseExpense(
+  expense?: Pick<GaneshExpense, "expenseType" | "assetId"> | null
+): boolean {
+  return expenseTypeOf(expense) === "asset_purchase" || Boolean(expense?.assetId);
+}
+
+export function expenseCashAmount(
+  expense: Pick<GaneshExpense, "godFundAmount" | "personalAmount">
+): number {
+  return (expense.godFundAmount || 0) + (expense.personalAmount || 0);
 }

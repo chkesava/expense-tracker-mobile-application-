@@ -67,6 +67,18 @@ export function totalExpenses(summary: Pick<
   return money(summary.godFundExpenses + summary.personalMoneyUsed);
 }
 
+export function assetPurchaseAmountOf(
+  summary: Pick<GaneshSummary, "assetPurchaseAmount">
+): number {
+  return money(summary.assetPurchaseAmount ?? 0);
+}
+
+export function regularExpenseAmount(
+  summary: Pick<GaneshSummary, "godFundExpenses" | "personalMoneyUsed" | "assetPurchaseAmount">
+): number {
+  return money(totalExpenses(summary) - assetPurchaseAmountOf(summary));
+}
+
 export type FundingInput = {
   totalAmount: number;
   godFundAmount: number;
@@ -303,6 +315,7 @@ export type LedgerTotalsInput = {
   personalAmounts: number[];
   inKindValues: number[];
   sponsoredValues: number[];
+  assetPurchaseAmounts?: number[];
 };
 
 export function summarizeLedger(input: LedgerTotalsInput): GaneshSummary {
@@ -323,6 +336,7 @@ export function summarizeLedger(input: LedgerTotalsInput): GaneshSummary {
     sponsoredValue: sum(input.sponsoredValues),
     collectionCount: input.collections.length,
     expenseCount: input.godFundExpenses.length,
+    assetPurchaseAmount: sum(input.assetPurchaseAmounts ?? []),
   };
 }
 

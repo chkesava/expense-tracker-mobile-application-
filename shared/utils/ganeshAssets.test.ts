@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { changedAssetFields, summarizeAssets, validateAssetDraft } from "./ganeshAssets";
+import {
+  changedAssetFields,
+  expenseCashAmount,
+  expenseTypeOf,
+  isAssetPurchaseExpense,
+  summarizeAssets,
+  validateAssetDraft,
+} from "./ganeshAssets";
 
 describe("validateAssetDraft", () => {
   it("accepts a named item with a positive quantity", () => {
@@ -46,11 +53,11 @@ describe("summarizeAssets", () => {
   it("counts available, damaged, and disposed quantities", () => {
     expect(
       summarizeAssets([
-        { quantity: 10, status: "available" },
-        { quantity: 2, status: "in_use" },
-        { quantity: 1, status: "damaged" },
-        { quantity: 3, status: "disposed" },
-        { quantity: 1, status: "lost" },
+        { quantity: 10, status: "available", estimatedValue: 8000 },
+        { quantity: 2, status: "in_use", estimatedValue: 2000 },
+        { quantity: 1, status: "damaged", estimatedValue: 500 },
+        { quantity: 3, status: "disposed", estimatedValue: 100 },
+        { quantity: 1, status: "lost", estimatedValue: 50 },
       ])
     ).toEqual({
       totalItems: 17,
@@ -58,6 +65,25 @@ describe("summarizeAssets", () => {
       available: 12,
       damaged: 1,
       disposed: 4,
+      estimatedValue: 10500,
     });
+  });
+});
+
+describe("expense type helpers", () => {
+  it("treats a missing type as a regular expense", () => {
+    expect(expenseTypeOf({})).toBe("normal");
+    expect(isAssetPurchaseExpense({ expenseType: "normal" })).toBe(false);
+    expect(isAssetPurchaseExpense({ name: "Flowers" } as never)).toBe(false);
+  });
+
+  it("treats asset_purchase or a linked assetId as a purchase", () => {
+    expect(expenseTypeOf({ expenseType: "asset_purchase" })).toBe("asset_purchase");
+    expect(isAssetPurchaseExpense({ expenseType: "asset_purchase" })).toBe(true);
+    expect(isAssetPurchaseExpense({ assetId: "chair-1" })).toBe(true);
+  });
+
+  it("counts only God Fund and personal cash", () => {
+    expect(expenseCashAmount({ godFundAmount: 10000, personalAmount: 5000 })).toBe(15000);
   });
 });

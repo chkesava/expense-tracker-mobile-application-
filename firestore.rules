@@ -566,8 +566,25 @@ service cloud.firestore {
             .hasOnly(['status', 'disposeReason', 'updatedBy', 'updatedAt']);
         }
 
+        function hasRelatedExpenseLink() {
+          return request.resource.data.keys().hasAll(['relatedExpenseId'])
+            && request.resource.data.relatedExpenseId is string
+            && request.resource.data.relatedExpenseId.size() > 0;
+        }
+
+        function linkedExpenseExistsAfter() {
+          return !hasRelatedExpenseLink() || (
+            request.resource.data.keys().hasAll(['relatedExpenseFestivalId'])
+            && request.resource.data.relatedExpenseFestivalId is string
+            && request.resource.data.relatedExpenseFestivalId.size() > 0
+            && existsAfter(/databases/$(database)/documents/pandals/$(pandalId)/festivals/$(request.resource.data.relatedExpenseFestivalId)/expenses/$(request.resource.data.relatedExpenseId))
+          );
+        }
+
         allow read: if canReadAssetOf(pandalId);
-        allow create: if canCreateAssetOf(pandalId) && ganeshIdentityCreate();
+        allow create: if canCreateAssetOf(pandalId)
+          && ganeshIdentityCreate()
+          && linkedExpenseExistsAfter();
         allow update: if ganeshIdentityUpdate() && (
           canUpdateAssetOf(pandalId)
           || (canDisposeAssetOf(pandalId) && isDisposeOnlyUpdate())
@@ -623,6 +640,29 @@ service cloud.firestore {
                   && canWriteLedgerSideEffect());
           }
 
+          function hasNonEmptyAssetId() {
+            return request.resource.data.keys().hasAll(['assetId'])
+              && request.resource.data.assetId is string
+              && request.resource.data.assetId.size() > 0;
+          }
+
+          function isAssetPurchaseCreate() {
+            return request.resource.data.keys().hasAll(['expenseType'])
+              && request.resource.data.expenseType == 'asset_purchase';
+          }
+
+          function expenseCreateAllowed() {
+            return subcol != 'expenses' || (
+              isAssetPurchaseCreate()
+                ? (
+                    canCreateAssetOf(pandalId)
+                    && hasNonEmptyAssetId()
+                    && existsAfter(/databases/$(database)/documents/pandals/$(pandalId)/assets/$(request.resource.data.assetId))
+                  )
+                : !hasNonEmptyAssetId()
+            );
+          }
+
           // Festival auditLogs stay writable as ledger side-effects, but only
           // admin/treasurer may read them. Nested matches OR together, so the
           // wildcard read must exclude this subcollection.
@@ -630,6 +670,7 @@ service cloud.firestore {
           allow create: if isActivePandalMember()
             && festivalOpen()
             && canWriteFestivalSubcol()
+            && expenseCreateAllowed()
             && (
               !request.resource.data.keys().hasAny(['createdBy'])
               || ganeshIdentityCreate()

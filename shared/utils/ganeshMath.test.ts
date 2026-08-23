@@ -2,13 +2,16 @@ import { describe, expect, it } from "vitest";
 
 import {
   applyPermanentFundDelta,
+  assetPurchaseAmountOf,
   availableGodFund,
   deriveHouseholdStatus,
   festivalCashSpent,
   festivalCollectedCash,
   memberPendingReimbursement,
   possibleHouseholdDuplicates,
+  regularExpenseAmount,
   summarizeLedger,
+  totalExpenses,
   validateCollection,
   validateExpenseFunding,
   validateFundTransfer,
@@ -191,6 +194,26 @@ describe("summarizeLedger", () => {
     expect(summary.transferredToPermanentFund).toBe(0);
     expect(festivalCollectedCash(summary)).toBe(5500);
     expect(festivalCashSpent(summary)).toBe(4000);
+    expect(assetPurchaseAmountOf(summary)).toBe(0);
+    expect(regularExpenseAmount(summary)).toBe(5000);
+  });
+
+  it("splits festival cash into regular vs asset-purchase spend", () => {
+    const summary = summarizeLedger({
+      openingFunds: [],
+      collections: [],
+      committeeContributions: [],
+      otherCashContributions: [],
+      godFundExpenses: [1500, 15000],
+      reimbursements: [],
+      personalAmounts: [0, 0],
+      inKindValues: [],
+      sponsoredValues: [],
+      assetPurchaseAmounts: [15000],
+    });
+    expect(totalExpenses(summary)).toBe(16500);
+    expect(assetPurchaseAmountOf(summary)).toBe(15000);
+    expect(regularExpenseAmount(summary)).toBe(1500);
   });
 });
 

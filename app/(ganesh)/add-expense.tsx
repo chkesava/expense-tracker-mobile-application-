@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 
+import { ChoiceChips } from "@/components/ganesh/ChoiceChips";
 import { GaneshImageUploader, type GaneshUploadStatus } from "@/components/ganesh/GaneshImageUploader";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { GaneshWriteLock } from "@/components/ganesh/GaneshWriteLock";
@@ -18,6 +19,12 @@ import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import type { PreparedGaneshImage } from "@/services/ganesh/storage/storageTypes";
+import type { GaneshExpenseType } from "@/shared/types/ganesh";
+import {
+  ASSET_CATEGORIES,
+  ASSET_CONDITIONS,
+  ASSET_UNITS,
+} from "@/shared/utils/ganeshAssets";
 import { todayDateInput } from "@/shared/utils/ganeshIdentity";
 import { useTheme } from "@/theme/ThemeProvider";
 
@@ -35,6 +42,8 @@ export default function AddExpenseScreen() {
   const writes = useGaneshWrites();
   const { can } = useGaneshPermissions();
   const { isOnline, uploadExpenseReceipt } = useGaneshStorage();
+  const canBuyAsset = can("assets.create");
+  const [kind, setKind] = useState<GaneshExpenseType>("normal");
   const [name, setName] = useState("");
   const [total, setTotal] = useState("");
   const [godFund, setGodFund] = useState("");
@@ -44,6 +53,13 @@ export default function AddExpenseScreen() {
   const [paidByMemberId, setPaidByMemberId] = useState(realUser?.uid ?? "");
   const [vendor, setVendor] = useState("");
   const [notes, setNotes] = useState("");
+  const [assetName, setAssetName] = useState("");
+  const [assetQty, setAssetQty] = useState("1");
+  const [assetCategory, setAssetCategory] = useState<(typeof ASSET_CATEGORIES)[number]["id"]>("furniture");
+  const [assetUnit, setAssetUnit] = useState<(typeof ASSET_UNITS)[number]["id"]>("pieces");
+  const [assetValue, setAssetValue] = useState("");
+  const [assetCondition, setAssetCondition] = useState<(typeof ASSET_CONDITIONS)[number]["id"]>("good");
+  const [assetLocation, setAssetLocation] = useState("");
   const [receipt, setReceipt] = useState<PreparedGaneshImage | null>(null);
   const [receiptStatus, setReceiptStatus] = useState<GaneshUploadStatus>("idle");
   const [savedId, setSavedId] = useState<string | null>(null);
@@ -52,6 +68,7 @@ export default function AddExpenseScreen() {
     visibleCategories.find((category) => category.id === categoryId) ?? visibleCategories[0];
   const closed = festivals.find((item) => item.id === festivalId)?.status === "closed";
   const ledgerSaved = Boolean(savedId);
+  const isAssetPurchase = kind === "asset_purchase" && canBuyAsset;
 
   const resolvedFunding = () => {
     const totalAmount = Number(total);
@@ -100,6 +117,28 @@ export default function AddExpenseScreen() {
 
   return (
     <GaneshScreen>
+      <ChoiceChips
+        label="Type"
+        value={isAssetPurchase ? "asset_purchase" : "normal"}
+        options={[
+          { id: "normal", label: "Regular expense" },
+          { id: "asset_purchase", label: "Asset purchase" },
+        ]}
+        onChange={setKind}
+        disabled={ledgerSaved}
+        disabledIds={canBuyAsset ? undefined : ["asset_purchase"]}
+      />
+      {!canBuyAsset ? (
+        <Text style={{ color: theme.colors.mutedForeground }}>
+          Asset purchase needs permission to add Pandal assets.
+        </Text>
+      ) : null}
+      {isAssetPurchase ? (
+        <Text style={{ color: theme.colors.mutedForeground }}>
+          This records the spend and adds the item to Pandal assets. Money stays on the festival;
+          ownership stays with the Pandal.
+        </Text>
+      ) : null}
       <Input label="Expense name" value={name} onChangeText={setName} placeholder="Flowers" editable={!ledgerSaved} />
       <Input label="Amount" value={total} onChangeText={setTotal} keyboardType="numeric" editable={!ledgerSaved} />
       <Text style={{ color: theme.colors.mutedForeground, fontWeight: "700" }}>Funding</Text>
@@ -189,6 +228,58 @@ export default function AddExpenseScreen() {
       </View>
       <Input label="Vendor (optional)" value={vendor} onChangeText={setVendor} editable={!ledgerSaved} />
       <Input label="Notes (optional)" value={notes} onChangeText={setNotes} editable={!ledgerSaved} />
+      {isAssetPurchase ? (
+        <View style={{ gap: 16 }}>
+          <Input
+            label="Asset name"
+            value={assetName}
+            onChangeText={setAssetName}
+            placeholder={name || "Plastic chairs"}
+            editable={!ledgerSaved}
+          />
+          <Input
+            label="Quantity"
+            value={assetQty}
+            onChangeText={setAssetQty}
+            keyboardType="number-pad"
+            editable={!ledgerSaved}
+          />
+          <ChoiceChips
+            label="Asset category"
+            value={assetCategory}
+            options={ASSET_CATEGORIES}
+            onChange={setAssetCategory}
+            disabled={ledgerSaved}
+          />
+          <ChoiceChips
+            label="Unit"
+            value={assetUnit}
+            options={ASSET_UNITS}
+            onChange={setAssetUnit}
+            disabled={ledgerSaved}
+          />
+          <Input
+            label="Estimated value (optional)"
+            value={assetValue}
+            onChangeText={setAssetValue}
+            keyboardType="numeric"
+            editable={!ledgerSaved}
+          />
+          <ChoiceChips
+            label="Condition"
+            value={assetCondition}
+            options={ASSET_CONDITIONS}
+            onChange={setAssetCondition}
+            disabled={ledgerSaved}
+          />
+          <Input
+            label="Location (optional)"
+            value={assetLocation}
+            onChangeText={setAssetLocation}
+            editable={!ledgerSaved}
+          />
+        </View>
+      ) : null}
       <GaneshImageUploader
         title="Receipt"
         kind="receipt"
@@ -221,18 +312,55 @@ export default function AddExpenseScreen() {
             toast.error("Add a category first.");
             return;
           }
+          const payload = {
+            name,
+            ...resolvedFunding(),
+            categoryId: selectedCategory.id,
+            categoryName: selectedCategory.name,
+            paidByMemberId: paidByMemberId || realUser?.uid || "",
+            vendor,
+            notes,
+            date: todayDateInput(),
+          };
+          if (isAssetPurchase) {
+            const quantity = Number(assetQty);
+            if (!Number.isInteger(quantity) || quantity <= 0) {
+              toast.error("Quantity must be greater than 0.");
+              return;
+            }
+            setBusy(true);
+            writes
+              .addAssetPurchase({
+                ...payload,
+                asset: {
+                  name: assetName.trim() || name,
+                  category: assetCategory,
+                  quantity,
+                  unit: assetUnit,
+                  estimatedValue: assetValue.trim() ? Number(assetValue) : undefined,
+                  condition: assetCondition,
+                  location: assetLocation,
+                },
+              })
+              .then(async ({ expenseId }) => {
+                setSavedId(expenseId);
+                if (!receipt) {
+                  back();
+                  return;
+                }
+                const uploaded = await persistReceipt(expenseId, receipt);
+                if (uploaded) back();
+              })
+              .catch((error) => {
+                logError("ganesh.addAssetPurchase", error);
+                toast.error(friendlyErrorMessage(error, "Could not save asset purchase."));
+              })
+              .finally(() => setBusy(false));
+            return;
+          }
           setBusy(true);
           writes
-            .addExpense({
-              name,
-              ...resolvedFunding(),
-              categoryId: selectedCategory.id,
-              categoryName: selectedCategory.name,
-              paidByMemberId: paidByMemberId || realUser?.uid || "",
-              vendor,
-              notes,
-              date: todayDateInput(),
-            })
+            .addExpense(payload)
             .then(async (id) => {
               setSavedId(id);
               if (!receipt) {
@@ -249,7 +377,7 @@ export default function AddExpenseScreen() {
             .finally(() => setBusy(false));
         }}
       >
-        Save expense
+        {isAssetPurchase ? "Save purchase" : "Save expense"}
       </Button>
     </GaneshScreen>
   );

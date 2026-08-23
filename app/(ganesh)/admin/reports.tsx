@@ -6,9 +6,17 @@ import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { MetricGrid } from "@/components/ganesh/MetricGrid";
 import { useFestivals } from "@/hooks/useFestivals";
 import { useGaneshSummary } from "@/hooks/useGaneshSummary";
+import { usePandalAssets } from "@/hooks/usePandalAssets";
 import { usePermanentFund } from "@/hooks/usePermanentFund";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
-import { availableGodFund, totalCashIn } from "@/shared/utils/ganeshMath";
+import { summarizeAssets } from "@/shared/utils/ganeshAssets";
+import {
+  assetPurchaseAmountOf,
+  availableGodFund,
+  regularExpenseAmount,
+  totalCashIn,
+  totalExpenses,
+} from "@/shared/utils/ganeshMath";
 import { useTheme } from "@/theme/ThemeProvider";
 
 export default function AdminReportsScreen() {
@@ -17,7 +25,9 @@ export default function AdminReportsScreen() {
   const { pandalId, festivalId } = useGaneshSession();
   const { festivals } = useFestivals(pandalId);
   const { summary } = useGaneshSummary(pandalId, festivalId);
+  const { assets } = usePandalAssets(pandalId);
   const { fund } = usePermanentFund(pandalId);
+  const assetSummary = summarizeAssets(assets);
   const festival = festivals.find((item) => item.id === festivalId);
 
   return (
@@ -35,6 +45,10 @@ export default function AdminReportsScreen() {
           { label: "God Fund expenses", value: summary.godFundExpenses },
           { label: "Reimbursements", value: summary.reimbursements },
           { label: "Closing / God Fund", value: availableGodFund(summary) },
+          { label: "Festival expenses", value: totalExpenses(summary) },
+          { label: "Regular", value: regularExpenseAmount(summary) },
+          { label: "Asset purchases", value: assetPurchaseAmountOf(summary) },
+          { label: "Pandal estimated value", value: assetSummary.estimatedValue },
           { label: "To Permanent Fund", value: summary.transferredToPermanentFund },
           { label: "Permanent Fund", value: fund.total },
         ]}

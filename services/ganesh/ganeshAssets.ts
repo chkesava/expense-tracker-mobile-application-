@@ -45,6 +45,7 @@ export type CreatePandalAssetInput = {
   relatedExpenseId?: string;
   relatedExpenseFestivalId?: string;
   relatedContributionId?: string;
+  acquisitionCost?: number;
 };
 
 export type UpdatePandalAssetPatch = Partial<{
@@ -60,6 +61,7 @@ export type UpdatePandalAssetPatch = Partial<{
   relatedExpenseId: string;
   relatedExpenseFestivalId: string;
   relatedContributionId: string;
+  acquisitionCost: number;
 }>;
 
 function pathRef(db: Firestore, segments: string[]) {
@@ -119,12 +121,14 @@ function ownershipExtras(input: CreatePandalAssetInput | UpdatePandalAssetPatch)
   };
 }
 
-export async function createPandalAsset(
+export function appendPandalAssetCreate(
+  batch: WriteBatch,
   db: Firestore,
   actor: GaneshActor,
   pandalId: string,
+  id: string,
   input: CreatePandalAssetInput
-): Promise<string> {
+): void {
   const validated = validateAssetDraft({
     name: input.name,
     quantity: input.quantity,
@@ -133,27 +137,31 @@ export async function createPandalAsset(
   if (validated.quantity <= 0) {
     throw new Error("Quantity must be greater than 0.");
   }
-  const id = newId();
   const extras = ownershipExtras(input);
-  const payload = omitUndefined({
-    name: validated.name,
-    category: input.category,
-    quantity: validated.quantity,
-    unit: input.unit,
-    ownershipType: input.ownershipType,
-    estimatedValue: validated.estimatedValue,
-    condition: input.condition,
-    status: input.status ?? "available",
-    location: input.location?.trim() || undefined,
-    description: input.description?.trim() || undefined,
-    ...extras,
-    createdBy: actor.uid,
-    createdAt: serverTimestamp(),
-    updatedBy: actor.uid,
-    updatedAt: serverTimestamp(),
-  });
-  const batch = writeBatch(db);
-  batch.set(pathRef(db, [...pandalAssetsCol(pandalId), id]), payload);
+  batch.set(
+    pathRef(db, [...pandalAssetsCol(pandalId), id]),
+    omitUndefined({
+      name: validated.name,
+      category: input.category,
+      quantity: validated.quantity,
+      unit: input.unit,
+      ownershipType: input.ownershipType,
+      estimatedValue: validated.estimatedValue,
+      condition: input.condition,
+      status: input.status ?? "available",
+      location: input.location?.trim() || undefined,
+      description: input.description?.trim() || undefined,
+      acquisitionCost:
+        input.ownershipType === "purchased"
+          ? input.acquisitionCost ?? validated.estimatedValue
+          : undefined,
+      ...extras,
+      createdBy: actor.uid,
+      createdAt: serverTimestamp(),
+      updatedBy: actor.uid,
+      updatedAt: serverTimestamp(),
+    })
+  );
   assetAudit(batch, db, pandalId, {
     actorId: actor.uid,
     assetId: id,
@@ -163,10 +171,45 @@ export async function createPandalAsset(
       category: input.category,
       quantity: validated.quantity,
       ownershipType: input.ownershipType,
+      relatedExpenseId: extras.relatedExpenseId,
+      relatedContributionId: extras.relatedContributionId,
     },
   });
+}
+
+export async function createPandalAsset(
+  db: Firestore,
+  actor: GaneshActor,
+  pandalId: string,
+  input: CreatePandalAssetInput
+): Promise<string> {
+  const id = newId();
+  const batch = writeBatch(db);
+  appendPandalAssetCreate(batch, db, actor, pandalId, id, input);
   await commitWrite(() => batch.commit(), { label: "asset create" });
   return id;
+}
+
+export function appendAssetAcquisitionCost(
+  batch: WriteBatch,
+  db: Firestore,
+  actor: GaneshActor,
+  pandalId: string,
+  assetId: string,
+  acquisitionCost: number
+): void {
+  batch.update(pathRef(db, [...pandalAssetsCol(pandalId), assetId]), {
+    acquisitionCost,
+    updatedBy: actor.uid,
+    updatedAt: serverTimestamp(),
+  });
+  assetAudit(batch, db, pandalId, {
+    actorId: actor.uid,
+    assetId,
+    action: "edited",
+    newValue: { acquisitionCost },
+    reason: "Linked expense amount corrected",
+  });
 }
 
 export async function updatePandalAsset(

@@ -6,9 +6,17 @@ import { MetricGrid } from "@/components/ganesh/MetricGrid";
 import { useFestivals } from "@/hooks/useFestivals";
 import { useGaneshSummary } from "@/hooks/useGaneshSummary";
 import { useGaneshWrites } from "@/hooks/useGaneshWrites";
+import { usePandalAssets } from "@/hooks/usePandalAssets";
 import { usePandals } from "@/hooks/usePandals";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
-import { availableGodFund, totalCashIn, totalExpenses } from "@/shared/utils/ganeshMath";
+import { summarizeAssets } from "@/shared/utils/ganeshAssets";
+import {
+  assetPurchaseAmountOf,
+  availableGodFund,
+  regularExpenseAmount,
+  totalCashIn,
+  totalExpenses,
+} from "@/shared/utils/ganeshMath";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { useTheme } from "@/theme/ThemeProvider";
 
@@ -18,6 +26,8 @@ export default function FestivalReportScreen() {
   const { pandals } = usePandals();
   const { festivals } = useFestivals(pandalId);
   const { summary } = useGaneshSummary(pandalId, festivalId);
+  const { assets } = usePandalAssets(pandalId);
+  const assetSummary = summarizeAssets(assets);
   const writes = useGaneshWrites();
   const { can } = useGaneshPermissions();
   const pandal = pandals.find((item) => item.id === pandalId);
@@ -44,7 +54,10 @@ export default function FestivalReportScreen() {
           { label: "Personal money used", value: summary.personalMoneyUsed },
           { label: "Pending reimbursements", value: summary.pendingReimbursements },
           { label: "In-kind contributions", value: summary.inKindValue },
-          { label: "Total expenses", value: totalExpenses(summary) },
+          { label: "Festival expenses", value: totalExpenses(summary) },
+          { label: "Regular", value: regularExpenseAmount(summary) },
+          { label: "Asset purchases", value: assetPurchaseAmountOf(summary) },
+          { label: "Pandal estimated value", value: assetSummary.estimatedValue },
         ]}
       />
       {can("festival.update") ? (

@@ -87,6 +87,24 @@ function canCreateExpense(ctx: Ctx): boolean {
   return isActivePandalMember(ctx) && (ctx.festivalOpen ?? true) && canWriteExpenseOrContribution(ctx);
 }
 
+function canCreateRegularExpense(
+  ctx: Ctx,
+  input: { assetId?: string } = {}
+): boolean {
+  const hasAssetId = Boolean(input.assetId);
+  return canCreateExpense(ctx) && !hasAssetId;
+}
+
+function canCreateAssetPurchaseExpense(
+  ctx: Ctx,
+  input: { assetId?: string; assetExistsAfter?: boolean } = {}
+): boolean {
+  return canCreateExpense(ctx)
+    && canCreateAsset(ctx)
+    && Boolean(input.assetId)
+    && Boolean(input.assetExistsAfter);
+}
+
 function ownerIdGrantsRead(ownerId: string, uid: string, member: Member): boolean {
   return isActivePandalMember({ signedIn: true, member }) && member?.status === "active";
 }
@@ -261,6 +279,46 @@ describe("ganesh firestore rules contract", () => {
     expect(canReadOwnMemberDoc({ signedIn: true, uid: "u1", memberId: "u1" })).toBe(true);
     expect(canReadOwnMemberDoc({ signedIn: true, uid: "u1", memberId: "u2" })).toBe(false);
     expect(canReadOwnMemberDoc({ signedIn: false, uid: "u1", memberId: "u1" })).toBe(false);
+  });
+
+  it("requires assets.create plus the sibling asset for asset_purchase expenses", () => {
+    const expensesOnly: Ctx = {
+      signedIn: true,
+      member: { role: "member", status: "active", permissions: ["expenses.create"] },
+      festivalOpen: true,
+    };
+    const bothPerms: Ctx = {
+      signedIn: true,
+      member: {
+        role: "member",
+        status: "active",
+        permissions: ["expenses.create", "assets.create"],
+      },
+      festivalOpen: true,
+    };
+    expect(canCreateRegularExpense(member)).toBe(true);
+    expect(canCreateRegularExpense(member, { assetId: "chair-1" })).toBe(false);
+    expect(canCreateAssetPurchaseExpense(member, { assetId: "chair-1", assetExistsAfter: true })).toBe(
+      true
+    );
+    expect(canCreateAssetPurchaseExpense(viewer, { assetId: "chair-1", assetExistsAfter: true })).toBe(
+      false
+    );
+    expect(canCreateAssetPurchaseExpense(collector, { assetId: "chair-1", assetExistsAfter: true })).toBe(
+      false
+    );
+    expect(
+      canCreateAssetPurchaseExpense(expensesOnly, { assetId: "chair-1", assetExistsAfter: true })
+    ).toBe(false);
+    expect(canCreateRegularExpense(expensesOnly)).toBe(true);
+    expect(
+      canCreateAssetPurchaseExpense(bothPerms, { assetId: "chair-1", assetExistsAfter: true })
+    ).toBe(true);
+    expect(
+      canCreateAssetPurchaseExpense(bothPerms, { assetId: "chair-1", assetExistsAfter: false })
+    ).toBe(false);
+    expect(canCreateAsset(member)).toBe(true);
+    expect(canCreateAsset(viewer)).toBe(false);
   });
 
   it("lets denormalized assets.read through and falls back when permissions are missing", () => {

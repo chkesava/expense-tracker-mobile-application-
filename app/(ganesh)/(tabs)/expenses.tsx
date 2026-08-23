@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -17,13 +17,87 @@ import { usePandalMembers } from "@/hooks/usePandalMembers";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import { formatInr } from "@/shared/utils/ganeshMoney";
 import { memberDisplayName } from "@/shared/utils/ganeshIdentity";
-import { totalExpenses } from "@/shared/utils/ganeshMath";
+import { assetPurchaseAmountOf, regularExpenseAmount, totalExpenses } from "@/shared/utils/ganeshMath";
+import { isAssetPurchaseExpense } from "@/shared/utils/ganeshAssets";
 import type { GaneshExpense } from "@/shared/types/ganesh";
 import { ganeshStoredPath } from "@/services/ganesh/storage/storageService";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { useTheme } from "@/theme/ThemeProvider";
 
 const FILTERS = ["all", "god", "personal", "pending"] as const;
+
+const ExpenseCard = memo(function ExpenseCard({
+  id,
+  name,
+  amountLabel,
+  fundingLabel,
+  paidBy,
+  enteredBy,
+  at,
+  date,
+  isAsset,
+  receiptPath,
+  pandalId,
+  festivalId,
+  pending,
+  onOpen,
+}: {
+  id: string;
+  name: string;
+  amountLabel: string;
+  fundingLabel: string;
+  paidBy: string;
+  enteredBy: string;
+  at?: GaneshExpense["createdAt"];
+  date?: string;
+  isAsset: boolean;
+  receiptPath?: string;
+  pandalId?: string | null;
+  festivalId?: string | null;
+  pending?: boolean;
+  onOpen: (id: string) => void;
+}) {
+  const { theme } = useTheme();
+  return (
+    <Pressable
+      onPress={() => onOpen(id)}
+      style={{
+        backgroundColor: theme.colors.card,
+        borderRadius: 16,
+        padding: 14,
+        marginBottom: 10,
+        gap: 4,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+      }}
+    >
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+        <Text style={{ color: theme.colors.foreground, fontWeight: "700", flex: 1 }}>{name}</Text>
+        {isAsset ? (
+          <View
+            style={{
+              paddingHorizontal: 8,
+              paddingVertical: 3,
+              borderRadius: 999,
+              backgroundColor: theme.colors.muted,
+            }}
+          >
+            <Text style={{ color: theme.colors.mutedForeground, fontWeight: "700", fontSize: 12 }}>
+              Asset
+            </Text>
+          </View>
+        ) : null}
+      </View>
+      <Text style={{ color: theme.colors.primary, fontWeight: "800" }}>{amountLabel}</Text>
+      <Text style={{ color: theme.colors.mutedForeground }}>{fundingLabel}</Text>
+      <AccountabilityLine paidBy={paidBy} enteredBy={enteredBy} at={at} date={date} />
+      {pandalId && festivalId && receiptPath ? (
+        <GaneshSignedPreview path={receiptPath} pandalId={pandalId} festivalId={festivalId} />
+      ) : null}
+      <PendingHint pending={pending} />
+    </Pressable>
+  );
+});
 
 export default function GaneshExpensesScreen() {
   const { theme } = useTheme();
@@ -37,6 +111,13 @@ export default function GaneshExpensesScreen() {
   const { members } = usePandalMembers(pandalId);
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>("all");
   const { can } = useGaneshPermissions();
+
+  const onOpen = useCallback(
+    (id: string) => {
+      push(`/(ganesh)/expense/${id}` as never);
+    },
+    [push]
+  );
 
   const rows = useMemo(
     () =>
@@ -60,9 +141,9 @@ export default function GaneshExpensesScreen() {
       </View>
       <MetricGrid
         items={[
-          { label: "Total expenses", value: totalExpenses(summary) },
-          { label: "God Fund", value: summary.godFundExpenses },
-          { label: "Personal", value: summary.personalMoneyUsed },
+          { label: "Festival expenses", value: totalExpenses(summary) },
+          { label: "Regular", value: regularExpenseAmount(summary) },
+          { label: "Asset purchases", value: assetPurchaseAmountOf(summary) },
           { label: "Pending reimbursement", value: summary.pendingReimbursements },
         ]}
       />
@@ -95,41 +176,24 @@ export default function GaneshExpensesScreen() {
         keyExtractor={(item) => item.id}
         renderItem={({ item }: { item: GaneshExpense }) => {
           const receiptPath = ganeshStoredPath(item.receipt, item.receiptPath);
+          const sponsored = item.sponsoredAmount > 0 ? ` · Sponsored ${formatInr(item.sponsoredAmount)}` : "";
           return (
-          <View
-            style={{
-              backgroundColor: theme.colors.card,
-              borderRadius: 16,
-              padding: 14,
-              marginBottom: 10,
-              gap: 4,
-              borderWidth: 1,
-              borderColor: theme.colors.border,
-            }}
-          >
-            <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>{item.name}</Text>
-            <Text style={{ color: theme.colors.primary, fontWeight: "800" }}>
-              {formatInr(item.totalAmount)}
-            </Text>
-            <Text style={{ color: theme.colors.mutedForeground }}>
-              God Fund {formatInr(item.godFundAmount)} · Personal {formatInr(item.personalAmount)}
-              {item.sponsoredAmount > 0 ? ` · Sponsored ${formatInr(item.sponsoredAmount)}` : ""}
-            </Text>
-            <AccountabilityLine
+            <ExpenseCard
+              id={item.id}
+              name={item.name}
+              amountLabel={formatInr(item.totalAmount)}
+              fundingLabel={`God Fund ${formatInr(item.godFundAmount)} · Personal ${formatInr(item.personalAmount)}${sponsored}`}
               paidBy={memberDisplayName(members, item.paidByMemberId)}
               enteredBy={memberDisplayName(members, item.createdBy)}
               at={item.createdAt}
               date={item.date}
+              isAsset={isAssetPurchaseExpense(item)}
+              receiptPath={receiptPath}
+              pandalId={pandalId}
+              festivalId={festivalId}
+              pending={item.pendingWrite}
+              onOpen={onOpen}
             />
-            {pandalId && festivalId && receiptPath ? (
-              <GaneshSignedPreview
-                path={receiptPath}
-                pandalId={pandalId}
-                festivalId={festivalId}
-              />
-            ) : null}
-            <PendingHint pending={item.pendingWrite} />
-          </View>
           );
         }}
         ListEmptyComponent={

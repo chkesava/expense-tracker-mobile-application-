@@ -19,6 +19,7 @@ import { usePermanentFund } from "@/hooks/usePermanentFund";
 import { logError } from "@/lib/errors";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import { summarizeAssets } from "@/shared/utils/ganeshAssets";
+import { assetPurchaseAmountOf, regularExpenseAmount, totalExpenses } from "@/shared/utils/ganeshMath";
 import { formatInr } from "@/shared/utils/ganeshMoney";
 import { useTheme } from "@/theme/ThemeProvider";
 
@@ -146,6 +147,15 @@ export default function AdminDashboardScreen() {
           ]}
         />
 
+        <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>Festival spend</Text>
+        <MetricGrid
+          items={[
+            { label: "Festival expenses", value: totalExpenses(summary) },
+            { label: "Regular", value: regularExpenseAmount(summary) },
+            { label: "Asset purchases", value: assetPurchaseAmountOf(summary) },
+          ]}
+        />
+
         <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>Pandal assets</Text>
         <MetricGrid
           items={[
@@ -153,6 +163,7 @@ export default function AdminDashboardScreen() {
             { label: "Available", value: `${assetSummary.available}` },
             { label: "Damaged", value: `${assetSummary.damaged}` },
             { label: "Disposed", value: `${assetSummary.disposed}` },
+            { label: "Estimated value", value: assetSummary.estimatedValue },
           ]}
         />
         <AdminLinkRow

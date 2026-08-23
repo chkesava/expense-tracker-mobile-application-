@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 
+import { ChoiceChips } from "@/components/ganesh/ChoiceChips";
 import { GaneshImageUploader, type GaneshUploadStatus } from "@/components/ganesh/GaneshImageUploader";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { GaneshWriteLock } from "@/components/ganesh/GaneshWriteLock";
@@ -15,6 +16,11 @@ import { toast } from "@/lib/toast";
 import type { PreparedGaneshImage } from "@/services/ganesh/storage/storageTypes";
 import { todayDateInput } from "@/shared/utils/ganeshIdentity";
 import type { ContributionKind, ContributionStatus } from "@/shared/types/ganesh";
+import {
+  ASSET_CATEGORIES,
+  ASSET_CONDITIONS,
+  ASSET_UNITS,
+} from "@/shared/utils/ganeshAssets";
 import { useTheme } from "@/theme/ThemeProvider";
 
 const KINDS: ContributionKind[] = ["money", "item", "service", "sponsorship"];
@@ -36,11 +42,18 @@ export default function AddContributionScreen() {
   const [amount, setAmount] = useState("");
   const [estimatedValue, setEstimatedValue] = useState("");
   const [description, setDescription] = useState("");
+  const [addAsAsset, setAddAsAsset] = useState(false);
+  const [assetCategory, setAssetCategory] = useState<(typeof ASSET_CATEGORIES)[number]["id"]>("other");
+  const [assetUnit, setAssetUnit] = useState<(typeof ASSET_UNITS)[number]["id"]>("pieces");
+  const [assetQty, setAssetQty] = useState("1");
+  const [assetCondition, setAssetCondition] = useState<(typeof ASSET_CONDITIONS)[number]["id"]>("good");
+  const [assetLocation, setAssetLocation] = useState("");
   const [photo, setPhoto] = useState<PreparedGaneshImage | null>(null);
   const [photoStatus, setPhotoStatus] = useState<GaneshUploadStatus>("idle");
   const [savedId, setSavedId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const allowsPhoto = PHOTO_KINDS.includes(kind);
+  const canLinkAsset = can("assets.create") && (kind === "item" || kind === "sponsorship");
   const ledgerSaved = Boolean(savedId);
 
   const persistPhoto = async (contributionId: string, file: PreparedGaneshImage) => {
@@ -86,6 +99,9 @@ export default function AddContributionScreen() {
         disabled={ledgerSaved}
         onChange={(next) => {
           setKind(next);
+          if (next !== "item" && next !== "sponsorship") {
+            setAddAsAsset(false);
+          }
           if (!PHOTO_KINDS.includes(next)) {
             setPhoto(null);
             setPhotoStatus("idle");
@@ -148,6 +164,70 @@ export default function AddContributionScreen() {
         onChangeText={setDescription}
         editable={!ledgerSaved}
       />
+      {canLinkAsset ? (
+        <View style={{ gap: 12 }}>
+          <Pressable
+            disabled={ledgerSaved}
+            onPress={() => setAddAsAsset((prev) => !prev)}
+            style={{
+              paddingHorizontal: 10,
+              paddingVertical: 8,
+              borderRadius: 12,
+              backgroundColor: addAsAsset ? theme.colors.primary : theme.colors.muted,
+            }}
+          >
+            <Text
+              style={{
+                color: addAsAsset ? theme.colors.primaryForeground : theme.colors.foreground,
+                fontWeight: "700",
+              }}
+            >
+              Also add as Pandal asset
+            </Text>
+          </Pressable>
+          {addAsAsset ? (
+            <>
+              <Text style={{ color: theme.colors.mutedForeground }}>
+                Adds inventory only. This does not create an expense or change cash.
+              </Text>
+              <Input
+                label="Asset quantity"
+                value={assetQty}
+                onChangeText={setAssetQty}
+                keyboardType="number-pad"
+                editable={!ledgerSaved}
+              />
+              <ChoiceChips
+                label="Asset category"
+                value={assetCategory}
+                options={ASSET_CATEGORIES}
+                onChange={setAssetCategory}
+                disabled={ledgerSaved}
+              />
+              <ChoiceChips
+                label="Unit"
+                value={assetUnit}
+                options={ASSET_UNITS}
+                onChange={setAssetUnit}
+                disabled={ledgerSaved}
+              />
+              <ChoiceChips
+                label="Condition"
+                value={assetCondition}
+                options={ASSET_CONDITIONS}
+                onChange={setAssetCondition}
+                disabled={ledgerSaved}
+              />
+              <Input
+                label="Location (optional)"
+                value={assetLocation}
+                onChangeText={setAssetLocation}
+                editable={!ledgerSaved}
+              />
+            </>
+          ) : null}
+        </View>
+      ) : null}
       {allowsPhoto ? (
         <GaneshImageUploader
           title="Contribution photo"
@@ -178,6 +258,17 @@ export default function AddContributionScreen() {
         loading={busy}
         disabled={ledgerSaved}
         onPress={() => {
+          if (addAsAsset && canLinkAsset) {
+            const qty = Number(assetQty || quantity || 0);
+            if (!Number.isInteger(qty) || qty <= 0) {
+              toast.error("Asset quantity must be greater than 0.");
+              return;
+            }
+            if (!(itemName.trim() || contributorName.trim())) {
+              toast.error("Enter an item name to add as a Pandal asset.");
+              return;
+            }
+          }
           setBusy(true);
           writes
             .addContribution({
@@ -191,6 +282,18 @@ export default function AddContributionScreen() {
               description,
               date: todayDateInput(),
               status: kind === "money" ? "received" : status,
+              pandalAsset:
+                addAsAsset && canLinkAsset
+                  ? {
+                      name: itemName.trim() || contributorName.trim(),
+                      category: assetCategory,
+                      quantity: Number(assetQty || quantity || 0),
+                      unit: assetUnit,
+                      estimatedValue: Number(estimatedValue || 0),
+                      condition: assetCondition,
+                      location: assetLocation,
+                    }
+                  : undefined,
             })
             .then(async (id) => {
               setSavedId(id);
