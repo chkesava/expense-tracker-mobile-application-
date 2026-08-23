@@ -46,6 +46,8 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: "contributions.read", label: "View" },
       { key: "contributions.create", label: "Create" },
       { key: "contributions.update", label: "Update" },
+      { key: "contributions.receive", label: "Mark received" },
+      { key: "contributions.cancel", label: "Cancel" },
     ],
   },
   {
@@ -133,6 +135,8 @@ export const PERMISSION_DEPENDENCIES: Partial<Record<GaneshPermission, GaneshPer
   "expenses.void": ["expenses.read"],
   "contributions.create": ["contributions.read"],
   "contributions.update": ["contributions.read"],
+  "contributions.receive": ["contributions.read"],
+  "contributions.cancel": ["contributions.read"],
   "reimbursements.create": ["reimbursements.read"],
   "permanentFund.add": ["permanentFund.read"],
   "permanentFund.transfer": ["permanentFund.read"],

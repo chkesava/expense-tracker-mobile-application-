@@ -202,6 +202,15 @@ export default function AssetDetailScreen() {
           Linked to a festival expense
         </Text>
       ) : null}
+      {asset.relatedContributionId ? (
+        <Pressable
+          onPress={() => push(`/(ganesh)/contribution/${asset.relatedContributionId}` as never)}
+        >
+          <Text style={{ color: theme.colors.primary, fontWeight: "700" }}>
+            Related contribution
+          </Text>
+        </Pressable>
+      ) : null}
 
       {canEdit ? (
         <View style={{ gap: 16 }}>

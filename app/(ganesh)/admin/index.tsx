@@ -6,6 +6,7 @@ import { AdminLinkRow } from "@/components/ganesh/AdminLinkRow";
 import { AdminQueryState } from "@/components/ganesh/AdminQueryState";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { MetricGrid } from "@/components/ganesh/MetricGrid";
+import { useContributions } from "@/hooks/useContributions";
 import { useFestivals } from "@/hooks/useFestivals";
 import { useGaneshSummary } from "@/hooks/useGaneshSummary";
 import { useGaneshWrites } from "@/hooks/useGaneshWrites";
@@ -19,6 +20,7 @@ import { usePermanentFund } from "@/hooks/usePermanentFund";
 import { logError } from "@/lib/errors";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import { summarizeAssets } from "@/shared/utils/ganeshAssets";
+import { summarizeContributions } from "@/shared/utils/ganeshContributions";
 import { assetPurchaseAmountOf, regularExpenseAmount, totalExpenses } from "@/shared/utils/ganeshMath";
 import { formatInr } from "@/shared/utils/ganeshMoney";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -39,7 +41,9 @@ export default function AdminDashboardScreen() {
   const { assets } = usePandalAssets(pandalId);
   const writes = useGaneshWrites();
   const { summary } = useGaneshSummary(pandalId, festivalId);
+  const { contributions } = useContributions(pandalId, festivalId);
   const { households } = useHouseholds(pandalId, festivalId);
+  const contributionTotals = summarizeContributions(contributions);
   const assetSummary = summarizeAssets(assets);
   const pandal = pandals.find((item) => item.id === pandalId);
   const festival = festivals.find((item) => item.id === festivalId);
@@ -104,6 +108,30 @@ export default function AdminDashboardScreen() {
       title: `${pendingHouses} household${pendingHouses === 1 ? "" : "s"} still pending`,
       subtitle: "Chanda not collected yet.",
       href: "/(ganesh)/collections",
+      tone: "attention",
+    });
+  }
+  if (contributionTotals.promisedCount > 0) {
+    needs.push({
+      title: `${contributionTotals.promisedCount} contribution${contributionTotals.promisedCount === 1 ? "" : "s"} promised`,
+      subtitle: "Promised gifts are not cash until they are received.",
+      href: "/(ganesh)/contributions?status=promised",
+      tone: "attention",
+    });
+  }
+  if (contributionTotals.overdueCount > 0) {
+    needs.push({
+      title: `${contributionTotals.overdueCount} contribution${contributionTotals.overdueCount === 1 ? "" : "s"} overdue`,
+      subtitle: "Still promised after the expected date. They are not cancelled automatically.",
+      href: "/(ganesh)/contributions?status=overdue",
+      tone: "critical",
+    });
+  }
+  if (contributionTotals.promisedSponsorCount > 0) {
+    needs.push({
+      title: `${contributionTotals.promisedSponsorCount} promised sponsor${contributionTotals.promisedSponsorCount === 1 ? "" : "s"}`,
+      subtitle: "Sponsorships that have not been received yet.",
+      href: "/(ganesh)/contributions?status=promised&kind=sponsorship",
       tone: "attention",
     });
   }

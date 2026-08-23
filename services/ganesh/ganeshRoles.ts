@@ -22,6 +22,7 @@ import {
   ALL_GANESH_PERMISSIONS,
   ASSET_ROLE_DEFAULTS,
   BUILTIN_ROLE_IDS,
+  CONTRIBUTION_STATUS_ROLE_DEFAULTS,
   ROLE_PERMISSIONS,
   getEffectivePermissions,
   roleNameKey,
@@ -130,6 +131,19 @@ function hasAssetPermission(permissions: unknown): boolean {
   return Array.isArray(permissions) && permissions.some((item) => String(item).startsWith("assets."));
 }
 
+function hasContributionReceivePermission(permissions: unknown): boolean {
+  return Array.isArray(permissions) && permissions.includes("contributions.receive");
+}
+
+function builtinMissingPermissions(
+  roleId: (typeof BUILTIN_ROLE_IDS)[number],
+  currentPerms: GaneshPermission[]
+): GaneshPermission[] {
+  return [...ASSET_ROLE_DEFAULTS[roleId], ...CONTRIBUTION_STATUS_ROLE_DEFAULTS[roleId]].filter(
+    (perm) => !currentPerms.includes(perm)
+  );
+}
+
 export async function ensurePandalRoles(
   db: Firestore,
   actor: GaneshActor,
@@ -155,7 +169,7 @@ export async function ensurePandalRoles(
     const currentPerms = Array.isArray(data.permissions)
       ? (data.permissions as GaneshPermission[])
       : [];
-    const missing = ASSET_ROLE_DEFAULTS[roleId].filter((perm) => !currentPerms.includes(perm));
+    const missing = builtinMissingPermissions(roleId, currentPerms);
     if (missing.length === 0) continue;
     seedBatch.update(current.ref, {
       permissions: expandPermissions([...currentPerms, ...missing]),
@@ -189,7 +203,10 @@ export async function ensurePandalRoles(
       : assignedPatched || (roleIds.some((id) =>
           BUILTIN_ROLE_IDS.includes(id as (typeof BUILTIN_ROLE_IDS)[number])
         ) && !hasAssetPermission(data.permissions));
-    if (hasRoleIds && hasPermissions && !needsAssetBackfill) return;
+    const needsContributionBackfill = isAdmin
+      ? !hasContributionReceivePermission(data.permissions)
+      : roleIds.includes("treasurer") && !hasContributionReceivePermission(data.permissions);
+    if (hasRoleIds && hasPermissions && !needsAssetBackfill && !needsContributionBackfill) return;
     const permissions = permissionsForRoleIds(roleIds, roles, isAdmin, role);
     migrateBatch.update(memberSnap.ref, {
       roleIds,

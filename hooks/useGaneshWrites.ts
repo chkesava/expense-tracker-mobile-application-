@@ -206,20 +206,53 @@ export function useGaneshWrites() {
         photo
       );
     },
-    updateContributionStatus: (
+    receiveContribution: (
       contributionId: string,
-      status: Parameters<typeof writes.updateContributionStatus>[5]
+      input?: Parameters<typeof writes.receiveContribution>[5] & { kind?: string }
     ) => {
-      requirePerm("contributions.update");
+      requirePerm("contributions.receive");
       const ctx = requireFestival();
-      return run("Contribution updated", () =>
-        writes.updateContributionStatus(
+      writes.assertMoneyReceiveOnline(isOnline, input?.kind ?? "item");
+      const { kind: _kind, ...payload } = input ?? {};
+      return run("Marked received", () =>
+        writes.receiveContribution(
           ctx.db,
           ctx.actor,
           ctx.pandalId,
           ctx.festivalId,
           contributionId,
-          status
+          payload
+        )
+      );
+    },
+    cancelContribution: (contributionId: string, reason?: string) => {
+      requirePerm("contributions.cancel");
+      const ctx = requireFestival();
+      return run("Contribution cancelled", () =>
+        writes.cancelContribution(
+          ctx.db,
+          ctx.actor,
+          ctx.pandalId,
+          ctx.festivalId,
+          contributionId,
+          reason
+        )
+      );
+    },
+    updatePromisedContribution: (
+      contributionId: string,
+      input: Parameters<typeof writes.updatePromisedContribution>[5]
+    ) => {
+      requirePerm("contributions.update");
+      const ctx = requireFestival();
+      return run("Contribution saved", () =>
+        writes.updatePromisedContribution(
+          ctx.db,
+          ctx.actor,
+          ctx.pandalId,
+          ctx.festivalId,
+          contributionId,
+          input
         )
       );
     },

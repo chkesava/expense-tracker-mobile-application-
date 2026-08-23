@@ -55,6 +55,10 @@ import type {
   PermanentFundLocation,
   PandalJoinMode,
 } from "@/shared/types/ganesh";
+import {
+  assertCanCancelContribution,
+  assertCanReceiveContribution,
+} from "@/shared/utils/ganeshContributions";
 import { JOIN_APPROVE_ROLES, ALL_GANESH_PERMISSIONS, ROLE_PERMISSIONS } from "@/shared/utils/ganeshPermissions";
 import { expandPermissions } from "@/shared/utils/ganeshPermissionRegistry";
 import type { PandalMemberAuditAction } from "@/shared/types/ganesh";
@@ -70,6 +74,11 @@ import {
   transferFestivalToPermanent,
   transferPermanentToFestival,
 } from "@/services/ganesh/ganeshPermanentFund";
+
+export {
+  assertMoneyReceiveOnline,
+  MONEY_RECEIVE_OFFLINE_ERROR,
+} from "@/shared/utils/ganeshContributions";
 
 export type GaneshActor = {
   uid: string;
@@ -1053,12 +1062,17 @@ export async function addContribution(
     isCommitteeContribution?: boolean;
     description?: string;
     date: string;
+    expectedDate?: string;
     status?: ContributionStatus;
     pandalAsset?: AssetPurchaseDraft;
   }
 ): Promise<string> {
   const contributorName = input.contributorName.trim();
   if (!contributorName) throw new Error("Enter the contributor name.");
+  const status = input.status ?? (input.kind === "money" ? "received" : "promised");
+  if (input.pandalAsset && status !== "received") {
+    throw new Error("Add a Pandal asset only when the contribution is received.");
+  }
   if (input.pandalAsset && input.kind !== "item" && input.kind !== "sponsorship") {
     throw new Error("Only item or sponsorship contributions can be added as Pandal assets.");
   }
@@ -1072,6 +1086,7 @@ export async function addContribution(
     if (!valid.ok) throw new Error(valid.error);
   }
   const id = newId();
+  const assetId = input.pandalAsset ? newId() : undefined;
   const isCommittee = Boolean(input.isCommitteeContribution && input.contributorMemberId);
   const ledgerType =
     input.kind === "money"
@@ -1094,7 +1109,11 @@ export async function addContribution(
       isCommitteeContribution: isCommittee || undefined,
       description: input.description?.trim() || undefined,
       date: input.date,
-      status: input.status ?? (input.kind === "money" ? "received" : "promised"),
+      expectedDate: status === "promised" ? input.expectedDate?.trim() || undefined : undefined,
+      status,
+      receivedAt: status === "received" ? serverTimestamp() : undefined,
+      receivedBy: status === "received" ? actor.uid : undefined,
+      assetId,
       ledgerType,
       voided: false,
       createdBy: actor.uid,
@@ -1104,7 +1123,7 @@ export async function addContribution(
     })
   );
 
-  const received = (input.status ?? "received") === "received";
+  const received = status === "received";
   if (input.kind === "money" && received) {
     bumpSummary(batch, db, pandalId, festivalId, {
       committeeContributions: isCommittee ? amount : 0,
@@ -1140,8 +1159,8 @@ export async function addContribution(
     entityType: "contribution",
     entityId: id,
   });
-  if (input.pandalAsset) {
-    appendPandalAssetCreate(batch, db, actor, pandalId, newId(), {
+  if (input.pandalAsset && assetId) {
+    appendPandalAssetCreate(batch, db, actor, pandalId, assetId, {
       name: input.pandalAsset.name,
       category: input.pandalAsset.category,
       quantity: input.pandalAsset.quantity,
@@ -1183,59 +1202,194 @@ export async function attachContributionPhoto(
   await commitWrite(() => batch.commit(), { label: "contribution photo" });
 }
 
-export async function updateContributionStatus(
+async function requireOpenFestival(
+  db: Firestore,
+  pandalId: string,
+  festivalId: string
+): Promise<void> {
+  const festivalSnap = await getDoc(pathRef(db, festivalDoc(pandalId, festivalId)));
+  if (!festivalSnap.exists() || festivalSnap.data().status !== "open") {
+    throw new Error("This festival is closed.");
+  }
+}
+
+function bumpReceivedContribution(
+  batch: WriteBatch,
+  db: Firestore,
+  pandalId: string,
+  festivalId: string,
+  data: {
+    kind: string;
+    amount: number;
+    estimatedValue: number;
+    isCommittee: boolean;
+    contributorMemberId?: string;
+    contributorName?: string;
+  }
+) {
+  if (data.kind === "money") {
+    bumpSummary(batch, db, pandalId, festivalId, {
+      committeeContributions: data.isCommittee ? data.amount : 0,
+      otherCashContributions: data.isCommittee ? 0 : data.amount,
+    });
+    if (data.isCommittee && data.contributorMemberId) {
+      batch.set(
+        pathRef(db, [...festivalCol(pandalId, festivalId, "members"), data.contributorMemberId]),
+        {
+          userId: data.contributorMemberId,
+          displayName: data.contributorName,
+          contributionPaid: increment(data.amount),
+        },
+        { merge: true }
+      );
+    }
+    return;
+  }
+  bumpSummary(batch, db, pandalId, festivalId, {
+    inKindValue: data.kind === "sponsorship" ? 0 : data.estimatedValue,
+    sponsoredValue: data.kind === "sponsorship" ? data.estimatedValue : 0,
+  });
+}
+
+export async function receiveContribution(
   db: Firestore,
   actor: GaneshActor,
   pandalId: string,
   festivalId: string,
   contributionId: string,
-  status: ContributionStatus
+  input?: {
+    receivedNotes?: string;
+    paymentMethod?: PaymentMethod;
+    pandalAsset?: AssetPurchaseDraft;
+  }
 ): Promise<void> {
+  await requireOpenFestival(db, pandalId, festivalId);
   const ref = pathRef(db, [...festivalCol(pandalId, festivalId, "contributions"), contributionId]);
   const snap = await getDoc(ref);
   if (!snap.exists()) throw new Error("Contribution not found.");
   const prev = snap.data();
-  const prevStatus = String(prev.status);
-  if (prevStatus === status) return;
-  const batch = writeBatch(db);
-  batch.update(ref, {
-    status,
-    updatedBy: actor.uid,
-    updatedAt: serverTimestamp(),
-  });
-  const amount = Number(prev.amount ?? 0);
-  const estimatedValue = Number(prev.estimatedValue ?? 0);
+  assertCanReceiveContribution(prev);
   const kind = String(prev.kind);
-  const isCommittee = Boolean(prev.isCommitteeContribution);
-  const becameReceived = prevStatus !== "received" && status === "received";
-  const leftReceived = prevStatus === "received" && status !== "received";
-  const sign = becameReceived ? 1 : leftReceived ? -1 : 0;
-  if (sign !== 0 && kind === "money") {
-    bumpSummary(batch, db, pandalId, festivalId, {
-      committeeContributions: isCommittee ? amount * sign : 0,
-      otherCashContributions: isCommittee ? 0 : amount * sign,
-    });
-    if (isCommittee && prev.contributorMemberId) {
-      batch.set(
-        pathRef(db, [
-          ...festivalCol(pandalId, festivalId, "members"),
-          String(prev.contributorMemberId),
-        ]),
-        { contributionPaid: increment(amount * sign) },
-        { merge: true }
-      );
-    }
-  } else if (sign !== 0 && kind !== "money") {
-    bumpSummary(batch, db, pandalId, festivalId, {
-      inKindValue: kind === "sponsorship" ? 0 : estimatedValue * sign,
-      sponsoredValue: kind === "sponsorship" ? estimatedValue * sign : 0,
+  if (input?.pandalAsset && kind !== "item" && kind !== "sponsorship") {
+    throw new Error("Only item or sponsorship contributions can be added as Pandal assets.");
+  }
+  const assetId = input?.pandalAsset ? newId() : undefined;
+  const batch = writeBatch(db);
+  batch.update(
+    ref,
+    omitUndefined({
+      status: "received",
+      receivedAt: serverTimestamp(),
+      receivedBy: actor.uid,
+      receivedNotes: input?.receivedNotes?.trim() || undefined,
+      paymentMethod: kind === "money" ? input?.paymentMethod : undefined,
+      assetId: prev.assetId || assetId,
+      updatedBy: actor.uid,
+      updatedAt: serverTimestamp(),
+    })
+  );
+  bumpReceivedContribution(batch, db, pandalId, festivalId, {
+    kind,
+    amount: Number(prev.amount ?? 0),
+    estimatedValue: Number(prev.estimatedValue ?? 0),
+    isCommittee: Boolean(prev.isCommitteeContribution),
+    contributorMemberId: prev.contributorMemberId ? String(prev.contributorMemberId) : undefined,
+    contributorName: prev.contributorName ? String(prev.contributorName) : undefined,
+  });
+  if (input?.pandalAsset && assetId) {
+    appendPandalAssetCreate(batch, db, actor, pandalId, assetId, {
+      name: input.pandalAsset.name,
+      category: input.pandalAsset.category,
+      quantity: input.pandalAsset.quantity,
+      unit: input.pandalAsset.unit,
+      ownershipType: kind === "sponsorship" ? "sponsored" : "donated",
+      estimatedValue: input.pandalAsset.estimatedValue ?? Number(prev.estimatedValue ?? 0),
+      condition: input.pandalAsset.condition ?? "good",
+      location: input.pandalAsset.location,
+      description: input.pandalAsset.description ?? String(prev.description ?? ""),
+      sourceName: String(prev.contributorName ?? ""),
+      relatedContributionId: contributionId,
     });
   }
   audit(batch, db, pandalId, festivalId, actor.uid, "edited", "contribution", contributionId, {
-    oldValue: { status: prevStatus },
-    newValue: { status },
+    oldValue: { status: prev.status },
+    newValue: { status: "received" },
+    reason: input?.receivedNotes?.trim() || "Marked received",
   });
-  await commitWrite(() => batch.commit(), { label: "contribution status" });
+  await commitWrite(() => batch.commit(), { label: "receive contribution" });
+}
+
+export async function cancelContribution(
+  db: Firestore,
+  actor: GaneshActor,
+  pandalId: string,
+  festivalId: string,
+  contributionId: string,
+  reason?: string
+): Promise<void> {
+  await requireOpenFestival(db, pandalId, festivalId);
+  const ref = pathRef(db, [...festivalCol(pandalId, festivalId, "contributions"), contributionId]);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) throw new Error("Contribution not found.");
+  const prev = snap.data();
+  assertCanCancelContribution(prev);
+  const batch = writeBatch(db);
+  batch.update(
+    ref,
+    omitUndefined({
+      status: "cancelled",
+      cancelReason: reason?.trim() || undefined,
+      updatedBy: actor.uid,
+      updatedAt: serverTimestamp(),
+    })
+  );
+  audit(batch, db, pandalId, festivalId, actor.uid, "edited", "contribution", contributionId, {
+    oldValue: { status: prev.status },
+    newValue: { status: "cancelled" },
+    reason: reason?.trim() || "Cancelled",
+  });
+  await commitWrite(() => batch.commit(), { label: "cancel contribution" });
+}
+
+export async function updatePromisedContribution(
+  db: Firestore,
+  actor: GaneshActor,
+  pandalId: string,
+  festivalId: string,
+  contributionId: string,
+  input: {
+    expectedDate?: string;
+    description?: string;
+    mobile?: string;
+  }
+): Promise<void> {
+  await requireOpenFestival(db, pandalId, festivalId);
+  const ref = pathRef(db, [...festivalCol(pandalId, festivalId, "contributions"), contributionId]);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) throw new Error("Contribution not found.");
+  const prev = snap.data();
+  if (prev.voided) throw new Error("This contribution is already voided.");
+  if (prev.status !== "promised") throw new Error("Only a promised contribution can be edited.");
+  const batch = writeBatch(db);
+  batch.update(
+    ref,
+    omitUndefined({
+      expectedDate: input.expectedDate?.trim() || undefined,
+      description: input.description?.trim() || undefined,
+      mobile: input.mobile?.trim() || undefined,
+      updatedBy: actor.uid,
+      updatedAt: serverTimestamp(),
+    })
+  );
+  audit(batch, db, pandalId, festivalId, actor.uid, "edited", "contribution", contributionId, {
+    oldValue: {
+      expectedDate: prev.expectedDate,
+      description: prev.description,
+      mobile: prev.mobile,
+    },
+    newValue: input,
+  });
+  await commitWrite(() => batch.commit(), { label: "contribution" });
 }
 
 export async function addExpense(

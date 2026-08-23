@@ -23,8 +23,17 @@ import {
 } from "@/shared/utils/ganeshAssets";
 import { useTheme } from "@/theme/ThemeProvider";
 
-const KINDS: ContributionKind[] = ["money", "item", "service", "sponsorship"];
-const STATUSES: ContributionStatus[] = ["promised", "received", "cancelled"];
+const KIND_OPTIONS: Array<{ id: ContributionKind; label: string }> = [
+  { id: "money", label: "Money" },
+  { id: "item", label: "Item" },
+  { id: "service", label: "Service" },
+  { id: "sponsorship", label: "Sponsorship" },
+];
+const STATUS_OPTIONS: Array<{ id: ContributionStatus; label: string }> = [
+  { id: "promised", label: "Promised" },
+  { id: "received", label: "Received" },
+  { id: "cancelled", label: "Cancelled" },
+];
 const PHOTO_KINDS: ContributionKind[] = ["item", "service", "sponsorship"];
 
 export default function AddContributionScreen() {
@@ -34,7 +43,7 @@ export default function AddContributionScreen() {
   const { can } = useGaneshPermissions();
   const { isOnline, uploadContributionPhoto } = useGaneshStorage();
   const [kind, setKind] = useState<ContributionKind>("item");
-  const [status, setStatus] = useState<ContributionStatus>("received");
+  const [status, setStatus] = useState<ContributionStatus>("promised");
   const [contributorName, setContributorName] = useState("");
   const [mobile, setMobile] = useState("");
   const [itemName, setItemName] = useState("");
@@ -42,6 +51,7 @@ export default function AddContributionScreen() {
   const [amount, setAmount] = useState("");
   const [estimatedValue, setEstimatedValue] = useState("");
   const [description, setDescription] = useState("");
+  const [expectedDate, setExpectedDate] = useState(todayDateInput());
   const [addAsAsset, setAddAsAsset] = useState(false);
   const [assetCategory, setAssetCategory] = useState<(typeof ASSET_CATEGORIES)[number]["id"]>("other");
   const [assetUnit, setAssetUnit] = useState<(typeof ASSET_UNITS)[number]["id"]>("pieces");
@@ -53,7 +63,10 @@ export default function AddContributionScreen() {
   const [savedId, setSavedId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const allowsPhoto = PHOTO_KINDS.includes(kind);
-  const canLinkAsset = can("assets.create") && (kind === "item" || kind === "sponsorship");
+  const canLinkAsset =
+    can("assets.create") &&
+    status === "received" &&
+    (kind === "item" || kind === "sponsorship");
   const ledgerSaved = Boolean(savedId);
 
   const persistPhoto = async (contributionId: string, file: PreparedGaneshImage) => {
@@ -93,9 +106,14 @@ export default function AddContributionScreen() {
       <Text style={{ color: theme.colors.mutedForeground }}>
         Contributor is who gave the item or money. You are only recording it.
       </Text>
-      <Chip
+      <Text style={{ color: theme.colors.mutedForeground }}>
+        A promised contribution does not change festival cash. Totals update only when it is
+        received.
+      </Text>
+      <ChoiceChips
+        label="Type"
         value={kind}
-        options={KINDS}
+        options={KIND_OPTIONS}
         disabled={ledgerSaved}
         onChange={(next) => {
           setKind(next);
@@ -108,9 +126,16 @@ export default function AddContributionScreen() {
           }
         }}
       />
-      {kind !== "money" ? (
-        <Chip value={status} options={STATUSES} disabled={ledgerSaved} onChange={setStatus} />
-      ) : null}
+      <ChoiceChips
+        label="Status"
+        value={status}
+        options={STATUS_OPTIONS}
+        disabled={ledgerSaved}
+        onChange={(next) => {
+          setStatus(next);
+          if (next !== "received") setAddAsAsset(false);
+        }}
+      />
       <Input
         label="Contributor"
         value={contributorName}
@@ -125,7 +150,15 @@ export default function AddContributionScreen() {
         keyboardType="phone-pad"
         editable={!ledgerSaved}
       />
-      {kind !== "money" ? (
+      {kind === "money" ? (
+        <Input
+          label="Amount"
+          value={amount}
+          onChangeText={setAmount}
+          keyboardType="numeric"
+          editable={!ledgerSaved}
+        />
+      ) : (
         <>
           <Input
             label="Item / service"
@@ -149,15 +182,16 @@ export default function AddContributionScreen() {
             editable={!ledgerSaved}
           />
         </>
-      ) : (
+      )}
+      {status === "promised" ? (
         <Input
-          label="Amount"
-          value={amount}
-          onChangeText={setAmount}
-          keyboardType="numeric"
+          label="Expected date"
+          value={expectedDate}
+          onChangeText={setExpectedDate}
+          placeholder="YYYY-MM-DD"
           editable={!ledgerSaved}
         />
-      )}
+      ) : null}
       <Input
         label="Description (optional)"
         value={description}
@@ -281,7 +315,8 @@ export default function AddContributionScreen() {
               estimatedValue: Number(estimatedValue || 0),
               description,
               date: todayDateInput(),
-              status: kind === "money" ? "received" : status,
+              expectedDate: status === "promised" ? expectedDate : undefined,
+              status,
               pandalAsset:
                 addAsAsset && canLinkAsset
                   ? {
@@ -314,46 +349,5 @@ export default function AddContributionScreen() {
         Save contribution
       </Button>
     </GaneshScreen>
-  );
-}
-
-function Chip<T extends string>({
-  value,
-  options,
-  onChange,
-  disabled,
-}: {
-  value: T;
-  options: T[];
-  onChange: (value: T) => void;
-  disabled?: boolean;
-}) {
-  const { theme } = useTheme();
-  return (
-    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-      {options.map((option) => (
-        <Pressable
-          key={option}
-          disabled={disabled}
-          onPress={() => onChange(option)}
-          style={{
-            paddingHorizontal: 10,
-            paddingVertical: 6,
-            borderRadius: 999,
-            backgroundColor: value === option ? theme.colors.primary : theme.colors.muted,
-          }}
-        >
-          <Text
-            style={{
-              color: value === option ? theme.colors.primaryForeground : theme.colors.foreground,
-              fontWeight: "700",
-              textTransform: "capitalize",
-            }}
-          >
-            {option}
-          </Text>
-        </Pressable>
-      ))}
-    </View>
   );
 }

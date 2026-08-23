@@ -382,7 +382,14 @@ export interface GaneshContribution extends GaneshAuditFields, GaneshVoidFields 
   isCommitteeContribution?: boolean;
   description?: string;
   date: string;
+  expectedDate?: string;
   status: ContributionStatus;
+  receivedAt?: FirestoreTime;
+  receivedBy?: string;
+  receivedNotes?: string;
+  paymentMethod?: PaymentMethod;
+  cancelReason?: string;
+  assetId?: string;
   photoPath?: string;
   photo?: GaneshFileMeta;
   ledgerType?: "COMMITTEE_CONTRIBUTION" | "OTHER_DONATION";

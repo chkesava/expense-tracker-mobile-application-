@@ -20,6 +20,8 @@ describe("ganeshPermissions", () => {
     expect(can("treasurer", "permanentFund.read")).toBe(true);
     expect(can("treasurer", "assets.update")).toBe(true);
     expect(can("treasurer", "assets.dispose")).toBe(false);
+    expect(can("treasurer", "contributions.receive")).toBe(true);
+    expect(can("treasurer", "contributions.cancel")).toBe(true);
   });
 
   it("lets collectors collect and nothing else financial", () => {
@@ -46,6 +48,8 @@ describe("ganeshPermissions", () => {
     expect(can("member", "assets.create")).toBe(true);
     expect(can("member", "assets.update")).toBe(false);
     expect(can("member", "assets.dispose")).toBe(false);
+    expect(can("member", "contributions.receive")).toBe(false);
+    expect(can("member", "contributions.cancel")).toBe(false);
   });
 
   it("gives admin every permission and labels the role for UI", () => {

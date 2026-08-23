@@ -295,6 +295,24 @@ service cloud.firestore {
         );
     }
 
+    function canReceiveContributionOf(pandalId) {
+      return hasPermOf(pandalId, 'contributions.receive')
+        || (
+          isActivePandalMemberOf(pandalId)
+          && !hasPermissionsField(pandalId)
+          && ganeshRoleOf(pandalId) in ['admin', 'treasurer']
+        );
+    }
+
+    function canCancelContributionOf(pandalId) {
+      return hasPermOf(pandalId, 'contributions.cancel')
+        || (
+          isActivePandalMemberOf(pandalId)
+          && !hasPermissionsField(pandalId)
+          && ganeshRoleOf(pandalId) in ['admin', 'treasurer']
+        );
+    }
+
     function canWriteReimbursementOf(pandalId) {
       return hasPermOf(pandalId, 'reimbursements.create')
         || (
@@ -663,6 +681,27 @@ service cloud.firestore {
             );
           }
 
+          function contributionStatusChanged() {
+            return subcol == 'contributions'
+              && resource.data.status != request.resource.data.status;
+          }
+
+          function contributionUpdateAllowed() {
+            return subcol != 'contributions' || (
+              !contributionStatusChanged()
+              || (
+                festivalOpen()
+                && resource.data.status == 'promised'
+                && (
+                  (request.resource.data.status == 'received'
+                    && canReceiveContributionOf(pandalId))
+                  || (request.resource.data.status == 'cancelled'
+                    && canCancelContributionOf(pandalId))
+                )
+              )
+            );
+          }
+
           // Festival auditLogs stay writable as ledger side-effects, but only
           // admin/treasurer may read them. Nested matches OR together, so the
           // wildcard read must exclude this subcollection.
@@ -676,7 +715,10 @@ service cloud.firestore {
               || ganeshIdentityCreate()
             );
           allow update: if isActivePandalMember()
-            && canWriteFestivalSubcol()
+            && (
+              (subcol == 'contributions' && contributionStatusChanged() && contributionUpdateAllowed())
+              || (canWriteFestivalSubcol() && contributionUpdateAllowed())
+            )
             && (
               (festivalOpen() && (
                 !resource.data.keys().hasAny(['createdBy'])

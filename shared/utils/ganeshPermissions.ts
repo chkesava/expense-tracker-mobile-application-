@@ -13,6 +13,8 @@ export type GaneshPermission =
   | "contributions.read"
   | "contributions.create"
   | "contributions.update"
+  | "contributions.receive"
+  | "contributions.cancel"
   | "reimbursements.read"
   | "reimbursements.create"
   | "members.read"
@@ -54,6 +56,8 @@ export const ALL_GANESH_PERMISSIONS: GaneshPermission[] = [
   "contributions.read",
   "contributions.create",
   "contributions.update",
+  "contributions.receive",
+  "contributions.cancel",
   "reimbursements.read",
   "reimbursements.create",
   "members.read",
@@ -110,6 +114,8 @@ const MEMBER_WRITES: GaneshPermission[] = [
 const TREASURER_PERMISSIONS: GaneshPermission[] = [
   ...MEMBER_WRITES,
   "expenses.void",
+  "contributions.receive",
+  "contributions.cancel",
   "reimbursements.create",
   "festival.update",
   "festival.close",
@@ -180,6 +186,17 @@ export const ASSET_ROLE_DEFAULTS: Record<(typeof BUILTIN_ROLE_IDS)[number], read
   member: ["assets.read", "assets.create"],
   collector: ["assets.read"],
   viewer: ["assets.read"],
+};
+
+/** Default receive/cancel keys unioned onto existing builtin role docs. */
+export const CONTRIBUTION_STATUS_ROLE_DEFAULTS: Record<
+  (typeof BUILTIN_ROLE_IDS)[number],
+  readonly GaneshPermission[]
+> = {
+  treasurer: ["contributions.receive", "contributions.cancel"],
+  member: [],
+  collector: [],
+  viewer: [],
 };
 
 export function isGaneshAdmin(role: GaneshRole | undefined): boolean {

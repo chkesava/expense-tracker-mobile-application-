@@ -3,6 +3,7 @@ import { Text } from "react-native";
 import { Button } from "@/components/ui/Button";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { MetricGrid } from "@/components/ganesh/MetricGrid";
+import { useContributions } from "@/hooks/useContributions";
 import { useFestivals } from "@/hooks/useFestivals";
 import { useGaneshSummary } from "@/hooks/useGaneshSummary";
 import { useGaneshWrites } from "@/hooks/useGaneshWrites";
@@ -10,6 +11,7 @@ import { usePandalAssets } from "@/hooks/usePandalAssets";
 import { usePandals } from "@/hooks/usePandals";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import { summarizeAssets } from "@/shared/utils/ganeshAssets";
+import { summarizeContributions } from "@/shared/utils/ganeshContributions";
 import {
   assetPurchaseAmountOf,
   availableGodFund,
@@ -26,6 +28,8 @@ export default function FestivalReportScreen() {
   const { pandals } = usePandals();
   const { festivals } = useFestivals(pandalId);
   const { summary } = useGaneshSummary(pandalId, festivalId);
+  const { contributions } = useContributions(pandalId, festivalId);
+  const contributionTotals = summarizeContributions(contributions);
   const { assets } = usePandalAssets(pandalId);
   const assetSummary = summarizeAssets(assets);
   const writes = useGaneshWrites();
@@ -53,11 +57,25 @@ export default function FestivalReportScreen() {
           { label: "Closing cash / God Fund", value: availableGodFund(summary) },
           { label: "Personal money used", value: summary.personalMoneyUsed },
           { label: "Pending reimbursements", value: summary.pendingReimbursements },
-          { label: "In-kind contributions", value: summary.inKindValue },
           { label: "Festival expenses", value: totalExpenses(summary) },
           { label: "Regular", value: regularExpenseAmount(summary) },
           { label: "Asset purchases", value: assetPurchaseAmountOf(summary) },
           { label: "Pandal estimated value", value: assetSummary.estimatedValue },
+        ]}
+      />
+      <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>
+        Promised vs received
+      </Text>
+      <Text style={{ color: theme.colors.mutedForeground }}>
+        Promised and cancelled amounts are not cash and are not part of Closing / God Fund.
+      </Text>
+      <MetricGrid
+        items={[
+          { label: "Cash received", value: contributionTotals.cashReceived },
+          { label: "Promised cash", value: contributionTotals.promisedCash },
+          { label: "In-kind received", value: contributionTotals.inKindReceived },
+          { label: "Promised in-kind", value: contributionTotals.promisedInKind },
+          { label: "Cancelled", value: contributionTotals.cancelledValue },
         ]}
       />
       {can("festival.update") ? (

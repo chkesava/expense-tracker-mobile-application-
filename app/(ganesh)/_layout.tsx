@@ -61,6 +61,7 @@ function GaneshStack() {
       <Stack.Screen name="add-expense" options={{ title: "Add expense" }} />
       <Stack.Screen name="expense/[id]" options={{ title: "Expense" }} />
       <Stack.Screen name="add-contribution" options={{ title: "Add contribution" }} />
+      <Stack.Screen name="contribution/[id]" options={{ title: "Contribution" }} />
       <Stack.Screen name="add-opening-fund" options={{ title: "Opening fund" }} />
       <Stack.Screen name="add-member-payment" options={{ title: "Member payment" }} />
       <Stack.Screen name="add-reimbursement" options={{ title: "Reimburse" }} />

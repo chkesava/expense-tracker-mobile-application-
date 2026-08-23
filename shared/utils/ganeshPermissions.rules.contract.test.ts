@@ -159,6 +159,8 @@ describe("ganesh firestore rules contract", () => {
     expect(roles.filter((role) => can(role, "audit.read"))).toEqual(RULE_TREASURER_WRITE_ROLES);
     expect(roles.filter((role) => can(role, "assets.create"))).toEqual(RULE_ASSET_CREATE_ROLES);
     expect(roles.filter((role) => can(role, "assets.update"))).toEqual(RULE_ASSET_UPDATE_ROLES);
+    expect(roles.filter((role) => can(role, "contributions.receive"))).toEqual(RULE_TREASURER_WRITE_ROLES);
+    expect(roles.filter((role) => can(role, "contributions.cancel"))).toEqual(RULE_TREASURER_WRITE_ROLES);
   });
 
   it("does not grant ledger access from ownerId alone", () => {
@@ -360,6 +362,35 @@ describe("ganesh firestore rules contract", () => {
     ).toBe(false);
     expect(canManageMembers(member)).toBe(false);
   });
+
+  it("lets fallback treasurer and denormalized receive mark promised as received", () => {
+    const denormalizedReceive: Ctx = {
+      signedIn: true,
+      member: { role: "member", status: "active", permissions: ["contributions.receive"] },
+      festivalOpen: true,
+    };
+    expect(canUpdateContributionStatus(treasurer, "promised", "received")).toBe(true);
+    expect(canUpdateContributionStatus(denormalizedReceive, "promised", "received")).toBe(true);
+    expect(canUpdateContributionStatus(member, "promised", "received")).toBe(false);
+    expect(canUpdateContributionStatus({ ...treasurer, festivalOpen: false }, "promised", "received")).toBe(
+      false
+    );
+  });
+
+  it("does not let expenses.create alone mark a contribution received", () => {
+    const expensesOnly: Ctx = {
+      signedIn: true,
+      member: { role: "member", status: "active", permissions: ["expenses.create"] },
+      festivalOpen: true,
+    };
+    expect(canWriteExpenseOrContribution(expensesOnly)).toBe(true);
+    expect(canUpdateContributionStatus(expensesOnly, "promised", "received")).toBe(false);
+    expect(canUpdateContributionStatus(expensesOnly, "promised", "promised")).toBe(true);
+    expect(canUpdateContributionStatus(member, "promised", "cancelled")).toBe(false);
+    expect(canUpdateContributionStatus(treasurer, "promised", "cancelled")).toBe(true);
+    expect(canUpdateContributionStatus(treasurer, "received", "cancelled")).toBe(false);
+    expect(canUpdateContributionStatus(treasurer, "received", "promised")).toBe(false);
+  });
 });
 
 function canReadOwnMemberDoc(params: { signedIn: boolean; uid: string; memberId: string }): boolean {
@@ -388,4 +419,51 @@ function canWriteOwnJoinRequest(params: {
   nextStatus: "pending" | "approved" | "rejected";
 }): boolean {
   return params.signedIn && params.requestUserId === params.uid && params.nextStatus === "pending";
+}
+
+function canReceiveContribution(ctx: Ctx): boolean {
+  return hasPerm(ctx, "contributions.receive")
+    || (
+      isActivePandalMember(ctx)
+      && !hasPermissionsField(ctx)
+      && RULE_TREASURER_WRITE_ROLES.includes(roleOf(ctx)!)
+    );
+}
+
+function canCancelContribution(ctx: Ctx): boolean {
+  return hasPerm(ctx, "contributions.cancel")
+    || (
+      isActivePandalMember(ctx)
+      && !hasPermissionsField(ctx)
+      && RULE_TREASURER_WRITE_ROLES.includes(roleOf(ctx)!)
+    );
+}
+
+function contributionUpdateAllowed(
+  ctx: Ctx,
+  oldStatus: string,
+  newStatus: string
+): boolean {
+  if (oldStatus === newStatus) return true;
+  return Boolean(ctx.festivalOpen)
+    && oldStatus === "promised"
+    && (
+      (newStatus === "received" && canReceiveContribution(ctx))
+      || (newStatus === "cancelled" && canCancelContribution(ctx))
+    );
+}
+
+function canUpdateContributionStatus(
+  ctx: Ctx,
+  oldStatus: string,
+  newStatus: string
+): boolean {
+  const statusChanged = oldStatus !== newStatus;
+  const updateAllowed = contributionUpdateAllowed(ctx, oldStatus, newStatus);
+  return isActivePandalMember(ctx)
+    && (
+      (statusChanged && updateAllowed)
+      || (canWriteExpenseOrContribution(ctx) && updateAllowed)
+    )
+    && (Boolean(ctx.festivalOpen) || canCloseOrUpdateFestival(ctx));
 }
