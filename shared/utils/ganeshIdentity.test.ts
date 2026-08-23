@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { indianPhoneToE164, memberDisplayName, normalizePandalCode } from "./ganeshIdentity";
+import {
+  formatPandalCode,
+  indianPhoneToE164,
+  memberDisplayName,
+  normalizePandalCode,
+} from "./ganeshIdentity";
 
 describe("ganeshIdentity", () => {
   it("resolves a member uid to their display name", () => {
@@ -23,6 +28,11 @@ describe("ganeshIdentity", () => {
 
   it("normalizes pandal codes", () => {
     expect(normalizePandalCode(" gnsh26 ")).toBe("GNSH26");
+    expect(normalizePandalCode("GNSH-7K2P")).toBe("GNSH7K2P");
+  });
+
+  it("formats stored codes for display", () => {
+    expect(formatPandalCode("GNSH7K2P")).toBe("GNSH-7K2P");
   });
 
   it("formats Indian mobile numbers to E.164", () => {

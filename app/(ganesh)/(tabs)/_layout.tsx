@@ -28,7 +28,8 @@ export default function GaneshTabsLayout() {
     );
   }
 
-  if (!pandalId || !festivalId || pandals.length === 0) {
+  const hasActivePandal = Boolean(pandalId && pandals.some((item) => item.id === pandalId));
+  if (!pandalId || !festivalId || pandals.length === 0 || !hasActivePandal) {
     return <Redirect href={"/(ganesh)/setup" as never} />;
   }
 

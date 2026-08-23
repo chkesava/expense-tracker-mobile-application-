@@ -17,6 +17,7 @@ import { formatInr } from "@/shared/utils/ganeshMoney";
 import { memberDisplayName } from "@/shared/utils/ganeshIdentity";
 import { totalExpenses } from "@/shared/utils/ganeshMath";
 import type { GaneshExpense } from "@/shared/types/ganesh";
+import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { useTheme } from "@/theme/ThemeProvider";
 
 const FILTERS = ["all", "god", "personal", "pending"] as const;
@@ -31,6 +32,7 @@ export default function GaneshExpensesScreen() {
   const { expenses } = useGaneshExpenses(pandalId, festivalId);
   const { members } = usePandalMembers(pandalId);
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>("all");
+  const { can } = useGaneshPermissions();
 
   const rows = useMemo(
     () =>
@@ -120,7 +122,7 @@ export default function GaneshExpensesScreen() {
           <EmptyState title="No expenses yet" description="Record God Fund, personal, or split-funded spends." />
         }
       />
-      {festival?.status === "open" ? (
+      {festival?.status === "open" && can("expenses.create") ? (
         <AddFab
           onPress={() => push("/(ganesh)/add-expense" as never)}
           accessibilityLabel="Add expense"

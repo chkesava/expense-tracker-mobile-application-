@@ -17,13 +17,12 @@ import { usePermanentFund } from "@/hooks/usePermanentFund";
 import { usePermanentFundTransactions } from "@/hooks/usePermanentFundTransactions";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
-import { useAuth } from "@/providers/AuthProvider";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import { useNetwork } from "@/providers/NetworkProvider";
 import type { PermanentFundLocation, PermanentFundTransaction, PermanentFundTxType } from "@/shared/types/ganesh";
 import { formatGaneshWhen, memberDisplayName } from "@/shared/utils/ganeshIdentity";
+import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import {
-  canManagePandal,
   festivalCashSpent,
   festivalCollectedCash,
 } from "@/shared/utils/ganeshMath";
@@ -41,7 +40,6 @@ const TX_LABELS: Record<PermanentFundTxType, string> = {
 
 export default function PermanentFundScreen() {
   const { theme } = useTheme();
-  const { realUser } = useAuth();
   const { isOnline } = useNetwork();
   const { pandalId, festivalId } = useGaneshSession();
   const { fund } = usePermanentFund(pandalId);
@@ -53,8 +51,8 @@ export default function PermanentFundScreen() {
   );
   const { members } = usePandalMembers(pandalId);
   const writes = useGaneshWrites();
-  const me = members.find((member) => member.userId === realUser?.uid);
-  const manager = canManagePandal(me?.role);
+  const { can } = useGaneshPermissions();
+  const canTransfer = can("permanentFund.transfer");
   const openFestivals = festivals.filter((festival) => festival.status === "open");
 
   return (
@@ -112,7 +110,7 @@ export default function PermanentFundScreen() {
                 );
               })
             )}
-            {manager ? (
+            {canTransfer ? (
               <ManagerFundActions
                 fundAvailable={fund.total}
                 openFestivalId={openFestivals[0]?.id ?? festivalId}
@@ -129,7 +127,7 @@ export default function PermanentFundScreen() {
               />
             ) : (
               <Text style={{ color: theme.colors.mutedForeground }}>
-                Members can view this fund. Only an admin or treasurer can transfer money.
+                Members can view this fund. Only a Pandal Admin can transfer money.
               </Text>
             )}
             <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>History</Text>

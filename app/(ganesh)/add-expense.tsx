@@ -4,6 +4,8 @@ import { useRouter } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
+import { GaneshWriteLock } from "@/components/ganesh/GaneshWriteLock";
+import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useFestivals } from "@/hooks/useFestivals";
@@ -29,6 +31,7 @@ export default function AddExpenseScreen() {
   const { categories } = useGaneshCategories(pandalId, festivalId);
   const { members } = usePandalMembers(pandalId);
   const writes = useGaneshWrites();
+  const { can } = useGaneshPermissions();
   const [name, setName] = useState("");
   const [total, setTotal] = useState("");
   const [godFund, setGodFund] = useState("");
@@ -55,6 +58,10 @@ export default function AddExpenseScreen() {
       sponsoredAmount: 0,
     };
   };
+
+  if (!can("expenses.create")) {
+    return <GaneshWriteLock message="Your role cannot add expenses." />;
+  }
 
   return (
     <GaneshScreen>

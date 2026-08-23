@@ -2,12 +2,20 @@ import type { PandalMember } from "@/shared/types/ganesh";
 
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
-export function generatePandalCode(length = 6): string {
-  let code = "";
+export function generatePandalCode(length = 4): string {
+  let suffix = "";
   for (let i = 0; i < length; i += 1) {
-    code += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)];
+    suffix += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)];
   }
-  return code;
+  return `GNSH${suffix}`;
+}
+
+export function formatPandalCode(code: string): string {
+  const normalized = normalizePandalCode(code);
+  if (normalized.startsWith("GNSH") && normalized.length > 4) {
+    return `GNSH-${normalized.slice(4)}`;
+  }
+  return normalized;
 }
 
 export function normalizePandalCode(value: string): string {

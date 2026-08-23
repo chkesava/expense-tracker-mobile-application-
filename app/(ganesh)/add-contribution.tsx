@@ -3,6 +3,8 @@ import { Pressable, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
+import { GaneshWriteLock } from "@/components/ganesh/GaneshWriteLock";
+import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useGaneshWrites } from "@/hooks/useGaneshWrites";
@@ -19,6 +21,7 @@ export default function AddContributionScreen() {
   const { theme } = useTheme();
   const { back } = useRouter();
   const writes = useGaneshWrites();
+  const { can } = useGaneshPermissions();
   const [kind, setKind] = useState<ContributionKind>("item");
   const [status, setStatus] = useState<ContributionStatus>("received");
   const [contributorName, setContributorName] = useState("");
@@ -29,6 +32,10 @@ export default function AddContributionScreen() {
   const [estimatedValue, setEstimatedValue] = useState("");
   const [description, setDescription] = useState("");
   const [busy, setBusy] = useState(false);
+
+  if (!can("contributions.create")) {
+    return <GaneshWriteLock message="Your role cannot add contributions." />;
+  }
 
   return (
     <GaneshScreen>

@@ -287,7 +287,7 @@ export function summarizeLedger(input: LedgerTotalsInput): GaneshSummary {
 }
 
 export function canManagePandal(role: FestivalMember["role"] | undefined): boolean {
-  return role === "admin" || role === "treasurer";
+  return role === "admin";
 }
 
 export function isFestivalWritable(status: FestivalMember["role"] | string): boolean {

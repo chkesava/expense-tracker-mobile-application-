@@ -1,5 +1,6 @@
-export type GaneshRole = "admin" | "treasurer" | "member" | "collector";
-export type GaneshMemberStatus = "active" | "removed";
+export type GaneshRole = "admin" | "treasurer" | "member" | "collector" | "viewer";
+export type GaneshMemberStatus = "active" | "suspended" | "removed";
+export type PandalJoinMode = "approval" | "open";
 export type FestivalStatus = "open" | "closed";
 export type ContributionMode = "same" | "custom";
 
@@ -80,15 +81,19 @@ export interface Pandal extends GaneshAuditFields {
   id: string;
   name: string;
   area?: string;
+  description?: string;
   code: string;
   ownerId: string;
   memberIds: string[];
+  joinMode?: PandalJoinMode;
+  adminCount?: number;
 }
 
 export interface PandalInvite {
   id: string;
   pandalId: string;
   name: string;
+  joinMode?: PandalJoinMode;
   createdBy: string;
   createdAt?: FirestoreTime;
 }
@@ -109,7 +114,21 @@ export interface PandalMembershipIndex {
   id: string;
   pandalId: string;
   role: GaneshRole;
+  status?: GaneshMemberStatus;
   joinedAt?: FirestoreTime;
+}
+
+export interface PandalMemberAudit {
+  id: string;
+  actorId: string;
+  targetUserId: string;
+  action: "role_changed" | "suspended" | "removed" | "approved" | "join_mode";
+  oldRole?: GaneshRole;
+  newRole?: GaneshRole;
+  oldStatus?: GaneshMemberStatus;
+  newStatus?: GaneshMemberStatus;
+  reason?: string;
+  at?: FirestoreTime;
 }
 
 export interface PandalMember {

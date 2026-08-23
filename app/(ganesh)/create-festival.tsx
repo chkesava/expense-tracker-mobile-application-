@@ -4,6 +4,8 @@ import { useRouter } from "expo-router";
 
 import { FundLocationChips } from "@/components/ganesh/FundLocationChips";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
+import { GaneshWriteLock } from "@/components/ganesh/GaneshWriteLock";
+import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { PermanentFundCard } from "@/components/ganesh/PermanentFundCard";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -25,6 +27,7 @@ export default function CreateFestivalScreen() {
   const { pandalId, setSession } = useGaneshSession();
   const { fund } = usePermanentFund(pandalId);
   const writes = useGaneshWrites();
+  const { can } = useGaneshPermissions();
   const { isOnline } = useNetwork();
   const year = new Date().getFullYear();
   const [name, setName] = useState(`Ganesh Chaturthi ${year}`);
@@ -76,6 +79,10 @@ export default function CreateFestivalScreen() {
       setBusy(false);
     }
   };
+
+  if (!can("festival.create")) {
+    return <GaneshWriteLock message="Only a Pandal Admin can create a festival." />;
+  }
 
   return (
     <GaneshScreen>

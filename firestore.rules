@@ -228,7 +228,8 @@ service cloud.firestore {
 
     // -----------------------------------------------------------------------
     // Ganesh Seva — shared Pandal / Festival ledger.
-    // Membership is the only grant. Expense Tracker accounts get nothing.
+    // ACTIVE membership is the only grant. ownerId / memberIds alone are not.
+    // Role helpers mirror shared/utils/ganeshPermissions.ts.
     // -----------------------------------------------------------------------
     function ganeshIdentityCreate() {
       return request.resource.data.createdBy == request.auth.uid
@@ -240,35 +241,90 @@ service cloud.firestore {
         && request.resource.data.updatedBy == request.auth.uid;
     }
 
+    function ganeshMemberDoc(pandalId) {
+      return get(/databases/$(database)/documents/pandals/$(pandalId)/members/$(request.auth.uid));
+    }
+
+    function isActivePandalMemberOf(pandalId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/pandals/$(pandalId)/members/$(request.auth.uid))
+        && ganeshMemberDoc(pandalId).data.status == 'active';
+    }
+
+    function ganeshRoleOf(pandalId) {
+      return ganeshMemberDoc(pandalId).data.role;
+    }
+
+    function canManageMembersOf(pandalId) {
+      return isActivePandalMemberOf(pandalId) && ganeshRoleOf(pandalId) == 'admin';
+    }
+
+    function canWriteCollectionOf(pandalId) {
+      return isActivePandalMemberOf(pandalId)
+        && ganeshRoleOf(pandalId) in ['admin', 'treasurer', 'member', 'collector'];
+    }
+
+    function canWriteExpenseOrContributionOf(pandalId) {
+      return isActivePandalMemberOf(pandalId)
+        && ganeshRoleOf(pandalId) in ['admin', 'treasurer', 'member'];
+    }
+
+    function canWriteReimbursementOf(pandalId) {
+      return isActivePandalMemberOf(pandalId)
+        && ganeshRoleOf(pandalId) in ['admin', 'treasurer'];
+    }
+
+    function canWritePermanentFundOf(pandalId) {
+      return isActivePandalMemberOf(pandalId) && ganeshRoleOf(pandalId) == 'admin';
+    }
+
+    function canCloseOrUpdateFestivalOf(pandalId) {
+      return isActivePandalMemberOf(pandalId)
+        && ganeshRoleOf(pandalId) in ['admin', 'treasurer'];
+    }
+
+    function canCreateFestivalOf(pandalId) {
+      return isActivePandalMemberOf(pandalId) && ganeshRoleOf(pandalId) == 'admin';
+    }
+
+    function canCreateOpeningFundOf(pandalId) {
+      return isActivePandalMemberOf(pandalId)
+        && ganeshRoleOf(pandalId) in ['admin', 'treasurer'];
+    }
+
+    function canWriteLedgerSideEffectOf(pandalId) {
+      return canWriteCollectionOf(pandalId)
+        || canWriteExpenseOrContributionOf(pandalId)
+        || canWriteReimbursementOf(pandalId)
+        || canCreateOpeningFundOf(pandalId)
+        || canWritePermanentFundOf(pandalId)
+        || canCloseOrUpdateFestivalOf(pandalId);
+    }
+
     match /pandalInvites/{code} {
       allow read: if signedIn();
       allow create: if signedIn()
         && request.resource.data.createdBy == request.auth.uid
         && request.resource.data.pandalId is string;
-      allow update, delete: if signedIn()
-        && resource.data.createdBy == request.auth.uid;
+      allow update: if signedIn()
+        && (
+          resource.data.createdBy == request.auth.uid
+          || canManageMembersOf(resource.data.pandalId)
+        );
+      allow delete: if signedIn() && resource.data.createdBy == request.auth.uid;
     }
 
     match /pandalJoinRequests/{requestId} {
       allow read: if signedIn()
         && (resource.data.userId == request.auth.uid
-            || (
-              exists(/databases/$(database)/documents/pandals/$(resource.data.pandalId))
-              && (
-                get(/databases/$(database)/documents/pandals/$(resource.data.pandalId)).data.ownerId
-                  == request.auth.uid
-                || request.auth.uid in get(/databases/$(database)/documents/pandals/$(resource.data.pandalId)).data.memberIds
-              )
-            ));
+            || isActivePandalMemberOf(resource.data.pandalId));
       allow create: if signedIn()
         && request.resource.data.userId == request.auth.uid
         && request.resource.data.status == 'pending';
-      allow update: if signedIn()
-        && exists(/databases/$(database)/documents/pandals/$(resource.data.pandalId)/members/$(request.auth.uid))
-        && get(/databases/$(database)/documents/pandals/$(resource.data.pandalId)/members/$(request.auth.uid)).data.role
-          in ['admin', 'treasurer']
-        && get(/databases/$(database)/documents/pandals/$(resource.data.pandalId)/members/$(request.auth.uid)).data.status
-          == 'active';
+      allow update: if canManageMembersOf(resource.data.pandalId)
+        && request.resource.data.pandalId == resource.data.pandalId
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.status in ['approved', 'rejected'];
       allow delete: if false;
     }
 
@@ -276,54 +332,124 @@ service cloud.firestore {
       function pandalData() {
         return get(/databases/$(database)/documents/pandals/$(pandalId)).data;
       }
-      function isPandalMember() {
-        return signedIn()
-          && (pandalData().ownerId == request.auth.uid
-              || request.auth.uid in pandalData().memberIds);
+      function pandalAfter() {
+        return getAfter(/databases/$(database)/documents/pandals/$(pandalId)).data;
       }
-      function isPandalManager() {
-        return isPandalMember()
-          && exists(/databases/$(database)/documents/pandals/$(pandalId)/members/$(request.auth.uid))
-          && get(/databases/$(database)/documents/pandals/$(pandalId)/members/$(request.auth.uid)).data.status == 'active'
-          && get(/databases/$(database)/documents/pandals/$(pandalId)/members/$(request.auth.uid)).data.role
-            in ['admin', 'treasurer'];
+      function isActivePandalMember() {
+        return isActivePandalMemberOf(pandalId);
       }
-      function keepsPandalOwner() {
+      function canManageMembers() {
+        return canManageMembersOf(pandalId);
+      }
+      function canWriteCollection() {
+        return canWriteCollectionOf(pandalId);
+      }
+      function canWriteExpenseOrContribution() {
+        return canWriteExpenseOrContributionOf(pandalId);
+      }
+      function canWriteReimbursement() {
+        return canWriteReimbursementOf(pandalId);
+      }
+      function canWritePermanentFund() {
+        return canWritePermanentFundOf(pandalId);
+      }
+      function canCloseOrUpdateFestival() {
+        return canCloseOrUpdateFestivalOf(pandalId);
+      }
+      function canCreateFestival() {
+        return canCreateFestivalOf(pandalId);
+      }
+      function canCreateOpeningFund() {
+        return canCreateOpeningFundOf(pandalId);
+      }
+      function canWriteLedgerSideEffect() {
+        return canWriteLedgerSideEffectOf(pandalId);
+      }
+      function keepsPandalCore() {
         return request.resource.data.ownerId == resource.data.ownerId
-          && (request.resource.data.memberIds == resource.data.memberIds
-              || request.auth.uid == resource.data.ownerId
-              || isPandalManager());
+          && request.resource.data.code == resource.data.code;
+      }
+      function currentAdminCount() {
+        return pandalData().keys().hasAny(['adminCount']) && pandalData().adminCount is number
+          ? pandalData().adminCount
+          : 1;
       }
 
-      allow read: if isPandalMember();
+      allow read: if isActivePandalMember();
       allow create: if signedIn()
         && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.adminCount == 1
         && ganeshIdentityCreate();
-      allow update: if isPandalMember() && keepsPandalOwner();
+      allow update: if canManageMembers() && keepsPandalCore();
       allow delete: if signedIn() && resource.data.ownerId == request.auth.uid;
 
       match /members/{memberId} {
-        allow read: if isPandalMember();
-        allow create, update: if signedIn()
+        function wasActiveAdmin() {
+          return resource.data.role == 'admin' && resource.data.status == 'active';
+        }
+        function willBeActiveAdmin() {
+          return request.resource.data.role == 'admin'
+            && request.resource.data.status == 'active';
+        }
+        function keepsAdminCount() {
+          return wasActiveAdmin() && !willBeActiveAdmin()
+            ? pandalAfter().adminCount == currentAdminCount() - 1
+              && pandalAfter().adminCount >= 1
+            : !wasActiveAdmin() && willBeActiveAdmin()
+              ? pandalAfter().adminCount == currentAdminCount() + 1
+              : pandalAfter().adminCount == currentAdminCount();
+        }
+        function cannotSelfPromoteToAdmin() {
+          return !(memberId == request.auth.uid
+            && request.resource.data.role == 'admin'
+            && resource.data.role != 'admin');
+        }
+
+        allow read: if isActivePandalMember();
+        allow create: if signedIn()
           && (
-            (memberId == request.auth.uid
+            (
+              memberId == request.auth.uid
               && request.resource.data.userId == request.auth.uid
-              && request.resource.data.role == 'admin'
-              && pandalData().ownerId == request.auth.uid)
-            || isPandalManager()
+              && request.resource.data.status == 'active'
+              && (
+                (
+                  request.resource.data.role == 'admin'
+                  && pandalAfter().ownerId == request.auth.uid
+                )
+                || (
+                  request.resource.data.role == 'member'
+                  && pandalAfter().joinMode == 'open'
+                )
+              )
+            )
+            || (
+              canManageMembers()
+              && request.resource.data.role in ['admin', 'treasurer', 'member', 'collector', 'viewer']
+            )
           );
-        allow delete: if isPandalManager();
+        allow update: if canManageMembers()
+          && request.resource.data.userId == resource.data.userId
+          && cannotSelfPromoteToAdmin()
+          && keepsAdminCount();
+        allow delete: if false;
+      }
+
+      match /memberAudits/{auditId} {
+        allow read: if isActivePandalMember();
+        allow create: if canManageMembers();
+        allow update, delete: if false;
       }
 
       match /permanentFund/{docId} {
-        allow read: if isPandalMember();
-        allow create, update: if isPandalManager();
+        allow read: if isActivePandalMember();
+        allow create, update: if canWritePermanentFund();
         allow delete: if false;
       }
 
       match /permanentFundTransactions/{txId} {
-        allow read: if isPandalMember();
-        allow create: if isPandalManager() && ganeshIdentityCreate();
+        allow read: if isActivePandalMember();
+        allow create: if canWritePermanentFund() && ganeshIdentityCreate();
         allow update, delete: if false;
       }
 
@@ -335,35 +461,54 @@ service cloud.firestore {
           return festivalData().status == 'open';
         }
 
-        allow read: if isPandalMember();
-        allow create: if isPandalMember() && ganeshIdentityCreate();
-        allow update: if isPandalManager()
+        allow read: if isActivePandalMember();
+        allow create: if canCreateFestival() && ganeshIdentityCreate();
+        allow update: if canCloseOrUpdateFestival()
           && request.resource.data.updatedBy == request.auth.uid;
-        allow delete: if isPandalManager();
+        allow delete: if canManageMembers();
 
         match /fundTransfers/{docId} {
-          allow read: if isPandalMember();
-          allow create: if isPandalManager() && ganeshIdentityCreate();
+          allow read: if isActivePandalMember();
+          allow create: if canWritePermanentFund() && ganeshIdentityCreate();
           allow update, delete: if false;
         }
 
         match /{subcol}/{docId} {
-          allow read: if isPandalMember();
-          allow create: if isPandalMember()
+          function canWriteFestivalSubcol() {
+            return (subcol == 'collections' && canWriteCollection())
+              || (subcol == 'households' && canWriteCollection())
+              || ((subcol == 'expenses' || subcol == 'contributions')
+                  && canWriteExpenseOrContribution())
+              || (subcol == 'reimbursements' && canWriteReimbursement())
+              || (subcol == 'openingFunds' && canCreateOpeningFund())
+              || (subcol == 'fundTransfers' && canWritePermanentFund())
+              || (subcol == 'members'
+                  && (canWriteExpenseOrContribution()
+                      || canManageMembers()
+                      || canCloseOrUpdateFestival()))
+              || (subcol == 'categories' && canWriteExpenseOrContribution())
+              || ((subcol == 'activity' || subcol == 'auditLogs' || subcol == 'summary')
+                  && canWriteLedgerSideEffect());
+          }
+
+          allow read: if isActivePandalMember();
+          allow create: if isActivePandalMember()
             && festivalOpen()
+            && canWriteFestivalSubcol()
             && (
               !request.resource.data.keys().hasAny(['createdBy'])
               || ganeshIdentityCreate()
             );
-          allow update: if isPandalMember()
+          allow update: if isActivePandalMember()
+            && canWriteFestivalSubcol()
             && (
               (festivalOpen() && (
                 !resource.data.keys().hasAny(['createdBy'])
                 || ganeshIdentityUpdate()
               ))
-              || isPandalManager()
+              || canCloseOrUpdateFestival()
             );
-          allow delete: if isPandalManager();
+          allow delete: if canCloseOrUpdateFestival();
         }
       }
     }

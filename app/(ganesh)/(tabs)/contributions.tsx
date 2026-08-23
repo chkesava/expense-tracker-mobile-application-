@@ -16,6 +16,7 @@ import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import { formatInr } from "@/shared/utils/ganeshMoney";
 import { memberDisplayName } from "@/shared/utils/ganeshIdentity";
 import type { ContributionKind, GaneshContribution } from "@/shared/types/ganesh";
+import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { useTheme } from "@/theme/ThemeProvider";
 
 const FILTERS: Array<"all" | ContributionKind> = ["all", "money", "item", "service", "sponsorship"];
@@ -30,6 +31,7 @@ export default function ContributionsScreen() {
   const { contributions } = useContributions(pandalId, festivalId);
   const { members } = usePandalMembers(pandalId);
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>("all");
+  const { can } = useGaneshPermissions();
 
   const rows = useMemo(
     () =>
@@ -124,7 +126,7 @@ export default function ContributionsScreen() {
           />
         }
       />
-      {festival?.status === "open" ? (
+      {festival?.status === "open" && can("contributions.create") ? (
         <AddFab
           onPress={() => push("/(ganesh)/add-contribution" as never)}
           accessibilityLabel="Add contribution"

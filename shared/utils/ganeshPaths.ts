@@ -48,3 +48,11 @@ export function summaryDoc(pandalId: string, festivalId: string): string[] {
 export function membershipDoc(uid: string, pandalId: string): string[] {
   return ["users", uid, "pandalMemberships", pandalId];
 }
+
+export function membershipsCol(uid: string): string[] {
+  return ["users", uid, "pandalMemberships"];
+}
+
+export function pandalMemberAuditsCol(pandalId: string): string[] {
+  return ["pandals", pandalId, "memberAudits"];
+}

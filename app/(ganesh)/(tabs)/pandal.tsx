@@ -10,6 +10,7 @@ import { PermanentFundCard } from "@/components/ganesh/PermanentFundCard";
 import { usePermanentFund } from "@/hooks/usePermanentFund";
 import { useState } from "react";
 import { useFestivals } from "@/hooks/useFestivals";
+import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { useGaneshWrites } from "@/hooks/useGaneshWrites";
 import { useFestivalMembers } from "@/hooks/useFestivalMembers";
 import { useJoinRequests } from "@/hooks/useJoinRequests";
@@ -17,14 +18,15 @@ import { usePandals } from "@/hooks/usePandals";
 import { useAuth } from "@/providers/AuthProvider";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import { useWorkspace } from "@/providers/WorkspaceProvider";
+import { formatPandalCode } from "@/shared/utils/ganeshIdentity";
 import { formatInr } from "@/shared/utils/ganeshMoney";
-import { canManagePandal } from "@/shared/utils/ganeshMath";
+import { ganeshRoleLabel } from "@/shared/utils/ganeshPermissions";
 import { useTheme } from "@/theme/ThemeProvider";
 
 export default function PandalScreen() {
   const { theme } = useTheme();
   const { push } = useRouter();
-  const { logout, realUser } = useAuth();
+  const { logout } = useAuth();
   const { setActiveWorkspace } = useWorkspace();
   const { pandalId, festivalId } = useGaneshSession();
   const { pandals } = usePandals();
@@ -32,11 +34,11 @@ export default function PandalScreen() {
   const { members } = useFestivalMembers(pandalId, festivalId);
   const { requests } = useJoinRequests(pandalId);
   const { fund } = usePermanentFund(pandalId);
+  const { can, role } = useGaneshPermissions();
   const pandal = pandals.find((item) => item.id === pandalId);
   const festival = festivals.find((item) => item.id === festivalId);
-  const me = members.find((member) => member.userId === realUser?.uid);
   const writes = useGaneshWrites();
-  const manager = canManagePandal(me?.role);
+  const joinMode = pandal?.joinMode ?? "approval";
   const target = members.reduce((sum, member) => sum + member.contributionTarget, 0);
   const collected = members.reduce((sum, member) => sum + member.contributionPaid, 0);
   const [memberTarget, setMemberTarget] = useState(String(festival?.contributionTargetAmount ?? 0));
@@ -51,7 +53,8 @@ export default function PandalScreen() {
         <GaneshSyncChip />
       </View>
       <Text style={{ color: theme.colors.mutedForeground }}>
-        Code {pandal?.code} · {festival?.name}
+        Code {pandal?.code ? formatPandalCode(pandal.code) : "—"} · {festival?.name}
+        {role ? ` · ${ganeshRoleLabel(role)}` : ""}
       </Text>
       <PermanentFundCard fund={fund} onPress={() => push("/(ganesh)/permanent-fund" as never)} />
       <MetricGrid
@@ -61,7 +64,26 @@ export default function PandalScreen() {
           { label: "Collected", value: collected },
         ]}
       />
-      {manager ? (
+      {can("members.assignRole") ? (
+        <View style={{ gap: 10 }}>
+          <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>Who can join</Text>
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            <Button
+              variant={joinMode === "approval" ? "primary" : "outline"}
+              onPress={() => void writes.updatePandalJoinMode("approval")}
+            >
+              Approval
+            </Button>
+            <Button
+              variant={joinMode === "open" ? "primary" : "outline"}
+              onPress={() => void writes.updatePandalJoinMode("open")}
+            >
+              Open
+            </Button>
+          </View>
+        </View>
+      ) : null}
+      {can("festival.update") ? (
         <View style={{ gap: 10 }}>
           <Input
             label="Member contribution target"
@@ -89,7 +111,12 @@ export default function PandalScreen() {
           </Button>
         </View>
       ) : null}
-      {manager && requests.length > 0 ? (
+      {can("members.read") ? (
+        <Button variant="outline" onPress={() => push("/(ganesh)/members" as never)}>
+          Members and roles
+        </Button>
+      ) : null}
+      {can("members.approve") && requests.length > 0 ? (
         <Button onPress={() => push("/(ganesh)/join-requests" as never)}>
           {requests.length} join request{requests.length === 1 ? "" : "s"}
         </Button>
@@ -121,20 +148,18 @@ export default function PandalScreen() {
       <Button variant="outline" onPress={() => push("/(ganesh)/setup" as never)}>
         Switch Pandal or festival
       </Button>
-      {manager ? (
-        <>
-          <Button variant="outline" onPress={() => push("/(ganesh)/create-festival" as never)}>
-            Create festival
-          </Button>
-          <Button variant="outline" onPress={() => push("/(ganesh)/report" as never)}>
-            Festival report
-          </Button>
-          {festival?.status === "open" ? (
-            <Button variant="outline" onPress={() => push("/(ganesh)/close-festival" as never)}>
-              Close festival
-            </Button>
-          ) : null}
-        </>
+      {can("festival.create") ? (
+        <Button variant="outline" onPress={() => push("/(ganesh)/create-festival" as never)}>
+          Create festival
+        </Button>
+      ) : null}
+      <Button variant="outline" onPress={() => push("/(ganesh)/report" as never)}>
+        Festival report
+      </Button>
+      {can("festival.close") && festival?.status === "open" ? (
+        <Button variant="outline" onPress={() => push("/(ganesh)/close-festival" as never)}>
+          Close festival
+        </Button>
       ) : null}
       <Button
         variant="ghost"

@@ -21,6 +21,7 @@ import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import { formatInr } from "@/shared/utils/ganeshMoney";
 import { availableGodFund, totalCashIn } from "@/shared/utils/ganeshMath";
 import { memberDisplayName } from "@/shared/utils/ganeshIdentity";
+import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { useTheme } from "@/theme/ThemeProvider";
 
 export default function GaneshHomeScreen() {
@@ -37,6 +38,7 @@ export default function GaneshHomeScreen() {
   const festival = festivals.find((item) => item.id === festivalId);
   const closed = festival?.status === "closed";
   const godFund = availableGodFund(summary);
+  const { can } = useGaneshPermissions();
 
   return (
     <GaneshScreen>
@@ -71,7 +73,7 @@ export default function GaneshHomeScreen() {
           { label: "Money in", value: totalCashIn(summary) },
         ]}
       />
-      {closed ? (
+      {closed && can("festival.create") ? (
         <Button onPress={() => push("/(ganesh)/create-festival" as never)}>
           Create next festival
         </Button>

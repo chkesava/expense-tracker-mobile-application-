@@ -14,6 +14,7 @@ import { toast } from "@/lib/toast";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import type { PermanentFundLocation } from "@/shared/types/ganesh";
 import { validateFundTransfer, validateNonNegativeAmount } from "@/shared/utils/ganeshMath";
+import { formatPandalCode } from "@/shared/utils/ganeshIdentity";
 import { formatInr } from "@/shared/utils/ganeshMoney";
 import { useTheme } from "@/theme/ThemeProvider";
 
@@ -70,7 +71,7 @@ export default function GaneshSetupScreen() {
         allocateToFestival: allocate > 0 ? { amount: allocate, location: fundLocation } : undefined,
       });
       await setSession({ pandalId: created.pandalId, festivalId: created.festivalId });
-      toast.success(`Pandal code ${created.code}`);
+      toast.success(`Pandal code ${formatPandalCode(created.code)}`);
       replace("/(ganesh)" as never);
     } catch (error) {
       logError("ganesh.setup.create", error);
@@ -84,7 +85,6 @@ export default function GaneshSetupScreen() {
     setBusy(true);
     try {
       await writes.requestPandalJoin(code);
-      toast.success("Ask an admin to approve your request.");
       setMode("choose");
     } catch (error) {
       logError("ganesh.setup.join", error);
@@ -100,7 +100,9 @@ export default function GaneshSetupScreen() {
         Ganesh Seva
       </Text>
       <Text style={{ color: theme.colors.mutedForeground, lineHeight: 22 }}>
-        Create a Pandal or join with a code. Expense Tracker data never appears here.
+        {pandals.length === 0
+          ? "Create a Pandal or join with a code. You will see the shared ledger only after you are an active member. Expense Tracker data never appears here."
+          : "Switch Pandal, create another, or join with a code. Expense Tracker data never appears here."}
       </Text>
 
       {pandals.length > 0 ? (
@@ -188,7 +190,7 @@ export default function GaneshSetupScreen() {
             value={code}
             onChangeText={setCode}
             autoCapitalize="characters"
-            placeholder="GNSH26"
+            placeholder="GNSH-XXXX"
           />
           <Button loading={busy} onPress={() => void join()}>
             Request access
@@ -238,7 +240,7 @@ function PandalPickRow({
       }}
     >
       <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>{name}</Text>
-      <Text style={{ color: theme.colors.mutedForeground }}>Code {code}</Text>
+      <Text style={{ color: theme.colors.mutedForeground }}>Code {formatPandalCode(code)}</Text>
       {openFestival ? (
         <Text style={{ color: theme.colors.mutedForeground }}>{openFestival.name}</Text>
       ) : null}

@@ -3,6 +3,8 @@ import { Pressable, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
+import { GaneshWriteLock } from "@/components/ganesh/GaneshWriteLock";
+import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useGaneshWrites } from "@/hooks/useGaneshWrites";
@@ -18,10 +20,15 @@ export default function AddOpeningFundScreen() {
   const { theme } = useTheme();
   const { back } = useRouter();
   const writes = useGaneshWrites();
+  const { can } = useGaneshPermissions();
   const [amount, setAmount] = useState("");
   const [sourceType, setSourceType] = useState<OpeningFundSource>("cash");
   const [description, setDescription] = useState("");
   const [busy, setBusy] = useState(false);
+
+  if (!can("openingFunds.create")) {
+    return <GaneshWriteLock message="Your role cannot add opening funds." />;
+  }
 
   return (
     <GaneshScreen>

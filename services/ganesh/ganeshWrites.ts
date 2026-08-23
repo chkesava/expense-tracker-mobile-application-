@@ -1,4 +1,5 @@
 import {
+  arrayRemove,
   arrayUnion,
   collection,
   doc,
@@ -29,18 +30,27 @@ import {
   validateReimbursement,
 } from "@/shared/utils/ganeshMath";
 import { generatePandalCode, normalizePandalCode } from "@/shared/utils/ganeshIdentity";
-import { festivalCol, festivalDoc, membershipDoc, summaryDoc } from "@/shared/utils/ganeshPaths";
+import {
+  festivalCol,
+  festivalDoc,
+  membershipDoc,
+  pandalMemberAuditsCol,
+  summaryDoc,
+} from "@/shared/utils/ganeshPaths";
 import type {
   AuditAction,
   ContributionKind,
   ContributionStatus,
   Festival,
+  GaneshMemberStatus,
   GaneshRole,
   HouseholdStatus,
   OpeningFundSource,
   PaymentMethod,
   PermanentFundLocation,
+  PandalJoinMode,
 } from "@/shared/types/ganesh";
+import { JOIN_APPROVE_ROLES } from "@/shared/utils/ganeshPermissions";
 import { EMPTY_GANESH_SUMMARY } from "@/shared/types/ganesh";
 import {
   seedPermanentFund,
@@ -116,6 +126,30 @@ function activity(
   );
 }
 
+function memberAudit(
+  batch: WriteBatch,
+  db: Firestore,
+  pandalId: string,
+  payload: {
+    actorId: string;
+    targetUserId: string;
+    action: "role_changed" | "suspended" | "removed" | "approved" | "join_mode";
+    oldRole?: GaneshRole;
+    newRole?: GaneshRole;
+    oldStatus?: GaneshMemberStatus;
+    newStatus?: GaneshMemberStatus;
+    reason?: string;
+  }
+) {
+  batch.set(
+    pathRef(db, [...pandalMemberAuditsCol(pandalId), newId()]),
+    omitUndefined({
+      ...payload,
+      at: serverTimestamp(),
+    })
+  );
+}
+
 function bumpSummary(
   batch: WriteBatch,
   db: Firestore,
@@ -148,6 +182,7 @@ export async function createPandalAndFestival(
   input: {
     pandalName: string;
     area?: string;
+    description?: string;
     festivalName: string;
     year: number;
     initialFund?: {
@@ -180,27 +215,29 @@ export async function createPandalAndFestival(
     omitUndefined({
       name,
       area: input.area?.trim() || undefined,
+      description: input.description?.trim() || undefined,
       code,
       ownerId: actor.uid,
       memberIds: [actor.uid],
+      joinMode: "approval" satisfies PandalJoinMode,
+      adminCount: 1,
       ...stamp,
     })
   );
   pandalBatch.set(doc(db, "pandalInvites", code), {
     pandalId,
     name,
+    joinMode: "approval",
     createdBy: actor.uid,
     createdAt: serverTimestamp(),
   });
   pandalBatch.set(pathRef(db, membershipDoc(actor.uid, pandalId)), {
     pandalId,
     role: "admin",
+    status: "active",
     joinedAt: serverTimestamp(),
   });
-  await commitWrite(() => pandalBatch.commit(), { label: "pandal" });
-
-  const memberBatch = writeBatch(db);
-  memberBatch.set(
+  pandalBatch.set(
     doc(db, "pandals", pandalId, "members", actor.uid),
     omitUndefined({
       userId: actor.uid,
@@ -212,7 +249,7 @@ export async function createPandalAndFestival(
       updatedAt: serverTimestamp(),
     })
   );
-  await commitWrite(() => memberBatch.commit(), { label: "pandal member" });
+  await commitWrite(() => pandalBatch.commit(), { label: "pandal" });
 
   const festivalBatch = writeBatch(db);
   festivalBatch.set(pathRef(db, festivalDoc(pandalId, festivalId)), {
@@ -287,7 +324,7 @@ export async function requestPandalJoin(
   db: Firestore,
   actor: GaneshActor,
   rawCode: string
-): Promise<{ pandalId: string; pandalName: string }> {
+): Promise<{ pandalId: string; pandalName: string; joined: boolean }> {
   const code = normalizePandalCode(rawCode);
   if (code.length < 4) throw new Error("Enter a valid Pandal code.");
   const invite = await getDoc(doc(db, "pandalInvites", code));
@@ -298,8 +335,31 @@ export async function requestPandalJoin(
   if (existing.exists() && existing.data().status === "active") {
     throw new Error("You are already a member of this Pandal.");
   }
+  const joinMode = (invite.data().joinMode ?? "approval") as PandalJoinMode;
   const requestId = `${pandalId}__${actor.uid}`;
   const joinBatch = writeBatch(db);
+  if (joinMode === "open" && !existing.exists()) {
+    joinBatch.set(
+      doc(db, "pandals", pandalId, "members", actor.uid),
+      omitUndefined({
+        userId: actor.uid,
+        displayName: actor.displayName,
+        phone: actor.phone,
+        role: "member" satisfies GaneshRole,
+        status: "active",
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      })
+    );
+    joinBatch.set(pathRef(db, membershipDoc(actor.uid, pandalId)), {
+      pandalId,
+      role: "member",
+      status: "active",
+      joinedAt: serverTimestamp(),
+    });
+    await commitWrite(() => joinBatch.commit(), { label: "open join" });
+    return { pandalId, pandalName, joined: true };
+  }
   joinBatch.set(
     doc(db, "pandalJoinRequests", requestId),
     omitUndefined({
@@ -313,7 +373,7 @@ export async function requestPandalJoin(
     })
   );
   await commitWrite(() => joinBatch.commit(), { label: "join request" });
-  return { pandalId, pandalName };
+  return { pandalId, pandalName, joined: false };
 }
 
 export async function decideJoinRequest(
@@ -335,6 +395,9 @@ export async function decideJoinRequest(
     updatedAt: serverTimestamp(),
   });
   if (decision === "approved") {
+    if (role === "admin" || !JOIN_APPROVE_ROLES.includes(role)) {
+      throw new Error("Approve new members as Member, Collector, or Viewer.");
+    }
     batch.set(
       doc(db, "pandals", pandalId, "members", userId),
       omitUndefined({
@@ -356,7 +419,15 @@ export async function decideJoinRequest(
     batch.set(pathRef(db, membershipDoc(userId, pandalId)), {
       pandalId,
       role,
+      status: "active",
       joinedAt: serverTimestamp(),
+    });
+    memberAudit(batch, db, pandalId, {
+      actorId: actor.uid,
+      targetUserId: userId,
+      action: "approved",
+      newRole: role,
+      newStatus: "active",
     });
     const festivals = await getDocs(collection(db, "pandals", pandalId, "festivals"));
     festivals.forEach((festivalSnap) => {
@@ -378,6 +449,99 @@ export async function decideJoinRequest(
     });
   }
   await commitWrite(() => batch.commit(), { label: "join decision" });
+}
+
+export async function updatePandalJoinMode(
+  db: Firestore,
+  actor: GaneshActor,
+  pandalId: string,
+  joinMode: PandalJoinMode
+): Promise<void> {
+  const pandalSnap = await getDoc(doc(db, "pandals", pandalId));
+  if (!pandalSnap.exists()) throw new Error("Pandal not found.");
+  const code = String(pandalSnap.data().code ?? "");
+  const batch = writeBatch(db);
+  batch.update(doc(db, "pandals", pandalId), {
+    joinMode,
+    updatedBy: actor.uid,
+    updatedAt: serverTimestamp(),
+  });
+  if (code) {
+    batch.set(
+      doc(db, "pandalInvites", normalizePandalCode(code)),
+      { joinMode, updatedAt: serverTimestamp() },
+      { merge: true }
+    );
+  }
+  memberAudit(batch, db, pandalId, {
+    actorId: actor.uid,
+    targetUserId: actor.uid,
+    action: "join_mode",
+    reason: joinMode,
+  });
+  await commitWrite(() => batch.commit(), { label: "join mode" });
+}
+
+export async function updatePandalMember(
+  db: Firestore,
+  actor: GaneshActor,
+  pandalId: string,
+  targetUserId: string,
+  input: { role?: GaneshRole; status?: GaneshMemberStatus; reason?: string }
+): Promise<void> {
+  const [pandalSnap, memberSnap] = await Promise.all([
+    getDoc(doc(db, "pandals", pandalId)),
+    getDoc(doc(db, "pandals", pandalId, "members", targetUserId)),
+  ]);
+  if (!pandalSnap.exists() || !memberSnap.exists()) throw new Error("Member not found.");
+  const oldRole = String(memberSnap.data().role ?? "member") as GaneshRole;
+  const oldStatus = String(memberSnap.data().status ?? "active") as GaneshMemberStatus;
+  const nextRole = input.role ?? oldRole;
+  const nextStatus = input.status ?? oldStatus;
+  const storedAdminCount = pandalSnap.data().adminCount;
+  const adminCount = typeof storedAdminCount === "number" ? storedAdminCount : 1;
+  const wasAdmin = oldRole === "admin" && oldStatus === "active";
+  const willBeAdmin = nextRole === "admin" && nextStatus === "active";
+  if (wasAdmin && !willBeAdmin && adminCount <= 1) {
+    throw new Error("This Pandal has only one Admin. Assign another Admin before removing this user.");
+  }
+  const nextAdminCount = adminCount + (willBeAdmin && !wasAdmin ? 1 : 0) - (wasAdmin && !willBeAdmin ? 1 : 0);
+
+  const batch = writeBatch(db);
+  batch.update(doc(db, "pandals", pandalId, "members", targetUserId), {
+    role: nextRole,
+    status: nextStatus,
+    updatedAt: serverTimestamp(),
+  });
+  batch.update(doc(db, "pandals", pandalId), {
+    adminCount: nextAdminCount,
+    memberIds: nextStatus === "active" ? arrayUnion(targetUserId) : arrayRemove(targetUserId),
+    updatedBy: actor.uid,
+    updatedAt: serverTimestamp(),
+  });
+  batch.set(pathRef(db, membershipDoc(targetUserId, pandalId)), {
+    pandalId,
+    role: nextRole,
+    status: nextStatus,
+    joinedAt: memberSnap.data().createdAt ?? serverTimestamp(),
+  });
+  const action =
+    nextStatus === "removed"
+      ? "removed"
+      : nextStatus === "suspended"
+        ? "suspended"
+        : "role_changed";
+  memberAudit(batch, db, pandalId, {
+    actorId: actor.uid,
+    targetUserId,
+    action,
+    oldRole,
+    newRole: nextRole,
+    oldStatus,
+    newStatus: nextStatus,
+    reason: input.reason,
+  });
+  await commitWrite(() => batch.commit(), { label: "member update" });
 }
 
 export async function createFestival(
@@ -413,7 +577,7 @@ export async function createFestival(
   });
   members.forEach((memberSnap) => {
     const member = memberSnap.data();
-    if (member.status === "removed") return;
+    if (member.status === "removed" || member.status === "suspended") return;
     seedBatch.set(pathRef(db, [...festivalCol(pandalId, festivalId, "members"), memberSnap.id]), {
       userId: memberSnap.id,
       displayName: member.displayName ?? "Member",

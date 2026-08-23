@@ -20,6 +20,8 @@ import { useNetwork } from "@/providers/NetworkProvider";
 import type { PermanentFundLocation } from "@/shared/types/ganesh";
 import { availableGodFund, validateSettlement } from "@/shared/utils/ganeshMath";
 import { formatInr } from "@/shared/utils/ganeshMoney";
+import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
+import { GaneshWriteLock } from "@/components/ganesh/GaneshWriteLock";
 import { useTheme } from "@/theme/ThemeProvider";
 
 export default function CloseFestivalScreen() {
@@ -32,6 +34,8 @@ export default function CloseFestivalScreen() {
   const { members } = useFestivalMembers(pandalId, festivalId);
   const { fund } = usePermanentFund(pandalId);
   const writes = useGaneshWrites();
+  const { can } = useGaneshPermissions();
+  const canTransfer = can("permanentFund.transfer");
   const festival = festivals.find((item) => item.id === festivalId);
   const closing = availableGodFund(summary);
   const [transferText, setTransferText] = useState("0");
@@ -44,10 +48,12 @@ export default function CloseFestivalScreen() {
   );
 
   const confirm = () => {
+    const transferAmount = canTransfer && Number.isFinite(transfer) ? transfer : 0;
+    const remainingAmount = Math.round((closing - transferAmount) * 100) / 100;
     const settlement = validateSettlement({
       closing,
-      transfer: Number.isFinite(transfer) ? transfer : 0,
-      remaining,
+      transfer: transferAmount,
+      remaining: remainingAmount,
     });
     if (!settlement.ok) {
       toast.error(settlement.error);
@@ -56,8 +62,8 @@ export default function CloseFestivalScreen() {
     setBusy(true);
     writes
       .closeFestival({
-        transferAmount: Number.isFinite(transfer) ? transfer : 0,
-        remainingAmount: remaining,
+        transferAmount,
+        remainingAmount,
         location,
         festivalName: festival?.name,
       })
@@ -68,6 +74,10 @@ export default function CloseFestivalScreen() {
       })
       .finally(() => setBusy(false));
   };
+
+  if (!can("festival.close")) {
+    return <GaneshWriteLock message="Only a Pandal Admin or Treasurer can close this festival." />;
+  }
 
   return (
     <GaneshScreen>
@@ -99,14 +109,23 @@ export default function CloseFestivalScreen() {
           Permanent Fund first. Closing with a deficit is not a settlement.
         </Text>
       ) : null}
-      <Input
-        label="Transfer to Permanent Fund"
-        value={transferText}
-        onChangeText={setTransferText}
-        keyboardType="numeric"
-      />
-      <Text style={{ color: theme.colors.mutedForeground, fontWeight: "700" }}>Money location</Text>
-      <FundLocationChips value={location} onChange={setLocation} />
+      {canTransfer ? (
+        <>
+          <Input
+            label="Transfer to Permanent Fund"
+            value={transferText}
+            onChangeText={setTransferText}
+            keyboardType="numeric"
+          />
+          <Text style={{ color: theme.colors.mutedForeground, fontWeight: "700" }}>Money location</Text>
+          <FundLocationChips value={location} onChange={setLocation} />
+        </>
+      ) : (
+        <Text style={{ color: theme.colors.mutedForeground, lineHeight: 22 }}>
+          Only a Pandal Admin can transfer unused cash to the Permanent Fund. You can still close
+          with a ₹0 transfer.
+        </Text>
+      )}
       <View style={{ gap: 4 }}>
         <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>
           Remaining in festival {formatInr(Number.isFinite(remaining) ? remaining : 0)}

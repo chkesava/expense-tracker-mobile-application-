@@ -3,6 +3,8 @@ import { Pressable, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
+import { GaneshWriteLock } from "@/components/ganesh/GaneshWriteLock";
+import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useFestivalMembers } from "@/hooks/useFestivalMembers";
@@ -22,11 +24,16 @@ export default function AddMemberPaymentScreen() {
   const { pandalId, festivalId } = useGaneshSession();
   const { members } = useFestivalMembers(pandalId, festivalId);
   const writes = useGaneshWrites();
+  const { can } = useGaneshPermissions();
   const [memberId, setMemberId] = useState(members[0]?.userId ?? "");
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState<PaymentMethod>("upi");
   const [busy, setBusy] = useState(false);
   const selected = members.find((member) => member.userId === memberId);
+
+  if (!can("contributions.create")) {
+    return <GaneshWriteLock message="Your role cannot record member payments." />;
+  }
 
   return (
     <GaneshScreen>

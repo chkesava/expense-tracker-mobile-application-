@@ -15,6 +15,7 @@ import {
   validateInKindValue,
   validateReimbursement,
   validateSettlement,
+  canManagePandal,
 } from "./ganeshMath";
 import { EMPTY_PERMANENT_FUND } from "@/shared/types/ganesh";
 
@@ -221,6 +222,14 @@ describe("permanent fund math", () => {
     expect(afterOut.next.cash).toBe(15000);
     const overdraw = applyPermanentFundDelta(afterOut.next, "upi", -1000);
     expect(overdraw.ok).toBe(false);
+  });
+});
+
+describe("canManagePandal", () => {
+  it("is admin-only and does not treat treasurer as admin", () => {
+    expect(canManagePandal("admin")).toBe(true);
+    expect(canManagePandal("treasurer")).toBe(false);
+    expect(canManagePandal("member")).toBe(false);
   });
 });
 

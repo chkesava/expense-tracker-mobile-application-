@@ -9,6 +9,7 @@ import { useGaneshWrites } from "@/hooks/useGaneshWrites";
 import { usePandals } from "@/hooks/usePandals";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import { availableGodFund, totalCashIn, totalExpenses } from "@/shared/utils/ganeshMath";
+import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { useTheme } from "@/theme/ThemeProvider";
 
 export default function FestivalReportScreen() {
@@ -18,6 +19,7 @@ export default function FestivalReportScreen() {
   const { festivals } = useFestivals(pandalId);
   const { summary } = useGaneshSummary(pandalId, festivalId);
   const writes = useGaneshWrites();
+  const { can } = useGaneshPermissions();
   const pandal = pandals.find((item) => item.id === pandalId);
   const festival = festivals.find((item) => item.id === festivalId);
 
@@ -45,9 +47,11 @@ export default function FestivalReportScreen() {
           { label: "Total expenses", value: totalExpenses(summary) },
         ]}
       />
-      <Button variant="outline" onPress={() => void writes.recomputeFestivalSummary()}>
-        Recalculate from ledger
-      </Button>
+      {can("festival.update") ? (
+        <Button variant="outline" onPress={() => void writes.recomputeFestivalSummary()}>
+          Recalculate from ledger
+        </Button>
+      ) : null}
     </GaneshScreen>
   );
 }

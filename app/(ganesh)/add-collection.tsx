@@ -4,6 +4,8 @@ import { useRouter } from "expo-router";
 
 import { DuplicateHouseholdDialog } from "@/components/ganesh/DuplicateHouseholdDialog";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
+import { GaneshWriteLock } from "@/components/ganesh/GaneshWriteLock";
+import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useFestivals } from "@/hooks/useFestivals";
@@ -31,6 +33,7 @@ export default function AddCollectionScreen() {
   const { members } = usePandalMembers(pandalId);
   const { households } = useHouseholds(pandalId, festivalId);
   const writes = useGaneshWrites();
+  const { can } = useGaneshPermissions();
   const [donorName, setDonorName] = useState("");
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState<PaymentMethod>("cash");
@@ -86,6 +89,10 @@ export default function AddCollectionScreen() {
     }
     void save();
   };
+
+  if (!can("collections.create")) {
+    return <GaneshWriteLock message="Your role cannot add collections." />;
+  }
 
   return (
     <GaneshScreen>

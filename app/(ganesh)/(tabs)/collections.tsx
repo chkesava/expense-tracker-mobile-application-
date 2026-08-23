@@ -17,6 +17,7 @@ import { useGaneshSummary } from "@/hooks/useGaneshSummary";
 import { formatInr } from "@/shared/utils/ganeshMoney";
 import { memberDisplayName } from "@/shared/utils/ganeshIdentity";
 import type { GaneshCollection, Household } from "@/shared/types/ganesh";
+import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { useTheme } from "@/theme/ThemeProvider";
 
 const FILTERS = ["all", "paid", "partial", "pending", "cash", "upi"] as const;
@@ -33,6 +34,7 @@ export default function CollectionsScreen() {
   const { members } = usePandalMembers(pandalId);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>("all");
+  const { can } = useGaneshPermissions();
 
   const visibleHouseholds = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -174,7 +176,7 @@ export default function CollectionsScreen() {
           />
         }
       />
-      {festival?.status === "open" ? (
+      {festival?.status === "open" && can("collections.create") ? (
         <AddFab
           onPress={() => push("/(ganesh)/add-collection" as never)}
           accessibilityLabel="Add collection"

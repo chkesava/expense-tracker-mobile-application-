@@ -14,6 +14,7 @@ import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import { formatInr } from "@/shared/utils/ganeshMoney";
 import { memberDisplayName } from "@/shared/utils/ganeshIdentity";
 import type { HouseholdStatus } from "@/shared/types/ganesh";
+import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { useTheme } from "@/theme/ThemeProvider";
 
 const STATUSES: HouseholdStatus[] = [
@@ -32,6 +33,9 @@ export default function HouseholdDetailScreen() {
   const { collections } = useCollections(pandalId, festivalId);
   const { members } = usePandalMembers(pandalId);
   const writes = useGaneshWrites();
+  const { can } = useGaneshPermissions();
+  const canUpdate = can("collections.update");
+  const canVoid = can("expenses.void");
   const household = households.find((item) => item.id === id);
   const history = collections.filter((row) => row.householdId === id && !row.voided);
   const [expected, setExpected] = useState(String(household?.expectedAmount ?? 0));
@@ -56,28 +60,32 @@ export default function HouseholdDetailScreen() {
       <Text style={{ color: theme.colors.primary, fontSize: 28, fontWeight: "800" }}>
         {formatInr(household.collectedAmount)}
       </Text>
-      <Input label="Expected amount" value={expected} onChangeText={setExpected} keyboardType="numeric" />
-      <Button
-        onPress={() => {
-          void writes.updateHousehold(household.id, { expectedAmount: Number(expected) });
-        }}
-      >
-        Save expected
-      </Button>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-        {STATUSES.map((status) => (
+      {canUpdate ? (
+        <>
+          <Input label="Expected amount" value={expected} onChangeText={setExpected} keyboardType="numeric" />
           <Button
-            key={status}
-            size="sm"
-            variant={household.status === status ? "primary" : "outline"}
             onPress={() => {
-              void writes.updateHousehold(household.id, { status });
+              void writes.updateHousehold(household.id, { expectedAmount: Number(expected) });
             }}
           >
-            {status.replace("_", " ")}
+            Save expected
           </Button>
-        ))}
-      </View>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+            {STATUSES.map((status) => (
+              <Button
+                key={status}
+                size="sm"
+                variant={household.status === status ? "primary" : "outline"}
+                onPress={() => {
+                  void writes.updateHousehold(household.id, { status });
+                }}
+              >
+                {status.replace("_", " ")}
+              </Button>
+            ))}
+          </View>
+        </>
+      ) : null}
       <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>Collection history</Text>
       {history.map((row) => (
         <View
@@ -98,19 +106,21 @@ export default function HouseholdDetailScreen() {
             at={row.createdAt}
             date={row.date}
           />
-          <Button
-            size="sm"
-            variant="outline"
-            onPress={() => {
-              void writes.voidFinancialRecord({
-                entityType: "collection",
-                entityId: row.id,
-                reason: "Voided from household history",
-              });
-            }}
-          >
-            Void
-          </Button>
+          {canVoid ? (
+            <Button
+              size="sm"
+              variant="outline"
+              onPress={() => {
+                void writes.voidFinancialRecord({
+                  entityType: "collection",
+                  entityId: row.id,
+                  reason: "Voided from household history",
+                });
+              }}
+            >
+              Void
+            </Button>
+          ) : null}
         </View>
       ))}
     </GaneshScreen>

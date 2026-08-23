@@ -3,6 +3,8 @@ import { Pressable, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
+import { GaneshWriteLock } from "@/components/ganesh/GaneshWriteLock";
+import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useFestivalMembers } from "@/hooks/useFestivalMembers";
@@ -24,12 +26,17 @@ export default function AddReimbursementScreen() {
   const { pandalId, festivalId } = useGaneshSession();
   const { members } = useFestivalMembers(pandalId, festivalId);
   const writes = useGaneshWrites();
+  const { can } = useGaneshPermissions();
   const [memberId, setMemberId] = useState(params.memberId ?? members[0]?.userId ?? "");
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState<PaymentMethod>("upi");
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const selected = members.find((member) => member.userId === memberId);
+
+  if (!can("reimbursements.create")) {
+    return <GaneshWriteLock message="Only a Pandal Admin or Treasurer can reimburse members." />;
+  }
 
   return (
     <GaneshScreen>
