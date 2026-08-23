@@ -10,6 +10,7 @@ import {
   othersFullyCollected,
   participantPaidAmount,
   participantRemainingDue,
+  recalibrateSplitAfterAmountChange,
   recalibrateSplitAfterOptOut,
   validateCustomSplits,
 } from "./splitMath";
@@ -560,12 +561,110 @@ describe("splitMath utilities", () => {
       expect(result.participants[0].shareRaised).toBeUndefined();
     });
 
+    it("₹100 among 5, 4 already paid, 5th drops: remaining 4 each owe ₹5 extra", () => {
+      const split: Split = {
+        id: "s-100-5",
+        title: "Dinner",
+        totalAmount: 100,
+        splitType: "equal",
+        createdBy: "me",
+        createdAt: 1,
+        settled: false,
+        participantIds: [],
+        participants: [
+          { key: "you", name: "You", amount: 20, paid: true, paidAmount: 20, isCurrentUser: true },
+          { key: "a", name: "A", amount: 20, paid: true, paidAmount: 20, isCurrentUser: false },
+          { key: "b", name: "B", amount: 20, paid: true, paidAmount: 20, isCurrentUser: false },
+          { key: "c", name: "C", amount: 20, paid: true, paidAmount: 20, isCurrentUser: false },
+          { key: "d", name: "D", amount: 20, paid: false, paidAmount: 0, isCurrentUser: false },
+        ],
+      };
+      const result = recalibrateSplitAfterOptOut(split, "d");
+      expect("error" in result).toBe(false);
+      if ("error" in result) return;
+
+      const contributing = result.participants.filter((p) => p.contributing !== false);
+      expect(contributing).toHaveLength(4);
+      expect(contributing.reduce((sum, p) => sum + p.amount, 0)).toBeCloseTo(100, 2);
+      for (const p of contributing) {
+        expect(p.amount).toBe(25);
+        expect(participantPaidAmount(p)).toBe(20);
+        expect(participantRemainingDue(p)).toBe(5);
+        expect(p.paid).toBe(false);
+        expect(p.shareRaised).toBe(true);
+      }
+      expect(result.participants[4].contributing).toBe(false);
+      expect(result.participants[4].amount).toBe(0);
+      expect(result.settled).toBe(false);
+    });
+
     it("blocks opt-out after a collect pot is spent", () => {
       const split = tenWayDinner(8);
       split.kind = "collect";
       split.status = "spent";
       expect(recalibrateSplitAfterOptOut(split, "p9")).toEqual({
         error: "This pot has already been spent.",
+      });
+    });
+  });
+
+  describe("recalibrateSplitAfterAmountChange", () => {
+    function fiveWayDinner(): Split {
+      return {
+        id: "s-edit",
+        title: "Dinner",
+        totalAmount: 100,
+        splitType: "equal",
+        createdBy: "me",
+        createdAt: 1,
+        settled: false,
+        participantIds: [],
+        participants: [
+          { key: "you", name: "You", amount: 20, paid: true, paidAmount: 20, isCurrentUser: true },
+          { key: "a", name: "A", amount: 20, paid: true, paidAmount: 20, isCurrentUser: false },
+          { key: "b", name: "B", amount: 20, paid: true, paidAmount: 20, isCurrentUser: false },
+          { key: "c", name: "C", amount: 20, paid: true, paidAmount: 20, isCurrentUser: false },
+          { key: "d", name: "D", amount: 20, paid: false, paidAmount: 0, isCurrentUser: false },
+        ],
+      };
+    }
+
+    it("raises the total and only the extra is still due for people who already paid", () => {
+      const result = recalibrateSplitAfterAmountChange(fiveWayDinner(), 125);
+      expect("error" in result).toBe(false);
+      if ("error" in result) return;
+      expect(result.totalAmount).toBe(125);
+      for (const p of result.participants) {
+        expect(p.amount).toBe(25);
+      }
+      expect(participantPaidAmount(result.participants[0])).toBe(20);
+      expect(participantRemainingDue(result.participants[0])).toBe(5);
+      expect(participantRemainingDue(result.participants[4])).toBe(25);
+    });
+
+    it("lowers the total without wiping money already marked paid", () => {
+      const result = recalibrateSplitAfterAmountChange(fiveWayDinner(), 80);
+      expect("error" in result).toBe(false);
+      if ("error" in result) return;
+      expect(result.totalAmount).toBe(80);
+      for (const p of result.participants) {
+        expect(p.amount).toBe(16);
+      }
+      expect(participantPaidAmount(result.participants[0])).toBe(20);
+      expect(participantRemainingDue(result.participants[0])).toBe(0);
+      expect(result.participants[0].paid).toBe(true);
+      expect(participantRemainingDue(result.participants[4])).toBe(16);
+    });
+
+    it("blocks a spent collect pot and a no-op amount", () => {
+      const spent = fiveWayDinner();
+      spent.kind = "collect";
+      spent.status = "spent";
+      expect(recalibrateSplitAfterAmountChange(spent, 140)).toEqual({
+        error: "This pot has already been spent.",
+      });
+      expect(recalibrateSplitAfterAmountChange(fiveWayDinner(), 100)).toEqual({
+        error: "The amount is already that value.",
       });
     });
   });

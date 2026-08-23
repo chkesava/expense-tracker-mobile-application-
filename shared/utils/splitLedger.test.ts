@@ -15,7 +15,12 @@ import {
   withParticipantKeys,
 } from "./splitLedger";
 import { buildSplitPublicSharePayloadFromSplit } from "./splitPublicShare";
-import { calculateEqualSplits, participantRemainingDue, recalibrateSplitAfterOptOut } from "./splitMath";
+import {
+  calculateEqualSplits,
+  participantRemainingDue,
+  recalibrateSplitAfterAmountChange,
+  recalibrateSplitAfterOptOut,
+} from "./splitMath";
 
 function collectPot(overrides: Partial<Split> = {}): Split {
   const participants: Participant[] = [
@@ -269,6 +274,110 @@ describe("mark / unmark collected", () => {
     expect(marked.participants[1].paidAmount).toBe(125);
     expect(marked.participants[1].paid).toBe(true);
     expect(marked.participants[1].collectedEntryIds).toEqual(["entry-1", "entry-2"]);
+  });
+
+  it("credits only ₹5 after a fifth person drops from a ₹100 pot of 5", () => {
+    const split = collectPot({
+      title: "Dinner",
+      totalAmount: 100,
+      participants: [
+        { key: "you", name: "You", amount: 20, paid: true, paidAmount: 20, isCurrentUser: true },
+        {
+          key: "a",
+          name: "A",
+          amount: 20,
+          paid: true,
+          paidAmount: 20,
+          isCurrentUser: false,
+          receivedAccountId: "hdfc",
+          collectedEntryId: "entry-1",
+        },
+        {
+          key: "b",
+          name: "B",
+          amount: 20,
+          paid: true,
+          paidAmount: 20,
+          isCurrentUser: false,
+          receivedAccountId: "hdfc",
+          collectedEntryId: "entry-2",
+        },
+        {
+          key: "c",
+          name: "C",
+          amount: 20,
+          paid: true,
+          paidAmount: 20,
+          isCurrentUser: false,
+          receivedAccountId: "hdfc",
+          collectedEntryId: "entry-3",
+        },
+        { key: "d", name: "D", amount: 20, paid: false, paidAmount: 0, isCurrentUser: false },
+      ],
+    });
+    const dropped = recalibrateSplitAfterOptOut(split, "d");
+    expect("error" in dropped).toBe(false);
+    if ("error" in dropped) return;
+
+    const marked = buildMarkCollectedWrites({
+      split: { ...split, participants: dropped.participants },
+      participantKey: "a",
+      accountId: "hdfc",
+      entryId: "entry-topup",
+      dateKey: "2026-08-23",
+    });
+    expect("error" in marked).toBe(false);
+    if ("error" in marked) return;
+    expect(marked.entry.amount).toBe(5);
+    expect(marked.entry.note).toContain("Top-up");
+    expect(marked.participants[1].paidAmount).toBe(25);
+    expect(marked.participants[1].paid).toBe(true);
+    expect(marked.participants[1].collectedEntryIds).toEqual(["entry-1", "entry-topup"]);
+  });
+
+  it("credits only the extra after the organizer edits the total up", () => {
+    const split = collectPot({
+      title: "Dinner",
+      totalAmount: 100,
+      participants: [
+        { key: "you", name: "You", amount: 20, paid: true, paidAmount: 20, isCurrentUser: true },
+        {
+          key: "a",
+          name: "A",
+          amount: 20,
+          paid: true,
+          paidAmount: 20,
+          isCurrentUser: false,
+          receivedAccountId: "hdfc",
+          collectedEntryId: "entry-1",
+        },
+        { key: "b", name: "B", amount: 20, paid: false, paidAmount: 0, isCurrentUser: false },
+        { key: "c", name: "C", amount: 20, paid: false, paidAmount: 0, isCurrentUser: false },
+        { key: "d", name: "D", amount: 20, paid: false, paidAmount: 0, isCurrentUser: false },
+      ],
+    });
+    const edited = recalibrateSplitAfterAmountChange(split, 125);
+    expect("error" in edited).toBe(false);
+    if ("error" in edited) return;
+
+    const snapshot = buildSplitPublicSharePayloadFromSplit({
+      ...split,
+      participants: edited.participants,
+      totalAmount: edited.totalAmount,
+    });
+    expect(snapshot.totalAmount).toBe(125);
+
+    const marked = buildMarkCollectedWrites({
+      split: { ...split, participants: edited.participants, totalAmount: edited.totalAmount },
+      participantKey: "a",
+      accountId: "hdfc",
+      entryId: "entry-topup",
+      dateKey: "2026-08-23",
+    });
+    expect("error" in marked).toBe(false);
+    if ("error" in marked) return;
+    expect(marked.entry.amount).toBe(5);
+    expect(marked.participants[1].paidAmount).toBe(25);
   });
 
   it("unmark deletes the credit entry id", () => {

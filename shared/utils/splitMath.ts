@@ -358,6 +358,42 @@ export function optOutBlockedReason(
   return null;
 }
 
+function redistributeContributingShares(
+  participants: Participant[],
+  totalAmount: number,
+  splitType: Split["splitType"]
+): Participant[] {
+  const next = participants.map((p) => ({ ...p }));
+  const contributorIndexes = next
+    .map((p, i) => (isParticipantContributing(p) ? i : -1))
+    .filter((i) => i >= 0);
+
+  const newAmounts =
+    splitType === "custom"
+      ? rescaleAmountsToTotal(
+          contributorIndexes.map((i) => Number(next[i].amount) || 0),
+          totalAmount
+        )
+      : equalShareAmounts(totalAmount, contributorIndexes.length);
+
+  contributorIndexes.forEach((participantIndex, n) => {
+    const p = next[participantIndex];
+    const amount = newAmounts[n];
+    const paidAmount = participantPaidAmount(p);
+    const due = roundMoney(Math.max(0, amount - paidAmount));
+    // Sticky: shares only ever rise on redistributes, and the flag is only
+    // read while something is still due, so a stale `true` is never visible.
+    const shareRaised = amount > (Number(p.amount) || 0) ? true : p.shareRaised;
+    next[participantIndex] = {
+      ...p,
+      amount,
+      paid: due <= 0.009,
+      ...(shareRaised ? { shareRaised: true } : {}),
+    };
+  });
+  return next;
+}
+
 /**
  * Mark someone as not contributing and redistribute the total among people who still are.
  * Equal: new equal shares. Custom: rescale remaining amounts so they still sum to the total.
@@ -383,37 +419,63 @@ export function recalibrateSplitAfterOptOut(
     };
   });
 
-  const contributorIndexes = next
-    .map((p, i) => (isParticipantContributing(p) ? i : -1))
-    .filter((i) => i >= 0);
-
-  const newAmounts =
-    split.splitType === "custom"
-      ? rescaleAmountsToTotal(
-          contributorIndexes.map((i) => Number(next[i].amount) || 0),
-          split.totalAmount
-        )
-      : equalShareAmounts(split.totalAmount, contributorIndexes.length);
-
-  contributorIndexes.forEach((participantIndex, n) => {
-    const p = next[participantIndex];
-    const amount = newAmounts[n];
-    const paidAmount = participantPaidAmount(p);
-    const due = roundMoney(Math.max(0, amount - paidAmount));
-    // Sticky: shares only ever rise on an opt-out, and the flag is only read
-    // while something is still due, so a stale `true` is never visible.
-    const shareRaised = amount > (Number(p.amount) || 0) ? true : p.shareRaised;
-    next[participantIndex] = {
-      ...p,
-      amount,
-      paid: due <= 0.009,
-      ...(shareRaised ? { shareRaised: true } : {}),
-    };
-  });
+  const participants = redistributeContributingShares(
+    next,
+    split.totalAmount,
+    split.splitType
+  );
 
   return {
-    participants: next,
-    settled: next.every((p) => isParticipantShareSettled(p)),
+    participants,
+    settled: participants.every((p) => isParticipantShareSettled(p)),
+  };
+}
+
+export function amountChangeBlockedReason(
+  split: Split,
+  newTotal: number
+): string | null {
+  if (isCollectSpent(split)) {
+    return "This pot has already been spent.";
+  }
+  if (!(newTotal > 0) || !Number.isFinite(newTotal)) {
+    return "Enter an amount greater than zero.";
+  }
+  if (Math.abs(roundMoney(newTotal) - roundMoney(split.totalAmount || 0)) < 0.01) {
+    return "The amount is already that value.";
+  }
+  const remaining = (split.participants || []).filter(isParticipantContributing);
+  if (remaining.length < 1) {
+    return "At least one person has to stay in the split.";
+  }
+  return null;
+}
+
+/**
+ * Change the split total and redistribute among people who are still in.
+ * Equal: new equal shares. Custom: rescale remaining amounts so they still sum to the new total.
+ * Keeps `paidAmount`; anyone who already paid may owe a top-up (or be overpaid).
+ */
+export function recalibrateSplitAfterAmountChange(
+  split: Split,
+  newTotal: number
+):
+  | { participants: Participant[]; settled: boolean; totalAmount: number }
+  | { error: string } {
+  const totalAmount = roundMoney(newTotal);
+  const blocked = amountChangeBlockedReason(split, totalAmount);
+  if (blocked) return { error: blocked };
+
+  const participants = redistributeContributingShares(
+    split.participants,
+    totalAmount,
+    split.splitType
+  );
+
+  return {
+    participants,
+    totalAmount,
+    settled: participants.every((p) => isParticipantShareSettled(p)),
   };
 }
 

@@ -63,6 +63,7 @@ import {
   isParticipantContributing,
   isParticipantShareSettled,
   participantRemainingDue,
+  recalibrateSplitAfterAmountChange,
   recalibrateSplitAfterOptOut,
 } from "@/shared/utils/splitMath";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
@@ -84,6 +85,10 @@ function applyShareSideEffects(
     ? doc(db, "splitPublicShares", split.publicShareId)
     : doc(collection(db, "splitPublicShares"));
   const settled = Boolean(extraSplitFields.settled ?? split.settled);
+  const totalAmount =
+    typeof extraSplitFields.totalAmount === "number"
+      ? extraSplitFields.totalAmount
+      : split.totalAmount;
 
   batch.update(
     doc(db, "splits", split.id as string),
@@ -102,6 +107,7 @@ function applyShareSideEffects(
         ...split,
         participants,
         settled,
+        totalAmount,
         status: (extraSplitFields.status as Split["status"]) ?? split.status,
       },
       {
@@ -728,6 +734,46 @@ export function useSplits(options?: { enabled?: boolean }) {
     }
   };
 
+  const updateSplitAmount = async (
+    splitId: string,
+    newTotal: number
+  ): Promise<boolean> => {
+    const db = getFirestoreDb();
+    if (!uid || !db || !splitId) return false;
+
+    const split = splits.find((s) => s.id === splitId);
+    if (!split) return false;
+    if (split.createdBy !== uid) {
+      toast.error("Only the organizer can edit this split amount.");
+      return false;
+    }
+
+    const built = recalibrateSplitAfterAmountChange(split, newTotal);
+    if ("error" in built) {
+      toast.error(built.error);
+      return false;
+    }
+
+    try {
+      const batch = writeBatch(db);
+      applyShareSideEffects(
+        batch,
+        db,
+        split,
+        built.participants,
+        { settled: built.settled, totalAmount: built.totalAmount },
+        { currency }
+      );
+      await commitWrite(() => batch.commit(), { label: "split amount" });
+      toast.success("Split amount updated");
+      return true;
+    } catch (err) {
+      logError("splits.updateamount", err);
+      toast.error(friendlyErrorMessage(err, "Failed to update amount"));
+      return false;
+    }
+  };
+
   const optOutParticipant = async (
     splitId: string,
     participantKey: string,
@@ -975,6 +1021,7 @@ export function useSplits(options?: { enabled?: boolean }) {
     loading,
     createSplit,
     updateSplit,
+    updateSplitAmount,
     ensureSplitSharing,
     toggleParticipantPaid,
     markParticipantCollected,
