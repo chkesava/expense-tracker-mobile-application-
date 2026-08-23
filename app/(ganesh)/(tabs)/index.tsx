@@ -41,14 +41,22 @@ export default function GaneshHomeScreen() {
   const { can } = useGaneshPermissions();
 
   return (
-    <GaneshScreen>
+    <GaneshScreen safeTop>
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
         <Text style={{ color: theme.colors.foreground, fontSize: 22, fontWeight: "800" }}>
           Ganesh Seva
         </Text>
         <GaneshSyncChip />
       </View>
-      <PermanentFundCard fund={fund} onPress={() => push("/(ganesh)/permanent-fund" as never)} />
+      <PermanentFundCard
+        fund={fund}
+        onPress={() => push("/(ganesh)/permanent-fund" as never)}
+        onAddPress={
+          can("permanentFund.transfer") && fund.total === 0
+            ? () => push("/(ganesh)/add-permanent-fund" as never)
+            : undefined
+        }
+      />
       <GodFundHero
         amount={godFund}
         festivalName={festival?.name}
@@ -78,7 +86,10 @@ export default function GaneshHomeScreen() {
           Create next festival
         </Button>
       ) : null}
-      <GaneshQuickActions disabled={closed} />
+      <GaneshQuickActions
+        disabled={closed}
+        showAddPermanentFund={can("permanentFund.transfer") && fund.total === 0}
+      />
       <Pressable onPress={() => push("/(ganesh)/report" as never)}>
         <Text style={{ color: theme.colors.primary, fontWeight: "700" }}>View festival report</Text>
       </Pressable>

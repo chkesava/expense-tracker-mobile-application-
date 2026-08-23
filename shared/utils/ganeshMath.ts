@@ -264,6 +264,35 @@ export function memberRemainingContribution(
   return money(Math.max(0, member.contributionTarget - member.contributionPaid));
 }
 
+export type CommitteePayStatus = "paid" | "partial" | "pending";
+
+export function committeePayStatus(
+  paid: number,
+  target: number,
+  overridden = false
+): CommitteePayStatus {
+  if (target <= 0 && overridden) return "paid";
+  return deriveHouseholdStatus({
+    expectedAmount: target,
+    collectedAmount: paid,
+  }) as CommitteePayStatus;
+}
+
+export function effectiveCommitteeTarget(
+  member:
+    | Pick<FestivalMember, "contributionTarget" | "contributionTargetOverridden">
+    | null
+    | undefined,
+  defaultTarget: number
+): number {
+  if (member?.contributionTargetOverridden) {
+    return money(Number(member.contributionTarget ?? 0));
+  }
+  const stored = money(Number(member?.contributionTarget ?? 0));
+  if (stored > 0) return stored;
+  return money(Number(defaultTarget ?? 0));
+}
+
 export type LedgerTotalsInput = {
   openingFunds: number[];
   collections: number[];

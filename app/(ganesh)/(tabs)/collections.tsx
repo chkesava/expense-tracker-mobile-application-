@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FlashList } from "@shopify/flash-list";
 
 import { AccountabilityLine } from "@/components/ganesh/AccountabilityLine";
@@ -24,6 +25,7 @@ const FILTERS = ["all", "paid", "partial", "pending", "cash", "upi"] as const;
 
 export default function CollectionsScreen() {
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
   const { push } = useRouter();
   const { pandalId, festivalId } = useGaneshSession();
   const { festivals } = useFestivals(pandalId);
@@ -98,7 +100,7 @@ export default function CollectionsScreen() {
   );
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.colors.background, padding: 16, gap: 12 }}>
+    <View style={{ flex: 1, backgroundColor: theme.colors.background, padding: 16, paddingTop: insets.top + 16, gap: 12 }}>
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
         <Text style={{ color: theme.colors.foreground, fontSize: 22, fontWeight: "800" }}>
           Collections

@@ -47,6 +47,7 @@ export default function GaneshTabsLayout() {
       <Tabs.Screen name="collections" options={{ title: "Collections" }} />
       <Tabs.Screen name="expenses" options={{ title: "Expenses" }} />
       <Tabs.Screen name="contributions" options={{ title: "Contributions" }} />
+      <Tabs.Screen name="committee" options={{ title: "Committee" }} />
       <Tabs.Screen name="pandal" options={{ title: "Pandal" }} />
     </Tabs>
   );

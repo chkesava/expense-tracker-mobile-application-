@@ -76,8 +76,12 @@ export default function GaneshMembersScreen() {
 
   return (
     <GaneshScreen>
+      <Text style={{ color: theme.colors.foreground, fontSize: 22, fontWeight: "800" }}>
+        Committee
+      </Text>
       <Text style={{ color: theme.colors.mutedForeground, lineHeight: 22 }}>
-        Roles are per Pandal. Leaving never rewrites historical entered-by names.
+        Everyone in this Pandal. Roles stay with the Pandal. Leaving never rewrites historical
+        entered-by names.
       </Text>
       {members.length === 0 ? (
         <EmptyState title="No members yet" description="Approve a join request to add the first person." />

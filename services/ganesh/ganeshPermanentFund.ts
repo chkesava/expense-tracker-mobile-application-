@@ -147,7 +147,14 @@ export async function seedPermanentFund(
 
   await runTransaction(db, async (txn) => {
     const current = await readPermanentFund(txn, db, pandalId);
-    if (current.total > 0 || current.cash + current.upi + current.bank + current.other > 0) {
+    const alreadyHasBalance =
+      current.total > 0 || current.cash + current.upi + current.bank + current.other > 0;
+    if (alreadyHasBalance) {
+      if (amount > 0) {
+        throw new Error(
+          "The Permanent Fund already has a balance. Use Add donation or Adjust to change it."
+        );
+      }
       return;
     }
     if (amount <= 0) {

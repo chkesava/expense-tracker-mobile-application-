@@ -28,6 +28,7 @@ import {
   validateExpenseFunding,
   validateGodFundSpend,
   validateInKindValue,
+  validateNonNegativeAmount,
   validatePositiveAmount,
   validateReimbursement,
 } from "@/shared/utils/ganeshMath";
@@ -632,6 +633,9 @@ export async function updateFestivalTargets(
   });
   const members = await getDocs(colRef(db, festivalCol(pandalId, festivalId, "members")));
   members.forEach((memberSnap) => {
+    if (input.contributionMode === "same" && memberSnap.data().contributionTargetOverridden) {
+      return;
+    }
     const target =
       input.contributionMode === "custom"
         ? Number(input.customTargets?.[memberSnap.id] ?? 0)
@@ -643,6 +647,61 @@ export async function updateFestivalTargets(
     reason: "Updated contribution targets",
   });
   await commitWrite(() => batch.commit(), { label: "targets" });
+}
+
+export async function setMemberContributionTarget(
+  db: Firestore,
+  actor: GaneshActor,
+  pandalId: string,
+  festivalId: string,
+  memberId: string,
+  input: {
+    amount?: number;
+    resetToDefault?: boolean;
+    displayName?: string;
+    role?: GaneshRole;
+  }
+): Promise<void> {
+  const festivalSnap = await getDoc(pathRef(db, festivalDoc(pandalId, festivalId)));
+  if (!festivalSnap.exists()) throw new Error("Festival not found.");
+  if (festivalSnap.data().status !== "open") {
+    throw new Error("Open the festival before changing a person's target.");
+  }
+  const defaultTarget = Number(festivalSnap.data().contributionTargetAmount ?? 0);
+  const reset = Boolean(input.resetToDefault);
+  const amount = reset ? defaultTarget : Number(input.amount);
+  const valid = validateNonNegativeAmount(amount, "This person's target");
+  if (!valid.ok) throw new Error(valid.error);
+
+  const memberRef = pathRef(db, [...festivalCol(pandalId, festivalId, "members"), memberId]);
+  const existing = await getDoc(memberRef);
+  const batch = writeBatch(db);
+  batch.set(
+    memberRef,
+    omitUndefined({
+      userId: memberId,
+      displayName:
+        input.displayName?.trim() ||
+        String(existing.data()?.displayName ?? "Member"),
+      role: input.role ?? existing.data()?.role ?? "member",
+      contributionTarget: amount,
+      contributionTargetOverridden: !reset,
+      contributionPaid: existing.exists() ? undefined : 0,
+      personalExpenses: existing.exists() ? undefined : 0,
+      reimbursed: existing.exists() ? undefined : 0,
+      pendingReimbursement: existing.exists() ? undefined : 0,
+      createdBy: existing.exists() ? undefined : actor.uid,
+      createdAt: existing.exists() ? undefined : serverTimestamp(),
+      updatedBy: actor.uid,
+      updatedAt: serverTimestamp(),
+    }),
+    { merge: true }
+  );
+  audit(batch, db, pandalId, festivalId, actor.uid, "adjusted", "festivalMember", memberId, {
+    newValue: { contributionTarget: amount, contributionTargetOverridden: !reset },
+    reason: reset ? "Reset to committee default target" : "Custom committee target",
+  });
+  await commitWrite(() => batch.commit(), { label: "member target" });
 }
 
 export async function addOpeningFund(
@@ -916,7 +975,11 @@ export async function addContribution(
           ...festivalCol(pandalId, festivalId, "members"),
           input.contributorMemberId,
         ]),
-        { contributionPaid: increment(amount) },
+        {
+          userId: input.contributorMemberId,
+          displayName: contributorName,
+          contributionPaid: increment(amount),
+        },
         { merge: true }
       );
     }

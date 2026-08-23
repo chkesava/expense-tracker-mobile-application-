@@ -7,14 +7,17 @@ import { useTheme } from "@/theme/ThemeProvider";
 export function GaneshScreen({
   children,
   scroll = true,
+  safeTop = false,
 }: {
   children: ReactNode;
   scroll?: boolean;
+  /** Use on headerless tab screens so content clears the Android status bar. */
+  safeTop?: boolean;
 }) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const padding = {
-    paddingTop: 16,
+    paddingTop: (safeTop ? insets.top : 0) + 16,
     paddingHorizontal: 16,
     paddingBottom: Math.max(insets.bottom, 16) + 24,
     gap: 16,

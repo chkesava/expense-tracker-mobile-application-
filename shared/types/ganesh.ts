@@ -170,6 +170,7 @@ export interface FestivalMember {
   displayName: string;
   role: GaneshRole;
   contributionTarget: number;
+  contributionTargetOverridden?: boolean;
   contributionPaid: number;
   personalExpenses: number;
   reimbursed: number;

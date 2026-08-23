@@ -160,6 +160,11 @@ export default function GaneshSetupScreen() {
               Yes
             </Button>
           </View>
+          {!hasExistingFund ? (
+            <Text style={{ color: theme.colors.mutedForeground, lineHeight: 20 }}>
+              You can add the Permanent Fund later from Home or the Pandal tab.
+            </Text>
+          ) : null}
           {hasExistingFund ? (
             <View style={{ gap: 12 }}>
               <Input

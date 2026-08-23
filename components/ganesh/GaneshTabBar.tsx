@@ -3,6 +3,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   Gift,
   Home,
+  Landmark,
   Receipt,
   Users,
   Wallet,
@@ -18,7 +19,8 @@ const TABS: Array<{ name: string; label: string; Icon: LucideIcon }> = [
   { name: "collections", label: "Collections", Icon: Wallet },
   { name: "expenses", label: "Expenses", Icon: Receipt },
   { name: "contributions", label: "Contributions", Icon: Gift },
-  { name: "pandal", label: "Pandal", Icon: Users },
+  { name: "committee", label: "Committee", Icon: Users },
+  { name: "pandal", label: "Pandal", Icon: Landmark },
 ];
 
 export function GaneshTabBar({
@@ -75,7 +77,10 @@ export function GaneshTabBar({
             style={({ pressed }) => [styles.item, pressed && { opacity: 0.8 }]}
           >
             <Icon size={22} color={color} strokeWidth={isFocused ? 2.5 : 2} />
-            <Text style={{ color, fontSize: 11, fontWeight: isFocused ? "700" : "500" }}>
+            <Text
+              numberOfLines={1}
+              style={{ color, fontSize: 10, fontWeight: isFocused ? "700" : "500" }}
+            >
               {meta.label}
             </Text>
           </Pressable>

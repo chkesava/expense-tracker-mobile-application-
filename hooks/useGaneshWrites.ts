@@ -118,6 +118,25 @@ export function useGaneshWrites() {
         writes.updateFestivalTargets(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, input)
       );
     },
+    setMemberContributionTarget: (
+      memberId: string,
+      input: Parameters<typeof writes.setMemberContributionTarget>[5]
+    ) => {
+      requirePerm("festival.update");
+      const ctx = requireFestival();
+      return run(
+        input.resetToDefault ? "Using committee default target" : "Person target saved",
+        () =>
+          writes.setMemberContributionTarget(
+            ctx.db,
+            ctx.actor,
+            ctx.pandalId,
+            ctx.festivalId,
+            memberId,
+            input
+          )
+      );
+    },
     addOpeningFund: (input: Parameters<typeof writes.addOpeningFund>[4]) => {
       requirePerm("openingFunds.create");
       const ctx = requireFestival();

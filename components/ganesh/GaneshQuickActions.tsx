@@ -18,14 +18,20 @@ const ACTIONS: Array<{
   { href: "/(ganesh)/add-member-payment", label: "+ Member payment", Icon: Landmark, permission: "contributions.create" },
 ];
 
-export function GaneshQuickActions({ disabled }: { disabled?: boolean }) {
+export function GaneshQuickActions({
+  disabled,
+  showAddPermanentFund,
+}: {
+  disabled?: boolean;
+  showAddPermanentFund?: boolean;
+}) {
   const { theme } = useTheme();
   const { push } = useRouter();
   const { can } = useGaneshPermissions();
   const visible = ACTIONS.filter((action) => can(action.permission));
   const showOpening = can("openingFunds.create");
 
-  if (visible.length === 0 && !showOpening) return null;
+  if (visible.length === 0 && !showOpening && !showAddPermanentFund) return null;
 
   return (
     <View style={{ gap: 10 }}>
@@ -54,6 +60,27 @@ export function GaneshQuickActions({ disabled }: { disabled?: boolean }) {
             <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>{label}</Text>
           </Pressable>
         ))}
+        {showAddPermanentFund ? (
+          <Pressable
+            onPress={() => push("/(ganesh)/add-permanent-fund" as never)}
+            style={({ pressed }) => ({
+              flexGrow: 1,
+              minWidth: "45%",
+              backgroundColor: theme.colors.muted,
+              borderRadius: 16,
+              padding: 14,
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 8,
+              opacity: pressed ? 0.85 : 1,
+            })}
+          >
+            <Landmark size={18} color={theme.colors.foreground} />
+            <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>
+              Permanent Fund
+            </Text>
+          </Pressable>
+        ) : null}
         {showOpening ? (
           <Pressable
             disabled={disabled}

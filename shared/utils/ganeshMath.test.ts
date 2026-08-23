@@ -17,6 +17,8 @@ import {
   validateReimbursement,
   validateSettlement,
   canManagePandal,
+  committeePayStatus,
+  effectiveCommitteeTarget,
 } from "./ganeshMath";
 import { EMPTY_PERMANENT_FUND } from "@/shared/types/ganesh";
 
@@ -256,5 +258,35 @@ describe("possibleHouseholdDuplicates", () => {
       { name: "Ramesh", houseNumber: "12" }
     );
     expect(matches).toHaveLength(1);
+  });
+});
+
+describe("committeePayStatus", () => {
+  it("marks unpaid committee people as pending", () => {
+    expect(committeePayStatus(0, 500)).toBe("pending");
+  });
+
+  it("marks a part payment as partial and a full payment as paid", () => {
+    expect(committeePayStatus(200, 500)).toBe("partial");
+    expect(committeePayStatus(500, 500)).toBe("paid");
+  });
+
+  it("treats an overridden zero target as paid", () => {
+    expect(committeePayStatus(0, 0, true)).toBe("paid");
+  });
+});
+
+describe("effectiveCommitteeTarget", () => {
+  it("uses the festival default until a person has a custom target", () => {
+    expect(effectiveCommitteeTarget({ contributionTarget: 0 }, 500)).toBe(500);
+    expect(
+      effectiveCommitteeTarget({ contributionTarget: 100, contributionTargetOverridden: true }, 500)
+    ).toBe(100);
+  });
+
+  it("allows a custom target of zero for a child who is not expected to pay", () => {
+    expect(
+      effectiveCommitteeTarget({ contributionTarget: 0, contributionTargetOverridden: true }, 500)
+    ).toBe(0);
   });
 });

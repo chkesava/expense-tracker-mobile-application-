@@ -1,5 +1,6 @@
 import { Pressable, Text, View } from "react-native";
 
+import { Button } from "@/components/ui/Button";
 import type { PermanentFundSummary } from "@/shared/types/ganesh";
 import { formatInr } from "@/shared/utils/ganeshMoney";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -7,15 +8,17 @@ import { useTheme } from "@/theme/ThemeProvider";
 export function PermanentFundCard({
   fund,
   onPress,
+  onAddPress,
 }: {
   fund: PermanentFundSummary;
   onPress?: () => void;
+  onAddPress?: () => void;
 }) {
   const { theme } = useTheme();
+  const empty = fund.total === 0;
+
   return (
-    <Pressable
-      onPress={onPress}
-      disabled={!onPress}
+    <View
       style={{
         backgroundColor: theme.colors.card,
         borderColor: theme.colors.border,
@@ -38,15 +41,28 @@ export function PermanentFundCard({
       <Text style={{ color: theme.colors.primary, fontSize: 32, fontWeight: "800" }}>
         {formatInr(fund.total)}
       </Text>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
-        <Text style={{ color: theme.colors.mutedForeground }}>Cash {formatInr(fund.cash)}</Text>
-        <Text style={{ color: theme.colors.mutedForeground }}>UPI {formatInr(fund.upi)}</Text>
-        <Text style={{ color: theme.colors.mutedForeground }}>Bank {formatInr(fund.bank)}</Text>
-        <Text style={{ color: theme.colors.mutedForeground }}>Other {formatInr(fund.other)}</Text>
-      </View>
-      {onPress ? (
-        <Text style={{ color: theme.colors.primary, fontWeight: "700" }}>View fund</Text>
+      {empty ? (
+        <Text style={{ color: theme.colors.mutedForeground, lineHeight: 20 }}>
+          No Permanent Fund recorded yet. You can add existing Pandal money after the app is set up.
+        </Text>
+      ) : (
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
+          <Text style={{ color: theme.colors.mutedForeground }}>Cash {formatInr(fund.cash)}</Text>
+          <Text style={{ color: theme.colors.mutedForeground }}>UPI {formatInr(fund.upi)}</Text>
+          <Text style={{ color: theme.colors.mutedForeground }}>Bank {formatInr(fund.bank)}</Text>
+          <Text style={{ color: theme.colors.mutedForeground }}>Other {formatInr(fund.other)}</Text>
+        </View>
+      )}
+      {onAddPress && empty ? (
+        <Button onPress={onAddPress}>Add Permanent Fund</Button>
       ) : null}
-    </Pressable>
+      {onPress ? (
+        <Pressable onPress={onPress}>
+          <Text style={{ color: theme.colors.primary, fontWeight: "700" }}>
+            {empty ? "View fund" : "View or add to fund"}
+          </Text>
+        </Pressable>
+      ) : null}
+    </View>
   );
 }

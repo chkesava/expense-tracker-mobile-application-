@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { FlashList } from "@shopify/flash-list";
+import { useRouter } from "expo-router";
 
 import { EmptyState } from "@/components/common/EmptyState";
 import { FundLocationChips, fundLocationLabel } from "@/components/ganesh/FundLocationChips";
@@ -40,6 +41,7 @@ const TX_LABELS: Record<PermanentFundTxType, string> = {
 
 export default function PermanentFundScreen() {
   const { theme } = useTheme();
+  const { push } = useRouter();
   const { isOnline } = useNetwork();
   const { pandalId, festivalId } = useGaneshSession();
   const { fund } = usePermanentFund(pandalId);
@@ -63,7 +65,14 @@ export default function PermanentFundScreen() {
         contentInsetAdjustmentBehavior="automatic"
         ListHeaderComponent={
           <View style={{ gap: 16, paddingBottom: 8 }}>
-            <PermanentFundCard fund={fund} />
+            <PermanentFundCard
+              fund={fund}
+              onAddPress={
+                canTransfer && fund.total === 0
+                  ? () => push("/(ganesh)/add-permanent-fund" as never)
+                  : undefined
+              }
+            />
             {!isOnline ? (
               <Text style={{ color: theme.colors.mutedForeground }}>
                 Transfers need an active connection. Viewing history still works offline.
