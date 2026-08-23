@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import { useRouter } from "expo-router";
+import { Stack, useRouter } from "expo-router";
 
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -10,9 +10,11 @@ import { useFestivals } from "@/hooks/useFestivals";
 import { useGaneshWrites } from "@/hooks/useGaneshWrites";
 import { useMyJoinRequests } from "@/hooks/useMyJoinRequests";
 import { usePandals } from "@/hooks/usePandals";
-import { friendlyErrorMessage, logError } from "@/lib/errors";
+import { classifyError, friendlyErrorMessage, logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
+import { useAuth } from "@/providers/AuthProvider";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
+import { useWorkspace } from "@/providers/WorkspaceProvider";
 import type { PermanentFundLocation } from "@/shared/types/ganesh";
 import { validateFundTransfer, validateNonNegativeAmount } from "@/shared/utils/ganeshMath";
 import { formatPandalCode } from "@/shared/utils/ganeshIdentity";
@@ -22,6 +24,8 @@ import { useTheme } from "@/theme/ThemeProvider";
 export default function GaneshSetupScreen() {
   const { theme } = useTheme();
   const { replace } = useRouter();
+  const { logout } = useAuth();
+  const { setActiveWorkspace } = useWorkspace();
   const { setSession } = useGaneshSession();
   const { pandals } = usePandals();
   const { pending, rejected } = useMyJoinRequests();
@@ -37,6 +41,7 @@ export default function GaneshSetupScreen() {
   const [fundLocation, setFundLocation] = useState<PermanentFundLocation>("cash");
   const [fundDescription, setFundDescription] = useState("Money saved from previous years");
   const [busy, setBusy] = useState(false);
+  const waiting = pending.length > 0 && mode === "choose";
 
   const create = async () => {
     const initial = hasExistingFund ? Number(initialAmount || 0) : 0;
@@ -87,10 +92,15 @@ export default function GaneshSetupScreen() {
     setBusy(true);
     try {
       await writes.requestPandalJoin(code);
+      setCode("");
       setMode("choose");
     } catch (error) {
       logError("ganesh.setup.join", error);
-      toast.error(friendlyErrorMessage(error, "Could not request access."));
+      toast.error(
+        classifyError(error) === "permission"
+          ? "Could not send the request. Check the code and try again, or ask the Pandal admin to add you."
+          : friendlyErrorMessage(error, "Could not send the join request.")
+      );
     } finally {
       setBusy(false);
     }
@@ -98,24 +108,56 @@ export default function GaneshSetupScreen() {
 
   return (
     <GaneshScreen>
+      <Stack.Screen
+        options={{
+          title: waiting ? "Waiting for approval" : "Ganesh Seva",
+          headerLeft: () => (
+            <Pressable
+              onPress={() => {
+                void setActiveWorkspace("expense");
+              }}
+              style={{ minHeight: 44, justifyContent: "center", paddingRight: 12 }}
+            >
+              <Text style={{ color: theme.colors.primary, fontWeight: "700" }}>Apps</Text>
+            </Pressable>
+          ),
+        }}
+      />
       <Text style={{ color: theme.colors.foreground, fontSize: 24, fontWeight: "800" }}>
-        Welcome to Ganesh Seva
+        {waiting ? "Waiting for approval" : "Welcome to Ganesh Seva"}
       </Text>
       <Text style={{ color: theme.colors.mutedForeground, lineHeight: 22 }}>
-        {pandals.length === 0
-          ? "You are not a member of the Pandal yet. Request to join or create the Pandal. You will not see expenses, collections, or the Permanent Fund until an admin accepts you."
-          : "Open a Pandal you already belong to, or join another with a code."}
+        {waiting
+          ? "Your request was sent to the Pandal admin. You will see expenses, collections, and the Permanent Fund after they accept you."
+          : pandals.length === 0
+            ? "You are not a member of the Pandal yet. Request to join or create the Pandal. You will not see expenses, collections, or the Permanent Fund until an admin accepts you."
+            : "Open a Pandal you already belong to, or join another with a code."}
       </Text>
-      {pending.length > 0 ? (
-        <View style={{ gap: 8 }}>
+      {waiting ? (
+        <View style={{ gap: 10 }}>
           {pending.map((request) => (
-            <Text key={request.id} style={{ color: theme.colors.foreground, fontWeight: "700" }}>
-              Request pending{request.pandalName ? ` for ${request.pandalName}` : ""}. An admin must accept you first.
-            </Text>
+            <View
+              key={request.id}
+              style={{
+                backgroundColor: theme.colors.card,
+                borderColor: theme.colors.border,
+                borderWidth: 1,
+                borderRadius: 16,
+                padding: 14,
+                gap: 6,
+              }}
+            >
+              <Text style={{ color: theme.colors.foreground, fontWeight: "800" }}>
+                {request.pandalName || "Pandal"}
+              </Text>
+              <Text style={{ color: theme.colors.mutedForeground, lineHeight: 20 }}>
+                Request sent. Waiting for an admin to approve you.
+              </Text>
+            </View>
           ))}
         </View>
       ) : null}
-      {rejected.length > 0 && pandals.length === 0 ? (
+      {rejected.length > 0 && pandals.length === 0 && !waiting ? (
         <Text style={{ color: theme.colors.mutedForeground }}>
           A previous join request was rejected. You can request again with the Pandal code.
         </Text>
@@ -137,7 +179,9 @@ export default function GaneshSetupScreen() {
 
       {mode === "choose" ? (
         <View style={{ gap: 10 }}>
-          <Button onPress={() => setMode("join")}>Request to Join</Button>
+          <Button onPress={() => setMode("join")}>
+            {waiting ? "Request another Pandal" : "Request to Join"}
+          </Button>
           <Button variant="outline" onPress={() => setMode("create")}>
             Create Pandal
           </Button>
@@ -221,6 +265,25 @@ export default function GaneshSetupScreen() {
           </Button>
         </View>
       ) : null}
+
+      <View style={{ gap: 8, paddingTop: 8 }}>
+        <Button
+          variant="outline"
+          onPress={() => {
+            void setActiveWorkspace("expense");
+          }}
+        >
+          Switch app
+        </Button>
+        <Button
+          variant="ghost"
+          onPress={() => {
+            void logout();
+          }}
+        >
+          Switch account / Log out
+        </Button>
+      </View>
     </GaneshScreen>
   );
 }

@@ -252,4 +252,43 @@ describe("ganesh firestore rules contract", () => {
     expect(isActivePandalMember(otherPandal)).toBe(false);
     expect(canCreateExpense(otherPandal)).toBe(false);
   });
+
+  it("lets a signed-in person read their own member doc so join can check membership", () => {
+    expect(canReadOwnMemberDoc({ signedIn: true, uid: "u1", memberId: "u1" })).toBe(true);
+    expect(canReadOwnMemberDoc({ signedIn: true, uid: "u1", memberId: "u2" })).toBe(false);
+    expect(canReadOwnMemberDoc({ signedIn: false, uid: "u1", memberId: "u1" })).toBe(false);
+  });
+
+  it("lets the requester file or refresh a pending join request, but not approve themselves", () => {
+    expect(
+      canWriteOwnJoinRequest({
+        signedIn: true,
+        uid: "u1",
+        requestUserId: "u1",
+        nextStatus: "pending",
+      })
+    ).toBe(true);
+    expect(
+      canWriteOwnJoinRequest({
+        signedIn: true,
+        uid: "u1",
+        requestUserId: "u1",
+        nextStatus: "approved",
+      })
+    ).toBe(false);
+    expect(canManageMembers(member)).toBe(false);
+  });
 });
+
+function canReadOwnMemberDoc(params: { signedIn: boolean; uid: string; memberId: string }): boolean {
+  return params.signedIn && params.memberId === params.uid;
+}
+
+function canWriteOwnJoinRequest(params: {
+  signedIn: boolean;
+  uid: string;
+  requestUserId: string;
+  nextStatus: "pending" | "approved" | "rejected";
+}): boolean {
+  return params.signedIn && params.requestUserId === params.uid && params.nextStatus === "pending";
+}

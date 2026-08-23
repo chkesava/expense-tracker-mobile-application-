@@ -71,7 +71,11 @@ export function useGaneshWrites() {
     requestPandalJoin: async (code: string) => {
       if (!actor) throw new Error("You must be signed in.");
       const result = await writes.requestPandalJoin(requireDb(), actor, code);
-      toast.success(result.joined ? "You're now a member." : "Join request sent");
+      toast.success(
+        result.joined
+          ? "You're now a member."
+          : "Request sent to the admin. Waiting for approval."
+      );
       return result;
     },
     decideJoinRequest: (

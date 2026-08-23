@@ -371,10 +371,18 @@ service cloud.firestore {
       allow create: if signedIn()
         && request.resource.data.userId == request.auth.uid
         && request.resource.data.status == 'pending';
-      allow update: if canManageMembersOf(resource.data.pandalId)
-        && request.resource.data.pandalId == resource.data.pandalId
-        && request.resource.data.userId == resource.data.userId
-        && request.resource.data.status in ['approved', 'rejected'];
+      allow update: if (
+          canManageMembersOf(resource.data.pandalId)
+          && request.resource.data.pandalId == resource.data.pandalId
+          && request.resource.data.userId == resource.data.userId
+          && request.resource.data.status in ['approved', 'rejected']
+        ) || (
+          signedIn()
+          && resource.data.userId == request.auth.uid
+          && request.resource.data.userId == request.auth.uid
+          && request.resource.data.pandalId == resource.data.pandalId
+          && request.resource.data.status == 'pending'
+        );
       allow delete: if false;
     }
 
@@ -455,7 +463,7 @@ service cloud.firestore {
             && resource.data.role != 'admin');
         }
 
-        allow read: if isActivePandalMember();
+        allow read: if isActivePandalMember() || memberId == request.auth.uid;
         allow create: if signedIn()
           && (
             (

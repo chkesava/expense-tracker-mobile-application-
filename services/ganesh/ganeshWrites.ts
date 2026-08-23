@@ -16,6 +16,7 @@ import {
 } from "firebase/firestore";
 
 import { DEFAULT_GANESH_CATEGORIES } from "@/shared/data/ganeshCategories";
+import { errorCode } from "@/lib/errors";
 import { newId } from "@/lib/id";
 import { commitWrite } from "@/lib/firestoreWrite";
 import { omitUndefined } from "@/shared/utils/firestorePayload";
@@ -74,6 +75,21 @@ export type GaneshActor = {
 function pathRef(db: Firestore, segments: string[]) {
   const [first, ...rest] = segments;
   return doc(db, first, ...rest);
+}
+
+async function readOwnMemberDoc(
+  db: Firestore,
+  pandalId: string,
+  uid: string
+): Promise<{ status?: string } | null> {
+  try {
+    const snap = await getDoc(doc(db, "pandals", pandalId, "members", uid));
+    if (!snap.exists()) return null;
+    return snap.data() as { status?: string };
+  } catch (error) {
+    if (errorCode(error) === "permission-denied") return null;
+    throw error;
+  }
 }
 
 function colRef(db: Firestore, segments: string[]) {
@@ -345,14 +361,14 @@ export async function requestPandalJoin(
   if (!invite.exists()) throw new Error("No Pandal found for that code.");
   const pandalId = String(invite.data().pandalId);
   const pandalName = String(invite.data().name ?? "Pandal");
-  const existing = await getDoc(doc(db, "pandals", pandalId, "members", actor.uid));
-  if (existing.exists() && existing.data().status === "active") {
+  const existing = await readOwnMemberDoc(db, pandalId, actor.uid);
+  if (existing?.status === "active") {
     throw new Error("You are already a member of this Pandal.");
   }
   const joinMode = (invite.data().joinMode ?? "approval") as PandalJoinMode;
   const requestId = `${pandalId}__${actor.uid}`;
   const joinBatch = writeBatch(db);
-  if (joinMode === "open" && !existing.exists()) {
+  if (joinMode === "open" && !existing) {
     joinBatch.set(
       doc(db, "pandals", pandalId, "members", actor.uid),
       omitUndefined({
