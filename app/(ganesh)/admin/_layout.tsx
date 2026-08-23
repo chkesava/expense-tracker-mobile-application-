@@ -24,6 +24,7 @@ export default function GaneshAdminLayout() {
         <Stack.Screen name="audit" options={{ title: "Audit log" }} />
         <Stack.Screen name="setup" options={{ title: "Contribution setup" }} />
         <Stack.Screen name="reports" options={{ title: "Reports" }} />
+        <Stack.Screen name="roles" options={{ headerShown: false }} />
       </Stack>
     </AdminGate>
   );

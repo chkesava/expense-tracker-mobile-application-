@@ -56,3 +56,7 @@ export function membershipsCol(uid: string): string[] {
 export function pandalMemberAuditsCol(pandalId: string): string[] {
   return ["pandals", pandalId, "memberAudits"];
 }
+
+export function pandalRolesCol(pandalId: string): string[] {
+  return ["pandals", pandalId, "roles"];
+}

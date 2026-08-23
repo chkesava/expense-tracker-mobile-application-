@@ -30,6 +30,8 @@ export default function AddPermanentFundScreen() {
   const { festivals } = useFestivals(pandalId);
   const writes = useGaneshWrites();
   const { can } = useGaneshPermissions();
+  const canAdd = can("permanentFund.add");
+  const canAllocate = can("permanentFund.transfer");
   const [amount, setAmount] = useState("");
   const [allocateAmount, setAllocateAmount] = useState("0");
   const [location, setLocation] = useState<PermanentFundLocation>("cash");
@@ -55,7 +57,7 @@ export default function AddPermanentFundScreen() {
       toast.error(PERMANENT_FUND_OFFLINE_ERROR);
       return;
     }
-    if (parsedAllocate > 0) {
+    if (canAllocate && parsedAllocate > 0) {
       const allowed = validateFundTransfer(parsedAllocate, parsedAmount, "Permanent Fund");
       if (!allowed.ok) {
         toast.error(allowed.error);
@@ -73,7 +75,7 @@ export default function AddPermanentFundScreen() {
         location,
         description,
       });
-      if (parsedAllocate > 0 && festival) {
+      if (canAllocate && parsedAllocate > 0 && festival) {
         await writes.transferPermanentToFestival({
           festivalId: festival.id,
           amount: parsedAllocate,
@@ -91,8 +93,8 @@ export default function AddPermanentFundScreen() {
     }
   };
 
-  if (!can("permanentFund.transfer")) {
-    return <GaneshWriteLock message="Only a Pandal Admin can add the Permanent Fund." />;
+  if (!canAdd) {
+    return <GaneshWriteLock message="You do not have permission to add the Permanent Fund." />;
   }
 
   if (fund.total > 0) {
@@ -134,7 +136,7 @@ export default function AddPermanentFundScreen() {
         onChangeText={setDescription}
         placeholder="Existing Pandal Fund"
       />
-      {festival ? (
+      {festival && canAllocate ? (
         <View style={{ gap: 8 }}>
           <Input
             label={`Use for ${festival.name} (0 keeps it in the Permanent Fund)`}

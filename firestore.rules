@@ -258,41 +258,88 @@ service cloud.firestore {
       return ganeshMemberDoc(pandalId).data.role;
     }
 
+    function hasPermissionsField(pandalId) {
+      return ganeshMemberDoc(pandalId).data.keys().hasAny(['permissions']);
+    }
+
+    function hasPermOf(pandalId, perm) {
+      return isActivePandalMemberOf(pandalId) && (
+        ganeshRoleOf(pandalId) == 'admin'
+        || (
+          hasPermissionsField(pandalId)
+          && perm in ganeshMemberDoc(pandalId).data.permissions
+        )
+      );
+    }
+
     function canManageMembersOf(pandalId) {
       return isActivePandalMemberOf(pandalId) && ganeshRoleOf(pandalId) == 'admin';
     }
 
     function canWriteCollectionOf(pandalId) {
-      return isActivePandalMemberOf(pandalId)
-        && ganeshRoleOf(pandalId) in ['admin', 'treasurer', 'member', 'collector'];
+      return hasPermOf(pandalId, 'collections.create')
+        || (
+          isActivePandalMemberOf(pandalId)
+          && !hasPermissionsField(pandalId)
+          && ganeshRoleOf(pandalId) in ['admin', 'treasurer', 'member', 'collector']
+        );
     }
 
     function canWriteExpenseOrContributionOf(pandalId) {
-      return isActivePandalMemberOf(pandalId)
-        && ganeshRoleOf(pandalId) in ['admin', 'treasurer', 'member'];
+      return hasPermOf(pandalId, 'expenses.create')
+        || hasPermOf(pandalId, 'contributions.create')
+        || (
+          isActivePandalMemberOf(pandalId)
+          && !hasPermissionsField(pandalId)
+          && ganeshRoleOf(pandalId) in ['admin', 'treasurer', 'member']
+        );
     }
 
     function canWriteReimbursementOf(pandalId) {
-      return isActivePandalMemberOf(pandalId)
-        && ganeshRoleOf(pandalId) in ['admin', 'treasurer'];
+      return hasPermOf(pandalId, 'reimbursements.create')
+        || (
+          isActivePandalMemberOf(pandalId)
+          && !hasPermissionsField(pandalId)
+          && ganeshRoleOf(pandalId) in ['admin', 'treasurer']
+        );
     }
 
     function canWritePermanentFundOf(pandalId) {
-      return isActivePandalMemberOf(pandalId) && ganeshRoleOf(pandalId) == 'admin';
+      return hasPermOf(pandalId, 'permanentFund.transfer')
+        || hasPermOf(pandalId, 'permanentFund.add')
+        || (
+          isActivePandalMemberOf(pandalId)
+          && !hasPermissionsField(pandalId)
+          && ganeshRoleOf(pandalId) == 'admin'
+        );
     }
 
     function canCloseOrUpdateFestivalOf(pandalId) {
-      return isActivePandalMemberOf(pandalId)
-        && ganeshRoleOf(pandalId) in ['admin', 'treasurer'];
+      return hasPermOf(pandalId, 'festival.update')
+        || hasPermOf(pandalId, 'festival.close')
+        || (
+          isActivePandalMemberOf(pandalId)
+          && !hasPermissionsField(pandalId)
+          && ganeshRoleOf(pandalId) in ['admin', 'treasurer']
+        );
     }
 
     function canCreateFestivalOf(pandalId) {
-      return isActivePandalMemberOf(pandalId) && ganeshRoleOf(pandalId) == 'admin';
+      return hasPermOf(pandalId, 'festival.create')
+        || (
+          isActivePandalMemberOf(pandalId)
+          && !hasPermissionsField(pandalId)
+          && ganeshRoleOf(pandalId) == 'admin'
+        );
     }
 
     function canCreateOpeningFundOf(pandalId) {
-      return isActivePandalMemberOf(pandalId)
-        && ganeshRoleOf(pandalId) in ['admin', 'treasurer'];
+      return hasPermOf(pandalId, 'openingFunds.create')
+        || (
+          isActivePandalMemberOf(pandalId)
+          && !hasPermissionsField(pandalId)
+          && ganeshRoleOf(pandalId) in ['admin', 'treasurer']
+        );
     }
 
     function canWriteLedgerSideEffectOf(pandalId) {
@@ -436,6 +483,13 @@ service cloud.firestore {
           && cannotSelfPromoteToAdmin()
           && keepsAdminCount();
         allow delete: if false;
+      }
+
+      match /roles/{roleId} {
+        allow read: if isActivePandalMember();
+        allow create: if canManageMembers();
+        allow update: if canManageMembers();
+        allow delete: if canManageMembers() && resource.data.type != 'builtin';
       }
 
       match /memberAudits/{auditId} {

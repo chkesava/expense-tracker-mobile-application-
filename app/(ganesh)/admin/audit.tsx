@@ -36,6 +36,21 @@ function memberLine(audit: PandalMemberAudit, members: PandalMember[]): string {
   if (audit.action === "join_mode") {
     return `${actor} changed who can join`;
   }
+  if (audit.action === "make_admin") {
+    return `${actor} made ${target} a Pandal Admin`;
+  }
+  if (audit.action === "remove_admin") {
+    return `${actor} removed Admin from ${target}`;
+  }
+  if (audit.action === "role_assigned") {
+    return `${actor} assigned ${audit.roleName ?? "a role"} to ${target}`;
+  }
+  if (audit.action === "role_unassigned") {
+    return `${actor} removed ${audit.roleName ?? "a role"} from ${target}`;
+  }
+  if (audit.action === "role_permissions") {
+    return `${actor} changed ${audit.roleName ?? "a role"}`;
+  }
   if (audit.oldRole && audit.newRole && audit.oldRole !== audit.newRole) {
     return `${actor} changed ${target} to ${ganeshRoleLabel(audit.newRole)}`;
   }

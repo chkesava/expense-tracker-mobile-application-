@@ -54,6 +54,7 @@ export default function PermanentFundScreen() {
   const { members } = usePandalMembers(pandalId);
   const writes = useGaneshWrites();
   const { can } = useGaneshPermissions();
+  const canAdd = can("permanentFund.add");
   const canTransfer = can("permanentFund.transfer");
   const openFestivals = festivals.filter((festival) => festival.status === "open");
 
@@ -68,7 +69,7 @@ export default function PermanentFundScreen() {
             <PermanentFundCard
               fund={fund}
               onAddPress={
-                canTransfer && fund.total === 0
+                canAdd && fund.total === 0
                   ? () => push("/(ganesh)/add-permanent-fund" as never)
                   : undefined
               }
@@ -119,7 +120,7 @@ export default function PermanentFundScreen() {
                 );
               })
             )}
-            {canTransfer ? (
+            {canAdd || canTransfer ? (
               <ManagerFundActions
                 fundAvailable={fund.total}
                 openFestivalId={openFestivals[0]?.id ?? festivalId}
@@ -127,7 +128,9 @@ export default function PermanentFundScreen() {
                   openFestivals[0]?.name ??
                   festivals.find((festival) => festival.id === festivalId)?.name
                 }
-                showInitial={fund.total === 0}
+                showInitial={canAdd && fund.total === 0}
+                canAdd={canAdd}
+                canTransfer={canTransfer}
                 onDonate={(input) => writes.addPermanentFundDonation(input)}
                 onAdjust={(input) => writes.adjustPermanentFund(input)}
                 onSeed={(input) => writes.seedPermanentFund(input)}
@@ -136,7 +139,7 @@ export default function PermanentFundScreen() {
               />
             ) : (
               <Text style={{ color: theme.colors.mutedForeground }}>
-                Members can view this fund. Only a Pandal Admin can transfer money.
+                Members can view this fund. Adding or transferring money needs a role that allows it.
               </Text>
             )}
             <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>History</Text>
@@ -217,6 +220,8 @@ function ManagerFundActions({
   openFestivalId,
   openFestivalName,
   showInitial,
+  canAdd,
+  canTransfer,
   onDonate,
   onAdjust,
   onSeed,
@@ -227,6 +232,8 @@ function ManagerFundActions({
   openFestivalId?: string | null;
   openFestivalName?: string;
   showInitial?: boolean;
+  canAdd?: boolean;
+  canTransfer?: boolean;
   onDonate: (input: { amount: number; location: PermanentFundLocation; description?: string }) => Promise<unknown>;
   onAdjust: (input: { amount: number; location: PermanentFundLocation; reason: string }) => Promise<unknown>;
   onSeed: (input: { amount?: number; location?: PermanentFundLocation; description?: string }) => Promise<unknown>;
@@ -300,13 +307,17 @@ function ManagerFundActions({
   const modes = useMemo(
     () =>
       [
-        ...(showInitial ? [{ id: "initial" as const, label: "Record existing balance" }] : []),
-        { id: "donate" as const, label: "Add donation" },
-        { id: "adjust" as const, label: "Adjust" },
-        { id: "toFestival" as const, label: "Use for festival" },
-        { id: "fromFestival" as const, label: "Return from festival" },
+        ...(canAdd && showInitial ? [{ id: "initial" as const, label: "Record existing balance" }] : []),
+        ...(canAdd ? [{ id: "donate" as const, label: "Add donation" }] : []),
+        ...(canTransfer
+          ? [
+              { id: "adjust" as const, label: "Adjust" },
+              { id: "toFestival" as const, label: "Use for festival" },
+              { id: "fromFestival" as const, label: "Return from festival" },
+            ]
+          : []),
       ],
-    [showInitial]
+    [canAdd, canTransfer, showInitial]
   );
 
   return (

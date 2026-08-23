@@ -75,7 +75,7 @@ export default function GaneshHomeScreen() {
         fund={fund}
         onPress={() => push("/(ganesh)/permanent-fund" as never)}
         onAddPress={
-          can("permanentFund.transfer") && fund.total === 0
+          can("permanentFund.add") && fund.total === 0
             ? () => push("/(ganesh)/add-permanent-fund" as never)
             : undefined
         }
@@ -111,7 +111,7 @@ export default function GaneshHomeScreen() {
       ) : null}
       <GaneshQuickActions
         disabled={closed}
-        showAddPermanentFund={can("permanentFund.transfer") && fund.total === 0}
+        showAddPermanentFund={can("permanentFund.add") && fund.total === 0}
       />
       <Pressable onPress={() => push("/(ganesh)/report" as never)}>
         <Text style={{ color: theme.colors.primary, fontWeight: "700" }}>View festival report</Text>

@@ -1,4 +1,6 @@
-import type { GaneshRole } from "@/shared/types/ganesh";
+import type { GaneshRole, PandalRole } from "@/shared/types/ganesh";
+
+import { expandPermissions, hasPermission } from "@/shared/utils/ganeshPermissionRegistry";
 
 export type GaneshPermission =
   | "collections.read"
@@ -18,13 +20,60 @@ export type GaneshPermission =
   | "members.remove"
   | "members.assignRole"
   | "members.suspend"
+  | "members.update"
   | "permanentFund.read"
+  | "permanentFund.add"
   | "permanentFund.transfer"
+  | "festival.read"
   | "festival.create"
   | "festival.update"
   | "festival.close"
   | "openingFunds.create"
+  | "roles.read"
+  | "roles.create"
+  | "roles.update"
+  | "roles.delete"
+  | "roles.assign"
+  | "settings.read"
+  | "settings.update"
   | "audit.read";
+
+export const ALL_GANESH_PERMISSIONS: GaneshPermission[] = [
+  "collections.read",
+  "collections.create",
+  "collections.update",
+  "expenses.read",
+  "expenses.create",
+  "expenses.update",
+  "expenses.void",
+  "contributions.read",
+  "contributions.create",
+  "contributions.update",
+  "reimbursements.read",
+  "reimbursements.create",
+  "members.read",
+  "members.approve",
+  "members.remove",
+  "members.assignRole",
+  "members.suspend",
+  "members.update",
+  "permanentFund.read",
+  "permanentFund.add",
+  "permanentFund.transfer",
+  "festival.read",
+  "festival.create",
+  "festival.update",
+  "festival.close",
+  "openingFunds.create",
+  "roles.read",
+  "roles.create",
+  "roles.update",
+  "roles.delete",
+  "roles.assign",
+  "settings.read",
+  "settings.update",
+  "audit.read",
+];
 
 const READ_LEDGER: GaneshPermission[] = [
   "collections.read",
@@ -33,6 +82,7 @@ const READ_LEDGER: GaneshPermission[] = [
   "reimbursements.read",
   "members.read",
   "permanentFund.read",
+  "festival.read",
 ];
 
 const MEMBER_WRITES: GaneshPermission[] = [
@@ -55,15 +105,7 @@ const TREASURER_PERMISSIONS: GaneshPermission[] = [
   "audit.read",
 ];
 
-const ADMIN_PERMISSIONS: GaneshPermission[] = [
-  ...TREASURER_PERMISSIONS,
-  "members.approve",
-  "members.remove",
-  "members.assignRole",
-  "members.suspend",
-  "permanentFund.transfer",
-  "festival.create",
-];
+const ADMIN_PERMISSIONS: GaneshPermission[] = [...ALL_GANESH_PERMISSIONS];
 
 const COLLECTOR_PERMISSIONS: GaneshPermission[] = [
   "collections.read",
@@ -73,6 +115,7 @@ const COLLECTOR_PERMISSIONS: GaneshPermission[] = [
   "contributions.read",
   "members.read",
   "permanentFund.read",
+  "festival.read",
 ];
 
 const VIEWER_PERMISSIONS: GaneshPermission[] = [...READ_LEDGER];
@@ -85,6 +128,8 @@ export const ROLE_PERMISSIONS: Record<GaneshRole, readonly GaneshPermission[]> =
   viewer: VIEWER_PERMISSIONS,
 };
 
+export const BUILTIN_ROLE_IDS = ["treasurer", "member", "collector", "viewer"] as const;
+
 export const JOIN_APPROVE_ROLES: GaneshRole[] = ["member", "collector", "viewer"];
 
 export const ASSIGNABLE_ROLES: GaneshRole[] = [
@@ -95,7 +140,7 @@ export const ASSIGNABLE_ROLES: GaneshRole[] = [
   "viewer",
 ];
 
-/** Mirrors `canWriteCollection()` in firestore.rules. */
+/** Mirrors `canWriteCollection()` fallback in firestore.rules. */
 export const RULE_COLLECTION_WRITE_ROLES: GaneshRole[] = [
   "admin",
   "treasurer",
@@ -103,10 +148,10 @@ export const RULE_COLLECTION_WRITE_ROLES: GaneshRole[] = [
   "collector",
 ];
 
-/** Mirrors `canWriteExpenseOrContribution()` in firestore.rules. */
+/** Mirrors `canWriteExpenseOrContribution()` fallback in firestore.rules. */
 export const RULE_EXPENSE_WRITE_ROLES: GaneshRole[] = ["admin", "treasurer", "member"];
 
-/** Mirrors `canWriteReimbursement()` / `canCloseOrUpdateFestival()` in firestore.rules. */
+/** Mirrors `canWriteReimbursement()` / `canCloseOrUpdateFestival()` fallback in firestore.rules. */
 export const RULE_TREASURER_WRITE_ROLES: GaneshRole[] = ["admin", "treasurer"];
 
 export function isGaneshAdmin(role: GaneshRole | undefined): boolean {
@@ -115,7 +160,26 @@ export function isGaneshAdmin(role: GaneshRole | undefined): boolean {
 
 export function can(role: GaneshRole | undefined, permission: GaneshPermission): boolean {
   if (!role) return false;
-  return ROLE_PERMISSIONS[role].includes(permission);
+  if (role === "admin") return true;
+  return expandPermissions(ROLE_PERMISSIONS[role]).includes(permission);
+}
+
+export function getEffectivePermissions(input: {
+  isAdmin?: boolean;
+  roleIds?: string[];
+  roles?: Array<Pick<PandalRole, "id" | "permissions">>;
+  fallbackRole?: GaneshRole;
+}): GaneshPermission[] {
+  if (input.isAdmin) return [...ALL_GANESH_PERMISSIONS];
+  const collected: GaneshPermission[] = [];
+  for (const roleId of input.roleIds ?? []) {
+    const role = input.roles?.find((item) => item.id === roleId);
+    if (role) collected.push(...role.permissions);
+  }
+  if (collected.length === 0 && input.fallbackRole && input.fallbackRole !== "admin") {
+    collected.push(...ROLE_PERMISSIONS[input.fallbackRole]);
+  }
+  return expandPermissions(collected);
 }
 
 export function ganeshRoleLabel(role: GaneshRole | undefined): string {
@@ -135,6 +199,20 @@ export function ganeshStatusLabel(status: string | undefined): string {
   return status || "Unknown";
 }
 
+export function roleNameKey(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+export function validateRoleName(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error("Enter a role name.");
+  if (trimmed.length > 40) throw new Error("Role name must be 40 characters or less.");
+  if (roleNameKey(trimmed) === "admin") {
+    throw new Error("Admin is a protected Pandal role. Promote a person instead.");
+  }
+  return trimmed;
+}
+
 export function assertPermission(
   role: GaneshRole | undefined,
   permission: GaneshPermission,
@@ -142,3 +220,15 @@ export function assertPermission(
 ): void {
   if (!can(role, permission)) throw new Error(message);
 }
+
+export function assertHasPermission(
+  effective: readonly GaneshPermission[] | undefined,
+  permission: GaneshPermission,
+  isAdmin = false,
+  message = "You do not have permission to do that."
+): void {
+  if (isAdmin || hasPermission(effective, permission)) return;
+  throw new Error(message);
+}
+
+export { hasPermission };

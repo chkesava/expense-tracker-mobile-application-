@@ -1,4 +1,5 @@
 import type { GaneshFileMeta, GaneshRole } from "@/shared/types/ganesh";
+import type { GaneshPermission } from "@/shared/utils/ganeshPermissions";
 
 export type { GaneshFileMeta };
 
@@ -20,6 +21,7 @@ export type PreparedGaneshImage = {
 export type UploadFestivalFileInput = {
   uid: string;
   role: GaneshRole | undefined;
+  permissions?: GaneshPermission[];
   memberStatus: string | undefined;
   sessionPandalId: string | null;
   sessionFestivalId: string | null;

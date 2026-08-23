@@ -104,7 +104,7 @@ export default function PandalScreen() {
         fund={fund}
         onPress={() => push("/(ganesh)/permanent-fund" as never)}
         onAddPress={
-          can("permanentFund.transfer") && fund.total === 0
+          can("permanentFund.add") && fund.total === 0
             ? () => push("/(ganesh)/add-permanent-fund" as never)
             : undefined
         }

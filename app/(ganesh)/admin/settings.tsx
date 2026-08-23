@@ -5,6 +5,7 @@ import { AdminQueryState } from "@/components/ganesh/AdminQueryState";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { useGaneshWrites } from "@/hooks/useGaneshWrites";
 import { usePandals } from "@/hooks/usePandals";
 import { usePandalMembers } from "@/hooks/usePandalMembers";
@@ -21,6 +22,8 @@ export default function AdminPandalSettingsScreen() {
   const { pandals, loading, error } = usePandals();
   const { members } = usePandalMembers(pandalId);
   const writes = useGaneshWrites();
+  const { can } = useGaneshPermissions();
+  const canUpdate = can("settings.update");
   const pandal = pandals.find((item) => item.id === pandalId);
   const admins = members.filter((member) => member.role === "admin" && member.status === "active");
   const [_name, setName] = useState<string | undefined>(undefined);
@@ -57,17 +60,19 @@ export default function AdminPandalSettingsScreen() {
                 {admins.map((admin) => `${admin.displayName} (${ganeshRoleLabel(admin.role)})`).join(", ")}
               </Text>
             ) : null}
-            <Input label="Pandal name" value={name} onChangeText={setName} />
-            <Input label="Area" value={area} onChangeText={setArea} />
-            <Input label="Description" value={description} onChangeText={setDescription} />
+            <Input label="Pandal name" value={name} onChangeText={setName} editable={canUpdate} />
+            <Input label="Area" value={area} onChangeText={setArea} editable={canUpdate} />
+            <Input label="Description" value={description} onChangeText={setDescription} editable={canUpdate} />
             <Input
               label="Contact number"
               value={contactPhone}
               onChangeText={setContactPhone}
               keyboardType="phone-pad"
+              editable={canUpdate}
             />
             <Button
               loading={busy}
+              disabled={!canUpdate}
               onPress={() => {
                 setBusy(true);
                 writes
@@ -91,12 +96,14 @@ export default function AdminPandalSettingsScreen() {
             <View style={{ flexDirection: "row", gap: 8 }}>
               <Button
                 variant={joinMode === "approval" ? "primary" : "outline"}
+                disabled={!canUpdate}
                 onPress={() => void writes.updatePandalJoinMode("approval")}
               >
                 Approval
               </Button>
               <Button
                 variant={joinMode === "open" ? "primary" : "outline"}
+                disabled={!canUpdate}
                 onPress={() => void writes.updatePandalJoinMode("open")}
               >
                 Open

@@ -18,6 +18,7 @@ export async function uploadFestivalFile(input: UploadFestivalFileInput): Promis
   assertCanUpload({
     uid: input.uid,
     role: input.role,
+    permissions: input.permissions,
     memberStatus: input.memberStatus,
     sessionPandalId: input.sessionPandalId,
     sessionFestivalId: input.sessionFestivalId,

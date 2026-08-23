@@ -10,6 +10,7 @@ import { useGaneshSummary } from "@/hooks/useGaneshSummary";
 import { useHouseholds } from "@/hooks/useHouseholds";
 import { useJoinRequests } from "@/hooks/useJoinRequests";
 import { usePandalMembers } from "@/hooks/usePandalMembers";
+import { usePandalRoles } from "@/hooks/usePandalRoles";
 import { usePandals } from "@/hooks/usePandals";
 import { usePermanentFund } from "@/hooks/usePermanentFund";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
@@ -25,6 +26,7 @@ export default function AdminDashboardScreen() {
     useFestivals(pandalId);
   const { members, loading: membersLoading, error: membersError, retry: retryMembers } =
     usePandalMembers(pandalId);
+  const { roles } = usePandalRoles(pandalId);
   const { requests, loading: requestsLoading, error: requestsError, retry: retryRequests } =
     useJoinRequests(pandalId);
   const { fund } = usePermanentFund(pandalId);
@@ -188,6 +190,29 @@ export default function AdminDashboardScreen() {
             title="View reports"
             subtitle="Festival and money summaries"
             onPress={() => push("/(ganesh)/admin/reports" as never)}
+          />
+        </View>
+
+        <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>User management</Text>
+        <MetricGrid
+          items={[
+            { label: "Members", value: `${activeMembers.length}` },
+            { label: "Pending requests", value: `${requests.length}` },
+            { label: "Roles", value: `${roles.length}` },
+          ]}
+        />
+        <View style={{ gap: 10 }}>
+          <AdminLinkRow
+            title="Manage members"
+            subtitle="Approve, assign roles, or make Admin"
+            badge={requests.length > 0 ? `${requests.length} pending` : undefined}
+            tone={requests.length > 0 ? "critical" : "normal"}
+            onPress={() => push("/(ganesh)/members" as never)}
+          />
+          <AdminLinkRow
+            title="Roles & permissions"
+            subtitle="Create roles and choose what they can do"
+            onPress={() => push("/(ganesh)/admin/roles" as never)}
           />
         </View>
 

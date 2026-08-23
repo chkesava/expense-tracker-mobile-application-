@@ -129,15 +129,45 @@ export interface PandalMembershipIndex {
   joinedAt?: FirestoreTime;
 }
 
+export type PandalRoleType = "builtin" | "custom";
+export type PandalMemberAuditAction =
+  | "role_changed"
+  | "suspended"
+  | "removed"
+  | "approved"
+  | "join_mode"
+  | "role_assigned"
+  | "role_unassigned"
+  | "make_admin"
+  | "remove_admin"
+  | "role_permissions";
+
+export interface PandalRole {
+  id: string;
+  name: string;
+  nameKey: string;
+  description?: string;
+  type: PandalRoleType;
+  permissions: import("@/shared/utils/ganeshPermissions").GaneshPermission[];
+  createdBy: string;
+  createdAt?: FirestoreTime;
+  updatedBy: string;
+  updatedAt?: FirestoreTime;
+}
+
 export interface PandalMemberAudit {
   id: string;
   actorId: string;
   targetUserId: string;
-  action: "role_changed" | "suspended" | "removed" | "approved" | "join_mode";
+  action: PandalMemberAuditAction;
   oldRole?: GaneshRole;
   newRole?: GaneshRole;
   oldStatus?: GaneshMemberStatus;
   newStatus?: GaneshMemberStatus;
+  roleId?: string;
+  roleName?: string;
+  oldPermissions?: string[];
+  newPermissions?: string[];
   reason?: string;
   at?: FirestoreTime;
 }
@@ -149,6 +179,9 @@ export interface PandalMember {
   phone?: string;
   role: GaneshRole;
   status: GaneshMemberStatus;
+  roleIds?: string[];
+  permissions?: import("@/shared/utils/ganeshPermissions").GaneshPermission[];
+  permissionOverrides?: import("@/shared/utils/ganeshPermissions").GaneshPermission[];
   createdAt?: FirestoreTime;
   updatedAt?: FirestoreTime;
 }

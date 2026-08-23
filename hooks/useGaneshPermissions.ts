@@ -1,8 +1,13 @@
 import { usePandalMembers } from "@/hooks/usePandalMembers";
 import { useAuth } from "@/providers/AuthProvider";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
-import type { GaneshPermission } from "@/shared/utils/ganeshPermissions";
-import { can, isGaneshAdmin } from "@/shared/utils/ganeshPermissions";
+import { hasPermission } from "@/shared/utils/ganeshPermissionRegistry";
+import {
+  ALL_GANESH_PERMISSIONS,
+  can as canRole,
+  isGaneshAdmin,
+  type GaneshPermission,
+} from "@/shared/utils/ganeshPermissions";
 
 export function useGaneshPermissions() {
   const { realUser } = useAuth();
@@ -12,12 +17,19 @@ export function useGaneshPermissions() {
     (member) =>
       member.userId === realUser?.uid && (member.status === "active" || member.status == null)
   );
+  const isAdmin = isGaneshAdmin(me?.role);
+  const permissions = isAdmin ? ALL_GANESH_PERMISSIONS : me?.permissions;
 
   return {
     role: me?.role,
     status: me?.status,
-    isAdmin: isGaneshAdmin(me?.role),
+    isAdmin,
+    permissions,
     loading: !ready || Boolean(pandalId && loading),
-    can: (permission: GaneshPermission) => can(me?.role, permission),
+    can: (permission: GaneshPermission) => {
+      if (isAdmin) return true;
+      if (me?.permissions) return hasPermission(me.permissions, permission);
+      return canRole(me?.role, permission);
+    },
   };
 }

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Text, View } from "react-native";
+import { Alert, Pressable, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
@@ -12,6 +12,9 @@ import { useFestivalMembers } from "@/hooks/useFestivalMembers";
 import { useFestivals } from "@/hooks/useFestivals";
 import { useGaneshWrites } from "@/hooks/useGaneshWrites";
 import { usePandalMembers } from "@/hooks/usePandalMembers";
+import { usePandalRoles } from "@/hooks/usePandalRoles";
+import { usePandals } from "@/hooks/usePandals";
+import { useAuth } from "@/providers/AuthProvider";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
@@ -23,7 +26,18 @@ import {
   memberRemainingContribution,
 } from "@/shared/utils/ganeshMath";
 import { formatInr } from "@/shared/utils/ganeshMoney";
-import { ganeshRoleLabel } from "@/shared/utils/ganeshPermissions";
+import { PermissionSummary } from "@/components/ganesh/PermissionChecklist";
+import {
+  CRITICAL_PERMISSIONS,
+  expandPermissions,
+  groupedPermissionPreview,
+} from "@/shared/utils/ganeshPermissionRegistry";
+import {
+  ALL_GANESH_PERMISSIONS,
+  ganeshRoleLabel,
+  ganeshStatusLabel,
+  getEffectivePermissions,
+} from "@/shared/utils/ganeshPermissions";
 import { useTheme } from "@/theme/ThemeProvider";
 
 export default function MemberDetailScreen() {
@@ -37,7 +51,11 @@ export default function MemberDetailScreen() {
   const { members: pandalMembers } = usePandalMembers(pandalId);
   const { contributions } = useContributions(pandalId, festivalId);
   const writes = useGaneshWrites();
-  const { can } = useGaneshPermissions();
+  const { can, isAdmin } = useGaneshPermissions();
+  const { realUser } = useAuth();
+  const { pandals } = usePandals();
+  const { roles } = usePandalRoles(pandalId);
+  const pandal = pandals.find((item) => item.id === pandalId);
   const festivalMember = members.find((item) => item.userId === id);
   const pandalMember = pandalMembers.find((item) => item.userId === id);
   const name = festivalMember?.displayName ?? pandalMember?.displayName;
@@ -54,6 +72,29 @@ export default function MemberDetailScreen() {
   const [_customTarget, setCustomTarget] = useState<string | undefined>(undefined);
   const customTarget = _customTarget ?? String(target);
   const [busy, setBusy] = useState(false);
+  const [assigning, setAssigning] = useState(false);
+  const [draftRoleIds, setDraftRoleIds] = useState<string[] | undefined>(undefined);
+  const assignedIds = draftRoleIds ?? pandalMember?.roleIds ?? [];
+  const isSelf = pandalMember?.userId === realUser?.uid;
+  const targetIsAdmin = pandalMember?.role === "admin";
+  const adminCount =
+    pandal?.adminCount ??
+    pandalMembers.filter((member) => member.role === "admin" && member.status === "active").length;
+  const lastAdmin = targetIsAdmin && adminCount <= 1;
+  const effective = targetIsAdmin
+    ? ALL_GANESH_PERMISSIONS
+    : pandalMember?.permissions?.length
+      ? expandPermissions(pandalMember.permissions)
+      : getEffectivePermissions({
+          roleIds: pandalMember?.roleIds,
+          roles,
+          fallbackRole: pandalMember?.role,
+        });
+  const roleNames = targetIsAdmin
+    ? ["Pandal Admin"]
+    : (pandalMember?.roleIds ?? [])
+        .map((roleId) => roles.find((item) => item.id === roleId)?.name)
+        .filter(Boolean);
   const payments = contributions.filter(
     (item) =>
       !item.voided &&
@@ -76,9 +117,194 @@ export default function MemberDetailScreen() {
         {name}
       </Text>
       <Text style={{ color: theme.colors.mutedForeground }}>
-        {ganeshRoleLabel(role)} · {festival?.name ?? "Festival"} ·{" "}
+        {(roleNames.length > 0 ? roleNames.join(" · ") : ganeshRoleLabel(role))}
+        {pandalMember?.status ? ` · ${ganeshStatusLabel(pandalMember.status)}` : ""}
+        {pandalMember?.phone ? ` · ${pandalMember.phone}` : ""}
+      </Text>
+      <Text style={{ color: theme.colors.mutedForeground }}>
+        {festival?.name ?? "Festival"} ·{" "}
         {status === "paid" ? "Paid" : status === "partial" ? "Partial" : "Not paid"}
       </Text>
+      <View style={{ gap: 10 }}>
+          <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>Roles</Text>
+          <Text style={{ color: theme.colors.mutedForeground, lineHeight: 20 }}>
+            {targetIsAdmin
+              ? "Pandal Admin has full access. Extra roles are not needed."
+              : roleNames.length > 0
+                ? roleNames.join(", ")
+                : "No custom roles assigned."}
+          </Text>
+          {assigning && !targetIsAdmin ? (
+            <View style={{ gap: 10 }}>
+              {roles.map((item) => {
+                const on = assignedIds.includes(item.id);
+                return (
+                  <Pressable
+                    key={item.id}
+                    onPress={() =>
+                      setDraftRoleIds((prev) => {
+                        const current = prev ?? pandalMember?.roleIds ?? [];
+                        return on
+                          ? current.filter((roleId) => roleId !== item.id)
+                          : [...current, item.id];
+                      })
+                    }
+                    style={{
+                      padding: 12,
+                      borderRadius: 14,
+                      borderWidth: 1,
+                      borderColor: theme.colors.border,
+                      backgroundColor: on ? theme.colors.muted : theme.colors.card,
+                    }}
+                  >
+                    <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>
+                      {on ? "☑" : "☐"} {item.name}
+                    </Text>
+                    <Text style={{ color: theme.colors.mutedForeground }}>
+                      {item.permissions.length} permissions ·{" "}
+                      {groupedPermissionPreview(item.permissions).join(", ") || "No access"}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+              <Button
+                loading={busy}
+                onPress={() => {
+                  if (!id) return;
+                  const nextEffective = getEffectivePermissions({
+                    roleIds: assignedIds,
+                    roles,
+                    fallbackRole: pandalMember?.role,
+                  });
+                  const addedCritical = CRITICAL_PERMISSIONS.filter(
+                    (item) => nextEffective.includes(item) && !effective.includes(item)
+                  );
+                  const save = () => {
+                    setBusy(true);
+                    writes
+                      .setMemberRoleIds(id, assignedIds)
+                      .then(() => {
+                        setAssigning(false);
+                        setDraftRoleIds(undefined);
+                      })
+                      .catch((caught) => {
+                        logError("ganesh.member.roles", caught);
+                        toast.error(friendlyErrorMessage(caught, "Could not save roles."));
+                      })
+                      .finally(() => setBusy(false));
+                  };
+                  if (addedCritical.length > 0) {
+                    Alert.alert(
+                      "Sensitive permissions",
+                      "These roles can move money or manage the committee.",
+                      [
+                        { text: "Cancel", style: "cancel" },
+                        { text: "Save roles", onPress: save },
+                      ]
+                    );
+                    return;
+                  }
+                  save();
+                }}
+              >
+                Save roles
+              </Button>
+              <Button variant="ghost" onPress={() => { setAssigning(false); setDraftRoleIds(undefined); }}>
+                Cancel
+              </Button>
+            </View>
+          ) : null}
+          {!assigning && !targetIsAdmin && can("roles.assign") ? (
+            <Button variant="outline" onPress={() => setAssigning(true)}>
+              Assign roles
+            </Button>
+          ) : null}
+          <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>
+            Effective permissions
+          </Text>
+          <PermissionSummary permissions={effective} />
+          {isAdmin && !isSelf ? (
+            <Button
+              variant="outline"
+              onPress={() => {
+                if (!id || !pandalMember) return;
+                if (targetIsAdmin && lastAdmin) {
+                  toast.error("Assign another Pandal Admin first.");
+                  return;
+                }
+                Alert.alert(
+                  targetIsAdmin ? "Remove Admin?" : "Make Pandal Admin?",
+                  targetIsAdmin
+                    ? `${name} will lose full Pandal control.`
+                    : `Making ${name} an Admin gives them full control over this Pandal.`,
+                  [
+                    { text: "Cancel", style: "cancel" },
+                    {
+                      text: targetIsAdmin ? "Remove Admin" : "Make Admin",
+                      onPress: () => {
+                        writes.setPandalAdmin(id, !targetIsAdmin).catch((caught) => {
+                          logError("ganesh.member.admin", caught);
+                          toast.error(friendlyErrorMessage(caught, "Could not change Admin access."));
+                        });
+                      },
+                    },
+                  ]
+                );
+              }}
+            >
+              {targetIsAdmin ? "Remove Admin" : "Make Pandal Admin"}
+            </Button>
+          ) : null}
+          {can("members.suspend") && pandalMember && !isSelf && pandalMember.status !== "removed" ? (
+            <View style={{ flexDirection: "row", gap: 10 }}>
+              {pandalMember.status === "active" ? (
+                <Button
+                  variant="outline"
+                  style={{ flex: 1 }}
+                  disabled={lastAdmin}
+                  onPress={() => {
+                    Alert.alert("Suspend member?", `${name} will lose access until you restore them.`, [
+                      { text: "Cancel", style: "cancel" },
+                      {
+                        text: "Suspend",
+                        onPress: () => void writes.updatePandalMember(id!, { status: "suspended" }),
+                      },
+                    ]);
+                  }}
+                >
+                  Suspend
+                </Button>
+              ) : (
+                <Button
+                  variant="outline"
+                  style={{ flex: 1 }}
+                  onPress={() => void writes.updatePandalMember(id!, { status: "active" })}
+                >
+                  Restore
+                </Button>
+              )}
+              {can("members.remove") ? (
+                <Button
+                  variant="outline"
+                  style={{ flex: 1 }}
+                  disabled={lastAdmin}
+                  onPress={() => {
+                    Alert.alert("Remove member?", `${name} will lose access. Historical records keep their name.`, [
+                      { text: "Cancel", style: "cancel" },
+                      {
+                        text: "Remove",
+                        style: "destructive",
+                        onPress: () => void writes.updatePandalMember(id!, { status: "removed" }),
+                      },
+                    ]);
+                  }}
+                >
+                  Remove
+                </Button>
+              ) : null}
+            </View>
+          ) : null}
+      </View>
       <MetricGrid
         items={[
           { label: "Paid", value: paid },

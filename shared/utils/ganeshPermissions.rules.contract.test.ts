@@ -16,7 +16,7 @@ import {
   can,
 } from "./ganeshPermissions";
 
-type Member = { role: GaneshRole; status: GaneshMemberStatus } | null;
+type Member = { role: GaneshRole; status: GaneshMemberStatus; permissions?: string[] } | null;
 
 type Ctx = {
   signedIn: boolean;
@@ -34,32 +34,51 @@ function roleOf(ctx: Ctx): GaneshRole | undefined {
   return ctx.member?.role;
 }
 
+function hasPermissionsField(ctx: Ctx): boolean {
+  return Array.isArray(ctx.member?.permissions);
+}
+
+function hasPerm(ctx: Ctx, perm: string): boolean {
+  return isActivePandalMember(ctx) && (
+    roleOf(ctx) === "admin" || Boolean(ctx.member?.permissions?.includes(perm))
+  );
+}
+
 function canManageMembers(ctx: Ctx): boolean {
   return isActivePandalMember(ctx) && roleOf(ctx) === "admin";
 }
 
 function canWriteCollection(ctx: Ctx): boolean {
-  return isActivePandalMember(ctx) && RULE_COLLECTION_WRITE_ROLES.includes(roleOf(ctx)!);
+  return hasPerm(ctx, "collections.create")
+    || (isActivePandalMember(ctx) && !hasPermissionsField(ctx) && RULE_COLLECTION_WRITE_ROLES.includes(roleOf(ctx)!));
 }
 
 function canWriteExpenseOrContribution(ctx: Ctx): boolean {
-  return isActivePandalMember(ctx) && RULE_EXPENSE_WRITE_ROLES.includes(roleOf(ctx)!);
+  return hasPerm(ctx, "expenses.create")
+    || hasPerm(ctx, "contributions.create")
+    || (isActivePandalMember(ctx) && !hasPermissionsField(ctx) && RULE_EXPENSE_WRITE_ROLES.includes(roleOf(ctx)!));
 }
 
 function canWriteReimbursement(ctx: Ctx): boolean {
-  return isActivePandalMember(ctx) && RULE_TREASURER_WRITE_ROLES.includes(roleOf(ctx)!);
+  return hasPerm(ctx, "reimbursements.create")
+    || (isActivePandalMember(ctx) && !hasPermissionsField(ctx) && RULE_TREASURER_WRITE_ROLES.includes(roleOf(ctx)!));
 }
 
 function canWritePermanentFund(ctx: Ctx): boolean {
-  return isActivePandalMember(ctx) && roleOf(ctx) === "admin";
+  return hasPerm(ctx, "permanentFund.transfer")
+    || hasPerm(ctx, "permanentFund.add")
+    || (isActivePandalMember(ctx) && !hasPermissionsField(ctx) && roleOf(ctx) === "admin");
 }
 
 function canCloseOrUpdateFestival(ctx: Ctx): boolean {
-  return isActivePandalMember(ctx) && RULE_TREASURER_WRITE_ROLES.includes(roleOf(ctx)!);
+  return hasPerm(ctx, "festival.update")
+    || hasPerm(ctx, "festival.close")
+    || (isActivePandalMember(ctx) && !hasPermissionsField(ctx) && RULE_TREASURER_WRITE_ROLES.includes(roleOf(ctx)!));
 }
 
 function canCreateFestival(ctx: Ctx): boolean {
-  return isActivePandalMember(ctx) && roleOf(ctx) === "admin";
+  return hasPerm(ctx, "festival.create")
+    || (isActivePandalMember(ctx) && !hasPermissionsField(ctx) && roleOf(ctx) === "admin");
 }
 
 function canCreateExpense(ctx: Ctx): boolean {
@@ -201,6 +220,31 @@ describe("ganesh firestore rules contract", () => {
         afterAdminCount: 1,
       })
     ).toBe(true);
+  });
+
+  it("never treats a custom permission set as Pandal Admin", () => {
+    const superTreasurer: Ctx = {
+      signedIn: true,
+      member: {
+        role: "member",
+        status: "active",
+        permissions: ["roles.assign", "permanentFund.transfer", "members.approve", "settings.update"],
+      },
+    };
+    expect(canManageMembers(superTreasurer)).toBe(false);
+    expect(canWritePermanentFund(superTreasurer)).toBe(true);
+  });
+
+  it("uses denormalized permissions when present and falls back to role names when missing", () => {
+    const customCollector: Ctx = {
+      signedIn: true,
+      member: { role: "member", status: "active", permissions: ["collections.create"] },
+      festivalOpen: true,
+    };
+    expect(canWriteCollection(customCollector)).toBe(true);
+    expect(canWriteExpenseOrContribution(customCollector)).toBe(false);
+    expect(canWriteCollection(member)).toBe(true);
+    expect(canManageMembers(customCollector)).toBe(false);
   });
 
   it("denies a member reading another Pandal when they have no ACTIVE membership there", () => {

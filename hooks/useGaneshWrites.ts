@@ -20,10 +20,8 @@ import type {
   GaneshRole,
   PermanentFundLocation,
 } from "@/shared/types/ganesh";
-import {
-  assertPermission,
-  type GaneshPermission,
-} from "@/shared/utils/ganeshPermissions";
+import * as roleWrites from "@/services/ganesh/ganeshRoles";
+import { assertHasPermission, type GaneshPermission } from "@/shared/utils/ganeshPermissions";
 
 function requireDb() {
   const db = getFirestoreDb();
@@ -34,7 +32,7 @@ function requireDb() {
 export function useGaneshWrites() {
   const { actor, pandalId, festivalId } = useGaneshSession();
   const { isOnline } = useNetwork();
-  const { role } = useGaneshPermissions();
+  const { can: hasPerm, isAdmin, permissions } = useGaneshPermissions();
 
   const run = useCallback(
     async <T,>(label: string, work: () => Promise<T>): Promise<T> => {
@@ -48,9 +46,10 @@ export function useGaneshWrites() {
 
   const requirePerm = useCallback(
     (permission: GaneshPermission) => {
-      assertPermission(role, permission);
+      if (hasPerm(permission)) return;
+      assertHasPermission(permissions, permission, isAdmin);
     },
-    [role]
+    [hasPerm, isAdmin, permissions]
   );
 
   const requireFestival = useCallback(() => {
@@ -87,7 +86,7 @@ export function useGaneshWrites() {
     },
     updatePandalProfile: (input: Parameters<typeof writes.updatePandalProfile>[3]) => {
       if (!pandalId || !actor) throw new Error("Select a Pandal first.");
-      requirePerm("members.assignRole");
+      requirePerm("settings.update");
       return run("Pandal saved", () =>
         writes.updatePandalProfile(requireDb(), actor, pandalId, input)
       );
@@ -104,7 +103,7 @@ export function useGaneshWrites() {
     },
     updatePandalJoinMode: (joinMode: Parameters<typeof writes.updatePandalJoinMode>[3]) => {
       if (!pandalId || !actor) throw new Error("Select a Pandal first.");
-      requirePerm("members.assignRole");
+      requirePerm("settings.update");
       return run(joinMode === "open" ? "Open join enabled" : "Approval required to join", () =>
         writes.updatePandalJoinMode(requireDb(), actor, pandalId, joinMode)
       );
@@ -264,7 +263,7 @@ export function useGaneshWrites() {
       description?: string;
     }) => {
       if (!actor || !pandalId) throw new Error("Select a Pandal first.");
-      requirePerm("permanentFund.transfer");
+      requirePerm("permanentFund.add");
       if (Number(input?.amount ?? 0) > 0) assertPermanentFundOnline(isOnline);
       return run("Permanent Fund saved", () =>
         seedPermanentFund(requireDb(), actor, pandalId, input)
@@ -276,7 +275,7 @@ export function useGaneshWrites() {
       description?: string;
     }) => {
       if (!actor || !pandalId) throw new Error("Select a Pandal first.");
-      requirePerm("permanentFund.transfer");
+      requirePerm("permanentFund.add");
       assertPermanentFundOnline(isOnline);
       return run("Permanent Fund donation saved", () =>
         addPermanentFundDonation(requireDb(), actor, pandalId, input)
@@ -349,6 +348,45 @@ export function useGaneshWrites() {
       const ctx = requireFestival();
       return run("Category updated", () =>
         writes.updateCategory(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, categoryId, input)
+      );
+    },
+    ensurePandalRoles: () => {
+      if (!pandalId || !actor) throw new Error("Select a Pandal first.");
+      requirePerm("roles.read");
+      return roleWrites.ensurePandalRoles(requireDb(), actor, pandalId);
+    },
+    createPandalRole: (input: Parameters<typeof roleWrites.createPandalRole>[3]) => {
+      if (!pandalId || !actor) throw new Error("Select a Pandal first.");
+      requirePerm("roles.create");
+      return run("Role created", () => roleWrites.createPandalRole(requireDb(), actor, pandalId, input));
+    },
+    updatePandalRole: (
+      roleId: string,
+      input: Parameters<typeof roleWrites.updatePandalRole>[4]
+    ) => {
+      if (!pandalId || !actor) throw new Error("Select a Pandal first.");
+      requirePerm("roles.update");
+      return run("Role saved", () =>
+        roleWrites.updatePandalRole(requireDb(), actor, pandalId, roleId, input)
+      );
+    },
+    deletePandalRole: (roleId: string) => {
+      if (!pandalId || !actor) throw new Error("Select a Pandal first.");
+      requirePerm("roles.delete");
+      return run("Role deleted", () => roleWrites.deletePandalRole(requireDb(), actor, pandalId, roleId));
+    },
+    setMemberRoleIds: (targetUserId: string, roleIds: string[]) => {
+      if (!pandalId || !actor) throw new Error("Select a Pandal first.");
+      requirePerm("roles.assign");
+      return run("Roles saved", () =>
+        roleWrites.setMemberRoleIds(requireDb(), actor, pandalId, targetUserId, roleIds)
+      );
+    },
+    setPandalAdmin: (targetUserId: string, makeAdmin: boolean) => {
+      if (!pandalId || !actor) throw new Error("Select a Pandal first.");
+      if (!isAdmin) throw new Error("Only a Pandal Admin can change Admin access.");
+      return run(makeAdmin ? "Made Pandal Admin" : "Removed Admin access", () =>
+        roleWrites.setPandalAdmin(requireDb(), actor, pandalId, targetUserId, makeAdmin)
       );
     },
   };

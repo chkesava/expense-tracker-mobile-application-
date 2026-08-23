@@ -1,6 +1,7 @@
 import type { GaneshStorageCategory } from "@/services/ganesh/storage/storageTypes";
 import type { GaneshRole } from "@/shared/types/ganesh";
-import { can, type GaneshPermission } from "@/shared/utils/ganeshPermissions";
+import { hasPermission } from "@/shared/utils/ganeshPermissionRegistry";
+import { can, isGaneshAdmin, type GaneshPermission } from "@/shared/utils/ganeshPermissions";
 
 const CATEGORY_PERMISSIONS: Record<GaneshStorageCategory, GaneshPermission[]> = {
   expenses: ["expenses.create", "expenses.update"],
@@ -15,6 +16,7 @@ export function uploadPermissionFor(category: GaneshStorageCategory): GaneshPerm
 export function assertCanUpload(input: {
   uid: string | null | undefined;
   role: GaneshRole | undefined;
+  permissions?: GaneshPermission[];
   memberStatus: string | undefined;
   sessionPandalId: string | null;
   sessionFestivalId: string | null;
@@ -36,7 +38,11 @@ export function assertCanUpload(input: {
   if (input.festivalId !== input.sessionFestivalId || !input.festivalBelongsToPandal) {
     throw new Error("You cannot store files in another festival.");
   }
-  const allowed = uploadPermissionFor(input.category).some((permission) => can(input.role, permission));
+  const allowed = uploadPermissionFor(input.category).some((permission) =>
+    isGaneshAdmin(input.role)
+    || hasPermission(input.permissions, permission)
+    || can(input.role, permission)
+  );
   if (!allowed) {
     throw new Error("You do not have permission to upload this file.");
   }

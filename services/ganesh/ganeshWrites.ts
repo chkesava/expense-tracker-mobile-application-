@@ -54,7 +54,10 @@ import type {
   PermanentFundLocation,
   PandalJoinMode,
 } from "@/shared/types/ganesh";
-import { JOIN_APPROVE_ROLES } from "@/shared/utils/ganeshPermissions";
+import { JOIN_APPROVE_ROLES, ALL_GANESH_PERMISSIONS, ROLE_PERMISSIONS } from "@/shared/utils/ganeshPermissions";
+import { expandPermissions } from "@/shared/utils/ganeshPermissionRegistry";
+import type { PandalMemberAuditAction } from "@/shared/types/ganesh";
+import { ensurePandalRoles } from "@/services/ganesh/ganeshRoles";
 import { EMPTY_GANESH_SUMMARY } from "@/shared/types/ganesh";
 import {
   seedPermanentFund,
@@ -137,11 +140,15 @@ function memberAudit(
   payload: {
     actorId: string;
     targetUserId: string;
-    action: "role_changed" | "suspended" | "removed" | "approved" | "join_mode";
+    action: PandalMemberAuditAction;
     oldRole?: GaneshRole;
     newRole?: GaneshRole;
     oldStatus?: GaneshMemberStatus;
     newStatus?: GaneshMemberStatus;
+    roleId?: string;
+    roleName?: string;
+    oldPermissions?: string[];
+    newPermissions?: string[];
     reason?: string;
   }
 ) {
@@ -248,12 +255,15 @@ export async function createPandalAndFestival(
       displayName: actor.displayName,
       phone: actor.phone,
       role: "admin" satisfies GaneshRole,
+      roleIds: [],
+      permissions: [...ALL_GANESH_PERMISSIONS],
       status: "active",
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     })
   );
   await commitWrite(() => pandalBatch.commit(), { label: "pandal" });
+  await ensurePandalRoles(db, actor, pandalId);
 
   const festivalBatch = writeBatch(db);
   festivalBatch.set(pathRef(db, festivalDoc(pandalId, festivalId)), {
@@ -350,6 +360,8 @@ export async function requestPandalJoin(
         displayName: actor.displayName,
         phone: actor.phone,
         role: "member" satisfies GaneshRole,
+        roleIds: ["member"],
+        permissions: expandPermissions([...ROLE_PERMISSIONS.member]),
         status: "active",
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
@@ -386,7 +398,7 @@ export async function decideJoinRequest(
   actor: GaneshActor,
   requestId: string,
   decision: "approved" | "rejected",
-  role: GaneshRole = "member"
+  assignment: GaneshRole | { roleId: string } = "member"
 ): Promise<void> {
   const requestSnap = await getDoc(doc(db, "pandalJoinRequests", requestId));
   if (!requestSnap.exists()) throw new Error("Join request not found.");
@@ -400,9 +412,27 @@ export async function decideJoinRequest(
     updatedAt: serverTimestamp(),
   });
   if (decision === "approved") {
-    if (role === "admin" || !JOIN_APPROVE_ROLES.includes(role)) {
-      throw new Error("Approve new members as Member, Collector, or Viewer.");
+    const roleId = typeof assignment === "string" ? assignment : assignment.roleId;
+    if (roleId === "admin") {
+      throw new Error("Approve new members with a committee role. Admin is not self-serve.");
     }
+    const roles = await ensurePandalRoles(db, actor, pandalId);
+    const assigned = roles.find((item) => item.id === roleId);
+    const fallbackRole =
+      typeof assignment === "string" && JOIN_APPROVE_ROLES.includes(assignment)
+        ? assignment
+        : "member";
+    if (!assigned && !JOIN_APPROVE_ROLES.includes(fallbackRole)) {
+      throw new Error("Choose a valid role.");
+    }
+    const role: GaneshRole =
+      assigned && JOIN_APPROVE_ROLES.includes(assigned.id as GaneshRole)
+        ? (assigned.id as GaneshRole)
+        : fallbackRole;
+    const roleIds = [assigned?.id ?? role];
+    const permissions = assigned
+      ? expandPermissions(assigned.permissions)
+      : expandPermissions([...ROLE_PERMISSIONS[role]]);
     batch.set(
       doc(db, "pandals", pandalId, "members", userId),
       omitUndefined({
@@ -410,6 +440,8 @@ export async function decideJoinRequest(
         displayName: String(request.displayName ?? "Member"),
         phone: request.phone,
         role,
+        roleIds,
+        permissions,
         status: "active",
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
@@ -433,6 +465,8 @@ export async function decideJoinRequest(
       action: "approved",
       newRole: role,
       newStatus: "active",
+      roleId: roleIds[0],
+      roleName: assigned?.name,
     });
     const festivals = await getDocs(collection(db, "pandals", pandalId, "festivals"));
     festivals.forEach((festivalSnap) => {
@@ -574,12 +608,21 @@ export async function updatePandalMember(
   }
   const nextAdminCount = adminCount + (willBeAdmin && !wasAdmin ? 1 : 0) - (wasAdmin && !willBeAdmin ? 1 : 0);
 
+  const roleChanged = nextRole !== oldRole;
+  const roleIds = nextRole === "admin" ? [] : [nextRole];
+  const permissions =
+    nextRole === "admin"
+      ? [...ALL_GANESH_PERMISSIONS]
+      : expandPermissions([...ROLE_PERMISSIONS[nextRole]]);
+
   const batch = writeBatch(db);
-  batch.update(doc(db, "pandals", pandalId, "members", targetUserId), {
+  batch.update(doc(db, "pandals", pandalId, "members", targetUserId), omitUndefined({
     role: nextRole,
+    roleIds: roleChanged ? roleIds : undefined,
+    permissions: roleChanged ? permissions : undefined,
     status: nextStatus,
     updatedAt: serverTimestamp(),
-  });
+  }));
   batch.update(doc(db, "pandals", pandalId), {
     adminCount: nextAdminCount,
     memberIds: nextStatus === "active" ? arrayUnion(targetUserId) : arrayRemove(targetUserId),

@@ -17,7 +17,7 @@ import type { GaneshFileMeta } from "@/shared/types/ganesh";
 export function useGaneshStorage() {
   const { realUser } = useAuth();
   const { pandalId, festivalId } = useGaneshSession();
-  const { role, status } = useGaneshPermissions();
+  const { role, status, permissions } = useGaneshPermissions();
   const { festivals } = useFestivals(pandalId);
   const writes = useGaneshWrites();
   const { isOnline } = useNetwork();
@@ -36,6 +36,7 @@ export function useGaneshStorage() {
       return uploadFestivalFile({
         uid: realUser.uid,
         role,
+        permissions,
         memberStatus: status,
         sessionPandalId: pandalId,
         sessionFestivalId: festivalId,
@@ -47,7 +48,7 @@ export function useGaneshStorage() {
         file: input.file,
       });
     },
-    [festivalBelongsToPandal, festivalId, pandalId, realUser?.uid, role, status]
+    [festivalBelongsToPandal, festivalId, pandalId, permissions, realUser?.uid, role, status]
   );
 
   const uploadExpenseReceipt = useCallback(
