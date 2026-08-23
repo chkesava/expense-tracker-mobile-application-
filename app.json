@@ -28,7 +28,7 @@
         "android.permission.POST_NOTIFICATIONS",
         "android.permission.REQUEST_INSTALL_PACKAGES"
       ],
-      "versionCode": 65
+      "versionCode": 66
     },
     "web": {
       "bundler": "metro",
