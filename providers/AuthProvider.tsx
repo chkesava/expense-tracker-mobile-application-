@@ -22,6 +22,7 @@ import {
   signInWithEmailAndPassword,
   signOut,
   updateProfile,
+  type AuthCredential,
   type User,
   type UserCredential,
 } from "firebase/auth";
@@ -56,6 +57,7 @@ type AuthContextType = {
   ) => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   loginWithGoogleIdToken: (idToken: string) => Promise<void>;
+  loginWithPhoneCredential: (credential: AuthCredential, displayName?: string) => Promise<void>;
   logout: () => Promise<void>;
 };
 
@@ -203,6 +205,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const loginWithPhoneCredential = useCallback(
+    async (credential: AuthCredential, displayName?: string) => {
+      const auth = getFirebaseAuth();
+      if (!auth) throw new Error("Firebase Auth is not configured.");
+      try {
+        const result = await signInWithCredential(auth, credential);
+        const name = displayName?.trim();
+        if (name && !result.user.displayName) {
+          await updateProfile(result.user, { displayName: name });
+        }
+      } catch (error) {
+        logError("authProvider.phoneLogin", error);
+        throw new Error(authErrorMessage(error, "Phone sign-in failed"));
+      }
+    },
+    []
+  );
+
   const logout = useCallback(async () => {
     const auth = getFirebaseAuth();
     if (!auth) return;
@@ -236,6 +256,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signUpWithEmail,
       resetPassword,
       loginWithGoogleIdToken,
+      loginWithPhoneCredential,
       logout,
     }),
     [
@@ -247,6 +268,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signUpWithEmail,
       resetPassword,
       loginWithGoogleIdToken,
+      loginWithPhoneCredential,
       logout,
     ]
   );

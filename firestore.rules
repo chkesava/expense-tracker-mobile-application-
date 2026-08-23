@@ -226,6 +226,130 @@ service cloud.firestore {
       allow write: if signedIn() && docId == "global";
     }
 
+    // -----------------------------------------------------------------------
+    // Ganesh Seva — shared Pandal / Festival ledger.
+    // Membership is the only grant. Expense Tracker accounts get nothing.
+    // -----------------------------------------------------------------------
+    function ganeshIdentityCreate() {
+      return request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.updatedBy == request.auth.uid;
+    }
+
+    function ganeshIdentityUpdate() {
+      return request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.updatedBy == request.auth.uid;
+    }
+
+    match /pandalInvites/{code} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.pandalId is string;
+      allow update, delete: if signedIn()
+        && resource.data.createdBy == request.auth.uid;
+    }
+
+    match /pandalJoinRequests/{requestId} {
+      allow read: if signedIn()
+        && (resource.data.userId == request.auth.uid
+            || (
+              exists(/databases/$(database)/documents/pandals/$(resource.data.pandalId))
+              && (
+                get(/databases/$(database)/documents/pandals/$(resource.data.pandalId)).data.ownerId
+                  == request.auth.uid
+                || request.auth.uid in get(/databases/$(database)/documents/pandals/$(resource.data.pandalId)).data.memberIds
+              )
+            ));
+      allow create: if signedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.status == 'pending';
+      allow update: if signedIn()
+        && exists(/databases/$(database)/documents/pandals/$(resource.data.pandalId)/members/$(request.auth.uid))
+        && get(/databases/$(database)/documents/pandals/$(resource.data.pandalId)/members/$(request.auth.uid)).data.role
+          in ['admin', 'treasurer']
+        && get(/databases/$(database)/documents/pandals/$(resource.data.pandalId)/members/$(request.auth.uid)).data.status
+          == 'active';
+      allow delete: if false;
+    }
+
+    match /pandals/{pandalId} {
+      function pandalData() {
+        return get(/databases/$(database)/documents/pandals/$(pandalId)).data;
+      }
+      function isPandalMember() {
+        return signedIn()
+          && (pandalData().ownerId == request.auth.uid
+              || request.auth.uid in pandalData().memberIds);
+      }
+      function isPandalManager() {
+        return isPandalMember()
+          && exists(/databases/$(database)/documents/pandals/$(pandalId)/members/$(request.auth.uid))
+          && get(/databases/$(database)/documents/pandals/$(pandalId)/members/$(request.auth.uid)).data.status == 'active'
+          && get(/databases/$(database)/documents/pandals/$(pandalId)/members/$(request.auth.uid)).data.role
+            in ['admin', 'treasurer'];
+      }
+      function keepsPandalOwner() {
+        return request.resource.data.ownerId == resource.data.ownerId
+          && (request.resource.data.memberIds == resource.data.memberIds
+              || request.auth.uid == resource.data.ownerId
+              || isPandalManager());
+      }
+
+      allow read: if isPandalMember();
+      allow create: if signedIn()
+        && request.resource.data.ownerId == request.auth.uid
+        && ganeshIdentityCreate();
+      allow update: if isPandalMember() && keepsPandalOwner();
+      allow delete: if signedIn() && resource.data.ownerId == request.auth.uid;
+
+      match /members/{memberId} {
+        allow read: if isPandalMember();
+        allow create, update: if signedIn()
+          && (
+            (memberId == request.auth.uid
+              && request.resource.data.userId == request.auth.uid
+              && request.resource.data.role == 'admin'
+              && pandalData().ownerId == request.auth.uid)
+            || isPandalManager()
+          );
+        allow delete: if isPandalManager();
+      }
+
+      match /festivals/{festivalId} {
+        function festivalData() {
+          return get(/databases/$(database)/documents/pandals/$(pandalId)/festivals/$(festivalId)).data;
+        }
+        function festivalOpen() {
+          return festivalData().status == 'open';
+        }
+
+        allow read: if isPandalMember();
+        allow create: if isPandalMember() && ganeshIdentityCreate();
+        allow update: if isPandalManager()
+          && request.resource.data.updatedBy == request.auth.uid;
+        allow delete: if isPandalManager();
+
+        match /{subcol}/{docId} {
+          allow read: if isPandalMember();
+          allow create: if isPandalMember()
+            && festivalOpen()
+            && (
+              !request.resource.data.keys().hasAny(['createdBy'])
+              || ganeshIdentityCreate()
+            );
+          allow update: if isPandalMember()
+            && (
+              (festivalOpen() && (
+                !resource.data.keys().hasAny(['createdBy'])
+                || ganeshIdentityUpdate()
+              ))
+              || isPandalManager()
+            );
+          allow delete: if isPandalManager();
+        }
+      }
+    }
+
     // Anything not matched above is denied.
   }
 }

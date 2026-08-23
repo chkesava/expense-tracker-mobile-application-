@@ -4,7 +4,7 @@ import {
   Apple,
   ArrowRight,
   CheckCircle2,
-  Clock,
+  Flower2,
   LayoutGrid,
   Wallet,
 } from "lucide-react-native";
@@ -164,6 +164,61 @@ export default function AppSelectorScreen() {
             Calorie log, macronutrient tracking, meal plans, workout routines, and body weight trend graphs.
           </Text>
 
+          <View style={styles.cardFooter}>
+            <Text style={[styles.launchText, { color: theme.colors.primary }]}>
+              Open Workspace
+            </Text>
+            <ArrowRight size={16} color={theme.colors.primary} />
+          </View>
+        </Pressable>
+
+        <Pressable
+          onPress={() => {
+            haptic.selection().catch(() => undefined);
+            setActiveWorkspace("ganesh");
+          }}
+          style={({ pressed }) => [
+            styles.spaceCard,
+            {
+              backgroundColor: theme.colors.card,
+              borderColor: activeWorkspace === "ganesh" ? theme.colors.primary : theme.colors.border,
+              borderWidth: activeWorkspace === "ganesh" ? 2 : 1,
+            },
+            pressed && { transform: [{ scale: 0.98 }] },
+          ]}
+        >
+          <View style={styles.cardHeader}>
+            <View
+              style={[
+                styles.iconWrap,
+                { backgroundColor: "rgba(249, 115, 22, 0.15)" },
+              ]}
+            >
+              <Flower2 size={24} color="#F97316" />
+            </View>
+            {activeWorkspace === "ganesh" ? (
+              <View style={[styles.badge, { backgroundColor: "rgba(249, 115, 22, 0.15)" }]}>
+                <CheckCircle2 size={12} color="#F97316" />
+                <Text style={[styles.badgeText, { color: "#F97316" }]}>ACTIVE</Text>
+              </View>
+            ) : null}
+          </View>
+          <Text
+            style={[
+              styles.spaceTitle,
+              { color: theme.colors.foreground, fontSize: theme.typography.lg },
+            ]}
+          >
+            Ganesh Seva
+          </Text>
+          <Text
+            style={[
+              styles.spaceDesc,
+              { color: theme.colors.mutedForeground, fontSize: theme.typography.sm },
+            ]}
+          >
+            Shared Pandal hisab: chanda, God Fund, in-kind contributions, and member reimbursements.
+          </Text>
           <View style={styles.cardFooter}>
             <Text style={[styles.launchText, { color: theme.colors.primary }]}>
               Open Workspace

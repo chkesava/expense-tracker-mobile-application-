@@ -49,12 +49,19 @@ export default function Index() {
     if (activeWorkspace === "nutrition") {
       return <Redirect href={"/(nutrition)" as any} />;
     }
+    if (activeWorkspace === "ganesh") {
+      return <Redirect href={"/(ganesh)" as any} />;
+    }
     return <Redirect href={"/(app)" as any} />;
   }
 
   // If the user has never launched the app before, show the Onboarding Carousel
   if (!hasLaunchedBefore) {
     return <Redirect href="/onboarding" />;
+  }
+
+  if (activeWorkspace === "ganesh") {
+    return <Redirect href={"/(ganesh-auth)/login" as any} />;
   }
 
   return <Redirect href="/(auth)/login" />;

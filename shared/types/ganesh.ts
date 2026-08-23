@@ -1,0 +1,280 @@
+export type GaneshRole = "admin" | "treasurer" | "member" | "collector";
+export type GaneshMemberStatus = "active" | "removed";
+export type FestivalStatus = "open" | "closed";
+export type ContributionMode = "same" | "custom";
+
+export type PaymentMethod = "cash" | "upi" | "bank" | "other";
+export type OpeningFundSource = "cash" | "upi" | "bank" | "previous_balance" | "other";
+
+export type HouseholdStatus =
+  | "pending"
+  | "partial"
+  | "paid"
+  | "not_interested"
+  | "not_available";
+
+export type ContributionKind = "money" | "item" | "service" | "sponsorship";
+export type ContributionStatus = "promised" | "received" | "cancelled";
+
+export type GaneshLedgerType =
+  | "OPENING_BALANCE"
+  | "COLLECTION"
+  | "COMMITTEE_CONTRIBUTION"
+  | "OTHER_DONATION"
+  | "EXPENSE"
+  | "REIMBURSEMENT"
+  | "ADJUSTMENT";
+
+export type JoinRequestStatus = "pending" | "approved" | "rejected";
+
+export type AuditAction = "created" | "edited" | "voided" | "reimbursed" | "adjusted" | "closed";
+
+export type FirestoreTime = {
+  seconds?: number;
+  nanoseconds?: number;
+  toDate?: () => Date;
+} | null;
+
+export interface GaneshAuditFields {
+  createdBy: string;
+  createdAt?: FirestoreTime;
+  updatedBy: string;
+  updatedAt?: FirestoreTime;
+}
+
+export interface GaneshVoidFields {
+  voided?: boolean;
+  voidReason?: string;
+  voidedBy?: string;
+  voidedAt?: FirestoreTime;
+}
+
+export interface Pandal extends GaneshAuditFields {
+  id: string;
+  name: string;
+  area?: string;
+  code: string;
+  ownerId: string;
+  memberIds: string[];
+}
+
+export interface PandalInvite {
+  id: string;
+  pandalId: string;
+  name: string;
+  createdBy: string;
+  createdAt?: FirestoreTime;
+}
+
+export interface PandalJoinRequest {
+  id: string;
+  pandalId: string;
+  userId: string;
+  displayName: string;
+  phone?: string;
+  status: JoinRequestStatus;
+  createdAt?: FirestoreTime;
+  updatedAt?: FirestoreTime;
+  decidedBy?: string;
+}
+
+export interface PandalMembershipIndex {
+  id: string;
+  pandalId: string;
+  role: GaneshRole;
+  joinedAt?: FirestoreTime;
+}
+
+export interface PandalMember {
+  id: string;
+  userId: string;
+  displayName: string;
+  phone?: string;
+  role: GaneshRole;
+  status: GaneshMemberStatus;
+  createdAt?: FirestoreTime;
+  updatedAt?: FirestoreTime;
+}
+
+export interface Festival extends GaneshAuditFields {
+  id: string;
+  name: string;
+  year: number;
+  status: FestivalStatus;
+  contributionMode: ContributionMode;
+  contributionTargetAmount: number;
+  householdTargetAmount: number;
+  closedAt?: FirestoreTime;
+  closedBy?: string;
+}
+
+export interface FestivalMember {
+  id: string;
+  userId: string;
+  displayName: string;
+  role: GaneshRole;
+  contributionTarget: number;
+  contributionPaid: number;
+  personalExpenses: number;
+  reimbursed: number;
+  pendingReimbursement: number;
+}
+
+export interface GaneshSummary {
+  openingFunds: number;
+  chanda: number;
+  committeeContributions: number;
+  otherCashContributions: number;
+  godFundExpenses: number;
+  reimbursements: number;
+  personalMoneyUsed: number;
+  pendingReimbursements: number;
+  inKindValue: number;
+  sponsoredValue: number;
+  collectionCount: number;
+  expenseCount: number;
+  updatedAt?: FirestoreTime;
+}
+
+export interface OpeningFund extends GaneshAuditFields, GaneshVoidFields {
+  id: string;
+  amount: number;
+  sourceType: OpeningFundSource;
+  description?: string;
+  date: string;
+  ledgerType: "OPENING_BALANCE";
+  pendingWrite?: boolean;
+}
+
+export interface Household {
+  id: string;
+  name: string;
+  houseNumber?: string;
+  mobile?: string;
+  area?: string;
+  expectedAmount: number;
+  collectedAmount: number;
+  status: HouseholdStatus;
+  assignedCollectorId?: string;
+  notes?: string;
+  createdBy: string;
+  createdAt?: FirestoreTime;
+  updatedBy: string;
+  updatedAt?: FirestoreTime;
+  pendingWrite?: boolean;
+}
+
+export interface GaneshCollection extends GaneshAuditFields, GaneshVoidFields {
+  id: string;
+  householdId?: string;
+  donorName: string;
+  mobile?: string;
+  houseNumber?: string;
+  address?: string;
+  amount: number;
+  paymentMethod: PaymentMethod;
+  collectorId: string;
+  notes?: string;
+  date: string;
+  ledgerType: "COLLECTION";
+  pendingWrite?: boolean;
+}
+
+export interface GaneshContribution extends GaneshAuditFields, GaneshVoidFields {
+  id: string;
+  kind: ContributionKind;
+  contributorName: string;
+  contributorMemberId?: string;
+  mobile?: string;
+  itemName?: string;
+  quantity?: string;
+  amount: number;
+  estimatedValue: number;
+  isCommitteeContribution?: boolean;
+  description?: string;
+  date: string;
+  status: ContributionStatus;
+  photoPath?: string;
+  ledgerType?: "COMMITTEE_CONTRIBUTION" | "OTHER_DONATION";
+  pendingWrite?: boolean;
+}
+
+export interface GaneshExpense extends GaneshAuditFields, GaneshVoidFields {
+  id: string;
+  name: string;
+  totalAmount: number;
+  godFundAmount: number;
+  personalAmount: number;
+  sponsoredAmount: number;
+  categoryId: string;
+  categoryName: string;
+  paidByMemberId: string;
+  vendor?: string;
+  description?: string;
+  notes?: string;
+  date: string;
+  receiptPath?: string;
+  linkedContributionId?: string;
+  ledgerType: "EXPENSE";
+  pendingWrite?: boolean;
+}
+
+export interface GaneshReimbursement extends GaneshAuditFields, GaneshVoidFields {
+  id: string;
+  memberId: string;
+  amount: number;
+  paymentMethod: PaymentMethod;
+  date: string;
+  notes?: string;
+  ledgerType: "REIMBURSEMENT";
+  pendingWrite?: boolean;
+}
+
+export interface GaneshCategory {
+  id: string;
+  name: string;
+  isDefault?: boolean;
+  sortOrder?: number;
+  createdBy?: string;
+  createdAt?: FirestoreTime;
+}
+
+export interface GaneshActivity {
+  id: string;
+  title: string;
+  subtitle?: string;
+  amount?: number;
+  estimatedValue?: number;
+  actorId: string;
+  entityType: string;
+  entityId: string;
+  createdAt?: FirestoreTime;
+  pendingWrite?: boolean;
+}
+
+export interface GaneshAuditLog {
+  id: string;
+  actorId: string;
+  action: AuditAction;
+  entityType: string;
+  entityId: string;
+  oldValue?: unknown;
+  newValue?: unknown;
+  reason?: string;
+  at?: FirestoreTime;
+}
+
+export const EMPTY_GANESH_SUMMARY: GaneshSummary = {
+  openingFunds: 0,
+  chanda: 0,
+  committeeContributions: 0,
+  otherCashContributions: 0,
+  godFundExpenses: 0,
+  reimbursements: 0,
+  personalMoneyUsed: 0,
+  pendingReimbursements: 0,
+  inKindValue: 0,
+  sponsoredValue: 0,
+  collectionCount: 0,
+  expenseCount: 0,
+};

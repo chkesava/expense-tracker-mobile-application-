@@ -35,7 +35,7 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({
     const loadWorkspace = async () => {
       try {
         const stored = await AsyncStorage.getItem("@active_workspace");
-        if (stored === "expense" || stored === "nutrition") {
+        if (stored === "expense" || stored === "nutrition" || stored === "ganesh") {
           setActiveWorkspaceState(stored);
         }
       } catch (error) {

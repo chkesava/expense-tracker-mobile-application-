@@ -9,6 +9,18 @@ service firebase.storage {
       allow write: if false;
     }
 
+    match /pandals/{pandalId}/festivals/{festivalId}/{allPaths=**} {
+      function isPandalMember() {
+        return request.auth != null
+          && exists(/databases/(default)/documents/pandals/$(pandalId))
+          && (
+            get(/databases/(default)/documents/pandals/$(pandalId)).data.ownerId == request.auth.uid
+            || request.auth.uid in get(/databases/(default)/documents/pandals/$(pandalId)).data.memberIds
+          );
+      }
+      allow read, write: if isPandalMember();
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }

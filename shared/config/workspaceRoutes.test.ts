@@ -9,4 +9,8 @@ describe("resolveWorkspaceRoute", () => {
   it("routes nutrition workspace to /(nutrition)", () => {
     expect(resolveWorkspaceRoute("nutrition")).toBe("/(nutrition)");
   });
+
+  it("routes ganesh workspace to /(ganesh)", () => {
+    expect(resolveWorkspaceRoute("ganesh")).toBe("/(ganesh)");
+  });
 });

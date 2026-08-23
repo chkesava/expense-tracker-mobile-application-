@@ -1,4 +1,4 @@
-export type WorkspaceType = "expense" | "nutrition";
+export type WorkspaceType = "expense" | "nutrition" | "ganesh";
 
 /**
  * Maps workspace switches to Expo Router destinations.
@@ -6,6 +6,8 @@ export type WorkspaceType = "expense" | "nutrition";
  */
 export function resolveWorkspaceRoute(
   workspace: WorkspaceType
-): "/(app)" | "/(nutrition)" {
-  return workspace === "nutrition" ? "/(nutrition)" : "/(app)";
+): "/(app)" | "/(nutrition)" | "/(ganesh)" {
+  if (workspace === "nutrition") return "/(nutrition)";
+  if (workspace === "ganesh") return "/(ganesh)";
+  return "/(app)";
 }
