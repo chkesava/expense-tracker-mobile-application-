@@ -72,6 +72,36 @@ export function isPandalAssetPath(path: string): boolean {
   return parts.length === 5 && parts[0] === "pandals" && parts[2] === "assets";
 }
 
+export function buildPandalSponsorPath(input: {
+  pandalId: string;
+  sponsorId: string;
+  fileName: string;
+}): string {
+  const pandalId = assertSafeId(input.pandalId, "Pandal");
+  const sponsorId = assertSafeId(input.sponsorId, "sponsor");
+  const fileName = sanitizeFileName(input.fileName, "sponsors.jpg");
+  return `pandals/${pandalId}/sponsors/${sponsorId}/${fileName}`;
+}
+
+export function isPandalSponsorPath(path: string): boolean {
+  const parts = path.split("/");
+  return parts.length === 5 && parts[0] === "pandals" && parts[2] === "sponsors";
+}
+
+export function assertOwnedPandalSponsorPath(
+  path: string,
+  expected: { pandalId: string }
+): void {
+  const pandalId = assertSafeId(expected.pandalId, "Pandal");
+  const prefix = `pandals/${pandalId}/sponsors/`;
+  if (path.includes("..") || path.startsWith("/") || !path.startsWith(prefix)) {
+    throw new Error("That file does not belong to this Pandal.");
+  }
+  if (!isPandalSponsorPath(path)) {
+    throw new Error("Invalid storage path.");
+  }
+}
+
 export function assertOwnedPandalAssetPath(
   path: string,
   expected: { pandalId: string }

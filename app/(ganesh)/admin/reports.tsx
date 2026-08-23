@@ -8,10 +8,14 @@ import { useContributions } from "@/hooks/useContributions";
 import { useFestivals } from "@/hooks/useFestivals";
 import { useGaneshSummary } from "@/hooks/useGaneshSummary";
 import { usePandalAssets } from "@/hooks/usePandalAssets";
+import { usePandalSponsors } from "@/hooks/usePandalSponsors";
 import { usePermanentFund } from "@/hooks/usePermanentFund";
+import { useSponsorships } from "@/hooks/useSponsorships";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import { summarizeAssets } from "@/shared/utils/ganeshAssets";
 import { summarizeContributions } from "@/shared/utils/ganeshContributions";
+import { formatInr } from "@/shared/utils/ganeshMoney";
+import { breakdownSponsors, summarizeSponsorships } from "@/shared/utils/ganeshSponsors";
 import {
   assetPurchaseAmountOf,
   availableGodFund,
@@ -29,6 +33,10 @@ export default function AdminReportsScreen() {
   const { summary } = useGaneshSummary(pandalId, festivalId);
   const { contributions } = useContributions(pandalId, festivalId);
   const contributionTotals = summarizeContributions(contributions);
+  const { sponsorships } = useSponsorships(pandalId, festivalId);
+  const { sponsors } = usePandalSponsors(pandalId);
+  const sponsorTotals = summarizeSponsorships(sponsorships);
+  const sponsorRows = breakdownSponsors(sponsorships, sponsors);
   const { assets } = usePandalAssets(pandalId);
   const { fund } = usePermanentFund(pandalId);
   const assetSummary = summarizeAssets(assets);
@@ -72,6 +80,42 @@ export default function AdminReportsScreen() {
           { label: "Cancelled", value: contributionTotals.cancelledValue },
         ]}
       />
+      <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>Sponsors</Text>
+      <Text style={{ color: theme.colors.mutedForeground }}>
+        Separate from Closing / God Fund. Expense sponsorship is not income.
+      </Text>
+      <MetricGrid
+        items={[
+          { label: "Cash received", value: sponsorTotals.cashReceived },
+          { label: "Promised cash", value: sponsorTotals.promisedCash },
+          { label: "In-kind received", value: sponsorTotals.inKindReceived },
+          { label: "Promised in-kind", value: sponsorTotals.promisedInKind },
+          { label: "Cancelled", value: sponsorTotals.cancelledValue },
+        ]}
+      />
+      {sponsorRows.length > 0 ? (
+        <View style={{ gap: 10 }}>
+          {sponsorRows.map((row) => (
+            <View
+              key={row.sponsorId}
+              style={{
+                backgroundColor: theme.colors.card,
+                borderColor: theme.colors.border,
+                borderWidth: 1,
+                borderRadius: 16,
+                padding: 14,
+                gap: 4,
+              }}
+            >
+              <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>{row.name}</Text>
+              <Text style={{ color: theme.colors.mutedForeground }}>
+                Received {formatInr(row.received)} · Promised {formatInr(row.promised)}
+                {row.inKind > 0 ? ` · In-kind ${formatInr(row.inKind)}` : ""}
+              </Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
       <View style={{ gap: 10 }}>
         <AdminLinkRow
           title="Festival summary"
@@ -97,6 +141,11 @@ export default function AdminReportsScreen() {
           title="Contribution summary"
           subtitle="Cash received, promised, in-kind, and cancelled. Promises do not add cash."
           onPress={() => push("/(ganesh)/contributions" as never)}
+        />
+        <AdminLinkRow
+          title="Sponsor summary"
+          subtitle="Cash received, promised cash, in-kind, and cancelled. Separate from God Fund."
+          onPress={() => push("/(ganesh)/sponsors" as never)}
         />
         <AdminLinkRow
           title="Reimbursement summary"

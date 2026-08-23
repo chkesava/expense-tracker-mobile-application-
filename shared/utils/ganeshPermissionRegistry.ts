@@ -11,7 +11,8 @@ export type PermissionGroupId =
   | "roles"
   | "settings"
   | "audit"
-  | "assets";
+  | "assets"
+  | "sponsors";
 
 export type PermissionGroup = {
   id: PermissionGroupId;
@@ -125,6 +126,17 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: "assets.manage", label: "Manage" },
     ],
   },
+  {
+    id: "sponsors",
+    label: "Sponsors",
+    items: [
+      { key: "sponsors.read", label: "View" },
+      { key: "sponsors.create", label: "Create" },
+      { key: "sponsors.update", label: "Update" },
+      { key: "sponsors.receive", label: "Mark received" },
+      { key: "sponsors.cancel", label: "Cancel" },
+    ],
+  },
 ];
 
 export const PERMISSION_DEPENDENCIES: Partial<Record<GaneshPermission, GaneshPermission[]>> = {
@@ -158,6 +170,10 @@ export const PERMISSION_DEPENDENCIES: Partial<Record<GaneshPermission, GaneshPer
   "assets.update": ["assets.read"],
   "assets.dispose": ["assets.read"],
   "assets.manage": ["assets.read", "assets.update"],
+  "sponsors.create": ["sponsors.read"],
+  "sponsors.update": ["sponsors.read"],
+  "sponsors.receive": ["sponsors.read"],
+  "sponsors.cancel": ["sponsors.read"],
 };
 
 export const CRITICAL_PERMISSIONS: GaneshPermission[] = [

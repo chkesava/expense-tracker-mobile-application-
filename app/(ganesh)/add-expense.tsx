@@ -14,6 +14,8 @@ import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { useGaneshStorage } from "@/hooks/useGaneshStorage";
 import { useGaneshWrites } from "@/hooks/useGaneshWrites";
 import { usePandalMembers } from "@/hooks/usePandalMembers";
+import { usePandalSponsors } from "@/hooks/usePandalSponsors";
+import { useSponsorships } from "@/hooks/useSponsorships";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
@@ -26,6 +28,8 @@ import {
   ASSET_UNITS,
 } from "@/shared/utils/ganeshAssets";
 import { todayDateInput } from "@/shared/utils/ganeshIdentity";
+import { formatInr } from "@/shared/utils/ganeshMoney";
+import { purposeLabelOf } from "@/shared/utils/ganeshSponsors";
 import { useTheme } from "@/theme/ThemeProvider";
 
 type Funding = "god" | "personal" | "split" | "sponsored";
@@ -39,8 +43,16 @@ export default function AddExpenseScreen() {
   const { categories } = useGaneshCategories(pandalId, festivalId);
   const visibleCategories = categories.filter((category) => !category.disabled);
   const { members } = usePandalMembers(pandalId);
+  const { sponsors } = usePandalSponsors(pandalId);
+  const { sponsorships } = useSponsorships(pandalId, festivalId);
   const writes = useGaneshWrites();
   const { can } = useGaneshPermissions();
+  const canLinkSponsor = can("sponsors.receive");
+  const openExpenseDeals = sponsorships.filter(
+    (row) =>
+      row.sponsoringType === "expense" &&
+      (row.status === "promised" || row.status === "confirmed")
+  );
   const { isOnline, uploadExpenseReceipt } = useGaneshStorage();
   const canBuyAsset = can("assets.create");
   const [kind, setKind] = useState<GaneshExpenseType>("normal");
@@ -48,6 +60,9 @@ export default function AddExpenseScreen() {
   const [total, setTotal] = useState("");
   const [godFund, setGodFund] = useState("");
   const [personal, setPersonal] = useState("");
+  const [sponsored, setSponsored] = useState("");
+  const [sponsorId, setSponsorId] = useState("");
+  const [linkedSponsorshipId, setLinkedSponsorshipId] = useState("");
   const [funding, setFunding] = useState<Funding>("god");
   const [categoryId, setCategoryId] = useState(visibleCategories[0]?.id ?? "");
   const [paidByMemberId, setPaidByMemberId] = useState(realUser?.uid ?? "");
@@ -79,7 +94,7 @@ export default function AddExpenseScreen() {
       totalAmount,
       godFundAmount: Number(godFund),
       personalAmount: Number(personal),
-      sponsoredAmount: 0,
+      sponsoredAmount: Number(sponsored || 0),
     };
   };
 
@@ -143,7 +158,7 @@ export default function AddExpenseScreen() {
       <Input label="Amount" value={total} onChangeText={setTotal} keyboardType="numeric" editable={!ledgerSaved} />
       <Text style={{ color: theme.colors.mutedForeground, fontWeight: "700" }}>Funding</Text>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-        {(["god", "personal", "split", "sponsored"] as Funding[]).map((item) => (
+        {(["god", "personal", "split", ...(canLinkSponsor ? (["sponsored"] as const) : [])] as Funding[]).map((item) => (
           <Pressable
             key={item}
             disabled={ledgerSaved}
@@ -171,7 +186,116 @@ export default function AddExpenseScreen() {
         <>
           <Input label="God Fund amount" value={godFund} onChangeText={setGodFund} keyboardType="numeric" editable={!ledgerSaved} />
           <Input label="Personal amount" value={personal} onChangeText={setPersonal} keyboardType="numeric" editable={!ledgerSaved} />
+          {canLinkSponsor ? (
+            <Input
+              label="Sponsored amount"
+              value={sponsored}
+              onChangeText={setSponsored}
+              keyboardType="numeric"
+              editable={!ledgerSaved}
+            />
+          ) : null}
         </>
+      ) : null}
+      {!canLinkSponsor ? (
+        <Text style={{ color: theme.colors.mutedForeground }}>
+          Linking a sponsored amount needs permission to mark a sponsorship received.
+        </Text>
+      ) : null}
+      {canLinkSponsor && (funding === "sponsored" || (funding === "split" && Number(sponsored || 0) > 0)) ? (
+        <View style={{ gap: 12 }}>
+          <Text style={{ color: theme.colors.mutedForeground }}>
+            Sponsored amount is not income. Pick a sponsor, or an open expense-type deal.
+          </Text>
+          {openExpenseDeals.length > 0 ? (
+            <>
+              <Text style={{ color: theme.colors.mutedForeground, fontWeight: "700" }}>
+                Open expense sponsorship
+              </Text>
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                <Pressable
+                  disabled={ledgerSaved}
+                  onPress={() => setLinkedSponsorshipId("")}
+                  style={{
+                    paddingHorizontal: 10,
+                    paddingVertical: 6,
+                    borderRadius: 999,
+                    backgroundColor: linkedSponsorshipId === "" ? theme.colors.primary : theme.colors.muted,
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: linkedSponsorshipId === "" ? theme.colors.primaryForeground : theme.colors.foreground,
+                      fontWeight: "700",
+                    }}
+                  >
+                    New deal
+                  </Text>
+                </Pressable>
+                {openExpenseDeals.map((deal) => {
+                  const sponsorName = sponsors.find((item) => item.id === deal.sponsorId)?.name ?? "Sponsor";
+                  return (
+                    <Pressable
+                      key={deal.id}
+                      disabled={ledgerSaved}
+                      onPress={() => {
+                        setLinkedSponsorshipId(deal.id);
+                        setSponsorId(deal.sponsorId);
+                      }}
+                      style={{
+                        paddingHorizontal: 10,
+                        paddingVertical: 6,
+                        borderRadius: 999,
+                        backgroundColor: linkedSponsorshipId === deal.id ? theme.colors.primary : theme.colors.muted,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color:
+                            linkedSponsorshipId === deal.id
+                              ? theme.colors.primaryForeground
+                              : theme.colors.foreground,
+                          fontWeight: "700",
+                        }}
+                      >
+                        {sponsorName} · {purposeLabelOf(deal.purpose, deal.purposeLabel)} · {formatInr(deal.amount)}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </>
+          ) : null}
+          {linkedSponsorshipId ? null : (
+            <>
+              <Text style={{ color: theme.colors.mutedForeground, fontWeight: "700" }}>Sponsor</Text>
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                {sponsors.map((item) => (
+                  <Pressable
+                    key={item.id}
+                    disabled={ledgerSaved}
+                    onPress={() => setSponsorId(item.id)}
+                    style={{
+                      paddingHorizontal: 10,
+                      paddingVertical: 6,
+                      borderRadius: 999,
+                      backgroundColor: sponsorId === item.id ? theme.colors.primary : theme.colors.muted,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: sponsorId === item.id ? theme.colors.primaryForeground : theme.colors.foreground,
+                        fontWeight: "700",
+                      }}
+                    >
+                      {item.name}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </>
+          )}
+        </View>
       ) : null}
       <Text style={{ color: theme.colors.mutedForeground, fontWeight: "700" }}>Category</Text>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
@@ -312,15 +436,22 @@ export default function AddExpenseScreen() {
             toast.error("Add a category first.");
             return;
           }
+          const fundingAmounts = resolvedFunding();
+          if (fundingAmounts.sponsoredAmount > 0 && !sponsorId && !linkedSponsorshipId) {
+            toast.error("Choose a sponsor for the sponsored amount.");
+            return;
+          }
           const payload = {
             name,
-            ...resolvedFunding(),
+            ...fundingAmounts,
             categoryId: selectedCategory.id,
             categoryName: selectedCategory.name,
             paidByMemberId: paidByMemberId || realUser?.uid || "",
             vendor,
             notes,
             date: todayDateInput(),
+            sponsorId: fundingAmounts.sponsoredAmount > 0 ? sponsorId || undefined : undefined,
+            linkedSponsorshipId: fundingAmounts.sponsoredAmount > 0 ? linkedSponsorshipId || undefined : undefined,
           };
           if (isAssetPurchase) {
             const quantity = Number(assetQty);

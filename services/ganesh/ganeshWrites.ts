@@ -54,7 +54,12 @@ import type {
   PaymentMethod,
   PermanentFundLocation,
   PandalJoinMode,
+  SponsorshipPurpose,
 } from "@/shared/types/ganesh";
+import {
+  appendExpenseSponsorship,
+  loadSponsoredExpenseLink,
+} from "@/services/ganesh/ganeshSponsors";
 import {
   assertCanCancelContribution,
   assertCanReceiveContribution,
@@ -1412,6 +1417,10 @@ export async function addExpense(
     date: string;
     receiptPath?: string;
     linkedContributionId?: string;
+    sponsorId?: string;
+    linkedSponsorshipId?: string;
+    sponsorshipPurpose?: SponsorshipPurpose;
+    purposeLabel?: string;
   }
 ): Promise<string> {
   const name = input.name.trim();
@@ -1433,8 +1442,24 @@ export async function addExpense(
     const spendOk = validateGodFundSpend(input.godFundAmount, availableGodFund(summary));
     if (!spendOk.ok) throw new Error(spendOk.error);
   }
+  const sponsorLink = await loadSponsoredExpenseLink(db, pandalId, festivalId, {
+    sponsoredAmount,
+    sponsorId: input.sponsorId,
+    linkedSponsorshipId: input.linkedSponsorshipId,
+  });
   const id = newId();
   const batch = writeBatch(db);
+  const linkedSponsorshipId = sponsorLink
+    ? appendExpenseSponsorship(batch, db, actor, pandalId, festivalId, {
+        expenseId: id,
+        sponsorId: sponsorLink.sponsorId,
+        sponsorshipId: sponsorLink.sponsorshipId,
+        amount: sponsoredAmount,
+        purpose: input.sponsorshipPurpose,
+        purposeLabel: input.purposeLabel,
+        existing: sponsorLink.existing,
+      })
+    : undefined;
   batch.set(
     pathRef(db, [...festivalCol(pandalId, festivalId, "expenses"), id]),
     omitUndefined({
@@ -1452,6 +1477,7 @@ export async function addExpense(
       date: input.date,
       receiptPath: input.receiptPath,
       linkedContributionId: input.linkedContributionId,
+      linkedSponsorshipId,
       expenseType: "normal",
       ledgerType: "EXPENSE",
       voided: false,
@@ -1511,6 +1537,10 @@ export async function addAssetPurchase(
     notes?: string;
     date: string;
     receiptPath?: string;
+    sponsorId?: string;
+    linkedSponsorshipId?: string;
+    sponsorshipPurpose?: SponsorshipPurpose;
+    purposeLabel?: string;
     asset: AssetPurchaseDraft;
   }
 ): Promise<{ expenseId: string; assetId: string }> {
@@ -1537,10 +1567,26 @@ export async function addAssetPurchase(
     input.asset.estimatedValue != null && Number.isFinite(input.asset.estimatedValue)
       ? input.asset.estimatedValue
       : input.totalAmount;
+  const sponsorLink = await loadSponsoredExpenseLink(db, pandalId, festivalId, {
+    sponsoredAmount,
+    sponsorId: input.sponsorId,
+    linkedSponsorshipId: input.linkedSponsorshipId,
+  });
   const expenseId = newId();
   const assetId = newId();
   const cashAmount = input.godFundAmount + input.personalAmount;
   const batch = writeBatch(db);
+  const linkedSponsorshipId = sponsorLink
+    ? appendExpenseSponsorship(batch, db, actor, pandalId, festivalId, {
+        expenseId,
+        sponsorId: sponsorLink.sponsorId,
+        sponsorshipId: sponsorLink.sponsorshipId,
+        amount: sponsoredAmount,
+        purpose: input.sponsorshipPurpose,
+        purposeLabel: input.purposeLabel,
+        existing: sponsorLink.existing,
+      })
+    : undefined;
   batch.set(
     pathRef(db, [...festivalCol(pandalId, festivalId, "expenses"), expenseId]),
     omitUndefined({
@@ -1557,6 +1603,7 @@ export async function addAssetPurchase(
       notes: input.notes?.trim() || undefined,
       date: input.date,
       receiptPath: input.receiptPath,
+      linkedSponsorshipId,
       expenseType: "asset_purchase",
       assetId,
       ledgerType: "EXPENSE",

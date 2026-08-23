@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { assertCanUpload, assertCanUploadPandalAsset } from "./storageAuth";
+import { assertCanUpload, assertCanUploadPandalAsset, assertCanUploadPandalSponsor } from "./storageAuth";
 
 const memberUpload = {
   uid: "user-1",
@@ -72,6 +72,30 @@ describe("assertCanUpload", () => {
         pandalId: "pandal-a",
       })
     ).not.toThrow();
+  });
+
+  it("lets a member upload a sponsor photo without a festival", () => {
+    expect(() =>
+      assertCanUploadPandalSponsor({
+        uid: "user-1",
+        role: "member",
+        memberStatus: "active",
+        sessionPandalId: "pandal-a",
+        pandalId: "pandal-a",
+      })
+    ).not.toThrow();
+  });
+
+  it("denies a viewer uploading a sponsor photo", () => {
+    expect(() =>
+      assertCanUploadPandalSponsor({
+        uid: "user-1",
+        role: "viewer",
+        memberStatus: "active",
+        sessionPandalId: "pandal-a",
+        pandalId: "pandal-a",
+      })
+    ).toThrow("You do not have permission to upload this file.");
   });
 
   it("denies a viewer uploading an asset photo", () => {

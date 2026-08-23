@@ -14,7 +14,9 @@ import {
   transferPermanentToFestival,
 } from "@/services/ganesh/ganeshPermanentFund";
 import * as assetWrites from "@/services/ganesh/ganeshAssets";
+import * as sponsorWrites from "@/services/ganesh/ganeshSponsors";
 import * as writes from "@/services/ganesh/ganeshWrites";
+import { assertMoneyReceiveOnline } from "@/shared/utils/ganeshContributions";
 import type {
   GaneshFileMeta,
   GaneshMemberStatus,
@@ -258,6 +260,7 @@ export function useGaneshWrites() {
     },
     addExpense: (input: Parameters<typeof writes.addExpense>[4]) => {
       requirePerm("expenses.create");
+      if ((input.sponsoredAmount ?? 0) > 0) requirePerm("sponsors.receive");
       const ctx = requireFestival();
       return run("Expense saved", () =>
         writes.addExpense(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, input)
@@ -266,6 +269,7 @@ export function useGaneshWrites() {
     addAssetPurchase: (input: Parameters<typeof writes.addAssetPurchase>[4]) => {
       requirePerm("expenses.create");
       requirePerm("assets.create");
+      if ((input.sponsoredAmount ?? 0) > 0) requirePerm("sponsors.receive");
       const ctx = requireFestival();
       return run("Asset purchase saved", () =>
         writes.addAssetPurchase(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, input)
@@ -512,6 +516,114 @@ export function useGaneshWrites() {
       }
       const ctx = requirePandal();
       return assetWrites.attachAssetPhoto(ctx.db, ctx.actor, ctx.pandalId, assetId, photo);
+    },
+    createSponsor: (input: Parameters<typeof sponsorWrites.createSponsor>[3]) => {
+      requirePerm("sponsors.create");
+      const ctx = requirePandal();
+      return run("Sponsor added", () =>
+        sponsorWrites.createSponsor(ctx.db, ctx.actor, ctx.pandalId, input)
+      );
+    },
+    updateSponsor: (
+      sponsorId: string,
+      input: Parameters<typeof sponsorWrites.updateSponsor>[4]
+    ) => {
+      requirePerm("sponsors.update");
+      const ctx = requirePandal();
+      return run("Sponsor saved", () =>
+        sponsorWrites.updateSponsor(ctx.db, ctx.actor, ctx.pandalId, sponsorId, input)
+      );
+    },
+    attachSponsorPhoto: (
+      sponsorId: string,
+      photo: Parameters<typeof sponsorWrites.attachSponsorPhoto>[4]
+    ) => {
+      if (!hasPerm("sponsors.create") && !hasPerm("sponsors.update")) {
+        requirePerm("sponsors.update");
+      }
+      const ctx = requirePandal();
+      return sponsorWrites.attachSponsorPhoto(ctx.db, ctx.actor, ctx.pandalId, sponsorId, photo);
+    },
+    addSponsorship: (
+      sponsorId: string,
+      input: Parameters<typeof sponsorWrites.addSponsorship>[5]
+    ) => {
+      requirePerm("sponsors.create");
+      if (input.status === "received") requirePerm("sponsors.receive");
+      if (input.pandalAsset) requirePerm("assets.create");
+      if (input.status === "received" && input.sponsoringType === "cash") {
+        assertMoneyReceiveOnline(isOnline, "money");
+      }
+      const ctx = requireFestival();
+      return run("Sponsorship saved", () =>
+        sponsorWrites.addSponsorship(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, sponsorId, input)
+      );
+    },
+    updateOpenSponsorship: (
+      sponsorshipId: string,
+      input: Parameters<typeof sponsorWrites.updateOpenSponsorship>[5]
+    ) => {
+      requirePerm("sponsors.update");
+      const ctx = requireFestival();
+      return run("Sponsorship saved", () =>
+        sponsorWrites.updateOpenSponsorship(
+          ctx.db,
+          ctx.actor,
+          ctx.pandalId,
+          ctx.festivalId,
+          sponsorshipId,
+          input
+        )
+      );
+    },
+    promiseSponsorship: (sponsorshipId: string) => {
+      requirePerm("sponsors.update");
+      const ctx = requireFestival();
+      return run("Marked promised", () =>
+        sponsorWrites.promiseSponsorship(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, sponsorshipId)
+      );
+    },
+    confirmSponsorship: (sponsorshipId: string) => {
+      requirePerm("sponsors.update");
+      const ctx = requireFestival();
+      return run("Sponsorship confirmed", () =>
+        sponsorWrites.confirmSponsorship(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, sponsorshipId)
+      );
+    },
+    receiveSponsorship: (
+      sponsorshipId: string,
+      input?: Parameters<typeof sponsorWrites.receiveSponsorship>[5] & { sponsoringType?: string }
+    ) => {
+      requirePerm("sponsors.receive");
+      const ctx = requireFestival();
+      if (input?.sponsoringType === "cash") {
+        assertMoneyReceiveOnline(isOnline, "money");
+      }
+      const { sponsoringType: _type, ...payload } = input ?? {};
+      return run("Marked received", () =>
+        sponsorWrites.receiveSponsorship(
+          ctx.db,
+          ctx.actor,
+          ctx.pandalId,
+          ctx.festivalId,
+          sponsorshipId,
+          payload
+        )
+      );
+    },
+    cancelSponsorship: (sponsorshipId: string, reason?: string) => {
+      requirePerm("sponsors.cancel");
+      const ctx = requireFestival();
+      return run("Sponsorship cancelled", () =>
+        sponsorWrites.cancelSponsorship(
+          ctx.db,
+          ctx.actor,
+          ctx.pandalId,
+          ctx.festivalId,
+          sponsorshipId,
+          reason
+        )
+      );
     },
   };
 }

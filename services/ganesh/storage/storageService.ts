@@ -1,10 +1,17 @@
-import { assertCanUpload, assertCanUploadPandalAsset } from "@/services/ganesh/storage/storageAuth";
+import {
+  assertCanUpload,
+  assertCanUploadPandalAsset,
+  assertCanUploadPandalSponsor,
+} from "@/services/ganesh/storage/storageAuth";
 import {
   assertOwnedFestivalPath,
   assertOwnedPandalAssetPath,
+  assertOwnedPandalSponsorPath,
   buildFestivalFilePath,
   buildPandalAssetPath,
+  buildPandalSponsorPath,
   isPandalAssetPath,
+  isPandalSponsorPath,
 } from "@/services/ganesh/storage/storagePaths";
 import {
   createObjectSignedUrl,
@@ -15,9 +22,10 @@ import type {
   GaneshFileMeta,
   UploadFestivalFileInput,
   UploadPandalAssetFileInput,
+  UploadPandalSponsorFileInput,
 } from "@/services/ganesh/storage/storageTypes";
 
-export { assertCanUpload, assertCanUploadPandalAsset } from "@/services/ganesh/storage/storageAuth";
+export { assertCanUpload, assertCanUploadPandalAsset, assertCanUploadPandalSponsor } from "@/services/ganesh/storage/storageAuth";
 export { ganeshStoredPath } from "@/services/ganesh/storage/storagePaths";
 export { prepareGaneshImage } from "@/services/ganesh/storage/imagePrepare";
 
@@ -35,6 +43,33 @@ export async function uploadPandalAssetFile(
   const path = buildPandalAssetPath({
     pandalId: input.pandalId,
     assetId: input.assetId,
+    fileName: input.file.fileName,
+  });
+  await uploadObject(path, input.file.uri, input.file.mimeType);
+  return {
+    path,
+    fileName: path.split("/").pop() ?? input.file.fileName,
+    mimeType: input.file.mimeType,
+    size: input.file.size,
+    uploadedAt: new Date().toISOString(),
+    uploadedBy: input.uid,
+  };
+}
+
+export async function uploadPandalSponsorFile(
+  input: UploadPandalSponsorFileInput
+): Promise<GaneshFileMeta> {
+  assertCanUploadPandalSponsor({
+    uid: input.uid,
+    role: input.role,
+    permissions: input.permissions,
+    memberStatus: input.memberStatus,
+    sessionPandalId: input.sessionPandalId,
+    pandalId: input.pandalId,
+  });
+  const path = buildPandalSponsorPath({
+    pandalId: input.pandalId,
+    sponsorId: input.sponsorId,
     fileName: input.file.fileName,
   });
   await uploadObject(path, input.file.uri, input.file.mimeType);
@@ -88,6 +123,8 @@ export async function getSignedUrl(
 ): Promise<string> {
   if (isPandalAssetPath(path)) {
     assertOwnedPandalAssetPath(path, { pandalId: expected.pandalId });
+  } else if (isPandalSponsorPath(path)) {
+    assertOwnedPandalSponsorPath(path, { pandalId: expected.pandalId });
   } else {
     if (!expected.festivalId) throw new Error("Select a Pandal and festival first.");
     assertOwnedFestivalPath(path, { pandalId: expected.pandalId, festivalId: expected.festivalId });
@@ -105,6 +142,8 @@ export async function deleteFile(
 ): Promise<void> {
   if (isPandalAssetPath(path)) {
     assertOwnedPandalAssetPath(path, { pandalId: expected.pandalId });
+  } else if (isPandalSponsorPath(path)) {
+    assertOwnedPandalSponsorPath(path, { pandalId: expected.pandalId });
   } else {
     if (!expected.festivalId) throw new Error("Select a Pandal and festival first.");
     assertOwnedFestivalPath(path, { pandalId: expected.pandalId, festivalId: expected.festivalId });

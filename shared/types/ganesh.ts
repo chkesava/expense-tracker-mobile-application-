@@ -196,6 +196,75 @@ export type PandalAssetAuditAction =
 
 export type GaneshExpenseType = "normal" | "asset_purchase";
 
+export type SponsorType = "person" | "business" | "organization" | "other";
+export type SponsoringType = "cash" | "item" | "service" | "expense";
+export type SponsorshipStatus =
+  | "prospective"
+  | "promised"
+  | "confirmed"
+  | "received"
+  | "cancelled";
+export type SponsorshipPurpose =
+  | "ganesh_idol"
+  | "decoration"
+  | "sound"
+  | "lighting"
+  | "prasadam"
+  | "food"
+  | "pooja"
+  | "immersion"
+  | "cultural"
+  | "other";
+export type PandalSponsorAuditAction = "created" | "edited" | "photo";
+
+export interface PandalSponsor extends GaneshAuditFields {
+  id: string;
+  name: string;
+  type: SponsorType;
+  mobile?: string;
+  email?: string;
+  address?: string;
+  notes?: string;
+  photo?: GaneshFileMeta;
+  pendingWrite?: boolean;
+}
+
+export interface PandalSponsorAudit {
+  id: string;
+  actorId: string;
+  sponsorId: string;
+  action: PandalSponsorAuditAction;
+  oldValue?: unknown;
+  newValue?: unknown;
+  reason?: string;
+  at?: FirestoreTime;
+}
+
+export interface GaneshSponsorship extends GaneshAuditFields {
+  id: string;
+  sponsorId: string;
+  sponsoringType: SponsoringType;
+  purpose: SponsorshipPurpose;
+  purposeLabel?: string;
+  status: SponsorshipStatus;
+  amount: number;
+  estimatedValue: number;
+  itemName?: string;
+  quantity?: string;
+  serviceDescription?: string;
+  expectedDate?: string;
+  paymentMethod?: PaymentMethod;
+  receivedAt?: FirestoreTime;
+  receivedBy?: string;
+  receivedNotes?: string;
+  cancelReason?: string;
+  contributionId?: string;
+  expenseId?: string;
+  assetId?: string;
+  notes?: string;
+  pendingWrite?: boolean;
+}
+
 export interface PandalAsset extends GaneshAuditFields {
   id: string;
   name: string;
@@ -393,6 +462,8 @@ export interface GaneshContribution extends GaneshAuditFields, GaneshVoidFields 
   photoPath?: string;
   photo?: GaneshFileMeta;
   ledgerType?: "COMMITTEE_CONTRIBUTION" | "OTHER_DONATION";
+  sponsorId?: string;
+  sponsorshipId?: string;
   pendingWrite?: boolean;
 }
 
@@ -413,6 +484,7 @@ export interface GaneshExpense extends GaneshAuditFields, GaneshVoidFields {
   receiptPath?: string;
   receipt?: GaneshFileMeta;
   linkedContributionId?: string;
+  linkedSponsorshipId?: string;
   expenseType?: GaneshExpenseType;
   assetId?: string;
   ledgerType: "EXPENSE";

@@ -76,6 +76,9 @@ function GaneshStack() {
       <Stack.Screen name="assets" options={{ title: "Pandal assets" }} />
       <Stack.Screen name="add-asset" options={{ title: "Add asset" }} />
       <Stack.Screen name="asset/[id]" options={{ title: "Asset" }} />
+      <Stack.Screen name="sponsors" options={{ title: "Sponsors" }} />
+      <Stack.Screen name="add-sponsor" options={{ title: "Add sponsor" }} />
+      <Stack.Screen name="sponsor/[id]" options={{ title: "Sponsor" }} />
       <Stack.Screen name="create-festival" options={{ title: "Create festival" }} />
     </Stack>
   );

@@ -23,6 +23,7 @@ import {
   ASSET_ROLE_DEFAULTS,
   BUILTIN_ROLE_IDS,
   CONTRIBUTION_STATUS_ROLE_DEFAULTS,
+  SPONSOR_ROLE_DEFAULTS,
   ROLE_PERMISSIONS,
   getEffectivePermissions,
   roleNameKey,
@@ -135,13 +136,19 @@ function hasContributionReceivePermission(permissions: unknown): boolean {
   return Array.isArray(permissions) && permissions.includes("contributions.receive");
 }
 
+function hasSponsorPermission(permissions: unknown): boolean {
+  return Array.isArray(permissions) && permissions.some((item) => String(item).startsWith("sponsors."));
+}
+
 function builtinMissingPermissions(
   roleId: (typeof BUILTIN_ROLE_IDS)[number],
   currentPerms: GaneshPermission[]
 ): GaneshPermission[] {
-  return [...ASSET_ROLE_DEFAULTS[roleId], ...CONTRIBUTION_STATUS_ROLE_DEFAULTS[roleId]].filter(
-    (perm) => !currentPerms.includes(perm)
-  );
+  return [
+    ...ASSET_ROLE_DEFAULTS[roleId],
+    ...CONTRIBUTION_STATUS_ROLE_DEFAULTS[roleId],
+    ...SPONSOR_ROLE_DEFAULTS[roleId],
+  ].filter((perm) => !currentPerms.includes(perm));
 }
 
 export async function ensurePandalRoles(
@@ -206,7 +213,25 @@ export async function ensurePandalRoles(
     const needsContributionBackfill = isAdmin
       ? !hasContributionReceivePermission(data.permissions)
       : roleIds.includes("treasurer") && !hasContributionReceivePermission(data.permissions);
-    if (hasRoleIds && hasPermissions && !needsAssetBackfill && !needsContributionBackfill) return;
+    const needsSponsorBackfill = isAdmin
+      ? !hasSponsorPermission(data.permissions)
+        || !Array.isArray(data.permissions)
+        || !data.permissions.includes("sponsors.receive")
+      : assignedPatched || roleIds.some((id) => {
+          if (!BUILTIN_ROLE_IDS.includes(id as (typeof BUILTIN_ROLE_IDS)[number])) return false;
+          return SPONSOR_ROLE_DEFAULTS[id as (typeof BUILTIN_ROLE_IDS)[number]].some(
+            (perm) => !Array.isArray(data.permissions) || !data.permissions.includes(perm)
+          );
+        });
+    if (
+      hasRoleIds &&
+      hasPermissions &&
+      !needsAssetBackfill &&
+      !needsContributionBackfill &&
+      !needsSponsorBackfill
+    ) {
+      return;
+    }
     const permissions = permissionsForRoleIds(roleIds, roles, isAdmin, role);
     migrateBatch.update(memberSnap.ref, {
       roleIds,

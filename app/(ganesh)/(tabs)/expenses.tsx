@@ -14,6 +14,8 @@ import { useFestivals } from "@/hooks/useFestivals";
 import { useGaneshExpenses } from "@/hooks/useGaneshExpenses";
 import { useGaneshSummary } from "@/hooks/useGaneshSummary";
 import { usePandalMembers } from "@/hooks/usePandalMembers";
+import { usePandalSponsors } from "@/hooks/usePandalSponsors";
+import { useSponsorships } from "@/hooks/useSponsorships";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import { formatInr } from "@/shared/utils/ganeshMoney";
 import { memberDisplayName } from "@/shared/utils/ganeshIdentity";
@@ -109,6 +111,8 @@ export default function GaneshExpensesScreen() {
   const { summary } = useGaneshSummary(pandalId, festivalId);
   const { expenses } = useGaneshExpenses(pandalId, festivalId);
   const { members } = usePandalMembers(pandalId);
+  const { sponsors } = usePandalSponsors(pandalId);
+  const { sponsorships } = useSponsorships(pandalId, festivalId);
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>("all");
   const { can } = useGaneshPermissions();
 
@@ -176,7 +180,12 @@ export default function GaneshExpensesScreen() {
         keyExtractor={(item) => item.id}
         renderItem={({ item }: { item: GaneshExpense }) => {
           const receiptPath = ganeshStoredPath(item.receipt, item.receiptPath);
-          const sponsored = item.sponsoredAmount > 0 ? ` · Sponsored ${formatInr(item.sponsoredAmount)}` : "";
+          const linked = sponsorships.find((row) => row.id === item.linkedSponsorshipId);
+          const sponsorName = sponsors.find((row) => row.id === linked?.sponsorId)?.name;
+          const sponsored =
+            item.sponsoredAmount > 0
+              ? ` · Sponsored ${formatInr(item.sponsoredAmount)}${sponsorName ? ` · ${sponsorName}` : ""}`
+              : "";
           return (
             <ExpenseCard
               id={item.id}

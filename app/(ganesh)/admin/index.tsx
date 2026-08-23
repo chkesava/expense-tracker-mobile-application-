@@ -13,6 +13,7 @@ import { useGaneshWrites } from "@/hooks/useGaneshWrites";
 import { useHouseholds } from "@/hooks/useHouseholds";
 import { useJoinRequests } from "@/hooks/useJoinRequests";
 import { usePandalAssets } from "@/hooks/usePandalAssets";
+import { useSponsorships } from "@/hooks/useSponsorships";
 import { usePandalMembers } from "@/hooks/usePandalMembers";
 import { usePandalRoles } from "@/hooks/usePandalRoles";
 import { usePandals } from "@/hooks/usePandals";
@@ -21,6 +22,7 @@ import { logError } from "@/lib/errors";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import { summarizeAssets } from "@/shared/utils/ganeshAssets";
 import { summarizeContributions } from "@/shared/utils/ganeshContributions";
+import { summarizeSponsorships } from "@/shared/utils/ganeshSponsors";
 import { assetPurchaseAmountOf, regularExpenseAmount, totalExpenses } from "@/shared/utils/ganeshMath";
 import { formatInr } from "@/shared/utils/ganeshMoney";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -42,8 +44,10 @@ export default function AdminDashboardScreen() {
   const writes = useGaneshWrites();
   const { summary } = useGaneshSummary(pandalId, festivalId);
   const { contributions } = useContributions(pandalId, festivalId);
+  const { sponsorships } = useSponsorships(pandalId, festivalId);
   const { households } = useHouseholds(pandalId, festivalId);
   const contributionTotals = summarizeContributions(contributions);
+  const sponsorTotals = summarizeSponsorships(sponsorships);
   const assetSummary = summarizeAssets(assets);
   const pandal = pandals.find((item) => item.id === pandalId);
   const festival = festivals.find((item) => item.id === festivalId);
@@ -127,11 +131,27 @@ export default function AdminDashboardScreen() {
       tone: "critical",
     });
   }
-  if (contributionTotals.promisedSponsorCount > 0) {
+  if (sponsorTotals.prospectiveCount > 0) {
     needs.push({
-      title: `${contributionTotals.promisedSponsorCount} promised sponsor${contributionTotals.promisedSponsorCount === 1 ? "" : "s"}`,
-      subtitle: "Sponsorships that have not been received yet.",
-      href: "/(ganesh)/contributions?status=promised&kind=sponsorship",
+      title: `${sponsorTotals.prospectiveCount} prospective sponsor${sponsorTotals.prospectiveCount === 1 ? "" : "s"}`,
+      subtitle: "Leads that have not been promised yet.",
+      href: "/(ganesh)/sponsors?status=prospective",
+      tone: "attention",
+    });
+  }
+  if (sponsorTotals.overdueCount > 0) {
+    needs.push({
+      title: `${sponsorTotals.overdueCount} promised sponsor${sponsorTotals.overdueCount === 1 ? "" : "s"} overdue`,
+      subtitle: "Still promised after the expected date. They are not cancelled automatically.",
+      href: "/(ganesh)/sponsors?status=overdue",
+      tone: "critical",
+    });
+  }
+  if (sponsorTotals.promisedCount > 0) {
+    needs.push({
+      title: `${sponsorTotals.promisedCount} awaiting confirmation`,
+      subtitle: "Promised sponsorships that have not been confirmed or received.",
+      href: "/(ganesh)/sponsors?status=promised",
       tone: "attention",
     });
   }
@@ -198,6 +218,11 @@ export default function AdminDashboardScreen() {
           title="Pandal assets"
           subtitle="Inventory that stays with the Pandal across years"
           onPress={() => push("/(ganesh)/assets" as never)}
+        />
+        <AdminLinkRow
+          title="Sponsors"
+          subtitle="Profiles and this festival's deals. Promises are not cash."
+          onPress={() => push("/(ganesh)/sponsors" as never)}
         />
 
         <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>Needs attention</Text>
@@ -334,8 +359,13 @@ export default function AdminDashboardScreen() {
           />
           <AdminLinkRow
             title="Contributions"
-            subtitle="Cash, in-kind, and sponsors"
+            subtitle="Cash, in-kind, and one-off gifts"
             onPress={() => push("/(ganesh)/contributions" as never)}
+          />
+          <AdminLinkRow
+            title="Sponsors"
+            subtitle="Festival sponsorships and profiles"
+            onPress={() => push("/(ganesh)/sponsors" as never)}
           />
         </View>
 

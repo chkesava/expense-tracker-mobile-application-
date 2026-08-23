@@ -43,7 +43,12 @@ export type GaneshPermission =
   | "assets.create"
   | "assets.update"
   | "assets.dispose"
-  | "assets.manage";
+  | "assets.manage"
+  | "sponsors.read"
+  | "sponsors.create"
+  | "sponsors.update"
+  | "sponsors.receive"
+  | "sponsors.cancel";
 
 export const ALL_GANESH_PERMISSIONS: GaneshPermission[] = [
   "collections.read",
@@ -87,6 +92,11 @@ export const ALL_GANESH_PERMISSIONS: GaneshPermission[] = [
   "assets.update",
   "assets.dispose",
   "assets.manage",
+  "sponsors.read",
+  "sponsors.create",
+  "sponsors.update",
+  "sponsors.receive",
+  "sponsors.cancel",
 ];
 
 const READ_LEDGER: GaneshPermission[] = [
@@ -98,6 +108,7 @@ const READ_LEDGER: GaneshPermission[] = [
   "permanentFund.read",
   "festival.read",
   "assets.read",
+  "sponsors.read",
 ];
 
 const MEMBER_WRITES: GaneshPermission[] = [
@@ -109,6 +120,8 @@ const MEMBER_WRITES: GaneshPermission[] = [
   "contributions.create",
   "contributions.update",
   "assets.create",
+  "sponsors.create",
+  "sponsors.update",
 ];
 
 const TREASURER_PERMISSIONS: GaneshPermission[] = [
@@ -122,6 +135,8 @@ const TREASURER_PERMISSIONS: GaneshPermission[] = [
   "openingFunds.create",
   "audit.read",
   "assets.update",
+  "sponsors.receive",
+  "sponsors.cancel",
 ];
 
 const ADMIN_PERMISSIONS: GaneshPermission[] = [...ALL_GANESH_PERMISSIONS];
@@ -136,6 +151,7 @@ const COLLECTOR_PERMISSIONS: GaneshPermission[] = [
   "permanentFund.read",
   "festival.read",
   "assets.read",
+  "sponsors.read",
 ];
 
 const VIEWER_PERMISSIONS: GaneshPermission[] = [...READ_LEDGER];
@@ -197,6 +213,23 @@ export const CONTRIBUTION_STATUS_ROLE_DEFAULTS: Record<
   member: [],
   collector: [],
   viewer: [],
+};
+
+/** Mirrors `canCreateSponsor()` fallback in firestore.rules. */
+export const RULE_SPONSOR_CREATE_ROLES: GaneshRole[] = ["admin", "treasurer", "member"];
+
+/** Mirrors `canUpdateSponsor()` / receive fallback in firestore.rules. */
+export const RULE_SPONSOR_UPDATE_ROLES: GaneshRole[] = ["admin", "treasurer"];
+
+/** Default `sponsors.*` keys unioned onto existing builtin role docs. */
+export const SPONSOR_ROLE_DEFAULTS: Record<
+  (typeof BUILTIN_ROLE_IDS)[number],
+  readonly GaneshPermission[]
+> = {
+  treasurer: ["sponsors.read", "sponsors.create", "sponsors.update", "sponsors.receive", "sponsors.cancel"],
+  member: ["sponsors.read", "sponsors.create", "sponsors.update"],
+  collector: ["sponsors.read"],
+  viewer: ["sponsors.read"],
 };
 
 export function isGaneshAdmin(role: GaneshRole | undefined): boolean {

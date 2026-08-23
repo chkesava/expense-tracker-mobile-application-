@@ -360,13 +360,65 @@ service cloud.firestore {
         );
     }
 
+    function canReadSponsorOf(pandalId) {
+      return hasPermOf(pandalId, 'sponsors.read')
+        || (
+          isActivePandalMemberOf(pandalId)
+          && !hasPermissionsField(pandalId)
+        );
+    }
+
+    function canCreateSponsorOf(pandalId) {
+      return hasPermOf(pandalId, 'sponsors.create')
+        || (
+          isActivePandalMemberOf(pandalId)
+          && !hasPermissionsField(pandalId)
+          && ganeshRoleOf(pandalId) in ['admin', 'treasurer', 'member']
+        );
+    }
+
+    function canUpdateSponsorOf(pandalId) {
+      return hasPermOf(pandalId, 'sponsors.update')
+        || (
+          isActivePandalMemberOf(pandalId)
+          && !hasPermissionsField(pandalId)
+          && ganeshRoleOf(pandalId) in ['admin', 'treasurer']
+        );
+    }
+
+    function canReceiveSponsorOf(pandalId) {
+      return hasPermOf(pandalId, 'sponsors.receive')
+        || (
+          isActivePandalMemberOf(pandalId)
+          && !hasPermissionsField(pandalId)
+          && ganeshRoleOf(pandalId) in ['admin', 'treasurer']
+        );
+    }
+
+    function canCancelSponsorOf(pandalId) {
+      return hasPermOf(pandalId, 'sponsors.cancel')
+        || (
+          isActivePandalMemberOf(pandalId)
+          && !hasPermissionsField(pandalId)
+          && ganeshRoleOf(pandalId) in ['admin', 'treasurer']
+        );
+    }
+
+    function canWriteSponsorOf(pandalId) {
+      return canCreateSponsorOf(pandalId)
+        || canUpdateSponsorOf(pandalId)
+        || canReceiveSponsorOf(pandalId)
+        || canCancelSponsorOf(pandalId);
+    }
+
     function canWriteLedgerSideEffectOf(pandalId) {
       return canWriteCollectionOf(pandalId)
         || canWriteExpenseOrContributionOf(pandalId)
         || canWriteReimbursementOf(pandalId)
         || canCreateOpeningFundOf(pandalId)
         || canWritePermanentFundOf(pandalId)
-        || canCloseOrUpdateFestivalOf(pandalId);
+        || canCloseOrUpdateFestivalOf(pandalId)
+        || canWriteSponsorOf(pandalId);
     }
 
     function canReadAssetOf(pandalId) {
@@ -616,6 +668,19 @@ service cloud.firestore {
         allow update, delete: if false;
       }
 
+      match /sponsors/{sponsorId} {
+        allow read: if canReadSponsorOf(pandalId);
+        allow create: if canCreateSponsorOf(pandalId) && ganeshIdentityCreate();
+        allow update: if canUpdateSponsorOf(pandalId) && ganeshIdentityUpdate();
+        allow delete: if false;
+      }
+
+      match /sponsorAudits/{auditId} {
+        allow read: if canReadSponsorOf(pandalId) || hasPermOf(pandalId, 'audit.read');
+        allow create: if canWriteSponsorOf(pandalId);
+        allow update, delete: if false;
+      }
+
       match /festivals/{festivalId} {
         function festivalData() {
           return get(/databases/$(database)/documents/pandals/$(pandalId)/festivals/$(festivalId)).data;
@@ -655,7 +720,8 @@ service cloud.firestore {
                       || canCloseOrUpdateFestival()))
               || (subcol == 'categories' && canCloseOrUpdateFestival())
               || ((subcol == 'activity' || subcol == 'auditLogs' || subcol == 'summary')
-                  && canWriteLedgerSideEffect());
+                  && canWriteLedgerSideEffect())
+              || (subcol == 'sponsorships' && canWriteSponsorOf(pandalId));
           }
 
           function hasNonEmptyAssetId() {
@@ -702,6 +768,42 @@ service cloud.firestore {
             );
           }
 
+          function sponsorshipStatusChanged() {
+            return subcol == 'sponsorships'
+              && resource.data.status != request.resource.data.status;
+          }
+
+          function sponsorshipCreateAllowed() {
+            return subcol != 'sponsorships' || (
+              !request.resource.data.keys().hasAll(['status'])
+              || request.resource.data.status != 'received'
+              || canReceiveSponsorOf(pandalId)
+            );
+          }
+
+          function sponsorshipUpdateAllowed() {
+            return subcol != 'sponsorships' || (
+              !sponsorshipStatusChanged()
+              || (
+                festivalOpen()
+                && (
+                  (resource.data.status == 'prospective'
+                    && request.resource.data.status == 'promised'
+                    && canUpdateSponsorOf(pandalId))
+                  || (resource.data.status == 'promised'
+                    && request.resource.data.status == 'confirmed'
+                    && canUpdateSponsorOf(pandalId))
+                  || (resource.data.status in ['promised', 'confirmed']
+                    && request.resource.data.status == 'received'
+                    && canReceiveSponsorOf(pandalId))
+                  || (resource.data.status in ['prospective', 'promised', 'confirmed']
+                    && request.resource.data.status == 'cancelled'
+                    && canCancelSponsorOf(pandalId))
+                )
+              )
+            );
+          }
+
           // Festival auditLogs stay writable as ledger side-effects, but only
           // admin/treasurer may read them. Nested matches OR together, so the
           // wildcard read must exclude this subcollection.
@@ -710,6 +812,7 @@ service cloud.firestore {
             && festivalOpen()
             && canWriteFestivalSubcol()
             && expenseCreateAllowed()
+            && sponsorshipCreateAllowed()
             && (
               !request.resource.data.keys().hasAny(['createdBy'])
               || ganeshIdentityCreate()
@@ -717,14 +820,20 @@ service cloud.firestore {
           allow update: if isActivePandalMember()
             && (
               (subcol == 'contributions' && contributionStatusChanged() && contributionUpdateAllowed())
-              || (canWriteFestivalSubcol() && contributionUpdateAllowed())
+              || (subcol == 'sponsorships' && sponsorshipStatusChanged() && sponsorshipUpdateAllowed())
+              || (canWriteFestivalSubcol() && contributionUpdateAllowed() && sponsorshipUpdateAllowed())
             )
             && (
               (festivalOpen() && (
                 !resource.data.keys().hasAny(['createdBy'])
                 || ganeshIdentityUpdate()
               ))
-              || canCloseOrUpdateFestival()
+              || (
+                canCloseOrUpdateFestival()
+                && !(subcol == 'sponsorships'
+                  && sponsorshipStatusChanged()
+                  && request.resource.data.status in ['received', 'cancelled'])
+              )
             );
           allow delete: if canCloseOrUpdateFestival();
         }

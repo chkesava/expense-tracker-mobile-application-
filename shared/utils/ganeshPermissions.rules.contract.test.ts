@@ -14,6 +14,8 @@ import {
   RULE_ASSET_UPDATE_ROLES,
   RULE_COLLECTION_WRITE_ROLES,
   RULE_EXPENSE_WRITE_ROLES,
+  RULE_SPONSOR_CREATE_ROLES,
+  RULE_SPONSOR_UPDATE_ROLES,
   RULE_TREASURER_WRITE_ROLES,
   can,
 } from "./ganeshPermissions";
@@ -161,6 +163,9 @@ describe("ganesh firestore rules contract", () => {
     expect(roles.filter((role) => can(role, "assets.update"))).toEqual(RULE_ASSET_UPDATE_ROLES);
     expect(roles.filter((role) => can(role, "contributions.receive"))).toEqual(RULE_TREASURER_WRITE_ROLES);
     expect(roles.filter((role) => can(role, "contributions.cancel"))).toEqual(RULE_TREASURER_WRITE_ROLES);
+    expect(roles.filter((role) => can(role, "sponsors.create"))).toEqual(RULE_SPONSOR_CREATE_ROLES);
+    expect(roles.filter((role) => can(role, "sponsors.receive"))).toEqual(RULE_TREASURER_WRITE_ROLES);
+    expect(roles.filter((role) => can(role, "sponsors.cancel"))).toEqual(RULE_TREASURER_WRITE_ROLES);
   });
 
   it("does not grant ledger access from ownerId alone", () => {
@@ -391,6 +396,49 @@ describe("ganesh firestore rules contract", () => {
     expect(canUpdateContributionStatus(treasurer, "received", "cancelled")).toBe(false);
     expect(canUpdateContributionStatus(treasurer, "received", "promised")).toBe(false);
   });
+
+  it("lets fallback treasurer and denormalized receive mark a sponsorship received", () => {
+    const denormalizedReceive: Ctx = {
+      signedIn: true,
+      member: { role: "member", status: "active", permissions: ["sponsors.receive"] },
+      festivalOpen: true,
+    };
+    expect(canUpdateSponsorshipStatus(treasurer, "promised", "received")).toBe(true);
+    expect(canUpdateSponsorshipStatus(denormalizedReceive, "promised", "received")).toBe(true);
+    expect(canUpdateSponsorshipStatus(member, "promised", "received")).toBe(false);
+    expect(canUpdateSponsorshipStatus({ ...treasurer, festivalOpen: false }, "promised", "received")).toBe(
+      false
+    );
+    expect(canUpdateSponsorshipStatus(treasurer, "promised", "confirmed")).toBe(true);
+    expect(
+      canUpdateSponsorshipStatus(
+        {
+          signedIn: true,
+          member: { role: "member", status: "active", permissions: ["sponsors.update"] },
+          festivalOpen: true,
+        },
+        "prospective",
+        "promised"
+      )
+    ).toBe(true);
+  });
+
+  it("does not let expenses.create alone mark a sponsorship received", () => {
+    const expensesOnly: Ctx = {
+      signedIn: true,
+      member: { role: "member", status: "active", permissions: ["expenses.create"] },
+      festivalOpen: true,
+    };
+    expect(canWriteExpenseOrContribution(expensesOnly)).toBe(true);
+    expect(canUpdateSponsorshipStatus(expensesOnly, "promised", "received")).toBe(false);
+    expect(canUpdateSponsorshipStatus(expensesOnly, "promised", "promised")).toBe(false);
+    expect(canCreateReceivedSponsorship(expensesOnly)).toBe(false);
+    expect(canCreateReceivedSponsorship(treasurer)).toBe(true);
+    expect(canCreateReceivedSponsorship(member)).toBe(false);
+    expect(canUpdateSponsorshipStatus(member, "promised", "cancelled")).toBe(false);
+    expect(canUpdateSponsorshipStatus(treasurer, "promised", "cancelled")).toBe(true);
+    expect(canUpdateSponsorshipStatus(treasurer, "received", "cancelled")).toBe(false);
+  });
 });
 
 function canReadOwnMemberDoc(params: { signedIn: boolean; uid: string; memberId: string }): boolean {
@@ -466,4 +514,78 @@ function canUpdateContributionStatus(
       || (canWriteExpenseOrContribution(ctx) && updateAllowed)
     )
     && (Boolean(ctx.festivalOpen) || canCloseOrUpdateFestival(ctx));
+}
+
+function canCreateSponsor(ctx: Ctx): boolean {
+  return hasPerm(ctx, "sponsors.create")
+    || (isActivePandalMember(ctx) && !hasPermissionsField(ctx) && RULE_SPONSOR_CREATE_ROLES.includes(roleOf(ctx)!));
+}
+
+function canUpdateSponsor(ctx: Ctx): boolean {
+  return hasPerm(ctx, "sponsors.update")
+    || (isActivePandalMember(ctx) && !hasPermissionsField(ctx) && RULE_SPONSOR_UPDATE_ROLES.includes(roleOf(ctx)!));
+}
+
+function canReceiveSponsor(ctx: Ctx): boolean {
+  return hasPerm(ctx, "sponsors.receive")
+    || (
+      isActivePandalMember(ctx)
+      && !hasPermissionsField(ctx)
+      && RULE_TREASURER_WRITE_ROLES.includes(roleOf(ctx)!)
+    );
+}
+
+function canCancelSponsor(ctx: Ctx): boolean {
+  return hasPerm(ctx, "sponsors.cancel")
+    || (
+      isActivePandalMember(ctx)
+      && !hasPermissionsField(ctx)
+      && RULE_TREASURER_WRITE_ROLES.includes(roleOf(ctx)!)
+    );
+}
+
+function canWriteSponsor(ctx: Ctx): boolean {
+  return canCreateSponsor(ctx) || canUpdateSponsor(ctx) || canReceiveSponsor(ctx) || canCancelSponsor(ctx);
+}
+
+function sponsorshipUpdateAllowed(ctx: Ctx, oldStatus: string, newStatus: string): boolean {
+  if (oldStatus === newStatus) return true;
+  if (!ctx.festivalOpen) return false;
+  if (oldStatus === "prospective" && newStatus === "promised") return canUpdateSponsor(ctx);
+  if (oldStatus === "promised" && newStatus === "confirmed") return canUpdateSponsor(ctx);
+  if ((oldStatus === "promised" || oldStatus === "confirmed") && newStatus === "received") {
+    return canReceiveSponsor(ctx);
+  }
+  if (
+    (oldStatus === "prospective" || oldStatus === "promised" || oldStatus === "confirmed")
+    && newStatus === "cancelled"
+  ) {
+    return canCancelSponsor(ctx);
+  }
+  return false;
+}
+
+function canUpdateSponsorshipStatus(
+  ctx: Ctx,
+  oldStatus: string,
+  newStatus: string
+): boolean {
+  const statusChanged = oldStatus !== newStatus;
+  const updateAllowed = sponsorshipUpdateAllowed(ctx, oldStatus, newStatus);
+  const closedBypass =
+    canCloseOrUpdateFestival(ctx)
+    && !(statusChanged && (newStatus === "received" || newStatus === "cancelled"));
+  return isActivePandalMember(ctx)
+    && (
+      (statusChanged && updateAllowed)
+      || (canWriteSponsor(ctx) && updateAllowed)
+    )
+    && (Boolean(ctx.festivalOpen) || closedBypass);
+}
+
+function canCreateReceivedSponsorship(ctx: Ctx): boolean {
+  return isActivePandalMember(ctx)
+    && Boolean(ctx.festivalOpen)
+    && canWriteSponsor(ctx)
+    && canReceiveSponsor(ctx);
 }

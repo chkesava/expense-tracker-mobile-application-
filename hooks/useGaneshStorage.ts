@@ -11,6 +11,7 @@ import {
   getSignedUrl,
   uploadFestivalFile,
   uploadPandalAssetFile,
+  uploadPandalSponsorFile,
 } from "@/services/ganesh/storage/storageService";
 import type { PreparedGaneshImage } from "@/services/ganesh/storage/storageTypes";
 import type { GaneshFileMeta } from "@/shared/types/ganesh";
@@ -97,6 +98,29 @@ export function useGaneshStorage() {
     [can, pandalId, permissions, realUser?.uid, role, status, writes]
   );
 
+  const uploadSponsorPhoto = useCallback(
+    async (sponsorId: string, file: PreparedGaneshImage) => {
+      if (!realUser?.uid) throw new Error("You must be signed in.");
+      if (!pandalId) throw new Error("Select a Pandal first.");
+      if (!can("sponsors.create") && !can("sponsors.update")) {
+        throw new Error("You do not have permission to upload this file.");
+      }
+      const meta = await uploadPandalSponsorFile({
+        uid: realUser.uid,
+        role,
+        permissions,
+        memberStatus: status,
+        sessionPandalId: pandalId,
+        pandalId,
+        sponsorId,
+        file,
+      });
+      await writes.attachSponsorPhoto(sponsorId, meta);
+      return meta;
+    },
+    [can, pandalId, permissions, realUser?.uid, role, status, writes]
+  );
+
   const signedUrl = useCallback(
     async (path: string): Promise<string> => {
       if (!pandalId) throw new Error("Select a Pandal first.");
@@ -120,6 +144,7 @@ export function useGaneshStorage() {
     uploadExpenseReceipt,
     uploadContributionPhoto,
     uploadAssetPhoto,
+    uploadSponsorPhoto,
     signedUrl,
     removeStoredFile,
   };

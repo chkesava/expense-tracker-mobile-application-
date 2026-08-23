@@ -5,9 +5,12 @@ import {
   assertOwnedPandalAssetPath,
   assertSafeId,
   buildFestivalFilePath,
+  assertOwnedPandalSponsorPath,
   buildPandalAssetPath,
+  buildPandalSponsorPath,
   ganeshStoredPath,
   isPandalAssetPath,
+  isPandalSponsorPath,
   sanitizeFileName,
 } from "./storagePaths";
 
@@ -83,6 +86,23 @@ describe("storagePaths", () => {
     );
     expect(() =>
       assertOwnedPandalAssetPath("pandals/pandal2/assets/asset1/chair.jpg", { pandalId: "pandal1" })
+    ).toThrow("That file does not belong to this Pandal.");
+  });
+
+  it("builds a Pandal-level sponsor path without a festival", () => {
+    expect(
+      buildPandalSponsorPath({
+        pandalId: "pandal1",
+        sponsorId: "sponsor1",
+        fileName: "photo.jpg",
+      })
+    ).toBe("pandals/pandal1/sponsors/sponsor1/photo.jpg");
+    expect(isPandalSponsorPath("pandals/pandal1/sponsors/sponsor1/photo.jpg")).toBe(true);
+    expect(isPandalSponsorPath("pandals/pandal1/assets/asset1/chair.jpg")).toBe(false);
+    expect(() =>
+      assertOwnedPandalSponsorPath("pandals/pandal2/sponsors/sponsor1/photo.jpg", {
+        pandalId: "pandal1",
+      })
     ).toThrow("That file does not belong to this Pandal.");
   });
 

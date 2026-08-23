@@ -14,6 +14,8 @@ import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { useGaneshWrites } from "@/hooks/useGaneshWrites";
 import { usePandalAssets } from "@/hooks/usePandalAssets";
 import { usePandalMembers } from "@/hooks/usePandalMembers";
+import { usePandalSponsors } from "@/hooks/usePandalSponsors";
+import { useSponsorships } from "@/hooks/useSponsorships";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
@@ -34,6 +36,8 @@ export default function ExpenseDetailScreen() {
   const { expense, loading } = useGaneshExpense(pandalId, expenseFestivalId, params.id ?? null);
   const { assets } = usePandalAssets(pandalId);
   const { members } = usePandalMembers(pandalId);
+  const { sponsors } = usePandalSponsors(pandalId);
+  const { sponsorships } = useSponsorships(pandalId, expenseFestivalId);
   const { can } = useGaneshPermissions();
   const writes = useGaneshWrites();
   const [total, setTotal] = useState("");
@@ -43,6 +47,8 @@ export default function ExpenseDetailScreen() {
   const [busy, setBusy] = useState(false);
   const festival = festivals.find((item) => item.id === expenseFestivalId);
   const linkedAsset = assets.find((item) => item.id === expense?.assetId);
+  const linkedSponsorship = sponsorships.find((item) => item.id === expense?.linkedSponsorshipId);
+  const linkedSponsor = sponsors.find((item) => item.id === linkedSponsorship?.sponsorId);
   const receiptPath = ganeshStoredPath(expense?.receipt, expense?.receiptPath);
   const isPurchase = isAssetPurchaseExpense(expense);
   const canEdit = can("expenses.update") && festival?.status === "open" && expense && !expense.voided;
@@ -157,6 +163,29 @@ export default function ExpenseDetailScreen() {
         <Text style={{ color: theme.colors.mutedForeground }}>{expense.notes}</Text>
       ) : null}
       <PendingHint pending={expense.pendingWrite} />
+      {linkedSponsorship || (expense.sponsoredAmount > 0 && linkedSponsor) ? (
+        <Pressable
+          onPress={() =>
+            push(
+              `/(ganesh)/sponsor/${linkedSponsorship?.sponsorId ?? linkedSponsor?.id}` as never
+            )
+          }
+          style={{
+            backgroundColor: theme.colors.card,
+            borderColor: theme.colors.border,
+            borderWidth: 1,
+            borderRadius: 16,
+            padding: 14,
+            gap: 4,
+          }}
+        >
+          <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>Sponsor</Text>
+          <Text style={{ color: theme.colors.mutedForeground }}>
+            {linkedSponsor?.name ?? "Linked sponsor"}
+            {expense.sponsoredAmount > 0 ? ` · ${formatInr(expense.sponsoredAmount)}` : ""}
+          </Text>
+        </Pressable>
+      ) : null}
       {linkedAsset ? (
         <Pressable
           onPress={() => push(`/(ganesh)/asset/${linkedAsset.id}` as never)}

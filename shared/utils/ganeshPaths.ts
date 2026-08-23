@@ -29,6 +29,7 @@ export function festivalCol(
     | "activity"
     | "auditLogs"
     | "fundTransfers"
+    | "sponsorships"
 ): string[] {
   return ["pandals", pandalId, "festivals", festivalId, name];
 }
@@ -67,4 +68,12 @@ export function pandalAssetsCol(pandalId: string): string[] {
 
 export function pandalAssetAuditsCol(pandalId: string): string[] {
   return ["pandals", pandalId, "assetAudits"];
+}
+
+export function pandalSponsorsCol(pandalId: string): string[] {
+  return ["pandals", pandalId, "sponsors"];
+}
+
+export function pandalSponsorAuditsCol(pandalId: string): string[] {
+  return ["pandals", pandalId, "sponsorAudits"];
 }

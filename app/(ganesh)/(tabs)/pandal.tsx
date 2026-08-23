@@ -128,6 +128,25 @@ export default function PandalScreen() {
           <Text style={{ color: theme.colors.primary, fontWeight: "700" }}>Open</Text>
         </Pressable>
       ) : null}
+      {can("sponsors.read") ? (
+        <Pressable
+          onPress={() => push("/(ganesh)/sponsors" as never)}
+          style={{
+            backgroundColor: theme.colors.card,
+            borderColor: theme.colors.border,
+            borderWidth: 1,
+            borderRadius: 16,
+            padding: 14,
+            gap: 6,
+          }}
+        >
+          <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>Sponsors</Text>
+          <Text style={{ color: theme.colors.mutedForeground }}>
+            Who is supporting this festival. Promised deals are not cash.
+          </Text>
+          <Text style={{ color: theme.colors.primary, fontWeight: "700" }}>Open</Text>
+        </Pressable>
+      ) : null}
       <MetricGrid
         items={[
           {

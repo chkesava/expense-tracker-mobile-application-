@@ -236,6 +236,24 @@ export default function ContributionDetailScreen() {
       {contribution.description ? (
         <Text style={{ color: theme.colors.mutedForeground }}>{contribution.description}</Text>
       ) : null}
+      {contribution.sponsorId ? (
+        <Pressable
+          onPress={() => push(`/(ganesh)/sponsor/${contribution.sponsorId}` as never)}
+          style={{
+            backgroundColor: theme.colors.card,
+            borderColor: theme.colors.border,
+            borderWidth: 1,
+            borderRadius: 16,
+            padding: 14,
+            gap: 4,
+          }}
+        >
+          <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>Sponsor</Text>
+          <Text style={{ color: theme.colors.mutedForeground }}>
+            {contribution.contributorName}
+          </Text>
+        </Pressable>
+      ) : null}
       <AccountabilityLine
         contributedBy={contribution.contributorName}
         enteredBy={memberDisplayName(members, contribution.createdBy)}
