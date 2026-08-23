@@ -39,8 +39,14 @@ import type {
   HouseholdStatus,
   OpeningFundSource,
   PaymentMethod,
+  PermanentFundLocation,
 } from "@/shared/types/ganesh";
 import { EMPTY_GANESH_SUMMARY } from "@/shared/types/ganesh";
+import {
+  seedPermanentFund,
+  transferFestivalToPermanent,
+  transferPermanentToFestival,
+} from "@/services/ganesh/ganeshPermanentFund";
 
 export type GaneshActor = {
   uid: string;
@@ -144,6 +150,15 @@ export async function createPandalAndFestival(
     area?: string;
     festivalName: string;
     year: number;
+    initialFund?: {
+      amount: number;
+      location: PermanentFundLocation;
+      description?: string;
+    };
+    allocateToFestival?: {
+      amount: number;
+      location: PermanentFundLocation;
+    };
   }
 ): Promise<{ pandalId: string; festivalId: string; code: string }> {
   const name = input.pandalName.trim();
@@ -243,6 +258,28 @@ export async function createPandalAndFestival(
     newValue: { name: festivalName, year: input.year },
   });
   await commitWrite(() => seedBatch.commit(), { label: "festival seed" });
+
+  const initialAmount = Number(input.initialFund?.amount ?? 0);
+  try {
+    await seedPermanentFund(db, actor, pandalId, {
+      amount: initialAmount,
+      location: input.initialFund?.location ?? "cash",
+      description: input.initialFund?.description,
+    });
+  } catch (error) {
+    if (initialAmount > 0) throw error;
+  }
+
+  const allocateAmount = Number(input.allocateToFestival?.amount ?? 0);
+  if (allocateAmount > 0) {
+    await transferPermanentToFestival(db, actor, pandalId, festivalId, {
+      amount: allocateAmount,
+      location: input.allocateToFestival?.location ?? input.initialFund?.location ?? "cash",
+      festivalName,
+      description: `Opening funds for ${festivalName}`,
+    });
+  }
+
   return { pandalId, festivalId, code };
 }
 
@@ -970,6 +1007,11 @@ export async function voidFinancialRecord(
   if (!snap.exists()) throw new Error("Record not found.");
   if (snap.data().voided) throw new Error("This record is already voided.");
   const data = snap.data();
+  if (input.entityType === "openingFund" && data.sourceType === "permanent_fund") {
+    throw new Error(
+      "Return Permanent Fund money from the Permanent Fund screen. Do not void this opening fund."
+    );
+  }
   const batch = writeBatch(db);
   batch.update(ref, {
     voided: true,
@@ -1079,8 +1121,26 @@ export async function closeFestival(
   db: Firestore,
   actor: GaneshActor,
   pandalId: string,
-  festivalId: string
+  festivalId: string,
+  settlement?: {
+    transferAmount: number;
+    remainingAmount: number;
+    location: PermanentFundLocation;
+    festivalName?: string;
+  }
 ): Promise<void> {
+  const transferAmount = Number(settlement?.transferAmount ?? 0);
+  if (transferAmount > 0) {
+    await transferFestivalToPermanent(db, actor, pandalId, festivalId, {
+      amount: transferAmount,
+      location: settlement?.location ?? "cash",
+      festivalName: settlement?.festivalName,
+      type: "CARRY_FORWARD",
+      closeFestival: true,
+      description: "Festival closing carry forward",
+    });
+    return;
+  }
   const batch = writeBatch(db);
   batch.update(pathRef(db, festivalDoc(pandalId, festivalId)), {
     status: "closed",
@@ -1103,13 +1163,15 @@ export async function recomputeFestivalSummary(
   const load = async (name: Parameters<typeof festivalCol>[2]) =>
     getDocs(query(colRef(db, festivalCol(pandalId, festivalId, name)), limit(2000)));
 
-  const [opening, collections, contributions, expenses, reimbursements] = await Promise.all([
-    load("openingFunds"),
-    load("collections"),
-    load("contributions"),
-    load("expenses"),
-    load("reimbursements"),
-  ]);
+  const [opening, collections, contributions, expenses, reimbursements, fundTransfers] =
+    await Promise.all([
+      load("openingFunds"),
+      load("collections"),
+      load("contributions"),
+      load("expenses"),
+      load("reimbursements"),
+      load("fundTransfers"),
+    ]);
 
   const notVoided = (docSnap: { data: () => { voided?: boolean } }) => !docSnap.data().voided;
   const received = (docSnap: { data: () => { voided?: boolean; status?: string } }) =>
@@ -1134,6 +1196,12 @@ export async function recomputeFestivalSummary(
       .filter((docSnap) => received(docSnap) && docSnap.data().kind === "sponsorship")
       .map((docSnap) => Number(docSnap.data().estimatedValue ?? 0)),
   });
+  summary.transferredToPermanentFund = fundTransfers.docs
+    .filter((docSnap) => docSnap.data().direction === "to_permanent")
+    .reduce((sum, docSnap) => sum + Number(docSnap.data().amount ?? 0), 0);
+  summary.receivedFromPermanentFund = fundTransfers.docs
+    .filter((docSnap) => docSnap.data().direction === "from_permanent")
+    .reduce((sum, docSnap) => sum + Number(docSnap.data().amount ?? 0), 0);
 
   const summaryBatch = writeBatch(db);
   summaryBatch.set(pathRef(db, summaryDoc(pandalId, festivalId)), {

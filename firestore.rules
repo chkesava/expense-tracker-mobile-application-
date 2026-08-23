@@ -315,6 +315,18 @@ service cloud.firestore {
         allow delete: if isPandalManager();
       }
 
+      match /permanentFund/{docId} {
+        allow read: if isPandalMember();
+        allow create, update: if isPandalManager();
+        allow delete: if false;
+      }
+
+      match /permanentFundTransactions/{txId} {
+        allow read: if isPandalMember();
+        allow create: if isPandalManager() && ganeshIdentityCreate();
+        allow update, delete: if false;
+      }
+
       match /festivals/{festivalId} {
         function festivalData() {
           return get(/databases/$(database)/documents/pandals/$(pandalId)/festivals/$(festivalId)).data;
@@ -328,6 +340,12 @@ service cloud.firestore {
         allow update: if isPandalManager()
           && request.resource.data.updatedBy == request.auth.uid;
         allow delete: if isPandalManager();
+
+        match /fundTransfers/{docId} {
+          allow read: if isPandalMember();
+          allow create: if isPandalManager() && ganeshIdentityCreate();
+          allow update, delete: if false;
+        }
 
         match /{subcol}/{docId} {
           allow read: if isPandalMember();

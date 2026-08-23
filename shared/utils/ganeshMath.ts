@@ -3,8 +3,10 @@ import type {
   GaneshSummary,
   Household,
   HouseholdStatus,
+  PermanentFundLocation,
+  PermanentFundSummary,
 } from "@/shared/types/ganesh";
-import { EMPTY_GANESH_SUMMARY } from "@/shared/types/ganesh";
+import { EMPTY_GANESH_SUMMARY, EMPTY_PERMANENT_FUND } from "@/shared/types/ganesh";
 
 function money(value: number): number {
   return Math.round(value * 100) / 100;
@@ -18,15 +20,32 @@ export function availableGodFund(summary: Pick<
   | "otherCashContributions"
   | "godFundExpenses"
   | "reimbursements"
->): number {
+> & { transferredToPermanentFund?: number }): number {
   return money(
     summary.openingFunds +
       summary.chanda +
       summary.committeeContributions +
       summary.otherCashContributions -
       summary.godFundExpenses -
-      summary.reimbursements
+      summary.reimbursements -
+      (summary.transferredToPermanentFund ?? 0)
   );
+}
+
+export function festivalCollectedCash(summary: Pick<
+  GaneshSummary,
+  "chanda" | "committeeContributions" | "otherCashContributions"
+>): number {
+  return money(
+    summary.chanda + summary.committeeContributions + summary.otherCashContributions
+  );
+}
+
+export function festivalCashSpent(summary: Pick<
+  GaneshSummary,
+  "godFundExpenses" | "reimbursements"
+>): number {
+  return money(summary.godFundExpenses + summary.reimbursements);
 }
 
 export function totalCashIn(summary: Pick<
@@ -114,6 +133,79 @@ export function validateCollection(amount: number): ValidationResult {
 
 export function validateCashContribution(amount: number): ValidationResult {
   return validatePositiveAmount(amount, "Contribution");
+}
+
+export function validateFundTransfer(amount: number, available: number, label = "Transfer"): ValidationResult {
+  const positive = validatePositiveAmount(amount, label);
+  if (!positive.ok) return positive;
+  if (money(amount) > money(available)) {
+    return {
+      ok: false,
+      error: `Insufficient ${label.toLowerCase()} balance. Available: ${money(available)}. Requested: ${money(amount)}.`,
+    };
+  }
+  return { ok: true };
+}
+
+export function validateSettlement(input: {
+  closing: number;
+  transfer: number;
+  remaining: number;
+}): ValidationResult {
+  const closing = money(input.closing);
+  const transfer = money(input.transfer);
+  const remaining = money(input.remaining);
+  if (closing < 0) return { ok: false, error: "Closing balance cannot be negative." };
+  if (transfer < 0 || remaining < 0) {
+    return { ok: false, error: "Transfer and remaining amounts cannot be negative." };
+  }
+  if (transfer > closing) {
+    return {
+      ok: false,
+      error: `Transfer amount cannot exceed the festival closing balance. Available: ${closing}. Requested: ${transfer}.`,
+    };
+  }
+  if (money(transfer + remaining) !== closing) {
+    return { ok: false, error: "Transfer plus remaining must equal the closing balance." };
+  }
+  return { ok: true };
+}
+
+export function applyPermanentFundDelta(
+  current: PermanentFundSummary,
+  location: PermanentFundLocation,
+  signedAmount: number
+): { ok: true; next: PermanentFundSummary } | { ok: false; error: string } {
+  if (!Number.isFinite(signedAmount) || signedAmount === 0) {
+    return { ok: false, error: "Enter an amount other than zero." };
+  }
+  const next: PermanentFundSummary = {
+    total: money((current.total ?? 0) + signedAmount),
+    cash: money(current.cash ?? 0),
+    upi: money(current.upi ?? 0),
+    bank: money(current.bank ?? 0),
+    other: money(current.other ?? 0),
+  };
+  next[location] = money((current[location] ?? 0) + signedAmount);
+  if (next[location] < 0 || next.total < 0) {
+    const available = money(current[location] ?? 0);
+    return {
+      ok: false,
+      error: `Insufficient Permanent Fund balance. Available: ${available}. Requested: ${money(Math.abs(signedAmount))}.`,
+    };
+  }
+  return { ok: true, next };
+}
+
+export function parsePermanentFund(data?: Partial<PermanentFundSummary> | null): PermanentFundSummary {
+  return {
+    ...EMPTY_PERMANENT_FUND,
+    total: money(Number(data?.total ?? 0)),
+    cash: money(Number(data?.cash ?? 0)),
+    upi: money(Number(data?.upi ?? 0)),
+    bank: money(Number(data?.bank ?? 0)),
+    other: money(Number(data?.other ?? 0)),
+  };
 }
 
 export function validateInKindValue(estimatedValue: number): ValidationResult {

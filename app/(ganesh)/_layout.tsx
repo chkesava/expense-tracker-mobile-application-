@@ -58,6 +58,8 @@ function GaneshStack() {
       <Stack.Screen name="report" options={{ title: "Festival report" }} />
       <Stack.Screen name="close-festival" options={{ title: "Close festival" }} />
       <Stack.Screen name="join-requests" options={{ title: "Join requests" }} />
+      <Stack.Screen name="permanent-fund" options={{ title: "Permanent Fund" }} />
+      <Stack.Screen name="create-festival" options={{ title: "Create festival" }} />
     </Stack>
   );
 }

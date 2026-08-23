@@ -6,6 +6,8 @@ import { Input } from "@/components/ui/Input";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { GaneshSyncChip } from "@/components/ganesh/GaneshSyncChip";
 import { MetricGrid } from "@/components/ganesh/MetricGrid";
+import { PermanentFundCard } from "@/components/ganesh/PermanentFundCard";
+import { usePermanentFund } from "@/hooks/usePermanentFund";
 import { useState } from "react";
 import { useFestivals } from "@/hooks/useFestivals";
 import { useGaneshWrites } from "@/hooks/useGaneshWrites";
@@ -29,6 +31,7 @@ export default function PandalScreen() {
   const { festivals } = useFestivals(pandalId);
   const { members } = useFestivalMembers(pandalId, festivalId);
   const { requests } = useJoinRequests(pandalId);
+  const { fund } = usePermanentFund(pandalId);
   const pandal = pandals.find((item) => item.id === pandalId);
   const festival = festivals.find((item) => item.id === festivalId);
   const me = members.find((member) => member.userId === realUser?.uid);
@@ -50,6 +53,7 @@ export default function PandalScreen() {
       <Text style={{ color: theme.colors.mutedForeground }}>
         Code {pandal?.code} · {festival?.name}
       </Text>
+      <PermanentFundCard fund={fund} onPress={() => push("/(ganesh)/permanent-fund" as never)} />
       <MetricGrid
         items={[
           { label: "Members", value: `${members.length}` },
@@ -119,6 +123,9 @@ export default function PandalScreen() {
       </Button>
       {manager ? (
         <>
+          <Button variant="outline" onPress={() => push("/(ganesh)/create-festival" as never)}>
+            Create festival
+          </Button>
           <Button variant="outline" onPress={() => push("/(ganesh)/report" as never)}>
             Festival report
           </Button>

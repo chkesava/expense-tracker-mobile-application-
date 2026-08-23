@@ -1,0 +1,450 @@
+import {
+  doc,
+  increment,
+  runTransaction,
+  serverTimestamp,
+  type Firestore,
+  type Transaction,
+} from "firebase/firestore";
+
+import { newId } from "@/lib/id";
+import { todayDateInput } from "@/shared/utils/ganeshIdentity";
+import { formatInr } from "@/shared/utils/ganeshMoney";
+import { omitUndefined } from "@/shared/utils/firestorePayload";
+import {
+  applyPermanentFundDelta,
+  availableGodFund,
+  parsePermanentFund,
+  validateFundTransfer,
+  validatePositiveAmount,
+  validateSettlement,
+} from "@/shared/utils/ganeshMath";
+import {
+  festivalCol,
+  festivalDoc,
+  permanentFundDoc,
+  permanentFundTransactionsCol,
+  summaryDoc,
+} from "@/shared/utils/ganeshPaths";
+import {
+  EMPTY_GANESH_SUMMARY,
+  EMPTY_PERMANENT_FUND,
+  type GaneshSummary,
+  type PermanentFundLocation,
+  type PermanentFundSummary,
+  type PermanentFundTxType,
+} from "@/shared/types/ganesh";
+
+type FundActor = {
+  uid: string;
+  displayName: string;
+  phone?: string;
+};
+
+export const PERMANENT_FUND_OFFLINE_ERROR =
+  "Transfer requires an active connection. Please reconnect and try again.";
+
+export class InsufficientFundError extends Error {
+  constructor(
+    public kind: "permanent" | "festival",
+    public available: number,
+    public requested: number
+  ) {
+    super(
+      kind === "permanent"
+        ? `Insufficient Permanent Fund balance.\n\nAvailable:\n${formatInr(available)}\n\nRequested:\n${formatInr(requested)}`
+        : `Transfer amount cannot exceed the festival closing balance.\n\nAvailable:\n${formatInr(available)}\n\nRequested:\n${formatInr(requested)}`
+    );
+    this.name = "InsufficientFundError";
+  }
+}
+
+export function assertPermanentFundOnline(isOnline: boolean): void {
+  if (!isOnline) throw new Error(PERMANENT_FUND_OFFLINE_ERROR);
+}
+
+function pathRef(db: Firestore, segments: string[]) {
+  const [first, ...rest] = segments;
+  return doc(db, first, ...rest);
+}
+
+function parseSummary(data?: Partial<GaneshSummary> | null): GaneshSummary {
+  return { ...EMPTY_GANESH_SUMMARY, ...(data ?? {}) };
+}
+
+async function readPermanentFund(
+  txn: Transaction,
+  db: Firestore,
+  pandalId: string
+): Promise<PermanentFundSummary> {
+  const snap = await txn.get(pathRef(db, permanentFundDoc(pandalId)));
+  return snap.exists() ? parsePermanentFund(snap.data()) : EMPTY_PERMANENT_FUND;
+}
+
+function writePermanentFund(
+  txn: Transaction,
+  db: Firestore,
+  pandalId: string,
+  actor: FundActor,
+  next: PermanentFundSummary
+) {
+  txn.set(pathRef(db, permanentFundDoc(pandalId)), {
+    ...next,
+    updatedBy: actor.uid,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+function writePermanentTx(
+  txn: Transaction,
+  db: Firestore,
+  pandalId: string,
+  actor: FundActor,
+  txId: string,
+  payload: {
+    type: PermanentFundTxType;
+    amount: number;
+    signedAmount: number;
+    location: PermanentFundLocation;
+    sourceType: "PERMANENT_FUND" | "FESTIVAL" | "EXTERNAL";
+    sourceId?: string;
+    destinationType: "PERMANENT_FUND" | "FESTIVAL" | "EXTERNAL";
+    destinationId?: string;
+    festivalId?: string;
+    festivalName?: string;
+    description?: string;
+  }
+) {
+  txn.set(
+    pathRef(db, [...permanentFundTransactionsCol(pandalId), txId]),
+    omitUndefined({
+      ...payload,
+      date: todayDateInput(),
+      createdBy: actor.uid,
+      createdAt: serverTimestamp(),
+      updatedBy: actor.uid,
+      updatedAt: serverTimestamp(),
+    })
+  );
+}
+
+export async function seedPermanentFund(
+  db: Firestore,
+  actor: FundActor,
+  pandalId: string,
+  input?: {
+    amount?: number;
+    location?: PermanentFundLocation;
+    description?: string;
+  }
+): Promise<void> {
+  const amount = Number(input?.amount ?? 0);
+  const location = input?.location ?? "cash";
+  if (amount > 0) {
+    const valid = validatePositiveAmount(amount, "Permanent Fund");
+    if (!valid.ok) throw new Error(valid.error);
+  }
+
+  await runTransaction(db, async (txn) => {
+    const current = await readPermanentFund(txn, db, pandalId);
+    if (current.total > 0 || current.cash + current.upi + current.bank + current.other > 0) {
+      return;
+    }
+    if (amount <= 0) {
+      writePermanentFund(txn, db, pandalId, actor, EMPTY_PERMANENT_FUND);
+      return;
+    }
+    const applied = applyPermanentFundDelta(EMPTY_PERMANENT_FUND, location, amount);
+    if (!applied.ok) throw new Error(applied.error);
+    writePermanentFund(txn, db, pandalId, actor, applied.next);
+    writePermanentTx(txn, db, pandalId, actor, newId(), {
+      type: "INITIAL_BALANCE",
+      amount,
+      signedAmount: amount,
+      location,
+      sourceType: "EXTERNAL",
+      sourceId: "existing-pandal-fund",
+      destinationType: "PERMANENT_FUND",
+      destinationId: pandalId,
+      description: input?.description?.trim() || "Money saved from previous years",
+    });
+  });
+}
+
+export async function addPermanentFundDonation(
+  db: Firestore,
+  actor: FundActor,
+  pandalId: string,
+  input: { amount: number; location: PermanentFundLocation; description?: string }
+): Promise<string> {
+  const valid = validatePositiveAmount(input.amount, "Donation");
+  if (!valid.ok) throw new Error(valid.error);
+  const txId = newId();
+
+  await runTransaction(db, async (txn) => {
+    const current = await readPermanentFund(txn, db, pandalId);
+    const applied = applyPermanentFundDelta(current, input.location, input.amount);
+    if (!applied.ok) throw new Error(applied.error);
+    writePermanentFund(txn, db, pandalId, actor, applied.next);
+    writePermanentTx(txn, db, pandalId, actor, txId, {
+      type: "DONATION",
+      amount: input.amount,
+      signedAmount: input.amount,
+      location: input.location,
+      sourceType: "EXTERNAL",
+      destinationType: "PERMANENT_FUND",
+      destinationId: pandalId,
+      description: input.description?.trim() || "Pandal donation",
+    });
+  });
+  return txId;
+}
+
+export async function adjustPermanentFund(
+  db: Firestore,
+  actor: FundActor,
+  pandalId: string,
+  input: { amount: number; location: PermanentFundLocation; reason: string }
+): Promise<string> {
+  const reason = input.reason.trim();
+  if (!reason) throw new Error("Enter a reason for the adjustment.");
+  if (!Number.isFinite(input.amount) || input.amount === 0) {
+    throw new Error("Enter an adjustment amount other than zero.");
+  }
+  const txId = newId();
+
+  await runTransaction(db, async (txn) => {
+    const current = await readPermanentFund(txn, db, pandalId);
+    const applied = applyPermanentFundDelta(current, input.location, input.amount);
+    if (!applied.ok) {
+      throw new InsufficientFundError("permanent", current[input.location] ?? 0, Math.abs(input.amount));
+    }
+    writePermanentFund(txn, db, pandalId, actor, applied.next);
+    writePermanentTx(txn, db, pandalId, actor, txId, {
+      type: "ADJUSTMENT",
+      amount: Math.abs(input.amount),
+      signedAmount: input.amount,
+      location: input.location,
+      sourceType: "EXTERNAL",
+      destinationType: "PERMANENT_FUND",
+      destinationId: pandalId,
+      description: reason,
+    });
+  });
+  return txId;
+}
+
+export async function transferPermanentToFestival(
+  db: Firestore,
+  actor: FundActor,
+  pandalId: string,
+  festivalId: string,
+  input: {
+    amount: number;
+    location: PermanentFundLocation;
+    festivalName?: string;
+    description?: string;
+  }
+): Promise<string> {
+  const valid = validatePositiveAmount(input.amount, "Transfer");
+  if (!valid.ok) throw new Error(valid.error);
+  const txId = newId();
+  const openingId = newId();
+  const festivalTransferId = newId();
+
+  await runTransaction(db, async (txn) => {
+    const current = await readPermanentFund(txn, db, pandalId);
+    const festivalSnap = await txn.get(pathRef(db, festivalDoc(pandalId, festivalId)));
+    if (!festivalSnap.exists()) throw new Error("Festival not found.");
+    if (festivalSnap.data().status !== "open") {
+      throw new Error("Open the festival before moving Permanent Fund into it.");
+    }
+    const transferCheck = validateFundTransfer(input.amount, current[input.location] ?? 0, "Permanent Fund");
+    if (!transferCheck.ok) {
+      throw new InsufficientFundError("permanent", current[input.location] ?? 0, input.amount);
+    }
+    const applied = applyPermanentFundDelta(current, input.location, -input.amount);
+    if (!applied.ok) {
+      throw new InsufficientFundError("permanent", current[input.location] ?? 0, input.amount);
+    }
+
+    const festivalName = input.festivalName?.trim() || String(festivalSnap.data().name ?? "Festival");
+    writePermanentFund(txn, db, pandalId, actor, applied.next);
+    writePermanentTx(txn, db, pandalId, actor, txId, {
+      type: "TRANSFER_OUT",
+      amount: input.amount,
+      signedAmount: -input.amount,
+      location: input.location,
+      sourceType: "PERMANENT_FUND",
+      sourceId: pandalId,
+      destinationType: "FESTIVAL",
+      destinationId: festivalId,
+      festivalId,
+      festivalName,
+      description: input.description?.trim() || `Opening funds for ${festivalName}`,
+    });
+    txn.set(
+      pathRef(db, [...festivalCol(pandalId, festivalId, "openingFunds"), openingId]),
+      omitUndefined({
+        amount: input.amount,
+        sourceType: "permanent_fund",
+        location: input.location,
+        linkedTransferId: txId,
+        description: input.description?.trim() || `From Permanent Pandal Fund (${input.location})`,
+        date: todayDateInput(),
+        ledgerType: "OPENING_BALANCE",
+        voided: false,
+        createdBy: actor.uid,
+        createdAt: serverTimestamp(),
+        updatedBy: actor.uid,
+        updatedAt: serverTimestamp(),
+      })
+    );
+    txn.set(
+      pathRef(db, [...festivalCol(pandalId, festivalId, "fundTransfers"), festivalTransferId]),
+      omitUndefined({
+        direction: "from_permanent",
+        amount: input.amount,
+        location: input.location,
+        linkedPermanentTxId: txId,
+        description: input.description?.trim() || `₹${input.amount} funded from Permanent Pandal Fund`,
+        createdBy: actor.uid,
+        createdAt: serverTimestamp(),
+        updatedBy: actor.uid,
+        updatedAt: serverTimestamp(),
+      })
+    );
+    txn.set(
+      pathRef(db, summaryDoc(pandalId, festivalId)),
+      {
+        openingFunds: increment(input.amount),
+        receivedFromPermanentFund: increment(input.amount),
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
+    txn.set(
+      pathRef(db, [...festivalCol(pandalId, festivalId, "activity"), newId()]),
+      omitUndefined({
+        title: "Funded from Permanent Pandal Fund",
+        subtitle: `Added by ${actor.displayName}`,
+        amount: input.amount,
+        actorId: actor.uid,
+        entityType: "fundTransfer",
+        entityId: txId,
+        createdAt: serverTimestamp(),
+      })
+    );
+  });
+  return txId;
+}
+
+export async function transferFestivalToPermanent(
+  db: Firestore,
+  actor: FundActor,
+  pandalId: string,
+  festivalId: string,
+  input: {
+    amount: number;
+    location: PermanentFundLocation;
+    festivalName?: string;
+    description?: string;
+    type: "CARRY_FORWARD" | "TRANSFER_IN";
+    closeFestival?: boolean;
+  }
+): Promise<string | null> {
+  const amount = Number(input.amount ?? 0);
+  if (amount < 0) throw new Error("Transfer amount cannot be negative.");
+  if (amount === 0 && !input.closeFestival) {
+    throw new Error("Enter a transfer amount.");
+  }
+  const txId = amount > 0 ? newId() : null;
+  const festivalTransferId = amount > 0 ? newId() : null;
+
+  await runTransaction(db, async (txn) => {
+    const current = await readPermanentFund(txn, db, pandalId);
+    const festivalSnap = await txn.get(pathRef(db, festivalDoc(pandalId, festivalId)));
+    if (!festivalSnap.exists()) throw new Error("Festival not found.");
+    const festivalName = input.festivalName?.trim() || String(festivalSnap.data().name ?? "Festival");
+    const summarySnap = await txn.get(pathRef(db, summaryDoc(pandalId, festivalId)));
+    const summary = parseSummary(summarySnap.exists() ? (summarySnap.data() as GaneshSummary) : null);
+    const closing = availableGodFund(summary);
+
+    if (amount > 0) {
+      const settlement = validateSettlement({
+        closing,
+        transfer: amount,
+        remaining: closing - amount,
+      });
+      if (!settlement.ok) throw new InsufficientFundError("festival", closing, amount);
+      const applied = applyPermanentFundDelta(current, input.location, amount);
+      if (!applied.ok) throw new Error(applied.error);
+      writePermanentFund(txn, db, pandalId, actor, applied.next);
+      writePermanentTx(txn, db, pandalId, actor, txId!, {
+        type: input.type,
+        amount,
+        signedAmount: amount,
+        location: input.location,
+        sourceType: "FESTIVAL",
+        sourceId: festivalId,
+        destinationType: "PERMANENT_FUND",
+        destinationId: pandalId,
+        festivalId,
+        festivalName,
+        description: input.description?.trim() || `${input.type === "CARRY_FORWARD" ? "Carry forward from" : "Returned from"} ${festivalName}`,
+      });
+      txn.set(
+        pathRef(db, [...festivalCol(pandalId, festivalId, "fundTransfers"), festivalTransferId!]),
+        omitUndefined({
+          direction: "to_permanent",
+          amount,
+          location: input.location,
+          linkedPermanentTxId: txId,
+          description: input.description?.trim() || `Returned to Permanent Pandal Fund`,
+          createdBy: actor.uid,
+          createdAt: serverTimestamp(),
+          updatedBy: actor.uid,
+          updatedAt: serverTimestamp(),
+        })
+      );
+      txn.set(
+        pathRef(db, summaryDoc(pandalId, festivalId)),
+        {
+          transferredToPermanentFund: increment(amount),
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+      if (!input.closeFestival) {
+        txn.set(
+          pathRef(db, [...festivalCol(pandalId, festivalId, "activity"), newId()]),
+          omitUndefined({
+            title: "Returned to Permanent Pandal Fund",
+            subtitle: `Added by ${actor.displayName}`,
+            amount,
+            actorId: actor.uid,
+            entityType: "fundTransfer",
+            entityId: txId,
+            createdAt: serverTimestamp(),
+          })
+        );
+      }
+    } else if (!input.closeFestival) {
+      return;
+    }
+
+    if (input.closeFestival) {
+      if (festivalSnap.data().status === "closed") {
+        throw new Error("This festival is already closed.");
+      }
+      txn.update(pathRef(db, festivalDoc(pandalId, festivalId)), {
+        status: "closed",
+        closedAt: serverTimestamp(),
+        closedBy: actor.uid,
+        updatedBy: actor.uid,
+        updatedAt: serverTimestamp(),
+      });
+    }
+  });
+  return txId;
+}

@@ -7,6 +7,8 @@ import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { GaneshSyncChip } from "@/components/ganesh/GaneshSyncChip";
 import { GodFundHero } from "@/components/ganesh/GodFundHero";
 import { MetricGrid } from "@/components/ganesh/MetricGrid";
+import { PermanentFundCard } from "@/components/ganesh/PermanentFundCard";
+import { Button } from "@/components/ui/Button";
 import { PendingHint } from "@/components/ganesh/GaneshSyncChip";
 import { EmptyState } from "@/components/common/EmptyState";
 import { useGaneshActivity } from "@/hooks/useGaneshActivity";
@@ -14,6 +16,7 @@ import { useFestivals } from "@/hooks/useFestivals";
 import { useGaneshSummary } from "@/hooks/useGaneshSummary";
 import { usePandals } from "@/hooks/usePandals";
 import { usePandalMembers } from "@/hooks/usePandalMembers";
+import { usePermanentFund } from "@/hooks/usePermanentFund";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import { formatInr } from "@/shared/utils/ganeshMoney";
 import { availableGodFund, totalCashIn } from "@/shared/utils/ganeshMath";
@@ -28,6 +31,7 @@ export default function GaneshHomeScreen() {
   const { festivals } = useFestivals(pandalId);
   const { members } = usePandalMembers(pandalId);
   const { summary } = useGaneshSummary(pandalId, festivalId);
+  const { fund } = usePermanentFund(pandalId);
   const { activity } = useGaneshActivity(pandalId, festivalId);
   const pandal = pandals.find((item) => item.id === pandalId);
   const festival = festivals.find((item) => item.id === festivalId);
@@ -42,6 +46,7 @@ export default function GaneshHomeScreen() {
         </Text>
         <GaneshSyncChip />
       </View>
+      <PermanentFundCard fund={fund} onPress={() => push("/(ganesh)/permanent-fund" as never)} />
       <GodFundHero
         amount={godFund}
         festivalName={festival?.name}
@@ -49,7 +54,12 @@ export default function GaneshHomeScreen() {
       />
       <MetricGrid
         items={[
+          { label: "Permanent Fund", value: fund.total },
+          { label: "Festival God Fund", value: godFund },
+          { label: "Total Pandal funds", value: fund.total + godFund },
           { label: "Opening funds", value: summary.openingFunds },
+          { label: "From Permanent Fund", value: summary.receivedFromPermanentFund },
+          { label: "Returned to Permanent Fund", value: summary.transferredToPermanentFund },
           { label: "Chanda", value: summary.chanda },
           { label: "Member contributions", value: summary.committeeContributions },
           { label: "Other cash", value: summary.otherCashContributions },
@@ -61,6 +71,11 @@ export default function GaneshHomeScreen() {
           { label: "Money in", value: totalCashIn(summary) },
         ]}
       />
+      {closed ? (
+        <Button onPress={() => push("/(ganesh)/create-festival" as never)}>
+          Create next festival
+        </Button>
+      ) : null}
       <GaneshQuickActions disabled={closed} />
       <Pressable onPress={() => push("/(ganesh)/report" as never)}>
         <Text style={{ color: theme.colors.primary, fontWeight: "700" }}>View festival report</Text>

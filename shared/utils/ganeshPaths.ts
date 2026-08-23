@@ -28,8 +28,17 @@ export function festivalCol(
     | "categories"
     | "activity"
     | "auditLogs"
+    | "fundTransfers"
 ): string[] {
   return ["pandals", pandalId, "festivals", festivalId, name];
+}
+
+export function permanentFundDoc(pandalId: string): string[] {
+  return ["pandals", pandalId, "permanentFund", "current"];
+}
+
+export function permanentFundTransactionsCol(pandalId: string): string[] {
+  return ["pandals", pandalId, "permanentFundTransactions"];
 }
 
 export function summaryDoc(pandalId: string, festivalId: string): string[] {

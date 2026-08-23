@@ -3,7 +3,17 @@ import { useCallback } from "react";
 import { getFirestoreDb } from "@/lib/firebase";
 import { toast } from "@/lib/toast";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
+import { useNetwork } from "@/providers/NetworkProvider";
+import {
+  addPermanentFundDonation,
+  adjustPermanentFund,
+  assertPermanentFundOnline,
+  seedPermanentFund,
+  transferFestivalToPermanent,
+  transferPermanentToFestival,
+} from "@/services/ganesh/ganeshPermanentFund";
 import * as writes from "@/services/ganesh/ganeshWrites";
+import type { PermanentFundLocation } from "@/shared/types/ganesh";
 
 function requireDb() {
   const db = getFirestoreDb();
@@ -13,6 +23,7 @@ function requireDb() {
 
 export function useGaneshWrites() {
   const { actor, pandalId, festivalId } = useGaneshSession();
+  const { isOnline } = useNetwork();
 
   const run = useCallback(
     async <T,>(label: string, work: () => Promise<T>): Promise<T> => {
@@ -34,8 +45,12 @@ export function useGaneshWrites() {
     actor,
     pandalId,
     festivalId,
-    createPandalAndFestival: (input: Parameters<typeof writes.createPandalAndFestival>[2]) =>
-      run("Pandal created", () => writes.createPandalAndFestival(requireDb(), actor!, input)),
+    createPandalAndFestival: (input: Parameters<typeof writes.createPandalAndFestival>[2]) => {
+      if (Number(input.initialFund?.amount ?? 0) > 0 || Number(input.allocateToFestival?.amount ?? 0) > 0) {
+        assertPermanentFundOnline(isOnline);
+      }
+      return run("Pandal created", () => writes.createPandalAndFestival(requireDb(), actor!, input));
+    },
     requestPandalJoin: (code: string) =>
       run("Join request sent", () => writes.requestPandalJoin(requireDb(), actor!, code)),
     decideJoinRequest: (
@@ -116,10 +131,80 @@ export function useGaneshWrites() {
         writes.voidFinancialRecord(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, input)
       );
     },
-    closeFestival: () => {
+    closeFestival: (settlement?: Parameters<typeof writes.closeFestival>[4]) => {
       const ctx = requireFestival();
-      return run("Festival closed", () =>
-        writes.closeFestival(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId)
+      if (settlement && settlement.transferAmount > 0) {
+        assertPermanentFundOnline(isOnline);
+      }
+      return run(
+        settlement && settlement.transferAmount > 0
+          ? "Festival settled and closed"
+          : "Festival closed",
+        () => writes.closeFestival(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, settlement)
+      );
+    },
+    seedPermanentFund: (input?: {
+      amount?: number;
+      location?: PermanentFundLocation;
+      description?: string;
+    }) => {
+      if (!actor || !pandalId) throw new Error("Select a Pandal first.");
+      if (Number(input?.amount ?? 0) > 0) assertPermanentFundOnline(isOnline);
+      return run("Permanent Fund saved", () =>
+        seedPermanentFund(requireDb(), actor, pandalId, input)
+      );
+    },
+    addPermanentFundDonation: (input: {
+      amount: number;
+      location: PermanentFundLocation;
+      description?: string;
+    }) => {
+      if (!actor || !pandalId) throw new Error("Select a Pandal first.");
+      assertPermanentFundOnline(isOnline);
+      return run("Permanent Fund donation saved", () =>
+        addPermanentFundDonation(requireDb(), actor, pandalId, input)
+      );
+    },
+    adjustPermanentFund: (input: {
+      amount: number;
+      location: PermanentFundLocation;
+      reason: string;
+    }) => {
+      if (!actor || !pandalId) throw new Error("Select a Pandal first.");
+      assertPermanentFundOnline(isOnline);
+      return run("Permanent Fund adjusted", () =>
+        adjustPermanentFund(requireDb(), actor, pandalId, input)
+      );
+    },
+    transferPermanentToFestival: (input: {
+      festivalId?: string;
+      amount: number;
+      location: PermanentFundLocation;
+      festivalName?: string;
+      description?: string;
+    }) => {
+      if (!actor || !pandalId) throw new Error("Select a Pandal first.");
+      const targetFestivalId = input.festivalId ?? festivalId;
+      if (!targetFestivalId) throw new Error("Select a festival first.");
+      assertPermanentFundOnline(isOnline);
+      return run("Transferred to festival", () =>
+        transferPermanentToFestival(requireDb(), actor, pandalId, targetFestivalId, input)
+      );
+    },
+    transferFestivalToPermanent: (input: {
+      amount: number;
+      location: PermanentFundLocation;
+      festivalName?: string;
+      description?: string;
+      type?: "CARRY_FORWARD" | "TRANSFER_IN";
+    }) => {
+      const ctx = requireFestival();
+      assertPermanentFundOnline(isOnline);
+      return run("Transferred to Permanent Fund", () =>
+        transferFestivalToPermanent(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, {
+          ...input,
+          type: input.type ?? "TRANSFER_IN",
+        })
       );
     },
     recomputeFestivalSummary: () => {

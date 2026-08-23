@@ -4,7 +4,27 @@ export type FestivalStatus = "open" | "closed";
 export type ContributionMode = "same" | "custom";
 
 export type PaymentMethod = "cash" | "upi" | "bank" | "other";
-export type OpeningFundSource = "cash" | "upi" | "bank" | "previous_balance" | "other";
+export type OpeningFundSource =
+  | "cash"
+  | "upi"
+  | "bank"
+  | "previous_balance"
+  | "permanent_fund"
+  | "other";
+
+export type PermanentFundLocation = "cash" | "upi" | "bank" | "other";
+
+export type PermanentFundTxType =
+  | "INITIAL_BALANCE"
+  | "CARRY_FORWARD"
+  | "TRANSFER_IN"
+  | "TRANSFER_OUT"
+  | "DONATION"
+  | "ADJUSTMENT";
+
+export type PermanentFundPartyType = "PERMANENT_FUND" | "FESTIVAL" | "EXTERNAL";
+
+export type FestivalFundTransferDirection = "to_permanent" | "from_permanent";
 
 export type HouseholdStatus =
   | "pending"
@@ -27,7 +47,14 @@ export type GaneshLedgerType =
 
 export type JoinRequestStatus = "pending" | "approved" | "rejected";
 
-export type AuditAction = "created" | "edited" | "voided" | "reimbursed" | "adjusted" | "closed";
+export type AuditAction =
+  | "created"
+  | "edited"
+  | "voided"
+  | "reimbursed"
+  | "adjusted"
+  | "closed"
+  | "transferred";
 
 export type FirestoreTime = {
   seconds?: number;
@@ -133,6 +160,8 @@ export interface GaneshSummary {
   sponsoredValue: number;
   collectionCount: number;
   expenseCount: number;
+  transferredToPermanentFund: number;
+  receivedFromPermanentFund: number;
   updatedAt?: FirestoreTime;
 }
 
@@ -140,10 +169,48 @@ export interface OpeningFund extends GaneshAuditFields, GaneshVoidFields {
   id: string;
   amount: number;
   sourceType: OpeningFundSource;
+  location?: PermanentFundLocation;
+  linkedTransferId?: string;
   description?: string;
   date: string;
   ledgerType: "OPENING_BALANCE";
   pendingWrite?: boolean;
+}
+
+export interface PermanentFundSummary {
+  total: number;
+  cash: number;
+  upi: number;
+  bank: number;
+  other: number;
+  updatedBy?: string;
+  updatedAt?: FirestoreTime;
+}
+
+export interface PermanentFundTransaction extends GaneshAuditFields {
+  id: string;
+  type: PermanentFundTxType;
+  amount: number;
+  signedAmount: number;
+  location: PermanentFundLocation;
+  sourceType: PermanentFundPartyType;
+  sourceId?: string;
+  destinationType: PermanentFundPartyType;
+  destinationId?: string;
+  festivalId?: string;
+  festivalName?: string;
+  description?: string;
+  date?: string;
+  pendingWrite?: boolean;
+}
+
+export interface FestivalFundTransfer extends GaneshAuditFields {
+  id: string;
+  direction: FestivalFundTransferDirection;
+  amount: number;
+  location: PermanentFundLocation;
+  linkedPermanentTxId: string;
+  description?: string;
 }
 
 export interface Household {
@@ -277,4 +344,14 @@ export const EMPTY_GANESH_SUMMARY: GaneshSummary = {
   sponsoredValue: 0,
   collectionCount: 0,
   expenseCount: 0,
+  transferredToPermanentFund: 0,
+  receivedFromPermanentFund: 0,
+};
+
+export const EMPTY_PERMANENT_FUND: PermanentFundSummary = {
+  total: 0,
+  cash: 0,
+  upi: 0,
+  bank: 0,
+  other: 0,
 };

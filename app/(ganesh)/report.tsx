@@ -36,6 +36,8 @@ export default function FestivalReportScreen() {
           { label: "Total cash in", value: totalCashIn(summary) },
           { label: "God Fund expenses", value: summary.godFundExpenses },
           { label: "Reimbursements", value: summary.reimbursements },
+          { label: "From Permanent Fund", value: summary.receivedFromPermanentFund },
+          { label: "Returned to Permanent Fund", value: summary.transferredToPermanentFund },
           { label: "Closing cash / God Fund", value: availableGodFund(summary) },
           { label: "Personal money used", value: summary.personalMoneyUsed },
           { label: "Pending reimbursements", value: summary.pendingReimbursements },

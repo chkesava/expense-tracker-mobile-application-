@@ -1,16 +1,22 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  applyPermanentFundDelta,
   availableGodFund,
   deriveHouseholdStatus,
+  festivalCashSpent,
+  festivalCollectedCash,
   memberPendingReimbursement,
   possibleHouseholdDuplicates,
   summarizeLedger,
   validateCollection,
   validateExpenseFunding,
+  validateFundTransfer,
   validateInKindValue,
   validateReimbursement,
+  validateSettlement,
 } from "./ganeshMath";
+import { EMPTY_PERMANENT_FUND } from "@/shared/types/ganesh";
 
 describe("availableGodFund", () => {
   it("adds opening funds and cash inflows, subtracts god-fund expenses and reimbursements", () => {
@@ -50,6 +56,20 @@ describe("availableGodFund", () => {
         reimbursements: 1000,
       })
     ).toBe(9000);
+  });
+
+  it("subtracts cash returned to the Permanent Fund and does not treat it as an expense", () => {
+    expect(
+      availableGodFund({
+        openingFunds: 10000,
+        chanda: 80000,
+        committeeContributions: 20000,
+        otherCashContributions: 10000,
+        godFundExpenses: 90000,
+        reimbursements: 5000,
+        transferredToPermanentFund: 20000,
+      })
+    ).toBe(5000);
   });
 });
 
@@ -149,6 +169,58 @@ describe("summarizeLedger", () => {
     expect(summary.inKindValue).toBe(16000);
     expect(summary.pendingReimbursements).toBe(1000);
     expect(summary.chanda).toBe(500);
+    expect(summary.transferredToPermanentFund).toBe(0);
+    expect(festivalCollectedCash(summary)).toBe(5500);
+    expect(festivalCashSpent(summary)).toBe(4000);
+  });
+});
+
+describe("permanent fund math", () => {
+  it("rejects a transfer larger than the available fund", () => {
+    const result = validateFundTransfer(5000, 3000, "Permanent Fund");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain("3000");
+      expect(result.error).toContain("5000");
+    }
+  });
+
+  it("accepts a partial settlement that sums to the closing balance", () => {
+    expect(validateSettlement({ closing: 25000, transfer: 20000, remaining: 5000 })).toEqual({
+      ok: true,
+    });
+  });
+
+  it("rejects a settlement that exceeds the closing balance", () => {
+    expect(validateSettlement({ closing: 25000, transfer: 30000, remaining: -5000 }).ok).toBe(
+      false
+    );
+  });
+
+  it("rejects a settlement whose parts do not sum to closing", () => {
+    expect(validateSettlement({ closing: 25000, transfer: 20000, remaining: 4000 }).ok).toBe(
+      false
+    );
+  });
+
+  it("lets the Permanent Fund grow and shrink by location without going negative", () => {
+    const afterIn = applyPermanentFundDelta(EMPTY_PERMANENT_FUND, "cash", 20000);
+    expect(afterIn.ok).toBe(true);
+    if (!afterIn.ok) return;
+    expect(afterIn.next).toEqual({
+      total: 20000,
+      cash: 20000,
+      upi: 0,
+      bank: 0,
+      other: 0,
+    });
+    const afterOut = applyPermanentFundDelta(afterIn.next, "cash", -5000);
+    expect(afterOut.ok).toBe(true);
+    if (!afterOut.ok) return;
+    expect(afterOut.next.total).toBe(15000);
+    expect(afterOut.next.cash).toBe(15000);
+    const overdraw = applyPermanentFundDelta(afterOut.next, "upi", -1000);
+    expect(overdraw.ok).toBe(false);
   });
 });
 
