@@ -487,6 +487,68 @@ export async function updatePandalJoinMode(
   await commitWrite(() => batch.commit(), { label: "join mode" });
 }
 
+export async function updatePandalProfile(
+  db: Firestore,
+  actor: GaneshActor,
+  pandalId: string,
+  input: {
+    name?: string;
+    area?: string;
+    description?: string;
+    contactPhone?: string;
+  }
+): Promise<void> {
+  const pandalSnap = await getDoc(doc(db, "pandals", pandalId));
+  if (!pandalSnap.exists()) throw new Error("Pandal not found.");
+  const name = input.name?.trim() || String(pandalSnap.data().name ?? "");
+  if (!name) throw new Error("Enter a Pandal name.");
+  const code = String(pandalSnap.data().code ?? "");
+  const batch = writeBatch(db);
+  batch.update(doc(db, "pandals", pandalId), {
+    name,
+    area: input.area?.trim() || "",
+    description: input.description?.trim() || "",
+    contactPhone: input.contactPhone?.trim() || "",
+    updatedBy: actor.uid,
+    updatedAt: serverTimestamp(),
+  });
+  if (code) {
+    batch.set(
+      doc(db, "pandalInvites", normalizePandalCode(code)),
+      { name, updatedAt: serverTimestamp() },
+      { merge: true }
+    );
+  }
+  await commitWrite(() => batch.commit(), { label: "pandal profile" });
+}
+
+export async function updateFestivalDetails(
+  db: Firestore,
+  actor: GaneshActor,
+  pandalId: string,
+  festivalId: string,
+  input: { name?: string; year?: number }
+): Promise<void> {
+  const festivalSnap = await getDoc(pathRef(db, festivalDoc(pandalId, festivalId)));
+  if (!festivalSnap.exists()) throw new Error("Festival not found.");
+  const name = input.name?.trim() || String(festivalSnap.data().name ?? "");
+  if (!name) throw new Error("Enter a festival name.");
+  const year = Number(input.year ?? festivalSnap.data().year);
+  if (!Number.isFinite(year) || year < 2000) throw new Error("Enter a valid year.");
+  const batch = writeBatch(db);
+  batch.update(pathRef(db, festivalDoc(pandalId, festivalId)), {
+    name,
+    year,
+    updatedBy: actor.uid,
+    updatedAt: serverTimestamp(),
+  });
+  audit(batch, db, pandalId, festivalId, actor.uid, "edited", "festival", festivalId, {
+    oldValue: { name: festivalSnap.data().name, year: festivalSnap.data().year },
+    newValue: { name, year },
+  });
+  await commitWrite(() => batch.commit(), { label: "festival details" });
+}
+
 export async function updatePandalMember(
   db: Firestore,
   actor: GaneshActor,
@@ -1512,6 +1574,41 @@ export async function addCustomCategory(
   });
   await commitWrite(() => categoryBatch.commit(), { label: "category" });
   return id;
+}
+
+export async function updateCategory(
+  db: Firestore,
+  actor: GaneshActor,
+  pandalId: string,
+  festivalId: string,
+  categoryId: string,
+  input: { name?: string; disabled?: boolean }
+): Promise<void> {
+  const categoryRef = pathRef(db, [...festivalCol(pandalId, festivalId, "categories"), categoryId]);
+  const snap = await getDoc(categoryRef);
+  if (!snap.exists()) throw new Error("Category not found.");
+  const name = input.name?.trim();
+  if (input.name != null && !name) throw new Error("Enter a category name.");
+  const batch = writeBatch(db);
+  batch.update(categoryRef, omitUndefined({
+    name: name || undefined,
+    disabled: input.disabled,
+    updatedBy: actor.uid,
+    updatedAt: serverTimestamp(),
+  }));
+  audit(batch, db, pandalId, festivalId, actor.uid, "adjusted", "category", categoryId, {
+    oldValue: { name: snap.data().name, disabled: snap.data().disabled ?? false },
+    newValue: { name: name || snap.data().name, disabled: input.disabled ?? snap.data().disabled ?? false },
+    reason:
+      input.disabled === true
+        ? "Disabled category"
+        : input.disabled === false
+          ? "Enabled category"
+          : name
+            ? "Renamed category"
+            : "Updated category",
+  });
+  await commitWrite(() => batch.commit(), { label: "category update" });
 }
 
 export async function listOpenFestivalIds(db: Firestore, pandalId: string): Promise<Festival[]> {

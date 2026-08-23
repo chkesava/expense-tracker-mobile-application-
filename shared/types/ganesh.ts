@@ -96,6 +96,7 @@ export interface Pandal extends GaneshAuditFields {
   memberIds: string[];
   joinMode?: PandalJoinMode;
   adminCount?: number;
+  contactPhone?: string;
 }
 
 export interface PandalInvite {
@@ -333,9 +334,24 @@ export interface GaneshCategory {
   id: string;
   name: string;
   isDefault?: boolean;
+  disabled?: boolean;
   sortOrder?: number;
   createdBy?: string;
   createdAt?: FirestoreTime;
+  updatedBy?: string;
+  updatedAt?: FirestoreTime;
+}
+
+export interface GaneshFestivalAudit {
+  id: string;
+  actorId: string;
+  action: AuditAction;
+  entityType: string;
+  entityId: string;
+  oldValue?: unknown;
+  newValue?: unknown;
+  reason?: string;
+  at?: FirestoreTime;
 }
 
 export interface GaneshActivity {

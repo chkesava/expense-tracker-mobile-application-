@@ -230,6 +230,9 @@ service cloud.firestore {
     // Ganesh Seva — shared Pandal / Festival ledger.
     // ACTIVE membership is the only grant. ownerId / memberIds alone are not.
     // Role helpers mirror shared/utils/ganeshPermissions.ts.
+    // Admin-only UI is not enough: memberAudits / festival auditLogs reads and
+    // category writes are limited to admin (and treasurer where the TS matrix
+    // already grants festival.update / audit.read).
     // -----------------------------------------------------------------------
     function ganeshIdentityCreate() {
       return request.resource.data.createdBy == request.auth.uid
@@ -436,7 +439,7 @@ service cloud.firestore {
       }
 
       match /memberAudits/{auditId} {
-        allow read: if isActivePandalMember();
+        allow read: if canCloseOrUpdateFestival();
         allow create: if canManageMembers();
         allow update, delete: if false;
       }
@@ -473,6 +476,10 @@ service cloud.firestore {
           allow update, delete: if false;
         }
 
+        match /auditLogs/{auditId} {
+          allow read: if canCloseOrUpdateFestival();
+        }
+
         match /{subcol}/{docId} {
           function canWriteFestivalSubcol() {
             return (subcol == 'collections' && canWriteCollection())
@@ -486,12 +493,15 @@ service cloud.firestore {
                   && (canWriteExpenseOrContribution()
                       || canManageMembers()
                       || canCloseOrUpdateFestival()))
-              || (subcol == 'categories' && canWriteExpenseOrContribution())
+              || (subcol == 'categories' && canCloseOrUpdateFestival())
               || ((subcol == 'activity' || subcol == 'auditLogs' || subcol == 'summary')
                   && canWriteLedgerSideEffect());
           }
 
-          allow read: if isActivePandalMember();
+          // Festival auditLogs stay writable as ledger side-effects, but only
+          // admin/treasurer may read them. Nested matches OR together, so the
+          // wildcard read must exclude this subcollection.
+          allow read: if isActivePandalMember() && subcol != 'auditLogs';
           allow create: if isActivePandalMember()
             && festivalOpen()
             && canWriteFestivalSubcol()

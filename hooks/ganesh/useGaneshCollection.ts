@@ -28,6 +28,7 @@ export function useGaneshCollection<T>(
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<LoadFailure | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
+  const [retryToken, setRetryToken] = useState(0);
 
   const pathKey = path?.join("/") ?? "";
   const enabled = options?.enabled !== false && Boolean(path);
@@ -71,7 +72,13 @@ export function useGaneshCollection<T>(
       }, "Couldn't load Ganesh data.")
     );
     return unsubscribe;
-  }, [enabled, pathKey, options?.orderByField, options?.orderDirection, options?.limitTo]);
+  }, [enabled, pathKey, options?.orderByField, options?.orderDirection, options?.limitTo, retryToken]);
 
-  return { items, loading, error, pendingCount };
+  return {
+    items,
+    loading,
+    error,
+    pendingCount,
+    retry: () => setRetryToken((token) => token + 1),
+  };
 }

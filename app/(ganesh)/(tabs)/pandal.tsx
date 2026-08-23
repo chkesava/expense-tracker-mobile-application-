@@ -45,11 +45,10 @@ export default function PandalScreen() {
   const { members: pandalMembers } = usePandalMembers(pandalId);
   const { requests } = useJoinRequests(pandalId);
   const { fund } = usePermanentFund(pandalId);
-  const { can, role } = useGaneshPermissions();
+  const { can, isAdmin, role } = useGaneshPermissions();
   const pandal = pandals.find((item) => item.id === pandalId);
   const festival = festivals.find((item) => item.id === festivalId);
   const writes = useGaneshWrites();
-  const joinMode = pandal?.joinMode ?? "approval";
   const collected = festivalMembers.reduce((sum, member) => sum + member.contributionPaid, 0);
   const [memberTarget, setMemberTarget] = useState(String(festival?.contributionTargetAmount ?? 0));
   const [houseTarget, setHouseTarget] = useState(String(festival?.householdTargetAmount ?? 0));
@@ -66,14 +65,7 @@ export default function PandalScreen() {
     const festivalMember = festivalMembers.find((item) => item.userId === member.userId);
     return sum + effectiveCommitteeTarget(festivalMember, defaultTarget);
   }, 0);
-  const isAdmin = can("members.assignRole");
-  const showAdmin =
-    isAdmin ||
-    can("festival.update") ||
-    can("members.approve") ||
-    can("festival.create") ||
-    can("festival.close") ||
-    can("permanentFund.transfer");
+  const showTreasurerTools = !isAdmin && can("festival.update");
 
   return (
     <GaneshScreen safeTop>
@@ -129,84 +121,65 @@ export default function PandalScreen() {
         ]}
       />
 
-      {showAdmin ? (
+      {isAdmin ? (
+        <Pressable
+          onPress={() => push("/(ganesh)/admin" as never)}
+          style={{
+            backgroundColor: theme.colors.card,
+            borderColor: theme.colors.border,
+            borderWidth: 1,
+            borderRadius: 16,
+            padding: 14,
+            gap: 6,
+            minHeight: 72,
+          }}
+        >
+          <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>Admin Dashboard</Text>
+          <Text style={{ color: theme.colors.mutedForeground, lineHeight: 20 }}>
+            {requests.length > 0
+              ? `${requests.length} join request${requests.length === 1 ? "" : "s"} need review`
+              : "Members, festival, funds, and Pandal settings"}
+          </Text>
+          <Text style={{ color: theme.colors.primary, fontWeight: "700" }}>Open</Text>
+        </Pressable>
+      ) : null}
+
+      {showTreasurerTools ? (
         <View style={{ gap: 12 }}>
           <Text style={{ color: theme.colors.foreground, fontSize: 18, fontWeight: "800" }}>
-            Admin
+            Treasurer
           </Text>
           <Text style={{ color: theme.colors.mutedForeground, lineHeight: 20 }}>
-            Only a Pandal Admin can change roles, join rules, and the Permanent Fund. Treasurers can
-            update festival targets and close the festival.
+            Set this festival’s contribution targets or close it. Pandal Admin handles roles and
+            the Permanent Fund.
           </Text>
-          {can("members.assignRole") ? (
-            <View style={{ gap: 10 }}>
-              <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>Who can join</Text>
-              <View style={{ flexDirection: "row", gap: 8 }}>
-                <Button
-                  variant={joinMode === "approval" ? "primary" : "outline"}
-                  onPress={() => void writes.updatePandalJoinMode("approval")}
-                >
-                  Approval
-                </Button>
-                <Button
-                  variant={joinMode === "open" ? "primary" : "outline"}
-                  onPress={() => void writes.updatePandalJoinMode("open")}
-                >
-                  Open
-                </Button>
-              </View>
-            </View>
-          ) : null}
-          {can("festival.update") ? (
-            <View style={{ gap: 10 }}>
-              <Text style={{ color: theme.colors.mutedForeground, lineHeight: 20 }}>
-                This is the default for most committee people. For a child or anyone who should pay
-                less, open them on the Committee tab and set a custom target.
-              </Text>
-              <Input
-                label="Member contribution target"
-                value={memberTarget}
-                onChangeText={setMemberTarget}
-                keyboardType="numeric"
-              />
-              <Input
-                label="Household chanda target"
-                value={houseTarget}
-                onChangeText={setHouseTarget}
-                keyboardType="numeric"
-              />
-              <Button
-                variant="outline"
-                onPress={() =>
-                  void writes.updateFestivalTargets({
-                    contributionMode: "same",
-                    contributionTargetAmount: Number(memberTarget),
-                    householdTargetAmount: Number(houseTarget),
-                  })
-                }
-              >
-                Save targets
-              </Button>
-            </View>
-          ) : null}
+          <Input
+            label="Member contribution target"
+            value={memberTarget}
+            onChangeText={setMemberTarget}
+            keyboardType="numeric"
+          />
+          <Input
+            label="Household chanda target"
+            value={houseTarget}
+            onChangeText={setHouseTarget}
+            keyboardType="numeric"
+          />
+          <Button
+            variant="outline"
+            onPress={() =>
+              void writes.updateFestivalTargets({
+                contributionMode: "same",
+                contributionTargetAmount: Number(memberTarget),
+                householdTargetAmount: Number(houseTarget),
+              })
+            }
+          >
+            Save targets
+          </Button>
           {can("members.read") ? (
             <Button variant="outline" onPress={() => push("/(ganesh)/members" as never)}>
-              {isAdmin ? "Manage committee roles" : "View committee roles"}
-            </Button>
-          ) : null}
-          {can("members.approve") ? (
-            <Button
-              variant={requests.length > 0 ? "primary" : "outline"}
-              onPress={() => push("/(ganesh)/join-requests" as never)}
-            >
-              {requests.length > 0
-                ? `${requests.length} join request${requests.length === 1 ? "" : "s"}`
-                : "Join requests"}
-            </Button>
-          ) : null}
-          {can("festival.create") ? (
-            <Button variant="outline" onPress={() => push("/(ganesh)/create-festival" as never)}>
-              Create festival
+              View committee roles
             </Button>
           ) : null}
           {can("festival.close") && festival?.status === "open" ? (

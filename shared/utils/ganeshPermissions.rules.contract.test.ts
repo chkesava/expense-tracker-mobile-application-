@@ -116,6 +116,8 @@ describe("ganesh firestore rules contract", () => {
     expect(roles.filter((role) => can(role, "permanentFund.transfer"))).toEqual(["admin"]);
     expect(roles.filter((role) => can(role, "members.approve"))).toEqual(["admin"]);
     expect(roles.filter((role) => can(role, "festival.create"))).toEqual(["admin"]);
+    expect(roles.filter((role) => can(role, "festival.update"))).toEqual(RULE_TREASURER_WRITE_ROLES);
+    expect(roles.filter((role) => can(role, "audit.read"))).toEqual(RULE_TREASURER_WRITE_ROLES);
   });
 
   it("does not grant ledger access from ownerId alone", () => {
@@ -157,6 +159,15 @@ describe("ganesh firestore rules contract", () => {
     expect(canCloseOrUpdateFestival(treasurer)).toBe(true);
     expect(canWriteReimbursement(treasurer)).toBe(true);
     expect(canCreateFestival(treasurer)).toBe(false);
+  });
+
+  it("denies a member writing expense categories or reading admin audit logs", () => {
+    expect(canCloseOrUpdateFestival(member)).toBe(false);
+    expect(canCloseOrUpdateFestival(admin)).toBe(true);
+    expect(canCloseOrUpdateFestival(treasurer)).toBe(true);
+    expect(can(member.member?.role, "audit.read")).toBe(false);
+    expect(can(member.member?.role, "festival.update")).toBe(false);
+    expect(can(admin.member?.role, "audit.read")).toBe(true);
   });
 
   it("denies demoting or removing the last admin", () => {

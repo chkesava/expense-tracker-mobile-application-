@@ -1,4 +1,5 @@
-import { Text, View } from "react-native";
+import { Alert, Text, View } from "react-native";
+import { useRouter } from "expo-router";
 
 import { RoleChips } from "@/components/ganesh/RoleChips";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
@@ -11,6 +12,7 @@ import { usePandalMembers } from "@/hooks/usePandalMembers";
 import { usePandals } from "@/hooks/usePandals";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
+import { useAuth } from "@/providers/AuthProvider";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import type { GaneshRole, PandalMember, PandalMemberAudit } from "@/shared/types/ganesh";
 import { formatGaneshWhen, memberDisplayName } from "@/shared/utils/ganeshIdentity";
@@ -25,7 +27,7 @@ function auditLine(audit: PandalMemberAudit, members: PandalMember[]): string {
   const actor = memberDisplayName(members, audit.actorId);
   const target = memberDisplayName(members, audit.targetUserId);
   if (audit.action === "approved") {
-    return `${actor} approved ${target} as ${ganeshRoleLabel(audit.newRole).toUpperCase()}`;
+    return `${actor} approved ${target} as ${ganeshRoleLabel(audit.newRole)}`;
   }
   if (audit.action === "suspended") {
     return `${actor} suspended ${target}`;
@@ -37,18 +39,37 @@ function auditLine(audit: PandalMemberAudit, members: PandalMember[]): string {
     return `${actor} set join mode to ${audit.reason ?? "approval"}`;
   }
   if (audit.oldRole && audit.newRole && audit.oldRole !== audit.newRole) {
-    return `${actor} changed ${target} ${audit.oldRole.toUpperCase()} → ${audit.newRole.toUpperCase()}`;
+    return `${actor} changed ${target} to ${ganeshRoleLabel(audit.newRole)}`;
   }
   return `${actor} updated ${target}`;
 }
 
+function roleImpact(role: GaneshRole): string {
+  if (role === "admin") {
+    return "They will be able to approve members, change roles, and move Permanent Fund money.";
+  }
+  if (role === "treasurer") {
+    return "They will be able to close the festival and record reimbursements.";
+  }
+  if (role === "collector") {
+    return "They will be able to record household collections only.";
+  }
+  if (role === "viewer") {
+    return "They will be able to see the ledger, but not add money records.";
+  }
+  return "They will be able to add collections, expenses, and contributions.";
+}
+
 export default function GaneshMembersScreen() {
   const { theme } = useTheme();
+  const { push } = useRouter();
+  const { realUser } = useAuth();
   const { pandalId } = useGaneshSession();
   const { pandals } = usePandals();
   const { members } = usePandalMembers(pandalId);
-  const { audits } = useMemberAudits(pandalId);
   const { can } = useGaneshPermissions();
+  const canReadAudit = can("audit.read");
+  const { audits } = useMemberAudits(pandalId, canReadAudit);
   const writes = useGaneshWrites();
   const pandal = pandals.find((item) => item.id === pandalId);
   const adminCount =
@@ -56,7 +77,7 @@ export default function GaneshMembersScreen() {
     members.filter((member) => member.role === "admin" && member.status === "active").length;
   const canManage = can("members.assignRole");
 
-  const change = (
+  const apply = (
     member: PandalMember,
     input: { role?: GaneshRole; status?: PandalMember["status"] }
   ) => {
@@ -68,10 +89,26 @@ export default function GaneshMembersScreen() {
       toast.error("Assign another Pandal Admin before changing this user.");
       return;
     }
-    void writes.updatePandalMember(member.userId, input).catch((error) => {
-      logError("ganesh.members.update", error);
-      toast.error(friendlyErrorMessage(error, "Could not update this member."));
+    void writes.updatePandalMember(member.userId, input).catch((caught) => {
+      logError("ganesh.members.update", caught);
+      toast.error(friendlyErrorMessage(caught, "Could not update this member."));
     });
+  };
+
+  const changeRole = (member: PandalMember, role: GaneshRole) => {
+    if (role === member.role) return;
+    if (member.userId === realUser?.uid) {
+      toast.error("Ask another Admin to change your role.");
+      return;
+    }
+    Alert.alert(
+      "Change role",
+      `${member.displayName}\n\nCurrent: ${ganeshRoleLabel(member.role)}\nNew: ${ganeshRoleLabel(role)}\n\n${roleImpact(role)}`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Save", onPress: () => apply(member, { role }) },
+      ]
+    );
   };
 
   return (
@@ -88,6 +125,7 @@ export default function GaneshMembersScreen() {
       ) : (
         members.map((member) => {
           const lastAdmin = member.role === "admin" && member.status === "active" && adminCount <= 1;
+          const isSelf = member.userId === realUser?.uid;
           return (
             <View
               key={member.id}
@@ -105,13 +143,22 @@ export default function GaneshMembersScreen() {
               </Text>
               <Text style={{ color: theme.colors.mutedForeground }}>
                 {ganeshRoleLabel(member.role)} · {ganeshStatusLabel(member.status)}
+                {member.createdAt ? ` · Joined ${formatGaneshWhen(member.createdAt)}` : ""}
               </Text>
-              {canManage && member.status !== "removed" ? (
+              <Button variant="outline" onPress={() => push(`/(ganesh)/member/${member.userId}` as never)}>
+                View activity
+              </Button>
+              {canManage && member.status !== "removed" && isSelf ? (
+                <Text style={{ color: theme.colors.mutedForeground, lineHeight: 20 }}>
+                  Ask another Admin to change your role or status.
+                </Text>
+              ) : null}
+              {canManage && member.status !== "removed" && !isSelf ? (
                 <View style={{ gap: 10 }}>
                   <RoleChips
                     value={member.role}
                     options={ASSIGNABLE_ROLES}
-                    onChange={(role) => change(member, { role })}
+                    onChange={(role) => changeRole(member, role)}
                   />
                   <View style={{ flexDirection: "row", gap: 10 }}>
                     {member.status === "active" ? (
@@ -119,7 +166,16 @@ export default function GaneshMembersScreen() {
                         variant="outline"
                         style={{ flex: 1 }}
                         disabled={lastAdmin}
-                        onPress={() => change(member, { status: "suspended" })}
+                        onPress={() => {
+                          Alert.alert(
+                            "Suspend member?",
+                            `${member.displayName} will lose access until you restore them.`,
+                            [
+                              { text: "Cancel", style: "cancel" },
+                              { text: "Suspend", onPress: () => apply(member, { status: "suspended" }) },
+                            ]
+                          );
+                        }}
                       >
                         Suspend
                       </Button>
@@ -127,7 +183,7 @@ export default function GaneshMembersScreen() {
                       <Button
                         variant="outline"
                         style={{ flex: 1 }}
-                        onPress={() => change(member, { status: "active" })}
+                        onPress={() => apply(member, { status: "active" })}
                       >
                         Restore
                       </Button>
@@ -136,7 +192,20 @@ export default function GaneshMembersScreen() {
                       variant="outline"
                       style={{ flex: 1 }}
                       disabled={lastAdmin}
-                      onPress={() => change(member, { status: "removed" })}
+                      onPress={() => {
+                        Alert.alert(
+                          "Remove member?",
+                          `${member.displayName} will lose access. Historical records keep their name.`,
+                          [
+                            { text: "Cancel", style: "cancel" },
+                            {
+                              text: "Remove",
+                              style: "destructive",
+                              onPress: () => apply(member, { status: "removed" }),
+                            },
+                          ]
+                        );
+                      }}
                     >
                       Remove
                     </Button>
@@ -152,19 +221,23 @@ export default function GaneshMembersScreen() {
           );
         })
       )}
-      <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>Member changes</Text>
-      {audits.length === 0 ? (
-        <Text style={{ color: theme.colors.mutedForeground }}>No membership changes yet.</Text>
-      ) : (
-        audits.map((audit) => (
-          <View key={audit.id} style={{ gap: 2 }}>
-            <Text style={{ color: theme.colors.foreground }}>{auditLine(audit, members)}</Text>
-            {audit.at ? (
-              <Text style={{ color: theme.colors.mutedForeground }}>{formatGaneshWhen(audit.at)}</Text>
-            ) : null}
-          </View>
-        ))
-      )}
+      {canReadAudit ? (
+        <>
+          <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>Member changes</Text>
+          {audits.length === 0 ? (
+            <Text style={{ color: theme.colors.mutedForeground }}>No membership changes yet.</Text>
+          ) : (
+            audits.map((audit) => (
+              <View key={audit.id} style={{ gap: 2 }}>
+                <Text style={{ color: theme.colors.foreground }}>{auditLine(audit, members)}</Text>
+                {audit.at ? (
+                  <Text style={{ color: theme.colors.mutedForeground }}>{formatGaneshWhen(audit.at)}</Text>
+                ) : null}
+              </View>
+            ))
+          )}
+        </>
+      ) : null}
     </GaneshScreen>
   );
 }

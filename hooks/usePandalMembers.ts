@@ -3,9 +3,9 @@ import { pandalMembersCol } from "@/shared/utils/ganeshPaths";
 import type { PandalMember } from "@/shared/types/ganesh";
 
 export function usePandalMembers(pandalId: string | null) {
-  const { items, loading, error } = useGaneshCollection<PandalMember>(
+  const { items, loading, error, retry } = useGaneshCollection<PandalMember>(
     pandalId ? pandalMembersCol(pandalId) : null,
     (id, data) => ({ id, ...(data as Omit<PandalMember, "id">) })
   );
-  return { members: items, loading, error };
+  return { members: items, loading, error, retry };
 }

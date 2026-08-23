@@ -85,6 +85,23 @@ export function useGaneshWrites() {
         writes.decideJoinRequest(requireDb(), actor!, requestId, decision, roleForJoin)
       );
     },
+    updatePandalProfile: (input: Parameters<typeof writes.updatePandalProfile>[3]) => {
+      if (!pandalId || !actor) throw new Error("Select a Pandal first.");
+      requirePerm("members.assignRole");
+      return run("Pandal saved", () =>
+        writes.updatePandalProfile(requireDb(), actor, pandalId, input)
+      );
+    },
+    updateFestivalDetails: (
+      targetFestivalId: string,
+      input: Parameters<typeof writes.updateFestivalDetails>[4]
+    ) => {
+      if (!pandalId || !actor) throw new Error("Select a Pandal first.");
+      requirePerm("festival.update");
+      return run("Festival saved", () =>
+        writes.updateFestivalDetails(requireDb(), actor, pandalId, targetFestivalId, input)
+      );
+    },
     updatePandalJoinMode: (joinMode: Parameters<typeof writes.updatePandalJoinMode>[3]) => {
       if (!pandalId || !actor) throw new Error("Select a Pandal first.");
       requirePerm("members.assignRole");
@@ -318,10 +335,20 @@ export function useGaneshWrites() {
       );
     },
     addCustomCategory: (name: string) => {
-      requirePerm("expenses.create");
+      requirePerm("festival.update");
       const ctx = requireFestival();
       return run("Category added", () =>
         writes.addCustomCategory(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, name)
+      );
+    },
+    updateCategory: (
+      categoryId: string,
+      input: Parameters<typeof writes.updateCategory>[5]
+    ) => {
+      requirePerm("festival.update");
+      const ctx = requireFestival();
+      return run("Category updated", () =>
+        writes.updateCategory(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, categoryId, input)
       );
     },
   };

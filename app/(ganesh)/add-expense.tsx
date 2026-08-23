@@ -30,6 +30,7 @@ export default function AddExpenseScreen() {
   const { pandalId, festivalId } = useGaneshSession();
   const { festivals } = useFestivals(pandalId);
   const { categories } = useGaneshCategories(pandalId, festivalId);
+  const visibleCategories = categories.filter((category) => !category.disabled);
   const { members } = usePandalMembers(pandalId);
   const writes = useGaneshWrites();
   const { can } = useGaneshPermissions();
@@ -39,7 +40,7 @@ export default function AddExpenseScreen() {
   const [godFund, setGodFund] = useState("");
   const [personal, setPersonal] = useState("");
   const [funding, setFunding] = useState<Funding>("god");
-  const [categoryId, setCategoryId] = useState(categories[0]?.id ?? "");
+  const [categoryId, setCategoryId] = useState(visibleCategories[0]?.id ?? "");
   const [paidByMemberId, setPaidByMemberId] = useState(realUser?.uid ?? "");
   const [vendor, setVendor] = useState("");
   const [notes, setNotes] = useState("");
@@ -47,7 +48,8 @@ export default function AddExpenseScreen() {
   const [receiptStatus, setReceiptStatus] = useState<GaneshUploadStatus>("idle");
   const [savedId, setSavedId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const selectedCategory = categories.find((category) => category.id === categoryId) ?? categories[0];
+  const selectedCategory =
+    visibleCategories.find((category) => category.id === categoryId) ?? visibleCategories[0];
   const closed = festivals.find((item) => item.id === festivalId)?.status === "closed";
   const ledgerSaved = Boolean(savedId);
 
@@ -134,7 +136,7 @@ export default function AddExpenseScreen() {
       ) : null}
       <Text style={{ color: theme.colors.mutedForeground, fontWeight: "700" }}>Category</Text>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-        {categories.map((category) => (
+        {visibleCategories.map((category) => (
           <Pressable
             key={category.id}
             disabled={ledgerSaved}
@@ -143,13 +145,13 @@ export default function AddExpenseScreen() {
               paddingHorizontal: 10,
               paddingVertical: 6,
               borderRadius: 999,
-              backgroundColor: (categoryId || categories[0]?.id) === category.id ? theme.colors.primary : theme.colors.muted,
+              backgroundColor: (categoryId || visibleCategories[0]?.id) === category.id ? theme.colors.primary : theme.colors.muted,
             }}
           >
             <Text
               style={{
                 color:
-                  (categoryId || categories[0]?.id) === category.id
+                  (categoryId || visibleCategories[0]?.id) === category.id
                     ? theme.colors.primaryForeground
                     : theme.colors.foreground,
                 fontWeight: "700",

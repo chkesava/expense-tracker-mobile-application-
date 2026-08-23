@@ -29,8 +29,9 @@ export default function CreateFestivalScreen() {
   const writes = useGaneshWrites();
   const { can } = useGaneshPermissions();
   const { isOnline } = useNetwork();
-  const year = new Date().getFullYear();
-  const [name, setName] = useState(`Ganesh Chaturthi ${year}`);
+  const defaultYear = new Date().getFullYear();
+  const [name, setName] = useState(`Ganesh Chaturthi ${defaultYear}`);
+  const [year, setYear] = useState(String(defaultYear));
   const [allocate, setAllocate] = useState("0");
   const [location, setLocation] = useState<PermanentFundLocation>("cash");
   const [busy, setBusy] = useState(false);
@@ -58,9 +59,14 @@ export default function CreateFestivalScreen() {
         return;
       }
     }
+    const festivalYear = Number(year);
+    if (!Number.isFinite(festivalYear) || festivalYear < 2000) {
+      toast.error("Enter a valid year.");
+      return;
+    }
     setBusy(true);
     try {
-      const festivalId = await writes.createFestival({ name, year });
+      const festivalId = await writes.createFestival({ name, year: festivalYear });
       if (allocateAmount > 0) {
         await writes.transferPermanentToFestival({
           festivalId,
@@ -94,7 +100,8 @@ export default function CreateFestivalScreen() {
         The Permanent Fund stays with the Pandal. Enter 0 if this festival should start with no
         money from it. Nothing is moved automatically.
       </Text>
-      <Input label="Festival" value={name} onChangeText={setName} />
+      <Input label="Festival name" value={name} onChangeText={setName} />
+      <Input label="Year" value={year} onChangeText={setYear} keyboardType="numeric" />
       <Input
         label="Opening funds from Permanent Fund"
         value={allocate}

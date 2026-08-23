@@ -109,6 +109,10 @@ export const RULE_EXPENSE_WRITE_ROLES: GaneshRole[] = ["admin", "treasurer", "me
 /** Mirrors `canWriteReimbursement()` / `canCloseOrUpdateFestival()` in firestore.rules. */
 export const RULE_TREASURER_WRITE_ROLES: GaneshRole[] = ["admin", "treasurer"];
 
+export function isGaneshAdmin(role: GaneshRole | undefined): boolean {
+  return role === "admin";
+}
+
 export function can(role: GaneshRole | undefined, permission: GaneshPermission): boolean {
   if (!role) return false;
   return ROLE_PERMISSIONS[role].includes(permission);

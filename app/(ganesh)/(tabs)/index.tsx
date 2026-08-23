@@ -38,15 +38,38 @@ export default function GaneshHomeScreen() {
   const festival = festivals.find((item) => item.id === festivalId);
   const closed = festival?.status === "closed";
   const godFund = availableGodFund(summary);
-  const { can } = useGaneshPermissions();
+  const { can, isAdmin } = useGaneshPermissions();
 
   return (
     <GaneshScreen safeTop>
-      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-        <Text style={{ color: theme.colors.foreground, fontSize: 22, fontWeight: "800" }}>
-          Ganesh Seva
-        </Text>
-        <GaneshSyncChip />
+      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text style={{ color: theme.colors.foreground, fontSize: 22, fontWeight: "800" }}>
+            Ganesh Seva
+          </Text>
+          {pandal?.name ? (
+            <Text style={{ color: theme.colors.mutedForeground }}>{pandal.name}</Text>
+          ) : null}
+        </View>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          {isAdmin ? (
+            <Pressable
+              onPress={() => push("/(ganesh)/admin" as never)}
+              style={{
+                backgroundColor: theme.colors.primary,
+                paddingHorizontal: 14,
+                minHeight: 44,
+                borderRadius: 12,
+                justifyContent: "center",
+              }}
+            >
+              <Text style={{ color: theme.colors.primaryForeground, fontWeight: "800" }}>
+                Admin
+              </Text>
+            </Pressable>
+          ) : null}
+          <GaneshSyncChip />
+        </View>
       </View>
       <PermanentFundCard
         fund={fund}

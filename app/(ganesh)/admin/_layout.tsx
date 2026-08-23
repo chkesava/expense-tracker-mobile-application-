@@ -1,0 +1,30 @@
+import { Stack } from "expo-router";
+
+import { AdminGate } from "@/components/ganesh/AdminGate";
+import { useTheme } from "@/theme/ThemeProvider";
+
+export default function GaneshAdminLayout() {
+  const { theme } = useTheme();
+
+  return (
+    <AdminGate>
+      <Stack
+        screenOptions={{
+          headerShown: true,
+          headerTintColor: theme.colors.foreground,
+          headerStyle: { backgroundColor: theme.colors.background },
+          headerShadowVisible: false,
+          contentStyle: { backgroundColor: theme.colors.background },
+        }}
+      >
+        <Stack.Screen name="index" options={{ title: "Admin Dashboard" }} />
+        <Stack.Screen name="settings" options={{ title: "Pandal settings" }} />
+        <Stack.Screen name="festivals" options={{ title: "Festivals" }} />
+        <Stack.Screen name="categories" options={{ title: "Expense categories" }} />
+        <Stack.Screen name="audit" options={{ title: "Audit log" }} />
+        <Stack.Screen name="setup" options={{ title: "Contribution setup" }} />
+        <Stack.Screen name="reports" options={{ title: "Reports" }} />
+      </Stack>
+    </AdminGate>
+  );
+}
