@@ -10,9 +10,10 @@ import {
   Text,
   View,
 } from "react-native";
-import { Check, Share2, UserMinus, X } from "lucide-react-native";
+import { Check, Pencil, Share2, UserMinus, X } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
+import { EditSplitAmountModal } from "@/components/splits/EditSplitAmountModal";
 import { SplitClaimsSection } from "@/components/splits/SplitClaimsSection";
 import { SplitPayQrCard } from "@/components/splits/SplitPayQrCard";
 import { UseGiftMoneyModal } from "@/components/splits/UseGiftMoneyModal";
@@ -76,6 +77,7 @@ export function SplitDetailModal({
     unmarkParticipantCollected,
     spendCollectPot,
     optOutParticipant,
+    updateSplitAmount,
     ensureSplitSharing,
     applyPaidClaim,
     dismissClaim,
@@ -85,6 +87,7 @@ export function SplitDetailModal({
 
   const [collectingKey, setCollectingKey] = useState<string | null>(null);
   const [spendOpen, setSpendOpen] = useState(false);
+  const [editAmountOpen, setEditAmountOpen] = useState(false);
   // "split" while sharing the group link, otherwise the participant key.
   const [sharing, setSharing] = useState<string | null>(null);
   const [claimWorkingKey, setClaimWorkingKey] = useState<string | null>(null);
@@ -607,16 +610,43 @@ export function SplitDetailModal({
                   >
                     {collect ? "TARGET AMOUNT" : "TOTAL SPLIT AMOUNT"}
                   </Text>
-                  <Amount
-                    value={split.totalAmount}
-                    currency={displayCurrency}
-                    ghostable
-                    style={{
-                      fontSize: 22,
-                      fontWeight: "900",
-                      color: theme.colors.foreground,
-                    }}
-                  />
+                  {isCreator && !spent ? (
+                    <Pressable
+                      onPress={() => {
+                        haptic.selection().catch(() => undefined);
+                        setEditAmountOpen(true);
+                      }}
+                      accessibilityRole="button"
+                      accessibilityLabel="Edit split amount"
+                      style={({ pressed }) => [
+                        styles.amountEdit,
+                        pressed && { opacity: 0.7 },
+                      ]}
+                    >
+                      <Amount
+                        value={split.totalAmount}
+                        currency={displayCurrency}
+                        ghostable
+                        style={{
+                          fontSize: 22,
+                          fontWeight: "900",
+                          color: theme.colors.foreground,
+                        }}
+                      />
+                      <Pencil size={14} color={theme.colors.mutedForeground} />
+                    </Pressable>
+                  ) : (
+                    <Amount
+                      value={split.totalAmount}
+                      currency={displayCurrency}
+                      ghostable
+                      style={{
+                        fontSize: 22,
+                        fontWeight: "900",
+                        color: theme.colors.foreground,
+                      }}
+                    />
+                  )}
                 </View>
 
                 <View style={{ alignItems: "flex-end" }}>
@@ -1031,6 +1061,15 @@ export function SplitDetailModal({
           return spendCollectPot(split.id, amount, accountId);
         }}
       />
+      <EditSplitAmountModal
+        visible={editAmountOpen}
+        split={split}
+        onClose={() => setEditAmountOpen(false)}
+        onConfirm={async (newTotal) => {
+          if (!split.id) return false;
+          return updateSplitAmount(split.id, newTotal);
+        }}
+      />
     </Modal>
   );
 }
@@ -1106,6 +1145,11 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 12,
     borderCurve: "continuous",
+  },
+  amountEdit: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   progressHeader: {
     flexDirection: "row",
