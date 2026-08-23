@@ -5,28 +5,33 @@ function money(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
+type ContributionStatusFields = Pick<
+  Partial<GaneshContribution>,
+  "status" | "voided" | "expectedDate"
+>;
+
 export function contributionStatusOf(
-  contribution?: Pick<GaneshContribution, "status"> | null
+  contribution?: Pick<ContributionStatusFields, "status"> | null
 ): ContributionStatus {
   if (contribution?.status === "received") return "received";
   if (contribution?.status === "cancelled") return "cancelled";
   return "promised";
 }
 
-export function isPromised(contribution?: Pick<GaneshContribution, "status" | "voided"> | null): boolean {
+export function isPromised(contribution?: ContributionStatusFields | null): boolean {
   return !contribution?.voided && contributionStatusOf(contribution) === "promised";
 }
 
-export function isReceived(contribution?: Pick<GaneshContribution, "status" | "voided"> | null): boolean {
+export function isReceived(contribution?: ContributionStatusFields | null): boolean {
   return !contribution?.voided && contributionStatusOf(contribution) === "received";
 }
 
-export function isCancelled(contribution?: Pick<GaneshContribution, "status" | "voided"> | null): boolean {
+export function isCancelled(contribution?: ContributionStatusFields | null): boolean {
   return !contribution?.voided && contributionStatusOf(contribution) === "cancelled";
 }
 
 export function isOverdue(
-  contribution?: Pick<GaneshContribution, "status" | "expectedDate" | "voided"> | null,
+  contribution?: ContributionStatusFields | null,
   today = todayDateInput()
 ): boolean {
   if (!isPromised(contribution)) return false;
@@ -108,7 +113,7 @@ export function summarizeContributions(
 }
 
 export function contributionStatusLabel(
-  contribution: Pick<GaneshContribution, "status" | "expectedDate" | "voided">,
+  contribution: ContributionStatusFields,
   today = todayDateInput()
 ): "promised" | "received" | "cancelled" | "overdue" {
   if (isOverdue(contribution, today)) return "overdue";
