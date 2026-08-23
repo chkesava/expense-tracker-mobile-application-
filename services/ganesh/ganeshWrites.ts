@@ -20,11 +20,13 @@ import { newId } from "@/lib/id";
 import { commitWrite } from "@/lib/firestoreWrite";
 import { omitUndefined } from "@/shared/utils/firestorePayload";
 import {
+  availableGodFund,
   deriveHouseholdStatus,
   summarizeLedger,
   validateCashContribution,
   validateCollection,
   validateExpenseFunding,
+  validateGodFundSpend,
   validateInKindValue,
   validatePositiveAmount,
   validateReimbursement,
@@ -42,6 +44,7 @@ import type {
   ContributionKind,
   ContributionStatus,
   Festival,
+  GaneshFileMeta,
   GaneshMemberStatus,
   GaneshRole,
   HouseholdStatus,
@@ -364,6 +367,7 @@ export async function requestPandalJoin(
     doc(db, "pandalJoinRequests", requestId),
     omitUndefined({
       pandalId,
+      pandalName,
       userId: actor.uid,
       displayName: actor.displayName,
       phone: actor.phone,
@@ -745,10 +749,10 @@ export async function addCollection(
     const existing = input.householdId ? await getDoc(householdRef) : null;
     if (existing?.exists()) {
       const prev = existing.data();
-      const collectedAmount = Number(prev.collectedAmount ?? 0) + input.amount;
       const expectedAmount = Number(prev.expectedAmount ?? 0);
+      const collectedAmount = Number(prev.collectedAmount ?? 0) + input.amount;
       batch.update(householdRef, {
-        collectedAmount,
+        collectedAmount: increment(input.amount),
         status: deriveHouseholdStatus({
           expectedAmount,
           collectedAmount,
@@ -939,6 +943,26 @@ export async function addContribution(
   return id;
 }
 
+export async function attachContributionPhoto(
+  db: Firestore,
+  actor: GaneshActor,
+  pandalId: string,
+  festivalId: string,
+  contributionId: string,
+  photo: GaneshFileMeta
+): Promise<void> {
+  const ref = pathRef(db, [...festivalCol(pandalId, festivalId, "contributions"), contributionId]);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) throw new Error("Contribution not found.");
+  const batch = writeBatch(db);
+  batch.update(ref, {
+    photo,
+    updatedBy: actor.uid,
+    updatedAt: serverTimestamp(),
+  });
+  await commitWrite(() => batch.commit(), { label: "contribution photo" });
+}
+
 export async function updateContributionStatus(
   db: Firestore,
   actor: GaneshActor,
@@ -1026,6 +1050,15 @@ export async function addExpense(
     sponsoredAmount,
   });
   if (!valid.ok) throw new Error(valid.error);
+  if (input.godFundAmount > 0) {
+    const summarySnap = await getDoc(pathRef(db, summaryDoc(pandalId, festivalId)));
+    const summary = {
+      ...EMPTY_GANESH_SUMMARY,
+      ...(summarySnap.exists() ? summarySnap.data() : {}),
+    };
+    const spendOk = validateGodFundSpend(input.godFundAmount, availableGodFund(summary));
+    if (!spendOk.ok) throw new Error(spendOk.error);
+  }
   const id = newId();
   const batch = writeBatch(db);
   batch.set(
@@ -1082,6 +1115,26 @@ export async function addExpense(
   });
   await commitWrite(() => batch.commit(), { label: "expense" });
   return id;
+}
+
+export async function attachExpenseReceipt(
+  db: Firestore,
+  actor: GaneshActor,
+  pandalId: string,
+  festivalId: string,
+  expenseId: string,
+  receipt: GaneshFileMeta
+): Promise<void> {
+  const ref = pathRef(db, [...festivalCol(pandalId, festivalId, "expenses"), expenseId]);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) throw new Error("Expense not found.");
+  const batch = writeBatch(db);
+  batch.update(ref, {
+    receipt,
+    updatedBy: actor.uid,
+    updatedAt: serverTimestamp(),
+  });
+  await commitWrite(() => batch.commit(), { label: "expense receipt" });
 }
 
 export async function addReimbursement(

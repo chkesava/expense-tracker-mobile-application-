@@ -246,13 +246,9 @@ export default function GaneshLoginScreen() {
             </View>
           )}
 
-          <Pressable
-            onPress={() => {
-              void setActiveWorkspace("expense");
-            }}
-          >
+          <Pressable onPress={() => replace("/welcome" as never)}>
             <Text style={{ color: theme.colors.mutedForeground, textAlign: "center" }}>
-              Back to Expense Tracker
+              Choose Expense Tracker or Ganesh Seva
             </Text>
           </Pressable>
         </ScrollView>

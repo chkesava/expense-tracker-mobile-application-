@@ -55,7 +55,7 @@ function GaneshStack() {
       }}
     >
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      <Stack.Screen name="setup" options={{ title: "Your Pandals" }} />
+      <Stack.Screen name="setup" options={{ title: "Ganesh Seva" }} />
       <Stack.Screen name="add-collection" options={{ title: "Add collection" }} />
       <Stack.Screen name="add-expense" options={{ title: "Add expense" }} />
       <Stack.Screen name="add-contribution" options={{ title: "Add contribution" }} />

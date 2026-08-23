@@ -274,6 +274,7 @@ function RootNavigator() {
         }}
       >
         <Stack.Screen name="index" />
+        <Stack.Screen name="welcome" options={{ animation: "fade" }} />
         <Stack.Screen name="onboarding" options={{ animation: "fade" }} />
         <Stack.Screen name="(auth)" options={{ animation: "fade" }} />
         <Stack.Screen name="(app)" />

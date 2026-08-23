@@ -59,6 +59,13 @@
           "icon": "./assets/branding/notification-icon.png",
           "color": "#071A2B"
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Spendly to attach Ganesh receipt and contribution photos.",
+          "cameraPermission": "Allow Spendly to photograph Ganesh receipts and contributions."
+        }
       ]
     ],
     "experiments": {

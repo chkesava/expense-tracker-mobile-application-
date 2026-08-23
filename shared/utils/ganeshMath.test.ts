@@ -12,6 +12,7 @@ import {
   validateCollection,
   validateExpenseFunding,
   validateFundTransfer,
+  validateGodFundSpend,
   validateInKindValue,
   validateReimbursement,
   validateSettlement,
@@ -103,6 +104,21 @@ describe("validateExpenseFunding", () => {
       personalAmount: 1000,
     });
     expect(result.ok).toBe(false);
+  });
+});
+
+describe("validateGodFundSpend", () => {
+  it("allows a personal or sponsored expense that uses no God Fund", () => {
+    expect(validateGodFundSpend(0, 0)).toEqual({ ok: true });
+  });
+
+  it("rejects a God Fund spend larger than the available balance", () => {
+    const result = validateGodFundSpend(500, 200);
+    expect(result.ok).toBe(false);
+  });
+
+  it("accepts a God Fund spend within the available balance", () => {
+    expect(validateGodFundSpend(200, 500)).toEqual({ ok: true });
   });
 });
 

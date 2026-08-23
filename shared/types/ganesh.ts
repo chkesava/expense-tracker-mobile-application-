@@ -48,6 +48,15 @@ export type GaneshLedgerType =
 
 export type JoinRequestStatus = "pending" | "approved" | "rejected";
 
+export type GaneshFileMeta = {
+  path: string;
+  fileName: string;
+  mimeType: "image/jpeg" | "image/png" | "image/webp";
+  size: number;
+  uploadedAt?: string;
+  uploadedBy?: string;
+};
+
 export type AuditAction =
   | "created"
   | "edited"
@@ -101,6 +110,7 @@ export interface PandalInvite {
 export interface PandalJoinRequest {
   id: string;
   pandalId: string;
+  pandalName?: string;
   userId: string;
   displayName: string;
   phone?: string;
@@ -281,6 +291,7 @@ export interface GaneshContribution extends GaneshAuditFields, GaneshVoidFields 
   date: string;
   status: ContributionStatus;
   photoPath?: string;
+  photo?: GaneshFileMeta;
   ledgerType?: "COMMITTEE_CONTRIBUTION" | "OTHER_DONATION";
   pendingWrite?: boolean;
 }
@@ -300,6 +311,7 @@ export interface GaneshExpense extends GaneshAuditFields, GaneshVoidFields {
   notes?: string;
   date: string;
   receiptPath?: string;
+  receipt?: GaneshFileMeta;
   linkedContributionId?: string;
   ledgerType: "EXPENSE";
   pendingWrite?: boolean;

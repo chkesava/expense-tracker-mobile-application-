@@ -112,6 +112,17 @@ export function validateExpenseFunding(input: FundingInput): ValidationResult {
   return { ok: true };
 }
 
+export function validateGodFundSpend(
+  godFundAmount: number,
+  available: number
+): ValidationResult {
+  if (money(godFundAmount) <= 0) return { ok: true };
+  if (money(godFundAmount) > money(available)) {
+    return { ok: false, error: "God Fund does not have enough money for this expense." };
+  }
+  return { ok: true };
+}
+
 export function validateReimbursement(
   amount: number,
   pendingPersonalExpense: number

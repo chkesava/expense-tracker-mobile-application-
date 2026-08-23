@@ -60,9 +60,5 @@ export default function Index() {
     return <Redirect href="/onboarding" />;
   }
 
-  if (activeWorkspace === "ganesh") {
-    return <Redirect href={"/(ganesh-auth)/login" as any} />;
-  }
-
-  return <Redirect href="/(auth)/login" />;
+  return <Redirect href={"/welcome" as any} />;
 }

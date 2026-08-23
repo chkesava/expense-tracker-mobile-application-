@@ -14,7 +14,12 @@ import {
   transferPermanentToFestival,
 } from "@/services/ganesh/ganeshPermanentFund";
 import * as writes from "@/services/ganesh/ganeshWrites";
-import type { GaneshMemberStatus, GaneshRole, PermanentFundLocation } from "@/shared/types/ganesh";
+import type {
+  GaneshFileMeta,
+  GaneshMemberStatus,
+  GaneshRole,
+  PermanentFundLocation,
+} from "@/shared/types/ganesh";
 import {
   assertPermission,
   type GaneshPermission,
@@ -141,6 +146,18 @@ export function useGaneshWrites() {
         writes.addContribution(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, input)
       );
     },
+    attachContributionPhoto: (contributionId: string, photo: GaneshFileMeta) => {
+      requirePerm("contributions.update");
+      const ctx = requireFestival();
+      return writes.attachContributionPhoto(
+        ctx.db,
+        ctx.actor,
+        ctx.pandalId,
+        ctx.festivalId,
+        contributionId,
+        photo
+      );
+    },
     updateContributionStatus: (
       contributionId: string,
       status: Parameters<typeof writes.updateContributionStatus>[5]
@@ -163,6 +180,18 @@ export function useGaneshWrites() {
       const ctx = requireFestival();
       return run("Expense saved", () =>
         writes.addExpense(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, input)
+      );
+    },
+    attachExpenseReceipt: (expenseId: string, receipt: GaneshFileMeta) => {
+      requirePerm("expenses.update");
+      const ctx = requireFestival();
+      return writes.attachExpenseReceipt(
+        ctx.db,
+        ctx.actor,
+        ctx.pandalId,
+        ctx.festivalId,
+        expenseId,
+        receipt
       );
     },
     addReimbursement: (input: Parameters<typeof writes.addReimbursement>[4]) => {

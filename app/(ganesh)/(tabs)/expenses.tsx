@@ -4,6 +4,7 @@ import { useRouter } from "expo-router";
 import { FlashList } from "@shopify/flash-list";
 
 import { AccountabilityLine } from "@/components/ganesh/AccountabilityLine";
+import { GaneshSignedPreview } from "@/components/ganesh/GaneshSignedPreview";
 import { GaneshSyncChip, PendingHint } from "@/components/ganesh/GaneshSyncChip";
 import { MetricGrid } from "@/components/ganesh/MetricGrid";
 import { AddFab } from "@/components/ui/AddFab";
@@ -17,6 +18,7 @@ import { formatInr } from "@/shared/utils/ganeshMoney";
 import { memberDisplayName } from "@/shared/utils/ganeshIdentity";
 import { totalExpenses } from "@/shared/utils/ganeshMath";
 import type { GaneshExpense } from "@/shared/types/ganesh";
+import { ganeshStoredPath } from "@/services/ganesh/storage/storageService";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { useTheme } from "@/theme/ThemeProvider";
 
@@ -89,7 +91,9 @@ export default function GaneshExpensesScreen() {
       <FlashList
         data={rows}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }: { item: GaneshExpense }) => (
+        renderItem={({ item }: { item: GaneshExpense }) => {
+          const receiptPath = ganeshStoredPath(item.receipt, item.receiptPath);
+          return (
           <View
             style={{
               backgroundColor: theme.colors.card,
@@ -115,9 +119,17 @@ export default function GaneshExpensesScreen() {
               at={item.createdAt}
               date={item.date}
             />
+            {pandalId && festivalId && receiptPath ? (
+              <GaneshSignedPreview
+                path={receiptPath}
+                pandalId={pandalId}
+                festivalId={festivalId}
+              />
+            ) : null}
             <PendingHint pending={item.pendingWrite} />
           </View>
-        )}
+          );
+        }}
         ListEmptyComponent={
           <EmptyState title="No expenses yet" description="Record God Fund, personal, or split-funded spends." />
         }

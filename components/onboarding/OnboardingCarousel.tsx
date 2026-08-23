@@ -105,7 +105,7 @@ export function OnboardingCarousel() {
   const handleComplete = async () => {
     haptic.success().catch(() => undefined);
     await AsyncStorage.setItem(FIRST_LAUNCH_KEY, "true").catch(() => undefined);
-    router.replace("/(auth)/login" as any);
+    router.replace("/welcome" as any);
   };
 
   const handleNext = () => {

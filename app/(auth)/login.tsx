@@ -9,7 +9,7 @@ import {
   Text,
   View,
 } from "react-native";
-import { Redirect } from "expo-router";
+import { Redirect, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Mail, Lock, Eye, EyeOff } from "lucide-react-native";
@@ -30,6 +30,7 @@ type AuthMode = "login" | "signup" | "forgot";
 
 export default function AuthScreen() {
   const { theme } = useTheme();
+  const { replace } = useRouter();
   const { user, loading: authLoading, loginWithEmail, signUpWithEmail, resetPassword, loginWithGoogleIdToken } =
     useAuth();
   const { settings } = useSystemSettings();
@@ -263,6 +264,11 @@ export default function AuthScreen() {
               </Pressable>
             </Animated.View>
           )}
+          <Pressable onPress={() => replace("/welcome" as never)} hitSlop={8}>
+            <Text style={{ color: isDark ? "#94A3B8" : "#64748B", textAlign: "center", fontSize: 14 }}>
+              Choose Expense Tracker or Ganesh Seva
+            </Text>
+          </Pressable>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

@@ -35,7 +35,16 @@ export const env = {
     messagingSenderId: trimEnv(process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER),
     appId: trimEnv(process.env.EXPO_PUBLIC_FIREBASE_APP_ID),
   },
+
+  supabase: {
+    url: trimEnv(process.env.EXPO_PUBLIC_SUPABASE_URL),
+    publishableKey: trimEnv(process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY),
+  },
 } as const;
+
+export function isSupabaseEnvConfigured(): boolean {
+  return Boolean(env.supabase.url && env.supabase.publishableKey);
+}
 
 export function isFirebaseEnvConfigured(): boolean {
   const f = env.firebase;

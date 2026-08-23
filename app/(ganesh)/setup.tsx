@@ -8,6 +8,7 @@ import { FundLocationChips } from "@/components/ganesh/FundLocationChips";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { useFestivals } from "@/hooks/useFestivals";
 import { useGaneshWrites } from "@/hooks/useGaneshWrites";
+import { useMyJoinRequests } from "@/hooks/useMyJoinRequests";
 import { usePandals } from "@/hooks/usePandals";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
@@ -23,6 +24,7 @@ export default function GaneshSetupScreen() {
   const { replace } = useRouter();
   const { setSession } = useGaneshSession();
   const { pandals } = usePandals();
+  const { pending, rejected } = useMyJoinRequests();
   const writes = useGaneshWrites();
   const [mode, setMode] = useState<"choose" | "create" | "join">("choose");
   const [pandalName, setPandalName] = useState("");
@@ -97,13 +99,27 @@ export default function GaneshSetupScreen() {
   return (
     <GaneshScreen>
       <Text style={{ color: theme.colors.foreground, fontSize: 24, fontWeight: "800" }}>
-        Ganesh Seva
+        Welcome to Ganesh Seva
       </Text>
       <Text style={{ color: theme.colors.mutedForeground, lineHeight: 22 }}>
         {pandals.length === 0
-          ? "Create a Pandal or join with a code. You will see the shared ledger only after you are an active member. Expense Tracker data never appears here."
-          : "Switch Pandal, create another, or join with a code. Expense Tracker data never appears here."}
+          ? "You are not a member of the Pandal yet. Request to join or create the Pandal. You will not see expenses, collections, or the Permanent Fund until an admin accepts you."
+          : "Open a Pandal you already belong to, or join another with a code."}
       </Text>
+      {pending.length > 0 ? (
+        <View style={{ gap: 8 }}>
+          {pending.map((request) => (
+            <Text key={request.id} style={{ color: theme.colors.foreground, fontWeight: "700" }}>
+              Request pending{request.pandalName ? ` for ${request.pandalName}` : ""}. An admin must accept you first.
+            </Text>
+          ))}
+        </View>
+      ) : null}
+      {rejected.length > 0 && pandals.length === 0 ? (
+        <Text style={{ color: theme.colors.mutedForeground }}>
+          A previous join request was rejected. You can request again with the Pandal code.
+        </Text>
+      ) : null}
 
       {pandals.length > 0 ? (
         <View style={{ gap: 10 }}>
@@ -121,9 +137,9 @@ export default function GaneshSetupScreen() {
 
       {mode === "choose" ? (
         <View style={{ gap: 10 }}>
-          <Button onPress={() => setMode("create")}>Create Ganesh Pandal</Button>
-          <Button variant="outline" onPress={() => setMode("join")}>
-            Join with Pandal code
+          <Button onPress={() => setMode("join")}>Request to Join</Button>
+          <Button variant="outline" onPress={() => setMode("create")}>
+            Create Pandal
           </Button>
         </View>
       ) : null}
