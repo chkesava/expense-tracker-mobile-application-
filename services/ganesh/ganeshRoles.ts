@@ -20,6 +20,7 @@ import type {
 import { expandPermissions } from "@/shared/utils/ganeshPermissionRegistry";
 import {
   ALL_GANESH_PERMISSIONS,
+  ASSET_ROLE_DEFAULTS,
   BUILTIN_ROLE_IDS,
   ROLE_PERMISSIONS,
   getEffectivePermissions,
@@ -125,6 +126,10 @@ function roleSeedPayload(actor: GaneshActor, roleId: (typeof BUILTIN_ROLE_IDS)[n
   };
 }
 
+function hasAssetPermission(permissions: unknown): boolean {
+  return Array.isArray(permissions) && permissions.some((item) => String(item).startsWith("assets."));
+}
+
 export async function ensurePandalRoles(
   db: Firestore,
   actor: GaneshActor,
@@ -137,10 +142,28 @@ export async function ensurePandalRoles(
   const existing = new Map(rolesSnap.docs.map((docSnap) => [docSnap.id, docSnap]));
   const seedBatch = writeBatch(db);
   let seeded = 0;
+  const patchedBuiltins = new Set<string>();
   for (const roleId of BUILTIN_ROLE_IDS) {
-    if (existing.has(roleId)) continue;
-    seedBatch.set(doc(db, "pandals", pandalId, "roles", roleId), roleSeedPayload(actor, roleId));
+    const current = existing.get(roleId);
+    if (!current) {
+      seedBatch.set(doc(db, "pandals", pandalId, "roles", roleId), roleSeedPayload(actor, roleId));
+      seeded += 1;
+      patchedBuiltins.add(roleId);
+      continue;
+    }
+    const data = current.data();
+    const currentPerms = Array.isArray(data.permissions)
+      ? (data.permissions as GaneshPermission[])
+      : [];
+    const missing = ASSET_ROLE_DEFAULTS[roleId].filter((perm) => !currentPerms.includes(perm));
+    if (missing.length === 0) continue;
+    seedBatch.update(current.ref, {
+      permissions: expandPermissions([...currentPerms, ...missing]),
+      updatedBy: actor.uid,
+      updatedAt: serverTimestamp(),
+    });
     seeded += 1;
+    patchedBuiltins.add(roleId);
   }
   if (seeded > 0) await commitWrite(() => seedBatch.commit(), { label: "seed roles" });
 
@@ -153,7 +176,6 @@ export async function ensurePandalRoles(
     const isAdmin = role === "admin";
     const hasRoleIds = Array.isArray(data.roleIds);
     const hasPermissions = Array.isArray(data.permissions);
-    if (hasRoleIds && hasPermissions) return;
     const roleIds = hasRoleIds
       ? (data.roleIds as string[])
       : isAdmin
@@ -161,6 +183,13 @@ export async function ensurePandalRoles(
         : BUILTIN_ROLE_IDS.includes(role as (typeof BUILTIN_ROLE_IDS)[number])
           ? [role]
           : ["member"];
+    const assignedPatched = roleIds.some((roleId) => patchedBuiltins.has(roleId));
+    const needsAssetBackfill = isAdmin
+      ? !hasAssetPermission(data.permissions)
+      : assignedPatched || (roleIds.some((id) =>
+          BUILTIN_ROLE_IDS.includes(id as (typeof BUILTIN_ROLE_IDS)[number])
+        ) && !hasAssetPermission(data.permissions));
+    if (hasRoleIds && hasPermissions && !needsAssetBackfill) return;
     const permissions = permissionsForRoleIds(roleIds, roles, isAdmin, role);
     migrateBatch.update(memberSnap.ref, {
       roleIds,

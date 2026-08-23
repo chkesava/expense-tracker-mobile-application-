@@ -18,6 +18,8 @@ describe("ganeshPermissions", () => {
     expect(can("treasurer", "festival.close")).toBe(true);
     expect(can("treasurer", "reimbursements.create")).toBe(true);
     expect(can("treasurer", "permanentFund.read")).toBe(true);
+    expect(can("treasurer", "assets.update")).toBe(true);
+    expect(can("treasurer", "assets.dispose")).toBe(false);
   });
 
   it("lets collectors collect and nothing else financial", () => {
@@ -32,12 +34,18 @@ describe("ganeshPermissions", () => {
     expect(can("viewer", "expenses.read")).toBe(true);
     expect(can("viewer", "expenses.create")).toBe(false);
     expect(can("viewer", "collections.create")).toBe(false);
+    expect(can("viewer", "assets.read")).toBe(true);
+    expect(can("viewer", "assets.create")).toBe(false);
+    expect(can("viewer", "assets.update")).toBe(false);
   });
 
   it("does not let members close festivals or transfer the Permanent Fund", () => {
     expect(can("member", "festival.close")).toBe(false);
     expect(can("member", "permanentFund.transfer")).toBe(false);
     expect(can("member", "expenses.create")).toBe(true);
+    expect(can("member", "assets.create")).toBe(true);
+    expect(can("member", "assets.update")).toBe(false);
+    expect(can("member", "assets.dispose")).toBe(false);
   });
 
   it("gives admin every permission and labels the role for UI", () => {
@@ -56,6 +64,9 @@ describe("ganeshPermissions", () => {
   it("expands write permissions to include the matching read", () => {
     expect(expandPermissions(["expenses.update"])).toEqual(
       expect.arrayContaining(["expenses.update", "expenses.read"])
+    );
+    expect(expandPermissions(["assets.manage"])).toEqual(
+      expect.arrayContaining(["assets.manage", "assets.update", "assets.read"])
     );
   });
 

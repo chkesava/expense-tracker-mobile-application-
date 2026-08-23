@@ -351,6 +351,48 @@ service cloud.firestore {
         || canCloseOrUpdateFestivalOf(pandalId);
     }
 
+    function canReadAssetOf(pandalId) {
+      return hasPermOf(pandalId, 'assets.read')
+        || (
+          isActivePandalMemberOf(pandalId)
+          && !hasPermissionsField(pandalId)
+        );
+    }
+
+    function canCreateAssetOf(pandalId) {
+      return hasPermOf(pandalId, 'assets.create')
+        || (
+          isActivePandalMemberOf(pandalId)
+          && !hasPermissionsField(pandalId)
+          && ganeshRoleOf(pandalId) in ['admin', 'treasurer', 'member']
+        );
+    }
+
+    function canUpdateAssetOf(pandalId) {
+      return hasPermOf(pandalId, 'assets.update')
+        || (
+          isActivePandalMemberOf(pandalId)
+          && !hasPermissionsField(pandalId)
+          && ganeshRoleOf(pandalId) in ['admin', 'treasurer']
+        );
+    }
+
+    function canDisposeAssetOf(pandalId) {
+      return hasPermOf(pandalId, 'assets.dispose')
+        || hasPermOf(pandalId, 'assets.manage')
+        || (
+          isActivePandalMemberOf(pandalId)
+          && !hasPermissionsField(pandalId)
+          && ganeshRoleOf(pandalId) == 'admin'
+        );
+    }
+
+    function canWriteAssetOf(pandalId) {
+      return canCreateAssetOf(pandalId)
+        || canUpdateAssetOf(pandalId)
+        || canDisposeAssetOf(pandalId);
+    }
+
     match /pandalInvites/{code} {
       allow read: if signedIn();
       allow create: if signedIn()
@@ -515,6 +557,27 @@ service cloud.firestore {
       match /permanentFundTransactions/{txId} {
         allow read: if isActivePandalMember();
         allow create: if canWritePermanentFund() && ganeshIdentityCreate();
+        allow update, delete: if false;
+      }
+
+      match /assets/{assetId} {
+        function isDisposeOnlyUpdate() {
+          return request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['status', 'disposeReason', 'updatedBy', 'updatedAt']);
+        }
+
+        allow read: if canReadAssetOf(pandalId);
+        allow create: if canCreateAssetOf(pandalId) && ganeshIdentityCreate();
+        allow update: if ganeshIdentityUpdate() && (
+          canUpdateAssetOf(pandalId)
+          || (canDisposeAssetOf(pandalId) && isDisposeOnlyUpdate())
+        );
+        allow delete: if false;
+      }
+
+      match /assetAudits/{auditId} {
+        allow read: if canReadAssetOf(pandalId) || hasPermOf(pandalId, 'audit.read');
+        allow create: if canWriteAssetOf(pandalId);
         allow update, delete: if false;
       }
 

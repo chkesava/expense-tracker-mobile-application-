@@ -1,8 +1,12 @@
-import type { GaneshStorageCategory } from "@/services/ganesh/storage/storageTypes";
+import type { GaneshFestivalStorageCategory } from "@/services/ganesh/storage/storageTypes";
 
 const SAFE_SEGMENT = /^[A-Za-z0-9_-]{1,64}$/;
 const SAFE_FILE = /^[A-Za-z0-9._-]{1,80}$/;
-const CATEGORIES: GaneshStorageCategory[] = ["expenses", "contributions", "documents"];
+const FESTIVAL_CATEGORIES: GaneshFestivalStorageCategory[] = [
+  "expenses",
+  "contributions",
+  "documents",
+];
 
 export function assertSafeId(value: string, label: string): string {
   const trimmed = value.trim();
@@ -22,14 +26,14 @@ export function sanitizeFileName(fileName: string, fallback: string): string {
 export function buildFestivalFilePath(input: {
   pandalId: string;
   festivalId: string;
-  category: GaneshStorageCategory;
+  category: GaneshFestivalStorageCategory;
   recordId: string;
   fileName: string;
 }): string {
   const pandalId = assertSafeId(input.pandalId, "Pandal");
   const festivalId = assertSafeId(input.festivalId, "festival");
   const recordId = assertSafeId(input.recordId, "record");
-  if (!CATEGORIES.includes(input.category)) {
+  if (!FESTIVAL_CATEGORIES.includes(input.category)) {
     throw new Error("Invalid file category.");
   }
   const fileName = sanitizeFileName(input.fileName, `${input.category}.jpg`);
@@ -47,7 +51,37 @@ export function assertOwnedFestivalPath(
     throw new Error("That file does not belong to this festival.");
   }
   const built = path.split("/");
-  if (built.length !== 7 || !CATEGORIES.includes(built[4] as GaneshStorageCategory)) {
+  if (built.length !== 7 || !FESTIVAL_CATEGORIES.includes(built[4] as GaneshFestivalStorageCategory)) {
+    throw new Error("Invalid storage path.");
+  }
+}
+
+export function buildPandalAssetPath(input: {
+  pandalId: string;
+  assetId: string;
+  fileName: string;
+}): string {
+  const pandalId = assertSafeId(input.pandalId, "Pandal");
+  const assetId = assertSafeId(input.assetId, "asset");
+  const fileName = sanitizeFileName(input.fileName, "assets.jpg");
+  return `pandals/${pandalId}/assets/${assetId}/${fileName}`;
+}
+
+export function isPandalAssetPath(path: string): boolean {
+  const parts = path.split("/");
+  return parts.length === 5 && parts[0] === "pandals" && parts[2] === "assets";
+}
+
+export function assertOwnedPandalAssetPath(
+  path: string,
+  expected: { pandalId: string }
+): void {
+  const pandalId = assertSafeId(expected.pandalId, "Pandal");
+  const prefix = `pandals/${pandalId}/assets/`;
+  if (path.includes("..") || path.startsWith("/") || !path.startsWith(prefix)) {
+    throw new Error("That file does not belong to this Pandal.");
+  }
+  if (!isPandalAssetPath(path)) {
     throw new Error("Invalid storage path.");
   }
 }

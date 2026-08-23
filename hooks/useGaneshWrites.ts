@@ -13,6 +13,7 @@ import {
   transferFestivalToPermanent,
   transferPermanentToFestival,
 } from "@/services/ganesh/ganeshPermanentFund";
+import * as assetWrites from "@/services/ganesh/ganeshAssets";
 import * as writes from "@/services/ganesh/ganeshWrites";
 import type {
   GaneshFileMeta,
@@ -57,6 +58,12 @@ export function useGaneshWrites() {
     if (!pandalId || !festivalId) throw new Error("Select a Pandal and festival first.");
     return { actor, pandalId, festivalId, db: requireDb() };
   }, [actor, pandalId, festivalId]);
+
+  const requirePandal = useCallback(() => {
+    if (!actor) throw new Error("You must be signed in.");
+    if (!pandalId) throw new Error("Select a Pandal first.");
+    return { actor, pandalId, db: requireDb() };
+  }, [actor, pandalId]);
 
   return {
     actor,
@@ -392,6 +399,62 @@ export function useGaneshWrites() {
       return run(makeAdmin ? "Made Pandal Admin" : "Removed Admin access", () =>
         roleWrites.setPandalAdmin(requireDb(), actor, pandalId, targetUserId, makeAdmin)
       );
+    },
+    createPandalAsset: (input: Parameters<typeof assetWrites.createPandalAsset>[3]) => {
+      requirePerm("assets.create");
+      const ctx = requirePandal();
+      return run("Asset added", () =>
+        assetWrites.createPandalAsset(ctx.db, ctx.actor, ctx.pandalId, input)
+      );
+    },
+    updatePandalAsset: (
+      assetId: string,
+      patch: Parameters<typeof assetWrites.updatePandalAsset>[4]
+    ) => {
+      requirePerm("assets.update");
+      const ctx = requirePandal();
+      return run("Asset updated", () =>
+        assetWrites.updatePandalAsset(ctx.db, ctx.actor, ctx.pandalId, assetId, patch)
+      );
+    },
+    adjustAssetQuantity: (
+      assetId: string,
+      input: Parameters<typeof assetWrites.adjustAssetQuantity>[4]
+    ) => {
+      requirePerm("assets.update");
+      const ctx = requirePandal();
+      return run("Quantity updated", () =>
+        assetWrites.adjustAssetQuantity(ctx.db, ctx.actor, ctx.pandalId, assetId, input)
+      );
+    },
+    setAssetStatus: (
+      assetId: string,
+      input: Parameters<typeof assetWrites.setAssetStatus>[4]
+    ) => {
+      if (input.status === "disposed" || input.status === "lost") {
+        requirePerm("assets.dispose");
+      } else {
+        requirePerm("assets.update");
+      }
+      const ctx = requirePandal();
+      return run(
+        input.status === "disposed"
+          ? "Asset disposed"
+          : input.status === "lost"
+            ? "Asset marked lost"
+            : "Status updated",
+        () => assetWrites.setAssetStatus(ctx.db, ctx.actor, ctx.pandalId, assetId, input)
+      );
+    },
+    attachAssetPhoto: (
+      assetId: string,
+      photo: Parameters<typeof assetWrites.attachAssetPhoto>[4]
+    ) => {
+      if (!hasPerm("assets.create") && !hasPerm("assets.update")) {
+        requirePerm("assets.update");
+      }
+      const ctx = requirePandal();
+      return assetWrites.attachAssetPhoto(ctx.db, ctx.actor, ctx.pandalId, assetId, photo);
     },
   };
 }

@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Text, View } from "react-native";
 import { useRouter } from "expo-router";
 
@@ -7,13 +8,17 @@ import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { MetricGrid } from "@/components/ganesh/MetricGrid";
 import { useFestivals } from "@/hooks/useFestivals";
 import { useGaneshSummary } from "@/hooks/useGaneshSummary";
+import { useGaneshWrites } from "@/hooks/useGaneshWrites";
 import { useHouseholds } from "@/hooks/useHouseholds";
 import { useJoinRequests } from "@/hooks/useJoinRequests";
+import { usePandalAssets } from "@/hooks/usePandalAssets";
 import { usePandalMembers } from "@/hooks/usePandalMembers";
 import { usePandalRoles } from "@/hooks/usePandalRoles";
 import { usePandals } from "@/hooks/usePandals";
 import { usePermanentFund } from "@/hooks/usePermanentFund";
+import { logError } from "@/lib/errors";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
+import { summarizeAssets } from "@/shared/utils/ganeshAssets";
 import { formatInr } from "@/shared/utils/ganeshMoney";
 import { useTheme } from "@/theme/ThemeProvider";
 
@@ -30,8 +35,11 @@ export default function AdminDashboardScreen() {
   const { requests, loading: requestsLoading, error: requestsError, retry: retryRequests } =
     useJoinRequests(pandalId);
   const { fund } = usePermanentFund(pandalId);
+  const { assets } = usePandalAssets(pandalId);
+  const writes = useGaneshWrites();
   const { summary } = useGaneshSummary(pandalId, festivalId);
   const { households } = useHouseholds(pandalId, festivalId);
+  const assetSummary = summarizeAssets(assets);
   const pandal = pandals.find((item) => item.id === pandalId);
   const festival = festivals.find((item) => item.id === festivalId);
   const activeMembers = members.filter((member) => member.status === "active" || member.status == null);
@@ -99,6 +107,12 @@ export default function AdminDashboardScreen() {
     });
   }
 
+  useEffect(() => {
+    writes.ensurePandalRoles().catch((error) => {
+      logError("ganesh.admin.ensureRoles", error);
+    });
+  }, [pandalId]);
+
   const loading =
     (pandalsLoading && !pandal) ||
     (festivalsLoading && festivals.length === 0) ||
@@ -130,6 +144,21 @@ export default function AdminDashboardScreen() {
             { label: "Permanent Fund", value: fund.total },
             { label: "Pending reimb.", value: pendingReimb },
           ]}
+        />
+
+        <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>Pandal assets</Text>
+        <MetricGrid
+          items={[
+            { label: "Total", value: `${assetSummary.totalItems}` },
+            { label: "Available", value: `${assetSummary.available}` },
+            { label: "Damaged", value: `${assetSummary.damaged}` },
+            { label: "Disposed", value: `${assetSummary.disposed}` },
+          ]}
+        />
+        <AdminLinkRow
+          title="Pandal assets"
+          subtitle="Inventory that stays with the Pandal across years"
+          onPress={() => push("/(ganesh)/assets" as never)}
         />
 
         <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>Needs attention</Text>

@@ -6,7 +6,7 @@ import { getSignedUrl } from "@/services/ganesh/storage/storageService";
 type Props = {
   path: string;
   pandalId: string;
-  festivalId: string;
+  festivalId?: string;
 };
 
 export const GaneshSignedPreview = memo(function GaneshSignedPreview({

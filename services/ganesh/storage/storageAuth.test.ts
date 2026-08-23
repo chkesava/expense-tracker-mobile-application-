@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { assertCanUpload } from "./storageAuth";
+import { assertCanUpload, assertCanUploadPandalAsset } from "./storageAuth";
 
 const memberUpload = {
   uid: "user-1",
@@ -60,5 +60,29 @@ describe("assertCanUpload", () => {
     expect(() => assertCanUpload({ ...memberUpload, festivalBelongsToPandal: false })).toThrow(
       "You cannot store files in another festival."
     );
+  });
+
+  it("lets a member upload an asset photo without a festival", () => {
+    expect(() =>
+      assertCanUploadPandalAsset({
+        uid: "user-1",
+        role: "member",
+        memberStatus: "active",
+        sessionPandalId: "pandal-a",
+        pandalId: "pandal-a",
+      })
+    ).not.toThrow();
+  });
+
+  it("denies a viewer uploading an asset photo", () => {
+    expect(() =>
+      assertCanUploadPandalAsset({
+        uid: "user-1",
+        role: "viewer",
+        memberStatus: "active",
+        sessionPandalId: "pandal-a",
+        pandalId: "pandal-a",
+      })
+    ).toThrow("You do not have permission to upload this file.");
   });
 });

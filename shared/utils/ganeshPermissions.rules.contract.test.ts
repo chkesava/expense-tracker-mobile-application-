@@ -10,6 +10,8 @@ import { describe, expect, it } from "vitest";
 
 import type { GaneshMemberStatus, GaneshRole } from "@/shared/types/ganesh";
 import {
+  RULE_ASSET_CREATE_ROLES,
+  RULE_ASSET_UPDATE_ROLES,
   RULE_COLLECTION_WRITE_ROLES,
   RULE_EXPENSE_WRITE_ROLES,
   RULE_TREASURER_WRITE_ROLES,
@@ -137,6 +139,8 @@ describe("ganesh firestore rules contract", () => {
     expect(roles.filter((role) => can(role, "festival.create"))).toEqual(["admin"]);
     expect(roles.filter((role) => can(role, "festival.update"))).toEqual(RULE_TREASURER_WRITE_ROLES);
     expect(roles.filter((role) => can(role, "audit.read"))).toEqual(RULE_TREASURER_WRITE_ROLES);
+    expect(roles.filter((role) => can(role, "assets.create"))).toEqual(RULE_ASSET_CREATE_ROLES);
+    expect(roles.filter((role) => can(role, "assets.update"))).toEqual(RULE_ASSET_UPDATE_ROLES);
   });
 
   it("does not grant ledger access from ownerId alone", () => {
@@ -259,6 +263,26 @@ describe("ganesh firestore rules contract", () => {
     expect(canReadOwnMemberDoc({ signedIn: false, uid: "u1", memberId: "u1" })).toBe(false);
   });
 
+  it("lets denormalized assets.read through and falls back when permissions are missing", () => {
+    const withAssets: Ctx = {
+      signedIn: true,
+      member: { role: "viewer", status: "active", permissions: ["assets.read"] },
+    };
+    const viewerFallback = viewer;
+    const viewerCannotUpdate: Ctx = {
+      signedIn: true,
+      member: { role: "viewer", status: "active", permissions: ["assets.read"] },
+    };
+    expect(canReadAsset(withAssets)).toBe(true);
+    expect(canReadAsset(viewerFallback)).toBe(true);
+    expect(canCreateAsset(viewerFallback)).toBe(false);
+    expect(canUpdateAsset(viewerFallback)).toBe(false);
+    expect(canUpdateAsset(viewerCannotUpdate)).toBe(false);
+    expect(canCreateAsset(member)).toBe(true);
+    expect(canUpdateAsset(treasurer)).toBe(true);
+    expect(canUpdateAsset(member)).toBe(false);
+  });
+
   it("lets the requester file or refresh a pending join request, but not approve themselves", () => {
     expect(
       canWriteOwnJoinRequest({
@@ -282,6 +306,21 @@ describe("ganesh firestore rules contract", () => {
 
 function canReadOwnMemberDoc(params: { signedIn: boolean; uid: string; memberId: string }): boolean {
   return params.signedIn && params.memberId === params.uid;
+}
+
+function canReadAsset(ctx: Ctx): boolean {
+  return hasPerm(ctx, "assets.read")
+    || (isActivePandalMember(ctx) && !hasPermissionsField(ctx));
+}
+
+function canCreateAsset(ctx: Ctx): boolean {
+  return hasPerm(ctx, "assets.create")
+    || (isActivePandalMember(ctx) && !hasPermissionsField(ctx) && RULE_ASSET_CREATE_ROLES.includes(roleOf(ctx)!));
+}
+
+function canUpdateAsset(ctx: Ctx): boolean {
+  return hasPerm(ctx, "assets.update")
+    || (isActivePandalMember(ctx) && !hasPermissionsField(ctx) && RULE_ASSET_UPDATE_ROLES.includes(roleOf(ctx)!));
 }
 
 function canWriteOwnJoinRequest(params: {

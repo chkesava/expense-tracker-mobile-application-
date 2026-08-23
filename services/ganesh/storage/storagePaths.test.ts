@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   assertOwnedFestivalPath,
+  assertOwnedPandalAssetPath,
   assertSafeId,
   buildFestivalFilePath,
+  buildPandalAssetPath,
   ganeshStoredPath,
+  isPandalAssetPath,
   sanitizeFileName,
 } from "./storagePaths";
 
@@ -64,6 +67,23 @@ describe("storagePaths", () => {
         festivalId: "fest2026",
       })
     ).toThrow();
+  });
+
+  it("builds a Pandal-level asset path without a festival", () => {
+    expect(
+      buildPandalAssetPath({
+        pandalId: "pandal1",
+        assetId: "asset1",
+        fileName: "chair.jpg",
+      })
+    ).toBe("pandals/pandal1/assets/asset1/chair.jpg");
+    expect(isPandalAssetPath("pandals/pandal1/assets/asset1/chair.jpg")).toBe(true);
+    expect(isPandalAssetPath("pandals/pandal1/festivals/fest2026/expenses/exp1/receipt.jpg")).toBe(
+      false
+    );
+    expect(() =>
+      assertOwnedPandalAssetPath("pandals/pandal2/assets/asset1/chair.jpg", { pandalId: "pandal1" })
+    ).toThrow("That file does not belong to this Pandal.");
   });
 
   it("ignores legacy public Firebase URLs", () => {

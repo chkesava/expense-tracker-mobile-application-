@@ -10,7 +10,8 @@ export type PermissionGroupId =
   | "members"
   | "roles"
   | "settings"
-  | "audit";
+  | "audit"
+  | "assets";
 
 export type PermissionGroup = {
   id: PermissionGroupId;
@@ -111,6 +112,17 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     label: "Audit",
     items: [{ key: "audit.read", label: "View" }],
   },
+  {
+    id: "assets",
+    label: "Assets",
+    items: [
+      { key: "assets.read", label: "View" },
+      { key: "assets.create", label: "Add" },
+      { key: "assets.update", label: "Update" },
+      { key: "assets.dispose", label: "Dispose" },
+      { key: "assets.manage", label: "Manage" },
+    ],
+  },
 ];
 
 export const PERMISSION_DEPENDENCIES: Partial<Record<GaneshPermission, GaneshPermission[]>> = {
@@ -138,6 +150,10 @@ export const PERMISSION_DEPENDENCIES: Partial<Record<GaneshPermission, GaneshPer
   "roles.delete": ["roles.read"],
   "roles.assign": ["roles.read"],
   "settings.update": ["settings.read"],
+  "assets.create": ["assets.read"],
+  "assets.update": ["assets.read"],
+  "assets.dispose": ["assets.read"],
+  "assets.manage": ["assets.read", "assets.update"],
 };
 
 export const CRITICAL_PERMISSIONS: GaneshPermission[] = [
@@ -146,6 +162,8 @@ export const CRITICAL_PERMISSIONS: GaneshPermission[] = [
   "members.assignRole",
   "members.remove",
   "roles.assign",
+  "assets.dispose",
+  "assets.manage",
 ];
 
 export function expandPermissions(input: readonly GaneshPermission[]): GaneshPermission[] {

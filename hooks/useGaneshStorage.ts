@@ -10,6 +10,7 @@ import {
   deleteFile,
   getSignedUrl,
   uploadFestivalFile,
+  uploadPandalAssetFile,
 } from "@/services/ganesh/storage/storageService";
 import type { PreparedGaneshImage } from "@/services/ganesh/storage/storageTypes";
 import type { GaneshFileMeta } from "@/shared/types/ganesh";
@@ -17,7 +18,7 @@ import type { GaneshFileMeta } from "@/shared/types/ganesh";
 export function useGaneshStorage() {
   const { realUser } = useAuth();
   const { pandalId, festivalId } = useGaneshSession();
-  const { role, status, permissions } = useGaneshPermissions();
+  const { role, status, permissions, can } = useGaneshPermissions();
   const { festivals } = useFestivals(pandalId);
   const writes = useGaneshWrites();
   const { isOnline } = useNetwork();
@@ -73,18 +74,41 @@ export function useGaneshStorage() {
     [uploadPrepared, writes]
   );
 
+  const uploadAssetPhoto = useCallback(
+    async (assetId: string, file: PreparedGaneshImage) => {
+      if (!realUser?.uid) throw new Error("You must be signed in.");
+      if (!pandalId) throw new Error("Select a Pandal first.");
+      if (!can("assets.create") && !can("assets.update")) {
+        throw new Error("You do not have permission to upload this file.");
+      }
+      const meta = await uploadPandalAssetFile({
+        uid: realUser.uid,
+        role,
+        permissions,
+        memberStatus: status,
+        sessionPandalId: pandalId,
+        pandalId,
+        assetId,
+        file,
+      });
+      await writes.attachAssetPhoto(assetId, meta);
+      return meta;
+    },
+    [can, pandalId, permissions, realUser?.uid, role, status, writes]
+  );
+
   const signedUrl = useCallback(
     async (path: string): Promise<string> => {
-      if (!pandalId || !festivalId) throw new Error("Select a Pandal and festival first.");
-      return getSignedUrl(path, { pandalId, festivalId });
+      if (!pandalId) throw new Error("Select a Pandal first.");
+      return getSignedUrl(path, { pandalId, festivalId: festivalId ?? undefined });
     },
     [festivalId, pandalId]
   );
 
   const removeStoredFile = useCallback(
     async (path: string): Promise<void> => {
-      if (!pandalId || !festivalId) throw new Error("Select a Pandal and festival first.");
-      await deleteFile(path, { pandalId, festivalId });
+      if (!pandalId) throw new Error("Select a Pandal first.");
+      await deleteFile(path, { pandalId, festivalId: festivalId ?? undefined });
     },
     [festivalId, pandalId]
   );
@@ -95,6 +119,7 @@ export function useGaneshStorage() {
     festivalId,
     uploadExpenseReceipt,
     uploadContributionPhoto,
+    uploadAssetPhoto,
     signedUrl,
     removeStoredFile,
   };

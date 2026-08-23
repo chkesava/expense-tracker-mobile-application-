@@ -60,3 +60,11 @@ export function pandalMemberAuditsCol(pandalId: string): string[] {
 export function pandalRolesCol(pandalId: string): string[] {
   return ["pandals", pandalId, "roles"];
 }
+
+export function pandalAssetsCol(pandalId: string): string[] {
+  return ["pandals", pandalId, "assets"];
+}
+
+export function pandalAssetAuditsCol(pandalId: string): string[] {
+  return ["pandals", pandalId, "assetAudits"];
+}

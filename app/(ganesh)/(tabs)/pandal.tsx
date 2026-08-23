@@ -109,6 +109,25 @@ export default function PandalScreen() {
             : undefined
         }
       />
+      {can("assets.read") ? (
+        <Pressable
+          onPress={() => push("/(ganesh)/assets" as never)}
+          style={{
+            backgroundColor: theme.colors.card,
+            borderColor: theme.colors.border,
+            borderWidth: 1,
+            borderRadius: 16,
+            padding: 14,
+            gap: 6,
+          }}
+        >
+          <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>Pandal assets</Text>
+          <Text style={{ color: theme.colors.mutedForeground }}>
+            Chairs, speakers, and other items that stay with the Pandal
+          </Text>
+          <Text style={{ color: theme.colors.primary, fontWeight: "700" }}>Open</Text>
+        </Pressable>
+      ) : null}
       <MetricGrid
         items={[
           {

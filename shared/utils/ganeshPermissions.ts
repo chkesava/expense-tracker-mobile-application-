@@ -36,7 +36,12 @@ export type GaneshPermission =
   | "roles.assign"
   | "settings.read"
   | "settings.update"
-  | "audit.read";
+  | "audit.read"
+  | "assets.read"
+  | "assets.create"
+  | "assets.update"
+  | "assets.dispose"
+  | "assets.manage";
 
 export const ALL_GANESH_PERMISSIONS: GaneshPermission[] = [
   "collections.read",
@@ -73,6 +78,11 @@ export const ALL_GANESH_PERMISSIONS: GaneshPermission[] = [
   "settings.read",
   "settings.update",
   "audit.read",
+  "assets.read",
+  "assets.create",
+  "assets.update",
+  "assets.dispose",
+  "assets.manage",
 ];
 
 const READ_LEDGER: GaneshPermission[] = [
@@ -83,6 +93,7 @@ const READ_LEDGER: GaneshPermission[] = [
   "members.read",
   "permanentFund.read",
   "festival.read",
+  "assets.read",
 ];
 
 const MEMBER_WRITES: GaneshPermission[] = [
@@ -93,6 +104,7 @@ const MEMBER_WRITES: GaneshPermission[] = [
   "expenses.update",
   "contributions.create",
   "contributions.update",
+  "assets.create",
 ];
 
 const TREASURER_PERMISSIONS: GaneshPermission[] = [
@@ -103,6 +115,7 @@ const TREASURER_PERMISSIONS: GaneshPermission[] = [
   "festival.close",
   "openingFunds.create",
   "audit.read",
+  "assets.update",
 ];
 
 const ADMIN_PERMISSIONS: GaneshPermission[] = [...ALL_GANESH_PERMISSIONS];
@@ -116,6 +129,7 @@ const COLLECTOR_PERMISSIONS: GaneshPermission[] = [
   "members.read",
   "permanentFund.read",
   "festival.read",
+  "assets.read",
 ];
 
 const VIEWER_PERMISSIONS: GaneshPermission[] = [...READ_LEDGER];
@@ -153,6 +167,20 @@ export const RULE_EXPENSE_WRITE_ROLES: GaneshRole[] = ["admin", "treasurer", "me
 
 /** Mirrors `canWriteReimbursement()` / `canCloseOrUpdateFestival()` fallback in firestore.rules. */
 export const RULE_TREASURER_WRITE_ROLES: GaneshRole[] = ["admin", "treasurer"];
+
+/** Mirrors `canCreateAsset()` fallback in firestore.rules. */
+export const RULE_ASSET_CREATE_ROLES: GaneshRole[] = ["admin", "treasurer", "member"];
+
+/** Mirrors `canUpdateAsset()` fallback in firestore.rules. */
+export const RULE_ASSET_UPDATE_ROLES: GaneshRole[] = ["admin", "treasurer"];
+
+/** Default `assets.*` keys unioned onto existing builtin role docs. */
+export const ASSET_ROLE_DEFAULTS: Record<(typeof BUILTIN_ROLE_IDS)[number], readonly GaneshPermission[]> = {
+  treasurer: ["assets.read", "assets.create", "assets.update"],
+  member: ["assets.read", "assets.create"],
+  collector: ["assets.read"],
+  viewer: ["assets.read"],
+};
 
 export function isGaneshAdmin(role: GaneshRole | undefined): boolean {
   return role === "admin";

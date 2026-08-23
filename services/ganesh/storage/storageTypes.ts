@@ -9,7 +9,8 @@ export const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"] as 
 
 export type AllowedImageType = (typeof ALLOWED_IMAGE_TYPES)[number];
 
-export type GaneshStorageCategory = "expenses" | "contributions" | "documents";
+export type GaneshFestivalStorageCategory = "expenses" | "contributions" | "documents";
+export type GaneshStorageCategory = GaneshFestivalStorageCategory | "assets";
 
 export type PreparedGaneshImage = {
   uri: string;
@@ -28,8 +29,19 @@ export type UploadFestivalFileInput = {
   pandalId: string;
   festivalId: string;
   recordId: string;
-  category: GaneshStorageCategory;
+  category: GaneshFestivalStorageCategory;
   festivalBelongsToPandal: boolean;
+  file: PreparedGaneshImage;
+};
+
+export type UploadPandalAssetFileInput = {
+  uid: string;
+  role: GaneshRole | undefined;
+  permissions?: GaneshPermission[];
+  memberStatus: string | undefined;
+  sessionPandalId: string | null;
+  pandalId: string;
+  assetId: string;
   file: PreparedGaneshImage;
 };
 

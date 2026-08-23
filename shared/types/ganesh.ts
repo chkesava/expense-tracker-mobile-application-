@@ -172,6 +172,60 @@ export interface PandalMemberAudit {
   at?: FirestoreTime;
 }
 
+export type AssetOwnershipType = "purchased" | "donated" | "sponsored" | "transferred" | "other";
+export type AssetCondition = "new" | "good" | "fair" | "damaged" | "unusable";
+export type AssetStatus = "available" | "in_use" | "damaged" | "lost" | "disposed";
+export type AssetCategory =
+  | "furniture"
+  | "sound"
+  | "lighting"
+  | "electrical"
+  | "kitchen"
+  | "decoration"
+  | "pooja"
+  | "storage"
+  | "other";
+export type AssetUnit = "pieces" | "sets" | "meters" | "other";
+export type PandalAssetAuditAction =
+  | "created"
+  | "edited"
+  | "quantity"
+  | "status"
+  | "disposed"
+  | "photo";
+
+export interface PandalAsset extends GaneshAuditFields {
+  id: string;
+  name: string;
+  category: AssetCategory;
+  quantity: number;
+  unit: AssetUnit;
+  ownershipType: AssetOwnershipType;
+  estimatedValue: number;
+  condition: AssetCondition;
+  status: AssetStatus;
+  location?: string;
+  description?: string;
+  photo?: GaneshFileMeta;
+  sourceName?: string;
+  relatedExpenseId?: string;
+  relatedExpenseFestivalId?: string;
+  relatedContributionId?: string;
+  disposeReason?: string;
+  pendingWrite?: boolean;
+}
+
+export interface PandalAssetAudit {
+  id: string;
+  actorId: string;
+  assetId: string;
+  action: PandalAssetAuditAction;
+  oldValue?: unknown;
+  newValue?: unknown;
+  reason?: string;
+  at?: FirestoreTime;
+}
+
 export interface PandalMember {
   id: string;
   userId: string;
