@@ -301,11 +301,31 @@ jobs:
           git add app.json package.json
           if git diff --staged --quiet; then
             echo "Version files already match v${VERSION_NAME} (build ${VERSION_CODE})."
-          else
-            git commit -m "chore: bump version to v${VERSION_NAME} (build ${VERSION_CODE}) [skip ci]"
-            git push
-            echo "Committed and pushed version bump."
+            exit 0
           fi
+          git commit -m "chore: bump version to v${VERSION_NAME} (build ${VERSION_CODE}) [skip ci]"
+
+          # The APK build takes ~25 minutes. Main can move in that window
+          # (this job failed when a later commit landed before git push).
+          BRANCH="${GITHUB_REF_NAME}"
+          git fetch origin "$BRANCH"
+          if ! git rebase "origin/${BRANCH}"; then
+            echo "::error::Version bump rebase conflicted. APK is published; set app.json to v${VERSION_NAME} (build ${VERSION_CODE}) on ${BRANCH}."
+            git rebase --abort || true
+            exit 1
+          fi
+
+          for attempt in 1 2 3; do
+            if git push origin "HEAD:${BRANCH}"; then
+              echo "Committed and pushed version bump."
+              exit 0
+            fi
+            echo "Push rejected (attempt ${attempt}). Rebasing onto latest ${BRANCH}..."
+            git fetch origin "$BRANCH"
+            git rebase "origin/${BRANCH}"
+          done
+          echo "::error::Could not push version bump after retries. APK is published; bump app.json to v${VERSION_NAME} (build ${VERSION_CODE}) on ${BRANCH}."
+          exit 1
 
       - name: Clean up credentials
         if: always()
