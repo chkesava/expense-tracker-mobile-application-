@@ -28,6 +28,26 @@ describe("sponsorship status helpers", () => {
     );
     expect(isSponsorshipOverdue({ status: "promised" }, today)).toBe(false);
   });
+
+  it("ignores a non-string expected date instead of crashing", () => {
+    const timestamp = { seconds: 1, nanoseconds: 0 } as unknown as string;
+    expect(isSponsorshipOverdue({ status: "promised", expectedDate: timestamp }, today)).toBe(false);
+    expect(() =>
+      summarizeSponsorships(
+        [
+          {
+            sponsorId: "abc",
+            sponsoringType: "cash",
+            amount: 1,
+            estimatedValue: 0,
+            status: "promised",
+            expectedDate: timestamp,
+          },
+        ],
+        today
+      )
+    ).not.toThrow();
+  });
 });
 
 describe("summarizeSponsorships", () => {

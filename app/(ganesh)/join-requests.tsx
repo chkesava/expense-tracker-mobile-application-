@@ -19,17 +19,18 @@ export default function JoinRequestsScreen() {
   const { requests } = useJoinRequests(pandalId);
   const { roles } = usePandalRoles(pandalId);
   const writes = useGaneshWrites();
-  const { can } = useGaneshPermissions();
+  const { can, isAdmin } = useGaneshPermissions();
   const [selected, setSelected] = useState<Record<string, string>>({});
   const assignable = roles.filter((role) => role.id !== "admin");
   const defaultRoleId =
     assignable.find((role) => role.id === "member")?.id ?? assignable[0]?.id ?? "member";
 
   useEffect(() => {
-    writes.ensurePandalRoles().catch((caught) => {
+    if (!isAdmin) return;
+    void writes.ensurePandalRoles().catch((caught) => {
       logError("ganesh.join.ensureRoles", caught);
     });
-  }, [pandalId]);
+  }, [isAdmin, pandalId]);
 
   if (!can("members.approve")) {
     return <GaneshWriteLock message="Only a Pandal Admin can approve join requests." />;

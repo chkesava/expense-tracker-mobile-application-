@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { ActivityIndicator, Text, View } from "react-native";
+import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
@@ -18,34 +18,43 @@ export function AdminGate({ children }: { children: React.ReactNode }) {
     return () => clearTimeout(timer);
   }, [isAdmin, loading, replace]);
 
-  if (loading) {
-    return (
-      <View
-        style={{
-          flex: 1,
-          alignItems: "center",
-          justifyContent: "center",
-          backgroundColor: theme.colors.background,
-        }}
-      >
-        <ActivityIndicator color={theme.colors.primary} />
-      </View>
-    );
-  }
-
-  if (!isAdmin) {
-    return (
-      <GaneshScreen>
-        <Text style={{ color: theme.colors.foreground, fontSize: 22, fontWeight: "800" }}>
-          Access denied
-        </Text>
-        <Text style={{ color: theme.colors.mutedForeground, lineHeight: 22 }}>
-          Only a Pandal Admin can open the Admin Dashboard.
-        </Text>
-        <Button onPress={() => replace("/(ganesh)" as never)}>Back to Ganesh Seva</Button>
-      </GaneshScreen>
-    );
-  }
-
-  return <>{children}</>;
+  return (
+    <View style={styles.root}>
+      {children}
+      {loading ? (
+        <View
+          style={[
+            StyleSheet.absoluteFill,
+            styles.overlay,
+            { backgroundColor: theme.colors.background },
+          ]}
+        >
+          <ActivityIndicator color={theme.colors.primary} />
+        </View>
+      ) : null}
+      {!loading && !isAdmin ? (
+        <View
+          style={[
+            StyleSheet.absoluteFill,
+            { backgroundColor: theme.colors.background },
+          ]}
+        >
+          <GaneshScreen>
+            <Text style={{ color: theme.colors.foreground, fontSize: 22, fontWeight: "800" }}>
+              Access denied
+            </Text>
+            <Text style={{ color: theme.colors.mutedForeground, lineHeight: 22 }}>
+              Only a Pandal Admin can open the Admin Dashboard.
+            </Text>
+            <Button onPress={() => replace("/(ganesh)" as never)}>Back to Ganesh Seva</Button>
+          </GaneshScreen>
+        </View>
+      ) : null}
+    </View>
+  );
 }
+
+const styles = StyleSheet.create({
+  root: { flex: 1 },
+  overlay: { alignItems: "center", justifyContent: "center" },
+});

@@ -8,6 +8,7 @@ import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { MetricGrid } from "@/components/ganesh/MetricGrid";
 import { useContributions } from "@/hooks/useContributions";
 import { useFestivals } from "@/hooks/useFestivals";
+import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { useGaneshSummary } from "@/hooks/useGaneshSummary";
 import { useGaneshWrites } from "@/hooks/useGaneshWrites";
 import { useHouseholds } from "@/hooks/useHouseholds";
@@ -41,6 +42,7 @@ export default function AdminDashboardScreen() {
     useJoinRequests(pandalId);
   const { fund } = usePermanentFund(pandalId);
   const { assets } = usePandalAssets(pandalId);
+  const { isAdmin } = useGaneshPermissions();
   const writes = useGaneshWrites();
   const { summary } = useGaneshSummary(pandalId, festivalId);
   const { contributions } = useContributions(pandalId, festivalId);
@@ -157,10 +159,11 @@ export default function AdminDashboardScreen() {
   }
 
   useEffect(() => {
-    writes.ensurePandalRoles().catch((error) => {
+    if (!isAdmin) return;
+    void writes.ensurePandalRoles().catch((error) => {
       logError("ganesh.admin.ensureRoles", error);
     });
-  }, [pandalId]);
+  }, [isAdmin, pandalId]);
 
   const loading =
     (pandalsLoading && !pandal) ||

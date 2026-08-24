@@ -81,12 +81,16 @@ export function isOpenSponsorship(row?: Pick<GaneshSponsorship, "status"> | null
   return status === "prospective" || status === "promised" || status === "confirmed";
 }
 
+function expectedDateOf(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
 export function isSponsorshipOverdue(
   row?: Pick<GaneshSponsorship, "status" | "expectedDate"> | null,
   today = todayDateInput()
 ): boolean {
   if (!isPromisedSponsorship(row)) return false;
-  const expected = row?.expectedDate?.trim();
+  const expected = expectedDateOf(row?.expectedDate);
   if (!expected) return false;
   return expected < today;
 }
@@ -157,7 +161,8 @@ export function summarizeSponsorships(
   };
   const sponsors = new Set<string>();
 
-  for (const row of rows) {
+  for (const row of rows ?? []) {
+    if (!row) continue;
     const value = sponsorshipValue(row);
     const status = sponsorshipStatusOf(row);
     if (row.sponsorId) sponsors.add(row.sponsorId);

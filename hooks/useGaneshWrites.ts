@@ -422,7 +422,7 @@ export function useGaneshWrites() {
         writes.updateCategory(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, categoryId, input)
       );
     },
-    ensurePandalRoles: () => {
+    ensurePandalRoles: async () => {
       if (!pandalId || !actor) throw new Error("Select a Pandal first.");
       requirePerm("roles.read");
       return roleWrites.ensurePandalRoles(requireDb(), actor, pandalId);

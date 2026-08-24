@@ -21,13 +21,14 @@ export default function AdminRolesScreen() {
   const { roles, loading, error, retry } = usePandalRoles(pandalId);
   const { members } = usePandalMembers(pandalId);
   const writes = useGaneshWrites();
-  const { can } = useGaneshPermissions();
+  const { can, isAdmin } = useGaneshPermissions();
 
   useEffect(() => {
-    writes.ensurePandalRoles().catch((caught) => {
+    if (!isAdmin) return;
+    void writes.ensurePandalRoles().catch((caught) => {
       logError("ganesh.roles.ensure", caught);
     });
-  }, [pandalId]);
+  }, [isAdmin, pandalId]);
 
   const assignedCount = (roleId: string) =>
     members.filter((member) => (member.roleIds ?? []).includes(roleId)).length;
