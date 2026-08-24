@@ -155,8 +155,20 @@ export const CATEGORY_SUGGESTIONS: { keyword: string; category: string; subcateg
   { keyword: "eggs for diet", category: "Health", subcategory: "Gym / Fitness" },
   { keyword: "sbi bluechip", category: "Savings & EMI", subcategory: "SIP / Mutual Funds" },
   { keyword: "mutual fund", category: "Savings & EMI", subcategory: "SIP / Mutual Funds" },
+  { keyword: "bike related", category: "Travel", subcategory: "Vehicle Service" },
   { keyword: "bike service", category: "Travel", subcategory: "Vehicle Service" },
   { keyword: "bike maintenance", category: "Travel", subcategory: "Vehicle Service" },
+  { keyword: "movie tickets", category: "Entertainment", subcategory: "Movies / Events" },
+  { keyword: "movie ticket", category: "Entertainment", subcategory: "Movies / Events" },
+  { keyword: "coconut water", category: "Food", subcategory: "Other Food" },
+  { keyword: "skin care", category: "Shopping", subcategory: "Personal Care" },
+  { keyword: "skincare", category: "Shopping", subcategory: "Personal Care" },
+  { keyword: "mobile recharge", category: "Bills", subcategory: "Mobile Recharge" },
+  { keyword: "brother pocket", category: "Family", subcategory: "Family Support" },
+  { keyword: "pocket money", category: "Family", subcategory: "Family Support" },
+  { keyword: "tiffin", category: "Food", subcategory: "Eating Out" },
+  { keyword: "curd", category: "Food", subcategory: "Milk & Dairy" },
+  { keyword: "dahi", category: "Food", subcategory: "Milk & Dairy" },
   { keyword: "car service", category: "Travel", subcategory: "Vehicle Service" },
   { keyword: "cool drinks", category: "Food", subcategory: "Eating Out" },
   { keyword: "brother related", category: "Family", subcategory: "Family Support" },
@@ -241,6 +253,13 @@ export const LEGACY_CATEGORY_MAP: Record<string, CategoryPair> = {
   Groceries: pair("Food", "Groceries"),
   Petrol: pair("Travel", "Petrol / Diesel"),
   "Cool Drinks": pair("Food", "Eating Out"),
+  "Skin care": pair("Shopping", "Personal Care"),
+  "Skin Care": pair("Shopping", "Personal Care"),
+  "Bike related": pair("Travel", "Vehicle Service"),
+  "Movie tickets": pair("Entertainment", "Movies / Events"),
+  "Mobile Recharge": pair("Bills", "Mobile Recharge"),
+  Tiffin: pair("Food", "Eating Out"),
+  Curd: pair("Food", "Milk & Dairy"),
 };
 
 /**
@@ -532,6 +551,40 @@ export function mapToV2Category(
   if (legacy) return legacy;
 
   return null;
+}
+
+/**
+ * Force any stored pair onto the current 12-parent taxonomy.
+ * Used to collapse leftover custom parents/subs (Brother related, Tiffin, …).
+ */
+export function collapseToCurrentTaxonomy(
+  category: string,
+  subcategory?: string | null,
+  note = ""
+): CategoryPair {
+  const parent = (category || "").trim();
+  const sub = (subcategory || "").trim();
+
+  const node = CATEGORY_TAXONOMY.find((c) => c.name === parent);
+  if (node && sub && node.subcategories.includes(sub)) {
+    return { category: parent, subcategory: sub };
+  }
+
+  const blobs = [[parent, sub].filter(Boolean).join(" "), parent, sub, note];
+  for (const blob of blobs) {
+    const suggestion = suggestCategoryFromNote(blob);
+    if (suggestion) return suggestion;
+  }
+
+  const mapped = mapToV2Category(parent, sub || undefined);
+  if (mapped) return mapped;
+
+  const lower = parent.toLowerCase();
+  for (const [legacyName, pairValue] of Object.entries(LEGACY_CATEGORY_MAP)) {
+    if (legacyName.toLowerCase() === lower) return pairValue;
+  }
+
+  return mapLegacyExpense(parent, note || sub);
 }
 
 export function mapLegacyExpense(legacyCategory: string, note = ""): CategoryPair {

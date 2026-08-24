@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   CATEGORY_TAXONOMY,
+  collapseToCurrentTaxonomy,
   mapLegacyExpense,
   mapToV2Category,
   suggestCategoryFromNote,
@@ -96,6 +97,47 @@ describe("mapToV2Category", () => {
     expect(mapToV2Category("Travel", "Petrol / Diesel")).toEqual({
       category: "Travel",
       subcategory: "Petrol / Diesel",
+    });
+  });
+});
+
+describe("collapseToCurrentTaxonomy", () => {
+  it("maps Brother related onto Family Support", () => {
+    expect(collapseToCurrentTaxonomy("Brother related")).toEqual({
+      category: "Family",
+      subcategory: "Family Support",
+    });
+  });
+
+  it("maps custom Food subs like Tiffin and Curd", () => {
+    expect(collapseToCurrentTaxonomy("Food", "Tiffin")).toEqual({
+      category: "Food",
+      subcategory: "Eating Out",
+    });
+    expect(collapseToCurrentTaxonomy("Food", "Curd")).toEqual({
+      category: "Food",
+      subcategory: "Milk & Dairy",
+    });
+  });
+
+  it("maps petrol-style custom parents onto Travel", () => {
+    expect(collapseToCurrentTaxonomy("Petrol for travel")).toEqual({
+      category: "Travel",
+      subcategory: "Petrol / Diesel",
+    });
+  });
+
+  it("maps leftover custom names onto Other when nothing matches", () => {
+    expect(collapseToCurrentTaxonomy("Office Chai Fund", "Snacks")).toEqual({
+      category: "Other",
+      subcategory: "Miscellaneous",
+    });
+  });
+
+  it("keeps valid current pairs", () => {
+    expect(collapseToCurrentTaxonomy("Food", "Groceries")).toEqual({
+      category: "Food",
+      subcategory: "Groceries",
     });
   });
 });
