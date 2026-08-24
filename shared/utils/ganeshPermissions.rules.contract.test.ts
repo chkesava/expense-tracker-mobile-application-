@@ -368,6 +368,45 @@ describe("ganesh firestore rules contract", () => {
     expect(canManageMembers(member)).toBe(false);
   });
 
+  it("lets a Pandal Admin stamp another person's membership index, but not a member", () => {
+    expect(
+      canWritePandalMembershipIndex({
+        isOwner: false,
+        actor: admin,
+        pandalId: "p1",
+        payloadPandalId: "p1",
+        status: "active",
+      })
+    ).toBe(true);
+    expect(
+      canWritePandalMembershipIndex({
+        isOwner: true,
+        actor: member,
+        pandalId: "p1",
+        payloadPandalId: "p1",
+        status: "active",
+      })
+    ).toBe(true);
+    expect(
+      canWritePandalMembershipIndex({
+        isOwner: false,
+        actor: member,
+        pandalId: "p1",
+        payloadPandalId: "p1",
+        status: "active",
+      })
+    ).toBe(false);
+    expect(
+      canWritePandalMembershipIndex({
+        isOwner: false,
+        actor: admin,
+        pandalId: "p1",
+        payloadPandalId: "other",
+        status: "active",
+      })
+    ).toBe(false);
+  });
+
   it("lets fallback treasurer and denormalized receive mark promised as received", () => {
     const denormalizedReceive: Ctx = {
       signedIn: true,
@@ -467,6 +506,21 @@ function canWriteOwnJoinRequest(params: {
   nextStatus: "pending" | "approved" | "rejected";
 }): boolean {
   return params.signedIn && params.requestUserId === params.uid && params.nextStatus === "pending";
+}
+
+function canWritePandalMembershipIndex(params: {
+  isOwner: boolean;
+  actor: Ctx;
+  pandalId: string;
+  payloadPandalId: string;
+  status: string;
+}): boolean {
+  if (params.isOwner) return true;
+  return (
+    canManageMembers(params.actor)
+    && params.payloadPandalId === params.pandalId
+    && (params.status === "active" || params.status === "suspended" || params.status === "removed")
+  );
 }
 
 function canReceiveContribution(ctx: Ctx): boolean {

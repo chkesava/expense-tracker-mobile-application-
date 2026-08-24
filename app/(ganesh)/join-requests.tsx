@@ -9,7 +9,8 @@ import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { useGaneshWrites } from "@/hooks/useGaneshWrites";
 import { useJoinRequests } from "@/hooks/useJoinRequests";
 import { usePandalRoles } from "@/hooks/usePandalRoles";
-import { logError } from "@/lib/errors";
+import { friendlyErrorMessage, logError } from "@/lib/errors";
+import { toast } from "@/lib/toast";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import { useTheme } from "@/theme/ThemeProvider";
 
@@ -21,6 +22,7 @@ export default function JoinRequestsScreen() {
   const writes = useGaneshWrites();
   const { can, isAdmin } = useGaneshPermissions();
   const [selected, setSelected] = useState<Record<string, string>>({});
+  const [busyId, setBusyId] = useState<string | null>(null);
   const assignable = roles.filter((role) => role.id !== "admin");
   const defaultRoleId =
     assignable.find((role) => role.id === "member")?.id ?? assignable[0]?.id ?? "member";
@@ -31,6 +33,34 @@ export default function JoinRequestsScreen() {
       logError("ganesh.join.ensureRoles", caught);
     });
   }, [isAdmin, pandalId]);
+
+  const decide = async (
+    requestId: string,
+    decision: "approved" | "rejected",
+    roleId: string
+  ) => {
+    if (busyId) return;
+    setBusyId(requestId);
+    try {
+      await writes.decideJoinRequest(
+        requestId,
+        decision,
+        decision === "approved" ? { roleId } : undefined
+      );
+    } catch (caught) {
+      logError(decision === "approved" ? "ganesh.join.approve" : "ganesh.join.reject", caught);
+      toast.error(
+        friendlyErrorMessage(
+          caught,
+          decision === "approved"
+            ? "Could not approve this person."
+            : "Could not reject this request."
+        )
+      );
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   if (!can("members.approve")) {
     return <GaneshWriteLock message="Only a Pandal Admin can approve join requests." />;
@@ -47,6 +77,7 @@ export default function JoinRequestsScreen() {
       ) : (
         requests.map((request) => {
           const roleId = selected[request.id] ?? defaultRoleId;
+          const busy = busyId === request.id;
           return (
             <View
               key={request.id}
@@ -100,18 +131,16 @@ export default function JoinRequestsScreen() {
               <View style={{ flexDirection: "row", gap: 10 }}>
                 <Button
                   style={{ flex: 1 }}
-                  onPress={() =>
-                    void writes.decideJoinRequest(request.id, "approved", { roleId }).catch((caught) => {
-                      logError("ganesh.join.approve", caught);
-                    })
-                  }
+                  loading={busy}
+                  onPress={() => void decide(request.id, "approved", roleId)}
                 >
                   Approve
                 </Button>
                 <Button
                   variant="outline"
                   style={{ flex: 1 }}
-                  onPress={() => void writes.decideJoinRequest(request.id, "rejected")}
+                  disabled={Boolean(busyId)}
+                  onPress={() => void decide(request.id, "rejected", roleId)}
                 >
                   Reject
                 </Button>

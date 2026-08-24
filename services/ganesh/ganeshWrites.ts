@@ -72,6 +72,7 @@ import {
   appendPandalAssetCreate,
   type CreatePandalAssetInput,
 } from "@/services/ganesh/ganeshAssets";
+import { tryStampPandalMembershipIndex } from "@/services/ganesh/ganeshMembershipIndex";
 import { ensurePandalRoles } from "@/services/ganesh/ganeshRoles";
 import { EMPTY_GANESH_SUMMARY } from "@/shared/types/ganesh";
 import {
@@ -441,6 +442,7 @@ export async function decideJoinRequest(
   const pandalId = String(request.pandalId);
   const userId = String(request.userId);
   const batch = writeBatch(db);
+  let approvedRole: GaneshRole | undefined;
   batch.update(doc(db, "pandalJoinRequests", requestId), {
     status: decision,
     decidedBy: actor.uid,
@@ -464,6 +466,7 @@ export async function decideJoinRequest(
       assigned && JOIN_APPROVE_ROLES.includes(assigned.id as GaneshRole)
         ? (assigned.id as GaneshRole)
         : fallbackRole;
+    approvedRole = role;
     const roleIds = [assigned?.id ?? role];
     const permissions = assigned
       ? expandPermissions(assigned.permissions)
@@ -487,12 +490,6 @@ export async function decideJoinRequest(
       memberIds: arrayUnion(userId),
       updatedBy: actor.uid,
       updatedAt: serverTimestamp(),
-    });
-    batch.set(pathRef(db, membershipDoc(userId, pandalId)), {
-      pandalId,
-      role,
-      status: "active",
-      joinedAt: serverTimestamp(),
     });
     memberAudit(batch, db, pandalId, {
       actorId: actor.uid,
@@ -523,6 +520,13 @@ export async function decideJoinRequest(
     });
   }
   await commitWrite(() => batch.commit(), { label: "join decision" });
+  if (approvedRole) {
+    await tryStampPandalMembershipIndex(db, userId, {
+      pandalId,
+      role: approvedRole,
+      status: "active",
+    });
+  }
 }
 
 export async function updatePandalJoinMode(
@@ -664,12 +668,6 @@ export async function updatePandalMember(
     updatedBy: actor.uid,
     updatedAt: serverTimestamp(),
   });
-  batch.set(pathRef(db, membershipDoc(targetUserId, pandalId)), {
-    pandalId,
-    role: nextRole,
-    status: nextStatus,
-    joinedAt: memberSnap.data().createdAt ?? serverTimestamp(),
-  });
   const action =
     nextStatus === "removed"
       ? "removed"
@@ -687,6 +685,12 @@ export async function updatePandalMember(
     reason: input.reason,
   });
   await commitWrite(() => batch.commit(), { label: "member update" });
+  await tryStampPandalMembershipIndex(db, targetUserId, {
+    pandalId,
+    role: nextRole,
+    status: nextStatus,
+    joinedAt: memberSnap.data().createdAt,
+  });
 }
 
 export async function createFestival(

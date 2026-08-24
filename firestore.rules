@@ -463,6 +463,21 @@ service cloud.firestore {
         || canDisposeAssetOf(pandalId);
     }
 
+    // Approving a join request stamps users/{uid}/pandalMemberships/{pandalId}.
+    // The personal users/{uid} tree is owner-only, so this is the explicit
+    // exception — still limited to a Pandal the writer actually admins.
+    match /users/{uid}/pandalMemberships/{pandalId} {
+      allow read: if isOwner(uid);
+      allow create, update: if isOwner(uid)
+        || (
+          canManageMembersOf(pandalId)
+          && request.resource.data.pandalId == pandalId
+          && request.resource.data.role is string
+          && request.resource.data.status in ['active', 'suspended', 'removed']
+        );
+      allow delete: if isOwner(uid) || canManageMembersOf(pandalId);
+    }
+
     match /pandalInvites/{code} {
       allow read: if signedIn();
       allow create: if signedIn()

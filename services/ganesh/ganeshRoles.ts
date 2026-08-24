@@ -12,6 +12,7 @@ import {
 import { newId } from "@/lib/id";
 import { commitWrite } from "@/lib/firestoreWrite";
 import { omitUndefined } from "@/shared/utils/firestorePayload";
+import { tryStampPandalMembershipIndex } from "@/services/ganesh/ganeshMembershipIndex";
 import type {
   GaneshRole,
   PandalMemberAuditAction,
@@ -30,7 +31,8 @@ import {
   validateRoleName,
   type GaneshPermission,
 } from "@/shared/utils/ganeshPermissions";
-import { membershipDoc, pandalMemberAuditsCol } from "@/shared/utils/ganeshPaths";
+import { pandalMemberAuditsCol } from "@/shared/utils/ganeshPaths";
+
 type GaneshActor = {
   uid: string;
   displayName: string;
@@ -398,13 +400,6 @@ export async function setMemberRoleIds(
     role: isAdmin ? "admin" : legacyRole,
     updatedAt: serverTimestamp(),
   });
-  if (!isAdmin) {
-    batch.set(pathRef(db, membershipDoc(targetUserId, pandalId)), {
-      pandalId,
-      role: legacyRole,
-      status: memberSnap.data().status ?? "active",
-    }, { merge: true });
-  }
   const added = unique.filter((id) => !previous.includes(id));
   const removed = previous.filter((id) => !unique.includes(id));
   for (const roleId of added) {
@@ -430,6 +425,13 @@ export async function setMemberRoleIds(
     });
   }
   await commitWrite(() => batch.commit(), { label: "role assignment" });
+  if (!isAdmin) {
+    await tryStampPandalMembershipIndex(db, targetUserId, {
+      pandalId,
+      role: legacyRole,
+      status: String(memberSnap.data().status ?? "active"),
+    });
+  }
 }
 
 export async function setPandalAdmin(
@@ -478,11 +480,6 @@ export async function setPandalAdmin(
     updatedBy: actor.uid,
     updatedAt: serverTimestamp(),
   });
-  batch.set(pathRef(db, membershipDoc(targetUserId, pandalId)), {
-    pandalId,
-    role: nextRole,
-    status,
-  }, { merge: true });
   roleAudit(batch, db, pandalId, {
     actorId: actor.uid,
     targetUserId,
@@ -492,6 +489,11 @@ export async function setPandalAdmin(
     reason: makeAdmin ? "MAKE_PANDAL_ADMIN" : "REMOVE_PANDAL_ADMIN",
   });
   await commitWrite(() => batch.commit(), { label: makeAdmin ? "made admin" : "removed admin" });
+  await tryStampPandalMembershipIndex(db, targetUserId, {
+    pandalId,
+    role: nextRole,
+    status,
+  });
 }
 
 export function builtinPermissions(roleId: (typeof BUILTIN_ROLE_IDS)[number]): GaneshPermission[] {

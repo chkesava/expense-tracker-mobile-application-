@@ -1,12 +1,15 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Redirect, Stack } from "expo-router";
 import { ActivityIndicator, View } from "react-native";
 
 import { PrivacyLock } from "@/components/PrivacyLock";
+import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
 import { useAuth } from "@/providers/AuthProvider";
 import { GaneshSessionProvider } from "@/providers/GaneshSessionProvider";
 import { upsertGaneshProfile } from "@/services/ganesh/ganeshProfile";
+import { claimOwnPandalMembership } from "@/services/ganesh/ganeshMembershipIndex";
+import { useMyJoinRequests } from "@/hooks/useMyJoinRequests";
 import { useTheme } from "@/theme/ThemeProvider";
 
 function GaneshGate({ children }: { children: React.ReactNode }) {
@@ -38,7 +41,36 @@ function GaneshGate({ children }: { children: React.ReactNode }) {
     return <Redirect href={"/(ganesh-auth)/login" as never} />;
   }
 
-  return <>{children}</>;
+  return (
+    <>
+      <ClaimApprovedMemberships />
+      {children}
+    </>
+  );
+}
+
+function ClaimApprovedMemberships() {
+  const { realUser } = useAuth();
+  const { requests } = useMyJoinRequests();
+  const claimed = useRef(new Set<string>());
+
+  useEffect(() => {
+    const db = getFirestoreDb();
+    const uid = realUser?.uid;
+    if (!db || !uid) return;
+    for (const request of requests) {
+      if (request.status !== "approved" || !request.pandalId) continue;
+      const key = `${uid}:${request.pandalId}`;
+      if (claimed.current.has(key)) continue;
+      claimed.current.add(key);
+      void claimOwnPandalMembership(db, uid, request.pandalId).catch((error) => {
+        claimed.current.delete(key);
+        logError("ganesh.claimMembership", error);
+      });
+    }
+  }, [realUser?.uid, requests]);
+
+  return null;
 }
 
 function GaneshStack() {
