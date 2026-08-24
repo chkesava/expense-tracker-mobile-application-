@@ -10,6 +10,7 @@ import {
   othersFullyCollected,
   participantPaidAmount,
   participantRemainingDue,
+  recalibrateSplitAfterAddParticipant,
   recalibrateSplitAfterAmountChange,
   recalibrateSplitAfterOptOut,
   validateCustomSplits,
@@ -666,6 +667,170 @@ describe("splitMath utilities", () => {
       expect(recalibrateSplitAfterAmountChange(fiveWayDinner(), 100)).toEqual({
         error: "The amount is already that value.",
       });
+    });
+  });
+
+  describe("recalibrateSplitAfterAddParticipant", () => {
+    function giftPot(paidFriend: boolean): Split {
+      return {
+        id: "s-gift",
+        title: "Wedding gift",
+        totalAmount: 1000,
+        splitType: "equal",
+        kind: "collect",
+        status: "collecting",
+        createdBy: "me",
+        createdAt: 1,
+        settled: false,
+        participantIds: [],
+        participants: [
+          {
+            key: "you",
+            name: "You",
+            amount: 500,
+            paid: true,
+            paidAmount: 500,
+            isCurrentUser: true,
+          },
+          {
+            key: "alice",
+            name: "Alice",
+            amount: 500,
+            paid: paidFriend,
+            paidAmount: paidFriend ? 500 : 0,
+            isCurrentUser: false,
+          },
+        ],
+      };
+    }
+
+    it("splits a ₹1000 gift among 3 after adding a friend", () => {
+      const result = recalibrateSplitAfterAddParticipant(giftPot(false), {
+        name: "Bob",
+      });
+      expect("error" in result).toBe(false);
+      if ("error" in result) return;
+
+      const contributing = result.participants.filter(
+        (p) => p.contributing !== false
+      );
+      expect(contributing).toHaveLength(3);
+      expect(contributing.reduce((sum, p) => p.amount + sum, 0)).toBeCloseTo(
+        1000,
+        2
+      );
+      expect(result.participants[2].name).toBe("Bob");
+      expect(result.participants[2].isCurrentUser).toBe(false);
+      expect(result.participants[2].paid).toBe(false);
+      expect(participantPaidAmount(result.participants[2])).toBe(0);
+      expect(result.participants[2].shareRaised).toBeUndefined();
+      expect(result.settled).toBe(false);
+      for (const p of contributing) {
+        expect(p.amount).toBeCloseTo(333.33, 1);
+      }
+    });
+
+    it("keeps money already collected and clears a raised-share flag", () => {
+      const split = giftPot(true);
+      split.participants[0].shareRaised = true;
+      split.participants[1].shareRaised = true;
+      const result = recalibrateSplitAfterAddParticipant(split, { name: "Bob" });
+      expect("error" in result).toBe(false);
+      if ("error" in result) return;
+
+      expect(participantPaidAmount(result.participants[0])).toBe(500);
+      expect(participantRemainingDue(result.participants[0])).toBe(0);
+      expect(result.participants[0].paid).toBe(true);
+      expect(result.participants[0].shareRaised).toBeUndefined();
+      expect(participantPaidAmount(result.participants[1])).toBe(500);
+      expect(participantRemainingDue(result.participants[1])).toBe(0);
+      expect(result.participants[2].name).toBe("Bob");
+      expect(participantRemainingDue(result.participants[2])).toBeCloseTo(
+        result.participants[2].amount,
+        2
+      );
+    });
+
+    it("rescales custom amounts so everyone still sums to the total", () => {
+      const split: Split = {
+        id: "s-custom-add",
+        title: "Custom gift",
+        totalAmount: 1000,
+        splitType: "custom",
+        kind: "collect",
+        status: "collecting",
+        createdBy: "me",
+        createdAt: 1,
+        settled: false,
+        participantIds: [],
+        participants: [
+          {
+            key: "you",
+            name: "You",
+            amount: 400,
+            paid: true,
+            paidAmount: 400,
+            isCurrentUser: true,
+          },
+          {
+            key: "a",
+            name: "A",
+            amount: 350,
+            paid: false,
+            paidAmount: 0,
+            isCurrentUser: false,
+          },
+          {
+            key: "b",
+            name: "B",
+            amount: 250,
+            paid: false,
+            paidAmount: 0,
+            isCurrentUser: false,
+          },
+        ],
+      };
+      const result = recalibrateSplitAfterAddParticipant(split, { name: "C" });
+      expect("error" in result).toBe(false);
+      if ("error" in result) return;
+      const contributing = result.participants.filter(
+        (p) => p.contributing !== false
+      );
+      expect(contributing).toHaveLength(4);
+      expect(contributing.reduce((sum, p) => p.amount + sum, 0)).toBeCloseTo(
+        1000,
+        2
+      );
+      expect(result.participants[3].name).toBe("C");
+      expect(result.participants[3].amount).toBeGreaterThan(0);
+      expect(result.participants[0].amount).toBeLessThan(400);
+    });
+
+    it("blocks spent pots, empty names, and people already in", () => {
+      const spent = giftPot(false);
+      spent.status = "spent";
+      expect(recalibrateSplitAfterAddParticipant(spent, { name: "Bob" })).toEqual(
+        { error: "This pot has already been spent." }
+      );
+      expect(
+        recalibrateSplitAfterAddParticipant(giftPot(false), { name: "   " })
+      ).toEqual({ error: "Enter a name." });
+      expect(
+        recalibrateSplitAfterAddParticipant(giftPot(false), { name: "alice" })
+      ).toEqual({ error: "That person is already in this split." });
+    });
+
+    it("lets you add back someone who dropped out under the same name", () => {
+      const split = giftPot(false);
+      split.participants[1].contributing = false;
+      split.participants[1].amount = 0;
+      const result = recalibrateSplitAfterAddParticipant(split, { name: "Alice" });
+      expect("error" in result).toBe(false);
+      if ("error" in result) return;
+      expect(result.participants).toHaveLength(3);
+      expect(result.participants[1].contributing).toBe(false);
+      expect(result.participants[2].name).toBe("Alice");
+      expect(result.participants[2].contributing).not.toBe(false);
     });
   });
 });

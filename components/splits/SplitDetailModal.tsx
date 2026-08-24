@@ -10,9 +10,10 @@ import {
   Text,
   View,
 } from "react-native";
-import { Check, Pencil, Share2, UserMinus, X } from "lucide-react-native";
+import { Check, Pencil, Plus, Share2, UserMinus, X } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
+import { AddParticipantModal } from "@/components/splits/AddParticipantModal";
 import { EditSplitAmountModal } from "@/components/splits/EditSplitAmountModal";
 import { SplitClaimsSection } from "@/components/splits/SplitClaimsSection";
 import { SplitPayQrCard } from "@/components/splits/SplitPayQrCard";
@@ -77,6 +78,7 @@ export function SplitDetailModal({
     unmarkParticipantCollected,
     spendCollectPot,
     optOutParticipant,
+    addParticipant,
     updateSplitAmount,
     ensureSplitSharing,
     applyPaidClaim,
@@ -88,6 +90,7 @@ export function SplitDetailModal({
   const [collectingKey, setCollectingKey] = useState<string | null>(null);
   const [spendOpen, setSpendOpen] = useState(false);
   const [editAmountOpen, setEditAmountOpen] = useState(false);
+  const [addPersonOpen, setAddPersonOpen] = useState(false);
   // "split" while sharing the group link, otherwise the participant key.
   const [sharing, setSharing] = useState<string | null>(null);
   const [claimWorkingKey, setClaimWorkingKey] = useState<string | null>(null);
@@ -727,14 +730,46 @@ export function SplitDetailModal({
             ) : null}
 
             <View style={{ gap: 8 }}>
-              <Text
-                style={[
-                  styles.sectionHeading,
-                  { color: theme.colors.mutedForeground },
-                ]}
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                }}
               >
-                PARTICIPANTS ({split.participants.length})
-              </Text>
+                <Text
+                  style={[
+                    styles.sectionHeading,
+                    { color: theme.colors.mutedForeground },
+                  ]}
+                >
+                  PARTICIPANTS ({split.participants.length})
+                </Text>
+                {isCreator && !spent ? (
+                  <Pressable
+                    onPress={() => {
+                      haptic.selection().catch(() => undefined);
+                      setAddPersonOpen(true);
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Add person to this split"
+                    style={({ pressed }) => [
+                      styles.addPersonBtn,
+                      pressed && { opacity: 0.7 },
+                    ]}
+                  >
+                    <Plus size={12} color={theme.colors.primary} />
+                    <Text
+                      style={[
+                        styles.addPersonText,
+                        { color: theme.colors.primary },
+                      ]}
+                    >
+                      Add person
+                    </Text>
+                  </Pressable>
+                ) : null}
+              </View>
 
               {split.participants.map((p, index) => {
                 const rowKey = p.key || `${p.name}-${index}`;
@@ -1061,6 +1096,23 @@ export function SplitDetailModal({
           return spendCollectPot(split.id, amount, accountId);
         }}
       />
+      <AddParticipantModal
+        visible={addPersonOpen}
+        split={split}
+        onClose={() => setAddPersonOpen(false)}
+        onConfirm={async (name) => {
+          if (!split.id) return false;
+          return addParticipant(
+            split.id,
+            { name },
+            {
+              organizerUpiId: creatorUpiId || undefined,
+              payeePhotoUrl: user?.photoURL || undefined,
+              qrStyleId: getStoredQrStyleId(),
+            }
+          );
+        }}
+      />
       <EditSplitAmountModal
         visible={editAmountOpen}
         split={split}
@@ -1221,6 +1273,15 @@ const styles = StyleSheet.create({
   iconActionBtn: {
     padding: 6,
     borderRadius: 8,
+  },
+  addPersonBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  addPersonText: {
+    fontSize: 11,
+    fontWeight: "700",
   },
   chip: {
     paddingHorizontal: 12,

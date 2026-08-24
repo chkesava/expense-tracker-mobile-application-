@@ -63,6 +63,7 @@ import {
   isParticipantContributing,
   isParticipantShareSettled,
   participantRemainingDue,
+  recalibrateSplitAfterAddParticipant,
   recalibrateSplitAfterAmountChange,
   recalibrateSplitAfterOptOut,
 } from "@/shared/utils/splitMath";
@@ -818,6 +819,87 @@ export function useSplits(options?: { enabled?: boolean }) {
     }
   };
 
+  const addParticipant = async (
+    splitId: string,
+    input: { name: string; upiId?: string },
+    options?: { organizerUpiId?: string; payeePhotoUrl?: string; qrStyleId?: QrStyleId }
+  ): Promise<boolean> => {
+    const db = getFirestoreDb();
+    if (!uid || !db || !splitId) return false;
+
+    const split = splits.find((s) => s.id === splitId);
+    if (!split) return false;
+    if (split.createdBy !== uid) {
+      toast.error("Only the organizer can add people to this split.");
+      return false;
+    }
+
+    const built = recalibrateSplitAfterAddParticipant(split, input);
+    if ("error" in built) {
+      toast.error(built.error);
+      return false;
+    }
+
+    try {
+      const batch = writeBatch(db);
+      let participants = built.participants;
+      const extraSplitFields: Record<string, unknown> = {
+        settled: built.settled,
+      };
+      const organizerUpiId = (options?.organizerUpiId || "").trim();
+
+      if (organizerUpiId) {
+        const shares = buildParticipantShareRequests({
+          splitId,
+          splitTitle: split.title,
+          createdBy: uid,
+          createdAt: Date.now(),
+          payeeName: split.createdByName || user?.displayName || "Me",
+          payeePhotoUrl: options?.payeePhotoUrl,
+          upiId: organizerUpiId,
+          qrStyleId: options?.qrStyleId || getStoredQrStyleId(),
+          currency,
+          skipExisting: true,
+          participants,
+        });
+        const newRequestIds: string[] = [];
+        const applied = shares.map((share) => {
+          const requestRef = doc(collection(db, "paymentRequests"));
+          batch.set(requestRef, share.payload);
+          newRequestIds.push(requestRef.id);
+          return {
+            participantKey: share.participantKey,
+            slug: share.slug,
+            requestId: requestRef.id,
+          };
+        });
+        if (applied.length > 0) {
+          participants = applyShareRequestsToParticipants(participants, applied);
+          extraSplitFields.paymentRequestIds = [
+            ...(split.paymentRequestIds || []),
+            ...newRequestIds,
+          ];
+        }
+      }
+
+      applyShareSideEffects(
+        batch,
+        db,
+        split,
+        participants,
+        extraSplitFields,
+        { currency }
+      );
+      await commitWrite(() => batch.commit(), { label: "split add person" });
+      toast.success(`${input.name.trim()} added`);
+      return true;
+    } catch (err) {
+      logError("splits.addparticipant", err);
+      toast.error(friendlyErrorMessage(err, "Failed to add person"));
+      return false;
+    }
+  };
+
   /**
    * Records a `bill` + `paid` claim filed from the public link.
    *
@@ -1029,6 +1111,7 @@ export function useSplits(options?: { enabled?: boolean }) {
     spendCollectPot,
     settleAll,
     optOutParticipant,
+    addParticipant,
     applyPaidClaim,
     dismissClaim,
     setSplitClaimsEnabled,

@@ -381,15 +381,26 @@ function redistributeContributingShares(
     const amount = newAmounts[n];
     const paidAmount = participantPaidAmount(p);
     const due = roundMoney(Math.max(0, amount - paidAmount));
-    // Sticky: shares only ever rise on redistributes, and the flag is only
-    // read while something is still due, so a stale `true` is never visible.
-    const shareRaised = amount > (Number(p.amount) || 0) ? true : p.shareRaised;
+    const previousAmount = Number(p.amount) || 0;
+    // Set when a share goes up (dropout / higher total). Clear when it goes
+    // down (someone joins / lower total). A brand-new row starts at 0, so
+    // that rise is not a top-up.
+    const shareRaised =
+      amount > previousAmount && previousAmount > 0
+        ? true
+        : amount < previousAmount
+          ? undefined
+          : p.shareRaised;
     next[participantIndex] = {
       ...p,
       amount,
       paid: due <= 0.009,
-      ...(shareRaised ? { shareRaised: true } : {}),
     };
+    if (shareRaised) {
+      next[participantIndex].shareRaised = true;
+    } else {
+      delete next[participantIndex].shareRaised;
+    }
   });
   return next;
 }
@@ -475,6 +486,76 @@ export function recalibrateSplitAfterAmountChange(
   return {
     participants,
     totalAmount,
+    settled: participants.every((p) => isParticipantShareSettled(p)),
+  };
+}
+
+export function addParticipantBlockedReason(
+  split: Split,
+  name: string
+): string | null {
+  if (isCollectSpent(split)) {
+    return "This pot has already been spent.";
+  }
+  const trimmed = name.trim();
+  if (!trimmed) return "Enter a name.";
+  const alreadyIn = (split.participants || []).some(
+    (p) =>
+      isParticipantContributing(p) &&
+      p.name.trim().toLowerCase() === trimmed.toLowerCase()
+  );
+  if (alreadyIn) {
+    return "That person is already in this split.";
+  }
+  const remaining = (split.participants || []).filter(isParticipantContributing);
+  if (remaining.length < 1) {
+    return "At least one person has to stay in the split.";
+  }
+  return null;
+}
+
+/**
+ * Add a contributing person and redistribute the same total among everyone still in.
+ * Equal: new equal shares. Custom: seed the new row with an equal slice, then
+ * rescale remaining amounts so they still sum to the total.
+ * Keeps `paidAmount`; people who already paid keep that credit (they may now
+ * owe nothing extra).
+ */
+export function recalibrateSplitAfterAddParticipant(
+  split: Split,
+  input: { name: string; upiId?: string }
+):
+  | { participants: Participant[]; settled: boolean }
+  | { error: string } {
+  const name = input.name.trim();
+  const blocked = addParticipantBlockedReason(split, name);
+  if (blocked) return { error: blocked };
+
+  const contributingCount =
+    (split.participants || []).filter(isParticipantContributing).length + 1;
+  const seedAmounts = equalShareAmounts(split.totalAmount, contributingCount);
+  const seed = seedAmounts[seedAmounts.length - 1] ?? 0;
+  const upiId = input.upiId?.trim();
+
+  const added: Participant = {
+    key: createParticipantKey(),
+    name,
+    amount: seed,
+    paid: false,
+    paidAmount: 0,
+    contributing: true,
+    isCurrentUser: false,
+  };
+  if (upiId) added.upiId = upiId;
+
+  const participants = redistributeContributingShares(
+    [...split.participants.map((p) => ({ ...p })), added],
+    split.totalAmount,
+    split.splitType
+  );
+
+  return {
+    participants,
     settled: participants.every((p) => isParticipantShareSettled(p)),
   };
 }
