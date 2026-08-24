@@ -243,7 +243,7 @@ describe("expenseDraftFromStatementLine", () => {
     const draft = expenseDraftFromStatementLine(lines[0], "cc-1");
     expect(draft).toEqual({
       amount: 450,
-      category: "Food & Dining",
+      category: "Food",
       subcategory: "Food Delivery",
       date: "2026-08-13",
       month: "2026-08",

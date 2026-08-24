@@ -22,7 +22,7 @@ const mockTrip: Trip = {
   status: "active",
   createdAt: Date.now(),
   categoryBudgets: [
-    { category: "Food & Dining", limit: 8000 },
+    { category: "Food", limit: 8000 },
     { category: "Transport", limit: 6000 },
     { category: "Accommodation", limit: 12000 },
   ],
@@ -32,7 +32,7 @@ const mockExpenses: Expense[] = [
   {
     id: "e1",
     amount: 3000,
-    category: "Food & Dining",
+    category: "Food",
     note: "Beach Shack Dinner",
     date: "2026-08-02",
     month: "2026-08",
@@ -62,7 +62,7 @@ const mockExpenses: Expense[] = [
   {
     id: "e4",
     amount: 2000,
-    category: "Food & Dining",
+    category: "Food",
     note: "Home delivery",
     date: "2026-07-25",
     month: "2026-07",
@@ -87,7 +87,7 @@ describe("tripCalculations utilities", () => {
   describe("computeTripCategoryBreakdown", () => {
     it("returns per-category spend vs limit with percentage", () => {
       const breakdown = computeTripCategoryBreakdown(mockExpenses, mockTrip);
-      const food = breakdown.find((b) => b.category === "Food & Dining");
+      const food = breakdown.find((b) => b.category === "Food");
       expect(food?.spent).toBe(3000);
       expect(food?.limit).toBe(8000);
       expect(food?.percentage).toBe(38); // floor(3000/8000 * 100)

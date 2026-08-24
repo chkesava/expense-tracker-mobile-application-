@@ -12,7 +12,7 @@ import { themeUsesDarkPalette } from "@/theme/tokens";
 
 export interface ActiveFilterChip {
   id: string;
-  /** Rendered as "Category: Food & Dining". */
+  /** Rendered as "Category: Food". */
   label: string;
   onRemove: () => void;
 }

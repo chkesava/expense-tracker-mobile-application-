@@ -224,7 +224,7 @@ export interface CategorizationRule {
 export interface Expense {
   id?: string;
   amount: number;
-  /** Parent category name (e.g. "Food & Dining"). */
+  /** Parent category name (e.g. "Food"). */
   category: string;
   /** Subcategory name (e.g. "Groceries"). */
   subcategory?: string;

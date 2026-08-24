@@ -18,7 +18,7 @@ describe("dayGrouping & transaction summary utilities", () => {
       {
         id: "1",
         amount: 250,
-        category: "Food & Dining",
+        category: "Food",
         date: todayStr,
         month: todayStr.slice(0, 7),
         note: "Lunch",
@@ -107,7 +107,7 @@ describe("dayGrouping & transaction summary utilities", () => {
       {
         id: "e1",
         amount: 1500,
-        category: "Food & Dining",
+        category: "Food",
         date: "2026-08-01",
         month: "2026-08",
         accountId: "acc-1",

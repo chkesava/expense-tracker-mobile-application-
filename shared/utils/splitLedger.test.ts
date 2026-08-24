@@ -58,7 +58,7 @@ function collectPot(overrides: Partial<Split> = {}): Split {
     participantIds: ["user-me"],
     kind: "collect",
     status: "collecting",
-    category: "Gifts & Donations",
+    category: "Family",
     ...overrides,
   };
 }
@@ -113,7 +113,7 @@ describe("buildCreateSplitPayload", () => {
         splitType: "equal",
         participants: parts,
         kind: "collect",
-        category: "Gifts & Donations",
+        category: "Family",
       },
       options: { createPersonalExpense: true, accountId: "hdfc" },
       dateKey: "2026-08-19",
@@ -141,7 +141,7 @@ describe("buildCreateSplitPayload", () => {
         totalAmount: 600,
         splitType: "equal",
         kind: "bill",
-        category: "Food & Dining",
+        category: "Food",
         participants: [
           { name: "You", amount: 300, paid: true, isCurrentUser: true, key: "you" },
           { name: "Bob", amount: 300, paid: false, isCurrentUser: false, key: "bob" },

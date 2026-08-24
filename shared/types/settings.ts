@@ -164,7 +164,7 @@ export function remainingPendingSettings(
 export const SETTINGS_DEFAULTS: UserSettings = {
   lockPastMonths: true,
   compactListMode: false,
-  defaultCategory: "Food & Dining",
+  defaultCategory: "Food",
   defaultView: "dashboard",
   exportYear: new Date().getFullYear(),
   monthlyBudget: 0,

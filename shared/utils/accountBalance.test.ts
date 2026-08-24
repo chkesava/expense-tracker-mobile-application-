@@ -354,7 +354,7 @@ describe("floating-point safety in money math", () => {
   ): Expense {
     return {
       amount,
-      category: "Food & Dining",
+      category: "Food",
       note: "",
       date,
       month: date.slice(0, 7),

@@ -15,7 +15,7 @@ describe("buildSmartInsights", () => {
           amount: 1240,
           date: "2026-08-10",
           month: "2026-08",
-          category: "Food & Dining",
+          category: "Food",
         },
         {
           amount: 7180,
@@ -27,7 +27,7 @@ describe("buildSmartInsights", () => {
           amount: 1000,
           date: "2026-08-03",
           month: "2026-08",
-          category: "Food & Dining",
+          category: "Food",
         },
       ],
     });
@@ -47,7 +47,7 @@ describe("buildSmartInsights", () => {
           amount: 500,
           date: "2026-08-12",
           month: "2026-08",
-          category: "Food & Dining",
+          category: "Food",
         },
       ],
     });
@@ -91,13 +91,13 @@ describe("buildSmartInsights", () => {
           amount: 105,
           date: "2026-08-10",
           month: "2026-08",
-          category: "Transportation",
+          category: "Travel",
         },
         {
           amount: 100,
           date: "2026-08-03",
           month: "2026-08",
-          category: "Transportation",
+          category: "Travel",
         },
       ],
     });
@@ -111,9 +111,9 @@ describe("firstDayOfWeek", () => {
   // 2026-08-16 is a Sunday, 2026-08-17 a Monday, 2026-08-19 a Wednesday.
   const midweek = "2026-08-19";
   const expenses = [
-    { amount: 100, date: "2026-08-16", month: "2026-08", category: "Food & Dining" },
-    { amount: 200, date: "2026-08-17", month: "2026-08", category: "Food & Dining" },
-    { amount: 300, date: "2026-08-19", month: "2026-08", category: "Food & Dining" },
+    { amount: 100, date: "2026-08-16", month: "2026-08", category: "Food" },
+    { amount: 200, date: "2026-08-17", month: "2026-08", category: "Food" },
+    { amount: 300, date: "2026-08-19", month: "2026-08", category: "Food" },
   ];
 
   it("excludes Sunday from a Monday-first week", () => {
@@ -156,9 +156,9 @@ describe("firstDayOfWeek", () => {
       today: midweek,
       firstDayOfWeek: "monday",
       expenses: [
-        { amount: 200, date: "2026-08-19", month: "2026-08", category: "Food & Dining" },
-        { amount: 100, date: "2026-08-12", month: "2026-08", category: "Food & Dining" },
-        { amount: 900, date: "2026-08-14", month: "2026-08", category: "Food & Dining" },
+        { amount: 200, date: "2026-08-19", month: "2026-08", category: "Food" },
+        { amount: 100, date: "2026-08-12", month: "2026-08", category: "Food" },
+        { amount: 900, date: "2026-08-14", month: "2026-08", category: "Food" },
       ],
     });
     // 200 vs a 100 baseline = +100%, not 200 vs 1000.

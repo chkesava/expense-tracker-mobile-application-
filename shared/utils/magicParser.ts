@@ -76,7 +76,8 @@ export function parseNaturalLanguageTransaction(
   ];
   if (incomeKeywords.some((regex) => regex.test(text))) {
     type = "income";
-    category = "Salary";
+    category = "Income";
+    subcategory = "Salary";
   }
 
   // 2. Extract Amount
@@ -227,7 +228,7 @@ export function parseNaturalLanguageTransaction(
     // Default fallback
     if (!category) {
       category = "Other";
-      subcategory = "General";
+      subcategory = "Miscellaneous";
     }
   }
 

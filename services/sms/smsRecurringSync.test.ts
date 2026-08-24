@@ -33,7 +33,7 @@ function everyNDays(
       amount,
       date: toLocalDateKey(date),
       note,
-      category: "Food & Dining",
+      category: "Food",
     });
     date.setDate(date.getDate() + step);
   }

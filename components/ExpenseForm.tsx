@@ -133,7 +133,7 @@ export function ExpenseForm({
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState("");
   const [category, setCategory] = useState<string>(
-    settings.defaultCategory || "Food & Dining"
+    settings.defaultCategory || "Food"
   );
   const [subcategory, setSubcategory] = useState<string>("Groceries");
   const [source, setSource] = useState<string>("Salary");
@@ -177,7 +177,7 @@ export function ExpenseForm({
       setType("expense");
       setAmount(String(editingExpense.amount || ""));
       setDate(editingExpense.date || todayDateKey(settings.timezone));
-      setCategory(editingExpense.category || "Food & Dining");
+      setCategory(editingExpense.category || "Food");
       setSubcategory(editingExpense.subcategory || "Other");
       setAccountId(editingExpense.accountId || "");
       setNote(editingExpense.note || "");
@@ -198,7 +198,7 @@ export function ExpenseForm({
       setType(initialType);
       setAmount("");
       setDate(todayDateKey(settings.timezone));
-      setCategory(settings.defaultCategory || "Food & Dining");
+      setCategory(settings.defaultCategory || "Food");
       setSubcategory("Groceries");
       setSource("Salary");
       setAccountId(accounts.length > 0 ? accounts[0].id : "");

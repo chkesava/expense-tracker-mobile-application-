@@ -47,7 +47,7 @@ export function FocusConfigModal({
   const displayCurrency = useDisplayCurrency();
 
   const [selectedDuration, setSelectedDuration] = useState<number>(7);
-  const [selectedCategory, setSelectedCategory] = useState<string>("Dining & Drinks");
+  const [selectedCategory, setSelectedCategory] = useState<string>("Food");
   const [dailyLimit, setDailyLimit] = useState<string>("500");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -75,21 +75,16 @@ export function FocusConfigModal({
 
   const categoryOptions = [
     "All Spending",
-    "Dining & Drinks",
-    "Shopping & Lifestyle",
+    "Food",
+    "Travel",
+    "Shopping",
     "Entertainment",
-    "Groceries",
-    "Coffee & Snacks",
+    "Home",
     ...categories
       .map((c: { name: string }) => c.name)
       .filter(
         (n: string) =>
-          ![
-            "Dining & Drinks",
-            "Shopping & Lifestyle",
-            "Entertainment",
-            "Groceries",
-          ].includes(n)
+          !["Food", "Travel", "Shopping", "Entertainment", "Home"].includes(n)
       ),
   ].slice(0, 8);
 

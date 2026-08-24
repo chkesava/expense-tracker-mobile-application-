@@ -82,14 +82,14 @@ describe("parseBankSms Phase 5", () => {
     expect(parsed.note).toMatch(/Swiggy/i);
     expect(parsed.note).toMatch(/UPI/);
     expect(parsed.templateId).toBe("phase7-parser");
-    expect(parsed.category).toBe("Food & Dining");
+    expect(parsed.category).toBe("Food");
     expect(parsed.subcategory).toBe("Food Delivery");
 
     const write = adaptParsedSmsToWritePayload(parsed);
     expect(write?.collection).toBe("expenses");
     if (write?.collection === "expenses") {
       expect(write.payload.amount).toBe(450);
-      expect(write.payload.category).toBe("Food & Dining");
+      expect(write.payload.category).toBe("Food");
       expect(write.payload.subcategory).toBe("Food Delivery");
       expect(write.payload.tags).toEqual(
         expect.arrayContaining(["sms", "upi", "sbi"])

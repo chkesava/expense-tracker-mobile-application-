@@ -94,7 +94,7 @@ export function TopCategoriesWidget({
           compact
           title="No Spending Data Yet"
           description="Your category breakdown will automatically appear after recording transactions."
-          tip="Track core essentials first: Housing, Food, Transport, and Utilities."
+          tip="Track core essentials first: Home, Food, Travel, and Bills."
         />
       </Section>
     );

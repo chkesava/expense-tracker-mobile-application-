@@ -65,7 +65,7 @@ export function findReviewInboxItem(
   return items.find((item) => item.id === id);
 }
 
-/** Mock-style line: "Food" from "Food & Dining"; income shows Salary / Refund / …. */
+/** Mock-style line: parent category name; income shows Salary / Refund / …. */
 export function briefSmsCategoryLabel(item: SmsReviewInboxItem): string {
   if (item.write.collection === "incomes") {
     return item.write.payload.source || item.parsed.incomeSource || "Income";

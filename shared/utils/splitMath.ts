@@ -2,8 +2,8 @@ import type { Participant, Split, SplitKind } from "@/shared/types/split";
 import { generatePaymentSlug } from "./paymentSlug";
 import { generateUpiLink } from "./upi";
 
-export const BILL_DEFAULT_CATEGORY = "Food & Dining";
-export const COLLECT_DEFAULT_CATEGORY = "Gifts & Donations";
+export const BILL_DEFAULT_CATEGORY = "Food";
+export const COLLECT_DEFAULT_CATEGORY = "Family";
 
 export function createParticipantKey(): string {
   try {

@@ -143,8 +143,8 @@ export function computeTripSummary(trips: Trip[], todayStr?: string): TripAggreg
 
 /** Default trip categories for budget allocation */
 export const TRIP_BUDGET_CATEGORIES = [
-  "Food & Dining",
-  "Transport",
+  "Food",
+  "Travel",
   "Accommodation",
   "Activities",
   "Shopping",

@@ -75,7 +75,7 @@ export function EditSubscriptionModal({
       setDayOfMonth(String(subscription.dayOfMonth || 1));
       setFrequency(subscriptionFrequency(subscription));
       setIntervalDays(String(subscription.intervalDays || 2));
-      setCategory(subscription.category || "Subscriptions");
+      setCategory(subscription.category || "Entertainment");
       setAccountId(subscription.accountId || "");
       setToAccountId(subscription.toAccountId || "");
       setEndMonth(subscription.endMonth ? String(subscription.endMonth) : "");

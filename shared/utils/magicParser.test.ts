@@ -16,7 +16,7 @@ describe("parseNaturalLanguageTransaction", () => {
     {
       id: "rule_1",
       keyword: "swiggy",
-      category: "Food & Dining",
+      category: "Food",
       subcategory: "Food Delivery",
       createdAt: 1000,
     },
@@ -28,7 +28,7 @@ describe("parseNaturalLanguageTransaction", () => {
     });
     expect(res.type).toBe("expense");
     expect(res.amount).toBe(450);
-    expect(res.category).toBe("Food & Dining");
+    expect(res.category).toBe("Food");
     expect(res.subcategory).toBe("Groceries");
   });
 
@@ -86,7 +86,7 @@ describe("parseNaturalLanguageTransaction", () => {
     });
     expect(res.type).toBe("expense");
     expect(res.amount).toBe(620);
-    expect(res.category).toBe("Food & Dining");
+    expect(res.category).toBe("Food");
     expect(res.subcategory).toBe("Food Delivery");
   });
 

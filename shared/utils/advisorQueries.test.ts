@@ -11,7 +11,7 @@ const ctx = {
   currentMonth: "2026-08",
   foodSpend: 4200,
   topCategory: {
-    category: "Food & Dining",
+    category: "Food",
     amount: 4200,
     percentage: 50,
   },
@@ -35,7 +35,7 @@ describe("advisorQueries", () => {
       "top_spend"
     );
     expect(answerAdvisorQuery("Where am I spending the most?", ctx)).toContain(
-      "Food & Dining"
+      "Food"
     );
   });
 

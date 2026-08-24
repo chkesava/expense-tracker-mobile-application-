@@ -8,7 +8,7 @@ describe("csvExport utilities", () => {
       id: "exp_1",
       date: "2026-08-01",
       month: "2026-08",
-      category: "Food & Dining",
+      category: "Food",
       subcategory: "Groceries",
       amount: 45.5,
       accountId: "acc_1",
@@ -56,7 +56,7 @@ describe("csvExport utilities", () => {
     expect(lines[1]).toContain("12,INR");
 
     // Row 2 / 3 with quoted string for comma and quotes
-    const dinnerRow = lines.find((l) => l.includes("Food & Dining"));
+    const dinnerRow = lines.find((l) => l.includes("Food"));
     expect(dinnerRow).toBeDefined();
     expect(dinnerRow).toContain('"Dinner, ""Special"" treats"');
     expect(dinnerRow).toContain("Main Checking");

@@ -5,7 +5,7 @@ import type { Expense, CategoryBudget } from "../types/expense";
 const sampleExpenses: Expense[] = [
   {
     amount: 100,
-    category: "Food & Dining",
+    category: "Food",
     subcategory: "Groceries",
     note: "a",
     date: "2026-07-01",
@@ -14,17 +14,17 @@ const sampleExpenses: Expense[] = [
   },
   {
     amount: 50,
-    category: "Technology",
-    subcategory: "AI Tools",
-    note: "claude",
+    category: "Entertainment",
+    subcategory: "OTT / Music",
+    note: "netflix",
     date: "2026-07-02",
     month: "2026-07",
     createdAt: null,
   },
   {
     amount: 200,
-    category: "Transportation",
-    subcategory: "Fuel",
+    category: "Travel",
+    subcategory: "Petrol / Diesel",
     note: "petrol",
     date: "2026-07-03",
     month: "2026-07",
@@ -33,15 +33,15 @@ const sampleExpenses: Expense[] = [
 ];
 
 describe("categoryInsights", () => {
-  it("filters AI lens", () => {
-    const ai = filterByLens(sampleExpenses, "ai");
-    expect(ai).toHaveLength(1);
-    expect(ai[0].subcategory).toBe("AI Tools");
+  it("filters subscription lens", () => {
+    const subs = filterByLens(sampleExpenses, "subscriptions");
+    expect(subs).toHaveLength(1);
+    expect(subs[0].subcategory).toBe("OTT / Music");
   });
 
   it("ranks top categories", () => {
     const tops = getTopCategories(sampleExpenses, 2);
-    expect(tops[0].category).toBe("Transportation");
+    expect(tops[0].category).toBe("Travel");
     expect(tops[0].value).toBe(200);
   });
 
@@ -49,7 +49,7 @@ describe("categoryInsights", () => {
     const budgets: CategoryBudget[] = [
       {
         id: "1",
-        category: "Food & Dining",
+        category: "Food",
         subcategory: "Groceries",
         amount: 500,
         month: "2026-07",

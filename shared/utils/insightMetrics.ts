@@ -2,13 +2,16 @@ import type { Expense, Income } from "../types/expense";
 import { currentMonthKey } from "./dates";
 
 const FIXED_CATEGORIES = [
+  "Home",
   "Housing",
   "Bills",
+  "Savings & EMI",
   "Finance",
   "Rent",
   "Utilities",
   "Subscriptions",
   "Insurance",
+  "EMI",
   "EMIS",
 ];
 

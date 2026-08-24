@@ -5,12 +5,12 @@ import { parseBankSms } from "@/services/sms/smsParser";
 
 describe("categorizeSmsMerchant", () => {
   it.each([
-    ["Swiggy", "Food & Dining", "Food Delivery"],
-    ["Zomato", "Food & Dining", "Food Delivery"],
-    ["Uber", "Transportation", "Cab"],
+    ["Swiggy", "Food", "Food Delivery"],
+    ["Zomato", "Food", "Food Delivery"],
+    ["Uber", "Travel", "Auto / Cab"],
     ["Amazon", "Shopping", "Online Shopping"],
-    ["Netflix", "Entertainment", "OTT"],
-    ["Airtel", "Bills", "Phone"],
+    ["Netflix", "Entertainment", "OTT / Music"],
+    ["Airtel", "Bills", "Mobile Recharge"],
   ])("maps %s → %s / %s", (merchant, category, subcategory) => {
     expect(categorizeSmsMerchant(merchant)).toEqual({
       category,
@@ -37,7 +37,7 @@ describe("categorizeSmsMerchant", () => {
 });
 
 describe("parseBankSms categorization", () => {
-  it("sets Food & Dining on a Swiggy debit", () => {
+  it("sets Food on a Swiggy debit", () => {
     const parsed = parseBankSms({
       id: "c1",
       address: "VK-SBIINB",
@@ -45,7 +45,7 @@ describe("parseBankSms categorization", () => {
       receivedAtMs: Date.parse("2026-08-12T10:00:00+05:30"),
     });
     expect(parsed.merchant).toBe("Swiggy");
-    expect(parsed.category).toBe("Food & Dining");
+    expect(parsed.category).toBe("Food");
     expect(parsed.subcategory).toBe("Food Delivery");
     expect(parsed.templateId).toBe("phase7-parser");
   });

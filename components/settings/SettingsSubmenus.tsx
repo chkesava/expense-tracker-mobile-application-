@@ -346,7 +346,7 @@ export function AutoCategorizationRulesManager() {
   const isDark = themeUsesDarkPalette(themeName);
   const { rules, addRule, deleteRule } = useCategorizationRules();
   const [keyword, setKeyword] = useState("");
-  const [category, setCategory] = useState("Food & Dining");
+  const [category, setCategory] = useState("Food");
   const [subcategory, setSubcategory] = useState("Groceries");
 
   const handleAdd = () => {
@@ -463,7 +463,7 @@ export function CategoryBudgetsManager() {
   const { budgets, addBudget, deleteBudget } = useCategoryBudgets();
   const { celebrateMilestone } = useCelebration();
   const [amount, setAmount] = useState("");
-  const [category, setCategory] = useState("Food & Dining");
+  const [category, setCategory] = useState("Food");
   const [subcategory, setSubcategory] = useState("Groceries");
 
   const [month, setMonth] = useState(() => {

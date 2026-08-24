@@ -65,7 +65,7 @@ function categoryLine(entry: SmsWriteReadyEntry): string {
   return "Other";
 }
 
-/** Review / detect: amount • merchant, then full category (Food & Dining). */
+/** Review / detect: amount • merchant, then full category (Food). */
 export function buildDetectedNotification(
   entry: SmsWriteReadyEntry
 ): SmsNotificationCopy {

@@ -216,7 +216,7 @@ describe("subscriptionProcessor utilities", () => {
       id: "sub-chicken",
       name: "Chicken",
       amount: 200,
-      category: "Food & Dining",
+      category: "Food",
       dayOfMonth: 1,
       frequency: "every_n_days",
       intervalDays: 2,

@@ -30,7 +30,7 @@ function everyNDays(
   start: string,
   count: number,
   step: number,
-  category = "Food & Dining"
+  category = "Food"
 ): RecurringExpenseInput[] {
   const items: RecurringExpenseInput[] = [];
   const date = parseLocalDate(start);
@@ -148,19 +148,19 @@ describe("detectRecurringPatterns", () => {
         amount: 450,
         date: "2026-08-10",
         note: "Swiggy",
-        category: "Food & Dining",
+        category: "Food",
       },
       {
         amount: 450,
         date: "2026-08-11",
         note: "Swiggy",
-        category: "Food & Dining",
+        category: "Food",
       },
       {
         amount: 450,
         date: "2026-08-12",
         note: "Swiggy",
-        category: "Food & Dining",
+        category: "Food",
       },
     ]);
     expect(patterns).toHaveLength(0);

@@ -61,7 +61,7 @@ describe("review inbox helpers", () => {
         collection: "expenses",
         payload: {
           amount: 450,
-          category: "Food & Dining",
+          category: "Food",
           subcategory: "Food Delivery",
           date: "2026-08-12",
           month: "2026-08",

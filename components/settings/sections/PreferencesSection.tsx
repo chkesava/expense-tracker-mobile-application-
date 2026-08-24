@@ -147,7 +147,7 @@ export function PreferencesSection() {
           label="Default category"
           value={categoryText}
           onChangeText={setCategoryText}
-          placeholder="Food & Dining"
+          placeholder="Food"
           onFocus={() => {
             categoryFocusedRef.current = true;
           }}

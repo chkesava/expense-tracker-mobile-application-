@@ -29,7 +29,7 @@ describe("SMS notification copy", () => {
     expect(entry).toBeDefined();
     const copy = buildDetectedNotification(entry!);
     expect(copy.title).toBe("💰 Transaction detected");
-    expect(copy.body).toBe("₹450 • Swiggy\nFood & Dining");
+    expect(copy.body).toBe("₹450 • Swiggy\nFood");
     expect(copy.data).toEqual({
       source: "sms",
       kind: "detected",
@@ -41,7 +41,7 @@ describe("SMS notification copy", () => {
     const entry = processRawSmsMessages([swiggy]).writeReady[0];
     const copy = buildAutoAddedNotification(entry!);
     expect(copy.title).toBe("✅ ₹450 Swiggy expense added");
-    expect(copy.body).toBe("Food & Dining");
+    expect(copy.body).toBe("Food");
     expect(copy.data.kind).toBe("auto_added");
     expect(copy.data.url).toBe("/dashboard");
   });
@@ -93,7 +93,7 @@ describe("SMS notification copy", () => {
     const copy = buildRecurringDetectedNotification({
       merchant: "Chicken",
       amount: 200,
-      category: "Food & Dining",
+      category: "Food",
       occurrences: 8,
       dates: ["2026-08-01", "2026-08-03", "2026-08-05"],
       dayOfMonth: 3,

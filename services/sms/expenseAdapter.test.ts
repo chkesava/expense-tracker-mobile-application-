@@ -10,7 +10,7 @@ describe("adaptParsedSmsToWritePayload", () => {
       amount: 249.5,
       date: "2026-08-10",
       merchant: "Swiggy",
-      category: "Food & Dining",
+      category: "Food",
       subcategory: "Delivery",
       confidence: 0.9,
     };
@@ -20,7 +20,7 @@ describe("adaptParsedSmsToWritePayload", () => {
       collection: "expenses",
       payload: {
         amount: 249.5,
-        category: "Food & Dining",
+        category: "Food",
         subcategory: "Delivery",
         date: "2026-08-10",
         month: "2026-08",
