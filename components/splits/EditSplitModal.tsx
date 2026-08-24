@@ -220,7 +220,7 @@ export function EditSplitModal({
             />
 
             <FieldLabel color={theme.colors.mutedForeground}>
-              {collect ? "TARGET AMOUNT" : "TOTAL AMOUNT"} ({displayCurrency})
+              {`${collect ? "TARGET AMOUNT" : "TOTAL AMOUNT"} (${displayCurrency})`}
             </FieldLabel>
             <TextInput
               value={amount}
