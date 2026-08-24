@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FlashList } from "@shopify/flash-list";
 
 import { EmptyState } from "@/components/common/EmptyState";
+import { useGaneshListPadding } from "@/components/ganesh/GaneshScreen";
 import { GaneshSyncChip } from "@/components/ganesh/GaneshSyncChip";
 import { MetricGrid } from "@/components/ganesh/MetricGrid";
 import { AddFab } from "@/components/ui/AddFab";
@@ -71,6 +72,7 @@ function buildRow(
 export default function CommitteeScreen() {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
+  const listPadding = useGaneshListPadding();
   const { push } = useRouter();
   const { pandalId, festivalId } = useGaneshSession();
   const { festivals } = useFestivals(pandalId);
@@ -205,6 +207,7 @@ export default function CommitteeScreen() {
       <FlashList
         data={rows}
         style={{ flex: 1 }}
+        contentContainerStyle={{ paddingBottom: listPadding }}
         keyExtractor={(item) => item.userId}
         renderItem={renderItem}
         ListEmptyComponent={

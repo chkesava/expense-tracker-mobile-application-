@@ -1,7 +1,10 @@
-import { Pressable, Text, View } from "react-native";
+import { FilterChips } from "@/components/ganesh/ui/FilterChips";
 
-import { useTheme } from "@/theme/ThemeProvider";
-
+/**
+ * Kept for call-site compatibility — the implementation now lives in
+ * `components/ganesh/ui/FilterChips`, which is the single chip control for
+ * Ganesh Seva.
+ */
 export function ChoiceChips<T extends string>({
   label,
   value,
@@ -17,41 +20,15 @@ export function ChoiceChips<T extends string>({
   disabled?: boolean;
   disabledIds?: T[];
 }) {
-  const { theme } = useTheme();
   return (
-    <View style={{ gap: 8 }}>
-      {label ? (
-        <Text style={{ color: theme.colors.mutedForeground, fontWeight: "700" }}>{label}</Text>
-      ) : null}
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-        {options.map((option) => {
-          const selected = value === option.id;
-          const optionDisabled = Boolean(disabled || disabledIds?.includes(option.id));
-          return (
-            <Pressable
-              key={option.id}
-              disabled={optionDisabled}
-              onPress={() => onChange(option.id)}
-              style={{
-                paddingHorizontal: 10,
-                paddingVertical: 6,
-                borderRadius: 999,
-                backgroundColor: selected ? theme.colors.primary : theme.colors.muted,
-                opacity: optionDisabled && !selected ? 0.5 : 1,
-              }}
-            >
-              <Text
-                style={{
-                  color: selected ? theme.colors.primaryForeground : theme.colors.foreground,
-                  fontWeight: "700",
-                }}
-              >
-                {option.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
-    </View>
+    <FilterChips
+      label={label}
+      value={value}
+      options={options}
+      onChange={onChange}
+      disabled={disabled}
+      disabledIds={disabledIds}
+      layout="wrap"
+    />
   );
 }
