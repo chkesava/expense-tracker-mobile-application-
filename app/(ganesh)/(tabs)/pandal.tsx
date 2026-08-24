@@ -68,7 +68,7 @@ export default function PandalScreen() {
   const showTreasurerTools = !isAdmin && can("festival.update");
 
   return (
-    <GaneshScreen safeTop>
+    <GaneshScreen safeTop withTabBar>
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
         <Text style={{ color: theme.colors.foreground, fontSize: 22, fontWeight: "800" }}>
           {pandal?.name || "Pandal"}

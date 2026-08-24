@@ -1,50 +1,37 @@
-import { Text, View } from "react-native";
+import { Sparkles } from "lucide-react-native";
 
-import { formatInr } from "@/shared/utils/ganeshMoney";
-import { useTheme } from "@/theme/ThemeProvider";
+import { FundHero, type FundBreakdownItem } from "@/components/ganesh/ui/FundHero";
+import { useGaneshTokens } from "@/components/ganesh/ui/tokens";
 
+/**
+ * The festival's headline number. One per screen — the Permanent Fund is a
+ * quieter row elsewhere, so the two never compete for the same slot.
+ */
 export function GodFundHero({
   amount,
   festivalName,
   pandalName,
+  breakdown,
+  onPress,
 }: {
   amount: number;
   festivalName?: string;
   pandalName?: string;
+  breakdown?: FundBreakdownItem[];
+  onPress?: () => void;
 }) {
-  const { theme } = useTheme();
+  const g = useGaneshTokens();
+
   return (
-    <View
-      style={{
-        backgroundColor: theme.colors.card,
-        borderColor: theme.colors.border,
-        borderWidth: 1,
-        borderRadius: 24,
-        padding: 20,
-        gap: 8,
-      }}
-    >
-      {pandalName ? (
-        <Text style={{ color: theme.colors.mutedForeground, fontSize: 13 }}>
-          {pandalName}
-        </Text>
-      ) : null}
-      <Text style={{ color: theme.colors.foreground, fontSize: 20, fontWeight: "800" }}>
-        {festivalName || "Ganesh Utsav"}
-      </Text>
-      <Text
-        style={{
-          color: theme.colors.mutedForeground,
-          fontSize: 12,
-          fontWeight: "700",
-          letterSpacing: 1,
-        }}
-      >
-        AVAILABLE GOD FUND
-      </Text>
-      <Text style={{ color: theme.colors.primary, fontSize: 36, fontWeight: "800" }}>
-        {formatInr(amount)}
-      </Text>
-    </View>
+    <FundHero
+      kind="god"
+      title={festivalName || "Ganesh Utsav"}
+      subtitle={pandalName}
+      icon={<Sparkles size={16} color={g.godFund} strokeWidth={2.2} />}
+      eyebrow="Available God Fund"
+      amount={amount}
+      breakdown={breakdown}
+      action={onPress ? { label: "Festival report", onPress } : undefined}
+    />
   );
 }
