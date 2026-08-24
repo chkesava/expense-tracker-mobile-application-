@@ -560,6 +560,151 @@ export function recalibrateSplitAfterAddParticipant(
   };
 }
 
+export function participantEditKey(p: Participant, index: number): string {
+  return p.key || `__idx_${index}`;
+}
+
+export type SplitDetailsUpdate = {
+  title: string;
+  category: string;
+  notes: string;
+  totalAmount: number;
+  splitType: Split["splitType"];
+  participantNames: Record<string, string>;
+  customAmounts?: Record<string, number>;
+};
+
+function participantNameFor(
+  p: Participant,
+  index: number,
+  names: Record<string, string>
+): string {
+  const mapped = names[participantEditKey(p, index)];
+  return (mapped ?? p.name).trim();
+}
+
+export function splitDetailsBlockedReason(
+  split: Split,
+  update: SplitDetailsUpdate
+): string | null {
+  if (!update.title.trim()) return "Enter a title.";
+
+  const names = (split.participants || []).map((p, index) =>
+    participantNameFor(p, index, update.participantNames)
+  );
+  if (names.some((name) => !name)) return "Every person needs a name.";
+  const contributingNames = (split.participants || [])
+    .map((p, index) =>
+      isParticipantContributing(p) ? names[index].toLowerCase() : null
+    )
+    .filter((name): name is string => Boolean(name));
+  if (new Set(contributingNames).size !== contributingNames.length) {
+    return "Two people can't have the same name.";
+  }
+
+  const spent = isCollectSpent(split);
+  if (spent) return null;
+
+  const totalAmount = roundMoney(update.totalAmount);
+  if (!(totalAmount > 0) || !Number.isFinite(totalAmount)) {
+    return "Enter an amount greater than zero.";
+  }
+
+  const amountChanged =
+    Math.abs(totalAmount - roundMoney(split.totalAmount || 0)) >= 0.01;
+  if (amountChanged) {
+    const blocked = amountChangeBlockedReason(split, totalAmount);
+    if (blocked) return blocked;
+  }
+
+  if (update.splitType === "custom") {
+    const customSum = (split.participants || []).reduce((sum, p, index) => {
+      if (!isParticipantContributing(p)) return sum;
+      const key = participantEditKey(p, index);
+      const amount =
+        typeof update.customAmounts?.[key] === "number"
+          ? update.customAmounts[key]
+          : Number(p.amount) || 0;
+      if (!Number.isFinite(amount) || amount < 0) return Number.NaN;
+      return sum + amount;
+    }, 0);
+    if (!Number.isFinite(customSum)) {
+      return "Enter a valid amount for each person.";
+    }
+    if (Math.abs(roundMoney(customSum) - totalAmount) >= 0.01) {
+      return "Custom amounts must add up to the total.";
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Edit title, category, notes, names, total, and equal/custom shares.
+ * Spent pots can still rename and retitle; amount and method stay locked.
+ * Keeps `paidAmount` when shares change.
+ */
+export function recalibrateSplitAfterDetailsChange(
+  split: Split,
+  update: SplitDetailsUpdate
+):
+  | {
+      participants: Participant[];
+      settled: boolean;
+      totalAmount: number;
+      title: string;
+      category: string;
+      notes: string;
+      splitType: Split["splitType"];
+    }
+  | { error: string } {
+  const blocked = splitDetailsBlockedReason(split, update);
+  if (blocked) return { error: blocked };
+
+  const spent = isCollectSpent(split);
+  const title = update.title.trim();
+  const category = update.category.trim();
+  const notes = update.notes.trim();
+  const totalAmount = spent
+    ? roundMoney(split.totalAmount || 0)
+    : roundMoney(update.totalAmount);
+  const splitType = spent ? split.splitType : update.splitType;
+
+  let participants = (split.participants || []).map((p, index) => ({
+    ...p,
+    name: participantNameFor(p, index, update.participantNames),
+  }));
+
+  if (!spent) {
+    if (splitType === "custom") {
+      participants = participants.map((p, index) => {
+        if (!isParticipantContributing(p)) return p;
+        const key = participantEditKey(p, index);
+        const amount =
+          typeof update.customAmounts?.[key] === "number"
+            ? roundMoney(update.customAmounts[key])
+            : Number(p.amount) || 0;
+        return { ...p, amount };
+      });
+    }
+    participants = redistributeContributingShares(
+      participants,
+      totalAmount,
+      splitType
+    );
+  }
+
+  return {
+    participants,
+    settled: participants.every((p) => isParticipantShareSettled(p)),
+    totalAmount,
+    title,
+    category,
+    notes,
+    splitType,
+  };
+}
+
 export function publicSplitStatus(
   split: Pick<Split, "kind" | "status" | "settled">,
   settled: boolean

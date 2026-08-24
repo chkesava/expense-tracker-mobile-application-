@@ -65,6 +65,7 @@ import {
   participantRemainingDue,
   recalibrateSplitAfterAddParticipant,
   recalibrateSplitAfterAmountChange,
+  recalibrateSplitAfterDetailsChange,
   recalibrateSplitAfterOptOut,
 } from "@/shared/utils/splitMath";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
@@ -79,7 +80,7 @@ function applyShareSideEffects(
    * `currency` is required because the public snapshot is the only place an
    * anonymous visitor can learn it — `system_settings/global` needs sign-in.
    */
-  options: { currency: string; claimsEnabled?: boolean }
+  options: { currency: string; claimsEnabled?: boolean; paymentNote?: string }
 ) {
   const publicSlug = split.publicSlug || generatePaymentSlug(10);
   const shareRef = split.publicShareId
@@ -90,6 +91,14 @@ function applyShareSideEffects(
     typeof extraSplitFields.totalAmount === "number"
       ? extraSplitFields.totalAmount
       : split.totalAmount;
+  const title =
+    typeof extraSplitFields.title === "string"
+      ? extraSplitFields.title
+      : split.title;
+  const splitType =
+    extraSplitFields.splitType === "equal" || extraSplitFields.splitType === "custom"
+      ? extraSplitFields.splitType
+      : split.splitType;
 
   batch.update(
     doc(db, "splits", split.id as string),
@@ -109,6 +118,8 @@ function applyShareSideEffects(
         participants,
         settled,
         totalAmount,
+        title,
+        splitType,
         status: (extraSplitFields.status as Split["status"]) ?? split.status,
       },
       {
@@ -126,6 +137,7 @@ function applyShareSideEffects(
 
   for (const patch of buildPaymentRequestSyncPatches(participants, {
     currency: options.currency,
+    note: options.paymentNote,
   })) {
     batch.update(doc(db, "paymentRequests", patch.requestId), patch.fields);
   }
@@ -775,6 +787,53 @@ export function useSplits(options?: { enabled?: boolean }) {
     }
   };
 
+  const updateSplitDetails = async (
+    splitId: string,
+    update: Parameters<typeof recalibrateSplitAfterDetailsChange>[1]
+  ): Promise<boolean> => {
+    const db = getFirestoreDb();
+    if (!uid || !db || !splitId) return false;
+
+    const split = splits.find((s) => s.id === splitId);
+    if (!split) return false;
+    if (split.createdBy !== uid) {
+      toast.error("Only the organizer can edit this split.");
+      return false;
+    }
+
+    const built = recalibrateSplitAfterDetailsChange(split, update);
+    if ("error" in built) {
+      toast.error(built.error);
+      return false;
+    }
+
+    try {
+      const batch = writeBatch(db);
+      applyShareSideEffects(
+        batch,
+        db,
+        split,
+        built.participants,
+        {
+          settled: built.settled,
+          totalAmount: built.totalAmount,
+          title: built.title,
+          category: built.category || undefined,
+          notes: built.notes,
+          splitType: built.splitType,
+        },
+        { currency, paymentNote: built.title }
+      );
+      await commitWrite(() => batch.commit(), { label: "split details" });
+      toast.success("Split updated");
+      return true;
+    } catch (err) {
+      logError("splits.updatedetails", err);
+      toast.error(friendlyErrorMessage(err, "Failed to update split"));
+      return false;
+    }
+  };
+
   const optOutParticipant = async (
     splitId: string,
     participantKey: string,
@@ -1104,6 +1163,7 @@ export function useSplits(options?: { enabled?: boolean }) {
     createSplit,
     updateSplit,
     updateSplitAmount,
+    updateSplitDetails,
     ensureSplitSharing,
     toggleParticipantPaid,
     markParticipantCollected,

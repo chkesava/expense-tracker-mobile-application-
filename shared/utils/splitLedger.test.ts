@@ -631,6 +631,12 @@ describe("bill share requests and public snapshot", () => {
     expect(alice?.fields.status).toBe("active");
     expect(bob?.fields.status).toBe("cancelled");
     expect(bob?.fields.amount).toBe(0);
+    const titled = buildPaymentRequestSyncPatches(split.participants, {
+      note: "Rahul's wedding",
+    });
+    expect(titled.find((p) => p.requestId === "pr-alice")?.fields.note).toBe(
+      "Rahul's wedding"
+    );
   });
 
   describe("currency and share-raised threading", () => {

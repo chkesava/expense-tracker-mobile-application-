@@ -12,6 +12,7 @@ import {
   participantRemainingDue,
   recalibrateSplitAfterAddParticipant,
   recalibrateSplitAfterAmountChange,
+  recalibrateSplitAfterDetailsChange,
   recalibrateSplitAfterOptOut,
   validateCustomSplits,
 } from "./splitMath";
@@ -831,6 +832,170 @@ describe("splitMath utilities", () => {
       expect(result.participants[1].contributing).toBe(false);
       expect(result.participants[2].name).toBe("Alice");
       expect(result.participants[2].contributing).not.toBe(false);
+    });
+  });
+
+  describe("recalibrateSplitAfterDetailsChange", () => {
+    function giftPot(): Split {
+      return {
+        id: "s-edit-details",
+        title: "Wedding gift",
+        totalAmount: 1000,
+        splitType: "equal",
+        kind: "collect",
+        status: "collecting",
+        category: "Family",
+        createdBy: "me",
+        createdAt: 1,
+        settled: false,
+        participantIds: [],
+        participants: [
+          {
+            key: "you",
+            name: "You",
+            amount: 500,
+            paid: true,
+            paidAmount: 500,
+            isCurrentUser: true,
+          },
+          {
+            key: "alice",
+            name: "Alice",
+            amount: 500,
+            paid: false,
+            paidAmount: 0,
+            isCurrentUser: false,
+          },
+        ],
+      };
+    }
+
+    function details(
+      split: Split,
+      over: Partial<{
+        title: string;
+        category: string;
+        notes: string;
+        totalAmount: number;
+        splitType: Split["splitType"];
+        participantNames: Record<string, string>;
+        customAmounts: Record<string, number>;
+      }> = {}
+    ) {
+      return {
+        title: over.title ?? split.title,
+        category: over.category ?? split.category ?? "",
+        notes: over.notes ?? split.notes ?? "",
+        totalAmount: over.totalAmount ?? split.totalAmount,
+        splitType: over.splitType ?? split.splitType,
+        participantNames: over.participantNames ?? {
+          you: "You",
+          alice: "Alice",
+        },
+        customAmounts: over.customAmounts,
+      };
+    }
+
+    it("renames the pot and a friend without touching shares", () => {
+      const split = giftPot();
+      const result = recalibrateSplitAfterDetailsChange(
+        split,
+        details(split, {
+          title: "Rahul's wedding",
+          category: "Gifts",
+          notes: "Pay by Friday",
+          participantNames: { you: "Kesava", alice: "Priya" },
+        })
+      );
+      expect("error" in result).toBe(false);
+      if ("error" in result) return;
+      expect(result.title).toBe("Rahul's wedding");
+      expect(result.category).toBe("Gifts");
+      expect(result.notes).toBe("Pay by Friday");
+      expect(result.participants[0].name).toBe("Kesava");
+      expect(result.participants[1].name).toBe("Priya");
+      expect(result.participants[0].amount).toBe(500);
+      expect(result.participants[1].amount).toBe(500);
+      expect(participantPaidAmount(result.participants[0])).toBe(500);
+    });
+
+    it("raises the total and keeps money already collected", () => {
+      const split = giftPot();
+      split.participants[1].paid = true;
+      split.participants[1].paidAmount = 500;
+      const result = recalibrateSplitAfterDetailsChange(
+        split,
+        details(split, { totalAmount: 1200 })
+      );
+      expect("error" in result).toBe(false);
+      if ("error" in result) return;
+      expect(result.totalAmount).toBe(1200);
+      expect(result.participants[0].amount).toBe(600);
+      expect(participantRemainingDue(result.participants[0])).toBe(100);
+    });
+
+    it("switches to custom amounts that still sum to the total", () => {
+      const split = giftPot();
+      const result = recalibrateSplitAfterDetailsChange(
+        split,
+        details(split, {
+          splitType: "custom",
+          customAmounts: { you: 700, alice: 300 },
+        })
+      );
+      expect("error" in result).toBe(false);
+      if ("error" in result) return;
+      expect(result.splitType).toBe("custom");
+      expect(result.participants[0].amount).toBe(700);
+      expect(result.participants[1].amount).toBe(300);
+      expect(participantRemainingDue(result.participants[0])).toBe(200);
+    });
+
+    it("blocks an empty title, duplicate names, and custom amounts that do not sum", () => {
+      const split = giftPot();
+      expect(
+        recalibrateSplitAfterDetailsChange(split, details(split, { title: "  " }))
+      ).toEqual({ error: "Enter a title." });
+      expect(
+        recalibrateSplitAfterDetailsChange(
+          split,
+          details(split, {
+            participantNames: { you: "Alex", alice: "alex" },
+          })
+        )
+      ).toEqual({ error: "Two people can't have the same name." });
+      expect(
+        recalibrateSplitAfterDetailsChange(
+          split,
+          details(split, {
+            splitType: "custom",
+            customAmounts: { you: 800, alice: 100 },
+          })
+        )
+      ).toEqual({ error: "Custom amounts must add up to the total." });
+    });
+
+    it("lets a spent pot change title and names but not the amount", () => {
+      const split = giftPot();
+      split.status = "spent";
+      const renamed = recalibrateSplitAfterDetailsChange(
+        split,
+        details(split, { title: "Bought the gift", participantNames: { you: "You", alice: "Priya" } })
+      );
+      expect("error" in renamed).toBe(false);
+      if ("error" in renamed) return;
+      expect(renamed.title).toBe("Bought the gift");
+      expect(renamed.participants[1].name).toBe("Priya");
+      expect(renamed.totalAmount).toBe(1000);
+      expect(renamed.participants[0].amount).toBe(500);
+
+      const raised = recalibrateSplitAfterDetailsChange(
+        split,
+        details(split, { totalAmount: 1400 })
+      );
+      expect("error" in raised).toBe(false);
+      if ("error" in raised) return;
+      expect(raised.totalAmount).toBe(1000);
     });
   });
 });

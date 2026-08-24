@@ -14,7 +14,7 @@ import { Check, Pencil, Plus, Share2, UserMinus, X } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
 import { AddParticipantModal } from "@/components/splits/AddParticipantModal";
-import { EditSplitAmountModal } from "@/components/splits/EditSplitAmountModal";
+import { EditSplitModal } from "@/components/splits/EditSplitModal";
 import { SplitClaimsSection } from "@/components/splits/SplitClaimsSection";
 import { SplitPayQrCard } from "@/components/splits/SplitPayQrCard";
 import { UseGiftMoneyModal } from "@/components/splits/UseGiftMoneyModal";
@@ -79,7 +79,7 @@ export function SplitDetailModal({
     spendCollectPot,
     optOutParticipant,
     addParticipant,
-    updateSplitAmount,
+    updateSplitDetails,
     ensureSplitSharing,
     applyPaidClaim,
     dismissClaim,
@@ -89,7 +89,7 @@ export function SplitDetailModal({
 
   const [collectingKey, setCollectingKey] = useState<string | null>(null);
   const [spendOpen, setSpendOpen] = useState(false);
-  const [editAmountOpen, setEditAmountOpen] = useState(false);
+  const [editSplitOpen, setEditSplitOpen] = useState(false);
   const [addPersonOpen, setAddPersonOpen] = useState(false);
   // "split" while sharing the group link, otherwise the participant key.
   const [sharing, setSharing] = useState<string | null>(null);
@@ -532,12 +532,35 @@ export function SplitDetailModal({
                 ) : null}
               </View>
 
-              <Text
-                style={[styles.title, { color: theme.colors.cardForeground }]}
-                numberOfLines={1}
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 8,
+                  paddingRight: 8,
+                }}
               >
-                {split.title}
-              </Text>
+                <Text
+                  style={[styles.title, { color: theme.colors.cardForeground, flex: 1 }]}
+                  numberOfLines={1}
+                >
+                  {split.title}
+                </Text>
+                {isCreator ? (
+                  <Pressable
+                    onPress={() => {
+                      haptic.selection().catch(() => undefined);
+                      setEditSplitOpen(true);
+                    }}
+                    hitSlop={12}
+                    accessibilityRole="button"
+                    accessibilityLabel="Edit split"
+                    style={({ pressed }) => [pressed && { opacity: 0.6 }]}
+                  >
+                    <Pencil size={16} color={theme.colors.mutedForeground} />
+                  </Pressable>
+                ) : null}
+              </View>
               <Text
                 style={[
                   styles.subtitle,
@@ -546,6 +569,16 @@ export function SplitDetailModal({
               >
                 Organized by {split.createdByName || "Me"}
               </Text>
+              {split.notes ? (
+                <Text
+                  style={[
+                    styles.subtitle,
+                    { color: theme.colors.mutedForeground, marginTop: 4 },
+                  ]}
+                >
+                  {split.notes}
+                </Text>
+              ) : null}
             </View>
 
             <View style={styles.headerActions}>
@@ -613,14 +646,14 @@ export function SplitDetailModal({
                   >
                     {collect ? "TARGET AMOUNT" : "TOTAL SPLIT AMOUNT"}
                   </Text>
-                  {isCreator && !spent ? (
+                  {isCreator ? (
                     <Pressable
                       onPress={() => {
                         haptic.selection().catch(() => undefined);
-                        setEditAmountOpen(true);
+                        setEditSplitOpen(true);
                       }}
                       accessibilityRole="button"
-                      accessibilityLabel="Edit split amount"
+                      accessibilityLabel="Edit split"
                       style={({ pressed }) => [
                         styles.amountEdit,
                         pressed && { opacity: 0.7 },
@@ -1113,13 +1146,13 @@ export function SplitDetailModal({
           );
         }}
       />
-      <EditSplitAmountModal
-        visible={editAmountOpen}
+      <EditSplitModal
+        visible={editSplitOpen}
         split={split}
-        onClose={() => setEditAmountOpen(false)}
-        onConfirm={async (newTotal) => {
+        onClose={() => setEditSplitOpen(false)}
+        onConfirm={async (update) => {
           if (!split.id) return false;
-          return updateSplitAmount(split.id, newTotal);
+          return updateSplitDetails(split.id, update);
         }}
       />
     </Modal>

@@ -214,7 +214,7 @@ export function applyShareRequestsToParticipants(
 
 export function buildPaymentRequestSyncPatches(
   participants: Participant[],
-  options?: { currency?: string }
+  options?: { currency?: string; note?: string }
 ): Array<{ requestId: string; fields: Record<string, unknown> }> {
   return participants
     .filter((p) => Boolean(p.paymentRequestId))
@@ -230,6 +230,7 @@ export function buildPaymentRequestSyncPatches(
           // The public pay page has no signed-in user, so it cannot read
           // system settings for a currency. Carry it on the doc.
           currency: options?.currency || undefined,
+          note: options?.note || undefined,
         }),
       };
     });
