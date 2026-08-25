@@ -33,5 +33,7 @@ export { LedgerRow, type LedgerRowProps, type LedgerRowBadge } from "./LedgerRow
 export { FundHero, type FundHeroProps, type FundBreakdownItem } from "./FundHero";
 export { GaneshHeader, type GaneshHeaderProps } from "./GaneshHeader";
 export { ListStateView, type ListStateViewProps } from "./ListStateView";
+export { NavRow, type NavRowProps } from "./NavRow";
+export { Avatar, initialsOf, type AvatarProps } from "./Avatar";
 export { GaneshMark } from "./GaneshMark";
 export { GaneshAuthBackground } from "./GaneshAuthBackground";

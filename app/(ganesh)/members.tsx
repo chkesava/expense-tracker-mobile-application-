@@ -1,10 +1,23 @@
-import { Pressable, Text, View } from "react-native";
+import { useMemo, useState } from "react";
+import { StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
+import { History, UserPlus, Users } from "lucide-react-native";
 
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
-import { EmptyState } from "@/components/common/EmptyState";
-import { Button } from "@/components/ui/Button";
+import {
+  Avatar,
+  FilterChips,
+  GaneshHeader,
+  LedgerRow,
+  ListStateView,
+  MetaLabel,
+  NavRow,
+  Section,
+  useGaneshTokens,
+} from "@/components/ganesh/ui";
+import { SearchBar } from "@/components/common/SearchBar";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
+import { useJoinRequests } from "@/hooks/useJoinRequests";
 import { useMemberAudits } from "@/hooks/useMemberAudits";
 import { usePandalMembers } from "@/hooks/usePandalMembers";
 import { usePandalRoles } from "@/hooks/usePandalRoles";
@@ -13,6 +26,15 @@ import type { PandalMember, PandalMemberAudit, PandalRole } from "@/shared/types
 import { formatGaneshWhen, memberDisplayName } from "@/shared/utils/ganeshIdentity";
 import { ganeshRoleLabel, ganeshStatusLabel } from "@/shared/utils/ganeshPermissions";
 import { useTheme } from "@/theme/ThemeProvider";
+
+type Filter = "all" | "admin" | "active" | "suspended";
+
+const FILTER_OPTIONS: Array<{ id: Filter; label: string }> = [
+  { id: "all", label: "Everyone" },
+  { id: "admin", label: "Admins" },
+  { id: "active", label: "Active" },
+  { id: "suspended", label: "Suspended" },
+];
 
 function memberRolesLabel(member: PandalMember, roles: PandalRole[]): string {
   if (member.role === "admin") return "Pandal Admin";
@@ -32,9 +54,15 @@ function auditLine(audit: PandalMemberAudit, members: PandalMember[]): string {
   if (audit.action === "join_mode") return `${actor} changed who can join`;
   if (audit.action === "make_admin") return `${actor} made ${target} a Pandal Admin`;
   if (audit.action === "remove_admin") return `${actor} removed Admin from ${target}`;
-  if (audit.action === "role_assigned") return `${actor} assigned ${audit.roleName ?? "a role"} to ${target}`;
-  if (audit.action === "role_unassigned") return `${actor} removed ${audit.roleName ?? "a role"} from ${target}`;
-  if (audit.action === "role_permissions") return `${actor} changed ${audit.roleName ?? "a role"}`;
+  if (audit.action === "role_assigned") {
+    return `${actor} assigned ${audit.roleName ?? "a role"} to ${target}`;
+  }
+  if (audit.action === "role_unassigned") {
+    return `${actor} removed ${audit.roleName ?? "a role"} from ${target}`;
+  }
+  if (audit.action === "role_permissions") {
+    return `${actor} changed ${audit.roleName ?? "a role"}`;
+  }
   if (audit.oldRole && audit.newRole && audit.oldRole !== audit.newRole) {
     return `${actor} changed ${target} to ${ganeshRoleLabel(audit.newRole)}`;
   }
@@ -43,72 +71,186 @@ function auditLine(audit: PandalMemberAudit, members: PandalMember[]): string {
 
 export default function GaneshMembersScreen() {
   const { theme } = useTheme();
-  const { push } = useRouter();
+  const g = useGaneshTokens();
+  const { push, back } = useRouter();
   const { pandalId } = useGaneshSession();
-  const { members } = usePandalMembers(pandalId);
+  const { members, loading, error } = usePandalMembers(pandalId);
   const { roles } = usePandalRoles(pandalId);
+  const { requests } = useJoinRequests(pandalId);
   const { can } = useGaneshPermissions();
   const canReadAudit = can("audit.read");
   const { audits } = useMemberAudits(pandalId, canReadAudit);
-  const active = members.filter((member) => member.status !== "removed");
+
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<Filter>("all");
+
+  const active = useMemo(
+    () => members.filter((member) => member.status !== "removed"),
+    [members]
+  );
+
+  const rows = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    return active
+      .filter((member) => {
+        if (filter === "admin" && member.role !== "admin") return false;
+        if (filter === "active" && !(member.status === "active" || member.status == null)) {
+          return false;
+        }
+        if (filter === "suspended" && member.status !== "suspended") return false;
+        if (!needle) return true;
+        return (
+          member.displayName.toLowerCase().includes(needle)
+          || memberRolesLabel(member, roles).toLowerCase().includes(needle)
+        );
+      })
+      .slice()
+      .sort((a, b) => {
+        if (a.role === "admin" && b.role !== "admin") return -1;
+        if (b.role === "admin" && a.role !== "admin") return 1;
+        return a.displayName.localeCompare(b.displayName);
+      });
+  }, [active, filter, query, roles]);
+
+  const adminCount = active.filter((member) => member.role === "admin").length;
 
   return (
-    <GaneshScreen>
-      <Text style={{ color: theme.colors.foreground, fontSize: 22, fontWeight: "800" }}>
-        Committee
-      </Text>
-      <Text style={{ color: theme.colors.mutedForeground, lineHeight: 22 }}>
-        Open a person to assign roles or make them Admin.
-      </Text>
+    <GaneshScreen safeTop>
+      <GaneshHeader
+        title="Members"
+        subtitle={`${active.length} ${active.length === 1 ? "person" : "people"} · ${adminCount} admin${
+          adminCount === 1 ? "" : "s"
+        }`}
+        icon={<Users size={22} color={g.saffron} strokeWidth={2.2} />}
+        onBack={back}
+      />
+
       {can("members.approve") ? (
-        <Button variant="outline" onPress={() => push("/(ganesh)/join-requests" as never)}>
-          Join requests
-        </Button>
+        <Section plain>
+          <NavRow
+            title="Join requests"
+            meta={
+              requests.length > 0
+                ? "Choose a role, then approve"
+                : "Nobody is waiting right now"
+            }
+            icon={<UserPlus size={17} color={g.saffron} strokeWidth={2.2} />}
+            iconTint={g.wash(g.saffron)}
+            badge={
+              requests.length > 0
+                ? { kind: "overdue", label: `${requests.length} waiting` }
+                : undefined
+            }
+            onPress={() => push("/(ganesh)/join-requests" as never)}
+          />
+        </Section>
       ) : null}
-      {active.length === 0 ? (
-        <EmptyState title="No members yet" description="Approve a join request to add the first person." />
+
+      <SearchBar value={query} onChangeText={setQuery} placeholder="Search name or role" />
+
+      <FilterChips value={filter} options={FILTER_OPTIONS} onChange={setFilter} />
+
+      {rows.length === 0 ? (
+        <ListStateView
+          loading={loading && active.length === 0}
+          error={error}
+          illustration="splits"
+          title={query.trim() || filter !== "all" ? "Nobody matches" : "No members yet"}
+          description={
+            query.trim() || filter !== "all"
+              ? "Try another filter or clear the search."
+              : "Approve a join request to add the first person to this Pandal."
+          }
+          action={
+            can("members.approve") && !query.trim() && filter === "all"
+              ? { label: "Join requests", onPress: () => push("/(ganesh)/join-requests" as never) }
+              : undefined
+          }
+        />
       ) : (
-        active.map((member) => (
-          <Pressable
-            key={member.id}
-            onPress={() => push(`/(ganesh)/member/${member.userId}` as never)}
-            style={{
-              backgroundColor: theme.colors.card,
-              borderRadius: 16,
-              padding: 14,
-              gap: 4,
-              borderWidth: 1,
-              borderColor: theme.colors.border,
-              minHeight: 64,
-            }}
-          >
-            <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>
-              {member.displayName}
-            </Text>
-            <Text style={{ color: theme.colors.mutedForeground }}>
-              {memberRolesLabel(member, roles)} · {ganeshStatusLabel(member.status)}
-              {member.createdAt ? ` · Joined ${formatGaneshWhen(member.createdAt)}` : ""}
-            </Text>
-          </Pressable>
-        ))
+        <View style={styles.list}>
+          {rows.map((member) => (
+            <LedgerRow
+              key={member.id}
+              id={member.userId}
+              icon={<Avatar name={member.displayName} seed={member.userId} />}
+              iconTint="none"
+              title={member.displayName}
+              meta={memberRolesLabel(member, roles)}
+              badges={
+                member.role === "admin"
+                  ? [{ kind: "permanent", label: "Admin" }]
+                  : member.status === "suspended"
+                    ? [{ kind: "cancelled", label: ganeshStatusLabel(member.status) }]
+                    : undefined
+              }
+              when={member.createdAt ? `Joined ${formatGaneshWhen(member.createdAt)}` : undefined}
+              onPress={(userId) => push(`/(ganesh)/member/${userId}` as never)}
+            />
+          ))}
+        </View>
       )}
+
       {canReadAudit ? (
-        <>
-          <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>Member changes</Text>
+        <Section
+          title="Member changes"
+          icon={<History size={16} color={theme.colors.mutedForeground} strokeWidth={2.2} />}
+        >
           {audits.length === 0 ? (
-            <Text style={{ color: theme.colors.mutedForeground }}>No membership changes yet.</Text>
+            <Text
+              style={[
+                styles.emptyAudit,
+                { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular },
+              ]}
+            >
+              No membership changes yet.
+            </Text>
           ) : (
-            audits.map((audit) => (
-              <View key={audit.id} style={{ gap: 2 }}>
-                <Text style={{ color: theme.colors.foreground }}>{auditLine(audit, members)}</Text>
+            audits.slice(0, 12).map((audit, index) => (
+              <View
+                key={audit.id}
+                style={[
+                  styles.auditRow,
+                  index < Math.min(audits.length, 12) - 1 && {
+                    borderBottomWidth: StyleSheet.hairlineWidth,
+                    borderBottomColor: g.divider,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.auditText,
+                    { color: theme.colors.foreground, fontFamily: theme.fontFamily.regular },
+                  ]}
+                >
+                  {auditLine(audit, members)}
+                </Text>
                 {audit.at ? (
-                  <Text style={{ color: theme.colors.mutedForeground }}>{formatGaneshWhen(audit.at)}</Text>
+                  <MetaLabel>{formatGaneshWhen(audit.at)}</MetaLabel>
                 ) : null}
               </View>
             ))
           )}
-        </>
+        </Section>
       ) : null}
     </GaneshScreen>
   );
 }
+
+const styles = StyleSheet.create({
+  list: {
+    gap: 10,
+  },
+  emptyAudit: {
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  auditRow: {
+    paddingVertical: 9,
+    gap: 2,
+  },
+  auditText: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+});

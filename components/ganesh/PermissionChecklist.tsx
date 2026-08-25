@@ -1,12 +1,33 @@
-import { Pressable, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { AlertTriangle, Check } from "lucide-react-native";
 
+import { MetaLabel, Section, useGaneshTokens } from "@/components/ganesh/ui";
+import { haptic } from "@/lib/haptics";
 import {
+  CRITICAL_PERMISSIONS,
   PERMISSION_GROUPS,
   togglePermission,
   type PermissionGroup,
 } from "@/shared/utils/ganeshPermissionRegistry";
 import type { GaneshPermission } from "@/shared/utils/ganeshPermissions";
 import { useTheme } from "@/theme/ThemeProvider";
+
+/** Square checkbox matching the app's control weight. */
+function Checkbox({ on, tint }: { on: boolean; tint: string }) {
+  const g = useGaneshTokens();
+  return (
+    <View
+      style={[
+        styles.checkbox,
+        on
+          ? { backgroundColor: tint, borderColor: tint }
+          : { backgroundColor: "transparent", borderColor: g.divider },
+      ]}
+    >
+      {on ? <Check size={13} color="#FFFFFF" strokeWidth={3} /> : null}
+    </View>
+  );
+}
 
 function GroupBlock({
   group,
@@ -18,61 +39,99 @@ function GroupBlock({
   onChange: (next: GaneshPermission[]) => void;
 }) {
   const { theme } = useTheme();
+  const g = useGaneshTokens();
+
   const keys = group.items.map((item) => item.key);
-  const allOn = keys.every((key) => selected.includes(key));
+  const onCount = keys.filter((key) => selected.includes(key)).length;
+  const allOn = onCount === keys.length;
 
   return (
-    <View style={{ gap: 8 }}>
-      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-        <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>{group.label}</Text>
+    <Section
+      title={group.label}
+      subtitle={`${onCount} of ${keys.length} allowed`}
+      action={
         <Pressable
           onPress={() => {
+            void haptic.selection();
             let next = [...selected];
-            if (allOn) {
-              for (const key of keys) next = togglePermission(next, key, false);
-            } else {
-              for (const key of keys) next = togglePermission(next, key, true);
-            }
+            for (const key of keys) next = togglePermission(next, key, !allOn);
             onChange(next);
           }}
-          style={{ minHeight: 40, justifyContent: "center" }}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={allOn ? `Clear all ${group.label}` : `Allow all ${group.label}`}
+          style={({ pressed }) => [styles.groupAction, pressed && { opacity: 0.6 }]}
         >
-          <Text style={{ color: theme.colors.primary, fontWeight: "700" }}>
-            {allOn ? "Clear" : "Select all"}
+          <Text style={[styles.groupActionLabel, { color: g.saffron, fontFamily: theme.fontFamily.semibold }]}>
+            {allOn ? "Clear" : "Allow all"}
           </Text>
         </Pressable>
-      </View>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-        {group.items.map((item) => {
-          const on = selected.includes(item.key);
-          return (
-            <Pressable
-              key={item.key}
-              onPress={() => onChange(togglePermission(selected, item.key, !on))}
-              style={{
-                paddingHorizontal: 12,
-                paddingVertical: 10,
-                minHeight: 44,
-                borderRadius: 999,
-                backgroundColor: on ? theme.colors.primary : theme.colors.muted,
-              }}
+      }
+    >
+      {group.items.map((item, index) => {
+        const on = selected.includes(item.key);
+        const critical = CRITICAL_PERMISSIONS.includes(item.key);
+
+        return (
+          <Pressable
+            key={item.key}
+            onPress={() => {
+              void haptic.selection();
+              onChange(togglePermission(selected, item.key, !on));
+            }}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: on }}
+            accessibilityLabel={`${group.label}: ${item.label}${critical ? ", sensitive" : ""}`}
+            android_ripple={{
+              color: g.isDark ? "rgba(255,255,255,0.06)" : "rgba(15,23,42,0.05)",
+              borderless: false,
+            }}
+            style={({ pressed }) => [
+              styles.permRow,
+              index < group.items.length - 1 && {
+                borderBottomWidth: StyleSheet.hairlineWidth,
+                borderBottomColor: g.divider,
+              },
+              pressed && { opacity: 0.85 },
+            ]}
+          >
+            <Checkbox on={on} tint={g.saffron} />
+            <Text
+              style={[
+                styles.permLabel,
+                { color: theme.colors.foreground, fontFamily: theme.fontFamily.regular },
+              ]}
             >
-              <Text
-                style={{
-                  color: on ? theme.colors.primaryForeground : theme.colors.foreground,
-                  fontWeight: "700",
-                }}
-              >
-                {item.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
-    </View>
+              {item.label}
+            </Text>
+            {critical ? (
+              <View style={styles.criticalTag}>
+                <AlertTriangle size={11} color={theme.colors.warning} strokeWidth={2.4} />
+                <Text
+                  style={[
+                    styles.criticalLabel,
+                    { color: theme.colors.warning, fontFamily: theme.fontFamily.medium },
+                  ]}
+                >
+                  Sensitive
+                </Text>
+              </View>
+            ) : null}
+          </Pressable>
+        );
+      })}
+    </Section>
   );
 }
 
+/**
+ * Grouped permission controls.
+ *
+ * The brief was explicit: no giant list of checkboxes. Each capability area is
+ * its own `Section` with a running "n of m allowed" count and one bulk toggle,
+ * and permissions that can move money or change the committee are tagged
+ * `Sensitive` in text — not by colour alone.
+ */
 export function PermissionChecklist({
   selected,
   onChange,
@@ -81,7 +140,7 @@ export function PermissionChecklist({
   onChange: (next: GaneshPermission[]) => void;
 }) {
   return (
-    <View style={{ gap: 18 }}>
+    <View style={styles.stack}>
       {PERMISSION_GROUPS.map((group) => (
         <GroupBlock key={group.id} group={group} selected={selected} onChange={onChange} />
       ))}
@@ -89,28 +148,138 @@ export function PermissionChecklist({
   );
 }
 
+/** Read-only view of what a role can do. Shows only what is granted. */
 export function PermissionSummary({
   permissions,
 }: {
   permissions: readonly GaneshPermission[];
 }) {
   const { theme } = useTheme();
+  const g = useGaneshTokens();
+
+  const granted = PERMISSION_GROUPS.map((group) => ({
+    group,
+    items: group.items.filter((item) => permissions.includes(item.key)),
+  })).filter((entry) => entry.items.length > 0);
+
+  if (granted.length === 0) {
+    return (
+      <Section title="Permissions">
+        <Text
+          style={[
+            styles.emptyText,
+            { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular },
+          ]}
+        >
+          This role cannot do anything yet. Edit it to choose what it can access.
+        </Text>
+      </Section>
+    );
+  }
+
   return (
-    <View style={{ gap: 12 }}>
-      {PERMISSION_GROUPS.map((group) => {
-        const items = group.items.filter((item) => permissions.includes(item.key));
-        if (items.length === 0) return null;
-        return (
-          <View key={group.id} style={{ gap: 4 }}>
-            <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>{group.label}</Text>
-            {group.items.map((item) => (
-              <Text key={item.key} style={{ color: theme.colors.mutedForeground }}>
-                {permissions.includes(item.key) ? "✓" : "✗"} {item.label}
+    <Section title="Permissions" subtitle={`${permissions.length} allowed`}>
+      <View style={styles.summaryStack}>
+        {granted.map(({ group, items }) => (
+          <View key={group.id} style={styles.summaryGroup}>
+            <MetaLabel>{group.label}</MetaLabel>
+            <View style={styles.summaryItems}>
+              {items.map((item) => (
+                <View key={item.key} style={styles.summaryItem}>
+                  <Check size={13} color={g.godFund} strokeWidth={3} />
+                  <Text
+                    style={[
+                      styles.summaryLabel,
+                      { color: theme.colors.foreground, fontFamily: theme.fontFamily.regular },
+                    ]}
+                  >
+                    {item.label}
+                  </Text>
+                </View>
+              ))}
+            </View>
+            {items.length < group.items.length ? (
+              <Text
+                style={[
+                  styles.summaryRest,
+                  { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular },
+                ]}
+              >
+                {group.items.length - items.length} not allowed
               </Text>
-            ))}
+            ) : null}
           </View>
-        );
-      })}
-    </View>
+        ))}
+      </View>
+    </Section>
   );
 }
+
+const styles = StyleSheet.create({
+  stack: {
+    gap: 12,
+  },
+  groupAction: {
+    minHeight: 32,
+    justifyContent: "center",
+  },
+  groupActionLabel: {
+    fontSize: 13,
+  },
+  permRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    minHeight: 48,
+    paddingVertical: 8,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 6,
+    borderCurve: "continuous",
+    borderWidth: 1.5,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  permLabel: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 14,
+  },
+  criticalTag: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  criticalLabel: {
+    fontSize: 10.5,
+    letterSpacing: 0.2,
+  },
+  summaryStack: {
+    gap: 14,
+  },
+  summaryGroup: {
+    gap: 5,
+  },
+  summaryItems: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+  },
+  summaryItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  summaryLabel: {
+    fontSize: 13,
+  },
+  summaryRest: {
+    fontSize: 11.5,
+  },
+  emptyText: {
+    fontSize: 13,
+    lineHeight: 19,
+  },
+});
