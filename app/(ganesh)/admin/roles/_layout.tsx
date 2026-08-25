@@ -14,9 +14,11 @@ export default function AdminRolesLayout() {
         contentStyle: { backgroundColor: theme.colors.background },
       }}
     >
-      <Stack.Screen name="index" options={{ title: "Roles & permissions" }} />
-      <Stack.Screen name="new" options={{ title: "Create role" }} />
-      <Stack.Screen name="[id]" options={{ title: "Role" }} />
+      {/* All three draw their own GaneshHeader, matching the Expense
+          Tracker's in-content PageHeader. */}
+      <Stack.Screen name="index" options={{ headerShown: false }} />
+      <Stack.Screen name="new" options={{ headerShown: false }} />
+      <Stack.Screen name="[id]" options={{ headerShown: false }} />
     </Stack>
   );
 }

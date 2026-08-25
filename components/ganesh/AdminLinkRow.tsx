@@ -1,51 +1,40 @@
-import { Pressable, Text, View } from "react-native";
+import type { ReactNode } from "react";
 
-import { useTheme } from "@/theme/ThemeProvider";
+import { NavRow } from "@/components/ganesh/ui/NavRow";
+import type { StatusKind } from "@/components/ganesh/ui/StatusBadge";
 
+/**
+ * Kept for call-site compatibility. The implementation is now `NavRow`, which
+ * renders as a row inside a `Section` rather than as its own bordered card —
+ * grouped navigation instead of a wall of cards.
+ */
 export function AdminLinkRow({
   title,
   subtitle,
   badge,
   tone = "normal",
+  icon,
+  divider,
   onPress,
 }: {
   title: string;
   subtitle?: string;
   badge?: string;
   tone?: "normal" | "attention" | "critical";
+  icon?: ReactNode;
+  divider?: boolean;
   onPress: () => void;
 }) {
-  const { theme } = useTheme();
-  const badgeColor =
-    tone === "critical"
-      ? theme.colors.destructive
-      : tone === "attention"
-        ? theme.colors.primary
-        : theme.colors.mutedForeground;
+  const kind: StatusKind = tone === "critical" ? "overdue" : "pending";
 
   return (
-    <Pressable
+    <NavRow
+      title={title}
+      meta={subtitle}
+      icon={icon}
+      divider={divider}
+      badge={badge ? { kind, label: badge } : undefined}
       onPress={onPress}
-      style={{
-        backgroundColor: theme.colors.card,
-        borderColor: theme.colors.border,
-        borderWidth: 1,
-        borderRadius: 16,
-        padding: 14,
-        gap: 4,
-      }}
-    >
-      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-        <Text style={{ color: theme.colors.foreground, fontWeight: "700", flex: 1 }}>{title}</Text>
-        {badge ? (
-          <Text style={{ color: badgeColor, fontWeight: "800" }}>{badge}</Text>
-        ) : (
-          <Text style={{ color: theme.colors.primary, fontWeight: "700" }}>Open</Text>
-        )}
-      </View>
-      {subtitle ? (
-        <Text style={{ color: theme.colors.mutedForeground, lineHeight: 20 }}>{subtitle}</Text>
-      ) : null}
-    </Pressable>
+    />
   );
 }

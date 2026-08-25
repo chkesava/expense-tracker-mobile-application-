@@ -1,11 +1,20 @@
 import { useState } from "react";
-import { Alert, Text, View } from "react-native";
+import { Alert, StyleSheet, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { ShieldCheck } from "lucide-react-native";
 
-import { AdminLinkRow } from "@/components/ganesh/AdminLinkRow";
-import { PermissionChecklist, PermissionSummary } from "@/components/ganesh/PermissionChecklist";
 import { AdminQueryState } from "@/components/ganesh/AdminQueryState";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
+import { PermissionChecklist, PermissionSummary } from "@/components/ganesh/PermissionChecklist";
+import {
+  Avatar,
+  GaneshHeader,
+  LedgerRow,
+  Section,
+  StatusStrip,
+  useGaneshTokens,
+} from "@/components/ganesh/ui";
+import { EmptyState } from "@/components/common/EmptyState";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
@@ -17,10 +26,9 @@ import { toast } from "@/lib/toast";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import { CRITICAL_PERMISSIONS } from "@/shared/utils/ganeshPermissionRegistry";
 import type { GaneshPermission } from "@/shared/utils/ganeshPermissions";
-import { useTheme } from "@/theme/ThemeProvider";
 
 export default function AdminRoleDetailScreen() {
-  const { theme } = useTheme();
+  const g = useGaneshTokens();
   const { push, back } = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { pandalId } = useGaneshSession();
@@ -28,19 +36,105 @@ export default function AdminRoleDetailScreen() {
   const { members } = usePandalMembers(pandalId);
   const writes = useGaneshWrites();
   const { can } = useGaneshPermissions();
+
   const role = roles.find((item) => item.id === id);
   const assigned = members.filter((member) => (member.roleIds ?? []).includes(id ?? ""));
+
   const [editing, setEditing] = useState(false);
   const [_name, setName] = useState<string | undefined>(undefined);
   const [_description, setDescription] = useState<string | undefined>(undefined);
   const [_permissions, setPermissions] = useState<GaneshPermission[] | undefined>(undefined);
   const [busy, setBusy] = useState(false);
+
   const name = _name ?? role?.name ?? "";
   const description = _description ?? role?.description ?? "";
   const permissions = _permissions ?? role?.permissions ?? [];
 
+  const resetDraft = () => {
+    setName(undefined);
+    setDescription(undefined);
+    setPermissions(undefined);
+  };
+
+  const saveRole = () => {
+    if (!role) return;
+    setBusy(true);
+    writes
+      .updatePandalRole(role.id, { name, description, permissions })
+      .then(() => {
+        setEditing(false);
+        resetDraft();
+      })
+      .catch((caught) => {
+        logError("ganesh.roles.update", caught);
+        toast.error(friendlyErrorMessage(caught, "Could not save the role."));
+      })
+      .finally(() => setBusy(false));
+  };
+
+  const onSave = () => {
+    if (!role) return;
+    const addedCritical = permissions.filter(
+      (item) => CRITICAL_PERMISSIONS.includes(item) && !role.permissions.includes(item)
+    );
+    if (addedCritical.length > 0) {
+      Alert.alert(
+        "Sensitive permissions",
+        "This change can let people move money or manage the committee.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Save", onPress: saveRole },
+        ]
+      );
+      return;
+    }
+    saveRole();
+  };
+
+  const onDelete = () => {
+    if (!role) return;
+    if (assigned.length > 0) {
+      Alert.alert(
+        "Role is in use",
+        `This role is assigned to ${assigned.length} ${
+          assigned.length === 1 ? "person" : "people"
+        }. Remove those assignments first.`
+      );
+      return;
+    }
+    Alert.alert("Delete this role?", `${role.name} will be removed.`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: () => {
+          writes
+            .deletePandalRole(role.id)
+            .then(() => back())
+            .catch((caught) => {
+              logError("ganesh.roles.delete", caught);
+              toast.error(friendlyErrorMessage(caught, "Could not delete the role."));
+            });
+        },
+      },
+    ]);
+  };
+
   return (
-    <GaneshScreen>
+    <GaneshScreen safeTop>
+      <GaneshHeader
+        title={role?.name || "Role"}
+        subtitle={
+          role
+            ? `${role.type === "builtin" ? "Built-in" : "Custom"} · ${
+                role.permissions.length
+              } permissions · ${assigned.length} ${assigned.length === 1 ? "person" : "people"}`
+            : undefined
+        }
+        icon={<ShieldCheck size={22} color={g.saffron} strokeWidth={2.2} />}
+        onBack={back}
+      />
+
       <AdminQueryState
         loading={loading && !role}
         error={error}
@@ -48,128 +142,98 @@ export default function AdminRoleDetailScreen() {
         empty={!role ? { title: "Role not found", description: "It may have been deleted." } : null}
       >
         {role ? (
-          <>
-            <Text style={{ color: theme.colors.mutedForeground }}>
-              {role.type === "builtin" ? "Built-in role" : "Custom role"} · {role.permissions.length}{" "}
-              permissions · {assigned.length} people
-            </Text>
-            {editing ? (
-              <View style={{ gap: 12 }}>
-                <Input label="Role name" value={name} onChangeText={setName} />
-                <Input label="Description" value={description} onChangeText={setDescription} />
-                <PermissionChecklist selected={permissions} onChange={setPermissions} />
-                <Button
-                  loading={busy}
-                  onPress={() => {
-                    const save = () => {
-                      setBusy(true);
-                      writes
-                        .updatePandalRole(role.id, { name, description, permissions })
-                        .then(() => {
-                          setEditing(false);
-                          setName(undefined);
-                          setDescription(undefined);
-                          setPermissions(undefined);
-                        })
-                        .catch((caught) => {
-                          logError("ganesh.roles.update", caught);
-                          toast.error(friendlyErrorMessage(caught, "Could not save the role."));
-                        })
-                        .finally(() => setBusy(false));
-                    };
-                    const addedCritical = permissions.filter(
-                      (item) =>
-                        CRITICAL_PERMISSIONS.includes(item) && !role.permissions.includes(item)
-                    );
-                    if (addedCritical.length > 0) {
-                      Alert.alert(
-                        "Sensitive permissions",
-                        "This change can let people move money or manage the committee.",
-                        [
-                          { text: "Cancel", style: "cancel" },
-                          { text: "Save", onPress: save },
-                        ]
-                      );
-                      return;
-                    }
-                    save();
-                  }}
-                >
+          editing ? (
+            <>
+              <Section title="Details">
+                <View style={styles.form}>
+                  <Input label="Role name" value={name} onChangeText={setName} />
+                  <Input label="Description" value={description} onChangeText={setDescription} />
+                </View>
+              </Section>
+
+              <PermissionChecklist selected={permissions} onChange={setPermissions} />
+
+              <View style={styles.form}>
+                <Button loading={busy} onPress={onSave}>
                   Save role
                 </Button>
-                <Button variant="ghost" onPress={() => setEditing(false)}>
+                <Button
+                  variant="ghost"
+                  onPress={() => {
+                    setEditing(false);
+                    resetDraft();
+                  }}
+                >
                   Cancel
                 </Button>
               </View>
-            ) : (
-              <>
-                {role.description ? (
-                  <Text style={{ color: theme.colors.mutedForeground, lineHeight: 22 }}>
-                    {role.description}
-                  </Text>
-                ) : null}
-                <PermissionSummary permissions={role.permissions} />
-                <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>
-                  Assigned people
-                </Text>
+            </>
+          ) : (
+            <>
+              {role.description ? (
+                <StatusStrip tone="info" message={role.description} />
+              ) : null}
+
+              <PermissionSummary permissions={role.permissions} />
+
+              <Section
+                title="Assigned people"
+                subtitle={`${assigned.length} ${assigned.length === 1 ? "person" : "people"}`}
+              >
                 {assigned.length === 0 ? (
-                  <Text style={{ color: theme.colors.mutedForeground }}>No one has this role yet.</Text>
+                  <EmptyState
+                    compact
+                    illustration="splits"
+                    title="Nobody has this role yet"
+                    description="Open a member to assign it."
+                  />
                 ) : (
-                  assigned.map((member) => (
-                    <AdminLinkRow
-                      key={member.userId}
-                      title={member.displayName}
-                      subtitle={member.role === "admin" ? "Pandal Admin" : "Committee"}
-                      onPress={() => push(`/(ganesh)/member/${member.userId}` as never)}
-                    />
-                  ))
+                  <View style={styles.people}>
+                    {assigned.map((member) => (
+                      <LedgerRow
+                        key={member.userId}
+                        id={member.userId}
+                        icon={<Avatar name={member.displayName} seed={member.userId} size={36} />}
+                        iconTint="none"
+                        title={member.displayName}
+                        meta={member.role === "admin" ? "Pandal Admin" : "Committee"}
+                        onPress={(userId) => push(`/(ganesh)/member/${userId}` as never)}
+                      />
+                    ))}
+                  </View>
                 )}
+              </Section>
+
+              <View style={styles.form}>
                 {can("roles.update") ? (
                   <Button onPress={() => setEditing(true)}>Edit role</Button>
                 ) : null}
                 {role.type === "custom" ? (
                   can("roles.delete") ? (
-                  <Button
-                    variant="outline"
-                    onPress={() => {
-                      if (assigned.length > 0) {
-                        Alert.alert(
-                          "Role is in use",
-                          `This role is assigned to ${assigned.length} user${assigned.length === 1 ? "" : "s"}. Remove those assignments first.`
-                        );
-                        return;
-                      }
-                      Alert.alert("Delete this role?", `${role.name} will be removed.`, [
-                        { text: "Cancel", style: "cancel" },
-                        {
-                          text: "Delete",
-                          style: "destructive",
-                          onPress: () => {
-                            writes
-                              .deletePandalRole(role.id)
-                              .then(() => back())
-                              .catch((caught) => {
-                                logError("ganesh.roles.delete", caught);
-                                toast.error(friendlyErrorMessage(caught, "Could not delete the role."));
-                              });
-                          },
-                        },
-                      ]);
-                    }}
-                  >
-                    Delete role
-                  </Button>
+                    <Button variant="outline" onPress={onDelete}>
+                      Delete role
+                    </Button>
                   ) : null
                 ) : (
-                  <Text style={{ color: theme.colors.mutedForeground }}>
-                    Built-in roles can be edited but not deleted.
-                  </Text>
+                  <StatusStrip
+                    tone="muted"
+                    message="Built-in roles can be edited but not deleted."
+                  />
                 )}
-              </>
-            )}
-          </>
+              </View>
+            </>
+          )
         ) : null}
       </AdminQueryState>
     </GaneshScreen>
   );
 }
+
+const styles = StyleSheet.create({
+  form: {
+    gap: 12,
+  },
+  people: {
+    gap: 10,
+  },
+});

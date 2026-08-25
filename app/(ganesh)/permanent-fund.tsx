@@ -1,13 +1,23 @@
-import { useMemo, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { useCallback, useMemo, useState } from "react";
+import { StyleSheet, Text, View } from "react-native";
 import { FlashList } from "@shopify/flash-list";
 import { useRouter } from "expo-router";
+import { ArrowDownLeft, ArrowUpRight, Landmark, WifiOff } from "lucide-react-native";
 
 import { EmptyState } from "@/components/common/EmptyState";
 import { FundLocationChips, fundLocationLabel } from "@/components/ganesh/FundLocationChips";
-import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
+import { GaneshScreen, useGaneshListPadding } from "@/components/ganesh/GaneshScreen";
 import { PermanentFundCard } from "@/components/ganesh/PermanentFundCard";
-import { PendingHint } from "@/components/ganesh/GaneshSyncChip";
+import {
+  FilterChips,
+  GaneshHeader,
+  LedgerRow,
+  MetaLabel,
+  Money,
+  Section,
+  StatusStrip,
+  useGaneshTokens,
+} from "@/components/ganesh/ui";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useFestivalSummaries } from "@/hooks/useFestivalSummaries";
@@ -20,13 +30,14 @@ import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import { useNetwork } from "@/providers/NetworkProvider";
-import type { PermanentFundLocation, PermanentFundTransaction, PermanentFundTxType } from "@/shared/types/ganesh";
+import type {
+  PermanentFundLocation,
+  PermanentFundTransaction,
+  PermanentFundTxType,
+} from "@/shared/types/ganesh";
 import { formatGaneshWhen, memberDisplayName } from "@/shared/utils/ganeshIdentity";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
-import {
-  festivalCashSpent,
-  festivalCollectedCash,
-} from "@/shared/utils/ganeshMath";
+import { festivalCashSpent, festivalCollectedCash } from "@/shared/utils/ganeshMath";
 import { formatInr } from "@/shared/utils/ganeshMoney";
 import { useTheme } from "@/theme/ThemeProvider";
 
@@ -39,13 +50,18 @@ const TX_LABELS: Record<PermanentFundTxType, string> = {
   ADJUSTMENT: "Adjustment",
 };
 
+type ActionMode = "hidden" | "donate" | "adjust" | "toFestival" | "fromFestival" | "initial";
+
 export default function PermanentFundScreen() {
   const { theme } = useTheme();
-  const { push } = useRouter();
+  const g = useGaneshTokens();
+  const { push, back } = useRouter();
+  const listPadding = useGaneshListPadding(false);
   const { isOnline } = useNetwork();
+
   const { pandalId, festivalId } = useGaneshSession();
   const { fund } = usePermanentFund(pandalId);
-  const { transactions } = usePermanentFundTransactions(pandalId);
+  const { transactions, loading } = usePermanentFundTransactions(pandalId);
   const { festivals } = useFestivals(pandalId);
   const { summaries } = useFestivalSummaries(
     pandalId,
@@ -54,79 +70,60 @@ export default function PermanentFundScreen() {
   const { members } = usePandalMembers(pandalId);
   const writes = useGaneshWrites();
   const { can } = useGaneshPermissions();
+
   const canAdd = can("permanentFund.add");
   const canTransfer = can("permanentFund.transfer");
   const openFestivals = festivals.filter((festival) => festival.status === "open");
 
+  const renderItem = useCallback(
+    ({ item }: { item: PermanentFundTransaction }) => (
+      <FundTransactionRow item={item} enteredBy={memberDisplayName(members, item.createdBy)} />
+    ),
+    [members]
+  );
+
   return (
-    <GaneshScreen scroll={false}>
+    <GaneshScreen safeTop scroll={false}>
+      <GaneshHeader
+        title="Permanent Fund"
+        subtitle="Carries across festivals"
+        icon={<Landmark size={22} color={g.maroon} strokeWidth={2.2} />}
+        onBack={back}
+      />
+
       <FlashList
         data={transactions}
+        style={styles.list}
         keyExtractor={(item) => item.id}
-        contentInsetAdjustmentBehavior="automatic"
+        contentContainerStyle={{ paddingBottom: listPadding }}
+        ItemSeparatorComponent={() => <View style={styles.separator} />}
         ListHeaderComponent={
-          <View style={{ gap: 16, paddingBottom: 8 }}>
+          <View style={styles.header}>
             <PermanentFundCard
               fund={fund}
+              variant="hero"
               onAddPress={
                 canAdd && fund.total === 0
                   ? () => push("/(ganesh)/add-permanent-fund" as never)
                   : undefined
               }
             />
+
             {!isOnline ? (
-              <Text style={{ color: theme.colors.mutedForeground }}>
-                Transfers need an active connection. Viewing history still works offline.
-              </Text>
-            ) : null}
-            <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>
-              Festival history
-            </Text>
-            {festivals.length === 0 ? (
-              <EmptyState
-                title="No festivals yet"
-                description="The Permanent Fund stays with the Pandal even without an active festival."
+              <StatusStrip
+                tone="muted"
+                icon={<WifiOff size={14} color={theme.colors.mutedForeground} strokeWidth={2.3} />}
+                message="Transfers need a connection. Viewing history still works offline."
               />
-            ) : (
-              festivals.map((festival) => {
-                const summary = summaries[festival.id];
-                return (
-                  <View
-                    key={festival.id}
-                    style={{
-                      backgroundColor: theme.colors.card,
-                      borderColor: theme.colors.border,
-                      borderWidth: 1,
-                      borderRadius: 16,
-                      padding: 14,
-                      gap: 4,
-                    }}
-                  >
-                    <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>
-                      {festival.name}
-                    </Text>
-                    <Text style={{ color: theme.colors.mutedForeground }}>
-                      Collected {formatInr(summary ? festivalCollectedCash(summary) : 0)}
-                      {" · "}
-                      Spent {formatInr(summary ? festivalCashSpent(summary) : 0)}
-                    </Text>
-                    <Text style={{ color: theme.colors.mutedForeground }}>
-                      From Permanent Fund{" "}
-                      {formatInr(summary?.receivedFromPermanentFund ?? 0)}
-                      {" · "}
-                      Returned {formatInr(summary?.transferredToPermanentFund ?? 0)}
-                    </Text>
-                  </View>
-                );
-              })
-            )}
+            ) : null}
+
             {canAdd || canTransfer ? (
-              <ManagerFundActions
+              <FundActions
                 fundAvailable={fund.total}
                 openFestivalId={openFestivals[0]?.id ?? festivalId}
                 openFestivalName={
-                  openFestivals[0]?.name ??
-                  festivals.find((festival) => festival.id === festivalId)?.name
+                  openFestivals[0]?.name
+                  ?? festivals.find((festival) => festival.id === festivalId)?.name
                 }
                 showInitial={canAdd && fund.total === 0}
                 canAdd={canAdd}
@@ -138,31 +135,113 @@ export default function PermanentFundScreen() {
                 onTransferIn={(input) => writes.transferFestivalToPermanent(input)}
               />
             ) : (
-              <Text style={{ color: theme.colors.mutedForeground }}>
-                Members can view this fund. Adding or transferring money needs a role that allows it.
-              </Text>
+              <StatusStrip
+                tone="muted"
+                message="Members can view this fund. Adding or transferring money needs a role that allows it."
+              />
             )}
-            <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>History</Text>
+
+            <Section title="Festival history" subtitle="What each festival took and returned">
+              {festivals.length === 0 ? (
+                <EmptyState
+                  compact
+                  illustration="general"
+                  title="No festivals yet"
+                  description="The Permanent Fund stays with the Pandal even without an active festival."
+                />
+              ) : (
+                festivals.map((festival, index) => {
+                  const summary = summaries[festival.id];
+                  return (
+                    <View
+                      key={festival.id}
+                      style={[
+                        styles.festivalRow,
+                        index < festivals.length - 1 && {
+                          borderBottomWidth: StyleSheet.hairlineWidth,
+                          borderBottomColor: g.divider,
+                        },
+                      ]}
+                    >
+                      <View style={styles.festivalTop}>
+                        <Text
+                          numberOfLines={1}
+                          style={[
+                            styles.festivalName,
+                            {
+                              color: theme.colors.foreground,
+                              fontFamily: theme.fontFamily.medium,
+                            },
+                          ]}
+                        >
+                          {festival.name}
+                        </Text>
+                        {festival.status === "open" ? (
+                          <MetaLabel>Open</MetaLabel>
+                        ) : (
+                          <MetaLabel>Closed</MetaLabel>
+                        )}
+                      </View>
+
+                      <View style={styles.festivalGrid}>
+                        <View style={styles.festivalCell}>
+                          <MetaLabel>Collected</MetaLabel>
+                          <Money
+                            value={summary ? festivalCollectedCash(summary) : 0}
+                            size="secondary"
+                          />
+                        </View>
+                        <View style={styles.festivalCell}>
+                          <MetaLabel>Spent</MetaLabel>
+                          <Money value={summary ? festivalCashSpent(summary) : 0} size="secondary" />
+                        </View>
+                        <View style={styles.festivalCell}>
+                          <MetaLabel>Took</MetaLabel>
+                          <Money
+                            value={summary?.receivedFromPermanentFund ?? 0}
+                            size="secondary"
+                          />
+                        </View>
+                        <View style={styles.festivalCell}>
+                          <MetaLabel>Returned</MetaLabel>
+                          <Money
+                            value={summary?.transferredToPermanentFund ?? 0}
+                            size="secondary"
+                          />
+                        </View>
+                      </View>
+                    </View>
+                  );
+                })
+              )}
+            </Section>
+
+            <Text
+              style={[
+                styles.historyHeading,
+                { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold },
+              ]}
+            >
+              History
+            </Text>
           </View>
         }
-        renderItem={({ item }) => (
-          <TransactionRow
-            item={item}
-            enteredBy={memberDisplayName(members, item.createdBy)}
-          />
-        )}
+        renderItem={renderItem}
         ListEmptyComponent={
-          <EmptyState
-            title="No Permanent Fund movements yet"
-            description="Initial balances, festival transfers, and pandal donations will appear here."
-          />
+          loading && transactions.length === 0 ? null : (
+            <EmptyState
+              illustration="vaults"
+              title="No Permanent Fund movements yet"
+              description="Initial balances, festival transfers, and Pandal donations will appear here."
+            />
+          )
         }
       />
     </GaneshScreen>
   );
 }
 
-function TransactionRow({
+function FundTransactionRow({
   item,
   enteredBy,
 }: {
@@ -170,10 +249,12 @@ function TransactionRow({
   enteredBy: string;
 }) {
   const { theme } = useTheme();
+  const g = useGaneshTokens();
   const inbound = item.signedAmount >= 0;
+
   const counterpart =
-    item.festivalName ||
-    (item.destinationType === "FESTIVAL"
+    item.festivalName
+    || (item.destinationType === "FESTIVAL"
       ? "Festival"
       : item.sourceType === "FESTIVAL"
         ? "Festival"
@@ -182,40 +263,32 @@ function TransactionRow({
           : item.type === "INITIAL_BALANCE"
             ? "Existing Pandal fund"
             : "External");
+
   return (
-    <View
-      style={{
-        backgroundColor: theme.colors.card,
-        borderColor: theme.colors.border,
-        borderWidth: 1,
-        borderRadius: 16,
-        padding: 14,
-        marginBottom: 10,
-        gap: 4,
-      }}
-    >
-      <Text style={{ color: inbound ? theme.colors.primary : theme.colors.foreground, fontWeight: "800" }}>
-        {inbound ? "+" : "-"} {formatInr(item.amount)}
-      </Text>
-      <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>
-        {TX_LABELS[item.type]}
-      </Text>
-      <Text style={{ color: theme.colors.mutedForeground }}>
-        {counterpart} · {fundLocationLabel(item.location)}
-      </Text>
-      {item.description ? (
-        <Text style={{ color: theme.colors.mutedForeground }}>{item.description}</Text>
-      ) : null}
-      <Text style={{ color: theme.colors.mutedForeground }}>
-        {inbound ? "Added by" : "Approved by"} {enteredBy}
-        {formatGaneshWhen(item.createdAt, item.date) ? ` · ${formatGaneshWhen(item.createdAt, item.date)}` : ""}
-      </Text>
-      <PendingHint pending={item.pendingWrite} />
-    </View>
+    <LedgerRow
+      id={item.id}
+      icon={
+        inbound ? (
+          <ArrowDownLeft size={18} color={g.godFund} strokeWidth={2.4} />
+        ) : (
+          <ArrowUpRight size={18} color={g.maroon} strokeWidth={2.4} />
+        )
+      }
+      iconTint={g.wash(inbound ? g.godFund : g.maroon)}
+      title={TX_LABELS[item.type]}
+      meta={[counterpart, fundLocationLabel(item.location), item.description || null]
+        .filter(Boolean)
+        .join(" · ")}
+      amount={item.amount}
+      amountMeta={<MetaLabel>{inbound ? "In" : "Out"}</MetaLabel>}
+      attribution={`${inbound ? "Added by" : "Approved by"} ${enteredBy}`}
+      when={formatGaneshWhen(item.createdAt, item.date)}
+      pending={item.pendingWrite}
+    />
   );
 }
 
-function ManagerFundActions({
+function FundActions({
   fundAvailable,
   openFestivalId,
   openFestivalName,
@@ -234,9 +307,21 @@ function ManagerFundActions({
   showInitial?: boolean;
   canAdd?: boolean;
   canTransfer?: boolean;
-  onDonate: (input: { amount: number; location: PermanentFundLocation; description?: string }) => Promise<unknown>;
-  onAdjust: (input: { amount: number; location: PermanentFundLocation; reason: string }) => Promise<unknown>;
-  onSeed: (input: { amount?: number; location?: PermanentFundLocation; description?: string }) => Promise<unknown>;
+  onDonate: (input: {
+    amount: number;
+    location: PermanentFundLocation;
+    description?: string;
+  }) => Promise<unknown>;
+  onAdjust: (input: {
+    amount: number;
+    location: PermanentFundLocation;
+    reason: string;
+  }) => Promise<unknown>;
+  onSeed: (input: {
+    amount?: number;
+    location?: PermanentFundLocation;
+    description?: string;
+  }) => Promise<unknown>;
   onTransferOut: (input: {
     festivalId?: string;
     amount: number;
@@ -252,16 +337,32 @@ function ManagerFundActions({
     type?: "CARRY_FORWARD" | "TRANSFER_IN";
   }) => Promise<unknown>;
 }) {
-  const { theme } = useTheme();
-  const [mode, setMode] = useState<
-    "hidden" | "donate" | "adjust" | "toFestival" | "fromFestival" | "initial"
-  >("hidden");
+  const [mode, setMode] = useState<ActionMode>("hidden");
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
   const [location, setLocation] = useState<PermanentFundLocation>("cash");
   const [adjustSign, setAdjustSign] = useState<1 | -1>(1);
   const [busy, setBusy] = useState(false);
+
   const parsedAmount = Number(amount);
+
+  const modes = useMemo(
+    () => [
+      { id: "hidden" as const, label: "None" },
+      ...(canAdd && showInitial
+        ? [{ id: "initial" as const, label: "Record existing balance" }]
+        : []),
+      ...(canAdd ? [{ id: "donate" as const, label: "Add donation" }] : []),
+      ...(canTransfer
+        ? [
+            { id: "toFestival" as const, label: "Use for festival" },
+            { id: "fromFestival" as const, label: "Return from festival" },
+            { id: "adjust" as const, label: "Adjust" },
+          ]
+        : []),
+    ],
+    [canAdd, canTransfer, showInitial]
+  );
 
   const submit = () => {
     setBusy(true);
@@ -269,28 +370,29 @@ function ManagerFundActions({
       mode === "initial"
         ? onSeed({ amount: parsedAmount, location, description })
         : mode === "donate"
-        ? onDonate({ amount: parsedAmount, location, description })
-        : mode === "adjust"
-          ? onAdjust({
-              amount: parsedAmount * adjustSign,
-              location,
-              reason: description,
-            })
-          : mode === "toFestival"
-            ? onTransferOut({
-                festivalId: openFestivalId ?? undefined,
-                amount: parsedAmount,
+          ? onDonate({ amount: parsedAmount, location, description })
+          : mode === "adjust"
+            ? onAdjust({
+                amount: parsedAmount * adjustSign,
                 location,
-                festivalName: openFestivalName,
-                description,
+                reason: description,
               })
-            : onTransferIn({
-                amount: parsedAmount,
-                location,
-                festivalName: openFestivalName,
-                description,
-                type: "TRANSFER_IN",
-              });
+            : mode === "toFestival"
+              ? onTransferOut({
+                  festivalId: openFestivalId ?? undefined,
+                  amount: parsedAmount,
+                  location,
+                  festivalName: openFestivalName,
+                  description,
+                })
+              : onTransferIn({
+                  amount: parsedAmount,
+                  location,
+                  festivalName: openFestivalName,
+                  description,
+                  type: "TRANSFER_IN",
+                });
+
     work
       .then(() => {
         setAmount("");
@@ -304,118 +406,131 @@ function ManagerFundActions({
       .finally(() => setBusy(false));
   };
 
-  const modes = useMemo(
-    () =>
-      [
-        ...(canAdd && showInitial ? [{ id: "initial" as const, label: "Record existing balance" }] : []),
-        ...(canAdd ? [{ id: "donate" as const, label: "Add donation" }] : []),
-        ...(canTransfer
-          ? [
-              { id: "adjust" as const, label: "Adjust" },
-              { id: "toFestival" as const, label: "Use for festival" },
-              { id: "fromFestival" as const, label: "Return from festival" },
-            ]
-          : []),
-      ],
-    [canAdd, canTransfer, showInitial]
-  );
-
   return (
-    <View style={{ gap: 10 }}>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-        {modes.map((item) => (
-          <Pressable
-            key={item.id}
-            onPress={() => setMode((prev) => (prev === item.id ? "hidden" : item.id))}
-            style={{
-              paddingHorizontal: 10,
-              paddingVertical: 6,
-              borderRadius: 999,
-              backgroundColor: mode === item.id ? theme.colors.primary : theme.colors.muted,
-            }}
-          >
-            <Text
-              style={{
-                color: mode === item.id ? theme.colors.primaryForeground : theme.colors.foreground,
-                fontWeight: "700",
-              }}
+    <Section title="Move money" subtitle="Every movement is recorded in the history below">
+      <View style={styles.actionBlock}>
+        <FilterChips value={mode} options={modes} onChange={setMode} />
+
+        {mode !== "hidden" ? (
+          <View style={styles.actionForm}>
+            {mode === "toFestival" ? (
+              <StatusStrip
+                tone="info"
+                message={`Available ${formatInr(fundAvailable)}. This is a fund transfer, not a donation.${
+                  openFestivalName
+                    ? ` Destination: ${openFestivalName}.`
+                    : " Open a festival first."
+                }`}
+              />
+            ) : null}
+
+            {mode === "fromFestival" ? (
+              <StatusStrip
+                tone="info"
+                message="Unused festival cash returns to the Permanent Fund. This is not new income."
+              />
+            ) : null}
+
+            {mode === "adjust" ? (
+              <FilterChips
+                label="Direction"
+                value={adjustSign === 1 ? "add" : "subtract"}
+                options={[
+                  { id: "add", label: "Add" },
+                  { id: "subtract", label: "Subtract" },
+                ]}
+                onChange={(next) => setAdjustSign(next === "add" ? 1 : -1)}
+              />
+            ) : null}
+
+            <Input
+              label="Amount"
+              value={amount}
+              onChangeText={setAmount}
+              keyboardType="numeric"
+              placeholder="0"
+            />
+
+            <FilterChips
+              label="Money location"
+              value={location}
+              options={[
+                { id: "cash" as PermanentFundLocation, label: "Cash" },
+                { id: "upi" as PermanentFundLocation, label: "UPI" },
+                { id: "bank" as PermanentFundLocation, label: "Bank" },
+                { id: "other" as PermanentFundLocation, label: "Other" },
+              ]}
+              onChange={setLocation}
+            />
+
+            <Input
+              label={mode === "adjust" ? "Reason" : "Description (optional)"}
+              value={description}
+              onChangeText={setDescription}
+            />
+
+            <Button
+              loading={busy}
+              disabled={
+                !Number.isFinite(parsedAmount)
+                || parsedAmount <= 0
+                || (mode === "toFestival" && !openFestivalId)
+                || (mode === "adjust" && !description.trim())
+              }
+              onPress={submit}
             >
-              {item.label}
-            </Text>
-          </Pressable>
-        ))}
+              Save
+            </Button>
+          </View>
+        ) : null}
       </View>
-      {mode !== "hidden" ? (
-        <View style={{ gap: 10 }}>
-          {mode === "toFestival" ? (
-            <Text style={{ color: theme.colors.mutedForeground }}>
-              Available Permanent Fund {formatInr(fundAvailable)}. This is a fund transfer, not a
-              donation.
-              {openFestivalName ? ` Destination: ${openFestivalName}.` : " Open a festival first."}
-            </Text>
-          ) : null}
-          {mode === "fromFestival" ? (
-            <Text style={{ color: theme.colors.mutedForeground }}>
-              Unused festival cash returns to the Permanent Fund. This is not new income.
-            </Text>
-          ) : null}
-          {mode === "adjust" ? (
-            <View style={{ flexDirection: "row", gap: 8 }}>
-              <Pressable
-                onPress={() => setAdjustSign(1)}
-                style={{
-                  paddingHorizontal: 10,
-                  paddingVertical: 6,
-                  borderRadius: 999,
-                  backgroundColor: adjustSign === 1 ? theme.colors.primary : theme.colors.muted,
-                }}
-              >
-                <Text
-                  style={{
-                    color: adjustSign === 1 ? theme.colors.primaryForeground : theme.colors.foreground,
-                    fontWeight: "700",
-                  }}
-                >
-                  Add
-                </Text>
-              </Pressable>
-              <Pressable
-                onPress={() => setAdjustSign(-1)}
-                style={{
-                  paddingHorizontal: 10,
-                  paddingVertical: 6,
-                  borderRadius: 999,
-                  backgroundColor: adjustSign === -1 ? theme.colors.primary : theme.colors.muted,
-                }}
-              >
-                <Text
-                  style={{
-                    color: adjustSign === -1 ? theme.colors.primaryForeground : theme.colors.foreground,
-                    fontWeight: "700",
-                  }}
-                >
-                  Subtract
-                </Text>
-              </Pressable>
-            </View>
-          ) : null}
-          <Input label="Amount" value={amount} onChangeText={setAmount} keyboardType="numeric" />
-          <Text style={{ color: theme.colors.mutedForeground, fontWeight: "700" }}>Money location</Text>
-          <FundLocationChips value={location} onChange={setLocation} />
-          <Input
-            label={mode === "adjust" ? "Reason" : "Description (optional)"}
-            value={description}
-            onChangeText={setDescription}
-          />
-          <Button
-            loading={busy}
-            disabled={mode === "toFestival" && !openFestivalId}
-            onPress={submit}
-          >
-            Save
-          </Button>
-        </View>
-      ) : null}
-    </View>
+    </Section>
   );
 }
+
+const styles = StyleSheet.create({
+  list: {
+    flex: 1,
+  },
+  header: {
+    gap: 16,
+    paddingBottom: 12,
+  },
+  separator: {
+    height: 10,
+  },
+  historyHeading: {
+    fontSize: 16,
+    letterSpacing: -0.2,
+  },
+  festivalRow: {
+    paddingVertical: 12,
+    gap: 8,
+  },
+  festivalTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  festivalName: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 14,
+  },
+  festivalGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 14,
+  },
+  festivalCell: {
+    minWidth: 68,
+    gap: 1,
+  },
+  actionBlock: {
+    gap: 12,
+  },
+  actionForm: {
+    gap: 12,
+  },
+});

@@ -97,20 +97,23 @@ function GaneshStack() {
       <Stack.Screen name="add-opening-fund" options={{ title: "Opening fund" }} />
       <Stack.Screen name="add-member-payment" options={{ title: "Member payment" }} />
       <Stack.Screen name="add-reimbursement" options={{ title: "Reimburse" }} />
-      <Stack.Screen name="member/[id]" options={{ title: "Member" }} />
+      <Stack.Screen name="member/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="household/[id]" options={{ title: "Household" }} />
       <Stack.Screen name="report" options={{ title: "Festival report" }} />
       <Stack.Screen name="close-festival" options={{ title: "Close festival" }} />
-      <Stack.Screen name="join-requests" options={{ title: "Join requests" }} />
-      <Stack.Screen name="members" options={{ title: "Committee" }} />
-      <Stack.Screen name="permanent-fund" options={{ title: "Permanent Fund" }} />
+      {/* Redesigned screens draw their own GaneshHeader, matching the Expense
+          Tracker's in-content PageHeader. The rest keep the native bar until
+          they are converted. */}
+      <Stack.Screen name="join-requests" options={{ headerShown: false }} />
+      <Stack.Screen name="members" options={{ headerShown: false }} />
+      <Stack.Screen name="permanent-fund" options={{ headerShown: false }} />
       <Stack.Screen name="add-permanent-fund" options={{ title: "Add Permanent Fund" }} />
-      <Stack.Screen name="assets" options={{ title: "Pandal assets" }} />
+      <Stack.Screen name="assets" options={{ headerShown: false }} />
       <Stack.Screen name="add-asset" options={{ title: "Add asset" }} />
-      <Stack.Screen name="asset/[id]" options={{ title: "Asset" }} />
-      <Stack.Screen name="sponsors" options={{ title: "Sponsors" }} />
+      <Stack.Screen name="asset/[id]" options={{ headerShown: false }} />
+      <Stack.Screen name="sponsors" options={{ headerShown: false }} />
       <Stack.Screen name="add-sponsor" options={{ title: "Add sponsor" }} />
-      <Stack.Screen name="sponsor/[id]" options={{ title: "Sponsor" }} />
+      <Stack.Screen name="sponsor/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="create-festival" options={{ title: "Create festival" }} />
     </Stack>
   );

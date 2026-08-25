@@ -3,6 +3,7 @@ import { useRouter } from "expo-router";
 
 import { AdminLinkRow } from "@/components/ganesh/AdminLinkRow";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
+import { Section } from "@/components/ganesh/ui";
 import { MetricGrid } from "@/components/ganesh/MetricGrid";
 import { useContributions } from "@/hooks/useContributions";
 import { useFestivals } from "@/hooks/useFestivals";
@@ -116,38 +117,45 @@ export default function AdminReportsScreen() {
           ))}
         </View>
       ) : null}
-      <View style={{ gap: 10 }}>
+      <Section title="Reports">
         <AdminLinkRow
+          divider
           title="Festival summary"
           subtitle="Cash in, expenses, and closing balance"
           onPress={() => push("/(ganesh)/report" as never)}
         />
         <AdminLinkRow
+          divider
           title="Collection summary"
           subtitle="Households, collectors, and payment methods"
           onPress={() => push("/(ganesh)/collections" as never)}
         />
         <AdminLinkRow
+          divider
           title="Expense summary"
           subtitle="God Fund, personal, and pending reimbursements"
           onPress={() => push("/(ganesh)/expenses" as never)}
         />
         <AdminLinkRow
+          divider
           title="Committee contribution summary"
           subtitle="Who paid this festival"
           onPress={() => push("/(ganesh)/committee" as never)}
         />
         <AdminLinkRow
+          divider
           title="Contribution summary"
           subtitle="Cash received, promised, in-kind, and cancelled. Promises do not add cash."
           onPress={() => push("/(ganesh)/contributions" as never)}
         />
         <AdminLinkRow
+          divider
           title="Sponsor summary"
           subtitle="Cash received, promised cash, in-kind, and cancelled. Separate from God Fund."
           onPress={() => push("/(ganesh)/sponsors" as never)}
         />
         <AdminLinkRow
+          divider
           title="Reimbursement summary"
           subtitle="Personal money still to be paid back"
           onPress={() => push("/(ganesh)/committee" as never)}
@@ -157,7 +165,7 @@ export default function AdminReportsScreen() {
           subtitle="Donations and festival transfers"
           onPress={() => push("/(ganesh)/permanent-fund" as never)}
         />
-      </View>
+      </Section>
     </GaneshScreen>
   );
 }
