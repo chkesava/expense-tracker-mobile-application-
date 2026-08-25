@@ -34,6 +34,8 @@ export { FundHero, type FundHeroProps, type FundBreakdownItem } from "./FundHero
 export { GaneshHeader, type GaneshHeaderProps } from "./GaneshHeader";
 export { ListStateView, type ListStateViewProps } from "./ListStateView";
 export { NavRow, type NavRowProps } from "./NavRow";
+export { MoreDetails, type MoreDetailsProps } from "./MoreDetails";
+export { FormShell, type FormShellProps } from "./FormShell";
 export { Avatar, initialsOf, type AvatarProps } from "./Avatar";
 export { GaneshMark } from "./GaneshMark";
 export { GaneshAuthBackground } from "./GaneshAuthBackground";

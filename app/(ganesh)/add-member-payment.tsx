@@ -1,11 +1,20 @@
-import { useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { useMemo, useState } from "react";
+import { StyleSheet, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { PiggyBank } from "lucide-react-native";
 
-import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { GaneshWriteLock } from "@/components/ganesh/GaneshWriteLock";
+import {
+  FilterChips,
+  FormShell,
+  Money,
+  Section,
+  StatTile,
+  StatusBadge,
+  StatusStrip,
+  useGaneshTokens,
+} from "@/components/ganesh/ui";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
-import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useFestivalMembers } from "@/hooks/useFestivalMembers";
 import { useFestivals } from "@/hooks/useFestivals";
@@ -21,13 +30,16 @@ import {
   effectiveCommitteeTarget,
   memberRemainingContribution,
 } from "@/shared/utils/ganeshMath";
-import { formatInr } from "@/shared/utils/ganeshMoney";
-import { useTheme } from "@/theme/ThemeProvider";
 
-const METHODS: PaymentMethod[] = ["cash", "upi", "bank", "other"];
+const METHOD_OPTIONS: Array<{ id: PaymentMethod; label: string }> = [
+  { id: "cash", label: "Cash" },
+  { id: "upi", label: "UPI" },
+  { id: "bank", label: "Bank" },
+  { id: "other", label: "Other" },
+];
 
 export default function AddMemberPaymentScreen() {
-  const { theme } = useTheme();
+  const g = useGaneshTokens();
   const { back } = useRouter();
   const { memberId: memberIdParam } = useLocalSearchParams<{ memberId?: string }>();
   const { pandalId, festivalId } = useGaneshSession();
@@ -37,14 +49,17 @@ export default function AddMemberPaymentScreen() {
   const { members: festivalMembers } = useFestivalMembers(pandalId, festivalId);
   const writes = useGaneshWrites();
   const { can } = useGaneshPermissions();
+
   const committee = pandalMembers.filter(
     (member) => member.status === "active" || member.status == null
   );
+
   const [_memberId, setMemberId] = useState<string | undefined>(undefined);
   const memberId = _memberId ?? memberIdParam ?? committee[0]?.userId ?? "";
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState<PaymentMethod>("upi");
   const [busy, setBusy] = useState(false);
+
   const selected = committee.find((member) => member.userId === memberId);
   const festivalMember = festivalMembers.find((member) => member.userId === memberId);
   const defaultTarget = festival?.contributionTargetAmount ?? 0;
@@ -57,99 +72,124 @@ export default function AddMemberPaymentScreen() {
   });
   const status = committeePayStatus(paid, target, overridden);
 
+  const memberOptions = useMemo(
+    () => committee.map((member) => ({ id: member.userId, label: member.displayName })),
+    [committee]
+  );
+
   if (!can("contributions.create")) {
     return <GaneshWriteLock message="Your role cannot record member payments." />;
   }
 
+  const parsedAmount = Number(amount);
+  const amountValid = Number.isFinite(parsedAmount) && parsedAmount > 0;
+
   return (
-    <GaneshScreen>
-      <Text style={{ color: theme.colors.mutedForeground }}>
-        Record a committee payment for this festival. It increases the God Fund.
-      </Text>
-      <Text style={{ color: theme.colors.mutedForeground, fontWeight: "700" }}>Committee person</Text>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-        {committee.map((member) => (
-          <Pressable
-            key={member.userId}
-            onPress={() => setMemberId(member.userId)}
-            style={{
-              paddingHorizontal: 10,
-              paddingVertical: 6,
-              borderRadius: 999,
-              backgroundColor: memberId === member.userId ? theme.colors.primary : theme.colors.muted,
-            }}
-          >
-            <Text
-              style={{
-                color: memberId === member.userId ? theme.colors.primaryForeground : theme.colors.foreground,
-                fontWeight: "700",
-              }}
-            >
-              {member.displayName}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
+    <FormShell
+      title="Member payment"
+      subtitle={festival?.name}
+      icon={<PiggyBank size={22} color={g.saffron} strokeWidth={2.2} />}
+      onBack={back}
+      submitLabel="Save payment"
+      submitting={busy}
+      submitDisabled={!selected || !amountValid}
+      onSubmit={() => {
+        if (!selected) return;
+        setBusy(true);
+        writes
+          .addContribution({
+            kind: "money",
+            contributorName: selected.displayName,
+            contributorMemberId: selected.userId,
+            amount: parsedAmount,
+            isCommitteeContribution: true,
+            description: method,
+            date: todayDateInput(),
+            status: "received",
+          })
+          .then(() => back())
+          .catch((error) => {
+            logError("ganesh.memberPayment", error);
+            toast.error(friendlyErrorMessage(error, "Could not save payment."));
+          })
+          .finally(() => setBusy(false));
+      }}
+      footerHint={
+        <StatusStrip
+          tone="info"
+          message="A committee payment is cash in — it increases the God Fund."
+        />
+      }
+    >
+      <Section title="Who is paying" plain>
+        <View style={styles.form}>
+          <FilterChips
+            label="Committee person"
+            value={memberId}
+            options={memberOptions}
+            onChange={setMemberId}
+          />
+        </View>
+      </Section>
+
       {selected ? (
-        <Text style={{ color: theme.colors.mutedForeground }}>
-          {selected.displayName} · {status === "paid" ? "Paid" : status === "partial" ? "Partial" : "Not paid"}
-          {" · "}
-          {formatInr(paid)}
-          {target > 0 ? ` / ${formatInr(target)}` : ""}
-          {due > 0 ? ` · due ${formatInr(due)}` : ""}
-        </Text>
+        <Section
+          title={selected.displayName}
+          badge={
+            <StatusBadge
+              kind={status === "pending" ? "pending" : status}
+              label={status === "paid" ? "Paid" : status === "partial" ? "Partial" : "Not paid"}
+            />
+          }
+        >
+          <View style={styles.statRow}>
+            <StatTile label="Paid so far">
+              <Money value={paid} size="primary" tone="positive" numberOfLines={1} adjustsFontSizeToFit />
+            </StatTile>
+            <StatTile label="Target">
+              <Money value={target} size="primary" numberOfLines={1} adjustsFontSizeToFit />
+            </StatTile>
+            <StatTile label="Due">
+              <Money
+                value={due}
+                size="primary"
+                tone={due > 0 ? "warning" : "default"}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+              />
+            </StatTile>
+          </View>
+        </Section>
       ) : null}
-      <Input label="Amount" value={amount} onChangeText={setAmount} keyboardType="numeric" />
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-        {METHODS.map((item) => (
-          <Pressable
-            key={item}
-            onPress={() => setMethod(item)}
-            style={{
-              paddingHorizontal: 10,
-              paddingVertical: 6,
-              borderRadius: 999,
-              backgroundColor: method === item ? theme.colors.primary : theme.colors.muted,
-            }}
-          >
-            <Text
-              style={{
-                color: method === item ? theme.colors.primaryForeground : theme.colors.foreground,
-                fontWeight: "700",
-                textTransform: "capitalize",
-              }}
-            >
-              {item}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-      <Button
-        loading={busy}
-        onPress={() => {
-          if (!selected) return;
-          setBusy(true);
-          writes
-            .addContribution({
-              kind: "money",
-              contributorName: selected.displayName,
-              contributorMemberId: selected.userId,
-              amount: Number(amount),
-              isCommitteeContribution: true,
-              description: method,
-              date: todayDateInput(),
-              status: "received",
-            })
-            .then(() => back())
-            .catch((error) => {
-              logError("ganesh.memberPayment", error);
-              toast.error(friendlyErrorMessage(error, "Could not save payment."));
-            })
-            .finally(() => setBusy(false));
-        }}
-      >
-        Save member payment
-      </Button>
-    </GaneshScreen>
+
+      <Section title="Payment" plain>
+        <View style={styles.form}>
+          <Input
+            label="Amount"
+            value={amount}
+            onChangeText={setAmount}
+            keyboardType="numeric"
+            placeholder={due > 0 ? String(due) : "0"}
+            autoFocus
+          />
+          <FilterChips
+            label="Payment method"
+            value={method}
+            options={METHOD_OPTIONS}
+            onChange={setMethod}
+          />
+        </View>
+      </Section>
+    </FormShell>
   );
 }
+
+const styles = StyleSheet.create({
+  form: {
+    gap: 14,
+  },
+  statRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+});

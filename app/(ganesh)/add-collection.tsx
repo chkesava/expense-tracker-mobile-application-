@@ -1,12 +1,19 @@
 import { useMemo, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
+import { Wallet } from "lucide-react-native";
 
 import { DuplicateHouseholdDialog } from "@/components/ganesh/DuplicateHouseholdDialog";
-import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { GaneshWriteLock } from "@/components/ganesh/GaneshWriteLock";
+import {
+  FilterChips,
+  FormShell,
+  MoreDetails,
+  Section,
+  StatusStrip,
+  useGaneshTokens,
+} from "@/components/ganesh/ui";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
-import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useFestivals } from "@/hooks/useFestivals";
 import { useGaneshWrites } from "@/hooks/useGaneshWrites";
@@ -18,13 +25,18 @@ import { useAuth } from "@/providers/AuthProvider";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import { possibleHouseholdDuplicates } from "@/shared/utils/ganeshMath";
 import { todayDateInput } from "@/shared/utils/ganeshIdentity";
+import { formatInr } from "@/shared/utils/ganeshMoney";
 import type { PaymentMethod } from "@/shared/types/ganesh";
-import { useTheme } from "@/theme/ThemeProvider";
 
-const METHODS: PaymentMethod[] = ["cash", "upi", "bank", "other"];
+const METHOD_OPTIONS: Array<{ id: PaymentMethod; label: string }> = [
+  { id: "cash", label: "Cash" },
+  { id: "upi", label: "UPI" },
+  { id: "bank", label: "Bank" },
+  { id: "other", label: "Other" },
+];
 
 export default function AddCollectionScreen() {
-  const { theme } = useTheme();
+  const g = useGaneshTokens();
   const { back } = useRouter();
   const { realUser } = useAuth();
   const { pandalId, festivalId } = useGaneshSession();
@@ -34,6 +46,7 @@ export default function AddCollectionScreen() {
   const { households } = useHouseholds(pandalId, festivalId);
   const writes = useGaneshWrites();
   const { can } = useGaneshPermissions();
+
   const [donorName, setDonorName] = useState("");
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState<PaymentMethod>("cash");
@@ -44,6 +57,18 @@ export default function AddCollectionScreen() {
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [matches, setMatches] = useState<typeof households>([]);
+
+  const collectorOptions = useMemo(
+    () =>
+      members
+        .filter((member) => member.status === "active" || member.status == null)
+        .map((member) => ({ id: member.userId, label: member.displayName })),
+    [members]
+  );
+
+  const optionalFilled = [mobile, houseNumber, address, notes].filter((value) =>
+    value.trim()
+  ).length;
 
   const payload = useMemo(
     () => ({
@@ -59,7 +84,18 @@ export default function AddCollectionScreen() {
       expectedAmount: festival?.householdTargetAmount ?? 0,
       createHousehold: true,
     }),
-    [address, amount, collectorId, donorName, festival?.householdTargetAmount, houseNumber, method, mobile, notes, realUser?.uid]
+    [
+      address,
+      amount,
+      collectorId,
+      donorName,
+      festival?.householdTargetAmount,
+      houseNumber,
+      method,
+      mobile,
+      notes,
+      realUser?.uid,
+    ]
   );
 
   const save = async () => {
@@ -78,9 +114,11 @@ export default function AddCollectionScreen() {
 
   const onSubmit = () => {
     const foundIds = new Set(
-      possibleHouseholdDuplicates(households, { name: donorName, houseNumber, mobile }).map(
-        (household) => household.id
-      )
+      possibleHouseholdDuplicates(households, {
+        name: donorName,
+        houseNumber,
+        mobile,
+      }).map((household) => household.id)
     );
     const found = households.filter((household) => foundIds.has(household.id));
     if (found.length > 0) {
@@ -94,26 +132,89 @@ export default function AddCollectionScreen() {
     return <GaneshWriteLock message="Your role cannot add collections." />;
   }
 
+  const parsedAmount = Number(amount);
+  const amountValid = Number.isFinite(parsedAmount) && parsedAmount > 0;
+
   return (
-    <GaneshScreen>
-      <Input label="Name" value={donorName} onChangeText={setDonorName} placeholder="Ramesh Kumar" />
-      <Input label="Amount" value={amount} onChangeText={setAmount} keyboardType="numeric" placeholder="500" />
-      <Text style={{ color: theme.colors.mutedForeground, fontWeight: "700" }}>Payment method</Text>
-      <ChipRow value={method} options={METHODS} onChange={(value) => setMethod(value as PaymentMethod)} />
-      <Text style={{ color: theme.colors.mutedForeground, fontWeight: "700" }}>Collected by</Text>
-      <ChipRow
-        value={collectorId}
-        options={members.map((member) => member.userId)}
-        labels={Object.fromEntries(members.map((member) => [member.userId, member.displayName]))}
-        onChange={setCollectorId}
-      />
-      <Input label="Mobile (optional)" value={mobile} onChangeText={setMobile} keyboardType="phone-pad" />
-      <Input label="House number (optional)" value={houseNumber} onChangeText={setHouseNumber} />
-      <Input label="Address / area (optional)" value={address} onChangeText={setAddress} />
-      <Input label="Notes (optional)" value={notes} onChangeText={setNotes} />
-      <Button loading={busy} onPress={onSubmit}>
-        Save collection
-      </Button>
+    <>
+      <FormShell
+        title="Add collection"
+        subtitle={festival?.name}
+        icon={<Wallet size={22} color={g.saffron} strokeWidth={2.2} />}
+        onBack={back}
+        submitLabel="Save collection"
+        submitting={busy}
+        submitDisabled={!donorName.trim() || !amountValid}
+        onSubmit={onSubmit}
+        footerHint={
+          festival?.householdTargetAmount
+            ? (
+                <StatusStrip
+                  tone="muted"
+                  message={`Household target is ${formatInr(festival.householdTargetAmount)}.`}
+                />
+              )
+            : null
+        }
+      >
+        {/* Four fields, nothing else — this is the app's most repeated task. */}
+        <Section title="Collection" plain>
+          <View style={styles.form}>
+            <Input
+              label="Donor name"
+              value={donorName}
+              onChangeText={setDonorName}
+              placeholder="Ramesh Kumar"
+              autoCapitalize="words"
+              autoFocus
+            />
+            <Input
+              label="Amount"
+              value={amount}
+              onChangeText={setAmount}
+              keyboardType="numeric"
+              placeholder="500"
+            />
+            <FilterChips
+              label="Payment method"
+              value={method}
+              options={METHOD_OPTIONS}
+              onChange={setMethod}
+            />
+            {collectorOptions.length > 1 ? (
+              <FilterChips
+                label="Collected by"
+                value={collectorId}
+                options={collectorOptions}
+                onChange={setCollectorId}
+              />
+            ) : null}
+          </View>
+        </Section>
+
+        <MoreDetails filledCount={optionalFilled}>
+          <Input
+            label="Mobile"
+            value={mobile}
+            onChangeText={setMobile}
+            keyboardType="phone-pad"
+            placeholder="98765 43210"
+          />
+          <Input
+            label="House number"
+            value={houseNumber}
+            onChangeText={setHouseNumber}
+            placeholder="12"
+          />
+          <Input
+            label="Address or area"
+            value={address}
+            onChangeText={setAddress}
+          />
+          <Input label="Notes" value={notes} onChangeText={setNotes} />
+        </MoreDetails>
+      </FormShell>
+
       {matches.length > 0 ? (
         <DuplicateHouseholdDialog
           matches={matches}
@@ -121,46 +222,12 @@ export default function AddCollectionScreen() {
           onContinue={() => void save()}
         />
       ) : null}
-    </GaneshScreen>
+    </>
   );
 }
 
-function ChipRow({
-  value,
-  options,
-  labels,
-  onChange,
-}: {
-  value: string;
-  options: string[];
-  labels?: Record<string, string>;
-  onChange: (value: string) => void;
-}) {
-  const { theme } = useTheme();
-  return (
-    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-      {options.map((option) => (
-        <Pressable
-          key={option}
-          onPress={() => onChange(option)}
-          style={{
-            paddingHorizontal: 10,
-            paddingVertical: 6,
-            borderRadius: 999,
-            backgroundColor: value === option ? theme.colors.primary : theme.colors.muted,
-          }}
-        >
-          <Text
-            style={{
-              color: value === option ? theme.colors.primaryForeground : theme.colors.foreground,
-              fontWeight: "700",
-              textTransform: "capitalize",
-            }}
-          >
-            {labels?.[option] ?? option}
-          </Text>
-        </Pressable>
-      ))}
-    </View>
-  );
-}
+const styles = StyleSheet.create({
+  form: {
+    gap: 14,
+  },
+});
