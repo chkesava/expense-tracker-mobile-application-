@@ -1,20 +1,31 @@
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { StyleSheet, Text, View } from "react-native";
 import { FlashList } from "@shopify/flash-list";
 import { useRouter } from "expo-router";
+import { Package } from "lucide-react-native";
 
-import { EmptyState } from "@/components/common/EmptyState";
-import { ChoiceChips } from "@/components/ganesh/ChoiceChips";
-import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
-import { GaneshSyncChip, PendingHint } from "@/components/ganesh/GaneshSyncChip";
+import { GaneshScreen, useGaneshListPadding } from "@/components/ganesh/GaneshScreen";
+import { GaneshSyncChip } from "@/components/ganesh/GaneshSyncChip";
 import { GaneshWriteLock } from "@/components/ganesh/GaneshWriteLock";
+import {
+  FilterChips,
+  GaneshHeader,
+  LedgerRow,
+  ListStateView,
+  MetaLabel,
+  Money,
+  StatTile,
+  useGaneshTokens,
+  type LedgerRowBadge,
+} from "@/components/ganesh/ui";
+import { SearchBar } from "@/components/common/SearchBar";
 import { AddFab } from "@/components/ui/AddFab";
-import { Input } from "@/components/ui/Input";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { useGaneshWrites } from "@/hooks/useGaneshWrites";
 import { usePandalAssets } from "@/hooks/usePandalAssets";
 import { logError } from "@/lib/errors";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
+import type { AssetStatus, PandalAsset } from "@/shared/types/ganesh";
 import {
   ASSET_CATEGORIES,
   assetCategoryLabel,
@@ -22,86 +33,71 @@ import {
   assetOwnershipLabel,
   assetStatusLabel,
   assetUnitLabel,
+  summarizeAssets,
 } from "@/shared/utils/ganeshAssets";
 import { formatInr } from "@/shared/utils/ganeshMoney";
 import { useTheme } from "@/theme/ThemeProvider";
 
 const SCOPE_OPTIONS = [
-  { id: "active", label: "Active" },
-  { id: "history", label: "History" },
+  { id: "active", label: "In store" },
+  { id: "history", label: "Gone" },
   { id: "all", label: "All" },
 ] as const;
 
 type AssetScope = (typeof SCOPE_OPTIONS)[number]["id"];
+type CategoryFilter = "all" | (typeof ASSET_CATEGORIES)[number]["id"];
 
-const AssetCard = memo(function AssetCard({
-  id,
-  name,
-  qtyLabel,
-  meta,
-  pending,
-  onOpen,
-}: {
-  id: string;
-  name: string;
-  qtyLabel: string;
-  meta: string;
-  pending?: boolean;
-  onOpen: (id: string) => void;
-}) {
-  const { theme } = useTheme();
-  return (
-    <Pressable
-      onPress={() => onOpen(id)}
-      style={{
-        backgroundColor: theme.colors.card,
-        borderColor: theme.colors.border,
-        borderWidth: 1,
-        borderRadius: 16,
-        padding: 14,
-        marginBottom: 10,
-        gap: 4,
-      }}
-    >
-      <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>{name}</Text>
-      <Text style={{ color: theme.colors.primary, fontWeight: "800" }}>{qtyLabel}</Text>
-      <Text style={{ color: theme.colors.mutedForeground }}>{meta}</Text>
-      <PendingHint pending={pending} />
-    </Pressable>
-  );
-});
+/** Asset status → badge. Each status keeps its own wording (a11y §35). */
+function assetBadge(status: AssetStatus): LedgerRowBadge {
+  switch (status) {
+    case "available":
+      return { kind: "received", label: assetStatusLabel(status) };
+    case "in_use":
+      return { kind: "sponsored", label: assetStatusLabel(status) };
+    case "damaged":
+      return { kind: "pending", label: assetStatusLabel(status) };
+    case "disposed":
+    case "lost":
+      return { kind: "cancelled", label: assetStatusLabel(status) };
+    default:
+      return { kind: "neutral", label: assetStatusLabel(status) };
+  }
+}
 
 export default function PandalAssetsScreen() {
   const { theme } = useTheme();
-  const { push } = useRouter();
+  const g = useGaneshTokens();
+  const { push, back } = useRouter();
+  const listPadding = useGaneshListPadding(false);
+
   const { pandalId } = useGaneshSession();
-  const { assets, loading } = usePandalAssets(pandalId);
+  const { assets, loading, error } = usePandalAssets(pandalId);
   const { can, isAdmin } = useGaneshPermissions();
   const writes = useGaneshWrites();
+
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState<AssetScope>("active");
-  const [category, setCategory] = useState<"all" | (typeof ASSET_CATEGORIES)[number]["id"]>("all");
+  const [category, setCategory] = useState<CategoryFilter>("all");
 
   useEffect(() => {
     if (!isAdmin) return;
-    writes.ensurePandalRoles().catch((error) => {
-      logError("ganesh.assets.ensureRoles", error);
+    writes.ensurePandalRoles().catch((caught) => {
+      logError("ganesh.assets.ensureRoles", caught);
     });
   }, [isAdmin, pandalId]);
 
-  const onOpen = useCallback(
-    (id: string) => {
-      push(`/(ganesh)/asset/${id}` as never);
-    },
-    [push]
-  );
+  const summary = useMemo(() => summarizeAssets(assets), [assets]);
 
   const rows = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return assets.filter((asset) => {
       if (category !== "all" && asset.category !== category) return false;
-      if (scope === "active" && (asset.status === "disposed" || asset.status === "lost")) return false;
-      if (scope === "history" && asset.status !== "disposed" && asset.status !== "lost") return false;
+      if (scope === "active" && (asset.status === "disposed" || asset.status === "lost")) {
+        return false;
+      }
+      if (scope === "history" && asset.status !== "disposed" && asset.status !== "lost") {
+        return false;
+      }
       if (!needle) return true;
       const haystack = [
         asset.name,
@@ -115,85 +111,201 @@ export default function PandalAssetsScreen() {
     });
   }, [assets, category, query, scope]);
 
+  const canAdd = can("assets.create");
+  const openAdd = useCallback(() => push("/(ganesh)/add-asset" as never), [push]);
+  const onOpen = useCallback((id: string) => push(`/(ganesh)/asset/${id}` as never), [push]);
+
+  const renderItem = useCallback(
+    ({ item }: { item: PandalAsset }) => (
+      <LedgerRow
+        id={item.id}
+        icon={<Package size={18} color={theme.colors.mutedForeground} strokeWidth={2.2} />}
+        title={item.name}
+        meta={
+          [
+            assetCategoryLabel(item.category),
+            assetConditionLabel(item.condition),
+            assetOwnershipLabel(item.ownershipType),
+            item.location || null,
+          ]
+            .filter(Boolean)
+            .join(" · ")
+        }
+        badges={[assetBadge(item.status)]}
+        amountMeta={
+          <View style={styles.assetValue}>
+            <Text
+              style={[
+                styles.quantity,
+                { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold },
+              ]}
+            >
+              {item.quantity} {assetUnitLabel(item.unit, item.quantity)}
+            </Text>
+            {item.estimatedValue > 0 ? (
+              <MetaLabel>Worth {formatInr(item.estimatedValue)}</MetaLabel>
+            ) : item.ownershipType === "purchased" && item.acquisitionCost != null ? (
+              <MetaLabel>Paid {formatInr(item.acquisitionCost)}</MetaLabel>
+            ) : null}
+          </View>
+        }
+        pending={item.pendingWrite}
+        onPress={onOpen}
+      />
+    ),
+    [onOpen, theme.colors.foreground, theme.colors.mutedForeground, theme.fontFamily.semibold]
+  );
+
   if (!can("assets.read")) {
     return <GaneshWriteLock message="Your role cannot view Pandal assets." />;
   }
 
   return (
-    <GaneshScreen scroll={false}>
-      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-        <Text style={{ color: theme.colors.foreground, fontSize: 22, fontWeight: "800" }}>
-          Pandal assets
-        </Text>
-        <GaneshSyncChip />
+    <GaneshScreen
+      safeTop
+      scroll={false}
+      overlay={
+        canAdd ? (
+          <View style={[styles.fab, { bottom: listPadding - 16 }]} pointerEvents="box-none">
+            <AddFab onPress={openAdd} accessibilityLabel="Add asset" size="lg" />
+          </View>
+        ) : null
+      }
+    >
+      <GaneshHeader
+        title="Pandal assets"
+        subtitle={`${summary.totalItems} item${summary.totalItems === 1 ? "" : "s"}`}
+        icon={<Package size={22} color={g.saffron} strokeWidth={2.2} />}
+        onBack={back}
+        rightElement={<GaneshSyncChip />}
+      />
+
+      <View style={styles.statRow}>
+        <StatTile label="Available">
+          <Text
+            style={[
+              styles.count,
+              { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold },
+            ]}
+          >
+            {summary.available}
+          </Text>
+        </StatTile>
+        <StatTile
+          label="Damaged"
+          meta={
+            summary.damaged > 0 ? (
+              <Text
+                style={[
+                  styles.tileMeta,
+                  { color: theme.colors.warning, fontFamily: theme.fontFamily.medium },
+                ]}
+              >
+                Needs repair
+              </Text>
+            ) : undefined
+          }
+        >
+          <Text
+            style={[
+              styles.count,
+              {
+                color: summary.damaged > 0 ? theme.colors.warning : theme.colors.foreground,
+                fontFamily: theme.fontFamily.semibold,
+              },
+            ]}
+          >
+            {summary.damaged}
+          </Text>
+        </StatTile>
+        <StatTile label="Estimated worth">
+          <Money
+            value={summary.estimatedValue}
+            size="primary"
+            numberOfLines={1}
+            adjustsFontSizeToFit
+          />
+        </StatTile>
       </View>
-      <Input
-        label="Search"
+
+      <SearchBar
         value={query}
         onChangeText={setQuery}
-        placeholder="Name, category, or location"
+        placeholder="Search name, category, or location"
       />
-      <ChoiceChips
-        value={scope}
-        options={[...SCOPE_OPTIONS]}
-        onChange={setScope}
-      />
-      <ChoiceChips
+
+      <FilterChips value={scope} options={[...SCOPE_OPTIONS]} onChange={setScope} />
+      <FilterChips
         value={category}
-        options={[{ id: "all", label: "All" }, ...ASSET_CATEGORIES]}
+        options={[{ id: "all" as const, label: "All categories" }, ...ASSET_CATEGORIES]}
         onChange={setCategory}
       />
+
       <FlashList
         data={rows}
-        style={{ flex: 1 }}
+        style={styles.list}
         keyExtractor={(item) => item.id}
-        contentInsetAdjustmentBehavior="automatic"
-        renderItem={({ item }) => (
-          <AssetCard
-            id={item.id}
-            name={item.name}
-            qtyLabel={`${item.quantity} ${assetUnitLabel(item.unit, item.quantity)}`}
-            meta={[
-              assetOwnershipLabel(item.ownershipType),
-              assetCategoryLabel(item.category),
-              assetConditionLabel(item.condition),
-              assetStatusLabel(item.status),
-              item.ownershipType === "purchased" && item.acquisitionCost != null
-                ? `Paid ${formatInr(item.acquisitionCost)}`
-                : null,
-              item.estimatedValue > 0 ? `Worth ${formatInr(item.estimatedValue)}` : null,
-            ]
-              .filter(Boolean)
-              .join(" · ")}
-            pending={item.pendingWrite}
-            onOpen={onOpen}
-          />
-        )}
+        contentContainerStyle={{ paddingBottom: listPadding }}
+        ItemSeparatorComponent={() => <View style={styles.separator} />}
+        renderItem={renderItem}
         ListEmptyComponent={
-          loading ? (
-            <Text style={{ color: theme.colors.mutedForeground }}>Loading assets…</Text>
-          ) : (
-            <EmptyState
-              title="Nothing in the Pandal store yet"
-              description="Add chairs, speakers, and other items. They stay with the Pandal every year."
-              primaryAction={
-                can("assets.create")
-                  ? {
-                      label: "Add asset",
-                      onPress: () => push("/(ganesh)/add-asset" as never),
-                    }
-                  : undefined
-              }
-            />
-          )
+          <ListStateView
+            loading={loading && assets.length === 0}
+            error={error}
+            illustration="vaults"
+            title={
+              query.trim() || category !== "all" || scope !== "active"
+                ? "Nothing matches"
+                : "No Pandal assets yet"
+            }
+            description={
+              query.trim() || category !== "all" || scope !== "active"
+                ? "Try another category, or switch to All."
+                : "Add reusable items such as chairs, speakers and lights. They stay with the Pandal every year."
+            }
+            action={
+              canAdd && !query.trim() && category === "all" && scope === "active"
+                ? { label: "Add asset", onPress: openAdd }
+                : undefined
+            }
+          />
         }
       />
-      {can("assets.create") && rows.length > 0 ? (
-        <AddFab
-          onPress={() => push("/(ganesh)/add-asset" as never)}
-          accessibilityLabel="Add asset"
-        />
-      ) : null}
     </GaneshScreen>
   );
 }
+
+const styles = StyleSheet.create({
+  list: {
+    flex: 1,
+  },
+  separator: {
+    height: 10,
+  },
+  statRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  tileMeta: {
+    fontSize: 11.5,
+    lineHeight: 15,
+  },
+  count: {
+    fontSize: 17,
+    letterSpacing: -0.2,
+    fontVariant: ["tabular-nums"],
+  },
+  assetValue: {
+    alignItems: "flex-end",
+    gap: 1,
+  },
+  quantity: {
+    fontSize: 14,
+    letterSpacing: -0.1,
+    fontVariant: ["tabular-nums"],
+  },
+  fab: {
+    position: "absolute",
+    right: 16,
+  },
+});

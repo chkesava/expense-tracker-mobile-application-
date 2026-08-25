@@ -1,10 +1,21 @@
 import { useEffect, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
+import { useRouter } from "expo-router";
+import { Phone, UserPlus } from "lucide-react-native";
 
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { GaneshWriteLock } from "@/components/ganesh/GaneshWriteLock";
+import {
+  Avatar,
+  FilterChips,
+  GaneshHeader,
+  MetaLabel,
+  StatusStrip,
+  useGaneshTokens,
+} from "@/components/ganesh/ui";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/common/EmptyState";
+import { SkeletonList } from "@/components/common/Skeleton";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { useGaneshWrites } from "@/hooks/useGaneshWrites";
 import { useJoinRequests } from "@/hooks/useJoinRequests";
@@ -16,16 +27,23 @@ import { useTheme } from "@/theme/ThemeProvider";
 
 export default function JoinRequestsScreen() {
   const { theme } = useTheme();
+  const g = useGaneshTokens();
+  const { back } = useRouter();
   const { pandalId } = useGaneshSession();
-  const { requests } = useJoinRequests(pandalId);
+  const { requests, loading } = useJoinRequests(pandalId);
   const { roles } = usePandalRoles(pandalId);
   const writes = useGaneshWrites();
   const { can, isAdmin } = useGaneshPermissions();
+
   const [selected, setSelected] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
+
   const assignable = roles.filter((role) => role.id !== "admin");
   const defaultRoleId =
     assignable.find((role) => role.id === "member")?.id ?? assignable[0]?.id ?? "member";
+  const roleOptions = (assignable.length > 0 ? assignable : [{ id: "member", name: "Member" }]).map(
+    (role) => ({ id: role.id, label: role.name })
+  );
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -67,88 +85,155 @@ export default function JoinRequestsScreen() {
   }
 
   return (
-    <GaneshScreen>
-      <Text style={{ color: theme.colors.mutedForeground }}>
-        Choose a committee role before approving. Admin is not self-serve — promote from the
-        member screen.
-      </Text>
-      {requests.length === 0 ? (
-        <EmptyState title="No pending requests" description="Share the Pandal code from the Pandal tab." />
+    <GaneshScreen safeTop>
+      <GaneshHeader
+        title="Join requests"
+        subtitle={
+          requests.length > 0
+            ? `${requests.length} waiting`
+            : "Nobody waiting"
+        }
+        icon={<UserPlus size={22} color={g.saffron} strokeWidth={2.2} />}
+        onBack={back}
+      />
+
+      <StatusStrip
+        tone="info"
+        message="Choose a committee role before approving. Admin is not self-serve — promote from the member screen."
+      />
+
+      {loading && requests.length === 0 ? (
+        <SkeletonList count={3} />
+      ) : requests.length === 0 ? (
+        <EmptyState
+          illustration="splits"
+          title="No pending requests"
+          description="Share the Pandal code from the Pandal tab so people can ask to join."
+        />
       ) : (
-        requests.map((request) => {
-          const roleId = selected[request.id] ?? defaultRoleId;
-          const busy = busyId === request.id;
-          return (
-            <View
-              key={request.id}
-              style={{
-                backgroundColor: theme.colors.card,
-                borderRadius: 16,
-                padding: 14,
-                gap: 10,
-                borderWidth: 1,
-                borderColor: theme.colors.border,
-              }}
-            >
-              <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>
-                {request.displayName}
-              </Text>
-              {request.phone ? (
-                <Text style={{ color: theme.colors.mutedForeground }}>{request.phone}</Text>
-              ) : null}
-              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                {(assignable.length > 0 ? assignable : [{ id: "member", name: "Member" }]).map(
-                  (role) => {
-                    const on = roleId === role.id;
-                    return (
-                      <Pressable
-                        key={role.id}
-                        onPress={() =>
-                          setSelected((prev) => ({ ...prev, [request.id]: role.id }))
-                        }
-                        style={{
-                          paddingHorizontal: 12,
-                          paddingVertical: 8,
-                          minHeight: 40,
-                          borderRadius: 999,
-                          backgroundColor: on ? theme.colors.primary : theme.colors.muted,
-                          justifyContent: "center",
-                        }}
-                      >
+        <View style={styles.list}>
+          {requests.map((request) => {
+            const roleId = selected[request.id] ?? defaultRoleId;
+            const busy = busyId === request.id;
+
+            return (
+              <View
+                key={request.id}
+                style={[
+                  styles.card,
+                  { backgroundColor: theme.colors.card, borderColor: g.divider },
+                ]}
+              >
+                <View style={styles.cardTop}>
+                  <Avatar name={request.displayName} seed={request.id} size={44} />
+                  <View style={styles.cardCopy}>
+                    <Text
+                      numberOfLines={1}
+                      style={[
+                        styles.name,
+                        { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold },
+                      ]}
+                    >
+                      {request.displayName}
+                    </Text>
+                    {request.phone ? (
+                      <View style={styles.phoneRow}>
+                        <Phone size={12} color={theme.colors.mutedForeground} strokeWidth={2.2} />
                         <Text
-                          style={{
-                            color: on ? theme.colors.primaryForeground : theme.colors.foreground,
-                            fontWeight: "700",
-                          }}
+                          style={[
+                            styles.phone,
+                            {
+                              color: theme.colors.mutedForeground,
+                              fontFamily: theme.fontFamily.regular,
+                            },
+                          ]}
                         >
-                          {role.name}
+                          {request.phone}
                         </Text>
-                      </Pressable>
-                    );
-                  }
-                )}
+                      </View>
+                    ) : null}
+                  </View>
+                </View>
+
+                <View style={styles.roleBlock}>
+                  <MetaLabel>Approve as</MetaLabel>
+                  <FilterChips
+                    value={roleId}
+                    options={roleOptions}
+                    disabled={busy}
+                    onChange={(next) =>
+                      setSelected((prev) => ({ ...prev, [request.id]: next }))
+                    }
+                  />
+                </View>
+
+                <View style={styles.actions}>
+                  <Button
+                    style={styles.actionButton}
+                    loading={busy}
+                    onPress={() => void decide(request.id, "approved", roleId)}
+                  >
+                    Approve
+                  </Button>
+                  <Button
+                    variant="outline"
+                    style={styles.actionButton}
+                    disabled={Boolean(busyId)}
+                    onPress={() => void decide(request.id, "rejected", roleId)}
+                  >
+                    Reject
+                  </Button>
+                </View>
               </View>
-              <View style={{ flexDirection: "row", gap: 10 }}>
-                <Button
-                  style={{ flex: 1 }}
-                  loading={busy}
-                  onPress={() => void decide(request.id, "approved", roleId)}
-                >
-                  Approve
-                </Button>
-                <Button
-                  variant="outline"
-                  style={{ flex: 1 }}
-                  disabled={Boolean(busyId)}
-                  onPress={() => void decide(request.id, "rejected", roleId)}
-                >
-                  Reject
-                </Button>
-              </View>
-            </View>
-          );
-        })
+            );
+          })}
+        </View>
       )}
     </GaneshScreen>
   );
 }
+
+const styles = StyleSheet.create({
+  list: {
+    gap: 12,
+  },
+  card: {
+    borderRadius: 20,
+    borderCurve: "continuous",
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 16,
+    gap: 14,
+  },
+  cardTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  cardCopy: {
+    flex: 1,
+    minWidth: 0,
+    gap: 3,
+  },
+  name: {
+    fontSize: 16,
+    letterSpacing: -0.2,
+  },
+  phoneRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  phone: {
+    fontSize: 12.5,
+  },
+  roleBlock: {
+    gap: 8,
+  },
+  actions: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  actionButton: {
+    flex: 1,
+  },
+});

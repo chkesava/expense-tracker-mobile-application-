@@ -1,57 +1,53 @@
 import type { ReactNode } from "react";
-import { ActivityIndicator, Text, View } from "react-native";
+import { View } from "react-native";
 
 import { EmptyState } from "@/components/common/EmptyState";
-import { Button } from "@/components/ui/Button";
+import { ErrorState } from "@/components/common/ErrorState";
+import { SkeletonList } from "@/components/common/Skeleton";
 import type { LoadFailure } from "@/lib/firestoreErrors";
-import { useTheme } from "@/theme/ThemeProvider";
 
+/**
+ * Loading / error / empty wrapper for the admin surfaces.
+ *
+ * Routes all three states through the shared Expense Tracker components, so a
+ * slow admin screen shows skeleton rows instead of an inline spinner and a
+ * failure gets the standard retry treatment.
+ */
 export function AdminQueryState({
   loading,
   error,
   onRetry,
   empty,
+  skeletonCount = 4,
   children,
 }: {
   loading?: boolean;
   error?: LoadFailure | null;
   onRetry?: () => void;
   empty?: { title: string; description?: string } | null;
+  skeletonCount?: number;
   children?: ReactNode;
 }) {
-  const { theme } = useTheme();
-
   if (loading) {
     return (
-      <View style={{ alignItems: "center", paddingVertical: 24, gap: 10 }}>
-        <ActivityIndicator color={theme.colors.primary} />
-        <Text style={{ color: theme.colors.mutedForeground }}>Loading…</Text>
+      <View style={{ paddingTop: 4 }}>
+        <SkeletonList count={skeletonCount} />
       </View>
     );
   }
 
   if (error) {
     return (
-      <View style={{ gap: 12 }}>
-        <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>
-          Couldn’t load this screen
-        </Text>
-        <Text style={{ color: theme.colors.mutedForeground, lineHeight: 22 }}>
-          {error.message}
-        </Text>
-        {error.retryable && onRetry ? (
-          <Button variant="outline" onPress={onRetry}>
-            Try again
-          </Button>
-        ) : null}
-      </View>
+      <ErrorState
+        title="We couldn’t load this screen"
+        description={error.message}
+        onRetry={error.retryable ? onRetry : undefined}
+      />
     );
   }
 
   if (empty) {
-    return (
-      <EmptyState compact title={empty.title} description={empty.description} />
-    );
+    return <EmptyState compact title={empty.title} description={empty.description} />;
   }
 
   return <>{children}</>;

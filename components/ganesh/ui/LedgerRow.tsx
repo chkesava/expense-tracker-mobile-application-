@@ -16,15 +16,16 @@ export type LedgerRowBadge = {
 
 export type LedgerRowProps = {
   id: string;
-  /** Circular leading glyph — a lucide icon. */
+  /** Circular leading glyph — a lucide icon, or an `<Avatar />` for a person. */
   icon: ReactNode;
-  /** Tint behind the glyph. Defaults to the neutral tile fill. */
-  iconTint?: string;
+  /** Tint behind the glyph. Pass `"none"` when the icon draws its own surface. */
+  iconTint?: string | "none";
   title: string;
   /** One short line under the title: method, category, house number. */
   meta?: string;
   badges?: LedgerRowBadge[];
-  amount: number;
+  /** Omit for rows that are about a person or an item rather than a value. */
+  amount?: number;
   amountSize?: MoneySize;
   /** Right-aligned line under the amount — e.g. a split or pending share. */
   amountMeta?: ReactNode;
@@ -68,7 +69,11 @@ export const LedgerRow = memo(function LedgerRow({
   const body = (
     <>
       <View style={styles.top}>
-        <View style={[styles.icon, { backgroundColor: iconTint ?? g.tile }]}>{icon}</View>
+        {iconTint === "none" ? (
+          icon
+        ) : (
+          <View style={[styles.icon, { backgroundColor: iconTint ?? g.tile }]}>{icon}</View>
+        )}
 
         <View style={styles.copy}>
           <Text
@@ -94,10 +99,12 @@ export const LedgerRow = memo(function LedgerRow({
           ) : null}
         </View>
 
-        <View style={styles.value}>
-          <Money value={amount} size={amountSize} />
-          {amountMeta}
-        </View>
+        {amount != null || amountMeta ? (
+          <View style={styles.value}>
+            {amount != null ? <Money value={amount} size={amountSize} /> : null}
+            {amountMeta}
+          </View>
+        ) : null}
 
         {onPress ? (
           <ChevronRight size={16} color={theme.colors.mutedForeground} strokeWidth={2} />

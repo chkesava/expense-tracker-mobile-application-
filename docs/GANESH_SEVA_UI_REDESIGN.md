@@ -209,16 +209,72 @@ route itself is unchanged, so every existing `/(ganesh)/committee` link still wo
 
 ### Phase 2 — Admin, Members, Roles, Permanent Fund, Assets, Sponsors
 
-Status: not started
+Status: **complete** (2026-08-25)
 
-First item: `app/(ganesh)/(tabs)/pandal.tsx` and `(tabs)/committee.tsx`. Pandal is
-now the primary "more" destination but still uses the old inline card styling —
-it picked up the rebuilt `PermanentFundCard` and `MetricGrid`, and both screens
-got correct tab-bar clearance in Phase 1, but neither has been redesigned.
+#### Additional findings (Phase 2 audit)
+
+| # | Severity | Finding | Evidence |
+| --- | --- | --- | --- |
+| G19 | Critical | **The Admin Dashboard rendered 31 navigation cards across 7 groups, with heavy duplication.** Members appeared 4× ("Members" in Quick actions, "Manage members" in User management, "Members" in People, "Approve members"); Permanent Fund, Festivals, Contribution setup, Sponsors and Reports each appeared 3×. Collections/Expenses/Contributions duplicated the bottom nav. Three separate `MetricGrid`s stacked 12 tiles above it. | `admin/index.tsx` (pre-redesign, lines 192–397) |
+| G20 | High | **`AdminLinkRow` made every menu entry its own bordered card**, so a menu of 31 destinations read as 31 pieces of content. | `AdminLinkRow.tsx:29-36` |
+| G21 | High | **Permission editing was a flat wall of pill chips** — the exact "ugly giant list of checkboxes" the brief forbids (§20). No per-group count, no indication which permissions are sensitive. | `PermissionChecklist.tsx:45-71` |
+| G22 | High | **`PermissionSummary` printed ✓/✗ for every permission in every group**, including all the denied ones — dozens of lines of noise to read one role. | `PermissionChecklist.tsx:106-111` |
+| G23 | High | **`AddFab` was a plain flex child on 4 screens**, so the "floating" action button rendered inline at the bottom of the column instead of floating. | `assets.tsx:191`, `sponsors.tsx:242` (pre-redesign) |
+| G24 | Med | **Ganesh Stack screens used native headers** while the Expense Tracker uses `headerShown: false` everywhere with an in-content `PageHeader`. | `(ganesh)/_layout.tsx:82-114`, vs `(app)/_layout.tsx:45` |
+| G25 | Med | **Member detail was one 180-line ungrouped column** — roles, permissions, admin controls, target editing and payment history with no sectioning. | `member/[id].tsx:128-307` (pre-redesign) |
+| G26 | Med | **Role assignment used `☑`/`☐` text glyphs** as checkboxes. | `member/[id].tsx:161` (pre-redesign) |
+| G27 | Med | **Sponsors exposed three chip rows at once** (status, type, purpose) above the list. | `sponsors.tsx:185-195` (pre-redesign) |
+| G28 | Med | **Asset and sponsor detail put every edit form on screen permanently**, with no view/edit distinction. | `asset/[id].tsx:215-319`, `sponsor/[id].tsx:213-233` (pre-redesign) |
+| G29 | Low | **Asset audit rows rendered raw snake_case action keys** (`quantity_adjusted`) as the row title. | `asset/[id].tsx:390` (pre-redesign) |
+| G30 | Low | Committee, members and assets lists had no loading, error or search-empty states. | `committee.tsx`, `members.tsx`, `assets.tsx` (pre-redesign) |
+
+#### New kit components
+
+| File | Purpose |
+| --- | --- |
+| `ui/NavRow.tsx` | grouped-navigation row — glyph, title, meta, badge, chevron; replaces the bordered-card menu (G19, G20) |
+| `ui/Avatar.tsx` | initials avatar on a deterministic non-semantic tint ramp (green and red excluded, so a person never reads as "good" or "bad") |
+
+`LedgerRow` gained an optional `amount` and `iconTint="none"`, so it can carry a
+person or an inventory item as well as a transaction.
+
+#### Rewritten
+
+- `components/ganesh/AdminLinkRow.tsx` — delegates to `NavRow` (G20)
+- `components/ganesh/AdminQueryState.tsx` — skeleton / error+retry / empty via the shared components (G30)
+- `components/ganesh/PermissionChecklist.tsx` — one `Section` per capability area with a running "n of m allowed" count, a bulk toggle, real checkboxes, and a `Sensitive` text tag on `CRITICAL_PERMISSIONS`; `PermissionSummary` now shows only what is granted plus an "n not allowed" line (G21, G22)
+- `app/(ganesh)/admin/index.tsx` — **31 cards → 4 metric tiles + 5 grouped sections (14 rows)**; every duplicate collapsed, tab-bar destinations dropped (G19)
+- `app/(ganesh)/(tabs)/pandal.tsx` — the "more" surface, rebuilt on `Section` + `NavRow`
+- `app/(ganesh)/(tabs)/committee.tsx` — avatar rows with a per-person progress track and an inline "Record payment" affordance
+- `app/(ganesh)/members.tsx` — search, role filters, avatar rows, member-changes log
+- `app/(ganesh)/join-requests.tsx` — avatar cards with role chips before approval
+- `app/(ganesh)/admin/roles/{index,new,[id]}.tsx` — built-in vs custom grouping, grouped permission editing
+- `app/(ganesh)/member/[id].tsx` — profile hero + sectioned festival stats, roles, permissions, target, access controls, payment history (G25, G26)
+- `app/(ganesh)/permanent-fund.tsx` — maroon hero, per-festival took/returned grid, "Move money" as one chip-selected form
+- `app/(ganesh)/assets.tsx` + `asset/[id].tsx` — inventory rows with quantity in the value column; detail gains a view/edit split and prose audit labels (G28, G29)
+- `app/(ganesh)/sponsors.tsx` + `sponsor/[id].tsx` — status chips always visible, type/purpose behind "More filters" (G27); detail gains a deal picker, linked-records block, and a view/edit split (G28)
+- `app/(ganesh)/admin/{festivals,reports}.tsx` — nav rows wrapped in a `Section` so they keep a surface (full redesign deferred to Phase 3)
+
+#### Navigation
+
+Every Phase 1 and Phase 2 screen now uses `headerShown: false` with an
+in-content `GaneshHeader`, matching the Expense Tracker exactly (G24). Screens
+not yet converted keep their native header, so the two styles never collide on
+one screen.
+
+#### Verification
+
+`npx tsc -p tsconfig.json --noEmit` clean; `npm test` 1221 tests / 125 files passing.
 
 ### Phase 3 — Reports, Settlement, Settings, secondary screens
 
 Status: not started
+
+Remaining: `report.tsx`, `admin/{reports,audit,categories,festivals,settings,setup}.tsx`,
+`setup.tsx`, `create-festival.tsx`, `close-festival.tsx`, the ten `add-*` forms
+(including the Add Collection fast-entry rework from §11), and the
+`expense/[id]`, `contribution/[id]`, `household/[id]` detail screens. Then the
+cross-app consistency audit (§33) and the admin/member walkthrough (§39).
 
 ---
 

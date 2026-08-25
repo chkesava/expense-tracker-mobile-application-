@@ -5,6 +5,7 @@ import { useRouter } from "expo-router";
 import { AdminLinkRow } from "@/components/ganesh/AdminLinkRow";
 import { AdminQueryState } from "@/components/ganesh/AdminQueryState";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
+import { Section } from "@/components/ganesh/ui";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useFestivals } from "@/hooks/useFestivals";
@@ -42,9 +43,11 @@ export default function AdminFestivalsScreen() {
             : null
         }
       >
-        {festivals.map((festival) => (
+        <Section title="Festivals">
+        {festivals.map((festival, index) => (
           <AdminLinkRow
             key={festival.id}
+            divider={index < festivals.length - 1}
             title={festival.name}
             subtitle={`${festival.year} · ${festival.status === "open" ? "Active" : "Closed"}`}
             badge={festival.id === festivalId ? "Current" : festival.status === "open" ? "Switch" : "Closed"}
@@ -75,6 +78,7 @@ export default function AdminFestivalsScreen() {
             }}
           />
         ))}
+        </Section>
       </AdminQueryState>
       {current ? (
         <View style={{ gap: 10 }}>

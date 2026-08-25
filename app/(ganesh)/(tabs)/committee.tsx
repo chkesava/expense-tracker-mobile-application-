@@ -1,20 +1,31 @@
 import { memo, useCallback, useMemo, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FlashList } from "@shopify/flash-list";
+import { ChevronRight, Plus, Users } from "lucide-react-native";
 
-import { EmptyState } from "@/components/common/EmptyState";
-import { useGaneshListPadding } from "@/components/ganesh/GaneshScreen";
+import { GaneshScreen, useGaneshListPadding } from "@/components/ganesh/GaneshScreen";
 import { GaneshSyncChip } from "@/components/ganesh/GaneshSyncChip";
-import { MetricGrid } from "@/components/ganesh/MetricGrid";
+import {
+  Avatar,
+  FilterChips,
+  GaneshHeader,
+  ListStateView,
+  MetaLabel,
+  Money,
+  ProgressTrack,
+  StatTile,
+  StatusBadge,
+  useGaneshTokens,
+} from "@/components/ganesh/ui";
+import { SearchBar } from "@/components/common/SearchBar";
 import { AddFab } from "@/components/ui/AddFab";
-import { Input } from "@/components/ui/Input";
 import { useFestivalMembers } from "@/hooks/useFestivalMembers";
 import { useFestivals } from "@/hooks/useFestivals";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { useGaneshSummary } from "@/hooks/useGaneshSummary";
 import { usePandalMembers } from "@/hooks/usePandalMembers";
+import { haptic } from "@/lib/haptics";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import type { FestivalMember, PandalMember } from "@/shared/types/ganesh";
 import {
@@ -27,7 +38,15 @@ import { formatInr } from "@/shared/utils/ganeshMoney";
 import { ganeshRoleLabel } from "@/shared/utils/ganeshPermissions";
 import { useTheme } from "@/theme/ThemeProvider";
 
-const FILTERS = ["all", "paid", "partial", "pending"] as const;
+type Filter = "all" | "paid" | "partial" | "pending";
+
+const FILTER_OPTIONS: Array<{ id: Filter; label: string }> = [
+  { id: "all", label: "Everyone" },
+  { id: "pending", label: "Not paid" },
+  { id: "partial", label: "Partial" },
+  { id: "paid", label: "Paid" },
+];
+
 const STATUS_LABEL: Record<CommitteePayStatus, string> = {
   paid: "Paid",
   partial: "Partial",
@@ -71,18 +90,20 @@ function buildRow(
 
 export default function CommitteeScreen() {
   const { theme } = useTheme();
-  const insets = useSafeAreaInsets();
-  const listPadding = useGaneshListPadding();
+  const g = useGaneshTokens();
   const { push } = useRouter();
+  const listPadding = useGaneshListPadding();
+
   const { pandalId, festivalId } = useGaneshSession();
   const { festivals } = useFestivals(pandalId);
   const festival = festivals.find((item) => item.id === festivalId);
   const { summary } = useGaneshSummary(pandalId, festivalId);
-  const { members: pandalMembers } = usePandalMembers(pandalId);
+  const { members: pandalMembers, loading, error } = usePandalMembers(pandalId);
   const { members: festivalMembers } = useFestivalMembers(pandalId, festivalId);
   const { can } = useGaneshPermissions();
+
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<(typeof FILTERS)[number]>("all");
+  const [filter, setFilter] = useState<Filter>("all");
   const defaultTarget = festival?.contributionTargetAmount ?? 0;
 
   const allRows = useMemo(
@@ -110,199 +131,374 @@ export default function CommitteeScreen() {
     return allRows.filter((row) => {
       if (filter !== "all" && row.status !== filter) return false;
       if (!needle) return true;
-      return row.name.toLowerCase().includes(needle) || row.roleLabel.toLowerCase().includes(needle);
+      return (
+        row.name.toLowerCase().includes(needle) || row.roleLabel.toLowerCase().includes(needle)
+      );
     });
   }, [allRows, filter, query]);
 
   const paidCount = allRows.filter((row) => row.status === "paid").length;
   const pendingCount = allRows.filter((row) => row.status === "pending").length;
 
+  const canRecord = can("contributions.create") && festival?.status === "open";
+  const openAdd = useCallback(
+    () => push("/(ganesh)/add-member-payment" as never),
+    [push]
+  );
+
   const onOpen = useCallback(
-    (userId: string) => {
-      push(`/(ganesh)/member/${userId}` as never);
-    },
+    (userId: string) => push(`/(ganesh)/member/${userId}` as never),
     [push]
   );
   const onPay = useCallback(
-    (userId: string) => {
-      push(`/(ganesh)/add-member-payment?memberId=${userId}` as never);
-    },
+    (userId: string) => push(`/(ganesh)/add-member-payment?memberId=${userId}` as never),
     [push]
   );
 
   const renderItem = useCallback(
     ({ item }: { item: CommitteeRow }) => (
-      <CommitteePersonRow
-        userId={item.userId}
-        name={item.name}
-        roleLabel={item.roleLabel}
-        paid={item.paid}
-        target={item.target}
-        due={item.due}
-        status={item.status}
-        customTarget={item.customTarget}
-        personalExpenses={item.personalExpenses}
-        pendingReimbursement={item.pendingReimbursement}
-        canRecord={can("contributions.create") && festival?.status === "open"}
-        onOpen={onOpen}
-        onPay={onPay}
-      />
+      <CommitteePersonRow row={item} canRecord={canRecord} onOpen={onOpen} onPay={onPay} />
     ),
-    [can, festival?.status, onOpen, onPay]
+    [canRecord, onOpen, onPay]
   );
 
   return (
-    <View
-      style={{
-        flex: 1,
-        backgroundColor: theme.colors.background,
-        padding: 16,
-        paddingTop: insets.top + 16,
-        gap: 12,
-      }}
+    <GaneshScreen
+      safeTop
+      scroll={false}
+      withTabBar
+      overlay={
+        canRecord ? (
+          <View style={[styles.fab, { bottom: listPadding - 24 }]} pointerEvents="box-none">
+            <AddFab onPress={openAdd} accessibilityLabel="Record committee payment" size="lg" />
+          </View>
+        ) : null
+      }
     >
-      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-        <Text style={{ color: theme.colors.foreground, fontSize: 22, fontWeight: "800" }}>
-          Committee
-        </Text>
-        <GaneshSyncChip />
-      </View>
-      <Text style={{ color: theme.colors.mutedForeground }}>
-        {festival?.name ?? "Festival"} · track who paid their committee share. A Pandal Admin can
-        set a lower target for a child or anyone who should pay less.
-      </Text>
-      <MetricGrid
-        items={[
-          { label: "Committee paid", value: summary.committeeContributions },
-          { label: "People", value: `${allRows.length}` },
-          { label: "Paid", value: `${paidCount}` },
-          { label: "Not paid", value: `${pendingCount}` },
-        ]}
+      <GaneshHeader
+        title="Committee"
+        subtitle={festival?.name}
+        icon={<Users size={22} color={g.saffron} strokeWidth={2.2} />}
+        rightElement={<GaneshSyncChip />}
       />
-      <Input value={query} onChangeText={setQuery} placeholder="Search committee" />
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-        {FILTERS.map((item) => (
-          <Pressable
-            key={item}
-            onPress={() => setFilter(item)}
-            style={{
-              paddingHorizontal: 10,
-              paddingVertical: 6,
-              borderRadius: 999,
-              backgroundColor: filter === item ? theme.colors.primary : theme.colors.muted,
-            }}
-          >
+
+      <View style={styles.statRow}>
+        <StatTile
+          label="Committee paid"
+          meta={
             <Text
-              style={{
-                color: filter === item ? theme.colors.primaryForeground : theme.colors.foreground,
-                fontWeight: "700",
-                textTransform: "capitalize",
-              }}
+              style={[
+                styles.tileMeta,
+                { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular },
+              ]}
             >
-              {item === "pending" ? "Not paid" : item}
+              {allRows.length} {allRows.length === 1 ? "person" : "people"}
             </Text>
-          </Pressable>
-        ))}
+          }
+        >
+          <Money
+            value={summary.committeeContributions}
+            size="primary"
+            tone="positive"
+            numberOfLines={1}
+            adjustsFontSizeToFit
+          />
+        </StatTile>
+        <StatTile
+          label="Paid"
+          meta={
+            <Text
+              style={[
+                styles.tileMeta,
+                { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular },
+              ]}
+            >
+              of {allRows.length}
+            </Text>
+          }
+        >
+          <Text
+            style={[
+              styles.count,
+              { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold },
+            ]}
+          >
+            {paidCount}
+          </Text>
+        </StatTile>
+        <StatTile
+          label="Not paid"
+          meta={
+            <Text
+              style={[
+                styles.tileMeta,
+                {
+                  color: pendingCount > 0 ? theme.colors.warning : theme.colors.mutedForeground,
+                  fontFamily: theme.fontFamily.regular,
+                },
+              ]}
+            >
+              {pendingCount > 0 ? "Needs follow-up" : "All done"}
+            </Text>
+          }
+        >
+          <Text
+            style={[
+              styles.count,
+              {
+                color: pendingCount > 0 ? theme.colors.warning : theme.colors.foreground,
+                fontFamily: theme.fontFamily.semibold,
+              },
+            ]}
+          >
+            {pendingCount}
+          </Text>
+        </StatTile>
       </View>
+
+      <SearchBar value={query} onChangeText={setQuery} placeholder="Search name or role" />
+
+      <FilterChips value={filter} options={FILTER_OPTIONS} onChange={setFilter} />
+
       <FlashList
         data={rows}
-        style={{ flex: 1 }}
-        contentContainerStyle={{ paddingBottom: listPadding }}
+        style={styles.list}
         keyExtractor={(item) => item.userId}
+        contentContainerStyle={{ paddingBottom: listPadding }}
+        ItemSeparatorComponent={() => <View style={styles.separator} />}
         renderItem={renderItem}
         ListEmptyComponent={
-          <EmptyState
-            title="No committee people yet"
-            description="Approve join requests or add a payment to start tracking this festival."
+          <ListStateView
+            loading={loading && allRows.length === 0}
+            error={error}
+            illustration="splits"
+            title={
+              query.trim() || filter !== "all" ? "Nobody matches" : "No committee people yet"
+            }
+            description={
+              query.trim() || filter !== "all"
+                ? "Try another filter or clear the search."
+                : "Approve a join request, or record a payment to start tracking this festival."
+            }
+            action={
+              canRecord && !query.trim() && filter === "all"
+                ? { label: "Record payment", onPress: openAdd }
+                : undefined
+            }
           />
         }
       />
-      {festival?.status === "open" && can("contributions.create") ? (
-        <AddFab
-          onPress={() => push("/(ganesh)/add-member-payment" as never)}
-          accessibilityLabel="Record committee payment"
-        />
-      ) : null}
-    </View>
+    </GaneshScreen>
   );
 }
 
 const CommitteePersonRow = memo(function CommitteePersonRow({
-  userId,
-  name,
-  roleLabel,
-  paid,
-  target,
-  due,
-  status,
-  customTarget,
-  personalExpenses,
-  pendingReimbursement,
+  row,
   canRecord,
   onOpen,
   onPay,
 }: {
-  userId: string;
-  name: string;
-  roleLabel: string;
-  paid: number;
-  target: number;
-  due: number;
-  status: CommitteePayStatus;
-  customTarget: boolean;
-  personalExpenses: number;
-  pendingReimbursement: number;
+  row: CommitteeRow;
   canRecord: boolean;
   onOpen: (userId: string) => void;
   onPay: (userId: string) => void;
 }) {
   const { theme } = useTheme();
-  const statusColor =
-    status === "paid"
-      ? theme.colors.primary
-      : status === "partial"
-        ? theme.colors.foreground
+  const g = useGaneshTokens();
+
+  const pct = row.target > 0 ? Math.min(100, Math.round((row.paid / row.target) * 100)) : 0;
+  const trackColor =
+    row.status === "paid"
+      ? g.godFund
+      : row.status === "partial"
+        ? theme.colors.warning
         : theme.colors.mutedForeground;
 
   return (
     <Pressable
-      onPress={() => onOpen(userId)}
-      style={{
-        backgroundColor: theme.colors.card,
-        borderRadius: 16,
-        padding: 14,
-        marginBottom: 10,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-        gap: 6,
+      onPress={() => {
+        void haptic.selection();
+        onOpen(row.userId);
       }}
+      accessibilityRole="button"
+      accessibilityLabel={`${row.name}, ${row.roleLabel}, ${STATUS_LABEL[row.status]}`}
+      android_ripple={{
+        color: g.isDark ? "rgba(255,255,255,0.06)" : "rgba(15,23,42,0.05)",
+        borderless: false,
+      }}
+      style={({ pressed }) => [
+        styles.person,
+        { backgroundColor: theme.colors.card, borderColor: g.divider },
+        pressed && { opacity: 0.9 },
+      ]}
     >
-      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-        <Text style={{ color: theme.colors.foreground, fontWeight: "700", flex: 1 }}>{name}</Text>
-        <Text style={{ color: statusColor, fontWeight: "800" }}>{STATUS_LABEL[status]}</Text>
+      <View style={styles.personTop}>
+        <Avatar name={row.name} seed={row.userId} />
+
+        <View style={styles.personCopy}>
+          <Text
+            numberOfLines={1}
+            style={[
+              styles.personName,
+              { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold },
+            ]}
+          >
+            {row.name}
+          </Text>
+          <View style={styles.personMetaLine}>
+            <Text
+              numberOfLines={1}
+              style={[
+                styles.personMeta,
+                { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular },
+              ]}
+            >
+              {row.roleLabel}
+              {row.customTarget ? " · Custom target" : ""}
+            </Text>
+            <StatusBadge
+              kind={row.status === "pending" ? "pending" : row.status}
+              label={STATUS_LABEL[row.status]}
+              size="sm"
+            />
+          </View>
+        </View>
+
+        <View style={styles.personValue}>
+          <Money value={row.paid} size="primary" />
+          {row.target > 0 ? <MetaLabel>of {formatInr(row.target)}</MetaLabel> : null}
+        </View>
+
+        <ChevronRight size={16} color={theme.colors.mutedForeground} strokeWidth={2} />
       </View>
-      <Text style={{ color: theme.colors.mutedForeground }}>
-        {roleLabel}
-        {customTarget ? " · Custom target" : ""}
-      </Text>
-      <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>
-        {formatInr(paid)}
-        {target > 0 ? ` / ${formatInr(target)}` : ""} this festival
-      </Text>
-      {due > 0 ? (
-        <Text style={{ color: theme.colors.mutedForeground }}>Due {formatInr(due)}</Text>
-      ) : null}
-      {personalExpenses > 0 || pendingReimbursement > 0 ? (
-        <Text style={{ color: theme.colors.mutedForeground }}>
-          Personal spent {formatInr(personalExpenses)}
-          {pendingReimbursement > 0 ? ` · Reimburse ${formatInr(pendingReimbursement)}` : ""}
+
+      {row.target > 0 ? <ProgressTrack pct={pct} color={trackColor} /> : null}
+
+      {row.due > 0 || row.personalExpenses > 0 || row.pendingReimbursement > 0 ? (
+        <Text
+          numberOfLines={2}
+          style={[
+            styles.personFooter,
+            { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular },
+          ]}
+        >
+          {[
+            row.due > 0 ? `Due ${formatInr(row.due)}` : null,
+            row.personalExpenses > 0 ? `Personal spent ${formatInr(row.personalExpenses)}` : null,
+            row.pendingReimbursement > 0
+              ? `Reimburse ${formatInr(row.pendingReimbursement)}`
+              : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
         </Text>
       ) : null}
-      {canRecord && status !== "paid" ? (
-        <Pressable onPress={() => onPay(userId)}>
-          <Text style={{ color: theme.colors.primary, fontWeight: "700" }}>Record payment</Text>
+
+      {canRecord && row.status !== "paid" ? (
+        <Pressable
+          onPress={() => {
+            void haptic.selection();
+            onPay(row.userId);
+          }}
+          hitSlop={6}
+          accessibilityRole="button"
+          accessibilityLabel={`Record payment for ${row.name}`}
+          style={({ pressed }) => [
+            styles.recordButton,
+            { backgroundColor: g.wash(g.saffron) },
+            pressed && { opacity: 0.8 },
+          ]}
+        >
+          <Plus size={14} color={g.saffron} strokeWidth={2.6} />
+          <Text
+            style={[
+              styles.recordLabel,
+              { color: g.saffron, fontFamily: theme.fontFamily.semibold },
+            ]}
+          >
+            Record payment
+          </Text>
         </Pressable>
       ) : null}
     </Pressable>
   );
+});
+
+const styles = StyleSheet.create({
+  list: {
+    flex: 1,
+  },
+  separator: {
+    height: 10,
+  },
+  statRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  tileMeta: {
+    fontSize: 11.5,
+    lineHeight: 15,
+  },
+  count: {
+    fontSize: 17,
+    letterSpacing: -0.2,
+    fontVariant: ["tabular-nums"],
+  },
+  fab: {
+    position: "absolute",
+    right: 16,
+  },
+  person: {
+    borderRadius: 16,
+    borderCurve: "continuous",
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 12,
+    gap: 10,
+    overflow: "hidden",
+  },
+  personTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  personCopy: {
+    flex: 1,
+    minWidth: 0,
+    gap: 4,
+  },
+  personName: {
+    fontSize: 14,
+    letterSpacing: -0.1,
+  },
+  personMetaLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flexWrap: "wrap",
+    minWidth: 0,
+  },
+  personMeta: {
+    fontSize: 11.5,
+    flexShrink: 1,
+  },
+  personValue: {
+    alignItems: "flex-end",
+    gap: 1,
+  },
+  personFooter: {
+    fontSize: 11.5,
+    lineHeight: 16,
+  },
+  recordButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 5,
+    minHeight: 34,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+  },
+  recordLabel: {
+    fontSize: 12.5,
+  },
 });
