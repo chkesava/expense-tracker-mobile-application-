@@ -266,15 +266,53 @@ one screen.
 
 `npx tsc -p tsconfig.json --noEmit` clean; `npm test` 1221 tests / 125 files passing.
 
-### Phase 3 — Reports, Settlement, Settings, secondary screens
+### Phase 3 — Forms, detail screens, reports, settlement, settings
 
-Status: not started
+Status: **complete** (2026-08-25)
 
-Remaining: `report.tsx`, `admin/{reports,audit,categories,festivals,settings,setup}.tsx`,
-`setup.tsx`, `create-festival.tsx`, `close-festival.tsx`, the ten `add-*` forms
-(including the Add Collection fast-entry rework from §11), and the
-`expense/[id]`, `contribution/[id]`, `household/[id]` detail screens. Then the
-cross-app consistency audit (§33) and the admin/member walkthrough (§39).
+#### Additional findings (Phase 3 audit)
+
+| # | Severity | Finding | Evidence |
+| --- | --- | --- | --- |
+| G31 | High | **Add Collection exposed eight fields at once**, four of them optional, for the app's single most repeated task. §11 asks for "a few seconds". | `add-collection.tsx:99-113` (pre-redesign) |
+| G32 | High | **All nine write forms were ungrouped columns of `Input`s** with the Save button at the end of the scroll. Add Expense with an asset purchase runs to ~40 fields, so the Save button was far off screen. | `add-expense.tsx:133-512` (pre-redesign) |
+| G33 | High | **`report.tsx` dumped 16 metric tiles in one grid** — opening funds through asset purchases — with no statement structure, so it could not be read as a set of accounts. | `report.tsx:54-73` (pre-redesign) |
+| G34 | High | **`admin/reports.tsx` dumped a further 10 + 5 + 5 tiles**, duplicating most of `report.tsx`. | `admin/reports.tsx:55-96` (pre-redesign) |
+| G35 | Med | **No form validated before submit.** Every form enabled Save unconditionally and failed with a toast afterwards. | all nine `add-*` screens |
+| G36 | Med | **Split-funded expenses could be saved with parts that do not sum to the total.** Nothing surfaced the mismatch. | `add-expense.tsx:88-99` (pre-redesign) |
+| G37 | Med | **`close-festival.tsx` showed the settlement as nine flat tiles**, including a member count rendered next to money, with the closing-balance arithmetic explained only in prose. | `close-festival.tsx:93-137` (pre-redesign) |
+| G38 | Med | **"Also add as Pandal asset" was a filled pill** that looked like a button, not a toggle, in four places. | `add-contribution.tsx:203`, `add-sponsor.tsx:263`, `contribution/[id].tsx:344`, `sponsor/[id].tsx:387` (pre-redesign) |
+| G39 | Med | **`admin/audit.tsx` rendered three hand-rolled chip rows** (action, actor, today) and a card per entry. | `admin/audit.tsx:151-240` (pre-redesign) |
+| G40 | Low | **`setup.tsx` used `Stack.Screen` with a text-only "Apps" `headerLeft`** as the only way back to the app switcher. | `setup.tsx:111-125` (pre-redesign) |
+| G41 | Low | **`admin/categories.tsx` mixed active and disabled categories** in one undifferentiated list. | `admin/categories.tsx:64-141` (pre-redesign) |
+| G42 | Low | Every detail screen put its edit form permanently on screen, with no view/edit distinction. | `expense/[id].tsx`, `contribution/[id].tsx`, `household/[id].tsx` (pre-redesign) |
+
+#### New kit components
+
+| File | Purpose |
+| --- | --- |
+| `ui/FormShell.tsx` | header, sectioned body, and a **docked** primary action, so a long form never hides its own Save button (G32) |
+| `ui/MoreDetails.tsx` | progressive disclosure for optional fields, with an "n filled" hint so nothing hidden is forgotten (G31) |
+
+#### Rewritten
+
+- **All nine write forms** — `add-collection` (four fields; mobile, house number, address and notes behind More details), `add-expense` (live split summary with a blocking mismatch strip), `add-contribution`, `add-asset`, `add-sponsor`, `add-member-payment` (live paid/target/due tiles), `add-opening-fund`, `add-permanent-fund`, `add-reimbursement` (members sorted by what they are owed) — G31, G32, G35, G36, G38
+- **Detail screens** — `expense/[id]`, `contribution/[id]`, `household/[id]`: fund hero, sectioned facts, linked-records block, view/edit split (G42)
+- **Reports** — `report.tsx` is now a statement of six sections read as label/amount rows; `admin/reports.tsx` keeps running totals plus a "open the list behind a number" nav section, no longer duplicating the full report (G33, G34)
+- **Settlement** — `close-festival.tsx` shows where the closing balance came from as a statement, warns when members are still owed, and blocks on a deficit (G37)
+- **Flows** — `setup.tsx` (Ganesh mark, sectioned create/join, account actions in-content), `create-festival.tsx` (live into-festival vs stays-permanent tiles)
+- **Admin secondary** — `admin/{audit,categories,festivals,settings,setup,reports}.tsx` (G39, G41)
+
+#### Consistency audit (§33)
+
+- **Zero** inline `borderRadius: 16` card definitions remain anywhere under `app/(ganesh)` or `components/ganesh`.
+- Two files still declare a custom card surface — `(tabs)/committee.tsx` and `join-requests.tsx` — both deliberate, both built from kit tokens (`g.divider`, `theme.colors.card`).
+- **No Ganesh screen uses a native header any more.** Every `Stack.Screen` in all three Ganesh layouts is `headerShown: false`, matching the Expense Tracker.
+- Every screen carries an in-content header. The single exception is `member/[id].tsx`, which leads with an avatar profile hero because the person, not the screen, is the subject.
+
+#### Verification
+
+`npx tsc -p tsconfig.json --noEmit` clean; `npm test` 1221 tests / 125 files passing.
 
 ---
 

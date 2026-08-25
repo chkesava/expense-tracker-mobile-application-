@@ -88,19 +88,19 @@ function GaneshStack() {
     >
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="admin" options={{ headerShown: false }} />
-      <Stack.Screen name="setup" options={{ title: "Ganesh Seva" }} />
+      <Stack.Screen name="setup" options={{ headerShown: false }} />
       <Stack.Screen name="add-collection" options={{ headerShown: false }} />
       <Stack.Screen name="add-expense" options={{ headerShown: false }} />
-      <Stack.Screen name="expense/[id]" options={{ title: "Expense" }} />
+      <Stack.Screen name="expense/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="add-contribution" options={{ headerShown: false }} />
-      <Stack.Screen name="contribution/[id]" options={{ title: "Contribution" }} />
+      <Stack.Screen name="contribution/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="add-opening-fund" options={{ headerShown: false }} />
       <Stack.Screen name="add-member-payment" options={{ headerShown: false }} />
       <Stack.Screen name="add-reimbursement" options={{ headerShown: false }} />
       <Stack.Screen name="member/[id]" options={{ headerShown: false }} />
-      <Stack.Screen name="household/[id]" options={{ title: "Household" }} />
-      <Stack.Screen name="report" options={{ title: "Festival report" }} />
-      <Stack.Screen name="close-festival" options={{ title: "Close festival" }} />
+      <Stack.Screen name="household/[id]" options={{ headerShown: false }} />
+      <Stack.Screen name="report" options={{ headerShown: false }} />
+      <Stack.Screen name="close-festival" options={{ headerShown: false }} />
       {/* Redesigned screens draw their own GaneshHeader, matching the Expense
           Tracker's in-content PageHeader. The rest keep the native bar until
           they are converted. */}
@@ -114,7 +114,7 @@ function GaneshStack() {
       <Stack.Screen name="sponsors" options={{ headerShown: false }} />
       <Stack.Screen name="add-sponsor" options={{ headerShown: false }} />
       <Stack.Screen name="sponsor/[id]" options={{ headerShown: false }} />
-      <Stack.Screen name="create-festival" options={{ title: "Create festival" }} />
+      <Stack.Screen name="create-festival" options={{ headerShown: false }} />
     </Stack>
   );
 }

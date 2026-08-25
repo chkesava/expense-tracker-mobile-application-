@@ -1,22 +1,37 @@
-import { Text, View } from "react-native";
+import { useMemo } from "react";
 import { useRouter } from "expo-router";
+import {
+  Building2,
+  ClipboardList,
+  FileBarChart,
+  Gift,
+  HandCoins,
+  Landmark,
+  Receipt,
+  Wallet,
+} from "lucide-react-native";
 
-import { AdminLinkRow } from "@/components/ganesh/AdminLinkRow";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
-import { Section } from "@/components/ganesh/ui";
-import { MetricGrid } from "@/components/ganesh/MetricGrid";
+import {
+  DataRow,
+  FundHero,
+  GaneshHeader,
+  Money,
+  NavRow,
+  Section,
+  StatusStrip,
+  useGaneshTokens,
+} from "@/components/ganesh/ui";
 import { useContributions } from "@/hooks/useContributions";
 import { useFestivals } from "@/hooks/useFestivals";
 import { useGaneshSummary } from "@/hooks/useGaneshSummary";
 import { usePandalAssets } from "@/hooks/usePandalAssets";
-import { usePandalSponsors } from "@/hooks/usePandalSponsors";
 import { usePermanentFund } from "@/hooks/usePermanentFund";
 import { useSponsorships } from "@/hooks/useSponsorships";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import { summarizeAssets } from "@/shared/utils/ganeshAssets";
 import { summarizeContributions } from "@/shared/utils/ganeshContributions";
-import { formatInr } from "@/shared/utils/ganeshMoney";
-import { breakdownSponsors, summarizeSponsorships } from "@/shared/utils/ganeshSponsors";
+import { summarizeSponsorships } from "@/shared/utils/ganeshSponsors";
 import {
   assetPurchaseAmountOf,
   availableGodFund,
@@ -26,146 +41,170 @@ import {
 } from "@/shared/utils/ganeshMath";
 import { useTheme } from "@/theme/ThemeProvider";
 
+function Line({
+  label,
+  value,
+  divider,
+  emphasis,
+}: {
+  label: string;
+  value: number;
+  divider?: boolean;
+  emphasis?: boolean;
+}) {
+  return (
+    <DataRow
+      title={label}
+      divider={divider}
+      value={<Money value={value} size={emphasis ? "primary" : "secondary"} />}
+    />
+  );
+}
+
 export default function AdminReportsScreen() {
   const { theme } = useTheme();
-  const { push } = useRouter();
+  const g = useGaneshTokens();
+  const { push, back } = useRouter();
   const { pandalId, festivalId } = useGaneshSession();
+
   const { festivals } = useFestivals(pandalId);
   const { summary } = useGaneshSummary(pandalId, festivalId);
   const { contributions } = useContributions(pandalId, festivalId);
-  const contributionTotals = summarizeContributions(contributions);
   const { sponsorships } = useSponsorships(pandalId, festivalId);
-  const { sponsors } = usePandalSponsors(pandalId);
-  const sponsorTotals = summarizeSponsorships(sponsorships);
-  const sponsorRows = breakdownSponsors(sponsorships, sponsors);
   const { assets } = usePandalAssets(pandalId);
   const { fund } = usePermanentFund(pandalId);
-  const assetSummary = summarizeAssets(assets);
+
+  const contributionTotals = useMemo(
+    () => summarizeContributions(contributions),
+    [contributions]
+  );
+  const sponsorTotals = useMemo(() => summarizeSponsorships(sponsorships), [sponsorships]);
+  const assetSummary = useMemo(() => summarizeAssets(assets), [assets]);
   const festival = festivals.find((item) => item.id === festivalId);
 
+  const glyph = (Icon: typeof Wallet) => (
+    <Icon size={17} color={theme.colors.mutedForeground} strokeWidth={2.2} />
+  );
+
   return (
-    <GaneshScreen>
-      <Text style={{ color: theme.colors.foreground, fontSize: 22, fontWeight: "800" }}>
-        {festival?.name || "Festival reports"}
-      </Text>
-      <Text style={{ color: theme.colors.mutedForeground, lineHeight: 22 }}>
-        Quick totals for the current festival. Open a section when you need the list behind the
-        number.
-      </Text>
-      <MetricGrid
-        items={[
-          { label: "Total cash in", value: totalCashIn(summary) },
-          { label: "God Fund expenses", value: summary.godFundExpenses },
-          { label: "Reimbursements", value: summary.reimbursements },
-          { label: "Closing / God Fund", value: availableGodFund(summary) },
-          { label: "Festival expenses", value: totalExpenses(summary) },
-          { label: "Regular", value: regularExpenseAmount(summary) },
-          { label: "Asset purchases", value: assetPurchaseAmountOf(summary) },
-          { label: "Pandal estimated value", value: assetSummary.estimatedValue },
-          { label: "To Permanent Fund", value: summary.transferredToPermanentFund },
-          { label: "Permanent Fund", value: fund.total },
-        ]}
+    <GaneshScreen safeTop>
+      <GaneshHeader
+        title="Reports"
+        subtitle={festival?.name}
+        icon={<FileBarChart size={22} color={g.saffron} strokeWidth={2.2} />}
+        onBack={back}
       />
-      <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>
-        Promised vs received
-      </Text>
-      <Text style={{ color: theme.colors.mutedForeground }}>
-        Promised and cancelled amounts are not cash and are not part of Closing / God Fund.
-      </Text>
-      <MetricGrid
-        items={[
-          { label: "Cash received", value: contributionTotals.cashReceived },
-          { label: "Promised cash", value: contributionTotals.promisedCash },
-          { label: "In-kind received", value: contributionTotals.inKindReceived },
-          { label: "Promised in-kind", value: contributionTotals.promisedInKind },
-          { label: "Cancelled", value: contributionTotals.cancelledValue },
+
+      <FundHero
+        eyebrow="Closing God Fund"
+        amount={availableGodFund(summary)}
+        kind="god"
+        breakdown={[
+          { label: "Cash in", value: totalCashIn(summary) },
+          { label: "Cash out", value: summary.godFundExpenses + summary.reimbursements },
         ]}
+        action={{ label: "Full festival report", onPress: () => push("/(ganesh)/report" as never) }}
       />
-      <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>Sponsors</Text>
-      <Text style={{ color: theme.colors.mutedForeground }}>
-        Separate from Closing / God Fund. Expense sponsorship is not income.
-      </Text>
-      <MetricGrid
-        items={[
-          { label: "Cash received", value: sponsorTotals.cashReceived },
-          { label: "Promised cash", value: sponsorTotals.promisedCash },
-          { label: "In-kind received", value: sponsorTotals.inKindReceived },
-          { label: "Promised in-kind", value: sponsorTotals.promisedInKind },
-          { label: "Cancelled", value: sponsorTotals.cancelledValue },
-        ]}
-      />
-      {sponsorRows.length > 0 ? (
-        <View style={{ gap: 10 }}>
-          {sponsorRows.map((row) => (
-            <View
-              key={row.sponsorId}
-              style={{
-                backgroundColor: theme.colors.card,
-                borderColor: theme.colors.border,
-                borderWidth: 1,
-                borderRadius: 16,
-                padding: 14,
-                gap: 4,
-              }}
-            >
-              <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>{row.name}</Text>
-              <Text style={{ color: theme.colors.mutedForeground }}>
-                Received {formatInr(row.received)} · Promised {formatInr(row.promised)}
-                {row.inKind > 0 ? ` · In-kind ${formatInr(row.inKind)}` : ""}
-              </Text>
-            </View>
-          ))}
-        </View>
-      ) : null}
-      <Section title="Reports">
-        <AdminLinkRow
-          divider
+
+      <Section title="This festival">
+        <Line label="Total cash in" value={totalCashIn(summary)} divider />
+        <Line label="God Fund expenses" value={summary.godFundExpenses} divider />
+        <Line label="Reimbursements paid" value={summary.reimbursements} divider />
+        <Line label="All expenses" value={totalExpenses(summary)} divider />
+        <Line label="Regular spending" value={regularExpenseAmount(summary)} divider />
+        <Line label="Asset purchases" value={assetPurchaseAmountOf(summary)} />
+      </Section>
+
+      <Section title="Funds that carry over">
+        <Line label="Returned to Permanent Fund" value={summary.transferredToPermanentFund} divider />
+        <Line label="Permanent Fund balance" value={fund.total} divider emphasis />
+        <Line label="Pandal asset worth" value={assetSummary.estimatedValue} />
+      </Section>
+
+      <Section
+        title="Promised vs received"
+        subtitle="Promised and cancelled amounts are not cash and are not in the closing balance."
+      >
+        <Line label="Contributions received" value={contributionTotals.cashReceived} divider />
+        <Line label="Contributions promised" value={contributionTotals.promisedCash} divider />
+        <Line label="In-kind received" value={contributionTotals.inKindReceived} divider />
+        <Line label="In-kind promised" value={contributionTotals.promisedInKind} divider />
+        <Line label="Cancelled" value={contributionTotals.cancelledValue} />
+      </Section>
+
+      <Section
+        title="Sponsors"
+        subtitle="Separate from the closing balance. Expense sponsorship is never income."
+      >
+        <Line label="Cash received" value={sponsorTotals.cashReceived} divider />
+        <Line label="Cash promised" value={sponsorTotals.promisedCash} divider />
+        <Line label="In-kind received" value={sponsorTotals.inKindReceived} divider />
+        <Line label="In-kind promised" value={sponsorTotals.promisedInKind} divider />
+        <Line label="Cancelled" value={sponsorTotals.cancelledValue} />
+      </Section>
+
+      <Section title="Open the list behind a number">
+        <NavRow
           title="Festival summary"
-          subtitle="Cash in, expenses, and closing balance"
+          meta="Cash in, expenses, and closing balance"
+          icon={glyph(FileBarChart)}
+          divider
           onPress={() => push("/(ganesh)/report" as never)}
         />
-        <AdminLinkRow
+        <NavRow
+          title="Collections"
+          meta="Households, collectors, and payment methods"
+          icon={glyph(Wallet)}
           divider
-          title="Collection summary"
-          subtitle="Households, collectors, and payment methods"
           onPress={() => push("/(ganesh)/collections" as never)}
         />
-        <AdminLinkRow
+        <NavRow
+          title="Expenses"
+          meta="God Fund, personal, and pending reimbursements"
+          icon={glyph(Receipt)}
           divider
-          title="Expense summary"
-          subtitle="God Fund, personal, and pending reimbursements"
           onPress={() => push("/(ganesh)/expenses" as never)}
         />
-        <AdminLinkRow
+        <NavRow
+          title="Committee contributions"
+          meta="Who paid this festival"
+          icon={glyph(ClipboardList)}
           divider
-          title="Committee contribution summary"
-          subtitle="Who paid this festival"
           onPress={() => push("/(ganesh)/committee" as never)}
         />
-        <AdminLinkRow
+        <NavRow
+          title="Contributions"
+          meta="Received, promised, in-kind, and cancelled"
+          icon={glyph(Gift)}
           divider
-          title="Contribution summary"
-          subtitle="Cash received, promised, in-kind, and cancelled. Promises do not add cash."
           onPress={() => push("/(ganesh)/contributions" as never)}
         />
-        <AdminLinkRow
+        <NavRow
+          title="Sponsors"
+          meta="Deals per sponsor, and what has actually arrived"
+          icon={glyph(Building2)}
           divider
-          title="Sponsor summary"
-          subtitle="Cash received, promised cash, in-kind, and cancelled. Separate from God Fund."
           onPress={() => push("/(ganesh)/sponsors" as never)}
         />
-        <AdminLinkRow
+        <NavRow
+          title="Reimbursements"
+          meta="Personal money still to be paid back"
+          icon={glyph(HandCoins)}
           divider
-          title="Reimbursement summary"
-          subtitle="Personal money still to be paid back"
           onPress={() => push("/(ganesh)/committee" as never)}
         />
-        <AdminLinkRow
+        <NavRow
           title="Permanent Fund history"
-          subtitle="Donations and festival transfers"
+          meta="Donations and festival transfers"
+          icon={glyph(Landmark)}
           onPress={() => push("/(ganesh)/permanent-fund" as never)}
         />
       </Section>
+
+      <StatusStrip
+        tone="muted"
+        message="These are running totals for the current festival. The full report has the complete statement."
+      />
     </GaneshScreen>
   );
 }

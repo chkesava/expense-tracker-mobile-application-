@@ -1,8 +1,19 @@
 import { useMemo, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
+import { useRouter } from "expo-router";
+import { ScrollText, ShieldCheck, Users, Wallet } from "lucide-react-native";
 
 import { AdminQueryState } from "@/components/ganesh/AdminQueryState";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
+import {
+  FilterChips,
+  GaneshHeader,
+  MetaLabel,
+  RowGlyph,
+  Section,
+  StatusStrip,
+  useGaneshTokens,
+} from "@/components/ganesh/ui";
 import { useFestivalAuditLogs } from "@/hooks/useFestivalAuditLogs";
 import { useMemberAudits } from "@/hooks/useMemberAudits";
 import { usePandalMembers } from "@/hooks/usePandalMembers";
@@ -12,36 +23,26 @@ import { formatGaneshWhen, memberDisplayName } from "@/shared/utils/ganeshIdenti
 import { ganeshRoleLabel } from "@/shared/utils/ganeshPermissions";
 import { useTheme } from "@/theme/ThemeProvider";
 
+type ActionGroup = "members" | "money" | "festival";
+
 type Row = {
   id: string;
   title: string;
   detail?: string;
   actorId: string;
-  action: string;
+  action: ActionGroup;
   at?: PandalMemberAudit["at"];
 };
 
 function memberLine(audit: PandalMemberAudit, members: PandalMember[]): string {
   const actor = memberDisplayName(members, audit.actorId);
   const target = memberDisplayName(members, audit.targetUserId);
-  if (audit.action === "approved") {
-    return `${actor} approved ${target}`;
-  }
-  if (audit.action === "suspended") {
-    return `${actor} suspended ${target}`;
-  }
-  if (audit.action === "removed") {
-    return `${actor} removed ${target}`;
-  }
-  if (audit.action === "join_mode") {
-    return `${actor} changed who can join`;
-  }
-  if (audit.action === "make_admin") {
-    return `${actor} made ${target} a Pandal Admin`;
-  }
-  if (audit.action === "remove_admin") {
-    return `${actor} removed Admin from ${target}`;
-  }
+  if (audit.action === "approved") return `${actor} approved ${target}`;
+  if (audit.action === "suspended") return `${actor} suspended ${target}`;
+  if (audit.action === "removed") return `${actor} removed ${target}`;
+  if (audit.action === "join_mode") return `${actor} changed who can join`;
+  if (audit.action === "make_admin") return `${actor} made ${target} a Pandal Admin`;
+  if (audit.action === "remove_admin") return `${actor} removed Admin from ${target}`;
   if (audit.action === "role_assigned") {
     return `${actor} assigned ${audit.roleName ?? "a role"} to ${target}`;
   }
@@ -84,15 +85,34 @@ function changeText(oldValue?: unknown, newValue?: unknown): string | undefined 
     .replace(/,/g, ", ");
 }
 
-const ACTION_FILTERS = ["all", "members", "money", "festival"] as const;
+const ACTION_OPTIONS: Array<{ id: "all" | ActionGroup; label: string }> = [
+  { id: "all", label: "Everything" },
+  { id: "members", label: "People" },
+  { id: "money", label: "Money" },
+  { id: "festival", label: "Festival" },
+];
+
+const DAY_OPTIONS = [
+  { id: "all" as const, label: "All time" },
+  { id: "today" as const, label: "Today" },
+];
+
+function groupGlyph(action: ActionGroup) {
+  if (action === "members") return Users;
+  if (action === "money") return Wallet;
+  return ShieldCheck;
+}
 
 export default function AdminAuditScreen() {
   const { theme } = useTheme();
+  const g = useGaneshTokens();
+  const { back } = useRouter();
   const { pandalId, festivalId } = useGaneshSession();
   const { members } = usePandalMembers(pandalId);
   const memberAudits = useMemberAudits(pandalId, true);
   const festivalAudits = useFestivalAuditLogs(pandalId, festivalId, true);
-  const [actionFilter, setActionFilter] = useState<(typeof ACTION_FILTERS)[number]>("all");
+
+  const [actionFilter, setActionFilter] = useState<"all" | ActionGroup>("all");
   const [actorId, setActorId] = useState<string>("all");
   const [day, setDay] = useState<"all" | "today">("all");
 
@@ -114,12 +134,16 @@ export default function AdminAuditScreen() {
       detail: changeText(audit.oldValue, audit.newValue) ?? audit.reason,
       actorId: audit.actorId,
       action:
-        audit.action === "transferred" || audit.action === "voided" || audit.action === "reimbursed"
+        audit.action === "transferred"
+        || audit.action === "voided"
+        || audit.action === "reimbursed"
           ? "money"
           : "festival",
       at: audit.at,
     }));
-    return [...memberRows, ...festivalRows].sort((a, b) => (b.at?.seconds ?? 0) - (a.at?.seconds ?? 0));
+    return [...memberRows, ...festivalRows].sort(
+      (a, b) => (b.at?.seconds ?? 0) - (a.at?.seconds ?? 0)
+    );
   }, [festivalAudits.audits, memberAudits.audits, members]);
 
   const actors = useMemo(() => {
@@ -139,105 +163,39 @@ export default function AdminAuditScreen() {
   });
 
   const loading =
-    (memberAudits.loading && memberAudits.audits.length === 0) ||
-    (festivalAudits.loading && festivalAudits.audits.length === 0);
+    (memberAudits.loading && memberAudits.audits.length === 0)
+    || (festivalAudits.loading && festivalAudits.audits.length === 0);
   const error = memberAudits.error ?? festivalAudits.error;
 
   return (
-    <GaneshScreen>
-      <Text style={{ color: theme.colors.mutedForeground, lineHeight: 22 }}>
-        Important Pandal changes. This is for the committee, not a technical log.
-      </Text>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-        {ACTION_FILTERS.map((item) => (
-          <Pressable
-            key={item}
-            onPress={() => setActionFilter(item)}
-            style={{
-              paddingHorizontal: 12,
-              paddingVertical: 8,
-              borderRadius: 999,
-              minHeight: 40,
-              justifyContent: "center",
-              backgroundColor: actionFilter === item ? theme.colors.primary : theme.colors.muted,
-            }}
-          >
-            <Text
-              style={{
-                color: actionFilter === item ? theme.colors.primaryForeground : theme.colors.foreground,
-                fontWeight: "700",
-                textTransform: "capitalize",
-              }}
-            >
-              {item}
-            </Text>
-          </Pressable>
-        ))}
-        <Pressable
-          onPress={() => setDay((prev) => (prev === "today" ? "all" : "today"))}
-          style={{
-            paddingHorizontal: 12,
-            paddingVertical: 8,
-            borderRadius: 999,
-            minHeight: 40,
-            justifyContent: "center",
-            backgroundColor: day === "today" ? theme.colors.primary : theme.colors.muted,
-          }}
-        >
-          <Text
-            style={{
-              color: day === "today" ? theme.colors.primaryForeground : theme.colors.foreground,
-              fontWeight: "700",
-            }}
-          >
-            Today
-          </Text>
-        </Pressable>
-      </View>
+    <GaneshScreen safeTop>
+      <GaneshHeader
+        title="Audit log"
+        subtitle={`${visible.length} ${visible.length === 1 ? "entry" : "entries"}`}
+        icon={<ScrollText size={22} color={g.saffron} strokeWidth={2.2} />}
+        onBack={back}
+      />
+
+      <StatusStrip
+        tone="info"
+        message="Important Pandal changes, written for the committee — not a technical log."
+      />
+
+      <FilterChips value={actionFilter} options={ACTION_OPTIONS} onChange={setActionFilter} />
+      <FilterChips value={day} options={DAY_OPTIONS} onChange={setDay} />
+
       {actors.length > 1 ? (
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-          <Pressable
-            onPress={() => setActorId("all")}
-            style={{
-              paddingHorizontal: 12,
-              paddingVertical: 8,
-              borderRadius: 999,
-              backgroundColor: actorId === "all" ? theme.colors.primary : theme.colors.muted,
-            }}
-          >
-            <Text
-              style={{
-                color: actorId === "all" ? theme.colors.primaryForeground : theme.colors.foreground,
-                fontWeight: "700",
-              }}
-            >
-              Everyone
-            </Text>
-          </Pressable>
-          {actors.map((member) => (
-            <Pressable
-              key={member.userId}
-              onPress={() => setActorId(member.userId)}
-              style={{
-                paddingHorizontal: 12,
-                paddingVertical: 8,
-                borderRadius: 999,
-                backgroundColor: actorId === member.userId ? theme.colors.primary : theme.colors.muted,
-              }}
-            >
-              <Text
-                style={{
-                  color:
-                    actorId === member.userId ? theme.colors.primaryForeground : theme.colors.foreground,
-                  fontWeight: "700",
-                }}
-              >
-                {member.displayName}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
+        <FilterChips
+          label="Who did it"
+          value={actorId}
+          options={[
+            { id: "all", label: "Everyone" },
+            ...actors.map((member) => ({ id: member.userId, label: member.displayName })),
+          ]}
+          onChange={setActorId}
+        />
       ) : null}
+
       <AdminQueryState
         loading={loading}
         error={error}
@@ -247,32 +205,88 @@ export default function AdminAuditScreen() {
         }}
         empty={
           visible.length === 0
-            ? { title: "No administrative activity yet", description: "Approvals, role changes, and money moves will show here." }
+            ? {
+                title:
+                  rows.length === 0
+                    ? "No administrative activity yet"
+                    : "Nothing matches these filters",
+                description:
+                  rows.length === 0
+                    ? "Approvals, role changes, and money moves will show here."
+                    : "Try a different filter, or switch back to All time.",
+              }
             : null
         }
       >
-        {visible.map((row) => (
-          <View
-            key={row.id}
-            style={{
-              backgroundColor: theme.colors.card,
-              borderColor: theme.colors.border,
-              borderWidth: 1,
-              borderRadius: 16,
-              padding: 14,
-              gap: 4,
-            }}
-          >
-            <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>{row.title}</Text>
-            {row.detail ? (
-              <Text style={{ color: theme.colors.mutedForeground, lineHeight: 20 }}>{row.detail}</Text>
-            ) : null}
-            {row.at ? (
-              <Text style={{ color: theme.colors.mutedForeground }}>{formatGaneshWhen(row.at)}</Text>
-            ) : null}
-          </View>
-        ))}
+        <Section title="Activity">
+          {visible.map((row, index) => {
+            const Glyph = groupGlyph(row.action);
+            return (
+              <View
+                key={row.id}
+                style={[
+                  styles.row,
+                  index < visible.length - 1 && {
+                    borderBottomWidth: StyleSheet.hairlineWidth,
+                    borderBottomColor: g.divider,
+                  },
+                ]}
+              >
+                <RowGlyph tint={g.tile}>
+                  <Glyph size={15} color={theme.colors.mutedForeground} strokeWidth={2.2} />
+                </RowGlyph>
+
+                <View style={styles.copy}>
+                  <Text
+                    style={[
+                      styles.title,
+                      { color: theme.colors.foreground, fontFamily: theme.fontFamily.regular },
+                    ]}
+                  >
+                    {row.title}
+                  </Text>
+                  {row.detail ? (
+                    <Text
+                      numberOfLines={3}
+                      style={[
+                        styles.detail,
+                        {
+                          color: theme.colors.mutedForeground,
+                          fontFamily: theme.fontFamily.regular,
+                        },
+                      ]}
+                    >
+                      {row.detail}
+                    </Text>
+                  ) : null}
+                  {row.at ? <MetaLabel>{formatGaneshWhen(row.at)}</MetaLabel> : null}
+                </View>
+              </View>
+            );
+          })}
+        </Section>
       </AdminQueryState>
     </GaneshScreen>
   );
 }
+
+const styles = StyleSheet.create({
+  row: {
+    flexDirection: "row",
+    gap: 12,
+    paddingVertical: 11,
+  },
+  copy: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  title: {
+    fontSize: 13.5,
+    lineHeight: 19,
+  },
+  detail: {
+    fontSize: 12,
+    lineHeight: 17,
+  },
+});
