@@ -359,3 +359,61 @@ describe("validateReimbursementReversal", () => {
     expect(validateReimbursementReversal(0.1 + 0.2, 0.3).ok).toBe(true);
   });
 });
+
+// GS-006 — a house paying in instalments used to produce a new household row per
+// payment, so `paid` was unreachable. The merge branch in addCollection was
+// always correct; nothing ever passed it a householdId.
+describe("household instalments reach paid", () => {
+  it("walks pending -> partial -> paid as one household accumulates", () => {
+    const expectedAmount = 500;
+    expect(deriveHouseholdStatus({ expectedAmount, collectedAmount: 0 })).toBe("pending");
+
+    const afterFirst = 200;
+    expect(deriveHouseholdStatus({ expectedAmount, collectedAmount: afterFirst })).toBe("partial");
+
+    const afterSecond = afterFirst + 300;
+    expect(deriveHouseholdStatus({ expectedAmount, collectedAmount: afterSecond })).toBe("paid");
+  });
+
+  it("keeps two separate rows stuck on partial, which is the bug being fixed", () => {
+    // Both payments as their own household: neither ever reaches the target.
+    expect(deriveHouseholdStatus({ expectedAmount: 500, collectedAmount: 200 })).toBe("partial");
+    expect(deriveHouseholdStatus({ expectedAmount: 500, collectedAmount: 300 })).toBe("partial");
+  });
+
+  it("still respects a household marked not interested or not available", () => {
+    expect(
+      deriveHouseholdStatus({
+        expectedAmount: 500,
+        collectedAmount: 500,
+        forcedStatus: "not_interested",
+      })
+    ).toBe("not_interested");
+  });
+
+  it("treats an overpayment against the target as paid", () => {
+    expect(deriveHouseholdStatus({ expectedAmount: 500, collectedAmount: 800 })).toBe("paid");
+  });
+});
+
+// GS-007 — the settlement screen could close a festival on a summary that had not
+// loaded yet, reporting "Closing cash ₹0" while the real balance was stranded.
+// The server now checks the remaining amount the client claims against its own
+// read of the summary, which is exactly this comparison.
+describe("settlement rejects a claim that disagrees with the server balance", () => {
+  it("rejects closing with a zero claim when the festival really holds money", () => {
+    expect(validateSettlement({ closing: 50000, transfer: 0, remaining: 0 }).ok).toBe(false);
+  });
+
+  it("still allows deliberately leaving the whole balance in the festival", () => {
+    expect(validateSettlement({ closing: 50000, transfer: 0, remaining: 50000 }).ok).toBe(true);
+  });
+
+  it("allows a genuinely empty festival to close on zeros", () => {
+    expect(validateSettlement({ closing: 0, transfer: 0, remaining: 0 }).ok).toBe(true);
+  });
+
+  it("allows a full transfer that leaves nothing behind", () => {
+    expect(validateSettlement({ closing: 50000, transfer: 50000, remaining: 0 }).ok).toBe(true);
+  });
+});

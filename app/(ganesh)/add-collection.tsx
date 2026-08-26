@@ -17,6 +17,7 @@ import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import { possibleHouseholdDuplicates } from "@/shared/utils/ganeshMath";
+import { formatInr } from "@/shared/utils/ganeshMoney";
 import { todayDateInput } from "@/shared/utils/ganeshIdentity";
 import type { PaymentMethod } from "@/shared/types/ganesh";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -44,6 +45,35 @@ export default function AddCollectionScreen() {
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [matches, setMatches] = useState<typeof households>([]);
+  // When set, this collection is added to an existing household and increments
+  // its running total. When null, a new household is created. Nothing in the app
+  // ever set this before, so every collection minted a fresh household and the
+  // partial -> paid transition was unreachable (GS-006).
+  const [householdId, setHouseholdId] = useState<string | null>(null);
+  const [householdSearch, setHouseholdSearch] = useState("");
+
+  const selectedHousehold = useMemo(
+    () => households.find((household) => household.id === householdId) ?? null,
+    [households, householdId]
+  );
+
+  const householdResults = useMemo(() => {
+    const query = householdSearch.trim().toLowerCase();
+    if (query.length < 2) return [];
+    const digits = query.replace(/\D/g, "");
+    return households
+      .filter((household) => {
+        const name = household.name.trim().toLowerCase();
+        const house = (household.houseNumber ?? "").trim().toLowerCase();
+        const mobileDigits = (household.mobile ?? "").replace(/\D/g, "");
+        return (
+          name.includes(query)
+          || (house.length > 0 && house.includes(query))
+          || (digits.length >= 3 && mobileDigits.includes(digits))
+        );
+      })
+      .slice(0, 6);
+  }, [households, householdSearch]);
 
   const payload = useMemo(
     () => ({
@@ -62,10 +92,14 @@ export default function AddCollectionScreen() {
     [address, amount, collectorId, donorName, festival?.householdTargetAmount, houseNumber, method, mobile, notes, realUser?.uid]
   );
 
-  const save = async () => {
+  const save = async (targetHouseholdId?: string | null) => {
+    if (busy) return;
     setBusy(true);
     try {
-      await writes.addCollection(payload);
+      await writes.addCollection({
+        ...payload,
+        householdId: targetHouseholdId ?? undefined,
+      });
       back();
     } catch (error) {
       logError("ganesh.addCollection", error);
@@ -76,7 +110,23 @@ export default function AddCollectionScreen() {
     }
   };
 
+  const pickHousehold = (household: (typeof households)[number]) => {
+    setHouseholdId(household.id);
+    setHouseholdSearch("");
+    setMatches([]);
+    // Prefill so the collection record carries the same identifying details as
+    // the household it joins; all three stay editable.
+    if (!donorName.trim()) setDonorName(household.name);
+    if (!houseNumber.trim() && household.houseNumber) setHouseNumber(household.houseNumber);
+    if (!mobile.trim() && household.mobile) setMobile(household.mobile);
+  };
+
   const onSubmit = () => {
+    // An explicit choice is an answer to the duplicate question, so do not ask.
+    if (householdId) {
+      void save(householdId);
+      return;
+    }
     const foundIds = new Set(
       possibleHouseholdDuplicates(households, { name: donorName, houseNumber, mobile }).map(
         (household) => household.id
@@ -87,7 +137,7 @@ export default function AddCollectionScreen() {
       setMatches(found);
       return;
     }
-    void save();
+    void save(null);
   };
 
   if (!can("collections.create")) {
@@ -96,6 +146,70 @@ export default function AddCollectionScreen() {
 
   return (
     <GaneshScreen>
+      {selectedHousehold ? (
+        <View
+          style={{
+            borderWidth: 1,
+            borderColor: theme.colors.border,
+            borderRadius: 14,
+            padding: 12,
+            gap: 6,
+          }}
+        >
+          <Text style={{ color: theme.colors.mutedForeground, fontWeight: "700" }}>
+            Adding to an existing household
+          </Text>
+          <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>
+            {selectedHousehold.name}
+            {selectedHousehold.houseNumber ? ` · House #${selectedHousehold.houseNumber}` : ""}
+          </Text>
+          <Text style={{ color: theme.colors.mutedForeground }}>
+            {selectedHousehold.expectedAmount > 0
+              ? `Collected ${formatInr(selectedHousehold.collectedAmount)} of ${formatInr(selectedHousehold.expectedAmount)}`
+              : `Collected ${formatInr(selectedHousehold.collectedAmount)}`}
+          </Text>
+          <Button variant="outline" onPress={() => setHouseholdId(null)}>
+            Record as a new household instead
+          </Button>
+        </View>
+      ) : (
+        <View style={{ gap: 8 }}>
+          <Input
+            label="Already collected from this house before? (optional)"
+            value={householdSearch}
+            onChangeText={setHouseholdSearch}
+            placeholder="Search by name, house number or mobile"
+          />
+          {householdResults.map((household) => (
+            <Pressable
+              key={household.id}
+              onPress={() => pickHousehold(household)}
+              style={{
+                borderWidth: 1,
+                borderColor: theme.colors.border,
+                borderRadius: 12,
+                paddingHorizontal: 12,
+                paddingVertical: 10,
+              }}
+            >
+              <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>
+                {household.name}
+                {household.houseNumber ? ` · House #${household.houseNumber}` : ""}
+              </Text>
+              <Text style={{ color: theme.colors.mutedForeground }}>
+                {household.expectedAmount > 0
+                  ? `Collected ${formatInr(household.collectedAmount)} of ${formatInr(household.expectedAmount)}`
+                  : `Collected ${formatInr(household.collectedAmount)}`}
+              </Text>
+            </Pressable>
+          ))}
+          {householdSearch.trim().length >= 2 && householdResults.length === 0 ? (
+            <Text style={{ color: theme.colors.mutedForeground }}>
+              No household matches that. Fill the form below to start a new one.
+            </Text>
+          ) : null}
+        </View>
+      )}
       <Input label="Name" value={donorName} onChangeText={setDonorName} placeholder="Ramesh Kumar" />
       <Input label="Amount" value={amount} onChangeText={setAmount} keyboardType="numeric" placeholder="500" />
       <Text style={{ color: theme.colors.mutedForeground, fontWeight: "700" }}>Payment method</Text>
@@ -117,8 +231,13 @@ export default function AddCollectionScreen() {
       {matches.length > 0 ? (
         <DuplicateHouseholdDialog
           matches={matches}
+          busy={busy}
           onCancel={() => setMatches([])}
-          onContinue={() => void save()}
+          onMerge={(id) => {
+            setHouseholdId(id);
+            void save(id);
+          }}
+          onCreateNew={() => void save(null)}
         />
       ) : null}
     </GaneshScreen>

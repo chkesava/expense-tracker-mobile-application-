@@ -8,6 +8,7 @@ import { FundLocationChips } from "@/components/ganesh/FundLocationChips";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { MetricGrid } from "@/components/ganesh/MetricGrid";
 import { PermanentFundCard } from "@/components/ganesh/PermanentFundCard";
+import { AdminQueryState } from "@/components/ganesh/AdminQueryState";
 import { useFestivalMembers } from "@/hooks/useFestivalMembers";
 import { useFestivals } from "@/hooks/useFestivals";
 import { useGaneshSummary } from "@/hooks/useGaneshSummary";
@@ -30,7 +31,12 @@ export default function CloseFestivalScreen() {
   const { isOnline } = useNetwork();
   const { pandalId, festivalId } = useGaneshSession();
   const { festivals } = useFestivals(pandalId);
-  const { summary } = useGaneshSummary(pandalId, festivalId);
+  const {
+    summary,
+    loading: summaryLoading,
+    error: summaryError,
+    retry: retrySummary,
+  } = useGaneshSummary(pandalId, festivalId);
   const { members } = useFestivalMembers(pandalId, festivalId);
   const { fund } = usePermanentFund(pandalId);
   const writes = useGaneshWrites();
@@ -42,12 +48,20 @@ export default function CloseFestivalScreen() {
   const [location, setLocation] = useState<PermanentFundLocation>("cash");
   const [busy, setBusy] = useState(false);
   const transfer = Number(transferText || 0);
+  const settled = !summaryLoading && !summaryError;
   const remaining = useMemo(
     () => Math.round((closing - (Number.isFinite(transfer) ? transfer : 0)) * 100) / 100,
     [closing, transfer]
   );
 
   const confirm = () => {
+    // Belt and braces: the button is disabled while the summary is unresolved,
+    // but a settlement is irreversible, so refuse here too rather than trust the
+    // disabled prop (GS-007).
+    if (!settled) {
+      toast.error("Totals are still loading. Wait for them before closing.");
+      return;
+    }
     const transferAmount = canTransfer && Number.isFinite(transfer) ? transfer : 0;
     const remainingAmount = Math.round((closing - transferAmount) * 100) / 100;
     const settlement = validateSettlement({
@@ -77,6 +91,26 @@ export default function CloseFestivalScreen() {
 
   if (!can("festival.close")) {
     return <GaneshWriteLock message="Only a Pandal Admin or Treasurer can close this festival." />;
+  }
+
+  // Every figure below comes from the summary, which starts at all zeros. Until
+  // the snapshot lands, "Closing cash ₹0" is not a fact — and closing on it
+  // strands the real balance with no settlement record and no way back, because
+  // the rules refuse every ledger write on a closed festival.
+  if (summaryLoading || summaryError) {
+    return (
+      <GaneshScreen>
+        <Text style={{ color: theme.colors.foreground, fontSize: 22, fontWeight: "800" }}>
+          Festival closing
+        </Text>
+        <AdminQueryState
+          loading={summaryLoading}
+          error={summaryError}
+          onRetry={retrySummary}
+          skeletonCount={5}
+        />
+      </GaneshScreen>
+    );
   }
 
   return (
@@ -140,7 +174,7 @@ export default function CloseFestivalScreen() {
           Transfer requires an active connection. Please reconnect and try again.
         </Text>
       ) : null}
-      <Button loading={busy} disabled={closing < 0} onPress={confirm}>
+      <Button loading={busy} disabled={!settled || closing < 0} onPress={confirm}>
         Confirm settlement and close
       </Button>
     </GaneshScreen>

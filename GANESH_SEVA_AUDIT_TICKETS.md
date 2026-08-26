@@ -24,6 +24,9 @@
 | 2026-08-27 | GS-016 | `members`/`roles`/`settings` no longer offered as grantable; `audit.read` un-inverted | Fixed (UI ships with app; rules half **not deployed**) |
 | 2026-08-27 | GS-018 | Closed festivals read-only; ledger records never hard-deleted | Fixed, **not deployed** |
 | 2026-08-27 | GS-037 | Creating a contribution already `received` requires `contributions.receive` | Fixed (UI ships with app; rules half **not deployed**) |
+| 2026-08-27 | GS-007 | Settlement waits for the summary; server re-derives the closing balance | Fixed |
+| 2026-08-27 | GS-006 | Household picker plus per-match merge in the duplicate dialog | Fixed |
+| 2026-08-27 | GS-028 | Duplicate dialog locks while a save is in flight | Fixed |
 
 All four are `firestore.rules` changes only; no application code was touched. They compile
 (`firebase deploy --only firestore:rules --dry-run`) but **take effect only after the manual
@@ -159,8 +162,8 @@ Recording these explicitly so the fix cycle does not undo working design:
 | GS-003 | CRITICAL | SECURITY | Pandal membership | `pandalInvites` is listable by any signed-in user | FIXED — AWAITING RULES DEPLOY |
 | GS-004 | CRITICAL | SECURITY | Security Rules | Festival subcollections have no payload validation; `summary` is forgeable | PARTIAL — AWAITING RULES DEPLOY |
 | GS-005 | CRITICAL | SECURITY | Audit Trail | `fundTransfers` and `auditLogs` are mutable via the wildcard match | FIXED — AWAITING RULES DEPLOY |
-| GS-006 | CRITICAL | COLLECTIONS | Households | Every collection creates a new household; the merge path is unreachable | OPEN |
-| GS-007 | CRITICAL | FESTIVAL | Festival Settlement | A festival can be closed on an unloaded ₹0 summary | OPEN |
+| GS-006 | CRITICAL | COLLECTIONS | Households | Every collection creates a new household; the merge path is unreachable | FIXED |
+| GS-007 | CRITICAL | FESTIVAL | Festival Settlement | A festival can be closed on an unloaded ₹0 summary | FIXED |
 | GS-008 | CRITICAL | FINANCE | Reimbursements | Reimbursement cap is client-supplied and there is no solvency check | FIXED |
 | GS-009 | CRITICAL | FINANCE | Reimbursements | `pendingReimbursements` goes negative when a reimbursed expense is voided | FIXED |
 | GS-010 | HIGH | FINANCE | Expenses | God Fund overspend: balance checked by a non-transactional cached read | FIXED |
@@ -181,7 +184,7 @@ Recording these explicitly so the fix cycle does not undo working design:
 | GS-025 | HIGH | UX | Committee Contributions | Target inputs seeded `0` and never re-synced; Save wipes real targets | OPEN |
 | GS-026 | HIGH | UX | Households | Expected-amount input is always seeded `0`; Save flips the household to paid | OPEN |
 | GS-027 | HIGH | UX | Collections | Voiding a collection has no confirmation, no busy lock and no error handling | OPEN |
-| GS-028 | HIGH | UX | Collections | Duplicate-household dialog's Continue can be double-submitted | OPEN |
+| GS-028 | HIGH | UX | Collections | Duplicate-household dialog's Continue can be double-submitted | FIXED |
 | GS-029 | HIGH | CODE_QUALITY | Error handling | `useGaneshWrites` guards throw synchronously, defeating `.catch` and spinners | OPEN |
 | GS-030 | HIGH | UX | Error handling | Late write failures bypass `lib/errors.ts` and arrive after a success toast | OPEN |
 | GS-031 | HIGH | UX | Error handling | Nine write paths have no error handling at all | OPEN |
@@ -649,7 +652,7 @@ Related to GS-021 (transfers write no audit at all) and GS-074.
 **Severity:** CRITICAL
 **Category:** COLLECTIONS
 **Feature:** Households
-**Status:** OPEN
+**Status:** FIXED (2026-08-27)
 
 ### Problem
 `addCollection` supports adding a collection to an existing household, but no caller anywhere in the application ever passes a `householdId`. Every collection therefore mints a brand-new household document, and the entire partial-payment model is unreachable.
@@ -695,6 +698,32 @@ Two coordinated changes:
 - [ ] Creating a genuinely new household is still possible.
 - [ ] The Paid / Pending counts on the collections tab and the admin dashboard reflect real households.
 
+### Resolution - 2026-08-27
+The service-side merge branch in `addCollection` was always correct - it increments
+`collectedAmount` and re-derives the status, and `deriveHouseholdStatus` only pins
+`not_interested` / `not_available`, so `partial -> paid` works. The whole bug was that no
+caller ever passed a `householdId`. Two places now do:
+
+1. **A household picker on `add-collection.tsx`.** Search by name, house number or mobile
+   (two characters minimum, capped at six results). Choosing a match sets `householdId`,
+   prefills any identifying field the user has left blank, and swaps the search box for a
+   card showing what that household has collected so far, with a "Record as a new household
+   instead" escape. Submitting with a household chosen skips the duplicate dialog - an
+   explicit choice is already an answer to that question.
+2. **The duplicate dialog offers merge per match.** `DuplicateHouseholdDialog` now lists
+   every match with its progress and an "Add to this household" primary action, and
+   demotes duplicate creation to a secondary "Create new anyway". Previously its only
+   actions were Cancel and Continue, and Continue re-ran the same duplicate-creating save.
+
+A test walks the ticket's own scenario - a house paying 200 then 300 against a 500 target -
+through `pending -> partial -> paid`, alongside the two-separate-rows case that stays stuck
+on `partial`, so the regression is locked in rather than only fixed.
+
+**Verified:** typecheck and typecheck:shared clean; 125 files / 1270 tests pass.
+
+**Not verified by a test:** the picker and dialog are UI, exercised by the manual guide
+rather than by a rendering test - the project has no component-test setup.
+
 ### Dependencies
 Related to GS-028 (the same dialog), GS-038 and GS-026.
 
@@ -705,7 +734,7 @@ Related to GS-028 (the same dialog), GS-038 and GS-026.
 **Severity:** CRITICAL
 **Category:** FESTIVAL
 **Feature:** Festival Settlement
-**Status:** OPEN
+**Status:** FIXED (2026-08-27)
 
 ### Problem
 The settlement screen reads the festival summary without consulting its loading state, computes a closing balance of ₹0 from the empty initial value, and allows the user to confirm the close. The server never re-validates the closing amount.
@@ -746,6 +775,41 @@ Gate the whole screen on `loading` from `useGaneshSummary` and disable the confi
 - [ ] The closing figure used by the server is derived server-side, not accepted from the client.
 - [ ] A normal settlement with a correct transfer still succeeds.
 - [ ] The screen surfaces a load error instead of rendering zeros.
+
+### Resolution - 2026-08-27
+Fixed on both sides, because either alone leaves the hole open.
+
+**Client.** `useGaneshSummary` now exposes `error` and `retry` via the existing
+`useLoadFailure` helper - its snapshot error callback previously discarded the
+`LoadFailure` it was handed and only cleared `loading`, so a failed listener was
+indistinguishable from a festival with no money. `close-festival.tsx` renders an
+`AdminQueryState` skeleton while the summary is unresolved and an error state with retry if
+the listener fails, so no figure is shown until it is real. The confirm button stays
+disabled until then, and `confirm()` re-checks rather than trusting the disabled prop,
+because the action is irreversible.
+
+**Server.** The zero-transfer close path did not read the summary at all - it just flipped
+the status in a batch. It now runs in a `runTransaction` that re-reads the festival and the
+summary, derives the closing balance itself, and compares it against the `remainingAmount`
+the client claims. The client no longer gets to assert the balance; it states what it
+expects to leave behind and the server checks that.
+
+That distinction matters: transferring nothing is a legitimate settlement when the
+committee wants the balance to stay with the festival, so the check cannot simply be
+"reject a zero transfer when the balance is non-zero". An unloaded screen claims
+`remaining: 0` against a real balance and is rejected; a deliberate keep-it-here claims
+`remaining: 50000` and passes. The comparison routes through `validateSettlement`, the same
+function the screen uses, so there is one definition of a balanced settlement.
+
+The transaction also refuses a festival that is already closed, and the audit entry now
+records the balance left behind rather than nothing. The non-zero transfer path was already
+safe - `transferFestivalToPermanent` re-derives the closing balance inside its own
+transaction.
+
+**Verified:** typecheck and typecheck:shared clean; 4 new cases in
+`shared/utils/ganeshMath.test.ts` covering the unloaded-zero rejection, the deliberate
+keep-in-festival, an genuinely empty festival, and a full transfer. Full suite green
+(125 files / 1270 tests).
 
 ### Dependencies
 Related to GS-032 (the same missing-loading-state class), GS-022, GS-021.
@@ -1980,7 +2044,7 @@ Related to GS-019, GS-031, GS-038.
 **Severity:** HIGH
 **Category:** UX
 **Feature:** Collections
-**Status:** OPEN
+**Status:** FIXED (2026-08-27)
 
 ### Problem
 The duplicate-household modal's Continue button has no loading or disabled state, and the modal stays mounted until the write settles — so it can be tapped twice, writing two collections.
@@ -2011,6 +2075,28 @@ Pass `loading={busy}` to the dialog's Continue button and dismiss the modal on f
 - [ ] Continue is disabled while the write is in flight.
 - [ ] Two rapid taps produce exactly one collection.
 - [ ] The behaviour holds offline, during the queued-write grace window.
+
+### Resolution - 2026-08-27
+Fixed with GS-006, as the ticket suggests, since it is the same dialog.
+
+`DuplicateHouseholdDialog` now takes a `busy` prop and disables every action while a save is
+in flight - the per-match merge buttons, "Create new anyway", and Cancel - and also
+suppresses the backdrop-tap and hardware-back dismissals, so the modal cannot be closed out
+from under an in-flight write. The screen passes its existing `busy` state, which was
+previously bound only to the underlying "Save collection" button.
+
+`save()` additionally returns early if `busy` is already set. That guard is what actually
+holds offline: `commitWrite`'s 1500 ms grace window keeps the modal mounted for the whole
+period, and a re-entrant call would otherwise slip past a prop that has not re-rendered yet.
+
+The dialog is still dismissed in the `finally` rather than on first press, because a failed
+save has to leave the user where they were with their matches intact; the lock is what
+prevents the double write, not the dismissal timing.
+
+**Verified:** typecheck clean; full suite green.
+
+**Not verified by a test:** double-tap behaviour is UI timing, covered by the manual guide -
+the project has no component-test setup.
 
 ### Dependencies
 Related to GS-006 (same dialog — fix together), GS-062.

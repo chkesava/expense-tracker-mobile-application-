@@ -35,7 +35,9 @@ import {
   validatePositiveAmount,
   validateReimbursement,
   validateReimbursementReversal,
+  validateSettlement,
 } from "@/shared/utils/ganeshMath";
+import { formatInr } from "@/shared/utils/ganeshMoney";
 import { generatePandalCode, normalizePandalCode } from "@/shared/utils/ganeshIdentity";
 import {
   festivalCol,
@@ -1234,6 +1236,19 @@ async function requireOpenFestival(
   }
 }
 
+/**
+ * Whether the closing balance the client expects to leave behind matches what
+ * the server actually reads. Uses the same rounding as every other money
+ * comparison rather than a local epsilon (see GS-080).
+ */
+function closeBalanceAgrees(claimedRemaining: number, serverClosing: number): boolean {
+  return validateSettlement({
+    closing: serverClosing,
+    transfer: 0,
+    remaining: claimedRemaining,
+  }).ok;
+}
+
 async function readSummaryInTxn(
   txn: Transaction,
   db: Firestore,
@@ -2135,6 +2150,8 @@ export async function closeFestival(
 ): Promise<void> {
   const transferAmount = Number(settlement?.transferAmount ?? 0);
   if (transferAmount > 0) {
+    // transferFestivalToPermanent already re-derives the closing balance inside
+    // its transaction and rejects a transfer that exceeds it.
     await transferFestivalToPermanent(db, actor, pandalId, festivalId, {
       amount: transferAmount,
       location: settlement?.location ?? "cash",
@@ -2145,18 +2162,44 @@ export async function closeFestival(
     });
     return;
   }
-  const batch = writeBatch(db);
-  batch.update(pathRef(db, festivalDoc(pandalId, festivalId)), {
-    status: "closed",
-    closedAt: serverTimestamp(),
-    closedBy: actor.uid,
-    updatedBy: actor.uid,
-    updatedAt: serverTimestamp(),
+
+  // Transferring nothing is a legitimate settlement — the committee may want the
+  // closing balance to stay with the festival. What is NOT legitimate is closing
+  // while believing the balance is zero when it is not: that is what happens when
+  // the screen acts on an unloaded summary (GS-007), and it is irreversible,
+  // because the rules refuse every ledger write once the festival is closed.
+  //
+  // So the client does not get to assert the balance. It states what it expects
+  // to be left behind, and the server checks that against its own read.
+  await runTransaction(db, async (txn) => {
+    const festivalRef = pathRef(db, festivalDoc(pandalId, festivalId));
+    const festivalSnap = await txn.get(festivalRef);
+    if (!festivalSnap.exists()) throw new Error("Festival not found.");
+    if (festivalSnap.data().status !== "open") throw new Error("This festival is already closed.");
+
+    const summary = await readSummaryInTxn(txn, db, pandalId, festivalId);
+    const closing = availableGodFund(summary);
+    const claimedRemaining = Number(settlement?.remainingAmount ?? 0);
+
+    if (!settlement || !closeBalanceAgrees(claimedRemaining, closing)) {
+      throw new Error(
+        `This festival still holds ${formatInr(closing)}. Reopen the settlement screen so the ` +
+          "totals load, then close with the correct figures."
+      );
+    }
+
+    txn.update(festivalRef, {
+      status: "closed",
+      closedAt: serverTimestamp(),
+      closedBy: actor.uid,
+      updatedBy: actor.uid,
+      updatedAt: serverTimestamp(),
+    });
+    audit(txn, db, pandalId, festivalId, actor.uid, "closed", "festival", festivalId, {
+      reason: "Festival closed",
+      newValue: { transferAmount: 0, remainingAmount: closing },
+    });
   });
-  audit(batch, db, pandalId, festivalId, actor.uid, "closed", "festival", festivalId, {
-    reason: "Festival closed",
-  });
-  await commitWrite(() => batch.commit(), { label: "close festival" });
 }
 
 export async function recomputeFestivalSummary(
