@@ -76,6 +76,28 @@ festival wildcard's `update` and `delete` inside the wildcard itself — the
 explicit `allow update, delete: if false` on `fundTransfers` cannot subtract a
 grant the wildcard makes.
 
+Three more Ganesh clauses are load-bearing and easy to undo by accident. A closed
+festival is **read-only** — both `update` branches of the festival wildcard require
+`festivalOpen()`, and `allow delete` is `false` for every ledger subcollection,
+because voiding (a soft flag that is audited and reverses the summary) is the
+designed reversal and a hard delete leaves no trace. Creating a contribution
+already marked `received` requires `contributions.receive`, mirroring the
+sponsorship guard — without it the promised-versus-received control is bypassable
+by setting the final state at creation time; the one carve-out is a row carrying
+`sponsorshipId` written by a holder of `sponsors.receive`, which is how receiving
+a sponsorship mirrors into the contributions ledger. And `members.*`, `roles.*`
+and `settings.*` are admin-only by design: the checklist in
+`ADMIN_ONLY_PERMISSION_GROUPS` no longer offers them, so do not add
+`hasPermOf()` clauses for them here without also making `members.assignRole`
+unable to grant admin or to grant a permission the actor does not hold.
+
+`adminCount` on the pandal document is read through guarded accessors
+(`currentAdminCount()` / `afterAdminCount()`) because nothing ever backfilled the
+field; a pandal that predates it reads as 1 instead of erroring, which would
+otherwise deny every member update including the migration that would repair it.
+`scripts/backfill-ganesh-admin-count.js` writes the true count where it differs —
+run it with `--dry-run` first.
+
 The festival wildcard also range-checks payloads: money fields must be numbers
 in `[0, 1e9]`, `status` must match the enum for its subcollection, and the
 `summary` document accepts only the fifteen `EMPTY_GANESH_SUMMARY` keys plus

@@ -4,6 +4,8 @@ import { AlertTriangle, Check } from "lucide-react-native";
 import { MetaLabel, Section, useGaneshTokens } from "@/components/ganesh/ui";
 import { haptic } from "@/lib/haptics";
 import {
+  ADMIN_ONLY_PERMISSION_GROUPS,
+  ALL_PERMISSION_GROUPS,
   CRITICAL_PERMISSIONS,
   PERMISSION_GROUPS,
   togglePermission,
@@ -144,7 +146,36 @@ export function PermissionChecklist({
       {PERMISSION_GROUPS.map((group) => (
         <GroupBlock key={group.id} group={group} selected={selected} onChange={onChange} />
       ))}
+      <AdminOnlyNote />
     </View>
+  );
+}
+
+/**
+ * These areas used to appear as ordinary checkboxes, but the security rules only
+ * ever accepted a Pandal Admin for them, so granting one produced buttons that
+ * failed at the server. Saying that here is better than quietly omitting three
+ * sections an admin might go looking for.
+ */
+function AdminOnlyNote() {
+  const { theme } = useTheme();
+  const g = useGaneshTokens();
+  const areas = ADMIN_ONLY_PERMISSION_GROUPS.map((group) => group.label).join(", ");
+
+  return (
+    <Section title="Pandal Admins only">
+      <View style={[styles.adminOnlyNote, { borderColor: g.divider }]}>
+        <Text
+          style={[
+            styles.emptyText,
+            { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular },
+          ]}
+        >
+          {areas} stay with Pandal Admins and cannot be given to a role. Make someone a
+          Pandal Admin if they need to manage the committee.
+        </Text>
+      </View>
+    </Section>
   );
 }
 
@@ -157,7 +188,7 @@ export function PermissionSummary({
   const { theme } = useTheme();
   const g = useGaneshTokens();
 
-  const granted = PERMISSION_GROUPS.map((group) => ({
+  const granted = ALL_PERMISSION_GROUPS.map((group) => ({
     group,
     items: group.items.filter((item) => permissions.includes(item.key)),
   })).filter((entry) => entry.items.length > 0);
@@ -277,6 +308,11 @@ const styles = StyleSheet.create({
   },
   summaryRest: {
     fontSize: 11.5,
+  },
+  adminOnlyNote: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 10,
+    padding: 12,
   },
   emptyText: {
     fontSize: 13,

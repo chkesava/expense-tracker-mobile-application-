@@ -272,6 +272,20 @@ service cloud.firestore {
       );
     }
 
+    // The UI gates every audit surface on `audit.read`, so the rules must too.
+    // Previously these reads were gated on festival.update/.close, which both
+    // over-exposed them (a role with festival.update but not audit.read could
+    // read them from the SDK) and under-exposed them (a role granted audit.read
+    // saw the section render and the query fail) — GS-016.
+    function canReadAuditOf(pandalId) {
+      return hasPermOf(pandalId, 'audit.read')
+        || (
+          isActivePandalMemberOf(pandalId)
+          && !hasPermissionsField(pandalId)
+          && ganeshRoleOf(pandalId) in ['admin', 'treasurer']
+        );
+    }
+
     function canManageMembersOf(pandalId) {
       return isActivePandalMemberOf(pandalId) && ganeshRoleOf(pandalId) == 'admin';
     }
@@ -513,9 +527,12 @@ service cloud.firestore {
     }
 
     match /pandalJoinRequests/{requestId} {
+      // Applicant name and phone. The UI shows this only to members.approve
+      // holders, which the rules treat as admin-only — every member including
+      // `viewer` could previously list it from the SDK (GS-016).
       allow read: if signedIn()
         && (resource.data.userId == request.auth.uid
-            || isActivePandalMemberOf(resource.data.pandalId));
+            || canManageMembersOf(resource.data.pandalId));
       allow create: if signedIn()
         && request.resource.data.userId == request.auth.uid
         && request.resource.data.status == 'pending';
@@ -573,12 +590,42 @@ service cloud.firestore {
       }
       function keepsPandalCore() {
         return request.resource.data.ownerId == resource.data.ownerId
-          && request.resource.data.code == resource.data.code;
+          && request.resource.data.code == resource.data.code
+          && adminCountDeltaBounded();
       }
       function currentAdminCount() {
         return pandalData().keys().hasAny(['adminCount']) && pandalData().adminCount is number
           ? pandalData().adminCount
           : 1;
+      }
+      // `adminCount` predates nothing that backfilled it, so a pandal created
+      // before the field exists reads as 1 rather than erroring. Without this
+      // guard every member update on such a pandal is denied — including the
+      // migration that would repair it (GS-014).
+      function afterAdminCount() {
+        return pandalAfter().keys().hasAny(['adminCount']) && pandalAfter().adminCount is number
+          ? pandalAfter().adminCount
+          : 1;
+      }
+      // Last-admin protection trusts this counter, so an admin must not be able
+      // to inflate it in one write and then demote every admin past the
+      // `>= 1` floor. Reads `resource` directly — no extra document read.
+      //
+      // This BOUNDS the hole rather than closing it (GS-015): a determined admin
+      // can still walk the counter up one allowed update at a time. Closing it
+      // properly needs the counter maintained server-side, or the pandal write to
+      // name the member whose transition justifies the delta so the rule can
+      // verify it with getAfter.
+      function adminCountDeltaBounded() {
+        let before = resource.data.keys().hasAny(['adminCount'])
+          && resource.data.adminCount is number
+          ? resource.data.adminCount
+          : 1;
+        let after = request.resource.data.keys().hasAny(['adminCount'])
+          && request.resource.data.adminCount is number
+          ? request.resource.data.adminCount
+          : 1;
+        return after >= 1 && after >= before - 1 && after <= before + 1;
       }
 
       allow read: if isActivePandalMember();
@@ -599,11 +646,19 @@ service cloud.firestore {
         }
         function keepsAdminCount() {
           return wasActiveAdmin() && !willBeActiveAdmin()
-            ? pandalAfter().adminCount == currentAdminCount() - 1
-              && pandalAfter().adminCount >= 1
+            ? afterAdminCount() == currentAdminCount() - 1
+              && afterAdminCount() >= 1
             : !wasActiveAdmin() && willBeActiveAdmin()
-              ? pandalAfter().adminCount == currentAdminCount() + 1
-              : pandalAfter().adminCount == currentAdminCount();
+              ? afterAdminCount() == currentAdminCount() + 1
+              : afterAdminCount() == currentAdminCount();
+        }
+        // The create rule has no `resource`, so the before-state helpers above
+        // cannot be reused. An admin adding an already-active admin must still
+        // move the counter, or the count silently understates reality (GS-015).
+        function createKeepsAdminCount() {
+          return willBeActiveAdmin()
+            ? afterAdminCount() == currentAdminCount() + 1
+            : afterAdminCount() == currentAdminCount();
         }
         // The open-join branch below is the one path where a user writes their
         // own membership without an admin in the loop. `permissions` is what
@@ -651,6 +706,7 @@ service cloud.firestore {
             || (
               canManageMembers()
               && request.resource.data.role in ['admin', 'treasurer', 'member', 'collector', 'viewer']
+              && createKeepsAdminCount()
             )
           );
         allow update: if canManageMembers()
@@ -668,7 +724,7 @@ service cloud.firestore {
       }
 
       match /memberAudits/{auditId} {
-        allow read: if canCloseOrUpdateFestival();
+        allow read: if canReadAuditOf(pandalId);
         allow create: if canManageMembers();
         allow update, delete: if false;
       }
@@ -757,7 +813,7 @@ service cloud.firestore {
         }
 
         match /auditLogs/{auditId} {
-          allow read: if canCloseOrUpdateFestival();
+          allow read: if canReadAuditOf(pandalId);
         }
 
         match /{subcol}/{docId} {
@@ -773,9 +829,14 @@ service cloud.firestore {
                   && (canWriteExpenseOrContribution()
                       || canManageMembers()
                       || canCloseOrUpdateFestival()))
-              || (subcol == 'categories' && canCloseOrUpdateFestival())
+              // canCreateFestival() is included so the seed batch that follows a
+              // festival create can write its categories and summary. Without it
+              // a role holding only festival.create produced a festival with
+              // neither (GS-016).
+              || (subcol == 'categories'
+                  && (canCloseOrUpdateFestival() || canCreateFestival()))
               || ((subcol == 'activity' || subcol == 'auditLogs' || subcol == 'summary')
-                  && canWriteLedgerSideEffect())
+                  && (canWriteLedgerSideEffect() || canCreateFestival()))
               || (subcol == 'sponsorships' && canWriteSponsorOf(pandalId));
           }
 
@@ -943,6 +1004,26 @@ service cloud.firestore {
               && resource.data.status != request.resource.data.status;
           }
 
+          // The status-transition rules below are only reachable on `update`, so
+          // without this a member without `contributions.receive` could skip the
+          // permission entirely by setting the final state at creation time and
+          // minting received cash (GS-037). Mirrors sponsorshipCreateAllowed().
+          function contributionCreateAllowed() {
+            return subcol != 'contributions' || (
+              !request.resource.data.keys().hasAll(['status'])
+              || request.resource.data.status != 'received'
+              || canReceiveContributionOf(pandalId)
+              // Receiving a sponsorship mirrors it into the contributions ledger
+              // as a received row carrying `sponsorshipId`. That row is
+              // authorized by sponsors.receive, which the actor already had to
+              // hold to receive the sponsorship itself.
+              || (
+                request.resource.data.keys().hasAll(['sponsorshipId'])
+                && canReceiveSponsorOf(pandalId)
+              )
+            );
+          }
+
           function sponsorshipCreateAllowed() {
             return subcol != 'sponsorships' || (
               !request.resource.data.keys().hasAll(['status'])
@@ -983,6 +1064,7 @@ service cloud.firestore {
             && canWriteFestivalSubcol()
             && payloadWellFormed()
             && expenseCreateAllowed()
+            && contributionCreateAllowed()
             && sponsorshipCreateAllowed()
             && (
               !request.resource.data.keys().hasAny(['createdBy'])
@@ -1002,13 +1084,22 @@ service cloud.firestore {
                 || ganeshIdentityUpdate()
               ))
               || (
-                canCloseOrUpdateFestival()
+                // Admin/treasurer may edit a document they did not create, but
+                // only while the books are open. Without festivalOpen() here a
+                // settled year stayed editable, silently breaking the
+                // reconciliation against the amount transferred at close (GS-018).
+                festivalOpen()
+                && canCloseOrUpdateFestival()
                 && !(subcol == 'sponsorships'
                   && sponsorshipStatusChanged()
                   && request.resource.data.status in ['received', 'cancelled'])
               )
             );
-          allow delete: if !isAppendOnlyLog() && canCloseOrUpdateFestival();
+          // Voiding is the designed reversal: it is a soft flag, it is audited,
+          // and it reverses the summary. A hard delete does none of that and
+          // leaves no trace, so no role gets it. Nothing in the app deletes a
+          // festival subcollection document — categories are soft-disabled.
+          allow delete: if false;
         }
       }
     }

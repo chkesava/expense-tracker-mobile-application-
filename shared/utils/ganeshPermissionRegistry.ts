@@ -20,6 +20,19 @@ export type PermissionGroup = {
   items: Array<{ key: GaneshPermission; label: string }>;
 };
 
+/**
+ * Capability areas an admin can hand to a custom role.
+ *
+ * `members`, `roles` and `settings` are deliberately NOT here. The Firestore
+ * rules gate all three on a literal `role == 'admin'` (`canManageMembersOf`),
+ * so offering them as checkboxes produced a role whose holder saw the buttons
+ * and got a bare permission-denied at the server (GS-016). They live in
+ * `ADMIN_ONLY_PERMISSION_GROUPS` below so the checklist can say so out loud
+ * rather than silently omitting them.
+ *
+ * If those areas should ever become grantable, the rules have to honour them
+ * first — and `members.assignRole` then needs an explicit anti-escalation guard.
+ */
 export const PERMISSION_GROUPS: PermissionGroup[] = [
   {
     id: "collections",
@@ -80,6 +93,42 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     ],
   },
   {
+    id: "audit",
+    label: "Audit",
+    items: [{ key: "audit.read", label: "View" }],
+  },
+  {
+    id: "assets",
+    label: "Assets",
+    items: [
+      { key: "assets.read", label: "View" },
+      { key: "assets.create", label: "Add" },
+      { key: "assets.update", label: "Update" },
+      { key: "assets.dispose", label: "Dispose" },
+      { key: "assets.manage", label: "Manage" },
+    ],
+  },
+  {
+    id: "sponsors",
+    label: "Sponsors",
+    items: [
+      { key: "sponsors.read", label: "View" },
+      { key: "sponsors.create", label: "Create" },
+      { key: "sponsors.update", label: "Update" },
+      { key: "sponsors.receive", label: "Mark received" },
+      { key: "sponsors.cancel", label: "Cancel" },
+    ],
+  },
+];
+
+/**
+ * Reserved for Pandal Admins. Mirrors `canManageMembersOf()` in
+ * `firestore.rules`, which accepts only a literal `role == 'admin'`. Rendered as
+ * a read-only note in the checklist and still used for labelling, so an admin's
+ * own full permission set displays correctly.
+ */
+export const ADMIN_ONLY_PERMISSION_GROUPS: PermissionGroup[] = [
+  {
     id: "members",
     label: "Members",
     items: [
@@ -110,33 +159,12 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: "settings.update", label: "Update" },
     ],
   },
-  {
-    id: "audit",
-    label: "Audit",
-    items: [{ key: "audit.read", label: "View" }],
-  },
-  {
-    id: "assets",
-    label: "Assets",
-    items: [
-      { key: "assets.read", label: "View" },
-      { key: "assets.create", label: "Add" },
-      { key: "assets.update", label: "Update" },
-      { key: "assets.dispose", label: "Dispose" },
-      { key: "assets.manage", label: "Manage" },
-    ],
-  },
-  {
-    id: "sponsors",
-    label: "Sponsors",
-    items: [
-      { key: "sponsors.read", label: "View" },
-      { key: "sponsors.create", label: "Create" },
-      { key: "sponsors.update", label: "Update" },
-      { key: "sponsors.receive", label: "Mark received" },
-      { key: "sponsors.cancel", label: "Cancel" },
-    ],
-  },
+];
+
+/** Every group, grantable or not. Use for labelling and read-only summaries. */
+export const ALL_PERMISSION_GROUPS: PermissionGroup[] = [
+  ...PERMISSION_GROUPS,
+  ...ADMIN_ONLY_PERMISSION_GROUPS,
 ];
 
 export const PERMISSION_DEPENDENCIES: Partial<Record<GaneshPermission, GaneshPermission[]>> = {
@@ -220,7 +248,7 @@ export function hasPermission(
 }
 
 export function permissionLabel(key: GaneshPermission): string {
-  for (const group of PERMISSION_GROUPS) {
+  for (const group of ALL_PERMISSION_GROUPS) {
     const item = group.items.find((entry) => entry.key === key);
     if (item) return `${group.label} · ${item.label}`;
   }
@@ -228,7 +256,7 @@ export function permissionLabel(key: GaneshPermission): string {
 }
 
 export function groupedPermissionPreview(effective: readonly GaneshPermission[]): string[] {
-  return PERMISSION_GROUPS.filter((group) => group.items.some((item) => effective.includes(item.key))).map(
+  return ALL_PERMISSION_GROUPS.filter((group) => group.items.some((item) => effective.includes(item.key))).map(
     (group) => group.label
   );
 }

@@ -19,6 +19,11 @@
 | 2026-08-27 | GS-009 | Reversing a personal amount past what is still owed is refused | Fixed |
 | 2026-08-27 | GS-010 | God Fund spend checks the balance inside `runTransaction` | Fixed |
 | 2026-08-27 | GS-008 | Reimbursement re-reads its ceiling server-side and checks God Fund solvency | Fixed |
+| 2026-08-27 | GS-014 | Guarded `afterAdminCount()`; legacy pandals unfrozen | Fixed, **not deployed**; backfill script written, **not run** |
+| 2026-08-27 | GS-015 | `adminCount` pinned to +/-1 per update; member create must move it | **Partial**, not deployed |
+| 2026-08-27 | GS-016 | `members`/`roles`/`settings` no longer offered as grantable; `audit.read` un-inverted | Fixed (UI ships with app; rules half **not deployed**) |
+| 2026-08-27 | GS-018 | Closed festivals read-only; ledger records never hard-deleted | Fixed, **not deployed** |
+| 2026-08-27 | GS-037 | Creating a contribution already `received` requires `contributions.receive` | Fixed (UI ships with app; rules half **not deployed**) |
 
 All four are `firestore.rules` changes only; no application code was touched. They compile
 (`firebase deploy --only firestore:rules --dry-run`) but **take effect only after the manual
@@ -162,12 +167,12 @@ Recording these explicitly so the fix cycle does not undo working design:
 | GS-011 | HIGH | FINANCE | Cash / UPI / Bank | Payment method is not tracked end to end; cash cannot be reconciled | OPEN |
 | GS-012 | HIGH | FIRESTORE | Reports | `recomputeFestivalSummary` truncates at 2000 docs and clobbers concurrent writes | OPEN |
 | GS-013 | HIGH | REPORTING | Reports | Report totals are computed from 400-doc truncated lists | OPEN |
-| GS-014 | HIGH | RBAC | Admin | `pandalAfter().adminCount` is dereferenced unguarded; legacy pandals are frozen | OPEN |
-| GS-015 | HIGH | RBAC | Admin | `adminCount` is unpinned on pandal update and bypassed on member create | OPEN |
-| GS-016 | HIGH | RBAC | Roles & Permissions | `members.*` / `roles.*` permissions are honoured by the UI and ignored by the rules | OPEN |
+| GS-014 | HIGH | RBAC | Admin | `pandalAfter().adminCount` is dereferenced unguarded; legacy pandals are frozen | FIXED - AWAITING RULES DEPLOY; backfill not run |
+| GS-015 | HIGH | RBAC | Admin | `adminCount` is unpinned on pandal update and bypassed on member create | PARTIAL - AWAITING RULES DEPLOY |
+| GS-016 | HIGH | RBAC | Roles & Permissions | `members.*` / `roles.*` permissions are honoured by the UI and ignored by the rules | FIXED - AWAITING RULES DEPLOY |
 | GS-017 | HIGH | SECURITY | Pandal creation | A removed founder keeps permanent delete rights; no ownership transfer exists | OPEN |
-| GS-018 | HIGH | FIRESTORE | Festival Settlement | Closed festivals remain mutable and hard-deletable | OPEN |
-| GS-019 | HIGH | FINANCE | Expenses | `voidFinancialRecord` has no open-festival guard | FIXED (client); rules gap remains — GS-018 |
+| GS-018 | HIGH | FIRESTORE | Festival Settlement | Closed festivals remain mutable and hard-deletable | FIXED - AWAITING RULES DEPLOY |
+| GS-019 | HIGH | FINANCE | Expenses | `voidFinancialRecord` has no open-festival guard | FIXED (rules gap closed by GS-018) |
 | GS-020 | HIGH | ASSETS | Asset vs Expense | Voiding an asset purchase orphans the asset in inventory | OPEN |
 | GS-021 | HIGH | REPORTING | Audit Trail | Fund transfers and settlement closes write no audit entry | OPEN |
 | GS-022 | HIGH | FINANCE | Festival Settlement | Money left in a closed festival disappears from every total | OPEN |
@@ -185,7 +190,7 @@ Recording these explicitly so the fix cycle does not undo working design:
 | GS-034 | HIGH | UX | Admin Dashboard | Summary tiles and "Needs attention" act on unloaded data | OPEN |
 | GS-035 | HIGH | UX | Festival | A closed festival is reported to the user as "You don't have access" | OPEN |
 | GS-036 | HIGH | STORAGE | Supabase Storage | File size and MIME type are enforced only on the client | OPEN |
-| GS-037 | HIGH | CONTRIBUTIONS | Promised vs Received | Contributions can be created already `received`, bypassing `contributions.receive` | OPEN |
+| GS-037 | HIGH | CONTRIBUTIONS | Promised vs Received | Contributions can be created already `received`, bypassing `contributions.receive` | FIXED - AWAITING RULES DEPLOY |
 | GS-038 | HIGH | COLLECTIONS | Households | `collectedAmount` written as an absolute value on void; status from a stale read | OPEN |
 | GS-039 | HIGH | FINANCE | Split Funding | The sponsored portion of an expense is absent from every summary total | OPEN |
 | GS-040 | HIGH | OFFLINE | Supabase Storage | The "waiting for connection" photo queue is ephemeral screen state | OPEN |
@@ -1172,7 +1177,7 @@ Related to GS-012, GS-032, GS-051.
 **Severity:** HIGH
 **Category:** RBAC
 **Feature:** Admin
-**Status:** OPEN
+**Status:** FIXED — AWAITING RULES DEPLOY; BACKFILL NOT RUN (2026-08-27)
 
 ### Problem
 `currentAdminCount()` defensively handles a missing `adminCount` field; `keepsAdminCount()` does not. On any pandal document that predates the field, reading `pandalAfter().adminCount` produces an evaluation error and **every** member update is denied — including the migration paths that would repair it.
@@ -1231,6 +1236,33 @@ and use it in all three branches. Run a one-off backfill setting `adminCount` on
 - [ ] Every existing pandal has a correct `adminCount`.
 - [ ] Emulator tests cover the missing-field case.
 
+### Resolution - 2026-08-27
+`firestore.rules` gains `afterAdminCount()`, mirroring the guard `currentAdminCount()`
+already had, and all three branches of `keepsAdminCount()` now use it instead of reading
+`pandalAfter().adminCount` directly. A pandal with no `adminCount` field reads as 1 rather
+than producing an evaluation error, so the three writers that touch only a member document
+- `setMemberRoleIds`, `updatePandalRole`'s permission propagation, and `decideJoinRequest`
+re-approving a removed member - work again on such a pandal. Role editing in particular
+was failing entirely, since the role write and every member write share one batch.
+
+Last-admin protection is unchanged: demoting or removing the final admin still fails,
+because the guard's arithmetic is untouched.
+
+**Backfill written but NOT run.** `scripts/backfill-ganesh-admin-count.js` recounts active
+admins per pandal and writes `adminCount` where the stored value disagrees, with a
+`--dry-run` mode. It refuses to write a count of zero, which would lock a pandal out of
+every member update. Running it touches production data, so that is your call - the rules
+fix alone is enough to unfreeze the common case, because a pandal created with the field
+has it, and a legacy one reads as 1 which is correct unless it has two or more active
+admins.
+
+**Verified:** rules compile via dry run; 4 new cases in
+`shared/utils/ganeshPermissions.rules.contract.test.ts` covering the missing field, a
+member write that does not touch the count, and both last-admin refusals.
+
+**Not verified:** no emulator executes the rules (GS-074); the backfill script has not been
+run against any project.
+
 ### Dependencies
 Blocks GS-016 verification. Related to GS-015, GS-074.
 
@@ -1241,7 +1273,7 @@ Blocks GS-016 verification. Related to GS-015, GS-074.
 **Severity:** HIGH
 **Category:** RBAC
 **Feature:** Admin
-**Status:** OPEN
+**Status:** PARTIAL — AWAITING RULES DEPLOY (2026-08-27)
 
 ### Problem
 Two separate holes let `adminCount` desynchronise from the real number of active admins, which defeats the last-admin protection that depends on it.
@@ -1283,6 +1315,37 @@ Add `request.resource.data.adminCount == resource.data.adminCount` to `keepsPand
 - [ ] Promoting and demoting admins through the app still works and keeps the count correct.
 - [ ] It is not possible to reach a state with zero active admins.
 
+### Resolution - 2026-08-27 (PARTIAL)
+**(b) Member create - fixed.** A new `createKeepsAdminCount()` is applied to the
+`canManageMembers()` create branch: creating an active admin must move the counter, and
+creating anyone else must leave it alone. It is deliberately NOT applied to the founder's
+own self-create, which runs inside the batch that creates the pandal, where a `get()` on
+the pandal document does not resolve.
+
+**(a) Pandal update - bounded, not closed.** `keepsPandalCore()` now also requires
+`adminCountDeltaBounded()`: the counter may move by at most one per update and may never
+land below 1. That kills the one-shot `adminCount: 99` inflation described in the ticket.
+
+It does **not** close the hole. A determined admin can still walk the counter up one
+allowed update at a time and then demote every admin. The ticket's suggested fix - pinning
+the field outright - cannot work as written, because the counter physically moves *through*
+this same `allow update` rule when an admin is promoted or demoted, so pinning it would
+break every legitimate admin transition. Closing it properly needs one of:
+
+- the counter maintained server-side, outside client reach; or
+- the pandal write naming the member whose transition justifies the delta, so the rule can
+  verify it with `getAfter` on that member document.
+
+The second is implementable but changes the document schema and both writers, and would
+reject every admin change made by a client older than the rules deploy - a real hazard
+given the manual deploy. Left for a deliberate decision rather than smuggled in here.
+
+Worth weighing when scheduling: the actor in this attack is already a full admin acting
+against their own pandal, and the outcome is a self-inflicted lockout rather than a breach.
+
+**Verified:** rules compile via dry run; 4 new contract cases covering the create hole and
+the bounded delta.
+
 ### Dependencies
 Depends on GS-014 (fix the guarded accessor first). Related to GS-017.
 
@@ -1293,7 +1356,7 @@ Depends on GS-014 (fix the guarded accessor first). Related to GS-017.
 **Severity:** HIGH
 **Category:** RBAC
 **Feature:** Roles & Permissions
-**Status:** OPEN
+**Status:** FIXED — AWAITING RULES DEPLOY (2026-08-27)
 
 ### Problem
 The TypeScript permission matrix treats membership and role management as ordinary, grantable permissions, and the UI gates on them. The Firestore rules recognise only a literal `role == 'admin'`. Custom roles carrying these permissions are therefore decorative — the user sees the buttons and gets permission-denied.
@@ -1342,6 +1405,44 @@ Either way, align `audit.read` so it gates `memberAudits` and festival `auditLog
 - [ ] A custom role with `festival.create` can create a fully seeded festival, or is prevented from trying.
 - [ ] No UI action results in a bare permission-denied for a permission the user was granted.
 - [ ] `ganeshPermissions.rules.contract.test.ts` is updated to reflect the chosen direction.
+
+### Resolution - 2026-08-27
+Direction chosen: **keep these areas admin-only and stop offering them**, rather than
+teaching the rules to honour them. Honouring them would have made `members.assignRole` an
+escalation vector needing its own anti-escalation guard, with no emulator to prove it; and
+because the mismatch fails closed, nobody loses a capability that works today.
+
+**Checklist.** `shared/utils/ganeshPermissionRegistry.ts` splits the registry:
+`PERMISSION_GROUPS` keeps only the grantable areas, and `members`, `roles` and `settings`
+move to a new `ADMIN_ONLY_PERMISSION_GROUPS`. `ALL_PERMISSION_GROUPS` is the union, used by
+`permissionLabel` and `groupedPermissionPreview` so an admin's own full set still renders
+with proper labels. `PermissionChecklist` renders the grantable groups and then a
+"Pandal Admins only" note naming the three reserved areas - silently omitting three
+sections an admin might go looking for would have been its own bug.
+
+An existing custom role that already carries, say, `members.approve` will drop it the next
+time someone saves that role. That key never did anything, so this is the intended outcome.
+
+**`audit.read` un-inverted.** New `canReadAuditOf()` gates `pandals/{id}/memberAudits` and
+the festival `auditLogs` read on `audit.read`, with the usual role fallback for members
+that carry no `permissions` array. Previously both were gated on
+`canCloseOrUpdateFestival()`, i.e. `festival.update`/`.close`, which over-exposed the audit
+trail to a role holding `festival.update` and under-exposed it to the role actually granted
+`audit.read`.
+
+**Join-request PII.** `pandalJoinRequests` read moves from any active member to
+`canManageMembersOf()` (or the applicant themselves). Every member including `viewer` could
+previously list applicants' names and phone numbers straight from the SDK.
+
+**`festival.create` seeding.** `canWriteFestivalSubcol()` now also accepts
+`canCreateFestival()` for `categories`, `summary`, `activity` and `auditLogs`, so the seed
+batch that follows a festival create succeeds. A role holding only `festival.create`
+previously produced a festival with no categories and no summary.
+
+**Verified:** typecheck and typecheck:shared clean; rules compile via dry run; 4 new
+contract cases assert no offered permission is one the rules gate on a literal admin role,
+that the three reserved groups are exactly `members`/`roles`/`settings`, and that
+`audit.read` is still offered. Full suite green (125 files / 1262 tests).
 
 ### Dependencies
 Verification depends on GS-014. Related to GS-002, GS-073, GS-074.
@@ -1398,7 +1499,7 @@ Related to GS-015, GS-083.
 **Severity:** HIGH
 **Category:** FIRESTORE
 **Feature:** Festival Settlement
-**Status:** OPEN
+**Status:** FIXED — AWAITING RULES DEPLOY (2026-08-27)
 
 ### Problem
 The rules require `festivalOpen()` for creating ledger documents but not for updating or deleting them, so a treasurer can edit or hard-delete records in a festival whose books have been settled and closed.
@@ -1429,6 +1530,32 @@ Add `festivalOpen()` to the `canCloseOrUpdateFestival()` update branch, and remo
 - [ ] Voiding remains the only reversal mechanism and remains audited.
 - [ ] Closing a festival still works.
 
+### Resolution - 2026-08-27
+Two changes to the festival subcollection wildcard:
+
+1. **`festivalOpen()` added to the closed-festival update branch.** That branch exists so an
+   admin or treasurer can edit a document they did not create, bypassing
+   `ganeshIdentityUpdate()`. It had no open-festival check, so a settled year stayed fully
+   editable. Both update branches now require the festival to be open.
+2. **`allow delete: if false`.** Voiding is the designed reversal - it is a soft flag, it is
+   audited, and it reverses the summary. A hard delete does none of that. Nothing in the app
+   deletes a festival subcollection document (categories are soft-disabled via a `disabled`
+   flag, not removed), so no client path regresses.
+
+Closing a festival still works: `transferFestivalToPermanent` writes its `fundTransfers`
+row and summary increment inside the same transaction that flips the status, and
+`festivalOpen()` reads the pre-transaction state.
+
+One intended consequence: **"Recalculate from ledger" no longer works on a closed
+festival**, because it updates the summary. That follows directly from the festival being
+read-only, and is the behaviour the ticket asks for.
+
+This also closes the rules half of **GS-019**, which was left as a client-only guarantee.
+
+**Verified:** rules compile via dry run; 3 new contract cases covering refusal for every
+role on a closed festival, the still-working admin/treasurer edit while open, and delete
+being refused outright.
+
 ### Dependencies
 Related to GS-019, GS-005, GS-022.
 
@@ -1439,7 +1566,7 @@ Related to GS-019, GS-005, GS-022.
 **Severity:** HIGH
 **Category:** FINANCE
 **Feature:** Expenses
-**Status:** FIXED (client) — RULES GAP REMAINS (2026-08-27)
+**Status:** FIXED (2026-08-27; rules gap closed by GS-018)
 
 ### Problem
 Every other mutation path checks that the festival is open. The void path does not, and the rules do not backstop it (GS-018).
@@ -2283,7 +2410,7 @@ Depends on GS-001 (the access model decision).
 **Severity:** HIGH
 **Category:** CONTRIBUTIONS
 **Feature:** Promised vs Received
-**Status:** OPEN
+**Status:** FIXED — AWAITING RULES DEPLOY (2026-08-27)
 
 ### Problem
 The rules correctly prevent creating a *sponsorship* in the `received` state without the receive permission, but there is no equivalent guard for *contributions* — and the client defaults money contributions to `received`.
@@ -2316,6 +2443,37 @@ Add a `contributionCreateAllowed()` function mirroring `sponsorshipCreateAllowed
 - [ ] A treasurer can still record a received contribution in one step.
 - [ ] Creating a `promised` contribution is unaffected.
 - [ ] Emulator tests cover both roles.
+
+### Resolution - 2026-08-27
+New `contributionCreateAllowed()` in the festival wildcard, mirroring the
+`sponsorshipCreateAllowed()` guard that already existed: creating a contribution with
+`status: 'received'` requires `contributions.receive`. The status-transition rules were only
+reachable on `update`, so the permission was bypassable simply by setting the final state at
+creation time.
+
+**One carve-out, and it is narrow.** Receiving a sponsorship mirrors it into the
+contributions ledger as a received row (`appendReceivedContribution` in
+`services/ganesh/ganeshSponsors.ts`). That row is allowed when it carries a `sponsorshipId`
+**and** the actor holds `sponsors.receive` - which they already needed to receive the
+sponsorship itself. A plain member cannot borrow the path by inventing a `sponsorshipId`,
+because the `sponsors.receive` half still has to hold; a contract test asserts exactly that.
+
+**Client side, so nobody meets a bare permission-denied** (the failure mode GS-016 is
+about):
+- `useGaneshWrites.addContribution` now resolves the effective status the same way the
+  service does and calls `requirePerm("contributions.receive")` plus
+  `assertMoneyReceiveOnline` when it is `received`.
+- `app/(ganesh)/add-contribution.tsx` drops the "Received" chip for anyone without the
+  permission. The screen already defaulted to "Promised" and always passed status
+  explicitly, so a member's normal flow is unchanged.
+
+Note the service default is untouched: `addContribution` still defaults money contributions
+to `received` for callers that omit status. The only such caller is the sponsor flow, which
+is covered by the carve-out above.
+
+**Verified:** typecheck clean; rules compile via dry run; 4 new contract cases covering
+member refusal, treasurer success, a denormalized `contributions.receive` grant, and both
+sides of the sponsor carve-out. Full suite green.
 
 ### Dependencies
 Related to GS-004, GS-074.

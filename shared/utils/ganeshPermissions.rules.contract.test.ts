@@ -10,7 +10,12 @@ import { describe, expect, it } from "vitest";
 
 import { EMPTY_GANESH_SUMMARY } from "@/shared/types/ganesh";
 import type { GaneshMemberStatus, GaneshRole } from "@/shared/types/ganesh";
-import { expandPermissions } from "@/shared/utils/ganeshPermissionRegistry";
+import {
+  ADMIN_ONLY_PERMISSION_GROUPS,
+  ALL_PERMISSION_GROUPS,
+  PERMISSION_GROUPS,
+  expandPermissions,
+} from "@/shared/utils/ganeshPermissionRegistry";
 import {
   ROLE_PERMISSIONS,
   RULE_ASSET_CREATE_ROLES,
@@ -953,3 +958,266 @@ function canCreateReceivedSponsorship(ctx: Ctx): boolean {
     && canWriteSponsor(ctx)
     && canReceiveSponsor(ctx);
 }
+
+// --- GS-014 / GS-015 --------------------------------------------------------
+/** Mirrors `currentAdminCount()` / `afterAdminCount()` in firestore.rules. */
+function readAdminCount(doc: { adminCount?: unknown } | null): number {
+  if (!doc) return 1;
+  return typeof doc.adminCount === "number" ? doc.adminCount : 1;
+}
+
+/** Mirrors `keepsAdminCount()` in firestore.rules. */
+function keepsAdminCountGuarded(params: {
+  oldRole: GaneshRole;
+  oldStatus: GaneshMemberStatus;
+  newRole: GaneshRole;
+  newStatus: GaneshMemberStatus;
+  pandalBefore: { adminCount?: unknown } | null;
+  pandalAfter: { adminCount?: unknown } | null;
+}): boolean {
+  const before = readAdminCount(params.pandalBefore);
+  const after = readAdminCount(params.pandalAfter);
+  const wasAdmin = params.oldRole === "admin" && params.oldStatus === "active";
+  const willBeAdmin = params.newRole === "admin" && params.newStatus === "active";
+  if (wasAdmin && !willBeAdmin) return after === before - 1 && after >= 1;
+  if (!wasAdmin && willBeAdmin) return after === before + 1;
+  return after === before;
+}
+
+/** Mirrors `createKeepsAdminCount()` in firestore.rules. */
+function createKeepsAdminCount(params: {
+  newRole: GaneshRole;
+  newStatus: GaneshMemberStatus;
+  pandalBefore: { adminCount?: unknown } | null;
+  pandalAfter: { adminCount?: unknown } | null;
+}): boolean {
+  const before = readAdminCount(params.pandalBefore);
+  const after = readAdminCount(params.pandalAfter);
+  const willBeAdmin = params.newRole === "admin" && params.newStatus === "active";
+  return willBeAdmin ? after === before + 1 : after === before;
+}
+
+/** Mirrors `adminCountDeltaBounded()` in firestore.rules. */
+function adminCountDeltaBounded(
+  before: { adminCount?: unknown } | null,
+  after: { adminCount?: unknown } | null
+): boolean {
+  const b = readAdminCount(before);
+  const a = readAdminCount(after);
+  return a >= 1 && a >= b - 1 && a <= b + 1;
+}
+
+// --- GS-018 -----------------------------------------------------------------
+/** Mirrors the closed-festival clauses of the festival wildcard. */
+function canUpdateLedgerDoc(params: {
+  ctx: Ctx;
+  isCreator: boolean;
+  festivalOpen: boolean;
+}): boolean {
+  if (!isActivePandalMember(params.ctx)) return false;
+  if (params.festivalOpen) return params.isCreator || canCloseOrUpdateFestival(params.ctx);
+  return false;
+}
+
+function canDeleteLedgerDoc(): boolean {
+  return false;
+}
+
+// --- GS-037 -----------------------------------------------------------------
+/** Mirrors `contributionCreateAllowed()` in firestore.rules. */
+function canCreateContribution(
+  ctx: Ctx,
+  payload: { status?: string; sponsorshipId?: string }
+): boolean {
+  if (!isActivePandalMember(ctx) || !ctx.festivalOpen) return false;
+  if (!canWriteExpenseOrContribution(ctx)) return false;
+  if (payload.status !== "received") return true;
+  if (canReceiveContribution(ctx)) return true;
+  return Boolean(payload.sponsorshipId) && canReceiveSponsor(ctx);
+}
+
+describe("ganesh firestore rules - GS-014 adminCount on legacy pandals", () => {
+  const legacy = {};
+
+  it("treats a pandal with no adminCount field as having one admin", () => {
+    expect(readAdminCount(legacy)).toBe(1);
+    expect(readAdminCount({ adminCount: "2" })).toBe(1);
+    expect(readAdminCount({ adminCount: 3 })).toBe(3);
+  });
+
+  it("lets a member write that does not touch adminCount through on a legacy pandal", () => {
+    // Role assignment, role-permission propagation and member re-approval all
+    // write only the member document, so before and after both read as 1.
+    expect(
+      keepsAdminCountGuarded({
+        oldRole: "member",
+        oldStatus: "active",
+        newRole: "collector",
+        newStatus: "active",
+        pandalBefore: legacy,
+        pandalAfter: legacy,
+      })
+    ).toBe(true);
+  });
+
+  it("still blocks demoting or removing the final admin", () => {
+    expect(
+      keepsAdminCountGuarded({
+        oldRole: "admin",
+        oldStatus: "active",
+        newRole: "member",
+        newStatus: "active",
+        pandalBefore: { adminCount: 1 },
+        pandalAfter: { adminCount: 0 },
+      })
+    ).toBe(false);
+    expect(
+      keepsAdminCountGuarded({
+        oldRole: "admin",
+        oldStatus: "active",
+        newRole: "admin",
+        newStatus: "removed",
+        pandalBefore: { adminCount: 2 },
+        pandalAfter: { adminCount: 1 },
+      })
+    ).toBe(true);
+  });
+});
+
+describe("ganesh firestore rules - GS-015 adminCount cannot drift", () => {
+  it("refuses creating an active admin without incrementing the count", () => {
+    expect(
+      createKeepsAdminCount({
+        newRole: "admin",
+        newStatus: "active",
+        pandalBefore: { adminCount: 1 },
+        pandalAfter: { adminCount: 1 },
+      })
+    ).toBe(false);
+    expect(
+      createKeepsAdminCount({
+        newRole: "admin",
+        newStatus: "active",
+        pandalBefore: { adminCount: 1 },
+        pandalAfter: { adminCount: 2 },
+      })
+    ).toBe(true);
+  });
+
+  it("lets an admin add a non-admin without moving the count", () => {
+    expect(
+      createKeepsAdminCount({
+        newRole: "collector",
+        newStatus: "active",
+        pandalBefore: { adminCount: 1 },
+        pandalAfter: { adminCount: 1 },
+      })
+    ).toBe(true);
+  });
+
+  it("refuses a one-shot inflation of adminCount on a pandal update", () => {
+    expect(adminCountDeltaBounded({ adminCount: 1 }, { adminCount: 99 })).toBe(false);
+    expect(adminCountDeltaBounded({ adminCount: 1 }, { adminCount: 0 })).toBe(false);
+  });
+
+  it("still allows the plus or minus one move a real admin transition makes", () => {
+    expect(adminCountDeltaBounded({ adminCount: 1 }, { adminCount: 2 })).toBe(true);
+    expect(adminCountDeltaBounded({ adminCount: 2 }, { adminCount: 1 })).toBe(true);
+    expect(adminCountDeltaBounded({ adminCount: 2 }, { adminCount: 2 })).toBe(true);
+  });
+});
+
+describe("ganesh firestore rules - GS-016 the checklist matches the rules", () => {
+  it("does not offer members, roles or settings as grantable", () => {
+    const grantable = PERMISSION_GROUPS.map((group) => group.id);
+    expect(grantable).not.toContain("members");
+    expect(grantable).not.toContain("roles");
+    expect(grantable).not.toContain("settings");
+  });
+
+  it("keeps them available for labelling an admin's own full set", () => {
+    const reserved = ADMIN_ONLY_PERMISSION_GROUPS.map((group) => group.id);
+    expect(reserved).toEqual(["members", "roles", "settings"]);
+    expect(ALL_PERMISSION_GROUPS).toHaveLength(
+      PERMISSION_GROUPS.length + ADMIN_ONLY_PERMISSION_GROUPS.length
+    );
+  });
+
+  it("offers no permission the rules gate on a literal admin role", () => {
+    // canManageMembersOf() is role == 'admin' only, so anything it guards must
+    // not appear as a checkbox.
+    const offered = PERMISSION_GROUPS.flatMap((group) => group.items.map((item) => item.key));
+    for (const key of offered) {
+      expect(key.startsWith("members.")).toBe(false);
+      expect(key.startsWith("roles.")).toBe(false);
+      expect(key.startsWith("settings.")).toBe(false);
+    }
+  });
+
+  it("still offers audit.read, which now gates audit reads in the rules too", () => {
+    const offered = PERMISSION_GROUPS.flatMap((group) => group.items.map((item) => item.key));
+    expect(offered).toContain("audit.read");
+  });
+});
+
+describe("ganesh firestore rules - GS-018 a closed festival is read-only", () => {
+  it("refuses ledger updates once the festival is closed, for every role", () => {
+    for (const actor of [admin, treasurer, member, collector]) {
+      const closed: Ctx = { ...actor, festivalOpen: false };
+      expect(canUpdateLedgerDoc({ ctx: closed, isCreator: true, festivalOpen: false })).toBe(false);
+      expect(canUpdateLedgerDoc({ ctx: closed, isCreator: false, festivalOpen: false })).toBe(false);
+    }
+  });
+
+  it("still lets admin and treasurer edit a document they did not create while open", () => {
+    expect(canUpdateLedgerDoc({ ctx: treasurer, isCreator: false, festivalOpen: true })).toBe(true);
+    expect(canUpdateLedgerDoc({ ctx: member, isCreator: false, festivalOpen: true })).toBe(false);
+    expect(canUpdateLedgerDoc({ ctx: member, isCreator: true, festivalOpen: true })).toBe(true);
+  });
+
+  it("never hard-deletes a ledger record, so voiding stays the only reversal", () => {
+    expect(canDeleteLedgerDoc()).toBe(false);
+  });
+});
+
+describe("ganesh firestore rules - GS-037 receiving on create needs the permission", () => {
+  it("refuses a member creating a contribution already received", () => {
+    expect(canCreateContribution(member, { status: "received" })).toBe(false);
+    expect(canCreateContribution(member, { status: "promised" })).toBe(true);
+  });
+
+  it("lets a treasurer record a received contribution in one step", () => {
+    expect(canCreateContribution(treasurer, { status: "received" })).toBe(true);
+  });
+
+  it("honours a denormalized contributions.receive grant", () => {
+    const receiver: Ctx = {
+      signedIn: true,
+      member: {
+        role: "member",
+        status: "active",
+        permissions: ["contributions.create", "contributions.receive"],
+      },
+      festivalOpen: true,
+    };
+    expect(canCreateContribution(receiver, { status: "received" })).toBe(true);
+  });
+
+  it("still lets the sponsor flow mirror a received sponsorship into the ledger", () => {
+    const sponsorReceiver: Ctx = {
+      signedIn: true,
+      member: {
+        role: "member",
+        status: "active",
+        permissions: ["contributions.create", "sponsors.receive"],
+      },
+      festivalOpen: true,
+    };
+    expect(canCreateContribution(sponsorReceiver, { status: "received" })).toBe(false);
+    expect(
+      canCreateContribution(sponsorReceiver, { status: "received", sponsorshipId: "s1" })
+    ).toBe(true);
+    // A plain member cannot borrow that path by inventing a sponsorshipId.
+    expect(canCreateContribution(member, { status: "received", sponsorshipId: "s1" })).toBe(false);
+  });
+});

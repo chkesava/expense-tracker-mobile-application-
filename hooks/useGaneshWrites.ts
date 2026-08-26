@@ -196,6 +196,15 @@ export function useGaneshWrites() {
     addContribution: (input: Parameters<typeof writes.addContribution>[4]) => {
       requirePerm("contributions.create");
       if (input.pandalAsset) requirePerm("assets.create");
+      // Recording a contribution as already received IS receiving it. The rules
+      // enforce this on create as well as on the promised -> received
+      // transition (GS-037); check here so the user gets the permission message
+      // rather than a bare permission-denied from Firestore.
+      const status = input.status ?? (input.kind === "money" ? "received" : "promised");
+      if (status === "received") {
+        requirePerm("contributions.receive");
+        writes.assertMoneyReceiveOnline(isOnline, input.kind);
+      }
       const ctx = requireFestival();
       return run("Contribution saved", () =>
         writes.addContribution(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, input)

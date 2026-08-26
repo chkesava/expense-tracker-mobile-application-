@@ -34,6 +34,10 @@ const STATUS_OPTIONS: Array<{ id: ContributionStatus; label: string }> = [
   { id: "received", label: "Received" },
   { id: "cancelled", label: "Cancelled" },
 ];
+// Recording something as already received IS receiving it, and the rules now
+// enforce contributions.receive on create as well as on the transition
+// (GS-037). Without this the option rendered and the save failed at the server.
+const PROMISE_ONLY_STATUS_OPTIONS = STATUS_OPTIONS.filter((option) => option.id !== "received");
 const PHOTO_KINDS: ContributionKind[] = ["item", "service", "sponsorship"];
 
 export default function AddContributionScreen() {
@@ -62,6 +66,8 @@ export default function AddContributionScreen() {
   const [photoStatus, setPhotoStatus] = useState<GaneshUploadStatus>("idle");
   const [savedId, setSavedId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const canReceive = can("contributions.receive");
+  const statusOptions = canReceive ? STATUS_OPTIONS : PROMISE_ONLY_STATUS_OPTIONS;
   const allowsPhoto = PHOTO_KINDS.includes(kind);
   const canLinkAsset =
     can("assets.create") &&
@@ -129,7 +135,7 @@ export default function AddContributionScreen() {
       <ChoiceChips
         label="Status"
         value={status}
-        options={STATUS_OPTIONS}
+        options={statusOptions}
         disabled={ledgerSaved}
         onChange={(next) => {
           setStatus(next);
