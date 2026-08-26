@@ -59,6 +59,31 @@ are needed, because closing `list` means there are no queries on it.
 The full reasoning, and the residual risk that is accepted rather than solved,
 is in `docs/audits/SPLIT_SHARE_LINK_AUDIT_2026-08-22.md`.
 
+The Ganesh Seva section confines every Pandal and Festival document to an
+**active** membership — `ownerId` or `memberIds` alone grant nothing. Three
+clauses there are easy to break by accident, so they are mirrored by hand in
+`shared/utils/ganeshPermissions.rules.contract.test.ts` and must be updated
+alongside the rules. `pandalInvites` is `get`-only with `list` denied, because a
+join code is a bearer secret and `read` would let any signed-in account
+enumerate every Pandal in the project. The `members/{memberId}` open-join
+self-create pins `permissions` to `builtinMemberPermissions()` and `roleIds` to
+`['member']` — that array is what `hasPermOf()` reads to authorize every later
+action, so a self-created membership must not be able to name its own
+privileges; the literal in the rules is asserted equal to
+`expandPermissions(ROLE_PERMISSIONS.member)` by that test. And because nested
+matches OR together, `fundTransfers` and `auditLogs` are excluded from the
+festival wildcard's `update` and `delete` inside the wildcard itself — the
+explicit `allow update, delete: if false` on `fundTransfers` cannot subtract a
+grant the wildcard makes.
+
+The festival wildcard also range-checks payloads: money fields must be numbers
+in `[0, 1e9]`, `status` must match the enum for its subcollection, and the
+`summary` document accepts only the fifteen `EMPTY_GANESH_SUMMARY` keys plus
+`updatedAt`. This stops negative, non-numeric, overflow and stray-field writes.
+It does **not** stop a member who may write a ledger side-effect from writing a
+plausible wrong number into `summary`; closing that needs server-side summary
+maintenance. The backlog entry is GS-004 in `GANESH_SEVA_AUDIT_TICKETS.md`.
+
 `firestore.indexes.json` declares the composite indexes for queries that filter
 and sort at the same time. Borrowings and Spending Spaces need
 `borrowingRepayments` by `borrowingId` + `date` and `expenses` by `spaceId` +

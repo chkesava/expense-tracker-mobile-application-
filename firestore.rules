@@ -276,6 +276,22 @@ service cloud.firestore {
       return isActivePandalMemberOf(pandalId) && ganeshRoleOf(pandalId) == 'admin';
     }
 
+    // Mirrors expandPermissions(ROLE_PERMISSIONS.member) in
+    // shared/utils/ganeshPermissions.ts. `hasPermOf` reads the member
+    // document's `permissions` array, so a self-created membership must not be
+    // allowed to name a set wider than this. Keep the two in sync.
+    function builtinMemberPermissions() {
+      return [
+        'collections.read', 'expenses.read', 'contributions.read',
+        'reimbursements.read', 'members.read', 'permanentFund.read',
+        'festival.read', 'assets.read', 'sponsors.read',
+        'collections.create', 'collections.update',
+        'expenses.create', 'expenses.update',
+        'contributions.create', 'contributions.update',
+        'assets.create', 'sponsors.create', 'sponsors.update'
+      ];
+    }
+
     function canWriteCollectionOf(pandalId) {
       return hasPermOf(pandalId, 'collections.create')
         || (
@@ -479,7 +495,12 @@ service cloud.firestore {
     }
 
     match /pandalInvites/{code} {
-      allow read: if signedIn();
+      // A join code is a bearer secret. `read` would also grant `list`, which
+      // would let any signed-in account enumerate every Pandal id, name and
+      // join code in the project. The invitee already knows the code and reads
+      // the document by id, so `get` alone is enough.
+      allow get: if signedIn();
+      allow list: if false;
       allow create: if signedIn()
         && request.resource.data.createdBy == request.auth.uid
         && request.resource.data.pandalId is string;
@@ -584,6 +605,24 @@ service cloud.firestore {
               ? pandalAfter().adminCount == currentAdminCount() + 1
               : pandalAfter().adminCount == currentAdminCount();
         }
+        // The open-join branch below is the one path where a user writes their
+        // own membership without an admin in the loop. `permissions` is what
+        // authorizes every later action, so it must not be self-declared.
+        function selfJoinClaimsNoExtraPower() {
+          return (
+            !request.resource.data.keys().hasAny(['permissions'])
+            || (
+              request.resource.data.permissions is list
+              && request.resource.data.permissions.hasOnly(builtinMemberPermissions())
+            )
+          ) && (
+            !request.resource.data.keys().hasAny(['roleIds'])
+            || (
+              request.resource.data.roleIds is list
+              && request.resource.data.roleIds.hasOnly(['member'])
+            )
+          );
+        }
         function cannotSelfPromoteToAdmin() {
           return !(memberId == request.auth.uid
             && request.resource.data.role == 'admin'
@@ -605,6 +644,7 @@ service cloud.firestore {
                 || (
                   request.resource.data.role == 'member'
                   && pandalAfter().joinMode == 'open'
+                  && selfJoinClaimsNoExtraPower()
                 )
               )
             )
@@ -739,6 +779,121 @@ service cloud.firestore {
               || (subcol == 'sponsorships' && canWriteSponsorOf(pandalId));
           }
 
+          // Nested matches OR together, so the explicit
+          // `fundTransfers: allow update, delete: if false` above cannot
+          // subtract a grant this wildcard makes. The exclusion has to live
+          // here. Both collections are append-only evidence.
+          function isAppendOnlyLog() {
+            return subcol == 'fundTransfers' || subcol == 'auditLogs';
+          }
+
+          // ₹100 crore. Far above any real pandal figure, but it rejects the
+          // overflow-shaped values (1e300) that poison every downstream sum.
+          function moneyCeiling() {
+            return 1000000000;
+          }
+
+          function okMoney(d, key) {
+            return !d.keys().hasAny([key])
+              || (d[key] is number && d[key] >= 0 && d[key] <= moneyCeiling());
+          }
+
+          // Derived per-member counters are maintained by increment() and can
+          // drift below zero (GS-009 does exactly that). They carry no
+          // display-integrity role, so bound the type and magnitude but do not
+          // assert a floor that would wedge an already-drifted member document.
+          function okSignedMoney(d, key) {
+            return !d.keys().hasAny([key])
+              || (
+                d[key] is number
+                && d[key] >= -moneyCeiling()
+                && d[key] <= moneyCeiling()
+              );
+          }
+
+          function amountsWellFormed() {
+            let d = request.resource.data;
+            return okMoney(d, 'amount')
+              && okMoney(d, 'totalAmount')
+              && okMoney(d, 'godFundAmount')
+              && okMoney(d, 'personalAmount')
+              && okMoney(d, 'sponsoredAmount')
+              && okMoney(d, 'estimatedValue')
+              && okMoney(d, 'expectedAmount')
+              && okMoney(d, 'collectedAmount')
+              && okMoney(d, 'contributionTarget')
+              && okSignedMoney(d, 'contributionPaid')
+              && okSignedMoney(d, 'personalExpenses')
+              && okSignedMoney(d, 'reimbursed')
+              && okSignedMoney(d, 'pendingReimbursement');
+          }
+
+          function statusWellFormed() {
+            let d = request.resource.data;
+            return !d.keys().hasAny(['status'])
+              || (
+                subcol == 'contributions'
+                  ? d.status in ['promised', 'received', 'cancelled']
+                  : subcol == 'sponsorships'
+                    ? d.status in ['prospective', 'promised', 'confirmed', 'received', 'cancelled']
+                    : subcol == 'households'
+                      ? d.status in ['pending', 'partial', 'paid', 'not_interested', 'not_available']
+                      : d.status is string
+              );
+          }
+
+          function flagsWellFormed() {
+            let d = request.resource.data;
+            return (!d.keys().hasAny(['voided']) || d.voided is bool)
+              && (!d.keys().hasAny(['date']) || d.date is string)
+              && (!d.keys().hasAny(['direction'])
+                  || subcol != 'fundTransfers'
+                  || d.direction in ['to_permanent', 'from_permanent']);
+          }
+
+          // The summary document is the sole input to availableGodFund() and
+          // therefore to every displayed balance, the God Fund spend guard and
+          // the settlement figure. It is written by increment() side-effects, by
+          // the festival seed and by the recompute tool — all of which stay
+          // inside this key set. Note the residual gap: a member who may write a
+          // ledger side-effect can still write a *plausible* wrong number here.
+          // Closing that needs server-side summary maintenance (see GS-004).
+          function summaryWellFormed() {
+            let d = request.resource.data;
+            return subcol != 'summary' || (
+              d.keys().hasOnly([
+                'openingFunds', 'chanda', 'committeeContributions',
+                'otherCashContributions', 'godFundExpenses', 'reimbursements',
+                'personalMoneyUsed', 'pendingReimbursements', 'inKindValue',
+                'sponsoredValue', 'collectionCount', 'expenseCount',
+                'assetPurchaseAmount', 'transferredToPermanentFund',
+                'receivedFromPermanentFund', 'updatedAt'
+              ])
+              && okMoney(d, 'openingFunds')
+              && okMoney(d, 'chanda')
+              && okMoney(d, 'committeeContributions')
+              && okMoney(d, 'otherCashContributions')
+              && okMoney(d, 'godFundExpenses')
+              && okMoney(d, 'reimbursements')
+              && okMoney(d, 'personalMoneyUsed')
+              && okSignedMoney(d, 'pendingReimbursements')
+              && okMoney(d, 'inKindValue')
+              && okMoney(d, 'sponsoredValue')
+              && okMoney(d, 'collectionCount')
+              && okMoney(d, 'expenseCount')
+              && okMoney(d, 'assetPurchaseAmount')
+              && okMoney(d, 'transferredToPermanentFund')
+              && okMoney(d, 'receivedFromPermanentFund')
+            );
+          }
+
+          function payloadWellFormed() {
+            return amountsWellFormed()
+              && statusWellFormed()
+              && flagsWellFormed()
+              && summaryWellFormed();
+          }
+
           function hasNonEmptyAssetId() {
             return request.resource.data.keys().hasAll(['assetId'])
               && request.resource.data.assetId is string
@@ -826,6 +981,7 @@ service cloud.firestore {
           allow create: if isActivePandalMember()
             && festivalOpen()
             && canWriteFestivalSubcol()
+            && payloadWellFormed()
             && expenseCreateAllowed()
             && sponsorshipCreateAllowed()
             && (
@@ -833,6 +989,8 @@ service cloud.firestore {
               || ganeshIdentityCreate()
             );
           allow update: if isActivePandalMember()
+            && !isAppendOnlyLog()
+            && payloadWellFormed()
             && (
               (subcol == 'contributions' && contributionStatusChanged() && contributionUpdateAllowed())
               || (subcol == 'sponsorships' && sponsorshipStatusChanged() && sponsorshipUpdateAllowed())
@@ -850,7 +1008,7 @@ service cloud.firestore {
                   && request.resource.data.status in ['received', 'cancelled'])
               )
             );
-          allow delete: if canCloseOrUpdateFestival();
+          allow delete: if !isAppendOnlyLog() && canCloseOrUpdateFestival();
         }
       }
     }

@@ -8,8 +8,11 @@
 
 import { describe, expect, it } from "vitest";
 
+import { EMPTY_GANESH_SUMMARY } from "@/shared/types/ganesh";
 import type { GaneshMemberStatus, GaneshRole } from "@/shared/types/ganesh";
+import { expandPermissions } from "@/shared/utils/ganeshPermissionRegistry";
 import {
+  ROLE_PERMISSIONS,
   RULE_ASSET_CREATE_ROLES,
   RULE_ASSET_UPDATE_ROLES,
   RULE_COLLECTION_WRITE_ROLES,
@@ -483,6 +486,313 @@ describe("ganesh firestore rules contract", () => {
 function canReadOwnMemberDoc(params: { signedIn: boolean; uid: string; memberId: string }): boolean {
   return params.signedIn && params.memberId === params.uid;
 }
+
+// --- GS-002 -----------------------------------------------------------------
+// Mirrors `builtinMemberPermissions()` in firestore.rules. Kept as a literal so
+// a drift between the rules file and ROLE_PERMISSIONS.member fails a test
+// rather than silently widening what an open-join self-create may claim.
+export const RULE_BUILTIN_MEMBER_PERMISSIONS: string[] = [
+  "collections.read",
+  "expenses.read",
+  "contributions.read",
+  "reimbursements.read",
+  "members.read",
+  "permanentFund.read",
+  "festival.read",
+  "assets.read",
+  "sponsors.read",
+  "collections.create",
+  "collections.update",
+  "expenses.create",
+  "expenses.update",
+  "contributions.create",
+  "contributions.update",
+  "assets.create",
+  "sponsors.create",
+  "sponsors.update",
+];
+
+/** Mirrors `selfJoinClaimsNoExtraPower()` in firestore.rules. */
+function selfJoinClaimsNoExtraPower(payload: {
+  permissions?: string[];
+  roleIds?: string[];
+}): boolean {
+  const permissionsOk =
+    payload.permissions === undefined
+    || payload.permissions.every((key) => RULE_BUILTIN_MEMBER_PERMISSIONS.includes(key));
+  const roleIdsOk =
+    payload.roleIds === undefined || payload.roleIds.every((id) => id === "member");
+  return permissionsOk && roleIdsOk;
+}
+
+/** Mirrors the `members/{memberId}` create rule in firestore.rules. */
+function canSelfCreateMemberDoc(params: {
+  signedIn: boolean;
+  uid: string;
+  memberId: string;
+  joinMode: "open" | "approval";
+  ownerId?: string;
+  payload: {
+    userId: string;
+    status: string;
+    role: string;
+    permissions?: string[];
+    roleIds?: string[];
+  };
+}): boolean {
+  if (!params.signedIn) return false;
+  if (params.memberId !== params.uid) return false;
+  if (params.payload.userId !== params.uid) return false;
+  if (params.payload.status !== "active") return false;
+  if (params.payload.role === "admin") return params.ownerId === params.uid;
+  if (params.payload.role !== "member") return false;
+  return params.joinMode === "open" && selfJoinClaimsNoExtraPower(params.payload);
+}
+
+// --- GS-003 -----------------------------------------------------------------
+/** Mirrors the `pandalInvites/{code}` read grants in firestore.rules. */
+const pandalInvites = {
+  canGet: (signedIn: boolean) => signedIn,
+  canList: (_signedIn: boolean) => false,
+};
+
+// --- GS-004 -----------------------------------------------------------------
+const RULE_MONEY_CEILING = 1_000_000_000;
+
+const RULE_SUMMARY_FIELDS: string[] = [...Object.keys(EMPTY_GANESH_SUMMARY), "updatedAt"];
+
+function okMoney(d: Record<string, unknown>, key: string): boolean {
+  if (!(key in d)) return true;
+  const value = d[key];
+  return typeof value === "number" && value >= 0 && value <= RULE_MONEY_CEILING;
+}
+
+function okSignedMoney(d: Record<string, unknown>, key: string): boolean {
+  if (!(key in d)) return true;
+  const value = d[key];
+  return (
+    typeof value === "number" && value >= -RULE_MONEY_CEILING && value <= RULE_MONEY_CEILING
+  );
+}
+
+const RULE_MONEY_FIELDS = [
+  "amount",
+  "totalAmount",
+  "godFundAmount",
+  "personalAmount",
+  "sponsoredAmount",
+  "estimatedValue",
+  "expectedAmount",
+  "collectedAmount",
+  "contributionTarget",
+];
+
+/** Derived counters maintained by increment(); bounded but not floored. */
+const RULE_SIGNED_COUNTER_FIELDS = [
+  "contributionPaid",
+  "personalExpenses",
+  "reimbursed",
+  "pendingReimbursement",
+];
+
+/** Mirrors `payloadWellFormed()` in firestore.rules. */
+function payloadWellFormed(subcol: string, d: Record<string, unknown>): boolean {
+  const amountsOk =
+    RULE_MONEY_FIELDS.every((key) => okMoney(d, key))
+    && RULE_SIGNED_COUNTER_FIELDS.every((key) => okSignedMoney(d, key));
+
+  const statusOk = !("status" in d)
+    || (subcol === "contributions"
+      ? ["promised", "received", "cancelled"].includes(d.status as string)
+      : subcol === "sponsorships"
+        ? ["prospective", "promised", "confirmed", "received", "cancelled"].includes(
+            d.status as string
+          )
+        : subcol === "households"
+          ? ["pending", "partial", "paid", "not_interested", "not_available"].includes(
+              d.status as string
+            )
+          : typeof d.status === "string");
+
+  const flagsOk =
+    (!("voided" in d) || typeof d.voided === "boolean")
+    && (!("date" in d) || typeof d.date === "string")
+    && (!("direction" in d)
+      || subcol !== "fundTransfers"
+      || ["to_permanent", "from_permanent"].includes(d.direction as string));
+
+  const summaryOk = subcol !== "summary"
+    || (Object.keys(d).every((key) => RULE_SUMMARY_FIELDS.includes(key))
+      && Object.keys(EMPTY_GANESH_SUMMARY).every((key) =>
+        key === "pendingReimbursements" ? okSignedMoney(d, key) : okMoney(d, key)
+      ));
+
+  return amountsOk && statusOk && flagsOk && summaryOk;
+}
+
+// --- GS-005 -----------------------------------------------------------------
+/** Mirrors `isAppendOnlyLog()` in firestore.rules. */
+function isAppendOnlyLog(subcol: string): boolean {
+  return subcol === "fundTransfers" || subcol === "auditLogs";
+}
+
+function canUpdateFestivalSubcol(subcol: string, ctx: Ctx): boolean {
+  return !isAppendOnlyLog(subcol) && isActivePandalMember(ctx);
+}
+
+function canDeleteFestivalSubcol(subcol: string, ctx: Ctx): boolean {
+  return !isAppendOnlyLog(subcol) && canCloseOrUpdateFestival(ctx);
+}
+
+describe("ganesh firestore rules — GS-002 open-join self-create", () => {
+  const basePayload = {
+    userId: "u1",
+    status: "active",
+    role: "member",
+    roleIds: ["member"],
+    permissions: RULE_BUILTIN_MEMBER_PERMISSIONS,
+  };
+  const openJoin = {
+    signedIn: true,
+    uid: "u1",
+    memberId: "u1",
+    joinMode: "open" as const,
+  };
+
+  it("keeps the rules literal aligned with expandPermissions(ROLE_PERMISSIONS.member)", () => {
+    expect([...RULE_BUILTIN_MEMBER_PERMISSIONS].sort()).toEqual(
+      [...expandPermissions([...ROLE_PERMISSIONS.member])].sort()
+    );
+  });
+
+  it("allows the honest open-join payload the app actually writes", () => {
+    expect(canSelfCreateMemberDoc({ ...openJoin, payload: basePayload })).toBe(true);
+  });
+
+  it("rejects a self-created membership that claims permissions beyond the member set", () => {
+    expect(
+      canSelfCreateMemberDoc({
+        ...openJoin,
+        payload: { ...basePayload, permissions: [...RULE_BUILTIN_MEMBER_PERMISSIONS, "permanentFund.transfer"] },
+      })
+    ).toBe(false);
+    expect(
+      canSelfCreateMemberDoc({
+        ...openJoin,
+        payload: { ...basePayload, permissions: ["festival.close"] },
+      })
+    ).toBe(false);
+  });
+
+  it("rejects a self-created membership that claims roleIds other than member", () => {
+    expect(
+      canSelfCreateMemberDoc({
+        ...openJoin,
+        payload: { ...basePayload, roleIds: ["treasurer"] },
+      })
+    ).toBe(false);
+    expect(
+      canSelfCreateMemberDoc({
+        ...openJoin,
+        payload: { ...basePayload, roleIds: ["member", "treasurer"] },
+      })
+    ).toBe(false);
+  });
+
+  it("still rejects self-create when the pandal is approval-only", () => {
+    expect(
+      canSelfCreateMemberDoc({ ...openJoin, joinMode: "approval", payload: basePayload })
+    ).toBe(false);
+  });
+
+  it("still lets the founder create their own admin membership", () => {
+    expect(
+      canSelfCreateMemberDoc({
+        ...openJoin,
+        joinMode: "approval",
+        ownerId: "u1",
+        payload: { ...basePayload, role: "admin", permissions: ["permanentFund.transfer"] },
+      })
+    ).toBe(true);
+  });
+});
+
+describe("ganesh firestore rules — GS-003 pandalInvites enumeration", () => {
+  it("lets a signed-in user get an invite by code but never list the collection", () => {
+    expect(pandalInvites.canGet(true)).toBe(true);
+    expect(pandalInvites.canGet(false)).toBe(false);
+    expect(pandalInvites.canList(true)).toBe(false);
+  });
+});
+
+describe("ganesh firestore rules — GS-004 festival payload validation", () => {
+  it("accepts the collection payload the app writes", () => {
+    expect(
+      payloadWellFormed("collections", {
+        donorName: "House 12",
+        amount: 500,
+        date: "2026-08-26",
+        voided: false,
+      })
+    ).toBe(true);
+  });
+
+  it("rejects negative, non-numeric and overflow amounts", () => {
+    expect(payloadWellFormed("collections", { amount: -50000 })).toBe(false);
+    expect(payloadWellFormed("collections", { amount: "500" })).toBe(false);
+    expect(payloadWellFormed("collections", { amount: 1e300 })).toBe(false);
+    expect(payloadWellFormed("expenses", { totalAmount: 100, godFundAmount: -100 })).toBe(false);
+    expect(payloadWellFormed("reimbursements", { amount: -1 })).toBe(false);
+  });
+
+  it("bounds derived per-member counters without flooring them at zero", () => {
+    expect(payloadWellFormed("members", { pendingReimbursement: -1000 })).toBe(true);
+    expect(payloadWellFormed("members", { contributionPaid: -500 })).toBe(true);
+    expect(payloadWellFormed("members", { pendingReimbursement: "x" })).toBe(false);
+    expect(payloadWellFormed("members", { reimbursed: 1e300 })).toBe(false);
+    expect(payloadWellFormed("members", { contributionTarget: -1 })).toBe(false);
+  });
+
+  it("rejects status values outside each subcollection's enum", () => {
+    expect(payloadWellFormed("contributions", { status: "received" })).toBe(true);
+    expect(payloadWellFormed("contributions", { status: "confirmed" })).toBe(false);
+    expect(payloadWellFormed("sponsorships", { status: "confirmed" })).toBe(true);
+    expect(payloadWellFormed("households", { status: "not_available" })).toBe(true);
+    expect(payloadWellFormed("households", { status: "settled" })).toBe(false);
+  });
+
+  it("rejects malformed voided, date and transfer direction values", () => {
+    expect(payloadWellFormed("expenses", { voided: "no" })).toBe(false);
+    expect(payloadWellFormed("expenses", { date: 20260826 })).toBe(false);
+    expect(payloadWellFormed("fundTransfers", { direction: "sideways" })).toBe(false);
+    expect(payloadWellFormed("fundTransfers", { direction: "to_permanent" })).toBe(true);
+  });
+
+  it("accepts the summary writes the app makes and rejects forged fields", () => {
+    expect(payloadWellFormed("summary", { ...EMPTY_GANESH_SUMMARY, updatedAt: 1 })).toBe(true);
+    expect(payloadWellFormed("summary", { chanda: 12000, collectionCount: 4 })).toBe(true);
+    expect(payloadWellFormed("summary", { chanda: 1000, godFundBonus: 999 })).toBe(false);
+    expect(payloadWellFormed("summary", { godFundExpenses: -1 })).toBe(false);
+    expect(payloadWellFormed("summary", { chanda: 1e300 })).toBe(false);
+  });
+});
+
+describe("ganesh firestore rules — GS-005 append-only fund transfers and audit logs", () => {
+  it("refuses updates and deletes on fundTransfers and auditLogs for every role", () => {
+    for (const actor of [admin, treasurer, member, collector]) {
+      for (const subcol of ["fundTransfers", "auditLogs"]) {
+        expect(canUpdateFestivalSubcol(subcol, actor)).toBe(false);
+        expect(canDeleteFestivalSubcol(subcol, actor)).toBe(false);
+      }
+    }
+  });
+
+  it("leaves the normal ledger subcollections editable and deletable as before", () => {
+    expect(canUpdateFestivalSubcol("collections", collector)).toBe(true);
+    expect(canDeleteFestivalSubcol("collections", treasurer)).toBe(true);
+    expect(canDeleteFestivalSubcol("collections", collector)).toBe(false);
+  });
+});
 
 function canReadAsset(ctx: Ctx): boolean {
   return hasPerm(ctx, "assets.read")

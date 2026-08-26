@@ -7,6 +7,23 @@
 
 ---
 
+## Fix Log
+
+| Date | Tickets | Change | State |
+| --- | --- | --- | --- |
+| 2026-08-26 | GS-003 | `pandalInvites` read split into `get` / `list: false` | Fixed, **not deployed** |
+| 2026-08-26 | GS-005 | `fundTransfers` and `auditLogs` excluded from the wildcard's `update` / `delete` | Fixed, **not deployed** |
+| 2026-08-26 | GS-002 | Open-join self-create pins `permissions` and `roleIds` to the built-in member set | Fixed, **not deployed** |
+| 2026-08-26 | GS-004 | Amount / status / flag / summary-key validation added to the festival wildcard | **Partial** (unknown-field `hasOnly` deferred to GS-074), not deployed |
+
+All four are `firestore.rules` changes only; no application code was touched. They compile
+(`firebase deploy --only firestore:rules --dry-run`) but **take effect only after the manual
+deploy** described in `docs/FIREBASE_RULES_DEPLOY.md` — CI does not deploy `firestore.rules`.
+Coverage is mirrored in `shared/utils/ganeshPermissions.rules.contract.test.ts`, which is a
+hand-written mirror, not an emulator run (GS-074 remains open).
+
+---
+
 ## Executive Summary
 
 | Metric | Count |
@@ -122,10 +139,10 @@ Recording these explicitly so the fix cycle does not undo working design:
 | ID | Severity | Category | Feature | Title | Status |
 | --- | --- | --- | --- | --- | --- |
 | GS-001 | CRITICAL | STORAGE | Supabase Storage | Supabase policies grant `anon` full CRUD over every pandal's files | OPEN |
-| GS-002 | CRITICAL | RBAC | Pandal membership | Open-join self-create accepts an arbitrary `permissions` array | OPEN |
-| GS-003 | CRITICAL | SECURITY | Pandal membership | `pandalInvites` is listable by any signed-in user | OPEN |
-| GS-004 | CRITICAL | SECURITY | Security Rules | Festival subcollections have no payload validation; `summary` is forgeable | OPEN |
-| GS-005 | CRITICAL | SECURITY | Audit Trail | `fundTransfers` and `auditLogs` are mutable via the wildcard match | OPEN |
+| GS-002 | CRITICAL | RBAC | Pandal membership | Open-join self-create accepts an arbitrary `permissions` array | FIXED — AWAITING RULES DEPLOY |
+| GS-003 | CRITICAL | SECURITY | Pandal membership | `pandalInvites` is listable by any signed-in user | FIXED — AWAITING RULES DEPLOY |
+| GS-004 | CRITICAL | SECURITY | Security Rules | Festival subcollections have no payload validation; `summary` is forgeable | PARTIAL — AWAITING RULES DEPLOY |
+| GS-005 | CRITICAL | SECURITY | Audit Trail | `fundTransfers` and `auditLogs` are mutable via the wildcard match | FIXED — AWAITING RULES DEPLOY |
 | GS-006 | CRITICAL | COLLECTIONS | Households | Every collection creates a new household; the merge path is unreachable | OPEN |
 | GS-007 | CRITICAL | FESTIVAL | Festival Settlement | A festival can be closed on an unloaded ₹0 summary | OPEN |
 | GS-008 | CRITICAL | FINANCE | Reimbursements | Reimbursement cap is client-supplied and there is no solvency check | OPEN |
@@ -295,7 +312,7 @@ Blocks GS-036, GS-069, GS-096.
 **Severity:** CRITICAL
 **Category:** RBAC
 **Feature:** Pandal membership
-**Status:** OPEN
+**Status:** FIXED — AWAITING RULES DEPLOY (2026-08-26)
 
 ### Problem
 The Firestore rule that lets a user create their own member document when a pandal has `joinMode: 'open'` constrains `memberId`, `userId`, `status` and `role` — but places no constraint at all on `permissions` or `roleIds`. The `permissions` array on the member document is exactly what the rules read to authorize every subsequent action.
@@ -351,6 +368,28 @@ On the self-create branch, pin the payload: require `request.resource.data.roleI
 - [ ] Joining an open pandal through the app still works and yields exactly the built-in member permissions.
 - [ ] A rules-emulator test covers the escalation attempt (see GS-074).
 
+### Resolution — 2026-08-26
+`firestore.rules` now pins the open-join self-create payload. A new top-level
+`builtinMemberPermissions()` mirrors `expandPermissions(ROLE_PERMISSIONS.member)`, and
+`selfJoinClaimsNoExtraPower()` in the `members/{memberId}` block requires that any
+`permissions` array on the self-create is `hasOnly(builtinMemberPermissions())` and any
+`roleIds` array is `hasOnly(['member'])`. The predicate is attached only to the
+`role == 'member' && joinMode == 'open'` branch, so the founder's own admin self-create
+(which legitimately writes `ALL_GANESH_PERMISSIONS`) is untouched.
+
+A member document that omits `permissions` entirely is still accepted — with no
+`permissions` field, `hasPermOf` falls through to the role-name fallback, which for
+`member` is exactly the built-in set. So the escalation is closed from both directions.
+
+**Verified:** `firebase deploy --only firestore:rules --dry-run` compiles clean.
+`shared/utils/ganeshPermissions.rules.contract.test.ts` gained a `GS-002` block covering
+the honest payload, a widened `permissions` array, a widened `roleIds` array, the
+approval-only pandal, and the founder admin path — plus a drift test asserting the rules
+literal still equals `expandPermissions(ROLE_PERMISSIONS.member)`.
+
+**Not verified:** no emulator executes the rules (GS-074 is still open). The contract test
+is a hand-written mirror.
+
 ### Dependencies
 Enabled by GS-003. Related to GS-016.
 
@@ -361,7 +400,7 @@ Enabled by GS-003. Related to GS-016.
 **Severity:** CRITICAL
 **Category:** SECURITY
 **Feature:** Pandal membership
-**Status:** OPEN
+**Status:** FIXED — AWAITING RULES DEPLOY (2026-08-26)
 
 ### Problem
 `pandalInvites` is a flat top-level collection keyed by the join code. Its read rule is `allow read: if signedIn()`, and in Firestore `read` covers `list` as well as `get`. Any authenticated account can enumerate the entire collection.
@@ -407,6 +446,20 @@ The person holding an invite already knows the code and reads the document by id
 - [ ] Join-by-code continues to work end to end.
 - [ ] A rules-emulator test asserts the collection cannot be listed.
 
+### Resolution — 2026-08-26
+`firestore.rules` splits the grant exactly as recommended:
+
+```
+allow get: if signedIn();
+allow list: if false;
+```
+
+**Verified:** every `pandalInvites` access in the codebase is by document id
+(`doc(db, "pandalInvites", code)` at `services/ganesh/ganeshWrites.ts:274, 549, 590`) —
+grepped across `app/`, `components/`, `hooks/`, `services/`, `lib/` and `shared/`. There is
+no `getDocs`/`query` against the collection, so join-by-code and the unique-code check both
+still work. Rules compile clean.
+
 ### Dependencies
 Blocks GS-002 and GS-042.
 
@@ -417,7 +470,7 @@ Blocks GS-002 and GS-042.
 **Severity:** CRITICAL
 **Category:** SECURITY
 **Feature:** Security Rules
-**Status:** OPEN
+**Status:** PARTIAL — AWAITING RULES DEPLOY (2026-08-26)
 
 ### Problem
 The wildcard rule governing every festival subcollection checks membership, festival status and role/permission — and nothing whatsoever about the document being written. There is no `keys().hasOnly(...)`, no type check, and no range check anywhere in the Ganesh section of the rules.
@@ -454,6 +507,52 @@ Add per-subcollection validation functions to the wildcard branch: `request.reso
 - [ ] Status fields only accept their declared enum values.
 - [ ] All existing legitimate write paths still succeed (covered by emulator tests, GS-074).
 
+### Resolution — 2026-08-26 (PARTIAL)
+**Done — value validation.** The festival-subcollection wildcard now runs
+`payloadWellFormed()` on both `create` and `update`:
+
+- `amountsWellFormed()` — every money field (`amount`, `totalAmount`, `godFundAmount`,
+  `personalAmount`, `sponsoredAmount`, `estimatedValue`, `expectedAmount`,
+  `collectedAmount`, `contributionTarget`) must be `is number`, `>= 0` and `<= 1e9`
+  (₹100 crore, four-plus orders of magnitude above any real figure, chosen to reject
+  overflow-shaped values like `1e300`). Derived per-member counters
+  (`contributionPaid`, `personalExpenses`, `reimbursed`, `pendingReimbursement`) are
+  type- and magnitude-bounded but deliberately **not** floored at zero — GS-009 drives
+  them negative today, and a floor would wedge an already-drifted member document with
+  permission-denied on every later edit.
+- `statusWellFormed()` — `status` is checked against the real enum per subcollection:
+  contributions `promised|received|cancelled`, sponsorships
+  `prospective|promised|confirmed|received|cancelled`, households
+  `pending|partial|paid|not_interested|not_available`.
+- `flagsWellFormed()` — `voided is bool`, `date is string`, and `fundTransfers.direction`
+  in `to_permanent|from_permanent`.
+- `summaryWellFormed()` — the `summary` document is now `keys().hasOnly(...)` the fifteen
+  `EMPTY_GANESH_SUMMARY` fields plus `updatedAt`, with each field range-checked
+  (`pendingReimbursements` signed, per above). This covers all three writers: the
+  `bumpSummary` merge-increments, the festival seed, and `recomputeFestivalSummary`.
+
+**Not done — unknown-field rejection.** Acceptance criterion 2 ("a ledger document
+containing unknown fields is rejected") is *not* implemented for the ledger
+subcollections. A `keys().hasOnly(...)` allowlist would have to enumerate the union of
+every create payload and every partial `updateDoc` across ~30 write sites in
+`ganeshWrites.ts`, `ganeshSponsors.ts` and `ganeshPermanentFund.ts`. Missing one optional
+field silently breaks a user flow in production, and — per the deploy note at the top of
+this file — the fix cycle is a manual deploy. This ticket's own Dependencies line already
+says it should land with GS-074; that is the right sequencing and it has not changed.
+
+**Residual gap — summary forgery.** The key allowlist and range checks stop negative,
+non-numeric, overflow and stray-field writes, but a member who may write a ledger
+side-effect can still write a *plausible* wrong number (`chanda: 9999999`). Closing that
+needs server-side summary maintenance, which is out of scope for a rules-only change. A
+comment in `firestore.rules` records this so the next reader does not mistake the
+allowlist for full protection.
+
+**Verified:** rules compile clean; a `GS-004` block in
+`shared/utils/ganeshPermissions.rules.contract.test.ts` mirrors `payloadWellFormed()` and
+covers the honest collection payload, negative/string/overflow amounts, each status enum,
+the malformed flags, and both accepted and forged summary writes. Full suite green
+(125 files / 1236 tests).
+
 ### Dependencies
 Related to GS-041. Should land with GS-074 so the coverage is provable.
 
@@ -464,7 +563,7 @@ Related to GS-041. Should land with GS-074 so the coverage is provable.
 **Severity:** CRITICAL
 **Category:** SECURITY
 **Feature:** Audit Trail
-**Status:** OPEN
+**Status:** FIXED — AWAITING RULES DEPLOY (2026-08-26)
 
 ### Problem
 Firestore ORs all matching rules — a more specific `match` block cannot remove a grant made by a wildcard. The explicit `allow update, delete: if false` on `fundTransfers` is therefore dead code, and the festival `auditLogs` collection is writable and deletable.
@@ -507,6 +606,22 @@ Exclude `fundTransfers` and `auditLogs` from the wildcard's write grants — rem
 - [ ] Creating a `fundTransfers` document via a Permanent Fund transfer still succeeds.
 - [ ] Ledger side-effects still append `auditLogs` entries normally.
 - [ ] Emulator tests cover all six cases.
+
+### Resolution — 2026-08-26
+The exclusion is placed in the wildcard itself, since an explicit `match` cannot subtract a
+grant. A new `isAppendOnlyLog()` returns true for `fundTransfers` and `auditLogs`, and the
+wildcard's `allow update` and `allow delete` are both gated on `!isAppendOnlyLog()`.
+
+`create` is intentionally left alone for both: `fundTransfers` keeps its explicit
+`allow create: if canWritePermanentFund() && ganeshIdentityCreate()`, and festival
+`auditLogs` must stay appendable by ledger writers via `canWriteLedgerSideEffect()`. The
+read split is unchanged — the wildcard read still excludes `auditLogs`.
+
+**Verified:** grepped `services/`, `hooks/` and `app/` — no client code updates or deletes
+either collection, so nothing legitimate regresses. Rules compile clean. A `GS-005` block
+in the contract test asserts update and delete are refused for admin, treasurer, member and
+collector on both subcollections, while `collections` stays updatable by a collector and
+deletable by a treasurer.
 
 ### Dependencies
 Related to GS-021 (transfers write no audit at all) and GS-074.
