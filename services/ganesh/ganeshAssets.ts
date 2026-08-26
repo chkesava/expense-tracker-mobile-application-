@@ -7,6 +7,7 @@ import {
   type Firestore,
   type WriteBatch,
 } from "firebase/firestore";
+import type { GaneshWriter } from "@/services/ganesh/ganeshWriter";
 
 import { newId } from "@/lib/id";
 import { commitWrite } from "@/lib/firestoreWrite";
@@ -70,7 +71,7 @@ function pathRef(db: Firestore, segments: string[]) {
 }
 
 function assetAudit(
-  batch: WriteBatch,
+  batch: GaneshWriter,
   db: Firestore,
   pandalId: string,
   payload: {
@@ -122,7 +123,7 @@ function ownershipExtras(input: CreatePandalAssetInput | UpdatePandalAssetPatch)
 }
 
 export function appendPandalAssetCreate(
-  batch: WriteBatch,
+  batch: GaneshWriter,
   db: Firestore,
   actor: GaneshActor,
   pandalId: string,
@@ -191,7 +192,7 @@ export async function createPandalAsset(
 }
 
 export function appendAssetAcquisitionCost(
-  batch: WriteBatch,
+  batch: GaneshWriter,
   db: Firestore,
   actor: GaneshActor,
   pandalId: string,

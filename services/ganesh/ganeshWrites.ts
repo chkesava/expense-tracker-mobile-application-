@@ -8,10 +8,12 @@ import {
   increment,
   limit,
   query,
+  runTransaction,
   serverTimestamp,
   where,
   writeBatch,
   type Firestore,
+  type Transaction,
   type WriteBatch,
 } from "firebase/firestore";
 
@@ -32,6 +34,7 @@ import {
   validateNonNegativeAmount,
   validatePositiveAmount,
   validateReimbursement,
+  validateReimbursementReversal,
 } from "@/shared/utils/ganeshMath";
 import { generatePandalCode, normalizePandalCode } from "@/shared/utils/ganeshIdentity";
 import {
@@ -72,18 +75,26 @@ import {
   appendPandalAssetCreate,
   type CreatePandalAssetInput,
 } from "@/services/ganesh/ganeshAssets";
+import type { GaneshWriter } from "@/services/ganesh/ganeshWriter";
 import { tryStampPandalMembershipIndex } from "@/services/ganesh/ganeshMembershipIndex";
 import { ensurePandalRoles } from "@/services/ganesh/ganeshRoles";
 import { EMPTY_GANESH_SUMMARY } from "@/shared/types/ganesh";
 import {
+  InsufficientFundError,
   seedPermanentFund,
   transferFestivalToPermanent,
   transferPermanentToFestival,
 } from "@/services/ganesh/ganeshPermanentFund";
 
 export {
+  assertGodFundSpendOnline,
   assertMoneyReceiveOnline,
+  assertReimbursementOnline,
+  assertVoidOnline,
+  GOD_FUND_SPEND_OFFLINE_ERROR,
+  LEDGER_VOID_OFFLINE_ERROR,
   MONEY_RECEIVE_OFFLINE_ERROR,
+  REIMBURSEMENT_OFFLINE_ERROR,
 } from "@/shared/utils/ganeshContributions";
 
 export type GaneshActor = {
@@ -91,6 +102,7 @@ export type GaneshActor = {
   displayName: string;
   phone?: string;
 };
+
 
 function pathRef(db: Firestore, segments: string[]) {
   const [first, ...rest] = segments;
@@ -118,7 +130,7 @@ function colRef(db: Firestore, segments: string[]) {
 }
 
 function audit(
-  batch: WriteBatch,
+  batch: GaneshWriter,
   db: Firestore,
   pandalId: string,
   festivalId: string,
@@ -145,7 +157,7 @@ function audit(
 }
 
 function activity(
-  batch: WriteBatch,
+  batch: GaneshWriter,
   db: Firestore,
   pandalId: string,
   festivalId: string,
@@ -170,7 +182,7 @@ function activity(
 }
 
 function memberAudit(
-  batch: WriteBatch,
+  batch: GaneshWriter,
   db: Firestore,
   pandalId: string,
   payload: {
@@ -198,7 +210,7 @@ function memberAudit(
 }
 
 function bumpSummary(
-  batch: WriteBatch,
+  batch: GaneshWriter,
   db: Firestore,
   pandalId: string,
   festivalId: string,
@@ -1222,6 +1234,43 @@ async function requireOpenFestival(
   }
 }
 
+async function readSummaryInTxn(
+  txn: Transaction,
+  db: Firestore,
+  pandalId: string,
+  festivalId: string
+) {
+  const snap = await txn.get(pathRef(db, summaryDoc(pandalId, festivalId)));
+  return {
+    ...EMPTY_GANESH_SUMMARY,
+    ...(snap.exists() ? snap.data() : {}),
+  };
+}
+
+/**
+ * Re-derives, inside the transaction, what a member is actually owed. The
+ * caller-supplied ceiling in `addReimbursement`'s input comes from a locally
+ * cached member document and must never be the thing that authorizes a payout.
+ */
+function assertReimbursementReversible(reversal: number, pending: number): void {
+  const check = validateReimbursementReversal(reversal, pending);
+  if (!check.ok) throw new Error(check.error);
+}
+
+async function readMemberPendingInTxn(
+  txn: Transaction,
+  db: Firestore,
+  pandalId: string,
+  festivalId: string,
+  memberId: string
+): Promise<{ pending: number; exists: boolean }> {
+  const snap = await txn.get(
+    pathRef(db, [...festivalCol(pandalId, festivalId, "members"), memberId])
+  );
+  if (!snap.exists()) return { pending: 0, exists: false };
+  return { pending: Number(snap.data().pendingReimbursement ?? 0), exists: true };
+}
+
 function bumpReceivedContribution(
   batch: WriteBatch,
   db: Firestore,
@@ -1437,87 +1486,95 @@ export async function addExpense(
     sponsoredAmount,
   });
   if (!valid.ok) throw new Error(valid.error);
-  if (input.godFundAmount > 0) {
-    const summarySnap = await getDoc(pathRef(db, summaryDoc(pandalId, festivalId)));
-    const summary = {
-      ...EMPTY_GANESH_SUMMARY,
-      ...(summarySnap.exists() ? summarySnap.data() : {}),
-    };
-    const spendOk = validateGodFundSpend(input.godFundAmount, availableGodFund(summary));
-    if (!spendOk.ok) throw new Error(spendOk.error);
-  }
   const sponsorLink = await loadSponsoredExpenseLink(db, pandalId, festivalId, {
     sponsoredAmount,
     sponsorId: input.sponsorId,
     linkedSponsorshipId: input.linkedSponsorshipId,
   });
   const id = newId();
-  const batch = writeBatch(db);
-  const linkedSponsorshipId = sponsorLink
-    ? appendExpenseSponsorship(batch, db, actor, pandalId, festivalId, {
-        expenseId: id,
-        sponsorId: sponsorLink.sponsorId,
-        sponsorshipId: sponsorLink.sponsorshipId,
-        amount: sponsoredAmount,
-        purpose: input.sponsorshipPurpose,
-        purposeLabel: input.purposeLabel,
-        existing: sponsorLink.existing,
+
+  const appendExpense = (writer: GaneshWriter) => {
+    const linkedSponsorshipId = sponsorLink
+      ? appendExpenseSponsorship(writer, db, actor, pandalId, festivalId, {
+          expenseId: id,
+          sponsorId: sponsorLink.sponsorId,
+          sponsorshipId: sponsorLink.sponsorshipId,
+          amount: sponsoredAmount,
+          purpose: input.sponsorshipPurpose,
+          purposeLabel: input.purposeLabel,
+          existing: sponsorLink.existing,
+        })
+      : undefined;
+    writer.set(
+      pathRef(db, [...festivalCol(pandalId, festivalId, "expenses"), id]),
+      omitUndefined({
+        name,
+        totalAmount: input.totalAmount,
+        godFundAmount: input.godFundAmount,
+        personalAmount: input.personalAmount,
+        sponsoredAmount,
+        categoryId: input.categoryId,
+        categoryName: input.categoryName,
+        paidByMemberId: input.paidByMemberId,
+        vendor: input.vendor?.trim() || undefined,
+        description: input.description?.trim() || undefined,
+        notes: input.notes?.trim() || undefined,
+        date: input.date,
+        receiptPath: input.receiptPath,
+        linkedContributionId: input.linkedContributionId,
+        linkedSponsorshipId,
+        expenseType: "normal",
+        ledgerType: "EXPENSE",
+        voided: false,
+        createdBy: actor.uid,
+        createdAt: serverTimestamp(),
+        updatedBy: actor.uid,
+        updatedAt: serverTimestamp(),
       })
-    : undefined;
-  batch.set(
-    pathRef(db, [...festivalCol(pandalId, festivalId, "expenses"), id]),
-    omitUndefined({
-      name,
-      totalAmount: input.totalAmount,
-      godFundAmount: input.godFundAmount,
-      personalAmount: input.personalAmount,
-      sponsoredAmount,
-      categoryId: input.categoryId,
-      categoryName: input.categoryName,
-      paidByMemberId: input.paidByMemberId,
-      vendor: input.vendor?.trim() || undefined,
-      description: input.description?.trim() || undefined,
-      notes: input.notes?.trim() || undefined,
-      date: input.date,
-      receiptPath: input.receiptPath,
-      linkedContributionId: input.linkedContributionId,
-      linkedSponsorshipId,
-      expenseType: "normal",
-      ledgerType: "EXPENSE",
-      voided: false,
-      createdBy: actor.uid,
-      createdAt: serverTimestamp(),
-      updatedBy: actor.uid,
-      updatedAt: serverTimestamp(),
-    })
-  );
-  bumpSummary(batch, db, pandalId, festivalId, {
-    godFundExpenses: input.godFundAmount,
-    personalMoneyUsed: input.personalAmount,
-    pendingReimbursements: input.personalAmount,
-    expenseCount: 1,
-  });
-  if (input.personalAmount > 0) {
-    batch.set(
-      pathRef(db, [...festivalCol(pandalId, festivalId, "members"), input.paidByMemberId]),
-      {
-        personalExpenses: increment(input.personalAmount),
-        pendingReimbursement: increment(input.personalAmount),
-      },
-      { merge: true }
     );
+    bumpSummary(writer, db, pandalId, festivalId, {
+      godFundExpenses: input.godFundAmount,
+      personalMoneyUsed: input.personalAmount,
+      pendingReimbursements: input.personalAmount,
+      expenseCount: 1,
+    });
+    if (input.personalAmount > 0) {
+      writer.set(
+        pathRef(db, [...festivalCol(pandalId, festivalId, "members"), input.paidByMemberId]),
+        {
+          personalExpenses: increment(input.personalAmount),
+          pendingReimbursement: increment(input.personalAmount),
+        },
+        { merge: true }
+      );
+    }
+    activity(writer, db, pandalId, festivalId, {
+      title: name,
+      subtitle: `Paid by member · Added by ${actor.displayName}`,
+      amount: input.totalAmount,
+      actorId: actor.uid,
+      entityType: "expense",
+      entityId: id,
+    });
+    audit(writer, db, pandalId, festivalId, actor.uid, "created", "expense", id, {
+      newValue: input,
+    });
+  };
+
+  // Spending real cash: read the balance inside the transaction so two
+  // treasurers cannot both pass the same check. Everything else appends.
+  if (input.godFundAmount > 0) {
+    await runTransaction(db, async (txn) => {
+      const summary = await readSummaryInTxn(txn, db, pandalId, festivalId);
+      const spendOk = validateGodFundSpend(input.godFundAmount, availableGodFund(summary));
+      if (!spendOk.ok) throw new Error(spendOk.error);
+      appendExpense(txn);
+    });
+    return id;
   }
-  activity(batch, db, pandalId, festivalId, {
-    title: name,
-    subtitle: `Paid by member · Added by ${actor.displayName}`,
-    amount: input.totalAmount,
-    actorId: actor.uid,
-    entityType: "expense",
-    entityId: id,
-  });
-  audit(batch, db, pandalId, festivalId, actor.uid, "created", "expense", id, {
-    newValue: input,
-  });
+
+  const batch = writeBatch(db);
+  appendExpense(batch);
   await commitWrite(() => batch.commit(), { label: "expense" });
   return id;
 }
@@ -1558,15 +1615,6 @@ export async function addAssetPurchase(
     sponsoredAmount,
   });
   if (!valid.ok) throw new Error(valid.error);
-  if (input.godFundAmount > 0) {
-    const summarySnap = await getDoc(pathRef(db, summaryDoc(pandalId, festivalId)));
-    const summary = {
-      ...EMPTY_GANESH_SUMMARY,
-      ...(summarySnap.exists() ? summarySnap.data() : {}),
-    };
-    const spendOk = validateGodFundSpend(input.godFundAmount, availableGodFund(summary));
-    if (!spendOk.ok) throw new Error(spendOk.error);
-  }
   const estimatedValue =
     input.asset.estimatedValue != null && Number.isFinite(input.asset.estimatedValue)
       ? input.asset.estimatedValue
@@ -1579,9 +1627,10 @@ export async function addAssetPurchase(
   const expenseId = newId();
   const assetId = newId();
   const cashAmount = input.godFundAmount + input.personalAmount;
-  const batch = writeBatch(db);
+
+  const appendAssetPurchase = (writer: GaneshWriter) => {
   const linkedSponsorshipId = sponsorLink
-    ? appendExpenseSponsorship(batch, db, actor, pandalId, festivalId, {
+    ? appendExpenseSponsorship(writer, db, actor, pandalId, festivalId, {
         expenseId,
         sponsorId: sponsorLink.sponsorId,
         sponsorshipId: sponsorLink.sponsorshipId,
@@ -1591,7 +1640,7 @@ export async function addAssetPurchase(
         existing: sponsorLink.existing,
       })
     : undefined;
-  batch.set(
+  writer.set(
     pathRef(db, [...festivalCol(pandalId, festivalId, "expenses"), expenseId]),
     omitUndefined({
       name,
@@ -1632,7 +1681,7 @@ export async function addAssetPurchase(
     relatedExpenseFestivalId: festivalId,
     acquisitionCost: input.totalAmount,
   });
-  bumpSummary(batch, db, pandalId, festivalId, {
+  bumpSummary(writer, db, pandalId, festivalId, {
     godFundExpenses: input.godFundAmount,
     personalMoneyUsed: input.personalAmount,
     pendingReimbursements: input.personalAmount,
@@ -1640,7 +1689,7 @@ export async function addAssetPurchase(
     assetPurchaseAmount: cashAmount,
   });
   if (input.personalAmount > 0) {
-    batch.set(
+    writer.set(
       pathRef(db, [...festivalCol(pandalId, festivalId, "members"), input.paidByMemberId]),
       {
         personalExpenses: increment(input.personalAmount),
@@ -1649,7 +1698,7 @@ export async function addAssetPurchase(
       { merge: true }
     );
   }
-  activity(batch, db, pandalId, festivalId, {
+  activity(writer, db, pandalId, festivalId, {
     title: name,
     subtitle: `Asset purchase · Added by ${actor.displayName}`,
     amount: input.totalAmount,
@@ -1657,9 +1706,25 @@ export async function addAssetPurchase(
     entityType: "expense",
     entityId: expenseId,
   });
-  audit(batch, db, pandalId, festivalId, actor.uid, "created", "expense", expenseId, {
+  audit(writer, db, pandalId, festivalId, actor.uid, "created", "expense", expenseId, {
     newValue: { ...input, expenseType: "asset_purchase", assetId },
   });
+  };
+
+  // Same reasoning as addExpense: a God Fund purchase reads the balance inside
+  // the transaction; a purchase funded personally or by a sponsor just appends.
+  if (input.godFundAmount > 0) {
+    await runTransaction(db, async (txn) => {
+      const summary = await readSummaryInTxn(txn, db, pandalId, festivalId);
+      const spendOk = validateGodFundSpend(input.godFundAmount, availableGodFund(summary));
+      if (!spendOk.ok) throw new Error(spendOk.error);
+      appendAssetPurchase(txn);
+    });
+    return { expenseId, assetId };
+  }
+
+  const batch = writeBatch(db);
+  appendAssetPurchase(batch);
   await commitWrite(() => batch.commit(), { label: "asset purchase" });
   return { expenseId, assetId };
 }
@@ -1698,20 +1763,13 @@ export async function updateExpenseAmounts(
   const oldPersonal = Number(current.personalAmount ?? 0);
   const godDelta = input.godFundAmount - oldGod;
   const personalDelta = input.personalAmount - oldPersonal;
-  if (godDelta > 0) {
-    const summarySnap = await getDoc(pathRef(db, summaryDoc(pandalId, festivalId)));
-    const summary = {
-      ...EMPTY_GANESH_SUMMARY,
-      ...(summarySnap.exists() ? summarySnap.data() : {}),
-    };
-    const spendOk = validateGodFundSpend(godDelta, availableGodFund(summary));
-    if (!spendOk.ok) throw new Error(spendOk.error);
-  }
   const wasPurchase = current.expenseType === "asset_purchase" || Boolean(current.assetId);
   const oldCash = oldGod + oldPersonal;
   const newCash = input.godFundAmount + input.personalAmount;
-  const batch = writeBatch(db);
-  batch.update(
+  const paidByMemberId = current.paidByMemberId ? String(current.paidByMemberId) : undefined;
+
+  const appendUpdate = (writer: GaneshWriter) => {
+  writer.update(
     ref,
     omitUndefined({
       totalAmount: input.totalAmount,
@@ -1722,15 +1780,15 @@ export async function updateExpenseAmounts(
       updatedAt: serverTimestamp(),
     })
   );
-  bumpSummary(batch, db, pandalId, festivalId, {
+  bumpSummary(writer, db, pandalId, festivalId, {
     godFundExpenses: godDelta,
     personalMoneyUsed: personalDelta,
     pendingReimbursements: personalDelta,
     assetPurchaseAmount: wasPurchase ? newCash - oldCash : 0,
   });
-  if (personalDelta !== 0 && current.paidByMemberId) {
-    batch.set(
-      pathRef(db, [...festivalCol(pandalId, festivalId, "members"), String(current.paidByMemberId)]),
+  if (personalDelta !== 0 && paidByMemberId) {
+    writer.set(
+      pathRef(db, [...festivalCol(pandalId, festivalId, "members"), paidByMemberId]),
       {
         personalExpenses: increment(personalDelta),
         pendingReimbursement: increment(personalDelta),
@@ -1740,7 +1798,7 @@ export async function updateExpenseAmounts(
   }
   if (wasPurchase && current.assetId) {
     appendAssetAcquisitionCost(
-      batch,
+      writer,
       db,
       actor,
       pandalId,
@@ -1748,7 +1806,7 @@ export async function updateExpenseAmounts(
       input.totalAmount
     );
   }
-  audit(batch, db, pandalId, festivalId, actor.uid, "edited", "expense", expenseId, {
+  audit(writer, db, pandalId, festivalId, actor.uid, "edited", "expense", expenseId, {
     oldValue: {
       totalAmount: current.totalAmount,
       godFundAmount: oldGod,
@@ -1757,6 +1815,35 @@ export async function updateExpenseAmounts(
     newValue: input,
     reason: "Amount corrected",
   });
+  };
+
+  // Two things here need a live read: spending more God Fund than before, and
+  // cutting the personal portion below what the member has already been
+  // reimbursed (which is what drives `pendingReimbursement` negative — GS-009).
+  const needsGodFundCheck = godDelta > 0;
+  const needsPendingCheck = personalDelta < 0 && Boolean(paidByMemberId);
+  if (needsGodFundCheck || needsPendingCheck) {
+    await runTransaction(db, async (txn) => {
+      // All reads first: a Firestore transaction refuses a read after a write.
+      const summary = needsGodFundCheck
+        ? await readSummaryInTxn(txn, db, pandalId, festivalId)
+        : null;
+      const member = needsPendingCheck
+        ? await readMemberPendingInTxn(txn, db, pandalId, festivalId, paidByMemberId!)
+        : null;
+
+      if (summary) {
+        const spendOk = validateGodFundSpend(godDelta, availableGodFund(summary));
+        if (!spendOk.ok) throw new Error(spendOk.error);
+      }
+      if (member) assertReimbursementReversible(-personalDelta, member.pending);
+      appendUpdate(txn);
+    });
+    return;
+  }
+
+  const batch = writeBatch(db);
+  appendUpdate(batch);
   await commitWrite(() => batch.commit(), { label: "expense amount" });
 }
 
@@ -1794,50 +1881,77 @@ export async function addReimbursement(
     pendingPersonalExpense: number;
   }
 ): Promise<string> {
+  // `input.pendingPersonalExpense` comes from a locally cached member document.
+  // Check it early so the user gets the friendly copy, but never let it be the
+  // thing that authorizes the payout — the ceiling is re-read below, inside the
+  // transaction, and the God Fund must also be able to cover the cash going out.
   const valid = validateReimbursement(input.amount, input.pendingPersonalExpense);
   if (!valid.ok) throw new Error(valid.error);
   const id = newId();
-  const batch = writeBatch(db);
-  batch.set(
-    pathRef(db, [...festivalCol(pandalId, festivalId, "reimbursements"), id]),
-    omitUndefined({
-      memberId: input.memberId,
+
+  await runTransaction(db, async (txn) => {
+    // All reads first: a Firestore transaction refuses a read after a write.
+    const member = await readMemberPendingInTxn(
+      txn,
+      db,
+      pandalId,
+      festivalId,
+      input.memberId
+    );
+    const summary = await readSummaryInTxn(txn, db, pandalId, festivalId);
+
+    const serverValid = validateReimbursement(input.amount, member.pending);
+    if (!serverValid.ok) throw new Error(serverValid.error);
+
+    // A reimbursement is cash leaving the God Fund, so it has to clear the same
+    // solvency check an expense does. Without this the fund goes negative with
+    // no warning anywhere (GS-008). Routed through validateGodFundSpend so the
+    // rounding stays the one central formula — see GS-080 on local money() copies.
+    const available = availableGodFund(summary);
+    if (!validateGodFundSpend(input.amount, available).ok) {
+      throw new InsufficientFundError("festival", available, input.amount);
+    }
+
+    txn.set(
+      pathRef(db, [...festivalCol(pandalId, festivalId, "reimbursements"), id]),
+      omitUndefined({
+        memberId: input.memberId,
+        amount: input.amount,
+        paymentMethod: input.paymentMethod,
+        date: input.date,
+        notes: input.notes?.trim() || undefined,
+        ledgerType: "REIMBURSEMENT",
+        voided: false,
+        createdBy: actor.uid,
+        createdAt: serverTimestamp(),
+        updatedBy: actor.uid,
+        updatedAt: serverTimestamp(),
+      })
+    );
+    bumpSummary(txn, db, pandalId, festivalId, {
+      reimbursements: input.amount,
+      pendingReimbursements: -input.amount,
+    });
+    txn.set(
+      pathRef(db, [...festivalCol(pandalId, festivalId, "members"), input.memberId]),
+      {
+        reimbursed: increment(input.amount),
+        pendingReimbursement: increment(-input.amount),
+      },
+      { merge: true }
+    );
+    activity(txn, db, pandalId, festivalId, {
+      title: "Reimbursement",
+      subtitle: `Recorded by ${actor.displayName}`,
       amount: input.amount,
-      paymentMethod: input.paymentMethod,
-      date: input.date,
-      notes: input.notes?.trim() || undefined,
-      ledgerType: "REIMBURSEMENT",
-      voided: false,
-      createdBy: actor.uid,
-      createdAt: serverTimestamp(),
-      updatedBy: actor.uid,
-      updatedAt: serverTimestamp(),
-    })
-  );
-  bumpSummary(batch, db, pandalId, festivalId, {
-    reimbursements: input.amount,
-    pendingReimbursements: -input.amount,
+      actorId: actor.uid,
+      entityType: "reimbursement",
+      entityId: id,
+    });
+    audit(txn, db, pandalId, festivalId, actor.uid, "reimbursed", "reimbursement", id, {
+      newValue: input,
+    });
   });
-  batch.set(
-    pathRef(db, [...festivalCol(pandalId, festivalId, "members"), input.memberId]),
-    {
-      reimbursed: increment(input.amount),
-      pendingReimbursement: increment(-input.amount),
-    },
-    { merge: true }
-  );
-  activity(batch, db, pandalId, festivalId, {
-    title: "Reimbursement",
-    subtitle: `Recorded by ${actor.displayName}`,
-    amount: input.amount,
-    actorId: actor.uid,
-    entityType: "reimbursement",
-    entityId: id,
-  });
-  audit(batch, db, pandalId, festivalId, actor.uid, "reimbursed", "reimbursement", id, {
-    newValue: input,
-  });
-  await commitWrite(() => batch.commit(), { label: "reimbursement" });
   return id;
 }
 
@@ -1862,6 +1976,12 @@ export async function voidFinancialRecord(
           : input.entityType === "expense"
             ? "expenses"
             : "reimbursements";
+  // Voiding rewrites balances, so it is a mutation like any other and must not
+  // land on a settled year (GS-019). Every other mutation path already guards
+  // this; the rules do not backstop it, because a void is an `update` and the
+  // wildcard permits updates on a closed festival for anyone who may close it.
+  await requireOpenFestival(db, pandalId, festivalId);
+
   const ref = pathRef(db, [...festivalCol(pandalId, festivalId, colName), input.entityId]);
   const snap = await getDoc(ref);
   if (!snap.exists()) throw new Error("Record not found.");
@@ -1872,6 +1992,28 @@ export async function voidFinancialRecord(
       "Return Permanent Fund money from the Permanent Fund screen. Do not void this opening fund."
     );
   }
+
+  // Voiding an expense hands the member's personal money back, which subtracts
+  // from what they are owed. If they have already been paid, that subtraction is
+  // what drives the counter negative (GS-009), so re-read the live figure and
+  // refuse rather than corrupt it.
+  const voidsPersonalMoney =
+    input.entityType === "expense"
+    && Number(data.personalAmount ?? 0) > 0
+    && Boolean(data.paidByMemberId);
+  if (voidsPersonalMoney) {
+    const memberSnap = await getDoc(
+      pathRef(db, [
+        ...festivalCol(pandalId, festivalId, "members"),
+        String(data.paidByMemberId),
+      ])
+    );
+    assertReimbursementReversible(
+      Number(data.personalAmount ?? 0),
+      memberSnap.exists() ? Number(memberSnap.data().pendingReimbursement ?? 0) : 0
+    );
+  }
+
   const batch = writeBatch(db);
   batch.update(ref, {
     voided: true,

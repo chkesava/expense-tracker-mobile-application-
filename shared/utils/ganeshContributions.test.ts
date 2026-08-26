@@ -4,7 +4,10 @@ import { can } from "./ganeshPermissions";
 import {
   assertCanCancelContribution,
   assertCanReceiveContribution,
+  assertGodFundSpendOnline,
   assertMoneyReceiveOnline,
+  assertReimbursementOnline,
+  assertVoidOnline,
   contributionStatusLabel,
   isCancelled,
   isOverdue,
@@ -123,5 +126,26 @@ describe("contribution permissions", () => {
     expect(can("treasurer", "contributions.receive")).toBe(true);
     expect(can("treasurer", "contributions.cancel")).toBe(true);
     expect(can("viewer", "contributions.receive")).toBe(false);
+  });
+});
+
+// GS-008 / GS-010 / GS-019 — these paths run inside a Firestore transaction so a
+// balance is read and enforced atomically. Transactions need a server, so the
+// gate refuses offline with a reason instead of hanging the save button.
+describe("offline gates for transactional money paths", () => {
+  it("blocks a God Fund spend offline but lets it through online", () => {
+    expect(() => assertGodFundSpendOnline(false, 500)).toThrow(/online/i);
+    expect(() => assertGodFundSpendOnline(true, 500)).not.toThrow();
+  });
+
+  it("leaves personal-money and sponsored expenses offline-capable", () => {
+    expect(() => assertGodFundSpendOnline(false, 0)).not.toThrow();
+  });
+
+  it("blocks reimbursements and voids offline", () => {
+    expect(() => assertReimbursementOnline(false)).toThrow(/online/i);
+    expect(() => assertVoidOnline(false)).toThrow(/online/i);
+    expect(() => assertReimbursementOnline(true)).not.toThrow();
+    expect(() => assertVoidOnline(true)).not.toThrow();
   });
 });

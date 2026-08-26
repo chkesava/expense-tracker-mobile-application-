@@ -16,6 +16,11 @@ import {
 import * as assetWrites from "@/services/ganesh/ganeshAssets";
 import * as sponsorWrites from "@/services/ganesh/ganeshSponsors";
 import * as writes from "@/services/ganesh/ganeshWrites";
+import {
+  assertGodFundSpendOnline,
+  assertReimbursementOnline,
+  assertVoidOnline,
+} from "@/services/ganesh/ganeshWrites";
 import { assertMoneyReceiveOnline } from "@/shared/utils/ganeshContributions";
 import type {
   GaneshFileMeta,
@@ -261,6 +266,7 @@ export function useGaneshWrites() {
     addExpense: (input: Parameters<typeof writes.addExpense>[4]) => {
       requirePerm("expenses.create");
       if ((input.sponsoredAmount ?? 0) > 0) requirePerm("sponsors.receive");
+      assertGodFundSpendOnline(isOnline, input.godFundAmount);
       const ctx = requireFestival();
       return run("Expense saved", () =>
         writes.addExpense(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, input)
@@ -270,6 +276,7 @@ export function useGaneshWrites() {
       requirePerm("expenses.create");
       requirePerm("assets.create");
       if ((input.sponsoredAmount ?? 0) > 0) requirePerm("sponsors.receive");
+      assertGodFundSpendOnline(isOnline, input.godFundAmount);
       const ctx = requireFestival();
       return run("Asset purchase saved", () =>
         writes.addAssetPurchase(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, input)
@@ -281,6 +288,9 @@ export function useGaneshWrites() {
       options?: { festivalId?: string }
     ) => {
       requirePerm("expenses.update");
+      // The service only opens a transaction when the God Fund share grows, but
+      // it cannot see the old amount from here, so gate on any God Fund share.
+      assertGodFundSpendOnline(isOnline, input.godFundAmount);
       const ctx = requireFestival(options?.festivalId);
       return run("Expense updated", () =>
         writes.updateExpenseAmounts(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, expenseId, input)
@@ -300,6 +310,7 @@ export function useGaneshWrites() {
     },
     addReimbursement: (input: Parameters<typeof writes.addReimbursement>[4]) => {
       requirePerm("reimbursements.create");
+      assertReimbursementOnline(isOnline);
       const ctx = requireFestival();
       return run("Reimbursement saved", () =>
         writes.addReimbursement(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, input)
@@ -310,6 +321,7 @@ export function useGaneshWrites() {
       options?: { festivalId?: string }
     ) => {
       requirePerm("expenses.void");
+      assertVoidOnline(isOnline);
       const ctx = requireFestival(options?.festivalId);
       return run("Record voided", () =>
         writes.voidFinancialRecord(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, input)

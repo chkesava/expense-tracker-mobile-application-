@@ -7,6 +7,7 @@ import type {
   PermanentFundSummary,
 } from "@/shared/types/ganesh";
 import { EMPTY_GANESH_SUMMARY, EMPTY_PERMANENT_FUND } from "@/shared/types/ganesh";
+import { formatInr } from "@/shared/utils/ganeshMoney";
 
 function money(value: number): number {
   return Math.round(value * 100) / 100;
@@ -148,6 +149,35 @@ export function validateReimbursement(
     };
   }
   return { ok: true };
+}
+
+/**
+ * Guards the reversal half of the reimbursement counter.
+ *
+ * Reimbursements are not linked to a specific expense — a festival member
+ * document carries only `personalExpenses` and `reimbursed` — so "has this
+ * expense's personal portion been reimbursed?" is not directly answerable. What
+ * is answerable, and equivalent, is whether the reversal exceeds what is still
+ * outstanding: `pendingReimbursement` is exactly `personalExpenses - reimbursed`
+ * for that member, so a reversal larger than it can only mean the money has
+ * already been paid back.
+ *
+ * Left unguarded this is GS-009: voiding a reimbursed expense drives the counter
+ * negative, `validateReimbursement` then rejects every future reimbursement to
+ * that member, and the incremental counter permanently disagrees with
+ * `summarizeLedger`, which clamps the same figure at zero.
+ */
+export function validateReimbursementReversal(
+  reversal: number,
+  pending: number
+): ValidationResult {
+  if (money(reversal) <= money(pending)) return { ok: true };
+  return {
+    ok: false,
+    error:
+      `${formatInr(money(reversal) - money(pending))} of this personal amount has already been reimbursed. ` +
+      "Void that reimbursement first, then change this expense.",
+  };
 }
 
 export function validateCollection(amount: number): ValidationResult {

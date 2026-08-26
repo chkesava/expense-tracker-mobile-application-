@@ -148,3 +148,35 @@ export const MONEY_RECEIVE_OFFLINE_ERROR =
 export function assertMoneyReceiveOnline(isOnline: boolean, kind: string): void {
   if (kind === "money" && !isOnline) throw new Error(MONEY_RECEIVE_OFFLINE_ERROR);
 }
+
+export const GOD_FUND_SPEND_OFFLINE_ERROR =
+  "Spend God Fund money when you are online, so the balance is checked against the live ledger.";
+
+export const LEDGER_VOID_OFFLINE_ERROR =
+  "Void a record when you are online, so the balances it reverses are corrected against the live ledger.";
+
+export const REIMBURSEMENT_OFFLINE_ERROR =
+  "Record a reimbursement when you are online, so the amount owed is checked against the live ledger.";
+
+/**
+ * The three gates below front write paths that run inside a Firestore
+ * transaction, because a balance has to be read and enforced with nothing
+ * committing in between. Transactions need a server, so refuse offline with a
+ * reason rather than letting the save hang or queueing a write that can never
+ * commit.
+ *
+ * God Fund spending is gated only when it actually spends: an expense paid
+ * entirely from personal money or by a sponsor touches no balance, stays a
+ * plain batch, and keeps working offline.
+ */
+export function assertGodFundSpendOnline(isOnline: boolean, godFundAmount: number): void {
+  if (godFundAmount > 0 && !isOnline) throw new Error(GOD_FUND_SPEND_OFFLINE_ERROR);
+}
+
+export function assertVoidOnline(isOnline: boolean): void {
+  if (!isOnline) throw new Error(LEDGER_VOID_OFFLINE_ERROR);
+}
+
+export function assertReimbursementOnline(isOnline: boolean): void {
+  if (!isOnline) throw new Error(REIMBURSEMENT_OFFLINE_ERROR);
+}

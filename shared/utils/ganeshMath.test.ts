@@ -18,6 +18,7 @@ import {
   validateGodFundSpend,
   validateInKindValue,
   validateReimbursement,
+  validateReimbursementReversal,
   validateSettlement,
   canManagePandal,
   committeePayStatus,
@@ -311,5 +312,50 @@ describe("effectiveCommitteeTarget", () => {
     expect(
       effectiveCommitteeTarget({ contributionTarget: 0, contributionTargetOverridden: true }, 500)
     ).toBe(0);
+  });
+});
+
+// GS-009 — voiding or shrinking an expense whose personal portion was already
+// reimbursed used to drive the counter negative, which then blocked the member
+// from every future reimbursement.
+describe("validateReimbursementReversal", () => {
+  it("allows reversing personal money that is still outstanding", () => {
+    expect(validateReimbursementReversal(1000, 1000).ok).toBe(true);
+    expect(validateReimbursementReversal(400, 1000).ok).toBe(true);
+    expect(validateReimbursementReversal(0, 0).ok).toBe(true);
+  });
+
+  it("refuses a reversal larger than what the member is still owed", () => {
+    const result = validateReimbursementReversal(1000, 0);
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.error).toContain("already been reimbursed");
+  });
+
+  it("names the amount that has to be un-reimbursed first", () => {
+    const result = validateReimbursementReversal(1000, 400);
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.error).toContain("600");
+  });
+
+  it("agrees with summarizeLedger, which clamps the same figure at zero", () => {
+    // Expense of 1000 personal, fully reimbursed: ledger says pending 0, so a
+    // 1000 reversal must be refused rather than producing -1000.
+    const rebuilt = summarizeLedger({
+      openingFunds: [],
+      collections: [],
+      committeeContributions: [],
+      otherCashContributions: [],
+      godFundExpenses: [],
+      personalAmounts: [1000],
+      reimbursements: [1000],
+      inKindValues: [],
+      sponsoredValues: [],
+    });
+    expect(rebuilt.pendingReimbursements).toBe(0);
+    expect(validateReimbursementReversal(1000, rebuilt.pendingReimbursements).ok).toBe(false);
+  });
+
+  it("tolerates float dust rather than rejecting an exact reversal", () => {
+    expect(validateReimbursementReversal(0.1 + 0.2, 0.3).ok).toBe(true);
   });
 });

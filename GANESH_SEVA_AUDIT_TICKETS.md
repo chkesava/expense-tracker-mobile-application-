@@ -15,12 +15,23 @@
 | 2026-08-26 | GS-005 | `fundTransfers` and `auditLogs` excluded from the wildcard's `update` / `delete` | Fixed, **not deployed** |
 | 2026-08-26 | GS-002 | Open-join self-create pins `permissions` and `roleIds` to the built-in member set | Fixed, **not deployed** |
 | 2026-08-26 | GS-004 | Amount / status / flag / summary-key validation added to the festival wildcard | **Partial** (unknown-field `hasOnly` deferred to GS-074), not deployed |
+| 2026-08-27 | GS-019 | `voidFinancialRecord` guards on an open festival | Fixed client-side; rules gap is GS-018 |
+| 2026-08-27 | GS-009 | Reversing a personal amount past what is still owed is refused | Fixed |
+| 2026-08-27 | GS-010 | God Fund spend checks the balance inside `runTransaction` | Fixed |
+| 2026-08-27 | GS-008 | Reimbursement re-reads its ceiling server-side and checks God Fund solvency | Fixed |
 
 All four are `firestore.rules` changes only; no application code was touched. They compile
 (`firebase deploy --only firestore:rules --dry-run`) but **take effect only after the manual
 deploy** described in `docs/FIREBASE_RULES_DEPLOY.md` — CI does not deploy `firestore.rules`.
 Coverage is mirrored in `shared/utils/ganeshPermissions.rules.contract.test.ts`, which is a
 hand-written mirror, not an emulator run (GS-074 remains open).
+
+The 2026-08-27 rows are application code (`services/ganesh/**`, `hooks/useGaneshWrites.ts`,
+`shared/utils/ganesh*`) and ship with the app - no deploy step. They introduce one
+deliberate behaviour change: **God Fund spending, reimbursements and voids now require a
+connection**, because each runs inside a Firestore transaction so a balance can be read and
+enforced atomically. Expenses paid entirely from personal money or by a sponsor touch no
+balance and stay offline-capable.
 
 ---
 
@@ -145,9 +156,9 @@ Recording these explicitly so the fix cycle does not undo working design:
 | GS-005 | CRITICAL | SECURITY | Audit Trail | `fundTransfers` and `auditLogs` are mutable via the wildcard match | FIXED — AWAITING RULES DEPLOY |
 | GS-006 | CRITICAL | COLLECTIONS | Households | Every collection creates a new household; the merge path is unreachable | OPEN |
 | GS-007 | CRITICAL | FESTIVAL | Festival Settlement | A festival can be closed on an unloaded ₹0 summary | OPEN |
-| GS-008 | CRITICAL | FINANCE | Reimbursements | Reimbursement cap is client-supplied and there is no solvency check | OPEN |
-| GS-009 | CRITICAL | FINANCE | Reimbursements | `pendingReimbursements` goes negative when a reimbursed expense is voided | OPEN |
-| GS-010 | HIGH | FINANCE | Expenses | God Fund overspend: balance checked by a non-transactional cached read | OPEN |
+| GS-008 | CRITICAL | FINANCE | Reimbursements | Reimbursement cap is client-supplied and there is no solvency check | FIXED |
+| GS-009 | CRITICAL | FINANCE | Reimbursements | `pendingReimbursements` goes negative when a reimbursed expense is voided | FIXED |
+| GS-010 | HIGH | FINANCE | Expenses | God Fund overspend: balance checked by a non-transactional cached read | FIXED |
 | GS-011 | HIGH | FINANCE | Cash / UPI / Bank | Payment method is not tracked end to end; cash cannot be reconciled | OPEN |
 | GS-012 | HIGH | FIRESTORE | Reports | `recomputeFestivalSummary` truncates at 2000 docs and clobbers concurrent writes | OPEN |
 | GS-013 | HIGH | REPORTING | Reports | Report totals are computed from 400-doc truncated lists | OPEN |
@@ -156,7 +167,7 @@ Recording these explicitly so the fix cycle does not undo working design:
 | GS-016 | HIGH | RBAC | Roles & Permissions | `members.*` / `roles.*` permissions are honoured by the UI and ignored by the rules | OPEN |
 | GS-017 | HIGH | SECURITY | Pandal creation | A removed founder keeps permanent delete rights; no ownership transfer exists | OPEN |
 | GS-018 | HIGH | FIRESTORE | Festival Settlement | Closed festivals remain mutable and hard-deletable | OPEN |
-| GS-019 | HIGH | FINANCE | Expenses | `voidFinancialRecord` has no open-festival guard | OPEN |
+| GS-019 | HIGH | FINANCE | Expenses | `voidFinancialRecord` has no open-festival guard | FIXED (client); rules gap remains — GS-018 |
 | GS-020 | HIGH | ASSETS | Asset vs Expense | Voiding an asset purchase orphans the asset in inventory | OPEN |
 | GS-021 | HIGH | REPORTING | Audit Trail | Fund transfers and settlement closes write no audit entry | OPEN |
 | GS-022 | HIGH | FINANCE | Festival Settlement | Money left in a closed festival disappears from every total | OPEN |
@@ -741,7 +752,7 @@ Related to GS-032 (the same missing-loading-state class), GS-022, GS-021.
 **Severity:** CRITICAL
 **Category:** FINANCE
 **Feature:** Reimbursements
-**Status:** OPEN
+**Status:** FIXED (2026-08-27)
 
 ### Problem
 `addReimbursement` validates the amount only against a ceiling passed in by the caller, re-reads nothing, runs no transaction, and — unlike `addExpense` — never checks that the God Fund can actually cover the payout. The rules validate nothing.
@@ -778,6 +789,40 @@ Wrap the reimbursement in `runTransaction`: read the festival member document an
 - [ ] `pendingReimbursement` never goes below zero.
 - [ ] Partial and full reimbursements still work.
 
+### Resolution - 2026-08-27
+`addReimbursement` now runs entirely inside `runTransaction`, mirroring
+`transferFestivalToPermanent`. Inside the transaction it reads the festival member
+document and the summary document (all reads first - a Firestore transaction refuses a
+read after a write), then applies two checks the old path did not have:
+
+1. **Server-read ceiling.** `validateReimbursement` is re-run against
+   `pendingReimbursement` as read in the transaction. `input.pendingPersonalExpense` is
+   still checked up front so the user gets the friendly copy immediately, but it no longer
+   authorizes anything - two treasurers reimbursing the same member concurrently now force
+   a transaction retry, and the second is rejected against the updated figure.
+2. **God Fund solvency.** A reimbursement is cash leaving the fund, so it clears the same
+   check an expense does. Routed through `validateGodFundSpend` rather than a local
+   comparison, so the rounding stays the one central formula (see GS-080), and raised as
+   `InsufficientFundError("festival", ...)` for the clearer message.
+
+`pendingReimbursement` cannot go below zero on this path because the ceiling is the pending
+amount itself; the reversal direction is GS-009, fixed alongside.
+
+Transactions need a server, so `useGaneshWrites.addReimbursement` gates on connectivity
+first via `assertReimbursementOnline` and says why, instead of hanging the save button or
+queueing a write that can never commit. Same shape as the existing
+`assertPermanentFundOnline` and `assertMoneyReceiveOnline` gates.
+
+**Trade-off:** reimbursement is no longer an offline action, and the save now waits for a
+real commit rather than `commitWrite`'s 1500 ms "durably queued" window, so it can feel
+slower on a poor connection. That is the cost of the balance check being real.
+
+**Verified:** typecheck and typecheck:shared clean; 125 files / 1244 tests pass. New
+coverage in `shared/utils/ganeshContributions.test.ts` for the offline gate.
+
+**Not verified:** the concurrency behaviour itself is a property of `runTransaction` and is
+not exercised by a test - there is no emulator (GS-074).
+
 ### Dependencies
 Shares a root cause pattern with GS-010. Related to GS-009 and GS-024.
 
@@ -788,7 +833,7 @@ Shares a root cause pattern with GS-010. Related to GS-009 and GS-024.
 **Severity:** CRITICAL
 **Category:** FINANCE
 **Feature:** Reimbursements
-**Status:** OPEN
+**Status:** FIXED (2026-08-27)
 
 ### Problem
 `pendingReimbursements` is maintained as an unclamped running counter by the incremental write path, while the rebuild path defines it as `max(0, personalMoneyUsed - reimbursements)`. Voiding an expense whose personal portion was already reimbursed drives the counter negative and permanently blocks the member from any future reimbursement.
@@ -837,6 +882,46 @@ In `voidFinancialRecord`, detect that the expense's personal portion has been re
 - [ ] After the scenario above, "Recalculate from ledger" produces the same figures as the incremental path.
 - [ ] The affected member can still be reimbursed for genuine outstanding amounts.
 
+### Resolution - 2026-08-27
+Reimbursements are not linked to a specific expense - a festival member document carries
+only `personalExpenses` and `reimbursed` - so "has this expense's personal portion been
+reimbursed?" is not directly answerable. What is answerable, and equivalent, is whether the
+reversal exceeds what is still outstanding: `pendingReimbursement` **is**
+`personalExpenses - reimbursed` for that member, so a reversal larger than it can only mean
+the money has already been paid back.
+
+New `validateReimbursementReversal(reversal, pending)` in `shared/utils/ganeshMath.ts`
+encodes that, next to the validators it has to agree with, and is applied at both places
+that shrink a personal portion:
+
+- **`voidFinancialRecord`** re-reads the member document and refuses the void, naming the
+  amount that has to be un-reimbursed first.
+- **`updateExpenseAmounts`** does the same inside its transaction whenever `personalDelta`
+  is negative.
+
+This takes the ticket's first option ("refused with a clear message") rather than the
+atomic-reversal option, because reversing a reimbursement the user did not ask to reverse
+would silently move money in the ledger; naming the blocking record keeps the correction
+explicit.
+
+Because every path that decrements the counter is now guarded, the incremental figure and
+`summarizeLedger`'s `max(0, personalMoneyUsed - reimbursed)` no longer disagree - a test
+asserts exactly that against a rebuilt summary, so "Recalculate from ledger" is a no-op on
+this figure instead of silently changing it.
+
+**Residual gap:** the void path's check is a plain read, not a transaction, so a void racing
+a reimbursement for the same member could still interleave. `addReimbursement` and
+`updateExpenseAmounts` are transactional; making the whole void transactional is a larger
+change and is not done here. The deterministic bug - the one reproducible in the ticket's
+own three steps - is closed.
+
+Separately, the Firestore rules deliberately do **not** floor these counters at zero (see
+the GS-004 resolution): a member document already drifted negative by this bug in
+production must stay editable so it can be repaired.
+
+**Verified:** 5 new cases in `shared/utils/ganeshMath.test.ts`, including agreement with
+`summarizeLedger` and float-dust tolerance. Full suite green (125 files / 1244 tests).
+
 ### Dependencies
 Related to GS-008, GS-019, GS-024, GS-012.
 
@@ -847,7 +932,7 @@ Related to GS-008, GS-019, GS-024, GS-012.
 **Severity:** HIGH
 **Category:** FINANCE
 **Feature:** Expenses
-**Status:** OPEN
+**Status:** FIXED (2026-08-27)
 
 ### Problem
 Before spending from the God Fund, the service reads the summary document with a plain `getDoc`, validates in JavaScript, then commits an unconditional `increment()` in a separate batch. There is no transaction, no write precondition, and no rules-level balance check.
@@ -891,6 +976,45 @@ Move the God Fund check into a `runTransaction` that reads the summary document,
 - [ ] `summary.godFundExpenses` cannot drive `availableGodFund` below zero.
 - [ ] Personal-money and sponsored expenses (which use no God Fund) are unaffected.
 - [ ] Normal online expense creation still works.
+
+### Resolution - 2026-08-27
+All three spend sites - `addExpense`, `addAssetPurchase` and `updateExpenseAmounts` - now
+read the summary **inside** a `runTransaction` and validate there, so two treasurers
+spending against the same balance force a retry instead of both passing the same stale
+check.
+
+The split is deliberate and matches the ticket's fourth acceptance criterion:
+
+- **Spends God Fund** (`godFundAmount > 0`, or `godDelta > 0` on an edit) -> transaction.
+- **Personal money or sponsor only** -> unchanged `writeBatch` + `commitWrite`, so it still
+  works offline and still reports "offline, will sync".
+
+To make that possible without duplicating the write bodies, each function now builds its
+appends once as a closure over a `GaneshWriter` - a new type in
+`services/ganesh/ganeshWriter.ts` covering the `set` / `update` shape that `WriteBatch` and
+`Transaction` share. `audit`, `activity`, `bumpSummary` and the sponsor/asset `append*`
+helpers were retyped to it; both Firestore classes are structurally assignable, so no call
+site changed. The type's doc comment records *why* a path picks one or the other, so the
+next reader does not "simplify" a transaction back into a batch.
+
+Offline is gated at the hook via `assertGodFundSpendOnline(isOnline, godFundAmount)`, which
+is a no-op when the God Fund share is zero. On `updateExpenseAmounts` the hook cannot see
+the old amount, so it gates on any God Fund share - slightly stricter than the service,
+which only opens a transaction when the share actually grows.
+
+**Trade-off:** a God Fund expense now waits for a real commit rather than `commitWrite`'s
+1500 ms grace window, so it can feel slower on a poor connection, and it cannot be recorded
+offline at all. Both are the cost of the balance check being real.
+
+**Still missing:** there is no rules-level balance check, so this is a client guarantee
+only - a crafted client can still write the increment directly. That is GS-004's residual
+summary gap and needs server-side summary maintenance.
+
+**Verified:** typecheck and typecheck:shared clean; 125 files / 1244 tests pass;
+offline-gate cases added to `shared/utils/ganeshContributions.test.ts`.
+
+**Not verified:** the concurrency behaviour is a property of `runTransaction` and is not
+exercised by a test - there is no emulator (GS-074).
 
 ### Dependencies
 Shares the root pattern with GS-008. Related to GS-004 (no rules-level check).
@@ -1315,7 +1439,7 @@ Related to GS-019, GS-005, GS-022.
 **Severity:** HIGH
 **Category:** FINANCE
 **Feature:** Expenses
-**Status:** OPEN
+**Status:** FIXED (client) — RULES GAP REMAINS (2026-08-27)
 
 ### Problem
 Every other mutation path checks that the festival is open. The void path does not, and the rules do not backstop it (GS-018).
@@ -1343,6 +1467,20 @@ Add `await requireOpenFestival(db, pandalId, festivalId)` to `voidFinancialRecor
 - [ ] Voiding any record in a closed festival is refused with a clear message.
 - [ ] Voiding in an open festival still works and remains audited.
 - [ ] The rules refuse the same write independently of the client.
+
+### Resolution - 2026-08-27
+`voidFinancialRecord` now calls `await requireOpenFestival(db, pandalId, festivalId)` before
+anything else, matching `receiveContribution`, `cancelContribution`,
+`updatePromisedContribution` and `updateExpenseAmounts`.
+
+**The rules gap is unchanged.** A void is an `update`, and the festival wildcard still
+permits updates on a closed festival for anyone who may close it (the
+`canCloseOrUpdateFestival()` branch of `allow update` in `firestore.rules`). So this is a
+client-side guarantee only, and the ticket's third acceptance criterion - "the rules refuse
+the same write independently of the client" - is **not** met. That is GS-018, still open,
+and this ticket stays flagged as partial until it lands.
+
+**Verified:** typecheck clean, full suite green.
 
 ### Dependencies
 Should land with GS-018. Related to GS-009.
