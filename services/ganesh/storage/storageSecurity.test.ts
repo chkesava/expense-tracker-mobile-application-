@@ -28,8 +28,14 @@ describe("ganesh storage security", () => {
   });
 
   it("uses signed URLs instead of public URLs", () => {
+    // Since GS-001, the client asks the ganesh-files Edge Function for a signed
+    // URL rather than calling Storage directly — the function is what calls
+    // createSignedUrl / createSignedUploadUrl, gated on a re-verified Firebase
+    // session (see supabase/functions/ganesh-files/index.ts). What must remain
+    // true here is that the client only ever receives a signed grant, never an
+    // unsigned public one.
     const source = read("services/ganesh/storage/supabaseStorage.ts");
-    expect(source).toContain("createSignedUrl");
+    expect(source).toContain("signedUrl");
     expect(source).not.toContain("getPublicUrl");
   });
 });

@@ -115,6 +115,11 @@ export async function uploadFestivalFile(input: UploadFestivalFileInput): Promis
   };
 }
 
+// Must stay at or below the Edge Function's DOWNLOAD_URL_TTL_SECONDS
+// (supabase/functions/ganesh-files/index.ts) — a cache TTL longer than the URL's
+// real lifetime hands out a link that looks valid but has already expired
+// server-side. Kept a minute short of the 5-minute grant as a safety margin.
+const SIGNED_URL_CACHE_MS = 4 * 60 * 1000;
 const signedUrlCache = new Map<string, { url: string; expiresAt: number }>();
 
 export async function getSignedUrl(
@@ -132,7 +137,7 @@ export async function getSignedUrl(
   const cached = signedUrlCache.get(path);
   if (cached && cached.expiresAt > Date.now() + 5_000) return cached.url;
   const url = await createObjectSignedUrl(path);
-  signedUrlCache.set(path, { url, expiresAt: Date.now() + 25 * 60 * 1000 });
+  signedUrlCache.set(path, { url, expiresAt: Date.now() + SIGNED_URL_CACHE_MS });
   return url;
 }
 
