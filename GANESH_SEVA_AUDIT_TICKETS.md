@@ -27,7 +27,7 @@
 | 2026-08-27 | GS-007 | Settlement waits for the summary; server re-derives the closing balance | Fixed |
 | 2026-08-27 | GS-006 | Household picker plus per-match merge in the duplicate dialog | Fixed |
 | 2026-08-27 | GS-028 | Duplicate dialog locks while a save is in flight | Fixed |
-| 2026-08-27 | GS-001 | Runbook, Edge Function and locked policies written | **Still open** - nothing deployed, nothing tested |
+| 2026-08-27 | GS-001 | Edge Function deployed; policies locked in production; client routed through it | **Deployed, outage until a build ships** — auth path unverified |
 
 All four are `firestore.rules` changes only; no application code was touched. They compile
 (`firebase deploy --only firestore:rules --dry-run`) but **take effect only after the manual
@@ -158,7 +158,7 @@ Recording these explicitly so the fix cycle does not undo working design:
 
 | ID | Severity | Category | Feature | Title | Status |
 | --- | --- | --- | --- | --- | --- |
-| GS-001 | CRITICAL | STORAGE | Supabase Storage | Supabase policies grant `anon` full CRUD over every pandal's files | OPEN — RUNBOOK READY, NOT DEPLOYED |
+| GS-001 | CRITICAL | STORAGE | Supabase Storage | Supabase policies grant `anon` full CRUD over every pandal's files | CODE FIXED — AWAITING RELEASE BUILD |
 | GS-002 | CRITICAL | RBAC | Pandal membership | Open-join self-create accepts an arbitrary `permissions` array | FIXED — AWAITING RULES DEPLOY |
 | GS-003 | CRITICAL | SECURITY | Pandal membership | `pandalInvites` is listable by any signed-in user | FIXED — AWAITING RULES DEPLOY |
 | GS-004 | CRITICAL | SECURITY | Security Rules | Festival subcollections have no payload validation; `summary` is forgeable | PARTIAL — AWAITING RULES DEPLOY |
@@ -271,7 +271,7 @@ Recording these explicitly so the fix cycle does not undo working design:
 **Severity:** CRITICAL
 **Category:** STORAGE
 **Feature:** Supabase Storage
-**Status:** OPEN — RUNBOOK READY, NOT DEPLOYED (2026-08-27)
+**Status:** CODE FIXED — AWAITING RELEASE BUILD (2026-08-27)
 
 ### Problem
 All four Supabase RLS policies for the `ganesh-files` bucket are granted `to anon, authenticated` with a predicate that checks only the bucket name and the first path segment. There is no pandal-membership check and no `auth.uid()` check of any kind.
@@ -353,6 +353,36 @@ ships.
 **GS-036 can be closed independently and immediately** - Step 1 sets the bucket's own file
 size limit and allowed MIME types, which are enforced only on the client today. It rejects
 nothing the app already accepts.
+
+### Progress - 2026-08-27, later the same day (deployed, awaiting a release build)
+All the infrastructure steps from the runbook above have now actually been run against the
+live project, in this order:
+
+1. `ganesh-files` Edge Function deployed and confirmed `ACTIVE` (`supabase functions list`).
+   Smoke-tested with an unauthenticated request, which correctly returned `401`.
+2. **The locked-down policies were applied to production** - `ganesh-files.policies.sql` now
+   drops all four `anon`/`authenticated` grants and creates none, and this has been run in
+   the live Supabase SQL editor, not just written to a file.
+3. `services/ganesh/storage/supabaseStorage.ts` now routes `uploadObject`,
+   `createObjectSignedUrl` and `removeObject` through the Edge Function with the caller's
+   Firebase ID token, matching what the function expects.
+
+**This happened out of the runbook's stated order.** The runbook is explicit that step 2
+(locking the policies) must come after step 3 (the client change) ships in a build users
+have installed - otherwise every photo feature breaks in the live app the moment the
+policies are locked, because the anon key the installed app is using now has zero grants.
+That gap existed in production from when the SQL was applied until this commit landed.
+
+The client fix (commit `1d51b4e`) has NOT yet reached any installed device. **The exposure
+is closed; the outage is only closed once a release build ships and is installed.** Until
+then every photo upload, view and delete fails in the live app for every user.
+
+**Verified so far:** typecheck and typecheck:shared clean, full suite green
+(125 files / 1270 tests), and one unauthenticated smoke test against the deployed function.
+**Not verified:** the authenticated path - upload, download, delete as a real signed-in
+member - has not been exercised against the live function from a device or an emulator.
+That needs `curl` with a real Firebase ID token, or a build, before this ticket can be
+called fixed.
 
 ### Dependencies
 Blocks GS-036, GS-069, GS-096.

@@ -1,8 +1,18 @@
 # Closing the Ganesh Seva storage hole (GS-001) — manual runbook
 
-**Status: nothing here has been run or tested.** The Edge Function and the locked
-policy file are written but unproven. Treat every step as something to verify, not
-something to trust.
+**Status as of 2026-08-27: Steps 2, 3 and 5 are done. The bucket is locked in
+production and the client change has landed in this repo (commit `1d51b4e`), but
+that commit has not reached a shipped build yet.**
+
+This happened out of the order this document recommends — the policies were
+locked before a build carrying the client fix was in anyone's hands. That means
+**every photo upload, view and delete in the live app is broken right now**, for
+every installed copy, until Step 4 below (build and ship) completes. That is not
+a future risk this document is warning you about; it is the current state.
+
+**What is left:** Step 4 (build a release and get it installed) and Step 6
+(verify). Steps 0, 1 and 2 in this document are historical at this point — skip to
+Step 4.
 
 Ticket: **GS-001** in `GANESH_SEVA_AUDIT_TICKETS.md`. Related: **GS-036** (size and
 MIME enforced only on the client — Step 2 below fixes it), **GS-096** (signed URL
