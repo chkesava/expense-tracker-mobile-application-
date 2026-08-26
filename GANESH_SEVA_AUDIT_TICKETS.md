@@ -28,6 +28,7 @@
 | 2026-08-27 | GS-006 | Household picker plus per-match merge in the duplicate dialog | Fixed |
 | 2026-08-27 | GS-028 | Duplicate dialog locks while a save is in flight | Fixed |
 | 2026-08-27 | GS-001 | Edge Function deployed; policies locked in production; client routed through it | **Deployed, outage until a build ships** — auth path unverified |
+| 2026-08-27 | GS-069 | Replacing a photo, and a failed attach, now clean up Storage | **Partial** — void does not delete a photo (deliberate: it's audit evidence); late-failure cleanup not closed |
 
 All four are `firestore.rules` changes only; no application code was touched. They compile
 (`firebase deploy --only firestore:rules --dry-run`) but **take effect only after the manual
@@ -226,7 +227,7 @@ Recording these explicitly so the fix cycle does not undo working design:
 | GS-066 | MEDIUM | PERFORMANCE | Sponsors | `useSponsorHistory` is an unbounded N+1 with client-side filtering | OPEN |
 | GS-067 | MEDIUM | ASSETS | Pandal Assets | Per-asset history is truncated by a pandal-wide 80-document cap | OPEN |
 | GS-068 | MEDIUM | OFFLINE | Offline behaviour | The Firestore persistence fallback cannot work and the cache mode is fabricated | OPEN |
-| GS-069 | MEDIUM | STORAGE | Supabase Storage | No cleanup path exists; orphaned files accumulate permanently | OPEN |
+| GS-069 | MEDIUM | STORAGE | Supabase Storage | No cleanup path exists; orphaned files accumulate permanently | PARTIAL |
 | GS-070 | MEDIUM | FINANCE | Permanent Fund | Seed-then-transfer runs as two non-atomic steps with no rollback | OPEN |
 | GS-071 | MEDIUM | FIRESTORE | Pandal creation | Multi-batch pandal and festival creation has no rollback | OPEN |
 | GS-072 | MEDIUM | FIRESTORE | Reports | The recompute treats a missing contribution status as `received` | OPEN |
@@ -3885,7 +3886,7 @@ None. Applies app-wide, not only to Ganesh.
 **Severity:** MEDIUM
 **Category:** STORAGE
 **Feature:** Supabase Storage
-**Status:** OPEN
+**Status:** PARTIAL (2026-08-27)
 
 ### Problem
 `deleteFile` exists and is never called. Nothing removes storage objects when a record is voided, when a photo is replaced with a different extension, or when the Firestore attach fails after a successful upload.
@@ -3915,6 +3916,58 @@ Call `removeStoredFile` on void and on replace, and add a best-effort `removeObj
 - [ ] Replacing a photo with a different extension removes the previous object.
 - [ ] A failed Firestore attach removes the just-uploaded object.
 - [ ] No user-visible regression in photo attachment.
+
+### Resolution - 2026-08-27 (PARTIAL — one criterion deliberately not done)
+
+**Done: replacing a photo removes the one it replaces.** `attachExpenseReceipt`,
+`attachContributionPhoto`, `attachAssetPhoto` and `attachSponsorPhoto` now read the record's
+current photo before overwriting it and report that previous path back to the caller.
+`useGaneshStorage`'s four upload functions pass it to a new `bestEffortCleanup`, which calls
+`deleteFile` and swallows any error into a warning log rather than surfacing it — a stray
+Storage object is a cost, not something the user who successfully replaced their photo
+should ever see a toast about.
+
+That report is gated on `commitWrite` returning `"acked"`, not merely resolving. `commitWrite`
+resolves as `"queued"` for an offline write that has not actually reached the server yet
+(`lib/firestoreWrite.ts`) — reporting the previous path on that outcome and deleting it
+immediately would be wrong if the queued write later fails to land, because the record would
+still be pointing at a photo that no longer exists. Waiting for a real ack means offline
+replacement leaves the old file in place a while longer (closing the gap once reconnected is
+future work), which is the safe direction to be wrong in.
+
+**Done: a failed attach cleans up the just-uploaded object.** Each of the four upload
+functions now wraps its attach call in try/catch; on failure it deletes the object it just
+put in Storage (also best-effort) and rethrows the original error, so the user still sees
+the real failure message.
+
+**Not done, on purpose: voiding does not delete a record's photo.** The ticket's own
+Recommended Fix says to call `removeStoredFile` on void. I did not implement that. The
+receipt/photo preview on `expense/[id].tsx` renders unconditionally on the record's stored
+path — it does **not** check `voided` — because a voided expense's receipt is the evidence
+for why it was voided (a duplicate entry, a wrong amount, a mis-scan), not garbage to
+discard. Deleting it on void would produce a broken image on exactly the record someone is
+most likely to come back and review, and would directly violate this same ticket's fourth
+acceptance criterion, "no user-visible regression in photo attachment." Collections have no
+photo field, and the only other reachable void path in the app is `household/[id].tsx`
+(collections), so the gap in practice is limited to expenses; contributions have no void UI
+today (voidFinancialRecord supports the entity type, but nothing in `app/` calls it for one).
+
+**Also not done:** cleanup for a write that fails *after* the grace window
+(`commitWrite`'s late-failure path, `lib/firestoreWrite.ts:66-74`) rather than before it. The
+try/catch here only catches a rejection from the awaited `attachXxx` call, which per
+`commitWrite`'s contract only happens for a failure that arrives before the ~1.5s grace
+window elapses. A failure that arrives after — reported instead through `onLateFailure`, a
+toast — leaves the newly uploaded object orphaned with no cleanup hook, because
+`ganeshWrites.ts` has no visibility into Storage to react to it. This was flagged in the
+ticket's own evidence and is not closed by this change.
+
+**Verified:** typecheck and typecheck:shared clean; full suite green (125 files / 1270
+tests). No existing test referenced the four attach functions' return type, so nothing else
+needed updating.
+
+**Not verified by a test:** the cleanup paths are asynchronous, best-effort, and depend on
+Storage state, which the project's test setup does not model — covered by the manual guide
+below, not by an automated test.
 
 ### Dependencies
 Related to GS-001, GS-040.

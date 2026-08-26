@@ -365,16 +365,21 @@ export async function updateSponsor(
   await commitWrite(() => batch.commit(), { label: "sponsor" });
 }
 
+/**
+ * Returns the path of the photo this attach replaces, if any, so the caller can
+ * remove the now-orphaned object from Storage after this write lands (GS-069).
+ */
 export async function attachSponsorPhoto(
   db: Firestore,
   actor: GaneshActor,
   pandalId: string,
   sponsorId: string,
   photo: GaneshFileMeta
-): Promise<void> {
+): Promise<string | undefined> {
   const ref = pathRef(db, [...pandalSponsorsCol(pandalId), sponsorId]);
   const snap = await getDoc(ref);
   if (!snap.exists()) throw new Error("Sponsor not found.");
+  const previousPath = (snap.data()?.photo as GaneshFileMeta | undefined)?.path;
   const batch = writeBatch(db);
   batch.update(ref, {
     photo,
@@ -387,7 +392,11 @@ export async function attachSponsorPhoto(
     action: "photo",
     newValue: { path: photo.path },
   });
-  await commitWrite(() => batch.commit(), { label: "sponsor photo" });
+  // See attachAssetPhoto for why this waits for a real ack.
+  const outcome = await commitWrite(() => batch.commit(), { label: "sponsor photo" });
+  return outcome === "acked" && previousPath && previousPath !== photo.path
+    ? previousPath
+    : undefined;
 }
 
 function appendReceiveEffects(

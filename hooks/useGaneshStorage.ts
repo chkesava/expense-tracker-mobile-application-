@@ -3,6 +3,7 @@ import { useCallback } from "react";
 import { useFestivals } from "@/hooks/useFestivals";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { useGaneshWrites } from "@/hooks/useGaneshWrites";
+import { logWarning } from "@/lib/errors";
 import { useAuth } from "@/providers/AuthProvider";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import { useNetwork } from "@/providers/NetworkProvider";
@@ -53,13 +54,38 @@ export function useGaneshStorage() {
     [festivalBelongsToPandal, festivalId, pandalId, permissions, realUser?.uid, role, status]
   );
 
+  /**
+   * A best-effort delete for a path Storage already has and Firestore no longer
+   * needs — either because it was superseded by a newer photo, or because the
+   * attach that would have linked it to a record just failed. Deliberately
+   * fire-and-forget: nothing the user did wrong, so nothing should surface as an
+   * error. Left uncleaned, this is exactly the orphan GS-069 describes; a warning
+   * gives it a trail for GS-069's own future cleanup sweep to find. `pandalId`
+   * is read fresh via a ref-less closure argument rather than the outer hook's
+   * value, because a delete-on-replace can legitimately run after the user has
+   * already navigated (e.g. the upload for a slow retry lands after the screen
+   * that started it is gone).
+   */
+  const bestEffortCleanup = useCallback((path: string | undefined, scope: string) => {
+    if (!path || !pandalId) return;
+    void deleteFile(path, { pandalId, festivalId: festivalId ?? undefined }).catch((error) => {
+      logWarning(scope, error);
+    });
+  }, [pandalId, festivalId]);
+
   const uploadExpenseReceipt = useCallback(
     async (expenseId: string, file: PreparedGaneshImage): Promise<GaneshFileMeta> => {
       const meta = await uploadPrepared({ category: "expenses", recordId: expenseId, file });
-      await writes.attachExpenseReceipt(expenseId, meta);
+      try {
+        const previousPath = await writes.attachExpenseReceipt(expenseId, meta);
+        bestEffortCleanup(previousPath, "ganesh.storage.replaceExpenseReceipt");
+      } catch (error) {
+        bestEffortCleanup(meta.path, "ganesh.storage.orphanExpenseReceipt");
+        throw error;
+      }
       return meta;
     },
-    [uploadPrepared, writes]
+    [bestEffortCleanup, uploadPrepared, writes]
   );
 
   const uploadContributionPhoto = useCallback(
@@ -69,10 +95,16 @@ export function useGaneshStorage() {
         recordId: contributionId,
         file,
       });
-      await writes.attachContributionPhoto(contributionId, meta);
+      try {
+        const previousPath = await writes.attachContributionPhoto(contributionId, meta);
+        bestEffortCleanup(previousPath, "ganesh.storage.replaceContributionPhoto");
+      } catch (error) {
+        bestEffortCleanup(meta.path, "ganesh.storage.orphanContributionPhoto");
+        throw error;
+      }
       return meta;
     },
-    [uploadPrepared, writes]
+    [bestEffortCleanup, uploadPrepared, writes]
   );
 
   const uploadAssetPhoto = useCallback(
@@ -92,10 +124,16 @@ export function useGaneshStorage() {
         assetId,
         file,
       });
-      await writes.attachAssetPhoto(assetId, meta);
+      try {
+        const previousPath = await writes.attachAssetPhoto(assetId, meta);
+        bestEffortCleanup(previousPath, "ganesh.storage.replaceAssetPhoto");
+      } catch (error) {
+        bestEffortCleanup(meta.path, "ganesh.storage.orphanAssetPhoto");
+        throw error;
+      }
       return meta;
     },
-    [can, pandalId, permissions, realUser?.uid, role, status, writes]
+    [bestEffortCleanup, can, pandalId, permissions, realUser?.uid, role, status, writes]
   );
 
   const uploadSponsorPhoto = useCallback(
@@ -115,10 +153,16 @@ export function useGaneshStorage() {
         sponsorId,
         file,
       });
-      await writes.attachSponsorPhoto(sponsorId, meta);
+      try {
+        const previousPath = await writes.attachSponsorPhoto(sponsorId, meta);
+        bestEffortCleanup(previousPath, "ganesh.storage.replaceSponsorPhoto");
+      } catch (error) {
+        bestEffortCleanup(meta.path, "ganesh.storage.orphanSponsorPhoto");
+        throw error;
+      }
       return meta;
     },
-    [can, pandalId, permissions, realUser?.uid, role, status, writes]
+    [bestEffortCleanup, can, pandalId, permissions, realUser?.uid, role, status, writes]
   );
 
   const signedUrl = useCallback(

@@ -348,16 +348,21 @@ export async function setAssetStatus(
   await commitWrite(() => batch.commit(), { label: "asset status" });
 }
 
+/**
+ * Returns the path of the photo this attach replaces, if any, so the caller can
+ * remove the now-orphaned object from Storage after this write lands (GS-069).
+ */
 export async function attachAssetPhoto(
   db: Firestore,
   actor: GaneshActor,
   pandalId: string,
   assetId: string,
   photo: GaneshFileMeta
-): Promise<void> {
+): Promise<string | undefined> {
   const ref = pathRef(db, [...pandalAssetsCol(pandalId), assetId]);
   const snap = await getDoc(ref);
   requireAsset(snap.data(), assetId);
+  const previousPath = (snap.data()?.photo as GaneshFileMeta | undefined)?.path;
   const batch = writeBatch(db);
   batch.update(ref, {
     photo,
@@ -370,5 +375,12 @@ export async function attachAssetPhoto(
     action: "photo",
     newValue: photo.path,
   });
-  await commitWrite(() => batch.commit(), { label: "asset photo" });
+  // Only report a previous path once the server has actually confirmed the new
+  // one replaced it. A merely-"queued" (offline) outcome could still fail to
+  // land, and deleting the previous object on that outcome would orphan the
+  // record itself.
+  const outcome = await commitWrite(() => batch.commit(), { label: "asset photo" });
+  return outcome === "acked" && previousPath && previousPath !== photo.path
+    ? previousPath
+    : undefined;
 }

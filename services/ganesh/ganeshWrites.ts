@@ -38,6 +38,7 @@ import {
   validateSettlement,
 } from "@/shared/utils/ganeshMath";
 import { formatInr } from "@/shared/utils/ganeshMoney";
+import { ganeshStoredPath } from "@/services/ganesh/storage/storagePaths";
 import { generatePandalCode, normalizePandalCode } from "@/shared/utils/ganeshIdentity";
 import {
   festivalCol,
@@ -1205,6 +1206,12 @@ export async function addContribution(
   return id;
 }
 
+/**
+ * Returns the path of the photo this attach replaces, if any, so the caller can
+ * remove the now-orphaned object from Storage after this write lands (GS-069).
+ * Firestore has no concept of Supabase Storage, so that removal has to happen
+ * client-side, in the caller — this function only reports what to clean up.
+ */
 export async function attachContributionPhoto(
   db: Firestore,
   actor: GaneshActor,
@@ -1212,17 +1219,23 @@ export async function attachContributionPhoto(
   festivalId: string,
   contributionId: string,
   photo: GaneshFileMeta
-): Promise<void> {
+): Promise<string | undefined> {
   const ref = pathRef(db, [...festivalCol(pandalId, festivalId, "contributions"), contributionId]);
   const snap = await getDoc(ref);
   if (!snap.exists()) throw new Error("Contribution not found.");
+  const previousPath = ganeshStoredPath(snap.data().photo as GaneshFileMeta | undefined, undefined);
   const batch = writeBatch(db);
   batch.update(ref, {
     photo,
     updatedBy: actor.uid,
     updatedAt: serverTimestamp(),
   });
-  await commitWrite(() => batch.commit(), { label: "contribution photo" });
+  // Only report a previous path once the server has actually confirmed the new
+  // one replaced it. A merely-"queued" (offline) outcome could still fail to
+  // land, and deleting the previous object on that outcome would orphan the
+  // record itself — it would keep pointing at a photo that no longer exists.
+  const outcome = await commitWrite(() => batch.commit(), { label: "contribution photo" });
+  return outcome === "acked" && previousPath !== photo.path ? previousPath : undefined;
 }
 
 async function requireOpenFestival(
@@ -1862,6 +1875,7 @@ export async function updateExpenseAmounts(
   await commitWrite(() => batch.commit(), { label: "expense amount" });
 }
 
+/** See attachContributionPhoto above — same reasoning, same GS-069. */
 export async function attachExpenseReceipt(
   db: Firestore,
   actor: GaneshActor,
@@ -1869,17 +1883,24 @@ export async function attachExpenseReceipt(
   festivalId: string,
   expenseId: string,
   receipt: GaneshFileMeta
-): Promise<void> {
+): Promise<string | undefined> {
   const ref = pathRef(db, [...festivalCol(pandalId, festivalId, "expenses"), expenseId]);
   const snap = await getDoc(ref);
   if (!snap.exists()) throw new Error("Expense not found.");
+  const data = snap.data();
+  const previousPath = ganeshStoredPath(
+    data.receipt as GaneshFileMeta | undefined,
+    data.receiptPath as string | undefined
+  );
   const batch = writeBatch(db);
   batch.update(ref, {
     receipt,
     updatedBy: actor.uid,
     updatedAt: serverTimestamp(),
   });
-  await commitWrite(() => batch.commit(), { label: "expense receipt" });
+  // See attachContributionPhoto above for why this waits for a real ack.
+  const outcome = await commitWrite(() => batch.commit(), { label: "expense receipt" });
+  return outcome === "acked" && previousPath !== receipt.path ? previousPath : undefined;
 }
 
 export async function addReimbursement(
