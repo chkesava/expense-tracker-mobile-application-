@@ -1,13 +1,20 @@
 import { useState } from "react";
-import { Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
+import { CalendarPlus } from "lucide-react-native";
 
-import { FundLocationChips } from "@/components/ganesh/FundLocationChips";
-import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { GaneshWriteLock } from "@/components/ganesh/GaneshWriteLock";
-import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { PermanentFundCard } from "@/components/ganesh/PermanentFundCard";
-import { Button } from "@/components/ui/Button";
+import {
+  FilterChips,
+  FormShell,
+  Money,
+  Section,
+  StatTile,
+  StatusStrip,
+  useGaneshTokens,
+} from "@/components/ganesh/ui";
+import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { Input } from "@/components/ui/Input";
 import { useGaneshWrites } from "@/hooks/useGaneshWrites";
 import { usePermanentFund } from "@/hooks/usePermanentFund";
@@ -19,24 +26,34 @@ import { useNetwork } from "@/providers/NetworkProvider";
 import type { PermanentFundLocation } from "@/shared/types/ganesh";
 import { validateFundTransfer, validateNonNegativeAmount } from "@/shared/utils/ganeshMath";
 import { formatInr } from "@/shared/utils/ganeshMoney";
-import { useTheme } from "@/theme/ThemeProvider";
+
+const LOCATION_OPTIONS: Array<{ id: PermanentFundLocation; label: string }> = [
+  { id: "cash", label: "Cash" },
+  { id: "upi", label: "UPI" },
+  { id: "bank", label: "Bank" },
+  { id: "other", label: "Other" },
+];
 
 export default function CreateFestivalScreen() {
-  const { theme } = useTheme();
-  const { replace } = useRouter();
+  const g = useGaneshTokens();
+  const { replace, back } = useRouter();
   const { pandalId, setSession } = useGaneshSession();
   const { fund } = usePermanentFund(pandalId);
   const writes = useGaneshWrites();
   const { can } = useGaneshPermissions();
   const { isOnline } = useNetwork();
+
   const defaultYear = new Date().getFullYear();
   const [name, setName] = useState(`Ganesh Chaturthi ${defaultYear}`);
   const [year, setYear] = useState(String(defaultYear));
   const [allocate, setAllocate] = useState("0");
   const [location, setLocation] = useState<PermanentFundLocation>("cash");
   const [busy, setBusy] = useState(false);
+
   const allocateAmount = Number(allocate || 0);
-  const remaining = fund.total - (Number.isFinite(allocateAmount) ? allocateAmount : 0);
+  const safeAllocate = Number.isFinite(allocateAmount) ? allocateAmount : 0;
+  const remaining = fund.total - safeAllocate;
+  const overDrawn = safeAllocate > fund[location];
 
   const create = async () => {
     if (!name.trim()) {
@@ -91,41 +108,86 @@ export default function CreateFestivalScreen() {
   }
 
   return (
-    <GaneshScreen>
-      <Text style={{ color: theme.colors.foreground, fontSize: 22, fontWeight: "800" }}>
-        Create Ganesh Festival
-      </Text>
-      <PermanentFundCard fund={fund} />
-      <Text style={{ color: theme.colors.mutedForeground, lineHeight: 22 }}>
-        The Permanent Fund stays with the Pandal. Enter 0 if this festival should start with no
-        money from it. Nothing is moved automatically.
-      </Text>
-      <Input label="Festival name" value={name} onChangeText={setName} />
-      <Input label="Year" value={year} onChangeText={setYear} keyboardType="numeric" />
-      <Input
-        label="Opening funds from Permanent Fund"
-        value={allocate}
-        onChangeText={setAllocate}
-        keyboardType="numeric"
-      />
-      <Text style={{ color: theme.colors.mutedForeground, fontWeight: "700" }}>Money location</Text>
-      <FundLocationChips value={location} onChange={setLocation} />
-      <View style={{ gap: 4 }}>
-        <Text style={{ color: theme.colors.mutedForeground }}>
-          From Permanent Fund: {formatInr(Number.isFinite(allocateAmount) ? allocateAmount : 0)}
-        </Text>
-        <Text style={{ color: theme.colors.mutedForeground }}>
-          Permanent Fund remaining: {formatInr(Number.isFinite(remaining) ? remaining : fund.total)}
-        </Text>
-      </View>
-      {!isOnline && allocateAmount > 0 ? (
-        <Text style={{ color: theme.colors.mutedForeground }}>
-          Transfer requires an active connection. Please reconnect and try again.
-        </Text>
-      ) : null}
-      <Button loading={busy} onPress={() => void create()}>
-        Create Festival
-      </Button>
-    </GaneshScreen>
+    <FormShell
+      title="Create festival"
+      subtitle="Starts a fresh ledger"
+      icon={<CalendarPlus size={22} color={g.saffron} strokeWidth={2.2} />}
+      onBack={back}
+      submitLabel="Create festival"
+      submitting={busy}
+      submitDisabled={!name.trim() || (safeAllocate > 0 && (!isOnline || overDrawn))}
+      onSubmit={() => void create()}
+      footerHint={
+        !isOnline && safeAllocate > 0 ? (
+          <StatusStrip
+            tone="warning"
+            message="Moving money from the Permanent Fund needs an active connection."
+          />
+        ) : overDrawn ? (
+          <StatusStrip
+            tone="warning"
+            message={`Only ${formatInr(fund[location])} is held as ${location.toUpperCase()}.`}
+          />
+        ) : null
+      }
+    >
+      <Section title="The festival" plain>
+        <View style={styles.form}>
+          <Input
+            label="Festival name"
+            value={name}
+            onChangeText={setName}
+            autoCapitalize="words"
+          />
+          <Input label="Year" value={year} onChangeText={setYear} keyboardType="numeric" />
+        </View>
+      </Section>
+
+      <Section
+        title="Opening money"
+        subtitle="The Permanent Fund stays with the Pandal. Leave this at 0 to start with nothing from it — nothing moves automatically."
+      >
+        <View style={styles.form}>
+          <PermanentFundCard fund={fund} />
+
+          <View style={styles.statRow}>
+            <StatTile label="Into the festival">
+              <Money value={safeAllocate} size="primary" numberOfLines={1} adjustsFontSizeToFit />
+            </StatTile>
+            <StatTile label="Stays permanent">
+              <Money
+                value={Number.isFinite(remaining) ? remaining : fund.total}
+                size="primary"
+                numberOfLines={1}
+                adjustsFontSizeToFit
+              />
+            </StatTile>
+          </View>
+
+          <Input
+            label="Opening funds from the Permanent Fund"
+            value={allocate}
+            onChangeText={setAllocate}
+            keyboardType="numeric"
+          />
+          <FilterChips
+            label="Money location"
+            value={location}
+            options={LOCATION_OPTIONS}
+            onChange={setLocation}
+          />
+        </View>
+      </Section>
+    </FormShell>
   );
 }
+
+const styles = StyleSheet.create({
+  form: {
+    gap: 14,
+  },
+  statRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+});

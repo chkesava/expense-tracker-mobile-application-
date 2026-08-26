@@ -1,10 +1,21 @@
 import { useState } from "react";
-import { Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
+import { Landmark } from "lucide-react-native";
 
-import { FundLocationChips } from "@/components/ganesh/FundLocationChips";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { GaneshWriteLock } from "@/components/ganesh/GaneshWriteLock";
+import {
+  FilterChips,
+  FormShell,
+  GaneshHeader,
+  Money,
+  Section,
+  StatTile,
+  StatusStrip,
+  useGaneshTokens,
+} from "@/components/ganesh/ui";
+import { EmptyState } from "@/components/common/EmptyState";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useFestivals } from "@/hooks/useFestivals";
@@ -19,10 +30,16 @@ import { useNetwork } from "@/providers/NetworkProvider";
 import type { PermanentFundLocation } from "@/shared/types/ganesh";
 import { validateFundTransfer, validatePositiveAmount } from "@/shared/utils/ganeshMath";
 import { formatInr } from "@/shared/utils/ganeshMoney";
-import { useTheme } from "@/theme/ThemeProvider";
+
+const LOCATION_OPTIONS: Array<{ id: PermanentFundLocation; label: string }> = [
+  { id: "cash", label: "Cash" },
+  { id: "upi", label: "UPI" },
+  { id: "bank", label: "Bank" },
+  { id: "other", label: "Other" },
+];
 
 export default function AddPermanentFundScreen() {
-  const { theme } = useTheme();
+  const g = useGaneshTokens();
   const { back } = useRouter();
   const { isOnline } = useNetwork();
   const { pandalId, festivalId } = useGaneshSession();
@@ -30,8 +47,10 @@ export default function AddPermanentFundScreen() {
   const { festivals } = useFestivals(pandalId);
   const writes = useGaneshWrites();
   const { can } = useGaneshPermissions();
+
   const canAdd = can("permanentFund.add");
   const canAllocate = can("permanentFund.transfer");
+
   const [amount, setAmount] = useState("");
   const [allocateAmount, setAllocateAmount] = useState("0");
   const [location, setLocation] = useState<PermanentFundLocation>("cash");
@@ -39,8 +58,9 @@ export default function AddPermanentFundScreen() {
   const [busy, setBusy] = useState(false);
 
   const festival =
-    festivals.find((item) => item.id === festivalId && item.status === "open") ??
-    festivals.find((item) => item.status === "open");
+    festivals.find((item) => item.id === festivalId && item.status === "open")
+    ?? festivals.find((item) => item.status === "open");
+
   const parsedAmount = Number(amount);
   const parsedAllocate = Number(allocateAmount || 0);
   const remaining = Number.isFinite(parsedAmount)
@@ -70,11 +90,7 @@ export default function AddPermanentFundScreen() {
     }
     setBusy(true);
     try {
-      await writes.seedPermanentFund({
-        amount: parsedAmount,
-        location,
-        description,
-      });
+      await writes.seedPermanentFund({ amount: parsedAmount, location, description });
       if (canAllocate && parsedAllocate > 0 && festival) {
         await writes.transferPermanentToFestival({
           festivalId: festival.id,
@@ -99,64 +115,111 @@ export default function AddPermanentFundScreen() {
 
   if (fund.total > 0) {
     return (
-      <GaneshScreen>
-        <Text style={{ color: theme.colors.foreground, fontSize: 22, fontWeight: "800" }}>
-          Permanent Fund already exists
-        </Text>
-        <Text style={{ color: theme.colors.mutedForeground, lineHeight: 22 }}>
-          This Pandal already has {formatInr(fund.total)}. Open the Permanent Fund to add a
-          donation or adjust the balance.
-        </Text>
-        <Button onPress={back}>Go back</Button>
+      <GaneshScreen safeTop>
+        <GaneshHeader
+          title="Permanent Fund"
+          icon={<Landmark size={22} color={g.maroon} strokeWidth={2.2} />}
+          onBack={back}
+        />
+        <EmptyState
+          illustration="vaults"
+          title="Already recorded"
+          description={`This Pandal already has ${formatInr(
+            fund.total
+          )}. Open the Permanent Fund to add a donation or adjust the balance.`}
+          primaryAction={{ label: "Go back", onPress: back }}
+        />
       </GaneshScreen>
     );
   }
 
   return (
-    <GaneshScreen>
-      <Text style={{ color: theme.colors.foreground, fontSize: 22, fontWeight: "800" }}>
-        Add Permanent Fund
-      </Text>
-      <Text style={{ color: theme.colors.mutedForeground, lineHeight: 22 }}>
-        Record money that already belongs to the Pandal. Saying No at setup only skipped this
-        step. This is not a festival donation.
-      </Text>
-      <Input
-        label="Existing Permanent Fund"
-        value={amount}
-        onChangeText={setAmount}
-        keyboardType="numeric"
-        placeholder="0"
-      />
-      <Text style={{ color: theme.colors.mutedForeground, fontWeight: "700" }}>Money location</Text>
-      <FundLocationChips value={location} onChange={setLocation} />
-      <Input
-        label="Source / description"
-        value={description}
-        onChangeText={setDescription}
-        placeholder="Existing Pandal Fund"
-      />
-      {festival && canAllocate ? (
-        <View style={{ gap: 8 }}>
-          <Input
-            label={`Use for ${festival.name} (0 keeps it in the Permanent Fund)`}
-            value={allocateAmount}
-            onChangeText={setAllocateAmount}
-            keyboardType="numeric"
+    <FormShell
+      title="Add Permanent Fund"
+      subtitle="Carries across festivals"
+      icon={<Landmark size={22} color={g.maroon} strokeWidth={2.2} />}
+      onBack={back}
+      submitLabel="Save Permanent Fund"
+      submitting={busy}
+      submitDisabled={!isOnline || !Number.isFinite(parsedAmount) || parsedAmount <= 0}
+      onSubmit={() => void save()}
+      footerHint={
+        !isOnline ? (
+          <StatusStrip
+            tone="warning"
+            message="Adding the Permanent Fund needs an active connection, so the balance is counted exactly once."
           />
-          <Text style={{ color: theme.colors.mutedForeground }}>
-            Remaining Permanent Fund {formatInr(remaining)}.
-          </Text>
+        ) : null
+      }
+    >
+      <StatusStrip
+        tone="info"
+        message="Record money that already belongs to the Pandal. Saying No at setup only skipped this step — this is not a festival donation."
+      />
+
+      <Section title="Existing balance" plain>
+        <View style={styles.form}>
+          <Input
+            label="Amount"
+            value={amount}
+            onChangeText={setAmount}
+            keyboardType="numeric"
+            placeholder="0"
+            autoFocus
+          />
+          <FilterChips
+            label="Money location"
+            value={location}
+            options={LOCATION_OPTIONS}
+            onChange={setLocation}
+          />
+          <Input
+            label="Source or description"
+            value={description}
+            onChangeText={setDescription}
+            placeholder="Existing Pandal fund"
+          />
         </View>
+      </Section>
+
+      {festival && canAllocate ? (
+        <Section
+          title="Use some for this festival"
+          subtitle={`Leave this at 0 to keep everything in the Permanent Fund. Destination: ${festival.name}.`}
+        >
+          <View style={styles.form}>
+            <View style={styles.statRow}>
+              <StatTile label={`To ${festival.name}`}>
+                <Money
+                  value={Number.isFinite(parsedAllocate) ? parsedAllocate : 0}
+                  size="primary"
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                />
+              </StatTile>
+              <StatTile label="Stays permanent">
+                <Money value={remaining} size="primary" numberOfLines={1} adjustsFontSizeToFit />
+              </StatTile>
+            </View>
+            <Input
+              label="Amount for this festival"
+              value={allocateAmount}
+              onChangeText={setAllocateAmount}
+              keyboardType="numeric"
+            />
+          </View>
+        </Section>
       ) : null}
-      {!isOnline ? (
-        <Text style={{ color: theme.colors.mutedForeground }}>
-          Adding the Permanent Fund needs an active connection.
-        </Text>
-      ) : null}
-      <Button loading={busy} onPress={() => void save()}>
-        Save Permanent Fund
-      </Button>
-    </GaneshScreen>
+    </FormShell>
   );
 }
+
+const styles = StyleSheet.create({
+  form: {
+    gap: 14,
+  },
+  statRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+});
