@@ -27,6 +27,7 @@
 | 2026-08-27 | GS-007 | Settlement waits for the summary; server re-derives the closing balance | Fixed |
 | 2026-08-27 | GS-006 | Household picker plus per-match merge in the duplicate dialog | Fixed |
 | 2026-08-27 | GS-028 | Duplicate dialog locks while a save is in flight | Fixed |
+| 2026-08-27 | GS-001 | Runbook, Edge Function and locked policies written | **Still open** - nothing deployed, nothing tested |
 
 All four are `firestore.rules` changes only; no application code was touched. They compile
 (`firebase deploy --only firestore:rules --dry-run`) but **take effect only after the manual
@@ -157,7 +158,7 @@ Recording these explicitly so the fix cycle does not undo working design:
 
 | ID | Severity | Category | Feature | Title | Status |
 | --- | --- | --- | --- | --- | --- |
-| GS-001 | CRITICAL | STORAGE | Supabase Storage | Supabase policies grant `anon` full CRUD over every pandal's files | OPEN |
+| GS-001 | CRITICAL | STORAGE | Supabase Storage | Supabase policies grant `anon` full CRUD over every pandal's files | OPEN — RUNBOOK READY, NOT DEPLOYED |
 | GS-002 | CRITICAL | RBAC | Pandal membership | Open-join self-create accepts an arbitrary `permissions` array | FIXED — AWAITING RULES DEPLOY |
 | GS-003 | CRITICAL | SECURITY | Pandal membership | `pandalInvites` is listable by any signed-in user | FIXED — AWAITING RULES DEPLOY |
 | GS-004 | CRITICAL | SECURITY | Security Rules | Festival subcollections have no payload validation; `summary` is forgeable | PARTIAL — AWAITING RULES DEPLOY |
@@ -270,7 +271,7 @@ Recording these explicitly so the fix cycle does not undo working design:
 **Severity:** CRITICAL
 **Category:** STORAGE
 **Feature:** Supabase Storage
-**Status:** OPEN
+**Status:** OPEN — RUNBOOK READY, NOT DEPLOYED (2026-08-27)
 
 ### Problem
 All four Supabase RLS policies for the `ganesh-files` bucket are granted `to anon, authenticated` with a predicate that checks only the bucket name and the first path segment. There is no pandal-membership check and no `auth.uid()` check of any kind.
@@ -320,6 +321,38 @@ Until one exists, treat the bucket as public and do not store anything sensitive
 - [ ] An active member of pandal A can still upload and view that pandal's receipts, assets, contribution and sponsor photos.
 - [ ] The bucket's `public` flag is asserted `false` by an automated check or a documented deploy step.
 - [ ] `supabase/ganesh-files.policies.sql` no longer grants `anon` any privilege.
+
+### Progress - 2026-08-27 (STILL OPEN)
+**Nothing has been deployed and nothing has been tested.** The hole is exactly as
+described above. What exists now is a reviewable plan plus the two artifacts it needs:
+
+- `docs/GANESH_STORAGE_LOCKDOWN.md` - ordered runbook, with the verification commands that
+  constitute this ticket's acceptance criteria and an explicit rollback.
+- `supabase/functions/ganesh-files/index.ts` - the trusted broker (approach 1 from the
+  Recommended Fix). It takes the caller's Firebase ID token and reads
+  `pandals/{pandalId}/members/{uid}` from the Firestore REST API **as that caller**, so
+  Firestore verifies the token and applies the Ganesh rules; only then does it use the
+  Supabase service-role key to mint a short-lived signed URL. That indirection is what
+  removes the need for a Firebase service account inside the function, and avoids keeping a
+  second copy of the permission model. Bytes never pass through the function - uploads go
+  straight to Storage on a signed upload URL.
+- `supabase/ganesh-files.policies.locked.sql` - drops all four policies and creates none.
+  With RLS on and no policy, `anon` can do nothing; signed URLs still work because Storage
+  validates those outside RLS.
+
+**The client change is deliberately not written.** `supabaseStorage.ts` must route its three
+functions through the Edge Function, but applying that before the function is live would
+break every photo feature on the next build. It is Step 4 of the runbook.
+
+**Ordering is the whole risk.** Locking the policies is Step 5, after a build that calls the
+function is in users' hands. There is no ordering in which old APKs keep working after
+lockdown - they call Storage directly, which is precisely what gets revoked. The runbook
+states the choice plainly: lock now and accept an outage, or stay exposed until the build
+ships.
+
+**GS-036 can be closed independently and immediately** - Step 1 sets the bucket's own file
+size limit and allowed MIME types, which are enforced only on the client today. It rejects
+nothing the app already accepts.
 
 ### Dependencies
 Blocks GS-036, GS-069, GS-096.
