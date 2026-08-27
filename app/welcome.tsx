@@ -7,6 +7,7 @@ import { useAuth } from "@/providers/AuthProvider";
 import { useWorkspace } from "@/providers/WorkspaceProvider";
 import { resolveWorkspaceRoute } from "@/shared/config/workspaceRoutes";
 import { useTheme } from "@/theme/ThemeProvider";
+import { ACTIVE_PRODUCT, activeProductRootRoute } from "@/lib/activeProduct";
 
 export default function WelcomeScreen() {
   const { theme } = useTheme();
@@ -18,7 +19,19 @@ export default function WelcomeScreen() {
   }
 
   if (user) {
-    return <Redirect href={resolveWorkspaceRoute(activeWorkspace) as never} />;
+    return (
+      <Redirect
+        href={(ACTIVE_PRODUCT !== null
+          ? activeProductRootRoute()
+          : resolveWorkspaceRoute(activeWorkspace)) as never}
+      />
+    );
+  }
+
+  // Single-product build: there's only one app to choose, so skip straight
+  // to sign-in instead of showing the Expense/Ganesh picker below.
+  if (ACTIVE_PRODUCT !== null) {
+    return <Redirect href="/(auth)/login" />;
   }
 
   return (

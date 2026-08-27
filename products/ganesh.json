@@ -1,0 +1,23 @@
+{
+  "product": "ganesh",
+  "version": "1.0.0",
+  "versionCode": 1,
+  "name": "Ganesh Seva",
+  "slug": "ganesh-seva",
+  "scheme": "ganeshseva",
+  "package": "com.example.ganeshseva",
+  "permissions": [
+    "android.permission.USE_BIOMETRIC",
+    "android.permission.USE_FINGERPRINT",
+    "android.permission.POST_NOTIFICATIONS"
+  ],
+  "extraPlugins": [
+    [
+      "expo-image-picker",
+      {
+        "photosPermission": "Allow Ganesh Seva to attach Ganesh receipt and contribution photos.",
+        "cameraPermission": "Allow Ganesh Seva to photograph Ganesh receipts and contributions."
+      }
+    ]
+  ]
+}

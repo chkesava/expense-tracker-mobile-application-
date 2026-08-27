@@ -57,6 +57,80 @@
           ]
         }
       }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:246872619658:android:6505ed9661d4b5474c8b73",
+        "android_client_info": {
+          "package_name": "com.example.ganeshseva"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "246872619658-fthhv8gtr5b8c3dr8ukbun1siqpfpqtt.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.ganeshseva",
+            "certificate_hash": "b351a9757a4deab8b072844b3d0409f5126cd579"
+          }
+        },
+        {
+          "client_id": "246872619658-5dm89l8189ql00m4ab84no0onon4osbk.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD8i0yIFHeMTX1NPJKzXIBwtbRz0pn6Cxs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "246872619658-5dm89l8189ql00m4ab84no0onon4osbk.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:246872619658:android:6af87b01bca290294c8b73",
+        "android_client_info": {
+          "package_name": "com.example.nutritiontrackera"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "246872619658-dofthd7r8v0gauj799sqeifmqalltkmb.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.nutritiontrackera",
+            "certificate_hash": "b351a9757a4deab8b072844b3d0409f5126cd579"
+          }
+        },
+        {
+          "client_id": "246872619658-5dm89l8189ql00m4ab84no0onon4osbk.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD8i0yIFHeMTX1NPJKzXIBwtbRz0pn6Cxs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "246872619658-5dm89l8189ql00m4ab84no0onon4osbk.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
     }
   ],
   "configuration_version": "1"

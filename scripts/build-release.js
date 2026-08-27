@@ -150,7 +150,7 @@ function buildRelease(cliOptions = null) {
   }
 
   const { storePassword, keyPassword, expoPublic } = loadEnvConfig();
-  const version = getCurrentVersion();
+  const version = getCurrentVersion(options.product);
   const isWindows = process.platform === 'win32';
   const gradlewCmd = isWindows ? 'gradlew.bat' : './gradlew';
 
@@ -250,7 +250,13 @@ function buildRelease(cliOptions = null) {
     fs.mkdirSync(RELEASES_DIR, { recursive: true });
   }
 
-  const baseApkName = `ExpenseTracker-v${version.versionName}-build${version.versionCode}`;
+  const APK_BASE_NAME_BY_PRODUCT = {
+    expense: 'ExpenseTracker',
+    nutrition: 'SpendlyNutrition',
+    ganesh: 'GaneshSeva'
+  };
+  const apkNamePrefix = APK_BASE_NAME_BY_PRODUCT[options.product] || 'ExpenseTracker';
+  const baseApkName = `${apkNamePrefix}-v${version.versionName}-build${version.versionCode}`;
   const { targetPath: archivedApkPath, fileName: archivedFileName } = getUniqueReleaseApkPath(baseApkName);
 
   fs.copyFileSync(rawApkAbsPath, archivedApkPath);

@@ -1,0 +1,23 @@
+{
+  "product": "nutrition",
+  "version": "1.0.0",
+  "versionCode": 1,
+  "name": "Spendly Nutrition",
+  "slug": "spendly-nutrition",
+  "scheme": "spendlynutrition",
+  "package": "com.example.nutritiontrackera",
+  "permissions": [
+    "android.permission.USE_BIOMETRIC",
+    "android.permission.USE_FINGERPRINT",
+    "android.permission.POST_NOTIFICATIONS"
+  ],
+  "extraPlugins": [
+    [
+      "expo-image-picker",
+      {
+        "photosPermission": "Allow Spendly Nutrition to attach a photo of your meal.",
+        "cameraPermission": "Allow Spendly Nutrition to photograph your meal."
+      }
+    ]
+  ]
+}

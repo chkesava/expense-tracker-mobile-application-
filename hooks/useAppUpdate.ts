@@ -14,11 +14,12 @@ import { doc, getDoc, onSnapshot } from "firebase/firestore";
 
 import {
   parseRelease,
-  RELEASE_DOC_PATH,
+  releaseDocPath,
   type AppRelease,
 } from "@/lib/appRelease";
 import { logWarning } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
+import { ACTIVE_PRODUCT } from "@/lib/activeProduct";
 
 export type { AppRelease };
 
@@ -31,9 +32,28 @@ export async function fetchLatestRelease(): Promise<AppRelease | null> {
     throw error;
   }
 
-  const snapshot = await getDoc(doc(db, ...RELEASE_DOC_PATH));
+  const snapshot = await getDoc(doc(db, ...releaseDocPath(ACTIVE_PRODUCT)));
   if (!snapshot.exists()) return null;
-  return parseRelease(snapshot.data());
+  return matchesThisApp(parseRelease(snapshot.data()));
+}
+
+/**
+ * Defense-in-depth: if the release doc names an applicationId, it must match
+ * this build's own — closes the gap where nothing previously verified a
+ * release was actually meant for the app reading it (see
+ * docs/MULTI_APP_SEPARATION_ANALYSIS.md §21/§25). Docs with no
+ * applicationId (all pre-split releases) are unaffected.
+ */
+function matchesThisApp(release: AppRelease | null): AppRelease | null {
+  if (!release || !release.applicationId) return release;
+  if (release.applicationId !== Application.applicationId) {
+    logWarning("appRelease.applicationIdMismatch", new Error("Release applicationId mismatch"), {
+      releaseApplicationId: release.applicationId,
+      installedApplicationId: Application.applicationId ?? undefined,
+    });
+    return null;
+  }
+  return release;
 }
 
 /** Build number of the running app, or null when it cannot be determined. */
@@ -74,9 +94,11 @@ export function useAppUpdate() {
     if (!db) return;
 
     const unsubscribe = onSnapshot(
-      doc(db, ...RELEASE_DOC_PATH),
+      doc(db, ...releaseDocPath(ACTIVE_PRODUCT)),
       (snapshot) => {
-        setRelease(snapshot.exists() ? parseRelease(snapshot.data()) : null);
+        setRelease(
+          snapshot.exists() ? matchesThisApp(parseRelease(snapshot.data())) : null
+        );
       },
       (error) => {
         logWarning("snapshot.latestRelease", error);

@@ -16,12 +16,16 @@ import { themeUsesDarkPalette } from "@/theme/tokens";
 
 import { useWorkspace } from "@/providers/WorkspaceProvider";
 import { haptic } from "@/lib/haptics";
+import { ACTIVE_PRODUCT } from "@/lib/activeProduct";
 
 export default function AppSelectorScreen() {
   const router = useRouter();
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const { activeWorkspace, setActiveWorkspace } = useWorkspace();
+  // A single-product build only ever ships this one workspace's routes
+  // (metro.config.js excludes the other two), so hide the switcher entirely.
+  const showOtherWorkspaces = ACTIVE_PRODUCT === null;
 
   const handleSelectExpense = () => {
     haptic.selection().catch(() => undefined);
@@ -103,6 +107,7 @@ export default function AppSelectorScreen() {
         </Pressable>
 
         {/* Nutrition Space */}
+        {showOtherWorkspaces && (
         <Pressable
           onPress={() => {
             haptic.selection().catch(() => undefined);
@@ -171,7 +176,9 @@ export default function AppSelectorScreen() {
             <ArrowRight size={16} color={theme.colors.primary} />
           </View>
         </Pressable>
+        )}
 
+        {showOtherWorkspaces && (
         <Pressable
           onPress={() => {
             haptic.selection().catch(() => undefined);
@@ -226,6 +233,7 @@ export default function AppSelectorScreen() {
             <ArrowRight size={16} color={theme.colors.primary} />
           </View>
         </Pressable>
+        )}
       </View>
     </PageShell>
   );

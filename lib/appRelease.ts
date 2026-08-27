@@ -1,7 +1,8 @@
 /**
- * Shape of `system_settings/latest_release`, written by the Android release
- * workflow. `downloadUrl` is the GitHub Release APK; `storagePath` is set
- * only when Firebase Storage also received the file.
+ * Shape of `system_settings/latest_release` (or, for a single-product build,
+ * `system_settings/latest_release_{product}`), written by the Android
+ * release workflow. `downloadUrl` is the GitHub Release APK; `storagePath`
+ * is set only when Firebase Storage also received the file.
  *
  * CI overwrites this document on every release, so it always points at the
  * newest APK — skipped intermediate versions are never installed.
@@ -22,9 +23,36 @@ export type AppRelease = {
   publishedAt?: string;
   contentLength?: number;
   sha256?: string;
+  /**
+   * Which product this release is for. Absent on documents published before
+   * the multi-app split (the combined build never sets this). See
+   * docs/MULTI_APP_SEPARATION_ANALYSIS.md §22.
+   */
+  product?: "expense" | "nutrition" | "ganesh";
+  /**
+   * Android applicationId this release was built with. When present, the
+   * client cross-checks it against its own applicationId before offering
+   * the update — cheap insurance against a future build/doc mismatch once
+   * the three products have distinct application IDs.
+   */
+  applicationId?: string;
 };
 
+/** Legacy path, still written by CI for the combined (non-split) build. */
 export const RELEASE_DOC_PATH = ["system_settings", "latest_release"] as const;
+
+/**
+ * Firestore path for a build's own release document. `null` (the combined
+ * build) keeps reading the legacy path above, unchanged; an explicit product
+ * reads its own doc so one product's build can never be offered another
+ * product's release.
+ */
+export function releaseDocPath(
+  product: "expense" | "nutrition" | "ganesh" | null
+): readonly [string, string] {
+  if (!product) return RELEASE_DOC_PATH;
+  return ["system_settings", `latest_release_${product}`] as const;
+}
 
 export function parseRelease(
   data: Record<string, unknown> | undefined
@@ -52,6 +80,11 @@ export function parseRelease(
     publishedAt: typeof data.publishedAt === "string" ? data.publishedAt : undefined,
     contentLength: Number.isFinite(contentLength) && contentLength > 0 ? contentLength : undefined,
     sha256: typeof data.sha256 === "string" ? data.sha256 : undefined,
+    product:
+      data.product === "expense" || data.product === "nutrition" || data.product === "ganesh"
+        ? data.product
+        : undefined,
+    applicationId: typeof data.applicationId === "string" ? data.applicationId : undefined,
   };
 }
 

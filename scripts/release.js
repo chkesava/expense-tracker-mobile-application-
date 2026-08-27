@@ -21,7 +21,7 @@ function main() {
   console.log('--- Phase 1: Environment & Asset Verification ---');
   verifyEnvironment();
   verifyKeystore();
-  verifyGoogleServices();
+  verifyGoogleServices(options.product);
   verifyGradle();
 
   // Step 2: Preparation & Version Management

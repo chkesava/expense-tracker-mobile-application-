@@ -32,6 +32,18 @@ const {
 
 const RELEASE_DOC_COLLECTION = 'system_settings';
 const RELEASE_DOC_ID = 'latest_release';
+const VALID_PRODUCTS = ['expense', 'nutrition', 'ganesh'];
+
+/**
+ * Optional per-product targeting, unused by today's CI (which never sets
+ * RELEASE_PRODUCT) so the combined build's publish step is unaffected.
+ * Set by a future product-aware release workflow to publish to
+ * `latest_release_{product}` instead of the legacy shared doc — see
+ * docs/MULTI_APP_SEPARATION_ANALYSIS.md §22/§27 Phase 3.
+ */
+function resolveReleaseDocId(product) {
+  return product ? `latest_release_${product}` : RELEASE_DOC_ID;
+}
 
 function parseArgs() {
   const args = process.argv.slice(2);
@@ -45,6 +57,8 @@ function parseArgs() {
     versionCode: process.env.RELEASE_VERSION_CODE
       ? Number.parseInt(process.env.RELEASE_VERSION_CODE, 10)
       : null,
+    product: process.env.RELEASE_PRODUCT || '',
+    applicationId: process.env.RELEASE_APPLICATION_ID || '',
     dryRun: false
   };
 
@@ -63,9 +77,22 @@ function parseArgs() {
       options.versionName = arg.slice('--version-name='.length).trim();
     } else if (arg.startsWith('--version-code=')) {
       options.versionCode = Number.parseInt(arg.slice('--version-code='.length).trim(), 10);
+    } else if (arg.startsWith('--product=')) {
+      options.product = arg.slice('--product='.length).trim();
+    } else if (arg.startsWith('--application-id=')) {
+      options.applicationId = arg.slice('--application-id='.length).trim();
     } else if (arg === '--dry-run') {
       options.dryRun = true;
     }
+  }
+
+  if (options.product && !VALID_PRODUCTS.includes(options.product)) {
+    failFast({
+      step: 'Publish Release Metadata',
+      error: `Unknown product "${options.product}".`,
+      why: `Expected one of: ${VALID_PRODUCTS.join(', ')}.`,
+      fix: 'Pass --product=expense|nutrition|ganesh, or omit it for the combined build.'
+    });
   }
 
   return options;
@@ -296,6 +323,8 @@ async function publishReleaseMetadata(cliOptions = null) {
     });
   }
 
+  const releaseDocId = resolveReleaseDocId(options.product);
+
   const payload = {
     versionName,
     versionCode,
@@ -310,6 +339,11 @@ async function publishReleaseMetadata(cliOptions = null) {
     sha256: ''
   };
 
+  // Only set when a product-aware caller opts in — an unset RELEASE_PRODUCT
+  // (today's CI) publishes the exact same document shape as before.
+  if (options.product) payload.product = options.product;
+  if (options.applicationId) payload.applicationId = options.applicationId;
+
   if (localApk && fs.existsSync(localApk)) {
     payload.sha256 = await sha256File(localApk);
   }
@@ -318,7 +352,7 @@ async function publishReleaseMetadata(cliOptions = null) {
   console.log(`   Mandatory:   ${payload.mandatory}`);
   console.log(`   APK:         ${localApk || payload.apkFileName || 'n/a'}`);
   console.log(`   Storage:     ${payload.storagePath || 'n/a'}`);
-  console.log(`   Doc:         ${RELEASE_DOC_COLLECTION}/${RELEASE_DOC_ID}`);
+  console.log(`   Doc:         ${RELEASE_DOC_COLLECTION}/${releaseDocId}`);
 
   if (options.dryRun) {
     console.log('\n🧪 Dry run — no Storage upload or Firestore write performed.');
@@ -395,7 +429,7 @@ async function publishReleaseMetadata(cliOptions = null) {
   try {
     await getFirestore()
       .collection(RELEASE_DOC_COLLECTION)
-      .doc(RELEASE_DOC_ID)
+      .doc(releaseDocId)
       .set(payload, { merge: true });
   } catch (e) {
     failFast({
@@ -435,6 +469,7 @@ module.exports = {
   publishReleaseMetadata,
   RELEASE_DOC_COLLECTION,
   RELEASE_DOC_ID,
+  resolveReleaseDocId,
   loadServiceAccount,
   loadAdminSdk,
   assertStorageBucket,
