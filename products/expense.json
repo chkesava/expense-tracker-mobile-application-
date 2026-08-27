@@ -1,0 +1,16 @@
+{
+  "product": "expense",
+  "name": "Spendly",
+  "slug": "spendly",
+  "scheme": "spendly",
+  "package": "com.example.expensetracker",
+  "permissions": [
+    "android.permission.USE_BIOMETRIC",
+    "android.permission.USE_FINGERPRINT",
+    "android.permission.READ_SMS",
+    "android.permission.RECEIVE_SMS",
+    "android.permission.POST_NOTIFICATIONS",
+    "android.permission.REQUEST_INSTALL_PACKAGES"
+  ],
+  "extraPlugins": []
+}
