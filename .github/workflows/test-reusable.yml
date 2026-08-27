@@ -1,0 +1,14 @@
+name: Test Reusable (temp)
+
+on:
+  workflow_call:
+    inputs:
+      product:
+        required: true
+        type: string
+
+jobs:
+  say:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "product is ${{ inputs.product }}"

@@ -1,0 +1,11 @@
+name: Test Caller (temp)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  call:
+    uses: ./.github/workflows/test-reusable.yml
+    with:
+      product: expense
+    secrets: inherit
