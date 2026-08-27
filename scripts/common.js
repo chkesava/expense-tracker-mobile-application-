@@ -14,9 +14,15 @@ const APP_JSON_PATH = path.join(ROOT_DIR, 'app.json');
 const PACKAGE_JSON_PATH = path.join(ROOT_DIR, 'package.json');
 const RELEASES_DIR = path.join(ROOT_DIR, 'releases');
 const STATE_FILE_PATH = path.join(ROOT_DIR, '.release-state.json');
+const PRODUCTS_DIR = path.join(ROOT_DIR, 'products');
+const VALID_PRODUCTS = ['expense', 'nutrition', 'ganesh'];
 
 const DEFAULT_KEY_ALIAS = 'expense-tracker-upload';
 const DEFAULT_STORE_FILE = '../keystores/expense-tracker-upload-key.keystore';
+
+function productJsonPath(product) {
+  return path.join(PRODUCTS_DIR, `${product}.json`);
+}
 
 function parseEnvFile(filePath) {
   if (!fs.existsSync(filePath)) return {};
@@ -94,7 +100,14 @@ function parseCliArgs() {
     version: null,
     versionCode: null,
     skipPrebuild: false,
-    clean: false
+    clean: false,
+    // Unset (null) means "combined build" — reads/writes app.json exactly
+    // like before the multi-app split. An explicit product (CLI flag, or
+    // EXPO_PUBLIC_PRODUCT — the same var app.config.js/metro.config.js key
+    // off) reads/writes that product's own products/<product>.json instead.
+    product: VALID_PRODUCTS.includes(process.env.EXPO_PUBLIC_PRODUCT)
+      ? process.env.EXPO_PUBLIC_PRODUCT
+      : null
   };
 
   for (const arg of args) {
@@ -116,13 +129,44 @@ function parseCliArgs() {
       options.skipPrebuild = true;
     } else if (arg === '--clean') {
       options.clean = true;
+    } else if (arg.startsWith('--product=')) {
+      const raw = arg.split('=')[1].trim();
+      if (!VALID_PRODUCTS.includes(raw)) {
+        failFast({
+          step: 'Parse CLI Arguments',
+          error: `Unknown --product value: "${raw}"`,
+          why: `Expected one of: ${VALID_PRODUCTS.join(', ')}.`,
+          fix: 'Pass --product=expense|nutrition|ganesh, or omit it for the combined build.'
+        });
+      }
+      options.product = raw;
     }
   }
 
   return options;
 }
 
-function getCurrentVersion() {
+/** Reads a single product's own version stream from products/<product>.json. */
+function getProductVersion(product) {
+  const jsonPath = productJsonPath(product);
+  if (!fs.existsSync(jsonPath)) {
+    failFast({
+      step: 'Version Management',
+      error: `No products/${product}.json found.`,
+      why: 'Each product tracks its own version/versionCode in its own products/<product>.json.',
+      fix: `Create products/${product}.json with "version" and "versionCode" fields.`
+    });
+  }
+  const productJson = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
+  return {
+    versionName: productJson.version || '1.0.0',
+    versionCode: Number(productJson.versionCode) || 1
+  };
+}
+
+function getCurrentVersion(product) {
+  if (product) return getProductVersion(product);
+
   let appVersion = '1.0.0';
   let appVersionCode = 1;
 
@@ -170,8 +214,8 @@ function bumpPatchVersion(versionName) {
   return `${parts[0]}.${parts[1]}.${parts[2]}`;
 }
 
-function updateVersion({ versionName, versionCode }) {
-  const current = getCurrentVersion();
+function updateVersion({ versionName, versionCode, product }) {
+  const current = getCurrentVersion(product);
   const newVersionName = versionName || current.versionName;
   let newVersionCode = versionCode !== undefined ? versionCode : current.versionCode + 1;
 
@@ -184,29 +228,40 @@ function updateVersion({ versionName, versionCode }) {
     });
   }
 
-  // 1. Update app.json
-  if (fs.existsSync(APP_JSON_PATH)) {
-    const appJson = JSON.parse(fs.readFileSync(APP_JSON_PATH, 'utf8'));
-    if (!appJson.expo) appJson.expo = {};
-    appJson.expo.version = newVersionName;
-    if (!appJson.expo.android) appJson.expo.android = {};
-    appJson.expo.android.versionCode = newVersionCode;
-    fs.writeFileSync(APP_JSON_PATH, JSON.stringify(appJson, null, 2) + '\n', 'utf8');
+  if (product) {
+    // Each product owns its own version stream — app.json/package.json (the
+    // combined build's stream) are untouched by a product-specific release.
+    const jsonPath = productJsonPath(product);
+    const productJson = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
+    productJson.version = newVersionName;
+    productJson.versionCode = newVersionCode;
+    fs.writeFileSync(jsonPath, JSON.stringify(productJson, null, 2) + '\n', 'utf8');
+  } else {
+    // 1. Update app.json
+    if (fs.existsSync(APP_JSON_PATH)) {
+      const appJson = JSON.parse(fs.readFileSync(APP_JSON_PATH, 'utf8'));
+      if (!appJson.expo) appJson.expo = {};
+      appJson.expo.version = newVersionName;
+      if (!appJson.expo.android) appJson.expo.android = {};
+      appJson.expo.android.versionCode = newVersionCode;
+      fs.writeFileSync(APP_JSON_PATH, JSON.stringify(appJson, null, 2) + '\n', 'utf8');
+    }
+
+    // 3. Update package.json
+    if (fs.existsSync(PACKAGE_JSON_PATH)) {
+      const pkgJson = JSON.parse(fs.readFileSync(PACKAGE_JSON_PATH, 'utf8'));
+      pkgJson.version = newVersionName;
+      fs.writeFileSync(PACKAGE_JSON_PATH, JSON.stringify(pkgJson, null, 2) + '\n', 'utf8');
+    }
   }
 
-  // 2. Update android/app/build.gradle
+  // 2. Update android/app/build.gradle — always, regardless of product: it's
+  // the native file for whichever product was just prebuilt.
   if (fs.existsSync(BUILD_GRADLE_PATH)) {
     let gradleContent = fs.readFileSync(BUILD_GRADLE_PATH, 'utf8');
     gradleContent = gradleContent.replace(/versionCode\s+\d+/, `versionCode ${newVersionCode}`);
     gradleContent = gradleContent.replace(/versionName\s+["'][^"']+["']/, `versionName "${newVersionName}"`);
     fs.writeFileSync(BUILD_GRADLE_PATH, gradleContent, 'utf8');
-  }
-
-  // 3. Update package.json
-  if (fs.existsSync(PACKAGE_JSON_PATH)) {
-    const pkgJson = JSON.parse(fs.readFileSync(PACKAGE_JSON_PATH, 'utf8'));
-    pkgJson.version = newVersionName;
-    fs.writeFileSync(PACKAGE_JSON_PATH, JSON.stringify(pkgJson, null, 2) + '\n', 'utf8');
   }
 
   return {
@@ -250,6 +305,9 @@ module.exports = {
   PACKAGE_JSON_PATH,
   RELEASES_DIR,
   STATE_FILE_PATH,
+  PRODUCTS_DIR,
+  VALID_PRODUCTS,
+  productJsonPath,
   DEFAULT_KEY_ALIAS,
   DEFAULT_STORE_FILE,
   loadEnvConfig,

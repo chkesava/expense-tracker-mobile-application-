@@ -1,0 +1,31 @@
+name: Release — Nutrition
+
+# Manual only from Actions → Release — Nutrition → Run workflow.
+# Never add pull_request here: fork PRs would gain access to the signing
+# keystore and the Firebase service account.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version name (e.g. 1.0.1). Defaults to auto-bumped patch from products/nutrition.json.'
+        required: false
+        type: string
+      mandatory:
+        description: 'Force users to update before continuing'
+        required: false
+        default: false
+        type: boolean
+      notes:
+        description: 'Release notes shown to testers and in the update prompt'
+        required: false
+        type: string
+
+jobs:
+  release:
+    uses: ./.github/workflows/release.yml
+    with:
+      product: nutrition
+      version: ${{ inputs.version }}
+      mandatory: ${{ inputs.mandatory }}
+      notes: ${{ inputs.notes }}
+    secrets: inherit

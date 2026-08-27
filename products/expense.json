@@ -1,5 +1,7 @@
 {
   "product": "expense",
+  "version": "4.3.0",
+  "versionCode": 74,
   "name": "Spendly",
   "slug": "spendly",
   "scheme": "spendly",

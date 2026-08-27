@@ -27,7 +27,7 @@ function prepareRelease(cliOptions = null) {
 
   // 2. Version Management
   console.log('\n📦 Managing Application Version & Build Code...');
-  const current = getCurrentVersion();
+  const current = getCurrentVersion(options.product);
   const targetVersionName = options.version || current.versionName;
   // CI passes an explicit code derived from the workflow run number, since it
   // never commits the bump back to main.
@@ -35,12 +35,17 @@ function prepareRelease(cliOptions = null) {
 
   const versionResult = updateVersion({
     versionName: targetVersionName,
-    versionCode: targetVersionCode
+    versionCode: targetVersionCode,
+    product: options.product
   });
 
   console.log(`   📌 Previous Version: ${current.versionName} (build ${current.versionCode})`);
   console.log(`   ✨ Release Version:  ${versionResult.versionName} (build ${versionResult.versionCode})`);
-  console.log('   ✅ Synchronized version in app.json, build.gradle, and package.json');
+  console.log(
+    options.product
+      ? `   ✅ Synchronized version in products/${options.product}.json and build.gradle`
+      : '   ✅ Synchronized version in app.json, build.gradle, and package.json'
+  );
 
   const envConfig = loadEnvConfig();
 

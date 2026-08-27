@@ -66,10 +66,16 @@ module.exports = ({ config }) => {
     name: override.name,
     slug: override.slug,
     scheme: override.scheme,
+    // Each product has its own version/versionCode stream (see
+    // products/<product>.json and scripts/common.js's per-product
+    // getCurrentVersion/updateVersion), independent of app.json's — which
+    // remains the combined build's own stream, untouched by product builds.
+    version: override.version,
     android: {
       ...config.android,
       package: override.package,
       permissions: override.permissions,
+      versionCode: override.versionCode,
     },
     plugins: [...SHARED_PLUGINS, ...(override.extraPlugins || [])],
     extra: {
