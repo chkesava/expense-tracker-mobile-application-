@@ -18,6 +18,7 @@ import {
 } from "@expo-google-fonts/inter";
 import "react-native-reanimated";
 
+import { ACTIVE_PRODUCT } from "@/lib/activeProduct";
 import { AppErrorBoundary } from "@/components/common/AppErrorBoundary";
 import { CelebrationOverlay } from "@/components/common/CelebrationOverlay";
 import { OfflineBanner } from "@/components/common/OfflineBanner";
@@ -277,11 +278,25 @@ function RootNavigator() {
         <Stack.Screen name="welcome" options={{ animation: "fade" }} />
         <Stack.Screen name="onboarding" options={{ animation: "fade" }} />
         <Stack.Screen name="(auth)" options={{ animation: "fade" }} />
-        <Stack.Screen name="(app)" />
-        <Stack.Screen name="(nutrition)" options={{ animation: "slide_from_right" }} />
-        <Stack.Screen name="(ganesh)" options={{ animation: "slide_from_right" }} />
-        <Stack.Screen name="(ganesh-auth)" options={{ animation: "fade" }} />
-        <Stack.Screen name="ganesh-phone-auth" options={{ animation: "none" }} />
+        {/*
+          A single-product build only ever has one of these route groups on
+          disk (metro.config.js blocks the other two), so only register the
+          screen(s) that exist. ACTIVE_PRODUCT === null (unset) is the
+          existing combined build — register all of them, unchanged.
+        */}
+        {(ACTIVE_PRODUCT === null || ACTIVE_PRODUCT === "expense") && (
+          <Stack.Screen name="(app)" />
+        )}
+        {(ACTIVE_PRODUCT === null || ACTIVE_PRODUCT === "nutrition") && (
+          <Stack.Screen name="(nutrition)" options={{ animation: "slide_from_right" }} />
+        )}
+        {(ACTIVE_PRODUCT === null || ACTIVE_PRODUCT === "ganesh") && (
+          <>
+            <Stack.Screen name="(ganesh)" options={{ animation: "slide_from_right" }} />
+            <Stack.Screen name="(ganesh-auth)" options={{ animation: "fade" }} />
+            <Stack.Screen name="ganesh-phone-auth" options={{ animation: "none" }} />
+          </>
+        )}
         <Stack.Screen name="google-auth" options={{ animation: "none" }} />
         <Stack.Screen name="payment/[slug]" options={{ animation: "fade" }} />
         <Stack.Screen name="split/[slug]" options={{ animation: "fade" }} />

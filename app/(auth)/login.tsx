@@ -21,6 +21,7 @@ import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import { useTheme } from "@/theme/ThemeProvider";
+import { activeProductRootRoute } from "@/lib/activeProduct";
 
 import { SpendlyLogo } from "@/components/auth/SpendlyLogo";
 import { AuthBackground } from "@/components/auth/AuthBackground";
@@ -51,7 +52,7 @@ export default function AuthScreen() {
   }
 
   if (user) {
-    return <Redirect href="/(app)" />;
+    return <Redirect href={activeProductRootRoute() as never} />;
   }
 
   const isDark = theme.colors.background === "#020817" || theme.colors.background === "#000000";

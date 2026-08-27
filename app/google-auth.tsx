@@ -3,6 +3,7 @@ import { Redirect } from "expo-router";
 
 import { useAuth } from "@/providers/AuthProvider";
 import { useTheme } from "@/theme/ThemeProvider";
+import { activeProductRootRoute } from "@/lib/activeProduct";
 
 /**
  * Deep-link target for Google web-bridge AuthSession
@@ -30,7 +31,7 @@ export default function GoogleAuthCallbackScreen() {
   }
 
   if (user) {
-    return <Redirect href="/(app)" />;
+    return <Redirect href={activeProductRootRoute() as never} />;
   }
 
   return <Redirect href="/(auth)/login" />;

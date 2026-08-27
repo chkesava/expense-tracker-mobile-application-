@@ -6,6 +6,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "@/providers/AuthProvider";
 import { useWorkspace } from "@/providers/WorkspaceProvider";
 import { FIRST_LAUNCH_KEY } from "@/components/onboarding/OnboardingCarousel";
+import { ACTIVE_PRODUCT, activeProductRootRoute } from "@/lib/activeProduct";
 
 /**
  * Intelligent Launch Router
@@ -46,6 +47,12 @@ export default function Index() {
   }
 
   if (user) {
+    // Single-product build: always this build's one product, regardless of
+    // whatever workspace was last stored on the device (e.g. from before the
+    // split, or a combined-app AsyncStorage value that no longer applies).
+    if (ACTIVE_PRODUCT !== null) {
+      return <Redirect href={activeProductRootRoute() as any} />;
+    }
     if (activeWorkspace === "nutrition") {
       return <Redirect href={"/(nutrition)" as any} />;
     }
