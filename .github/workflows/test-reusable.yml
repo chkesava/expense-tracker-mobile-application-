@@ -1,24 +1,430 @@
-name: Test Reusable (temp)
+name: Release (reusable)
 
+# Reusable release pipeline, parameterized by `product`. Called only by the
+# three thin per-product workflows (release-expense.yml, release-nutrition.yml,
+# release-ganesh.yml) — never triggered directly. Mirrors android-release.yml
+# (the legacy combined-build workflow, left untouched) step-for-step, with
+# every product-specific value (applicationId, Firebase app id, version
+# stream, tag/asset names) resolved from `inputs.product`.
+#
+# See docs/MULTI_APP_SEPARATION_ANALYSIS.md §18/§27 Phase 4.
 on:
   workflow_call:
     inputs:
       product:
+        description: 'expense | nutrition | ganesh'
         required: true
         type: string
       version:
+        description: 'Version name (e.g. 1.2.0). Defaults to auto-bumped patch from products/<product>.json.'
         required: false
         type: string
       mandatory:
+        description: 'Force users to update before continuing'
         required: false
         default: false
         type: boolean
       notes:
+        description: 'Release notes shown to testers and in the update prompt'
         required: false
         type: string
 
+concurrency:
+  group: android-release-${{ inputs.product }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
 jobs:
-  say:
+  build:
+    name: Build, distribute and announce
     runs-on: ubuntu-latest
+    timeout-minutes: 60
+
     steps:
-      - run: echo "product=${{ inputs.product }} version=${{ inputs.version }} mandatory=${{ inputs.mandatory }} notes=${{ inputs.notes }}"
+      - name: Validate product input
+        run: |
+          case "${{ inputs.product }}" in
+            expense|nutrition|ganesh) ;;
+            *)
+              echo "::error::Unknown product '${{ inputs.product }}'. Expected expense, nutrition, or ganesh."
+              exit 1
+              ;;
+          esac
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Needed so the bot can push the version bump commit back to main.
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Same quality gate as android-release.yml, before secrets-heavy / APK work.
+      - name: Unit + integration-lite suite
+        run: npm test
+
+      - name: Shared typecheck
+        run: npm run typecheck:shared
+
+      - name: Full app typecheck
+        run: npm run typecheck
+
+      - name: Restore .env
+        env:
+          MOBILE_ENV_FILE: ${{ secrets.MOBILE_ENV_FILE }}
+          EXPO_PUBLIC_APP_URL: ${{ secrets.EXPO_PUBLIC_APP_URL }}
+          EXPO_PUBLIC_SHARE_URL: ${{ secrets.EXPO_PUBLIC_SHARE_URL }}
+          EXPO_PUBLIC_FIREBASE_API_KEY: ${{ secrets.EXPO_PUBLIC_FIREBASE_API_KEY }}
+          EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ secrets.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN }}
+          EXPO_PUBLIC_FIREBASE_PROJECT_ID: ${{ secrets.EXPO_PUBLIC_FIREBASE_PROJECT_ID }}
+          EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET: ${{ secrets.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET }}
+          EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER: ${{ secrets.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER }}
+          EXPO_PUBLIC_FIREBASE_APP_ID: ${{ secrets.EXPO_PUBLIC_FIREBASE_APP_ID }}
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+          EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: ${{ secrets.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID }}
+          EXPO_PUBLIC_GEMINI_API_KEY: ${{ secrets.EXPO_PUBLIC_GEMINI_API_KEY }}
+          MYAPP_RELEASE_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          MYAPP_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          PRODUCT: ${{ inputs.product }}
+        run: |
+          if [ -n "$MOBILE_ENV_FILE" ]; then
+            printf '%s\n' "$MOBILE_ENV_FILE" > .env
+            echo "Wrote .env from MOBILE_ENV_FILE."
+          else
+            # Compose from individual secrets (matches how this repo's secrets were set up).
+            : > .env
+            write_kv() {
+              local key="$1"
+              local value="$2"
+              if [ -n "$value" ]; then
+                printf '%s=%s\n' "$key" "$value" >> .env
+              fi
+            }
+            write_kv EXPO_PUBLIC_APP_URL "$EXPO_PUBLIC_APP_URL"
+            write_kv EXPO_PUBLIC_SHARE_URL "$EXPO_PUBLIC_SHARE_URL"
+            write_kv EXPO_PUBLIC_FIREBASE_API_KEY "$EXPO_PUBLIC_FIREBASE_API_KEY"
+            write_kv EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN "$EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN"
+            write_kv EXPO_PUBLIC_FIREBASE_PROJECT_ID "$EXPO_PUBLIC_FIREBASE_PROJECT_ID"
+            write_kv EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET "$EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET"
+            write_kv EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER "$EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER"
+            write_kv EXPO_PUBLIC_FIREBASE_APP_ID "$EXPO_PUBLIC_FIREBASE_APP_ID"
+            write_kv EXPO_PUBLIC_SUPABASE_URL "$EXPO_PUBLIC_SUPABASE_URL"
+            write_kv EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY "$EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY"
+            write_kv EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID "$EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID"
+            write_kv EXPO_PUBLIC_GEMINI_API_KEY "$EXPO_PUBLIC_GEMINI_API_KEY"
+            write_kv MYAPP_RELEASE_STORE_PASSWORD "$MYAPP_RELEASE_STORE_PASSWORD"
+            write_kv MYAPP_RELEASE_KEY_PASSWORD "$MYAPP_RELEASE_KEY_PASSWORD"
+            echo "Wrote .env from individual EXPO_PUBLIC_* secrets."
+          fi
+
+          # Gradle's bundleRelease task only inherits EXPO_PUBLIC_* vars that
+          # scripts/common.js's getExpoPublicEnv() finds in .env (not the raw
+          # job env) — this line is what makes lib/activeProduct.ts's Metro
+          # inlining resolve to this build's product. See
+          # docs/MULTI_APP_SEPARATION_ANALYSIS.md §11/§22.
+          echo "EXPO_PUBLIC_PRODUCT=$PRODUCT" >> .env
+
+          KEY_COUNT=$(grep -c '^EXPO_PUBLIC_' .env || true)
+          if [ "$KEY_COUNT" -lt 7 ]; then
+            echo "::error::Need the Firebase EXPO_PUBLIC_* secrets (or one MOBILE_ENV_FILE). Found $KEY_COUNT EXPO_PUBLIC_* lines."
+            exit 1
+          fi
+          echo "Wrote .env with $KEY_COUNT EXPO_PUBLIC_* keys for product=$PRODUCT."
+
+      - name: Restore signing keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "::error::ANDROID_KEYSTORE_BASE64 secret is empty."
+            exit 1
+          fi
+          mkdir -p keystores
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > keystores/expense-tracker-upload-key.keystore
+          echo "Keystore restored ($(stat -c%s keystores/expense-tracker-upload-key.keystore) bytes)."
+
+      - name: Write service account credentials
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "::error::FIREBASE_SERVICE_ACCOUNT secret is empty."
+            exit 1
+          fi
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "${{ runner.temp }}/service-account.json"
+          chmod 600 "${{ runner.temp }}/service-account.json"
+
+      # Repo variables, not secrets — one Firebase Android app id per
+      # product, all within the existing single Firebase project (see
+      # docs/MULTI_APP_SEPARATION_ANALYSIS.md §20). Falls back to the
+      # legacy FIREBASE_ANDROID_APP_ID var for "expense" only, so this
+      # keeps working immediately after the split without a new variable.
+      - name: Resolve Firebase Android app id
+        id: firebase_app
+        env:
+          PRODUCT: ${{ inputs.product }}
+          EXPENSE_APP_ID: ${{ vars.EXPENSE_FIREBASE_ANDROID_APP_ID || vars.FIREBASE_ANDROID_APP_ID }}
+          NUTRITION_APP_ID: ${{ vars.NUTRITION_FIREBASE_ANDROID_APP_ID }}
+          GANESH_APP_ID: ${{ vars.GANESH_FIREBASE_ANDROID_APP_ID }}
+        run: |
+          case "$PRODUCT" in
+            expense) APP_ID="$EXPENSE_APP_ID" ;;
+            nutrition) APP_ID="$NUTRITION_APP_ID" ;;
+            ganesh) APP_ID="$GANESH_APP_ID" ;;
+          esac
+          if [ -z "$APP_ID" ]; then
+            echo "::error::No Firebase Android app id configured for '$PRODUCT'. Register that product's Android app in the Firebase console, then set the matching *_FIREBASE_ANDROID_APP_ID repo variable (see docs/MULTI_APP_SEPARATION_ANALYSIS.md §20)."
+            exit 1
+          fi
+          echo "app_id=$APP_ID" >> "$GITHUB_OUTPUT"
+
+      # Each product owns its own version stream in products/<product>.json
+      # (see scripts/common.js) — never app.json, which stays the combined
+      # build's own stream. Falls back to the legacy VERSION_CODE_OFFSET for
+      # "expense" only, matching android-release.yml's existing offset.
+      - name: Resolve version
+        id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          PRODUCT: ${{ inputs.product }}
+          EXPENSE_OFFSET: ${{ vars.EXPENSE_VERSION_CODE_OFFSET || vars.VERSION_CODE_OFFSET }}
+          NUTRITION_OFFSET: ${{ vars.NUTRITION_VERSION_CODE_OFFSET }}
+          GANESH_OFFSET: ${{ vars.GANESH_VERSION_CODE_OFFSET }}
+        run: |
+          CURRENT_NAME=$(node -p "require('./products/${PRODUCT}.json').version")
+          CURRENT_CODE=$(node -p "Number(require('./products/${PRODUCT}.json').versionCode)||0")
+
+          VERSION_NAME="$INPUT_VERSION"
+          if [ -z "$VERSION_NAME" ]; then
+            # Each manual release advances the patch: 1.1.0 → 1.1.1
+            VERSION_NAME=$(node -e "const {bumpPatchVersion}=require('./scripts/common'); console.log(bumpPatchVersion(process.argv[1]))" "$CURRENT_NAME")
+          fi
+
+          case "$PRODUCT" in
+            expense) OFFSET="${EXPENSE_OFFSET:-27}" ;;
+            nutrition) OFFSET="${NUTRITION_OFFSET:-1}" ;;
+            ganesh) OFFSET="${GANESH_OFFSET:-1}" ;;
+          esac
+          VERSION_CODE=$((OFFSET + GITHUB_RUN_NUMBER))
+          # Never go backwards relative to what is already in products/<product>.json.
+          if [ "$VERSION_CODE" -le "$CURRENT_CODE" ]; then
+            VERSION_CODE=$((CURRENT_CODE + 1))
+          fi
+
+          echo "name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
+          echo "code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
+          echo "Building $PRODUCT v$VERSION_NAME (build $VERSION_CODE) from base v$CURRENT_NAME (build $CURRENT_CODE)"
+
+      - name: Resolve release notes
+        id: notes
+        env:
+          INPUT_NOTES: ${{ inputs.notes }}
+        run: |
+          NOTES="$INPUT_NOTES"
+          if [ -z "$NOTES" ]; then
+            NOTES=$(git log -1 --pretty=%s)
+          fi
+          {
+            echo 'value<<RELEASE_NOTES_EOF'
+            echo "$NOTES"
+            echo 'RELEASE_NOTES_EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      # verify-environment.js and verify-gradle.js both require android/ to
+      # exist, so prebuild has to run before release:verify / the APK build.
+      # EXPO_PUBLIC_PRODUCT here (job env, not .env) is what app.config.js /
+      # metro.config.js read directly in this Node process.
+      - name: Expo prebuild (Android)
+        env:
+          EXPO_PUBLIC_PRODUCT: ${{ inputs.product }}
+        run: npx expo prebuild --platform android --no-install
+
+      - name: Release environment verify
+        env:
+          MYAPP_RELEASE_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          MYAPP_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: npm run release:verify
+
+      - name: Build signed release APK
+        env:
+          MYAPP_RELEASE_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          MYAPP_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          EXPO_PUBLIC_PRODUCT: ${{ inputs.product }}
+        run: |
+          node scripts/release.js \
+            --skip-prebuild \
+            --product=${{ inputs.product }} \
+            --version=${{ steps.version.outputs.name }} \
+            --version-code=${{ steps.version.outputs.code }}
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.product }}-v${{ steps.version.outputs.name }}-build${{ steps.version.outputs.code }}
+          path: releases/*.apk
+          retention-days: 7
+          if-no-files-found: error
+
+      # Public repo: this URL is a real APK file. In-app updates use it when
+      # Firebase Storage is not set up (Spark / no Blaze billing).
+      - name: Publish APK to GitHub Releases
+        id: github_apk
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PRODUCT: ${{ inputs.product }}
+          VERSION_NAME: ${{ steps.version.outputs.name }}
+          VERSION_CODE: ${{ steps.version.outputs.code }}
+          NOTES: ${{ steps.notes.outputs.value }}
+        run: |
+          case "$PRODUCT" in
+            expense) DISPLAY_NAME="ExpenseTracker" ;;
+            nutrition) DISPLAY_NAME="SpendlyNutrition" ;;
+            ganesh) DISPLAY_NAME="GaneshSeva" ;;
+          esac
+          TAG="${PRODUCT}-v${VERSION_NAME}-${VERSION_CODE}"
+          ASSET="${DISPLAY_NAME}-${VERSION_NAME}-${VERSION_CODE}.apk"
+          cp releases/app-release.apk "releases/${ASSET}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "releases/${ASSET}" --clobber
+          else
+            gh release create "$TAG" "releases/${ASSET}" \
+              --title "${DISPLAY_NAME} v${VERSION_NAME} (${VERSION_CODE})" \
+              --notes "$NOTES"
+          fi
+          URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${ASSET}"
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Published $ASSET at $URL"
+
+      # Tester group name assumes a "<product>-testers" group exists in the
+      # Firebase console for this product (one-time human setup — see
+      # docs/MULTI_APP_SEPARATION_ANALYSIS.md §20).
+      - name: Distribute to Firebase App Distribution
+        id: distribute
+        continue-on-error: true
+        uses: wzieba/Firebase-Distribution-Github-Action@v1
+        with:
+          appId: ${{ steps.firebase_app.outputs.app_id }}
+          serviceCredentialsFileContent: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          groups: ${{ inputs.product }}-testers
+          file: releases/app-release.apk
+          releaseNotes: |
+            v${{ steps.version.outputs.name }} (build ${{ steps.version.outputs.code }})
+            ${{ steps.notes.outputs.value }}
+
+      # Tester webpage is a last-resort fallback. In-app download uses the
+      # GitHub Release APK, plus Firebase Storage when that bucket exists.
+      - name: Resolve tester URL
+        id: download
+        env:
+          TESTING_URI: ${{ steps.distribute.outputs.TESTING_URI }}
+          BINARY_URI: ${{ steps.distribute.outputs.BINARY_DOWNLOAD_URI }}
+          CONSOLE_URI: ${{ steps.distribute.outputs.FIREBASE_CONSOLE_URI }}
+        run: |
+          URL="${TESTING_URI:-${BINARY_URI:-$CONSOLE_URI}}"
+          if [ -z "$URL" ]; then
+            echo "::warning::App Distribution did not emit a tester URL. In-app updates still use the GitHub Release APK."
+          fi
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "Using tester URL: ${URL:-none}"
+
+      # Writes system_settings/latest_release_<product> (see lib/appRelease.ts
+      # releaseDocPath) — never the legacy shared doc, so this product's
+      # release can never be offered to a different product's build.
+      - name: Publish release metadata to Firestore
+        id: publish
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/service-account.json
+          RELEASE_APK_PATH: releases/app-release.apk
+          RELEASE_DOWNLOAD_URL: ${{ steps.github_apk.outputs.url }}
+          RELEASE_TESTER_URL: ${{ steps.download.outputs.url }}
+          RELEASE_NOTES: ${{ steps.notes.outputs.value }}
+          RELEASE_MANDATORY: ${{ inputs.mandatory || false }}
+          RELEASE_VERSION_NAME: ${{ steps.version.outputs.name }}
+          RELEASE_VERSION_CODE: ${{ steps.version.outputs.code }}
+          RELEASE_PRODUCT: ${{ inputs.product }}
+          EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET: ${{ secrets.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET }}
+        run: |
+          APPLICATION_ID=$(node -p "require('./products/${{ inputs.product }}.json').package")
+          RELEASE_APPLICATION_ID="$APPLICATION_ID" node scripts/publish-release-metadata.js
+
+      - name: Commit version bump
+        if: always() && (steps.github_apk.outcome == 'success' || steps.distribute.outcome == 'success')
+        env:
+          PRODUCT: ${{ inputs.product }}
+          VERSION_NAME: ${{ steps.version.outputs.name }}
+          VERSION_CODE: ${{ steps.version.outputs.code }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "products/${PRODUCT}.json"
+          if git diff --staged --quiet; then
+            echo "products/${PRODUCT}.json already matches v${VERSION_NAME} (build ${VERSION_CODE})."
+            exit 0
+          fi
+          git commit -m "chore(${PRODUCT}): bump version to v${VERSION_NAME} (build ${VERSION_CODE}) [skip ci]"
+
+          # The APK build takes a while. Main can move in that window.
+          BRANCH="${GITHUB_REF_NAME}"
+          git fetch origin "$BRANCH"
+          if ! git rebase "origin/${BRANCH}"; then
+            echo "::error::Version bump rebase conflicted. APK is published; set products/${PRODUCT}.json to v${VERSION_NAME} (build ${VERSION_CODE}) on ${BRANCH}."
+            git rebase --abort || true
+            exit 1
+          fi
+
+          for attempt in 1 2 3; do
+            if git push origin "HEAD:${BRANCH}"; then
+              echo "Committed and pushed version bump."
+              exit 0
+            fi
+            echo "Push rejected (attempt ${attempt}). Rebasing onto latest ${BRANCH}..."
+            git fetch origin "$BRANCH"
+            git rebase "origin/${BRANCH}"
+          done
+          echo "::error::Could not push version bump after retries. APK is published; bump products/${PRODUCT}.json to v${VERSION_NAME} (build ${VERSION_CODE}) on ${BRANCH}."
+          exit 1
+
+      - name: Clean up credentials
+        if: always()
+        run: |
+          rm -f "${{ runner.temp }}/service-account.json"
+          rm -f keystores/expense-tracker-upload-key.keystore
+          rm -f .env
+
+      - name: Job summary
+        if: always() && (steps.github_apk.outcome == 'success' || steps.distribute.outcome == 'success')
+        env:
+          PUBLISH_OUTCOME: ${{ steps.publish.outcome }}
+        run: |
+          {
+            echo "## ${{ inputs.product }} Android release published"
+            echo ""
+            echo "- Version: **v${{ steps.version.outputs.name }}** (build ${{ steps.version.outputs.code }})"
+            echo "- Notes: ${{ steps.notes.outputs.value }}"
+            echo "- Mandatory update: ${{ inputs.mandatory || false }}"
+            echo "- In-app APK: ${{ steps.github_apk.outputs.url }}"
+            echo "- Testers link: ${{ steps.distribute.outputs.TESTING_URI }}"
+            echo "- Firestore doc: system_settings/latest_release_${{ inputs.product }}"
+            echo "- Firestore publish: ${PUBLISH_OUTCOME}"
+            echo "- Firebase Storage: optional (used when the bucket exists)"
+          } >> "$GITHUB_STEP_SUMMARY"
