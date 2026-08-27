@@ -20,6 +20,10 @@ on:
         required: false
         type: string
 
+# Must match release.yml's own `permissions:` — see release-expense.yml for why.
+permissions:
+  contents: write
+
 jobs:
   release:
     uses: ./.github/workflows/release.yml

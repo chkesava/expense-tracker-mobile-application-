@@ -20,6 +20,14 @@ on:
         required: false
         type: string
 
+# Must match release.yml's own `permissions:` — a caller can't grant a
+# reusable workflow more than it itself has, and GitHub rejects the
+# workflow_dispatch at dispatch time (startup_failure, no job even starts)
+# if this is missing here, even though it's redundant with release.yml's own
+# declaration. Confirmed by bisecting a minimal reusable-workflow pair.
+permissions:
+  contents: write
+
 jobs:
   release:
     uses: ./.github/workflows/release.yml
