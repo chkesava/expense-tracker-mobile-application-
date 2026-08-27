@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildsBehind, isTesterWebpageUrl, parseRelease } from "./appRelease";
+import { buildsBehind, isTesterWebpageUrl, parseRelease, releaseDocPath } from "./appRelease";
 
 describe("parseRelease", () => {
   it("parses a Storage-backed release", () => {
@@ -43,6 +43,50 @@ describe("parseRelease", () => {
     expect(
       parseRelease({ versionCode: "nope", downloadUrl: "https://example.com/a.apk" })
     ).toBeNull();
+  });
+
+  it("leaves product/applicationId undefined on a pre-split doc", () => {
+    const release = parseRelease({
+      versionCode: 41,
+      downloadUrl: "https://example.com/a.apk",
+    });
+    expect(release?.product).toBeUndefined();
+    expect(release?.applicationId).toBeUndefined();
+  });
+
+  it("parses product and applicationId when present", () => {
+    const release = parseRelease({
+      versionCode: 41,
+      downloadUrl: "https://example.com/a.apk",
+      product: "ganesh",
+      applicationId: "com.example.ganeshseva",
+    });
+    expect(release?.product).toBe("ganesh");
+    expect(release?.applicationId).toBe("com.example.ganeshseva");
+  });
+
+  it("ignores an unrecognized product value", () => {
+    const release = parseRelease({
+      versionCode: 41,
+      downloadUrl: "https://example.com/a.apk",
+      product: "bogus",
+    });
+    expect(release?.product).toBeUndefined();
+  });
+});
+
+describe("releaseDocPath", () => {
+  it("keeps the legacy combined path when no product is given", () => {
+    expect(releaseDocPath(null)).toEqual(["system_settings", "latest_release"]);
+  });
+
+  it("scopes the doc path per product", () => {
+    expect(releaseDocPath("expense")).toEqual(["system_settings", "latest_release_expense"]);
+    expect(releaseDocPath("nutrition")).toEqual([
+      "system_settings",
+      "latest_release_nutrition",
+    ]);
+    expect(releaseDocPath("ganesh")).toEqual(["system_settings", "latest_release_ganesh"]);
   });
 });
 

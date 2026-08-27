@@ -9,6 +9,7 @@ import { AppState, Linking, Platform } from "react-native";
 
 import ApkInstaller from "@/lib/apkInstaller";
 import { isTesterWebpageUrl, type AppRelease } from "@/lib/appRelease";
+import { logWarning } from "@/lib/errors";
 import { getFirebaseStorage } from "@/lib/firebase";
 import { fetchLatestRelease, getInstalledVersionCode } from "@/hooks/useAppUpdate";
 
@@ -191,7 +192,10 @@ export async function installAppRelease(
         // Cache cleanup is best-effort.
       }
     }
-  } catch {
+  } catch (error) {
+    logWarning("apkUpdate.installAppRelease", error, {
+      versionCode: target.versionCode,
+    });
     return openFallback(target);
   }
 }
