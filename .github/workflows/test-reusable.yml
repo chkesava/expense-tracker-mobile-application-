@@ -6,9 +6,19 @@ on:
       product:
         required: true
         type: string
+      version:
+        required: false
+        type: string
+      mandatory:
+        required: false
+        default: false
+        type: boolean
+      notes:
+        required: false
+        type: string
 
 jobs:
   say:
     runs-on: ubuntu-latest
     steps:
-      - run: echo "product is ${{ inputs.product }}"
+      - run: echo "product=${{ inputs.product }} version=${{ inputs.version }} mandatory=${{ inputs.mandatory }} notes=${{ inputs.notes }}"

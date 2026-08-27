@@ -2,10 +2,27 @@ name: Test Caller (temp)
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version name (e.g. 1.2.0). Defaults to auto-bumped patch from products/expense.json.'
+        required: false
+        type: string
+      mandatory:
+        description: 'Force users to update before continuing'
+        required: false
+        default: false
+        type: boolean
+      notes:
+        description: 'Release notes shown to testers and in the update prompt'
+        required: false
+        type: string
 
 jobs:
   call:
     uses: ./.github/workflows/test-reusable.yml
     with:
       product: expense
+      version: ${{ inputs.version }}
+      mandatory: ${{ inputs.mandatory }}
+      notes: ${{ inputs.notes }}
     secrets: inherit
