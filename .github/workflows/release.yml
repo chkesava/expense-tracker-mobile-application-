@@ -191,6 +191,12 @@ jobs:
             nutrition) APP_ID="$NUTRITION_APP_ID" ;;
             ganesh) APP_ID="$GANESH_APP_ID" ;;
           esac
+          # A repo variable with stray leading/trailing whitespace (seen in
+          # practice on FIREBASE_ANDROID_APP_ID) breaks the simple
+          # key=value $GITHUB_OUTPUT form below, which can't hold embedded
+          # newlines — strip it defensively rather than trusting variable
+          # hygiene.
+          APP_ID=$(printf '%s' "$APP_ID" | tr -d '[:space:]')
           if [ -z "$APP_ID" ]; then
             echo "::error::No Firebase Android app id configured for '$PRODUCT'. Register that product's Android app in the Firebase console, then set the matching *_FIREBASE_ANDROID_APP_ID repo variable (see docs/MULTI_APP_SEPARATION_ANALYSIS.md §20)."
             exit 1
