@@ -4,22 +4,21 @@ on:
   workflow_call:
     inputs:
       product:
-        description: 'expense | nutrition | ganesh'
         required: true
         type: string
       version:
-        description: 'Version name'
         required: false
         type: string
       mandatory:
-        description: 'Force users to update before continuing'
         required: false
         default: false
         type: boolean
       notes:
-        description: 'Release notes'
         required: false
         type: string
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -33,7 +32,7 @@ jobs:
           case "${{ inputs.product }}" in
             expense|nutrition|ganesh) ;;
             *)
-              echo "::error::Unknown product '${{ inputs.product }}'. Expected expense, nutrition, or ganesh."
+              echo "::error::Unknown product '${{ inputs.product }}'"
               exit 1
               ;;
           esac
