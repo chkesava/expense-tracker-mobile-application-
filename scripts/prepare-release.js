@@ -22,7 +22,7 @@ function prepareRelease(cliOptions = null) {
   // 1. Run full verification suite
   verifyEnvironment();
   verifyKeystore();
-  verifyGoogleServices();
+  verifyGoogleServices(options.product);
   verifyGradle();
 
   // 2. Version Management
