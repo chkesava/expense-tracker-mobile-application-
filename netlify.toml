@@ -3,7 +3,7 @@
 # SUPERSEDED as this site's deploy mechanism: spendly-share.netlify.app now
 # also serves the full multi-product web app (/expense, /nutrition, /ganesh,
 # and / — see scripts/build-web.js and .github/workflows/web-deploy.yml),
-# deployed via `netlify deploy --no-build` from GitHub Actions, NOT via this
+# deployed via `netlify deploy` (no --build flag) from GitHub Actions, NOT via this
 # file. Continuous deployment (Netlify's own git-triggered build reading this
 # file) must stay OFF for this site — if it's ever re-enabled, the next push
 # to main will rebuild and publish the OLD narrow dist/ below, clobbering the

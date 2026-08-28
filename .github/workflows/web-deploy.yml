@@ -8,7 +8,8 @@ name: Deploy Web (Netlify)
 # IMPORTANT: spendly-share.netlify.app is an EXISTING site that used to serve
 # only /split and /payment via its own git-triggered build (root netlify.toml,
 # `command = npm run build:web`, publish "dist"). This workflow now deploys
-# the full multi-product app to that SAME site via `netlify deploy --no-build`
+# the full multi-product app to that SAME site via `netlify deploy` (no
+# --build flag, so it deploys the directory as-is instead of rebuilding)
 # instead. Continuous deployment (Netlify's own git-triggered build) MUST be
 # disabled in that site's dashboard, or its next auto-build will overwrite
 # this workflow's deploy with the old narrow dist/ output (and vice versa —
@@ -131,9 +132,13 @@ jobs:
           # Deploy from outside the repo (no netlify.toml here) so this site
           # never picks up the OTHER site's root netlify.toml — routing for
           # this deploy comes entirely from dist-web/_redirects + _headers.
+          # netlify-cli v17's `deploy` has no --no-build flag — omitting
+          # --build (the opt-in flag to run a build first) already means
+          # "deploy --dir as-is", which is what we want since GitHub Actions
+          # already built dist-web/ in the previous step.
           cp -R "$GITHUB_WORKSPACE/dist-web" "$RUNNER_TEMP/publish"
           cd "$RUNNER_TEMP"
-          netlify deploy --prod --no-build \
+          netlify deploy --prod \
             --dir "$RUNNER_TEMP/publish" \
             --site "$NETLIFY_SITE_ID" \
             --message "$GITHUB_SHA"
