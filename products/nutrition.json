@@ -1,7 +1,7 @@
 {
   "product": "nutrition",
-  "version": "1.0.3",
-  "versionCode": 4,
+  "version": "1.0.4",
+  "versionCode": 5,
   "name": "Spendly Nutrition",
   "slug": "spendly-nutrition",
   "scheme": "spendlynutrition",
