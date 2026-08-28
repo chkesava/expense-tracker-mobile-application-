@@ -14,5 +14,13 @@
     "android.permission.POST_NOTIFICATIONS",
     "android.permission.REQUEST_INSTALL_PACKAGES"
   ],
-  "extraPlugins": []
+  "extraPlugins": [],
+  "web": {
+    "basePath": "/expense",
+    "shortName": "Spendly",
+    "themeColor": "#071A2B",
+    "backgroundColor": "#071A2B",
+    "description": "Personal ledger, accounts, splits and vaults.",
+    "manifestIcon": "./assets/branding/icon.png"
+  }
 }

@@ -1,5 +1,17 @@
 # Netlify build for the Expo web export.
 #
+# SUPERSEDED as this site's deploy mechanism: spendly-share.netlify.app now
+# also serves the full multi-product web app (/expense, /nutrition, /ganesh,
+# and / — see scripts/build-web.js and .github/workflows/web-deploy.yml),
+# deployed via `netlify deploy --no-build` from GitHub Actions, NOT via this
+# file. Continuous deployment (Netlify's own git-triggered build reading this
+# file) must stay OFF for this site — if it's ever re-enabled, the next push
+# to main will rebuild and publish the OLD narrow dist/ below, clobbering the
+# multi-product deploy (and the reverse: the next Actions run then clobbers
+# that). Kept here for reference/manual-rollback only.
+#
+# --- Original narrow-share-only config below (historical) ---
+#
 # This site serves the public share pages — /split/:slug and /payment/:slug —
 # for people who have no account. It is self-contained: the app addresses it via
 # EXPO_PUBLIC_SHARE_URL, and nothing here depends on, or redirects to, any other

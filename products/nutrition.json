@@ -22,5 +22,13 @@
         "cameraPermission": "Allow Spendly Nutrition to photograph your meal."
       }
     ]
-  ]
+  ],
+  "web": {
+    "basePath": "/nutrition",
+    "shortName": "Nutrition",
+    "themeColor": "#166534",
+    "backgroundColor": "#071A2B",
+    "description": "Meal logging, food photo analysis and nutrition insights.",
+    "manifestIcon": "./assets/branding/nutrition-adaptive-icon.png"
+  }
 }

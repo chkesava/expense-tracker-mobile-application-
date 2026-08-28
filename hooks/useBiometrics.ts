@@ -4,17 +4,24 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
+import { Platform } from "react-native";
 import * as LocalAuthentication from "expo-local-authentication";
 import * as SecureStore from "expo-secure-store";
 import { logError } from "@/lib/errors";
 
 const BIOMETRIC_KEY = "vault_biometric_id";
+// expo-local-authentication/expo-secure-store have no web hardware to back
+// them — their web stubs already fail safely (hasHardwareAsync() -> false,
+// SecureStore calls reject), this just skips the calls outright so nothing
+// logs spurious errors on the public web pages.
+const SUPPORTED = Platform.OS !== "web";
 
 export function useBiometrics() {
   const [isSupported, setIsSupported] = useState(false);
   const [isRegistered, setIsRegistered] = useState(false);
 
   useEffect(() => {
+    if (!SUPPORTED) return;
     let cancelled = false;
 
     (async () => {
@@ -39,6 +46,7 @@ export function useBiometrics() {
   }, []);
 
   const register = useCallback(async (): Promise<boolean> => {
+    if (!SUPPORTED) return false;
     try {
       const hasHardware = await LocalAuthentication.hasHardwareAsync();
       const enrolled = await LocalAuthentication.isEnrolledAsync();
@@ -63,6 +71,7 @@ export function useBiometrics() {
   }, []);
 
   const authenticate = useCallback(async (): Promise<boolean> => {
+    if (!SUPPORTED) return false;
     try {
       const stored = await SecureStore.getItemAsync(BIOMETRIC_KEY);
       if (!stored) return false;
@@ -81,6 +90,10 @@ export function useBiometrics() {
   }, []);
 
   const unregister = useCallback(async () => {
+    if (!SUPPORTED) {
+      setIsRegistered(false);
+      return;
+    }
     try {
       await SecureStore.deleteItemAsync(BIOMETRIC_KEY);
     } catch {

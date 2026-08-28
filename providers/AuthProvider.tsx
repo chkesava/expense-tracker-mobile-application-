@@ -15,7 +15,6 @@ import {
 import {
   GoogleAuthProvider,
   createUserWithEmailAndPassword,
-  getAdditionalUserInfo,
   onAuthStateChanged,
   sendPasswordResetEmail,
   signInWithCredential,
@@ -35,6 +34,7 @@ import { logError } from "@/lib/errors";
 import { ensureCategoryHierarchy } from "@/lib/ensureCategoryHierarchy";
 import { env } from "@/lib/env";
 import { getFirebaseAuth, getFirestoreDb } from "@/lib/firebase";
+import { enforceGoogleSignupGate } from "@/lib/googleSignupGate";
 import { perfMark } from "@/lib/perf";
 import { privacySession } from "@/lib/privacySession";
 import { authErrorMessage, createDuressUser } from "@/lib/authHelpers";
@@ -181,24 +181,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loginWithGoogleIdToken = useCallback(async (idToken: string) => {
     const auth = getFirebaseAuth();
-    const db = getFirestoreDb();
     if (!auth) throw new Error("Firebase Auth is not configured.");
     if (!idToken) throw new Error("Missing Google ID token.");
 
     try {
       const credential = GoogleAuthProvider.credential(idToken);
       const result: UserCredential = await signInWithCredential(auth, credential);
-      const additionalInfo = getAdditionalUserInfo(result);
-
-      if (additionalInfo?.isNewUser && db) {
-        const settingsSnap = await getDoc(doc(db, "system_settings", "global"));
-        if (settingsSnap.exists() && settingsSnap.data().disableSignups) {
-          await result.user.delete();
-          throw new Error(
-            "New registrations are temporarily disabled by the administrator."
-          );
-        }
-      }
+      await enforceGoogleSignupGate(result);
     } catch (error) {
       logError("authProvider.googleLogin", error);
       throw new Error(authErrorMessage(error, "Google sign-in failed"));

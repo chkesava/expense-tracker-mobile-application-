@@ -1,0 +1,16 @@
+{
+  "product": "landing",
+  "webOnly": true,
+  "name": "Spendly",
+  "slug": "spendly-web",
+  "scheme": "spendly",
+  "version": "1.0.0",
+  "web": {
+    "basePath": "",
+    "shortName": "Spendly",
+    "themeColor": "#071A2B",
+    "backgroundColor": "#071A2B",
+    "description": "Spendly — Expense, Nutrition and Ganesh Seva.",
+    "manifestIcon": "./assets/branding/icon.png"
+  }
+}

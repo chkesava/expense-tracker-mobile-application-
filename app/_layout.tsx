@@ -18,12 +18,13 @@ import {
 } from "@expo-google-fonts/inter";
 import "react-native-reanimated";
 
-import { ACTIVE_PRODUCT } from "@/lib/activeProduct";
+import { ACTIVE_PRODUCT, IS_LANDING_BUILD } from "@/lib/activeProduct";
 import { AppErrorBoundary } from "@/components/common/AppErrorBoundary";
 import { CelebrationOverlay } from "@/components/common/CelebrationOverlay";
 import { OfflineBanner } from "@/components/common/OfflineBanner";
 import { SplashAnimationOverlay } from "@/components/common/SplashAnimationOverlay";
 import { UpdateAvailableSheet } from "@/components/UpdateAvailableSheet";
+import { webWidthConstraintStyle } from "@/components/common/WebWidthConstraint";
 import { isPermissionError, logWarning } from "@/lib/errors";
 import { installGlobalErrorHandlers } from "@/lib/globalErrorHandler";
 import { perfMark } from "@/lib/perf";
@@ -271,24 +272,35 @@ function RootNavigator() {
       <Stack
         screenOptions={{
           headerShown: false,
-          contentStyle: { backgroundColor: theme.colors.background },
+          contentStyle: { backgroundColor: theme.colors.background, ...webWidthConstraintStyle },
           animation: "fade_from_bottom",
         }}
       >
         <Stack.Screen name="index" />
-        <Stack.Screen name="welcome" options={{ animation: "fade" }} />
-        <Stack.Screen name="onboarding" options={{ animation: "fade" }} />
-        <Stack.Screen name="(auth)" options={{ animation: "fade" }} />
+        {/*
+          The web-only "landing" build (bare root chooser) blocks these three
+          route files from Metro entirely (see metro.config.js's
+          LANDING_EXTRA_BLOCKS), so they must not be registered here either —
+          same three-separate-expressions requirement as the product screens
+          below (useFilterScreenChildren does not flatten a Fragment).
+        */}
+        {!IS_LANDING_BUILD && <Stack.Screen name="welcome" options={{ animation: "fade" }} />}
+        {!IS_LANDING_BUILD && <Stack.Screen name="onboarding" options={{ animation: "fade" }} />}
+        {!IS_LANDING_BUILD && <Stack.Screen name="(auth)" options={{ animation: "fade" }} />}
         {/*
           A single-product build only ever has one of these route groups on
           disk (metro.config.js blocks the other two), so only register the
           screen(s) that exist. ACTIVE_PRODUCT === null (unset) is the
-          existing combined build — register all of them, unchanged.
+          existing combined build — register all of them, unchanged. The
+          web-only "landing" build also resolves ACTIVE_PRODUCT to null (it
+          isn't a member of the Product union) but blocks ALL product routes
+          from Metro, so it must be excluded here too, or these would
+          register screens for route files that don't exist in that bundle.
         */}
-        {(ACTIVE_PRODUCT === null || ACTIVE_PRODUCT === "expense") && (
+        {!IS_LANDING_BUILD && (ACTIVE_PRODUCT === null || ACTIVE_PRODUCT === "expense") && (
           <Stack.Screen name="(app)" />
         )}
-        {(ACTIVE_PRODUCT === null || ACTIVE_PRODUCT === "nutrition") && (
+        {!IS_LANDING_BUILD && (ACTIVE_PRODUCT === null || ACTIVE_PRODUCT === "nutrition") && (
           <Stack.Screen name="(nutrition)" options={{ animation: "slide_from_right" }} />
         )}
         {/*
@@ -301,13 +313,13 @@ function RootNavigator() {
           Ganesh-only build: the first redirect into /(ganesh) failed to
           resolve, and AppErrorBoundary caught it immediately on launch.
         */}
-        {(ACTIVE_PRODUCT === null || ACTIVE_PRODUCT === "ganesh") && (
+        {!IS_LANDING_BUILD && (ACTIVE_PRODUCT === null || ACTIVE_PRODUCT === "ganesh") && (
           <Stack.Screen name="(ganesh)" options={{ animation: "slide_from_right" }} />
         )}
-        {(ACTIVE_PRODUCT === null || ACTIVE_PRODUCT === "ganesh") && (
+        {!IS_LANDING_BUILD && (ACTIVE_PRODUCT === null || ACTIVE_PRODUCT === "ganesh") && (
           <Stack.Screen name="(ganesh-auth)" options={{ animation: "fade" }} />
         )}
-        {(ACTIVE_PRODUCT === null || ACTIVE_PRODUCT === "ganesh") && (
+        {!IS_LANDING_BUILD && (ACTIVE_PRODUCT === null || ACTIVE_PRODUCT === "ganesh") && (
           <Stack.Screen name="ganesh-phone-auth" options={{ animation: "none" }} />
         )}
         <Stack.Screen name="google-auth" options={{ animation: "none" }} />
