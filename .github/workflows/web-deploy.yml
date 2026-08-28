@@ -20,22 +20,12 @@ name: Deploy Web (Netlify)
 # partial deploy would delete the other sub-apps. /split and /payment keep
 # working because the "landing" target (published at the site root) still
 # registers those two routes unconditionally — see app/_layout.tsx.
+#
+# Manual trigger only (workflow_dispatch) — deliberately no push trigger, so
+# merging to main never fires a web deploy on its own. Run it from
+# GitHub → Actions → Deploy Web (Netlify) → Run workflow when you actually
+# want to publish.
 on:
-  push:
-    branches: [main]
-    paths-ignore:
-      - '**/*.md'
-      - 'docs/**'
-      - 'releases/**'
-      - 'android/**'
-      - 'plugins/**'
-      - 'supabase/**'
-      - 'firestore.*'
-      - 'storage.rules'
-      - 'google-services.json'
-      - '.github/workflows/release*.yml'
-      - '.github/workflows/android-release.yml'
-      - '.github/workflows/pr-checks.yml'
   workflow_dispatch:
 
 concurrency:
