@@ -17,6 +17,7 @@ import Animated, { FadeInUp, FadeInDown } from "react-native-reanimated";
 
 import { Input } from "@/components/ui/Input";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
+import { describeGoogleSignInError, signInWithGoogle } from "@/lib/googleSignIn";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
@@ -87,35 +88,17 @@ export default function AuthScreen() {
   const onGoogle = async () => {
     setSubmitting(true);
     try {
-      const { GoogleSignin, isSuccessResponse } = await import("@react-native-google-signin/google-signin");
-
-      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-      const result = await GoogleSignin.signIn();
-
-      if (!isSuccessResponse(result)) return;
-
-      const idToken = result.data.idToken;
-      if (!idToken) {
-        throw new Error("Google did not return an ID token. Check that the Web client ID is configured.");
-      }
-
-      await loginWithGoogleIdToken(idToken);
+      const outcome = await signInWithGoogle();
+      if (outcome.status === "cancelled") return;
+      if (outcome.status === "id-token") await loginWithGoogleIdToken(outcome.idToken);
+      // "signed-in": web's signInWithPopup already established the Firebase
+      // session; AuthProvider's onAuthStateChanged listener picks it up.
       toast.success("Welcome!");
     } catch (error) {
       logError("auth.google", error);
-      let message = friendlyErrorMessage(error, "Google sign-in failed.");
-
-      try {
-        const { isErrorWithCode, statusCodes } = await import("@react-native-google-signin/google-signin");
-        if (isErrorWithCode(error)) {
-          if (error.code === statusCodes.SIGN_IN_CANCELLED) return;
-          if (error.code === statusCodes.IN_PROGRESS) message = "Google sign-in is already in progress.";
-          else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) message = "Google Play Services is not available on this device.";
-          else if (String(error.code) === "10") message = "Google Sign-In configuration error. Add the release signing SHA-1 in Firebase.";
-        }
-      } catch {}
-
-      if (!/cancelled/i.test(message)) toast.error(message);
+      const specific = await describeGoogleSignInError(error);
+      if (specific === "cancelled") return;
+      toast.error(specific ?? friendlyErrorMessage(error, "Google sign-in failed."));
     } finally {
       setSubmitting(false);
     }

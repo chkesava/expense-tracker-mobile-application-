@@ -1,0 +1,167 @@
+name: Deploy Web (Netlify)
+
+# Builds the multi-product web export (expense/nutrition/ganesh/landing, see
+# scripts/build-web.js) and deploys it to spendly-share.netlify.app via the
+# Netlify CLI. Entirely separate from the Android release workflows
+# (release.yml + its three callers, android-release.yml).
+#
+# IMPORTANT: spendly-share.netlify.app is an EXISTING site that used to serve
+# only /split and /payment via its own git-triggered build (root netlify.toml,
+# `command = npm run build:web`, publish "dist"). This workflow now deploys
+# the full multi-product app to that SAME site via `netlify deploy --no-build`
+# instead. Continuous deployment (Netlify's own git-triggered build) MUST be
+# disabled in that site's dashboard, or its next auto-build will overwrite
+# this workflow's deploy with the old narrow dist/ output (and vice versa —
+# whichever runs last wins, on the same site). netlify.toml is left in the
+# repo for reference/rollback but is no longer meant to build this site.
+#
+# This workflow always builds and deploys all four targets together: a
+# Netlify production deploy replaces the whole publish directory, so a
+# partial deploy would delete the other sub-apps. /split and /payment keep
+# working because the "landing" target (published at the site root) still
+# registers those two routes unconditionally — see app/_layout.tsx.
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'releases/**'
+      - 'android/**'
+      - 'plugins/**'
+      - 'supabase/**'
+      - 'firestore.*'
+      - 'storage.rules'
+      - 'google-services.json'
+      - '.github/workflows/release*.yml'
+      - '.github/workflows/android-release.yml'
+      - '.github/workflows/pr-checks.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: web-deploy
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Build and deploy web
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Unit + integration-lite suite
+        run: npm test
+
+      - name: Shared typecheck
+        run: npm run typecheck:shared
+
+      - name: Full app typecheck
+        run: npm run typecheck
+
+      # Same EXPO_PUBLIC_* set as release.yml, minus keystore passwords (a web
+      # build never touches signing) and minus EXPO_PUBLIC_PRODUCT (each of
+      # the four targets sets its own inside scripts/build-web.js).
+      - name: Restore .env
+        env:
+          MOBILE_ENV_FILE: ${{ secrets.MOBILE_ENV_FILE }}
+          EXPO_PUBLIC_APP_URL: ${{ secrets.EXPO_PUBLIC_APP_URL }}
+          EXPO_PUBLIC_SHARE_URL: ${{ secrets.EXPO_PUBLIC_SHARE_URL }}
+          EXPO_PUBLIC_FIREBASE_API_KEY: ${{ secrets.EXPO_PUBLIC_FIREBASE_API_KEY }}
+          EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ secrets.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN }}
+          EXPO_PUBLIC_FIREBASE_PROJECT_ID: ${{ secrets.EXPO_PUBLIC_FIREBASE_PROJECT_ID }}
+          EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET: ${{ secrets.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET }}
+          EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER: ${{ secrets.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER }}
+          EXPO_PUBLIC_FIREBASE_APP_ID: ${{ secrets.EXPO_PUBLIC_FIREBASE_APP_ID }}
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+          EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: ${{ secrets.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID }}
+          EXPO_PUBLIC_GEMINI_API_KEY: ${{ secrets.EXPO_PUBLIC_GEMINI_API_KEY }}
+        run: |
+          if [ -n "$MOBILE_ENV_FILE" ]; then
+            printf '%s\n' "$MOBILE_ENV_FILE" > .env
+            echo "Wrote .env from MOBILE_ENV_FILE."
+          else
+            : > .env
+            write_kv() {
+              local key="$1"
+              local value="$2"
+              if [ -n "$value" ]; then
+                printf '%s=%s\n' "$key" "$value" >> .env
+              fi
+            }
+            write_kv EXPO_PUBLIC_APP_URL "$EXPO_PUBLIC_APP_URL"
+            write_kv EXPO_PUBLIC_SHARE_URL "$EXPO_PUBLIC_SHARE_URL"
+            write_kv EXPO_PUBLIC_FIREBASE_API_KEY "$EXPO_PUBLIC_FIREBASE_API_KEY"
+            write_kv EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN "$EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN"
+            write_kv EXPO_PUBLIC_FIREBASE_PROJECT_ID "$EXPO_PUBLIC_FIREBASE_PROJECT_ID"
+            write_kv EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET "$EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET"
+            write_kv EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER "$EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER"
+            write_kv EXPO_PUBLIC_FIREBASE_APP_ID "$EXPO_PUBLIC_FIREBASE_APP_ID"
+            write_kv EXPO_PUBLIC_SUPABASE_URL "$EXPO_PUBLIC_SUPABASE_URL"
+            write_kv EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY "$EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY"
+            write_kv EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID "$EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID"
+            write_kv EXPO_PUBLIC_GEMINI_API_KEY "$EXPO_PUBLIC_GEMINI_API_KEY"
+            echo "Wrote .env from individual EXPO_PUBLIC_* secrets."
+          fi
+          KEY_COUNT=$(grep -c '^EXPO_PUBLIC_' .env || true)
+          if [ "$KEY_COUNT" -lt 7 ]; then
+            echo "::error::Need the Firebase EXPO_PUBLIC_* secrets (or one MOBILE_ENV_FILE). Found $KEY_COUNT EXPO_PUBLIC_* lines."
+            exit 1
+          fi
+          echo "Wrote .env with $KEY_COUNT EXPO_PUBLIC_* keys."
+
+      - name: Build web (expense, nutrition, ganesh, landing)
+        run: npm run build:web:all
+
+      - name: Deploy to Netlify
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+        run: |
+          if [ -z "$NETLIFY_AUTH_TOKEN" ] || [ -z "$NETLIFY_SITE_ID" ]; then
+            echo "::error::NETLIFY_AUTH_TOKEN and/or NETLIFY_SITE_ID secrets are missing."
+            exit 1
+          fi
+          npm install -g netlify-cli@17
+          # Deploy from outside the repo (no netlify.toml here) so this site
+          # never picks up the OTHER site's root netlify.toml — routing for
+          # this deploy comes entirely from dist-web/_redirects + _headers.
+          cp -R "$GITHUB_WORKSPACE/dist-web" "$RUNNER_TEMP/publish"
+          cd "$RUNNER_TEMP"
+          netlify deploy --prod --no-build \
+            --dir "$RUNNER_TEMP/publish" \
+            --site "$NETLIFY_SITE_ID" \
+            --message "$GITHUB_SHA"
+
+      - name: Clean up
+        if: always()
+        run: rm -f .env
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "## Web deploy"
+            echo ""
+            echo "- https://spendly-share.netlify.app/"
+            echo "- https://spendly-share.netlify.app/expense"
+            echo "- https://spendly-share.netlify.app/nutrition"
+            echo "- https://spendly-share.netlify.app/ganesh"
+            echo "- https://spendly-share.netlify.app/split/<slug> (unchanged)"
+            echo "- https://spendly-share.netlify.app/payment/<slug> (unchanged)"
+          } >> "$GITHUB_STEP_SUMMARY"

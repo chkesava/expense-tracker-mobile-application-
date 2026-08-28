@@ -26,12 +26,24 @@ config.resolver.unstable_enablePackageExports = false;
  */
 const PRODUCTS = ["expense", "nutrition", "ganesh"];
 
+// "landing" mirrors app.config.js's web-only pseudo-product: the bare-root
+// chooser build. Only accepted when EXPO_WEB_BUILD=1 (set only by
+// scripts/build-web.js), so it can never be selected for a native build.
+const WEB_TARGETS = [...PRODUCTS, "landing"];
+const isWebBuild = process.env.EXPO_WEB_BUILD === "1";
+
 // Route-group directories/files (relative to app/) owned by each product.
 const PRODUCT_ROUTES = {
   expense: ["(app)"],
   nutrition: ["(nutrition)"],
   ganesh: ["(ganesh)", "(ganesh-auth)", "ganesh-phone-auth.tsx"],
+  landing: [],
 };
+
+// The landing build owns no product routes, but also has no use for the
+// generic combined-build screens (workspace picker, onboarding, generic
+// login) — those stay reachable only from a combined (unset-product) build.
+const LANDING_EXTRA_BLOCKS = ["(auth)", "welcome.tsx", "onboarding.tsx"];
 
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -43,17 +55,21 @@ function routeBlockPattern(routeName) {
 }
 
 const activeProduct = (process.env.EXPO_PUBLIC_PRODUCT || "").trim();
+const allowedProducts = isWebBuild ? WEB_TARGETS : PRODUCTS;
 
-if (activeProduct && !PRODUCTS.includes(activeProduct)) {
+if (activeProduct && !allowedProducts.includes(activeProduct)) {
   throw new Error(
-    `Unknown EXPO_PUBLIC_PRODUCT "${activeProduct}". Expected one of: ${PRODUCTS.join(", ")}.`
+    `Unknown EXPO_PUBLIC_PRODUCT "${activeProduct}". Expected one of: ${allowedProducts.join(", ")}.`
   );
 }
 
 if (activeProduct) {
-  const excludedRoutes = PRODUCTS.filter((p) => p !== activeProduct).flatMap(
-    (p) => PRODUCT_ROUTES[p]
-  );
+  const excludedRoutes = allowedProducts
+    .filter((p) => p !== activeProduct)
+    .flatMap((p) => PRODUCT_ROUTES[p]);
+  if (activeProduct === "landing") {
+    excludedRoutes.push(...LANDING_EXTRA_BLOCKS);
+  }
   const existingBlockList = config.resolver.blockList;
   const existingList = Array.isArray(existingBlockList)
     ? existingBlockList

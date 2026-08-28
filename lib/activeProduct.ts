@@ -23,6 +23,21 @@ export const ACTIVE_PRODUCT: Product | null =
         ? "ganesh"
         : null;
 
+/**
+ * True only for the web-only "landing" pseudo-product build (the bare-root
+ * chooser at spendly-share.netlify.app/). Static comparison for the same
+ * Metro-inlining reason as ACTIVE_PRODUCT above.
+ */
+export const IS_LANDING_BUILD: boolean = process.env.EXPO_PUBLIC_PRODUCT === "landing";
+
+/** Path each product is served under on spendly-share.netlify.app. Kept in sync
+ * with products/<product>.json's "web.basePath" by lib/activeProduct.test.ts. */
+export const WEB_BASE_PATHS: Record<Product, string> = {
+  expense: "/expense",
+  nutrition: "/nutrition",
+  ganesh: "/ganesh",
+};
+
 /** The single root route to send an authenticated user to in a single-product build. */
 export function activeProductRootRoute(): "/(app)" | "/(nutrition)" | "/(ganesh)" {
   if (ACTIVE_PRODUCT === "nutrition") return "/(nutrition)";

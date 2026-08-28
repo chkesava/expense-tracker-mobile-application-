@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -13,6 +13,7 @@ import { Redirect, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
 import { Lock, Mail, Smartphone, User } from "lucide-react-native";
+import { RecaptchaVerifier } from "firebase/auth";
 
 import { SocialLoginButton } from "@/components/auth/SocialLoginButton";
 import { GaneshAuthBackground, GaneshMark, useGaneshTokens } from "@/components/ganesh/ui";
@@ -21,6 +22,7 @@ import { Input } from "@/components/ui/Input";
 import { ganeshPhoneCredential, requestGaneshPhoneVerification } from "@/lib/ganeshPhoneAuth";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { getFirebaseAuth, getFirestoreDb } from "@/lib/firebase";
+import { describeGoogleSignInError, signInWithGoogle } from "@/lib/googleSignIn";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import { useWorkspace } from "@/providers/WorkspaceProvider";
@@ -40,7 +42,7 @@ export default function GaneshLoginScreen() {
   } = useAuth();
   const { setActiveWorkspace } = useWorkspace();
   const { replace } = useRouter();
-  const webVerifier = useRef<undefined>(undefined);
+  const webVerifier = useRef<RecaptchaVerifier | undefined>(undefined);
 
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
@@ -51,6 +53,22 @@ export default function GaneshLoginScreen() {
   const [verificationId, setVerificationId] = useState<string | null>(null);
   const [showPhone, setShowPhone] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  // Web-only invisible reCAPTCHA, created once the user opens phone sign-in.
+  // Mirrors the verifier already used by app/ganesh-phone-auth.tsx (native's
+  // web-bridge redirect target) — this is the in-page equivalent for web.
+  useEffect(() => {
+    if (Platform.OS !== "web" || !showPhone || verificationId) return;
+    const auth = getFirebaseAuth();
+    const host = typeof document !== "undefined" ? document.getElementById("ganesh-recaptcha-login") : null;
+    if (!auth || !host) return;
+    const verifier = new RecaptchaVerifier(auth, host, { size: "invisible" });
+    webVerifier.current = verifier;
+    return () => {
+      verifier.clear();
+      webVerifier.current = undefined;
+    };
+  }, [showPhone, verificationId]);
 
   if (loading) {
     return (
@@ -80,33 +98,16 @@ export default function GaneshLoginScreen() {
   const onGoogle = async () => {
     setSubmitting(true);
     try {
-      const { GoogleSignin, isSuccessResponse } = await import("@react-native-google-signin/google-signin");
-      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-      const result = await GoogleSignin.signIn();
-      if (!isSuccessResponse(result)) return;
-      const idToken = result.data.idToken;
-      if (!idToken) {
-        throw new Error("Google did not return an ID token. Check that the Web client ID is configured.");
-      }
-      await loginWithGoogleIdToken(idToken);
+      const outcome = await signInWithGoogle();
+      if (outcome.status === "cancelled") return;
+      if (outcome.status === "id-token") await loginWithGoogleIdToken(outcome.idToken);
       await finish();
       toast.success("Welcome to Ganesh Seva");
     } catch (error) {
       logError("ganesh.login.google", error);
-      let message = friendlyErrorMessage(error, "Google sign-in failed.");
-      try {
-        const { isErrorWithCode, statusCodes } = await import("@react-native-google-signin/google-signin");
-        if (isErrorWithCode(error)) {
-          if (error.code === statusCodes.SIGN_IN_CANCELLED) return;
-          if (error.code === statusCodes.IN_PROGRESS) message = "Google sign-in is already in progress.";
-          else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
-            message = "Google Play Services is not available on this device.";
-          }
-        }
-      } catch {
-        /* ignore */
-      }
-      if (!/cancelled/i.test(message)) toast.error(message);
+      const specific = await describeGoogleSignInError(error);
+      if (specific === "cancelled") return;
+      toast.error(specific ?? friendlyErrorMessage(error, "Google sign-in failed."));
     } finally {
       setSubmitting(false);
     }
@@ -305,14 +306,22 @@ export default function GaneshLoginScreen() {
                 ]}
               >
                 {!verificationId ? (
-                  <Input
-                    label="Mobile number"
-                    value={phone}
-                    onChangeText={setPhone}
-                    keyboardType="phone-pad"
-                    placeholder="98765 43210"
-                    leadingIcon={<Smartphone size={20} color={iconColor} />}
-                  />
+                  <>
+                    <Input
+                      label="Mobile number"
+                      value={phone}
+                      onChangeText={setPhone}
+                      keyboardType="phone-pad"
+                      placeholder="98765 43210"
+                      leadingIcon={<Smartphone size={20} color={iconColor} />}
+                    />
+                    {Platform.OS === "web"
+                      ? // Web-only invisible reCAPTCHA host for the useEffect above.
+                        (require("react") as typeof import("react")).createElement("div", {
+                          id: "ganesh-recaptcha-login",
+                        })
+                      : null}
+                  </>
                 ) : (
                   <>
                     <Input

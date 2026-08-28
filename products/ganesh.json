@@ -22,5 +22,13 @@
         "cameraPermission": "Allow Ganesh Seva to photograph Ganesh receipts and contributions."
       }
     ]
-  ]
+  ],
+  "web": {
+    "basePath": "/ganesh",
+    "shortName": "Ganesh Seva",
+    "themeColor": "#F97316",
+    "backgroundColor": "#071A2B",
+    "description": "Shared Pandal hisab: contributions, sponsors and expenses.",
+    "manifestIcon": "./assets/branding/ganesh-pandal-adaptive-icon.png"
+  }
 }
