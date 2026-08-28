@@ -23,6 +23,7 @@ import { AppErrorBoundary } from "@/components/common/AppErrorBoundary";
 import { CelebrationOverlay } from "@/components/common/CelebrationOverlay";
 import { OfflineBanner } from "@/components/common/OfflineBanner";
 import { SplashAnimationOverlay } from "@/components/common/SplashAnimationOverlay";
+import { UpdateAvailableSheet } from "@/components/UpdateAvailableSheet";
 import { isPermissionError, logWarning } from "@/lib/errors";
 import { installGlobalErrorHandlers } from "@/lib/globalErrorHandler";
 import { perfMark } from "@/lib/perf";
@@ -315,6 +316,17 @@ function RootNavigator() {
         <Stack.Screen name="+not-found" options={{ animation: "fade" }} />
       </Stack>
       <OfflineBanner />
+      {/*
+        Cross-cutting, product-agnostic: was only ever mounted in
+        app/(app)/_layout.tsx (Expense's own shell), so Nutrition and Ganesh
+        never showed an update prompt at all — not a regression from the
+        split, just a gap that only started mattering once they became
+        separately installed apps. useAppUpdate() already resolves the
+        right product-scoped Firestore doc via ACTIVE_PRODUCT and gates on
+        Platform.OS === "android" internally, so one root-level mount
+        covers all three products (and the combined build) correctly.
+      */}
+      <UpdateAvailableSheet />
     </>
   );
 }

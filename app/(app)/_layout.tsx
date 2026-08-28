@@ -9,7 +9,6 @@ import { MobileActionDock } from "@/components/MobileActionDock";
 import { PrivacyLock } from "@/components/PrivacyLock";
 import { TabSwipeArea } from "@/components/navigation/TabSwipeArea";
 import { SetupWizardModal } from "@/components/onboarding/SetupWizardModal";
-import { UpdateAvailableSheet } from "@/components/UpdateAvailableSheet";
 import { useAndroidBackHandler } from "@/hooks/useAndroidBackHandler";
 import { useNavigationStateRestoration } from "@/hooks/useNavigationStateRestoration";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -120,7 +119,6 @@ function AppShellInner() {
       {settings.navigationStyle === "dock" ? <MobileActionDock /> : <BottomNav />}
       <AddTransactionModal />
       <SetupWizardModal />
-      <UpdateAvailableSheet />
     </View>
   );
 }
