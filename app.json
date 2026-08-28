@@ -66,7 +66,8 @@
           "photosPermission": "Allow Spendly to attach Ganesh receipt and contribution photos.",
           "cameraPermission": "Allow Spendly to photograph Ganesh receipts and contributions."
         }
-      ]
+      ],
+      "./plugins/withReactNativeArchitectures"
     ],
     "experiments": {
       "typedRoutes": true

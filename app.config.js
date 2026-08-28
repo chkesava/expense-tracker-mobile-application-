@@ -40,6 +40,11 @@ const SHARED_PLUGINS = [
       color: "#071A2B",
     },
   ],
+  // Drops x86/x86_64 native libs (emulator-only, ~55MB of a ~140MB APK) —
+  // see plugins/withReactNativeArchitectures.js. Kept in sync with the
+  // same entry in app.json's plugins array (the combined build's config,
+  // which app.config.js returns unmodified when no product is set).
+  "./plugins/withReactNativeArchitectures",
 ];
 
 /** Returns null for "combined, no override" (today's default), or a validated product id. */
