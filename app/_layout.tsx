@@ -290,12 +290,24 @@ function RootNavigator() {
         {(ACTIVE_PRODUCT === null || ACTIVE_PRODUCT === "nutrition") && (
           <Stack.Screen name="(nutrition)" options={{ animation: "slide_from_right" }} />
         )}
+        {/*
+          Deliberately three separate expressions, not one Fragment wrapping
+          three screens: expo-router's useFilterScreenChildren only
+          recognizes direct <Stack.Screen> elements passed to <Stack> — it
+          does not flatten a <>...</> Fragment's children, so all three
+          would otherwise be silently dropped (just a console.warn), never
+          registered as navigable screens. That produced a genuinely broken
+          Ganesh-only build: the first redirect into /(ganesh) failed to
+          resolve, and AppErrorBoundary caught it immediately on launch.
+        */}
         {(ACTIVE_PRODUCT === null || ACTIVE_PRODUCT === "ganesh") && (
-          <>
-            <Stack.Screen name="(ganesh)" options={{ animation: "slide_from_right" }} />
-            <Stack.Screen name="(ganesh-auth)" options={{ animation: "fade" }} />
-            <Stack.Screen name="ganesh-phone-auth" options={{ animation: "none" }} />
-          </>
+          <Stack.Screen name="(ganesh)" options={{ animation: "slide_from_right" }} />
+        )}
+        {(ACTIVE_PRODUCT === null || ACTIVE_PRODUCT === "ganesh") && (
+          <Stack.Screen name="(ganesh-auth)" options={{ animation: "fade" }} />
+        )}
+        {(ACTIVE_PRODUCT === null || ACTIVE_PRODUCT === "ganesh") && (
+          <Stack.Screen name="ganesh-phone-auth" options={{ animation: "none" }} />
         )}
         <Stack.Screen name="google-auth" options={{ animation: "none" }} />
         <Stack.Screen name="payment/[slug]" options={{ animation: "fade" }} />
