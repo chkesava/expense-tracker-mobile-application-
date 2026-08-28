@@ -7,7 +7,7 @@ import { useAuth } from "@/providers/AuthProvider";
 import { useWorkspace } from "@/providers/WorkspaceProvider";
 import { resolveWorkspaceRoute } from "@/shared/config/workspaceRoutes";
 import { useTheme } from "@/theme/ThemeProvider";
-import { ACTIVE_PRODUCT, activeProductRootRoute } from "@/lib/activeProduct";
+import { ACTIVE_PRODUCT, activeProductEntryRoute, activeProductRootRoute } from "@/lib/activeProduct";
 
 export default function WelcomeScreen() {
   const { theme } = useTheme();
@@ -29,9 +29,10 @@ export default function WelcomeScreen() {
   }
 
   // Single-product build: there's only one app to choose, so skip straight
-  // to sign-in instead of showing the Expense/Ganesh picker below.
+  // to sign-in instead of showing the Expense/Ganesh picker below. Ganesh
+  // has its own branded auth screen; Expense/Nutrition share the generic one.
   if (ACTIVE_PRODUCT !== null) {
-    return <Redirect href="/(auth)/login" />;
+    return <Redirect href={activeProductEntryRoute() as never} />;
   }
 
   return (

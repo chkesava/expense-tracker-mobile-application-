@@ -29,3 +29,18 @@ export function activeProductRootRoute(): "/(app)" | "/(nutrition)" | "/(ganesh)
   if (ACTIVE_PRODUCT === "ganesh") return "/(ganesh)";
   return "/(app)";
 }
+
+/**
+ * Where a not-yet-authenticated user should sign in. Ganesh has its own
+ * branded auth screen (phone OTP, Ganesh styling) at /(ganesh-auth)/login —
+ * (ganesh)/_layout.tsx's GaneshGate already redirects there internally for
+ * an authenticated-but-not-yet-arrived user, but a single-product Ganesh
+ * build's welcome screen used to skip straight to the generic /(auth)/login
+ * instead, so users only ever saw Expense Tracker's plain sign-in UI.
+ * Expense and Nutrition have no dedicated auth screen of their own — both
+ * genuinely use the shared /(auth)/login.
+ */
+export function activeProductEntryRoute(): "/(auth)/login" | "/(ganesh-auth)/login" {
+  if (ACTIVE_PRODUCT === "ganesh") return "/(ganesh-auth)/login";
+  return "/(auth)/login";
+}

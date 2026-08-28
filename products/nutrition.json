@@ -6,6 +6,9 @@
   "slug": "spendly-nutrition",
   "scheme": "spendlynutrition",
   "package": "com.example.nutritiontrackera",
+  "icon": "./assets/branding/nutrition-adaptive-icon.png",
+  "adaptiveIconForeground": "./assets/branding/nutrition-adaptive-icon.png",
+  "splashImage": "./assets/branding/nutrition-splash-logo.png",
   "permissions": [
     "android.permission.USE_BIOMETRIC",
     "android.permission.USE_FINGERPRINT",

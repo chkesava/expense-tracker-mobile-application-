@@ -18,18 +18,10 @@ const path = require("path");
 const PRODUCTS = ["expense", "nutrition", "ganesh"];
 
 // Plugins that are identical for every product. Anything product-specific
-// (currently just expo-image-picker's permission copy) lives in
-// products/<product>.json's "extraPlugins" instead.
+// (currently the splash image and expo-image-picker's permission copy)
+// lives in products/<product>.json's "splashImage" / "extraPlugins" instead.
 const SHARED_PLUGINS = [
   ["expo-router", { sitemap: false }],
-  [
-    "expo-splash-screen",
-    {
-      image: "./assets/branding/splash-logo.png",
-      resizeMode: "contain",
-      backgroundColor: "#071A2B",
-    },
-  ],
   "expo-secure-store",
   "expo-local-authentication",
   "@react-native-google-signin/google-signin",
@@ -46,6 +38,17 @@ const SHARED_PLUGINS = [
   // which app.config.js returns unmodified when no product is set).
   "./plugins/withReactNativeArchitectures",
 ];
+
+function splashScreenPlugin(image) {
+  return [
+    "expo-splash-screen",
+    {
+      image: image || "./assets/branding/splash-logo.png",
+      resizeMode: "contain",
+      backgroundColor: "#071A2B",
+    },
+  ];
+}
 
 /** Returns null for "combined, no override" (today's default), or a validated product id. */
 function resolveProduct() {
@@ -76,13 +79,25 @@ module.exports = ({ config }) => {
     // getCurrentVersion/updateVersion), independent of app.json's — which
     // remains the combined build's own stream, untouched by product builds.
     version: override.version,
+    // Falls back to the shared Spendly assets when a product doesn't
+    // supply its own (currently only Expense — it keeps the original
+    // branding it already shipped with).
+    icon: override.icon || config.icon,
     android: {
       ...config.android,
       package: override.package,
       permissions: override.permissions,
       versionCode: override.versionCode,
+      adaptiveIcon: {
+        ...config.android?.adaptiveIcon,
+        foregroundImage: override.adaptiveIconForeground || config.android?.adaptiveIcon?.foregroundImage,
+      },
     },
-    plugins: [...SHARED_PLUGINS, ...(override.extraPlugins || [])],
+    plugins: [
+      ...SHARED_PLUGINS,
+      splashScreenPlugin(override.splashImage),
+      ...(override.extraPlugins || []),
+    ],
     extra: {
       ...config.extra,
       product,
