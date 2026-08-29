@@ -1,15 +1,14 @@
-import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { CalendarDays } from "lucide-react-native";
 
+import { GaneshArt } from "@/components/ganesh/art/GaneshArt";
+import { useArtScale } from "@/components/ganesh/art/useArtScale";
 import { SevaRow } from "@/components/ganesh/SevaRow";
 import { GANESH_RADIUS, Section, SectionAction } from "@/components/ganesh/ui";
 import { SkeletonList } from "@/components/common/Skeleton";
 import { haptic } from "@/lib/haptics";
 import type { FestivalSeva } from "@/shared/types/ganesh";
 import { useTheme } from "@/theme/ThemeProvider";
-
-const DIYA = require("@/assets/branding/ganesh/diya.png");
-const MANDAP = require("@/assets/branding/ganesh/mandap.png");
 
 export function TodaySevaPanel({
   sevaToday,
@@ -35,6 +34,7 @@ export function TodaySevaPanel({
   onOpen: (id: string) => void;
 }) {
   const { theme } = useTheme();
+  const { diya, temple } = useArtScale();
   const empty = sevaToday.length === 0;
 
   return (
@@ -47,8 +47,8 @@ export function TodaySevaPanel({
         <SkeletonList count={3} />
       ) : empty ? (
         <View style={[styles.emptyCard, { backgroundColor: theme.colors.card }]}>
-          <Image source={MANDAP} style={styles.mandap} resizeMode="contain" />
-          <Image source={DIYA} style={styles.diya} resizeMode="contain" />
+          <GaneshArt name="temple" width={temple} height={temple * 0.78} opacity={0.28} style={styles.mandap} />
+          <GaneshArt name="diya" width={diya} height={diya} style={styles.diya} />
           <View style={styles.emptyCopy}>
             <Text
               style={[styles.emptyTitle, { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold }]}
@@ -115,16 +115,11 @@ const styles = StyleSheet.create({
     position: "absolute",
     right: -18,
     bottom: -10,
-    width: 168,
-    height: 132,
-    opacity: 0.32,
   },
   diya: {
     position: "absolute",
     left: 8,
     bottom: 14,
-    width: 62,
-    height: 62,
   },
   emptyCopy: {
     paddingLeft: 78,

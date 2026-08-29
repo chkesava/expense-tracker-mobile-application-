@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import {
   ClipboardCheck,
@@ -13,6 +13,7 @@ import {
   Wallet,
 } from "lucide-react-native";
 
+import { GaneshArt } from "@/components/ganesh/art/GaneshArt";
 import { GaneshQuickActions } from "@/components/ganesh/GaneshQuickActions";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { GaneshSyncChip } from "@/components/ganesh/GaneshSyncChip";
@@ -45,8 +46,6 @@ import { summarizeContributions } from "@/shared/utils/ganeshContributions";
 import { currentTimeInput, nextSeva, todaySeva, unstaffedSeva } from "@/shared/utils/ganeshSeva";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { useTheme } from "@/theme/ThemeProvider";
-
-const LOTUS = require("@/assets/branding/ganesh/lotus-watermark.png");
 
 function activityGlyph(entityType: string) {
   if (entityType.includes("collection")) return Wallet;
@@ -260,7 +259,7 @@ export default function GaneshHomeScreen() {
 
         <View style={styles.activityWrap}>
           <View pointerEvents="none" style={styles.lotusWrap}>
-            <Image source={LOTUS} style={styles.lotus} resizeMode="contain" />
+            <GaneshArt name="lotusWatermark" width={220} height={220} />
           </View>
           <Section
             title="Recent Activity"

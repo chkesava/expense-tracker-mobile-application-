@@ -1,6 +1,18 @@
-import { Image, type ImageSourcePropType, Pressable, StyleSheet, Text, View } from "react-native";
+import { type ComponentType } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 
+import {
+  AssetIcon,
+  CollectionIcon,
+  ContributionIcon,
+  ExpenseIcon,
+  MemberPaymentIcon,
+  OpeningFundIcon,
+  SevaIcon,
+  VolunteerIcon,
+} from "@/components/ganesh/art/icons";
+import { useArtScale } from "@/components/ganesh/art/useArtScale";
 import { Section, GANESH_RADIUS } from "@/components/ganesh/ui";
 import { useGaneshTokens } from "@/components/ganesh/ui/tokens";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
@@ -11,57 +23,32 @@ import { useTheme } from "@/theme/ThemeProvider";
 type QuickAction = {
   href: string;
   label: string;
-  icon: ImageSourcePropType;
+  Icon: ComponentType<{ size?: number }>;
   permission?: GaneshPermission;
 };
 
 const ACTIONS: QuickAction[] = [
-  {
-    href: "/(ganesh)/add-seva",
-    label: "Seva",
-    icon: require("@/assets/branding/ganesh/icon-seva.png"),
-    permission: "seva.write",
-  },
-  {
-    href: "/(ganesh)/add-collection",
-    label: "Collection",
-    icon: require("@/assets/branding/ganesh/icon-collection.png"),
-    permission: "collections.create",
-  },
-  {
-    href: "/(ganesh)/add-expense",
-    label: "Expense",
-    icon: require("@/assets/branding/ganesh/icon-expense.png"),
-    permission: "expenses.create",
-  },
+  { href: "/(ganesh)/add-seva", label: "Seva", Icon: SevaIcon, permission: "seva.write" },
+  { href: "/(ganesh)/add-collection", label: "Collection", Icon: CollectionIcon, permission: "collections.create" },
+  { href: "/(ganesh)/add-expense", label: "Expense", Icon: ExpenseIcon, permission: "expenses.create" },
   {
     href: "/(ganesh)/add-contribution",
     label: "Contribution",
-    icon: require("@/assets/branding/ganesh/icon-contribution.png"),
+    Icon: ContributionIcon,
     permission: "contributions.create",
   },
-  {
-    href: "/(ganesh)/(tabs)/people",
-    label: "Volunteer",
-    icon: require("@/assets/branding/ganesh/icon-volunteer.png"),
-    permission: "members.read",
-  },
-  {
-    href: "/(ganesh)/add-asset",
-    label: "Asset / Item",
-    icon: require("@/assets/branding/ganesh/icon-asset.png"),
-    permission: "assets.create",
-  },
+  { href: "/(ganesh)/(tabs)/people", label: "Volunteer", Icon: VolunteerIcon, permission: "members.read" },
+  { href: "/(ganesh)/add-asset", label: "Asset / Item", Icon: AssetIcon, permission: "assets.create" },
   {
     href: "/(ganesh)/add-member-payment",
     label: "Member Payment",
-    icon: require("@/assets/branding/ganesh/icon-member-pay.png"),
+    Icon: MemberPaymentIcon,
     permission: "contributions.create",
   },
   {
     href: "/(ganesh)/add-opening-fund",
     label: "Opening Fund",
-    icon: require("@/assets/branding/ganesh/icon-opening-fund.png"),
+    Icon: OpeningFundIcon,
     permission: "openingFunds.create",
   },
 ];
@@ -83,6 +70,7 @@ export function GaneshQuickActions({ disabled }: { disabled?: boolean }) {
   const { push } = useRouter();
   const { can } = useGaneshPermissions();
   const g = useGaneshTokens();
+  const { actionIcon } = useArtScale();
 
   const items = ACTIONS.filter((action) => !action.permission || can(action.permission));
   if (items.length === 0) return null;
@@ -92,7 +80,7 @@ export function GaneshQuickActions({ disabled }: { disabled?: boolean }) {
       <View style={styles.grid}>
         {chunkRows(items, 4).map((row) => (
           <View key={row.map((item) => item.href).join("|")} style={styles.row}>
-            {row.map(({ href, label, icon }) => (
+            {row.map(({ href, label, Icon }) => (
               <Pressable
                 key={href}
                 disabled={disabled}
@@ -113,7 +101,7 @@ export function GaneshQuickActions({ disabled }: { disabled?: boolean }) {
                   pressed && !disabled ? { opacity: 0.85 } : null,
                 ]}
               >
-                <Image source={icon} style={styles.icon} resizeMode="contain" />
+                <Icon size={actionIcon} />
                 <Text
                   numberOfLines={2}
                   style={[styles.label, { color: theme.colors.foreground, fontFamily: theme.fontFamily.medium }]}
@@ -155,10 +143,6 @@ const styles = StyleSheet.create({
   },
   spacer: {
     flex: 1,
-  },
-  icon: {
-    width: 44,
-    height: 44,
   },
   label: {
     fontSize: 11.5,
