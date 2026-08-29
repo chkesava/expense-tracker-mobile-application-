@@ -1,10 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback } from "react";
 import {
   collection,
   doc,
   getDocs,
-  onSnapshot,
-  orderBy,
   query,
   serverTimestamp,
   setDoc,
@@ -16,10 +14,9 @@ import {
 import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
 import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
-import { snapshotErrorHandler } from "@/lib/firestoreErrors";
-import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
+import { useExpenseReferenceData } from "@/providers/ExpenseReferenceDataProvider";
 import type { Space } from "@/shared/types/space";
 
 /** Firestore caps a batch at 500 writes; stay comfortably under it. */
@@ -42,44 +39,16 @@ export function useSpaces(options?: { enabled?: boolean }) {
   const enabled = options?.enabled !== false;
   const { user } = useAuth();
   const uid = user?.uid;
-
-  const [spaces, setSpaces] = useState<Space[]>([]);
-  const [loading, setLoading] = useState(true);
-  const { error, setError, retry, attempt } = useLoadFailure();
-
-  useEffect(() => {
-    const db = getFirestoreDb();
-    if (!uid || !enabled || !db) {
-      setSpaces([]);
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-    const unsubscribe = onSnapshot(
-      query(collection(db, "users", uid, "spaces"), orderBy("name")),
-      (snapshot) => {
-        setSpaces(
-          snapshot.docs.map((docSnap) => ({
-            id: docSnap.id,
-            ...(docSnap.data() as Omit<Space, "id">),
-          }))
-        );
-        setError(null);
-        setLoading(false);
-      },
-      snapshotErrorHandler(
-        "snapshot.spaces",
-        (failure) => {
-          setError(failure);
-          setLoading(false);
-        },
-        "Couldn't load your spaces."
-      )
-    );
-
-    return () => unsubscribe();
-  }, [uid, enabled, attempt]);
+  const {
+    spaces: sharedSpaces,
+    spacesLoading,
+    spacesError,
+    retrySpaces,
+  } = useExpenseReferenceData();
+  const spaces = enabled ? sharedSpaces : [];
+  const loading = enabled ? spacesLoading : false;
+  const error = enabled ? spacesError : null;
+  const retry = retrySpaces;
 
   const createSpace = useCallback(
     async (input: CreateSpaceInput): Promise<string | null> => {

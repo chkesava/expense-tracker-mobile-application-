@@ -1,64 +1,31 @@
-import { useEffect, useState } from "react";
 import {
   addDoc,
   collection,
   deleteDoc,
   doc,
-  onSnapshot,
-  orderBy,
-  query,
   serverTimestamp,
 } from "firebase/firestore";
 
 import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
-import { snapshotErrorHandler } from "@/lib/firestoreErrors";
-import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
-import type { CategorizationRule } from "@/shared/types/expense";
+import { useExpenseReferenceData } from "@/providers/ExpenseReferenceDataProvider";
 
 export const useCategorizationRules = (options?: { enabled?: boolean }) => {
   const enabled = options?.enabled !== false;
   const { user } = useAuth();
   const uid = user?.uid;
-  const [rules, setRules] = useState<CategorizationRule[]>([]);
-  const [loading, setLoading] = useState(true);
-  const { error, setError, retry, attempt } = useLoadFailure();
-
-  useEffect(() => {
-    const db = getFirestoreDb();
-    if (!uid || !enabled || !db) {
-      setRules([]);
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-    const q = query(
-      collection(db, "users", uid, "categorizationRules"),
-      orderBy("createdAt", "asc")
-    );
-
-    return onSnapshot(
-      q,
-      (snap) => {
-        setRules(
-          snap.docs.map((d) => ({ id: d.id, ...d.data() } as CategorizationRule))
-        );
-        setError(null);
-        setLoading(false);
-      },
-      snapshotErrorHandler(
-        "snapshot.categorizationRules",
-        (failure) => {
-          setError(failure);
-          setLoading(false);
-        },
-        "Couldn't load your categorization rules."
-      )
-    );
-  }, [uid, enabled, attempt]);
+  const {
+    rules: sharedRules,
+    rulesLoading,
+    rulesError,
+    retryRules,
+  } = useExpenseReferenceData();
+  const rules = enabled ? sharedRules : [];
+  const loading = enabled ? rulesLoading : false;
+  const error = enabled ? rulesError : null;
+  const retry = retryRules;
 
   const addRule = async (
     keyword: string,

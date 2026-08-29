@@ -241,17 +241,19 @@ export function PrivacyLock({ children }: { children: ReactNode }) {
     }
   };
 
-  if (!isLocked) {
-    return (
-      <View style={{ flex: 1 }} onTouchStart={onRootTouch} {...panResponder.panHandlers}>
-        {children}
-      </View>
-    );
-  }
-
   const keypadDisabled = lockoutTimeLeft > 0;
 
   return (
+    <View style={{ flex: 1 }} onTouchStart={onRootTouch} {...panResponder.panHandlers}>
+      <View
+        style={{ flex: 1 }}
+        pointerEvents={isLocked ? "none" : "auto"}
+        accessibilityElementsHidden={isLocked}
+        importantForAccessibility={isLocked ? "no-hide-descendants" : "auto"}
+      >
+        {children}
+      </View>
+      {isLocked ? (
     <View
       style={[
         styles.overlay,
@@ -444,6 +446,8 @@ export function PrivacyLock({ children }: { children: ReactNode }) {
         </Pressable>
       </View>
     </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -498,7 +502,11 @@ const KEY_GAP = 18;
 
 const styles = StyleSheet.create({
   overlay: {
-    ...StyleSheet.absoluteFill,
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
     zIndex: 9999,
     alignItems: "center",
     justifyContent: "center",

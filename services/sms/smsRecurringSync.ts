@@ -31,6 +31,23 @@ import {
 
 const inFlight = new Set<string>();
 
+/** Live subscription list from ExpenseReferenceDataProvider — avoids getDocs. */
+let hydratedSubscriptions: Subscription[] | null = null;
+
+export function rememberHydratedSubscriptions(
+  list: Subscription[] | null
+): void {
+  hydratedSubscriptions = list;
+}
+
+export function resetHydratedSubscriptionsForTests(): void {
+  hydratedSubscriptions = null;
+}
+
+export function peekHydratedSubscriptionsForTests(): Subscription[] | null {
+  return hydratedSubscriptions;
+}
+
 function expenseToInput(expense: Expense): RecurringExpenseInput {
   return {
     amount: expense.amount,
@@ -246,6 +263,7 @@ export async function syncRecurringAfterSmsCommit(
 }
 
 async function loadRemoteSubscriptions(uid: string): Promise<Subscription[]> {
+  if (hydratedSubscriptions !== null) return hydratedSubscriptions;
   const { getFirestoreDb } = await import("@/lib/firebase");
   const { collection, getDocs } = await import("firebase/firestore");
   const db = getFirestoreDb();
