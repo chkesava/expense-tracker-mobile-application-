@@ -125,7 +125,7 @@ export function GaneshTabBar({
       style={[
         styles.bar,
         {
-          backgroundColor: g.isDark ? theme.colors.card : "#FFFFFF",
+          backgroundColor: g.isDark ? theme.colors.card : theme.colors.background,
           borderTopColor: theme.colors.outlineVariant ?? theme.colors.border,
           paddingBottom: bottomInset,
           height: BOTTOM_NAV_BAR_HEIGHT + bottomInset,
