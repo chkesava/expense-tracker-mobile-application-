@@ -2,7 +2,7 @@
 
 > **Update:** `spendly-share.netlify.app` now also serves the full
 > multi-product web app (`/expense`, `/nutrition`, `/ganesh`, `/`), deployed by
-> `.github/workflows/web-deploy.yml` via `netlify deploy --no-build`, not by
+> `.github/workflows/web-deploy.yml` via `netlify deploy` (no --build flag), not by
 > this site's own git-triggered build (`netlify.toml`, still below, is kept
 > for reference only — continuous deployment must stay OFF for this site).
 > `/split/:slug` and `/payment/:slug` keep working unchanged, served by the
