@@ -691,14 +691,154 @@ Also note the dev server (`npx expo start`) cannot run from this worktree at all
 it has no `node_modules` of its own, so Metro fails to resolve
 `./node_modules/expo-router/entry`. Use the main checkout for `expo start`.
 
-## 6.10 Remaining phases
+## 6.10 Remaining phases — actionable plan
 
-4. Funds / People / Pandal — extract the three ledger lists into shared
-   components so `funds.tsx` can host them under a segmented control rather than
-   routing away; redesign `pandal.tsx` around identity; promote assets to a
-   visual inventory.
-5. Reports, forms, responsive, polish — `report.tsx` (still 21 raw `MetricGrid`
-   tiles), the ten `add-*` forms, remaining `admin/*` screens, breakpoints.
+Branch: `claude/ganesh-seva-redesign-1372fa`. Phases 1–3 are merged into it and
+pushed. Two phases remain.
+
+Before starting either, read §6.1–§6.3 for the design rules the earlier phases
+established — chiefly: **Ganesh owns its surfaces** (`components/ganesh/ui/surfaces.tsx`;
+nothing under `components/ganesh/` may import `components/dashboard/`), amounts
+render in `foreground` and never in the accent, and the arch appears on hero
+surfaces only.
+
+### Do these first (carried over, blocking)
+
+1. **Deploy the Firestore rules.** Not deployed by CI. Seva writes fail with
+   permission-denied until this lands. The command compiles the rules first,
+   which is the syntax check that could not run in the authoring environment
+   (JDK 17 present; the emulator needs 21):
+   ```bash
+   firebase deploy --only firestore:rules
+   ```
+2. **Device pass on everything behind sign-in.** All of Phase 3 — Command
+   Center, Seva, Funds, People — is covered by typecheck, a clean production
+   bundle and pure-logic tests only. It has never been rendered against real
+   data.
+3. **No festival dates are ever written.** `createFestival` and
+   `updateFestivalDetails` accept optional `startDate`/`endDate`, and
+   `PandalHero` / the Seva day strip both read them, but **no screen collects
+   them**, so "Day 4 of 10" and the full day strip never appear. Add two date
+   fields to `app/(ganesh)/create-festival.tsx` and
+   `app/(ganesh)/admin/festivals.tsx`. Smallest high-value item on this list.
+
+---
+
+### Phase 4 — Funds, People, Pandal
+
+**Goal:** finish the money hub so it hosts the ledgers instead of routing away
+from them, and give the Pandal tab a real identity.
+
+**4a. Extract the three ledger lists.** `funds.tsx` currently links out to
+`(tabs)/contributions` (310 lines), `(tabs)/collections` (277) and
+`(tabs)/expenses` (257). Pull each screen's body into
+`components/ganesh/funds/{ContributionsList,CollectionsList,ExpensesList}.tsx`,
+then:
+
+- `funds.tsx` renders them under a segmented control (`FilterChips` already
+  gives the right control — do not build a second one).
+- The three route files become thin wrappers around the same component.
+
+One implementation, both entry points, and every existing deep link keeps
+working — including `?status=promised`, which the Command Center relies on. Keep
+the filter/search state inside each list component so the wrappers stay trivial.
+
+**4b. Contributions in Seva language.** Lead with Received / Promised / Pending
+promises, each promise naming the contributor and offering the action that
+resolves it. The promised-vs-received *logic* is correct and must not be
+touched — this is presentation only. See `summarizeContributions` in
+`shared/utils/ganeshContributions.ts`.
+
+**4c. `pandal.tsx` (332 lines).** Rebuild around pandal identity rather than as
+a menu: hero with name, code, festival, committee size; then property, then
+administration. It is currently the app's "more" surface and reads like one.
+
+**4d. Assets → visual inventory.** `assets.tsx` (311 lines) is a list of rows.
+Promote it to something that shows what the Pandal owns at a glance — quantity
+per category, condition, what needs replacing. `summarizeAssets` in
+`shared/utils/ganeshAssets.ts` already computes most of it.
+
+**4e. Asset vs Expense wording.** In `add-expense.tsx` (515 lines) restate the
+choice in plain language:
+```
+○ Pandal Asset      Something the Pandal keeps and reuses
+○ Festival Expense  Something used up for this festival
+```
+**Wording and layout only.** `expenseType`, the `assetId` link and both write
+paths in `ganeshWrites.ts` stay exactly as they are — that distinction is
+load-bearing and has its own tests.
+
+---
+
+### Phase 5 — Reports, forms, responsive, polish
+
+**5a. `report.tsx` (132 lines) → Pandal Transparency.** The last screen
+untouched by *either* redesign: 21 undifferentiated `MetricGrid` tiles and raw
+inline styles. Rebuild as something a committee can read aloud at a meeting —
+where money came from, where it went, what the Pandal now owns. Keep
+promised-vs-received and the regular/asset expense split intact; both are
+already computed by `ganeshMath` and `summarizeContributions`.
+
+**5b. The ten `add-*` forms.** Progressive disclosure and larger touch targets,
+following the pattern in `add-seva.tsx`. `add-expense.tsx` is the big one.
+
+**5c. Remaining `admin/*` screens** (1415 lines across 7 files) — `audit.tsx`
+(278) and `index.tsx` (449) are the substantial ones.
+
+**5d. Native headers.** 17 screens still use the native Stack header
+(`app/(ganesh)/_layout.tsx`, the `options={{ title: ... }}` entries) while
+redesigned screens draw their own `GaneshHeader`. Convert as each screen is
+redesigned so the two styles never collide within one flow.
+
+**5e. Responsive.** Add `hooks/useBreakpoint.ts` (`compact <600`,
+`medium 600–1023`, `expanded ≥1024`). Ganesh currently inherits the shared
+480px `webWidthConstraintStyle`; give it 720/1100 caps and two-column reflow for
+stat strips and section pairs. **Do not edit
+`components/common/WebWidthConstraint.tsx`** — it is shared with Expense and
+Nutrition. Add a Ganesh equivalent. Bottom nav stays at all sizes; no desktop
+sidebar (confirmed scope decision, §6.2).
+
+**5f. Success/error language.** "Seva recorded", "Contribution received" through
+the existing `lib/toast` + `lib/errors` paths.
+
+---
+
+### Guardrails (unchanged from §6.2)
+
+- No change to money math, promised/received logic, the God Fund / Personal /
+  Permanent Fund model, reimbursements, the `expenseType` discriminator, RBAC,
+  or storage paths.
+- No edits to `components/dashboard/primitives.tsx`, `components/ui/*`,
+  `components/common/*`, `components/layout/*`, or the Expense/Nutrition
+  palettes. Ganesh gets parallel components.
+- Routes are added, never removed.
+- Per `AGENTS.md`: Expo 57 docs are the reference, and each phase ends with a
+  Manual Testing Guide plus the exact commands to run.
+
+### Verification per phase
+
+```bash
+npm run typecheck && npm run typecheck:shared && npm test
+npm run build:web:ganesh
+```
+
+The web export is the only check that catches an import cycle introduced by the
+surfaces fork — typecheck cannot see one.
+
+Cross-product safety — must return nothing outside `components/ganesh/` and
+`app/(ganesh*)`:
+
+```bash
+grep -rn "components/ganesh\|GaneshThemeProvider\|ganeshPalette" app components --include=*.tsx --include=*.ts
+```
+
+Note: `app/`, `components/` and `hooks/` sit outside the Vitest glob
+(`vitest.config.ts`), so **no screen work is automatically testable**. Push new
+logic into `shared/utils/` where it can be, as `ganeshSeva.ts` does.
+
+Note: `npx expo start` cannot run from the worktree — it has no `node_modules`
+of its own and Metro fails to resolve `./node_modules/expo-router/entry`. Use
+the main checkout.
 
 ## 6.11 Deploy checklist
 
