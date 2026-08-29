@@ -5,6 +5,7 @@ import {
   expenseCashAmount,
   expenseTypeOf,
   isAssetPurchaseExpense,
+  inventoryGlance,
   summarizeAssets,
   validateAssetDraft,
 } from "./ganeshAssets";
@@ -66,6 +67,33 @@ describe("summarizeAssets", () => {
       damaged: 1,
       disposed: 4,
       estimatedValue: 10500,
+    });
+  });
+});
+
+describe("inventoryGlance", () => {
+  it("groups active quantity by category and condition, and flags what needs replacing", () => {
+    expect(
+      inventoryGlance([
+        { category: "furniture", quantity: 20, status: "available", condition: "good" },
+        { category: "furniture", quantity: 4, status: "in_use", condition: "fair" },
+        { category: "sound", quantity: 2, status: "damaged", condition: "damaged" },
+        { category: "lighting", quantity: 1, status: "available", condition: "unusable" },
+        { category: "kitchen", quantity: 6, status: "disposed", condition: "good" },
+      ])
+    ).toEqual({
+      byCategory: [
+        { id: "furniture", label: "Furniture", quantity: 24 },
+        { id: "sound", label: "Sound", quantity: 2 },
+        { id: "lighting", label: "Lighting", quantity: 1 },
+      ],
+      byCondition: [
+        { id: "good", label: "Good", quantity: 20 },
+        { id: "fair", label: "Fair", quantity: 4 },
+        { id: "damaged", label: "Damaged", quantity: 2 },
+        { id: "unusable", label: "Unusable", quantity: 1 },
+      ],
+      needsReplacing: 3,
     });
   });
 });

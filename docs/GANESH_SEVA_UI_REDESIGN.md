@@ -691,12 +691,112 @@ Also note the dev server (`npx expo start`) cannot run from this worktree at all
 it has no `node_modules` of its own, so Metro fails to resolve
 `./node_modules/expo-router/entry`. Use the main checkout for `expo start`.
 
-## 6.10 Remaining phases — actionable plan
+## 6.9 Phase 4 — Funds, People, Pandal
 
-Branch: `claude/ganesh-seva-redesign-1372fa`. Phases 1–3 are merged into it and
-pushed. Two phases remain.
+Status: **complete** (2026-08-29). Money is now one destination that *hosts*
+the ledgers, and the Pandal tab is an identity surface rather than a leftover
+menu.
 
-Before starting either, read §6.1–§6.3 for the design rules the earlier phases
+### 4a. One list, two entry points
+
+`components/ganesh/funds/{ContributionsList,CollectionsList,ExpensesList}.tsx`
+own the filter/search state and the FlashList. `funds.tsx` renders them under
+a `FilterChips` segmented control (Contributions / Collections / Expenses).
+The original tab routes are three-line wrappers, so
+`/(ganesh)/(tabs)/contributions?status=promised` from the Command Center
+still resolves to the same component.
+
+When hosted, the list's chrome (stats, search, chips) sits in
+`ListHeaderComponent` so it scrolls with the rows instead of pinning a second
+header under Pandal Nidhi.
+
+### 4b. Contributions in Seva language
+
+The list now leads with **Received / Promised / Pending**. Promised rows name
+the contributor and offer **Mark received** on the row — presentation only;
+`summarizeContributions`, `isPromised` / `isReceived`, and the write path are
+untouched. Money still defaults to cash on that shortcut and still refuses
+offline, matching `MONEY_RECEIVE_OFFLINE_ERROR`. UPI/bank stay on the detail
+screen.
+
+The overdue filter chip is labelled **Pending**. Colour is never the only
+signal: the badge still carries a text label.
+
+### 4c. Pandal identity
+
+`ui/PandalIdentity.tsx` — name, code, festival window, committee size, role.
+**No arch** (that stays on the Command Center hero) and **no money**. Property
+(assets glance, sponsors, Permanent Fund) comes next, then people, then
+administration. Treasurer target fields and account/logout are unchanged.
+
+### 4d. Assets as visual inventory
+
+`inventoryGlance()` in `ganeshAssets.ts` groups active quantity by category
+and condition and counts what needs replacing (damaged status, or
+damaged/unusable condition). Disposed and lost stay out of the store view.
+The assets screen leads with those chips, then Available / Needs replacing /
+Estimated worth.
+
+### 4e. Asset vs Expense wording
+
+`add-expense.tsx` now offers two cards:
+
+```
+Pandal Asset       Something the Pandal keeps and reuses
+Festival Expense   Something used up for this festival
+```
+
+`expenseType`, `assetId`, and both write paths are untouched.
+
+### Carried over: festival dates are now collected
+
+`FestivalWindowFields` on `create-festival.tsx` and `admin/festivals.tsx`
+writes optional `startDate` / `endDate`. `validateFestivalWindow` in
+`ganeshSeva.ts` is the shared ISO + order check; `assertFestivalWindow` in
+`ganeshWrites.ts` now uses it. Without these dates, “Day 4 of 10” and the
+Seva day strip never appear.
+
+### Files
+
+| File | Change |
+| --- | --- |
+| `components/ganesh/funds/*` | **new** — extracted ledger lists |
+| `components/ganesh/ui/PandalIdentity.tsx` | **new** — Pandal tab identity, no arch |
+| `components/ganesh/FestivalWindowFields.tsx` | **new** — first/last day inputs |
+| `components/ganesh/ui/LedgerRow.tsx` | optional `action` for “Mark received” |
+| `app/(ganesh)/(tabs)/{funds,contributions,collections,expenses,pandal}.tsx` | hub + thin wrappers + identity |
+| `app/(ganesh)/assets.tsx` | category / condition / needs-replacing glance |
+| `app/(ganesh)/add-expense.tsx` | Pandal Asset vs Festival Expense cards |
+| `app/(ganesh)/create-festival.tsx`, `admin/festivals.tsx` | festival window fields |
+| `shared/utils/ganeshSeva.ts` | `validateFestivalWindow` |
+| `shared/utils/ganeshAssets.ts` | `inventoryGlance` |
+| `hooks/useGaneshWrites.ts` | `createFestival` accepts the window |
+| `services/ganesh/ganeshWrites.ts` | window assertion uses the shared helper |
+
+### Verification (Phase 4)
+
+- `npx tsc -p tsconfig.json --noEmit` and `tsconfig.shared.json` — clean
+- `npm test` — **128 files / 1346 tests passing** (was 128 / 1341; +4 window
+  tests, +1 inventory glance)
+- `npx expo export --platform web` for Ganesh — **exports cleanly**, no import
+  cycle from the list extraction
+- Ganesh does not leak: `components/ganesh` / `GaneshThemeProvider` /
+  `ganeshPalette` still appear only under `components/ganesh/` and
+  `app/(ganesh*)`
+- `dashboard/primitives` still appears only as the explanatory comment in
+  `surfaces.tsx`
+
+**Not verified visually: screens behind authentication**, same constraint as
+Phase 3 — no `.env` in this worktree. Needs a real device pass.
+
+---
+
+## 6.10 Remaining work
+
+Branch: `claude/ganesh-seva-redesign-1372fa`. Phases 1–4 are on this branch.
+Phase 5 remains.
+
+Before starting it, read §6.1–§6.3 for the design rules the earlier phases
 established — chiefly: **Ganesh owns its surfaces** (`components/ganesh/ui/surfaces.tsx`;
 nothing under `components/ganesh/` may import `components/dashboard/`), amounts
 render in `foreground` and never in the accent, and the arch appears on hero
@@ -711,62 +811,10 @@ surfaces only.
    ```bash
    firebase deploy --only firestore:rules
    ```
-2. **Device pass on everything behind sign-in.** All of Phase 3 — Command
-   Center, Seva, Funds, People — is covered by typecheck, a clean production
-   bundle and pure-logic tests only. It has never been rendered against real
-   data.
-3. **No festival dates are ever written.** `createFestival` and
-   `updateFestivalDetails` accept optional `startDate`/`endDate`, and
-   `PandalHero` / the Seva day strip both read them, but **no screen collects
-   them**, so "Day 4 of 10" and the full day strip never appear. Add two date
-   fields to `app/(ganesh)/create-festival.tsx` and
-   `app/(ganesh)/admin/festivals.tsx`. Smallest high-value item on this list.
-
----
-
-### Phase 4 — Funds, People, Pandal
-
-**Goal:** finish the money hub so it hosts the ledgers instead of routing away
-from them, and give the Pandal tab a real identity.
-
-**4a. Extract the three ledger lists.** `funds.tsx` currently links out to
-`(tabs)/contributions` (310 lines), `(tabs)/collections` (277) and
-`(tabs)/expenses` (257). Pull each screen's body into
-`components/ganesh/funds/{ContributionsList,CollectionsList,ExpensesList}.tsx`,
-then:
-
-- `funds.tsx` renders them under a segmented control (`FilterChips` already
-  gives the right control — do not build a second one).
-- The three route files become thin wrappers around the same component.
-
-One implementation, both entry points, and every existing deep link keeps
-working — including `?status=promised`, which the Command Center relies on. Keep
-the filter/search state inside each list component so the wrappers stay trivial.
-
-**4b. Contributions in Seva language.** Lead with Received / Promised / Pending
-promises, each promise naming the contributor and offering the action that
-resolves it. The promised-vs-received *logic* is correct and must not be
-touched — this is presentation only. See `summarizeContributions` in
-`shared/utils/ganeshContributions.ts`.
-
-**4c. `pandal.tsx` (332 lines).** Rebuild around pandal identity rather than as
-a menu: hero with name, code, festival, committee size; then property, then
-administration. It is currently the app's "more" surface and reads like one.
-
-**4d. Assets → visual inventory.** `assets.tsx` (311 lines) is a list of rows.
-Promote it to something that shows what the Pandal owns at a glance — quantity
-per category, condition, what needs replacing. `summarizeAssets` in
-`shared/utils/ganeshAssets.ts` already computes most of it.
-
-**4e. Asset vs Expense wording.** In `add-expense.tsx` (515 lines) restate the
-choice in plain language:
-```
-○ Pandal Asset      Something the Pandal keeps and reuses
-○ Festival Expense  Something used up for this festival
-```
-**Wording and layout only.** `expenseType`, the `assetId` link and both write
-paths in `ganeshWrites.ts` stay exactly as they are — that distinction is
-load-bearing and has its own tests.
+2. **Device pass on everything behind sign-in.** Phases 3 and 4 — Command
+   Center, Seva, Funds (now hosting the ledgers), People, Pandal identity,
+   assets glance — are covered by typecheck, a clean production bundle and
+   pure-logic tests only. They have never been rendered against real data.
 
 ---
 

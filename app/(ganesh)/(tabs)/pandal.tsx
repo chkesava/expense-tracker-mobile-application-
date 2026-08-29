@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import {
@@ -17,30 +17,29 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { GaneshSyncChip } from "@/components/ganesh/GaneshSyncChip";
-import { PermanentFundCard } from "@/components/ganesh/PermanentFundCard";
 import {
   GaneshHeader,
   MetaLabel,
-  Money,
   NavRow,
+  PandalIdentity,
   Section,
-  StatTile,
   useGaneshTokens,
 } from "@/components/ganesh/ui";
-import { usePermanentFund } from "@/hooks/usePermanentFund";
 import { useFestivals } from "@/hooks/useFestivals";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { useGaneshWrites } from "@/hooks/useGaneshWrites";
-import { useFestivalMembers } from "@/hooks/useFestivalMembers";
 import { useJoinRequests } from "@/hooks/useJoinRequests";
+import { usePandalAssets } from "@/hooks/usePandalAssets";
 import { usePandalMembers } from "@/hooks/usePandalMembers";
 import { usePandals } from "@/hooks/usePandals";
+import { usePermanentFund } from "@/hooks/usePermanentFund";
 import { useAuth } from "@/providers/AuthProvider";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import { useWorkspace } from "@/providers/WorkspaceProvider";
+import { inventoryGlance } from "@/shared/utils/ganeshAssets";
 import { formatPandalCode } from "@/shared/utils/ganeshIdentity";
-import { effectiveCommitteeTarget } from "@/shared/utils/ganeshMath";
 import { ganeshRoleLabel } from "@/shared/utils/ganeshPermissions";
+import { formatInr } from "@/shared/utils/ganeshMoney";
 import { useTheme } from "@/theme/ThemeProvider";
 
 const ROLE_ORDER: Record<string, number> = {
@@ -60,17 +59,17 @@ export default function PandalScreen() {
   const { pandalId, festivalId } = useGaneshSession();
   const { pandals } = usePandals();
   const { festivals } = useFestivals(pandalId);
-  const { members: festivalMembers } = useFestivalMembers(pandalId, festivalId);
   const { members: pandalMembers } = usePandalMembers(pandalId);
   const { requests } = useJoinRequests(pandalId);
   const { fund } = usePermanentFund(pandalId);
+  const { assets } = usePandalAssets(pandalId);
   const { can, isAdmin, role } = useGaneshPermissions();
   const writes = useGaneshWrites();
 
   const pandal = pandals.find((item) => item.id === pandalId);
   const festival = festivals.find((item) => item.id === festivalId);
+  const glance = useMemo(() => inventoryGlance(assets), [assets]);
 
-  const collected = festivalMembers.reduce((sum, member) => sum + member.contributionPaid, 0);
   const [memberTarget, setMemberTarget] = useState(
     String(festival?.contributionTargetAmount ?? 0)
   );
@@ -85,85 +84,43 @@ export default function PandalScreen() {
       return a.displayName.localeCompare(b.displayName);
     });
 
-  const defaultTarget = festival?.contributionTargetAmount ?? 0;
-  const target = committee.reduce((sum, member) => {
-    const festivalMember = festivalMembers.find((item) => item.userId === member.userId);
-    return sum + effectiveCommitteeTarget(festivalMember, defaultTarget);
-  }, 0);
-
   const showTreasurerTools = !isAdmin && can("festival.update");
   const glyph = (Icon: typeof Users, tint?: string) => (
     <Icon size={17} color={tint ?? theme.colors.mutedForeground} strokeWidth={2.2} />
   );
 
+  const assetMeta = glance.needsReplacing > 0
+    ? `${glance.byCategory.reduce((sum, row) => sum + row.quantity, 0)} in store · ${glance.needsReplacing} need replacing`
+    : glance.byCategory.length > 0
+      ? glance.byCategory.map((row) => `${row.quantity} ${row.label.toLowerCase()}`).slice(0, 3).join(" · ")
+      : "Chairs, speakers, and other items that stay with the Pandal";
+
   return (
     <GaneshScreen safeTop withTabBar>
       <GaneshHeader
-        title={pandal?.name || "Pandal"}
-        subtitle={
-          [
-            pandal?.code ? `Code ${formatPandalCode(pandal.code)}` : null,
-            role ? ganeshRoleLabel(role) : null,
-          ]
-            .filter(Boolean)
-            .join(" · ") || undefined
-        }
+        title="Pandal"
+        subtitle={festival?.name}
         icon={<Landmark size={22} color={g.saffron} strokeWidth={2.2} />}
         rightElement={<GaneshSyncChip />}
       />
 
-      <PermanentFundCard
-        fund={fund}
-        onPress={() => push("/(ganesh)/permanent-fund" as never)}
-        onAddPress={
-          can("permanentFund.add") && fund.total === 0
-            ? () => push("/(ganesh)/add-permanent-fund" as never)
-            : undefined
-        }
+      <PandalIdentity
+        pandalName={pandal?.name}
+        code={pandal?.code ? formatPandalCode(pandal.code) : undefined}
+        festivalName={festival?.name}
+        festival={festival}
+        committeeSize={committee.length}
+        roleLabel={role ? ganeshRoleLabel(role) : undefined}
       />
 
-      <Section title="Committee" subtitle={festival?.name}>
-        <View style={styles.statRow}>
-          <StatTile label="People">
-            <Text
-              style={[
-                styles.countValue,
-                { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold },
-              ]}
-            >
-              {committee.length}
-            </Text>
-          </StatTile>
-          <StatTile label="Target">
-            <Money value={target} size="primary" numberOfLines={1} adjustsFontSizeToFit />
-          </StatTile>
-          <StatTile label="Collected">
-            <Money
-              value={collected}
-              size="primary"
-              tone="positive"
-              numberOfLines={1}
-              adjustsFontSizeToFit
-            />
-          </StatTile>
-        </View>
-
-        <NavRow
-          title="Committee tracker"
-          meta="Who paid their share, who still owes"
-          icon={glyph(ClipboardList)}
-          onPress={() => push("/(ganesh)/committee" as never)}
-        />
-      </Section>
-
-      {can("assets.read") || can("sponsors.read") ? (
+      {can("assets.read") || can("sponsors.read") || can("permanentFund.read") ? (
         <Section title="Pandal property">
           {can("assets.read") ? (
             <NavRow
               title="Assets"
-              meta="Chairs, speakers, and other items that stay with the Pandal"
+              meta={assetMeta}
               icon={glyph(Package)}
-              divider={can("sponsors.read")}
+              divider={can("sponsors.read") || can("permanentFund.read")}
               onPress={() => push("/(ganesh)/assets" as never)}
             />
           ) : null}
@@ -172,11 +129,43 @@ export default function PandalScreen() {
               title="Sponsors"
               meta="Who is supporting this festival. Promised deals are not cash."
               icon={glyph(Building2)}
+              divider={can("permanentFund.read")}
               onPress={() => push("/(ganesh)/sponsors" as never)}
+            />
+          ) : null}
+          {can("permanentFund.read") ? (
+            <NavRow
+              title="Permanent Fund"
+              meta={
+                fund.total > 0
+                  ? `${formatInr(fund.total)} · standing corpus, kept between festivals`
+                  : "The Pandal's standing corpus, kept between festivals"
+              }
+              icon={glyph(Landmark, g.maroon)}
+              iconTint={g.wash(g.maroon)}
+              onPress={() => push("/(ganesh)/permanent-fund" as never)}
             />
           ) : null}
         </Section>
       ) : null}
+
+      <Section title="People" subtitle={`${committee.length} on the committee`}>
+        <NavRow
+          title="Committee tracker"
+          meta="Who paid their share, who still owes"
+          icon={glyph(ClipboardList)}
+          divider={can("members.read")}
+          onPress={() => push("/(ganesh)/committee" as never)}
+        />
+        {can("members.read") ? (
+          <NavRow
+            title="Members and roles"
+            meta="Who holds which role in the Pandal"
+            icon={glyph(Users)}
+            onPress={() => push("/(ganesh)/members" as never)}
+          />
+        ) : null}
+      </Section>
 
       {isAdmin ? (
         <Section title="Administration">
@@ -228,15 +217,6 @@ export default function PandalScreen() {
             >
               Save targets
             </Button>
-            {can("members.read") ? (
-              <NavRow
-                title="Committee roles"
-                meta="View who holds which role"
-                icon={glyph(Users)}
-                divider={can("festival.close") && festival?.status === "open"}
-                onPress={() => push("/(ganesh)/members" as never)}
-              />
-            ) : null}
             {can("festival.close") && festival?.status === "open" ? (
               <NavRow
                 title="Close festival"
@@ -299,16 +279,6 @@ export default function PandalScreen() {
 }
 
 const styles = StyleSheet.create({
-  statRow: {
-    flexDirection: "row",
-    gap: 10,
-    marginBottom: 4,
-  },
-  countValue: {
-    fontSize: 17,
-    letterSpacing: -0.2,
-    fontVariant: ["tabular-nums"],
-  },
   form: {
     gap: 12,
   },

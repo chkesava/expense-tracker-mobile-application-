@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Text, View } from "react-native";
 import { useRouter } from "expo-router";
 
+import { FestivalWindowFields } from "@/components/ganesh/FestivalWindowFields";
 import { FundLocationChips } from "@/components/ganesh/FundLocationChips";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { GaneshWriteLock } from "@/components/ganesh/GaneshWriteLock";
@@ -19,6 +20,7 @@ import { useNetwork } from "@/providers/NetworkProvider";
 import type { PermanentFundLocation } from "@/shared/types/ganesh";
 import { validateFundTransfer, validateNonNegativeAmount } from "@/shared/utils/ganeshMath";
 import { formatInr } from "@/shared/utils/ganeshMoney";
+import { validateFestivalWindow } from "@/shared/utils/ganeshSeva";
 import { useTheme } from "@/theme/ThemeProvider";
 
 export default function CreateFestivalScreen() {
@@ -33,6 +35,8 @@ export default function CreateFestivalScreen() {
   const [name, setName] = useState(`Ganesh Chaturthi ${defaultYear}`);
   const [year, setYear] = useState(String(defaultYear));
   const [allocate, setAllocate] = useState("0");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [location, setLocation] = useState<PermanentFundLocation>("cash");
   const [busy, setBusy] = useState(false);
   const allocateAmount = Number(allocate || 0);
@@ -64,9 +68,19 @@ export default function CreateFestivalScreen() {
       toast.error("Enter a valid year.");
       return;
     }
+    const window = validateFestivalWindow(startDate, endDate);
+    if (!window.ok) {
+      toast.error(window.error);
+      return;
+    }
     setBusy(true);
     try {
-      const festivalId = await writes.createFestival({ name, year: festivalYear });
+      const festivalId = await writes.createFestival({
+        name,
+        year: festivalYear,
+        startDate: startDate.trim() || undefined,
+        endDate: endDate.trim() || undefined,
+      });
       if (allocateAmount > 0) {
         await writes.transferPermanentToFestival({
           festivalId,
@@ -102,6 +116,12 @@ export default function CreateFestivalScreen() {
       </Text>
       <Input label="Festival name" value={name} onChangeText={setName} />
       <Input label="Year" value={year} onChangeText={setYear} keyboardType="numeric" />
+      <FestivalWindowFields
+        startDate={startDate}
+        endDate={endDate}
+        onStartDateChange={setStartDate}
+        onEndDateChange={setEndDate}
+      />
       <Input
         label="Opening funds from Permanent Fund"
         value={allocate}

@@ -40,6 +40,7 @@ import {
 import { formatInr } from "@/shared/utils/ganeshMoney";
 import { ganeshStoredPath } from "@/services/ganesh/storage/storagePaths";
 import { generatePandalCode, normalizePandalCode } from "@/shared/utils/ganeshIdentity";
+import { validateFestivalWindow } from "@/shared/utils/ganeshSeva";
 import {
   festivalCol,
   festivalDoc,
@@ -617,10 +618,8 @@ export async function updatePandalProfile(
  * schedule's day strip nonsense, so reject that pair outright.
  */
 function assertFestivalWindow(startDate?: string, endDate?: string): void {
-  const start = startDate?.trim();
-  const end = endDate?.trim();
-  if (!start || !end) return;
-  if (end < start) throw new Error("The festival end date must be on or after the start date.");
+  const result = validateFestivalWindow(startDate, endDate);
+  if (!result.ok) throw new Error(result.error);
 }
 
 export async function updateFestivalDetails(

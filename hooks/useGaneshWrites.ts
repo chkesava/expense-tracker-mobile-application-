@@ -142,7 +142,7 @@ export function useGaneshWrites() {
         writes.updatePandalMember(requireDb(), actor, pandalId, targetUserId, input)
       );
     },
-    createFestival: (input: { name: string; year: number }) => {
+    createFestival: (input: { name: string; year: number; startDate?: string; endDate?: string }) => {
       if (!pandalId || !actor) throw new Error("Select a Pandal first.");
       requirePerm("festival.create");
       return run("Festival created", () =>

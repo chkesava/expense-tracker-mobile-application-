@@ -1,11 +1,13 @@
-import { useEffect, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { useEffect, useState, type ReactNode } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
+import { Package, Receipt } from "lucide-react-native";
 
 import { ChoiceChips } from "@/components/ganesh/ChoiceChips";
 import { GaneshImageUploader, type GaneshUploadStatus } from "@/components/ganesh/GaneshImageUploader";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { GaneshWriteLock } from "@/components/ganesh/GaneshWriteLock";
+import { useGaneshTokens } from "@/components/ganesh/ui";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useFestivals } from "@/hooks/useFestivals";
@@ -36,6 +38,7 @@ type Funding = "god" | "personal" | "split" | "sponsored";
 
 export default function AddExpenseScreen() {
   const { theme } = useTheme();
+  const g = useGaneshTokens();
   const { back } = useRouter();
   const { realUser } = useAuth();
   const { pandalId, festivalId } = useGaneshSession();
@@ -132,20 +135,27 @@ export default function AddExpenseScreen() {
 
   return (
     <GaneshScreen>
-      <ChoiceChips
-        label="Type"
-        value={isAssetPurchase ? "asset_purchase" : "normal"}
-        options={[
-          { id: "normal", label: "Regular expense" },
-          { id: "asset_purchase", label: "Asset purchase" },
-        ]}
-        onChange={setKind}
-        disabled={ledgerSaved}
-        disabledIds={canBuyAsset ? undefined : ["asset_purchase"]}
-      />
+      <View style={styles.kindRow}>
+        <ExpenseKindCard
+          selected={isAssetPurchase}
+          disabled={ledgerSaved || !canBuyAsset}
+          icon={<Package size={18} color={isAssetPurchase ? g.saffron : theme.colors.mutedForeground} strokeWidth={2.2} />}
+          title="Pandal Asset"
+          description="Something the Pandal keeps and reuses"
+          onPress={() => setKind("asset_purchase")}
+        />
+        <ExpenseKindCard
+          selected={!isAssetPurchase}
+          disabled={ledgerSaved}
+          icon={<Receipt size={18} color={!isAssetPurchase ? g.saffron : theme.colors.mutedForeground} strokeWidth={2.2} />}
+          title="Festival Expense"
+          description="Something used up for this festival"
+          onPress={() => setKind("normal")}
+        />
+      </View>
       {!canBuyAsset ? (
         <Text style={{ color: theme.colors.mutedForeground }}>
-          Asset purchase needs permission to add Pandal assets.
+          Adding a Pandal Asset needs permission to add Pandal assets.
         </Text>
       ) : null}
       {isAssetPurchase ? (
@@ -513,3 +523,86 @@ export default function AddExpenseScreen() {
     </GaneshScreen>
   );
 }
+
+function ExpenseKindCard({
+  selected,
+  disabled,
+  icon,
+  title,
+  description,
+  onPress,
+}: {
+  selected: boolean;
+  disabled?: boolean;
+  icon: ReactNode;
+  title: string;
+  description: string;
+  onPress: () => void;
+}) {
+  const { theme } = useTheme();
+  const g = useGaneshTokens();
+
+  return (
+    <Pressable
+      disabled={disabled}
+      onPress={onPress}
+      accessibilityRole="radio"
+      accessibilityState={{ selected, disabled: Boolean(disabled) }}
+      accessibilityLabel={`${title}. ${description}`}
+      style={({ pressed }) => [
+        styles.kindCard,
+        {
+          backgroundColor: selected ? g.wash(g.saffron) : theme.colors.card,
+          borderColor: selected ? g.wash(g.saffron) : g.divider,
+        },
+        disabled && !selected ? { opacity: 0.45 } : null,
+        pressed && !disabled ? { opacity: 0.85 } : null,
+      ]}
+    >
+      {icon}
+      <Text
+        style={[
+          styles.kindTitle,
+          {
+            color: selected ? g.saffron : theme.colors.foreground,
+            fontFamily: theme.fontFamily.semibold,
+          },
+        ]}
+      >
+        {title}
+      </Text>
+      <Text
+        style={[
+          styles.kindDescription,
+          { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular },
+        ]}
+      >
+        {description}
+      </Text>
+    </Pressable>
+  );
+}
+
+const styles = StyleSheet.create({
+  kindRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  kindCard: {
+    flex: 1,
+    minHeight: 112,
+    padding: 12,
+    gap: 6,
+    borderRadius: 16,
+    borderCurve: "continuous",
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  kindTitle: {
+    fontSize: 14,
+    letterSpacing: -0.1,
+  },
+  kindDescription: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+});

@@ -42,6 +42,7 @@ export { GaneshMark } from "./GaneshMark";
 export { GaneshAuthBackground } from "./GaneshAuthBackground";
 export { ArchFrame } from "./ArchFrame";
 export { PandalHero } from "./PandalHero";
+export { PandalIdentity } from "./PandalIdentity";
 export {
   GaneshEmptyState,
   type GaneshEmptyAction,

@@ -392,6 +392,29 @@ export function formatFestivalWindow(
 
 /* ------------------------------------------------------------ Validation */
 
+/**
+ * Optional festival window. Empty is fine — older festivals have none.
+ * Non-empty values must be ISO `yyyy-mm-dd`, and the last day cannot
+ * precede the first. Compared lexically, same as seva dates.
+ */
+export function validateFestivalWindow(
+  startDate?: string,
+  endDate?: string
+): { ok: true } | { ok: false; error: string } {
+  const start = startDate?.trim() ?? "";
+  const end = endDate?.trim() ?? "";
+  if (start && !DATE_PATTERN.test(start)) {
+    return { ok: false, error: "The first day must be YYYY-MM-DD." };
+  }
+  if (end && !DATE_PATTERN.test(end)) {
+    return { ok: false, error: "The last day must be YYYY-MM-DD." };
+  }
+  if (start && end && end < start) {
+    return { ok: false, error: "The festival end date must be on or after the start date." };
+  }
+  return { ok: true };
+}
+
 export type SevaDraft = {
   name: string;
   kind: SevaKind;

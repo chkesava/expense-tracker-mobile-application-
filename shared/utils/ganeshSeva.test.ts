@@ -15,6 +15,7 @@ import {
   formatFestivalWindow,
   formatSevaDate,
   formatSevaTime,
+  validateFestivalWindow,
   groupSevaByDay,
   isSevaOverdue,
   nextSeva,
@@ -353,6 +354,32 @@ describe("formatting", () => {
     expect(formatFestivalWindow({ startDate: "2026-08-27", endDate: "2026-08-27" })).toBe("27 Aug");
     expect(formatFestivalWindow({})).toBe("");
     expect(formatFestivalWindow(undefined)).toBe("");
+  });
+});
+
+describe("validateFestivalWindow", () => {
+  it("accepts a missing or partial window", () => {
+    expect(validateFestivalWindow()).toEqual({ ok: true });
+    expect(validateFestivalWindow("2026-08-27")).toEqual({ ok: true });
+    expect(validateFestivalWindow(undefined, "2026-09-05")).toEqual({ ok: true });
+    expect(validateFestivalWindow("  ", "  ")).toEqual({ ok: true });
+  });
+
+  it("rejects a non-ISO day", () => {
+    expect(validateFestivalWindow("27 Aug 2026").ok).toBe(false);
+    expect(validateFestivalWindow(undefined, "2026/09/05").ok).toBe(false);
+  });
+
+  it("rejects an end date before the start", () => {
+    expect(validateFestivalWindow("2026-09-05", "2026-08-27")).toEqual({
+      ok: false,
+      error: "The festival end date must be on or after the start date.",
+    });
+  });
+
+  it("accepts a same-day or ordered window", () => {
+    expect(validateFestivalWindow("2026-08-27", "2026-08-27")).toEqual({ ok: true });
+    expect(validateFestivalWindow("2026-08-27", "2026-09-05")).toEqual({ ok: true });
   });
 });
 
