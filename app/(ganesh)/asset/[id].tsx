@@ -17,8 +17,8 @@ import {
   StatusBadge,
   StatusStrip,
   useGaneshTokens,
+  GaneshEmptyState,
 } from "@/components/ganesh/ui";
-import { EmptyState } from "@/components/common/EmptyState";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useFestivals } from "@/hooks/useFestivals";
@@ -163,8 +163,8 @@ export default function AssetDetailScreen() {
           icon={<Package size={22} color={g.saffron} strokeWidth={2.2} />}
           onBack={back}
         />
-        <EmptyState
-          illustration="search"
+        <GaneshEmptyState
+          icon={<Package size={22} color={g.saffron} strokeWidth={2.2} />}
           title="Asset not found"
           description="It may have been removed from this view, or it belongs to another Pandal."
         />

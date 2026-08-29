@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import { Stack, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
+import { Landmark } from "lucide-react-native";
 
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { FundLocationChips } from "@/components/ganesh/FundLocationChips";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
+import { GaneshHeader, useGaneshTokens } from "@/components/ganesh/ui";
 import { useFestivals } from "@/hooks/useFestivals";
 import { useGaneshWrites } from "@/hooks/useGaneshWrites";
 import { useMyJoinRequests } from "@/hooks/useMyJoinRequests";
@@ -23,6 +25,7 @@ import { useTheme } from "@/theme/ThemeProvider";
 
 export default function GaneshSetupScreen() {
   const { theme } = useTheme();
+  const g = useGaneshTokens();
   const { replace } = useRouter();
   const { logout } = useAuth();
   const { setActiveWorkspace } = useWorkspace();
@@ -107,25 +110,14 @@ export default function GaneshSetupScreen() {
   };
 
   return (
-    <GaneshScreen>
-      <Stack.Screen
-        options={{
-          title: waiting ? "Waiting for approval" : "Ganesh Seva",
-          headerLeft: () => (
-            <Pressable
-              onPress={() => {
-                void setActiveWorkspace("expense");
-              }}
-              style={{ minHeight: 44, justifyContent: "center", paddingRight: 12 }}
-            >
-              <Text style={{ color: theme.colors.primary, fontWeight: "700" }}>Apps</Text>
-            </Pressable>
-          ),
+    <GaneshScreen safeTop>
+      <GaneshHeader
+        title={waiting ? "Waiting for approval" : "Ganesh Seva"}
+        icon={<Landmark size={22} color={g.saffron} strokeWidth={2.2} />}
+        onBack={() => {
+          void setActiveWorkspace("expense");
         }}
       />
-      <Text style={{ color: theme.colors.foreground, fontSize: 24, fontWeight: "800" }}>
-        {waiting ? "Waiting for approval" : "Welcome to Ganesh Seva"}
-      </Text>
       <Text style={{ color: theme.colors.mutedForeground, lineHeight: 22 }}>
         {waiting
           ? "Your request was sent to the Pandal admin. You will see expenses, collections, and the Permanent Fund after they accept you."

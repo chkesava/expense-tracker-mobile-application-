@@ -2,11 +2,19 @@ import { useEffect, useState } from "react";
 import { Alert, Pressable, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
+import { Gift } from "lucide-react-native";
+
 import { AccountabilityLine } from "@/components/ganesh/AccountabilityLine";
 import { ChoiceChips } from "@/components/ganesh/ChoiceChips";
 import { GaneshSignedPreview } from "@/components/ganesh/GaneshSignedPreview";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { PendingHint } from "@/components/ganesh/GaneshSyncChip";
+import {
+  GaneshEmptyState,
+  GaneshHeader,
+  Money,
+  useGaneshTokens,
+} from "@/components/ganesh/ui";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useFestivals } from "@/hooks/useFestivals";
@@ -44,7 +52,8 @@ const PAYMENT_OPTIONS: Array<{ id: PaymentMethod; label: string }> = [
 
 export default function ContributionDetailScreen() {
   const { theme } = useTheme();
-  const { push } = useRouter();
+  const g = useGaneshTokens();
+  const { push, back } = useRouter();
   const params = useLocalSearchParams<{ id: string }>();
   const { pandalId, festivalId } = useGaneshSession();
   const { isOnline } = useNetwork();
@@ -93,6 +102,11 @@ export default function ContributionDetailScreen() {
   if (loading && !contribution) {
     return (
       <GaneshScreen>
+        <GaneshHeader
+          title="Contribution"
+          icon={<Gift size={22} color={g.saffron} strokeWidth={2.2} />}
+          onBack={back}
+        />
         <Text style={{ color: theme.colors.mutedForeground }}>Loading contribution…</Text>
       </GaneshScreen>
     );
@@ -101,25 +115,21 @@ export default function ContributionDetailScreen() {
   if (!contribution) {
     return (
       <GaneshScreen>
-        <Text style={{ color: theme.colors.foreground, fontSize: 22, fontWeight: "800" }}>
-          Contribution not found
-        </Text>
-        <Text style={{ color: theme.colors.mutedForeground }}>
-          It may belong to another festival, or it was removed.
-        </Text>
+        <GaneshHeader
+          title="Contribution"
+          icon={<Gift size={22} color={g.saffron} strokeWidth={2.2} />}
+          onBack={back}
+        />
+        <GaneshEmptyState
+          icon={<Gift size={22} color={g.saffron} strokeWidth={2.2} />}
+          title="Contribution not found"
+          description="It may belong to another festival, or it was removed."
+        />
       </GaneshScreen>
     );
   }
 
   const value = contributionValue(contribution);
-  const badgeStyle =
-    badge === "overdue"
-      ? { backgroundColor: theme.colors.destructive, color: theme.colors.destructiveForeground }
-      : badge === "received"
-        ? { backgroundColor: theme.colors.success, color: theme.colors.successForeground }
-        : badge === "cancelled"
-          ? { backgroundColor: theme.colors.muted, color: theme.colors.mutedForeground }
-          : { backgroundColor: theme.colors.warning, color: theme.colors.warningForeground };
 
   const run = (work: Promise<unknown>, fallback: string) => {
     setBusy(true);
@@ -179,24 +189,13 @@ export default function ContributionDetailScreen() {
 
   return (
     <GaneshScreen>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-        <Text style={{ color: theme.colors.foreground, fontSize: 22, fontWeight: "800", flex: 1 }}>
-          {contribution.itemName || contribution.contributorName}
-        </Text>
-        <View
-          style={{
-            paddingHorizontal: 8,
-            paddingVertical: 3,
-            borderRadius: 999,
-            backgroundColor: badgeStyle.backgroundColor,
-          }}
-        >
-          <Text style={{ color: badgeStyle.color, fontWeight: "700", fontSize: 12, textTransform: "capitalize" }}>
-            {badge}
-          </Text>
-        </View>
-      </View>
-      <Text style={{ color: theme.colors.primary, fontWeight: "800" }}>{formatInr(value)}</Text>
+      <GaneshHeader
+        title={contribution.itemName || contribution.contributorName}
+        subtitle={badge}
+        icon={<Gift size={22} color={g.saffron} strokeWidth={2.2} />}
+        onBack={back}
+      />
+      <Money value={value} size="title" />
       <Text style={{ color: theme.colors.mutedForeground, textTransform: "capitalize" }}>
         {contribution.kind}
         {contribution.quantity ? ` · ${contribution.quantity}` : ""}

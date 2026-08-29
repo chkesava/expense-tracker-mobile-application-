@@ -1,6 +1,6 @@
 import { StyleSheet, Text, View } from "react-native";
 
-import { DASH_RADIUS, toneColor, type Tone } from "@/components/dashboard/primitives";
+import { GANESH_RADIUS, toneColor, type Tone } from "@/components/ganesh/ui/surfaces";
 import { useTheme } from "@/theme/ThemeProvider";
 
 import { useGaneshTokens } from "./tokens";
@@ -105,7 +105,7 @@ export function StatusBadge({ kind, label, size = "md" }: StatusBadgeProps) {
 
 const styles = StyleSheet.create({
   badge: {
-    borderRadius: DASH_RADIUS.pill,
+    borderRadius: GANESH_RADIUS.pill,
     alignSelf: "flex-start",
     maxWidth: 180,
   },

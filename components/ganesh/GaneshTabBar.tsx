@@ -7,7 +7,7 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from "react-native-reanimated";
-import { Gift, Home, Landmark, Receipt, Wallet, type LucideIcon } from "lucide-react-native";
+import { Flame, Home, IndianRupee, Landmark, Users, type LucideIcon } from "lucide-react-native";
 
 import { BOTTOM_NAV_BAR_HEIGHT } from "@/components/layout/chrome";
 import { useGaneshTokens } from "@/components/ganesh/ui/tokens";
@@ -16,17 +16,23 @@ import { durations, easing } from "@/theme/motion";
 import { useTheme } from "@/theme/ThemeProvider";
 
 /**
- * Five destinations, matching the Expense Tracker's bottom nav.
+ * The five things a pandal committee actually does.
  *
- * Committee used to be a sixth tab; it now lives one tap inside Pandal, which
- * is the app's "more" surface (committee, assets, sponsors, permanent fund,
- * admin, settings). Six evenly-split destinations forced 10px labels.
+ * This bar used to be Home / Collections / Expenses / Contributions / Pandal —
+ * three of five destinations were ledgers, which is the single clearest reason
+ * the product read as an expense tracker. Money is now one destination of five,
+ * behind Funds, and Seva — the festival's actual programme — is promoted to the
+ * second slot.
+ *
+ * `collections`, `expenses`, `contributions` and `committee` remain registered
+ * routes and keep working; they are simply no longer top-level destinations.
+ * Every existing deep link still resolves.
  */
 const TABS: Array<{ name: string; label: string; Icon: LucideIcon }> = [
   { name: "index", label: "Home", Icon: Home },
-  { name: "collections", label: "Collections", Icon: Wallet },
-  { name: "expenses", label: "Expenses", Icon: Receipt },
-  { name: "contributions", label: "Contributions", Icon: Gift },
+  { name: "seva", label: "Seva", Icon: Flame },
+  { name: "funds", label: "Funds", Icon: IndianRupee },
+  { name: "people", label: "People", Icon: Users },
   { name: "pandal", label: "Pandal", Icon: Landmark },
 ];
 

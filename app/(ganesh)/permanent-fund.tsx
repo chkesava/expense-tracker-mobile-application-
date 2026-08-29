@@ -4,12 +4,12 @@ import { FlashList } from "@shopify/flash-list";
 import { useRouter } from "expo-router";
 import { ArrowDownLeft, ArrowUpRight, Landmark, WifiOff } from "lucide-react-native";
 
-import { EmptyState } from "@/components/common/EmptyState";
 import { FundLocationChips, fundLocationLabel } from "@/components/ganesh/FundLocationChips";
 import { GaneshScreen, useGaneshListPadding } from "@/components/ganesh/GaneshScreen";
 import { PermanentFundCard } from "@/components/ganesh/PermanentFundCard";
 import {
   FilterChips,
+  GaneshEmptyState,
   GaneshHeader,
   LedgerRow,
   MetaLabel,
@@ -143,9 +143,9 @@ export default function PermanentFundScreen() {
 
             <Section title="Festival history" subtitle="What each festival took and returned">
               {festivals.length === 0 ? (
-                <EmptyState
+                <GaneshEmptyState
                   compact
-                  illustration="general"
+                  icon={<Landmark size={20} color={g.saffron} strokeWidth={2.2} />}
                   title="No festivals yet"
                   description="The Permanent Fund stays with the Pandal even without an active festival."
                 />
@@ -229,8 +229,8 @@ export default function PermanentFundScreen() {
         renderItem={renderItem}
         ListEmptyComponent={
           loading && transactions.length === 0 ? null : (
-            <EmptyState
-              illustration="vaults"
+            <GaneshEmptyState
+              icon={<Landmark size={22} color={g.saffron} strokeWidth={2.2} />}
               title="No Permanent Fund movements yet"
               description="Initial balances, festival transfers, and Pandal donations will appear here."
             />

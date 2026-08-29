@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import { Gift, Landmark, PiggyBank, Receipt, Wallet, type LucideIcon } from "lucide-react-native";
+import { Flame, Gift, PiggyBank, Receipt, Wallet, type LucideIcon } from "lucide-react-native";
 
 import { Section, useSurfaces, GANESH_RADIUS } from "@/components/ganesh/ui";
 import { useGaneshTokens } from "@/components/ganesh/ui/tokens";
@@ -17,6 +17,9 @@ type QuickAction = {
 };
 
 const ACTIONS: QuickAction[] = [
+  // Seva leads: the committee's first job is running the festival, not
+  // recording money. The money actions keep their place directly beneath.
+  { href: "/(ganesh)/add-seva", label: "Seva", Icon: Flame, permission: "seva.write" },
   { href: "/(ganesh)/add-collection", label: "Collection", Icon: Wallet, permission: "collections.create" },
   { href: "/(ganesh)/add-expense", label: "Expense", Icon: Receipt, permission: "expenses.create" },
   { href: "/(ganesh)/add-contribution", label: "Contribution", Icon: Gift, permission: "contributions.create" },
@@ -24,16 +27,11 @@ const ACTIONS: QuickAction[] = [
 ];
 
 /**
- * Quick actions. Recording money is the app's core job, so the four write
- * paths sit one tap from Home — as low-contrast tiles, not as four more cards.
+ * Quick actions — the write paths one tap from Home, as low-contrast tiles
+ * rather than as more cards. Each is filtered by the permission that governs
+ * it, so a viewer sees none of them and the section disappears entirely.
  */
-export function GaneshQuickActions({
-  disabled,
-  showAddPermanentFund,
-}: {
-  disabled?: boolean;
-  showAddPermanentFund?: boolean;
-}) {
+export function GaneshQuickActions({ disabled }: { disabled?: boolean }) {
   const { theme } = useTheme();
   const { push } = useRouter();
   const { can } = useGaneshPermissions();
@@ -52,15 +50,6 @@ export function GaneshQuickActions({
       tint: g.godFund,
     });
   }
-  if (showAddPermanentFund) {
-    items.push({
-      href: "/(ganesh)/add-permanent-fund",
-      label: "Permanent Fund",
-      Icon: Landmark,
-      tint: g.maroon,
-    });
-  }
-
   if (items.length === 0) return null;
 
   return (
@@ -76,10 +65,7 @@ export function GaneshQuickActions({
             }}
             accessibilityRole="button"
             accessibilityLabel={`Add ${label}`}
-            android_ripple={{
-              color: surfaces.isDark ? "rgba(255,255,255,0.06)" : "rgba(15,23,42,0.05)",
-              borderless: false,
-            }}
+            android_ripple={{ color: g.ripple, borderless: false }}
             style={({ pressed }) => [
               styles.tile,
               { backgroundColor: surfaces.tile },

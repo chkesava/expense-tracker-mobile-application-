@@ -14,6 +14,7 @@ import {
   ListStateView,
   MetaLabel,
   Money,
+  Section,
   StatTile,
   useGaneshTokens,
   type LedgerRowBadge,
@@ -33,6 +34,7 @@ import {
   assetOwnershipLabel,
   assetStatusLabel,
   assetUnitLabel,
+  inventoryGlance,
   summarizeAssets,
 } from "@/shared/utils/ganeshAssets";
 import { formatInr } from "@/shared/utils/ganeshMoney";
@@ -87,6 +89,7 @@ export default function PandalAssetsScreen() {
   }, [isAdmin, pandalId]);
 
   const summary = useMemo(() => summarizeAssets(assets), [assets]);
+  const glance = useMemo(() => inventoryGlance(assets), [assets]);
 
   const rows = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -180,6 +183,41 @@ export default function PandalAssetsScreen() {
         rightElement={<GaneshSyncChip />}
       />
 
+      {glance.byCategory.length > 0 ? (
+        <Section title="In store" subtitle="What the Pandal owns" plain rule={false}>
+          <View style={styles.categories}>
+            {glance.byCategory.map((row) => (
+              <View
+                key={row.id}
+                style={[styles.categoryChip, { backgroundColor: g.tile, borderColor: g.divider }]}
+              >
+                <Text
+                  style={[
+                    styles.categoryQty,
+                    { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold },
+                  ]}
+                >
+                  {row.quantity}
+                </Text>
+                <Text
+                  style={[
+                    styles.categoryLabel,
+                    { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.medium },
+                  ]}
+                >
+                  {row.label}
+                </Text>
+              </View>
+            ))}
+          </View>
+          {glance.byCondition.length > 0 ? (
+            <MetaLabel numberOfLines={2}>
+              {glance.byCondition.map((row) => `${row.label} ${row.quantity}`).join(" · ")}
+            </MetaLabel>
+          ) : null}
+        </Section>
+      ) : null}
+
       <View style={styles.statRow}>
         <StatTile label="Available">
           <Text
@@ -192,30 +230,39 @@ export default function PandalAssetsScreen() {
           </Text>
         </StatTile>
         <StatTile
-          label="Damaged"
+          label="Needs replacing"
           meta={
-            summary.damaged > 0 ? (
+            glance.needsReplacing > 0 ? (
               <Text
                 style={[
                   styles.tileMeta,
                   { color: theme.colors.warning, fontFamily: theme.fontFamily.medium },
                 ]}
               >
-                Needs repair
+                Damaged or unusable
               </Text>
-            ) : undefined
+            ) : (
+              <Text
+                style={[
+                  styles.tileMeta,
+                  { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular },
+                ]}
+              >
+                Store is sound
+              </Text>
+            )
           }
         >
           <Text
             style={[
               styles.count,
               {
-                color: summary.damaged > 0 ? theme.colors.warning : theme.colors.foreground,
+                color: glance.needsReplacing > 0 ? theme.colors.warning : theme.colors.foreground,
                 fontFamily: theme.fontFamily.semibold,
               },
             ]}
           >
-            {summary.damaged}
+            {glance.needsReplacing}
           </Text>
         </StatTile>
         <StatTile label="Estimated worth">
@@ -303,6 +350,29 @@ const styles = StyleSheet.create({
     fontSize: 14,
     letterSpacing: -0.1,
     fontVariant: ["tabular-nums"],
+  },
+  categories: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 8,
+  },
+  categoryChip: {
+    minWidth: 72,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderCurve: "continuous",
+    borderWidth: StyleSheet.hairlineWidth,
+    gap: 2,
+  },
+  categoryQty: {
+    fontSize: 17,
+    letterSpacing: -0.2,
+    fontVariant: ["tabular-nums"],
+  },
+  categoryLabel: {
+    fontSize: 11.5,
   },
   fab: {
     position: "absolute",

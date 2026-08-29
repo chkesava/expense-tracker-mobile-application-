@@ -158,6 +158,58 @@ export function summarizeAssets(
   };
 }
 
+export type InventoryCategoryRow = {
+  id: AssetCategory;
+  label: string;
+  quantity: number;
+};
+
+export type InventoryConditionRow = {
+  id: AssetCondition;
+  label: string;
+  quantity: number;
+};
+
+export type InventoryGlance = {
+  byCategory: InventoryCategoryRow[];
+  byCondition: InventoryConditionRow[];
+  needsReplacing: number;
+};
+
+/**
+ * What the Pandal owns, at a glance. Active items only — disposed and lost
+ * stay out of the store view. "Needs replacing" is damaged-status or
+ * damaged/unusable condition; those are the items a committee walks the
+ * store looking for before the next festival.
+ */
+export function inventoryGlance(
+  assets: Array<Pick<PandalAsset, "category" | "quantity" | "status" | "condition">>
+): InventoryGlance {
+  const active = assets.filter((asset) => isActiveAsset(asset));
+  const qty = (rows: typeof active) => rows.reduce((sum, asset) => sum + (asset.quantity || 0), 0);
+
+  return {
+    byCategory: ASSET_CATEGORIES.map((category) => ({
+      id: category.id,
+      label: category.label,
+      quantity: qty(active.filter((asset) => asset.category === category.id)),
+    })).filter((row) => row.quantity > 0),
+    byCondition: ASSET_CONDITIONS.map((condition) => ({
+      id: condition.id,
+      label: condition.label,
+      quantity: qty(active.filter((asset) => asset.condition === condition.id)),
+    })).filter((row) => row.quantity > 0),
+    needsReplacing: qty(
+      active.filter(
+        (asset) =>
+          asset.status === "damaged"
+          || asset.condition === "damaged"
+          || asset.condition === "unusable"
+      )
+    ),
+  };
+}
+
 export function expenseTypeOf(
   expense?: Pick<GaneshExpense, "expenseType"> | null
 ): GaneshExpenseType {

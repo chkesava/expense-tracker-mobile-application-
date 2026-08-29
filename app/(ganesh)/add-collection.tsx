@@ -1,10 +1,13 @@
 import { useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useRouter } from "expo-router";
+import { Home } from "lucide-react-native";
 
 import { DuplicateHouseholdDialog } from "@/components/ganesh/DuplicateHouseholdDialog";
+import { FormDetails } from "@/components/ganesh/FormDetails";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { GaneshWriteLock } from "@/components/ganesh/GaneshWriteLock";
+import { FilterChips, GaneshHeader, useGaneshTokens } from "@/components/ganesh/ui";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -22,10 +25,16 @@ import { todayDateInput } from "@/shared/utils/ganeshIdentity";
 import type { PaymentMethod } from "@/shared/types/ganesh";
 import { useTheme } from "@/theme/ThemeProvider";
 
-const METHODS: PaymentMethod[] = ["cash", "upi", "bank", "other"];
+const METHOD_OPTIONS: Array<{ id: PaymentMethod; label: string }> = [
+  { id: "cash", label: "Cash" },
+  { id: "upi", label: "UPI" },
+  { id: "bank", label: "Bank" },
+  { id: "other", label: "Other" },
+];
 
 export default function AddCollectionScreen() {
   const { theme } = useTheme();
+  const g = useGaneshTokens();
   const { back } = useRouter();
   const { realUser } = useAuth();
   const { pandalId, festivalId } = useGaneshSession();
@@ -146,6 +155,11 @@ export default function AddCollectionScreen() {
 
   return (
     <GaneshScreen>
+      <GaneshHeader
+        title="Add collection"
+        icon={<Home size={22} color={g.saffron} strokeWidth={2.2} />}
+        onBack={back}
+      />
       {selectedHousehold ? (
         <View
           style={{
@@ -212,19 +226,26 @@ export default function AddCollectionScreen() {
       )}
       <Input label="Name" value={donorName} onChangeText={setDonorName} placeholder="Ramesh Kumar" />
       <Input label="Amount" value={amount} onChangeText={setAmount} keyboardType="numeric" placeholder="500" />
-      <Text style={{ color: theme.colors.mutedForeground, fontWeight: "700" }}>Payment method</Text>
-      <ChipRow value={method} options={METHODS} onChange={(value) => setMethod(value as PaymentMethod)} />
-      <Text style={{ color: theme.colors.mutedForeground, fontWeight: "700" }}>Collected by</Text>
-      <ChipRow
+      <FilterChips
+        label="Payment method"
+        layout="wrap"
+        value={method}
+        options={METHOD_OPTIONS}
+        onChange={setMethod}
+      />
+      <FilterChips
+        label="Collected by"
+        layout="wrap"
         value={collectorId}
-        options={members.map((member) => member.userId)}
-        labels={Object.fromEntries(members.map((member) => [member.userId, member.displayName]))}
+        options={members.map((member) => ({ id: member.userId, label: member.displayName }))}
         onChange={setCollectorId}
       />
-      <Input label="Mobile (optional)" value={mobile} onChangeText={setMobile} keyboardType="phone-pad" />
-      <Input label="House number (optional)" value={houseNumber} onChangeText={setHouseNumber} />
-      <Input label="Address / area (optional)" value={address} onChangeText={setAddress} />
-      <Input label="Notes (optional)" value={notes} onChangeText={setNotes} />
+      <FormDetails>
+        <Input label="Mobile (optional)" value={mobile} onChangeText={setMobile} keyboardType="phone-pad" />
+        <Input label="House number (optional)" value={houseNumber} onChangeText={setHouseNumber} />
+        <Input label="Address / area (optional)" value={address} onChangeText={setAddress} />
+        <Input label="Notes (optional)" value={notes} onChangeText={setNotes} />
+      </FormDetails>
       <Button loading={busy} onPress={onSubmit}>
         Save collection
       </Button>
@@ -241,45 +262,5 @@ export default function AddCollectionScreen() {
         />
       ) : null}
     </GaneshScreen>
-  );
-}
-
-function ChipRow({
-  value,
-  options,
-  labels,
-  onChange,
-}: {
-  value: string;
-  options: string[];
-  labels?: Record<string, string>;
-  onChange: (value: string) => void;
-}) {
-  const { theme } = useTheme();
-  return (
-    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-      {options.map((option) => (
-        <Pressable
-          key={option}
-          onPress={() => onChange(option)}
-          style={{
-            paddingHorizontal: 10,
-            paddingVertical: 6,
-            borderRadius: 999,
-            backgroundColor: value === option ? theme.colors.primary : theme.colors.muted,
-          }}
-        >
-          <Text
-            style={{
-              color: value === option ? theme.colors.primaryForeground : theme.colors.foreground,
-              fontWeight: "700",
-              textTransform: "capitalize",
-            }}
-          >
-            {labels?.[option] ?? option}
-          </Text>
-        </Pressable>
-      ))}
-    </View>
   );
 }

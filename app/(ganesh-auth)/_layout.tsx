@@ -1,8 +1,10 @@
 import { Stack } from "expo-router";
 
+import { GaneshThemeProvider } from "@/providers/GaneshThemeProvider";
 import { useTheme } from "@/theme/ThemeProvider";
 
-export default function GaneshAuthLayout() {
+/** Split out so it reads the festival palette rather than the one above it. */
+function GaneshAuthStack() {
   const { theme } = useTheme();
   return (
     <Stack
@@ -11,5 +13,13 @@ export default function GaneshAuthLayout() {
         contentStyle: { backgroundColor: theme.colors.background },
       }}
     />
+  );
+}
+
+export default function GaneshAuthLayout() {
+  return (
+    <GaneshThemeProvider>
+      <GaneshAuthStack />
+    </GaneshThemeProvider>
   );
 }

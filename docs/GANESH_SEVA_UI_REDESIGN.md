@@ -5,6 +5,17 @@ gap analysis, the shared design decisions, and the phase-by-phase change log.
 
 Started 2026-08-24. Branch `claude/ganesh-seva-ui-redesign-f0d468`.
 
+> ## ⚠️ Direction changed 2026-08-29 — read §6 before using §1–§4
+>
+> Sections 1–4 below describe the **2026-08-24 redesign**, whose stated goal was
+> to align Ganesh Seva *to* the Expense Tracker's design system ("there is never
+> a second, divergent design system", §3.3).
+>
+> **That decision has been reversed.** Ganesh Seva is now a Pandal operating
+> platform with its own palette, its own surfaces, and its own information
+> architecture. §1–§4 remain as the historical record of how the code got to its
+> current shape — they are no longer the design brief. See **§6 Redesign II**.
+
 ---
 
 ## 1. Expense Tracker design system (the reference)
@@ -304,3 +315,649 @@ business-logic decision:
    decision about where the reimbursed-per-expense figure comes from
    (`GaneshExpense` carries no `reimbursedAmount`; only the festival-level
    `summary.pendingReimbursements` exists). Flagged for the owner.
+
+---
+
+# 6. Redesign II — Pandal operating platform (2026-08-29)
+
+Branch `claude/ganesh-seva-redesign-1372fa`.
+
+## 6.1 Why the direction changed
+
+Redesign I made Ganesh Seva a well-built *sibling* of the Expense Tracker. The
+problem is that being a sibling of an expense tracker is exactly what this
+product should not be. Three findings from the 2026-08-29 audit:
+
+| # | Finding | Evidence |
+| --- | --- | --- |
+| R1 | **No theme of its own.** `theme/` had zero Ganesh awareness, so the app rendered in whatever theme + accent the user picked in the Expense Tracker (default indigo). The entire festival identity was one saffron accent. | `theme/tokens.ts` (no Ganesh entries), `components/ganesh/ui/tokens.ts` |
+| R2 | **Money owned the navigation.** 3 of 5 bottom tabs were ledgers (Collections, Expenses, Contributions); Home led with a fund balance and two money tiles. | `GaneshTabBar.tsx`, `(tabs)/index.tsx` |
+| R3 | **Every surface was an Expense Tracker surface.** `Section`, `StatTile`, `DataRow`, `RowGlyph`, radii and spacing were re-exported from `components/dashboard/primitives`. | `components/ganesh/ui/index.ts` |
+
+Guiding principle for Redesign II: **Seva first. Pandal operations second. Money
+as an important supporting system — not the identity of the product.**
+
+## 6.2 Scope decisions (confirmed with the owner)
+
+1. **Seva Schedule + volunteer duty assignment will be built.** Neither existed
+   in any form — no types, hooks, services, screens or Firestore rules. This is
+   the only part of the redesign that adds backend surface.
+2. **Fixed festival palette, light + dark.** Ganesh ignores the Expense accent:
+   a pandal's app should look the same to every committee member.
+3. **Wider responsive layout, no desktop sidebar.** Bottom nav stays at all sizes.
+
+## 6.3 Phase 1 — design-system foundation
+
+Status: **complete** (2026-08-29)
+
+### Palette
+
+`theme/ganeshPalette.ts` (new) — a full `ColorTokens` pair, not an accent overlay.
+
+| Role | Light | Dark |
+| --- | --- | --- |
+| `background` | `#FDF8F0` warm ivory | `#171009` |
+| `card` | `#FFFFFF` | `#211711` |
+| `foreground` | `#241609` | `#F6EDE2` |
+| `mutedForeground` | `#7A6A5F` | `#B8A697` |
+| `primary` (saffron) | `#C2410C` | `#FB923C` |
+| `border` | `#EADFCF` | `#33251C` |
+| `success` / `warning` / `destructive` | `#1F7A4D` / `#B45309` / `#B3261E` | `#4ECB8B` / `#F0B045` / `#F2635A` |
+
+Non-`ColorTokens` festival values stay in `components/ganesh/ui/tokens.ts`:
+maroon (`#7B1D3A` / `#F0A7BE`, Permanent Fund only) and gold (`#B98029` /
+`#E0B558`, section rules and the hero arch only).
+
+Note: `secondary` and `muted` are **surfaces** in this token system, not brand
+colours — components fill chips and inset tiles with them. They are warm
+neutrals here; putting maroon there would have broken every chip in the app.
+
+### Delivery mechanism
+
+`providers/GaneshThemeProvider.tsx` (new) republishes `ThemeContext` for the
+Ganesh subtree. Because `useTheme()` reads a context, **every one of the ~10,000
+lines of existing Ganesh screens picks up the new palette with no per-screen
+edit**, and nothing outside `app/(ganesh*)` can see it. Mounted at the top of
+`app/(ganesh)/_layout.tsx` and `app/(ganesh-auth)/_layout.tsx`.
+
+The only change to a shared file is `theme/ThemeProvider.tsx`, which now exports
+its `ThemeContext` (previously module-private). Purely additive — no behaviour
+change for Expense or Nutrition.
+
+### Surfaces forked
+
+`components/ganesh/ui/surfaces.tsx` (new) owns `Section`, `SectionAction`,
+`StatTile`, `DataRow`, `RowGlyph`, `MetaLabel`, `Pill`, `StatusStrip`,
+`ProgressTrack`, `TrendText`, `useSurfaces`, `toneColor`, `GANESH_RADIUS`,
+`GANESH_SPACE`. `components/ganesh/ui/index.ts` re-points to it, so **no screen
+import changed**. Nothing under `components/ganesh/` imports
+`components/dashboard/` any more.
+
+What deliberately differs from the Expense primitives:
+
+- **Warm surfaces** — tile/track washes mixed from the palette's ink brown
+  (`rgba(36,22,9,...)`), not slate. A slate wash on ivory reads grey-blue and
+  instantly looks like a finance app.
+- **Softer geometry** — section radius 18 (was 20), tile 12 (was 14).
+- **Squircle glyph niches** instead of circles, closer to a temple niche.
+- **A gold hairline rule** under section headers — the one piece of decoration
+  in the system, header only, never repeated inside a section.
+- **`accent` means the festival colour.** The Expense version hardcodes
+  `ACCENT_PURPLE`, which belongs to the Vault feature and has no meaning here.
+- **52dp rows** (was 48dp) — the app is used standing, in a crowd, one-handed.
+
+### New components
+
+| File | Purpose |
+| --- | --- |
+| `ui/ArchFrame.tsx` | Mandap arch along a hero's top edge, gold at low opacity. **Hero surfaces only** — never a list card, or the app becomes a festival poster. |
+| `ui/GaneshEmptyState.tsx` | Seva-appropriate empty states. Separate from `common/EmptyState`, which carries finance illustrations and a "Pro Tip" card. Copy rule: never "No data found". |
+| `ui/SevaGlyph.tsx` | One lucide icon + label per `SevaKind`. No emoji — they render differently per Android skin and ignore colour. |
+
+### Types added (consumed by Phase 2)
+
+`shared/types/ganesh.ts` gained `SevaKind`, `SevaStatus`, `DutyStatus`,
+`FestivalSeva`, `SevaDuty`, and optional `Festival.startDate` / `endDate`.
+A seva carries **no money fields** and never enters `GaneshSummary`, any ledger,
+or the God Fund; money spent on an activity remains a `GaneshExpense`.
+
+### Defect fixed: God Fund asset purchases threw
+
+`services/ganesh/ganeshWrites.ts:1702` — inside `addAssetPurchase`, the
+`appendAssetPurchase(writer)` closure called
+`appendPandalAssetCreate(batch, ...)`, referencing the `const batch` declared 56
+lines below it. The God Fund path invokes that closure inside `runTransaction`
+**before** the `const` initialises, so **every asset purchase paid even partly
+from the God Fund failed with `ReferenceError: Cannot access 'batch' before
+initialization`**, and the asset row never joined the transaction. The
+personal/sponsored path worked only by accident of ordering.
+
+Pre-existing and unrelated to the redesign, but fixed here because it breaks the
+Asset-vs-Expense distinction. One word: `batch` to `writer`.
+
+New `services/ganesh/ganeshAssetPurchase.write.test.ts` drives the real function
+against a faked Firestore and asserts both paths write the expense *and* the
+asset through the same writer. Verified to fail against the original code
+(reproducing the exact `ReferenceError`) and pass with the fix. These are the
+**first tests to cover `ganeshWrites.ts`**, which is 2355 lines and previously
+had none; the pattern (mock `firebase/firestore`, `@/lib/firestoreWrite` and
+`@/lib/id`) is reusable for the rest of the file.
+
+## 6.4 Functionality preserved
+
+No change to money math, promised/received logic, the God Fund / Personal Money
+/ Permanent Fund model, reimbursements, the `expenseType` discriminator, RBAC,
+Firestore rules, storage paths, or any route. Phase 1 changes colour, surfaces
+and types only — plus the one-word correctness fix above.
+
+## 6.5 Verification (Phase 1)
+
+- `npx tsc -p tsconfig.json --noEmit` — clean
+- `npx tsc -p tsconfig.shared.json --noEmit` — clean
+- `npm test` — **127 files / 1280 tests passing** (was 126 / 1278; +2 new)
+- Ganesh does not leak: grepping `components/ganesh`, `GaneshThemeProvider` and
+  `ganeshPalette` across `app/` and `components/` returns nothing outside
+  `components/ganesh/` and `app/(ganesh*)`
+- Ganesh is fully forked: grepping `dashboard/primitives` across the Ganesh tree
+  returns only the explanatory comment in `surfaces.tsx`
+- Only shared file touched is `theme/ThemeProvider.tsx`, and only to add `export`
+
+## 6.7 Phase 2 — Seva schedule + volunteer duties (backend)
+
+Status: **complete** (2026-08-29). Not yet user-visible — the screens land in Phase 3.
+
+This is the only phase that adds backend surface. Everything is additive: no
+existing collection, rule, permission or write path changed behaviour.
+
+### The model
+
+A **seva** is an activity the committee runs — morning aarti, annadanam, a
+cultural programme, the visarjan procession. A **duty** is one volunteer on one
+seva.
+
+The load-bearing decision: **a seva is not a financial record.** It carries no
+amount, never enters `GaneshSummary`, any ledger, or the God Fund. Money spent
+on an activity remains a `GaneshExpense` exactly as before. This is enforced in
+three places rather than trusted:
+
+1. `FestivalSeva` / `SevaDuty` declare no money fields.
+2. `sevaCarriesNoMoney()` in `firestore.rules` rejects any write to a seva or
+   duty document carrying `amount`, `totalAmount`, `godFundAmount`,
+   `personalAmount`, `sponsoredAmount`, `estimatedValue` or `ledgerType`.
+3. A contract test asserts a holder of `seva.write` cannot reach any money
+   write helper.
+
+Point 2 matters because nothing reads those keys *today*. Without the guard, a
+later summary or report that started reading them would be spending money
+authorised by the wrong permission.
+
+### Storage
+
+```
+pandals/{p}/festivals/{f}/seva/{sevaId}
+pandals/{p}/festivals/{f}/seva/{sevaId}/duties/{dutyId}
+```
+
+Duties are a subcollection rather than an array on the seva document so two
+coordinators staffing the same aarti do not overwrite each other. `dutyCount` on
+the seva is denormalised for list rendering only; `dutyCounts()` over the real
+duties is the source of truth wherever it matters.
+
+Dates are ISO `yyyy-mm-dd` and times 24-hour `HH:mm`, compared lexically —
+the same choice `GaneshContribution.expectedDate` already makes. No `Date`
+objects and no timezone maths anywhere in the schedule: a pandal's programme is
+local wall-clock time, and routing it through UTC is how an aarti lands on the
+wrong day.
+
+### Permissions
+
+Three new keys in `ALL_GANESH_PERMISSIONS`, the registry (as a grantable
+"Seva schedule" group), and `PERMISSION_DEPENDENCIES`:
+
+| Key | Who has it by default |
+| --- | --- |
+| `seva.read` | every role, including viewer — a volunteer who cannot read the schedule cannot turn up |
+| `seva.write` | admin, treasurer |
+| `seva.assign` | admin, treasurer |
+
+`SEVA_ROLE_DEFAULTS` + `hasSevaPermission()` extend the existing backfill in
+`ensurePandalRoles`, so a pandal that already has role and member documents
+gains the new keys on next load — the same migration path assets and sponsors
+used. Without it an existing treasurer would see the schedule and get a bare
+permission-denied when planning one.
+
+**One volunteer self-service carve-out.** The `duties` update rule lets the
+assignee change their own duty — "I am here", "done" — without holding
+`seva.assign`, restricted via `affectedKeys().hasOnly(['status','updatedBy','updatedAt'])`
+so it cannot be used to reassign the duty to somebody else. `setDutyStatus`
+writes exactly those three keys to stay inside that gate.
+
+### The contract test caught a real mismatch
+
+`firestore.rules` duplicates the member permission set as a literal in
+`builtinMemberPermissions()`, mirrored in the test as
+`RULE_BUILTIN_MEMBER_PERMISSIONS`. Adding `seva.read` to the member role made
+the two disagree, and the alignment test failed exactly as intended. Both
+literals were updated. Left unfixed, an open-join self-created membership
+writing the correct member permission set would have been rejected by the rules.
+
+### Files
+
+| File | Change |
+| --- | --- |
+| `shared/utils/ganeshSeva.ts` + `.test.ts` | **new** — selection, festival-window maths, duty counts, transition guards, validation. **42 tests** |
+| `shared/types/ganesh.ts` | `FestivalSeva`, `SevaDuty`, `pendingWrite`, optional `Festival.startDate`/`endDate` |
+| `shared/utils/ganeshPaths.ts` | `seva` subcollection + `sevaDutiesCol()` |
+| `shared/utils/ganeshPermissions.ts` | 3 permissions, role maps, `RULE_SEVA_WRITE_ROLES`, `SEVA_ROLE_DEFAULTS` |
+| `shared/utils/ganeshPermissionRegistry.ts` | grantable "Seva schedule" group + dependencies |
+| `shared/utils/ganeshPermissions.rules.contract.test.ts` | seva rule mirrors, **13 new tests** |
+| `firestore.rules` | `canPlanSevaOf` / `canAssignSevaOf` / `canWriteSevaOf`, `seva` in the subcollection allowlist, seva status enum, `sevaCarriesNoMoney()`, nested `duties` match |
+| `services/ganesh/ganeshSeva.ts` | **new** — `createSeva`, `updateSeva`, `setSevaStatus`, `voidSeva`, `assignDuty`, `removeDuty`, `setDutyStatus` |
+| `services/ganesh/ganeshRoles.ts` | seva backfill for existing role and member docs |
+| `services/ganesh/ganeshWrites.ts` | optional festival window on create/update + `assertFestivalWindow` |
+| `hooks/useFestivalSeva.ts` | **new** — `useFestivalSeva`, `useSeva`, `useSevaDuties` |
+| `hooks/useGaneshWrites.ts` | seva writes behind `requirePerm` |
+
+### Design notes
+
+- **No online gate on any seva write.** Every path is a plain `writeBatch`
+  because none reads a balance, so planning and staffing work with no signal at
+  the pandal — which is exactly when a schedule gets changed. The money paths
+  keep their transaction + online gates untouched.
+- **A seva is soft-removed** (`voided`), like every other Ganesh record, so a
+  finished festival's schedule still reconciles with what people remember.
+  **A duty is hard-deleted** — taking a volunteer off an aarti reverses no
+  balance and leaves nothing to reconcile.
+- `updateSeva` writes `""` rather than omitting cleared optional fields, because
+  `omitUndefined` would silently keep the old value.
+
+### Verification (Phase 2)
+
+- `npx tsc -p tsconfig.json --noEmit` and `tsconfig.shared.json` — clean
+- `npm test` — **128 files / 1334 tests passing** (was 127 / 1280)
+- `ganeshPermissions.rules.contract.test.ts` — 65 tests, the gate for this phase
+
+**Not verified locally: `firestore.rules` does not compile anywhere in this
+environment.** `firebase deploy --dry-run` needs project credentials, and
+`firebase emulators:exec` requires JDK 21 (this machine has 17). The rules were
+reviewed by hand against the existing helpers and mirrored in the contract test,
+but the mirror is hand-written and proves consistency, not syntax. **Compile the
+rules before deploying** — see §6.9.
+
+## 6.8 Phase 3 — Command Center + navigation
+
+Status: **complete** (2026-08-29). This is the phase where the product stops
+looking like an expense tracker.
+
+### The navigation change
+
+| Before | After |
+| --- | --- |
+| Home · Collections · Expenses · Contributions · Pandal | Home · **Seva** · **Funds** · **People** · Pandal |
+
+Three of five destinations were ledgers. Money is now **one** destination of
+five, and Seva — the festival's actual programme — takes the second slot.
+
+**No route was removed.** `collections`, `expenses`, `contributions` and
+`committee` stay registered in the Tabs navigator, simply absent from the bar
+(the pattern `committee` already used). Every existing link keeps resolving,
+including `/(ganesh)/(tabs)/contributions?status=promised` from the Command
+Center's promised-contributions row. They are reached from the Funds and People
+hubs instead.
+
+Declaration order in `(tabs)/_layout.tsx` is display order, because
+`GaneshTabBar` filters the navigator's own route list — the five visible
+destinations are declared first, the four hidden ones after.
+
+### Home → Pandal Command Center
+
+`app/(ganesh)/(tabs)/index.tsx`, rebuilt to answer *"how is my Pandal doing
+today?"* in this order:
+
+1. **`PandalHero`** — pandal, festival, date window, "Day 4 of 10" as beads.
+   **Carries no money at all.** The old Home opened with the God Fund balance
+   and two money tiles, which is precisely what made the product read as a
+   finance app in the first second.
+2. **Today's Seva** — the day's programme on a time rail, next item emphasised,
+   volunteer count per row.
+3. **Needs attention** — the existing logic verbatim (join requests, pending
+   reimbursements, promised contributions) **plus** unstaffed seva.
+4. **Pandal funds** — three readings in one strip: available, received, spent.
+   Money is not demoted in importance, only in position.
+5. **Quick actions**, then **Pandal activity**.
+
+Money still reaches its old screens in one tap via the section's "Funds" action.
+
+### New screens
+
+| Screen | Purpose |
+| --- | --- |
+| `(tabs)/seva.tsx` | Day strip across the festival + that day's programme. Falls back to the days that *have* seva when the festival has no dates, so it works before anyone fills the window in. Shows today's completion, up-next, and unstaffed counts. |
+| `(tabs)/funds.tsx` | **Pandal Nidhi** — the single money surface. Cash position, a spend meter, a promised-not-received block that says out loud that promises are not cash, then routes into the three unchanged ledgers plus sponsors, Permanent Fund and the report. |
+| `(tabs)/people.tsx` | Committee, volunteers on seva today, households, join requests. Previously "Committee" was a hidden tab reachable only through the Pandal menu, which buried the half of the product that is not money. |
+| `add-seva.tsx` | Progressive disclosure — name, kind, day, time; location and notes behind "Add details". Picking a kind pre-fills the name as a starting point. |
+| `seva/[id].tsx` | One seva and its duty roster. A coordinator staffs it; a volunteer marks themselves on duty and done — **that needs no permission**, matching the rules' own-duty carve-out, and `setSevaDutyStatus(..., isOwnDuty)` skips `requirePerm` accordingly. |
+
+### New components
+
+- **`ui/PandalHero.tsx`** — identity, `ArchFrame`, and a bead-per-day meter.
+  Beads rather than a progress bar: a festival is a countable number of days.
+  Above 15 days the beads stop being countable and it falls back to text.
+- **`SevaRow.tsx`** — the time rail (time, connector, glyph niche). This is what
+  makes a schedule read as a schedule instead of another list of cards, and it
+  is the Command Center's signature row. Status carries a text label as well as
+  colour, so it survives colour blindness and bright sunlight.
+
+### Pure logic added
+
+`formatSevaTime`, `formatSevaDate`, `formatFestivalWindow` in `ganeshSeva.ts`,
+with **7 more tests** (49 total in that file). They format ISO strings by
+slicing rather than constructing a `Date` and localising: parsing
+`"2026-08-28"` yields UTC midnight, which renders as the 27th for every user
+west of Greenwich. `DATE_PATTERN`/`TIME_PATTERN` were moved above first use —
+safe either way inside function bodies, but not worth leaving that shape in the
+file given the TDZ defect fixed in Phase 1.
+
+### Incidental cleanups
+
+- `GaneshQuickActions` gained a **Seva** action (first, before the money ones)
+  and lost the now-dead `showAddPermanentFund` prop — no caller passed it after
+  Home was rebuilt. Seeding the Permanent Fund remains reachable from the Pandal
+  tab, the admin dashboard, and the Permanent Fund screen itself; verified by
+  grep before removing.
+- Its hardcoded slate ripple now uses the palette's `g.ripple`.
+
+### Verification (Phase 3)
+
+- `npx tsc -p tsconfig.json --noEmit` — clean
+- `npm test` — **128 files / 1341 tests passing** (was 128 / 1334)
+- `npm run build:web:ganesh` — **exports cleanly**, 12.98 MB bundle. This is the
+  real check that no import cycle was introduced by the surfaces fork; typecheck
+  cannot see one.
+- **Rendered and inspected in a browser**: the exported bundle was served with an
+  SPA fallback and the Ganesh login was checked in both colour schemes. Confirmed
+  warm ivory ground, vermilion primary, deep-brown text, warm hairlines, the
+  arch-and-lotus mark, and full-vermilion CTA when enabled (the washed salmon
+  first observed was the disabled state, not a palette bug).
+
+**Not verified visually: every screen behind authentication**, which is all of
+the Command Center, Seva, Funds and People work in this phase. There is no
+`.env` in this worktree, so Firebase is unconfigured and sign-in cannot complete.
+Those screens are covered by typecheck, a clean production bundle, and the pure
+logic tests only. They need a real device pass against a real pandal — see the
+manual guide.
+
+Also note the dev server (`npx expo start`) cannot run from this worktree at all:
+it has no `node_modules` of its own, so Metro fails to resolve
+`./node_modules/expo-router/entry`. Use the main checkout for `expo start`.
+
+## 6.9 Phase 4 — Funds, People, Pandal
+
+Status: **complete** (2026-08-29). Money is now one destination that *hosts*
+the ledgers, and the Pandal tab is an identity surface rather than a leftover
+menu.
+
+### 4a. One list, two entry points
+
+`components/ganesh/funds/{ContributionsList,CollectionsList,ExpensesList}.tsx`
+own the filter/search state and the FlashList. `funds.tsx` renders them under
+a `FilterChips` segmented control (Contributions / Collections / Expenses).
+The original tab routes are three-line wrappers, so
+`/(ganesh)/(tabs)/contributions?status=promised` from the Command Center
+still resolves to the same component.
+
+When hosted, the list's chrome (stats, search, chips) sits in
+`ListHeaderComponent` so it scrolls with the rows instead of pinning a second
+header under Pandal Nidhi.
+
+### 4b. Contributions in Seva language
+
+The list now leads with **Received / Promised / Pending**. Promised rows name
+the contributor and offer **Mark received** on the row — presentation only;
+`summarizeContributions`, `isPromised` / `isReceived`, and the write path are
+untouched. Money still defaults to cash on that shortcut and still refuses
+offline, matching `MONEY_RECEIVE_OFFLINE_ERROR`. UPI/bank stay on the detail
+screen.
+
+The overdue filter chip is labelled **Pending**. Colour is never the only
+signal: the badge still carries a text label.
+
+### 4c. Pandal identity
+
+`ui/PandalIdentity.tsx` — name, code, festival window, committee size, role.
+**No arch** (that stays on the Command Center hero) and **no money**. Property
+(assets glance, sponsors, Permanent Fund) comes next, then people, then
+administration. Treasurer target fields and account/logout are unchanged.
+
+### 4d. Assets as visual inventory
+
+`inventoryGlance()` in `ganeshAssets.ts` groups active quantity by category
+and condition and counts what needs replacing (damaged status, or
+damaged/unusable condition). Disposed and lost stay out of the store view.
+The assets screen leads with those chips, then Available / Needs replacing /
+Estimated worth.
+
+### 4e. Asset vs Expense wording
+
+`add-expense.tsx` now offers two cards:
+
+```
+Pandal Asset       Something the Pandal keeps and reuses
+Festival Expense   Something used up for this festival
+```
+
+`expenseType`, `assetId`, and both write paths are untouched.
+
+### Carried over: festival dates are now collected
+
+`FestivalWindowFields` on `create-festival.tsx` and `admin/festivals.tsx`
+writes optional `startDate` / `endDate`. `validateFestivalWindow` in
+`ganeshSeva.ts` is the shared ISO + order check; `assertFestivalWindow` in
+`ganeshWrites.ts` now uses it. Without these dates, “Day 4 of 10” and the
+Seva day strip never appear.
+
+### Files
+
+| File | Change |
+| --- | --- |
+| `components/ganesh/funds/*` | **new** — extracted ledger lists |
+| `components/ganesh/ui/PandalIdentity.tsx` | **new** — Pandal tab identity, no arch |
+| `components/ganesh/FestivalWindowFields.tsx` | **new** — first/last day inputs |
+| `components/ganesh/ui/LedgerRow.tsx` | optional `action` for “Mark received” |
+| `app/(ganesh)/(tabs)/{funds,contributions,collections,expenses,pandal}.tsx` | hub + thin wrappers + identity |
+| `app/(ganesh)/assets.tsx` | category / condition / needs-replacing glance |
+| `app/(ganesh)/add-expense.tsx` | Pandal Asset vs Festival Expense cards |
+| `app/(ganesh)/create-festival.tsx`, `admin/festivals.tsx` | festival window fields |
+| `shared/utils/ganeshSeva.ts` | `validateFestivalWindow` |
+| `shared/utils/ganeshAssets.ts` | `inventoryGlance` |
+| `hooks/useGaneshWrites.ts` | `createFestival` accepts the window |
+| `services/ganesh/ganeshWrites.ts` | window assertion uses the shared helper |
+
+### Verification (Phase 4)
+
+- `npx tsc -p tsconfig.json --noEmit` and `tsconfig.shared.json` — clean
+- `npm test` — **128 files / 1346 tests passing** (was 128 / 1341; +4 window
+  tests, +1 inventory glance)
+- `npx expo export --platform web` for Ganesh — **exports cleanly**, no import
+  cycle from the list extraction
+- Ganesh does not leak: `components/ganesh` / `GaneshThemeProvider` /
+  `ganeshPalette` still appear only under `components/ganesh/` and
+  `app/(ganesh*)`
+- `dashboard/primitives` still appears only as the explanatory comment in
+  `surfaces.tsx`
+
+**Not verified visually: screens behind authentication**, same constraint as
+Phase 3 — no `.env` in this worktree. Needs a real device pass.
+
+---
+
+## 6.10 Remaining work
+
+Branch: `claude/ganesh-seva-redesign-1372fa`. Phases 1–5 are on this branch.
+Phase 5 is recorded in §6.12.
+
+Before using the new screens, read §6.1–§6.3 for the design rules — chiefly:
+**Ganesh owns its surfaces** (`components/ganesh/ui/surfaces.tsx`; nothing
+under `components/ganesh/` may import `components/dashboard/`), amounts
+render in `foreground` and never in the accent, and the arch appears on hero
+surfaces only.
+
+### Do these first (carried over, blocking)
+
+1. **Deploy the Firestore rules.** Not deployed by CI. Seva writes fail with
+   permission-denied until this lands. The command compiles the rules first,
+   which is the syntax check that could not run in the authoring environment
+   (JDK 17 present; the emulator needs 21):
+   ```bash
+   firebase deploy --only firestore:rules
+   ```
+2. **Device pass on everything behind sign-in.** Phases 3–5 — Command
+   Center, Seva, Funds, People, Pandal identity, Transparency, add-* forms,
+   and Admin — are covered by typecheck, a clean production bundle and
+   pure-logic tests only. They have never been rendered against real data.
+
+Leftover chrome from Phase 5 is done: `expense/[id]`,
+`contribution/[id]`, `household/[id]`, `close-festival`, and first-run
+`setup` draw `GaneshHeader`. Expense `EmptyState` / `MetricGrid` on
+close-festival, member / sponsor / asset detail, join-requests, Permanent
+Fund, and admin role detail are now `GaneshEmptyState` / `StatStrip`.
+`AdminQueryState` and `ListStateView` still wrap the shared Expense
+`EmptyState` for query/list plumbing — that is not a screen-level leftover.
+
+---
+
+### Guardrails (unchanged from §6.2)
+
+- No change to money math, promised/received logic, the God Fund / Personal /
+  Permanent Fund model, reimbursements, the `expenseType` discriminator, RBAC,
+  or storage paths.
+- No edits to `components/dashboard/primitives.tsx`, `components/ui/*`,
+  `components/common/*`, `components/layout/*`, or the Expense/Nutrition
+  palettes. Ganesh gets parallel components.
+- Routes are added, never removed.
+- Per `AGENTS.md`: Expo 57 docs are the reference, and each phase ends with a
+  Manual Testing Guide plus the exact commands to run.
+
+### Verification per phase
+
+```bash
+npm run typecheck && npm run typecheck:shared && npm test
+npm run build:web:ganesh
+```
+
+The web export is the only check that catches an import cycle introduced by the
+surfaces fork — typecheck cannot see one.
+
+Cross-product safety — must return nothing outside `components/ganesh/` and
+`app/(ganesh*)`:
+
+```bash
+grep -rn "components/ganesh\|GaneshThemeProvider\|ganeshPalette" app components --include=*.tsx --include=*.ts
+```
+
+Note: `app/`, `components/` and `hooks/` sit outside the Vitest glob
+(`vitest.config.ts`), so **no screen work is automatically testable**. Push new
+logic into `shared/utils/` where it can be, as `ganeshSeva.ts` does.
+
+Note: `npx expo start` cannot run from the worktree — it has no `node_modules`
+of its own and Metro fails to resolve `./node_modules/expo-router/entry`. Use
+the main checkout.
+
+## 6.11 Deploy checklist
+
+`firestore.rules` is **not deployed by CI** (see `docs/FIREBASE_RULES_DEPLOY.md`).
+The seva rules must be compiled and deployed *before or with* the client that
+writes seva, or every seva write returns permission-denied:
+
+```bash
+firebase deploy --only firestore:rules
+```
+
+That command compiles the rules first, which is also the syntax check this
+environment could not run.
+
+## 6.12 Phase 5 — Reports, forms, responsive, polish
+
+Status: **complete** (2026-08-29). The last undifferentiated report is now
+something a committee can read aloud; the ten add-* forms hide optional
+fields; Admin uses Ganesh surfaces; Ganesh has its own web width.
+
+### 5a. Pandal Transparency
+
+`report.tsx` is sectioned: where money came from, where it went, what the
+Pandal owns, then promised-vs-received and sponsors. Numbers still come from
+`ganeshMath`, `summarizeContributions`, `summarizeSponsorships`, and
+`summarizeAssets`. Recalculate stays behind `festival.update`. `MetricGrid`
+is gone from this screen.
+
+### 5b. Progressive disclosure on add-* forms
+
+`FormDetails` is the shared “Add details” toggle. Required fields stay up
+front; vendor, notes, photos, contact extras, and asset metadata sit behind
+it. Tiny solid-primary chips are `FilterChips` / `ChoiceChips`. Write
+payloads and validation are unchanged. `add-expense.tsx` still offers the
+Pandal Asset / Festival Expense cards and the same funding / save paths.
+
+### 5c. Admin
+
+`admin/index.tsx` uses `StatTile` / `Money` and `GaneshEmptyState` instead of
+`MetricGrid` and the Expense `EmptyState`. `admin/audit.tsx` uses
+`FilterChips` and `DataRow`. Settings, festivals, categories, setup, and
+reports draw `GaneshHeader` + `Section` / `StatStrip`.
+
+### 5d. Native headers
+
+Every add-* form, Transparency, create-festival, Admin, first-run `setup`,
+`close-festival`, and the leftover details (`expense/[id]`,
+`contribution/[id]`, `household/[id]`) are `headerShown: false` with an
+in-content `GaneshHeader` + back. Member / sponsor / asset details already
+drew Ganesh chrome; their Expense `EmptyState`s are now `GaneshEmptyState`.
+
+### 5e. Responsive
+
+`shared/utils/ganeshBreakpoint.ts` is the pure cut (`compact <600`,
+`medium 600–1023`, `expanded ≥1024`) with tests. `hooks/useBreakpoint.ts`
+reads the window. `ganeshWebWidthStyle` caps web at 720 / 1100.
+`GaneshScreen` applies it. The root Stack **opts ganesh routes out of the
+shared 480 cap** (`app/_layout.tsx` contentStyle without
+`webWidthConstraintStyle`) because a child 720 cannot exceed a 480 parent.
+`WebWidthConstraint.tsx` is untouched. `StatStrip` and `SectionPair` reflow
+stat tiles and section pairs. Bottom nav stays; no desktop sidebar.
+
+### 5f. Success language
+
+`useGaneshWrites` `run(label)` toasts: “Seva recorded”, “Contribution
+received” (on receive / received create), “Collection recorded”, “Expense
+recorded”, “Reimbursement recorded”. Errors still go through `lib/errors`.
+
+### Files
+
+| File | Change |
+| --- | --- |
+| `shared/utils/ganeshBreakpoint.ts` | **new** — width → bucket + web max |
+| `hooks/useBreakpoint.ts` | **new** — window hook |
+| `components/ganesh/ui/GaneshWidthConstraint.ts` | **new** — 720 / 1100 web cap |
+| `components/ganesh/ui/{StatStrip,SectionPair}.tsx` | **new** — reflow |
+| `components/ganesh/FormDetails.tsx` | **new** — Add details toggle |
+| `components/ganesh/GaneshScreen.tsx` | applies Ganesh web width |
+| `app/_layout.tsx` | ganesh routes drop the 480 cap |
+| `app/(ganesh)/report.tsx` | Pandal Transparency |
+| `app/(ganesh)/add-*.tsx` | header + progressive disclosure |
+| `app/(ganesh)/admin/*` | GaneshHeader, StatTile, FilterChips |
+| `hooks/useGaneshWrites.ts` | recorded / received toast labels |
+
+### Verification (Phase 5)
+
+- `npx tsc -p tsconfig.json --noEmit` and `tsconfig.shared.json` — clean
+- `npm test` — **129 files / 1351 tests passing** (was 128 / 1346; +5
+  breakpoint tests)
+- `npx expo export --platform web` for Ganesh — **exports cleanly**, no
+  import cycle from the new surfaces
+- Ganesh does not leak: `components/ganesh` / `GaneshThemeProvider` /
+  `ganeshPalette` still appear only under `components/ganesh/` and
+  `app/(ganesh*)`
+- `components/common/WebWidthConstraint.tsx` is untouched
+
+**Not verified visually: screens behind authentication**, same constraint as
+Phases 3 and 4. No `.env` in this worktree.
+

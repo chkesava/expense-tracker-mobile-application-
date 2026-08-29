@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
-import { DASH_RADIUS } from "@/components/dashboard/primitives";
+import { GANESH_RADIUS } from "@/components/ganesh/ui/surfaces";
 import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
 import { haptic } from "@/lib/haptics";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -158,7 +158,7 @@ const styles = StyleSheet.create({
     gap: 6,
     minHeight: 36,
     paddingHorizontal: 14,
-    borderRadius: DASH_RADIUS.pill,
+    borderRadius: GANESH_RADIUS.pill,
     borderWidth: StyleSheet.hairlineWidth,
     overflow: "hidden",
   },

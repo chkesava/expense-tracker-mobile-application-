@@ -24,6 +24,7 @@ import {
   ASSET_ROLE_DEFAULTS,
   BUILTIN_ROLE_IDS,
   CONTRIBUTION_STATUS_ROLE_DEFAULTS,
+  SEVA_ROLE_DEFAULTS,
   SPONSOR_ROLE_DEFAULTS,
   ROLE_PERMISSIONS,
   getEffectivePermissions,
@@ -142,6 +143,10 @@ function hasSponsorPermission(permissions: unknown): boolean {
   return Array.isArray(permissions) && permissions.some((item) => String(item).startsWith("sponsors."));
 }
 
+function hasSevaPermission(permissions: unknown): boolean {
+  return Array.isArray(permissions) && permissions.some((item) => String(item).startsWith("seva."));
+}
+
 function builtinMissingPermissions(
   roleId: (typeof BUILTIN_ROLE_IDS)[number],
   currentPerms: GaneshPermission[]
@@ -150,6 +155,7 @@ function builtinMissingPermissions(
     ...ASSET_ROLE_DEFAULTS[roleId],
     ...CONTRIBUTION_STATUS_ROLE_DEFAULTS[roleId],
     ...SPONSOR_ROLE_DEFAULTS[roleId],
+    ...SEVA_ROLE_DEFAULTS[roleId],
   ].filter((perm) => !currentPerms.includes(perm));
 }
 
@@ -225,12 +231,25 @@ export async function ensurePandalRoles(
             (perm) => !Array.isArray(data.permissions) || !data.permissions.includes(perm)
           );
         });
+    // Seva arrived after these member docs were written, so a pandal upgrading
+    // to the schedule needs the new keys unioned in the same way assets and
+    // sponsors were. Without this an existing treasurer sees the schedule but
+    // gets a bare permission-denied when planning one.
+    const needsSevaBackfill = isAdmin
+      ? !hasSevaPermission(data.permissions)
+      : assignedPatched || roleIds.some((id) => {
+          if (!BUILTIN_ROLE_IDS.includes(id as (typeof BUILTIN_ROLE_IDS)[number])) return false;
+          return SEVA_ROLE_DEFAULTS[id as (typeof BUILTIN_ROLE_IDS)[number]].some(
+            (perm) => !Array.isArray(data.permissions) || !data.permissions.includes(perm)
+          );
+        });
     if (
       hasRoleIds &&
       hasPermissions &&
       !needsAssetBackfill &&
       !needsContributionBackfill &&
-      !needsSponsorBackfill
+      !needsSponsorBackfill &&
+      !needsSevaBackfill
     ) {
       return;
     }

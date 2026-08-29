@@ -48,7 +48,10 @@ export type GaneshPermission =
   | "sponsors.create"
   | "sponsors.update"
   | "sponsors.receive"
-  | "sponsors.cancel";
+  | "sponsors.cancel"
+  | "seva.read"
+  | "seva.write"
+  | "seva.assign";
 
 export const ALL_GANESH_PERMISSIONS: GaneshPermission[] = [
   "collections.read",
@@ -97,6 +100,9 @@ export const ALL_GANESH_PERMISSIONS: GaneshPermission[] = [
   "sponsors.update",
   "sponsors.receive",
   "sponsors.cancel",
+  "seva.read",
+  "seva.write",
+  "seva.assign",
 ];
 
 const READ_LEDGER: GaneshPermission[] = [
@@ -109,6 +115,7 @@ const READ_LEDGER: GaneshPermission[] = [
   "festival.read",
   "assets.read",
   "sponsors.read",
+  "seva.read",
 ];
 
 const MEMBER_WRITES: GaneshPermission[] = [
@@ -137,6 +144,8 @@ const TREASURER_PERMISSIONS: GaneshPermission[] = [
   "assets.update",
   "sponsors.receive",
   "sponsors.cancel",
+  "seva.write",
+  "seva.assign",
 ];
 
 const ADMIN_PERMISSIONS: GaneshPermission[] = [...ALL_GANESH_PERMISSIONS];
@@ -152,6 +161,7 @@ const COLLECTOR_PERMISSIONS: GaneshPermission[] = [
   "festival.read",
   "assets.read",
   "sponsors.read",
+  "seva.read",
 ];
 
 const VIEWER_PERMISSIONS: GaneshPermission[] = [...READ_LEDGER];
@@ -230,6 +240,26 @@ export const SPONSOR_ROLE_DEFAULTS: Record<
   member: ["sponsors.read", "sponsors.create", "sponsors.update"],
   collector: ["sponsors.read"],
   viewer: ["sponsors.read"],
+};
+
+/** Mirrors `canWriteSeva()` fallback in firestore.rules. */
+export const RULE_SEVA_WRITE_ROLES: GaneshRole[] = ["admin", "treasurer"];
+
+/**
+ * Default `seva.*` keys unioned onto existing builtin role docs.
+ *
+ * Every role can see the schedule — a volunteer who cannot read it cannot turn
+ * up. Only treasurer and admin plan and staff it, matching the fallback roles
+ * above.
+ */
+export const SEVA_ROLE_DEFAULTS: Record<
+  (typeof BUILTIN_ROLE_IDS)[number],
+  readonly GaneshPermission[]
+> = {
+  treasurer: ["seva.read", "seva.write", "seva.assign"],
+  member: ["seva.read"],
+  collector: ["seva.read"],
+  viewer: ["seva.read"],
 };
 
 export function isGaneshAdmin(role: GaneshRole | undefined): boolean {

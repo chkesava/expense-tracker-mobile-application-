@@ -1,8 +1,11 @@
 import { useState } from "react";
 import { Alert, Text, View } from "react-native";
+import { useRouter } from "expo-router";
+import { Tags } from "lucide-react-native";
 
 import { AdminQueryState } from "@/components/ganesh/AdminQueryState";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
+import { GaneshHeader, useGaneshTokens } from "@/components/ganesh/ui";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useGaneshCategories } from "@/hooks/useGaneshCategories";
@@ -14,6 +17,8 @@ import { useTheme } from "@/theme/ThemeProvider";
 
 export default function AdminCategoriesScreen() {
   const { theme } = useTheme();
+  const g = useGaneshTokens();
+  const { back } = useRouter();
   const { pandalId, festivalId } = useGaneshSession();
   const { categories, loading, error, retry } = useGaneshCategories(pandalId, festivalId);
   const writes = useGaneshWrites();
@@ -34,6 +39,11 @@ export default function AdminCategoriesScreen() {
 
   return (
     <GaneshScreen>
+      <GaneshHeader
+        title="Expense categories"
+        icon={<Tags size={22} color={g.saffron} strokeWidth={2.2} />}
+        onBack={back}
+      />
       <Text style={{ color: theme.colors.mutedForeground, lineHeight: 22 }}>
         Disable a category instead of deleting it. Expenses already recorded keep their old
         category name.

@@ -1,9 +1,11 @@
 import { useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { Users } from "lucide-react-native";
 
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { GaneshWriteLock } from "@/components/ganesh/GaneshWriteLock";
+import { FilterChips, GaneshHeader, useGaneshTokens } from "@/components/ganesh/ui";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -24,10 +26,16 @@ import {
 import { formatInr } from "@/shared/utils/ganeshMoney";
 import { useTheme } from "@/theme/ThemeProvider";
 
-const METHODS: PaymentMethod[] = ["cash", "upi", "bank", "other"];
+const METHOD_OPTIONS: Array<{ id: PaymentMethod; label: string }> = [
+  { id: "cash", label: "Cash" },
+  { id: "upi", label: "UPI" },
+  { id: "bank", label: "Bank" },
+  { id: "other", label: "Other" },
+];
 
 export default function AddMemberPaymentScreen() {
   const { theme } = useTheme();
+  const g = useGaneshTokens();
   const { back } = useRouter();
   const { memberId: memberIdParam } = useLocalSearchParams<{ memberId?: string }>();
   const { pandalId, festivalId } = useGaneshSession();
@@ -63,33 +71,21 @@ export default function AddMemberPaymentScreen() {
 
   return (
     <GaneshScreen>
-      <Text style={{ color: theme.colors.mutedForeground }}>
+      <GaneshHeader
+        title="Member payment"
+        icon={<Users size={22} color={g.saffron} strokeWidth={2.2} />}
+        onBack={back}
+      />
+      <Text style={{ color: theme.colors.mutedForeground, lineHeight: 21 }}>
         Record a committee payment for this festival. It increases the God Fund.
       </Text>
-      <Text style={{ color: theme.colors.mutedForeground, fontWeight: "700" }}>Committee person</Text>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-        {committee.map((member) => (
-          <Pressable
-            key={member.userId}
-            onPress={() => setMemberId(member.userId)}
-            style={{
-              paddingHorizontal: 10,
-              paddingVertical: 6,
-              borderRadius: 999,
-              backgroundColor: memberId === member.userId ? theme.colors.primary : theme.colors.muted,
-            }}
-          >
-            <Text
-              style={{
-                color: memberId === member.userId ? theme.colors.primaryForeground : theme.colors.foreground,
-                fontWeight: "700",
-              }}
-            >
-              {member.displayName}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
+      <FilterChips
+        label="Committee person"
+        layout="wrap"
+        value={memberId}
+        options={committee.map((member) => ({ id: member.userId, label: member.displayName }))}
+        onChange={setMemberId}
+      />
       {selected ? (
         <Text style={{ color: theme.colors.mutedForeground }}>
           {selected.displayName} · {status === "paid" ? "Paid" : status === "partial" ? "Partial" : "Not paid"}
@@ -100,30 +96,13 @@ export default function AddMemberPaymentScreen() {
         </Text>
       ) : null}
       <Input label="Amount" value={amount} onChangeText={setAmount} keyboardType="numeric" />
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-        {METHODS.map((item) => (
-          <Pressable
-            key={item}
-            onPress={() => setMethod(item)}
-            style={{
-              paddingHorizontal: 10,
-              paddingVertical: 6,
-              borderRadius: 999,
-              backgroundColor: method === item ? theme.colors.primary : theme.colors.muted,
-            }}
-          >
-            <Text
-              style={{
-                color: method === item ? theme.colors.primaryForeground : theme.colors.foreground,
-                fontWeight: "700",
-                textTransform: "capitalize",
-              }}
-            >
-              {item}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
+      <FilterChips
+        label="Method"
+        layout="wrap"
+        value={method}
+        options={METHOD_OPTIONS}
+        onChange={setMethod}
+      />
       <Button
         loading={busy}
         onPress={() => {

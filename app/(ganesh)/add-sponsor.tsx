@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { Building2 } from "lucide-react-native";
 
 import { ChoiceChips } from "@/components/ganesh/ChoiceChips";
+import { FormDetails } from "@/components/ganesh/FormDetails";
 import { GaneshImageUploader, type GaneshUploadStatus } from "@/components/ganesh/GaneshImageUploader";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { GaneshWriteLock } from "@/components/ganesh/GaneshWriteLock";
+import { GaneshHeader, useGaneshTokens } from "@/components/ganesh/ui";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useFestivals } from "@/hooks/useFestivals";
@@ -48,6 +51,7 @@ const PAYMENT_OPTIONS: Array<{ id: PaymentMethod; label: string }> = [
 
 export default function AddSponsorScreen() {
   const { theme } = useTheme();
+  const g = useGaneshTokens();
   const { back } = useRouter();
   const params = useLocalSearchParams<{ sponsorId?: string }>();
   const existingSponsorId = typeof params.sponsorId === "string" ? params.sponsorId : "";
@@ -148,48 +152,54 @@ export default function AddSponsorScreen() {
 
   return (
     <GaneshScreen>
-      <Text style={{ color: theme.colors.foreground, fontSize: 22, fontWeight: "800" }}>
-        {existingSponsorId ? "Add sponsorship" : "Add sponsor"}
-      </Text>
-      <Text style={{ color: theme.colors.mutedForeground }}>
+      <GaneshHeader
+        title={existingSponsorId ? "Add sponsorship" : "Add sponsor"}
+        icon={<Building2 size={22} color={g.saffron} strokeWidth={2.2} />}
+        onBack={back}
+      />
+      <Text style={{ color: theme.colors.mutedForeground, lineHeight: 21 }}>
         Prospective and promised deals do not change festival cash. In-kind is not cash.
       </Text>
       {existingSponsorId ? null : (
         <View style={{ gap: 16 }}>
           <Input label="Name" value={name} onChangeText={setName} placeholder="ABC Electricals" />
           <ChoiceChips label="Sponsor type" value={sponsorType} options={SPONSOR_TYPES} onChange={setSponsorType} />
-          <Input label="Mobile (optional)" value={mobile} onChangeText={setMobile} keyboardType="phone-pad" />
-          <Input label="Email (optional)" value={email} onChangeText={setEmail} keyboardType="email-address" />
-          <Input label="Address (optional)" value={address} onChangeText={setAddress} />
-          <Input label="Notes (optional)" value={notes} onChangeText={setNotes} />
-          <GaneshImageUploader
-            title="Photo"
-            kind="photo"
-            status={photoStatus}
-            previewUri={photo?.uri}
-            disabled={busy}
-            onPrepared={(file) => {
-              setPhoto(file);
-              setPhotoStatus("selected");
-            }}
-            onRemove={() => {
-              setPhoto(null);
-              setPhotoStatus("idle");
-            }}
-            onRetry={() => {
-              if (!savedId || !photo) return;
-              setBusy(true);
-              void persistPhoto(savedId, photo)
-                .then((ok) => {
-                  if (ok) back();
-                })
-                .finally(() => setBusy(false));
-            }}
-          />
+          <FormDetails>
+            <Input label="Mobile (optional)" value={mobile} onChangeText={setMobile} keyboardType="phone-pad" />
+            <Input label="Email (optional)" value={email} onChangeText={setEmail} keyboardType="email-address" />
+            <Input label="Address (optional)" value={address} onChangeText={setAddress} />
+            <Input label="Notes (optional)" value={notes} onChangeText={setNotes} />
+            <GaneshImageUploader
+              title="Photo"
+              kind="photo"
+              status={photoStatus}
+              previewUri={photo?.uri}
+              disabled={busy}
+              onPrepared={(file) => {
+                setPhoto(file);
+                setPhotoStatus("selected");
+              }}
+              onRemove={() => {
+                setPhoto(null);
+                setPhotoStatus("idle");
+              }}
+              onRetry={() => {
+                if (!savedId || !photo) return;
+                setBusy(true);
+                void persistPhoto(savedId, photo)
+                  .then((ok) => {
+                    if (ok) back();
+                  })
+                  .finally(() => setBusy(false));
+              }}
+            />
+          </FormDetails>
         </View>
       )}
 
-      <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>This festival</Text>
+      <Text style={{ color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold }}>
+        This festival
+      </Text>
       <ChoiceChips label="What they are giving" value={dealType} options={SPONSORING_TYPES} onChange={setDealType} />
       <ChoiceChips label="Purpose" value={purpose} options={SPONSORSHIP_PURPOSES} onChange={setPurpose} />
       {purpose === "other" ? (
@@ -257,27 +267,19 @@ export default function AddSponsorScreen() {
           Connect to the internet to record received cash so it is counted once.
         </Text>
       ) : null}
+      <FormDetails>
       <Input label="Deal notes (optional)" value={dealNotes} onChangeText={setDealNotes} />
       {canLinkAsset ? (
         <View style={{ gap: 12 }}>
-          <Pressable
-            onPress={() => setAddAsAsset((prev) => !prev)}
-            style={{
-              paddingHorizontal: 10,
-              paddingVertical: 8,
-              borderRadius: 12,
-              backgroundColor: addAsAsset ? theme.colors.primary : theme.colors.muted,
-            }}
-          >
-            <Text
-              style={{
-                color: addAsAsset ? theme.colors.primaryForeground : theme.colors.foreground,
-                fontWeight: "700",
-              }}
-            >
-              Also add as Pandal asset
-            </Text>
-          </Pressable>
+          <ChoiceChips
+            label="Pandal asset"
+            value={addAsAsset ? "yes" : "no"}
+            options={[
+              { id: "no", label: "Deal only" },
+              { id: "yes", label: "Also add as Pandal asset" },
+            ]}
+            onChange={(next) => setAddAsAsset(next === "yes")}
+          />
           {addAsAsset ? (
             <>
               <Input
@@ -308,6 +310,7 @@ export default function AddSponsorScreen() {
           ) : null}
         </View>
       ) : null}
+      </FormDetails>
       <Button
         loading={busy}
         disabled={closed || moneyOffline}

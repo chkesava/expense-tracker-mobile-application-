@@ -12,7 +12,8 @@ export type PermissionGroupId =
   | "settings"
   | "audit"
   | "assets"
-  | "sponsors";
+  | "sponsors"
+  | "seva";
 
 export type PermissionGroup = {
   id: PermissionGroupId;
@@ -119,6 +120,15 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: "sponsors.cancel", label: "Cancel" },
     ],
   },
+  {
+    id: "seva",
+    label: "Seva schedule",
+    items: [
+      { key: "seva.read", label: "View" },
+      { key: "seva.write", label: "Plan and update" },
+      { key: "seva.assign", label: "Assign volunteers" },
+    ],
+  },
 ];
 
 /**
@@ -202,6 +212,8 @@ export const PERMISSION_DEPENDENCIES: Partial<Record<GaneshPermission, GaneshPer
   "sponsors.update": ["sponsors.read"],
   "sponsors.receive": ["sponsors.read"],
   "sponsors.cancel": ["sponsors.read"],
+  "seva.write": ["seva.read"],
+  "seva.assign": ["seva.read"],
 };
 
 export const CRITICAL_PERMISSIONS: GaneshPermission[] = [

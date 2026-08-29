@@ -1,10 +1,23 @@
-import { Text, View } from "react-native";
+import { Text } from "react-native";
+import { useRouter } from "expo-router";
+import { FileBarChart } from "lucide-react-native";
 
-import { Button } from "@/components/ui/Button";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
-import { MetricGrid } from "@/components/ganesh/MetricGrid";
+import {
+  DataRow,
+  GaneshHeader,
+  MetaLabel,
+  Money,
+  Section,
+  SectionPair,
+  StatStrip,
+  StatTile,
+  useGaneshTokens,
+} from "@/components/ganesh/ui";
+import { Button } from "@/components/ui/Button";
 import { useContributions } from "@/hooks/useContributions";
 import { useFestivals } from "@/hooks/useFestivals";
+import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { useGaneshSummary } from "@/hooks/useGaneshSummary";
 import { useGaneshWrites } from "@/hooks/useGaneshWrites";
 import { usePandalAssets } from "@/hooks/usePandalAssets";
@@ -14,7 +27,6 @@ import { useSponsorships } from "@/hooks/useSponsorships";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import { summarizeAssets } from "@/shared/utils/ganeshAssets";
 import { summarizeContributions } from "@/shared/utils/ganeshContributions";
-import { breakdownSponsors, summarizeSponsorships } from "@/shared/utils/ganeshSponsors";
 import {
   assetPurchaseAmountOf,
   availableGodFund,
@@ -22,12 +34,22 @@ import {
   totalCashIn,
   totalExpenses,
 } from "@/shared/utils/ganeshMath";
-import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { formatInr } from "@/shared/utils/ganeshMoney";
+import { breakdownSponsors, summarizeSponsorships } from "@/shared/utils/ganeshSponsors";
 import { useTheme } from "@/theme/ThemeProvider";
 
+/**
+ * Pandal Transparency — a committee-readable festival hisab.
+ *
+ * Same numbers as before (`ganeshMath`, `summarizeContributions`,
+ * `summarizeSponsorships`, `summarizeAssets`). The layout is what you would
+ * read aloud at a meeting: where money came from, where it went, what the
+ * Pandal now owns. Promised-vs-received and the regular/asset split stay.
+ */
 export default function FestivalReportScreen() {
   const { theme } = useTheme();
+  const g = useGaneshTokens();
+  const { back } = useRouter();
   const { pandalId, festivalId } = useGaneshSession();
   const { pandals } = usePandals();
   const { festivals } = useFestivals(pandalId);
@@ -44,85 +66,156 @@ export default function FestivalReportScreen() {
   const { can } = useGaneshPermissions();
   const pandal = pandals.find((item) => item.id === pandalId);
   const festival = festivals.find((item) => item.id === festivalId);
+  const canRecalculate = can("festival.update");
 
   return (
     <GaneshScreen>
-      <Text style={{ color: theme.colors.foreground, fontSize: 22, fontWeight: "800" }}>
-        {festival?.name}
-      </Text>
-      <Text style={{ color: theme.colors.mutedForeground }}>{pandal?.name}</Text>
-      <MetricGrid
-        items={[
-          { label: "Opening funds", value: summary.openingFunds },
-          { label: "Cash collections", value: summary.chanda },
-          { label: "Committee contributions", value: summary.committeeContributions },
-          { label: "Other cash contributions", value: summary.otherCashContributions },
-          { label: "Total cash in", value: totalCashIn(summary) },
-          { label: "God Fund expenses", value: summary.godFundExpenses },
-          { label: "Reimbursements", value: summary.reimbursements },
-          { label: "From Permanent Fund", value: summary.receivedFromPermanentFund },
-          { label: "Returned to Permanent Fund", value: summary.transferredToPermanentFund },
-          { label: "Closing cash / God Fund", value: availableGodFund(summary) },
-          { label: "Personal money used", value: summary.personalMoneyUsed },
-          { label: "Pending reimbursements", value: summary.pendingReimbursements },
-          { label: "Festival expenses", value: totalExpenses(summary) },
-          { label: "Regular", value: regularExpenseAmount(summary) },
-          { label: "Asset purchases", value: assetPurchaseAmountOf(summary) },
-          { label: "Pandal estimated value", value: assetSummary.estimatedValue },
-        ]}
+      <GaneshHeader
+        title="Pandal Transparency"
+        subtitle={[pandal?.name, festival?.name].filter(Boolean).join(" · ") || undefined}
+        icon={<FileBarChart size={22} color={g.saffron} strokeWidth={2.2} />}
+        onBack={back}
       />
-      <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>
-        Promised vs received
+
+      <Text style={{ color: theme.colors.mutedForeground, lineHeight: 21 }}>
+        Read this aloud at a meeting: where the money came from, where it went, and what the
+        Pandal now owns. Promises are not cash.
       </Text>
-      <Text style={{ color: theme.colors.mutedForeground }}>
-        Promised and cancelled amounts are not cash and are not part of Closing / God Fund.
-      </Text>
-      <MetricGrid
-        items={[
-          { label: "Cash received", value: contributionTotals.cashReceived },
-          { label: "Promised cash", value: contributionTotals.promisedCash },
-          { label: "In-kind received", value: contributionTotals.inKindReceived },
-          { label: "Promised in-kind", value: contributionTotals.promisedInKind },
-          { label: "Cancelled", value: contributionTotals.cancelledValue },
-        ]}
-      />
-      <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>Sponsors</Text>
-      <Text style={{ color: theme.colors.mutedForeground }}>
-        Separate from Closing / God Fund. Expense sponsorship is not income.
-      </Text>
-      <MetricGrid
-        items={[
-          { label: "Cash received", value: sponsorTotals.cashReceived },
-          { label: "Promised cash", value: sponsorTotals.promisedCash },
-          { label: "In-kind received", value: sponsorTotals.inKindReceived },
-          { label: "Promised in-kind", value: sponsorTotals.promisedInKind },
-          { label: "Cancelled", value: sponsorTotals.cancelledValue },
-        ]}
-      />
-      {sponsorRows.length > 0 ? (
-        <View style={{ gap: 10 }}>
-          {sponsorRows.map((row) => (
-            <View
-              key={row.sponsorId}
-              style={{
-                backgroundColor: theme.colors.card,
-                borderColor: theme.colors.border,
-                borderWidth: 1,
-                borderRadius: 16,
-                padding: 14,
-                gap: 4,
-              }}
-            >
-              <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>{row.name}</Text>
-              <Text style={{ color: theme.colors.mutedForeground }}>
-                Received {formatInr(row.received)} · Promised {formatInr(row.promised)}
-                {row.inKind > 0 ? ` · In-kind ${formatInr(row.inKind)}` : ""}
-              </Text>
-            </View>
-          ))}
-        </View>
-      ) : null}
-      {can("festival.update") ? (
+
+      <SectionPair>
+        <Section title="Where money came from" subtitle="Cash that entered this festival">
+          <StatStrip>
+            <StatTile label="Opening funds">
+              <Money value={summary.openingFunds} size="secondary" />
+            </StatTile>
+            <StatTile label="Chanda">
+              <Money value={summary.chanda} size="secondary" />
+            </StatTile>
+            <StatTile label="Committee">
+              <Money value={summary.committeeContributions} size="secondary" />
+            </StatTile>
+            <StatTile label="Other cash">
+              <Money value={summary.otherCashContributions} size="secondary" />
+            </StatTile>
+            <StatTile label="From Permanent Fund">
+              <Money value={summary.receivedFromPermanentFund} size="secondary" />
+            </StatTile>
+            <StatTile label="Total cash in">
+              <Money value={totalCashIn(summary)} size="secondary" />
+            </StatTile>
+          </StatStrip>
+        </Section>
+
+        <Section title="Where it went" subtitle="Spend and returns this festival">
+          <StatStrip>
+            <StatTile label="God Fund expenses">
+              <Money value={summary.godFundExpenses} size="secondary" />
+            </StatTile>
+            <StatTile label="Reimbursements">
+              <Money value={summary.reimbursements} size="secondary" />
+            </StatTile>
+            <StatTile label="Returned to Permanent Fund">
+              <Money value={summary.transferredToPermanentFund} size="secondary" />
+            </StatTile>
+            <StatTile label="Festival expenses">
+              <Money value={totalExpenses(summary)} size="secondary" />
+            </StatTile>
+            <StatTile label="Regular">
+              <Money value={regularExpenseAmount(summary)} size="secondary" />
+            </StatTile>
+            <StatTile label="Asset purchases">
+              <Money value={assetPurchaseAmountOf(summary)} size="secondary" />
+            </StatTile>
+          </StatStrip>
+          <StatStrip>
+            <StatTile label="Personal money used">
+              <Money value={summary.personalMoneyUsed} size="secondary" />
+            </StatTile>
+            <StatTile label="Pending reimbursements">
+              <Money value={summary.pendingReimbursements} size="secondary" />
+            </StatTile>
+          </StatStrip>
+        </Section>
+      </SectionPair>
+
+      <Section title="What the Pandal owns" subtitle="After this festival's spend">
+        <StatStrip>
+          <StatTile label="Closing cash / God Fund">
+            <Money value={availableGodFund(summary)} size="secondary" />
+          </StatTile>
+          <StatTile label="Pandal estimated value">
+            <Money value={assetSummary.estimatedValue} size="secondary" />
+          </StatTile>
+        </StatStrip>
+      </Section>
+
+      <Section
+        title="Promised vs received"
+        subtitle="Promised and cancelled amounts are not cash and are not part of Closing / God Fund."
+      >
+        <StatStrip>
+          <StatTile label="Cash received">
+            <Money value={contributionTotals.cashReceived} size="secondary" />
+          </StatTile>
+          <StatTile label="Promised cash">
+            <Money value={contributionTotals.promisedCash} size="secondary" />
+          </StatTile>
+          <StatTile label="In-kind received">
+            <Money value={contributionTotals.inKindReceived} size="secondary" />
+          </StatTile>
+          <StatTile label="Promised in-kind">
+            <Money value={contributionTotals.promisedInKind} size="secondary" />
+          </StatTile>
+          <StatTile label="Cancelled">
+            <Money value={contributionTotals.cancelledValue} size="secondary" />
+          </StatTile>
+        </StatStrip>
+      </Section>
+
+      <Section
+        title="Sponsors"
+        subtitle="Separate from Closing / God Fund. Expense sponsorship is not income."
+      >
+        <StatStrip>
+          <StatTile label="Cash received">
+            <Money value={sponsorTotals.cashReceived} size="secondary" />
+          </StatTile>
+          <StatTile label="Promised cash">
+            <Money value={sponsorTotals.promisedCash} size="secondary" />
+          </StatTile>
+          <StatTile label="In-kind received">
+            <Money value={sponsorTotals.inKindReceived} size="secondary" />
+          </StatTile>
+          <StatTile label="Promised in-kind">
+            <Money value={sponsorTotals.promisedInKind} size="secondary" />
+          </StatTile>
+          <StatTile label="Cancelled">
+            <Money value={sponsorTotals.cancelledValue} size="secondary" />
+          </StatTile>
+        </StatStrip>
+        {sponsorRows.length > 0 ? (
+          <>
+            {sponsorRows.map((row, index) => (
+              <DataRow
+                key={row.sponsorId}
+                title={row.name}
+                meta={[
+                  `Received ${formatInr(row.received)}`,
+                  `Promised ${formatInr(row.promised)}`,
+                  row.inKind > 0 ? `In-kind ${formatInr(row.inKind)}` : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+                divider={index < sponsorRows.length - 1}
+              />
+            ))}
+          </>
+        ) : (
+          <MetaLabel>No sponsor deals this festival.</MetaLabel>
+        )}
+      </Section>
+
+      {canRecalculate ? (
         <Button variant="outline" onPress={() => void writes.recomputeFestivalSummary()}>
           Recalculate from ledger
         </Button>

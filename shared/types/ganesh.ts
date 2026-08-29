@@ -320,6 +320,13 @@ export interface Festival extends GaneshAuditFields {
   contributionMode: ContributionMode;
   contributionTargetAmount: number;
   householdTargetAmount: number;
+  /**
+   * Festival window, ISO `yyyy-mm-dd`. Optional: festivals created before the
+   * seva schedule existed have neither, and every surface degrades to showing
+   * just the festival name when they are absent.
+   */
+  startDate?: string;
+  endDate?: string;
   closedAt?: FirestoreTime;
   closedBy?: string;
 }
@@ -549,6 +556,64 @@ export interface GaneshAuditLog {
   newValue?: unknown;
   reason?: string;
   at?: FirestoreTime;
+}
+
+/* --------------------------------------------------------------------- Seva */
+
+/**
+ * Seva — the pandal's operational schedule.
+ *
+ * A seva is an activity the committee runs during a festival: the morning
+ * aarti, annadanam, a cultural programme, the visarjan procession. It is
+ * deliberately **not** a financial record: a seva carries no amount and never
+ * enters `GaneshSummary`, any ledger, or the God Fund. Money spent on an
+ * activity is recorded as a `GaneshExpense` exactly as before.
+ */
+export type SevaKind =
+  | "aarti"
+  | "annadanam"
+  | "prasadam"
+  | "bhajan"
+  | "cultural"
+  | "decoration"
+  | "cleaning"
+  | "security"
+  | "procession"
+  | "visarjan"
+  | "other";
+
+export type SevaStatus = "scheduled" | "in_progress" | "completed" | "cancelled";
+
+/** A volunteer's duty on one seva. */
+export type DutyStatus = "assigned" | "on_duty" | "completed" | "declined";
+
+export interface FestivalSeva extends GaneshAuditFields, GaneshVoidFields {
+  id: string;
+  name: string;
+  kind: SevaKind;
+  /** ISO `yyyy-mm-dd`. Stored as a string so it sorts and compares lexically, matching `GaneshContribution.expectedDate`. */
+  date: string;
+  /** 24-hour `HH:mm`. Same reason. */
+  startTime: string;
+  endTime?: string;
+  location?: string;
+  notes?: string;
+  status: SevaStatus;
+  /** Denormalised count of duties, so a schedule list needs no per-row subquery. */
+  dutyCount?: number;
+  pendingWrite?: boolean;
+}
+
+export interface SevaDuty extends GaneshAuditFields {
+  id: string;
+  sevaId: string;
+  /** The pandal member serving. */
+  userId: string;
+  displayName: string;
+  /** What they are doing, e.g. "Prasadam counter". Free text. */
+  roleLabel?: string;
+  status: DutyStatus;
+  pendingWrite?: boolean;
 }
 
 export const EMPTY_GANESH_SUMMARY: GaneshSummary = {

@@ -302,7 +302,8 @@ service cloud.firestore {
         'collections.create', 'collections.update',
         'expenses.create', 'expenses.update',
         'contributions.create', 'contributions.update',
-        'assets.create', 'sponsors.create', 'sponsors.update'
+        'assets.create', 'sponsors.create', 'sponsors.update',
+        'seva.read'
       ];
     }
 
@@ -439,6 +440,30 @@ service cloud.firestore {
         || canUpdateSponsorOf(pandalId)
         || canReceiveSponsorOf(pandalId)
         || canCancelSponsorOf(pandalId);
+    }
+
+    // Seva schedule. A seva carries no money, so these helpers gate planning
+    // and staffing only; nothing here can move a rupee.
+    function canPlanSevaOf(pandalId) {
+      return hasPermOf(pandalId, 'seva.write')
+        || (
+          isActivePandalMemberOf(pandalId)
+          && !hasPermissionsField(pandalId)
+          && ganeshRoleOf(pandalId) in ['admin', 'treasurer']
+        );
+    }
+
+    function canAssignSevaOf(pandalId) {
+      return hasPermOf(pandalId, 'seva.assign')
+        || (
+          isActivePandalMemberOf(pandalId)
+          && !hasPermissionsField(pandalId)
+          && ganeshRoleOf(pandalId) in ['admin', 'treasurer']
+        );
+    }
+
+    function canWriteSevaOf(pandalId) {
+      return canPlanSevaOf(pandalId) || canAssignSevaOf(pandalId);
     }
 
     function canWriteLedgerSideEffectOf(pandalId) {
@@ -837,7 +862,10 @@ service cloud.firestore {
                   && (canCloseOrUpdateFestival() || canCreateFestival()))
               || ((subcol == 'activity' || subcol == 'auditLogs' || subcol == 'summary')
                   && (canWriteLedgerSideEffect() || canCreateFestival()))
-              || (subcol == 'sponsorships' && canWriteSponsorOf(pandalId));
+              || (subcol == 'sponsorships' && canWriteSponsorOf(pandalId))
+              // Seva is the operational schedule, not a ledger. Planning and
+              // staffing are separate permissions; neither can touch money.
+              || (subcol == 'seva' && canWriteSevaOf(pandalId));
           }
 
           // Nested matches OR together, so the explicit
@@ -899,8 +927,21 @@ service cloud.firestore {
                     ? d.status in ['prospective', 'promised', 'confirmed', 'received', 'cancelled']
                     : subcol == 'households'
                       ? d.status in ['pending', 'partial', 'paid', 'not_interested', 'not_available']
-                      : d.status is string
+                      : subcol == 'seva'
+                        ? d.status in ['scheduled', 'in_progress', 'completed', 'cancelled']
+                        : d.status is string
               );
+          }
+
+          // A seva must never carry money. Without this a writer holding only
+          // seva.write could park an `amount` on a seva document; nothing reads
+          // it today, but a later summary or report that did would be spending
+          // money authorised by the wrong permission.
+          function sevaCarriesNoMoney() {
+            return subcol != 'seva' || !request.resource.data.keys().hasAny([
+              'amount', 'totalAmount', 'godFundAmount', 'personalAmount',
+              'sponsoredAmount', 'estimatedValue', 'ledgerType'
+            ]);
           }
 
           function flagsWellFormed() {
@@ -952,7 +993,8 @@ service cloud.firestore {
             return amountsWellFormed()
               && statusWellFormed()
               && flagsWellFormed()
-              && summaryWellFormed();
+              && summaryWellFormed()
+              && sevaCarriesNoMoney();
           }
 
           function hasNonEmptyAssetId() {
@@ -1100,6 +1142,62 @@ service cloud.firestore {
           // leaves no trace, so no role gets it. Nothing in the app deletes a
           // festival subcollection document — categories are soft-disabled.
           allow delete: if false;
+
+          /**
+           * Volunteer duties, two levels below the festival. The wildcard above
+           * is single-segment, so this needs its own block.
+           *
+           * Guarded on `subcol == 'seva'` because the enclosing wildcard would
+           * otherwise offer a `duties` subcollection under every festival
+           * collection — a writable side-channel hanging off expenses.
+           *
+           * Unlike every money record, a duty may be deleted: taking a
+           * volunteer off an aarti is routine, reverses no balance and leaves
+           * nothing to reconcile.
+           */
+          match /duties/{dutyId} {
+            function dutyWellFormed() {
+              let d = request.resource.data;
+              return (!d.keys().hasAny(['status'])
+                  || d.status in ['assigned', 'on_duty', 'completed', 'declined'])
+                && (!d.keys().hasAny(['userId']) || d.userId is string)
+                && !d.keys().hasAny([
+                  'amount', 'totalAmount', 'godFundAmount', 'personalAmount',
+                  'sponsoredAmount', 'estimatedValue', 'ledgerType'
+                ]);
+            }
+
+            allow read: if isActivePandalMember() && subcol == 'seva';
+            allow create: if isActivePandalMember()
+              && subcol == 'seva'
+              && festivalOpen()
+              && canAssignSevaOf(pandalId)
+              && dutyWellFormed()
+              && (
+                !request.resource.data.keys().hasAny(['createdBy'])
+                || ganeshIdentityCreate()
+              );
+            allow update: if isActivePandalMember()
+              && subcol == 'seva'
+              && festivalOpen()
+              && dutyWellFormed()
+              && (
+                canAssignSevaOf(pandalId)
+                // A volunteer may report on their own duty — "I am here", "done"
+                // — without holding seva.assign, which is the power to staff
+                // other people. Restricted to the status field so it cannot be
+                // used to reassign the duty to someone else.
+                || (
+                  resource.data.userId == request.auth.uid
+                  && request.resource.data.diff(resource.data).affectedKeys()
+                       .hasOnly(['status', 'updatedBy', 'updatedAt'])
+                )
+              );
+            allow delete: if isActivePandalMember()
+              && subcol == 'seva'
+              && festivalOpen()
+              && canAssignSevaOf(pandalId);
+          }
         }
       }
     }

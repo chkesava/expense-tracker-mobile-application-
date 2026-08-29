@@ -37,6 +37,8 @@ export type LedgerRowProps = {
   media?: ReactNode;
   pending?: boolean;
   onPress?: (id: string) => void;
+  /** Inline action — e.g. "Mark received" on a promised contribution. */
+  action?: { label: string; onPress: (id: string) => void; disabled?: boolean };
 };
 
 /**
@@ -62,6 +64,7 @@ export const LedgerRow = memo(function LedgerRow({
   media,
   pending,
   onPress,
+  action,
 }: LedgerRowProps) {
   const { theme } = useTheme();
   const g = useGaneshTokens();
@@ -129,6 +132,29 @@ export const LedgerRow = memo(function LedgerRow({
             Waiting to sync
           </Text>
         </View>
+      ) : null}
+
+      {action ? (
+        <Pressable
+          disabled={action.disabled}
+          onPress={(event) => {
+            event.stopPropagation?.();
+            void haptic.selection();
+            action.onPress(id);
+          }}
+          accessibilityRole="button"
+          accessibilityLabel={action.label}
+          style={({ pressed }) => [
+            styles.action,
+            { backgroundColor: g.wash(g.saffron), borderColor: g.wash(g.saffron) },
+            action.disabled ? { opacity: 0.45 } : null,
+            pressed && !action.disabled ? { opacity: 0.8 } : null,
+          ]}
+        >
+          <Text style={[styles.actionLabel, { color: g.saffron, fontFamily: theme.fontFamily.semibold }]}>
+            {action.label}
+          </Text>
+        </Pressable>
       ) : null}
     </>
   );
@@ -218,5 +244,17 @@ const styles = StyleSheet.create({
   },
   pendingText: {
     fontSize: 11,
+  },
+  action: {
+    alignSelf: "flex-start",
+    minHeight: 32,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderCurve: "continuous",
+    borderWidth: StyleSheet.hairlineWidth,
+    justifyContent: "center",
+  },
+  actionLabel: {
+    fontSize: 12.5,
   },
 });

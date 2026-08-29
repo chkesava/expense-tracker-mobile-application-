@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { ChevronRight } from "lucide-react-native";
 
-import { DASH_RADIUS, MetaLabel } from "@/components/dashboard/primitives";
+import { GANESH_RADIUS, MetaLabel } from "@/components/ganesh/ui/surfaces";
 import { haptic } from "@/lib/haptics";
 import { useTheme } from "@/theme/ThemeProvider";
 
@@ -145,7 +145,7 @@ export function FundHero({
 
 const styles = StyleSheet.create({
   surface: {
-    borderRadius: DASH_RADIUS.section,
+    borderRadius: GANESH_RADIUS.section,
     borderCurve: "continuous",
     borderWidth: StyleSheet.hairlineWidth,
     overflow: "hidden",

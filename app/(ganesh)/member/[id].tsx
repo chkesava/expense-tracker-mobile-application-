@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { ArrowLeft, Check, Phone } from "lucide-react-native";
+import { ArrowLeft, Check, Phone, Users } from "lucide-react-native";
 
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { PermissionSummary } from "@/components/ganesh/PermissionChecklist";
 import {
   Avatar,
+  GaneshEmptyState,
+  GaneshHeader,
   LedgerRow,
   MetaLabel,
   Money,
@@ -17,7 +19,6 @@ import {
   StatusStrip,
   useGaneshTokens,
 } from "@/components/ganesh/ui";
-import { EmptyState } from "@/components/common/EmptyState";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useContributions } from "@/hooks/useContributions";
@@ -129,17 +130,13 @@ export default function MemberDetailScreen() {
   if (!name) {
     return (
       <GaneshScreen safeTop>
-        <Pressable
-          onPress={back}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-          style={styles.bareBack}
-        >
-          <ArrowLeft size={22} color={theme.colors.foreground} strokeWidth={2.2} />
-        </Pressable>
-        <EmptyState
-          illustration="search"
+        <GaneshHeader
+          title="Member"
+          icon={<Users size={22} color={g.saffron} strokeWidth={2.2} />}
+          onBack={back}
+        />
+        <GaneshEmptyState
+          icon={<Users size={22} color={g.saffron} strokeWidth={2.2} />}
           title="Member not found"
           description="They may have been removed from this Pandal."
         />
@@ -615,9 +612,9 @@ export default function MemberDetailScreen() {
 
       <Section title="Festival payments" subtitle={`${payments.length} recorded`}>
         {payments.length === 0 ? (
-          <EmptyState
+          <GaneshEmptyState
             compact
-            illustration="income"
+            icon={<Check size={20} color={g.saffron} strokeWidth={2.2} />}
             title="No payments yet"
             description="No committee payments recorded for this festival."
           />
@@ -645,12 +642,6 @@ export default function MemberDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  bareBack: {
-    width: 44,
-    height: 44,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   heroRow: {
     flexDirection: "row",
     alignItems: "center",

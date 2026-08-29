@@ -1,7 +1,7 @@
 import { StyleSheet, Text, View } from "react-native";
 import { Check, RefreshCw, WifiOff } from "lucide-react-native";
 
-import { DASH_RADIUS } from "@/components/dashboard/primitives";
+import { GANESH_RADIUS } from "@/components/ganesh/ui/surfaces";
 import { useGaneshTokens } from "@/components/ganesh/ui/tokens";
 import { useGlobalPendingSyncCount } from "@/lib/syncStatusStore";
 import { useNetwork } from "@/providers/NetworkProvider";
@@ -70,7 +70,7 @@ const styles = StyleSheet.create({
     gap: 5,
     paddingHorizontal: 9,
     paddingVertical: 4,
-    borderRadius: DASH_RADIUS.pill,
+    borderRadius: GANESH_RADIUS.pill,
   },
   label: {
     fontSize: 11.5,

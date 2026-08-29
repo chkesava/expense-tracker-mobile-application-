@@ -22,6 +22,7 @@ import {
   RULE_ASSET_UPDATE_ROLES,
   RULE_COLLECTION_WRITE_ROLES,
   RULE_EXPENSE_WRITE_ROLES,
+  RULE_SEVA_WRITE_ROLES,
   RULE_SPONSOR_CREATE_ROLES,
   RULE_SPONSOR_UPDATE_ROLES,
   RULE_TREASURER_WRITE_ROLES,
@@ -515,6 +516,7 @@ export const RULE_BUILTIN_MEMBER_PERMISSIONS: string[] = [
   "assets.create",
   "sponsors.create",
   "sponsors.update",
+  "seva.read",
 ];
 
 /** Mirrors `selfJoinClaimsNoExtraPower()` in firestore.rules. */
@@ -617,7 +619,9 @@ function payloadWellFormed(subcol: string, d: Record<string, unknown>): boolean 
           ? ["pending", "partial", "paid", "not_interested", "not_available"].includes(
               d.status as string
             )
-          : typeof d.status === "string");
+          : subcol === "seva"
+            ? ["scheduled", "in_progress", "completed", "cancelled"].includes(d.status as string)
+            : typeof d.status === "string");
 
   const flagsOk =
     (!("voided" in d) || typeof d.voided === "boolean")
@@ -632,8 +636,27 @@ function payloadWellFormed(subcol: string, d: Record<string, unknown>): boolean 
         key === "pendingReimbursements" ? okSignedMoney(d, key) : okMoney(d, key)
       ));
 
-  return amountsOk && statusOk && flagsOk && summaryOk;
+  /** Mirrors `sevaCarriesNoMoney()` in firestore.rules. */
+  const sevaMoneyOk = subcol !== "seva"
+    || !RULE_SEVA_FORBIDDEN_FIELDS.some((key) => key in d);
+
+  return amountsOk && statusOk && flagsOk && summaryOk && sevaMoneyOk;
 }
+
+/**
+ * Money-shaped keys a seva document may never carry. A seva is the operational
+ * schedule; letting `seva.write` park an amount would put money behind the
+ * wrong permission the moment anything read it.
+ */
+const RULE_SEVA_FORBIDDEN_FIELDS = [
+  "amount",
+  "totalAmount",
+  "godFundAmount",
+  "personalAmount",
+  "sponsoredAmount",
+  "estimatedValue",
+  "ledgerType",
+];
 
 // --- GS-005 -----------------------------------------------------------------
 /** Mirrors `isAppendOnlyLog()` in firestore.rules. */
@@ -1219,5 +1242,142 @@ describe("ganesh firestore rules - GS-037 receiving on create needs the permissi
     ).toBe(true);
     // A plain member cannot borrow that path by inventing a sponsorshipId.
     expect(canCreateContribution(member, { status: "received", sponsorshipId: "s1" })).toBe(false);
+  });
+});
+
+/* -------------------------------------------------------------------- Seva */
+
+/** Mirrors `canPlanSevaOf()` in firestore.rules. */
+function canPlanSeva(ctx: Ctx): boolean {
+  return hasPerm(ctx, "seva.write")
+    || (isActivePandalMember(ctx) && !hasPermissionsField(ctx) && RULE_SEVA_WRITE_ROLES.includes(roleOf(ctx)!));
+}
+
+/** Mirrors `canAssignSevaOf()` in firestore.rules. */
+function canAssignSeva(ctx: Ctx): boolean {
+  return hasPerm(ctx, "seva.assign")
+    || (isActivePandalMember(ctx) && !hasPermissionsField(ctx) && RULE_SEVA_WRITE_ROLES.includes(roleOf(ctx)!));
+}
+
+/** Mirrors `canWriteSevaOf()` in firestore.rules. */
+function canWriteSeva(ctx: Ctx): boolean {
+  return canPlanSeva(ctx) || canAssignSeva(ctx);
+}
+
+/** Mirrors the `duties` update clause, including the own-duty self-service arm. */
+function canUpdateDuty(
+  ctx: Ctx,
+  duty: { userId: string },
+  uid: string,
+  changedKeys: string[]
+): boolean {
+  if (!isActivePandalMember(ctx) || !ctx.festivalOpen) return false;
+  if (canAssignSeva(ctx)) return true;
+  const selfServiceKeys = ["status", "updatedBy", "updatedAt"];
+  return duty.userId === uid && changedKeys.every((key) => selfServiceKeys.includes(key));
+}
+
+describe("ganesh firestore rules — seva schedule", () => {
+  const treasurer: Ctx = {
+    signedIn: true,
+    member: { role: "treasurer", status: "active" },
+    festivalOpen: true,
+  };
+  const member: Ctx = {
+    signedIn: true,
+    member: { role: "member", status: "active" },
+    festivalOpen: true,
+  };
+  const viewer: Ctx = {
+    signedIn: true,
+    member: { role: "viewer", status: "active" },
+    festivalOpen: true,
+  };
+
+  it("keeps the TypeScript seva matrix aligned with the rules role set", () => {
+    for (const role of RULE_SEVA_WRITE_ROLES) {
+      expect(can(role, "seva.write")).toBe(true);
+      expect(can(role, "seva.assign")).toBe(true);
+    }
+    // Everyone can see the schedule — a volunteer who cannot read it cannot turn up.
+    for (const role of ["admin", "treasurer", "member", "collector", "viewer"] as const) {
+      expect(can(role, "seva.read")).toBe(true);
+    }
+  });
+
+  it("lets only treasurer and admin plan or staff seva by role fallback", () => {
+    expect(canPlanSeva(treasurer)).toBe(true);
+    expect(canAssignSeva(treasurer)).toBe(true);
+    expect(canPlanSeva(member)).toBe(false);
+    expect(canAssignSeva(member)).toBe(false);
+    expect(canPlanSeva(viewer)).toBe(false);
+  });
+
+  it("honours a denormalized seva permission on a custom role", () => {
+    const planner: Ctx = {
+      signedIn: true,
+      member: { role: "member", status: "active", permissions: ["seva.read", "seva.write"] },
+      festivalOpen: true,
+    };
+    expect(canPlanSeva(planner)).toBe(true);
+    // Planning is not staffing.
+    expect(canAssignSeva(planner)).toBe(false);
+    expect(canWriteSeva(planner)).toBe(true);
+  });
+
+  it("never lets a seva permission reach money", () => {
+    const planner: Ctx = {
+      signedIn: true,
+      member: { role: "member", status: "active", permissions: ["seva.read", "seva.write"] },
+      festivalOpen: true,
+    };
+    expect(canWriteCollection(planner)).toBe(false);
+    expect(canWriteExpenseOrContribution(planner)).toBe(false);
+    expect(canWritePermanentFund(planner)).toBe(false);
+    expect(canWriteReimbursement(planner)).toBe(false);
+  });
+
+  it("rejects a seva document carrying money-shaped fields", () => {
+    expect(payloadWellFormed("seva", { name: "Morning Aarti", status: "scheduled" })).toBe(true);
+    for (const key of RULE_SEVA_FORBIDDEN_FIELDS) {
+      expect(payloadWellFormed("seva", { name: "Aarti", [key]: 500 })).toBe(false);
+    }
+  });
+
+  it("rejects an unknown seva status", () => {
+    expect(payloadWellFormed("seva", { status: "in_progress" })).toBe(true);
+    expect(payloadWellFormed("seva", { status: "received" })).toBe(false);
+    expect(payloadWellFormed("seva", { status: "whatever" })).toBe(false);
+  });
+
+  it("denies a removed or suspended member every seva write", () => {
+    for (const status of ["removed", "suspended"] as const) {
+      const gone: Ctx = { signedIn: true, member: { role: "treasurer", status }, festivalOpen: true };
+      expect(canPlanSeva(gone)).toBe(false);
+      expect(canAssignSeva(gone)).toBe(false);
+      expect(canWriteSeva(gone)).toBe(false);
+    }
+  });
+
+  it("lets a volunteer report on their own duty without holding seva.assign", () => {
+    expect(canUpdateDuty(member, { userId: "u1" }, "u1", ["status", "updatedAt"])).toBe(true);
+  });
+
+  it("stops a volunteer editing anyone else's duty", () => {
+    expect(canUpdateDuty(member, { userId: "u2" }, "u1", ["status"])).toBe(false);
+  });
+
+  it("stops a volunteer reassigning their own duty to someone else", () => {
+    expect(canUpdateDuty(member, { userId: "u1" }, "u1", ["userId"])).toBe(false);
+    expect(canUpdateDuty(member, { userId: "u1" }, "u1", ["status", "userId"])).toBe(false);
+  });
+
+  it("lets a coordinator edit anybody's duty", () => {
+    expect(canUpdateDuty(treasurer, { userId: "u2" }, "u1", ["userId", "roleLabel"])).toBe(true);
+  });
+
+  it("freezes the schedule once the festival is closed", () => {
+    const closed: Ctx = { ...treasurer, festivalOpen: false };
+    expect(canUpdateDuty(closed, { userId: "u1" }, "u1", ["status"])).toBe(false);
   });
 });

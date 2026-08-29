@@ -17,16 +17,13 @@ export default function GaneshAdminLayout() {
           contentStyle: { backgroundColor: theme.colors.background },
         }}
       >
-        {/* The dashboard draws its own GaneshHeader, matching the Expense
-            Tracker's in-content PageHeader. Sub-screens keep the native bar
-            until they are redesigned. */}
         <Stack.Screen name="index" options={{ headerShown: false }} />
-        <Stack.Screen name="settings" options={{ title: "Pandal settings" }} />
-        <Stack.Screen name="festivals" options={{ title: "Festivals" }} />
-        <Stack.Screen name="categories" options={{ title: "Expense categories" }} />
-        <Stack.Screen name="audit" options={{ title: "Audit log" }} />
-        <Stack.Screen name="setup" options={{ title: "Contribution setup" }} />
-        <Stack.Screen name="reports" options={{ title: "Reports" }} />
+        <Stack.Screen name="settings" options={{ headerShown: false }} />
+        <Stack.Screen name="festivals" options={{ headerShown: false }} />
+        <Stack.Screen name="categories" options={{ headerShown: false }} />
+        <Stack.Screen name="audit" options={{ headerShown: false }} />
+        <Stack.Screen name="setup" options={{ headerShown: false }} />
+        <Stack.Screen name="reports" options={{ headerShown: false }} />
         <Stack.Screen name="roles" options={{ headerShown: false }} />
       </Stack>
     </AdminGate>

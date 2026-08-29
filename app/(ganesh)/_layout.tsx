@@ -7,6 +7,7 @@ import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
 import { useAuth } from "@/providers/AuthProvider";
 import { GaneshSessionProvider } from "@/providers/GaneshSessionProvider";
+import { GaneshThemeProvider } from "@/providers/GaneshThemeProvider";
 import { upsertGaneshProfile } from "@/services/ganesh/ganeshProfile";
 import { claimOwnPandalMembership } from "@/services/ganesh/ganeshMembershipIndex";
 import { useMyJoinRequests } from "@/hooks/useMyJoinRequests";
@@ -88,45 +89,48 @@ function GaneshStack() {
     >
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="admin" options={{ headerShown: false }} />
-      <Stack.Screen name="setup" options={{ title: "Ganesh Seva" }} />
-      <Stack.Screen name="add-collection" options={{ title: "Add collection" }} />
-      <Stack.Screen name="add-expense" options={{ title: "Add expense" }} />
-      <Stack.Screen name="expense/[id]" options={{ title: "Expense" }} />
-      <Stack.Screen name="add-contribution" options={{ title: "Add contribution" }} />
-      <Stack.Screen name="contribution/[id]" options={{ title: "Contribution" }} />
-      <Stack.Screen name="add-opening-fund" options={{ title: "Opening fund" }} />
-      <Stack.Screen name="add-member-payment" options={{ title: "Member payment" }} />
-      <Stack.Screen name="add-reimbursement" options={{ title: "Reimburse" }} />
+      <Stack.Screen name="setup" options={{ headerShown: false }} />
+      <Stack.Screen name="add-collection" options={{ headerShown: false }} />
+      <Stack.Screen name="add-expense" options={{ headerShown: false }} />
+      <Stack.Screen name="expense/[id]" options={{ headerShown: false }} />
+      <Stack.Screen name="add-contribution" options={{ headerShown: false }} />
+      <Stack.Screen name="contribution/[id]" options={{ headerShown: false }} />
+      <Stack.Screen name="add-opening-fund" options={{ headerShown: false }} />
+      <Stack.Screen name="add-member-payment" options={{ headerShown: false }} />
+      <Stack.Screen name="add-reimbursement" options={{ headerShown: false }} />
       <Stack.Screen name="member/[id]" options={{ headerShown: false }} />
-      <Stack.Screen name="household/[id]" options={{ title: "Household" }} />
-      <Stack.Screen name="report" options={{ title: "Festival report" }} />
-      <Stack.Screen name="close-festival" options={{ title: "Close festival" }} />
-      {/* Redesigned screens draw their own GaneshHeader, matching the Expense
-          Tracker's in-content PageHeader. The rest keep the native bar until
-          they are converted. */}
+      <Stack.Screen name="household/[id]" options={{ headerShown: false }} />
+      <Stack.Screen name="report" options={{ headerShown: false }} />
+      <Stack.Screen name="close-festival" options={{ headerShown: false }} />
       <Stack.Screen name="join-requests" options={{ headerShown: false }} />
       <Stack.Screen name="members" options={{ headerShown: false }} />
       <Stack.Screen name="permanent-fund" options={{ headerShown: false }} />
-      <Stack.Screen name="add-permanent-fund" options={{ title: "Add Permanent Fund" }} />
+      <Stack.Screen name="add-permanent-fund" options={{ headerShown: false }} />
       <Stack.Screen name="assets" options={{ headerShown: false }} />
-      <Stack.Screen name="add-asset" options={{ title: "Add asset" }} />
+      <Stack.Screen name="add-asset" options={{ headerShown: false }} />
       <Stack.Screen name="asset/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="sponsors" options={{ headerShown: false }} />
-      <Stack.Screen name="add-sponsor" options={{ title: "Add sponsor" }} />
+      <Stack.Screen name="add-sponsor" options={{ headerShown: false }} />
       <Stack.Screen name="sponsor/[id]" options={{ headerShown: false }} />
-      <Stack.Screen name="create-festival" options={{ title: "Create festival" }} />
+      <Stack.Screen name="create-festival" options={{ headerShown: false }} />
+      <Stack.Screen name="add-seva" options={{ headerShown: false }} />
+      <Stack.Screen name="seva/[id]" options={{ headerShown: false }} />
     </Stack>
   );
 }
 
 export default function GaneshLayout() {
+  // Outermost, so the loading spinners and the privacy lock are already wearing
+  // the festival palette on the very first frame.
   return (
-    <PrivacyLock>
-      <GaneshSessionProvider>
-        <GaneshGate>
-          <GaneshStack />
-        </GaneshGate>
-      </GaneshSessionProvider>
-    </PrivacyLock>
+    <GaneshThemeProvider>
+      <PrivacyLock>
+        <GaneshSessionProvider>
+          <GaneshGate>
+            <GaneshStack />
+          </GaneshGate>
+        </GaneshSessionProvider>
+      </PrivacyLock>
+    </GaneshThemeProvider>
   );
 }

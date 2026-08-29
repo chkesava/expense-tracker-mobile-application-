@@ -1,8 +1,16 @@
 import { useMemo, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text } from "react-native";
+import { useRouter } from "expo-router";
+import { ScrollText } from "lucide-react-native";
 
 import { AdminQueryState } from "@/components/ganesh/AdminQueryState";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
+import {
+  DataRow,
+  FilterChips,
+  GaneshHeader,
+  useGaneshTokens,
+} from "@/components/ganesh/ui";
 import { useFestivalAuditLogs } from "@/hooks/useFestivalAuditLogs";
 import { useMemberAudits } from "@/hooks/useMemberAudits";
 import { usePandalMembers } from "@/hooks/usePandalMembers";
@@ -17,7 +25,7 @@ type Row = {
   title: string;
   detail?: string;
   actorId: string;
-  action: string;
+  action: "members" | "money" | "festival";
   at?: PandalMemberAudit["at"];
 };
 
@@ -84,15 +92,15 @@ function changeText(oldValue?: unknown, newValue?: unknown): string | undefined 
     .replace(/,/g, ", ");
 }
 
-const ACTION_FILTERS = ["all", "members", "money", "festival"] as const;
-
 export default function AdminAuditScreen() {
   const { theme } = useTheme();
+  const g = useGaneshTokens();
+  const { back } = useRouter();
   const { pandalId, festivalId } = useGaneshSession();
   const { members } = usePandalMembers(pandalId);
   const memberAudits = useMemberAudits(pandalId, true);
   const festivalAudits = useFestivalAuditLogs(pandalId, festivalId, true);
-  const [actionFilter, setActionFilter] = useState<(typeof ACTION_FILTERS)[number]>("all");
+  const [actionFilter, setActionFilter] = useState<"all" | "members" | "money" | "festival">("all");
   const [actorId, setActorId] = useState<string>("all");
   const [day, setDay] = useState<"all" | "today">("all");
 
@@ -145,98 +153,44 @@ export default function AdminAuditScreen() {
 
   return (
     <GaneshScreen>
+      <GaneshHeader
+        title="Audit log"
+        icon={<ScrollText size={22} color={g.saffron} strokeWidth={2.2} />}
+        onBack={back}
+      />
       <Text style={{ color: theme.colors.mutedForeground, lineHeight: 22 }}>
         Important Pandal changes. This is for the committee, not a technical log.
       </Text>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-        {ACTION_FILTERS.map((item) => (
-          <Pressable
-            key={item}
-            onPress={() => setActionFilter(item)}
-            style={{
-              paddingHorizontal: 12,
-              paddingVertical: 8,
-              borderRadius: 999,
-              minHeight: 40,
-              justifyContent: "center",
-              backgroundColor: actionFilter === item ? theme.colors.primary : theme.colors.muted,
-            }}
-          >
-            <Text
-              style={{
-                color: actionFilter === item ? theme.colors.primaryForeground : theme.colors.foreground,
-                fontWeight: "700",
-                textTransform: "capitalize",
-              }}
-            >
-              {item}
-            </Text>
-          </Pressable>
-        ))}
-        <Pressable
-          onPress={() => setDay((prev) => (prev === "today" ? "all" : "today"))}
-          style={{
-            paddingHorizontal: 12,
-            paddingVertical: 8,
-            borderRadius: 999,
-            minHeight: 40,
-            justifyContent: "center",
-            backgroundColor: day === "today" ? theme.colors.primary : theme.colors.muted,
-          }}
-        >
-          <Text
-            style={{
-              color: day === "today" ? theme.colors.primaryForeground : theme.colors.foreground,
-              fontWeight: "700",
-            }}
-          >
-            Today
-          </Text>
-        </Pressable>
-      </View>
+      <FilterChips
+        layout="wrap"
+        value={actionFilter}
+        options={[
+          { id: "all", label: "All" },
+          { id: "members", label: "Members" },
+          { id: "money", label: "Money" },
+          { id: "festival", label: "Festival" },
+        ]}
+        onChange={setActionFilter}
+      />
+      <FilterChips
+        layout="wrap"
+        value={day}
+        options={[
+          { id: "all", label: "All days" },
+          { id: "today", label: "Today" },
+        ]}
+        onChange={setDay}
+      />
       {actors.length > 1 ? (
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-          <Pressable
-            onPress={() => setActorId("all")}
-            style={{
-              paddingHorizontal: 12,
-              paddingVertical: 8,
-              borderRadius: 999,
-              backgroundColor: actorId === "all" ? theme.colors.primary : theme.colors.muted,
-            }}
-          >
-            <Text
-              style={{
-                color: actorId === "all" ? theme.colors.primaryForeground : theme.colors.foreground,
-                fontWeight: "700",
-              }}
-            >
-              Everyone
-            </Text>
-          </Pressable>
-          {actors.map((member) => (
-            <Pressable
-              key={member.userId}
-              onPress={() => setActorId(member.userId)}
-              style={{
-                paddingHorizontal: 12,
-                paddingVertical: 8,
-                borderRadius: 999,
-                backgroundColor: actorId === member.userId ? theme.colors.primary : theme.colors.muted,
-              }}
-            >
-              <Text
-                style={{
-                  color:
-                    actorId === member.userId ? theme.colors.primaryForeground : theme.colors.foreground,
-                  fontWeight: "700",
-                }}
-              >
-                {member.displayName}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
+        <FilterChips
+          layout="wrap"
+          value={actorId}
+          options={[
+            { id: "all", label: "Everyone" },
+            ...actors.map((member) => ({ id: member.userId, label: member.displayName })),
+          ]}
+          onChange={setActorId}
+        />
       ) : null}
       <AdminQueryState
         loading={loading}
@@ -251,26 +205,13 @@ export default function AdminAuditScreen() {
             : null
         }
       >
-        {visible.map((row) => (
-          <View
+        {visible.map((row, index) => (
+          <DataRow
             key={row.id}
-            style={{
-              backgroundColor: theme.colors.card,
-              borderColor: theme.colors.border,
-              borderWidth: 1,
-              borderRadius: 16,
-              padding: 14,
-              gap: 4,
-            }}
-          >
-            <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>{row.title}</Text>
-            {row.detail ? (
-              <Text style={{ color: theme.colors.mutedForeground, lineHeight: 20 }}>{row.detail}</Text>
-            ) : null}
-            {row.at ? (
-              <Text style={{ color: theme.colors.mutedForeground }}>{formatGaneshWhen(row.at)}</Text>
-            ) : null}
-          </View>
+            title={row.title}
+            meta={[row.detail, row.at ? formatGaneshWhen(row.at) : null].filter(Boolean).join(" · ")}
+            divider={index < visible.length - 1}
+          />
         ))}
       </AdminQueryState>
     </GaneshScreen>
