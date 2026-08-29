@@ -2,50 +2,57 @@ import { useCallback, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import {
-  ArrowDownLeft,
-  ArrowUpRight,
+  CalendarPlus,
   ClipboardCheck,
   Clock,
+  Flame,
   Gift,
   Receipt,
   Shield,
   Sparkles,
   UserPlus,
+  Users,
   Wallet,
 } from "lucide-react-native";
 
 import { GaneshQuickActions } from "@/components/ganesh/GaneshQuickActions";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { GaneshSyncChip } from "@/components/ganesh/GaneshSyncChip";
-import { GodFundHero } from "@/components/ganesh/GodFundHero";
-import { PermanentFundCard } from "@/components/ganesh/PermanentFundCard";
+import { SevaRow } from "@/components/ganesh/SevaRow";
 import {
   DataRow,
+  GaneshEmptyState,
   GaneshHeader,
   MetaLabel,
   Money,
+  PandalHero,
   RowGlyph,
   Section,
   SectionAction,
   StatTile,
   useGaneshTokens,
 } from "@/components/ganesh/ui";
-import { EmptyState } from "@/components/common/EmptyState";
 import { SkeletonList } from "@/components/common/Skeleton";
 import { Button } from "@/components/ui/Button";
 import { useContributions } from "@/hooks/useContributions";
 import { useGaneshActivity } from "@/hooks/useGaneshActivity";
 import { useFestivals } from "@/hooks/useFestivals";
+import { useFestivalSeva } from "@/hooks/useFestivalSeva";
 import { useGaneshSummary } from "@/hooks/useGaneshSummary";
 import { useJoinRequests } from "@/hooks/useJoinRequests";
 import { usePandals } from "@/hooks/usePandals";
 import { usePandalMembers } from "@/hooks/usePandalMembers";
-import { usePermanentFund } from "@/hooks/usePermanentFund";
 import { haptic } from "@/lib/haptics";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import { availableGodFund, festivalCashSpent, totalCashIn } from "@/shared/utils/ganeshMath";
 import { formatGaneshWhen, memberDisplayName, todayDateInput } from "@/shared/utils/ganeshIdentity";
 import { summarizeContributions } from "@/shared/utils/ganeshContributions";
+import {
+  currentTimeInput,
+  nextSeva,
+  todaySeva,
+  unstaffedSeva,
+} from "@/shared/utils/ganeshSeva";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { useTheme } from "@/theme/ThemeProvider";
 
@@ -54,9 +61,26 @@ function activityGlyph(entityType: string) {
   if (entityType.includes("collection")) return Wallet;
   if (entityType.includes("expense")) return Receipt;
   if (entityType.includes("contribution") || entityType.includes("sponsor")) return Gift;
+  if (entityType.includes("seva")) return Flame;
   return Sparkles;
 }
 
+/**
+ * The Pandal Command Center.
+ *
+ * Answers "how is my Pandal doing today?", in this order:
+ *
+ *   1. Where the festival is — pandal, name, which day of how many
+ *   2. What is happening today — the seva programme on a time rail
+ *   3. What needs a person — join requests, reimbursements, promises, unstaffed seva
+ *   4. How the money stands — three readings, one compact strip
+ *   5. Quick actions, then recent activity
+ *
+ * The previous version opened with the God Fund balance and two money tiles,
+ * which is what made this read as an expense tracker on launch. Money has not
+ * been removed or demoted in importance — it has been moved below the things an
+ * organiser standing at the pandal actually needs first.
+ */
 export default function GaneshHomeScreen() {
   const { theme } = useTheme();
   const g = useGaneshTokens();
@@ -66,9 +90,9 @@ export default function GaneshHomeScreen() {
   const { festivals } = useFestivals(pandalId);
   const { members } = usePandalMembers(pandalId);
   const { summary } = useGaneshSummary(pandalId, festivalId);
-  const { fund } = usePermanentFund(pandalId);
   const { activity, loading: activityLoading } = useGaneshActivity(pandalId, festivalId);
   const { contributions } = useContributions(pandalId, festivalId);
+  const { seva, loading: sevaLoading } = useFestivalSeva(pandalId, festivalId);
   const { requests } = useJoinRequests(pandalId);
   const { can, isAdmin } = useGaneshPermissions();
 
@@ -78,21 +102,29 @@ export default function GaneshHomeScreen() {
   const festival = festivals.find((item) => item.id === festivalId);
   const closed = festival?.status === "closed";
 
+  const today = todayDateInput();
+  const nowTime = currentTimeInput();
+
   const godFund = availableGodFund(summary);
   const moneyIn = totalCashIn(summary);
   const spent = festivalCashSpent(summary);
 
   const contributionTotals = useMemo(
-    () => summarizeContributions(contributions, todayDateInput()),
-    [contributions]
+    () => summarizeContributions(contributions, today),
+    [contributions, today]
   );
+
+  const sevaToday = useMemo(() => todaySeva(seva, today), [seva, today]);
+  const upNext = useMemo(() => nextSeva(seva, today, nowTime), [seva, today, nowTime]);
+  const unstaffed = useMemo(() => unstaffedSeva(seva, today), [seva, today]);
+  const canPlanSeva = can("seva.write") && !closed;
 
   const handleRefresh = useCallback(() => {
     setRefreshing(true);
     setTimeout(() => setRefreshing(false), 600);
   }, []);
 
-  /** Things a person has to *do*, newest concern first. Empty is a good state. */
+  /** Things a person has to *do*, most urgent first. Empty is a good state. */
   const pendingActions = useMemo(() => {
     const rows: Array<{
       id: string;
@@ -111,6 +143,17 @@ export default function GaneshHomeScreen() {
         icon: UserPlus,
         tint: g.saffron,
         onPress: () => push("/(ganesh)/join-requests" as never),
+      });
+    }
+
+    if (unstaffed.length > 0) {
+      rows.push({
+        id: "unstaffed",
+        title: `${unstaffed.length} seva without volunteers`,
+        meta: `Starting with ${unstaffed[0].name}`,
+        icon: Users,
+        tint: theme.colors.warning,
+        onPress: () => push("/(ganesh)/(tabs)/seva" as never),
       });
     }
 
@@ -152,12 +195,13 @@ export default function GaneshHomeScreen() {
     summary.pendingReimbursements,
     theme.colors.info,
     theme.colors.warning,
+    unstaffed,
   ]);
 
   return (
     <GaneshScreen safeTop withTabBar refreshing={refreshing} onRefresh={handleRefresh}>
       <GaneshHeader
-        title={festival?.name || "Ganesh Utsav"}
+        title="Ganesh Seva"
         subtitle={pandal?.name}
         icon={<Sparkles size={22} color={g.saffron} strokeWidth={2.2} />}
         rightElement={
@@ -185,40 +229,60 @@ export default function GaneshHomeScreen() {
         }
       />
 
-      <GodFundHero
-        amount={godFund}
-        festivalName={festival?.name}
+      <PandalHero
         pandalName={pandal?.name}
-        onPress={() => push("/(ganesh)/report" as never)}
+        festivalName={festival?.name}
+        festival={festival}
+        today={today}
       />
 
-      <View style={styles.statRow}>
-        <StatTile
-          label="Money in"
-          meta={
-            <Text
-              style={[styles.tileMeta, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}
-            >
-              {summary.collectionCount} collections
-            </Text>
-          }
-        >
-          <Money value={moneyIn} size="primary" tone="positive" numberOfLines={1} adjustsFontSizeToFit />
-        </StatTile>
-        <StatTile
-          label="Spent"
-          meta={
-            <Text
-              style={[styles.tileMeta, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}
-            >
-              {summary.expenseCount} expenses
-            </Text>
-          }
-        >
-          <Money value={spent} size="primary" numberOfLines={1} adjustsFontSizeToFit />
-        </StatTile>
-      </View>
+      {/* 2. What is happening today. */}
+      <Section
+        title="Today's Seva"
+        subtitle={sevaToday.length > 0 ? `${sevaToday.length} planned` : undefined}
+        action={
+          seva.length > 0 ? (
+            <SectionAction
+              label="Schedule"
+              onPress={() => push("/(ganesh)/(tabs)/seva" as never)}
+            />
+          ) : undefined
+        }
+      >
+        {sevaLoading && seva.length === 0 ? (
+          <SkeletonList count={3} />
+        ) : sevaToday.length === 0 ? (
+          <GaneshEmptyState
+            compact
+            icon={<CalendarPlus size={20} color={g.saffron} strokeWidth={1.9} />}
+            title={seva.length === 0 ? "No seva planned yet" : "Nothing planned today"}
+            description={
+              canPlanSeva
+                ? "Plan the aarti, annadanam and programmes so the committee knows what happens when."
+                : "Your committee has not planned anything for today."
+            }
+            action={
+              canPlanSeva
+                ? { label: "Plan a seva", onPress: () => push("/(ganesh)/add-seva" as never) }
+                : undefined
+            }
+          />
+        ) : (
+          sevaToday.map((item, index) => (
+            <SevaRow
+              key={item.id}
+              seva={item}
+              today={today}
+              nowTime={nowTime}
+              isNext={item.id === upNext?.id}
+              isLast={index === sevaToday.length - 1}
+              onPress={() => push(`/(ganesh)/seva/${item.id}` as never)}
+            />
+          ))
+        )}
+      </Section>
 
+      {/* 3. What needs a person. */}
       {pendingActions.length > 0 ? (
         <Section title="Needs attention" subtitle="Open items for this festival">
           {pendingActions.map((row, index) => (
@@ -243,20 +307,43 @@ export default function GaneshHomeScreen() {
         </Section>
       ) : null}
 
-      <GaneshQuickActions
-        disabled={closed}
-        showAddPermanentFund={can("permanentFund.add") && fund.total === 0}
-      />
+      {/* 4. How the money stands — present, but no longer the identity. */}
+      <Section
+        title="Pandal funds"
+        action={<SectionAction label="Funds" onPress={() => push("/(ganesh)/(tabs)/funds" as never)} />}
+      >
+        <View style={styles.statRow}>
+          <StatTile label="Available">
+            <Money value={godFund} size="primary" tone="positive" numberOfLines={1} adjustsFontSizeToFit />
+          </StatTile>
+          <StatTile
+            label="Received"
+            meta={
+              <Text
+                style={[styles.tileMeta, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}
+              >
+                {summary.collectionCount} collections
+              </Text>
+            }
+          >
+            <Money value={moneyIn} size="primary" numberOfLines={1} adjustsFontSizeToFit />
+          </StatTile>
+          <StatTile
+            label="Spent"
+            meta={
+              <Text
+                style={[styles.tileMeta, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}
+              >
+                {summary.expenseCount} expenses
+              </Text>
+            }
+          >
+            <Money value={spent} size="primary" numberOfLines={1} adjustsFontSizeToFit />
+          </StatTile>
+        </View>
+      </Section>
 
-      <PermanentFundCard
-        fund={fund}
-        onPress={() => push("/(ganesh)/permanent-fund" as never)}
-        onAddPress={
-          can("permanentFund.add") && fund.total === 0
-            ? () => push("/(ganesh)/add-permanent-fund" as never)
-            : undefined
-        }
-      />
+      <GaneshQuickActions disabled={closed} />
 
       {closed && can("festival.create") ? (
         <Button onPress={() => push("/(ganesh)/create-festival" as never)}>
@@ -265,7 +352,7 @@ export default function GaneshHomeScreen() {
       ) : null}
 
       <Section
-        title="Recent activity"
+        title="Pandal activity"
         action={
           activity.length > 0 ? (
             <SectionAction label="Report" onPress={() => push("/(ganesh)/report" as never)} />
@@ -275,16 +362,15 @@ export default function GaneshHomeScreen() {
         {activityLoading && activity.length === 0 ? (
           <SkeletonList count={3} />
         ) : activity.length === 0 ? (
-          <EmptyState
+          <GaneshEmptyState
             compact
-            illustration="expenses"
+            icon={<Sparkles size={20} color={g.saffron} strokeWidth={1.9} />}
             title="Nothing recorded yet"
             description="Add an opening fund or the first chanda collection to start this festival's ledger."
           />
         ) : (
           activity.slice(0, 8).map((item, index) => {
             const Glyph = activityGlyph(item.entityType);
-            const isMoneyIn = (item.amount ?? 0) > 0 && item.entityType.includes("collection");
             return (
               <DataRow
                 key={item.id}
@@ -307,14 +393,7 @@ export default function GaneshHomeScreen() {
                 }
                 value={
                   item.amount != null ? (
-                    <View style={styles.activityValue}>
-                      {isMoneyIn ? (
-                        <ArrowDownLeft size={12} color={g.godFund} strokeWidth={2.4} />
-                      ) : (
-                        <ArrowUpRight size={12} color={theme.colors.mutedForeground} strokeWidth={2.4} />
-                      )}
-                      <Money value={item.amount} size="secondary" />
-                    </View>
+                    <Money value={item.amount} size="secondary" />
                   ) : item.estimatedValue != null ? (
                     <Money value={item.estimatedValue} size="secondary" tone="muted" />
                   ) : undefined
@@ -354,10 +433,5 @@ const styles = StyleSheet.create({
   tileMeta: {
     fontSize: 11.5,
     lineHeight: 15,
-  },
-  activityValue: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
   },
 });

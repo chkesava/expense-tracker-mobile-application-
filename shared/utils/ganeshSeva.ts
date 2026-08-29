@@ -22,6 +22,9 @@ import { todayDateInput } from "@/shared/utils/ganeshIdentity";
  * wrong day.
  */
 
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
+
 type SevaRow = Pick<
   Partial<FestivalSeva>,
   "date" | "startTime" | "endTime" | "status" | "voided" | "kind" | "dutyCount"
@@ -340,6 +343,53 @@ export function dutyStatusLabel(status: DutyStatus): string {
   }
 }
 
+/* ------------------------------------------------------------ Formatting */
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+/**
+ * These format ISO strings by slicing, not by constructing a `Date` and asking
+ * it to localise. A pandal's schedule is local wall-clock time; parsing
+ * "2026-08-28" into a Date gives UTC midnight, which renders as the 27th for
+ * every user west of Greenwich.
+ */
+export function formatSevaTime(hhmm?: string): string {
+  if (!hhmm || !TIME_PATTERN.test(hhmm)) return "";
+  const hour = Number(hhmm.slice(0, 2));
+  const minute = hhmm.slice(3, 5);
+  const suffix = hour < 12 ? "AM" : "PM";
+  const display = hour % 12 === 0 ? 12 : hour % 12;
+  return `${display}:${minute} ${suffix}`;
+}
+
+/** "28 Aug" — or "Thu 28 Aug" with `withWeekday`. */
+export function formatSevaDate(iso?: string, withWeekday = false): string {
+  if (!iso || !DATE_PATTERN.test(iso)) return "";
+  const month = MONTHS[Number(iso.slice(5, 7)) - 1] ?? "";
+  const day = Number(iso.slice(8, 10));
+  const base = `${day} ${month}`;
+  if (!withWeekday) return base;
+  // Weekday needs real calendar maths; UTC keeps it stable across timezones.
+  const parsed = Date.parse(`${iso}T00:00:00Z`);
+  if (Number.isNaN(parsed)) return base;
+  return `${WEEKDAYS[new Date(parsed).getUTCDay()]} ${base}`;
+}
+
+/** "27 Aug – 5 Sep", collapsing the month when both dates share one. */
+export function formatFestivalWindow(
+  festival: { startDate?: string; endDate?: string } | null | undefined
+): string {
+  const start = festival?.startDate?.trim();
+  const end = festival?.endDate?.trim();
+  if (!start || !DATE_PATTERN.test(start)) return "";
+  if (!end || !DATE_PATTERN.test(end)) return formatSevaDate(start);
+  if (start === end) return formatSevaDate(start);
+  const sameMonth = start.slice(0, 7) === end.slice(0, 7);
+  const from = sameMonth ? String(Number(start.slice(8, 10))) : formatSevaDate(start);
+  return `${from} – ${formatSevaDate(end)}`;
+}
+
 /* ------------------------------------------------------------ Validation */
 
 export type SevaDraft = {
@@ -349,9 +399,6 @@ export type SevaDraft = {
   startTime: string;
   endTime?: string;
 };
-
-const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 /**
  * Validates a seva before it is written, in the same `{ ok, error }` shape the

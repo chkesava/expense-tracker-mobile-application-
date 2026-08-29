@@ -584,13 +584,123 @@ reviewed by hand against the existing helpers and mirrored in the contract test,
 but the mirror is hand-written and proves consistency, not syntax. **Compile the
 rules before deploying** — see §6.9.
 
-## 6.8 Remaining phases
+## 6.8 Phase 3 — Command Center + navigation
 
-3. Command Center + navigation — 5 new tabs, Home rebuilt, seva screens
-4. Funds / People / Pandal
-5. Reports, forms, responsive, polish
+Status: **complete** (2026-08-29). This is the phase where the product stops
+looking like an expense tracker.
 
-## 6.9 Deploy checklist
+### The navigation change
+
+| Before | After |
+| --- | --- |
+| Home · Collections · Expenses · Contributions · Pandal | Home · **Seva** · **Funds** · **People** · Pandal |
+
+Three of five destinations were ledgers. Money is now **one** destination of
+five, and Seva — the festival's actual programme — takes the second slot.
+
+**No route was removed.** `collections`, `expenses`, `contributions` and
+`committee` stay registered in the Tabs navigator, simply absent from the bar
+(the pattern `committee` already used). Every existing link keeps resolving,
+including `/(ganesh)/(tabs)/contributions?status=promised` from the Command
+Center's promised-contributions row. They are reached from the Funds and People
+hubs instead.
+
+Declaration order in `(tabs)/_layout.tsx` is display order, because
+`GaneshTabBar` filters the navigator's own route list — the five visible
+destinations are declared first, the four hidden ones after.
+
+### Home → Pandal Command Center
+
+`app/(ganesh)/(tabs)/index.tsx`, rebuilt to answer *"how is my Pandal doing
+today?"* in this order:
+
+1. **`PandalHero`** — pandal, festival, date window, "Day 4 of 10" as beads.
+   **Carries no money at all.** The old Home opened with the God Fund balance
+   and two money tiles, which is precisely what made the product read as a
+   finance app in the first second.
+2. **Today's Seva** — the day's programme on a time rail, next item emphasised,
+   volunteer count per row.
+3. **Needs attention** — the existing logic verbatim (join requests, pending
+   reimbursements, promised contributions) **plus** unstaffed seva.
+4. **Pandal funds** — three readings in one strip: available, received, spent.
+   Money is not demoted in importance, only in position.
+5. **Quick actions**, then **Pandal activity**.
+
+Money still reaches its old screens in one tap via the section's "Funds" action.
+
+### New screens
+
+| Screen | Purpose |
+| --- | --- |
+| `(tabs)/seva.tsx` | Day strip across the festival + that day's programme. Falls back to the days that *have* seva when the festival has no dates, so it works before anyone fills the window in. Shows today's completion, up-next, and unstaffed counts. |
+| `(tabs)/funds.tsx` | **Pandal Nidhi** — the single money surface. Cash position, a spend meter, a promised-not-received block that says out loud that promises are not cash, then routes into the three unchanged ledgers plus sponsors, Permanent Fund and the report. |
+| `(tabs)/people.tsx` | Committee, volunteers on seva today, households, join requests. Previously "Committee" was a hidden tab reachable only through the Pandal menu, which buried the half of the product that is not money. |
+| `add-seva.tsx` | Progressive disclosure — name, kind, day, time; location and notes behind "Add details". Picking a kind pre-fills the name as a starting point. |
+| `seva/[id].tsx` | One seva and its duty roster. A coordinator staffs it; a volunteer marks themselves on duty and done — **that needs no permission**, matching the rules' own-duty carve-out, and `setSevaDutyStatus(..., isOwnDuty)` skips `requirePerm` accordingly. |
+
+### New components
+
+- **`ui/PandalHero.tsx`** — identity, `ArchFrame`, and a bead-per-day meter.
+  Beads rather than a progress bar: a festival is a countable number of days.
+  Above 15 days the beads stop being countable and it falls back to text.
+- **`SevaRow.tsx`** — the time rail (time, connector, glyph niche). This is what
+  makes a schedule read as a schedule instead of another list of cards, and it
+  is the Command Center's signature row. Status carries a text label as well as
+  colour, so it survives colour blindness and bright sunlight.
+
+### Pure logic added
+
+`formatSevaTime`, `formatSevaDate`, `formatFestivalWindow` in `ganeshSeva.ts`,
+with **7 more tests** (49 total in that file). They format ISO strings by
+slicing rather than constructing a `Date` and localising: parsing
+`"2026-08-28"` yields UTC midnight, which renders as the 27th for every user
+west of Greenwich. `DATE_PATTERN`/`TIME_PATTERN` were moved above first use —
+safe either way inside function bodies, but not worth leaving that shape in the
+file given the TDZ defect fixed in Phase 1.
+
+### Incidental cleanups
+
+- `GaneshQuickActions` gained a **Seva** action (first, before the money ones)
+  and lost the now-dead `showAddPermanentFund` prop — no caller passed it after
+  Home was rebuilt. Seeding the Permanent Fund remains reachable from the Pandal
+  tab, the admin dashboard, and the Permanent Fund screen itself; verified by
+  grep before removing.
+- Its hardcoded slate ripple now uses the palette's `g.ripple`.
+
+### Verification (Phase 3)
+
+- `npx tsc -p tsconfig.json --noEmit` — clean
+- `npm test` — **128 files / 1341 tests passing** (was 128 / 1334)
+- `npm run build:web:ganesh` — **exports cleanly**, 12.98 MB bundle. This is the
+  real check that no import cycle was introduced by the surfaces fork; typecheck
+  cannot see one.
+- **Rendered and inspected in a browser**: the exported bundle was served with an
+  SPA fallback and the Ganesh login was checked in both colour schemes. Confirmed
+  warm ivory ground, vermilion primary, deep-brown text, warm hairlines, the
+  arch-and-lotus mark, and full-vermilion CTA when enabled (the washed salmon
+  first observed was the disabled state, not a palette bug).
+
+**Not verified visually: every screen behind authentication**, which is all of
+the Command Center, Seva, Funds and People work in this phase. There is no
+`.env` in this worktree, so Firebase is unconfigured and sign-in cannot complete.
+Those screens are covered by typecheck, a clean production bundle, and the pure
+logic tests only. They need a real device pass against a real pandal — see the
+manual guide.
+
+Also note the dev server (`npx expo start`) cannot run from this worktree at all:
+it has no `node_modules` of its own, so Metro fails to resolve
+`./node_modules/expo-router/entry`. Use the main checkout for `expo start`.
+
+## 6.10 Remaining phases
+
+4. Funds / People / Pandal — extract the three ledger lists into shared
+   components so `funds.tsx` can host them under a segmented control rather than
+   routing away; redesign `pandal.tsx` around identity; promote assets to a
+   visual inventory.
+5. Reports, forms, responsive, polish — `report.tsx` (still 21 raw `MetricGrid`
+   tiles), the ten `add-*` forms, remaining `admin/*` screens, breakpoints.
+
+## 6.11 Deploy checklist
 
 `firestore.rules` is **not deployed by CI** (see `docs/FIREBASE_RULES_DEPLOY.md`).
 The seva rules must be compiled and deployed *before or with* the client that

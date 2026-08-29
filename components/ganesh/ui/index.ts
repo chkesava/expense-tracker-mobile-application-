@@ -41,6 +41,7 @@ export { Avatar, initialsOf, type AvatarProps } from "./Avatar";
 export { GaneshMark } from "./GaneshMark";
 export { GaneshAuthBackground } from "./GaneshAuthBackground";
 export { ArchFrame } from "./ArchFrame";
+export { PandalHero } from "./PandalHero";
 export {
   GaneshEmptyState,
   type GaneshEmptyAction,

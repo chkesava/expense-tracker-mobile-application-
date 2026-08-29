@@ -43,12 +43,25 @@ export default function GaneshTabsLayout() {
       )}
       screenOptions={{ headerShown: false }}
     >
+      {/*
+        Declaration order is display order: `GaneshTabBar` filters the
+        navigator's routes, so the five visible destinations come first.
+
+        The four below them stay registered but are absent from the bar, so
+        every existing link — `/(ganesh)/(tabs)/expenses`,
+        `/(ganesh)/(tabs)/contributions?status=promised` — keeps resolving.
+        They are reached from the Funds and People hubs instead.
+      */}
       <Tabs.Screen name="index" options={{ title: "Home" }} />
+      <Tabs.Screen name="seva" options={{ title: "Seva" }} />
+      <Tabs.Screen name="funds" options={{ title: "Funds" }} />
+      <Tabs.Screen name="people" options={{ title: "People" }} />
+      <Tabs.Screen name="pandal" options={{ title: "Pandal" }} />
+
       <Tabs.Screen name="collections" options={{ title: "Collections" }} />
       <Tabs.Screen name="expenses" options={{ title: "Expenses" }} />
       <Tabs.Screen name="contributions" options={{ title: "Contributions" }} />
       <Tabs.Screen name="committee" options={{ title: "Committee" }} />
-      <Tabs.Screen name="pandal" options={{ title: "Pandal" }} />
     </Tabs>
   );
 }

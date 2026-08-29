@@ -12,6 +12,9 @@ import {
   dutyCounts,
   festivalDates,
   festivalDayNumber,
+  formatFestivalWindow,
+  formatSevaDate,
+  formatSevaTime,
   groupSevaByDay,
   isSevaOverdue,
   nextSeva,
@@ -306,6 +309,50 @@ describe("validateSeva", () => {
   it("rejects an end time at or before the start", () => {
     expect(validateSeva({ ...base, endTime: "06:00" })).toMatchObject({ ok: false });
     expect(validateSeva({ ...base, endTime: "05:00" })).toMatchObject({ ok: false });
+  });
+});
+
+describe("formatting", () => {
+  it("formats a 24-hour time as a 12-hour clock", () => {
+    expect(formatSevaTime("06:00")).toBe("6:00 AM");
+    expect(formatSevaTime("12:30")).toBe("12:30 PM");
+    expect(formatSevaTime("00:15")).toBe("12:15 AM");
+    expect(formatSevaTime("19:05")).toBe("7:05 PM");
+  });
+
+  it("returns empty for a malformed or missing time rather than NaN", () => {
+    expect(formatSevaTime(undefined)).toBe("");
+    expect(formatSevaTime("6:00")).toBe("");
+    expect(formatSevaTime("nonsense")).toBe("");
+  });
+
+  it("formats a date without drifting a day across timezones", () => {
+    // Sliced, never parsed into a local Date — see the note in ganeshSeva.ts.
+    expect(formatSevaDate("2026-08-28")).toBe("28 Aug");
+    expect(formatSevaDate("2026-09-05")).toBe("5 Sep");
+    expect(formatSevaDate("2026-01-01")).toBe("1 Jan");
+  });
+
+  it("adds the correct weekday", () => {
+    expect(formatSevaDate("2026-08-27", true)).toBe("Thu 27 Aug");
+    expect(formatSevaDate("2026-08-30", true)).toBe("Sun 30 Aug");
+  });
+
+  it("collapses the month when a festival stays inside one", () => {
+    expect(formatFestivalWindow({ startDate: "2026-08-27", endDate: "2026-08-30" })).toBe(
+      "27 – 30 Aug"
+    );
+  });
+
+  it("keeps both months when the festival crosses one", () => {
+    expect(formatFestivalWindow(FESTIVAL)).toBe("27 Aug – 5 Sep");
+  });
+
+  it("degrades gracefully with one date or none", () => {
+    expect(formatFestivalWindow({ startDate: "2026-08-27" })).toBe("27 Aug");
+    expect(formatFestivalWindow({ startDate: "2026-08-27", endDate: "2026-08-27" })).toBe("27 Aug");
+    expect(formatFestivalWindow({})).toBe("");
+    expect(formatFestivalWindow(undefined)).toBe("");
   });
 });
 

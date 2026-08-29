@@ -116,6 +116,8 @@ function GaneshStack() {
       <Stack.Screen name="add-sponsor" options={{ title: "Add sponsor" }} />
       <Stack.Screen name="sponsor/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="create-festival" options={{ title: "Create festival" }} />
+      <Stack.Screen name="add-seva" options={{ title: "Plan a seva" }} />
+      <Stack.Screen name="seva/[id]" options={{ headerShown: false }} />
     </Stack>
   );
 }
