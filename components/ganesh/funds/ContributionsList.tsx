@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Alert, StyleSheet, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { FlashList } from "@shopify/flash-list";
@@ -103,9 +103,17 @@ export type ContributionsListProps = {
    * implementation.
    */
   embedded?: boolean;
+  /** Funds already shows Festival Report — skip the duplicate tiles. */
+  hideSummary?: boolean;
+  /** Festival chrome (cash position, ledger tabs) that scrolls with the list. */
+  prefix?: ReactNode;
 };
 
-export function ContributionsList({ embedded = false }: ContributionsListProps) {
+export function ContributionsList({
+  embedded = false,
+  hideSummary = false,
+  prefix,
+}: ContributionsListProps) {
   const { theme } = useTheme();
   const g = useGaneshTokens();
   const { push } = useRouter();
@@ -279,60 +287,65 @@ export function ContributionsList({ embedded = false }: ContributionsListProps) 
         />
       )}
 
-      <View style={styles.statRow}>
-        <StatTile
-          label="Received"
-          meta={
-            <Text
-              style={[styles.tileMeta, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}
-            >
-              Cash · in the God Fund
-            </Text>
-          }
-        >
-          <Money value={totals.cashReceived} size="primary" tone="positive" numberOfLines={1} adjustsFontSizeToFit />
-        </StatTile>
-        <StatTile
-          label="Promised"
-          meta={
-            <Text
-              style={[styles.tileMeta, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}
-            >
-              Not cash until received
-            </Text>
-          }
-        >
-          <Money value={promisedTotal} size="primary" tone="warning" numberOfLines={1} adjustsFontSizeToFit />
-        </StatTile>
-        <StatTile
-          label="Pending"
-          meta={
-            totals.overdueCount > 0 ? (
-              <Text style={[styles.tileMeta, { color: theme.colors.warning, fontFamily: theme.fontFamily.medium }]}>
-                Past the expected day
-              </Text>
-            ) : (
+      {hideSummary ? null : (
+        <View style={styles.statRow}>
+          <StatTile
+            label="Received"
+            meta={
               <Text
                 style={[styles.tileMeta, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}
               >
-                None overdue
+                Cash · in the God Fund
               </Text>
-            )
-          }
-        >
-          <Text
-            style={[
-              styles.count,
-              {
-                color: totals.overdueCount > 0 ? theme.colors.warning : theme.colors.foreground,
-                fontFamily: theme.fontFamily.semibold,
-              },
-            ]}
+            }
           >
-            {totals.overdueCount}
-          </Text>
-        </StatTile>
-      </View>
+            <Money value={totals.cashReceived} size="primary" tone="positive" numberOfLines={1} adjustsFontSizeToFit />
+          </StatTile>
+          <StatTile
+            label="Promised"
+            meta={
+              <Text
+                style={[styles.tileMeta, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}
+              >
+                Not cash until received
+              </Text>
+            }
+          >
+            <Money value={promisedTotal} size="primary" tone="warning" numberOfLines={1} adjustsFontSizeToFit />
+          </StatTile>
+          <StatTile
+            label="Pending"
+            meta={
+              totals.overdueCount > 0 ? (
+                <Text style={[styles.tileMeta, { color: theme.colors.warning, fontFamily: theme.fontFamily.medium }]}>
+                  Past the expected day
+                </Text>
+              ) : (
+                <Text
+                  style={[
+                    styles.tileMeta,
+                    { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular },
+                  ]}
+                >
+                  None overdue
+                </Text>
+              )
+            }
+          >
+            <Text
+              style={[
+                styles.count,
+                {
+                  color: totals.overdueCount > 0 ? theme.colors.warning : theme.colors.foreground,
+                  fontFamily: theme.fontFamily.semibold,
+                },
+              ]}
+            >
+              {totals.overdueCount}
+            </Text>
+          </StatTile>
+        </View>
+      )}
 
       <SearchBar value={search} onChangeText={setSearch} placeholder="Search contributor or item" />
 
@@ -345,12 +358,18 @@ export function ContributionsList({ embedded = false }: ContributionsListProps) 
     <FlashList
       data={rows}
       style={styles.list}
+      keyboardShouldPersistTaps="handled"
       keyExtractor={(item) => item.id}
       contentContainerStyle={{ paddingBottom: listPadding }}
       ItemSeparatorComponent={() => <View style={styles.separator} />}
       renderItem={renderItem}
       ListHeaderComponent={
-        embedded ? <View style={styles.embeddedHeader}>{chrome}</View> : undefined
+        embedded ? (
+          <View style={styles.embeddedHeader}>
+            {prefix}
+            {chrome}
+          </View>
+        ) : undefined
       }
       ListEmptyComponent={
         <ListStateView

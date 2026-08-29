@@ -4,13 +4,13 @@ import { useArtScale } from "./useArtScale";
 
 const DIVIDER = require("@/assets/branding/ganesh/lotus-divider.png");
 
-export function LotusDivider() {
+export function LotusDivider({ maxWidth = 280 }: { maxWidth?: number }) {
   const { width } = useArtScale();
   return (
     <Image
       source={DIVIDER}
       resizeMode="contain"
-      style={[styles.divider, { width: Math.min(width - 48, 280), height: 18 }]}
+      style={[styles.divider, { width: Math.min(width - 48, maxWidth), height: 18 }]}
     />
   );
 }
