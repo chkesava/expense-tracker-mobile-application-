@@ -27,8 +27,8 @@ import {
   StatusStrip,
   useGaneshTokens,
   type StatusKind,
+  GaneshEmptyState,
 } from "@/components/ganesh/ui";
-import { EmptyState } from "@/components/common/EmptyState";
 import { SkeletonList } from "@/components/common/Skeleton";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -183,8 +183,8 @@ export default function SponsorDetailScreen() {
           icon={<Building2 size={22} color={g.saffron} strokeWidth={2.2} />}
           onBack={back}
         />
-        <EmptyState
-          illustration="search"
+        <GaneshEmptyState
+          icon={<Building2 size={22} color={g.saffron} strokeWidth={2.2} />}
           title="Sponsor not found"
           description="They may have been removed, or belong to another Pandal."
         />
@@ -361,9 +361,9 @@ export default function SponsorDetailScreen() {
         }
       >
         {deals.length === 0 ? (
-          <EmptyState
+          <GaneshEmptyState
             compact
-            illustration="collect"
+            icon={<Gift size={20} color={g.saffron} strokeWidth={2.2} />}
             title="No deal yet"
             description="Add a sponsorship to track what they are giving this year."
           />

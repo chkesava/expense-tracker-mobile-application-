@@ -816,10 +816,13 @@ surfaces only.
    and Admin — are covered by typecheck, a clean production bundle and
    pure-logic tests only. They have never been rendered against real data.
 
-Detail screens that were not redesigned in Phase 5 still use the native
-Stack header: `expense/[id]`, `contribution/[id]`, `household/[id]`,
-`close-festival`, and the first-run `setup` chooser. Convert those if a
-later pass touches those flows.
+Leftover chrome from Phase 5 is done: `expense/[id]`,
+`contribution/[id]`, `household/[id]`, `close-festival`, and first-run
+`setup` draw `GaneshHeader`. Expense `EmptyState` / `MetricGrid` on
+close-festival, member / sponsor / asset detail, join-requests, Permanent
+Fund, and admin role detail are now `GaneshEmptyState` / `StatStrip`.
+`AdminQueryState` and `ListStateView` still wrap the shared Expense
+`EmptyState` for query/list plumbing — that is not a screen-level leftover.
 
 ---
 
@@ -904,10 +907,11 @@ reports draw `GaneshHeader` + `Section` / `StatStrip`.
 
 ### 5d. Native headers
 
-Every add-* form, Transparency, create-festival, and every Admin sub-screen
-is `headerShown: false` with an in-content `GaneshHeader` + back. Detail
-screens not redesigned in this phase keep the native bar so the two styles
-do not collide inside a form flow.
+Every add-* form, Transparency, create-festival, Admin, first-run `setup`,
+`close-festival`, and the leftover details (`expense/[id]`,
+`contribution/[id]`, `household/[id]`) are `headerShown: false` with an
+in-content `GaneshHeader` + back. Member / sponsor / asset details already
+drew Ganesh chrome; their Expense `EmptyState`s are now `GaneshEmptyState`.
 
 ### 5e. Responsive
 

@@ -2,11 +2,19 @@ import { useMemo, useState } from "react";
 import { Text, View } from "react-native";
 import { useRouter } from "expo-router";
 
+import { CalendarDays } from "lucide-react-native";
+
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { FundLocationChips } from "@/components/ganesh/FundLocationChips";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
-import { MetricGrid } from "@/components/ganesh/MetricGrid";
+import {
+  GaneshHeader,
+  Money,
+  StatStrip,
+  StatTile,
+  useGaneshTokens,
+} from "@/components/ganesh/ui";
 import { PermanentFundCard } from "@/components/ganesh/PermanentFundCard";
 import { AdminQueryState } from "@/components/ganesh/AdminQueryState";
 import { useFestivalMembers } from "@/hooks/useFestivalMembers";
@@ -27,6 +35,7 @@ import { useTheme } from "@/theme/ThemeProvider";
 
 export default function CloseFestivalScreen() {
   const { theme } = useTheme();
+  const g = useGaneshTokens();
   const { back } = useRouter();
   const { isOnline } = useNetwork();
   const { pandalId, festivalId } = useGaneshSession();
@@ -100,9 +109,11 @@ export default function CloseFestivalScreen() {
   if (summaryLoading || summaryError) {
     return (
       <GaneshScreen>
-        <Text style={{ color: theme.colors.foreground, fontSize: 22, fontWeight: "800" }}>
-          Festival closing
-        </Text>
+        <GaneshHeader
+          title="Close festival"
+          icon={<CalendarDays size={22} color={g.saffron} strokeWidth={2.2} />}
+          onBack={back}
+        />
         <AdminQueryState
           loading={summaryLoading}
           error={summaryError}
@@ -115,28 +126,49 @@ export default function CloseFestivalScreen() {
 
   return (
     <GaneshScreen>
-      <Text style={{ color: theme.colors.foreground, fontSize: 22, fontWeight: "800" }}>
-        Festival closing
-      </Text>
+      <GaneshHeader
+        title="Close festival"
+        subtitle={festival?.name}
+        icon={<CalendarDays size={22} color={g.saffron} strokeWidth={2.2} />}
+        onBack={back}
+      />
       <Text style={{ color: theme.colors.mutedForeground, lineHeight: 22 }}>
         Choose how much unused festival cash should move to the Permanent Pandal Fund. Nothing is
         transferred unless you enter an amount and confirm. This is a fund transfer, not a donation
         or expense.
       </Text>
       <PermanentFundCard fund={fund} />
-      <MetricGrid
-        items={[
-          { label: "Opening funds", value: summary.openingFunds },
-          { label: "Collections", value: summary.chanda },
-          { label: "Committee contributions", value: summary.committeeContributions },
-          { label: "Other cash", value: summary.otherCashContributions },
-          { label: "God Fund expenses", value: summary.godFundExpenses },
-          { label: "Reimbursements", value: summary.reimbursements },
-          { label: "Closing cash", value: closing },
-          { label: "Pending reimbursements", value: summary.pendingReimbursements },
-          { label: "Members", value: `${members.length}` },
-        ]}
-      />
+      <StatStrip>
+        <StatTile label="Opening funds">
+          <Money value={summary.openingFunds} size="secondary" />
+        </StatTile>
+        <StatTile label="Collections">
+          <Money value={summary.chanda} size="secondary" />
+        </StatTile>
+        <StatTile label="Committee">
+          <Money value={summary.committeeContributions} size="secondary" />
+        </StatTile>
+        <StatTile label="Other cash">
+          <Money value={summary.otherCashContributions} size="secondary" />
+        </StatTile>
+        <StatTile label="God Fund expenses">
+          <Money value={summary.godFundExpenses} size="secondary" />
+        </StatTile>
+        <StatTile label="Reimbursements">
+          <Money value={summary.reimbursements} size="secondary" />
+        </StatTile>
+        <StatTile label="Closing cash">
+          <Money value={closing} size="secondary" />
+        </StatTile>
+        <StatTile label="Pending reimbursements">
+          <Money value={summary.pendingReimbursements} size="secondary" />
+        </StatTile>
+        <StatTile label="Members">
+          <Text style={{ color: theme.colors.foreground, fontFamily: theme.fontFamily.bold, fontSize: 17 }}>
+            {members.length}
+          </Text>
+        </StatTile>
+      </StatStrip>
       {closing < 0 ? (
         <Text style={{ color: theme.colors.mutedForeground, lineHeight: 22 }}>
           This festival is short {formatInr(Math.abs(closing))}. Transfer that amount from the

@@ -89,22 +89,19 @@ function GaneshStack() {
     >
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="admin" options={{ headerShown: false }} />
-      {/* Phase 5 add-* / report / festival screens draw GaneshHeader. Detail
-          screens that were not redesigned keep the native bar so the two
-          styles never collide inside one form flow. */}
-      <Stack.Screen name="setup" options={{ title: "Ganesh Seva" }} />
+      <Stack.Screen name="setup" options={{ headerShown: false }} />
       <Stack.Screen name="add-collection" options={{ headerShown: false }} />
       <Stack.Screen name="add-expense" options={{ headerShown: false }} />
-      <Stack.Screen name="expense/[id]" options={{ title: "Expense" }} />
+      <Stack.Screen name="expense/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="add-contribution" options={{ headerShown: false }} />
-      <Stack.Screen name="contribution/[id]" options={{ title: "Contribution" }} />
+      <Stack.Screen name="contribution/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="add-opening-fund" options={{ headerShown: false }} />
       <Stack.Screen name="add-member-payment" options={{ headerShown: false }} />
       <Stack.Screen name="add-reimbursement" options={{ headerShown: false }} />
       <Stack.Screen name="member/[id]" options={{ headerShown: false }} />
-      <Stack.Screen name="household/[id]" options={{ title: "Household" }} />
+      <Stack.Screen name="household/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="report" options={{ headerShown: false }} />
-      <Stack.Screen name="close-festival" options={{ title: "Close festival" }} />
+      <Stack.Screen name="close-festival" options={{ headerShown: false }} />
       <Stack.Screen name="join-requests" options={{ headerShown: false }} />
       <Stack.Screen name="members" options={{ headerShown: false }} />
       <Stack.Screen name="permanent-fund" options={{ headerShown: false }} />

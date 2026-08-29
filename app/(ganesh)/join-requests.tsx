@@ -12,9 +12,9 @@ import {
   MetaLabel,
   StatusStrip,
   useGaneshTokens,
+  GaneshEmptyState,
 } from "@/components/ganesh/ui";
 import { Button } from "@/components/ui/Button";
-import { EmptyState } from "@/components/common/EmptyState";
 import { SkeletonList } from "@/components/common/Skeleton";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { useGaneshWrites } from "@/hooks/useGaneshWrites";
@@ -105,8 +105,8 @@ export default function JoinRequestsScreen() {
       {loading && requests.length === 0 ? (
         <SkeletonList count={3} />
       ) : requests.length === 0 ? (
-        <EmptyState
-          illustration="splits"
+        <GaneshEmptyState
+          icon={<UserPlus size={22} color={g.saffron} strokeWidth={2.2} />}
           title="No pending requests"
           description="Share the Pandal code from the Pandal tab so people can ask to join."
         />

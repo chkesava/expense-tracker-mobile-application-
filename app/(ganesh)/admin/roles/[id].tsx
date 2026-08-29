@@ -8,13 +8,13 @@ import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { PermissionChecklist, PermissionSummary } from "@/components/ganesh/PermissionChecklist";
 import {
   Avatar,
+  GaneshEmptyState,
   GaneshHeader,
   LedgerRow,
   Section,
   StatusStrip,
   useGaneshTokens,
 } from "@/components/ganesh/ui";
-import { EmptyState } from "@/components/common/EmptyState";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
@@ -181,9 +181,9 @@ export default function AdminRoleDetailScreen() {
                 subtitle={`${assigned.length} ${assigned.length === 1 ? "person" : "people"}`}
               >
                 {assigned.length === 0 ? (
-                  <EmptyState
+                  <GaneshEmptyState
                     compact
-                    illustration="splits"
+                    icon={<ShieldCheck size={20} color={g.saffron} strokeWidth={2.2} />}
                     title="Nobody has this role yet"
                     description="Open a member to assign it."
                   />

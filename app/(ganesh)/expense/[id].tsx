@@ -2,10 +2,18 @@ import { useEffect, useState } from "react";
 import { Alert, Pressable, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
+import { Receipt } from "lucide-react-native";
+
 import { AccountabilityLine } from "@/components/ganesh/AccountabilityLine";
 import { GaneshSignedPreview } from "@/components/ganesh/GaneshSignedPreview";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { PendingHint } from "@/components/ganesh/GaneshSyncChip";
+import {
+  GaneshEmptyState,
+  GaneshHeader,
+  Money,
+  useGaneshTokens,
+} from "@/components/ganesh/ui";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useFestivals } from "@/hooks/useFestivals";
@@ -27,7 +35,8 @@ import { useTheme } from "@/theme/ThemeProvider";
 
 export default function ExpenseDetailScreen() {
   const { theme } = useTheme();
-  const { push } = useRouter();
+  const g = useGaneshTokens();
+  const { push, back } = useRouter();
   const params = useLocalSearchParams<{ id: string; festivalId?: string }>();
   const { pandalId, festivalId: sessionFestivalId } = useGaneshSession();
   const expenseFestivalId =
@@ -65,6 +74,11 @@ export default function ExpenseDetailScreen() {
   if (loading && !expense) {
     return (
       <GaneshScreen>
+        <GaneshHeader
+          title="Expense"
+          icon={<Receipt size={22} color={g.saffron} strokeWidth={2.2} />}
+          onBack={back}
+        />
         <Text style={{ color: theme.colors.mutedForeground }}>Loading expense…</Text>
       </GaneshScreen>
     );
@@ -73,12 +87,16 @@ export default function ExpenseDetailScreen() {
   if (!expense) {
     return (
       <GaneshScreen>
-        <Text style={{ color: theme.colors.foreground, fontSize: 22, fontWeight: "800" }}>
-          Expense not found
-        </Text>
-        <Text style={{ color: theme.colors.mutedForeground }}>
-          It may belong to another festival, or it was removed.
-        </Text>
+        <GaneshHeader
+          title="Expense"
+          icon={<Receipt size={22} color={g.saffron} strokeWidth={2.2} />}
+          onBack={back}
+        />
+        <GaneshEmptyState
+          icon={<Receipt size={22} color={g.saffron} strokeWidth={2.2} />}
+          title="Expense not found"
+          description="It may belong to another festival, or it was removed."
+        />
       </GaneshScreen>
     );
   }
@@ -118,26 +136,13 @@ export default function ExpenseDetailScreen() {
 
   return (
     <GaneshScreen>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-        <Text style={{ color: theme.colors.foreground, fontSize: 22, fontWeight: "800", flex: 1 }}>
-          {expense.name}
-        </Text>
-        <View
-          style={{
-            paddingHorizontal: 8,
-            paddingVertical: 3,
-            borderRadius: 999,
-            backgroundColor: theme.colors.muted,
-          }}
-        >
-          <Text style={{ color: theme.colors.mutedForeground, fontWeight: "700", fontSize: 12 }}>
-            {isPurchase ? "Asset purchase" : "Regular"}
-          </Text>
-        </View>
-      </View>
-      <Text style={{ color: theme.colors.primary, fontWeight: "800" }}>
-        {formatInr(expense.totalAmount)}
-      </Text>
+      <GaneshHeader
+        title={expense.name}
+        subtitle={isPurchase ? "Asset purchase" : "Festival expense"}
+        icon={<Receipt size={22} color={g.saffron} strokeWidth={2.2} />}
+        onBack={back}
+      />
+      <Money value={expense.totalAmount} size="title" />
       <Text style={{ color: theme.colors.mutedForeground }}>
         God Fund {formatInr(expense.godFundAmount)} · Personal {formatInr(expense.personalAmount)}
         {expense.sponsoredAmount > 0 ? ` · Sponsored ${formatInr(expense.sponsoredAmount)}` : ""}
