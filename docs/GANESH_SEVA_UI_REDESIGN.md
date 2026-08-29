@@ -462,9 +462,143 @@ and types only — plus the one-word correctness fix above.
   returns only the explanatory comment in `surfaces.tsx`
 - Only shared file touched is `theme/ThemeProvider.tsx`, and only to add `export`
 
-## 6.6 Remaining phases
+## 6.7 Phase 2 — Seva schedule + volunteer duties (backend)
 
-2. Seva schedule + volunteer duties — rules, RBAC, hooks, writers, pure logic
-3. Command Center + navigation — 5 new tabs, Home rebuilt
+Status: **complete** (2026-08-29). Not yet user-visible — the screens land in Phase 3.
+
+This is the only phase that adds backend surface. Everything is additive: no
+existing collection, rule, permission or write path changed behaviour.
+
+### The model
+
+A **seva** is an activity the committee runs — morning aarti, annadanam, a
+cultural programme, the visarjan procession. A **duty** is one volunteer on one
+seva.
+
+The load-bearing decision: **a seva is not a financial record.** It carries no
+amount, never enters `GaneshSummary`, any ledger, or the God Fund. Money spent
+on an activity remains a `GaneshExpense` exactly as before. This is enforced in
+three places rather than trusted:
+
+1. `FestivalSeva` / `SevaDuty` declare no money fields.
+2. `sevaCarriesNoMoney()` in `firestore.rules` rejects any write to a seva or
+   duty document carrying `amount`, `totalAmount`, `godFundAmount`,
+   `personalAmount`, `sponsoredAmount`, `estimatedValue` or `ledgerType`.
+3. A contract test asserts a holder of `seva.write` cannot reach any money
+   write helper.
+
+Point 2 matters because nothing reads those keys *today*. Without the guard, a
+later summary or report that started reading them would be spending money
+authorised by the wrong permission.
+
+### Storage
+
+```
+pandals/{p}/festivals/{f}/seva/{sevaId}
+pandals/{p}/festivals/{f}/seva/{sevaId}/duties/{dutyId}
+```
+
+Duties are a subcollection rather than an array on the seva document so two
+coordinators staffing the same aarti do not overwrite each other. `dutyCount` on
+the seva is denormalised for list rendering only; `dutyCounts()` over the real
+duties is the source of truth wherever it matters.
+
+Dates are ISO `yyyy-mm-dd` and times 24-hour `HH:mm`, compared lexically —
+the same choice `GaneshContribution.expectedDate` already makes. No `Date`
+objects and no timezone maths anywhere in the schedule: a pandal's programme is
+local wall-clock time, and routing it through UTC is how an aarti lands on the
+wrong day.
+
+### Permissions
+
+Three new keys in `ALL_GANESH_PERMISSIONS`, the registry (as a grantable
+"Seva schedule" group), and `PERMISSION_DEPENDENCIES`:
+
+| Key | Who has it by default |
+| --- | --- |
+| `seva.read` | every role, including viewer — a volunteer who cannot read the schedule cannot turn up |
+| `seva.write` | admin, treasurer |
+| `seva.assign` | admin, treasurer |
+
+`SEVA_ROLE_DEFAULTS` + `hasSevaPermission()` extend the existing backfill in
+`ensurePandalRoles`, so a pandal that already has role and member documents
+gains the new keys on next load — the same migration path assets and sponsors
+used. Without it an existing treasurer would see the schedule and get a bare
+permission-denied when planning one.
+
+**One volunteer self-service carve-out.** The `duties` update rule lets the
+assignee change their own duty — "I am here", "done" — without holding
+`seva.assign`, restricted via `affectedKeys().hasOnly(['status','updatedBy','updatedAt'])`
+so it cannot be used to reassign the duty to somebody else. `setDutyStatus`
+writes exactly those three keys to stay inside that gate.
+
+### The contract test caught a real mismatch
+
+`firestore.rules` duplicates the member permission set as a literal in
+`builtinMemberPermissions()`, mirrored in the test as
+`RULE_BUILTIN_MEMBER_PERMISSIONS`. Adding `seva.read` to the member role made
+the two disagree, and the alignment test failed exactly as intended. Both
+literals were updated. Left unfixed, an open-join self-created membership
+writing the correct member permission set would have been rejected by the rules.
+
+### Files
+
+| File | Change |
+| --- | --- |
+| `shared/utils/ganeshSeva.ts` + `.test.ts` | **new** — selection, festival-window maths, duty counts, transition guards, validation. **42 tests** |
+| `shared/types/ganesh.ts` | `FestivalSeva`, `SevaDuty`, `pendingWrite`, optional `Festival.startDate`/`endDate` |
+| `shared/utils/ganeshPaths.ts` | `seva` subcollection + `sevaDutiesCol()` |
+| `shared/utils/ganeshPermissions.ts` | 3 permissions, role maps, `RULE_SEVA_WRITE_ROLES`, `SEVA_ROLE_DEFAULTS` |
+| `shared/utils/ganeshPermissionRegistry.ts` | grantable "Seva schedule" group + dependencies |
+| `shared/utils/ganeshPermissions.rules.contract.test.ts` | seva rule mirrors, **13 new tests** |
+| `firestore.rules` | `canPlanSevaOf` / `canAssignSevaOf` / `canWriteSevaOf`, `seva` in the subcollection allowlist, seva status enum, `sevaCarriesNoMoney()`, nested `duties` match |
+| `services/ganesh/ganeshSeva.ts` | **new** — `createSeva`, `updateSeva`, `setSevaStatus`, `voidSeva`, `assignDuty`, `removeDuty`, `setDutyStatus` |
+| `services/ganesh/ganeshRoles.ts` | seva backfill for existing role and member docs |
+| `services/ganesh/ganeshWrites.ts` | optional festival window on create/update + `assertFestivalWindow` |
+| `hooks/useFestivalSeva.ts` | **new** — `useFestivalSeva`, `useSeva`, `useSevaDuties` |
+| `hooks/useGaneshWrites.ts` | seva writes behind `requirePerm` |
+
+### Design notes
+
+- **No online gate on any seva write.** Every path is a plain `writeBatch`
+  because none reads a balance, so planning and staffing work with no signal at
+  the pandal — which is exactly when a schedule gets changed. The money paths
+  keep their transaction + online gates untouched.
+- **A seva is soft-removed** (`voided`), like every other Ganesh record, so a
+  finished festival's schedule still reconciles with what people remember.
+  **A duty is hard-deleted** — taking a volunteer off an aarti reverses no
+  balance and leaves nothing to reconcile.
+- `updateSeva` writes `""` rather than omitting cleared optional fields, because
+  `omitUndefined` would silently keep the old value.
+
+### Verification (Phase 2)
+
+- `npx tsc -p tsconfig.json --noEmit` and `tsconfig.shared.json` — clean
+- `npm test` — **128 files / 1334 tests passing** (was 127 / 1280)
+- `ganeshPermissions.rules.contract.test.ts` — 65 tests, the gate for this phase
+
+**Not verified locally: `firestore.rules` does not compile anywhere in this
+environment.** `firebase deploy --dry-run` needs project credentials, and
+`firebase emulators:exec` requires JDK 21 (this machine has 17). The rules were
+reviewed by hand against the existing helpers and mirrored in the contract test,
+but the mirror is hand-written and proves consistency, not syntax. **Compile the
+rules before deploying** — see §6.9.
+
+## 6.8 Remaining phases
+
+3. Command Center + navigation — 5 new tabs, Home rebuilt, seva screens
 4. Funds / People / Pandal
 5. Reports, forms, responsive, polish
+
+## 6.9 Deploy checklist
+
+`firestore.rules` is **not deployed by CI** (see `docs/FIREBASE_RULES_DEPLOY.md`).
+The seva rules must be compiled and deployed *before or with* the client that
+writes seva, or every seva write returns permission-denied:
+
+```bash
+firebase deploy --only firestore:rules
+```
+
+That command compiles the rules first, which is also the syntax check this
+environment could not run.

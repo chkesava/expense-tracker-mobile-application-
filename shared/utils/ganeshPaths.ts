@@ -30,8 +30,22 @@ export function festivalCol(
     | "auditLogs"
     | "fundTransfers"
     | "sponsorships"
+    | "seva"
 ): string[] {
   return ["pandals", pandalId, "festivals", festivalId, name];
+}
+
+/**
+ * Volunteer duties hang off a seva, two levels below the festival. They are
+ * their own collection rather than an array on the seva doc so two coordinators
+ * can staff the same aarti at once without clobbering each other's writes.
+ */
+export function sevaDutiesCol(
+  pandalId: string,
+  festivalId: string,
+  sevaId: string
+): string[] {
+  return ["pandals", pandalId, "festivals", festivalId, "seva", sevaId, "duties"];
 }
 
 export function permanentFundDoc(pandalId: string): string[] {

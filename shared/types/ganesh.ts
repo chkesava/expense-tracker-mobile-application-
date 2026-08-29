@@ -601,6 +601,7 @@ export interface FestivalSeva extends GaneshAuditFields, GaneshVoidFields {
   status: SevaStatus;
   /** Denormalised count of duties, so a schedule list needs no per-row subquery. */
   dutyCount?: number;
+  pendingWrite?: boolean;
 }
 
 export interface SevaDuty extends GaneshAuditFields {
@@ -612,6 +613,7 @@ export interface SevaDuty extends GaneshAuditFields {
   /** What they are doing, e.g. "Prasadam counter". Free text. */
   roleLabel?: string;
   status: DutyStatus;
+  pendingWrite?: boolean;
 }
 
 export const EMPTY_GANESH_SUMMARY: GaneshSummary = {

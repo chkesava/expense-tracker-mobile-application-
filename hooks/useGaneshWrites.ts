@@ -14,6 +14,7 @@ import {
   transferPermanentToFestival,
 } from "@/services/ganesh/ganeshPermanentFund";
 import * as assetWrites from "@/services/ganesh/ganeshAssets";
+import * as sevaWrites from "@/services/ganesh/ganeshSeva";
 import * as sponsorWrites from "@/services/ganesh/ganeshSponsors";
 import * as writes from "@/services/ganesh/ganeshWrites";
 import {
@@ -23,10 +24,12 @@ import {
 } from "@/services/ganesh/ganeshWrites";
 import { assertMoneyReceiveOnline } from "@/shared/utils/ganeshContributions";
 import type {
+  DutyStatus,
   GaneshFileMeta,
   GaneshMemberStatus,
   GaneshRole,
   PermanentFundLocation,
+  SevaStatus,
 } from "@/shared/types/ganesh";
 import * as roleWrites from "@/services/ganesh/ganeshRoles";
 import { assertHasPermission, type GaneshPermission } from "@/shared/utils/ganeshPermissions";
@@ -644,6 +647,64 @@ export function useGaneshWrites() {
           sponsorshipId,
           reason
         )
+      );
+    },
+    /* ------------------------------------------------------------- Seva */
+    // Seva writes take no online gate: none of them reads a balance, so they
+    // stay plain batches and keep working with no signal at the pandal, which
+    // is exactly when a schedule gets changed.
+    createSeva: (input: Parameters<typeof sevaWrites.createSeva>[4]) => {
+      requirePerm("seva.write");
+      const ctx = requireFestival();
+      return run("Seva added", () =>
+        sevaWrites.createSeva(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, input)
+      );
+    },
+    updateSeva: (sevaId: string, input: Parameters<typeof sevaWrites.updateSeva>[5]) => {
+      requirePerm("seva.write");
+      const ctx = requireFestival();
+      return run("Seva updated", () =>
+        sevaWrites.updateSeva(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, sevaId, input)
+      );
+    },
+    setSevaStatus: (sevaId: string, next: SevaStatus) => {
+      requirePerm("seva.write");
+      const ctx = requireFestival();
+      const label = next === "completed" ? "Seva completed" : next === "in_progress" ? "Seva started" : "Seva updated";
+      return run(label, () =>
+        sevaWrites.setSevaStatus(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, sevaId, next)
+      );
+    },
+    voidSeva: (sevaId: string, reason?: string) => {
+      requirePerm("seva.write");
+      const ctx = requireFestival();
+      return run("Seva removed", () =>
+        sevaWrites.voidSeva(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, sevaId, reason)
+      );
+    },
+    assignSevaDuty: (sevaId: string, input: Parameters<typeof sevaWrites.assignDuty>[5]) => {
+      requirePerm("seva.assign");
+      const ctx = requireFestival();
+      return run("Volunteer assigned", () =>
+        sevaWrites.assignDuty(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, sevaId, input)
+      );
+    },
+    removeSevaDuty: (sevaId: string, dutyId: string) => {
+      requirePerm("seva.assign");
+      const ctx = requireFestival();
+      return run("Volunteer removed", () =>
+        sevaWrites.removeDuty(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, sevaId, dutyId)
+      );
+    },
+    setSevaDutyStatus: (sevaId: string, dutyId: string, next: DutyStatus, isOwnDuty = false) => {
+      // A volunteer reporting on their own duty needs no permission - the rules
+      // allow it for the assignee, restricted to the status field. Staffing
+      // anyone else still requires seva.assign.
+      if (!isOwnDuty) requirePerm("seva.assign");
+      const ctx = requireFestival();
+      const label = next === "on_duty" ? "On duty" : next === "completed" ? "Duty completed" : "Duty updated";
+      return run(label, () =>
+        sevaWrites.setDutyStatus(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, sevaId, dutyId, next)
       );
     },
   };

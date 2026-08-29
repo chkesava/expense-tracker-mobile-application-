@@ -610,12 +610,25 @@ export async function updatePandalProfile(
   await commitWrite(() => batch.commit(), { label: "pandal profile" });
 }
 
+/**
+ * Festival dates are optional — festivals created before the seva schedule
+ * existed have none, and every surface degrades to the festival name. But a
+ * window that ends before it starts would make `festivalDayNumber` and the
+ * schedule's day strip nonsense, so reject that pair outright.
+ */
+function assertFestivalWindow(startDate?: string, endDate?: string): void {
+  const start = startDate?.trim();
+  const end = endDate?.trim();
+  if (!start || !end) return;
+  if (end < start) throw new Error("The festival end date must be on or after the start date.");
+}
+
 export async function updateFestivalDetails(
   db: Firestore,
   actor: GaneshActor,
   pandalId: string,
   festivalId: string,
-  input: { name?: string; year?: number }
+  input: { name?: string; year?: number; startDate?: string; endDate?: string }
 ): Promise<void> {
   const festivalSnap = await getDoc(pathRef(db, festivalDoc(pandalId, festivalId)));
   if (!festivalSnap.exists()) throw new Error("Festival not found.");
@@ -623,16 +636,32 @@ export async function updateFestivalDetails(
   if (!name) throw new Error("Enter a festival name.");
   const year = Number(input.year ?? festivalSnap.data().year);
   if (!Number.isFinite(year) || year < 2000) throw new Error("Enter a valid year.");
+  const previous = festivalSnap.data();
+  // Undefined means "leave alone"; an empty string means "clear it".
+  const startDate = input.startDate === undefined
+    ? (previous.startDate as string | undefined)
+    : input.startDate.trim() || undefined;
+  const endDate = input.endDate === undefined
+    ? (previous.endDate as string | undefined)
+    : input.endDate.trim() || undefined;
+  assertFestivalWindow(startDate, endDate);
   const batch = writeBatch(db);
   batch.update(pathRef(db, festivalDoc(pandalId, festivalId)), {
     name,
     year,
+    startDate: startDate ?? "",
+    endDate: endDate ?? "",
     updatedBy: actor.uid,
     updatedAt: serverTimestamp(),
   });
   audit(batch, db, pandalId, festivalId, actor.uid, "edited", "festival", festivalId, {
-    oldValue: { name: festivalSnap.data().name, year: festivalSnap.data().year },
-    newValue: { name, year },
+    oldValue: {
+      name: previous.name,
+      year: previous.year,
+      startDate: previous.startDate,
+      endDate: previous.endDate,
+    },
+    newValue: { name, year, startDate, endDate },
   });
   await commitWrite(() => batch.commit(), { label: "festival details" });
 }
@@ -712,8 +741,9 @@ export async function createFestival(
   db: Firestore,
   actor: GaneshActor,
   pandalId: string,
-  input: { name: string; year: number }
+  input: { name: string; year: number; startDate?: string; endDate?: string }
 ): Promise<string> {
+  assertFestivalWindow(input.startDate, input.endDate);
   const festivalId = newId();
   const members = await getDocs(collection(db, "pandals", pandalId, "members"));
   const stamp = {
@@ -730,6 +760,10 @@ export async function createFestival(
     contributionMode: "same",
     contributionTargetAmount: 0,
     householdTargetAmount: 500,
+    ...omitUndefined({
+      startDate: input.startDate?.trim() || undefined,
+      endDate: input.endDate?.trim() || undefined,
+    }),
     ...stamp,
   });
   await commitWrite(() => festivalBatch.commit(), { label: "festival" });
