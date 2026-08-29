@@ -5,6 +5,17 @@ gap analysis, the shared design decisions, and the phase-by-phase change log.
 
 Started 2026-08-24. Branch `claude/ganesh-seva-ui-redesign-f0d468`.
 
+> ## ⚠️ Direction changed 2026-08-29 — read §6 before using §1–§4
+>
+> Sections 1–4 below describe the **2026-08-24 redesign**, whose stated goal was
+> to align Ganesh Seva *to* the Expense Tracker's design system ("there is never
+> a second, divergent design system", §3.3).
+>
+> **That decision has been reversed.** Ganesh Seva is now a Pandal operating
+> platform with its own palette, its own surfaces, and its own information
+> architecture. §1–§4 remain as the historical record of how the code got to its
+> current shape — they are no longer the design brief. See **§6 Redesign II**.
+
 ---
 
 ## 1. Expense Tracker design system (the reference)
@@ -304,3 +315,156 @@ business-logic decision:
    decision about where the reimbursed-per-expense figure comes from
    (`GaneshExpense` carries no `reimbursedAmount`; only the festival-level
    `summary.pendingReimbursements` exists). Flagged for the owner.
+
+---
+
+# 6. Redesign II — Pandal operating platform (2026-08-29)
+
+Branch `claude/ganesh-seva-redesign-1372fa`.
+
+## 6.1 Why the direction changed
+
+Redesign I made Ganesh Seva a well-built *sibling* of the Expense Tracker. The
+problem is that being a sibling of an expense tracker is exactly what this
+product should not be. Three findings from the 2026-08-29 audit:
+
+| # | Finding | Evidence |
+| --- | --- | --- |
+| R1 | **No theme of its own.** `theme/` had zero Ganesh awareness, so the app rendered in whatever theme + accent the user picked in the Expense Tracker (default indigo). The entire festival identity was one saffron accent. | `theme/tokens.ts` (no Ganesh entries), `components/ganesh/ui/tokens.ts` |
+| R2 | **Money owned the navigation.** 3 of 5 bottom tabs were ledgers (Collections, Expenses, Contributions); Home led with a fund balance and two money tiles. | `GaneshTabBar.tsx`, `(tabs)/index.tsx` |
+| R3 | **Every surface was an Expense Tracker surface.** `Section`, `StatTile`, `DataRow`, `RowGlyph`, radii and spacing were re-exported from `components/dashboard/primitives`. | `components/ganesh/ui/index.ts` |
+
+Guiding principle for Redesign II: **Seva first. Pandal operations second. Money
+as an important supporting system — not the identity of the product.**
+
+## 6.2 Scope decisions (confirmed with the owner)
+
+1. **Seva Schedule + volunteer duty assignment will be built.** Neither existed
+   in any form — no types, hooks, services, screens or Firestore rules. This is
+   the only part of the redesign that adds backend surface.
+2. **Fixed festival palette, light + dark.** Ganesh ignores the Expense accent:
+   a pandal's app should look the same to every committee member.
+3. **Wider responsive layout, no desktop sidebar.** Bottom nav stays at all sizes.
+
+## 6.3 Phase 1 — design-system foundation
+
+Status: **complete** (2026-08-29)
+
+### Palette
+
+`theme/ganeshPalette.ts` (new) — a full `ColorTokens` pair, not an accent overlay.
+
+| Role | Light | Dark |
+| --- | --- | --- |
+| `background` | `#FDF8F0` warm ivory | `#171009` |
+| `card` | `#FFFFFF` | `#211711` |
+| `foreground` | `#241609` | `#F6EDE2` |
+| `mutedForeground` | `#7A6A5F` | `#B8A697` |
+| `primary` (saffron) | `#C2410C` | `#FB923C` |
+| `border` | `#EADFCF` | `#33251C` |
+| `success` / `warning` / `destructive` | `#1F7A4D` / `#B45309` / `#B3261E` | `#4ECB8B` / `#F0B045` / `#F2635A` |
+
+Non-`ColorTokens` festival values stay in `components/ganesh/ui/tokens.ts`:
+maroon (`#7B1D3A` / `#F0A7BE`, Permanent Fund only) and gold (`#B98029` /
+`#E0B558`, section rules and the hero arch only).
+
+Note: `secondary` and `muted` are **surfaces** in this token system, not brand
+colours — components fill chips and inset tiles with them. They are warm
+neutrals here; putting maroon there would have broken every chip in the app.
+
+### Delivery mechanism
+
+`providers/GaneshThemeProvider.tsx` (new) republishes `ThemeContext` for the
+Ganesh subtree. Because `useTheme()` reads a context, **every one of the ~10,000
+lines of existing Ganesh screens picks up the new palette with no per-screen
+edit**, and nothing outside `app/(ganesh*)` can see it. Mounted at the top of
+`app/(ganesh)/_layout.tsx` and `app/(ganesh-auth)/_layout.tsx`.
+
+The only change to a shared file is `theme/ThemeProvider.tsx`, which now exports
+its `ThemeContext` (previously module-private). Purely additive — no behaviour
+change for Expense or Nutrition.
+
+### Surfaces forked
+
+`components/ganesh/ui/surfaces.tsx` (new) owns `Section`, `SectionAction`,
+`StatTile`, `DataRow`, `RowGlyph`, `MetaLabel`, `Pill`, `StatusStrip`,
+`ProgressTrack`, `TrendText`, `useSurfaces`, `toneColor`, `GANESH_RADIUS`,
+`GANESH_SPACE`. `components/ganesh/ui/index.ts` re-points to it, so **no screen
+import changed**. Nothing under `components/ganesh/` imports
+`components/dashboard/` any more.
+
+What deliberately differs from the Expense primitives:
+
+- **Warm surfaces** — tile/track washes mixed from the palette's ink brown
+  (`rgba(36,22,9,...)`), not slate. A slate wash on ivory reads grey-blue and
+  instantly looks like a finance app.
+- **Softer geometry** — section radius 18 (was 20), tile 12 (was 14).
+- **Squircle glyph niches** instead of circles, closer to a temple niche.
+- **A gold hairline rule** under section headers — the one piece of decoration
+  in the system, header only, never repeated inside a section.
+- **`accent` means the festival colour.** The Expense version hardcodes
+  `ACCENT_PURPLE`, which belongs to the Vault feature and has no meaning here.
+- **52dp rows** (was 48dp) — the app is used standing, in a crowd, one-handed.
+
+### New components
+
+| File | Purpose |
+| --- | --- |
+| `ui/ArchFrame.tsx` | Mandap arch along a hero's top edge, gold at low opacity. **Hero surfaces only** — never a list card, or the app becomes a festival poster. |
+| `ui/GaneshEmptyState.tsx` | Seva-appropriate empty states. Separate from `common/EmptyState`, which carries finance illustrations and a "Pro Tip" card. Copy rule: never "No data found". |
+| `ui/SevaGlyph.tsx` | One lucide icon + label per `SevaKind`. No emoji — they render differently per Android skin and ignore colour. |
+
+### Types added (consumed by Phase 2)
+
+`shared/types/ganesh.ts` gained `SevaKind`, `SevaStatus`, `DutyStatus`,
+`FestivalSeva`, `SevaDuty`, and optional `Festival.startDate` / `endDate`.
+A seva carries **no money fields** and never enters `GaneshSummary`, any ledger,
+or the God Fund; money spent on an activity remains a `GaneshExpense`.
+
+### Defect fixed: God Fund asset purchases threw
+
+`services/ganesh/ganeshWrites.ts:1702` — inside `addAssetPurchase`, the
+`appendAssetPurchase(writer)` closure called
+`appendPandalAssetCreate(batch, ...)`, referencing the `const batch` declared 56
+lines below it. The God Fund path invokes that closure inside `runTransaction`
+**before** the `const` initialises, so **every asset purchase paid even partly
+from the God Fund failed with `ReferenceError: Cannot access 'batch' before
+initialization`**, and the asset row never joined the transaction. The
+personal/sponsored path worked only by accident of ordering.
+
+Pre-existing and unrelated to the redesign, but fixed here because it breaks the
+Asset-vs-Expense distinction. One word: `batch` to `writer`.
+
+New `services/ganesh/ganeshAssetPurchase.write.test.ts` drives the real function
+against a faked Firestore and asserts both paths write the expense *and* the
+asset through the same writer. Verified to fail against the original code
+(reproducing the exact `ReferenceError`) and pass with the fix. These are the
+**first tests to cover `ganeshWrites.ts`**, which is 2355 lines and previously
+had none; the pattern (mock `firebase/firestore`, `@/lib/firestoreWrite` and
+`@/lib/id`) is reusable for the rest of the file.
+
+## 6.4 Functionality preserved
+
+No change to money math, promised/received logic, the God Fund / Personal Money
+/ Permanent Fund model, reimbursements, the `expenseType` discriminator, RBAC,
+Firestore rules, storage paths, or any route. Phase 1 changes colour, surfaces
+and types only — plus the one-word correctness fix above.
+
+## 6.5 Verification (Phase 1)
+
+- `npx tsc -p tsconfig.json --noEmit` — clean
+- `npx tsc -p tsconfig.shared.json --noEmit` — clean
+- `npm test` — **127 files / 1280 tests passing** (was 126 / 1278; +2 new)
+- Ganesh does not leak: grepping `components/ganesh`, `GaneshThemeProvider` and
+  `ganeshPalette` across `app/` and `components/` returns nothing outside
+  `components/ganesh/` and `app/(ganesh*)`
+- Ganesh is fully forked: grepping `dashboard/primitives` across the Ganesh tree
+  returns only the explanatory comment in `surfaces.tsx`
+- Only shared file touched is `theme/ThemeProvider.tsx`, and only to add `export`
+
+## 6.6 Remaining phases
+
+2. Seva schedule + volunteer duties — rules, RBAC, hooks, writers, pure logic
+3. Command Center + navigation — 5 new tabs, Home rebuilt
+4. Funds / People / Pandal
+5. Reports, forms, responsive, polish

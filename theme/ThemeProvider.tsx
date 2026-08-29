@@ -43,7 +43,14 @@ type ThemeContextValue = {
   toggleTheme: () => void;
 };
 
-const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
+/**
+ * Exported so a product can republish a different palette to its own subtree —
+ * see `providers/GaneshThemeProvider.tsx`. Nothing else should provide this
+ * context; `AppThemeProvider` remains the only writer of theme *preferences*.
+ */
+export const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
+
+export type { ThemeContextValue };
 
 function resolveInitialTheme(system: string | null | undefined): ThemeName {
   try {

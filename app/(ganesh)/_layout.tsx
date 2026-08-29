@@ -7,6 +7,7 @@ import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
 import { useAuth } from "@/providers/AuthProvider";
 import { GaneshSessionProvider } from "@/providers/GaneshSessionProvider";
+import { GaneshThemeProvider } from "@/providers/GaneshThemeProvider";
 import { upsertGaneshProfile } from "@/services/ganesh/ganeshProfile";
 import { claimOwnPandalMembership } from "@/services/ganesh/ganeshMembershipIndex";
 import { useMyJoinRequests } from "@/hooks/useMyJoinRequests";
@@ -120,13 +121,17 @@ function GaneshStack() {
 }
 
 export default function GaneshLayout() {
+  // Outermost, so the loading spinners and the privacy lock are already wearing
+  // the festival palette on the very first frame.
   return (
-    <PrivacyLock>
-      <GaneshSessionProvider>
-        <GaneshGate>
-          <GaneshStack />
-        </GaneshGate>
-      </GaneshSessionProvider>
-    </PrivacyLock>
+    <GaneshThemeProvider>
+      <PrivacyLock>
+        <GaneshSessionProvider>
+          <GaneshGate>
+            <GaneshStack />
+          </GaneshGate>
+        </GaneshSessionProvider>
+      </PrivacyLock>
+    </GaneshThemeProvider>
   );
 }

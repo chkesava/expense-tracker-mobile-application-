@@ -1,27 +1,35 @@
 /**
  * Ganesh Seva design tokens.
  *
- * Ganesh Seva is a sibling of the Expense Tracker, not a second design system.
- * Radius, spacing, surfaces and the semantic `Tone` vocabulary all come from
- * `components/dashboard/primitives` — the Expense Tracker's layout language.
+ * Ganesh Seva owns its whole visual language: the palette comes from
+ * `theme/ganeshPalette.ts` (published to the subtree by `GaneshThemeProvider`),
+ * and the surfaces come from `./surfaces`. Nothing here depends on the Expense
+ * Tracker.
  *
- * The only thing added here is a *festival identity*: one warm saffron accent
- * plus a maroon reserved for the Permanent Fund, and the fund-type tones that
- * distinguish God Fund money from a member's personal money.
+ * This module adds the vocabulary the palette alone cannot express:
  *
- * Rule: the accent marks actions and identity. Amounts stay in `foreground`.
+ * - **Saffron / maroon / gold** — festival identity. Saffron is the same value
+ *   as `colors.primary`; it is named here so screens can say what they mean.
+ * - **Fund kinds** — which pot of money a value belongs to. God Fund money and
+ *   a member's personal money are genuinely different things to a treasurer,
+ *   and the distinction always carries a text label, never colour alone.
+ * - **Seva kinds** — a colour and meaning per kind of pandal activity.
+ *
+ * Rule: colour marks actions, identity and status. Amounts stay in
+ * `foreground`.
  */
 
 import {
-  DASH_RADIUS,
-  DASH_SPACE,
+  GANESH_RADIUS,
+  GANESH_SPACE,
   useSurfaces,
   withAlpha,
-} from "@/components/dashboard/primitives";
+} from "./surfaces";
+import type { SevaKind } from "@/shared/types/ganesh";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
-export { DASH_RADIUS as GANESH_RADIUS, DASH_SPACE as GANESH_SPACE, withAlpha };
+export { GANESH_RADIUS, GANESH_SPACE, withAlpha };
 
 /** Which pot of money a value belongs to. Drives tone, never colour alone. */
 export type FundKind = "god" | "personal" | "permanent" | "inKind";
@@ -32,6 +40,8 @@ export type GaneshTokens = {
   saffron: string;
   /** Permanent Pandal Fund identity. Used nowhere else. */
   maroon: string;
+  /** Temple gold — section rules and the hero arch. Never used for text. */
+  gold: string;
   /** God Fund money. */
   godFund: string;
   /** Money fronted by a member, awaiting reimbursement. */
@@ -40,14 +50,17 @@ export type GaneshTokens = {
   promised: string;
   /** Tint any of the above down to a background wash. */
   wash: (hex: string) => string;
-  /** Inset tile fill (matches dashboard tiles). */
+  /** Inset tile fill (matches section tiles). */
   tile: string;
   /** Hairline divider. */
   divider: string;
   /** Progress / meter track. */
   track: string;
+  /** Android ripple colour over a surface. */
+  ripple: string;
   fundColor: (kind: FundKind) => string;
   fundLabel: (kind: FundKind) => string;
+  sevaColor: (kind: SevaKind) => string;
 };
 
 export function useGaneshTokens(): GaneshTokens {
@@ -55,8 +68,10 @@ export function useGaneshTokens(): GaneshTokens {
   const surfaces = useSurfaces();
   const isDark = themeUsesDarkPalette(themeName);
 
-  const saffron = isDark ? "#FB923C" : "#C2410C";
+  // Saffron is the palette's primary; naming it keeps screens readable.
+  const saffron = theme.colors.primary;
   const maroon = isDark ? "#F0A7BE" : "#7B1D3A";
+  const gold = isDark ? "#E0B558" : "#B98029";
   const godFund = theme.colors.success;
   const personal = theme.colors.info;
   const promised = theme.colors.warning;
@@ -87,10 +102,40 @@ export function useGaneshTokens(): GaneshTokens {
     }
   };
 
+  /**
+   * A colour per kind of seva. Deliberately a small, warm set — a schedule
+   * should read as one festival, not a category chart. Every seva row also
+   * carries its icon and name, so colour is never the only signal.
+   */
+  const sevaColor = (kind: SevaKind): string => {
+    switch (kind) {
+      case "aarti":
+        return saffron;
+      case "annadanam":
+      case "prasadam":
+        return godFund;
+      case "bhajan":
+      case "cultural":
+        return maroon;
+      case "decoration":
+        return gold;
+      case "security":
+        return personal;
+      case "cleaning":
+        return theme.colors.mutedForeground;
+      case "procession":
+      case "visarjan":
+        return promised;
+      default:
+        return theme.colors.mutedForeground;
+    }
+  };
+
   return {
     isDark,
     saffron,
     maroon,
+    gold,
     godFund,
     personal,
     promised,
@@ -98,7 +143,9 @@ export function useGaneshTokens(): GaneshTokens {
     tile: surfaces.tile,
     divider: surfaces.divider,
     track: surfaces.track,
+    ripple: surfaces.ripple,
     fundColor,
     fundLabel,
+    sevaColor,
   };
 }

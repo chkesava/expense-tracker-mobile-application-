@@ -1,6 +1,6 @@
 import { Text, type StyleProp, type TextStyle } from "react-native";
 
-import { toneColor, type Tone } from "@/components/dashboard/primitives";
+import { toneColor, type Tone } from "@/components/ganesh/ui/surfaces";
 import { formatInr } from "@/shared/utils/ganeshMoney";
 import { useTheme } from "@/theme/ThemeProvider";
 

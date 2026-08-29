@@ -1695,7 +1695,11 @@ export async function addAssetPurchase(
       updatedAt: serverTimestamp(),
     })
   );
-  appendPandalAssetCreate(batch, db, actor, pandalId, assetId, {
+  // Must be `writer`, not the `batch` declared further down: on the God Fund
+  // path this closure runs inside runTransaction *before* that `const` is
+  // initialised, so naming it here threw a TDZ ReferenceError and left the
+  // asset row outside the transaction.
+  appendPandalAssetCreate(writer, db, actor, pandalId, assetId, {
     name: input.asset.name,
     category: input.asset.category,
     quantity: input.asset.quantity,

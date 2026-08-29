@@ -1,9 +1,11 @@
 /**
- * Ganesh Seva UI kit.
+ * Ganesh Seva UI kit — the single import site for every Ganesh screen.
  *
- * Ganesh-specific components live here; everything else is re-exported straight
- * from the Expense Tracker's dashboard primitives so screens have one import
- * site and there is never a second, divergent design system.
+ * The surfaces below are Ganesh's own (`./surfaces`), forked from the Expense
+ * Tracker's dashboard primitives and now fully independent of them. Ganesh Seva
+ * is a pandal operating platform, not a re-themed expense tracker, so the two
+ * design systems are allowed — required — to diverge. Nothing under
+ * `components/ganesh/` may import from `components/dashboard/`.
  */
 
 export {
@@ -18,12 +20,13 @@ export {
   ProgressTrack,
   TrendText,
   useSurfaces,
+  useGaneshSurfaceAccents,
   withAlpha,
   toneColor,
-  DASH_RADIUS as GANESH_RADIUS,
-  DASH_SPACE as GANESH_SPACE,
+  GANESH_RADIUS,
+  GANESH_SPACE,
   type Tone,
-} from "@/components/dashboard/primitives";
+} from "./surfaces";
 
 export { useGaneshTokens, type FundKind, type GaneshTokens } from "./tokens";
 export { Money, type MoneyProps, type MoneySize } from "./Money";
@@ -37,3 +40,10 @@ export { NavRow, type NavRowProps } from "./NavRow";
 export { Avatar, initialsOf, type AvatarProps } from "./Avatar";
 export { GaneshMark } from "./GaneshMark";
 export { GaneshAuthBackground } from "./GaneshAuthBackground";
+export { ArchFrame } from "./ArchFrame";
+export {
+  GaneshEmptyState,
+  type GaneshEmptyAction,
+  type GaneshEmptyStateProps,
+} from "./GaneshEmptyState";
+export { SevaGlyph, sevaIcon, sevaKindLabel, SEVA_KINDS } from "./SevaGlyph";
