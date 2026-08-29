@@ -16,6 +16,7 @@ import { Lock, Mail, Smartphone, User } from "lucide-react-native";
 import { RecaptchaVerifier } from "firebase/auth";
 
 import { SocialLoginButton } from "@/components/auth/SocialLoginButton";
+import { GaneshAppVersion } from "@/components/ganesh/GaneshAppVersion";
 import { GaneshAuthBackground, GaneshMark, useGaneshTokens } from "@/components/ganesh/ui";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -375,6 +376,7 @@ export default function GaneshLoginScreen() {
                 Choose Expense Tracker or Ganesh Seva
               </Text>
             </Pressable>
+            <GaneshAppVersion centered />
           </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
