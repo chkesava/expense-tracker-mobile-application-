@@ -15,6 +15,7 @@ import {
 
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { GaneshAppVersion } from "@/components/ganesh/GaneshAppVersion";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { GaneshSyncChip } from "@/components/ganesh/GaneshSyncChip";
 import {
@@ -273,6 +274,7 @@ export default function PandalScreen() {
         <MetaLabel>
           Switching apps keeps you signed in. Ganesh Seva and Expense Tracker never share data.
         </MetaLabel>
+        <GaneshAppVersion />
       </Section>
     </GaneshScreen>
   );

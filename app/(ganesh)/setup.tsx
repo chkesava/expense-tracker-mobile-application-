@@ -6,6 +6,7 @@ import { Landmark } from "lucide-react-native";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { FundLocationChips } from "@/components/ganesh/FundLocationChips";
+import { GaneshAppVersion } from "@/components/ganesh/GaneshAppVersion";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { GaneshHeader, useGaneshTokens } from "@/components/ganesh/ui";
 import { useFestivals } from "@/hooks/useFestivals";
@@ -275,6 +276,7 @@ export default function GaneshSetupScreen() {
         >
           Switch account / Log out
         </Button>
+        <GaneshAppVersion />
       </View>
     </GaneshScreen>
   );
