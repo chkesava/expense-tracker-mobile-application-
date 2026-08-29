@@ -1,9 +1,12 @@
 import { useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { Wallet } from "lucide-react-native";
 
+import { FormDetails } from "@/components/ganesh/FormDetails";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { GaneshWriteLock } from "@/components/ganesh/GaneshWriteLock";
+import { FilterChips, GaneshHeader, useGaneshTokens } from "@/components/ganesh/ui";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -17,10 +20,16 @@ import { todayDateInput } from "@/shared/utils/ganeshIdentity";
 import type { PaymentMethod } from "@/shared/types/ganesh";
 import { useTheme } from "@/theme/ThemeProvider";
 
-const METHODS: PaymentMethod[] = ["cash", "upi", "bank", "other"];
+const METHOD_OPTIONS: Array<{ id: PaymentMethod; label: string }> = [
+  { id: "cash", label: "Cash" },
+  { id: "upi", label: "UPI" },
+  { id: "bank", label: "Bank" },
+  { id: "other", label: "Other" },
+];
 
 export default function AddReimbursementScreen() {
   const { theme } = useTheme();
+  const g = useGaneshTokens();
   const { back } = useRouter();
   const params = useLocalSearchParams<{ memberId?: string }>();
   const { pandalId, festivalId } = useGaneshSession();
@@ -40,63 +49,37 @@ export default function AddReimbursementScreen() {
 
   return (
     <GaneshScreen>
-      <Text style={{ color: theme.colors.mutedForeground }}>
+      <GaneshHeader
+        title="Reimburse"
+        icon={<Wallet size={22} color={g.saffron} strokeWidth={2.2} />}
+        onBack={back}
+      />
+      <Text style={{ color: theme.colors.mutedForeground, lineHeight: 21 }}>
         Reimbursement reduces God Fund and pending personal money.
       </Text>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-        {members.map((member) => (
-          <Pressable
-            key={member.userId}
-            onPress={() => setMemberId(member.userId)}
-            style={{
-              paddingHorizontal: 10,
-              paddingVertical: 6,
-              borderRadius: 999,
-              backgroundColor: memberId === member.userId ? theme.colors.primary : theme.colors.muted,
-            }}
-          >
-            <Text
-              style={{
-                color: memberId === member.userId ? theme.colors.primaryForeground : theme.colors.foreground,
-                fontWeight: "700",
-              }}
-            >
-              {member.displayName}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
+      <FilterChips
+        label="Member"
+        layout="wrap"
+        value={memberId}
+        options={members.map((member) => ({ id: member.userId, label: member.displayName }))}
+        onChange={setMemberId}
+      />
       {selected ? (
         <Text style={{ color: theme.colors.mutedForeground }}>
           Pending {formatInr(selected.pendingReimbursement)}
         </Text>
       ) : null}
       <Input label="Amount" value={amount} onChangeText={setAmount} keyboardType="numeric" />
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-        {METHODS.map((item) => (
-          <Pressable
-            key={item}
-            onPress={() => setMethod(item)}
-            style={{
-              paddingHorizontal: 10,
-              paddingVertical: 6,
-              borderRadius: 999,
-              backgroundColor: method === item ? theme.colors.primary : theme.colors.muted,
-            }}
-          >
-            <Text
-              style={{
-                color: method === item ? theme.colors.primaryForeground : theme.colors.foreground,
-                fontWeight: "700",
-                textTransform: "capitalize",
-              }}
-            >
-              {item}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-      <Input label="Notes (optional)" value={notes} onChangeText={setNotes} />
+      <FilterChips
+        label="Method"
+        layout="wrap"
+        value={method}
+        options={METHOD_OPTIONS}
+        onChange={setMethod}
+      />
+      <FormDetails>
+        <Input label="Notes (optional)" value={notes} onChangeText={setNotes} />
+      </FormDetails>
       <Button
         loading={busy}
         onPress={() => {

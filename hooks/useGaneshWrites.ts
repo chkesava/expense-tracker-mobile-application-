@@ -178,14 +178,14 @@ export function useGaneshWrites() {
     addOpeningFund: (input: Parameters<typeof writes.addOpeningFund>[4]) => {
       requirePerm("openingFunds.create");
       const ctx = requireFestival();
-      return run("Opening fund saved", () =>
+      return run("Opening fund recorded", () =>
         writes.addOpeningFund(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, input)
       );
     },
     addCollection: (input: Parameters<typeof writes.addCollection>[4]) => {
       requirePerm("collections.create");
       const ctx = requireFestival();
-      return run("Collection saved", () =>
+      return run("Collection recorded", () =>
         writes.addCollection(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, input)
       );
     },
@@ -209,7 +209,7 @@ export function useGaneshWrites() {
         writes.assertMoneyReceiveOnline(isOnline, input.kind);
       }
       const ctx = requireFestival();
-      return run("Contribution saved", () =>
+      return run(status === "received" ? "Contribution received" : "Contribution recorded", () =>
         writes.addContribution(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, input)
       );
     },
@@ -233,7 +233,7 @@ export function useGaneshWrites() {
       const ctx = requireFestival();
       writes.assertMoneyReceiveOnline(isOnline, input?.kind ?? "item");
       const { kind: _kind, ...payload } = input ?? {};
-      return run("Marked received", () =>
+      return run("Contribution received", () =>
         writes.receiveContribution(
           ctx.db,
           ctx.actor,
@@ -264,7 +264,7 @@ export function useGaneshWrites() {
     ) => {
       requirePerm("contributions.update");
       const ctx = requireFestival();
-      return run("Contribution saved", () =>
+      return run("Contribution recorded", () =>
         writes.updatePromisedContribution(
           ctx.db,
           ctx.actor,
@@ -280,7 +280,7 @@ export function useGaneshWrites() {
       if ((input.sponsoredAmount ?? 0) > 0) requirePerm("sponsors.receive");
       assertGodFundSpendOnline(isOnline, input.godFundAmount);
       const ctx = requireFestival();
-      return run("Expense saved", () =>
+      return run("Expense recorded", () =>
         writes.addExpense(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, input)
       );
     },
@@ -290,7 +290,7 @@ export function useGaneshWrites() {
       if ((input.sponsoredAmount ?? 0) > 0) requirePerm("sponsors.receive");
       assertGodFundSpendOnline(isOnline, input.godFundAmount);
       const ctx = requireFestival();
-      return run("Asset purchase saved", () =>
+      return run("Asset purchase recorded", () =>
         writes.addAssetPurchase(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, input)
       );
     },
@@ -324,7 +324,7 @@ export function useGaneshWrites() {
       requirePerm("reimbursements.create");
       assertReimbursementOnline(isOnline);
       const ctx = requireFestival();
-      return run("Reimbursement saved", () =>
+      return run("Reimbursement recorded", () =>
         writes.addReimbursement(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, input)
       );
     },
@@ -624,7 +624,7 @@ export function useGaneshWrites() {
         assertMoneyReceiveOnline(isOnline, "money");
       }
       const { sponsoringType: _type, ...payload } = input ?? {};
-      return run("Marked received", () =>
+      return run("Sponsorship received", () =>
         sponsorWrites.receiveSponsorship(
           ctx.db,
           ctx.actor,
@@ -656,7 +656,7 @@ export function useGaneshWrites() {
     createSeva: (input: Parameters<typeof sevaWrites.createSeva>[4]) => {
       requirePerm("seva.write");
       const ctx = requireFestival();
-      return run("Seva added", () =>
+      return run("Seva recorded", () =>
         sevaWrites.createSeva(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, input)
       );
     },

@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { Text, View } from "react-native";
 import { useRouter } from "expo-router";
+import { CalendarDays } from "lucide-react-native";
 
 import { FestivalWindowFields } from "@/components/ganesh/FestivalWindowFields";
 import { FundLocationChips } from "@/components/ganesh/FundLocationChips";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { GaneshWriteLock } from "@/components/ganesh/GaneshWriteLock";
+import { GaneshHeader, useGaneshTokens } from "@/components/ganesh/ui";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { PermanentFundCard } from "@/components/ganesh/PermanentFundCard";
 import { Button } from "@/components/ui/Button";
@@ -25,7 +27,8 @@ import { useTheme } from "@/theme/ThemeProvider";
 
 export default function CreateFestivalScreen() {
   const { theme } = useTheme();
-  const { replace } = useRouter();
+  const g = useGaneshTokens();
+  const { replace, back } = useRouter();
   const { pandalId, setSession } = useGaneshSession();
   const { fund } = usePermanentFund(pandalId);
   const writes = useGaneshWrites();
@@ -106,9 +109,11 @@ export default function CreateFestivalScreen() {
 
   return (
     <GaneshScreen>
-      <Text style={{ color: theme.colors.foreground, fontSize: 22, fontWeight: "800" }}>
-        Create Ganesh Festival
-      </Text>
+      <GaneshHeader
+        title="Create festival"
+        icon={<CalendarDays size={22} color={g.saffron} strokeWidth={2.2} />}
+        onBack={back}
+      />
       <PermanentFundCard fund={fund} />
       <Text style={{ color: theme.colors.mutedForeground, lineHeight: 22 }}>
         The Permanent Fund stays with the Pandal. Enter 0 if this festival should start with no

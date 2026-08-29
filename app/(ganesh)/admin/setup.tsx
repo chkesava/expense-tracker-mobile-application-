@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { Text } from "react-native";
 import { useRouter } from "expo-router";
+import { Target } from "lucide-react-native";
 
 import { AdminQueryState } from "@/components/ganesh/AdminQueryState";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
+import { GaneshHeader, useGaneshTokens } from "@/components/ganesh/ui";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useFestivals } from "@/hooks/useFestivals";
@@ -16,7 +18,8 @@ import { useTheme } from "@/theme/ThemeProvider";
 
 export default function AdminContributionSetupScreen() {
   const { theme } = useTheme();
-  const { push } = useRouter();
+  const g = useGaneshTokens();
+  const { push, back } = useRouter();
   const { pandalId, festivalId } = useGaneshSession();
   const { festivals, loading, error, retry } = useFestivals(pandalId);
   const festival = festivals.find((item) => item.id === festivalId);
@@ -28,6 +31,11 @@ export default function AdminContributionSetupScreen() {
 
   return (
     <GaneshScreen>
+      <GaneshHeader
+        title="Contribution setup"
+        icon={<Target size={22} color={g.saffron} strokeWidth={2.2} />}
+        onBack={back}
+      />
       <Text style={{ color: theme.colors.mutedForeground, lineHeight: 22 }}>
         Committee target and household chanda stay separate. For a child or anyone who should pay
         less, open them on Committee and set a custom amount.

@@ -1,10 +1,13 @@
 import { useState } from "react";
 import { Text, View } from "react-native";
 import { useRouter } from "expo-router";
+import { Landmark } from "lucide-react-native";
 
+import { FormDetails } from "@/components/ganesh/FormDetails";
 import { FundLocationChips } from "@/components/ganesh/FundLocationChips";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { GaneshWriteLock } from "@/components/ganesh/GaneshWriteLock";
+import { GaneshHeader, useGaneshTokens } from "@/components/ganesh/ui";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useFestivals } from "@/hooks/useFestivals";
@@ -23,6 +26,7 @@ import { useTheme } from "@/theme/ThemeProvider";
 
 export default function AddPermanentFundScreen() {
   const { theme } = useTheme();
+  const g = useGaneshTokens();
   const { back } = useRouter();
   const { isOnline } = useNetwork();
   const { pandalId, festivalId } = useGaneshSession();
@@ -100,7 +104,12 @@ export default function AddPermanentFundScreen() {
   if (fund.total > 0) {
     return (
       <GaneshScreen>
-        <Text style={{ color: theme.colors.foreground, fontSize: 22, fontWeight: "800" }}>
+        <GaneshHeader
+          title="Permanent Fund"
+          icon={<Landmark size={22} color={g.saffron} strokeWidth={2.2} />}
+          onBack={back}
+        />
+        <Text style={{ color: theme.colors.foreground, fontFamily: theme.fontFamily.bold }}>
           Permanent Fund already exists
         </Text>
         <Text style={{ color: theme.colors.mutedForeground, lineHeight: 22 }}>
@@ -114,9 +123,11 @@ export default function AddPermanentFundScreen() {
 
   return (
     <GaneshScreen>
-      <Text style={{ color: theme.colors.foreground, fontSize: 22, fontWeight: "800" }}>
-        Add Permanent Fund
-      </Text>
+      <GaneshHeader
+        title="Add Permanent Fund"
+        icon={<Landmark size={22} color={g.saffron} strokeWidth={2.2} />}
+        onBack={back}
+      />
       <Text style={{ color: theme.colors.mutedForeground, lineHeight: 22 }}>
         Record money that already belongs to the Pandal. Saying No at setup only skipped this
         step. This is not a festival donation.
@@ -137,17 +148,19 @@ export default function AddPermanentFundScreen() {
         placeholder="Existing Pandal Fund"
       />
       {festival && canAllocate ? (
-        <View style={{ gap: 8 }}>
-          <Input
-            label={`Use for ${festival.name} (0 keeps it in the Permanent Fund)`}
-            value={allocateAmount}
-            onChangeText={setAllocateAmount}
-            keyboardType="numeric"
-          />
-          <Text style={{ color: theme.colors.mutedForeground }}>
-            Remaining Permanent Fund {formatInr(remaining)}.
-          </Text>
-        </View>
+        <FormDetails label="Allocate to this festival">
+          <View style={{ gap: 8 }}>
+            <Input
+              label={`Use for ${festival.name} (0 keeps it in the Permanent Fund)`}
+              value={allocateAmount}
+              onChangeText={setAllocateAmount}
+              keyboardType="numeric"
+            />
+            <Text style={{ color: theme.colors.mutedForeground }}>
+              Remaining Permanent Fund {formatInr(remaining)}.
+            </Text>
+          </View>
+        </FormDetails>
       ) : null}
       {!isOnline ? (
         <Text style={{ color: theme.colors.mutedForeground }}>

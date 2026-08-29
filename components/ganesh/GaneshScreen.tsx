@@ -9,7 +9,9 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { ganeshWebWidthStyle } from "@/components/ganesh/ui/GaneshWidthConstraint";
 import { BOTTOM_NAV_SCROLL_PADDING } from "@/components/layout/chrome";
+import { useBreakpoint } from "@/hooks/useBreakpoint";
 import { haptic } from "@/lib/haptics";
 import { useTheme } from "@/theme/ThemeProvider";
 
@@ -61,6 +63,8 @@ export function GaneshScreen({
 }: GaneshScreenProps) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
+  const { breakpoint } = useBreakpoint();
+  const widthStyle = ganeshWebWidthStyle(breakpoint);
 
   const paddingTop = (safeTop ? insets.top : 0) + theme.space.lg;
   const paddingBottom = withTabBar
@@ -83,7 +87,7 @@ export function GaneshScreen({
   };
 
   return (
-    <View style={[styles.fill, { backgroundColor: theme.colors.background }, style]}>
+    <View style={[styles.fill, { backgroundColor: theme.colors.background }, widthStyle, style]}>
       {scroll ? (
         <ScrollView
           style={styles.fill}

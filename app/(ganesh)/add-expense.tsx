@@ -4,10 +4,11 @@ import { useRouter } from "expo-router";
 import { Package, Receipt } from "lucide-react-native";
 
 import { ChoiceChips } from "@/components/ganesh/ChoiceChips";
+import { FormDetails } from "@/components/ganesh/FormDetails";
 import { GaneshImageUploader, type GaneshUploadStatus } from "@/components/ganesh/GaneshImageUploader";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { GaneshWriteLock } from "@/components/ganesh/GaneshWriteLock";
-import { useGaneshTokens } from "@/components/ganesh/ui";
+import { FilterChips, GaneshHeader, useGaneshTokens } from "@/components/ganesh/ui";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useFestivals } from "@/hooks/useFestivals";
@@ -87,6 +88,12 @@ export default function AddExpenseScreen() {
   const closed = festivals.find((item) => item.id === festivalId)?.status === "closed";
   const ledgerSaved = Boolean(savedId);
   const isAssetPurchase = kind === "asset_purchase" && canBuyAsset;
+  const fundingOptions: Array<{ id: Funding; label: string }> = [
+    { id: "god", label: "God Fund" },
+    { id: "personal", label: "Personal" },
+    { id: "split", label: "Split" },
+  ];
+  if (canLinkSponsor) fundingOptions.push({ id: "sponsored", label: "Sponsored" });
 
   const resolvedFunding = () => {
     const totalAmount = Number(total);
@@ -135,6 +142,10 @@ export default function AddExpenseScreen() {
 
   return (
     <GaneshScreen>
+      <GaneshHeader
+        title={isAssetPurchase ? "Add Pandal asset" : "Add expense"}
+        onBack={back}
+      />
       <View style={styles.kindRow}>
         <ExpenseKindCard
           selected={isAssetPurchase}
@@ -166,32 +177,14 @@ export default function AddExpenseScreen() {
       ) : null}
       <Input label="Expense name" value={name} onChangeText={setName} placeholder="Flowers" editable={!ledgerSaved} />
       <Input label="Amount" value={total} onChangeText={setTotal} keyboardType="numeric" editable={!ledgerSaved} />
-      <Text style={{ color: theme.colors.mutedForeground, fontWeight: "700" }}>Funding</Text>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-        {(["god", "personal", "split", ...(canLinkSponsor ? (["sponsored"] as const) : [])] as Funding[]).map((item) => (
-          <Pressable
-            key={item}
-            disabled={ledgerSaved}
-            onPress={() => setFunding(item)}
-            style={{
-              paddingHorizontal: 10,
-              paddingVertical: 6,
-              borderRadius: 999,
-              backgroundColor: funding === item ? theme.colors.primary : theme.colors.muted,
-            }}
-          >
-            <Text
-              style={{
-                color: funding === item ? theme.colors.primaryForeground : theme.colors.foreground,
-                fontWeight: "700",
-                textTransform: "capitalize",
-              }}
-            >
-              {item === "god" ? "God Fund" : item}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
+      <FilterChips
+        label="Funding"
+        layout="wrap"
+        value={funding}
+        options={fundingOptions}
+        onChange={setFunding}
+        disabled={ledgerSaved}
+      />
       {funding === "split" ? (
         <>
           <Input label="God Fund amount" value={godFund} onChangeText={setGodFund} keyboardType="numeric" editable={!ledgerSaved} />
@@ -218,150 +211,49 @@ export default function AddExpenseScreen() {
             Sponsored amount is not income. Pick a sponsor, or an open expense-type deal.
           </Text>
           {openExpenseDeals.length > 0 ? (
-            <>
-              <Text style={{ color: theme.colors.mutedForeground, fontWeight: "700" }}>
-                Open expense sponsorship
-              </Text>
-              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                <Pressable
-                  disabled={ledgerSaved}
-                  onPress={() => setLinkedSponsorshipId("")}
-                  style={{
-                    paddingHorizontal: 10,
-                    paddingVertical: 6,
-                    borderRadius: 999,
-                    backgroundColor: linkedSponsorshipId === "" ? theme.colors.primary : theme.colors.muted,
-                  }}
-                >
-                  <Text
-                    style={{
-                      color: linkedSponsorshipId === "" ? theme.colors.primaryForeground : theme.colors.foreground,
-                      fontWeight: "700",
-                    }}
-                  >
-                    New deal
-                  </Text>
-                </Pressable>
-                {openExpenseDeals.map((deal) => {
-                  const sponsorName = sponsors.find((item) => item.id === deal.sponsorId)?.name ?? "Sponsor";
-                  return (
-                    <Pressable
-                      key={deal.id}
-                      disabled={ledgerSaved}
-                      onPress={() => {
-                        setLinkedSponsorshipId(deal.id);
-                        setSponsorId(deal.sponsorId);
-                      }}
-                      style={{
-                        paddingHorizontal: 10,
-                        paddingVertical: 6,
-                        borderRadius: 999,
-                        backgroundColor: linkedSponsorshipId === deal.id ? theme.colors.primary : theme.colors.muted,
-                      }}
-                    >
-                      <Text
-                        style={{
-                          color:
-                            linkedSponsorshipId === deal.id
-                              ? theme.colors.primaryForeground
-                              : theme.colors.foreground,
-                          fontWeight: "700",
-                        }}
-                      >
-                        {sponsorName} · {purposeLabelOf(deal.purpose, deal.purposeLabel)} · {formatInr(deal.amount)}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </>
+            <FilterChips
+              label="Open expense sponsorship"
+              layout="wrap"
+              value={linkedSponsorshipId || "new"}
+              options={[
+                { id: "new", label: "New deal" },
+                ...openExpenseDeals.map((deal) => ({
+                  id: deal.id,
+                  label: `${sponsors.find((item) => item.id === deal.sponsorId)?.name ?? "Sponsor"} · ${purposeLabelOf(deal.purpose, deal.purposeLabel)} · ${formatInr(deal.amount)}`,
+                })),
+              ]}
+              onChange={(next) => {
+                if (next === "new") {
+                  setLinkedSponsorshipId("");
+                  return;
+                }
+                const deal = openExpenseDeals.find((item) => item.id === next);
+                setLinkedSponsorshipId(next);
+                if (deal) setSponsorId(deal.sponsorId);
+              }}
+              disabled={ledgerSaved}
+            />
           ) : null}
           {linkedSponsorshipId ? null : (
-            <>
-              <Text style={{ color: theme.colors.mutedForeground, fontWeight: "700" }}>Sponsor</Text>
-              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                {sponsors.map((item) => (
-                  <Pressable
-                    key={item.id}
-                    disabled={ledgerSaved}
-                    onPress={() => setSponsorId(item.id)}
-                    style={{
-                      paddingHorizontal: 10,
-                      paddingVertical: 6,
-                      borderRadius: 999,
-                      backgroundColor: sponsorId === item.id ? theme.colors.primary : theme.colors.muted,
-                    }}
-                  >
-                    <Text
-                      style={{
-                        color: sponsorId === item.id ? theme.colors.primaryForeground : theme.colors.foreground,
-                        fontWeight: "700",
-                      }}
-                    >
-                      {item.name}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-            </>
+            <FilterChips
+              label="Sponsor"
+              layout="wrap"
+              value={sponsorId}
+              options={sponsors.map((item) => ({ id: item.id, label: item.name }))}
+              onChange={setSponsorId}
+              disabled={ledgerSaved}
+            />
           )}
         </View>
       ) : null}
-      <Text style={{ color: theme.colors.mutedForeground, fontWeight: "700" }}>Category</Text>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-        {visibleCategories.map((category) => (
-          <Pressable
-            key={category.id}
-            disabled={ledgerSaved}
-            onPress={() => setCategoryId(category.id)}
-            style={{
-              paddingHorizontal: 10,
-              paddingVertical: 6,
-              borderRadius: 999,
-              backgroundColor: (categoryId || visibleCategories[0]?.id) === category.id ? theme.colors.primary : theme.colors.muted,
-            }}
-          >
-            <Text
-              style={{
-                color:
-                  (categoryId || visibleCategories[0]?.id) === category.id
-                    ? theme.colors.primaryForeground
-                    : theme.colors.foreground,
-                fontWeight: "700",
-              }}
-            >
-              {category.name}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-      <Text style={{ color: theme.colors.mutedForeground, fontWeight: "700" }}>Paid by</Text>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-        {members.map((member) => (
-          <Pressable
-            key={member.userId}
-            disabled={ledgerSaved}
-            onPress={() => setPaidByMemberId(member.userId)}
-            style={{
-              paddingHorizontal: 10,
-              paddingVertical: 6,
-              borderRadius: 999,
-              backgroundColor: paidByMemberId === member.userId ? theme.colors.primary : theme.colors.muted,
-            }}
-          >
-            <Text
-              style={{
-                color: paidByMemberId === member.userId ? theme.colors.primaryForeground : theme.colors.foreground,
-                fontWeight: "700",
-              }}
-            >
-              {member.displayName}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-      <Input label="Vendor (optional)" value={vendor} onChangeText={setVendor} editable={!ledgerSaved} />
-      <Input label="Notes (optional)" value={notes} onChangeText={setNotes} editable={!ledgerSaved} />
+      <FilterChips
+        label="Category"
+        layout="wrap"
+        value={categoryId || visibleCategories[0]?.id || ""}
+        options={visibleCategories.map((category) => ({ id: category.id, label: category.name }))}
+        onChange={setCategoryId}
+        disabled={ledgerSaved}
+      />
       {isAssetPurchase ? (
         <View style={{ gap: 16 }}>
           <Input
@@ -385,6 +277,21 @@ export default function AddExpenseScreen() {
             onChange={setAssetCategory}
             disabled={ledgerSaved}
           />
+        </View>
+      ) : null}
+      <FormDetails>
+      <FilterChips
+        label="Paid by"
+        layout="wrap"
+        value={paidByMemberId}
+        options={members.map((member) => ({ id: member.userId, label: member.displayName }))}
+        onChange={setPaidByMemberId}
+        disabled={ledgerSaved}
+      />
+      <Input label="Vendor (optional)" value={vendor} onChangeText={setVendor} editable={!ledgerSaved} />
+      <Input label="Notes (optional)" value={notes} onChangeText={setNotes} editable={!ledgerSaved} />
+      {isAssetPurchase ? (
+        <View style={{ gap: 16 }}>
           <ChoiceChips
             label="Unit"
             value={assetUnit}
@@ -438,6 +345,7 @@ export default function AddExpenseScreen() {
             .finally(() => setBusy(false));
         }}
       />
+      </FormDetails>
       <Button
         loading={busy}
         disabled={closed || ledgerSaved}

@@ -1,15 +1,19 @@
 import { useMemo, useState } from "react";
 import { Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { Flame } from "lucide-react-native";
 
+import { FormDetails } from "@/components/ganesh/FormDetails";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { GaneshWriteLock } from "@/components/ganesh/GaneshWriteLock";
 import {
   FilterChips,
+  GaneshHeader,
   MetaLabel,
   Section,
   SEVA_KINDS,
   sevaKindLabel,
+  useGaneshTokens,
 } from "@/components/ganesh/ui";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -44,8 +48,8 @@ export default function AddSevaScreen() {
   const [endTime, setEndTime] = useState("");
   const [location, setLocation] = useState("");
   const [notes, setNotes] = useState("");
-  const [showDetails, setShowDetails] = useState(false);
   const [busy, setBusy] = useState(false);
+  const g = useGaneshTokens();
 
   const kindOptions = useMemo(
     () => SEVA_KINDS.map((item) => ({ id: item, label: sevaKindLabel(item) })),
@@ -61,6 +65,11 @@ export default function AddSevaScreen() {
 
   return (
     <GaneshScreen>
+      <GaneshHeader
+        title="Plan a seva"
+        icon={<Flame size={22} color={g.saffron} strokeWidth={2.2} />}
+        onBack={back}
+      />
       <Text style={{ color: theme.colors.mutedForeground, lineHeight: 21 }}>
         A seva is something the Pandal does — an aarti, annadanam, a programme. Money spent on it
         is recorded separately as an expense.
@@ -102,32 +111,26 @@ export default function AddSevaScreen() {
       </View>
       <MetaLabel>Date as YYYY-MM-DD, time on a 24-hour clock.</MetaLabel>
 
-      {showDetails ? (
-        <>
-          <Input
-            label="End time (optional)"
-            value={endTime}
-            onChangeText={setEndTime}
-            placeholder="07:00"
-          />
-          <Input
-            label="Where (optional)"
-            value={location}
-            onChangeText={setLocation}
-            placeholder="Main pandal"
-          />
-          <Input
-            label="Notes (optional)"
-            value={notes}
-            onChangeText={setNotes}
-            placeholder="Anything the volunteers should know"
-          />
-        </>
-      ) : (
-        <Button variant="ghost" onPress={() => setShowDetails(true)}>
-          Add details
-        </Button>
-      )}
+      <FormDetails>
+        <Input
+          label="End time (optional)"
+          value={endTime}
+          onChangeText={setEndTime}
+          placeholder="07:00"
+        />
+        <Input
+          label="Where (optional)"
+          value={location}
+          onChangeText={setLocation}
+          placeholder="Main pandal"
+        />
+        <Input
+          label="Notes (optional)"
+          value={notes}
+          onChangeText={setNotes}
+          placeholder="Anything the volunteers should know"
+        />
+      </FormDetails>
 
       {!valid.ok && (name.trim() || date !== todayDateInput()) ? (
         <Text style={{ color: theme.colors.destructive, fontSize: 13 }}>{valid.error}</Text>

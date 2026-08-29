@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { Alert, Text, View } from "react-native";
 import { useRouter } from "expo-router";
+import { CalendarDays } from "lucide-react-native";
 
 import { AdminLinkRow } from "@/components/ganesh/AdminLinkRow";
 import { AdminQueryState } from "@/components/ganesh/AdminQueryState";
 import { FestivalWindowFields } from "@/components/ganesh/FestivalWindowFields";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
-import { Section } from "@/components/ganesh/ui";
+import { GaneshHeader, Section, useGaneshTokens } from "@/components/ganesh/ui";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useFestivals } from "@/hooks/useFestivals";
@@ -19,7 +20,8 @@ import { useTheme } from "@/theme/ThemeProvider";
 
 export default function AdminFestivalsScreen() {
   const { theme } = useTheme();
-  const { push } = useRouter();
+  const g = useGaneshTokens();
+  const { push, back } = useRouter();
   const { pandalId, festivalId, setSession } = useGaneshSession();
   const { festivals, loading, error, retry } = useFestivals(pandalId);
   const writes = useGaneshWrites();
@@ -35,6 +37,11 @@ export default function AdminFestivalsScreen() {
 
   return (
     <GaneshScreen>
+      <GaneshHeader
+        title="Festivals"
+        icon={<CalendarDays size={22} color={g.saffron} strokeWidth={2.2} />}
+        onBack={back}
+      />
       <Text style={{ color: theme.colors.mutedForeground, lineHeight: 22 }}>
         Opening money comes from the Permanent Fund or Opening Fund screens. Set the first and
         last day so Home can show “Day 4 of 10” and Seva can draw the full day strip.

@@ -793,12 +793,12 @@ Phase 3 — no `.env` in this worktree. Needs a real device pass.
 
 ## 6.10 Remaining work
 
-Branch: `claude/ganesh-seva-redesign-1372fa`. Phases 1–4 are on this branch.
-Phase 5 remains.
+Branch: `claude/ganesh-seva-redesign-1372fa`. Phases 1–5 are on this branch.
+Phase 5 is recorded in §6.12.
 
-Before starting it, read §6.1–§6.3 for the design rules the earlier phases
-established — chiefly: **Ganesh owns its surfaces** (`components/ganesh/ui/surfaces.tsx`;
-nothing under `components/ganesh/` may import `components/dashboard/`), amounts
+Before using the new screens, read §6.1–§6.3 for the design rules — chiefly:
+**Ganesh owns its surfaces** (`components/ganesh/ui/surfaces.tsx`; nothing
+under `components/ganesh/` may import `components/dashboard/`), amounts
 render in `foreground` and never in the accent, and the arch appears on hero
 surfaces only.
 
@@ -811,43 +811,15 @@ surfaces only.
    ```bash
    firebase deploy --only firestore:rules
    ```
-2. **Device pass on everything behind sign-in.** Phases 3 and 4 — Command
-   Center, Seva, Funds (now hosting the ledgers), People, Pandal identity,
-   assets glance — are covered by typecheck, a clean production bundle and
+2. **Device pass on everything behind sign-in.** Phases 3–5 — Command
+   Center, Seva, Funds, People, Pandal identity, Transparency, add-* forms,
+   and Admin — are covered by typecheck, a clean production bundle and
    pure-logic tests only. They have never been rendered against real data.
 
----
-
-### Phase 5 — Reports, forms, responsive, polish
-
-**5a. `report.tsx` (132 lines) → Pandal Transparency.** The last screen
-untouched by *either* redesign: 21 undifferentiated `MetricGrid` tiles and raw
-inline styles. Rebuild as something a committee can read aloud at a meeting —
-where money came from, where it went, what the Pandal now owns. Keep
-promised-vs-received and the regular/asset expense split intact; both are
-already computed by `ganeshMath` and `summarizeContributions`.
-
-**5b. The ten `add-*` forms.** Progressive disclosure and larger touch targets,
-following the pattern in `add-seva.tsx`. `add-expense.tsx` is the big one.
-
-**5c. Remaining `admin/*` screens** (1415 lines across 7 files) — `audit.tsx`
-(278) and `index.tsx` (449) are the substantial ones.
-
-**5d. Native headers.** 17 screens still use the native Stack header
-(`app/(ganesh)/_layout.tsx`, the `options={{ title: ... }}` entries) while
-redesigned screens draw their own `GaneshHeader`. Convert as each screen is
-redesigned so the two styles never collide within one flow.
-
-**5e. Responsive.** Add `hooks/useBreakpoint.ts` (`compact <600`,
-`medium 600–1023`, `expanded ≥1024`). Ganesh currently inherits the shared
-480px `webWidthConstraintStyle`; give it 720/1100 caps and two-column reflow for
-stat strips and section pairs. **Do not edit
-`components/common/WebWidthConstraint.tsx`** — it is shared with Expense and
-Nutrition. Add a Ganesh equivalent. Bottom nav stays at all sizes; no desktop
-sidebar (confirmed scope decision, §6.2).
-
-**5f. Success/error language.** "Seva recorded", "Contribution received" through
-the existing `lib/toast` + `lib/errors` paths.
+Detail screens that were not redesigned in Phase 5 still use the native
+Stack header: `expense/[id]`, `contribution/[id]`, `household/[id]`,
+`close-festival`, and the first-run `setup` chooser. Convert those if a
+later pass touches those flows.
 
 ---
 
@@ -900,3 +872,88 @@ firebase deploy --only firestore:rules
 
 That command compiles the rules first, which is also the syntax check this
 environment could not run.
+
+## 6.12 Phase 5 — Reports, forms, responsive, polish
+
+Status: **complete** (2026-08-29). The last undifferentiated report is now
+something a committee can read aloud; the ten add-* forms hide optional
+fields; Admin uses Ganesh surfaces; Ganesh has its own web width.
+
+### 5a. Pandal Transparency
+
+`report.tsx` is sectioned: where money came from, where it went, what the
+Pandal owns, then promised-vs-received and sponsors. Numbers still come from
+`ganeshMath`, `summarizeContributions`, `summarizeSponsorships`, and
+`summarizeAssets`. Recalculate stays behind `festival.update`. `MetricGrid`
+is gone from this screen.
+
+### 5b. Progressive disclosure on add-* forms
+
+`FormDetails` is the shared “Add details” toggle. Required fields stay up
+front; vendor, notes, photos, contact extras, and asset metadata sit behind
+it. Tiny solid-primary chips are `FilterChips` / `ChoiceChips`. Write
+payloads and validation are unchanged. `add-expense.tsx` still offers the
+Pandal Asset / Festival Expense cards and the same funding / save paths.
+
+### 5c. Admin
+
+`admin/index.tsx` uses `StatTile` / `Money` and `GaneshEmptyState` instead of
+`MetricGrid` and the Expense `EmptyState`. `admin/audit.tsx` uses
+`FilterChips` and `DataRow`. Settings, festivals, categories, setup, and
+reports draw `GaneshHeader` + `Section` / `StatStrip`.
+
+### 5d. Native headers
+
+Every add-* form, Transparency, create-festival, and every Admin sub-screen
+is `headerShown: false` with an in-content `GaneshHeader` + back. Detail
+screens not redesigned in this phase keep the native bar so the two styles
+do not collide inside a form flow.
+
+### 5e. Responsive
+
+`shared/utils/ganeshBreakpoint.ts` is the pure cut (`compact <600`,
+`medium 600–1023`, `expanded ≥1024`) with tests. `hooks/useBreakpoint.ts`
+reads the window. `ganeshWebWidthStyle` caps web at 720 / 1100.
+`GaneshScreen` applies it. The root Stack **opts ganesh routes out of the
+shared 480 cap** (`app/_layout.tsx` contentStyle without
+`webWidthConstraintStyle`) because a child 720 cannot exceed a 480 parent.
+`WebWidthConstraint.tsx` is untouched. `StatStrip` and `SectionPair` reflow
+stat tiles and section pairs. Bottom nav stays; no desktop sidebar.
+
+### 5f. Success language
+
+`useGaneshWrites` `run(label)` toasts: “Seva recorded”, “Contribution
+received” (on receive / received create), “Collection recorded”, “Expense
+recorded”, “Reimbursement recorded”. Errors still go through `lib/errors`.
+
+### Files
+
+| File | Change |
+| --- | --- |
+| `shared/utils/ganeshBreakpoint.ts` | **new** — width → bucket + web max |
+| `hooks/useBreakpoint.ts` | **new** — window hook |
+| `components/ganesh/ui/GaneshWidthConstraint.ts` | **new** — 720 / 1100 web cap |
+| `components/ganesh/ui/{StatStrip,SectionPair}.tsx` | **new** — reflow |
+| `components/ganesh/FormDetails.tsx` | **new** — Add details toggle |
+| `components/ganesh/GaneshScreen.tsx` | applies Ganesh web width |
+| `app/_layout.tsx` | ganesh routes drop the 480 cap |
+| `app/(ganesh)/report.tsx` | Pandal Transparency |
+| `app/(ganesh)/add-*.tsx` | header + progressive disclosure |
+| `app/(ganesh)/admin/*` | GaneshHeader, StatTile, FilterChips |
+| `hooks/useGaneshWrites.ts` | recorded / received toast labels |
+
+### Verification (Phase 5)
+
+- `npx tsc -p tsconfig.json --noEmit` and `tsconfig.shared.json` — clean
+- `npm test` — **129 files / 1351 tests passing** (was 128 / 1346; +5
+  breakpoint tests)
+- `npx expo export --platform web` for Ganesh — **exports cleanly**, no
+  import cycle from the new surfaces
+- Ganesh does not leak: `components/ganesh` / `GaneshThemeProvider` /
+  `ganeshPalette` still appear only under `components/ganesh/` and
+  `app/(ganesh*)`
+- `components/common/WebWidthConstraint.tsx` is untouched
+
+**Not verified visually: screens behind authentication**, same constraint as
+Phases 3 and 4. No `.env` in this worktree.
+

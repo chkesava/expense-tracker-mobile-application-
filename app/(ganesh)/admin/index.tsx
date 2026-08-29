@@ -1,4 +1,5 @@
 import { useEffect, useMemo } from "react";
+import { Text } from "react-native";
 import { useRouter } from "expo-router";
 import {
   AlertTriangle,
@@ -19,15 +20,18 @@ import {
 
 import { AdminQueryState } from "@/components/ganesh/AdminQueryState";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
-import { MetricGrid } from "@/components/ganesh/MetricGrid";
 import {
+  GaneshEmptyState,
   GaneshHeader,
+  Money,
   NavRow,
   Section,
+  SectionPair,
+  StatStrip,
+  StatTile,
   useGaneshTokens,
   type StatusKind,
 } from "@/components/ganesh/ui";
-import { EmptyState } from "@/components/common/EmptyState";
 import { useContributions } from "@/hooks/useContributions";
 import { useFestivals } from "@/hooks/useFestivals";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
@@ -268,33 +272,52 @@ export default function AdminDashboardScreen() {
           retryRequests();
         }}
       >
-        <MetricGrid
-          items={[
-            {
-              label: "Members",
-              value: `${activeMembers.length}`,
-              meta: requests.length > 0 ? `${requests.length} waiting` : "All approved",
-              onPress: () => push("/(ganesh)/members" as never),
-            },
-            {
-              label: "Permanent Fund",
-              value: fund.total,
-              meta: "Carries across festivals",
-              onPress: () => push("/(ganesh)/permanent-fund" as never),
-            },
-            {
-              label: "Pending reimbursement",
-              value: pendingReimb,
-              meta: pendingReimb > 0 ? "Owed to members" : "All settled",
-            },
-            {
-              label: "Pandal assets",
-              value: `${assetSummary.totalItems}`,
-              meta: `${assetSummary.available} available`,
-              onPress: () => push("/(ganesh)/assets" as never),
-            },
-          ]}
-        />
+        <StatStrip>
+          <StatTile
+            label="Members"
+            meta={
+              <Text style={{ color: theme.colors.mutedForeground, fontSize: 12 }}>
+                {requests.length > 0 ? `${requests.length} waiting` : "All approved"}
+              </Text>
+            }
+          >
+            <Text style={{ color: theme.colors.foreground, fontFamily: theme.fontFamily.bold, fontSize: 22 }}>
+              {activeMembers.length}
+            </Text>
+          </StatTile>
+          <StatTile
+            label="Permanent Fund"
+            meta={
+              <Text style={{ color: theme.colors.mutedForeground, fontSize: 12 }}>
+                Carries across festivals
+              </Text>
+            }
+          >
+            <Money value={fund.total} size="title" />
+          </StatTile>
+          <StatTile
+            label="Pending reimbursement"
+            meta={
+              <Text style={{ color: theme.colors.mutedForeground, fontSize: 12 }}>
+                {pendingReimb > 0 ? "Owed to members" : "All settled"}
+              </Text>
+            }
+          >
+            <Money value={pendingReimb} size="title" />
+          </StatTile>
+          <StatTile
+            label="Pandal assets"
+            meta={
+              <Text style={{ color: theme.colors.mutedForeground, fontSize: 12 }}>
+                {assetSummary.available} available
+              </Text>
+            }
+          >
+            <Text style={{ color: theme.colors.foreground, fontFamily: theme.fontFamily.bold, fontSize: 22 }}>
+              {assetSummary.totalItems}
+            </Text>
+          </StatTile>
+        </StatStrip>
 
         <Section
           title="Needs attention"
@@ -311,9 +334,9 @@ export default function AdminDashboardScreen() {
           iconTint={needs.length > 0 ? g.wash(theme.colors.warning) : undefined}
         >
           {needs.length === 0 ? (
-            <EmptyState
+            <GaneshEmptyState
               compact
-              illustration="general"
+              icon={<ShieldCheck size={20} color={g.saffron} strokeWidth={2.2} />}
               title="You're all caught up"
               description="No join requests or urgent money items right now."
             />
@@ -334,6 +357,7 @@ export default function AdminDashboardScreen() {
           )}
         </Section>
 
+        <SectionPair>
         <Section title="People">
           <NavRow
             title="Members"
@@ -392,7 +416,9 @@ export default function AdminDashboardScreen() {
             onPress={() => push("/(ganesh)/admin/setup" as never)}
           />
         </Section>
+        </SectionPair>
 
+        <SectionPair>
         <Section title="Pandal property">
           <NavRow
             title="Assets"
@@ -443,6 +469,7 @@ export default function AdminDashboardScreen() {
             onPress={() => push("/(ganesh)/admin/settings" as never)}
           />
         </Section>
+        </SectionPair>
       </AdminQueryState>
     </GaneshScreen>
   );

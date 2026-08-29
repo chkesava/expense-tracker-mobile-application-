@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { useRouter } from "expo-router";
+import { Package } from "lucide-react-native";
 
 import { ChoiceChips } from "@/components/ganesh/ChoiceChips";
+import { FormDetails } from "@/components/ganesh/FormDetails";
 import { GaneshImageUploader, type GaneshUploadStatus } from "@/components/ganesh/GaneshImageUploader";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { GaneshWriteLock } from "@/components/ganesh/GaneshWriteLock";
+import { FilterChips, GaneshHeader, useGaneshTokens } from "@/components/ganesh/ui";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useGaneshExpenses } from "@/hooks/useGaneshExpenses";
@@ -28,6 +31,7 @@ import { useTheme } from "@/theme/ThemeProvider";
 
 export default function AddAssetScreen() {
   const { theme } = useTheme();
+  const g = useGaneshTokens();
   const { back } = useRouter();
   const { pandalId, festivalId } = useGaneshSession();
   const { expenses } = useGaneshExpenses(pandalId, festivalId);
@@ -85,6 +89,11 @@ export default function AddAssetScreen() {
 
   return (
     <GaneshScreen>
+      <GaneshHeader
+        title="Add asset"
+        icon={<Package size={22} color={g.saffron} strokeWidth={2.2} />}
+        onBack={back}
+      />
       <Input
         label="Item name"
         value={name}
@@ -106,6 +115,7 @@ export default function AddAssetScreen() {
         keyboardType="number-pad"
         editable={!savedId}
       />
+      <FormDetails>
       <ChoiceChips
         label="Unit"
         value={unit}
@@ -137,53 +147,19 @@ export default function AddAssetScreen() {
               No expenses this festival. You can still add the item.
             </Text>
           ) : (
-            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-              <Pressable
-                disabled={Boolean(savedId)}
-                onPress={() => setRelatedExpenseId("")}
-                style={{
-                  paddingHorizontal: 10,
-                  paddingVertical: 6,
-                  borderRadius: 999,
-                  backgroundColor: !relatedExpenseId ? theme.colors.primary : theme.colors.muted,
-                }}
-              >
-                <Text
-                  style={{
-                    color: !relatedExpenseId ? theme.colors.primaryForeground : theme.colors.foreground,
-                    fontWeight: "700",
-                  }}
-                >
-                  None
-                </Text>
-              </Pressable>
-              {openExpenses.map((expense) => (
-                <Pressable
-                  key={expense.id}
-                  disabled={Boolean(savedId)}
-                  onPress={() => setRelatedExpenseId(expense.id)}
-                  style={{
-                    paddingHorizontal: 10,
-                    paddingVertical: 6,
-                    borderRadius: 999,
-                    backgroundColor:
-                      relatedExpenseId === expense.id ? theme.colors.primary : theme.colors.muted,
-                  }}
-                >
-                  <Text
-                    style={{
-                      color:
-                        relatedExpenseId === expense.id
-                          ? theme.colors.primaryForeground
-                          : theme.colors.foreground,
-                      fontWeight: "700",
-                    }}
-                  >
-                    {expense.name} · {formatInr(expense.totalAmount)}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
+            <FilterChips
+              layout="wrap"
+              value={relatedExpenseId || "none"}
+              options={[
+                { id: "none", label: "None" },
+                ...openExpenses.map((expense) => ({
+                  id: expense.id,
+                  label: `${expense.name} · ${formatInr(expense.totalAmount)}`,
+                })),
+              ]}
+              onChange={(next) => setRelatedExpenseId(next === "none" ? "" : next)}
+              disabled={Boolean(savedId)}
+            />
           )}
         </View>
       ) : null}
@@ -265,6 +241,7 @@ export default function AddAssetScreen() {
             .finally(() => setBusy(false));
         }}
       />
+      </FormDetails>
       <Button
         loading={busy}
         disabled={Boolean(savedId)}

@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { useRouter } from "expo-router";
+import { Gift } from "lucide-react-native";
 
 import { ChoiceChips } from "@/components/ganesh/ChoiceChips";
+import { FormDetails } from "@/components/ganesh/FormDetails";
 import { GaneshImageUploader, type GaneshUploadStatus } from "@/components/ganesh/GaneshImageUploader";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { GaneshWriteLock } from "@/components/ganesh/GaneshWriteLock";
+import { GaneshHeader, useGaneshTokens } from "@/components/ganesh/ui";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
@@ -42,6 +45,7 @@ const PHOTO_KINDS: ContributionKind[] = ["item", "service", "sponsorship"];
 
 export default function AddContributionScreen() {
   const { theme } = useTheme();
+  const g = useGaneshTokens();
   const { back } = useRouter();
   const writes = useGaneshWrites();
   const { can } = useGaneshPermissions();
@@ -109,12 +113,14 @@ export default function AddContributionScreen() {
 
   return (
     <GaneshScreen>
-      <Text style={{ color: theme.colors.mutedForeground }}>
-        Contributor is who gave the item or money. You are only recording it.
-      </Text>
-      <Text style={{ color: theme.colors.mutedForeground }}>
-        A promised contribution does not change festival cash. Totals update only when it is
-        received.
+      <GaneshHeader
+        title="Add contribution"
+        icon={<Gift size={22} color={g.saffron} strokeWidth={2.2} />}
+        onBack={back}
+      />
+      <Text style={{ color: theme.colors.mutedForeground, lineHeight: 21 }}>
+        Contributor is who gave the item or money. You are only recording it. A promised
+        contribution does not change festival cash.
       </Text>
       <ChoiceChips
         label="Type"
@@ -147,13 +153,6 @@ export default function AddContributionScreen() {
         value={contributorName}
         onChangeText={setContributorName}
         placeholder="Suresh Kumar"
-        editable={!ledgerSaved}
-      />
-      <Input
-        label="Mobile (optional)"
-        value={mobile}
-        onChangeText={setMobile}
-        keyboardType="phone-pad"
         editable={!ledgerSaved}
       />
       {kind === "money" ? (
@@ -198,33 +197,32 @@ export default function AddContributionScreen() {
           editable={!ledgerSaved}
         />
       ) : null}
-      <Input
-        label="Description (optional)"
-        value={description}
-        onChangeText={setDescription}
-        editable={!ledgerSaved}
-      />
+      <FormDetails>
+        <Input
+          label="Mobile (optional)"
+          value={mobile}
+          onChangeText={setMobile}
+          keyboardType="phone-pad"
+          editable={!ledgerSaved}
+        />
+        <Input
+          label="Description (optional)"
+          value={description}
+          onChangeText={setDescription}
+          editable={!ledgerSaved}
+        />
       {canLinkAsset ? (
         <View style={{ gap: 12 }}>
-          <Pressable
+          <ChoiceChips
+            label="Pandal asset"
+            value={addAsAsset ? "yes" : "no"}
+            options={[
+              { id: "no", label: "Contribution only" },
+              { id: "yes", label: "Also add as Pandal asset" },
+            ]}
+            onChange={(next) => setAddAsAsset(next === "yes")}
             disabled={ledgerSaved}
-            onPress={() => setAddAsAsset((prev) => !prev)}
-            style={{
-              paddingHorizontal: 10,
-              paddingVertical: 8,
-              borderRadius: 12,
-              backgroundColor: addAsAsset ? theme.colors.primary : theme.colors.muted,
-            }}
-          >
-            <Text
-              style={{
-                color: addAsAsset ? theme.colors.primaryForeground : theme.colors.foreground,
-                fontWeight: "700",
-              }}
-            >
-              Also add as Pandal asset
-            </Text>
-          </Pressable>
+          />
           {addAsAsset ? (
             <>
               <Text style={{ color: theme.colors.mutedForeground }}>
@@ -294,6 +292,7 @@ export default function AddContributionScreen() {
           }}
         />
       ) : null}
+      </FormDetails>
       <Button
         loading={busy}
         disabled={ledgerSaved}
