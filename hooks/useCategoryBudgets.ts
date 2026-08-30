@@ -1,65 +1,32 @@
-import { useEffect, useState } from "react";
 import {
   addDoc,
   collection,
   deleteDoc,
   doc,
-  onSnapshot,
-  orderBy,
-  query,
   serverTimestamp,
 } from "firebase/firestore";
 
 import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
 import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
-import { snapshotErrorHandler } from "@/lib/firestoreErrors";
-import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
-import type { CategoryBudget } from "@/shared/types/expense";
+import { useExpenseReferenceData } from "@/providers/ExpenseReferenceDataProvider";
 
 export const useCategoryBudgets = (options?: { enabled?: boolean }) => {
   const enabled = options?.enabled !== false;
   const { user } = useAuth();
   const uid = user?.uid;
-  const [budgets, setBudgets] = useState<CategoryBudget[]>([]);
-  const [loading, setLoading] = useState(true);
-  const { error, setError, retry, attempt } = useLoadFailure();
-
-  useEffect(() => {
-    const db = getFirestoreDb();
-    if (!uid || !enabled || !db) {
-      setBudgets([]);
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-    const q = query(
-      collection(db, "users", uid, "categoryBudgets"),
-      orderBy("month", "desc")
-    );
-
-    return onSnapshot(
-      q,
-      (snap) => {
-        setBudgets(
-          snap.docs.map((d) => ({ id: d.id, ...d.data() } as CategoryBudget))
-        );
-        setError(null);
-        setLoading(false);
-      },
-      snapshotErrorHandler(
-        "snapshot.categoryBudgets",
-        (failure) => {
-          setError(failure);
-          setLoading(false);
-        },
-        "Couldn't load your budgets."
-      )
-    );
-  }, [uid, enabled, attempt]);
+  const {
+    budgets: sharedBudgets,
+    budgetsLoading,
+    budgetsError,
+    retryBudgets,
+  } = useExpenseReferenceData();
+  const budgets = enabled ? sharedBudgets : [];
+  const loading = enabled ? budgetsLoading : false;
+  const error = enabled ? budgetsError : null;
+  const retry = retryBudgets;
 
   const addBudget = async (
     category: string,

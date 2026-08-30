@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { User } from "firebase/auth";
-import { authErrorMessage, createDuressUser } from "./authHelpers";
+import {
+  authErrorMessage,
+  createDuressUser,
+  shouldIgnoreAuthUidChange,
+} from "./authHelpers";
 
 function mockUser(uid: string): User {
   return {
@@ -51,6 +55,17 @@ describe("authHelpers", () => {
       const real = mockUser("uid-1");
       createDuressUser(real);
       expect(real.uid).toBe("uid-1");
+    });
+  });
+
+  describe("shouldIgnoreAuthUidChange", () => {
+    it("ignores token-refresh callbacks for the same uid", () => {
+      expect(shouldIgnoreAuthUidChange("abc", "abc")).toBe(true);
+    });
+
+    it("does not ignore the first auth event or a real sign-out", () => {
+      expect(shouldIgnoreAuthUidChange(undefined, "abc")).toBe(false);
+      expect(shouldIgnoreAuthUidChange("abc", null)).toBe(false);
     });
   });
 });

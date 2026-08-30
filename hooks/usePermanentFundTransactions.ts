@@ -1,16 +1,21 @@
-import { useGaneshCollection } from "@/hooks/ganesh/useGaneshCollection";
+import { useSharedOrLocalCollection } from "@/hooks/ganesh/useSharedOrLocalCollection";
+import { useGaneshData } from "@/providers/GaneshDataProvider";
 import type { PermanentFundTransaction } from "@/shared/types/ganesh";
 import { permanentFundTransactionsCol } from "@/shared/utils/ganeshPaths";
 
 export function usePermanentFundTransactions(pandalId: string | null) {
-  const { items, loading, error } = useGaneshCollection<PermanentFundTransaction>(
-    pandalId ? permanentFundTransactionsCol(pandalId) : null,
-    (id, data, pendingWrite) => ({
+  const data = useGaneshData();
+  const { items, loading, error } = useSharedOrLocalCollection<PermanentFundTransaction>({
+    useShared: Boolean(pandalId) && pandalId === data.sessionPandalId,
+    requestShared: () => data.request("permanentFundTx"),
+    shared: data.fundTransactions,
+    path: pandalId ? permanentFundTransactionsCol(pandalId) : null,
+    mapDoc: (id, docData, pendingWrite) => ({
       id,
-      ...(data as Omit<PermanentFundTransaction, "id">),
+      ...(docData as Omit<PermanentFundTransaction, "id">),
       pendingWrite,
     }),
-    { orderByField: "createdAt", orderDirection: "desc", limitTo: 200 }
-  );
+    query: { orderByField: "createdAt", orderDirection: "desc", limitTo: 200 },
+  });
   return { transactions: items, loading, error };
 }

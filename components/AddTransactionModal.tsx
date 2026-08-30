@@ -36,14 +36,16 @@ export function AddTransactionModal() {
               : "Add Transaction"
       }
     >
-      <ExpenseForm
-        embedded
-        initialType={addTransactionKind}
-        editingExpense={editingExpense}
-        editingIncome={editingIncome}
-        onSuccess={handleClose}
-        onCancel={handleClose}
-      />
+      {isAddExpenseOpen ? (
+        <ExpenseForm
+          embedded
+          initialType={addTransactionKind}
+          editingExpense={editingExpense}
+          editingIncome={editingIncome}
+          onSuccess={handleClose}
+          onCancel={handleClose}
+        />
+      ) : null}
     </Modal>
   );
 }

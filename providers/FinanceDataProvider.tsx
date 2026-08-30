@@ -4,7 +4,6 @@ import {
   deleteDoc,
   doc,
   getDocs,
-  limit,
   onSnapshot,
   orderBy,
   query,
@@ -52,11 +51,12 @@ import {
 } from "@/shared/utils/accountIdentity";
 import { isValidDateKey, todayDateKey } from "@/shared/utils/dates";
 import { snapshotErrorHandler, type LoadFailure } from "@/lib/firestoreErrors";
+import {
+  forgetSnapshotPath,
+  logQuerySnapshot,
+} from "@/lib/firestoreReadDebug";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { scheduleIdleWork } from "@/shared/utils/scheduleIdle";
-
-/** Initial first-paint window — full history loads on idle */
-const INITIAL_EXPENSE_LIMIT = 200;
 
 // ─── Granular Context Types ───────────────────────────────────────────────────
 
@@ -155,6 +155,7 @@ function sortByDateDesc<T extends { date: string }>(items: T[]) {
 
 export function FinanceDataProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
+  const uid = user?.uid;
   const db = getFirestoreDb();
 
   const userRef = useRef(user);
@@ -225,11 +226,11 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
   const repairedTodayBaselinesRef = useRef(new Set<string>());
 
   useEffect(() => {
-    if (!user) repairedTodayBaselinesRef.current.clear();
-  }, [user]);
+    if (!uid) repairedTodayBaselinesRef.current.clear();
+  }, [uid]);
 
   useEffect(() => {
-    if (!user || !db || accountsLoading) return;
+    if (!uid || !db || accountsLoading) return;
     const today = todayDateKey();
     for (const account of accounts) {
       if (!account.id) continue;
@@ -239,7 +240,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       const accountId = account.id;
       void commitWrite(
         () =>
-          updateDoc(doc(db, "users", user.uid, "accounts", accountId), {
+          updateDoc(doc(db, "users", uid, "accounts", accountId), {
             balanceAsOfDate: null,
           }),
         {
@@ -254,16 +255,12 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         logError("financeDataProvider.clearAccidentalBaseline", error);
       });
     }
-  }, [accounts, accountsLoading, db, user]);
+  }, [accounts, accountsLoading, db, uid]);
 
   // ─── Critical listeners (First paint) ────────────────────────────────────────
 
-  const limitedExpensesUnsubRef = useRef<(() => void) | null>(null);
-
   useEffect(() => {
-    if (!user || !db) {
-      limitedExpensesUnsubRef.current?.();
-      limitedExpensesUnsubRef.current = null;
+    if (!uid || !db) {
       setExpenses([]);
       setIncomes([]);
       setAccounts([]);
@@ -304,45 +301,43 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     setEntriesLoading(true);
     setTransfersLoading(true);
 
-    const base = ["users", user.uid] as const;
+    const base = ["users", uid] as const;
+    const expensePath = `users/${uid}/expenses`;
+    const incomePath = `users/${uid}/incomes`;
+    const accountPath = `users/${uid}/accounts`;
+    const accountTypePath = `users/${uid}/accountTypes`;
 
-    // 1. Staged initial expenses
-    limitedExpensesUnsubRef.current?.();
-    limitedExpensesUnsubRef.current = onSnapshot(
-      query(
-        collection(db, ...base, "expenses"),
-        orderBy("createdAt", "desc"),
-        limit(INITIAL_EXPENSE_LIMIT)
-      ),
-      (snap) => {
-        setExpenses(
-          // Firestore doc id must win over any `id` field stored on the document.
-          snap.docs.map((d) => ({ ...(d.data() as object), id: d.id } as Expense))
-        );
-        pendingExpensesCountRef.current = snap.docs.filter(
-          (d) => d.metadata.hasPendingWrites
-        ).length;
-        updatePendingSyncCount();
-        setIsFromCache(snap.metadata.fromCache);
-        expensesHydratedRef.current = true;
-        setFinanceError(null);
-        setExpensesLoading(false);
-      },
-      snapshotErrorHandler(
-        "snapshot.expenses",
-        (failure) => {
-          setFinanceError(failure);
+    const unsubscribers = [
+      onSnapshot(
+        query(collection(db, ...base, "expenses"), orderBy("createdAt", "desc")),
+        (snap) => {
+          logQuerySnapshot(expensePath, snap);
+          setExpenses(
+            // Firestore doc id must win over any `id` field stored on the document.
+            snap.docs.map((d) => ({ ...(d.data() as object), id: d.id } as Expense))
+          );
+          pendingExpensesCountRef.current = snap.docs.filter(
+            (d) => d.metadata.hasPendingWrites
+          ).length;
+          updatePendingSyncCount();
+          setIsFromCache(snap.metadata.fromCache);
+          expensesHydratedRef.current = true;
+          setFinanceError(null);
           setExpensesLoading(false);
         },
-        "Couldn't load your expenses."
-      )
-    );
-
-    // 2. Incomes, Accounts, and Account Types
-    const unsubscribers = [
+        snapshotErrorHandler(
+          "snapshot.expenses",
+          (failure) => {
+            setFinanceError(failure);
+            setExpensesLoading(false);
+          },
+          "Couldn't load your expenses."
+        )
+      ),
       onSnapshot(
         query(collection(db, ...base, "incomes"), orderBy("createdAt", "desc")),
         (snap) => {
+          logQuerySnapshot(incomePath, snap);
           setIncomes(
             snap.docs.map((d) => ({ ...(d.data() as object), id: d.id } as Income))
           );
@@ -366,6 +361,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       onSnapshot(
         query(collection(db, ...base, "accounts")),
         (snap) => {
+          logQuerySnapshot(accountPath, snap);
           setAccounts(
             snap.docs.map((d) => ({ id: d.id, ...(d.data() as object) } as Account))
           );
@@ -389,6 +385,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       onSnapshot(
         query(collection(db, ...base, "accountTypes")),
         (snap) => {
+          logQuerySnapshot(accountTypePath, snap);
           setAccountTypes(
             snap.docs.map((d) => ({ id: d.id, ...(d.data() as object) } as AccountType))
           );
@@ -412,58 +409,33 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     ];
 
     return () => {
-      limitedExpensesUnsubRef.current?.();
-      limitedExpensesUnsubRef.current = null;
+      forgetSnapshotPath(expensePath);
+      forgetSnapshotPath(incomePath);
+      forgetSnapshotPath(accountPath);
+      forgetSnapshotPath(accountTypePath);
       unsubscribers.forEach((unsub) => unsub());
     };
-  }, [user, db, updatePendingSyncCount, financeAttempt, setFinanceError]);
+  }, [uid, db, updatePendingSyncCount, financeAttempt, setFinanceError]);
 
-  // ─── Deferred: Full Expense History + Secondary Collections ──────────────────
+  // ─── Deferred: Secondary ledger collections ─────────────────────────────────
 
   useEffect(() => {
-    if (!user || !db) return;
+    if (!uid || !db) return;
 
     let secondaryUnsubs: Array<() => void> = [];
-    let expensesUpgradeUnsub: (() => void) | undefined;
+    const paymentPath = `users/${uid}/accountPayments`;
+    const entryPath = `users/${uid}/accountEntries`;
+    const transferPath = `users/${uid}/accountTransfers`;
 
     const cancelIdle = scheduleIdleWork(
       () => {
-        const base = ["users", user.uid] as const;
-
-        // Drop limited listener before attaching full history listener
-        limitedExpensesUnsubRef.current?.();
-        limitedExpensesUnsubRef.current = null;
-
-        expensesUpgradeUnsub = onSnapshot(
-          query(collection(db, ...base, "expenses"), orderBy("createdAt", "desc")),
-          (snap) => {
-            // Replace limited window with full history without flipping loading
-            // (keeps ledger/dashboard mounted list from blanking mid-scroll).
-            setExpenses(
-              snap.docs.map((d) => ({ ...(d.data() as object), id: d.id } as Expense))
-            );
-            pendingExpensesCountRef.current = snap.docs.filter(
-              (d) => d.metadata.hasPendingWrites
-            ).length;
-            updatePendingSyncCount();
-            expensesHydratedRef.current = true;
-            setFinanceError(null);
-            setExpensesLoading(false);
-          },
-          snapshotErrorHandler(
-            "snapshot.expensesFull",
-            (failure) => {
-              setFinanceError(failure);
-              setExpensesLoading(false);
-            },
-            "Couldn't load your expense history."
-          )
-        );
+        const base = ["users", uid] as const;
 
         secondaryUnsubs = [
           onSnapshot(
             query(collection(db, ...base, "accountPayments")),
             (snap) => {
+              logQuerySnapshot(paymentPath, snap);
               setPayments(
                 sortByDateDesc(
                   snap.docs.map(
@@ -490,6 +462,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
           onSnapshot(
             query(collection(db, ...base, "accountEntries")),
             (snap) => {
+              logQuerySnapshot(entryPath, snap);
               setEntries(
                 sortByDateDesc(
                   snap.docs.map(
@@ -516,6 +489,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
           onSnapshot(
             query(collection(db, ...base, "accountTransfers")),
             (snap) => {
+              logQuerySnapshot(transferPath, snap);
               setTransfers(
                 sortByDateDesc(
                   snap.docs.map(
@@ -546,10 +520,12 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
 
     return () => {
       cancelIdle();
-      expensesUpgradeUnsub?.();
+      forgetSnapshotPath(paymentPath);
+      forgetSnapshotPath(entryPath);
+      forgetSnapshotPath(transferPath);
       secondaryUnsubs.forEach((unsub) => unsub());
     };
-  }, [user, db, updatePendingSyncCount, financeAttempt, setFinanceError]);
+  }, [uid, db, updatePendingSyncCount, financeAttempt, setFinanceError]);
 
   // ─── Actions ─────────────────────────────────────────────────────────────────
 

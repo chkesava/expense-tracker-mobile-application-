@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import {
@@ -30,14 +30,12 @@ import { useFestivals } from "@/hooks/useFestivals";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { useGaneshWrites } from "@/hooks/useGaneshWrites";
 import { useJoinRequests } from "@/hooks/useJoinRequests";
-import { usePandalAssets } from "@/hooks/usePandalAssets";
 import { usePandalMembers } from "@/hooks/usePandalMembers";
 import { usePandals } from "@/hooks/usePandals";
 import { usePermanentFund } from "@/hooks/usePermanentFund";
 import { useAuth } from "@/providers/AuthProvider";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import { useWorkspace } from "@/providers/WorkspaceProvider";
-import { inventoryGlance } from "@/shared/utils/ganeshAssets";
 import { formatPandalCode } from "@/shared/utils/ganeshIdentity";
 import { ganeshRoleLabel } from "@/shared/utils/ganeshPermissions";
 import { formatInr } from "@/shared/utils/ganeshMoney";
@@ -63,14 +61,11 @@ export default function PandalScreen() {
   const { members: pandalMembers } = usePandalMembers(pandalId);
   const { requests } = useJoinRequests(pandalId);
   const { fund } = usePermanentFund(pandalId);
-  const { assets } = usePandalAssets(pandalId);
   const { can, isAdmin, role } = useGaneshPermissions();
   const writes = useGaneshWrites();
 
   const pandal = pandals.find((item) => item.id === pandalId);
   const festival = festivals.find((item) => item.id === festivalId);
-  const glance = useMemo(() => inventoryGlance(assets), [assets]);
-
   const [memberTarget, setMemberTarget] = useState(
     String(festival?.contributionTargetAmount ?? 0)
   );
@@ -90,11 +85,7 @@ export default function PandalScreen() {
     <Icon size={17} color={tint ?? theme.colors.mutedForeground} strokeWidth={2.2} />
   );
 
-  const assetMeta = glance.needsReplacing > 0
-    ? `${glance.byCategory.reduce((sum, row) => sum + row.quantity, 0)} in store · ${glance.needsReplacing} need replacing`
-    : glance.byCategory.length > 0
-      ? glance.byCategory.map((row) => `${row.quantity} ${row.label.toLowerCase()}`).slice(0, 3).join(" · ")
-      : "Chairs, speakers, and other items that stay with the Pandal";
+  const assetMeta = "Chairs, speakers, and other items that stay with the Pandal";
 
   return (
     <GaneshScreen safeTop withTabBar>
