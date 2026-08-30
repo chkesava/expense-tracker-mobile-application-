@@ -1,7 +1,7 @@
 import { type ReactNode } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Bell, Sun } from "lucide-react-native";
+import { Bell } from "lucide-react-native";
 
 import { FestivalDateStrip } from "@/components/ganesh/art/FestivalDateStrip";
 import { FestivalGarlandBells } from "@/components/ganesh/art/FestivalChrome";
@@ -43,7 +43,7 @@ export function CommandHero({
   const { theme } = useTheme();
   const g = useGaneshTokens();
   const insets = useSafeAreaInsets();
-  const { ganesha } = useArtScale();
+  const { ganesha, mandala } = useArtScale();
   const maroon = g.isDark ? "#3A1020" : "#7A1836";
   const gold = "#E8C36A";
 
@@ -61,6 +61,9 @@ export function CommandHero({
           },
         ]}
       >
+        <View pointerEvents="none" style={styles.mandalaWrap}>
+          <GaneshArt name="mandala" width={mandala} height={mandala} opacity={0.1} />
+        </View>
         <FestivalGarlandBells />
 
         <View style={styles.topBar}>
@@ -131,12 +134,11 @@ export function CommandHero({
             </Text>
             {festivalName ? (
               <View style={[styles.festivalPill, { backgroundColor: "#C2410C" }]}>
-                <Sun size={11} color="#FFF8F1" strokeWidth={2.4} />
                 <Text
                   style={[styles.festivalPillText, { color: "#FFF8F1", fontFamily: theme.fontFamily.semibold }]}
                   numberOfLines={1}
                 >
-                  {festivalName}
+                  ✿  {festivalName}  ✿
                 </Text>
               </View>
             ) : null}
@@ -159,6 +161,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 36,
     overflow: "hidden",
+  },
+  mandalaWrap: {
+    position: "absolute",
+    left: -48,
+    top: -18,
+    zIndex: 0,
   },
   topBar: {
     flexDirection: "row",

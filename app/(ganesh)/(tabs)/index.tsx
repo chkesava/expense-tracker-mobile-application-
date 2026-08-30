@@ -1,19 +1,15 @@
 import { useCallback, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import {
-  ClipboardCheck,
-  Clock,
-  Flame,
-  Gift,
-  Receipt,
-  Sparkles,
-  UserPlus,
-  Users,
-  Wallet,
-} from "lucide-react-native";
+import { ChevronRight, ClipboardCheck, Clock, Sparkles, UserPlus, Users } from "lucide-react-native";
 
 import { GaneshArt } from "@/components/ganesh/art/GaneshArt";
+import {
+  CollectionIcon,
+  ContributionIcon,
+  ExpenseIcon,
+  SevaIcon,
+} from "@/components/ganesh/art/icons";
 import { GaneshQuickActions } from "@/components/ganesh/GaneshQuickActions";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { GaneshSyncChip } from "@/components/ganesh/GaneshSyncChip";
@@ -47,23 +43,16 @@ import { currentTimeInput, nextSeva, todaySeva, unstaffedSeva } from "@/shared/u
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { useTheme } from "@/theme/ThemeProvider";
 
-function activityGlyph(entityType: string) {
-  if (entityType.includes("collection")) return Wallet;
-  if (entityType.includes("expense")) return Receipt;
-  if (entityType.includes("contribution") || entityType.includes("sponsor")) return Gift;
-  if (entityType.includes("seva")) return Flame;
-  return Sparkles;
-}
-
-function activityTint(
-  entityType: string,
-  colors: { saffron: string; godFund: string; maroon: string; muted: string }
-) {
-  if (entityType.includes("collection") || entityType.includes("opening")) return colors.godFund;
-  if (entityType.includes("expense")) return colors.maroon;
-  if (entityType.includes("contribution") || entityType.includes("sponsor")) return colors.saffron;
-  if (entityType.includes("seva")) return colors.saffron;
-  return colors.muted;
+function activityArt(entityType: string) {
+  if (entityType.includes("collection") || entityType.includes("opening")) {
+    return <CollectionIcon size={28} />;
+  }
+  if (entityType.includes("expense")) return <ExpenseIcon size={28} />;
+  if (entityType.includes("contribution") || entityType.includes("sponsor")) {
+    return <ContributionIcon size={28} />;
+  }
+  if (entityType.includes("seva")) return <SevaIcon size={28} />;
+  return <ContributionIcon size={28} />;
 }
 
 /**
@@ -280,22 +269,11 @@ export default function GaneshHomeScreen() {
             />
           ) : (
             preview.map((item, index) => {
-              const Glyph = activityGlyph(item.entityType);
-              const tint = activityTint(item.entityType, {
-                saffron: g.saffron,
-                godFund: g.godFund,
-                maroon: g.maroon,
-                muted: theme.colors.mutedForeground,
-              });
               return (
                 <DataRow
                   key={item.id}
                   divider={index < preview.length - 1}
-                  leading={
-                    <RowGlyph tint={g.wash(tint)}>
-                      <Glyph size={16} color={tint} strokeWidth={2.2} />
-                    </RowGlyph>
-                  }
+                  leading={activityArt(item.entityType)}
                   title={item.title}
                   meta={
                     [
@@ -336,6 +314,7 @@ export default function GaneshHomeScreen() {
               <Text style={[styles.moreLabel, { color: g.saffron, fontFamily: theme.fontFamily.semibold }]}>
                 More Activity
               </Text>
+              <ChevronRight size={14} color={g.saffron} strokeWidth={2.4} />
             </Pressable>
           ) : null}
         </Section>
@@ -359,7 +338,10 @@ const styles = StyleSheet.create({
   more: {
     alignSelf: "center",
     minHeight: 44,
+    flexDirection: "row",
+    alignItems: "center",
     justifyContent: "center",
+    gap: 2,
     paddingHorizontal: 12,
   },
   moreLabel: {

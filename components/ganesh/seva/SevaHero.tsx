@@ -1,5 +1,5 @@
 import { type ReactNode } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Platform, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { FestivalDateStrip } from "@/components/ganesh/art/FestivalDateStrip";
@@ -8,6 +8,13 @@ import { GaneshArt } from "@/components/ganesh/art/GaneshArt";
 import { useArtScale } from "@/components/ganesh/art/useArtScale";
 import { useGaneshTokens } from "@/components/ganesh/ui/tokens";
 import { useTheme } from "@/theme/ThemeProvider";
+
+const TITLE_FONT = Platform.select({
+  ios: "Georgia",
+  android: "serif",
+  web: 'Georgia, "Times New Roman", serif',
+  default: undefined,
+});
 
 /**
  * Seva tab identity. Temple and bells decorate; the title and dates stay live.
@@ -28,7 +35,7 @@ export function SevaHero({
   const { theme } = useTheme();
   const g = useGaneshTokens();
   const insets = useSafeAreaInsets();
-  const { temple } = useArtScale();
+  const { temple, mandala } = useArtScale();
   const maroon = g.isDark ? "#3A1020" : "#7A1836";
 
   return (
@@ -45,6 +52,9 @@ export function SevaHero({
           },
         ]}
       >
+        <View pointerEvents="none" style={styles.mandalaWrap}>
+          <GaneshArt name="mandala" width={mandala} height={mandala} opacity={0.1} />
+        </View>
         <FestivalGarlandBells />
         <View pointerEvents="none" style={styles.templeWrap}>
           <GaneshArt name="temple" width={temple} height={temple * 0.82} opacity={0.42} />
@@ -55,7 +65,10 @@ export function SevaHero({
             <GaneshArt name="diya" width={28} height={28} />
           </View>
           <View style={styles.copy}>
-            <Text style={[styles.title, { fontFamily: theme.fontFamily.bold }]} numberOfLines={1}>
+            <Text
+              style={[styles.title, { fontFamily: TITLE_FONT ?? theme.fontFamily.bold }]}
+              numberOfLines={1}
+            >
               Seva
             </Text>
             {festivalName ? (
@@ -87,6 +100,12 @@ const styles = StyleSheet.create({
     paddingBottom: 34,
     overflow: "hidden",
     minHeight: 128,
+  },
+  mandalaWrap: {
+    position: "absolute",
+    left: -48,
+    top: -18,
+    zIndex: 0,
   },
   templeWrap: {
     position: "absolute",

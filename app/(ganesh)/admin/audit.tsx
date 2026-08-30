@@ -1,15 +1,14 @@
 import { useMemo, useState } from "react";
-import { Text } from "react-native";
+import { Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import { ScrollText } from "lucide-react-native";
-
+import { AdminGlyph } from "@/components/ganesh/admin/adminArt";
 import { AdminQueryState } from "@/components/ganesh/AdminQueryState";
+import { FestivalStackHero } from "@/components/ganesh/chrome/FestivalStackHero";
+import { ganeshStackLayout } from "@/components/ganesh/chrome/stackLayout";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import {
   DataRow,
   FilterChips,
-  GaneshHeader,
-  useGaneshTokens,
 } from "@/components/ganesh/ui";
 import { useFestivalAuditLogs } from "@/hooks/useFestivalAuditLogs";
 import { useMemberAudits } from "@/hooks/useMemberAudits";
@@ -94,7 +93,6 @@ function changeText(oldValue?: unknown, newValue?: unknown): string | undefined 
 
 export default function AdminAuditScreen() {
   const { theme } = useTheme();
-  const g = useGaneshTokens();
   const { back } = useRouter();
   const { pandalId, festivalId } = useGaneshSession();
   const { members } = usePandalMembers(pandalId);
@@ -152,12 +150,13 @@ export default function AdminAuditScreen() {
   const error = memberAudits.error ?? festivalAudits.error;
 
   return (
-    <GaneshScreen>
-      <GaneshHeader
+    <GaneshScreen contentContainerStyle={ganeshStackLayout.bleed}>
+      <FestivalStackHero
         title="Audit log"
-        icon={<ScrollText size={22} color={g.saffron} strokeWidth={2.2} />}
         onBack={back}
+        mark={<AdminGlyph name="iconAudit" size={40} />}
       />
+      <View style={ganeshStackLayout.body}>
       <Text style={{ color: theme.colors.mutedForeground, lineHeight: 22 }}>
         Important Pandal changes. This is for the committee, not a technical log.
       </Text>
@@ -214,6 +213,7 @@ export default function AdminAuditScreen() {
           />
         ))}
       </AdminQueryState>
+      </View>
     </GaneshScreen>
   );
 }

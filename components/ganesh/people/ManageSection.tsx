@@ -1,12 +1,20 @@
 import { type ReactNode } from "react";
-import { Image, StyleSheet, Text, View } from "react-native";
-import { Settings2 } from "lucide-react-native";
+import { Image, Platform, StyleSheet, Text, View } from "react-native";
+
+import { AdminGlyph } from "@/components/ganesh/admin/adminArt";
 
 import { PeopleGoldDivider } from "@/components/ganesh/people/PeopleGoldDivider";
 import { PEOPLE_ART } from "@/components/ganesh/people/peopleArt";
 import { useGaneshTokens } from "@/components/ganesh/ui";
 import { GANESH_RADIUS } from "@/components/ganesh/ui/surfaces";
 import { useTheme } from "@/theme/ThemeProvider";
+
+const TITLE_FONT = Platform.select({
+  ios: "Georgia",
+  android: "serif",
+  web: 'Georgia, "Times New Roman", serif',
+  default: undefined,
+});
 
 /**
  * Grouped destinations for the people who run the Pandal. Rows are passed in
@@ -19,10 +27,13 @@ export function ManageSection({ children }: { children: ReactNode }) {
   return (
     <View style={[styles.card, { backgroundColor: theme.colors.card, borderColor: g.divider }]}>
       <View style={styles.heading}>
-        <View style={[styles.headingGlyph, { backgroundColor: g.wash(g.saffron) }]}>
-          <Settings2 size={16} color={g.saffron} strokeWidth={2.2} />
-        </View>
-        <Text style={[styles.title, { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold }]}>
+        <AdminGlyph name="iconSettings" size={30} />
+        <Text
+          style={[
+            styles.title,
+            { color: theme.colors.foreground, fontFamily: TITLE_FONT ?? theme.fontFamily.semibold },
+          ]}
+        >
           Manage
         </Text>
       </View>

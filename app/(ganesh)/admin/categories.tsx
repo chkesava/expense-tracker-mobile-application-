@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { Alert, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import { Tags } from "lucide-react-native";
-
+import { AdminGlyph } from "@/components/ganesh/admin/adminArt";
 import { AdminQueryState } from "@/components/ganesh/AdminQueryState";
+import { FestivalStackHero } from "@/components/ganesh/chrome/FestivalStackHero";
+import { ganeshStackLayout } from "@/components/ganesh/chrome/stackLayout";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
-import { GaneshHeader, useGaneshTokens } from "@/components/ganesh/ui";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useGaneshCategories } from "@/hooks/useGaneshCategories";
@@ -17,7 +17,6 @@ import { useTheme } from "@/theme/ThemeProvider";
 
 export default function AdminCategoriesScreen() {
   const { theme } = useTheme();
-  const g = useGaneshTokens();
   const { back } = useRouter();
   const { pandalId, festivalId } = useGaneshSession();
   const { categories, loading, error, retry } = useGaneshCategories(pandalId, festivalId);
@@ -38,12 +37,13 @@ export default function AdminCategoriesScreen() {
   };
 
   return (
-    <GaneshScreen>
-      <GaneshHeader
+    <GaneshScreen contentContainerStyle={ganeshStackLayout.bleed}>
+      <FestivalStackHero
         title="Expense categories"
-        icon={<Tags size={22} color={g.saffron} strokeWidth={2.2} />}
         onBack={back}
+        mark={<AdminGlyph name="iconCategories" size={40} />}
       />
+      <View style={ganeshStackLayout.body}>
       <Text style={{ color: theme.colors.mutedForeground, lineHeight: 22 }}>
         Disable a category instead of deleting it. Expenses already recorded keep their old
         category name.
@@ -150,6 +150,7 @@ export default function AdminCategoriesScreen() {
           </View>
         ))}
       </AdminQueryState>
+      </View>
     </GaneshScreen>
   );
 }

@@ -1,8 +1,8 @@
 import { useCallback, useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import { ClipboardList, Home, UserPlus, Users } from "lucide-react-native";
-
+import { AdminGlyph } from "@/components/ganesh/admin/adminArt";
+import { CollectionIcon } from "@/components/ganesh/art/icons";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { GaneshSyncChip } from "@/components/ganesh/GaneshSyncChip";
 import { CommitteeOverview } from "@/components/ganesh/people/CommitteeOverview";
@@ -95,8 +95,8 @@ export default function PeopleScreen() {
             <NavRow
               title="Join requests"
               meta="People asking to join this Pandal"
-              icon={<UserPlus size={17} color={g.saffron} strokeWidth={2.2} />}
-              iconTint={g.wash(g.saffron)}
+              icon={<AdminGlyph name="iconJoin" />}
+              iconTint="transparent"
               chevronColor={g.saffron}
               badge={{
                 kind: "overdue",
@@ -110,8 +110,8 @@ export default function PeopleScreen() {
           <NavRow
             title="Committee tracker"
             meta="Who has paid their share, who still owes"
-            icon={<ClipboardList size={17} color={g.maroon} strokeWidth={2.2} />}
-            iconTint={g.wash(g.maroon)}
+            icon={<AdminGlyph name="iconCommittee" />}
+            iconTint="transparent"
             chevronColor={g.saffron}
             divider={showMembers || showHouseholds}
             onPress={() => push("/(ganesh)/(tabs)/committee" as never)}
@@ -121,8 +121,8 @@ export default function PeopleScreen() {
             <NavRow
               title="Members and roles"
               meta="Who holds which role in the Pandal"
-              icon={<Users size={17} color={g.personal} strokeWidth={2.2} />}
-              iconTint={g.wash(g.personal)}
+              icon={<AdminGlyph name="iconMembers" />}
+              iconTint="transparent"
               chevronColor={g.saffron}
               divider={showHouseholds}
               onPress={() => push("/(ganesh)/members" as never)}
@@ -133,8 +133,8 @@ export default function PeopleScreen() {
             <NavRow
               title="Households"
               meta="Door-to-door chanda rounds"
-              icon={<Home size={17} color={g.godFund} strokeWidth={2.2} />}
-              iconTint={g.wash(g.godFund)}
+              icon={<CollectionIcon size={36} />}
+              iconTint="transparent"
               chevronColor={g.saffron}
               value={
                 households.length > 0 ? (

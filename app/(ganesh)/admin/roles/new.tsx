@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { Alert, StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
-import { ShieldPlus } from "lucide-react-native";
-
+import { AdminGlyph } from "@/components/ganesh/admin/adminArt";
+import { FestivalStackHero } from "@/components/ganesh/chrome/FestivalStackHero";
+import { ganeshStackLayout } from "@/components/ganesh/chrome/stackLayout";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { GaneshWriteLock } from "@/components/ganesh/GaneshWriteLock";
 import { PermissionChecklist } from "@/components/ganesh/PermissionChecklist";
-import { GaneshHeader, Section, StatusStrip, useGaneshTokens } from "@/components/ganesh/ui";
+import { Section, StatusStrip } from "@/components/ganesh/ui";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
@@ -20,7 +21,6 @@ import {
 import type { GaneshPermission } from "@/shared/utils/ganeshPermissions";
 
 export default function AdminCreateRoleScreen() {
-  const g = useGaneshTokens();
   const { replace, back } = useRouter();
   const writes = useGaneshWrites();
   const { can } = useGaneshPermissions();
@@ -60,14 +60,14 @@ export default function AdminCreateRoleScreen() {
   };
 
   return (
-    <GaneshScreen safeTop>
-      <GaneshHeader
+    <GaneshScreen contentContainerStyle={ganeshStackLayout.bleed}>
+      <FestivalStackHero
         title="Create role"
         subtitle="For this committee only"
-        icon={<ShieldPlus size={22} color={g.saffron} strokeWidth={2.2} />}
         onBack={back}
+        mark={<AdminGlyph name="iconRoles" size={40} />}
       />
-
+      <View style={ganeshStackLayout.body}>
       <Section title="Details">
         <View style={styles.form}>
           <Input
@@ -100,6 +100,7 @@ export default function AdminCreateRoleScreen() {
       <Button loading={busy} disabled={!name.trim() || permissions.length === 0} onPress={onCreate}>
         Create role
       </Button>
+      </View>
     </GaneshScreen>
   );
 }

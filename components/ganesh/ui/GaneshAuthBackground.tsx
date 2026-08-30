@@ -1,99 +1,40 @@
-import { StyleSheet, View, useWindowDimensions } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
+import { StyleSheet, View } from "react-native";
 
+import { GaneshArt } from "@/components/ganesh/art/GaneshArt";
+import { useArtScale } from "@/components/ganesh/art/useArtScale";
 import { useTheme } from "@/theme/ThemeProvider";
 
-import { useGaneshTokens, withAlpha } from "./tokens";
+import { useGaneshTokens } from "./tokens";
 
 /**
- * Login backdrop. Structurally identical to the Expense Tracker's
- * `AuthBackground` — same two soft blobs, same dot grid, same opacities — so
- * the two sign-in screens are recognisably the same product. Only the two
- * accent hues differ.
+ * Login cream wash. Festival ornaments only — no Expense Tracker dot grid.
  */
 export function GaneshAuthBackground() {
   const { theme } = useTheme();
   const g = useGaneshTokens();
-  const { width } = useWindowDimensions();
-
-  const base = theme.colors.background;
-  const surface = theme.colors.card;
-  const alpha = g.isDark ? 0.15 : 0.08;
+  const { mandala, ganesha } = useArtScale();
 
   return (
-    <View style={[StyleSheet.absoluteFill, { backgroundColor: base }]}>
-      <LinearGradient colors={[base, surface]} style={StyleSheet.absoluteFill} />
-
-      <View
-        style={[
-          styles.blob,
-          {
-            backgroundColor: withAlpha(g.saffron, alpha),
-            width: width * 1.2,
-            height: width * 1.2,
-            borderRadius: width,
-            top: -width * 0.4,
-            left: -width * 0.3,
-          },
-        ]}
-      />
-
-      <View
-        style={[
-          styles.blob,
-          {
-            backgroundColor: withAlpha(g.maroon, alpha),
-            width: width * 1.5,
-            height: width * 1.5,
-            borderRadius: width,
-            top: -width * 0.2,
-            right: -width * 0.6,
-          },
-        ]}
-      />
-
-      <View style={styles.pattern} pointerEvents="none">
-        {Array.from({ length: 12 }).map((_, col) => (
-          <View key={`col-${col}`} style={styles.patternCol}>
-            {Array.from({ length: 8 }).map((_, row) => (
-              <View
-                key={`dot-${col}-${row}`}
-                style={[
-                  styles.dot,
-                  {
-                    backgroundColor: g.isDark
-                      ? "rgba(255,255,255,0.05)"
-                      : "rgba(15, 23, 42, 0.05)",
-                  },
-                ]}
-              />
-            ))}
-          </View>
-        ))}
+    <View style={[StyleSheet.absoluteFill, { backgroundColor: theme.colors.background }]}>
+      <View pointerEvents="none" style={styles.mandala}>
+        <GaneshArt name="mandala" width={mandala * 1.15} height={mandala * 1.15} opacity={g.isDark ? 0.12 : 0.08} />
+      </View>
+      <View pointerEvents="none" style={styles.lotus}>
+        <GaneshArt name="lotusWatermark" width={ganesha * 1.4} height={ganesha * 1.4} opacity={g.isDark ? 0.1 : 0.07} />
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  blob: {
+  mandala: {
     position: "absolute",
-    opacity: 0.8,
+    right: -80,
+    top: 120,
   },
-  pattern: {
+  lotus: {
     position: "absolute",
-    top: 60,
-    left: 20,
-    flexDirection: "row",
-    gap: 12,
-  },
-  patternCol: {
-    flexDirection: "column",
-    gap: 12,
-  },
-  dot: {
-    width: 3,
-    height: 3,
-    borderRadius: 3,
+    left: -20,
+    bottom: 40,
   },
 });

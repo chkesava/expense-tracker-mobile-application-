@@ -1,10 +1,9 @@
 import { type ReactNode } from "react";
 import { Platform, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { IndianRupee } from "lucide-react-native";
-
 import { FestivalGarlandBells } from "@/components/ganesh/art/FestivalChrome";
 import { GaneshArt } from "@/components/ganesh/art/GaneshArt";
+import { OpeningFundIcon } from "@/components/ganesh/art/icons";
 import { useArtScale } from "@/components/ganesh/art/useArtScale";
 import { useGaneshTokens } from "@/components/ganesh/ui/tokens";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -30,7 +29,7 @@ export function PandalNidhiHero({
   const { theme } = useTheme();
   const g = useGaneshTokens();
   const insets = useSafeAreaInsets();
-  const { temple } = useArtScale();
+  const { temple, mandala } = useArtScale();
   const maroon = g.isDark ? "#3A1020" : "#7A1836";
 
   return (
@@ -46,6 +45,9 @@ export function PandalNidhiHero({
         },
       ]}
     >
+      <View pointerEvents="none" style={styles.mandalaWrap}>
+        <GaneshArt name="mandala" width={mandala} height={mandala} opacity={0.1} />
+      </View>
       <FestivalGarlandBells />
       <View pointerEvents="none" style={styles.templeWrap}>
         <GaneshArt name="temple" width={temple * 0.72} height={temple * 0.58} opacity={0.28} />
@@ -59,7 +61,7 @@ export function PandalNidhiHero({
           accessibilityRole="image"
           accessibilityLabel="Pandal Nidhi"
         >
-          <IndianRupee size={22} color="#7A1836" strokeWidth={2.4} />
+          <OpeningFundIcon size={36} />
         </View>
         <View style={styles.copy}>
           <Text
@@ -91,6 +93,12 @@ const styles = StyleSheet.create({
     paddingBottom: 28,
     overflow: "hidden",
     minHeight: 112,
+  },
+  mandalaWrap: {
+    position: "absolute",
+    left: -48,
+    top: -18,
+    zIndex: 0,
   },
   templeWrap: {
     position: "absolute",

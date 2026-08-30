@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import { CalendarDays, CalendarPlus, Clock, Plus } from "lucide-react-native";
+import { Bell, CalendarDays, CalendarPlus, ClipboardList, Clock, Plus } from "lucide-react-native";
 
 import { GaneshArt } from "@/components/ganesh/art/GaneshArt";
 import { VolunteerIcon } from "@/components/ganesh/art/icons";
@@ -199,36 +199,54 @@ export default function SevaScreen() {
               )}
             </Section>
 
-            <View style={[styles.upcoming, { backgroundColor: surfaces.tile, borderColor: g.divider }]}>
-              <View style={[styles.upcomingIcon, { backgroundColor: g.wash(g.saffron) }]}>
-                <Clock size={18} color={g.saffron} strokeWidth={2.2} />
-              </View>
-              <View style={styles.upcomingCopy}>
+            <View>
+              <View style={styles.upcomingHead}>
                 <Text
                   style={[
-                    styles.upcomingTitle,
+                    styles.upcomingHeadTitle,
                     { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold },
                   ]}
-                  numberOfLines={1}
                 >
-                  {upNext ? upNext.name : "No upcoming seva"}
+                  Upcoming Seva
                 </Text>
-                <Text
-                  style={[
-                    styles.upcomingMeta,
-                    { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular },
-                  ]}
-                  numberOfLines={2}
-                >
-                  {upNext
-                    ? [formatSevaDate(upNext.date, true), upNext.startTime].filter(Boolean).join(" · ")
-                    : "Plan your next seva and keep everyone informed."}
-                </Text>
+                {seva.length > 0 ? (
+                  <SectionAction
+                    label="See all"
+                    onPress={() => setSelectedDate(upNext?.date ?? today)}
+                  />
+                ) : null}
               </View>
-              <GaneshArt name="temple" width={72} height={58} opacity={0.45} />
+              <View style={[styles.upcoming, { backgroundColor: surfaces.tile, borderColor: g.divider }]}>
+                <View style={[styles.upcomingIcon, { backgroundColor: g.wash(g.saffron) }]}>
+                  <Clock size={18} color={g.saffron} strokeWidth={2.2} />
+                </View>
+                <View style={styles.upcomingCopy}>
+                  <Text
+                    style={[
+                      styles.upcomingTitle,
+                      { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {upNext ? upNext.name : "No upcoming seva"}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.upcomingMeta,
+                      { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular },
+                    ]}
+                    numberOfLines={2}
+                  >
+                    {upNext
+                      ? [formatSevaDate(upNext.date, true), upNext.startTime].filter(Boolean).join(" · ")
+                      : "Plan your next seva and keep everyone informed."}
+                  </Text>
+                </View>
+                <GaneshArt name="temple" width={72} height={58} opacity={0.45} />
+              </View>
             </View>
 
-            {canPlan || canReadPeople ? (
+            {canPlan || canReadPeople || isAdmin ? (
               <Section title="Quick Seva Actions" plain>
                 <View style={styles.actionRow}>
                   {canPlan ? (
@@ -241,7 +259,7 @@ export default function SevaScreen() {
                       accessibilityLabel="Plan a Seva"
                       style={({ pressed }) => [
                         styles.actionTile,
-                        { backgroundColor: theme.colors.card, borderColor: g.divider },
+                        { backgroundColor: g.wash(g.saffron), borderColor: g.divider },
                         pressed ? { opacity: 0.85 } : null,
                       ]}
                     >
@@ -299,6 +317,76 @@ export default function SevaScreen() {
                       </Text>
                     </Pressable>
                   ) : null}
+                  <Pressable
+                    onPress={() => {
+                      void haptic.selection();
+                      setSelectedDate(today);
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Seva Tasks"
+                    style={({ pressed }) => [
+                      styles.actionTile,
+                      { backgroundColor: g.wash("#2E7D32"), borderColor: g.divider },
+                      pressed ? { opacity: 0.85 } : null,
+                    ]}
+                  >
+                    <View style={[styles.actionGlyph, { backgroundColor: g.wash("#2E7D32") }]}>
+                      <ClipboardList size={18} color="#2E7D32" strokeWidth={2.2} />
+                    </View>
+                    <Text
+                      style={[
+                        styles.actionTitle,
+                        { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold },
+                      ]}
+                    >
+                      Seva Tasks
+                    </Text>
+                    <Text
+                      style={[
+                        styles.actionMeta,
+                        { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular },
+                      ]}
+                    >
+                      Checklist and preparation
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => {
+                      void haptic.selection();
+                      if (isAdmin) {
+                        push("/(ganesh)/admin/festivals" as never);
+                      } else {
+                        setSelectedDate(today);
+                      }
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Reminders"
+                    style={({ pressed }) => [
+                      styles.actionTile,
+                      { backgroundColor: g.wash("#B98029"), borderColor: g.divider },
+                      pressed ? { opacity: 0.85 } : null,
+                    ]}
+                  >
+                    <View style={[styles.actionGlyph, { backgroundColor: g.wash("#B98029") }]}>
+                      <Bell size={18} color="#B98029" strokeWidth={2.2} />
+                    </View>
+                    <Text
+                      style={[
+                        styles.actionTitle,
+                        { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold },
+                      ]}
+                    >
+                      Reminders
+                    </Text>
+                    <Text
+                      style={[
+                        styles.actionMeta,
+                        { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular },
+                      ]}
+                    >
+                      Stay reminded about seva
+                    </Text>
+                  </Pressable>
                 </View>
               </Section>
             ) : null}
@@ -560,12 +648,26 @@ const styles = StyleSheet.create({
     fontSize: 12.5,
     lineHeight: 17,
   },
+  upcomingHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+    paddingHorizontal: 2,
+  },
+  upcomingHeadTitle: {
+    fontSize: 16,
+    letterSpacing: -0.2,
+  },
   actionRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 10,
   },
   actionTile: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: "22%",
+    minWidth: 72,
     minHeight: 112,
     alignItems: "center",
     justifyContent: "center",

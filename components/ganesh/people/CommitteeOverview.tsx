@@ -1,12 +1,20 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
-import { HandCoins, HandHeart, User, Users } from "lucide-react-native";
+import { Pressable, Platform, StyleSheet, Text, View } from "react-native";
+import { Users } from "lucide-react-native";
 
+import { CollectionIcon, SevaIcon, VolunteerIcon } from "@/components/ganesh/art/icons";
 import { Avatar, GaneshEmptyState, useGaneshTokens } from "@/components/ganesh/ui";
 import { GANESH_RADIUS } from "@/components/ganesh/ui/surfaces";
 import { PeopleGoldDivider } from "@/components/ganesh/people/PeopleGoldDivider";
 import { SkeletonList } from "@/components/common/Skeleton";
 import { haptic } from "@/lib/haptics";
 import { useTheme } from "@/theme/ThemeProvider";
+
+const TITLE_FONT = Platform.select({
+  ios: "Georgia",
+  android: "serif",
+  web: 'Georgia, "Times New Roman", serif',
+  default: undefined,
+});
 
 export type CommitteeMemberPreview = {
   id: string;
@@ -51,11 +59,14 @@ export function CommitteeOverview({
   return (
     <View style={[styles.card, { backgroundColor: theme.colors.card, borderColor: g.divider }]}>
       <View style={styles.heading}>
-        <View style={[styles.headingGlyph, { backgroundColor: g.wash(g.saffron) }]}>
-          <Users size={16} color={g.saffron} strokeWidth={2.2} />
-        </View>
+        <VolunteerIcon size={30} />
         <View style={styles.headingCopy}>
-          <Text style={[styles.title, { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold }]}>
+          <Text
+            style={[
+              styles.title,
+              { color: theme.colors.foreground, fontFamily: TITLE_FONT ?? theme.fontFamily.semibold },
+            ]}
+          >
             Committee
           </Text>
           <Text style={[styles.subtitle, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}>
@@ -70,9 +81,7 @@ export function CommitteeOverview({
           style={[styles.metric, { backgroundColor: g.wash(g.godFund) }]}
           accessibilityLabel={`${memberCount} members`}
         >
-          <View style={[styles.metricGlyph, { backgroundColor: g.wash(g.godFund) }]}>
-            <User size={14} color={g.godFund} strokeWidth={2.2} />
-          </View>
+          <VolunteerIcon size={28} />
           <Text style={[styles.metricLabel, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.medium }]}>
             Members
           </Text>
@@ -87,9 +96,7 @@ export function CommitteeOverview({
           style={[styles.metric, { backgroundColor: g.wash(g.saffron) }]}
           accessibilityLabel={`${paidCount} of ${festivalMemberCount} contributed, ${pct} percent`}
         >
-          <View style={[styles.metricGlyph, { backgroundColor: g.wash(g.saffron) }]}>
-            <HandCoins size={14} color={g.saffron} strokeWidth={2.2} />
-          </View>
+          <CollectionIcon size={28} />
           <Text style={[styles.metricLabel, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.medium }]}>
             Contributed
           </Text>
@@ -109,9 +116,7 @@ export function CommitteeOverview({
           style={[styles.metric, { backgroundColor: g.wash(sevaTint) }]}
           accessibilityLabel={`${onDutyToday} on seva today`}
         >
-          <View style={[styles.metricGlyph, { backgroundColor: g.wash(sevaTint) }]}>
-            <HandHeart size={14} color={sevaTint} strokeWidth={2.2} />
-          </View>
+          <SevaIcon size={28} />
           <Text style={[styles.metricLabel, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.medium }]}>
             On seva today
           </Text>

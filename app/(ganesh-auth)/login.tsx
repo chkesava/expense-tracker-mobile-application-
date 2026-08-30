@@ -10,14 +10,15 @@ import {
   View,
 } from "react-native";
 import { Redirect, useRouter } from "expo-router";
-import { SafeAreaView } from "react-native-safe-area-context";
-import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Animated, { FadeInUp } from "react-native-reanimated";
 import { Lock, Mail, Smartphone, User } from "lucide-react-native";
 import { RecaptchaVerifier } from "firebase/auth";
 
 import { SocialLoginButton } from "@/components/auth/SocialLoginButton";
+import { FestivalAuthHero } from "@/components/ganesh/chrome/FestivalStackHero";
 import { GaneshAppVersion } from "@/components/ganesh/GaneshAppVersion";
-import { GaneshAuthBackground, GaneshMark, useGaneshTokens } from "@/components/ganesh/ui";
+import { GaneshAuthBackground, useGaneshTokens } from "@/components/ganesh/ui";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { ganeshPhoneCredential, requestGaneshPhoneVerification } from "@/lib/ganeshPhoneAuth";
@@ -33,6 +34,7 @@ import { useTheme } from "@/theme/ThemeProvider";
 export default function GaneshLoginScreen() {
   const { theme } = useTheme();
   const g = useGaneshTokens();
+  const insets = useSafeAreaInsets();
   const {
     user,
     loading,
@@ -164,36 +166,25 @@ export default function GaneshLoginScreen() {
   const emailDisabled = submitting || !email.trim() || !password;
 
   return (
-    <SafeAreaView style={styles.fill} edges={["top", "bottom"]}>
+    <View style={[styles.fill, { backgroundColor: theme.colors.background }]}>
       <GaneshAuthBackground />
+      <FestivalAuthHero
+        title="Ganesh Seva"
+        tagline="Manage your Pandal's collections, contributions and expenses together."
+      />
       <KeyboardAvoidingView
         style={styles.fill}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <ScrollView
-          contentContainerStyle={styles.scroll}
+          contentContainerStyle={[
+            styles.scroll,
+            { paddingBottom: Math.max(insets.bottom, 24) + 16 },
+          ]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <Animated.View entering={FadeInDown.duration(600).springify()} style={styles.header}>
-            <GaneshMark size={84} />
-            <View style={styles.headerText}>
-              <Text
-                style={[styles.title, { color: theme.colors.foreground, fontFamily: theme.fontFamily.bold }]}
-              >
-                Ganesh Seva
-              </Text>
-              <Text
-                style={[
-                  styles.subtitle,
-                  { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular },
-                ]}
-              >
-                Manage your Pandal&apos;s collections, contributions and expenses together.
-              </Text>
-            </View>
-          </Animated.View>
-
+          <View style={styles.body}>
           <Animated.View
             entering={FadeInUp.duration(700).delay(100).springify()}
             style={[
@@ -378,9 +369,10 @@ export default function GaneshLoginScreen() {
             </Pressable>
             <GaneshAppVersion centered />
           </Animated.View>
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -389,28 +381,14 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
   scroll: {
     flexGrow: 1,
-    justifyContent: "center",
-    paddingHorizontal: 24,
-    paddingVertical: 40,
-    gap: 28,
+    paddingHorizontal: 0,
+    paddingTop: 0,
+    gap: 0,
   },
-  header: {
-    alignItems: "center",
-  },
-  headerText: {
-    marginTop: 16,
-    alignItems: "center",
-    gap: 8,
-  },
-  title: {
-    fontSize: 28,
-    letterSpacing: -0.6,
-  },
-  subtitle: {
-    fontSize: 15,
-    lineHeight: 22,
-    textAlign: "center",
-    maxWidth: 300,
+  body: {
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    gap: 20,
   },
   surface: {
     borderRadius: 24,

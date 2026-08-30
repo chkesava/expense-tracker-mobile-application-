@@ -1,6 +1,5 @@
 import { Platform, StyleSheet, Text, View } from "react-native";
-import { Clock, HandCoins, HandHeart } from "lucide-react-native";
-
+import { CollectionIcon, ContributionIcon, ExpenseIcon } from "@/components/ganesh/art/icons";
 import { LotusDivider } from "@/components/ganesh/art/LotusDivider";
 import { Money, SectionAction, useGaneshTokens } from "@/components/ganesh/ui";
 import { GANESH_RADIUS } from "@/components/ganesh/ui/surfaces";
@@ -46,7 +45,7 @@ export function FestivalReportStrip({
 
       <View style={styles.row}>
         <View style={[styles.tile, { backgroundColor: g.wash(g.godFund) }]}>
-          <HandCoins size={14} color={g.godFund} strokeWidth={2.2} />
+          <CollectionIcon size={28} />
           <Text style={[styles.label, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.medium }]}>
             Received
           </Text>
@@ -56,7 +55,7 @@ export function FestivalReportStrip({
           </Text>
         </View>
         <View style={[styles.tile, { backgroundColor: g.wash(g.promised) }]}>
-          <HandHeart size={14} color={g.promised} strokeWidth={2.2} />
+          <ContributionIcon size={28} />
           <Text style={[styles.label, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.medium }]}>
             Promised
           </Text>
@@ -66,7 +65,7 @@ export function FestivalReportStrip({
           </Text>
         </View>
         <View style={[styles.tile, { backgroundColor: g.wash(g.maroon) }]}>
-          <Clock size={14} color={g.maroon} strokeWidth={2.2} />
+          <ExpenseIcon size={28} />
           <Text style={[styles.label, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.medium }]}>
             Pending
           </Text>

@@ -1,37 +1,22 @@
 import { useEffect, useMemo } from "react";
-import { Text } from "react-native";
+import { Image, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import {
-  AlertTriangle,
-  Building2,
-  CalendarDays,
-  ClipboardList,
-  FileBarChart,
-  Landmark,
-  Package,
-  ScrollText,
-  Settings,
-  ShieldCheck,
-  Tags,
-  Target,
-  UserPlus,
-  Users,
-} from "lucide-react-native";
 
+import { AdminGlyph, ADMIN_ART } from "@/components/ganesh/admin/adminArt";
+import { AdminHero } from "@/components/ganesh/admin/AdminHero";
+import { AdminSection } from "@/components/ganesh/admin/AdminSection";
+import { AdminSummary } from "@/components/ganesh/admin/AdminSummary";
 import { AdminQueryState } from "@/components/ganesh/AdminQueryState";
+import { ganeshStackLayout } from "@/components/ganesh/chrome/stackLayout";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
+import { GaneshSyncChip } from "@/components/ganesh/GaneshSyncChip";
 import {
-  GaneshEmptyState,
-  GaneshHeader,
-  Money,
   NavRow,
-  Section,
   SectionPair,
-  StatStrip,
-  StatTile,
   useGaneshTokens,
   type StatusKind,
 } from "@/components/ganesh/ui";
+import { useTheme } from "@/theme/ThemeProvider";
 import { useContributions } from "@/hooks/useContributions";
 import { useFestivals } from "@/hooks/useFestivals";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
@@ -51,7 +36,6 @@ import { summarizeAssets } from "@/shared/utils/ganeshAssets";
 import { summarizeContributions } from "@/shared/utils/ganeshContributions";
 import { summarizeSponsorships } from "@/shared/utils/ganeshSponsors";
 import { formatInr } from "@/shared/utils/ganeshMoney";
-import { useTheme } from "@/theme/ThemeProvider";
 
 type NeedTone = "attention" | "critical";
 
@@ -62,8 +46,11 @@ type Need = {
   tone: NeedTone;
 };
 
+/**
+ * Pandal administration. Live status first, then the destinations that change
+ * people, money, property, and settings. Predicates and routes are unchanged.
+ */
 export default function AdminDashboardScreen() {
-  const { theme } = useTheme();
   const g = useGaneshTokens();
   const { push, back } = useRouter();
   const { pandalId, festivalId } = useGaneshSession();
@@ -250,227 +237,329 @@ export default function AdminDashboardScreen() {
     || (requestsLoading && requests.length === 0 && !requestsError);
   const error = pandalsError ?? festivalsError ?? membersError ?? requestsError;
 
-  const glyph = (Icon: typeof Users, tint?: string) => (
-    <Icon size={17} color={tint ?? theme.colors.mutedForeground} strokeWidth={2.2} />
-  );
+  const membersMeta = requests.length > 0 ? `${requests.length} waiting` : "All approved";
+  const reimbMeta = pendingReimb > 0 ? "Owed to members" : "All settled";
+  const assetsMeta = `${assetSummary.available} available`;
+  const contributionMeta =
+    festival && ((festival.contributionTargetAmount ?? 0) > 0 || (festival.householdTargetAmount ?? 0) > 0)
+      ? `Committee ${formatInr(festival.contributionTargetAmount ?? 0)} · household ${formatInr(festival.householdTargetAmount ?? 0)}`
+      : "Default committee and household targets";
+  const festivalMeta = festival
+    ? `${festival.name} — create, switch, or close`
+    : "Create a festival";
 
   return (
-    <GaneshScreen safeTop>
-      <GaneshHeader
-        title="Admin"
-        subtitle={[pandal?.name, festival?.name].filter(Boolean).join(" · ") || undefined}
-        icon={<ShieldCheck size={22} color={g.saffron} strokeWidth={2.2} />}
+    <GaneshScreen contentContainerStyle={ganeshStackLayout.bleed}>
+      <AdminHero
+        pandalName={pandal?.name}
+        festivalName={festival?.name}
         onBack={back}
+        rightAccessory={<GaneshSyncChip onDark />}
       />
 
-      <AdminQueryState
-        loading={loading}
-        error={error}
-        onRetry={() => {
-          retryFestivals();
-          retryMembers();
-          retryRequests();
-        }}
-      >
-        <StatStrip>
-          <StatTile
-            label="Members"
-            meta={
-              <Text style={{ color: theme.colors.mutedForeground, fontSize: 12 }}>
-                {requests.length > 0 ? `${requests.length} waiting` : "All approved"}
-              </Text>
-            }
-          >
-            <Text style={{ color: theme.colors.foreground, fontFamily: theme.fontFamily.bold, fontSize: 22 }}>
-              {activeMembers.length}
-            </Text>
-          </StatTile>
-          <StatTile
-            label="Permanent Fund"
-            meta={
-              <Text style={{ color: theme.colors.mutedForeground, fontSize: 12 }}>
-                Carries across festivals
-              </Text>
-            }
-          >
-            <Money value={fund.total} size="title" />
-          </StatTile>
-          <StatTile
-            label="Pending reimbursement"
-            meta={
-              <Text style={{ color: theme.colors.mutedForeground, fontSize: 12 }}>
-                {pendingReimb > 0 ? "Owed to members" : "All settled"}
-              </Text>
-            }
-          >
-            <Money value={pendingReimb} size="title" />
-          </StatTile>
-          <StatTile
-            label="Pandal assets"
-            meta={
-              <Text style={{ color: theme.colors.mutedForeground, fontSize: 12 }}>
-                {assetSummary.available} available
-              </Text>
-            }
-          >
-            <Text style={{ color: theme.colors.foreground, fontFamily: theme.fontFamily.bold, fontSize: 22 }}>
-              {assetSummary.totalItems}
-            </Text>
-          </StatTile>
-        </StatStrip>
-
-        <Section
-          title="Needs attention"
-          subtitle={
-            needs.length > 0
-              ? `${needs.length} open item${needs.length === 1 ? "" : "s"}`
-              : undefined
-          }
-          icon={
-            needs.length > 0 ? (
-              <AlertTriangle size={16} color={theme.colors.warning} strokeWidth={2.2} />
-            ) : undefined
-          }
-          iconTint={needs.length > 0 ? g.wash(theme.colors.warning) : undefined}
+      <View style={styles.body}>
+        <View pointerEvents="none" style={styles.lotusWash}>
+          <Image
+            source={ADMIN_ART.lotusWatermark}
+            resizeMode="contain"
+            accessibilityElementsHidden
+            importantForAccessibility="no"
+            style={styles.lotusImage}
+          />
+        </View>
+        <AdminQueryState
+          loading={loading}
+          error={error}
+          onRetry={() => {
+            retryFestivals();
+            retryMembers();
+            retryRequests();
+          }}
         >
-          {needs.length === 0 ? (
-            <GaneshEmptyState
-              compact
-              icon={<ShieldCheck size={20} color={g.saffron} strokeWidth={2.2} />}
-              title="You're all caught up"
-              description="No join requests or urgent money items right now."
-            />
-          ) : (
-            needs.map((item, index) => {
-              const kind: StatusKind = item.tone === "critical" ? "overdue" : "pending";
-              return (
-                <NavRow
-                  key={item.title}
-                  title={item.title}
-                  meta={item.subtitle}
-                  divider={index < needs.length - 1}
-                  badge={{ kind, label: item.tone === "critical" ? "Act now" : "Review" }}
-                  onPress={() => push(item.href as never)}
-                />
-              );
-            })
-          )}
-        </Section>
+          <AdminSummary
+            memberCount={activeMembers.length}
+            membersMeta={membersMeta}
+            fundTotal={fund.total ?? 0}
+            pendingReimb={pendingReimb}
+            reimbMeta={reimbMeta}
+            assetCount={assetSummary.totalItems}
+            assetsMeta={assetsMeta}
+          />
 
-        <SectionPair>
-        <Section title="People">
-          <NavRow
-            title="Members"
-            meta="Roles, status, and who paid"
-            icon={glyph(Users)}
-            divider
-            badge={
-              requests.length > 0
-                ? { kind: "overdue", label: `${requests.length} pending` }
-                : undefined
+          <AdminSection
+            title="Needs attention"
+            icon={<AdminGlyph name="iconRoles" size={30} />}
+            subtitle={
+              needs.length > 0
+                ? `${needs.length} open item${needs.length === 1 ? "" : "s"}`
+                : "All clear"
             }
-            onPress={() => push("/(ganesh)/members" as never)}
-          />
-          <NavRow
-            title="Join requests"
-            meta="People waiting with the Pandal code"
-            icon={glyph(UserPlus)}
-            divider
-            onPress={() => push("/(ganesh)/join-requests" as never)}
-          />
-          <NavRow
-            title="Roles & permissions"
-            meta={`${roles.length} role${roles.length === 1 ? "" : "s"} — choose what each can do`}
-            icon={glyph(ShieldCheck)}
-            divider
-            onPress={() => push("/(ganesh)/admin/roles" as never)}
-          />
-          <NavRow
-            title="Committee tracker"
-            meta="Who paid their share this festival"
-            icon={glyph(ClipboardList)}
-            onPress={() => push("/(ganesh)/committee" as never)}
-          />
-        </Section>
+          >
+            {needs.length === 0 ? (
+              <AllClearBanner />
+            ) : (
+              needs.map((item, index) => {
+                const kind: StatusKind = item.tone === "critical" ? "overdue" : "pending";
+                return (
+                  <NavRow
+                    key={item.title}
+                    title={item.title}
+                    meta={item.subtitle}
+                    divider={index < needs.length - 1}
+                    chevronColor={g.saffron}
+                    badge={{ kind, label: item.tone === "critical" ? "Act now" : "Review" }}
+                    onPress={() => push(item.href as never)}
+                  />
+                );
+              })
+            )}
+          </AdminSection>
 
-        <Section title="Festival & funds">
-          <NavRow
-            title="Festival"
-            meta={festival ? `${festival.name} — create, switch, or close` : "Create a festival"}
-            icon={glyph(CalendarDays)}
-            divider
-            onPress={() => push("/(ganesh)/admin/festivals" as never)}
-          />
-          <NavRow
-            title="Permanent Fund"
-            meta={formatInr(fund.total)}
-            icon={glyph(Landmark, g.maroon)}
-            iconTint={g.wash(g.maroon)}
-            divider
-            onPress={() => push("/(ganesh)/permanent-fund" as never)}
-          />
-          <NavRow
-            title="Contribution setup"
-            meta="Default committee and household targets"
-            icon={glyph(Target)}
-            onPress={() => push("/(ganesh)/admin/setup" as never)}
-          />
-        </Section>
-        </SectionPair>
+          <SectionPair>
+            <AdminSection
+              title="People"
+              icon={<AdminGlyph name="iconMembers" size={30} />}
+            >
+              <NavRow
+                title="Members"
+                meta="Roles, status, and who paid"
+                icon={<AdminGlyph name="iconMembers" />}
+                iconTint="transparent"
+                chevronColor={g.saffron}
+                divider
+                onPress={() => push("/(ganesh)/members" as never)}
+              />
+              <NavRow
+                title="Join requests"
+                meta="People waiting with the Pandal code"
+                icon={<AdminGlyph name="iconJoin" />}
+                iconTint="transparent"
+                chevronColor={g.saffron}
+                divider
+                badge={
+                  requests.length > 0
+                    ? { kind: "overdue", label: `${requests.length} pending` }
+                    : undefined
+                }
+                onPress={() => push("/(ganesh)/join-requests" as never)}
+              />
+              <NavRow
+                title="Roles & permissions"
+                meta={`${roles.length} role${roles.length === 1 ? "" : "s"} — choose what each can do`}
+                icon={<AdminGlyph name="iconRoles" />}
+                iconTint="transparent"
+                chevronColor={g.saffron}
+                divider
+                onPress={() => push("/(ganesh)/admin/roles" as never)}
+              />
+              <NavRow
+                title="Committee tracker"
+                meta="Who paid their share this festival"
+                icon={<AdminGlyph name="iconCommittee" />}
+                iconTint="transparent"
+                chevronColor={g.saffron}
+                onPress={() => push("/(ganesh)/committee" as never)}
+              />
+            </AdminSection>
 
-        <SectionPair>
-        <Section title="Pandal property">
-          <NavRow
-            title="Assets"
-            meta={`${assetSummary.totalItems} items · ${formatInr(assetSummary.estimatedValue)} estimated`}
-            icon={glyph(Package)}
-            divider
-            badge={
-              assetSummary.damaged > 0
-                ? { kind: "pending", label: `${assetSummary.damaged} damaged` }
-                : undefined
-            }
-            onPress={() => push("/(ganesh)/assets" as never)}
-          />
-          <NavRow
-            title="Sponsors"
-            meta="Profiles and this festival's deals. Promises are not cash."
-            icon={glyph(Building2)}
-            onPress={() => push("/(ganesh)/sponsors" as never)}
-          />
-        </Section>
+            <AdminSection
+              title="Festival & funds"
+              icon={<AdminGlyph name="iconFestival" size={30} />}
+            >
+              <NavRow
+                title="Festival"
+                meta={festivalMeta}
+                icon={<AdminGlyph name="iconFestival" />}
+                iconTint="transparent"
+                chevronColor={g.saffron}
+                divider
+                onPress={() => push("/(ganesh)/admin/festivals" as never)}
+              />
+              <NavRow
+                title="Permanent Fund"
+                meta={formatInr(fund.total)}
+                icon={<AdminGlyph name="iconFund" />}
+                iconTint="transparent"
+                chevronColor={g.saffron}
+                divider
+                onPress={() => push("/(ganesh)/permanent-fund" as never)}
+              />
+              <NavRow
+                title="Contribution setup"
+                meta={contributionMeta}
+                icon={<AdminGlyph name="iconContribution" />}
+                iconTint="transparent"
+                chevronColor={g.saffron}
+                onPress={() => push("/(ganesh)/admin/setup" as never)}
+              />
+            </AdminSection>
+          </SectionPair>
 
-        <Section title="Review & settings">
-          <NavRow
-            title="Reports"
-            meta="Festival and money summaries"
-            icon={glyph(FileBarChart)}
-            divider
-            onPress={() => push("/(ganesh)/admin/reports" as never)}
-          />
-          <NavRow
-            title="Audit log"
-            meta="Who changed what"
-            icon={glyph(ScrollText)}
-            divider
-            onPress={() => push("/(ganesh)/admin/audit" as never)}
-          />
-          <NavRow
-            title="Expense categories"
-            meta="Add, rename, or disable"
-            icon={glyph(Tags)}
-            divider
-            onPress={() => push("/(ganesh)/admin/categories" as never)}
-          />
-          <NavRow
-            title="Pandal settings"
-            meta="Name, area, join rules"
-            icon={glyph(Settings)}
-            onPress={() => push("/(ganesh)/admin/settings" as never)}
-          />
-        </Section>
-        </SectionPair>
-      </AdminQueryState>
+          <SectionPair>
+            <AdminSection
+              title="Pandal property"
+              icon={<AdminGlyph name="iconAssets" size={30} />}
+            >
+              <NavRow
+                title="Assets"
+                meta={`${assetSummary.totalItems} items · ${formatInr(assetSummary.estimatedValue)} estimated`}
+                icon={<AdminGlyph name="iconAssets" />}
+                iconTint="transparent"
+                chevronColor={g.saffron}
+                divider
+                badge={
+                  assetSummary.damaged > 0
+                    ? { kind: "pending", label: `${assetSummary.damaged} damaged` }
+                    : undefined
+                }
+                onPress={() => push("/(ganesh)/assets" as never)}
+              />
+              <NavRow
+                title="Sponsors"
+                meta="Profiles and this festival's deals. Promises are not cash."
+                icon={<AdminGlyph name="iconSponsors" />}
+                iconTint="transparent"
+                chevronColor={g.saffron}
+                onPress={() => push("/(ganesh)/sponsors" as never)}
+              />
+            </AdminSection>
+
+            <AdminSection
+              title="Review & settings"
+              icon={<AdminGlyph name="iconSettings" size={30} />}
+            >
+              <NavRow
+                title="Reports"
+                meta="Festival and money summaries"
+                icon={<AdminGlyph name="iconReports" />}
+                iconTint="transparent"
+                chevronColor={g.saffron}
+                divider
+                onPress={() => push("/(ganesh)/admin/reports" as never)}
+              />
+              <NavRow
+                title="Audit log"
+                meta="Who changed what"
+                icon={<AdminGlyph name="iconAudit" />}
+                iconTint="transparent"
+                chevronColor={g.saffron}
+                divider
+                onPress={() => push("/(ganesh)/admin/audit" as never)}
+              />
+              <NavRow
+                title="Expense categories"
+                meta="Add, rename, or disable"
+                icon={<AdminGlyph name="iconCategories" />}
+                iconTint="transparent"
+                chevronColor={g.saffron}
+                divider
+                onPress={() => push("/(ganesh)/admin/categories" as never)}
+              />
+              <NavRow
+                title="Pandal settings"
+                meta="Name, area, join rules"
+                icon={<AdminGlyph name="iconSettings" />}
+                iconTint="transparent"
+                chevronColor={g.saffron}
+                onPress={() => push("/(ganesh)/admin/settings" as never)}
+              />
+            </AdminSection>
+          </SectionPair>
+        </AdminQueryState>
+      </View>
     </GaneshScreen>
   );
 }
+
+function AllClearBanner() {
+  const { theme } = useTheme();
+  const g = useGaneshTokens();
+
+  return (
+    <View
+      style={[
+        styles.infoBanner,
+        { backgroundColor: g.wash(g.saffron), borderColor: g.gold },
+      ]}
+      accessibilityRole="summary"
+    >
+      <View style={[styles.infoMark, { backgroundColor: g.saffron }]}>
+        <Text style={[styles.infoMarkLabel, { fontFamily: theme.fontFamily.bold }]}>i</Text>
+      </View>
+      <View style={styles.infoCopy}>
+        <Text
+          style={[
+            styles.infoTitle,
+            { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold },
+          ]}
+        >
+          You're all caught up
+        </Text>
+        <Text style={[styles.infoMeta, { color: theme.colors.mutedForeground }]}>
+          No join requests or urgent money items right now.
+        </Text>
+      </View>
+      <Image source={ADMIN_ART.diya} resizeMode="contain" style={styles.diya} />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  body: {
+    paddingHorizontal: 16,
+    paddingTop: 0,
+    marginTop: -8,
+    gap: 12,
+    overflow: "visible",
+  },
+  lotusWash: {
+    position: "absolute",
+    right: -20,
+    top: 120,
+    width: 220,
+    height: 220,
+    opacity: 0.08,
+  },
+  lotusImage: {
+    width: 220,
+    height: 220,
+  },
+  infoBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    borderRadius: 14,
+    borderCurve: "continuous",
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  infoMark: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  infoMarkLabel: {
+    color: "#FFF8F1",
+    fontSize: 14,
+  },
+  infoCopy: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  infoTitle: {
+    fontSize: 14.5,
+    letterSpacing: -0.15,
+  },
+  infoMeta: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  diya: {
+    width: 36,
+    height: 36,
+  },
+});

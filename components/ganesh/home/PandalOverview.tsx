@@ -1,7 +1,7 @@
 import { StyleSheet, Text, View } from "react-native";
-import { HandCoins, HeartHandshake, ShoppingBag } from "lucide-react-native";
 
-import { Money, Section, SectionAction, StatTile, useGaneshTokens } from "@/components/ganesh/ui";
+import { CollectionIcon, ExpenseIcon, OpeningFundIcon } from "@/components/ganesh/art/icons";
+import { Money, Section, SectionAction, StatTile } from "@/components/ganesh/ui";
 import { useTheme } from "@/theme/ThemeProvider";
 
 /**
@@ -24,7 +24,6 @@ export function PandalOverview({
   onDetails: () => void;
 }) {
   const { theme } = useTheme();
-  const g = useGaneshTokens();
 
   return (
     <Section title="Pandal Overview" action={<SectionAction label="View Details" onPress={onDetails} />}>
@@ -37,9 +36,7 @@ export function PandalOverview({
             </Text>
           }
         >
-          <View style={[styles.glyph, { backgroundColor: g.wash(g.godFund) }]}>
-            <HeartHandshake size={14} color={g.godFund} strokeWidth={2.2} />
-          </View>
+          <OpeningFundIcon size={32} />
           <Money value={available} size="primary" tone="positive" numberOfLines={1} adjustsFontSizeToFit />
         </StatTile>
         <StatTile
@@ -50,9 +47,7 @@ export function PandalOverview({
             </Text>
           }
         >
-          <View style={[styles.glyph, { backgroundColor: g.wash(g.saffron) }]}>
-            <HandCoins size={14} color={g.saffron} strokeWidth={2.2} />
-          </View>
+          <CollectionIcon size={32} />
           <Money value={received} size="primary" tone="accent" numberOfLines={1} adjustsFontSizeToFit />
         </StatTile>
         <StatTile
@@ -63,9 +58,7 @@ export function PandalOverview({
             </Text>
           }
         >
-          <View style={[styles.glyph, { backgroundColor: g.wash(g.maroon) }]}>
-            <ShoppingBag size={14} color={g.maroon} strokeWidth={2.2} />
-          </View>
+          <ExpenseIcon size={32} />
           <Money value={spent} size="primary" tone="negative" numberOfLines={1} adjustsFontSizeToFit />
         </StatTile>
       </View>
@@ -77,15 +70,6 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     gap: 10,
-  },
-  glyph: {
-    width: 26,
-    height: 26,
-    borderRadius: 8,
-    borderCurve: "continuous",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 4,
   },
   meta: {
     fontSize: 11.5,
