@@ -1,3 +1,4 @@
+const path = require("path");
 const { getDefaultConfig } = require("expo/metro-config");
 
 /** @type {import('expo/metro-config').MetroConfig} */
@@ -78,6 +79,45 @@ if (activeProduct) {
       : [];
 
   config.resolver.blockList = [...existingList, ...excludedRoutes.map(routeBlockPattern)];
+}
+
+/**
+ * Product-specific JS splash overlay. A static import of both overlays would
+ * pull the Expense `splash-logo.png` into a Ganesh bundle. Metro resolves the
+ * `product-splash-overlay` package name to one file per EXPO_PUBLIC_PRODUCT.
+ */
+const splashOverlayFile =
+  activeProduct === "ganesh"
+    ? path.resolve(__dirname, "components/ganesh/splash/GaneshSplashOverlay.tsx")
+    : path.resolve(__dirname, "components/splash/DefaultSplashOverlay.tsx");
+
+config.resolver.extraNodeModules = {
+  ...(config.resolver.extraNodeModules || {}),
+  "product-splash-overlay": splashOverlayFile,
+};
+
+const previousResolveRequest = config.resolver.resolveRequest;
+config.resolver.resolveRequest = (context, moduleName, platform) => {
+  if (moduleName === "product-splash-overlay") {
+    return { type: "sourceFile", filePath: splashOverlayFile };
+  }
+  if (previousResolveRequest) {
+    return previousResolveRequest(context, moduleName, platform);
+  }
+  return context.resolveRequest(context, moduleName, platform);
+};
+
+if (activeProduct === "ganesh") {
+  const currentBlockList = config.resolver.blockList;
+  const currentList = Array.isArray(currentBlockList)
+    ? currentBlockList
+    : currentBlockList
+      ? [currentBlockList]
+      : [];
+  config.resolver.blockList = [
+    ...currentList,
+    /[\\/]assets[\\/]branding[\\/]splash-logo\.png$/,
+  ];
 }
 
 module.exports = config;

@@ -45,15 +45,16 @@ const SHARED_PLUGINS = [
   "./plugins/withReactNativeArchitectures",
 ];
 
-function splashScreenPlugin(image) {
-  return [
-    "expo-splash-screen",
-    {
-      image: image || "./assets/branding/splash-logo.png",
-      resizeMode: "contain",
-      backgroundColor: "#071A2B",
-    },
-  ];
+function splashScreenPlugin(image, backgroundColor, imageWidth) {
+  const plugin = {
+    image: image || "./assets/branding/splash-logo.png",
+    resizeMode: "contain",
+    backgroundColor: backgroundColor || "#071A2B",
+  };
+  if (imageWidth) {
+    plugin.imageWidth = imageWidth;
+  }
+  return ["expo-splash-screen", plugin];
 }
 
 /**
@@ -131,7 +132,11 @@ module.exports = ({ config }) => {
       // than diverging behavior for a build that never runs them.
       plugins: [
         ...SHARED_PLUGINS,
-        splashScreenPlugin(override.splashImage),
+        splashScreenPlugin(
+          override.splashImage,
+          override.splashBackgroundColor,
+          override.splashImageWidth
+        ),
         ...(override.extraPlugins || []),
       ],
     };
@@ -151,7 +156,11 @@ module.exports = ({ config }) => {
     },
     plugins: [
       ...SHARED_PLUGINS,
-      splashScreenPlugin(override.splashImage),
+      splashScreenPlugin(
+        override.splashImage,
+        override.splashBackgroundColor,
+        override.splashImageWidth
+      ),
       ...(override.extraPlugins || []),
     ],
   };
