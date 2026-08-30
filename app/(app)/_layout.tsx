@@ -1,4 +1,4 @@
-import { ActivityIndicator, View } from "react-native";
+import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { Redirect, Stack } from "expo-router";
 
 import { AddTransactionModal } from "@/components/AddTransactionModal";
@@ -14,6 +14,7 @@ import { useNavigationStateRestoration } from "@/hooks/useNavigationStateRestora
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAuth } from "@/providers/AuthProvider";
 import { BorrowingsReceivablesProvider } from "@/providers/BorrowingsReceivablesProvider";
+import { ExpenseReferenceDataProvider } from "@/providers/ExpenseReferenceDataProvider";
 import { FinanceDataProvider } from "@/providers/FinanceDataProvider";
 import { CreditCardBillsProvider } from "@/providers/CreditCardBillsProvider";
 import { LedgerStateProvider } from "@/providers/LedgerStateProvider";
@@ -132,46 +133,65 @@ export default function AppLayout() {
   const { settings, loading: settingsLoading } = useSystemSettings();
   const { isAdmin, loading: roleLoading } = useUserRole();
 
-  if (authLoading || settingsLoading || (user && roleLoading)) {
-    return (
-      <View
-        style={{
-          flex: 1,
-          alignItems: "center",
-          justifyContent: "center",
-          backgroundColor: theme.colors.background,
-        }}
-      >
-        <ActivityIndicator color={theme.colors.primary} />
-      </View>
-    );
-  }
-
   if (!user) {
+    if (authLoading) {
+      return (
+        <View
+          style={{
+            flex: 1,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: theme.colors.background,
+          }}
+        >
+          <ActivityIndicator color={theme.colors.primary} />
+        </View>
+      );
+    }
     return <Redirect href="/(auth)/login" />;
   }
 
-  if (settings.maintenanceMode && !isAdmin) {
+  if (settings.maintenanceMode && !isAdmin && !roleLoading && !settingsLoading) {
     return <MaintenanceScreen />;
   }
+
+  const showGate = settingsLoading || roleLoading;
 
   return (
     <PrivacyLock>
       <FinanceDataProvider>
-        <BorrowingsReceivablesProvider>
-          <CreditCardBillsProvider>
-            <ModalProvider>
-              <SetupProgressProvider>
-                <LedgerStateProvider>
-                  <SmsReceiverProvider>
-                    <AppShellInner />
-                  </SmsReceiverProvider>
-                </LedgerStateProvider>
-              </SetupProgressProvider>
-            </ModalProvider>
-          </CreditCardBillsProvider>
-        </BorrowingsReceivablesProvider>
+        <ExpenseReferenceDataProvider>
+          <BorrowingsReceivablesProvider>
+            <CreditCardBillsProvider>
+              <ModalProvider>
+                <SetupProgressProvider>
+                  <LedgerStateProvider>
+                    <SmsReceiverProvider>
+                      <AppShellInner />
+                    </SmsReceiverProvider>
+                  </LedgerStateProvider>
+                </SetupProgressProvider>
+              </ModalProvider>
+            </CreditCardBillsProvider>
+          </BorrowingsReceivablesProvider>
+        </ExpenseReferenceDataProvider>
       </FinanceDataProvider>
+      {showGate ? (
+        <View
+          pointerEvents="auto"
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: theme.colors.background,
+              zIndex: 20,
+            },
+          ]}
+        >
+          <ActivityIndicator color={theme.colors.primary} />
+        </View>
+      ) : null}
     </PrivacyLock>
   );
 }

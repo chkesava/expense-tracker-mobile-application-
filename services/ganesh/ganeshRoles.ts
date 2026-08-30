@@ -5,6 +5,8 @@ import {
   getDocs,
   serverTimestamp,
   writeBatch,
+  type DocumentData,
+  type DocumentReference,
   type Firestore,
   type WriteBatch,
 } from "firebase/firestore";
@@ -12,9 +14,11 @@ import {
 import { newId } from "@/lib/id";
 import { commitWrite } from "@/lib/firestoreWrite";
 import { omitUndefined } from "@/shared/utils/firestorePayload";
+import { peekGaneshRoleSeed } from "@/services/ganesh/ganeshHydrated";
 import { tryStampPandalMembershipIndex } from "@/services/ganesh/ganeshMembershipIndex";
 import type {
   GaneshRole,
+  PandalMember,
   PandalMemberAuditAction,
   PandalRole,
 } from "@/shared/types/ganesh";
@@ -159,16 +163,43 @@ function builtinMissingPermissions(
   ].filter((perm) => !currentPerms.includes(perm));
 }
 
+export type PandalRoleSeed = {
+  roles?: PandalRole[] | null;
+  members?: PandalMember[] | null;
+};
+
+type RoleLike = {
+  id: string;
+  ref: DocumentReference;
+  data: () => DocumentData;
+};
+
+type MemberLike = {
+  ref: DocumentReference;
+  data: () => DocumentData;
+};
+
 export async function ensurePandalRoles(
   db: Firestore,
   actor: GaneshActor,
-  pandalId: string
+  pandalId: string,
+  hydrated?: PandalRoleSeed | null
 ): Promise<PandalRole[]> {
-  const [rolesSnap, membersSnap] = await Promise.all([
-    getDocs(collection(db, "pandals", pandalId, "roles")),
-    getDocs(collection(db, "pandals", pandalId, "members")),
-  ]);
-  const existing = new Map(rolesSnap.docs.map((docSnap) => [docSnap.id, docSnap]));
+  const seed = hydrated === undefined ? peekGaneshRoleSeed(pandalId) : hydrated;
+  const roleDocs: RoleLike[] = seed?.roles
+    ? seed.roles.map((role) => ({
+        id: role.id,
+        ref: doc(db, "pandals", pandalId, "roles", role.id),
+        data: () => role as unknown as DocumentData,
+      }))
+    : (await getDocs(collection(db, "pandals", pandalId, "roles"))).docs;
+  const memberDocs: MemberLike[] = seed?.members
+    ? seed.members.map((member) => ({
+        ref: doc(db, "pandals", pandalId, "members", member.id),
+        data: () => member as unknown as DocumentData,
+      }))
+    : (await getDocs(collection(db, "pandals", pandalId, "members"))).docs;
+  const existing = new Map(roleDocs.map((docSnap) => [docSnap.id, docSnap]));
   const seedBatch = writeBatch(db);
   let seeded = 0;
   const patchedBuiltins = new Set<string>();
@@ -196,10 +227,11 @@ export async function ensurePandalRoles(
   }
   if (seeded > 0) await commitWrite(() => seedBatch.commit(), { label: "seed roles" });
 
-  const roles = await loadRoles(db, pandalId);
+  const roles =
+    seeded > 0 || !seed?.roles ? await loadRoles(db, pandalId) : seed.roles;
   const migrateBatch = writeBatch(db);
   let migrated = 0;
-  membersSnap.forEach((memberSnap) => {
+  memberDocs.forEach((memberSnap) => {
     const data = memberSnap.data();
     const role = String(data.role ?? "member") as GaneshRole;
     const isAdmin = role === "admin";
@@ -262,7 +294,7 @@ export async function ensurePandalRoles(
     migrated += 1;
   });
   if (migrated > 0) await commitWrite(() => migrateBatch.commit(), { label: "migrate roles" });
-  return loadRoles(db, pandalId);
+  return roles;
 }
 
 export async function createPandalRole(

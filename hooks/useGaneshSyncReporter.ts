@@ -1,21 +1,23 @@
 import { useEffect } from "react";
 
 import { setGlobalPendingSyncCount } from "@/lib/syncStatusStore";
-import { useCollections } from "@/hooks/useCollections";
-import { useContributions } from "@/hooks/useContributions";
-import { useGaneshActivity } from "@/hooks/useGaneshActivity";
-import { useGaneshExpenses } from "@/hooks/useGaneshExpenses";
-import { useGaneshSession } from "@/providers/GaneshSessionProvider";
+import { useGaneshData } from "@/providers/GaneshDataProvider";
 
 export function useGaneshSyncReporter() {
-  const { pandalId, festivalId } = useGaneshSession();
-  const { pendingCount: collections } = useCollections(pandalId, festivalId);
-  const { pendingCount: expenses } = useGaneshExpenses(pandalId, festivalId);
-  const { pendingCount: contributions } = useContributions(pandalId, festivalId);
-  const { pendingCount: activity } = useGaneshActivity(pandalId, festivalId);
+  const { collections, expenses, contributions, activity } = useGaneshData();
 
   useEffect(() => {
-    setGlobalPendingSyncCount(collections + expenses + contributions + activity);
+    setGlobalPendingSyncCount(
+      collections.pendingCount +
+        expenses.pendingCount +
+        contributions.pendingCount +
+        activity.pendingCount
+    );
     return () => setGlobalPendingSyncCount(0);
-  }, [activity, collections, contributions, expenses]);
+  }, [
+    activity.pendingCount,
+    collections.pendingCount,
+    contributions.pendingCount,
+    expenses.pendingCount,
+  ]);
 }

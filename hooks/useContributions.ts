@@ -1,22 +1,29 @@
 import { useEffect, useState } from "react";
 import { doc, onSnapshot } from "firebase/firestore";
 
-import { useGaneshCollection } from "@/hooks/ganesh/useGaneshCollection";
+import { useSharedOrLocalCollection } from "@/hooks/ganesh/useSharedOrLocalCollection";
 import { snapshotErrorHandler } from "@/lib/firestoreErrors";
 import { getFirestoreDb } from "@/lib/firebase";
-import { festivalCol } from "@/shared/utils/ganeshPaths";
+import { useGaneshData } from "@/providers/GaneshDataProvider";
 import type { GaneshContribution } from "@/shared/types/ganesh";
+import { festivalCol } from "@/shared/utils/ganeshPaths";
 
 export function useContributions(pandalId: string | null, festivalId: string | null) {
-  const { items, loading, error, pendingCount } = useGaneshCollection<GaneshContribution>(
-    pandalId && festivalId ? festivalCol(pandalId, festivalId, "contributions") : null,
-    (id, data, pendingWrite) => ({
+  const data = useGaneshData();
+  const { items, loading, error, pendingCount } = useSharedOrLocalCollection<GaneshContribution>({
+    useShared:
+      Boolean(pandalId && festivalId) &&
+      pandalId === data.sessionPandalId &&
+      festivalId === data.sessionFestivalId,
+    shared: data.contributions,
+    path: pandalId && festivalId ? festivalCol(pandalId, festivalId, "contributions") : null,
+    mapDoc: (id, docData, pendingWrite) => ({
       id,
-      ...(data as Omit<GaneshContribution, "id">),
+      ...(docData as Omit<GaneshContribution, "id">),
       pendingWrite,
     }),
-    { orderByField: "createdAt", orderDirection: "desc", limitTo: 400 }
-  );
+    query: { orderByField: "createdAt", orderDirection: "desc", limitTo: 400 },
+  });
   return { contributions: items, loading, error, pendingCount };
 }
 
@@ -25,10 +32,17 @@ export function useGaneshContribution(
   festivalId: string | null,
   contributionId: string | null
 ) {
-  const [contribution, setContribution] = useState<GaneshContribution | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { contributions } = useContributions(pandalId, festivalId);
+  const fromList = contributions.find((item) => item.id === contributionId) ?? null;
+  const [contribution, setContribution] = useState<GaneshContribution | null>(fromList);
+  const [loading, setLoading] = useState(!fromList);
 
   useEffect(() => {
+    if (fromList) {
+      setContribution(fromList);
+      setLoading(false);
+      return;
+    }
     const db = getFirestoreDb();
     if (!db || !pandalId || !festivalId || !contributionId) {
       setContribution(null);
@@ -36,6 +50,7 @@ export function useGaneshContribution(
       return;
     }
     const [root, ...rest] = [...festivalCol(pandalId, festivalId, "contributions"), contributionId];
+    setLoading(true);
     const unsubscribe = onSnapshot(
       doc(db, root, ...rest),
       (snap) => {
@@ -57,7 +72,7 @@ export function useGaneshContribution(
       )
     );
     return unsubscribe;
-  }, [pandalId, festivalId, contributionId]);
+  }, [fromList, pandalId, festivalId, contributionId]);
 
-  return { contribution, loading };
+  return { contribution: fromList ?? contribution, loading: fromList ? false : loading };
 }

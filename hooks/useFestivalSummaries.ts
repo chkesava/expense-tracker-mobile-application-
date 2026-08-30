@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { doc, onSnapshot } from "firebase/firestore";
 
 import { getFirestoreDb } from "@/lib/firebase";
+import { forgetSnapshotPath, logQuerySnapshot } from "@/lib/firestoreReadDebug";
 import { EMPTY_GANESH_SUMMARY, type GaneshSummary } from "@/shared/types/ganesh";
 import { summaryDoc } from "@/shared/utils/ganeshPaths";
 
@@ -15,9 +16,12 @@ export function useFestivalSummaries(pandalId: string | null, festivalIds: strin
       setSummaries({});
       return;
     }
-    const unsubs = festivalIds.map((festivalId) => {
+    const paths = festivalIds.map((festivalId) => summaryDoc(pandalId, festivalId).join("/"));
+    const unsubs = festivalIds.map((festivalId, index) => {
       const [root, ...rest] = summaryDoc(pandalId, festivalId);
+      const path = paths[index]!;
       return onSnapshot(doc(db, root, ...rest), (snap) => {
+        logQuerySnapshot(path, snap);
         setSummaries((prev) => ({
           ...prev,
           [festivalId]: snap.exists()
@@ -27,6 +31,7 @@ export function useFestivalSummaries(pandalId: string | null, festivalIds: strin
       });
     });
     return () => {
+      paths.forEach((path) => forgetSnapshotPath(path));
       unsubs.forEach((unsubscribe) => unsubscribe());
     };
   }, [pandalId, idsKey]);

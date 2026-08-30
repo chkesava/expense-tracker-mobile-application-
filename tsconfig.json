@@ -5,6 +5,9 @@
     "paths": {
       "@/*": [
         "./*"
+      ],
+      "product-splash-overlay": [
+        "./components/splash/DefaultSplashOverlay.tsx"
       ]
     }
   },

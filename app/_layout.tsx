@@ -22,7 +22,7 @@ import { ACTIVE_PRODUCT, IS_LANDING_BUILD } from "@/lib/activeProduct";
 import { AppErrorBoundary } from "@/components/common/AppErrorBoundary";
 import { CelebrationOverlay } from "@/components/common/CelebrationOverlay";
 import { OfflineBanner } from "@/components/common/OfflineBanner";
-import { SplashAnimationOverlay } from "@/components/common/SplashAnimationOverlay";
+import { ProductSplashOverlay } from "product-splash-overlay";
 import { UpdateAvailableSheet } from "@/components/UpdateAvailableSheet";
 import { webWidthConstraintStyle } from "@/components/common/WebWidthConstraint";
 import { isPermissionError, logWarning } from "@/lib/errors";
@@ -93,6 +93,10 @@ SplashScreen.preventAutoHideAsync().catch(() => {
   /* splash may already be hidden in fast refresh */
 });
 
+if (ACTIVE_PRODUCT === "ganesh") {
+  SplashScreen.setOptions({ fade: true, duration: 280 });
+}
+
 if (Platform.OS !== "web") {
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
@@ -113,6 +117,7 @@ function AppInitializer({ children }: { children: React.ReactNode }) {
   const [navigationReady, setNavigationReady] = useState(false);
   const [appIsReady, setAppIsReady] = useState(false);
   const [animationComplete, setAnimationComplete] = useState(false);
+  const [overlayPainted, setOverlayPainted] = useState(false);
   const [fontsLoaded, fontError] = useFonts({
     Inter_400Regular,
     Inter_500Medium,
@@ -201,22 +206,33 @@ function AppInitializer({ children }: { children: React.ReactNode }) {
   }, [authLoading, localStoresReady, navigationReady, fontsSettled, readyTimedOut]);
 
   useEffect(() => {
+    if (ACTIVE_PRODUCT === "ganesh") {
+      if (overlayPainted || appIsReady) {
+        SplashScreen.hideAsync().catch(() => undefined);
+      }
+      return;
+    }
     if (appIsReady) {
       SplashScreen.hideAsync().catch(() => undefined);
     }
-  }, [appIsReady]);
+  }, [appIsReady, overlayPainted]);
+
+  const showGaneshSplash = ACTIVE_PRODUCT === "ganesh" && !animationComplete;
+  const showDefaultSplash = ACTIVE_PRODUCT !== "ganesh" && !animationComplete && appIsReady;
 
   return (
     <>
       {children}
-      {!animationComplete && appIsReady && (
-        <SplashAnimationOverlay
+      {(showGaneshSplash || showDefaultSplash) ? (
+        <ProductSplashOverlay
+          isReady={appIsReady}
+          onFirstFrame={() => setOverlayPainted(true)}
           onAnimationComplete={() => {
             setAnimationComplete(true);
             perfMark("splash_animation_done");
           }}
         />
-      )}
+      ) : null}
     </>
   );
 }

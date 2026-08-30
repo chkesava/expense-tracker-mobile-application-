@@ -1,12 +1,8 @@
-import { useEffect, useState } from "react";
 import {
   addDoc,
   collection,
   deleteDoc,
   doc,
-  onSnapshot,
-  orderBy,
-  query,
   serverTimestamp,
   updateDoc,
 } from "firebase/firestore";
@@ -14,53 +10,24 @@ import {
 import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
 import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
-import { snapshotErrorHandler } from "@/lib/firestoreErrors";
-import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
-import type { FinancialGoal } from "@/shared/types/expense";
+import { useExpenseReferenceData } from "@/providers/ExpenseReferenceDataProvider";
 
 export const useFinancialGoals = (options?: { enabled?: boolean }) => {
   const enabled = options?.enabled !== false;
   const { user } = useAuth();
   const uid = user?.uid;
-  const [goals, setGoals] = useState<FinancialGoal[]>([]);
-  const [loading, setLoading] = useState(true);
-  const { error, setError, retry, attempt } = useLoadFailure();
-
-  useEffect(() => {
-    const db = getFirestoreDb();
-    if (!uid || !enabled || !db) {
-      setGoals([]);
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-    const q = query(
-      collection(db, "users", uid, "financialGoals"),
-      orderBy("createdAt", "asc")
-    );
-
-    return onSnapshot(
-      q,
-      (snap) => {
-        setGoals(
-          snap.docs.map((d) => ({ id: d.id, ...d.data() } as FinancialGoal))
-        );
-        setError(null);
-        setLoading(false);
-      },
-      snapshotErrorHandler(
-        "snapshot.financialGoals",
-        (failure) => {
-          setError(failure);
-          setLoading(false);
-        },
-        "Couldn't load your goals."
-      )
-    );
-  }, [uid, enabled, attempt]);
+  const {
+    goals: sharedGoals,
+    goalsLoading,
+    goalsError,
+    retryGoals,
+  } = useExpenseReferenceData();
+  const goals = enabled ? sharedGoals : [];
+  const loading = enabled ? goalsLoading : false;
+  const error = enabled ? goalsError : null;
+  const retry = retryGoals;
 
   const addGoal = async (
     name: string,

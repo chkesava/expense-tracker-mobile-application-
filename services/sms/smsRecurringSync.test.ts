@@ -7,7 +7,10 @@ import {
 } from "@/services/sms/smsRecurringDetector";
 import {
   declineRecurringSuggestion,
+  peekHydratedSubscriptionsForTests,
   rememberDeletedSubscription,
+  rememberHydratedSubscriptions,
+  resetHydratedSubscriptionsForTests,
 } from "@/services/sms/smsRecurringSync";
 import {
   enqueueRecurringSuggestions,
@@ -43,6 +46,7 @@ function everyNDays(
 describe("recurring suggestion inbox", () => {
   beforeEach(() => {
     resetSmsRecurringStoreForTests();
+    resetHydratedSubscriptionsForTests();
   });
 
   it("strips legacy merchant|amount dismiss keys", () => {
@@ -90,5 +94,14 @@ describe("recurring suggestion inbox", () => {
   it("deleting a subscription dismisses that merchant", async () => {
     await rememberDeletedSubscription(undefined, { name: "Chicken" });
     expect(await loadDismissedRecurringKeys()).toContain("chicken");
+  });
+
+  it("reuses the shared subscription list instead of a fresh getDocs", () => {
+    rememberHydratedSubscriptions([
+      { id: "sub-1", name: "Netflix" } as never,
+    ]);
+    expect(peekHydratedSubscriptionsForTests()?.[0]?.id).toBe("sub-1");
+    resetHydratedSubscriptionsForTests();
+    expect(peekHydratedSubscriptionsForTests()).toBeNull();
   });
 });

@@ -55,11 +55,17 @@ function todayKey() {
  * app, so a signed-in user sees the same portfolio on web and mobile.
  *
  * @param options.enabled When false, skips snapshot listeners (ledger tabs already unmount portfolio/SIP when inactive).
+ * @param options.includeSecondary When false, only settings + holdings (enough for net worth).
  */
-export function usePortfolio(options?: { enabled?: boolean }) {
+export function usePortfolio(options?: {
+  enabled?: boolean;
+  includeSecondary?: boolean;
+}) {
   const { user } = useAuth();
+  const uid = user?.uid;
   const db = getFirestoreDb();
   const enabled = options?.enabled ?? true;
+  const includeSecondary = options?.includeSecondary !== false;
 
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [transactions, setTransactions] = useState<PortfolioTransaction[]>([]);
@@ -71,7 +77,7 @@ export function usePortfolio(options?: { enabled?: boolean }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user || !db) {
+    if (!uid || !db) {
       setHoldings([]);
       setTransactions([]);
       setWatchlist([]);
@@ -88,7 +94,6 @@ export function usePortfolio(options?: { enabled?: boolean }) {
       return;
     }
 
-    const uid = user.uid;
     setLoading(true);
     const settingsRef = doc(db, "users", uid, "portfolioSettings", SETTINGS_DOC_ID);
 
@@ -114,9 +119,10 @@ export function usePortfolio(options?: { enabled?: boolean }) {
       }),
     ];
 
-    // Secondary collections after idle — avoid snapshot fan-out on dashboard
+    // Secondary collections after idle — skip for net-worth-only consumers
     let secondaryUnsubs: Array<() => void> = [];
-    const cancelIdle = scheduleIdleWork(
+    const cancelIdle = includeSecondary
+      ? scheduleIdleWork(
       () => {
         secondaryUnsubs = [
           onSnapshot(query(collection(db, "users", uid, "portfolioTransactions")), (snapshot) => {
@@ -155,14 +161,15 @@ export function usePortfolio(options?: { enabled?: boolean }) {
         ];
       },
       { fallbackDelayMs: 900, timeoutMs: 2500 }
-    );
+    )
+      : undefined;
 
     return () => {
-      cancelIdle();
+      cancelIdle?.();
       primaryUnsubs.forEach((unsubscribe) => unsubscribe());
       secondaryUnsubs.forEach((unsubscribe) => unsubscribe());
     };
-  }, [db, user, enabled]);
+  }, [db, uid, enabled, includeSecondary]);
 
   const addHolding = useCallback(async (holding: CreateHoldingInput): Promise<string | null> => {
     if (!user || !db) return null;

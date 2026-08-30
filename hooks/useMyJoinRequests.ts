@@ -1,25 +1,12 @@
-import { where } from "firebase/firestore";
-
-import { useGaneshCollection } from "@/hooks/ganesh/useGaneshCollection";
-import { useAuth } from "@/providers/AuthProvider";
-import type { PandalJoinRequest } from "@/shared/types/ganesh";
+import { useGaneshData } from "@/providers/GaneshDataProvider";
 
 export function useMyJoinRequests() {
-  const { realUser } = useAuth();
-  const uid = realUser?.uid ?? null;
-  const { items, loading, error } = useGaneshCollection<PandalJoinRequest>(
-    uid ? ["pandalJoinRequests"] : null,
-    (id, data) => ({ id, ...(data as Omit<PandalJoinRequest, "id">) }),
-    {
-      extra: uid ? [where("userId", "==", uid)] : [],
-      enabled: Boolean(uid),
-    }
-  );
+  const { myJoinRequests } = useGaneshData();
   return {
-    requests: items,
-    pending: items.filter((request) => request.status === "pending"),
-    rejected: items.filter((request) => request.status === "rejected"),
-    loading,
-    error,
+    requests: myJoinRequests.items,
+    pending: myJoinRequests.items.filter((request) => request.status === "pending"),
+    rejected: myJoinRequests.items.filter((request) => request.status === "rejected"),
+    loading: myJoinRequests.loading,
+    error: myJoinRequests.error,
   };
 }

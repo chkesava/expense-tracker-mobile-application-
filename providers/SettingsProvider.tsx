@@ -16,6 +16,8 @@ import {
 import { View } from "react-native";
 import { doc, setDoc } from "firebase/firestore";
 
+import { GANESH_SPLASH_MAROON } from "@/components/ganesh/splash/ganeshSplashTheme";
+import { ACTIVE_PRODUCT } from "@/lib/activeProduct";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
 import { commitWrite } from "@/lib/firestoreWrite";
@@ -272,7 +274,7 @@ function SettingsBootSplash() {
     <View
       style={{
         flex: 1,
-        backgroundColor: "#0F2F4B",
+        backgroundColor: ACTIVE_PRODUCT === "ganesh" ? GANESH_SPLASH_MAROON : "#0F2F4B",
       }}
     />
   );

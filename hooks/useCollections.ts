@@ -1,16 +1,23 @@
-import { useGaneshCollection } from "@/hooks/ganesh/useGaneshCollection";
-import { festivalCol } from "@/shared/utils/ganeshPaths";
+import { useSharedOrLocalCollection } from "@/hooks/ganesh/useSharedOrLocalCollection";
+import { useGaneshData } from "@/providers/GaneshDataProvider";
 import type { GaneshCollection } from "@/shared/types/ganesh";
+import { festivalCol } from "@/shared/utils/ganeshPaths";
 
 export function useCollections(pandalId: string | null, festivalId: string | null) {
-  const { items, loading, error, pendingCount } = useGaneshCollection<GaneshCollection>(
-    pandalId && festivalId ? festivalCol(pandalId, festivalId, "collections") : null,
-    (id, data, pendingWrite) => ({
+  const data = useGaneshData();
+  const { items, loading, error, pendingCount } = useSharedOrLocalCollection<GaneshCollection>({
+    useShared:
+      Boolean(pandalId && festivalId) &&
+      pandalId === data.sessionPandalId &&
+      festivalId === data.sessionFestivalId,
+    shared: data.collections,
+    path: pandalId && festivalId ? festivalCol(pandalId, festivalId, "collections") : null,
+    mapDoc: (id, docData, pendingWrite) => ({
       id,
-      ...(data as Omit<GaneshCollection, "id">),
+      ...(docData as Omit<GaneshCollection, "id">),
       pendingWrite,
     }),
-    { orderByField: "createdAt", orderDirection: "desc", limitTo: 400 }
-  );
+    query: { orderByField: "createdAt", orderDirection: "desc", limitTo: 400 },
+  });
   return { collections: items, loading, error, pendingCount };
 }

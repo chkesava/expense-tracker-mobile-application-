@@ -17,6 +17,14 @@ export function authErrorMessage(error: unknown, fallback: string): string {
  * Proxied Firebase user whose `uid` is `${real.uid}_duress`.
  * Keeps other User fields/prototype behavior for Auth consumers.
  */
+/** Token refresh keeps the same uid — listeners must not remount. */
+export function shouldIgnoreAuthUidChange(
+  observedUid: string | null | undefined,
+  nextUid: string | null
+): boolean {
+  return observedUid === nextUid;
+}
+
 export function createDuressUser(real: User): User {
   const duressUser = Object.create(real) as User;
   Object.defineProperty(duressUser, "uid", {

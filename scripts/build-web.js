@@ -74,6 +74,18 @@ function formatBytes(bytes) {
 }
 
 /** Injects the manifest link + Apple PWA meta tags into an exported index.html. */
+/** Ganesh-only first-paint color. Shared public/index.html stays navy for other targets. */
+function paintGaneshBootBackground(outDir, product) {
+  if (product.product !== 'ganesh') return;
+  const indexPath = path.join(outDir, 'index.html');
+  if (!fs.existsSync(indexPath)) return;
+  const bg = (product.web && product.web.backgroundColor) || '#3D1224';
+  let html = fs.readFileSync(indexPath, 'utf8');
+  html = html.replace(/background-color:\s*#071a2b;/gi, `background-color: ${bg};`);
+  html = html.replace(/background-color:\s*#fff;/g, `background-color: ${bg};`);
+  fs.writeFileSync(indexPath, html);
+}
+
 function injectHeadTags(outDir, product) {
   const indexPath = path.join(outDir, 'index.html');
   if (!fs.existsSync(indexPath)) return;
@@ -183,6 +195,7 @@ function buildTarget(target) {
   writeManifest(outDir, product);
   copyPwaIcons(outDir, target);
   injectHeadTags(outDir, product);
+  paintGaneshBootBackground(outDir, product);
 
   const bytes = dirSizeBytes(outDir);
   console.log(`"${target}" bundle size: ${formatBytes(bytes)}`);

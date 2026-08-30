@@ -2,8 +2,10 @@ import { useEffect, useState } from "react";
 import { doc, onSnapshot } from "firebase/firestore";
 
 import { useGaneshCollection } from "@/hooks/ganesh/useGaneshCollection";
+import { useSharedOrLocalCollection } from "@/hooks/ganesh/useSharedOrLocalCollection";
 import { snapshotErrorHandler } from "@/lib/firestoreErrors";
 import { getFirestoreDb } from "@/lib/firebase";
+import { useGaneshData } from "@/providers/GaneshDataProvider";
 import type { FestivalSeva, SevaDuty } from "@/shared/types/ganesh";
 import { festivalCol, sevaDutiesCol } from "@/shared/utils/ganeshPaths";
 
@@ -16,15 +18,21 @@ import { festivalCol, sevaDutiesCol } from "@/shared/utils/ganeshPaths";
  * entirely.
  */
 export function useFestivalSeva(pandalId: string | null, festivalId: string | null) {
-  const { items, loading, error, pendingCount, retry } = useGaneshCollection<FestivalSeva>(
-    pandalId && festivalId ? festivalCol(pandalId, festivalId, "seva") : null,
-    (id, data, pendingWrite) => ({
+  const data = useGaneshData();
+  const { items, loading, error, pendingCount, retry } = useSharedOrLocalCollection<FestivalSeva>({
+    useShared:
+      Boolean(pandalId && festivalId) &&
+      pandalId === data.sessionPandalId &&
+      festivalId === data.sessionFestivalId,
+    shared: data.seva,
+    path: pandalId && festivalId ? festivalCol(pandalId, festivalId, "seva") : null,
+    mapDoc: (id, docData, pendingWrite) => ({
       id,
-      ...(data as Omit<FestivalSeva, "id">),
+      ...(docData as Omit<FestivalSeva, "id">),
       pendingWrite,
     }),
-    { orderByField: "date", orderDirection: "asc", limitTo: 400 }
-  );
+    query: { orderByField: "date", orderDirection: "asc", limitTo: 400 },
+  });
   return { seva: items, loading, error, pendingCount, retry };
 }
 
@@ -34,10 +42,17 @@ export function useSeva(
   festivalId: string | null,
   sevaId: string | null
 ) {
-  const [seva, setSeva] = useState<FestivalSeva | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { seva: items } = useFestivalSeva(pandalId, festivalId);
+  const fromList = items.find((item) => item.id === sevaId) ?? null;
+  const [seva, setSeva] = useState<FestivalSeva | null>(fromList);
+  const [loading, setLoading] = useState(!fromList);
 
   useEffect(() => {
+    if (fromList) {
+      setSeva(fromList);
+      setLoading(false);
+      return;
+    }
     const db = getFirestoreDb();
     if (!db || !pandalId || !festivalId || !sevaId) {
       setSeva(null);
@@ -45,6 +60,7 @@ export function useSeva(
       return;
     }
     const [root, ...rest] = [...festivalCol(pandalId, festivalId, "seva"), sevaId];
+    setLoading(true);
     const unsubscribe = onSnapshot(
       doc(db, root, ...rest),
       (snap) => {
@@ -62,9 +78,9 @@ export function useSeva(
       snapshotErrorHandler("snapshot.ganesh.seva", () => setLoading(false), "Couldn't load seva.")
     );
     return unsubscribe;
-  }, [pandalId, festivalId, sevaId]);
+  }, [fromList, pandalId, festivalId, sevaId]);
 
-  return { seva, loading };
+  return { seva: fromList ?? seva, loading: fromList ? false : loading };
 }
 
 /**

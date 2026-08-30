@@ -37,7 +37,11 @@ import { getFirebaseAuth, getFirestoreDb } from "@/lib/firebase";
 import { enforceGoogleSignupGate } from "@/lib/googleSignupGate";
 import { perfMark } from "@/lib/perf";
 import { privacySession } from "@/lib/privacySession";
-import { authErrorMessage, createDuressUser } from "@/lib/authHelpers";
+import {
+  authErrorMessage,
+  createDuressUser,
+  shouldIgnoreAuthUidChange,
+} from "@/lib/authHelpers";
 import { scheduleIdleWork } from "@/shared/utils/scheduleIdle";
 
 const GOOGLE_WEB_CLIENT_ID =
@@ -95,8 +99,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     let cancelHierarchy: (() => void) | undefined;
+    let observedUid: string | null | undefined;
 
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      const nextUid = currentUser?.uid ?? null;
+      // Token refresh / profile updates keep the same uid — do not replace the
+      // User object or re-run hierarchy seed (that remounts every listener).
+      if (shouldIgnoreAuthUidChange(observedUid, nextUid)) {
+        setLoading(false);
+        return;
+      }
+      observedUid = nextUid;
+
       if (!currentUser) {
         privacySession.clearAll();
       }

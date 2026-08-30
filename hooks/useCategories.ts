@@ -1,12 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import {
   addDoc,
   collection,
   deleteDoc,
   doc,
   getDocs,
-  onSnapshot,
-  query,
   serverTimestamp,
   updateDoc,
   writeBatch,
@@ -14,48 +12,24 @@ import {
 
 import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
-import { snapshotErrorHandler } from "@/lib/firestoreErrors";
-import { useLoadFailure } from "@/hooks/useLoadFailure";
+import { useExpenses } from "@/hooks/useExpenses";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
+import { useExpenseReferenceData } from "@/providers/ExpenseReferenceDataProvider";
 import type { Category } from "@/shared/types/expense";
 
 export const useCategories = () => {
   const { user } = useAuth();
   const uid = user?.uid;
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [loading, setLoading] = useState(true);
-  const { error, setError, retry, attempt } = useLoadFailure();
-
-  useEffect(() => {
-    const db = getFirestoreDb();
-    if (!uid || !db) {
-      setCategories([]);
-      setLoading(false);
-      return;
-    }
-
-    const q = query(collection(db, "users", uid, "categories"));
-
-    return onSnapshot(
-      q,
-      (snap) => {
-        setCategories(
-          snap.docs.map((d) => ({ id: d.id, ...d.data() } as Category))
-        );
-        setError(null);
-        setLoading(false);
-      },
-      snapshotErrorHandler(
-        "snapshot.categories",
-        (failure) => {
-          setError(failure);
-          setLoading(false);
-        },
-        "Couldn't load your categories."
-      )
-    );
-  }, [uid, attempt]);
+  const {
+    categories,
+    categoriesLoading: loading,
+    categoriesError: error,
+    retryCategories: retry,
+    budgets,
+    budgetsLoading,
+  } = useExpenseReferenceData();
+  const { expenses, loading: expensesLoading } = useExpenses();
 
   const parentCategories = useMemo(
     () =>
@@ -222,9 +196,20 @@ export const useCategories = () => {
       });
 
       if (rewriteExpenses) {
-        const expensesSnap = await getDocs(
-          collection(db, "users", uid, "expenses")
-        );
+        const rows = !expensesLoading
+          ? expenses.map((expense) => ({
+              id: expense.id,
+              data: expense,
+            }))
+          : (await getDocs(collection(db, "users", uid, "expenses"))).docs.map(
+              (expenseDoc) => ({
+                id: expenseDoc.id,
+                data: expenseDoc.data() as {
+                  category?: string;
+                  subcategory?: string;
+                },
+              })
+            );
         let batch = writeBatch(db);
         let ops = 0;
         const flush = async () => {
@@ -234,8 +219,10 @@ export const useCategories = () => {
           ops = 0;
         };
 
-        for (const expenseDoc of expensesSnap.docs) {
-          const data = expenseDoc.data();
+        for (const row of rows) {
+          if (!row.id) continue;
+          const data = row.data;
+          const ref = doc(db, "users", uid, "expenses", row.id);
           if (cat.kind === "subcategory") {
             const parent = categories.find((c) => c.id === cat.parentId);
             if (
@@ -243,11 +230,11 @@ export const useCategories = () => {
               data.category === parent.name &&
               data.subcategory === oldName
             ) {
-              batch.update(expenseDoc.ref, { subcategory: trimmed });
+              batch.update(ref, { subcategory: trimmed });
               ops++;
             }
           } else if (data.category === oldName) {
-            batch.update(expenseDoc.ref, { category: trimmed });
+            batch.update(ref, { category: trimmed });
             ops++;
           }
           if (ops >= 400) await flush();
@@ -375,15 +362,27 @@ export const useCategories = () => {
         if (ops >= 400) await flush();
       }
 
-      const expensesSnap = await getDocs(
-        collection(db, "users", uid, "expenses")
-      );
-      for (const expenseDoc of expensesSnap.docs) {
-        const data = expenseDoc.data();
+      const expenseRows = !expensesLoading
+        ? expenses.map((expense) => ({
+            id: expense.id,
+            data: expense,
+          }))
+        : (await getDocs(collection(db, "users", uid, "expenses"))).docs.map(
+            (expenseDoc) => ({
+              id: expenseDoc.id,
+              data: expenseDoc.data() as {
+                category?: string;
+                subcategory?: string;
+              },
+            })
+          );
+      for (const row of expenseRows) {
+        if (!row.id) continue;
+        const data = row.data;
         if (data.category === source.name) {
           const oldSub = (data.subcategory as string) || "Other";
           const conflict = targetSubNames.has(oldSub.toLowerCase());
-          batch.update(expenseDoc.ref, {
+          batch.update(doc(db, "users", uid, "expenses", row.id), {
             category: target.name,
             subcategory: conflict ? `${oldSub} (from ${source.name})` : oldSub,
           });
@@ -392,13 +391,16 @@ export const useCategories = () => {
         }
       }
 
-      // Rewrite budgets pointing at source category
-      const budgetsSnap = await getDocs(
-        collection(db, "users", uid, "categoryBudgets")
-      );
-      for (const b of budgetsSnap.docs) {
-        if (b.data().category === source.name) {
-          batch.update(b.ref, { category: target.name });
+      const budgetRows = !budgetsLoading
+        ? budgets
+        : (await getDocs(collection(db, "users", uid, "categoryBudgets"))).docs.map(
+            (b) => ({ id: b.id, ...(b.data() as { category?: string }) })
+          );
+      for (const b of budgetRows) {
+        if (b.category === source.name) {
+          batch.update(doc(db, "users", uid, "categoryBudgets", b.id), {
+            category: target.name,
+          });
           ops++;
           if (ops >= 400) await flush();
         }

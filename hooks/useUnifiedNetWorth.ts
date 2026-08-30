@@ -78,7 +78,7 @@ export function useUnifiedNetWorth(): UnifiedNetWorthSummary {
     holdings,
     settings: portfolioSettings,
     loading: portfolioLoading,
-  } = usePortfolio();
+  } = usePortfolio({ includeSecondary: false });
 
   const symbolRequests = useMemo(
     () =>

@@ -21,6 +21,7 @@ import {
 import { AppState } from "react-native";
 
 import { getFirestoreDb } from "@/lib/firebase";
+import { forgetSnapshotPath, logQuerySnapshot } from "@/lib/firestoreReadDebug";
 import { commitWrite } from "@/lib/firestoreWrite";
 import { logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
@@ -149,12 +150,14 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
   const autoGenerateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoGenerateInFlight = useRef(false);
   const autoGenerateToastShown = useRef(false);
+  const lastAutoBillFingerprintRef = useRef("");
 
   const globalPrefs = settings.creditCardBillReminders;
   const timezone = settings.timezone;
 
   useEffect(() => {
     autoGenerateToastShown.current = false;
+    lastAutoBillFingerprintRef.current = "";
   }, [user?.uid]);
 
   useEffect(() => {
@@ -166,9 +169,11 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
     }
 
     setBillsLoading(true);
+    const path = `users/${user.uid}/creditCardBills`;
     const unsub = onSnapshot(
       query(collection(db, "users", user.uid, "creditCardBills")),
       (snap) => {
+        logQuerySnapshot(path, snap);
         setBills(
           snap.docs.map(
             (d) => ({ id: d.id, ...(d.data() as object) }) as CreditCardBill
@@ -178,8 +183,11 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
       },
       () => setBillsLoading(false)
     );
-    return unsub;
-  }, [user]);
+    return () => {
+      forgetSnapshotPath(path);
+      unsub();
+    };
+  }, [user?.uid]);
 
   const writeReminderLog = useCallback(
     async (entry: Omit<CreditCardBillReminderLog, "id" | "sentAt" | "channel">) => {
@@ -344,6 +352,60 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
         existingBills: bills,
         today: todayDateKey(timezone),
       });
+      const patches = collectAutoCreditCardBillRefreshPatches({
+        accounts,
+        typeNameById,
+        expenses,
+        existingBills: bills,
+        today: todayDateKey(timezone),
+      });
+      const patchedPreview = new Map(bills.map((bill) => [bill.id, bill]));
+      for (const patch of patches) {
+        const existing = patchedPreview.get(patch.billId);
+        if (!existing) continue;
+        patchedPreview.set(patch.billId, {
+          ...existing,
+          statementAmount: patch.statementAmount,
+          minimumDueAmount: patch.minimumDueAmount,
+          statementDate: patch.statementDate,
+          billingPeriodStart: patch.billingPeriodStart,
+          billingPeriodEnd: patch.billingPeriodEnd,
+          dueDate: patch.dueDate,
+        });
+      }
+      const previewAllocations = collectCreditBillAllocationPatches({
+        accounts,
+        isCreditAccount: (account) =>
+          getAccountKind(typeNameById.get(account.typeId) || "") === "credit",
+        expenses,
+        payments,
+        bills: [...patchedPreview.values()],
+        today: todayDateKey(timezone),
+      });
+      const fingerprint = JSON.stringify({
+        drafts: drafts
+          .map(
+            (draft) =>
+              `${draft.accountId}:${draft.billingPeriodStart}:${draft.statementAmount}`
+          )
+          .sort(),
+        patches: patches
+          .map(
+            (patch) =>
+              `${patch.billId}:${patch.statementAmount}:${patch.dueDate}:${patch.billingPeriodStart}:${patch.billingPeriodEnd}`
+          )
+          .sort(),
+        allocations: previewAllocations
+          .map(
+            (allocation) =>
+              `${allocation.billId}:${allocation.amountPaid}:${allocation.paymentIds.join(",")}`
+          )
+          .sort(),
+      });
+      if (fingerprint === lastAutoBillFingerprintRef.current) {
+        return;
+      }
+
       let created = 0;
       for (const draft of drafts) {
         try {
@@ -362,13 +424,6 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
         );
       }
 
-      const patches = collectAutoCreditCardBillRefreshPatches({
-        accounts,
-        typeNameById,
-        expenses,
-        existingBills: bills,
-        today: todayDateKey(timezone),
-      });
       const patchedBills = new Map(bills.map((bill) => [bill.id, bill]));
       for (const patch of patches) {
         const existing = patchedBills.get(patch.billId);
@@ -388,6 +443,18 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
           status: derived.status,
           remainingAmount: derived.remainingAmount,
         });
+        if (
+          existing.statementAmount === patch.statementAmount &&
+          existing.minimumDueAmount === patch.minimumDueAmount &&
+          existing.statementDate === patch.statementDate &&
+          existing.billingPeriodStart === patch.billingPeriodStart &&
+          existing.billingPeriodEnd === patch.billingPeriodEnd &&
+          existing.dueDate === patch.dueDate &&
+          existing.status === derived.status &&
+          existing.remainingAmount === derived.remainingAmount
+        ) {
+          continue;
+        }
         try {
           await commitWrite(
             () =>
@@ -427,6 +494,13 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
       for (const allocation of allocations) {
         const existing = patchedBills.get(allocation.billId);
         if (!existing) continue;
+        if (
+          existing.amountPaid === allocation.amountPaid &&
+          JSON.stringify(existing.paymentIds ?? []) ===
+            JSON.stringify(allocation.paymentIds)
+        ) {
+          continue;
+        }
         const derived = refreshDerivedFields(
           { ...existing, amountPaid: allocation.amountPaid },
           timezone,
@@ -453,6 +527,7 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
           logError("creditCardBills.allocatePayments", err);
         }
       }
+      lastAutoBillFingerprintRef.current = fingerprint;
     } finally {
       autoGenerateInFlight.current = false;
     }
