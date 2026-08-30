@@ -9,6 +9,8 @@
   "icon": "./assets/branding/ganesh-pandal-adaptive-icon.png",
   "adaptiveIconForeground": "./assets/branding/ganesh-pandal-adaptive-icon.png",
   "splashImage": "./assets/branding/ganesh-pandal-splash-logo.png",
+  "splashBackgroundColor": "#3D1224",
+  "splashImageWidth": 200,
   "permissions": [
     "android.permission.USE_BIOMETRIC",
     "android.permission.USE_FINGERPRINT",
@@ -27,7 +29,7 @@
     "basePath": "/ganesh",
     "shortName": "Ganesh Seva",
     "themeColor": "#F97316",
-    "backgroundColor": "#071A2B",
+    "backgroundColor": "#3D1224",
     "description": "Shared Pandal hisab: contributions, sponsors and expenses.",
     "manifestIcon": "./assets/branding/ganesh-pandal-adaptive-icon.png"
   }

@@ -5,6 +5,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { useAuth } from "@/providers/AuthProvider";
 import { useWorkspace } from "@/providers/WorkspaceProvider";
+import { GANESH_SPLASH_MAROON } from "@/components/ganesh/splash/ganeshSplashTheme";
 import { FIRST_LAUNCH_KEY } from "@/components/onboarding/OnboardingCarousel";
 import { ProductChooser } from "@/components/landing/ProductChooser";
 import { ACTIVE_PRODUCT, activeProductRootRoute, IS_LANDING_BUILD } from "@/lib/activeProduct";
@@ -45,7 +46,7 @@ export default function Index() {
       <View
         style={{
           flex: 1,
-          backgroundColor: "#0F2F4B",
+          backgroundColor: ACTIVE_PRODUCT === "ganesh" ? GANESH_SPLASH_MAROON : "#0F2F4B",
         }}
       />
     );
