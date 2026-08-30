@@ -17,6 +17,7 @@ export const GANESH_SPLASH = {
   petal: "rgba(226, 138, 60, 0.5)",
 } as const;
 
-export const GANESH_SPLASH_MIN_MS = 400;
-export const GANESH_SPLASH_REDUCED_MIN_MS = 200;
-export const GANESH_SPLASH_FADE_MS = 280;
+/** Hold the festival reveal long enough to play, and to warm Pandal data. */
+export const GANESH_SPLASH_MIN_MS = 5500;
+export const GANESH_SPLASH_REDUCED_MIN_MS = 1600;
+export const GANESH_SPLASH_FADE_MS = 420;

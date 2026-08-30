@@ -324,7 +324,6 @@ export default function AdminDashboardScreen() {
                 title="Members"
                 meta="Roles, status, and who paid"
                 icon={<AdminGlyph name="iconMembers" />}
-                iconTint="transparent"
                 chevronColor={g.saffron}
                 divider
                 onPress={() => push("/(ganesh)/members" as never)}
@@ -333,7 +332,6 @@ export default function AdminDashboardScreen() {
                 title="Join requests"
                 meta="People waiting with the Pandal code"
                 icon={<AdminGlyph name="iconJoin" />}
-                iconTint="transparent"
                 chevronColor={g.saffron}
                 divider
                 badge={
@@ -347,7 +345,6 @@ export default function AdminDashboardScreen() {
                 title="Roles & permissions"
                 meta={`${roles.length} role${roles.length === 1 ? "" : "s"} — choose what each can do`}
                 icon={<AdminGlyph name="iconRoles" />}
-                iconTint="transparent"
                 chevronColor={g.saffron}
                 divider
                 onPress={() => push("/(ganesh)/admin/roles" as never)}
@@ -356,7 +353,6 @@ export default function AdminDashboardScreen() {
                 title="Committee tracker"
                 meta="Who paid their share this festival"
                 icon={<AdminGlyph name="iconCommittee" />}
-                iconTint="transparent"
                 chevronColor={g.saffron}
                 onPress={() => push("/(ganesh)/committee" as never)}
               />
@@ -370,7 +366,6 @@ export default function AdminDashboardScreen() {
                 title="Festival"
                 meta={festivalMeta}
                 icon={<AdminGlyph name="iconFestival" />}
-                iconTint="transparent"
                 chevronColor={g.saffron}
                 divider
                 onPress={() => push("/(ganesh)/admin/festivals" as never)}
@@ -379,7 +374,6 @@ export default function AdminDashboardScreen() {
                 title="Permanent Fund"
                 meta={formatInr(fund.total)}
                 icon={<AdminGlyph name="iconFund" />}
-                iconTint="transparent"
                 chevronColor={g.saffron}
                 divider
                 onPress={() => push("/(ganesh)/permanent-fund" as never)}
@@ -388,7 +382,6 @@ export default function AdminDashboardScreen() {
                 title="Contribution setup"
                 meta={contributionMeta}
                 icon={<AdminGlyph name="iconContribution" />}
-                iconTint="transparent"
                 chevronColor={g.saffron}
                 onPress={() => push("/(ganesh)/admin/setup" as never)}
               />
@@ -404,7 +397,6 @@ export default function AdminDashboardScreen() {
                 title="Assets"
                 meta={`${assetSummary.totalItems} items · ${formatInr(assetSummary.estimatedValue)} estimated`}
                 icon={<AdminGlyph name="iconAssets" />}
-                iconTint="transparent"
                 chevronColor={g.saffron}
                 divider
                 badge={
@@ -418,7 +410,6 @@ export default function AdminDashboardScreen() {
                 title="Sponsors"
                 meta="Profiles and this festival's deals. Promises are not cash."
                 icon={<AdminGlyph name="iconSponsors" />}
-                iconTint="transparent"
                 chevronColor={g.saffron}
                 onPress={() => push("/(ganesh)/sponsors" as never)}
               />
@@ -432,7 +423,6 @@ export default function AdminDashboardScreen() {
                 title="Reports"
                 meta="Festival and money summaries"
                 icon={<AdminGlyph name="iconReports" />}
-                iconTint="transparent"
                 chevronColor={g.saffron}
                 divider
                 onPress={() => push("/(ganesh)/admin/reports" as never)}
@@ -441,7 +431,6 @@ export default function AdminDashboardScreen() {
                 title="Audit log"
                 meta="Who changed what"
                 icon={<AdminGlyph name="iconAudit" />}
-                iconTint="transparent"
                 chevronColor={g.saffron}
                 divider
                 onPress={() => push("/(ganesh)/admin/audit" as never)}
@@ -450,7 +439,6 @@ export default function AdminDashboardScreen() {
                 title="Expense categories"
                 meta="Add, rename, or disable"
                 icon={<AdminGlyph name="iconCategories" />}
-                iconTint="transparent"
                 chevronColor={g.saffron}
                 divider
                 onPress={() => push("/(ganesh)/admin/categories" as never)}
@@ -459,7 +447,6 @@ export default function AdminDashboardScreen() {
                 title="Pandal settings"
                 meta="Name, area, join rules"
                 icon={<AdminGlyph name="iconSettings" />}
-                iconTint="transparent"
                 chevronColor={g.saffron}
                 onPress={() => push("/(ganesh)/admin/settings" as never)}
               />
@@ -499,7 +486,7 @@ function AllClearBanner() {
           No join requests or urgent money items right now.
         </Text>
       </View>
-      <Image source={ADMIN_ART.diya} resizeMode="contain" style={styles.diya} />
+      <Image source={ADMIN_ART.diya} resizeMode="contain" style={[styles.diya, { backgroundColor: "transparent" }]} />
     </View>
   );
 }

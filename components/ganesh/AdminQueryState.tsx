@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import { View } from "react-native";
+import { Inbox } from "lucide-react-native";
 
-import { EmptyState } from "@/components/common/EmptyState";
+import { GaneshEmptyState, useGaneshTokens } from "@/components/ganesh/ui";
 import { ErrorState } from "@/components/common/ErrorState";
 import { SkeletonList } from "@/components/common/Skeleton";
 import type { LoadFailure } from "@/lib/firestoreErrors";
@@ -9,9 +10,8 @@ import type { LoadFailure } from "@/lib/firestoreErrors";
 /**
  * Loading / error / empty wrapper for the admin surfaces.
  *
- * Routes all three states through the shared Expense Tracker components, so a
- * slow admin screen shows skeleton rows instead of an inline spinner and a
- * failure gets the standard retry treatment.
+ * Loading uses the shared skeleton. Empty uses GaneshEmptyState — never the
+ * Expense Tracker's finance illustrations.
  */
 export function AdminQueryState({
   loading,
@@ -28,6 +28,8 @@ export function AdminQueryState({
   skeletonCount?: number;
   children?: ReactNode;
 }) {
+  const g = useGaneshTokens();
+
   if (loading) {
     return (
       <View style={{ paddingTop: 4 }}>
@@ -47,7 +49,14 @@ export function AdminQueryState({
   }
 
   if (empty) {
-    return <EmptyState compact title={empty.title} description={empty.description} />;
+    return (
+      <GaneshEmptyState
+        compact
+        icon={<Inbox size={20} color={g.saffron} strokeWidth={1.9} />}
+        title={empty.title}
+        description={empty.description}
+      />
+    );
   }
 
   return <>{children}</>;

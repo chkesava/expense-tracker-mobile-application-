@@ -13,7 +13,7 @@ import { logError } from "@/lib/errors";
 import { useAuth } from "@/providers/AuthProvider";
 import type { GaneshActor } from "@/services/ganesh/ganeshWrites";
 
-const STORAGE_KEY = "@ganesh_session";
+export const GANESH_SESSION_STORAGE_KEY = "@ganesh_session";
 
 type SessionState = {
   pandalId: string | null;
@@ -36,7 +36,7 @@ export function GaneshSessionProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
-    AsyncStorage.getItem(STORAGE_KEY)
+    AsyncStorage.getItem(GANESH_SESSION_STORAGE_KEY)
       .then((raw) => {
         if (cancelled || !raw) return;
         const parsed = JSON.parse(raw) as SessionState;
@@ -53,12 +53,12 @@ export function GaneshSessionProvider({ children }: { children: ReactNode }) {
 
   const setSession = useCallback(async (next: SessionState) => {
     setState(next);
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    await AsyncStorage.setItem(GANESH_SESSION_STORAGE_KEY, JSON.stringify(next));
   }, []);
 
   const clearSession = useCallback(async () => {
     setState({ pandalId: null, festivalId: null });
-    await AsyncStorage.removeItem(STORAGE_KEY);
+    await AsyncStorage.removeItem(GANESH_SESSION_STORAGE_KEY);
   }, []);
 
   const actor = useMemo<GaneshActor | null>(() => {

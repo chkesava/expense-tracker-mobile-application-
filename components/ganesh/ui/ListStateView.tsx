@@ -1,9 +1,12 @@
+import { type ReactNode } from "react";
+import { Inbox } from "lucide-react-native";
 import { View } from "react-native";
 
-import { EmptyState, type EmptyActionConfig } from "@/components/common/EmptyState";
-import { type EmptyIllustrationType } from "@/components/common/EmptyStateIllustration";
 import { ErrorState } from "@/components/common/ErrorState";
 import { SkeletonList } from "@/components/common/Skeleton";
+
+import { GaneshEmptyState, type GaneshEmptyAction } from "./GaneshEmptyState";
+import { useGaneshTokens } from "./tokens";
 
 export type ListStateViewProps = {
   loading?: boolean;
@@ -12,8 +15,13 @@ export type ListStateViewProps = {
   onRetry?: () => void;
   title: string;
   description?: string;
-  illustration?: EmptyIllustrationType;
-  action?: EmptyActionConfig;
+  icon?: ReactNode;
+  /**
+   * @deprecated Expense Tracker illustration names are ignored. Kept so
+   * existing call sites compile without a finance empty state leaking in.
+   */
+  illustration?: string;
+  action?: GaneshEmptyAction;
   /** Number of skeleton rows while loading. */
   skeletonCount?: number;
 };
@@ -21,10 +29,8 @@ export type ListStateViewProps = {
 /**
  * The `ListEmptyComponent` for every Ganesh list.
  *
- * Ganesh screens previously rendered a bare "No X yet" line and nothing at all
- * while loading or on failure. This routes all three states through the shared
- * Expense Tracker components so a slow network shows skeletons, a failure is
- * actionable, and an empty list offers the action that fills it.
+ * Loading uses the shared skeleton. Empty uses `GaneshEmptyState` — never the
+ * Expense Tracker's finance illustrations.
  */
 export function ListStateView({
   loading,
@@ -32,10 +38,12 @@ export function ListStateView({
   onRetry,
   title,
   description,
-  illustration,
+  icon,
   action,
   skeletonCount = 4,
 }: ListStateViewProps) {
+  const g = useGaneshTokens();
+
   if (loading) {
     return (
       <View style={{ paddingTop: 4 }}>
@@ -58,11 +66,11 @@ export function ListStateView({
   }
 
   return (
-    <EmptyState
-      illustration={illustration}
+    <GaneshEmptyState
+      icon={icon ?? <Inbox size={22} color={g.saffron} strokeWidth={1.9} />}
       title={title}
       description={description}
-      primaryAction={action}
+      action={action}
     />
   );
 }

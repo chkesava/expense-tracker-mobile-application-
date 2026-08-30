@@ -34,7 +34,7 @@ export function AdminGlyph({ name, size = 36 }: { name: AdminArtName; size?: num
     <Image
       source={ADMIN_ART[name]}
       resizeMode="contain"
-      style={{ width: size, height: size }}
+      style={{ width: size, height: size, backgroundColor: "transparent" }}
       accessibilityElementsHidden
       importantForAccessibility="no"
     />

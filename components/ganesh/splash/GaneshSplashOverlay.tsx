@@ -14,11 +14,13 @@ import Animated, {
   useSharedValue,
   withDelay,
   withRepeat,
+  withSequence,
   withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import type { ProductSplashOverlayProps } from "@/components/splash/types";
+import { prefetchGaneshStartup } from "@/services/ganesh/ganeshStartupPrefetch";
 
 import {
   BellsLayer,
@@ -98,6 +100,10 @@ export function ProductSplashOverlay({
   const titleOpacity = useSharedValue(0);
   const taglineOpacity = useSharedValue(0);
   const loaderOpacity = useSharedValue(0);
+  const statusOpacity = useSharedValue(0);
+  const dotA = useSharedValue(0.35);
+  const dotB = useSharedValue(0.35);
+  const dotC = useSharedValue(0.35);
   const diyaGlow = useSharedValue(0.35);
   const petalY = useSharedValue(0);
   const petalFade = useSharedValue(0);
@@ -114,6 +120,10 @@ export function ProductSplashOverlay({
   };
 
   useEffect(() => {
+    prefetchGaneshStartup();
+  }, []);
+
+  useEffect(() => {
     if (reducedMotion) {
       mandalaOpacity.set(1);
       glowOpacity.set(0.45);
@@ -123,33 +133,48 @@ export function ProductSplashOverlay({
       titleOpacity.set(1);
       taglineOpacity.set(1);
       loaderOpacity.set(1);
+      statusOpacity.set(1);
       diyaGlow.set(0.55);
       petalFade.set(0);
       return;
     }
 
     const ease = Easing.out(Easing.cubic);
-    glowOpacity.set(withTiming(0.5, { duration: 420, easing: ease }));
-    mandalaOpacity.set(withTiming(1, { duration: 560, easing: ease }));
+    glowOpacity.set(withTiming(0.5, { duration: 700, easing: ease }));
+    mandalaOpacity.set(withTiming(1, { duration: 900, easing: ease }));
     mandalaRotate.set(withRepeat(withTiming(360, { duration: 80_000, easing: Easing.linear }), -1, false));
 
-    emblemOpacity.set(withDelay(160, withTiming(1, { duration: 520, easing: ease })));
-    emblemScale.set(withDelay(160, withTiming(1, { duration: 640, easing: ease })));
+    emblemOpacity.set(withDelay(700, withTiming(1, { duration: 800, easing: ease })));
+    emblemScale.set(
+      withDelay(
+        700,
+        withSequence(
+          withTiming(1, { duration: 800, easing: ease }),
+          withRepeat(withTiming(1.025, { duration: 2600, easing: Easing.inOut(Easing.sin) }), -1, true)
+        )
+      )
+    );
 
-    decorOpacity.set(withDelay(280, withTiming(1, { duration: 480, easing: ease })));
+    decorOpacity.set(withDelay(1400, withTiming(1, { duration: 700, easing: ease })));
     bellRotate.set(
       withDelay(
-        400,
+        1800,
         withRepeat(withTiming(2.4, { duration: 2200, easing: Easing.inOut(Easing.sin) }), -1, true)
       )
     );
 
-    titleOpacity.set(withDelay(380, withTiming(1, { duration: 420, easing: ease })));
-    taglineOpacity.set(withDelay(500, withTiming(1, { duration: 420, easing: ease })));
-    loaderOpacity.set(withDelay(520, withTiming(1, { duration: 280, easing: ease })));
+    titleOpacity.set(withDelay(2200, withTiming(1, { duration: 600, easing: ease })));
+    taglineOpacity.set(withDelay(2800, withTiming(1, { duration: 600, easing: ease })));
+    loaderOpacity.set(withDelay(3200, withTiming(1, { duration: 360, easing: ease })));
+    statusOpacity.set(withDelay(3400, withTiming(1, { duration: 400, easing: ease })));
+
+    const pulse = { duration: 720, easing: Easing.inOut(Easing.sin) };
+    dotA.set(withDelay(3200, withRepeat(withTiming(1, pulse), -1, true)));
+    dotB.set(withDelay(3440, withRepeat(withTiming(1, pulse), -1, true)));
+    dotC.set(withDelay(3680, withRepeat(withTiming(1, pulse), -1, true)));
 
     diyaGlow.set(withRepeat(withTiming(0.85, { duration: 1400, easing: Easing.inOut(Easing.sin) }), -1, true));
-    petalFade.set(withDelay(360, withTiming(0.7, { duration: 500, easing: ease })));
+    petalFade.set(withDelay(1600, withTiming(0.7, { duration: 700, easing: ease })));
     petalY.set(withRepeat(withTiming(18, { duration: 4200, easing: Easing.inOut(Easing.sin) }), -1, true));
   }, [
     reducedMotion,
@@ -162,6 +187,10 @@ export function ProductSplashOverlay({
     titleOpacity,
     taglineOpacity,
     loaderOpacity,
+    statusOpacity,
+    dotA,
+    dotB,
+    dotC,
     diyaGlow,
     petalFade,
     petalY,
@@ -170,14 +199,21 @@ export function ProductSplashOverlay({
 
   useEffect(() => {
     if (!isReady) return;
-    loaderOpacity.set(withTiming(0, { duration: 180 }));
     const minMs = reducedMotion ? GANESH_SPLASH_REDUCED_MIN_MS : GANESH_SPLASH_MIN_MS;
     const wait = Math.max(0, minMs - (Date.now() - startedAt.current));
+    const hideLoaderAt = Math.max(0, wait - 360);
+    const loaderTimer = setTimeout(() => {
+      loaderOpacity.set(withTiming(0, { duration: 280 }));
+      statusOpacity.set(withTiming(0, { duration: 280 }));
+    }, hideLoaderAt);
     const timer = setTimeout(finish, wait);
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      clearTimeout(loaderTimer);
+    };
     // finish closes over the latest onAnimationComplete via runOnJS
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isReady, reducedMotion, loaderOpacity]);
+  }, [isReady, reducedMotion, loaderOpacity, statusOpacity]);
 
   const onLayout = () => {
     if (reportedFrame.current) return;
@@ -213,6 +249,18 @@ export function ProductSplashOverlay({
   }));
   const loaderStyle = useAnimatedStyle(() => ({
     opacity: loaderOpacity.get(),
+  }));
+  const statusStyle = useAnimatedStyle(() => ({
+    opacity: statusOpacity.get(),
+  }));
+  const dotAStyle = useAnimatedStyle(() => ({
+    opacity: dotA.get(),
+  }));
+  const dotBStyle = useAnimatedStyle(() => ({
+    opacity: dotB.get(),
+  }));
+  const dotCStyle = useAnimatedStyle(() => ({
+    opacity: dotC.get(),
   }));
   const diyaStyle = useAnimatedStyle(() => ({
     opacity: diyaGlow.get(),
@@ -269,10 +317,11 @@ export function ProductSplashOverlay({
         <Animated.Text style={[styles.tagline, taglineStyle]}>Seva. Sangathan. Samruddhi.</Animated.Text>
 
         <Animated.View style={[styles.loader, loaderStyle]}>
-          <View style={styles.dot} />
-          <View style={styles.dot} />
-          <View style={styles.dot} />
+          <Animated.View style={[styles.dot, dotAStyle]} />
+          <Animated.View style={[styles.dot, dotBStyle]} />
+          <Animated.View style={[styles.dot, dotCStyle]} />
         </Animated.View>
+        <Animated.Text style={[styles.status, statusStyle]}>Preparing your Pandal</Animated.Text>
       </View>
 
       <Animated.View style={[styles.diya, { bottom: Math.max(insets.bottom, 16) + 8 }, diyaStyle]}>
@@ -360,6 +409,13 @@ const styles = StyleSheet.create({
     height: 6,
     borderRadius: 3,
     backgroundColor: GANESH_SPLASH.gold,
+  },
+  status: {
+    fontSize: 12,
+    letterSpacing: 0.6,
+    color: GANESH_SPLASH.ivory,
+    opacity: 0.72,
+    textAlign: "center",
   },
   diya: {
     position: "absolute",

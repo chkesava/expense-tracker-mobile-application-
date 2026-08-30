@@ -48,6 +48,7 @@ export {
   type GaneshEmptyAction,
   type GaneshEmptyStateProps,
 } from "./GaneshEmptyState";
+export { GaneshIconTile, type GaneshIconTileProps } from "./GaneshIconTile";
 export { SevaGlyph, sevaIcon, sevaKindLabel, SEVA_KINDS } from "./SevaGlyph";
 export { ganeshWebWidthStyle } from "./GaneshWidthConstraint";
 export { StatStrip } from "./StatStrip";

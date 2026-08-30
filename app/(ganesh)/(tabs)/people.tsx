@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { AdminGlyph } from "@/components/ganesh/admin/adminArt";
@@ -42,10 +42,8 @@ export default function PeopleScreen() {
   const { seva } = useFestivalSeva(pandalId, festivalId);
   const { can, isAdmin } = useGaneshPermissions();
 
-  const [refreshing, setRefreshing] = useState(false);
   const handleRefresh = useCallback(() => {
-    setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 600);
+    // Live listeners already hold the truth.
   }, []);
 
   const festival = festivals.find((item) => item.id === festivalId);
@@ -71,7 +69,6 @@ export default function PeopleScreen() {
   return (
     <GaneshScreen
       withTabBar
-      refreshing={refreshing}
       onRefresh={handleRefresh}
       contentContainerStyle={styles.bleed}
     >
@@ -96,7 +93,6 @@ export default function PeopleScreen() {
               title="Join requests"
               meta="People asking to join this Pandal"
               icon={<AdminGlyph name="iconJoin" />}
-              iconTint="transparent"
               chevronColor={g.saffron}
               badge={{
                 kind: "overdue",
@@ -111,7 +107,6 @@ export default function PeopleScreen() {
             title="Committee tracker"
             meta="Who has paid their share, who still owes"
             icon={<AdminGlyph name="iconCommittee" />}
-            iconTint="transparent"
             chevronColor={g.saffron}
             divider={showMembers || showHouseholds}
             onPress={() => push("/(ganesh)/(tabs)/committee" as never)}
@@ -122,7 +117,6 @@ export default function PeopleScreen() {
               title="Members and roles"
               meta="Who holds which role in the Pandal"
               icon={<AdminGlyph name="iconMembers" />}
-              iconTint="transparent"
               chevronColor={g.saffron}
               divider={showHouseholds}
               onPress={() => push("/(ganesh)/members" as never)}
@@ -133,8 +127,7 @@ export default function PeopleScreen() {
             <NavRow
               title="Households"
               meta="Door-to-door chanda rounds"
-              icon={<CollectionIcon size={36} />}
-              iconTint="transparent"
+              icon={<CollectionIcon size={36} framed={false} />}
               chevronColor={g.saffron}
               value={
                 households.length > 0 ? (

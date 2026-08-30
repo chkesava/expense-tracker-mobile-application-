@@ -1,11 +1,10 @@
 import { type ReactNode } from "react";
-import { Image, Platform, StyleSheet, Text, View } from "react-native";
+import { Platform, StyleSheet, Text, View } from "react-native";
 
+import { PeopleGoldDivider } from "@/components/ganesh/people/PeopleGoldDivider";
 import { useGaneshTokens } from "@/components/ganesh/ui";
 import { GANESH_RADIUS } from "@/components/ganesh/ui/surfaces";
 import { useTheme } from "@/theme/ThemeProvider";
-
-import { PANDAL_ART } from "./pandalArt";
 
 const TITLE_FONT = Platform.select({
   ios: "Georgia",
@@ -22,7 +21,6 @@ export function PandalSectionCard({
   title,
   subtitle,
   children,
-  footer = true,
 }: {
   title: string;
   subtitle?: string;
@@ -52,23 +50,8 @@ export function PandalSectionCard({
           </Text>
         ) : null}
       </View>
-      <Image
-        source={PANDAL_ART.goldDivider}
-        resizeMode="contain"
-        accessibilityElementsHidden
-        importantForAccessibility="no"
-        style={styles.divider}
-      />
+      <PeopleGoldDivider maxWidth={188} />
       {children}
-      {footer ? (
-        <Image
-          source={PANDAL_ART.lotusFooter}
-          resizeMode="contain"
-          accessibilityElementsHidden
-          importantForAccessibility="no"
-          style={styles.footer}
-        />
-      ) : null}
     </View>
   );
 }
@@ -81,7 +64,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingTop: 12,
     paddingBottom: 8,
-    boxShadow: "0 6px 18px rgba(122, 24, 54, 0.08)",
   },
   heading: {
     flexDirection: "row",
@@ -100,18 +82,5 @@ const styles = StyleSheet.create({
     minWidth: 0,
     fontSize: 12,
     textAlign: "right",
-  },
-  divider: {
-    alignSelf: "center",
-    width: 188,
-    height: 22,
-    marginVertical: 4,
-  },
-  footer: {
-    alignSelf: "center",
-    width: 132,
-    height: 22,
-    marginTop: 4,
-    opacity: 0.7,
   },
 });

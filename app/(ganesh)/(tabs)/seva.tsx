@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import { Bell, CalendarDays, CalendarPlus, ClipboardList, Clock, Plus } from "lucide-react-native";
+import { Bell, CalendarDays, CalendarPlus, ClipboardList, Clock, Flame, Plus } from "lucide-react-native";
 
 import { GaneshArt } from "@/components/ganesh/art/GaneshArt";
 import { VolunteerIcon } from "@/components/ganesh/art/icons";
@@ -66,12 +66,9 @@ export default function SevaScreen() {
   const nowTime = currentTimeInput();
 
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
 
   const handleRefresh = useCallback(() => {
-    setRefreshing(true);
     retry();
-    setTimeout(() => setRefreshing(false), 600);
   }, [retry]);
 
   /**
@@ -97,7 +94,6 @@ export default function SevaScreen() {
   return (
     <GaneshScreen
       withTabBar
-      refreshing={refreshing}
       onRefresh={handleRefresh}
       contentContainerStyle={styles.bleed}
     >
@@ -111,79 +107,52 @@ export default function SevaScreen() {
 
       <View style={styles.body}>
         {loading && seva.length === 0 ? (
-          <SkeletonList count={4} />
+          <SkeletonList count={3} />
         ) : error ? (
           <ErrorState
             title="Couldn't load the schedule"
             description="Check your connection and try again."
             onRetry={retry}
           />
+        ) : seva.length === 0 ? (
+          <GaneshEmptyState
+            icon={<Flame size={22} color={g.saffron} strokeWidth={1.9} />}
+            title="No seva planned yet"
+            description={
+              canPlan
+                ? "Plan the aarti, annadanam and programmes so the committee knows what happens when."
+                : "Your committee has not planned the festival programme yet."
+            }
+            action={
+              canPlan
+                ? {
+                    label: "Plan a Seva",
+                    onPress: () => push("/(ganesh)/add-seva" as never),
+                  }
+                : undefined
+            }
+          />
         ) : (
           <>
             <Section
               title="Today's Seva"
-              action={
-                seva.length > 0 ? (
-                  <SectionAction label="View all" onPress={() => setSelectedDate(today)} />
-                ) : undefined
-              }
+              action={<SectionAction label="View all" onPress={() => setSelectedDate(today)} />}
             >
               {sevaToday.length === 0 ? (
-                <View style={[styles.emptyCard, { backgroundColor: surfaces.tile }]}>
-                  <View pointerEvents="none" style={styles.mandalaWrap}>
-                    <GaneshArt name="mandala" width={168} height={168} opacity={0.14} />
-                  </View>
-                  <View style={styles.emptyGraphic}>
-                    <GaneshArt name="diya" width={28} height={28} />
-                    <View style={[styles.calendarMark, { backgroundColor: g.wash(g.saffron) }]}>
-                      <CalendarPlus size={22} color={g.saffron} strokeWidth={2.1} />
-                    </View>
-                    <GaneshArt name="diya" width={28} height={28} />
-                  </View>
-                  <Text
-                    style={[
-                      styles.emptyTitle,
-                      { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold },
-                    ]}
-                  >
-                    No seva planned yet
-                  </Text>
-                  <Text
-                    style={[
-                      styles.emptyBody,
-                      { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular },
-                    ]}
-                  >
-                    {canPlan
-                      ? "Add the aarti, annadanam and programmes your committee runs, so everyone knows what happens when."
-                      : "Your committee has not planned the festival programme yet."}
-                  </Text>
-                  {canPlan ? (
-                    <Pressable
-                      onPress={() => {
-                        void haptic.selection();
-                        push("/(ganesh)/add-seva" as never);
-                      }}
-                      accessibilityRole="button"
-                      accessibilityLabel="Plan a Seva"
-                      style={({ pressed }) => [
-                        styles.planButton,
-                        { backgroundColor: theme.colors.primary },
-                        pressed ? { opacity: 0.88 } : null,
-                      ]}
-                    >
-                      <CalendarDays size={16} color={theme.colors.primaryForeground} strokeWidth={2.2} />
-                      <Text
-                        style={[
-                          styles.planLabel,
-                          { color: theme.colors.primaryForeground, fontFamily: theme.fontFamily.semibold },
-                        ]}
-                      >
-                        Plan a Seva
-                      </Text>
-                    </Pressable>
-                  ) : null}
-                </View>
+                <GaneshEmptyState
+                  compact
+                  icon={<CalendarDays size={20} color={g.saffron} strokeWidth={1.9} />}
+                  title="Nothing planned today"
+                  description={canPlan ? "Add the day's first seva." : undefined}
+                  action={
+                    canPlan
+                      ? {
+                          label: "Plan a Seva",
+                          onPress: () => push("/(ganesh)/add-seva" as never),
+                        }
+                      : undefined
+                  }
+                />
               ) : (
                 sevaToday.map((item, index) => (
                   <SevaRow
@@ -326,12 +295,12 @@ export default function SevaScreen() {
                     accessibilityLabel="Seva Tasks"
                     style={({ pressed }) => [
                       styles.actionTile,
-                      { backgroundColor: g.wash("#2E7D32"), borderColor: g.divider },
+                        { backgroundColor: g.wash(g.godFund), borderColor: g.divider },
                       pressed ? { opacity: 0.85 } : null,
                     ]}
                   >
-                    <View style={[styles.actionGlyph, { backgroundColor: g.wash("#2E7D32") }]}>
-                      <ClipboardList size={18} color="#2E7D32" strokeWidth={2.2} />
+                    <View style={[styles.actionGlyph, { backgroundColor: g.wash(g.godFund) }]}>
+                      <ClipboardList size={18} color={g.godFund} strokeWidth={2.2} />
                     </View>
                     <Text
                       style={[
@@ -363,12 +332,12 @@ export default function SevaScreen() {
                     accessibilityLabel="Reminders"
                     style={({ pressed }) => [
                       styles.actionTile,
-                      { backgroundColor: g.wash("#B98029"), borderColor: g.divider },
+                        { backgroundColor: g.wash(g.gold), borderColor: g.divider },
                       pressed ? { opacity: 0.85 } : null,
                     ]}
                   >
-                    <View style={[styles.actionGlyph, { backgroundColor: g.wash("#B98029") }]}>
-                      <Bell size={18} color="#B98029" strokeWidth={2.2} />
+                    <View style={[styles.actionGlyph, { backgroundColor: g.wash(g.gold) }]}>
+                      <Bell size={18} color={g.gold} strokeWidth={2.2} />
                     </View>
                     <Text
                       style={[
@@ -391,9 +360,7 @@ export default function SevaScreen() {
               </Section>
             ) : null}
 
-            {seva.length > 0 ? (
-              <>
-                <View style={styles.statRow}>
+            <View style={styles.statRow}>
                   <StatTile label="Today">
                     <Text
                       style={[
@@ -549,8 +516,6 @@ export default function SevaScreen() {
                     ))
                   )}
                 </Section>
-              </>
-            ) : null}
           </>
         )}
       </View>
@@ -568,55 +533,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 8,
     gap: 16,
-  },
-  emptyCard: {
-    borderRadius: GANESH_RADIUS.tile,
-    borderCurve: "continuous",
-    overflow: "hidden",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 20,
-    gap: 8,
-  },
-  mandalaWrap: {
-    position: "absolute",
-    top: 8,
-    alignSelf: "center",
-  },
-  emptyGraphic: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginBottom: 4,
-  },
-  calendarMark: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  emptyTitle: {
-    fontSize: 16,
-    textAlign: "center",
-  },
-  emptyBody: {
-    fontSize: 13,
-    lineHeight: 19,
-    textAlign: "center",
-  },
-  planButton: {
-    marginTop: 8,
-    minHeight: 40,
-    paddingHorizontal: 16,
-    borderRadius: GANESH_RADIUS.pill,
-    borderCurve: "continuous",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  planLabel: {
-    fontSize: 14,
   },
   upcoming: {
     flexDirection: "row",

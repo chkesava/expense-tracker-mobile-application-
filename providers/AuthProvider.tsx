@@ -30,7 +30,7 @@ import { Platform } from "react-native";
 import { GoogleSignin } from "@react-native-google-signin/google-signin";
 
 import { clearSavedRoute } from "@/hooks/useNavigationStateRestoration";
-import { logError } from "@/lib/errors";
+import { classifyError, logError } from "@/lib/errors";
 import { ensureCategoryHierarchy } from "@/lib/ensureCategoryHierarchy";
 import { env } from "@/lib/env";
 import { getFirebaseAuth, getFirestoreDb } from "@/lib/firebase";
@@ -159,11 +159,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!auth) throw new Error("Firebase Auth is not configured.");
 
       if (db) {
-        const settingsSnap = await getDoc(doc(db, "system_settings", "global"));
-        if (settingsSnap.exists() && settingsSnap.data().disableSignups) {
-          throw new Error(
-            "New registrations are temporarily disabled by the administrator."
-          );
+        try {
+          const settingsSnap = await getDoc(doc(db, "system_settings", "global"));
+          if (settingsSnap.exists() && settingsSnap.data().disableSignups) {
+            throw new Error(
+              "New registrations are temporarily disabled by the administrator."
+            );
+          }
+        } catch (error) {
+          if (error instanceof Error && error.message.includes("temporarily disabled")) {
+            throw error;
+          }
+          // Unauthenticated clients often cannot read system_settings. Do not
+          // block email signup when the gate itself is unreadable.
+          if (classifyError(error) !== "permission") {
+            throw error;
+          }
         }
       }
 

@@ -1,4 +1,5 @@
 import { useMemo, type ReactNode } from "react";
+import { StatusBar } from "expo-status-bar";
 
 import { createGaneshTheme } from "@/theme/ganeshPalette";
 import { ThemeContext, useTheme } from "@/theme/ThemeProvider";
@@ -27,5 +28,10 @@ export function GaneshThemeProvider({ children }: { children: ReactNode }) {
     [parent, isDark]
   );
 
-  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+  return (
+    <ThemeContext.Provider value={value}>
+      <StatusBar style={isDark ? "light" : "dark"} />
+      {children}
+    </ThemeContext.Provider>
+  );
 }

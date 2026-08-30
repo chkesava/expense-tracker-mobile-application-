@@ -1,6 +1,5 @@
 import { type ReactNode } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Bell } from "lucide-react-native";
 
 import { FestivalDateStrip } from "@/components/ganesh/art/FestivalDateStrip";
@@ -42,7 +41,6 @@ export function CommandHero({
 }) {
   const { theme } = useTheme();
   const g = useGaneshTokens();
-  const insets = useSafeAreaInsets();
   const { ganesha, mandala } = useArtScale();
   const maroon = g.isDark ? "#3A1020" : "#7A1836";
   const gold = "#E8C36A";
@@ -54,7 +52,6 @@ export function CommandHero({
           styles.hero,
           {
             backgroundColor: maroon,
-            paddingTop: insets.top + 6,
             experimental_backgroundImage: g.isDark
               ? "linear-gradient(180deg, #4A1628 0%, #3A1020 88%)"
               : "linear-gradient(180deg, #9B2C4A 0%, #7A1836 62%, #64142C 100%)",
@@ -138,7 +135,7 @@ export function CommandHero({
                   style={[styles.festivalPillText, { color: "#FFF8F1", fontFamily: theme.fontFamily.semibold }]}
                   numberOfLines={1}
                 >
-                  ✿  {festivalName}  ✿
+                  {festivalName}
                 </Text>
               </View>
             ) : null}
@@ -159,6 +156,7 @@ const styles = StyleSheet.create({
   },
   hero: {
     paddingHorizontal: 16,
+    paddingTop: 6,
     paddingBottom: 36,
     overflow: "hidden",
   },

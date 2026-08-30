@@ -6,20 +6,28 @@ const GARLAND = require("@/assets/branding/ganesh/marigold-garland.png");
 const BELL = require("@/assets/branding/ganesh/temple-bell.png");
 
 /**
- * Marigold toran plus a pair of temple bells. Used on maroon festival heroes
- * only — never as a full-sheet background.
+ * A short marigold toran and a pair of small bells. Used on maroon festival
+ * heroes only — never as a full-sheet background.
  */
 export function FestivalGarlandBells() {
   const { bell, garlandHeight } = useArtScale();
 
   return (
     <View pointerEvents="none" style={styles.layer}>
-      <Image source={GARLAND} resizeMode="cover" style={[styles.garland, { height: garlandHeight }]} />
-      <Image source={BELL} resizeMode="contain" style={[styles.bell, styles.bellLeft, { width: bell, height: bell * 1.45 }]} />
+      <Image
+        source={GARLAND}
+        resizeMode="cover"
+        style={[styles.garland, { height: garlandHeight, opacity: 0.78 }]}
+      />
       <Image
         source={BELL}
         resizeMode="contain"
-        style={[styles.bell, styles.bellRight, { width: bell, height: bell * 1.45 }]}
+        style={[styles.bell, styles.bellLeft, { width: bell, height: bell * 1.4, opacity: 0.7 }]}
+      />
+      <Image
+        source={BELL}
+        resizeMode="contain"
+        style={[styles.bell, styles.bellRight, { width: bell, height: bell * 1.4, opacity: 0.7 }]}
       />
     </View>
   );
@@ -35,16 +43,18 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     width: "100%",
+    backgroundColor: "transparent",
   },
   bell: {
     position: "absolute",
-    top: 2,
+    top: 0,
+    backgroundColor: "transparent",
   },
   bellLeft: {
-    left: 2,
+    left: 6,
   },
   bellRight: {
-    right: 2,
+    right: 6,
     transform: [{ scaleX: -1 }],
   },
 });

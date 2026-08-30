@@ -21,7 +21,7 @@ export function GaneshArt({
     <Image
       source={GANESH_ART[name]}
       resizeMode={resizeMode}
-      style={[{ width, height, opacity }, style]}
+      style={[{ width, height, opacity, backgroundColor: "transparent" }, style]}
     />
   );
 }

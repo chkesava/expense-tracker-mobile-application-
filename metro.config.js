@@ -89,7 +89,9 @@ if (activeProduct) {
 const splashOverlayFile =
   activeProduct === "ganesh"
     ? path.resolve(__dirname, "components/ganesh/splash/GaneshSplashOverlay.tsx")
-    : path.resolve(__dirname, "components/splash/DefaultSplashOverlay.tsx");
+    : activeProduct === null
+      ? path.resolve(__dirname, "components/splash/WorkspaceSplashOverlay.tsx")
+      : path.resolve(__dirname, "components/splash/DefaultSplashOverlay.tsx");
 
 config.resolver.extraNodeModules = {
   ...(config.resolver.extraNodeModules || {}),

@@ -121,7 +121,6 @@ const styles = StyleSheet.create({
     paddingTop: 40,
     paddingBottom: 14,
     overflow: "hidden",
-    boxShadow: "0 6px 18px rgba(122, 24, 54, 0.08)",
   },
   ganeshaWrap: {
     position: "absolute",

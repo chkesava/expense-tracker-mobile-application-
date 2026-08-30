@@ -37,7 +37,7 @@ import { NetworkProvider } from "@/providers/NetworkProvider";
 import { SettingsProvider, useSettings } from "@/providers/SettingsProvider";
 import { SystemSettingsProvider } from "@/providers/SystemSettingsProvider";
 import { UserDocProvider, useUserDoc } from "@/providers/UserDocProvider";
-import { WorkspaceProvider } from "@/providers/WorkspaceProvider";
+import { WorkspaceProvider, useWorkspace } from "@/providers/WorkspaceProvider";
 import { AppThemeProvider, useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette, THEME_STORAGE_KEY } from "@/theme/tokens";
 
@@ -110,6 +110,7 @@ if (Platform.OS !== "web") {
 
 function AppInitializer({ children }: { children: React.ReactNode }) {
   const { loading: authLoading } = useAuth();
+  const { activeWorkspace, isLoading: workspaceLoading } = useWorkspace();
   // Settings / userDoc continue loading in the background — not on the splash critical path.
   useSettings();
   useUserDoc();
@@ -217,8 +218,16 @@ function AppInitializer({ children }: { children: React.ReactNode }) {
     }
   }, [appIsReady, overlayPainted]);
 
-  const showGaneshSplash = ACTIVE_PRODUCT === "ganesh" && !animationComplete;
-  const showDefaultSplash = ACTIVE_PRODUCT !== "ganesh" && !animationComplete && appIsReady;
+  const ganeshStartup =
+    ACTIVE_PRODUCT === "ganesh" ||
+    (ACTIVE_PRODUCT === null && !workspaceLoading && activeWorkspace === "ganesh");
+  const showGaneshSplash = ganeshStartup && !animationComplete;
+  const showDefaultSplash =
+    !ganeshStartup &&
+    !(ACTIVE_PRODUCT === null && workspaceLoading) &&
+    ACTIVE_PRODUCT !== "ganesh" &&
+    !animationComplete &&
+    appIsReady;
 
   return (
     <>

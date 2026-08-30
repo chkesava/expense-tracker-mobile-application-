@@ -51,7 +51,7 @@ export function CommitteeOverview({
 }) {
   const { theme } = useTheme();
   const g = useGaneshTokens();
-  const sevaTint = g.isDark ? "#C4B5FD" : "#6D5BBE";
+  const sevaTint = g.maroon;
   const pct = contributedPct(paidCount, festivalMemberCount);
   const subtitle =
     memberCount === 1 ? "1 active member" : `${memberCount} active members`;
@@ -209,7 +209,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingTop: 12,
     paddingBottom: 14,
-    boxShadow: "0 6px 18px rgba(122, 24, 54, 0.08)",
   },
   metricGlyph: {
     width: 22,

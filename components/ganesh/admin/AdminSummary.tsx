@@ -1,12 +1,14 @@
+import { type ReactNode } from "react";
 import { Image, StyleSheet, Text, View } from "react-native";
+import { Landmark, Package, Users, Wallet } from "lucide-react-native";
 
 import { Money } from "@/components/ganesh/ui/Money";
-import { GANESH_RADIUS } from "@/components/ganesh/ui/surfaces";
+import { GANESH_RADIUS, withAlpha } from "@/components/ganesh/ui/surfaces";
 import { useGaneshTokens } from "@/components/ganesh/ui/tokens";
 import { useBreakpoint } from "@/hooks/useBreakpoint";
 import { useTheme } from "@/theme/ThemeProvider";
 
-import { ADMIN_ART, type AdminArtName } from "./adminArt";
+import { ADMIN_ART } from "./adminArt";
 
 export function AdminSummary({
   memberCount,
@@ -48,26 +50,44 @@ export function AdminSummary({
         importantForAccessibility="no"
         style={styles.peak}
       />
-      <Image
-        source={ADMIN_ART.goldDivider}
-        resizeMode="contain"
-        accessibilityElementsHidden
-        importantForAccessibility="no"
-        style={styles.rule}
-      />
+      <View style={[styles.rule, { backgroundColor: withAlpha(g.gold, 0.45) }]} />
       <View style={styles.grid}>
-        <MetricTile basis={basis} label="Members" meta={membersMeta} art="statMembers" wash="#2E7D32">
+        <MetricTile
+          basis={basis}
+          label="Members"
+          meta={membersMeta}
+          wash={g.godFund}
+          icon={<Users size={18} color={g.godFund} strokeWidth={2} />}
+        >
           <Text style={[styles.value, { color: theme.colors.foreground, fontFamily: theme.fontFamily.bold }]}>
             {memberCount}
           </Text>
         </MetricTile>
-        <MetricTile basis={basis} label="Permanent Fund" meta="Carries across festivals" art="statFund" wash={g.gold}>
+        <MetricTile
+          basis={basis}
+          label="Permanent Fund"
+          meta="Carries across festivals"
+          wash={g.gold}
+          icon={<Landmark size={18} color={g.gold} strokeWidth={2} />}
+        >
           <Money value={fundTotal} size="title" />
         </MetricTile>
-        <MetricTile basis={basis} label="Pending reimbursement" meta={reimbMeta} art="statReimb" wash="#7E57C2">
+        <MetricTile
+          basis={basis}
+          label="Pending reimbursement"
+          meta={reimbMeta}
+          wash={g.promised}
+          icon={<Wallet size={18} color={g.promised} strokeWidth={2} />}
+        >
           <Money value={pendingReimb} size="title" />
         </MetricTile>
-        <MetricTile basis={basis} label="Pandal assets" meta={assetsMeta} art="statAssets" wash="#4FC3F7">
+        <MetricTile
+          basis={basis}
+          label="Pandal assets"
+          meta={assetsMeta}
+          wash={g.personal}
+          icon={<Package size={18} color={g.personal} strokeWidth={2} />}
+        >
           <Text style={[styles.value, { color: theme.colors.foreground, fontFamily: theme.fontFamily.bold }]}>
             {assetCount}
           </Text>
@@ -81,16 +101,16 @@ function MetricTile({
   basis,
   label,
   meta,
-  art,
   wash,
+  icon,
   children,
 }: {
   basis: `${number}%`;
   label: string;
   meta: string;
-  art: AdminArtName;
   wash: string;
-  children: React.ReactNode;
+  icon: ReactNode;
+  children: ReactNode;
 }) {
   const { theme } = useTheme();
   const g = useGaneshTokens();
@@ -106,7 +126,7 @@ function MetricTile({
         },
       ]}
     >
-      <Image source={ADMIN_ART[art]} resizeMode="contain" style={styles.statIcon} />
+      {icon}
       <Text style={[styles.label, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.medium }]}>
         {label}
       </Text>
@@ -126,18 +146,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingTop: 4,
     paddingBottom: 10,
-    boxShadow: "0 6px 18px rgba(122, 24, 54, 0.08)",
   },
   peak: {
     alignSelf: "center",
     width: 30,
     height: 30,
+    backgroundColor: "transparent",
   },
   rule: {
     alignSelf: "center",
-    width: 188,
-    height: 18,
-    marginBottom: 6,
+    width: "70%",
+    height: 1,
+    borderRadius: 1,
+    marginBottom: 10,
+    marginTop: 6,
   },
   grid: {
     flexDirection: "row",
@@ -153,10 +175,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 10,
     gap: 4,
-  },
-  statIcon: {
-    width: 44,
-    height: 44,
   },
   label: {
     fontSize: 11.5,

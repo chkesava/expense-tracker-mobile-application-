@@ -35,6 +35,7 @@ describe("product splash overlay isolation", () => {
     expect(metro).toContain("product-splash-overlay");
     expect(metro).toContain("GaneshSplashOverlay.tsx");
     expect(metro).toContain("DefaultSplashOverlay.tsx");
+    expect(metro).toContain("WorkspaceSplashOverlay.tsx");
     expect(metro).toContain("splash-logo.png");
   });
 
@@ -51,8 +52,16 @@ describe("product splash overlay isolation", () => {
     expect(overlay).toContain("ganesh-emblem.webp");
     expect(overlay).toContain("Ganesh Seva");
     expect(overlay).toContain("Seva. Sangathan. Samruddhi.");
+    expect(overlay).toContain("prefetchGaneshStartup");
     expect(overlay).not.toContain("splash-logo.png");
     expect(overlay).not.toContain("Spendly");
+  });
+
+  it("holds the Ganesh splash for five to six seconds", () => {
+    const theme = read("components/ganesh/splash/ganeshSplashTheme.ts");
+    expect(theme).toMatch(/GANESH_SPLASH_MIN_MS = 5[0-9]{3}/);
+    const overlay = read("components/common/SplashAnimationOverlay.tsx");
+    expect(overlay).toContain(", 450)");
   });
 
   it("wires the product overlay from the root layout", () => {

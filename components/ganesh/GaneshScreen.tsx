@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { GaneshStatusBarGap } from "@/components/ganesh/chrome/GaneshStatusBarGap";
 import { ganeshWebWidthStyle } from "@/components/ganesh/ui/GaneshWidthConstraint";
 import { BOTTOM_NAV_SCROLL_PADDING } from "@/components/layout/chrome";
 import { useBreakpoint } from "@/hooks/useBreakpoint";
@@ -31,7 +32,7 @@ export function useGaneshListPadding(withTabBar = true): number {
 export type GaneshScreenProps = {
   children: ReactNode;
   scroll?: boolean;
-  /** Use on headerless tab screens so content clears the Android status bar. */
+  /** Extra top breathing room. The status-bar gap is always reserved by the shell. */
   safeTop?: boolean;
   /** Reserve clearance for the Ganesh tab bar. */
   withTabBar?: boolean;
@@ -66,7 +67,7 @@ export function GaneshScreen({
   const { breakpoint } = useBreakpoint();
   const widthStyle = ganeshWebWidthStyle(breakpoint);
 
-  const paddingTop = (safeTop ? insets.top : 0) + theme.space.lg;
+  const paddingTop = theme.space.lg + (safeTop ? theme.space.sm : 0);
   const paddingBottom = withTabBar
     ? insets.bottom + BOTTOM_NAV_SCROLL_PADDING
     : Math.max(insets.bottom, theme.space.lg) + theme.space.xl;
@@ -88,11 +89,12 @@ export function GaneshScreen({
 
   return (
     <View style={[styles.fill, { backgroundColor: theme.colors.background }, widthStyle, style]}>
+      <GaneshStatusBarGap />
       {scroll ? (
         <ScrollView
           style={styles.fill}
           showsVerticalScrollIndicator={false}
-          contentInsetAdjustmentBehavior="automatic"
+          contentInsetAdjustmentBehavior="never"
           contentContainerStyle={[content, contentContainerStyle]}
           keyboardShouldPersistTaps="handled"
           refreshControl={

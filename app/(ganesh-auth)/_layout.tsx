@@ -1,5 +1,7 @@
 import { Stack } from "expo-router";
+import { View } from "react-native";
 
+import { GaneshStatusBarGap } from "@/components/ganesh/chrome/GaneshStatusBarGap";
 import { GaneshThemeProvider } from "@/providers/GaneshThemeProvider";
 import { useTheme } from "@/theme/ThemeProvider";
 
@@ -19,7 +21,10 @@ function GaneshAuthStack() {
 export default function GaneshAuthLayout() {
   return (
     <GaneshThemeProvider>
-      <GaneshAuthStack />
+      <View style={{ flex: 1 }}>
+        <GaneshStatusBarGap />
+        <GaneshAuthStack />
+      </View>
     </GaneshThemeProvider>
   );
 }

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { ChevronRight, ClipboardCheck, Clock, Sparkles, UserPlus, Users } from "lucide-react-native";
@@ -69,11 +69,9 @@ export default function GaneshHomeScreen() {
   const { summary } = useGaneshSummary(pandalId, festivalId);
   const { activity, loading: activityLoading } = useGaneshActivity(pandalId, festivalId);
   const { contributions } = useContributions(pandalId, festivalId);
-  const { seva, loading: sevaLoading } = useFestivalSeva(pandalId, festivalId);
+  const { seva, loading: sevaLoading, retry: retrySeva } = useFestivalSeva(pandalId, festivalId);
   const { requests } = useJoinRequests(pandalId);
   const { can, isAdmin } = useGaneshPermissions();
-
-  const [refreshing, setRefreshing] = useState(false);
 
   const pandal = pandals.find((item) => item.id === pandalId);
   const festival = festivals.find((item) => item.id === festivalId);
@@ -98,9 +96,8 @@ export default function GaneshHomeScreen() {
   const preview = activity.slice(0, 5);
 
   const handleRefresh = useCallback(() => {
-    setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 600);
-  }, []);
+    retrySeva();
+  }, [retrySeva]);
 
   const pendingActions = useMemo(() => {
     const rows: Array<{
@@ -178,7 +175,6 @@ export default function GaneshHomeScreen() {
   return (
     <GaneshScreen
       withTabBar
-      refreshing={refreshing}
       onRefresh={handleRefresh}
       contentContainerStyle={styles.bleed}
     >

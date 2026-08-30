@@ -83,7 +83,6 @@ export default function PandalScreen() {
         title="Committee tracker"
         meta="Who paid their share, who still owes"
         icon={<AdminGlyph name="iconCommittee" />}
-        iconTint="transparent"
         chevronColor={g.saffron}
         divider={can("members.read")}
         onPress={() => push("/(ganesh)/committee" as never)}
@@ -93,7 +92,6 @@ export default function PandalScreen() {
           title="Members and roles"
           meta="Who holds which role in the Pandal"
           icon={<AdminGlyph name="iconMembers" />}
-          iconTint="transparent"
           chevronColor={g.saffron}
           onPress={() => push("/(ganesh)/members" as never)}
         />
@@ -107,7 +105,6 @@ export default function PandalScreen() {
         title="Admin dashboard"
         meta="Members, festival, funds, and Pandal settings"
         icon={<AdminGlyph name="shield" size={36} />}
-        iconTint="transparent"
         chevronColor={g.saffron}
         badge={
           requests.length > 0
@@ -143,7 +140,6 @@ export default function PandalScreen() {
                 title="Assets"
                 meta={assetMeta}
                 icon={<AdminGlyph name="iconAssets" />}
-                iconTint="transparent"
                 chevronColor={g.saffron}
                 divider={can("sponsors.read") || can("permanentFund.read")}
                 onPress={() => push("/(ganesh)/assets" as never)}
@@ -154,7 +150,6 @@ export default function PandalScreen() {
                 title="Sponsors"
                 meta="Who is supporting this festival. Promised deals are not cash."
                 icon={<AdminGlyph name="iconSponsors" />}
-                iconTint="transparent"
                 chevronColor={g.saffron}
                 divider={can("permanentFund.read")}
                 onPress={() => push("/(ganesh)/sponsors" as never)}
@@ -169,7 +164,6 @@ export default function PandalScreen() {
                     : "The Pandal's standing corpus, kept between festivals"
                 }
                 icon={<AdminGlyph name="iconFund" />}
-                iconTint="transparent"
                 chevronColor={g.saffron}
                 onPress={() => push("/(ganesh)/permanent-fund" as never)}
               />
@@ -214,7 +208,6 @@ export default function PandalScreen() {
                   title="Close festival"
                   meta="Lock the ledger and settle up"
                   icon={<AdminGlyph name="iconFestival" />}
-                  iconTint="transparent"
                   chevronColor={g.saffron}
                   onPress={() => push("/(ganesh)/close-festival" as never)}
                 />
@@ -228,7 +221,6 @@ export default function PandalScreen() {
             title="Festival report"
             meta="Full money summary for this Ganesh Utsav"
             icon={<AdminGlyph name="iconReports" />}
-            iconTint="transparent"
             chevronColor={g.saffron}
             divider
             onPress={() => push("/(ganesh)/report" as never)}
@@ -237,7 +229,6 @@ export default function PandalScreen() {
             title="Switch Pandal or festival"
             meta={festival?.name}
             icon={<AdminGlyph name="iconFestival" />}
-            iconTint="transparent"
             chevronColor={g.saffron}
             onPress={() => push("/(ganesh)/setup" as never)}
           />
@@ -265,7 +256,7 @@ const styles = StyleSheet.create({
   body: {
     paddingHorizontal: 16,
     paddingTop: 0,
-    marginTop: -22,
+    marginTop: 8,
     gap: 12,
   },
   form: {

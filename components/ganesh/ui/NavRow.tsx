@@ -106,7 +106,8 @@ const styles = StyleSheet.create({
   glyph: {
     width: 36,
     height: 36,
-    borderRadius: 18,
+    borderRadius: 12,
+    borderCurve: "continuous",
     alignItems: "center",
     justifyContent: "center",
   },
