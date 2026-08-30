@@ -59,3 +59,10 @@ export function activeProductEntryRoute(): "/(auth)/login" | "/(ganesh-auth)/log
   if (ACTIVE_PRODUCT === "ganesh") return "/(ganesh-auth)/login";
   return "/(auth)/login";
 }
+
+/** Display name for toasts and the in-app update prompt. */
+export function productAppName(): string {
+  if (ACTIVE_PRODUCT === "ganesh") return "Ganesh Seva";
+  if (ACTIVE_PRODUCT === "nutrition") return "Spendly Nutrition";
+  return "Spendly";
+}

@@ -20,6 +20,7 @@ import {
 import { logWarning } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
 import { ACTIVE_PRODUCT } from "@/lib/activeProduct";
+import { useAuth } from "@/providers/AuthProvider";
 
 export type { AppRelease };
 
@@ -79,6 +80,7 @@ export function getInstalledVersionName(): string {
 }
 
 export function useAppUpdate() {
+  const { user, loading: authLoading } = useAuth();
   const [release, setRelease] = useState<AppRelease | null>(null);
   const [dismissedThisSession, setDismissedThisSession] = useState(false);
 
@@ -86,9 +88,15 @@ export function useAppUpdate() {
   const supported = Platform.OS === "android";
   const installedVersionCode = useMemo(getInstalledVersionCode, []);
   const installedVersionName = useMemo(getInstalledVersionName, []);
+  const uid = user?.uid ?? null;
 
   useEffect(() => {
     if (!supported) return;
+    // Auth restore races the first snapshot. A permission-denied error kills
+    // the listener; wait until we know whether anyone is signed in, then
+    // subscribe again after login so Ganesh (which starts on its own login
+    // screen) still sees latest_release_ganesh.
+    if (authLoading) return;
 
     const db = getFirestoreDb();
     if (!db) return;
@@ -107,7 +115,7 @@ export function useAppUpdate() {
     );
 
     return unsubscribe;
-  }, [supported]);
+  }, [supported, authLoading, uid]);
 
   // "Not now" only hides the sheet until they leave and open the app again.
   useEffect(() => {

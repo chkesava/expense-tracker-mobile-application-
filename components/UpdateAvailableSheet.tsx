@@ -10,6 +10,7 @@ import {
   installProgressLabel,
   type InstallProgress,
 } from "@/lib/apkUpdate";
+import { productAppName } from "@/lib/activeProduct";
 import { toast } from "@/lib/toast";
 import { useTheme } from "@/theme/ThemeProvider";
 import { haptic } from "@/lib/haptics";
@@ -37,7 +38,7 @@ export function UpdateAvailableSheet() {
     try {
       const outcome = await installAppRelease(release, setProgress);
       if (outcome === "needs-permission") {
-        toast.info("Allow Spendly to install updates, then tap Update again");
+        toast.info(`Allow ${productAppName()} to install updates, then tap Update again`);
       } else if (outcome === "aborted") {
         toast.info("Update cancelled");
       } else if (outcome === "fallback") {

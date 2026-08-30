@@ -1,24 +1,11 @@
-import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { EyeOff, ListChecks, RotateCcw } from "lucide-react-native";
 
+import { CheckForAppUpdate } from "@/components/CheckForAppUpdate";
 import { SettingsPanel } from "@/components/settings/SettingsControls";
-import { Button } from "@/components/ui/Button";
-import {
-  fetchLatestRelease,
-  getInstalledVersionCode,
-  getInstalledVersionName,
-  useAppUpdate,
-} from "@/hooks/useAppUpdate";
-import {
-  installAppRelease,
-  installProgressLabel,
-  type InstallProgress,
-} from "@/lib/apkUpdate";
-import { friendlyErrorMessage } from "@/lib/errors";
+import { getInstalledVersionCode, getInstalledVersionName } from "@/hooks/useAppUpdate";
 import { haptic } from "@/lib/haptics";
-import { toast } from "@/lib/toast";
 import { useSetupProgress } from "@/providers/SetupProgressProvider";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
@@ -34,50 +21,8 @@ export function AboutSection() {
 
 function AppVersionCard() {
   const { theme } = useTheme();
-  const { resetDismissal } = useAppUpdate();
-  const [checking, setChecking] = useState(false);
-  const [progress, setProgress] = useState<InstallProgress>({ phase: "idle" });
-
   const versionName = getInstalledVersionName();
   const versionCode = getInstalledVersionCode();
-  const busy = checking || progress.phase !== "idle";
-
-  const onCheck = async () => {
-    setChecking(true);
-    try {
-      const release = await fetchLatestRelease();
-
-      if (!release) {
-        toast.info("No release information available right now");
-        return;
-      }
-
-      if (versionCode !== null && release.versionCode > versionCode) {
-        resetDismissal();
-        toast.success(`Version ${release.versionName} is available`);
-        const outcome = await installAppRelease(release, setProgress);
-        if (outcome === "needs-permission") {
-          toast.info(
-            "Allow Spendly to install updates, then tap Check for updates again"
-          );
-        } else if (outcome === "aborted") {
-          toast.info("Update cancelled");
-        } else if (outcome === "fallback") {
-          toast.info("Opened the download page");
-        } else if (outcome === "up-to-date") {
-          toast.success("You are on the latest version");
-        }
-        return;
-      }
-
-      toast.success("You are on the latest version");
-    } catch (error) {
-      toast.error(friendlyErrorMessage(error, "Could not check for updates"));
-    } finally {
-      setChecking(false);
-      setProgress({ phase: "idle" });
-    }
-  };
 
   return (
     <SettingsPanel
@@ -88,9 +33,7 @@ function AppVersionCard() {
         Installed: v{versionName}
         {versionCode !== null ? ` (build ${versionCode})` : ""}
       </Text>
-      <Button variant="outline" loading={busy} disabled={busy} onPress={onCheck}>
-        {progress.phase !== "idle" ? installProgressLabel(progress) : "Check for updates"}
-      </Button>
+      <CheckForAppUpdate />
     </SettingsPanel>
   );
 }
