@@ -12,6 +12,7 @@ import {
   dutyCounts,
   festivalDates,
   festivalDayNumber,
+  festivalWindowSummary,
   formatFestivalWindow,
   formatSevaDate,
   formatSevaTime,
@@ -354,6 +355,25 @@ describe("formatting", () => {
     expect(formatFestivalWindow({ startDate: "2026-08-27", endDate: "2026-08-27" })).toBe("27 Aug");
     expect(formatFestivalWindow({})).toBe("");
     expect(formatFestivalWindow(undefined)).toBe("");
+  });
+
+  it("summarises duration and remaining days from the stored window", () => {
+    expect(festivalWindowSummary(FESTIVAL, "2026-08-30")).toEqual({
+      label: "27 Aug – 5 Sep",
+      year: "2026",
+      totalDays: 10,
+      day: 4,
+      remaining: 6,
+    });
+    expect(festivalWindowSummary(FESTIVAL, "2026-08-26").remaining).toBe(1);
+    expect(festivalWindowSummary(FESTIVAL, "2026-09-06").remaining).toBe(0);
+    expect(festivalWindowSummary({}, "2026-08-30")).toEqual({
+      label: "",
+      year: undefined,
+      totalDays: null,
+      day: null,
+      remaining: null,
+    });
   });
 });
 

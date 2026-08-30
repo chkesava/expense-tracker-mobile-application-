@@ -1,15 +1,18 @@
 import { useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { collection, getDocs, orderBy, query } from "firebase/firestore";
-import { Landmark } from "lucide-react-native";
+import { AdminGlyph } from "@/components/ganesh/admin/adminArt";
 
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { FestivalStackHero } from "@/components/ganesh/chrome/FestivalStackHero";
+import { ganeshStackLayout } from "@/components/ganesh/chrome/stackLayout";
 import { FundLocationChips } from "@/components/ganesh/FundLocationChips";
-import { GaneshAppVersion } from "@/components/ganesh/GaneshAppVersion";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
-import { GaneshHeader, useGaneshTokens } from "@/components/ganesh/ui";
+import { PandalAccountBar } from "@/components/ganesh/pandal/PandalAccountBar";
+import { PandalSectionCard } from "@/components/ganesh/pandal/PandalSectionCard";
+import { useGaneshTokens } from "@/components/ganesh/ui";
 import { useGaneshWrites } from "@/hooks/useGaneshWrites";
 import { useMyJoinRequests } from "@/hooks/useMyJoinRequests";
 import { usePandals } from "@/hooks/usePandals";
@@ -112,173 +115,174 @@ export default function GaneshSetupScreen() {
     }
   };
 
+  const intro = waiting
+    ? "Your request was sent to the Pandal admin. You will see expenses, collections, and the Permanent Fund after they accept you."
+    : pandals.length === 0
+      ? "You are not a member of the Pandal yet. Request to join or create the Pandal. You will not see expenses, collections, or the Permanent Fund until an admin accepts you."
+      : "Open a Pandal you already belong to, or join another with a code.";
+
   return (
-    <GaneshScreen safeTop>
-      <GaneshHeader
+    <GaneshScreen contentContainerStyle={ganeshStackLayout.bleed}>
+      <FestivalStackHero
         title={waiting ? "Waiting for approval" : "Ganesh Seva"}
-        icon={<Landmark size={22} color={g.saffron} strokeWidth={2.2} />}
+        subtitle={waiting ? "Join request sent" : "Choose or create a Pandal"}
         onBack={() => {
           void setActiveWorkspace("expense");
         }}
+        mark={<AdminGlyph name="shield" size={40} />}
       />
-      <Text style={{ color: theme.colors.mutedForeground, lineHeight: 22 }}>
-        {waiting
-          ? "Your request was sent to the Pandal admin. You will see expenses, collections, and the Permanent Fund after they accept you."
-          : pandals.length === 0
-            ? "You are not a member of the Pandal yet. Request to join or create the Pandal. You will not see expenses, collections, or the Permanent Fund until an admin accepts you."
-            : "Open a Pandal you already belong to, or join another with a code."}
-      </Text>
-      {waiting ? (
-        <View style={{ gap: 10 }}>
-          {pending.map((request) => (
-            <View
-              key={request.id}
-              style={{
-                backgroundColor: theme.colors.card,
-                borderColor: theme.colors.border,
-                borderWidth: 1,
-                borderRadius: 16,
-                padding: 14,
-                gap: 6,
-              }}
-            >
-              <Text style={{ color: theme.colors.foreground, fontWeight: "800" }}>
-                {request.pandalName || "Pandal"}
-              </Text>
-              <Text style={{ color: theme.colors.mutedForeground, lineHeight: 20 }}>
-                Request sent. Waiting for an admin to approve you.
-              </Text>
-            </View>
-          ))}
-        </View>
-      ) : null}
-      {rejected.length > 0 && pandals.length === 0 && !waiting ? (
-        <Text style={{ color: theme.colors.mutedForeground }}>
-          A previous join request was rejected. You can request again with the Pandal code.
-        </Text>
-      ) : null}
 
-      {pandals.length > 0 ? (
-        <View style={{ gap: 10 }}>
-          <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>My Pandals</Text>
-          {pandals.map((pandal) => (
-            <PandalPickRow
-              key={pandal.id}
-              pandalId={pandal.id}
-              name={pandal.name}
-              code={pandal.code}
-            />
-          ))}
-        </View>
-      ) : null}
-
-      {mode === "choose" ? (
-        <View style={{ gap: 10 }}>
-          <Button onPress={() => setMode("join")}>
-            {waiting ? "Request another Pandal" : "Request to Join"}
-          </Button>
-          <Button variant="outline" onPress={() => setMode("create")}>
-            Create Pandal
-          </Button>
-        </View>
-      ) : null}
-
-      {mode === "create" ? (
-        <View style={{ gap: 12 }}>
-          <Input label="Pandal name" value={pandalName} onChangeText={setPandalName} placeholder="Sri Ganesh Youth Committee" />
-          <Input label="Area (optional)" value={area} onChangeText={setArea} />
-          <Input label="Festival" value={festivalName} onChangeText={setFestivalName} />
-          <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>
-            Do you already have money belonging to the Pandal?
+      <View style={ganeshStackLayout.body}>
+        <View style={[styles.notice, { backgroundColor: theme.colors.card, borderColor: g.divider }]}>
+          <Text style={[styles.noticeText, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}>
+            {intro}
           </Text>
-          <View style={{ flexDirection: "row", gap: 8 }}>
-            <Button variant={hasExistingFund ? "outline" : "primary"} onPress={() => setHasExistingFund(false)}>
-              No
+        </View>
+
+        {waiting ? (
+          <PandalSectionCard title="Pending requests" subtitle={`${pending.length} waiting`}>
+            <View style={styles.stack}>
+              {pending.map((request) => (
+                <View
+                  key={request.id}
+                  style={[styles.pendingRow, { borderColor: g.divider }]}
+                >
+                  <Text style={[styles.pendingName, { color: theme.colors.foreground, fontFamily: theme.fontFamily.bold }]}>
+                    {request.pandalName || "Pandal"}
+                  </Text>
+                  <Text style={[styles.pendingMeta, { color: theme.colors.mutedForeground }]}>
+                    Request sent. Waiting for an admin to approve you.
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </PandalSectionCard>
+        ) : null}
+
+        {rejected.length > 0 && pandals.length === 0 && !waiting ? (
+          <Text style={{ color: theme.colors.mutedForeground, lineHeight: 20 }}>
+            A previous join request was rejected. You can request again with the Pandal code.
+          </Text>
+        ) : null}
+
+        {pandals.length > 0 ? (
+          <PandalSectionCard
+            title="My Pandals"
+            subtitle={pandals.length === 1 ? "1 Pandal" : `${pandals.length} Pandals`}
+          >
+            <View style={styles.stack}>
+              {pandals.map((pandal) => (
+                <PandalPickRow
+                  key={pandal.id}
+                  pandalId={pandal.id}
+                  name={pandal.name}
+                  code={pandal.code}
+                />
+              ))}
+            </View>
+          </PandalSectionCard>
+        ) : null}
+
+        {mode === "choose" ? (
+          <View style={styles.stack}>
+            <Button onPress={() => setMode("join")}>
+              {waiting ? "Request another Pandal" : "Request to Join"}
             </Button>
-            <Button variant={hasExistingFund ? "primary" : "outline"} onPress={() => setHasExistingFund(true)}>
-              Yes
+            <Button variant="outline" onPress={() => setMode("create")}>
+              Create Pandal
             </Button>
           </View>
-          {!hasExistingFund ? (
-            <Text style={{ color: theme.colors.mutedForeground, lineHeight: 20 }}>
-              You can add the Permanent Fund later from Home or the Pandal tab.
-            </Text>
-          ) : null}
-          {hasExistingFund ? (
-            <View style={{ gap: 12 }}>
-              <Input
-                label="Existing Permanent Fund"
-                value={initialAmount}
-                onChangeText={setInitialAmount}
-                keyboardType="numeric"
-              />
-              <Text style={{ color: theme.colors.mutedForeground, fontWeight: "700" }}>
-                Money location
+        ) : null}
+
+        {mode === "create" ? (
+          <PandalSectionCard title="Create Pandal" subtitle="You become the first admin">
+            <View style={styles.form}>
+              <Input label="Pandal name" value={pandalName} onChangeText={setPandalName} placeholder="Sri Ganesh Youth Committee" />
+              <Input label="Area (optional)" value={area} onChangeText={setArea} />
+              <Input label="Festival" value={festivalName} onChangeText={setFestivalName} />
+              <Text style={[styles.formHeading, { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold }]}>
+                Do you already have money belonging to the Pandal?
               </Text>
-              <FundLocationChips value={fundLocation} onChange={setFundLocation} />
-              <Input
-                label="Source / description"
-                value={fundDescription}
-                onChangeText={setFundDescription}
-                placeholder="Existing Pandal Fund"
-              />
-              <Input
-                label="Use for this first festival (0 keeps it in the Permanent Fund)"
-                value={allocateAmount}
-                onChangeText={setAllocateAmount}
-                keyboardType="numeric"
-              />
-              <Text style={{ color: theme.colors.mutedForeground }}>
-                This amount is not a {festivalName} donation. Remaining Permanent Fund{" "}
-                {formatInr(Math.max(0, Number(initialAmount || 0) - Number(allocateAmount || 0)))}.
-              </Text>
+              <View style={styles.choiceRow}>
+                <Button variant={hasExistingFund ? "outline" : "primary"} onPress={() => setHasExistingFund(false)}>
+                  No
+                </Button>
+                <Button variant={hasExistingFund ? "primary" : "outline"} onPress={() => setHasExistingFund(true)}>
+                  Yes
+                </Button>
+              </View>
+              {hasExistingFund ? (
+                <View style={styles.form}>
+                  <Input
+                    label="Existing Permanent Fund"
+                    value={initialAmount}
+                    onChangeText={setInitialAmount}
+                    keyboardType="numeric"
+                  />
+                  <Text style={[styles.formHeading, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.semibold }]}>
+                    Money location
+                  </Text>
+                  <FundLocationChips value={fundLocation} onChange={setFundLocation} />
+                  <Input
+                    label="Source / description"
+                    value={fundDescription}
+                    onChangeText={setFundDescription}
+                    placeholder="Existing Pandal Fund"
+                  />
+                  <Input
+                    label="Use for this first festival (0 keeps it in the Permanent Fund)"
+                    value={allocateAmount}
+                    onChangeText={setAllocateAmount}
+                    keyboardType="numeric"
+                  />
+                  <Text style={{ color: theme.colors.mutedForeground, lineHeight: 20 }}>
+                    This amount is not a {festivalName} donation. Remaining Permanent Fund{" "}
+                    {formatInr(Math.max(0, Number(initialAmount || 0) - Number(allocateAmount || 0)))}.
+                  </Text>
+                </View>
+              ) : (
+                <Text style={{ color: theme.colors.mutedForeground, lineHeight: 20 }}>
+                  You can add the Permanent Fund later from Home or the Pandal tab.
+                </Text>
+              )}
+              <Button loading={busy} onPress={() => void create()}>
+                Create Pandal
+              </Button>
+              <Button variant="ghost" onPress={() => setMode("choose")}>
+                Back
+              </Button>
             </View>
-          ) : null}
-          <Button loading={busy} onPress={() => void create()}>
-            Create Pandal
-          </Button>
-          <Button variant="ghost" onPress={() => setMode("choose")}>
-            Back
-          </Button>
-        </View>
-      ) : null}
+          </PandalSectionCard>
+        ) : null}
 
-      {mode === "join" ? (
-        <View style={{ gap: 12 }}>
-          <Input
-            label="Pandal code"
-            value={code}
-            onChangeText={setCode}
-            autoCapitalize="characters"
-            placeholder="GNSH-XXXX"
-          />
-          <Button loading={busy} onPress={() => void join()}>
-            Request access
-          </Button>
-          <Button variant="ghost" onPress={() => setMode("choose")}>
-            Back
-          </Button>
-        </View>
-      ) : null}
+        {mode === "join" ? (
+          <PandalSectionCard title="Request to join" subtitle="Ask the admin with the Pandal code">
+            <View style={styles.form}>
+              <Input
+                label="Pandal code"
+                value={code}
+                onChangeText={setCode}
+                autoCapitalize="characters"
+                placeholder="GNSH-XXXX"
+              />
+              <Button loading={busy} onPress={() => void join()}>
+                Request access
+              </Button>
+              <Button variant="ghost" onPress={() => setMode("choose")}>
+                Back
+              </Button>
+            </View>
+          </PandalSectionCard>
+        ) : null}
 
-      <View style={{ gap: 8, paddingTop: 8 }}>
-        <Button
-          variant="outline"
-          onPress={() => {
+        <PandalAccountBar
+          onSwitchApp={() => {
             void setActiveWorkspace("expense");
           }}
-        >
-          Switch app
-        </Button>
-        <Button
-          variant="ghost"
-          onPress={() => {
+          onLogout={() => {
             void logout();
           }}
-        >
-          Switch account / Log out
-        </Button>
-        <GaneshAppVersion />
+        />
       </View>
     </GaneshScreen>
   );
@@ -294,6 +298,7 @@ function PandalPickRow({
   code: string;
 }) {
   const { theme } = useTheme();
+  const g = useGaneshTokens();
   const { replace } = useRouter();
   const { setSession } = useGaneshSession();
   const [busy, setBusy] = useState(false);
@@ -330,18 +335,79 @@ function PandalPickRow({
       onPress={() => {
         void open();
       }}
-      style={{
-        backgroundColor: theme.colors.card,
-        borderColor: theme.colors.border,
-        borderWidth: 1,
-        borderRadius: 16,
-        padding: 14,
-        gap: 4,
-        opacity: busy ? 0.7 : 1,
-      }}
+      style={({ pressed }) => [
+        styles.pick,
+        {
+          backgroundColor: g.wash(g.saffron),
+          borderColor: g.divider,
+          opacity: busy ? 0.7 : 1,
+        },
+        pressed ? { opacity: 0.88 } : null,
+      ]}
     >
-      <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>{name}</Text>
-      <Text style={{ color: theme.colors.mutedForeground }}>Code {formatPandalCode(code)}</Text>
+      <Text style={[styles.pickName, { color: theme.colors.foreground, fontFamily: theme.fontFamily.bold }]}>
+        {name}
+      </Text>
+      <Text style={[styles.pickMeta, { color: g.saffron, fontFamily: theme.fontFamily.semibold }]}>
+        Code {formatPandalCode(code)}
+      </Text>
     </Pressable>
   );
 }
+
+const styles = StyleSheet.create({
+  notice: {
+    borderRadius: 16,
+    borderCurve: "continuous",
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  noticeText: {
+    fontSize: 14,
+    lineHeight: 22,
+  },
+  stack: {
+    gap: 10,
+    paddingHorizontal: 2,
+    paddingBottom: 6,
+  },
+  pendingRow: {
+    gap: 4,
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  pendingName: {
+    fontSize: 16,
+  },
+  pendingMeta: {
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  form: {
+    gap: 12,
+    paddingHorizontal: 2,
+    paddingBottom: 8,
+  },
+  formHeading: {
+    fontSize: 14,
+  },
+  choiceRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  pick: {
+    borderRadius: 14,
+    borderCurve: "continuous",
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    gap: 4,
+  },
+  pickName: {
+    fontSize: 16,
+  },
+  pickMeta: {
+    fontSize: 13,
+  },
+});

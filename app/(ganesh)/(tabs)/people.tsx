@@ -1,21 +1,15 @@
 import { useCallback, useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import { ClipboardList, Home, UserPlus, Users } from "lucide-react-native";
-
+import { AdminGlyph } from "@/components/ganesh/admin/adminArt";
+import { CollectionIcon } from "@/components/ganesh/art/icons";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { GaneshSyncChip } from "@/components/ganesh/GaneshSyncChip";
-import {
-  Avatar,
-  GaneshEmptyState,
-  GaneshHeader,
-  MetaLabel,
-  NavRow,
-  Section,
-  StatTile,
-  useGaneshTokens,
-} from "@/components/ganesh/ui";
-import { SkeletonList } from "@/components/common/Skeleton";
+import { CommitteeOverview } from "@/components/ganesh/people/CommitteeOverview";
+import { ManageSection } from "@/components/ganesh/people/ManageSection";
+import { PandalInfoNotice } from "@/components/ganesh/people/PandalInfoNotice";
+import { PeopleHero } from "@/components/ganesh/people/PeopleHero";
+import { NavRow, useGaneshTokens } from "@/components/ganesh/ui";
 import { useFestivals } from "@/hooks/useFestivals";
 import { useFestivalMembers } from "@/hooks/useFestivalMembers";
 import { useFestivalSeva } from "@/hooks/useFestivalSeva";
@@ -69,184 +63,117 @@ export default function PeopleScreen() {
   );
 
   const paidCount = festivalMembers.filter((m) => m.contributionPaid > 0).length;
+  const canOpenMember = can("members.read");
+  const showJoinRequests = isAdmin && requests.length > 0;
+  const showMembers = can("members.read");
+  const showHouseholds = can("collections.read");
 
   return (
-    <GaneshScreen safeTop withTabBar refreshing={refreshing} onRefresh={handleRefresh}>
-      <GaneshHeader
-        title="People"
-        subtitle={festival?.name}
-        icon={<Users size={22} color={g.saffron} strokeWidth={2.2} />}
-        rightElement={<GaneshSyncChip />}
-      />
+    <GaneshScreen
+      withTabBar
+      refreshing={refreshing}
+      onRefresh={handleRefresh}
+      contentContainerStyle={styles.bleed}
+    >
+      <PeopleHero festivalName={festival?.name} rightAccessory={<GaneshSyncChip onDark />} />
 
-      <Section title="Committee" subtitle={`${active.length} active`}>
-        <View style={styles.statRow}>
-          <StatTile label="Members">
-            <Text style={[styles.count, { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold }]}>
-              {active.length}
-            </Text>
-          </StatTile>
-          <StatTile label="Contributed">
-            <Text style={[styles.count, { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold }]}>
-              {paidCount}
-              <Text style={{ color: theme.colors.mutedForeground }}> / {festivalMembers.length}</Text>
-            </Text>
-          </StatTile>
-          <StatTile label="On seva today">
-            <Text style={[styles.count, { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold }]}>
-              {onDutyToday}
-            </Text>
-          </StatTile>
-        </View>
-
-        {membersLoading && active.length === 0 ? (
-          <SkeletonList count={3} />
-        ) : active.length === 0 ? (
-          <GaneshEmptyState
-            compact
-            icon={<Users size={20} color={g.saffron} strokeWidth={1.9} />}
-            title="No committee members yet"
-            description="Share your Pandal code so people can join."
-          />
-        ) : (
-          <View style={styles.avatars}>
-            {active.slice(0, 8).map((member) => (
-              <View key={member.id} style={styles.avatarItem}>
-                <Avatar name={member.displayName} size={38} />
-                <Text
-                  numberOfLines={1}
-                  style={[
-                    styles.avatarName,
-                    { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.medium },
-                  ]}
-                >
-                  {member.displayName.split(" ")[0]}
-                </Text>
-              </View>
-            ))}
-            {active.length > 8 ? (
-              <View style={styles.avatarItem}>
-                <View style={[styles.more, { backgroundColor: g.wash(g.saffron) }]}>
-                  <Text
-                    style={[styles.moreText, { color: g.saffron, fontFamily: theme.fontFamily.semibold }]}
-                  >
-                    +{active.length - 8}
-                  </Text>
-                </View>
-                <Text
-                  numberOfLines={1}
-                  style={[
-                    styles.avatarName,
-                    { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.medium },
-                  ]}
-                >
-                  more
-                </Text>
-              </View>
-            ) : null}
-          </View>
-        )}
-      </Section>
-
-      <Section title="Manage">
-        {isAdmin && requests.length > 0 ? (
-          <NavRow
-            title="Join requests"
-            meta="People asking to join this Pandal"
-            icon={<UserPlus size={17} color={g.saffron} strokeWidth={2.2} />}
-            iconTint={g.wash(g.saffron)}
-            badge={{
-              kind: "overdue",
-              label: `${requests.length} waiting`,
-            }}
-            divider
-            onPress={() => push("/(ganesh)/join-requests" as never)}
-          />
-        ) : null}
-
-        <NavRow
-          title="Committee tracker"
-          meta="Who has paid their share, who still owes"
-          icon={<ClipboardList size={17} color={theme.colors.mutedForeground} strokeWidth={2.2} />}
-          divider={can("members.read") || can("collections.read")}
-          onPress={() => push("/(ganesh)/(tabs)/committee" as never)}
+      <View style={styles.body}>
+        <CommitteeOverview
+          memberCount={active.length}
+          paidCount={paidCount}
+          festivalMemberCount={festivalMembers.length}
+          onDutyToday={onDutyToday}
+          members={active}
+          loading={membersLoading}
+          onMemberPress={
+            canOpenMember ? (userId) => push(`/(ganesh)/member/${userId}` as never) : undefined
+          }
         />
 
-        {can("members.read") ? (
-          <NavRow
-            title="Members and roles"
-            meta="Who holds which role in the Pandal"
-            icon={<Users size={17} color={theme.colors.mutedForeground} strokeWidth={2.2} />}
-            divider={can("collections.read")}
-            onPress={() => push("/(ganesh)/members" as never)}
-          />
-        ) : null}
+        <ManageSection>
+          {showJoinRequests ? (
+            <NavRow
+              title="Join requests"
+              meta="People asking to join this Pandal"
+              icon={<AdminGlyph name="iconJoin" />}
+              iconTint="transparent"
+              chevronColor={g.saffron}
+              badge={{
+                kind: "overdue",
+                label: `${requests.length} waiting`,
+              }}
+              divider
+              onPress={() => push("/(ganesh)/join-requests" as never)}
+            />
+          ) : null}
 
-        {can("collections.read") ? (
           <NavRow
-            title="Households"
-            meta="Door-to-door chanda rounds"
-            icon={<Home size={17} color={theme.colors.mutedForeground} strokeWidth={2.2} />}
-            value={
-              households.length > 0 ? (
-                <Text
-                  style={[
-                    styles.count,
-                    { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold, fontSize: 15 },
-                  ]}
-                >
-                  {households.length}
-                </Text>
-              ) : undefined
-            }
-            onPress={() => push("/(ganesh)/(tabs)/collections" as never)}
+            title="Committee tracker"
+            meta="Who has paid their share, who still owes"
+            icon={<AdminGlyph name="iconCommittee" />}
+            iconTint="transparent"
+            chevronColor={g.saffron}
+            divider={showMembers || showHouseholds}
+            onPress={() => push("/(ganesh)/(tabs)/committee" as never)}
           />
-        ) : null}
-      </Section>
 
-      <MetaLabel>
-        {festival?.name
-          ? `Roles apply to the whole Pandal. Contribution targets are set per festival — currently ${festival.name}.`
-          : "Roles apply to the whole Pandal."}
-      </MetaLabel>
+          {showMembers ? (
+            <NavRow
+              title="Members and roles"
+              meta="Who holds which role in the Pandal"
+              icon={<AdminGlyph name="iconMembers" />}
+              iconTint="transparent"
+              chevronColor={g.saffron}
+              divider={showHouseholds}
+              onPress={() => push("/(ganesh)/members" as never)}
+            />
+          ) : null}
+
+          {showHouseholds ? (
+            <NavRow
+              title="Households"
+              meta="Door-to-door chanda rounds"
+              icon={<CollectionIcon size={36} />}
+              iconTint="transparent"
+              chevronColor={g.saffron}
+              value={
+                households.length > 0 ? (
+                  <Text
+                    style={[
+                      styles.householdCount,
+                      { color: g.godFund, fontFamily: theme.fontFamily.semibold },
+                    ]}
+                  >
+                    {households.length}
+                  </Text>
+                ) : undefined
+              }
+              onPress={() => push("/(ganesh)/(tabs)/collections" as never)}
+            />
+          ) : null}
+        </ManageSection>
+
+        <PandalInfoNotice festivalName={festival?.name} />
+      </View>
     </GaneshScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  statRow: {
-    flexDirection: "row",
-    gap: 10,
-    marginBottom: 12,
+  bleed: {
+    paddingHorizontal: 0,
+    paddingTop: 0,
+    gap: 0,
   },
-  count: {
-    fontSize: 17,
-    letterSpacing: -0.2,
-    fontVariant: ["tabular-nums"],
-  },
-  avatars: {
-    flexDirection: "row",
-    flexWrap: "wrap",
+  body: {
+    paddingHorizontal: 16,
+    paddingTop: 0,
+    marginTop: -6,
     gap: 12,
   },
-  avatarItem: {
-    alignItems: "center",
-    width: 52,
-    gap: 4,
-  },
-  avatarName: {
-    fontSize: 10.5,
-    textAlign: "center",
-  },
-  more: {
-    width: 38,
-    height: 38,
-    borderRadius: 13,
-    borderCurve: "continuous",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  moreText: {
-    fontSize: 12.5,
+  householdCount: {
+    fontSize: 15,
+    letterSpacing: -0.2,
+    fontVariant: ["tabular-nums"],
   },
 });

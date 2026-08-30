@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { FlashList } from "@shopify/flash-list";
@@ -48,9 +48,11 @@ const FILTER_OPTIONS: Array<{ id: Filter; label: string }> = [
 
 export type ExpensesListProps = {
   embedded?: boolean;
+  /** Festival chrome (cash position, ledger tabs) that scrolls with the list. */
+  prefix?: ReactNode;
 };
 
-export function ExpensesList({ embedded = false }: ExpensesListProps) {
+export function ExpensesList({ embedded = false, prefix }: ExpensesListProps) {
   const { theme } = useTheme();
   const g = useGaneshTokens();
   const { push } = useRouter();
@@ -157,50 +159,54 @@ export function ExpensesList({ embedded = false }: ExpensesListProps) {
         />
       )}
 
-      <FundHero
-        eyebrow="Spent this festival"
-        amount={totalExpenses(summary)}
-        kind="god"
-        breakdown={[
-          { label: "Regular", value: regularExpenseAmount(summary) },
-          { label: "Assets", value: assetPurchaseAmountOf(summary) },
-        ]}
-      />
-
-      <View style={styles.statRow}>
-        <StatTile label="Personal money used">
-          <Money value={summary.personalMoneyUsed} size="primary" numberOfLines={1} adjustsFontSizeToFit />
-        </StatTile>
-        <StatTile
-          label="Pending reimbursement"
-          meta={
-            summary.pendingReimbursements > 0 ? (
-              <Text
-                style={[styles.tileMeta, { color: theme.colors.warning, fontFamily: theme.fontFamily.medium }]}
-              >
-                Owed back to members
-              </Text>
-            ) : (
-              <Text
-                style={[
-                  styles.tileMeta,
-                  { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular },
-                ]}
-              >
-                All settled
-              </Text>
-            )
-          }
-        >
-          <Money
-            value={summary.pendingReimbursements}
-            size="primary"
-            tone={summary.pendingReimbursements > 0 ? "warning" : "default"}
-            numberOfLines={1}
-            adjustsFontSizeToFit
+      {embedded ? null : (
+        <>
+          <FundHero
+            eyebrow="Spent this festival"
+            amount={totalExpenses(summary)}
+            kind="god"
+            breakdown={[
+              { label: "Regular", value: regularExpenseAmount(summary) },
+              { label: "Assets", value: assetPurchaseAmountOf(summary) },
+            ]}
           />
-        </StatTile>
-      </View>
+
+          <View style={styles.statRow}>
+            <StatTile label="Personal money used">
+              <Money value={summary.personalMoneyUsed} size="primary" numberOfLines={1} adjustsFontSizeToFit />
+            </StatTile>
+            <StatTile
+              label="Pending reimbursement"
+              meta={
+                summary.pendingReimbursements > 0 ? (
+                  <Text
+                    style={[styles.tileMeta, { color: theme.colors.warning, fontFamily: theme.fontFamily.medium }]}
+                  >
+                    Owed back to members
+                  </Text>
+                ) : (
+                  <Text
+                    style={[
+                      styles.tileMeta,
+                      { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular },
+                    ]}
+                  >
+                    All settled
+                  </Text>
+                )
+              }
+            >
+              <Money
+                value={summary.pendingReimbursements}
+                size="primary"
+                tone={summary.pendingReimbursements > 0 ? "warning" : "default"}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+              />
+            </StatTile>
+          </View>
+        </>
+      )}
 
       <FilterChips value={filter} options={FILTER_OPTIONS} onChange={setFilter} />
     </>
@@ -210,13 +216,19 @@ export function ExpensesList({ embedded = false }: ExpensesListProps) {
     <FlashList
       data={rows}
       style={styles.list}
+      keyboardShouldPersistTaps="handled"
       keyExtractor={(item) => item.id}
       getItemType={(item) => (isAssetPurchaseExpense(item) ? "asset" : "expense")}
       contentContainerStyle={{ paddingBottom: listPadding }}
       ItemSeparatorComponent={() => <View style={styles.separator} />}
       renderItem={renderItem}
       ListHeaderComponent={
-        embedded ? <View style={styles.embeddedHeader}>{chrome}</View> : undefined
+        embedded ? (
+          <View style={styles.embeddedHeader}>
+            {prefix}
+            {chrome}
+          </View>
+        ) : undefined
       }
       ListEmptyComponent={
         <ListStateView

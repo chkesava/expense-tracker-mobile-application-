@@ -1,16 +1,17 @@
 import { useEffect, useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import { Plus, ShieldCheck } from "lucide-react-native";
+import { Plus } from "lucide-react-native";
 
+import { AdminGlyph } from "@/components/ganesh/admin/adminArt";
 import { AdminQueryState } from "@/components/ganesh/AdminQueryState";
+import { FestivalStackHero } from "@/components/ganesh/chrome/FestivalStackHero";
+import { ganeshStackLayout } from "@/components/ganesh/chrome/stackLayout";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import {
-  GaneshHeader,
   NavRow,
   Section,
   StatusStrip,
-  useGaneshTokens,
 } from "@/components/ganesh/ui";
 import { Button } from "@/components/ui/Button";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
@@ -23,7 +24,6 @@ import { useTheme } from "@/theme/ThemeProvider";
 
 export default function AdminRolesScreen() {
   const { theme } = useTheme();
-  const g = useGaneshTokens();
   const { push, back } = useRouter();
   const { pandalId } = useGaneshSession();
   const { roles, loading, error, retry } = usePandalRoles(pandalId);
@@ -50,14 +50,14 @@ export default function AdminRolesScreen() {
     }`;
 
   return (
-    <GaneshScreen safeTop>
-      <GaneshHeader
+    <GaneshScreen contentContainerStyle={ganeshStackLayout.bleed}>
+      <FestivalStackHero
         title="Roles"
         subtitle={`${roles.length} role${roles.length === 1 ? "" : "s"}`}
-        icon={<ShieldCheck size={22} color={g.saffron} strokeWidth={2.2} />}
         onBack={back}
+        mark={<AdminGlyph name="iconRoles" size={40} />}
       />
-
+      <View style={ganeshStackLayout.body}>
       <StatusStrip
         tone="info"
         message="Built-in roles keep the Pandal working. Custom roles are for this committee only."
@@ -120,6 +120,7 @@ export default function AdminRolesScreen() {
           </Section>
         ) : null}
       </AdminQueryState>
+      </View>
     </GaneshScreen>
   );
 }

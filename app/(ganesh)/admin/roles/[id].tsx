@@ -1,15 +1,15 @@
 import { useState } from "react";
 import { Alert, StyleSheet, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { ShieldCheck } from "lucide-react-native";
-
+import { AdminGlyph } from "@/components/ganesh/admin/adminArt";
 import { AdminQueryState } from "@/components/ganesh/AdminQueryState";
+import { FestivalStackHero } from "@/components/ganesh/chrome/FestivalStackHero";
+import { ganeshStackLayout } from "@/components/ganesh/chrome/stackLayout";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { PermissionChecklist, PermissionSummary } from "@/components/ganesh/PermissionChecklist";
 import {
   Avatar,
   GaneshEmptyState,
-  GaneshHeader,
   LedgerRow,
   Section,
   StatusStrip,
@@ -121,8 +121,8 @@ export default function AdminRoleDetailScreen() {
   };
 
   return (
-    <GaneshScreen safeTop>
-      <GaneshHeader
+    <GaneshScreen contentContainerStyle={ganeshStackLayout.bleed}>
+      <FestivalStackHero
         title={role?.name || "Role"}
         subtitle={
           role
@@ -131,10 +131,10 @@ export default function AdminRoleDetailScreen() {
               } permissions · ${assigned.length} ${assigned.length === 1 ? "person" : "people"}`
             : undefined
         }
-        icon={<ShieldCheck size={22} color={g.saffron} strokeWidth={2.2} />}
         onBack={back}
+        mark={<AdminGlyph name="iconRoles" size={40} />}
       />
-
+      <View style={ganeshStackLayout.body}>
       <AdminQueryState
         loading={loading && !role}
         error={error}
@@ -183,7 +183,7 @@ export default function AdminRoleDetailScreen() {
                 {assigned.length === 0 ? (
                   <GaneshEmptyState
                     compact
-                    icon={<ShieldCheck size={20} color={g.saffron} strokeWidth={2.2} />}
+                    icon={<AdminGlyph name="iconRoles" size={22} />}
                     title="Nobody has this role yet"
                     description="Open a member to assign it."
                   />
@@ -225,6 +225,7 @@ export default function AdminRoleDetailScreen() {
           )
         ) : null}
       </AdminQueryState>
+      </View>
     </GaneshScreen>
   );
 }

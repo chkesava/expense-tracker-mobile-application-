@@ -21,6 +21,8 @@ export type NavRowProps = {
   badge?: { kind: StatusKind; label?: string };
   /** Hairline under the row. Set on every row but the last in a group. */
   divider?: boolean;
+  /** Defaults to muted. People manage rows pass saffron to match the mock. */
+  chevronColor?: string;
   onPress: () => void;
 };
 
@@ -40,6 +42,7 @@ export function NavRow({
   value,
   badge,
   divider = false,
+  chevronColor,
   onPress,
 }: NavRowProps) {
   const { theme } = useTheme();
@@ -87,7 +90,7 @@ export function NavRow({
       {badge ? <StatusBadge kind={badge.kind} label={badge.label} size="sm" /> : null}
       {value}
 
-      <ChevronRight size={16} color={theme.colors.mutedForeground} strokeWidth={2} />
+      <ChevronRight size={16} color={chevronColor ?? theme.colors.mutedForeground} strokeWidth={2} />
     </Pressable>
   );
 }

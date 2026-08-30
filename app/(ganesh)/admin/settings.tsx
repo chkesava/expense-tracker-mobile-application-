@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import { Settings } from "lucide-react-native";
-
+import { AdminGlyph } from "@/components/ganesh/admin/adminArt";
 import { AdminQueryState } from "@/components/ganesh/AdminQueryState";
+import { FestivalStackHero } from "@/components/ganesh/chrome/FestivalStackHero";
+import { ganeshStackLayout } from "@/components/ganesh/chrome/stackLayout";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
-import { GaneshHeader, useGaneshTokens } from "@/components/ganesh/ui";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
@@ -21,7 +21,6 @@ import { useTheme } from "@/theme/ThemeProvider";
 
 export default function AdminPandalSettingsScreen() {
   const { theme } = useTheme();
-  const g = useGaneshTokens();
   const { back } = useRouter();
   const { pandalId } = useGaneshSession();
   const { pandals, loading, error } = usePandals();
@@ -43,12 +42,14 @@ export default function AdminPandalSettingsScreen() {
   const contactPhone = _contactPhone ?? pandal?.contactPhone ?? "";
 
   return (
-    <GaneshScreen>
-      <GaneshHeader
+    <GaneshScreen contentContainerStyle={ganeshStackLayout.bleed}>
+      <FestivalStackHero
         title="Pandal settings"
-        icon={<Settings size={22} color={g.saffron} strokeWidth={2.2} />}
+        subtitle={pandal?.name}
         onBack={back}
+        mark={<AdminGlyph name="iconSettings" size={40} />}
       />
+      <View style={ganeshStackLayout.body}>
       <AdminQueryState
         loading={loading && !pandal}
         error={error}
@@ -126,6 +127,7 @@ export default function AdminPandalSettingsScreen() {
           </>
         ) : null}
       </AdminQueryState>
+      </View>
     </GaneshScreen>
   );
 }

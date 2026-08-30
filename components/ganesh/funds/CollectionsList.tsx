@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { FlashList } from "@shopify/flash-list";
@@ -65,9 +65,11 @@ const METHOD_LABEL: Record<string, string> = {
 
 export type CollectionsListProps = {
   embedded?: boolean;
+  /** Festival chrome (cash position, ledger tabs) that scrolls with the list. */
+  prefix?: ReactNode;
 };
 
-export function CollectionsList({ embedded = false }: CollectionsListProps) {
+export function CollectionsList({ embedded = false, prefix }: CollectionsListProps) {
   const { theme } = useTheme();
   const g = useGaneshTokens();
   const { push } = useRouter();
@@ -201,19 +203,21 @@ export function CollectionsList({ embedded = false }: CollectionsListProps) {
         />
       )}
 
-      <FundHero
-        eyebrow="Collected this festival"
-        amount={summary.chanda}
-        kind="god"
-        footer={
-          <Text
-            style={[styles.counts, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}
-          >
-            {summary.collectionCount} {summary.collectionCount === 1 ? "donor" : "donors"} ·{" "}
-            {paidHouses} paid {paidHouses === 1 ? "house" : "houses"} · {pendingHouses} pending
-          </Text>
-        }
-      />
+      {embedded ? null : (
+        <FundHero
+          eyebrow="Collected this festival"
+          amount={summary.chanda}
+          kind="god"
+          footer={
+            <Text
+              style={[styles.counts, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}
+            >
+              {summary.collectionCount} {summary.collectionCount === 1 ? "donor" : "donors"} ·{" "}
+              {paidHouses} paid {paidHouses === 1 ? "house" : "houses"} · {pendingHouses} pending
+            </Text>
+          }
+        />
+      )}
 
       <SearchBar
         value={query}
@@ -229,6 +233,7 @@ export function CollectionsList({ embedded = false }: CollectionsListProps) {
     <FlashList
       data={data}
       style={styles.list}
+      keyboardShouldPersistTaps="handled"
       keyExtractor={(item) => item.id}
       getItemType={(item) => ("donorName" in item ? "collection" : "household")}
       contentContainerStyle={{ paddingBottom: listPadding }}
@@ -237,7 +242,12 @@ export function CollectionsList({ embedded = false }: CollectionsListProps) {
         "donorName" in item ? renderCollection(item) : renderHousehold(item)
       }
       ListHeaderComponent={
-        embedded ? <View style={styles.embeddedHeader}>{chrome}</View> : undefined
+        embedded ? (
+          <View style={styles.embeddedHeader}>
+            {prefix}
+            {chrome}
+          </View>
+        ) : undefined
       }
       ListEmptyComponent={
         <ListStateView

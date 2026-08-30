@@ -1,35 +1,27 @@
 import { useCallback, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import {
-  CalendarPlus,
-  ClipboardCheck,
-  Clock,
-  Flame,
-  Gift,
-  Receipt,
-  Shield,
-  Sparkles,
-  UserPlus,
-  Users,
-  Wallet,
-} from "lucide-react-native";
+import { ChevronRight, ClipboardCheck, Clock, Sparkles, UserPlus, Users } from "lucide-react-native";
 
+import { GaneshArt } from "@/components/ganesh/art/GaneshArt";
+import {
+  CollectionIcon,
+  ContributionIcon,
+  ExpenseIcon,
+  SevaIcon,
+} from "@/components/ganesh/art/icons";
 import { GaneshQuickActions } from "@/components/ganesh/GaneshQuickActions";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { GaneshSyncChip } from "@/components/ganesh/GaneshSyncChip";
-import { SevaRow } from "@/components/ganesh/SevaRow";
+import { CommandHero, PandalOverview, TodaySevaPanel } from "@/components/ganesh/home";
 import {
   DataRow,
   GaneshEmptyState,
-  GaneshHeader,
   MetaLabel,
   Money,
-  PandalHero,
   RowGlyph,
   Section,
   SectionAction,
-  StatTile,
   useGaneshTokens,
 } from "@/components/ganesh/ui";
 import { SkeletonList } from "@/components/common/Skeleton";
@@ -47,39 +39,24 @@ import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import { availableGodFund, festivalCashSpent, totalCashIn } from "@/shared/utils/ganeshMath";
 import { formatGaneshWhen, memberDisplayName, todayDateInput } from "@/shared/utils/ganeshIdentity";
 import { summarizeContributions } from "@/shared/utils/ganeshContributions";
-import {
-  currentTimeInput,
-  nextSeva,
-  todaySeva,
-  unstaffedSeva,
-} from "@/shared/utils/ganeshSeva";
+import { currentTimeInput, nextSeva, todaySeva, unstaffedSeva } from "@/shared/utils/ganeshSeva";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { useTheme } from "@/theme/ThemeProvider";
 
-/** Icon for an activity row, chosen from the entity it describes. */
-function activityGlyph(entityType: string) {
-  if (entityType.includes("collection")) return Wallet;
-  if (entityType.includes("expense")) return Receipt;
-  if (entityType.includes("contribution") || entityType.includes("sponsor")) return Gift;
-  if (entityType.includes("seva")) return Flame;
-  return Sparkles;
+function activityArt(entityType: string) {
+  if (entityType.includes("collection") || entityType.includes("opening")) {
+    return <CollectionIcon size={28} />;
+  }
+  if (entityType.includes("expense")) return <ExpenseIcon size={28} />;
+  if (entityType.includes("contribution") || entityType.includes("sponsor")) {
+    return <ContributionIcon size={28} />;
+  }
+  if (entityType.includes("seva")) return <SevaIcon size={28} />;
+  return <ContributionIcon size={28} />;
 }
 
 /**
- * The Pandal Command Center.
- *
- * Answers "how is my Pandal doing today?", in this order:
- *
- *   1. Where the festival is — pandal, name, which day of how many
- *   2. What is happening today — the seva programme on a time rail
- *   3. What needs a person — join requests, reimbursements, promises, unstaffed seva
- *   4. How the money stands — three readings, one compact strip
- *   5. Quick actions, then recent activity
- *
- * The previous version opened with the God Fund balance and two money tiles,
- * which is what made this read as an expense tracker on launch. Money has not
- * been removed or demoted in importance — it has been moved below the things an
- * organiser standing at the pandal actually needs first.
+ * Pandal Command Center — identity, today's seva, then operations and money.
  */
 export default function GaneshHomeScreen() {
   const { theme } = useTheme();
@@ -118,13 +95,13 @@ export default function GaneshHomeScreen() {
   const upNext = useMemo(() => nextSeva(seva, today, nowTime), [seva, today, nowTime]);
   const unstaffed = useMemo(() => unstaffedSeva(seva, today), [seva, today]);
   const canPlanSeva = can("seva.write") && !closed;
+  const preview = activity.slice(0, 5);
 
   const handleRefresh = useCallback(() => {
     setRefreshing(true);
     setTimeout(() => setRefreshing(false), 600);
   }, []);
 
-  /** Things a person has to *do*, most urgent first. Empty is a good state. */
   const pendingActions = useMemo(() => {
     const rows: Array<{
       id: string;
@@ -199,239 +176,190 @@ export default function GaneshHomeScreen() {
   ]);
 
   return (
-    <GaneshScreen safeTop withTabBar refreshing={refreshing} onRefresh={handleRefresh}>
-      <GaneshHeader
-        title="Ganesh Seva"
-        subtitle={pandal?.name}
-        icon={<Sparkles size={22} color={g.saffron} strokeWidth={2.2} />}
-        rightElement={
-          <View style={styles.headerActions}>
-            {isAdmin ? (
-              <Pressable
-                onPress={() => {
-                  void haptic.selection();
-                  push("/(ganesh)/admin" as never);
-                }}
-                accessibilityRole="button"
-                accessibilityLabel="Open admin dashboard"
-                hitSlop={6}
-                style={({ pressed }) => [
-                  styles.adminButton,
-                  { backgroundColor: g.wash(g.saffron) },
-                  pressed && { opacity: 0.8 },
-                ]}
-              >
-                <Shield size={18} color={g.saffron} strokeWidth={2.2} />
-              </Pressable>
-            ) : null}
-            <GaneshSyncChip />
-          </View>
-        }
-      />
-
-      <PandalHero
+    <GaneshScreen
+      withTabBar
+      refreshing={refreshing}
+      onRefresh={handleRefresh}
+      contentContainerStyle={styles.bleed}
+    >
+      <CommandHero
         pandalName={pandal?.name}
         festivalName={festival?.name}
         festival={festival}
         today={today}
+        onNotify={isAdmin ? () => push("/(ganesh)/admin" as never) : undefined}
+        onFestivalDates={isAdmin ? () => push("/(ganesh)/admin/festivals" as never) : undefined}
+        rightAccessory={<GaneshSyncChip onDark />}
       />
 
-      {/* 2. What is happening today. */}
-      <Section
-        title="Today's Seva"
-        subtitle={sevaToday.length > 0 ? `${sevaToday.length} planned` : undefined}
-        action={
-          seva.length > 0 ? (
-            <SectionAction
-              label="Schedule"
-              onPress={() => push("/(ganesh)/(tabs)/seva" as never)}
-            />
-          ) : undefined
-        }
-      >
-        {sevaLoading && seva.length === 0 ? (
-          <SkeletonList count={3} />
-        ) : sevaToday.length === 0 ? (
-          <GaneshEmptyState
-            compact
-            icon={<CalendarPlus size={20} color={g.saffron} strokeWidth={1.9} />}
-            title={seva.length === 0 ? "No seva planned yet" : "Nothing planned today"}
-            description={
-              canPlanSeva
-                ? "Plan the aarti, annadanam and programmes so the committee knows what happens when."
-                : "Your committee has not planned anything for today."
-            }
-            action={
-              canPlanSeva
-                ? { label: "Plan a seva", onPress: () => push("/(ganesh)/add-seva" as never) }
-                : undefined
-            }
-          />
-        ) : (
-          sevaToday.map((item, index) => (
-            <SevaRow
-              key={item.id}
-              seva={item}
-              today={today}
-              nowTime={nowTime}
-              isNext={item.id === upNext?.id}
-              isLast={index === sevaToday.length - 1}
-              onPress={() => push(`/(ganesh)/seva/${item.id}` as never)}
-            />
-          ))
-        )}
-      </Section>
+      <View style={styles.body}>
+        <TodaySevaPanel
+          sevaToday={sevaToday}
+          sevaCount={seva.length}
+          loading={sevaLoading}
+          upNextId={upNext?.id}
+          today={today}
+          nowTime={nowTime}
+          canPlan={canPlanSeva}
+          onSchedule={() => push("/(ganesh)/(tabs)/seva" as never)}
+          onPlan={() => push("/(ganesh)/add-seva" as never)}
+          onOpen={(id) => push(`/(ganesh)/seva/${id}` as never)}
+        />
 
-      {/* 3. What needs a person. */}
-      {pendingActions.length > 0 ? (
-        <Section title="Needs attention" subtitle="Open items for this festival">
-          {pendingActions.map((row, index) => (
-            <DataRow
-              key={row.id}
-              divider={index < pendingActions.length - 1}
-              leading={
-                <RowGlyph tint={g.wash(row.tint)}>
-                  <row.icon size={16} color={row.tint} strokeWidth={2.2} />
-                </RowGlyph>
-              }
-              title={row.title}
-              meta={row.meta}
-              value={
-                row.id === "reimbursement" ? (
-                  <Money value={summary.pendingReimbursements} size="secondary" tone="warning" />
-                ) : undefined
-              }
-              onPress={row.onPress}
-            />
-          ))}
-        </Section>
-      ) : null}
-
-      {/* 4. How the money stands — present, but no longer the identity. */}
-      <Section
-        title="Pandal funds"
-        action={<SectionAction label="Funds" onPress={() => push("/(ganesh)/(tabs)/funds" as never)} />}
-      >
-        <View style={styles.statRow}>
-          <StatTile label="Available">
-            <Money value={godFund} size="primary" tone="positive" numberOfLines={1} adjustsFontSizeToFit />
-          </StatTile>
-          <StatTile
-            label="Received"
-            meta={
-              <Text
-                style={[styles.tileMeta, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}
-              >
-                {summary.collectionCount} collections
-              </Text>
-            }
-          >
-            <Money value={moneyIn} size="primary" numberOfLines={1} adjustsFontSizeToFit />
-          </StatTile>
-          <StatTile
-            label="Spent"
-            meta={
-              <Text
-                style={[styles.tileMeta, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}
-              >
-                {summary.expenseCount} expenses
-              </Text>
-            }
-          >
-            <Money value={spent} size="primary" numberOfLines={1} adjustsFontSizeToFit />
-          </StatTile>
-        </View>
-      </Section>
-
-      <GaneshQuickActions disabled={closed} />
-
-      {closed && can("festival.create") ? (
-        <Button onPress={() => push("/(ganesh)/create-festival" as never)}>
-          Create next festival
-        </Button>
-      ) : null}
-
-      <Section
-        title="Pandal activity"
-        action={
-          activity.length > 0 ? (
-            <SectionAction label="Report" onPress={() => push("/(ganesh)/report" as never)} />
-          ) : undefined
-        }
-      >
-        {activityLoading && activity.length === 0 ? (
-          <SkeletonList count={3} />
-        ) : activity.length === 0 ? (
-          <GaneshEmptyState
-            compact
-            icon={<Sparkles size={20} color={g.saffron} strokeWidth={1.9} />}
-            title="Nothing recorded yet"
-            description="Add an opening fund or the first chanda collection to start this festival's ledger."
-          />
-        ) : (
-          activity.slice(0, 8).map((item, index) => {
-            const Glyph = activityGlyph(item.entityType);
-            return (
+        {pendingActions.length > 0 ? (
+          <Section title="Needs attention" subtitle="Open items for this festival">
+            {pendingActions.map((row, index) => (
               <DataRow
-                key={item.id}
-                divider={index < Math.min(activity.length, 8) - 1}
+                key={row.id}
+                divider={index < pendingActions.length - 1}
                 leading={
-                  <RowGlyph tint={g.tile}>
-                    <Glyph size={16} color={theme.colors.mutedForeground} strokeWidth={2.2} />
+                  <RowGlyph tint={g.wash(row.tint)}>
+                    <row.icon size={16} color={row.tint} strokeWidth={2.2} />
                   </RowGlyph>
                 }
-                title={item.title}
-                meta={
-                  [
-                    memberDisplayName(members, item.actorId)
-                      ? `By ${memberDisplayName(members, item.actorId)}`
-                      : null,
-                    formatGaneshWhen(item.createdAt),
-                  ]
-                    .filter(Boolean)
-                    .join(" · ") || undefined
-                }
+                title={row.title}
+                meta={row.meta}
                 value={
-                  item.amount != null ? (
-                    <Money value={item.amount} size="secondary" />
-                  ) : item.estimatedValue != null ? (
-                    <Money value={item.estimatedValue} size="secondary" tone="muted" />
+                  row.id === "reimbursement" ? (
+                    <Money value={summary.pendingReimbursements} size="secondary" tone="warning" />
                   ) : undefined
                 }
-                valueMeta={
-                  item.amount == null && item.estimatedValue != null ? (
-                    <MetaLabel>Estimated</MetaLabel>
-                  ) : undefined
-                }
+                onPress={row.onPress}
               />
-            );
-          })
-        )}
-      </Section>
+            ))}
+          </Section>
+        ) : null}
+
+        <PandalOverview
+          available={godFund}
+          received={moneyIn}
+          spent={spent}
+          collectionCount={summary.collectionCount}
+          expenseCount={summary.expenseCount}
+          onDetails={() => push("/(ganesh)/(tabs)/funds" as never)}
+        />
+        <GaneshQuickActions disabled={closed} />
+
+        {closed && can("festival.create") ? (
+          <Button onPress={() => push("/(ganesh)/create-festival" as never)}>
+            Create next festival
+          </Button>
+        ) : null}
+
+        <View style={styles.activityWrap}>
+          <View pointerEvents="none" style={styles.lotusWrap}>
+            <GaneshArt name="lotusWatermark" width={220} height={220} />
+          </View>
+          <Section
+            title="Recent Activity"
+            action={
+              activity.length > 0 ? (
+                <SectionAction label="View Report" onPress={() => push("/(ganesh)/report" as never)} />
+              ) : undefined
+            }
+          >
+          {activityLoading && activity.length === 0 ? (
+            <SkeletonList count={3} />
+          ) : activity.length === 0 ? (
+            <GaneshEmptyState
+              compact
+              icon={<Sparkles size={20} color={g.saffron} strokeWidth={1.9} />}
+              title="Nothing recorded yet"
+              description="Add an opening fund or the first chanda collection to start this festival's ledger."
+            />
+          ) : (
+            preview.map((item, index) => {
+              return (
+                <DataRow
+                  key={item.id}
+                  divider={index < preview.length - 1}
+                  leading={activityArt(item.entityType)}
+                  title={item.title}
+                  meta={
+                    [
+                      memberDisplayName(members, item.actorId)
+                        ? `By ${memberDisplayName(members, item.actorId)}`
+                        : null,
+                      formatGaneshWhen(item.createdAt),
+                    ]
+                      .filter(Boolean)
+                      .join(" · ") || undefined
+                  }
+                  value={
+                    item.amount != null ? (
+                      <Money value={item.amount} size="secondary" tone="positive" />
+                    ) : item.estimatedValue != null ? (
+                      <Money value={item.estimatedValue} size="secondary" tone="muted" />
+                    ) : undefined
+                  }
+                  valueMeta={
+                    item.amount == null && item.estimatedValue != null ? (
+                      <MetaLabel>Estimated</MetaLabel>
+                    ) : undefined
+                  }
+                />
+              );
+            })
+          )}
+          {activity.length > preview.length ? (
+            <Pressable
+              onPress={() => {
+                void haptic.selection();
+                push("/(ganesh)/report" as never);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="View more activity"
+              style={styles.more}
+            >
+              <Text style={[styles.moreLabel, { color: g.saffron, fontFamily: theme.fontFamily.semibold }]}>
+                More Activity
+              </Text>
+              <ChevronRight size={14} color={g.saffron} strokeWidth={2.4} />
+            </Pressable>
+          ) : null}
+        </Section>
+        </View>
+      </View>
     </GaneshScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  headerActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
+  bleed: {
+    paddingHorizontal: 0,
+    paddingTop: 0,
+    gap: 0,
   },
-  adminButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    borderCurve: "continuous",
+  body: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    gap: 16,
+  },
+  more: {
+    alignSelf: "center",
+    minHeight: 44,
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+    gap: 2,
+    paddingHorizontal: 12,
   },
-  statRow: {
-    flexDirection: "row",
-    gap: 10,
+  moreLabel: {
+    fontSize: 13.5,
   },
-  tileMeta: {
-    fontSize: 11.5,
-    lineHeight: 15,
+  activityWrap: {
+    position: "relative",
+  },
+  lotusWrap: {
+    position: "absolute",
+    width: 220,
+    height: 220,
+    right: -28,
+    top: 36,
+    opacity: 0.16,
+  },
+  lotus: {
+    width: 220,
+    height: 220,
   },
 });

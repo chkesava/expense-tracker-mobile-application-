@@ -1,7 +1,7 @@
 import { StyleSheet, Text, View } from "react-native";
 import { Check, RefreshCw, WifiOff } from "lucide-react-native";
 
-import { GANESH_RADIUS } from "@/components/ganesh/ui/surfaces";
+import { GANESH_RADIUS, withAlpha } from "@/components/ganesh/ui/surfaces";
 import { useGaneshTokens } from "@/components/ganesh/ui/tokens";
 import { useGlobalPendingSyncCount } from "@/lib/syncStatusStore";
 import { useNetwork } from "@/providers/NetworkProvider";
@@ -12,7 +12,7 @@ import { useTheme } from "@/theme/ThemeProvider";
  * "Synced" — the state it is in 99% of the time — never competes with the
  * financial content beside it.
  */
-export function GaneshSyncChip() {
+export function GaneshSyncChip({ onDark = false }: { onDark?: boolean }) {
   const { theme } = useTheme();
   const g = useGaneshTokens();
   const { isOnline } = useNetwork();
@@ -41,7 +41,10 @@ export function GaneshSyncChip() {
     <View
       accessibilityRole="text"
       accessibilityLabel={`Sync status: ${label}`}
-      style={[styles.chip, { backgroundColor: g.wash(color) }]}
+      style={[
+        styles.chip,
+        { backgroundColor: onDark ? withAlpha("#FFF8F1", 0.14) : g.wash(color) },
+      ]}
     >
       <Icon size={12} color={color} strokeWidth={2.4} />
       <Text style={[styles.label, { color, fontFamily: theme.fontFamily.medium }]}>{label}</Text>

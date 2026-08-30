@@ -9,6 +9,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { Flame, Home, IndianRupee, Landmark, Users, type LucideIcon } from "lucide-react-native";
 
+import { GaneshArt } from "@/components/ganesh/art/GaneshArt";
 import { BOTTOM_NAV_BAR_HEIGHT } from "@/components/layout/chrome";
 import { useGaneshTokens } from "@/components/ganesh/ui/tokens";
 import { haptic } from "@/lib/haptics";
@@ -125,13 +126,16 @@ export function GaneshTabBar({
       style={[
         styles.bar,
         {
-          backgroundColor: g.isDark ? theme.colors.card : "#FFFFFF",
+          backgroundColor: g.isDark ? theme.colors.card : theme.colors.background,
           borderTopColor: theme.colors.outlineVariant ?? theme.colors.border,
           paddingBottom: bottomInset,
           height: BOTTOM_NAV_BAR_HEIGHT + bottomInset,
         },
       ]}
     >
+      <View pointerEvents="none" style={styles.lotusWrap}>
+        <GaneshArt name="lotusWatermark" width={148} height={148} />
+      </View>
       {visibleRoutes.map((route) => {
         const meta = TABS.find((tab) => tab.name === route.name);
         if (!meta) return null;
@@ -163,6 +167,7 @@ const styles = StyleSheet.create({
   bar: {
     flexDirection: "row",
     alignItems: "stretch",
+    overflow: "hidden",
     borderTopWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 4,
     elevation: 2,
@@ -171,10 +176,20 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.06,
     shadowRadius: 4,
   },
+  lotusWrap: {
+    position: "absolute",
+    right: -18,
+    bottom: -36,
+    width: 148,
+    height: 148,
+    opacity: 0.14,
+    zIndex: 0,
+  },
   item: {
     flex: 1,
     minWidth: 0,
     minHeight: 48,
+    zIndex: 1,
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",

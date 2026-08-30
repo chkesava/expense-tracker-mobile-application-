@@ -1,18 +1,17 @@
-import { Text } from "react-native";
+import { Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import { FileBarChart } from "lucide-react-native";
-
+import { AdminGlyph } from "@/components/ganesh/admin/adminArt";
 import { AdminLinkRow } from "@/components/ganesh/AdminLinkRow";
+import { FestivalStackHero } from "@/components/ganesh/chrome/FestivalStackHero";
+import { ganeshStackLayout } from "@/components/ganesh/chrome/stackLayout";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import {
   DataRow,
-  GaneshHeader,
   Money,
   Section,
   SectionPair,
   StatStrip,
   StatTile,
-  useGaneshTokens,
 } from "@/components/ganesh/ui";
 import { useContributions } from "@/hooks/useContributions";
 import { useFestivals } from "@/hooks/useFestivals";
@@ -37,7 +36,6 @@ import { useTheme } from "@/theme/ThemeProvider";
 
 export default function AdminReportsScreen() {
   const { theme } = useTheme();
-  const g = useGaneshTokens();
   const { push, back } = useRouter();
   const { pandalId, festivalId } = useGaneshSession();
   const { festivals } = useFestivals(pandalId);
@@ -54,13 +52,14 @@ export default function AdminReportsScreen() {
   const festival = festivals.find((item) => item.id === festivalId);
 
   return (
-    <GaneshScreen>
-      <GaneshHeader
+    <GaneshScreen contentContainerStyle={ganeshStackLayout.bleed}>
+      <FestivalStackHero
         title="Reports"
         subtitle={festival?.name}
-        icon={<FileBarChart size={22} color={g.saffron} strokeWidth={2.2} />}
         onBack={back}
+        mark={<AdminGlyph name="iconReports" size={40} />}
       />
+      <View style={ganeshStackLayout.body}>
       <Text style={{ color: theme.colors.mutedForeground, lineHeight: 22 }}>
         Quick totals for the current festival. Open a section when you need the list behind the
         number.
@@ -218,6 +217,7 @@ export default function AdminReportsScreen() {
           onPress={() => push("/(ganesh)/permanent-fund" as never)}
         />
       </Section>
+      </View>
     </GaneshScreen>
   );
 }

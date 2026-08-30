@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { Alert, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import { CalendarDays } from "lucide-react-native";
-
+import { AdminGlyph } from "@/components/ganesh/admin/adminArt";
 import { AdminLinkRow } from "@/components/ganesh/AdminLinkRow";
 import { AdminQueryState } from "@/components/ganesh/AdminQueryState";
+import { FestivalStackHero } from "@/components/ganesh/chrome/FestivalStackHero";
+import { ganeshStackLayout } from "@/components/ganesh/chrome/stackLayout";
 import { FestivalWindowFields } from "@/components/ganesh/FestivalWindowFields";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
-import { GaneshHeader, Section, useGaneshTokens } from "@/components/ganesh/ui";
+import { Section } from "@/components/ganesh/ui";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useFestivals } from "@/hooks/useFestivals";
@@ -20,7 +21,6 @@ import { useTheme } from "@/theme/ThemeProvider";
 
 export default function AdminFestivalsScreen() {
   const { theme } = useTheme();
-  const g = useGaneshTokens();
   const { push, back } = useRouter();
   const { pandalId, festivalId, setSession } = useGaneshSession();
   const { festivals, loading, error, retry } = useFestivals(pandalId);
@@ -36,12 +36,14 @@ export default function AdminFestivalsScreen() {
   const endDate = _endDate ?? current?.endDate ?? "";
 
   return (
-    <GaneshScreen>
-      <GaneshHeader
+    <GaneshScreen contentContainerStyle={ganeshStackLayout.bleed}>
+      <FestivalStackHero
         title="Festivals"
-        icon={<CalendarDays size={22} color={g.saffron} strokeWidth={2.2} />}
+        subtitle={current?.name}
         onBack={back}
+        mark={<AdminGlyph name="iconFestival" size={40} />}
       />
+      <View style={ganeshStackLayout.body}>
       <Text style={{ color: theme.colors.mutedForeground, lineHeight: 22 }}>
         Opening money comes from the Permanent Fund or Opening Fund screens. Set the first and
         last day so Home can show “Day 4 of 10” and Seva can draw the full day strip.
@@ -150,6 +152,7 @@ export default function AdminFestivalsScreen() {
         </View>
       ) : null}
       <Button onPress={() => push("/(ganesh)/create-festival" as never)}>Create festival</Button>
+      </View>
     </GaneshScreen>
   );
 }

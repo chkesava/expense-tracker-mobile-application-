@@ -390,6 +390,44 @@ export function formatFestivalWindow(
   return `${from} – ${formatSevaDate(end)}`;
 }
 
+/**
+ * Contextual festival-window facts for Home. Built only from the stored
+ * start/end dates — no timezone conversion, no invented calendar.
+ */
+export type FestivalWindowSummary = {
+  /** "27 Aug – 5 Sep", or empty when no dates are set. */
+  label: string;
+  year?: string;
+  totalDays: number | null;
+  /** 1-based day inside the window; null before, after, or without dates. */
+  day: number | null;
+  /** Days until the start, days left after today, or 0 after the close. */
+  remaining: number | null;
+};
+
+export function festivalWindowSummary(
+  festival: { startDate?: string; endDate?: string } | null | undefined,
+  today = todayDateInput()
+): FestivalWindowSummary {
+  const label = formatFestivalWindow(festival);
+  const start = festival?.startDate?.trim();
+  const end = festival?.endDate?.trim();
+  const year = start && DATE_PATTERN.test(start) ? start.slice(0, 4) : undefined;
+
+  if (!start || !end || !DATE_PATTERN.test(start) || !DATE_PATTERN.test(end) || end < start) {
+    return { label, year, totalDays: null, day: null, remaining: null };
+  }
+
+  const totalDays = daysBetween(start, end) + 1;
+  const dayInfo = festivalDayNumber(festival, today);
+  let remaining: number | null = null;
+  if (today < start) remaining = daysBetween(today, start);
+  else if (today > end) remaining = 0;
+  else if (dayInfo) remaining = Math.max(0, dayInfo.total - dayInfo.day);
+
+  return { label, year, totalDays, day: dayInfo?.day ?? null, remaining };
+}
+
 /* ------------------------------------------------------------ Validation */
 
 /**
