@@ -1,5 +1,5 @@
 import { Redirect, Tabs } from "expo-router";
-import { ActivityIndicator, View } from "react-native";
+import { ActivityIndicator, StyleSheet, View } from "react-native";
 
 import { GaneshTabBar } from "@/components/ganesh/GaneshTabBar";
 import { useGaneshSyncReporter } from "@/hooks/useGaneshSyncReporter";
@@ -13,7 +13,7 @@ export default function GaneshTabsLayout() {
   const { pandals, loading } = usePandals();
   useGaneshSyncReporter();
 
-  if (!ready || loading) {
+  if (!ready) {
     return (
       <View
         style={{
@@ -28,12 +28,17 @@ export default function GaneshTabsLayout() {
     );
   }
 
-  const hasActivePandal = Boolean(pandalId && pandals.some((item) => item.id === pandalId));
-  if (!pandalId || !festivalId || pandals.length === 0 || !hasActivePandal) {
+  if (!pandalId || !festivalId) {
+    return <Redirect href={"/(ganesh)/setup" as never} />;
+  }
+
+  const hasActivePandal = pandals.some((item) => item.id === pandalId);
+  if (!loading && (pandals.length === 0 || !hasActivePandal)) {
     return <Redirect href={"/(ganesh)/setup" as never} />;
   }
 
   return (
+    <View style={{ flex: 1 }}>
     <Tabs
       tabBar={(props) => (
         <GaneshTabBar
@@ -63,5 +68,22 @@ export default function GaneshTabsLayout() {
       <Tabs.Screen name="contributions" options={{ title: "Contributions" }} />
       <Tabs.Screen name="committee" options={{ title: "Committee" }} />
     </Tabs>
+      {loading || !hasActivePandal ? (
+        <View
+          pointerEvents="auto"
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: theme.colors.background,
+              zIndex: 20,
+            },
+          ]}
+        >
+          <ActivityIndicator color={theme.colors.primary} />
+        </View>
+      ) : null}
+    </View>
   );
 }

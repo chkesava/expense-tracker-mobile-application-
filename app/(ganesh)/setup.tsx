@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useRouter } from "expo-router";
+import { collection, getDocs, orderBy, query } from "firebase/firestore";
 import { Landmark } from "lucide-react-native";
 
 import { Button } from "@/components/ui/Button";
@@ -9,16 +10,17 @@ import { FundLocationChips } from "@/components/ganesh/FundLocationChips";
 import { GaneshAppVersion } from "@/components/ganesh/GaneshAppVersion";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { GaneshHeader, useGaneshTokens } from "@/components/ganesh/ui";
-import { useFestivals } from "@/hooks/useFestivals";
 import { useGaneshWrites } from "@/hooks/useGaneshWrites";
 import { useMyJoinRequests } from "@/hooks/useMyJoinRequests";
 import { usePandals } from "@/hooks/usePandals";
 import { classifyError, friendlyErrorMessage, logError } from "@/lib/errors";
+import { getFirestoreDb } from "@/lib/firebase";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import { useWorkspace } from "@/providers/WorkspaceProvider";
-import type { PermanentFundLocation } from "@/shared/types/ganesh";
+import type { Festival, PermanentFundLocation } from "@/shared/types/ganesh";
+import { festivalsCol } from "@/shared/utils/ganeshPaths";
 import { validateFundTransfer, validateNonNegativeAmount } from "@/shared/utils/ganeshMath";
 import { formatPandalCode } from "@/shared/utils/ganeshIdentity";
 import { formatInr } from "@/shared/utils/ganeshMoney";
@@ -294,19 +296,39 @@ function PandalPickRow({
   const { theme } = useTheme();
   const { replace } = useRouter();
   const { setSession } = useGaneshSession();
-  const { festivals } = useFestivals(pandalId);
-  const openFestival = festivals.find((festival) => festival.status === "open") ?? festivals[0];
+  const [busy, setBusy] = useState(false);
+
+  const open = async () => {
+    const db = getFirestoreDb();
+    if (!db || busy) return;
+    setBusy(true);
+    try {
+      const [root, ...rest] = festivalsCol(pandalId);
+      const snap = await getDocs(query(collection(db, root, ...rest), orderBy("year", "desc")));
+      const festivals = snap.docs.map((docSnap) => ({
+        id: docSnap.id,
+        ...(docSnap.data() as Omit<Festival, "id">),
+      }));
+      const openFestival = festivals.find((festival) => festival.status === "open") ?? festivals[0];
+      if (!openFestival) {
+        toast.error("This Pandal has no festival yet.");
+        return;
+      }
+      await setSession({ pandalId, festivalId: openFestival.id });
+      replace("/(ganesh)" as never);
+    } catch (error) {
+      logError("ganesh.setup.openPandal", error);
+      toast.error(friendlyErrorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <Pressable
+      disabled={busy}
       onPress={() => {
-        if (!openFestival) {
-          toast.error("This Pandal has no festival yet.");
-          return;
-        }
-        void setSession({ pandalId, festivalId: openFestival.id }).then(() => {
-          replace("/(ganesh)" as never);
-        });
+        void open();
       }}
       style={{
         backgroundColor: theme.colors.card,
@@ -315,13 +337,11 @@ function PandalPickRow({
         borderRadius: 16,
         padding: 14,
         gap: 4,
+        opacity: busy ? 0.7 : 1,
       }}
     >
       <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>{name}</Text>
       <Text style={{ color: theme.colors.mutedForeground }}>Code {formatPandalCode(code)}</Text>
-      {openFestival ? (
-        <Text style={{ color: theme.colors.mutedForeground }}>{openFestival.name}</Text>
-      ) : null}
     </Pressable>
   );
 }

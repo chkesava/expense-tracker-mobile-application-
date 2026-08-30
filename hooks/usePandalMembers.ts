@@ -1,11 +1,15 @@
-import { useGaneshCollection } from "@/hooks/ganesh/useGaneshCollection";
-import { pandalMembersCol } from "@/shared/utils/ganeshPaths";
+import { useSharedOrLocalCollection } from "@/hooks/ganesh/useSharedOrLocalCollection";
+import { useGaneshData } from "@/providers/GaneshDataProvider";
 import type { PandalMember } from "@/shared/types/ganesh";
+import { pandalMembersCol } from "@/shared/utils/ganeshPaths";
 
 export function usePandalMembers(pandalId: string | null) {
-  const { items, loading, error, retry } = useGaneshCollection<PandalMember>(
-    pandalId ? pandalMembersCol(pandalId) : null,
-    (id, data) => ({ id, ...(data as Omit<PandalMember, "id">) })
-  );
+  const data = useGaneshData();
+  const { items, loading, error, retry } = useSharedOrLocalCollection<PandalMember>({
+    useShared: Boolean(pandalId) && pandalId === data.sessionPandalId,
+    shared: data.members,
+    path: pandalId ? pandalMembersCol(pandalId) : null,
+    mapDoc: (id, docData) => ({ id, ...(docData as Omit<PandalMember, "id">) }),
+  });
   return { members: items, loading, error, retry };
 }

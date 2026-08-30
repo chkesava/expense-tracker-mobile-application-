@@ -1,4 +1,4 @@
-import { usePandalMembers } from "@/hooks/usePandalMembers";
+import { useGaneshData } from "@/providers/GaneshDataProvider";
 import { useAuth } from "@/providers/AuthProvider";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import { hasPermission } from "@/shared/utils/ganeshPermissionRegistry";
@@ -12,8 +12,8 @@ import {
 export function useGaneshPermissions() {
   const { realUser } = useAuth();
   const { pandalId, ready } = useGaneshSession();
-  const { members, loading } = usePandalMembers(pandalId);
-  const me = members.find(
+  const { members } = useGaneshData();
+  const me = members.items.find(
     (member) =>
       member.userId === realUser?.uid && (member.status === "active" || member.status == null)
   );
@@ -25,7 +25,7 @@ export function useGaneshPermissions() {
     status: me?.status,
     isAdmin,
     permissions,
-    loading: !ready || Boolean(pandalId && loading),
+    loading: !ready || Boolean(pandalId && members.loading),
     can: (permission: GaneshPermission) => {
       if (isAdmin) return true;
       if (me?.permissions) return hasPermission(me.permissions, permission);

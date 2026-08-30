@@ -1,11 +1,12 @@
 import { useEffect, useRef } from "react";
 import { Redirect, Stack } from "expo-router";
-import { ActivityIndicator, View } from "react-native";
+import { ActivityIndicator, StyleSheet, View } from "react-native";
 
 import { PrivacyLock } from "@/components/PrivacyLock";
 import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
 import { useAuth } from "@/providers/AuthProvider";
+import { GaneshDataProvider } from "@/providers/GaneshDataProvider";
 import { GaneshSessionProvider } from "@/providers/GaneshSessionProvider";
 import { GaneshThemeProvider } from "@/providers/GaneshThemeProvider";
 import { upsertGaneshProfile } from "@/services/ganesh/ganeshProfile";
@@ -16,37 +17,53 @@ import { useTheme } from "@/theme/ThemeProvider";
 function GaneshGate({ children }: { children: React.ReactNode }) {
   const { theme } = useTheme();
   const { user, loading } = useAuth();
+  const uid = user?.uid;
 
   useEffect(() => {
     const db = getFirestoreDb();
     if (!user || !db) return;
     void upsertGaneshProfile(db, user);
-  }, [user]);
-
-  if (loading) {
-    return (
-      <View
-        style={{
-          flex: 1,
-          alignItems: "center",
-          justifyContent: "center",
-          backgroundColor: theme.colors.background,
-        }}
-      >
-        <ActivityIndicator color={theme.colors.primary} />
-      </View>
-    );
-  }
+  }, [uid]);
 
   if (!user) {
+    if (loading) {
+      return (
+        <View
+          style={{
+            flex: 1,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: theme.colors.background,
+          }}
+        >
+          <ActivityIndicator color={theme.colors.primary} />
+        </View>
+      );
+    }
     return <Redirect href={"/(ganesh-auth)/login" as never} />;
   }
 
   return (
-    <>
+    <GaneshDataProvider>
       <ClaimApprovedMemberships />
       {children}
-    </>
+      {loading ? (
+        <View
+          pointerEvents="auto"
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: theme.colors.background,
+              zIndex: 20,
+            },
+          ]}
+        >
+          <ActivityIndicator color={theme.colors.primary} />
+        </View>
+      ) : null}
+    </GaneshDataProvider>
   );
 }
 

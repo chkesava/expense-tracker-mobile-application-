@@ -1,15 +1,21 @@
-import { useGaneshCollection } from "@/hooks/ganesh/useGaneshCollection";
-import type { PandalJoinRequest } from "@/shared/types/ganesh";
 import { where } from "firebase/firestore";
 
+import { useSharedOrLocalCollection } from "@/hooks/ganesh/useSharedOrLocalCollection";
+import { useGaneshData } from "@/providers/GaneshDataProvider";
+import type { PandalJoinRequest } from "@/shared/types/ganesh";
+
 export function useJoinRequests(pandalId: string | null) {
-  const { items, loading, error, retry } = useGaneshCollection<PandalJoinRequest>(
-    pandalId ? ["pandalJoinRequests"] : null,
-    (id, data) => ({ id, ...(data as Omit<PandalJoinRequest, "id">) }),
-    {
+  const data = useGaneshData();
+  const { items, loading, error, retry } = useSharedOrLocalCollection<PandalJoinRequest>({
+    useShared: Boolean(pandalId) && pandalId === data.sessionPandalId,
+    shared: data.joinRequests,
+    path: pandalId ? ["pandalJoinRequests"] : null,
+    mapDoc: (id, docData) => ({ id, ...(docData as Omit<PandalJoinRequest, "id">) }),
+    query: {
       extra: pandalId ? [where("pandalId", "==", pandalId)] : [],
-    }
-  );
+      extraKey: pandalId ?? "",
+    },
+  });
   return {
     requests: items.filter((request) => request.status === "pending"),
     loading,
