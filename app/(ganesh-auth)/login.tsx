@@ -367,7 +367,7 @@ export default function GaneshLoginScreen() {
                 Choose Expense Tracker or Ganesh Seva
               </Text>
             </Pressable>
-            <GaneshAppVersion centered />
+            <GaneshAppVersion centered showUpdateCheck />
           </Animated.View>
           </View>
         </ScrollView>

@@ -113,8 +113,10 @@ and sort at the same time. Borrowings and Spending Spaces need
 `date` and `receivables` by `status` + `lentDate` — deploy indexes manually
 after pulling that change; index builds are asynchronous (see below).
 
-Signed-in users may read `system_settings/global` and
-`system_settings/latest_release`. Only `global` is writable from the client.
+Signed-in users may read `system_settings/global`. Release pointer docs
+(`latest_release` and `latest_release_{expense|nutrition|ganesh}`) are
+readable without auth so the in-app update prompt can attach before sign-in.
+Only `global` is writable from the client.
 Release APKs live under Storage `releases/**` and are readable by signed-in
 users; clients cannot write them.
 

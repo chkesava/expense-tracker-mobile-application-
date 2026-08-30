@@ -89,7 +89,7 @@ export function PandalAccountBar({
       <MetaLabel>
         Switching apps keeps you signed in. Ganesh Seva and Expense Tracker never share data.
       </MetaLabel>
-      <GaneshAppVersion />
+      <GaneshAppVersion showUpdateCheck />
     </View>
   );
 }

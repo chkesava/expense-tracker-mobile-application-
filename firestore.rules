@@ -219,10 +219,19 @@ service cloud.firestore {
     }
 
     // App-wide flags (`global`) and the sideloaded APK pointer (`latest_release`).
-    // Clients may read both. Only `global` is writable from the app (onboarding
-    // currency). `latest_release` is written by the Admin SDK in CI.
+    // Release docs are public GitHub APK URLs — readable without auth so the
+    // update prompt can attach before sign-in finishes (Ganesh login especially).
+    // Only `global` is writable from the app (onboarding currency).
+    // Product docs are written by the Admin SDK in CI.
+    function isReleasePointer() {
+      return docId == "latest_release"
+        || docId == "latest_release_expense"
+        || docId == "latest_release_nutrition"
+        || docId == "latest_release_ganesh";
+    }
+
     match /system_settings/{docId} {
-      allow read: if signedIn();
+      allow read: if isReleasePointer() || signedIn();
       allow write: if signedIn() && docId == "global";
     }
 

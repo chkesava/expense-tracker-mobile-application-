@@ -8,6 +8,7 @@ import { getDownloadURL, ref } from "firebase/storage";
 import { AppState, Linking, Platform } from "react-native";
 
 import ApkInstaller from "@/lib/apkInstaller";
+import { productAppName } from "@/lib/activeProduct";
 import { isTesterWebpageUrl, type AppRelease } from "@/lib/appRelease";
 import { logWarning } from "@/lib/errors";
 import { getFirebaseStorage } from "@/lib/firebase";
@@ -33,7 +34,7 @@ export function installProgressLabel(progress: InstallProgress): string {
     case "resolving":
       return "Preparing update…";
     case "permission":
-      return "Allow installs from Spendly";
+      return `Allow installs from ${productAppName()}`;
     case "downloading":
       return `Downloading ${progress.percent}%`;
     case "installing":

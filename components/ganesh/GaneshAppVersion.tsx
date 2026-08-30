@@ -1,3 +1,6 @@
+import { View } from "react-native";
+
+import { CheckForAppUpdate } from "@/components/CheckForAppUpdate";
 import { MetaLabel } from "@/components/ganesh/ui";
 import {
   getInstalledVersionCode,
@@ -11,10 +14,19 @@ export function ganeshAppVersionLabel(): string {
   return code !== null ? `Ganesh Seva v${name} · build ${code}` : `Ganesh Seva v${name}`;
 }
 
-export function GaneshAppVersion({ centered }: { centered?: boolean }) {
+export function GaneshAppVersion({
+  centered,
+  showUpdateCheck,
+}: {
+  centered?: boolean;
+  showUpdateCheck?: boolean;
+}) {
   return (
-    <MetaLabel style={centered ? { textAlign: "center", alignSelf: "center" } : undefined}>
-      {ganeshAppVersionLabel()}
-    </MetaLabel>
+    <View style={{ gap: 10, alignItems: centered ? "center" : "stretch", alignSelf: centered ? "center" : "stretch" }}>
+      <MetaLabel style={centered ? { textAlign: "center" } : undefined}>
+        {ganeshAppVersionLabel()}
+      </MetaLabel>
+      {showUpdateCheck ? <CheckForAppUpdate /> : null}
+    </View>
   );
 }
