@@ -23,7 +23,8 @@ import { usePandalMembers } from "@/hooks/usePandalMembers";
 import { usePandalRoles } from "@/hooks/usePandalRoles";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import type { PandalMember, PandalMemberAudit, PandalRole } from "@/shared/types/ganesh";
-import { formatGaneshWhen, memberDisplayName } from "@/shared/utils/ganeshIdentity";
+import { formatGaneshWhen } from "@/shared/utils/ganeshIdentity";
+import { memberAuditLine } from "@/shared/utils/ganeshMemberCopy";
 import { ganeshRoleLabel, ganeshStatusLabel } from "@/shared/utils/ganeshPermissions";
 import { useTheme } from "@/theme/ThemeProvider";
 
@@ -46,27 +47,7 @@ function memberRolesLabel(member: PandalMember, roles: PandalRole[]): string {
 }
 
 function auditLine(audit: PandalMemberAudit, members: PandalMember[]): string {
-  const actor = memberDisplayName(members, audit.actorId);
-  const target = memberDisplayName(members, audit.targetUserId);
-  if (audit.action === "approved") return `${actor} approved ${target}`;
-  if (audit.action === "suspended") return `${actor} suspended ${target}`;
-  if (audit.action === "removed") return `${actor} removed ${target}`;
-  if (audit.action === "join_mode") return `${actor} changed who can join`;
-  if (audit.action === "make_admin") return `${actor} made ${target} a Pandal Admin`;
-  if (audit.action === "remove_admin") return `${actor} removed Admin from ${target}`;
-  if (audit.action === "role_assigned") {
-    return `${actor} assigned ${audit.roleName ?? "a role"} to ${target}`;
-  }
-  if (audit.action === "role_unassigned") {
-    return `${actor} removed ${audit.roleName ?? "a role"} from ${target}`;
-  }
-  if (audit.action === "role_permissions") {
-    return `${actor} changed ${audit.roleName ?? "a role"}`;
-  }
-  if (audit.oldRole && audit.newRole && audit.oldRole !== audit.newRole) {
-    return `${actor} changed ${target} to ${ganeshRoleLabel(audit.newRole)}`;
-  }
-  return `${actor} updated ${target}`;
+  return memberAuditLine(audit, members);
 }
 
 export default function GaneshMembersScreen() {

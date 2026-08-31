@@ -544,6 +544,7 @@ export async function setPandalAdmin(
     pandalId,
     role: nextRole,
     status,
+    pandalName: String(pandalSnap.data().name ?? ""),
   });
 }
 

@@ -81,7 +81,7 @@ function ClaimApprovedMemberships() {
       const key = `${uid}:${request.pandalId}`;
       if (claimed.current.has(key)) continue;
       claimed.current.add(key);
-      void claimOwnPandalMembership(db, uid, request.pandalId).catch((error) => {
+      void claimOwnPandalMembership(db, uid, request.pandalId, request.pandalName).catch((error) => {
         claimed.current.delete(key);
         logError("ganesh.claimMembership", error);
       });

@@ -9,8 +9,13 @@ import {
   query,
 } from "firebase/firestore";
 
-import { getFirestoreDb } from "@/lib/firebase";
-import { GANESH_SESSION_STORAGE_KEY } from "@/providers/GaneshSessionProvider";
+import { getFirebaseAuth, getFirestoreDb } from "@/lib/firebase";
+import {
+  GANESH_SESSION_LEGACY_KEY,
+  ganeshSessionStorageKey,
+  hasGaneshSession,
+  parseGaneshSession,
+} from "@/shared/utils/ganeshSessionStorage";
 
 const soft = (task: Promise<unknown>) => task.catch(() => undefined);
 
@@ -30,18 +35,16 @@ async function runPrefetch(): Promise<void> {
   const db = getFirestoreDb();
   if (!db) return;
 
-  const raw = await AsyncStorage.getItem(GANESH_SESSION_STORAGE_KEY).catch(() => null);
-  if (!raw) return;
-
-  let pandalId: string | null = null;
-  let festivalId: string | null = null;
-  try {
-    const parsed = JSON.parse(raw) as { pandalId?: string; festivalId?: string };
-    pandalId = parsed.pandalId ?? null;
-    festivalId = parsed.festivalId ?? null;
-  } catch {
-    return;
-  }
+  const uid = getFirebaseAuth()?.currentUser?.uid;
+  const namespaced = uid
+    ? await AsyncStorage.getItem(ganeshSessionStorageKey(uid)).catch(() => null)
+    : null;
+  const parsed = parseGaneshSession(namespaced);
+  const legacy = hasGaneshSession(parsed)
+    ? parsed
+    : parseGaneshSession(await AsyncStorage.getItem(GANESH_SESSION_LEGACY_KEY).catch(() => null));
+  const pandalId = legacy?.pandalId ?? null;
+  const festivalId = legacy?.festivalId ?? null;
   if (!pandalId || !festivalId) return;
 
   const festival = collection(db, "pandals", pandalId, "festivals", festivalId, "seva");

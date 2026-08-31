@@ -743,6 +743,10 @@ describe("ganesh firestore rules — GS-002 open-join self-create", () => {
       })
     ).toBe(true);
   });
+
+  it("does not let an open-join member update the Pandal document (memberIds)", () => {
+    expect(canManageMembers(member)).toBe(false);
+  });
 });
 
 describe("ganesh firestore rules — GS-003 pandalInvites enumeration", () => {

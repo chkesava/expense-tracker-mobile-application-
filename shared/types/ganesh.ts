@@ -126,6 +126,7 @@ export interface PandalMembershipIndex {
   pandalId: string;
   role: GaneshRole;
   status?: GaneshMemberStatus;
+  pandalName?: string;
   joinedAt?: FirestoreTime;
 }
 
@@ -135,6 +136,9 @@ export type PandalMemberAuditAction =
   | "suspended"
   | "removed"
   | "approved"
+  | "rejected"
+  | "joined"
+  | "pandal_created"
   | "join_mode"
   | "role_assigned"
   | "role_unassigned"

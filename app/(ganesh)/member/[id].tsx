@@ -35,6 +35,7 @@ import { toast } from "@/lib/toast";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { formatGaneshWhen } from "@/shared/utils/ganeshIdentity";
+import { lastAdminSafetyMessage } from "@/shared/utils/ganeshMemberCopy";
 import {
   committeePayStatus,
   effectiveCommitteeTarget,
@@ -189,7 +190,7 @@ export default function MemberDetailScreen() {
   const toggleAdmin = () => {
     if (!id || !pandalMember) return;
     if (targetIsAdmin && lastAdmin) {
-      toast.error("Assign another Pandal Admin first.");
+      toast.error(lastAdminSafetyMessage(isSelf));
       return;
     }
     Alert.alert(
@@ -527,6 +528,10 @@ export default function MemberDetailScreen() {
         </Section>
       ) : null}
 
+      {lastAdmin && isSelf ? (
+        <StatusStrip tone="warning" message={lastAdminSafetyMessage(true)} />
+      ) : null}
+
       {(isAdmin && !isSelf)
       || (can("members.suspend") && pandalMember && !isSelf && pandalMember.status !== "removed") ? (
         <Section title="Access" subtitle="Changes here take effect immediately">
@@ -603,7 +608,7 @@ export default function MemberDetailScreen() {
             {lastAdmin ? (
               <StatusStrip
                 tone="warning"
-                message="This is the only Pandal Admin. Assign another before suspending or removing them."
+                message={lastAdminSafetyMessage(isSelf)}
               />
             ) : null}
           </View>

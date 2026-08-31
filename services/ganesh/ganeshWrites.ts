@@ -18,7 +18,7 @@ import {
 } from "firebase/firestore";
 
 import { DEFAULT_GANESH_CATEGORIES } from "@/shared/data/ganeshCategories";
-import { errorCode } from "@/lib/errors";
+import { errorCode, logError } from "@/lib/errors";
 import { newId } from "@/lib/id";
 import { commitWrite } from "@/lib/firestoreWrite";
 import { omitUndefined } from "@/shared/utils/firestorePayload";
@@ -80,6 +80,10 @@ import {
   type CreatePandalAssetInput,
 } from "@/services/ganesh/ganeshAssets";
 import type { GaneshWriter } from "@/services/ganesh/ganeshWriter";
+import {
+  festivalMemberSeedPayload,
+  shouldSeedFestivalMember,
+} from "@/shared/utils/ganeshFestivalMemberSeed";
 import { tryStampPandalMembershipIndex } from "@/services/ganesh/ganeshMembershipIndex";
 import { ensurePandalRoles } from "@/services/ganesh/ganeshRoles";
 import { EMPTY_GANESH_SUMMARY } from "@/shared/types/ganesh";
@@ -239,6 +243,120 @@ async function uniquePandalCode(db: Firestore): Promise<string> {
   return `${generatePandalCode()}${generatePandalCode().slice(0, 2)}`;
 }
 
+async function seedFirstFestival(
+  db: Firestore,
+  actor: GaneshActor,
+  pandalId: string,
+  festivalId: string,
+  festivalName: string,
+  year: number,
+  stamp: { createdBy: string; createdAt: unknown; updatedBy: string; updatedAt: unknown }
+): Promise<void> {
+  const festivalRef = pathRef(db, festivalDoc(pandalId, festivalId));
+  const existing = await getDoc(festivalRef);
+  if (!existing.exists()) {
+    const festivalBatch = writeBatch(db);
+    festivalBatch.set(festivalRef, {
+      name: festivalName,
+      year,
+      status: "open",
+      contributionMode: "same",
+      contributionTargetAmount: 0,
+      householdTargetAmount: 500,
+      ...stamp,
+    });
+    await commitWrite(() => festivalBatch.commit(), { label: "festival" });
+  }
+
+  const seedBatch = writeBatch(db);
+  seedBatch.set(
+    pathRef(db, [...festivalCol(pandalId, festivalId, "members"), actor.uid]),
+    festivalMemberSeedPayload({
+      userId: actor.uid,
+      displayName: actor.displayName,
+      role: "admin",
+    }),
+    { merge: true }
+  );
+  seedBatch.set(
+    pathRef(db, summaryDoc(pandalId, festivalId)),
+    {
+      ...EMPTY_GANESH_SUMMARY,
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true }
+  );
+  const categoriesSnap = await getDocs(colRef(db, [...festivalCol(pandalId, festivalId, "categories")]));
+  if (categoriesSnap.empty) {
+    for (const category of DEFAULT_GANESH_CATEGORIES) {
+      seedBatch.set(pathRef(db, [...festivalCol(pandalId, festivalId, "categories"), newId()]), {
+        name: category.name,
+        isDefault: true,
+        sortOrder: category.sortOrder,
+        createdBy: actor.uid,
+        updatedBy: actor.uid,
+        createdAt: serverTimestamp(),
+      });
+    }
+  }
+  if (!existing.exists()) {
+    audit(seedBatch, db, pandalId, festivalId, actor.uid, "created", "festival", festivalId, {
+      newValue: { name: festivalName, year },
+    });
+  }
+  await commitWrite(() => seedBatch.commit(), { label: "festival seed" });
+}
+
+async function seedFirstFestivalWithRetry(
+  db: Firestore,
+  actor: GaneshActor,
+  pandalId: string,
+  festivalId: string,
+  festivalName: string,
+  year: number,
+  stamp: { createdBy: string; createdAt: unknown; updatedBy: string; updatedAt: unknown }
+): Promise<void> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      await seedFirstFestival(db, actor, pandalId, festivalId, festivalName, year, stamp);
+      return;
+    } catch (error) {
+      lastError = error;
+      logError("ganesh.festivalSeed.retry", error);
+    }
+  }
+  throw lastError;
+}
+
+async function seedOpenFestivalMemberRows(
+  db: Firestore,
+  pandalId: string,
+  userId: string,
+  displayName: string,
+  role: GaneshRole
+): Promise<void> {
+  const festivals = await getDocs(collection(db, "pandals", pandalId, "festivals"));
+  const batch = writeBatch(db);
+  let writes = 0;
+  festivals.forEach((festivalSnap) => {
+    if (!shouldSeedFestivalMember(festivalSnap.data().status)) return;
+    writes += 1;
+    batch.set(
+      pathRef(db, [...festivalCol(pandalId, festivalSnap.id, "members"), userId]),
+      festivalMemberSeedPayload({
+        userId,
+        displayName,
+        role,
+        contributionTarget: Number(festivalSnap.data().contributionTargetAmount ?? 0),
+      }),
+      { merge: true }
+    );
+  });
+  if (writes === 0) return;
+  await commitWrite(() => batch.commit(), { label: "open join festival members" });
+}
+
 export async function createPandalAndFestival(
   db: Firestore,
   actor: GaneshActor,
@@ -246,6 +364,7 @@ export async function createPandalAndFestival(
     pandalName: string;
     area?: string;
     description?: string;
+    contactPhone?: string;
     festivalName: string;
     year: number;
     initialFund?: {
@@ -279,6 +398,7 @@ export async function createPandalAndFestival(
       name,
       area: input.area?.trim() || undefined,
       description: input.description?.trim() || undefined,
+      contactPhone: input.contactPhone?.trim() || undefined,
       code,
       ownerId: actor.uid,
       memberIds: [actor.uid],
@@ -298,6 +418,7 @@ export async function createPandalAndFestival(
     pandalId,
     role: "admin",
     status: "active",
+    pandalName: name,
     joinedAt: serverTimestamp(),
   });
   pandalBatch.set(
@@ -315,52 +436,26 @@ export async function createPandalAndFestival(
     })
   );
   await commitWrite(() => pandalBatch.commit(), { label: "pandal" });
-  await ensurePandalRoles(db, actor, pandalId);
-
-  const festivalBatch = writeBatch(db);
-  festivalBatch.set(pathRef(db, festivalDoc(pandalId, festivalId)), {
-    name: festivalName,
-    year: input.year,
-    status: "open",
-    contributionMode: "same",
-    contributionTargetAmount: 0,
-    householdTargetAmount: 500,
-    ...stamp,
-  });
-  await commitWrite(() => festivalBatch.commit(), { label: "festival" });
-
-  const seedBatch = writeBatch(db);
-  seedBatch.set(
-    pathRef(db, [...festivalCol(pandalId, festivalId, "members"), actor.uid]),
-    {
-      userId: actor.uid,
-      displayName: actor.displayName,
-      role: "admin",
-      contributionTarget: 0,
-      contributionPaid: 0,
-      personalExpenses: 0,
-      reimbursed: 0,
-      pendingReimbursement: 0,
-    }
-  );
-  seedBatch.set(pathRef(db, summaryDoc(pandalId, festivalId)), {
-    ...EMPTY_GANESH_SUMMARY,
-    updatedAt: serverTimestamp(),
-  });
-  for (const category of DEFAULT_GANESH_CATEGORIES) {
-    seedBatch.set(pathRef(db, [...festivalCol(pandalId, festivalId, "categories"), newId()]), {
-      name: category.name,
-      isDefault: true,
-      sortOrder: category.sortOrder,
-      createdBy: actor.uid,
-      updatedBy: actor.uid,
-      createdAt: serverTimestamp(),
+  try {
+    const createdAudit = writeBatch(db);
+    memberAudit(createdAudit, db, pandalId, {
+      actorId: actor.uid,
+      targetUserId: actor.uid,
+      action: "pandal_created",
+      newRole: "admin",
+      newStatus: "active",
     });
+    await commitWrite(() => createdAudit.commit(), { label: "pandal created audit" });
+  } catch (error) {
+    logError("ganesh.pandalCreatedAudit", error);
   }
-  audit(seedBatch, db, pandalId, festivalId, actor.uid, "created", "festival", festivalId, {
-    newValue: { name: festivalName, year: input.year },
-  });
-  await commitWrite(() => seedBatch.commit(), { label: "festival seed" });
+  try {
+    await ensurePandalRoles(db, actor, pandalId);
+  } catch (error) {
+    logError("ganesh.ensurePandalRoles", error);
+  }
+
+  await seedFirstFestivalWithRetry(db, actor, pandalId, festivalId, festivalName, input.year, stamp);
 
   const initialAmount = Number(input.initialFund?.amount ?? 0);
   try {
@@ -423,9 +518,15 @@ export async function requestPandalJoin(
       pandalId,
       role: "member",
       status: "active",
+      pandalName,
       joinedAt: serverTimestamp(),
     });
     await commitWrite(() => joinBatch.commit(), { label: "open join" });
+    try {
+      await seedOpenFestivalMemberRows(db, pandalId, actor.uid, actor.displayName, "member");
+    } catch (error) {
+      logError("ganesh.openJoin.festivalMembers", error);
+    }
     return { pandalId, pandalName, joined: true };
   }
   joinBatch.set(
@@ -518,21 +619,23 @@ export async function decideJoinRequest(
     });
     const festivals = await getDocs(collection(db, "pandals", pandalId, "festivals"));
     festivals.forEach((festivalSnap) => {
-      if (festivalSnap.data().status === "closed") return;
+      if (!shouldSeedFestivalMember(festivalSnap.data().status)) return;
       batch.set(
         pathRef(db, [...festivalCol(pandalId, festivalSnap.id, "members"), userId]),
-        {
+        festivalMemberSeedPayload({
           userId,
           displayName: String(request.displayName ?? "Member"),
           role,
           contributionTarget: Number(festivalSnap.data().contributionTargetAmount ?? 0),
-          contributionPaid: 0,
-          personalExpenses: 0,
-          reimbursed: 0,
-          pendingReimbursement: 0,
-        },
+        }),
         { merge: true }
       );
+    });
+  } else {
+    memberAudit(batch, db, pandalId, {
+      actorId: actor.uid,
+      targetUserId: userId,
+      action: "rejected",
     });
   }
   await commitWrite(() => batch.commit(), { label: "join decision" });
@@ -541,6 +644,7 @@ export async function decideJoinRequest(
       pandalId,
       role: approvedRole,
       status: "active",
+      pandalName: String(request.pandalName ?? ""),
     });
   }
 }
@@ -732,6 +836,7 @@ export async function updatePandalMember(
     pandalId,
     role: nextRole,
     status: nextStatus,
+    pandalName: String(pandalSnap.data().name ?? ""),
     joinedAt: memberSnap.data().createdAt,
   });
 }

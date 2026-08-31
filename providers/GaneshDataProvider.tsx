@@ -50,6 +50,7 @@ import {
   type PandalJoinRequest,
   type PandalMember,
   type PandalMemberAudit,
+  type PandalMembershipIndex,
   type PandalRole,
   type PandalSponsor,
   type PandalSponsorAudit,
@@ -99,6 +100,7 @@ export type GaneshData = {
   pandals: Pandal[];
   pandalsLoading: boolean;
   pandalsError: LoadFailure | null;
+  inactiveMemberships: PandalMembershipIndex[];
   festivals: Slice<Festival>;
   members: Slice<PandalMember>;
   summary: GaneshSummary;
@@ -172,10 +174,12 @@ export function GaneshDataProvider({ children }: { children: ReactNode }) {
   const [pandals, setPandals] = useState<Pandal[]>([]);
   const [pandalsLoading, setPandalsLoading] = useState(true);
   const [pandalsError, setPandalsError] = useState<LoadFailure | null>(null);
+  const [inactiveMemberships, setInactiveMemberships] = useState<PandalMembershipIndex[]>([]);
 
   useEffect(() => {
     if (!uid || !db) {
       setPandals([]);
+      setInactiveMemberships([]);
       setPandalsLoading(false);
       return;
     }
@@ -186,14 +190,26 @@ export function GaneshDataProvider({ children }: { children: ReactNode }) {
       collection(db, "users", uid, "pandalMemberships"),
       (snapshot) => {
         logQuerySnapshot(membershipPath, snapshot);
-        const activeIds = new Set(
-          snapshot.docs
-            .filter((docSnap) => {
-              const status = docSnap.data().status;
-              return status == null || status === "active";
-            })
-            .map((docSnap) => docSnap.id)
-        );
+        const activeIds = new Set<string>();
+        const inactive: PandalMembershipIndex[] = [];
+        for (const docSnap of snapshot.docs) {
+          const data = docSnap.data();
+          const status = data.status as PandalMembershipIndex["status"];
+          const row: PandalMembershipIndex = {
+            id: docSnap.id,
+            pandalId: String(data.pandalId ?? docSnap.id),
+            role: data.role,
+            status,
+            pandalName: typeof data.pandalName === "string" ? data.pandalName : undefined,
+            joinedAt: data.joinedAt,
+          };
+          if (status == null || status === "active") {
+            activeIds.add(docSnap.id);
+          } else if (status === "removed" || status === "suspended") {
+            inactive.push(row);
+          }
+        }
+        setInactiveMemberships(inactive);
         for (const [id, unsub] of pandalUnsubs) {
           if (activeIds.has(id)) continue;
           forgetSnapshotPath(`pandals/${id}`);
@@ -492,6 +508,7 @@ export function GaneshDataProvider({ children }: { children: ReactNode }) {
       pandals,
       pandalsLoading,
       pandalsError,
+      inactiveMemberships,
       festivals: toSlice(
         festivalsColHook.items,
         festivalsColHook.loading,
@@ -650,6 +667,7 @@ export function GaneshDataProvider({ children }: { children: ReactNode }) {
       pandals,
       pandalsLoading,
       pandalsError,
+      inactiveMemberships,
       festivalsColHook,
       membersColHook,
       summary,

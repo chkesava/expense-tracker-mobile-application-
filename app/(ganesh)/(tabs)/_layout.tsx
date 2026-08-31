@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Redirect, Tabs } from "expo-router";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 
@@ -9,9 +10,18 @@ import { useTheme } from "@/theme/ThemeProvider";
 
 export default function GaneshTabsLayout() {
   const { theme } = useTheme();
-  const { ready, pandalId, festivalId } = useGaneshSession();
+  const { ready, pandalId, festivalId, clearSession } = useGaneshSession();
   const { pandals, loading } = usePandals();
   useGaneshSyncReporter();
+
+  const hasActivePandal = pandals.some((item) => item.id === pandalId);
+
+  useEffect(() => {
+    if (!ready || loading || !pandalId) return;
+    if (!hasActivePandal) {
+      void clearSession();
+    }
+  }, [ready, loading, pandalId, hasActivePandal, clearSession]);
 
   if (!ready) {
     return (
@@ -32,7 +42,6 @@ export default function GaneshTabsLayout() {
     return <Redirect href={"/(ganesh)/setup" as never} />;
   }
 
-  const hasActivePandal = pandals.some((item) => item.id === pandalId);
   if (!loading && (pandals.length === 0 || !hasActivePandal)) {
     return <Redirect href={"/(ganesh)/setup" as never} />;
   }

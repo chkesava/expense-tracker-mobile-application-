@@ -1,7 +1,6 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import { collection, getDocs, orderBy, query } from "firebase/firestore";
 import { AdminGlyph } from "@/components/ganesh/admin/adminArt";
 
 import { Button } from "@/components/ui/Button";
@@ -22,8 +21,9 @@ import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import { useWorkspace } from "@/providers/WorkspaceProvider";
-import type { Festival, PermanentFundLocation } from "@/shared/types/ganesh";
-import { festivalsCol } from "@/shared/utils/ganeshPaths";
+import { pickFestivalIdForPandal } from "@/services/ganesh/ganeshOpenSession";
+import type { PermanentFundLocation } from "@/shared/types/ganesh";
+import { ganeshSetupCopy, resolveGaneshSetupFocus } from "@/shared/utils/ganeshSetupState";
 import { validateFundTransfer, validateNonNegativeAmount } from "@/shared/utils/ganeshMath";
 import { formatPandalCode } from "@/shared/utils/ganeshIdentity";
 import { formatInr } from "@/shared/utils/ganeshMoney";
@@ -36,12 +36,14 @@ export default function GaneshSetupScreen() {
   const { logout } = useAuth();
   const { setActiveWorkspace } = useWorkspace();
   const { setSession } = useGaneshSession();
-  const { pandals } = usePandals();
+  const { pandals, inactiveMemberships } = usePandals();
   const { pending, rejected } = useMyJoinRequests();
   const writes = useGaneshWrites();
   const [mode, setMode] = useState<"choose" | "create" | "join">("choose");
   const [pandalName, setPandalName] = useState("");
   const [area, setArea] = useState("");
+  const [description, setDescription] = useState("");
+  const [contactPhone, setContactPhone] = useState("");
   const [festivalName, setFestivalName] = useState(`Ganesh Chaturthi ${new Date().getFullYear()}`);
   const [code, setCode] = useState("");
   const [hasExistingFund, setHasExistingFund] = useState(false);
@@ -50,7 +52,52 @@ export default function GaneshSetupScreen() {
   const [fundLocation, setFundLocation] = useState<PermanentFundLocation>("cash");
   const [fundDescription, setFundDescription] = useState("Money saved from previous years");
   const [busy, setBusy] = useState(false);
-  const waiting = pending.length > 0 && mode === "choose";
+  const pendingIdsRef = useRef(new Set<string>());
+  const openedFromApproval = useRef(false);
+
+  const focus = resolveGaneshSetupFocus({
+    activeCount: pandals.length,
+    pendingCount: pending.length,
+    rejectedCount: rejected.length,
+    removedCount: inactiveMemberships.length,
+    mode,
+  });
+  const copy = ganeshSetupCopy(focus);
+  const waiting = focus === "pending";
+
+  const openPandal = async (pandalId: string) => {
+    const db = getFirestoreDb();
+    if (!db) return;
+    const festivalId = await pickFestivalIdForPandal(db, pandalId);
+    if (!festivalId) {
+      toast.error("This Pandal has no festival yet.");
+      return;
+    }
+    await setSession({ pandalId, festivalId });
+    replace("/(ganesh)" as never);
+  };
+
+  useEffect(() => {
+    for (const request of pending) {
+      if (request.pandalId) pendingIdsRef.current.add(request.pandalId);
+    }
+  }, [pending]);
+
+  useEffect(() => {
+    if (openedFromApproval.current || mode !== "choose") return;
+    const newlyActive = pandals.filter((pandal) => pendingIdsRef.current.has(pandal.id));
+    if (newlyActive.length === 0) return;
+    const target = newlyActive[0];
+    pendingIdsRef.current.delete(target.id);
+    toast.success(`You're in ${target.name}.`);
+    if (pandals.length === 1) {
+      openedFromApproval.current = true;
+      void openPandal(target.id).catch((error) => {
+        openedFromApproval.current = false;
+        logError("ganesh.setup.autoOpen", error);
+      });
+    }
+  }, [pandals, mode]);
 
   const create = async () => {
     const initial = hasExistingFund ? Number(initialAmount || 0) : 0;
@@ -79,6 +126,8 @@ export default function GaneshSetupScreen() {
       const created = await writes.createPandalAndFestival({
         pandalName,
         area,
+        description,
+        contactPhone,
         festivalName,
         year: new Date().getFullYear(),
         initialFund: initial > 0
@@ -100,9 +149,12 @@ export default function GaneshSetupScreen() {
   const join = async () => {
     setBusy(true);
     try {
-      await writes.requestPandalJoin(code);
+      const result = await writes.requestPandalJoin(code);
       setCode("");
       setMode("choose");
+      if (result.joined) {
+        await openPandal(result.pandalId);
+      }
     } catch (error) {
       logError("ganesh.setup.join", error);
       toast.error(
@@ -115,17 +167,14 @@ export default function GaneshSetupScreen() {
     }
   };
 
-  const intro = waiting
-    ? "Your request was sent to the Pandal admin. You will see expenses, collections, and the Permanent Fund after they accept you."
-    : pandals.length === 0
-      ? "You are not a member of the Pandal yet. Request to join or create the Pandal. You will not see expenses, collections, or the Permanent Fund until an admin accepts you."
-      : "Open a Pandal you already belong to, or join another with a code.";
+  const removedName = inactiveMemberships.find((item) => item.pandalName)?.pandalName;
+  const rejectedName = rejected.find((item) => item.pandalName)?.pandalName;
 
   return (
     <GaneshScreen contentContainerStyle={ganeshStackLayout.bleed}>
       <FestivalStackHero
-        title={waiting ? "Waiting for approval" : "Ganesh Seva"}
-        subtitle={waiting ? "Join request sent" : "Choose or create a Pandal"}
+        title={copy.title}
+        subtitle={copy.subtitle}
         onBack={() => {
           void setActiveWorkspace("expense");
         }}
@@ -135,7 +184,7 @@ export default function GaneshSetupScreen() {
       <View style={ganeshStackLayout.body}>
         <View style={[styles.notice, { backgroundColor: theme.colors.card, borderColor: g.divider }]}>
           <Text style={[styles.noticeText, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}>
-            {intro}
+            {copy.intro}
           </Text>
         </View>
 
@@ -151,7 +200,7 @@ export default function GaneshSetupScreen() {
                     {request.pandalName || "Pandal"}
                   </Text>
                   <Text style={[styles.pendingMeta, { color: theme.colors.mutedForeground }]}>
-                    Request sent. Waiting for an admin to approve you.
+                    Waiting for Admin approval.
                   </Text>
                 </View>
               ))}
@@ -159,9 +208,19 @@ export default function GaneshSetupScreen() {
           </PandalSectionCard>
         ) : null}
 
-        {rejected.length > 0 && pandals.length === 0 && !waiting ? (
+        {focus === "rejected" ? (
           <Text style={{ color: theme.colors.mutedForeground, lineHeight: 20 }}>
-            A previous join request was rejected. You can request again with the Pandal code.
+            {rejectedName
+              ? `Your request to join ${rejectedName} was not approved.`
+              : "Your request was not approved."}
+          </Text>
+        ) : null}
+
+        {focus === "removed" ? (
+          <Text style={{ color: theme.colors.mutedForeground, lineHeight: 20 }}>
+            {removedName
+              ? `You no longer have access to ${removedName}.`
+              : "You no longer have access to this Pandal."}
           </Text>
         ) : null}
 
@@ -177,6 +236,7 @@ export default function GaneshSetupScreen() {
                   pandalId={pandal.id}
                   name={pandal.name}
                   code={pandal.code}
+                  onOpen={openPandal}
                 />
               ))}
             </View>
@@ -199,6 +259,13 @@ export default function GaneshSetupScreen() {
             <View style={styles.form}>
               <Input label="Pandal name" value={pandalName} onChangeText={setPandalName} placeholder="Sri Ganesh Youth Committee" />
               <Input label="Area (optional)" value={area} onChangeText={setArea} />
+              <Input label="Description (optional)" value={description} onChangeText={setDescription} />
+              <Input
+                label="Contact (optional)"
+                value={contactPhone}
+                onChangeText={setContactPhone}
+                keyboardType="phone-pad"
+              />
               <Input label="Festival" value={festivalName} onChangeText={setFestivalName} />
               <Text style={[styles.formHeading, { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold }]}>
                 Do you already have money belonging to the Pandal?
@@ -292,35 +359,22 @@ function PandalPickRow({
   pandalId,
   name,
   code,
+  onOpen,
 }: {
   pandalId: string;
   name: string;
   code: string;
+  onOpen: (pandalId: string) => Promise<void>;
 }) {
   const { theme } = useTheme();
   const g = useGaneshTokens();
-  const { replace } = useRouter();
-  const { setSession } = useGaneshSession();
   const [busy, setBusy] = useState(false);
 
   const open = async () => {
-    const db = getFirestoreDb();
-    if (!db || busy) return;
+    if (busy) return;
     setBusy(true);
     try {
-      const [root, ...rest] = festivalsCol(pandalId);
-      const snap = await getDocs(query(collection(db, root, ...rest), orderBy("year", "desc")));
-      const festivals = snap.docs.map((docSnap) => ({
-        id: docSnap.id,
-        ...(docSnap.data() as Omit<Festival, "id">),
-      }));
-      const openFestival = festivals.find((festival) => festival.status === "open") ?? festivals[0];
-      if (!openFestival) {
-        toast.error("This Pandal has no festival yet.");
-        return;
-      }
-      await setSession({ pandalId, festivalId: openFestival.id });
-      replace("/(ganesh)" as never);
+      await onOpen(pandalId);
     } catch (error) {
       logError("ganesh.setup.openPandal", error);
       toast.error(friendlyErrorMessage(error));

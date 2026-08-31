@@ -9,6 +9,7 @@ type MembershipIndexInput = {
   pandalId: string;
   role: string;
   status?: string;
+  pandalName?: string;
   joinedAt?: unknown;
 };
 
@@ -30,6 +31,7 @@ export async function stampPandalMembershipIndex(
           pandalId: input.pandalId,
           role: input.role,
           status: input.status ?? "active",
+          pandalName: input.pandalName,
           joinedAt: input.joinedAt,
         }),
         { merge: true }
@@ -55,16 +57,23 @@ export async function tryStampPandalMembershipIndex(
 export async function claimOwnPandalMembership(
   db: Firestore,
   uid: string,
-  pandalId: string
+  pandalId: string,
+  pandalName?: string
 ): Promise<void> {
   const memberSnap = await getDoc(doc(db, "pandals", pandalId, "members", uid));
   if (!memberSnap.exists()) return;
   const data = memberSnap.data();
   if (data.status != null && data.status !== "active") return;
+  let name = pandalName?.trim() || undefined;
+  if (!name) {
+    const pandalSnap = await getDoc(doc(db, "pandals", pandalId));
+    name = String(pandalSnap.data()?.name ?? "").trim() || undefined;
+  }
   await stampPandalMembershipIndex(db, uid, {
     pandalId,
     role: String(data.role ?? "member"),
     status: String(data.status ?? "active"),
+    pandalName: name,
     joinedAt: data.createdAt,
   });
 }
