@@ -9,6 +9,7 @@ import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { GaneshWriteLock } from "@/components/ganesh/GaneshWriteLock";
 import { FilterChips, GaneshHeader, useGaneshTokens } from "@/components/ganesh/ui";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
+import { useFestivalWriteLock } from "@/hooks/useFestivalWriteLock";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useFestivals } from "@/hooks/useFestivals";
@@ -19,6 +20,7 @@ import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
+import { CLOSED_FESTIVAL_WRITE_MESSAGE } from "@/shared/utils/ganeshFestivalStatus";
 import { possibleHouseholdDuplicates } from "@/shared/utils/ganeshMath";
 import { formatInr } from "@/shared/utils/ganeshMoney";
 import { todayDateInput } from "@/shared/utils/ganeshIdentity";
@@ -44,6 +46,7 @@ export default function AddCollectionScreen() {
   const { households } = useHouseholds(pandalId, festivalId);
   const writes = useGaneshWrites();
   const { can } = useGaneshPermissions();
+  const { closed } = useFestivalWriteLock();
   const [donorName, setDonorName] = useState("");
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState<PaymentMethod>("cash");
@@ -151,6 +154,9 @@ export default function AddCollectionScreen() {
 
   if (!can("collections.create")) {
     return <GaneshWriteLock message="Your role cannot add collections." />;
+  }
+  if (closed) {
+    return <GaneshWriteLock message={CLOSED_FESTIVAL_WRITE_MESSAGE} />;
   }
 
   return (

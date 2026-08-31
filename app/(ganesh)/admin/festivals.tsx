@@ -12,11 +12,13 @@ import { Section } from "@/components/ganesh/ui";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useFestivals } from "@/hooks/useFestivals";
+import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { useGaneshWrites } from "@/hooks/useGaneshWrites";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import { formatFestivalWindow, validateFestivalWindow } from "@/shared/utils/ganeshSeva";
+import { festivalDisplayLabel } from "@/shared/utils/ganeshFestivalStatus";
 import { useTheme } from "@/theme/ThemeProvider";
 
 export default function AdminFestivalsScreen() {
@@ -25,6 +27,7 @@ export default function AdminFestivalsScreen() {
   const { pandalId, festivalId, setSession } = useGaneshSession();
   const { festivals, loading, error, retry } = useFestivals(pandalId);
   const writes = useGaneshWrites();
+  const { can } = useGaneshPermissions();
   const current = festivals.find((item) => item.id === festivalId);
   const [_name, setName] = useState<string | undefined>(undefined);
   const [_year, setYear] = useState<string | undefined>(undefined);
@@ -41,6 +44,7 @@ export default function AdminFestivalsScreen() {
         title="Festivals"
         subtitle={current?.name}
         onBack={back}
+        showFestivalSwitcher
         mark={<AdminGlyph name="iconFestival" size={40} />}
       />
       <View style={ganeshStackLayout.body}>
@@ -64,10 +68,10 @@ export default function AdminFestivalsScreen() {
             key={festival.id}
             divider={index < festivals.length - 1}
             title={festival.name}
-            subtitle={`${festival.year} · ${festival.status === "open" ? "Active" : "Closed"}${
+            subtitle={`${festival.year} · ${festivalDisplayLabel(festival)}${
               formatFestivalWindow(festival) ? ` · ${formatFestivalWindow(festival)}` : ""
             }`}
-            badge={festival.id === festivalId ? "Current" : festival.status === "open" ? "Switch" : "Closed"}
+            badge={festival.id === festivalId ? "Current" : festivalDisplayLabel(festival)}
             tone={
               festival.id === festivalId
                 ? "attention"
@@ -147,6 +151,30 @@ export default function AdminFestivalsScreen() {
               }}
             >
               Close festival
+            </Button>
+          ) : current.status === "closed" && can("festival.close") ? (
+            <Button
+              variant="outline"
+              onPress={() => {
+                Alert.alert(
+                  "Reopen festival?",
+                  "Committee members will be able to add money and seva again.",
+                  [
+                    { text: "Cancel", style: "cancel" },
+                    {
+                      text: "Reopen",
+                      onPress: () => {
+                        writes.reopenFestival().catch((caught) => {
+                          logError("ganesh.admin.reopenFestival", caught);
+                          toast.error(friendlyErrorMessage(caught, "Could not reopen the festival."));
+                        });
+                      },
+                    },
+                  ]
+                );
+              }}
+            >
+              Reopen festival
             </Button>
           ) : null}
         </View>

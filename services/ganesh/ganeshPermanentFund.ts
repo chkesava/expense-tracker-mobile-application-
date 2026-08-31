@@ -63,6 +63,32 @@ export function assertPermanentFundOnline(isOnline: boolean): void {
   if (!isOnline) throw new Error(PERMANENT_FUND_OFFLINE_ERROR);
 }
 
+function writeFestivalAudit(
+  txn: Transaction,
+  db: Firestore,
+  pandalId: string,
+  festivalId: string,
+  actorId: string,
+  action: "closed" | "transferred",
+  entityType: string,
+  entityId: string,
+  extra?: { reason?: string; newValue?: unknown }
+) {
+  txn.set(
+    pathRef(db, [...festivalCol(pandalId, festivalId, "auditLogs"), newId()]),
+    omitUndefined({
+      actorId,
+      action,
+      entityType,
+      entityId,
+      oldValue: null,
+      newValue: extra?.newValue ?? null,
+      reason: extra?.reason,
+      at: serverTimestamp(),
+    })
+  );
+}
+
 function pathRef(db: Firestore, segments: string[]) {
   const [first, ...rest] = segments;
   return doc(db, first, ...rest);
@@ -451,6 +477,23 @@ export async function transferFestivalToPermanent(
         updatedBy: actor.uid,
         updatedAt: serverTimestamp(),
       });
+      writeFestivalAudit(txn, db, pandalId, festivalId, actor.uid, "closed", "festival", festivalId, {
+        reason: "Festival closed",
+        newValue: { transferAmount: amount, remainingAmount: closing - amount },
+      });
+      if (amount > 0 && festivalTransferId) {
+        writeFestivalAudit(
+          txn,
+          db,
+          pandalId,
+          festivalId,
+          actor.uid,
+          "transferred",
+          "fundTransfer",
+          festivalTransferId,
+          { newValue: { amount, location: input.location } }
+        );
+      }
     }
   });
   return txId;

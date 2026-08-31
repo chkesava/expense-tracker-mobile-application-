@@ -1,6 +1,7 @@
 import { collection, getDocs, orderBy, query, type Firestore } from "firebase/firestore";
 
 import type { Festival } from "@/shared/types/ganesh";
+import { pickFestivalFromList } from "@/shared/utils/ganeshFestivalSession";
 import { festivalsCol } from "@/shared/utils/ganeshPaths";
 
 export async function pickFestivalIdForPandal(
@@ -13,6 +14,5 @@ export async function pickFestivalIdForPandal(
     id: docSnap.id,
     ...(docSnap.data() as Omit<Festival, "id">),
   }));
-  const openFestival = festivals.find((festival) => festival.status === "open") ?? festivals[0];
-  return openFestival?.id ?? null;
+  return pickFestivalFromList(festivals)?.id ?? null;
 }

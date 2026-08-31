@@ -3,25 +3,50 @@ import { Redirect, Tabs } from "expo-router";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 
 import { GaneshTabBar } from "@/components/ganesh/GaneshTabBar";
+import { useFestivals } from "@/hooks/useFestivals";
 import { useGaneshSyncReporter } from "@/hooks/useGaneshSyncReporter";
 import { usePandals } from "@/hooks/usePandals";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
+import { resolveSessionFestival } from "@/shared/utils/ganeshFestivalSession";
 import { useTheme } from "@/theme/ThemeProvider";
 
 export default function GaneshTabsLayout() {
   const { theme } = useTheme();
-  const { ready, pandalId, festivalId, clearSession } = useGaneshSession();
+  const { ready, pandalId, festivalId, clearSession, setSession } = useGaneshSession();
   const { pandals, loading } = usePandals();
+  const { festivals, loading: festivalsLoading } = useFestivals(pandalId);
   useGaneshSyncReporter();
 
   const hasActivePandal = pandals.some((item) => item.id === pandalId);
+  const festivalResolution = resolveSessionFestival(
+    festivalId,
+    festivals,
+    !festivalsLoading
+  );
+  const switchingFestival = festivalResolution.action === "switch";
 
   useEffect(() => {
     if (!ready || loading || !pandalId) return;
     if (!hasActivePandal) {
       void clearSession();
+      return;
     }
-  }, [ready, loading, pandalId, hasActivePandal, clearSession]);
+    if (festivalsLoading) return;
+    const resolved = resolveSessionFestival(festivalId, festivals, true);
+    if (resolved.action === "switch") {
+      void setSession({ pandalId, festivalId: resolved.festivalId });
+    }
+  }, [
+    ready,
+    loading,
+    pandalId,
+    festivalId,
+    festivals,
+    festivalsLoading,
+    hasActivePandal,
+    clearSession,
+    setSession,
+  ]);
 
   if (!ready) {
     return (
@@ -77,7 +102,7 @@ export default function GaneshTabsLayout() {
       <Tabs.Screen name="contributions" options={{ title: "Contributions" }} />
       <Tabs.Screen name="committee" options={{ title: "Committee" }} />
     </Tabs>
-      {loading || !hasActivePandal ? (
+      {loading || !hasActivePandal || festivalsLoading || switchingFestival ? (
         <View
           pointerEvents="auto"
           style={[

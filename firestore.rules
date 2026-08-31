@@ -826,6 +826,15 @@ service cloud.firestore {
         allow update, delete: if false;
       }
 
+      match /festivalYears/{year} {
+        allow read: if isActivePandalMember();
+        allow create: if canCreateFestival()
+          && request.resource.data.festivalId is string
+          && request.resource.data.year is int
+          && string(request.resource.data.year) == year;
+        allow update, delete: if false;
+      }
+
       match /festivals/{festivalId} {
         function festivalData() {
           return get(/databases/$(database)/documents/pandals/$(pandalId)/festivals/$(festivalId)).data;

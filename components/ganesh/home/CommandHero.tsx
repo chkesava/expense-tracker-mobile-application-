@@ -2,6 +2,8 @@ import { type ReactNode } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { Bell } from "lucide-react-native";
 
+import { FestivalSwitcher } from "@/components/ganesh/chrome/FestivalSwitcher";
+import { ClosedFestivalBanner } from "@/components/ganesh/chrome/ClosedFestivalBanner";
 import { FestivalDateStrip } from "@/components/ganesh/art/FestivalDateStrip";
 import { FestivalGarlandBells } from "@/components/ganesh/art/FestivalChrome";
 import { GaneshArt } from "@/components/ganesh/art/GaneshArt";
@@ -130,14 +132,7 @@ export function CommandHero({
               {pandalName || "Your Pandal"}
             </Text>
             {festivalName ? (
-              <View style={[styles.festivalPill, { backgroundColor: "#C2410C" }]}>
-                <Text
-                  style={[styles.festivalPillText, { color: "#FFF8F1", fontFamily: theme.fontFamily.semibold }]}
-                  numberOfLines={1}
-                >
-                  {festivalName}
-                </Text>
-              </View>
+              <FestivalSwitcher variant="pill" fallbackName={festivalName} />
             ) : null}
           </View>
         </View>
@@ -145,6 +140,7 @@ export function CommandHero({
         <View pointerEvents="none" style={[styles.curveBite, { backgroundColor: theme.colors.background }]} />
       </View>
 
+      <ClosedFestivalBanner />
       <FestivalDateStrip festival={festival} today={today} onPress={onFestivalDates} />
     </View>
   );
@@ -218,19 +214,6 @@ const styles = StyleSheet.create({
   pandal: {
     fontSize: 14,
     lineHeight: 18,
-  },
-  festivalPill: {
-    alignSelf: "flex-start",
-    marginTop: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 999,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-  },
-  festivalPillText: {
-    fontSize: 11.5,
   },
   curveBite: {
     position: "absolute",

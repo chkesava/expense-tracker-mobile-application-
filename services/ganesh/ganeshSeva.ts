@@ -20,6 +20,7 @@ import type {
   SevaStatus,
 } from "@/shared/types/ganesh";
 import { festivalCol, sevaDutiesCol } from "@/shared/utils/ganeshPaths";
+import { requireOpenFestival } from "@/services/ganesh/ganeshFestivalGuard";
 import {
   assertCanAssignDuty,
   assertCanTransitionDuty,
@@ -65,6 +66,7 @@ export async function createSeva(
   festivalId: string,
   input: SevaInput
 ): Promise<string> {
+  await requireOpenFestival(db, pandalId, festivalId);
   const valid = validateSeva(input);
   if (!valid.ok) throw new Error(valid.error);
 

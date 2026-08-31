@@ -8,6 +8,7 @@ import { FundLocationChips } from "@/components/ganesh/FundLocationChips";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { GaneshWriteLock } from "@/components/ganesh/GaneshWriteLock";
 import { GaneshHeader, useGaneshTokens } from "@/components/ganesh/ui";
+import { useFestivals } from "@/hooks/useFestivals";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { PermanentFundCard } from "@/components/ganesh/PermanentFundCard";
 import { Button } from "@/components/ui/Button";
@@ -20,6 +21,10 @@ import { PERMANENT_FUND_OFFLINE_ERROR } from "@/services/ganesh/ganeshPermanentF
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import { useNetwork } from "@/providers/NetworkProvider";
 import type { PermanentFundLocation } from "@/shared/types/ganesh";
+import {
+  duplicateFestivalYearMessage,
+  yearTakenByAnotherFestival,
+} from "@/shared/utils/ganeshFestivalYear";
 import { validateFundTransfer, validateNonNegativeAmount } from "@/shared/utils/ganeshMath";
 import { formatInr } from "@/shared/utils/ganeshMoney";
 import { validateFestivalWindow } from "@/shared/utils/ganeshSeva";
@@ -30,6 +35,7 @@ export default function CreateFestivalScreen() {
   const g = useGaneshTokens();
   const { replace, back } = useRouter();
   const { pandalId, setSession } = useGaneshSession();
+  const { festivals } = useFestivals(pandalId);
   const { fund } = usePermanentFund(pandalId);
   const writes = useGaneshWrites();
   const { can } = useGaneshPermissions();
@@ -69,6 +75,10 @@ export default function CreateFestivalScreen() {
     const festivalYear = Number(year);
     if (!Number.isFinite(festivalYear) || festivalYear < 2000) {
       toast.error("Enter a valid year.");
+      return;
+    }
+    if (yearTakenByAnotherFestival(festivals, festivalYear)) {
+      toast.error(duplicateFestivalYearMessage(festivalYear));
       return;
     }
     const window = validateFestivalWindow(startDate, endDate);
@@ -121,6 +131,11 @@ export default function CreateFestivalScreen() {
       </Text>
       <Input label="Festival name" value={name} onChangeText={setName} />
       <Input label="Year" value={year} onChangeText={setYear} keyboardType="numeric" />
+      {Number.isFinite(Number(year)) && yearTakenByAnotherFestival(festivals, Number(year)) ? (
+        <Text style={{ color: theme.colors.mutedForeground, lineHeight: 20 }}>
+          {duplicateFestivalYearMessage(Number(year))}
+        </Text>
+      ) : null}
       <FestivalWindowFields
         startDate={startDate}
         endDate={endDate}

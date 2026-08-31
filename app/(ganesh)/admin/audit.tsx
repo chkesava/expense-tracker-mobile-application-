@@ -35,6 +35,7 @@ function memberLine(audit: PandalMemberAudit, members: PandalMember[]): string {
 
 function festivalLine(audit: GaneshFestivalAudit, members: PandalMember[]): string {
   const actor = memberDisplayName(members, audit.actorId);
+  if (audit.action === "reopened") return `${actor} reopened the festival`;
   if (audit.action === "transferred") return `${actor} moved money`;
   if (audit.action === "closed") return `${actor} closed the festival`;
   if (audit.action === "voided") return `${actor} voided a ${audit.entityType}`;

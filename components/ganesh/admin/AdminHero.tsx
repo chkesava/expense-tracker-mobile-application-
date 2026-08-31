@@ -25,6 +25,7 @@ export function AdminHero({
       subtitle={festivalName}
       onBack={onBack}
       rightAccessory={rightAccessory}
+      showFestivalSwitcher
       mark={
         <GaneshIconTile onDark>
           <Shield size={22} color="#FFF8F1" strokeWidth={2} />

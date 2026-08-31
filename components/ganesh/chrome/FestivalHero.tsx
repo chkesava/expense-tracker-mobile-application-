@@ -2,6 +2,8 @@ import { type ReactNode } from "react";
 import { Image, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { ArrowLeft } from "lucide-react-native";
 
+import { ClosedFestivalBanner } from "@/components/ganesh/chrome/ClosedFestivalBanner";
+import { FestivalSwitcher } from "@/components/ganesh/chrome/FestivalSwitcher";
 import { FestivalGarlandBells } from "@/components/ganesh/art/FestivalChrome";
 import { GaneshArt } from "@/components/ganesh/art/GaneshArt";
 import { useArtScale } from "@/components/ganesh/art/useArtScale";
@@ -32,6 +34,7 @@ export type FestivalHeroProps = {
   onBack?: () => void;
   showTemple?: boolean;
   showFlag?: boolean;
+  showFestivalSwitcher?: boolean;
 };
 
 /**
@@ -49,6 +52,7 @@ export function FestivalHero({
   onBack,
   showTemple = true,
   showFlag = false,
+  showFestivalSwitcher = false,
 }: FestivalHeroProps) {
   const { theme } = useTheme();
   const g = useGaneshTokens();
@@ -56,6 +60,7 @@ export function FestivalHero({
   const maroon = g.isDark ? "#3A1020" : "#7A1836";
 
   return (
+    <View>
     <View
       style={[
         styles.hero,
@@ -126,7 +131,9 @@ export function FestivalHero({
               {context}
             </Text>
           ) : null}
-          {subtitle ? (
+          {showFestivalSwitcher ? (
+            <FestivalSwitcher variant="subtitle" fallbackName={subtitle} />
+          ) : subtitle ? (
             <Text
               style={[styles.subtitle, { fontFamily: theme.fontFamily.medium }]}
               numberOfLines={1}
@@ -138,6 +145,8 @@ export function FestivalHero({
       </View>
 
       <View pointerEvents="none" style={[styles.curveBite, { backgroundColor: theme.colors.background }]} />
+    </View>
+    {showFestivalSwitcher ? <ClosedFestivalBanner /> : null}
     </View>
   );
 }

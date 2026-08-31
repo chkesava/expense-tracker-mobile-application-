@@ -156,6 +156,27 @@ const viewer: Ctx = { signedIn: true, member: { role: "viewer", status: "active"
 const removed: Ctx = { signedIn: true, member: { role: "member", status: "removed" }, festivalOpen: true };
 const ownerOnly: Ctx = { signedIn: true, member: null, ownerId: "u1", uid: "u1", festivalOpen: true };
 
+function canReadFestivalYear(ctx: Ctx): boolean {
+  return isActivePandalMember(ctx);
+}
+
+function canCreateFestivalYear(
+  ctx: Ctx,
+  data: { festivalId: unknown; year: unknown }
+): boolean {
+  return canCreateFestival(ctx)
+    && typeof data.festivalId === "string"
+    && typeof data.year === "number";
+}
+
+function canUpdateFestivalYear(): boolean {
+  return false;
+}
+
+function canDeleteFestivalYear(): boolean {
+  return false;
+}
+
 describe("ganesh firestore rules contract", () => {
   it("keeps the TypeScript matrix aligned with the rules role sets", () => {
     const roles: GaneshRole[] = ["admin", "treasurer", "member", "collector", "viewer"];
@@ -1383,5 +1404,18 @@ describe("ganesh firestore rules — seva schedule", () => {
   it("freezes the schedule once the festival is closed", () => {
     const closed: Ctx = { ...treasurer, festivalOpen: false };
     expect(canUpdateDuty(closed, { userId: "u1" }, "u1", ["status"])).toBe(false);
+  });
+
+  it("lets an active member read festivalYears and only festival.create holders write them", () => {
+    const payload = { festivalId: "fest-1", year: 2026 };
+    expect(canReadFestivalYear(admin)).toBe(true);
+    expect(canReadFestivalYear(member)).toBe(true);
+    expect(canReadFestivalYear(removed)).toBe(false);
+    expect(canCreateFestivalYear(admin, payload)).toBe(true);
+    expect(canCreateFestivalYear(treasurer, payload)).toBe(false);
+    expect(canCreateFestivalYear(member, payload)).toBe(false);
+    expect(canCreateFestivalYear(admin, { festivalId: 1, year: 2026 })).toBe(false);
+    expect(canUpdateFestivalYear()).toBe(false);
+    expect(canDeleteFestivalYear()).toBe(false);
   });
 });

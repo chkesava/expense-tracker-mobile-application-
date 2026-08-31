@@ -2,6 +2,7 @@ import {
   arrayRemove,
   arrayUnion,
   collection,
+  deleteField,
   doc,
   getDoc,
   getDocs,
@@ -41,9 +42,16 @@ import { formatInr } from "@/shared/utils/ganeshMoney";
 import { ganeshStoredPath } from "@/services/ganesh/storage/storagePaths";
 import { generatePandalCode, normalizePandalCode } from "@/shared/utils/ganeshIdentity";
 import { validateFestivalWindow } from "@/shared/utils/ganeshSeva";
+import { requireOpenFestival } from "@/services/ganesh/ganeshFestivalGuard";
+import {
+  duplicateFestivalYearMessage,
+  planFestivalYearClaim,
+  yearTakenByAnotherFestival,
+} from "@/shared/utils/ganeshFestivalYear";
 import {
   festivalCol,
   festivalDoc,
+  festivalYearDoc,
   membershipDoc,
   pandalMemberAuditsCol,
   summaryDoc,
@@ -93,6 +101,8 @@ import {
   transferFestivalToPermanent,
   transferPermanentToFestival,
 } from "@/services/ganesh/ganeshPermanentFund";
+
+export { requireOpenFestival };
 
 export {
   assertGodFundSpendOnline,
@@ -234,6 +244,37 @@ function bumpSummary(
   batch.set(ref, payload, { merge: true });
 }
 
+async function commitFestivalAndYearClaim(
+  db: Firestore,
+  pandalId: string,
+  festivalId: string,
+  year: number,
+  festivalPayload?: Record<string, unknown>
+): Promise<void> {
+  await runTransaction(db, async (txn) => {
+    const yearRef = pathRef(db, festivalYearDoc(pandalId, year));
+    const festivalRef = pathRef(db, festivalDoc(pandalId, festivalId));
+    const yearSnap = await txn.get(yearRef);
+    const festivalSnap = await txn.get(festivalRef);
+    const claim = planFestivalYearClaim({
+      year,
+      claimingFestivalId: festivalId,
+      sentinel: yearSnap.exists()
+        ? { festivalId: String(yearSnap.data().festivalId ?? "") }
+        : undefined,
+      festivalExists: festivalSnap.exists(),
+    });
+    if (!claim.ok) throw new Error(claim.error);
+    if (claim.writeFestival) {
+      if (!festivalPayload) throw new Error("Festival could not be created.");
+      txn.set(festivalRef, festivalPayload);
+    }
+    if (claim.writeSentinel) {
+      txn.set(yearRef, { festivalId, year });
+    }
+  });
+}
+
 async function uniquePandalCode(db: Firestore): Promise<string> {
   for (let attempt = 0; attempt < 8; attempt += 1) {
     const code = generatePandalCode();
@@ -254,19 +295,24 @@ async function seedFirstFestival(
 ): Promise<void> {
   const festivalRef = pathRef(db, festivalDoc(pandalId, festivalId));
   const existing = await getDoc(festivalRef);
-  if (!existing.exists()) {
-    const festivalBatch = writeBatch(db);
-    festivalBatch.set(festivalRef, {
-      name: festivalName,
-      year,
-      status: "open",
-      contributionMode: "same",
-      contributionTargetAmount: 0,
-      householdTargetAmount: 500,
-      ...stamp,
-    });
-    await commitWrite(() => festivalBatch.commit(), { label: "festival" });
-  }
+  const created = !existing.exists();
+  await commitFestivalAndYearClaim(
+    db,
+    pandalId,
+    festivalId,
+    year,
+    created
+      ? {
+          name: festivalName,
+          year,
+          status: "open",
+          contributionMode: "same",
+          contributionTargetAmount: 0,
+          householdTargetAmount: 500,
+          ...stamp,
+        }
+      : undefined
+  );
 
   const seedBatch = writeBatch(db);
   seedBatch.set(
@@ -299,7 +345,7 @@ async function seedFirstFestival(
       });
     }
   }
-  if (!existing.exists()) {
+  if (created) {
     audit(seedBatch, db, pandalId, festivalId, actor.uid, "created", "festival", festivalId, {
       newValue: { name: festivalName, year },
     });
@@ -848,6 +894,14 @@ export async function createFestival(
   input: { name: string; year: number; startDate?: string; endDate?: string }
 ): Promise<string> {
   assertFestivalWindow(input.startDate, input.endDate);
+  const festivalsSnap = await getDocs(collection(db, "pandals", pandalId, "festivals"));
+  const existingFestivals = festivalsSnap.docs.map((docSnap) => ({
+    id: docSnap.id,
+    year: Number(docSnap.data().year),
+  }));
+  if (yearTakenByAnotherFestival(existingFestivals, input.year)) {
+    throw new Error(duplicateFestivalYearMessage(input.year));
+  }
   const festivalId = newId();
   const members = await getDocs(collection(db, "pandals", pandalId, "members"));
   const stamp = {
@@ -856,8 +910,7 @@ export async function createFestival(
     updatedBy: actor.uid,
     updatedAt: serverTimestamp(),
   };
-  const festivalBatch = writeBatch(db);
-  festivalBatch.set(pathRef(db, festivalDoc(pandalId, festivalId)), {
+  await commitFestivalAndYearClaim(db, pandalId, festivalId, input.year, {
     name: input.name.trim(),
     year: input.year,
     status: "open",
@@ -870,7 +923,6 @@ export async function createFestival(
     }),
     ...stamp,
   });
-  await commitWrite(() => festivalBatch.commit(), { label: "festival" });
 
   const seedBatch = writeBatch(db);
   seedBatch.set(pathRef(db, summaryDoc(pandalId, festivalId)), {
@@ -1013,6 +1065,7 @@ export async function addOpeningFund(
     date: string;
   }
 ): Promise<string> {
+  await requireOpenFestival(db, pandalId, festivalId);
   const valid = validatePositiveAmount(input.amount, "Opening fund");
   if (!valid.ok) throw new Error(valid.error);
   const id = newId();
@@ -1068,6 +1121,7 @@ export async function addCollection(
     createHousehold?: boolean;
   }
 ): Promise<string> {
+  await requireOpenFestival(db, pandalId, festivalId);
   const valid = validateCollection(input.amount);
   if (!valid.ok) throw new Error(valid.error);
   const donorName = input.donorName.trim();
@@ -1229,6 +1283,7 @@ export async function addContribution(
     pandalAsset?: AssetPurchaseDraft;
   }
 ): Promise<string> {
+  await requireOpenFestival(db, pandalId, festivalId);
   const contributorName = input.contributorName.trim();
   if (!contributorName) throw new Error("Enter the contributor name.");
   const status = input.status ?? (input.kind === "money" ? "received" : "promised");
@@ -1374,17 +1429,6 @@ export async function attachContributionPhoto(
   // record itself — it would keep pointing at a photo that no longer exists.
   const outcome = await commitWrite(() => batch.commit(), { label: "contribution photo" });
   return outcome === "acked" && previousPath !== photo.path ? previousPath : undefined;
-}
-
-async function requireOpenFestival(
-  db: Firestore,
-  pandalId: string,
-  festivalId: string
-): Promise<void> {
-  const festivalSnap = await getDoc(pathRef(db, festivalDoc(pandalId, festivalId)));
-  if (!festivalSnap.exists() || festivalSnap.data().status !== "open") {
-    throw new Error("This festival is closed.");
-  }
 }
 
 /**
@@ -1642,6 +1686,7 @@ export async function addExpense(
     purposeLabel?: string;
   }
 ): Promise<string> {
+  await requireOpenFestival(db, pandalId, festivalId);
   const name = input.name.trim();
   if (!name) throw new Error("Enter the expense name.");
   const sponsoredAmount = input.sponsoredAmount ?? 0;
@@ -2059,6 +2104,7 @@ export async function addReimbursement(
     pendingPersonalExpense: number;
   }
 ): Promise<string> {
+  await requireOpenFestival(db, pandalId, festivalId);
   // `input.pendingPersonalExpense` comes from a locally cached member document.
   // Check it early so the user gets the friendly copy, but never let it be the
   // thing that authorizes the payout — the ceiling is re-read below, inside the
@@ -2361,6 +2407,36 @@ export async function closeFestival(
     audit(txn, db, pandalId, festivalId, actor.uid, "closed", "festival", festivalId, {
       reason: "Festival closed",
       newValue: { transferAmount: 0, remainingAmount: closing },
+    });
+  });
+}
+
+export async function reopenFestival(
+  db: Firestore,
+  actor: GaneshActor,
+  pandalId: string,
+  festivalId: string
+): Promise<void> {
+  await runTransaction(db, async (txn) => {
+    const festivalRef = pathRef(db, festivalDoc(pandalId, festivalId));
+    const festivalSnap = await txn.get(festivalRef);
+    if (!festivalSnap.exists()) throw new Error("Festival not found.");
+    if (festivalSnap.data().status !== "closed") {
+      throw new Error("This festival is already open.");
+    }
+    txn.update(festivalRef, {
+      status: "open",
+      closedAt: deleteField(),
+      closedBy: deleteField(),
+      updatedBy: actor.uid,
+      updatedAt: serverTimestamp(),
+    });
+    audit(txn, db, pandalId, festivalId, actor.uid, "reopened", "festival", festivalId, {
+      reason: "Festival reopened",
+      oldValue: {
+        status: "closed",
+        closedBy: festivalSnap.data().closedBy,
+      },
     });
   });
 }

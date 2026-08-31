@@ -19,6 +19,7 @@ export function PeopleHero({
       title="People"
       subtitle={festivalName}
       rightAccessory={rightAccessory}
+      showFestivalSwitcher
       mark={
         <GaneshIconTile onDark>
           <Users size={22} color="#FFF8F1" strokeWidth={2} />

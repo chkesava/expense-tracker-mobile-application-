@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Text, View } from "react-native";
+import { Alert, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 
 import { CalendarDays } from "lucide-react-native";
@@ -82,20 +82,33 @@ export default function CloseFestivalScreen() {
       toast.error(settlement.error);
       return;
     }
-    setBusy(true);
-    writes
-      .closeFestival({
-        transferAmount,
-        remainingAmount,
-        location,
-        festivalName: festival?.name,
-      })
-      .then(() => back())
-      .catch((error) => {
-        logError("ganesh.closeFestival", error);
-        toast.error(friendlyErrorMessage(error, "Could not close the festival."));
-      })
-      .finally(() => setBusy(false));
+    Alert.alert(
+      "Close this festival?",
+      "Closing cannot be undone from this screen. Money and seva cannot be added until an admin reopens it.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Close festival",
+          style: "destructive",
+          onPress: () => {
+            setBusy(true);
+            writes
+              .closeFestival({
+                transferAmount,
+                remainingAmount,
+                location,
+                festivalName: festival?.name,
+              })
+              .then(() => back())
+              .catch((error) => {
+                logError("ganesh.closeFestival", error);
+                toast.error(friendlyErrorMessage(error, "Could not close the festival."));
+              })
+              .finally(() => setBusy(false));
+          },
+        },
+      ]
+    );
   };
 
   if (!can("festival.close")) {

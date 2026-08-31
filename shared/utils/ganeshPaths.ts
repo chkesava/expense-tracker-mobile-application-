@@ -10,6 +10,11 @@ export function festivalsCol(pandalId: string): [string, string, string] {
   return ["pandals", pandalId, "festivals"];
 }
 
+/** One doc per calendar year so two festivals cannot claim 2026 at once. */
+export function festivalYearDoc(pandalId: string, year: number): string[] {
+  return ["pandals", pandalId, "festivalYears", String(year)];
+}
+
 export function festivalDoc(pandalId: string, festivalId: string): string[] {
   return ["pandals", pandalId, "festivals", festivalId];
 }

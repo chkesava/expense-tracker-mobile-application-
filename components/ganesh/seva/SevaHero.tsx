@@ -28,6 +28,7 @@ export function SevaHero({
         title="Seva"
         subtitle={festivalName}
         rightAccessory={rightAccessory}
+        showFestivalSwitcher
         mark={
           <GaneshIconTile onDark>
             <Flame size={22} color="#FFF8F1" strokeWidth={2} />

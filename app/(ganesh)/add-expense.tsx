@@ -11,9 +11,9 @@ import { GaneshWriteLock } from "@/components/ganesh/GaneshWriteLock";
 import { FilterChips, GaneshHeader, useGaneshTokens } from "@/components/ganesh/ui";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { useFestivals } from "@/hooks/useFestivals";
 import { useGaneshCategories } from "@/hooks/useGaneshCategories";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
+import { useFestivalWriteLock } from "@/hooks/useFestivalWriteLock";
 import { useGaneshStorage } from "@/hooks/useGaneshStorage";
 import { useGaneshWrites } from "@/hooks/useGaneshWrites";
 import { usePandalMembers } from "@/hooks/usePandalMembers";
@@ -31,6 +31,7 @@ import {
   ASSET_UNITS,
 } from "@/shared/utils/ganeshAssets";
 import { todayDateInput } from "@/shared/utils/ganeshIdentity";
+import { CLOSED_FESTIVAL_WRITE_MESSAGE } from "@/shared/utils/ganeshFestivalStatus";
 import { formatInr } from "@/shared/utils/ganeshMoney";
 import { purposeLabelOf } from "@/shared/utils/ganeshSponsors";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -43,13 +44,13 @@ export default function AddExpenseScreen() {
   const { back } = useRouter();
   const { realUser } = useAuth();
   const { pandalId, festivalId } = useGaneshSession();
-  const { festivals } = useFestivals(pandalId);
   const { categories } = useGaneshCategories(pandalId, festivalId);
   const visibleCategories = categories.filter((category) => !category.disabled);
   const { members } = usePandalMembers(pandalId);
   const { sponsors } = usePandalSponsors(pandalId);
   const { sponsorships } = useSponsorships(pandalId, festivalId);
   const writes = useGaneshWrites();
+  const { closed } = useFestivalWriteLock();
   const { can } = useGaneshPermissions();
   const canLinkSponsor = can("sponsors.receive");
   const openExpenseDeals = sponsorships.filter(
@@ -85,7 +86,6 @@ export default function AddExpenseScreen() {
   const [busy, setBusy] = useState(false);
   const selectedCategory =
     visibleCategories.find((category) => category.id === categoryId) ?? visibleCategories[0];
-  const closed = festivals.find((item) => item.id === festivalId)?.status === "closed";
   const ledgerSaved = Boolean(savedId);
   const isAssetPurchase = kind === "asset_purchase" && canBuyAsset;
   const fundingOptions: Array<{ id: Funding; label: string }> = [
@@ -138,6 +138,9 @@ export default function AddExpenseScreen() {
 
   if (!can("expenses.create")) {
     return <GaneshWriteLock message="Your role cannot add expenses." />;
+  }
+  if (closed) {
+    return <GaneshWriteLock message={CLOSED_FESTIVAL_WRITE_MESSAGE} />;
   }
 
   return (

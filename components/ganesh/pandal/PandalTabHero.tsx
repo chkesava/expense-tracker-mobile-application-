@@ -21,6 +21,7 @@ export function PandalTabHero({
       subtitle={festivalName}
       rightAccessory={rightAccessory}
       showFlag
+      showFestivalSwitcher
       mark={
         <GaneshIconTile onDark>
           <Landmark size={22} color="#FFF8F1" strokeWidth={2} />

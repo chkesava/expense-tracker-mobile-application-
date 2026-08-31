@@ -7,6 +7,7 @@ import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { GaneshWriteLock } from "@/components/ganesh/GaneshWriteLock";
 import { FilterChips, GaneshHeader, useGaneshTokens } from "@/components/ganesh/ui";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
+import { useFestivalWriteLock } from "@/hooks/useFestivalWriteLock";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useFestivalMembers } from "@/hooks/useFestivalMembers";
@@ -17,6 +18,7 @@ import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import { todayDateInput } from "@/shared/utils/ganeshIdentity";
+import { CLOSED_FESTIVAL_WRITE_MESSAGE } from "@/shared/utils/ganeshFestivalStatus";
 import type { PaymentMethod } from "@/shared/types/ganesh";
 import {
   committeePayStatus,
@@ -45,6 +47,7 @@ export default function AddMemberPaymentScreen() {
   const { members: festivalMembers } = useFestivalMembers(pandalId, festivalId);
   const writes = useGaneshWrites();
   const { can } = useGaneshPermissions();
+  const { closed } = useFestivalWriteLock();
   const committee = pandalMembers.filter(
     (member) => member.status === "active" || member.status == null
   );
@@ -67,6 +70,9 @@ export default function AddMemberPaymentScreen() {
 
   if (!can("contributions.create")) {
     return <GaneshWriteLock message="Your role cannot record member payments." />;
+  }
+  if (closed) {
+    return <GaneshWriteLock message={CLOSED_FESTIVAL_WRITE_MESSAGE} />;
   }
 
   return (

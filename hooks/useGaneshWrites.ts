@@ -149,6 +149,13 @@ export function useGaneshWrites() {
         writes.createFestival(requireDb(), actor, pandalId, input)
       );
     },
+    reopenFestival: () => {
+      requirePerm("festival.close");
+      const ctx = requireFestival();
+      return run("Festival reopened", () =>
+        writes.reopenFestival(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId)
+      );
+    },
     updateFestivalTargets: (input: Parameters<typeof writes.updateFestivalTargets>[4]) => {
       requirePerm("festival.update");
       const ctx = requireFestival();

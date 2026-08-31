@@ -64,7 +64,8 @@ export type AuditAction =
   | "reimbursed"
   | "adjusted"
   | "closed"
-  | "transferred";
+  | "transferred"
+  | "reopened";
 
 export type FirestoreTime = {
   seconds?: number;

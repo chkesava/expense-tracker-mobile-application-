@@ -19,6 +19,7 @@ export function PandalNidhiHero({
       title="Pandal Nidhi"
       subtitle={festivalName}
       rightAccessory={rightAccessory}
+      showFestivalSwitcher
       mark={
         <GaneshIconTile onDark>
           <IndianRupee size={22} color="#FFF8F1" strokeWidth={2} />

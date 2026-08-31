@@ -31,6 +31,7 @@ export function FestivalStackHero({
   rightAccessory,
   showFlag = false,
   showTemple = true,
+  showFestivalSwitcher = false,
 }: {
   title: string;
   subtitle?: string;
@@ -39,6 +40,7 @@ export function FestivalStackHero({
   rightAccessory?: ReactNode;
   showFlag?: boolean;
   showTemple?: boolean;
+  showFestivalSwitcher?: boolean;
 }) {
   return (
     <FestivalHero
@@ -48,6 +50,7 @@ export function FestivalStackHero({
       rightAccessory={rightAccessory}
       showFlag={showFlag}
       showTemple={showTemple}
+      showFestivalSwitcher={showFestivalSwitcher}
       mark={mark ? <GaneshIconTile onDark>{mark}</GaneshIconTile> : undefined}
     />
   );
