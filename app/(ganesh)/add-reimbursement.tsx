@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Text } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Wallet } from "lucide-react-native";
@@ -21,6 +21,7 @@ import { todayDateInput } from "@/shared/utils/ganeshIdentity";
 import { CLOSED_FESTIVAL_WRITE_MESSAGE } from "@/shared/utils/ganeshFestivalStatus";
 import type { PaymentMethod } from "@/shared/types/ganesh";
 import { useTheme } from "@/theme/ThemeProvider";
+import { newId } from "@/lib/id";
 
 const METHOD_OPTIONS: Array<{ id: PaymentMethod; label: string }> = [
   { id: "cash", label: "Cash" },
@@ -44,6 +45,7 @@ export default function AddReimbursementScreen() {
   const [method, setMethod] = useState<PaymentMethod>("upi");
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
+  const clientOpIdRef = useRef<string | null>(null);
   const selected = members.find((member) => member.userId === memberId);
 
   if (!can("reimbursements.create")) {
@@ -99,6 +101,7 @@ export default function AddReimbursementScreen() {
               date: todayDateInput(),
               notes,
               pendingPersonalExpense: selected.pendingReimbursement,
+              clientOpId: clientOpIdRef.current ?? (clientOpIdRef.current = newId()),
             })
             .then(() => back())
             .catch((error) => {

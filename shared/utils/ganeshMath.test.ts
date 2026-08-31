@@ -149,6 +149,23 @@ describe("validateReimbursement", () => {
   it("accepts a partial reimbursement", () => {
     expect(validateReimbursement(1000, 2000)).toEqual({ ok: true });
   });
+
+  it("keeps voluntary personal contributions out of the reimbursement obligation", () => {
+    const summary = summarizeLedger({
+      openingFunds: [],
+      collections: [],
+      committeeContributions: [],
+      otherCashContributions: [],
+      godFundExpenses: [],
+      reimbursements: [],
+      personalAmounts: [5000, 3000],
+      reimbursementAmounts: [5000],
+      inKindValues: [],
+      sponsoredValues: [],
+    });
+    expect(summary.personalMoneyUsed).toBe(8000);
+    expect(summary.pendingReimbursements).toBe(5000);
+  });
 });
 
 describe("validateCollection", () => {

@@ -2023,6 +2023,8 @@ export async function addExpense(
     categoryId: string;
     categoryName: string;
     paidByMemberId: string;
+    reimbursementRequired?: boolean;
+    clientOpId?: string;
     vendor?: string;
     description?: string;
     notes?: string;
@@ -2053,7 +2055,8 @@ export async function addExpense(
     sponsorId: input.sponsorId,
     linkedSponsorshipId: input.linkedSponsorshipId,
   });
-  const id = newId();
+  const id = input.clientOpId?.trim() || newId();
+  const reimbursementRequired = input.reimbursementRequired !== false;
 
   const appendExpense = (writer: GaneshWriter) => {
     const linkedSponsorshipId = sponsorLink
@@ -2078,6 +2081,8 @@ export async function addExpense(
         categoryId: input.categoryId,
         categoryName: input.categoryName,
         paidByMemberId: input.paidByMemberId,
+        reimbursementRequired,
+        clientOpId: input.clientOpId?.trim() || id,
         vendor: input.vendor?.trim() || undefined,
         description: input.description?.trim() || undefined,
         notes: input.notes?.trim() || undefined,
@@ -2098,11 +2103,11 @@ export async function addExpense(
     bumpSummary(writer, db, pandalId, festivalId, {
       godFundExpenses: input.godFundAmount,
       personalMoneyUsed: input.personalAmount,
-      pendingReimbursements: input.personalAmount,
+      pendingReimbursements: reimbursementRequired ? input.personalAmount : 0,
       expenseCount: 1,
       ...(input.godFundAmount > 0 ? locationBump(paymentMethod, -input.godFundAmount) : {}),
     });
-    if (input.personalAmount > 0) {
+    if (reimbursementRequired && input.personalAmount > 0) {
       writer.set(
         pathRef(db, [...festivalCol(pandalId, festivalId, "members"), input.paidByMemberId]),
         {
@@ -2129,6 +2134,14 @@ export async function addExpense(
   // treasurers cannot both pass the same check. Everything else appends.
   if (input.godFundAmount > 0) {
     await runTransaction(db, async (txn) => {
+      if (input.clientOpId) {
+        const expenseRef = pathRef(db, [...festivalCol(pandalId, festivalId, "expenses"), id]);
+        const existing = await txn.get(expenseRef);
+        if (existing.exists()) {
+          if (existing.data().voided) throw new Error("This expense operation was already voided.");
+          return;
+        }
+      }
       const summary = await readSummaryInTxn(txn, db, pandalId, festivalId);
       const spendOk = validateGodFundLocationSpend(
         input.godFundAmount,
@@ -2139,6 +2152,14 @@ export async function addExpense(
       appendExpense(txn);
     });
     return id;
+  }
+
+  if (input.clientOpId) {
+    const existing = await getDoc(pathRef(db, [...festivalCol(pandalId, festivalId, "expenses"), id]));
+    if (existing.exists()) {
+      if (existing.data().voided) throw new Error("This expense operation was already voided.");
+      return id;
+    }
   }
 
   const batch = writeBatch(db);
@@ -2161,6 +2182,8 @@ export async function addAssetPurchase(
     categoryId: string;
     categoryName: string;
     paidByMemberId: string;
+    reimbursementRequired?: boolean;
+    clientOpId?: string;
     vendor?: string;
     description?: string;
     notes?: string;
@@ -2194,8 +2217,9 @@ export async function addAssetPurchase(
     sponsorId: input.sponsorId,
     linkedSponsorshipId: input.linkedSponsorshipId,
   });
-  const expenseId = newId();
+  const expenseId = input.clientOpId?.trim() || newId();
   const assetId = newId();
+  const reimbursementRequired = input.reimbursementRequired !== false;
   const cashAmount = input.godFundAmount + input.personalAmount;
 
   const appendAssetPurchase = (writer: GaneshWriter) => {
@@ -2221,6 +2245,8 @@ export async function addAssetPurchase(
       categoryId: input.categoryId,
       categoryName: input.categoryName,
       paidByMemberId: input.paidByMemberId,
+      reimbursementRequired,
+      clientOpId: input.clientOpId?.trim() || expenseId,
       vendor: input.vendor?.trim() || undefined,
       description: input.description?.trim() || undefined,
       notes: input.notes?.trim() || undefined,
@@ -2259,12 +2285,12 @@ export async function addAssetPurchase(
   bumpSummary(writer, db, pandalId, festivalId, {
     godFundExpenses: input.godFundAmount,
     personalMoneyUsed: input.personalAmount,
-    pendingReimbursements: input.personalAmount,
+    pendingReimbursements: reimbursementRequired ? input.personalAmount : 0,
     expenseCount: 1,
     assetPurchaseAmount: cashAmount,
     ...(input.godFundAmount > 0 ? locationBump(paymentMethod, -input.godFundAmount) : {}),
   });
-  if (input.personalAmount > 0) {
+  if (reimbursementRequired && input.personalAmount > 0) {
     writer.set(
       pathRef(db, [...festivalCol(pandalId, festivalId, "members"), input.paidByMemberId]),
       {
@@ -2291,6 +2317,14 @@ export async function addAssetPurchase(
   // the transaction; a purchase funded personally or by a sponsor just appends.
   if (input.godFundAmount > 0) {
     await runTransaction(db, async (txn) => {
+      if (input.clientOpId) {
+        const expenseRef = pathRef(db, [...festivalCol(pandalId, festivalId, "expenses"), expenseId]);
+        const existing = await txn.get(expenseRef);
+        if (existing.exists()) {
+          if (existing.data().voided) throw new Error("This expense operation was already voided.");
+          return;
+        }
+      }
       const summary = await readSummaryInTxn(txn, db, pandalId, festivalId);
       const spendOk = validateGodFundLocationSpend(
         input.godFundAmount,
@@ -2301,6 +2335,14 @@ export async function addAssetPurchase(
       appendAssetPurchase(txn);
     });
     return { expenseId, assetId };
+  }
+
+  if (input.clientOpId) {
+    const existing = await getDoc(pathRef(db, [...festivalCol(pandalId, festivalId, "expenses"), expenseId]));
+    if (existing.exists()) {
+      if (existing.data().voided) throw new Error("This expense operation was already voided.");
+      return { expenseId, assetId: String(existing.data().assetId ?? assetId) };
+    }
   }
 
   const batch = writeBatch(db);
@@ -2343,6 +2385,7 @@ export async function updateExpenseAmounts(
   const oldPersonal = Number(current.personalAmount ?? 0);
   const godDelta = input.godFundAmount - oldGod;
   const personalDelta = input.personalAmount - oldPersonal;
+  const reimbursementRequired = current.reimbursementRequired !== false;
   const wasPurchase = current.expenseType === "asset_purchase" || Boolean(current.assetId);
   const oldCash = oldGod + oldPersonal;
   const newCash = input.godFundAmount + input.personalAmount;
@@ -2370,11 +2413,11 @@ export async function updateExpenseAmounts(
   bumpSummary(writer, db, pandalId, festivalId, {
     godFundExpenses: godDelta,
     personalMoneyUsed: personalDelta,
-    pendingReimbursements: personalDelta,
+    pendingReimbursements: reimbursementRequired ? personalDelta : 0,
     assetPurchaseAmount: wasPurchase ? newCash - oldCash : 0,
     ...(godDelta !== 0 ? locationBump(paymentMethod, -godDelta) : {}),
   });
-  if (personalDelta !== 0 && paidByMemberId) {
+  if (reimbursementRequired && personalDelta !== 0 && paidByMemberId) {
     writer.set(
       pathRef(db, [...festivalCol(pandalId, festivalId, "members"), paidByMemberId]),
       {
@@ -2475,6 +2518,7 @@ export async function addReimbursement(
     date: string;
     notes?: string;
     pendingPersonalExpense: number;
+    clientOpId?: string;
   }
 ): Promise<string> {
   await requireOpenFestival(db, pandalId, festivalId);
@@ -2484,10 +2528,18 @@ export async function addReimbursement(
   // transaction, and the God Fund must also be able to cover the cash going out.
   const valid = validateReimbursement(input.amount, input.pendingPersonalExpense);
   if (!valid.ok) throw new Error(valid.error);
-  const id = newId();
+  const id = input.clientOpId?.trim() || newId();
 
   await runTransaction(db, async (txn) => {
     // All reads first: a Firestore transaction refuses a read after a write.
+    const reimbursementRef = pathRef(db, [...festivalCol(pandalId, festivalId, "reimbursements"), id]);
+    if (input.clientOpId) {
+      const existing = await txn.get(reimbursementRef);
+      if (existing.exists()) {
+        if (existing.data().voided) throw new Error("This reimbursement operation was already voided.");
+        return;
+      }
+    }
     const member = await readMemberPendingInTxn(
       txn,
       db,
@@ -2518,13 +2570,15 @@ export async function addReimbursement(
     }
 
     txn.set(
-      pathRef(db, [...festivalCol(pandalId, festivalId, "reimbursements"), id]),
+      reimbursementRef,
       omitUndefined({
         memberId: input.memberId,
         amount: input.amount,
         paymentMethod: input.paymentMethod,
         date: input.date,
         notes: input.notes?.trim() || undefined,
+        status: "paid",
+        clientOpId: input.clientOpId?.trim() || id,
         ledgerType: "REIMBURSEMENT",
         voided: false,
         createdBy: actor.uid,
@@ -2606,6 +2660,7 @@ export async function voidFinancialRecord(
   const voidsPersonalMoney =
     input.entityType === "expense"
     && Number(data.personalAmount ?? 0) > 0
+    && data.reimbursementRequired !== false
     && Boolean(data.paidByMemberId);
   if (voidsPersonalMoney) {
     const memberSnap = await getDoc(
@@ -2626,6 +2681,7 @@ export async function voidFinancialRecord(
     voidReason: input.reason.trim() || "Voided",
     voidedBy: actor.uid,
     voidedAt: serverTimestamp(),
+    ...(input.entityType === "reimbursement" ? { status: "voided" } : {}),
     updatedBy: actor.uid,
     updatedAt: serverTimestamp(),
   });
@@ -2707,7 +2763,7 @@ export async function voidFinancialRecord(
     bumpSummary(batch, db, pandalId, festivalId, {
       godFundExpenses: -godFundAmount,
       personalMoneyUsed: -personalAmount,
-      pendingReimbursements: -personalAmount,
+    pendingReimbursements: data.reimbursementRequired === false ? 0 : -personalAmount,
       expenseCount: -1,
       assetPurchaseAmount: wasPurchase ? -(godFundAmount + personalAmount) : 0,
       ...(godFundAmount > 0
@@ -2717,7 +2773,7 @@ export async function voidFinancialRecord(
           )
         : {}),
     });
-    if (personalAmount > 0 && data.paidByMemberId) {
+    if (personalAmount > 0 && data.reimbursementRequired !== false && data.paidByMemberId) {
       batch.set(
         pathRef(db, [...festivalCol(pandalId, festivalId, "members"), String(data.paidByMemberId)]),
         {
@@ -2959,6 +3015,10 @@ export async function recomputeFestivalSummary(
     godFundExpenses: expenses.filter(notVoided).map((docSnap) => Number(docSnap.data().godFundAmount ?? 0)),
     reimbursements: reimbursements.filter(notVoided).map((docSnap) => Number(docSnap.data().amount ?? 0)),
     personalAmounts: expenses.filter(notVoided).map((docSnap) => Number(docSnap.data().personalAmount ?? 0)),
+    reimbursementAmounts: expenses
+      .filter(notVoided)
+      .filter((docSnap) => docSnap.data().reimbursementRequired !== false)
+      .map((docSnap) => Number(docSnap.data().personalAmount ?? 0)),
     assetPurchaseAmounts: expenses
       .filter(notVoided)
       .filter((docSnap) => docSnap.data().expenseType === "asset_purchase" || docSnap.data().assetId)

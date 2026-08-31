@@ -633,6 +633,7 @@ export type LedgerTotalsInput = {
   godFundExpenses: number[];
   reimbursements: number[];
   personalAmounts: number[];
+  reimbursementAmounts?: number[];
   inKindValues: number[];
   sponsoredValues: number[];
   assetPurchaseAmounts?: number[];
@@ -651,6 +652,7 @@ export function summarizeFestivalLocations(deltas: LedgerLocationDelta[]): Festi
 export function summarizeLedger(input: LedgerTotalsInput): GaneshSummary {
   const sum = (values: number[]) => money(values.reduce((acc, value) => acc + value, 0));
   const personalMoneyUsed = sum(input.personalAmounts);
+  const reimbursementObligation = sum(input.reimbursementAmounts ?? input.personalAmounts);
   const reimbursed = sum(input.reimbursements);
   const summary: GaneshSummary = {
     ...EMPTY_GANESH_SUMMARY,
@@ -661,7 +663,7 @@ export function summarizeLedger(input: LedgerTotalsInput): GaneshSummary {
     godFundExpenses: sum(input.godFundExpenses),
     reimbursements: reimbursed,
     personalMoneyUsed,
-    pendingReimbursements: money(Math.max(0, personalMoneyUsed - reimbursed)),
+    pendingReimbursements: money(Math.max(0, reimbursementObligation - reimbursed)),
     inKindValue: sum(input.inKindValues),
     sponsoredValue: sum(input.sponsoredValues),
     collectionCount: input.collections.length,

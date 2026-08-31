@@ -500,6 +500,10 @@ export interface GaneshExpense extends GaneshAuditFields, GaneshVoidFields {
   categoryId: string;
   categoryName: string;
   paidByMemberId: string;
+  /** Whether the personal portion should create a reimbursement obligation. */
+  reimbursementRequired?: boolean;
+  /** Stable client operation id used to make retries safe. */
+  clientOpId?: string;
   vendor?: string;
   description?: string;
   notes?: string;
@@ -527,9 +531,13 @@ export interface GaneshReimbursement extends GaneshAuditFields, GaneshVoidFields
   paymentMethod: PaymentMethod;
   date: string;
   notes?: string;
+  status: GaneshReimbursementStatus;
+  clientOpId?: string;
   ledgerType: "REIMBURSEMENT";
   pendingWrite?: boolean;
 }
+
+export type GaneshReimbursementStatus = "paid" | "voided";
 
 export interface GaneshCategory {
   id: string;

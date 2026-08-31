@@ -945,8 +945,10 @@ service cloud.firestore {
                     ? d.status in ['prospective', 'promised', 'confirmed', 'received', 'cancelled']
                     : subcol == 'households'
                       ? d.status in ['pending', 'partial', 'paid', 'not_interested', 'not_available']
-                      : subcol == 'seva'
+                    : subcol == 'seva'
                         ? d.status in ['scheduled', 'in_progress', 'completed', 'cancelled']
+                        : subcol == 'reimbursements'
+                          ? d.status in ['paid', 'voided']
                         : d.status is string
               );
           }
@@ -965,6 +967,8 @@ service cloud.firestore {
           function flagsWellFormed() {
             let d = request.resource.data;
             return (!d.keys().hasAny(['voided']) || d.voided is bool)
+              && (!d.keys().hasAny(['reimbursementRequired']) || d.reimbursementRequired is bool)
+              && (!d.keys().hasAny(['clientOpId']) || (d.clientOpId is string && d.clientOpId.size() > 0))
               && (!d.keys().hasAny(['date']) || d.date is string)
               && (!d.keys().hasAny(['paymentMethod'])
                   || d.paymentMethod in ['cash', 'upi', 'bank', 'other'])

@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { Package, Receipt } from "lucide-react-native";
@@ -31,6 +31,7 @@ import {
   ASSET_UNITS,
 } from "@/shared/utils/ganeshAssets";
 import { todayDateInput } from "@/shared/utils/ganeshIdentity";
+import { newId } from "@/lib/id";
 import { CLOSED_FESTIVAL_WRITE_MESSAGE } from "@/shared/utils/ganeshFestivalStatus";
 import { formatInr } from "@/shared/utils/ganeshMoney";
 import { purposeLabelOf } from "@/shared/utils/ganeshSponsors";
@@ -76,6 +77,8 @@ export default function AddExpenseScreen() {
   const [sponsorId, setSponsorId] = useState("");
   const [linkedSponsorshipId, setLinkedSponsorshipId] = useState("");
   const [funding, setFunding] = useState<Funding>("god");
+  const [reimbursementRequired, setReimbursementRequired] = useState(true);
+  const clientOpIdRef = useRef<string | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
   const [categoryId, setCategoryId] = useState(visibleCategories[0]?.id ?? "");
   const [paidByMemberId, setPaidByMemberId] = useState(realUser?.uid ?? "");
@@ -210,6 +213,19 @@ export default function AddExpenseScreen() {
             />
           ) : null}
         </>
+      ) : null}
+      {funding === "personal" || funding === "split" ? (
+        <FilterChips
+          label="Personal money"
+          layout="wrap"
+          value={reimbursementRequired ? "required" : "contribution"}
+          options={[
+            { id: "required", label: "Reimbursement required" },
+            { id: "contribution", label: "Personal contribution" },
+          ]}
+          onChange={(next) => setReimbursementRequired(next === "required")}
+          disabled={ledgerSaved}
+        />
       ) : null}
       {funding === "god" || (funding === "split" && Number(godFund || 0) > 0) ? (
         <FilterChips
@@ -396,6 +412,10 @@ export default function AddExpenseScreen() {
             categoryId: selectedCategory.id,
             categoryName: selectedCategory.name,
             paidByMemberId: paidByMemberId || realUser?.uid || "",
+            reimbursementRequired: funding === "personal" || funding === "split"
+              ? reimbursementRequired
+              : false,
+            clientOpId: clientOpIdRef.current ?? (clientOpIdRef.current = newId()),
             vendor,
             notes,
             date: todayDateInput(),

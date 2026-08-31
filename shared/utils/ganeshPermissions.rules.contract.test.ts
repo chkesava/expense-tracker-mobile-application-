@@ -642,10 +642,14 @@ function payloadWellFormed(subcol: string, d: Record<string, unknown>): boolean 
             )
           : subcol === "seva"
             ? ["scheduled", "in_progress", "completed", "cancelled"].includes(d.status as string)
+            : subcol === "reimbursements"
+              ? ["paid", "voided"].includes(d.status as string)
             : typeof d.status === "string");
 
   const flagsOk =
     (!("voided" in d) || typeof d.voided === "boolean")
+    && (!("reimbursementRequired" in d) || typeof d.reimbursementRequired === "boolean")
+    && (!("clientOpId" in d) || (typeof d.clientOpId === "string" && d.clientOpId.length > 0))
     && (!("date" in d) || typeof d.date === "string")
     && (!("paymentMethod" in d)
       || ["cash", "upi", "bank", "other"].includes(d.paymentMethod as string))
@@ -817,11 +821,15 @@ describe("ganesh firestore rules — GS-004 festival payload validation", () => 
     expect(payloadWellFormed("sponsorships", { status: "confirmed" })).toBe(true);
     expect(payloadWellFormed("households", { status: "not_available" })).toBe(true);
     expect(payloadWellFormed("households", { status: "settled" })).toBe(false);
+    expect(payloadWellFormed("reimbursements", { status: "paid" })).toBe(true);
+    expect(payloadWellFormed("reimbursements", { status: "pending" })).toBe(false);
   });
 
   it("rejects malformed voided, date and transfer direction values", () => {
     expect(payloadWellFormed("expenses", { voided: "no" })).toBe(false);
     expect(payloadWellFormed("expenses", { date: 20260826 })).toBe(false);
+    expect(payloadWellFormed("expenses", { reimbursementRequired: "yes" })).toBe(false);
+    expect(payloadWellFormed("expenses", { clientOpId: "retry-1" })).toBe(true);
     expect(payloadWellFormed("fundTransfers", { direction: "sideways" })).toBe(false);
     expect(payloadWellFormed("fundTransfers", { direction: "to_permanent" })).toBe(true);
   });
