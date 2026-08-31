@@ -26,7 +26,9 @@ import { getFirestoreDb } from "@/lib/firebase";
 import { forgetSnapshotPath, logQuerySnapshot } from "@/lib/firestoreReadDebug";
 import { useAuth } from "@/providers/AuthProvider";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
+import { useNetwork } from "@/providers/NetworkProvider";
 import { rememberGaneshRoleSeed } from "@/services/ganesh/ganeshHydrated";
+import { assignPendingCollectionReceipts } from "@/services/ganesh/ganeshWrites";
 import {
   EMPTY_GANESH_SUMMARY,
   EMPTY_PERMANENT_FUND,
@@ -160,6 +162,7 @@ export function GaneshDataProvider({ children }: { children: ReactNode }) {
   const { realUser } = useAuth();
   const uid = realUser?.uid ?? null;
   const { pandalId, festivalId } = useGaneshSession();
+  const { isOnline } = useNetwork();
   const db = getFirestoreDb();
   const festivalReady = Boolean(pandalId && festivalId);
 
@@ -170,6 +173,11 @@ export function GaneshDataProvider({ children }: { children: ReactNode }) {
   const wanted = (slice: GaneshIdleSlice) => Boolean(idle[slice]);
   const wantFund = wanted("permanentFund");
   const wantRoles = wanted("roles");
+
+  useEffect(() => {
+    if (!isOnline || !db || !pandalId || !festivalId) return;
+    void assignPendingCollectionReceipts(db, pandalId, festivalId).catch(() => undefined);
+  }, [isOnline, db, pandalId, festivalId]);
 
   const [pandals, setPandals] = useState<Pandal[]>([]);
   const [pandalsLoading, setPandalsLoading] = useState(true);

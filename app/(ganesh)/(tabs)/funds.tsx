@@ -16,6 +16,7 @@ import { PandalNidhiHero } from "@/components/ganesh/funds/PandalNidhiHero";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { GaneshSyncChip } from "@/components/ganesh/GaneshSyncChip";
 import { ListStateView } from "@/components/ganesh/ui";
+import { useCollections } from "@/hooks/useCollections";
 import { useContributions } from "@/hooks/useContributions";
 import { useFestivalMembers } from "@/hooks/useFestivalMembers";
 import { useFestivals } from "@/hooks/useFestivals";
@@ -49,6 +50,7 @@ export default function FundsScreen() {
   const { members: festivalMembers } = useFestivalMembers(pandalId, festivalId);
   const { members: pandalMembers } = usePandalMembers(pandalId);
   const { households } = useHouseholds(pandalId, festivalId);
+  const { collections } = useCollections(pandalId, festivalId);
   const { fund } = usePermanentFund(pandalId);
   const { activity } = useGaneshActivity(pandalId, festivalId);
   const { can } = useGaneshPermissions();
@@ -63,11 +65,22 @@ export default function FundsScreen() {
         sponsorships,
         members: festivalMembers,
         households,
+        collections,
         activity,
         festival,
         today: todayDateInput(),
       }),
-    [summary, fund, contributions, sponsorships, festivalMembers, households, activity, festival]
+    [
+      summary,
+      fund,
+      contributions,
+      sponsorships,
+      festivalMembers,
+      households,
+      collections,
+      activity,
+      festival,
+    ]
   );
 
   const ledgers = useMemo(() => {

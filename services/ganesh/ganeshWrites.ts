@@ -30,7 +30,9 @@ import { omitUndefined } from "@/shared/utils/firestorePayload";
 import {
   availableGodFund,
   deriveHouseholdStatus,
+  formatCollectionReceipt,
   locationDelta,
+  mapHouseholdForNewFestival,
   money,
   parseGaneshSummary,
   resolveFundLocation,
@@ -986,10 +988,44 @@ export async function createFestival(
       createdAt: serverTimestamp(),
     });
   }
+
   audit(seedBatch, db, pandalId, festivalId, actor.uid, "created", "festival", festivalId, {
     newValue: input,
   });
   await commitWrite(() => seedBatch.commit(), { label: "festival seed" });
+
+  // GS-062 — reuse last festival's house list with reset balances (no collections).
+  const previousFestival = festivalsSnap.docs
+    .map((docSnap) => ({
+      id: docSnap.id,
+      year: Number(docSnap.data().year ?? 0),
+    }))
+    .sort((a, b) => b.year - a.year || a.id.localeCompare(b.id))[0];
+  if (previousFestival) {
+    const previousHouseholds = await getDocs(
+      colRef(db, festivalCol(pandalId, previousFestival.id, "households"))
+    );
+    const houses = previousHouseholds.docs;
+    for (let i = 0; i < houses.length; i += 400) {
+      const slice = houses.slice(i, i + 400);
+      const houseBatch = writeBatch(db);
+      for (const houseSnap of slice) {
+        const seeded = mapHouseholdForNewFestival(houseSnap.data(), 500);
+        houseBatch.set(
+          pathRef(db, [...festivalCol(pandalId, festivalId, "households"), newId()]),
+          omitUndefined({
+            ...seeded,
+            createdBy: actor.uid,
+            createdAt: serverTimestamp(),
+            updatedBy: actor.uid,
+            updatedAt: serverTimestamp(),
+          })
+        );
+      }
+      await commitWrite(() => houseBatch.commit(), { label: "festival households" });
+    }
+  }
+
   return festivalId;
 }
 
@@ -1173,6 +1209,11 @@ export async function addOpeningFunds(
   return ids;
 }
 
+export type AddCollectionResult = {
+  id: string;
+  receiptNumber?: string;
+};
+
 export async function addCollection(
   db: Firestore,
   actor: GaneshActor,
@@ -1187,31 +1228,191 @@ export async function addCollection(
     mobile?: string;
     houseNumber?: string;
     address?: string;
+    area?: string;
     notes?: string;
     householdId?: string;
     expectedAmount?: number;
     createHousehold?: boolean;
+    clientOpId?: string;
+    /** When false, skip receipt allocation (offline / weak network). */
+    assignReceipt?: boolean;
   }
-): Promise<string> {
+): Promise<AddCollectionResult> {
   await requireOpenFestival(db, pandalId, festivalId);
   const valid = validateCollection(input.amount);
   if (!valid.ok) throw new Error(valid.error);
   const donorName = input.donorName.trim();
   if (!donorName) throw new Error("Enter the donor name.");
-  const id = newId();
-  const householdId = input.householdId || (input.createHousehold !== false ? newId() : undefined);
+
+  const collectorId = await resolveCollectorId(db, pandalId, actor.uid, input.collectorId);
+  const collectionId = input.clientOpId?.trim() || newId();
+  const householdId =
+    input.householdId || (input.createHousehold !== false ? newId() : undefined);
+  const assignReceipt = input.assignReceipt !== false;
+  const area = input.area?.trim() || undefined;
+  const address = input.address?.trim() || undefined;
+
+  if (assignReceipt) {
+    return runTransaction(db, async (txn) => {
+      const collectionRef = pathRef(db, [
+        ...festivalCol(pandalId, festivalId, "collections"),
+        collectionId,
+      ]);
+      const existingCollection = await txn.get(collectionRef);
+      if (existingCollection.exists() && !existingCollection.data().voided) {
+        return {
+          id: collectionId,
+          receiptNumber:
+            typeof existingCollection.data().receiptNumber === "string"
+              ? existingCollection.data().receiptNumber
+              : undefined,
+        };
+      }
+
+      const festivalSnap = await txn.get(pathRef(db, festivalDoc(pandalId, festivalId)));
+      const year = Number(festivalSnap.data()?.year ?? new Date().getFullYear());
+      const summaryRef = pathRef(db, summaryDoc(pandalId, festivalId));
+      const summarySnap = await txn.get(summaryRef);
+      const nextSeq = Number(summarySnap.data()?.nextReceiptNumber ?? 0) + 1;
+      const receiptNumber = formatCollectionReceipt(year, nextSeq);
+
+      let householdStatus: HouseholdStatus | undefined;
+      if (householdId) {
+        const householdRef = pathRef(db, [
+          ...festivalCol(pandalId, festivalId, "households"),
+          householdId,
+        ]);
+        if (input.householdId) {
+          const existing = await txn.get(householdRef);
+          if (existing.exists()) {
+            const prev = existing.data();
+            const expectedAmount = Number(prev.expectedAmount ?? 0);
+            const collectedAmount = money(Number(prev.collectedAmount ?? 0) + input.amount);
+            householdStatus = deriveHouseholdStatus({
+              expectedAmount,
+              collectedAmount,
+            });
+            txn.update(householdRef, {
+              collectedAmount: increment(input.amount),
+              status: householdStatus,
+              updatedBy: actor.uid,
+              updatedAt: serverTimestamp(),
+            });
+          } else {
+            const expectedAmount = Number(input.expectedAmount ?? 0);
+            householdStatus = deriveHouseholdStatus({
+              expectedAmount,
+              collectedAmount: input.amount,
+            });
+            txn.set(
+              householdRef,
+              omitUndefined({
+                name: donorName,
+                houseNumber: input.houseNumber?.trim() || undefined,
+                mobile: input.mobile?.trim() || undefined,
+                area,
+                expectedAmount,
+                collectedAmount: input.amount,
+                status: householdStatus,
+                createdBy: actor.uid,
+                createdAt: serverTimestamp(),
+                updatedBy: actor.uid,
+                updatedAt: serverTimestamp(),
+              })
+            );
+          }
+        } else {
+          const expectedAmount = Number(input.expectedAmount ?? 0);
+          householdStatus = deriveHouseholdStatus({
+            expectedAmount,
+            collectedAmount: input.amount,
+          });
+          txn.set(
+            householdRef,
+            omitUndefined({
+              name: donorName,
+              houseNumber: input.houseNumber?.trim() || undefined,
+              mobile: input.mobile?.trim() || undefined,
+              area,
+              expectedAmount,
+              collectedAmount: input.amount,
+              status: householdStatus,
+              createdBy: actor.uid,
+              createdAt: serverTimestamp(),
+              updatedBy: actor.uid,
+              updatedAt: serverTimestamp(),
+            })
+          );
+        }
+      }
+
+      txn.set(
+        collectionRef,
+        omitUndefined({
+          householdId,
+          donorName,
+          mobile: input.mobile?.trim() || undefined,
+          houseNumber: input.houseNumber?.trim() || undefined,
+          address,
+          amount: input.amount,
+          paymentMethod: input.paymentMethod,
+          collectorId,
+          receiptNumber,
+          clientOpId: input.clientOpId?.trim() || collectionId,
+          notes: input.notes?.trim() || undefined,
+          date: input.date,
+          ledgerType: "COLLECTION",
+          voided: false,
+          createdBy: actor.uid,
+          createdAt: serverTimestamp(),
+          updatedBy: actor.uid,
+          updatedAt: serverTimestamp(),
+        })
+      );
+
+      bumpSummary(txn, db, pandalId, festivalId, {
+        chanda: input.amount,
+        collectionCount: 1,
+        ...locationBump(input.paymentMethod, input.amount),
+      });
+      txn.set(
+        summaryRef,
+        { nextReceiptNumber: nextSeq, updatedAt: serverTimestamp() },
+        { merge: true }
+      );
+      activity(txn, db, pandalId, festivalId, {
+        title: `${donorName}`,
+        subtitle: `Collected by member · Added by ${actor.displayName}`,
+        amount: input.amount,
+        actorId: actor.uid,
+        entityType: "collection",
+        entityId: collectionId,
+      });
+      audit(txn, db, pandalId, festivalId, actor.uid, "created", "collection", collectionId, {
+        newValue: { donorName, amount: input.amount, receiptNumber },
+      });
+      return { id: collectionId, receiptNumber };
+    });
+  }
+
+  // Offline / deferred receipt: batch write without allocating a number.
   const batch = writeBatch(db);
+  const collectionRef = pathRef(db, [
+    ...festivalCol(pandalId, festivalId, "collections"),
+    collectionId,
+  ]);
   batch.set(
-    pathRef(db, [...festivalCol(pandalId, festivalId, "collections"), id]),
+    collectionRef,
     omitUndefined({
       householdId,
       donorName,
       mobile: input.mobile?.trim() || undefined,
       houseNumber: input.houseNumber?.trim() || undefined,
-      address: input.address?.trim() || undefined,
+      address,
       amount: input.amount,
       paymentMethod: input.paymentMethod,
-      collectorId: input.collectorId,
+      collectorId,
+      clientOpId: input.clientOpId?.trim() || collectionId,
       notes: input.notes?.trim() || undefined,
       date: input.date,
       ledgerType: "COLLECTION",
@@ -1232,14 +1433,10 @@ export async function addCollection(
     if (existing?.exists()) {
       const prev = existing.data();
       const expectedAmount = Number(prev.expectedAmount ?? 0);
-      const collectedAmount = Number(prev.collectedAmount ?? 0) + input.amount;
+      const collectedAmount = money(Number(prev.collectedAmount ?? 0) + input.amount);
       batch.update(householdRef, {
         collectedAmount: increment(input.amount),
-        status: deriveHouseholdStatus({
-          expectedAmount,
-          collectedAmount,
-          forcedStatus: prev.status,
-        }),
+        status: deriveHouseholdStatus({ expectedAmount, collectedAmount }),
         updatedBy: actor.uid,
         updatedAt: serverTimestamp(),
       });
@@ -1251,7 +1448,7 @@ export async function addCollection(
           name: donorName,
           houseNumber: input.houseNumber?.trim() || undefined,
           mobile: input.mobile?.trim() || undefined,
-          area: input.address?.trim() || undefined,
+          area,
           expectedAmount,
           collectedAmount: input.amount,
           status: deriveHouseholdStatus({
@@ -1278,13 +1475,79 @@ export async function addCollection(
     amount: input.amount,
     actorId: actor.uid,
     entityType: "collection",
-    entityId: id,
+    entityId: collectionId,
   });
-  audit(batch, db, pandalId, festivalId, actor.uid, "created", "collection", id, {
+  audit(batch, db, pandalId, festivalId, actor.uid, "created", "collection", collectionId, {
     newValue: { donorName, amount: input.amount },
   });
   await commitWrite(() => batch.commit(), { label: "collection" });
-  return id;
+  return { id: collectionId };
+}
+
+async function resolveCollectorId(
+  db: Firestore,
+  pandalId: string,
+  actorUid: string,
+  requested: string
+): Promise<string> {
+  const candidate = requested.trim() || actorUid;
+  if (!candidate) throw new Error("Choose who collected this.");
+  if (candidate === actorUid) return candidate;
+  try {
+    const snap = await getDoc(doc(db, "pandals", pandalId, "members", candidate));
+    if (!snap.exists()) return actorUid;
+    const status = snap.data().status;
+    if (status === "removed" || status === "suspended") return actorUid;
+    return candidate;
+  } catch {
+    return actorUid;
+  }
+}
+
+/**
+ * Assign receipt numbers to collections that synced without one (offline path).
+ * Safe to call repeatedly; only fills missing `receiptNumber`.
+ */
+export async function assignPendingCollectionReceipts(
+  db: Firestore,
+  pandalId: string,
+  festivalId: string
+): Promise<number> {
+  const festivalSnap = await getDoc(pathRef(db, festivalDoc(pandalId, festivalId)));
+  if (!festivalSnap.exists()) return 0;
+  const year = Number(festivalSnap.data().year ?? new Date().getFullYear());
+  const pending = await getDocs(
+    query(
+      colRef(db, festivalCol(pandalId, festivalId, "collections")),
+      where("voided", "==", false),
+      limit(50)
+    )
+  );
+  const missing = pending.docs.filter((docSnap) => !docSnap.data().receiptNumber);
+  if (missing.length === 0) return 0;
+
+  let assigned = 0;
+  for (const docSnap of missing) {
+    await runTransaction(db, async (txn) => {
+      const live = await txn.get(docSnap.ref);
+      if (!live.exists() || live.data().receiptNumber || live.data().voided) return;
+      const summaryRef = pathRef(db, summaryDoc(pandalId, festivalId));
+      const summarySnap = await txn.get(summaryRef);
+      const nextSeq = Number(summarySnap.data()?.nextReceiptNumber ?? 0) + 1;
+      const receiptNumber = formatCollectionReceipt(year, nextSeq);
+      txn.update(docSnap.ref, {
+        receiptNumber,
+        updatedAt: serverTimestamp(),
+      });
+      txn.set(
+        summaryRef,
+        { nextReceiptNumber: nextSeq, updatedAt: serverTimestamp() },
+        { merge: true }
+      );
+      assigned += 1;
+    });
+  }
+  return assigned;
 }
 
 export async function updateHousehold(
@@ -1304,22 +1567,29 @@ export async function updateHousehold(
     pathRef(db, [...festivalCol(pandalId, festivalId, "households"), householdId])
   );
   if (!current.exists()) throw new Error("Household not found.");
-  const collectedAmount = Number(current.data().collectedAmount ?? 0);
-  const expectedAmount = input.expectedAmount ?? Number(current.data().expectedAmount ?? 0);
+  const prev = current.data();
+  const collectedAmount = Number(prev.collectedAmount ?? 0);
+  const expectedAmount = input.expectedAmount ?? Number(prev.expectedAmount ?? 0);
+  const previousStatus = prev.status as HouseholdStatus | undefined;
   const householdBatch = writeBatch(db);
-  householdBatch.update(current.ref, omitUndefined({
-    expectedAmount,
-    assignedCollectorId: input.assignedCollectorId === null ? null : input.assignedCollectorId,
-    status: input.status
-      ?? deriveHouseholdStatus({
-        expectedAmount,
-        collectedAmount,
-        forcedStatus: input.status,
-      }),
-    notes: input.notes,
-    updatedBy: actor.uid,
-    updatedAt: serverTimestamp(),
-  }));
+  householdBatch.update(
+    current.ref,
+    omitUndefined({
+      expectedAmount,
+      assignedCollectorId: input.assignedCollectorId === null ? null : input.assignedCollectorId,
+      status:
+        input.status
+        ?? deriveHouseholdStatus({
+          expectedAmount,
+          collectedAmount,
+          // Preserve sticky visit statuses on expected-only edits (GS-026).
+          forcedStatus: previousStatus,
+        }),
+      notes: input.notes,
+      updatedBy: actor.uid,
+      updatedAt: serverTimestamp(),
+    })
+  );
   await commitWrite(() => householdBatch.commit(), { label: "household" });
 }
 
@@ -2386,15 +2656,16 @@ export async function voidFinancialRecord(
       ]);
       const household = await getDoc(householdRef);
       if (household.exists()) {
-        const collectedAmount = Math.max(
-          0,
-          Number(household.data().collectedAmount ?? 0) - Number(data.amount ?? 0)
+        const nextCollected = money(
+          Math.max(0, Number(household.data().collectedAmount ?? 0) - amount)
         );
         batch.update(householdRef, {
-          collectedAmount,
+          // Increment keeps concurrent voids from clobbering each other (GS-038).
+          collectedAmount: increment(-amount),
           status: deriveHouseholdStatus({
             expectedAmount: Number(household.data().expectedAmount ?? 0),
-            collectedAmount,
+            collectedAmount: nextCollected,
+            forcedStatus: household.data().status as HouseholdStatus | undefined,
           }),
           updatedBy: actor.uid,
           updatedAt: serverTimestamp(),

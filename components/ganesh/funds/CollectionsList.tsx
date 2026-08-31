@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState, type ReactNode } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { FlashList } from "@shopify/flash-list";
 import { Home as HomeIcon, IndianRupee, Smartphone, Wallet } from "lucide-react-native";
@@ -26,19 +26,31 @@ import { useHouseholds } from "@/hooks/useHouseholds";
 import { usePandalMembers } from "@/hooks/usePandalMembers";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import type { GaneshCollection, Household, HouseholdStatus } from "@/shared/types/ganesh";
-import { formatGaneshWhen, memberDisplayName } from "@/shared/utils/ganeshIdentity";
+import { formatGaneshWhen, memberDisplayName, todayDateInput } from "@/shared/utils/ganeshIdentity";
+import { buildFinancialOverview } from "@/shared/utils/ganeshFinancialOverview";
 import { formatInr } from "@/shared/utils/ganeshMoney";
 import { useTheme } from "@/theme/ThemeProvider";
 
-type Filter = "all" | "paid" | "partial" | "pending" | "cash" | "upi";
+type Filter =
+  | "all"
+  | "open"
+  | "paid"
+  | "partial"
+  | "pending"
+  | "cash"
+  | "upi"
+  | "bank"
+  | "other";
 
 const FILTER_OPTIONS: Array<{ id: Filter; label: string }> = [
   { id: "all", label: "All houses" },
+  { id: "open", label: "Pending" },
   { id: "paid", label: "Paid" },
   { id: "partial", label: "Partial" },
-  { id: "pending", label: "Pending" },
-  { id: "cash", label: "Cash entries" },
-  { id: "upi", label: "UPI entries" },
+  { id: "cash", label: "Cash" },
+  { id: "upi", label: "UPI" },
+  { id: "bank", label: "Bank" },
+  { id: "other", label: "Other" },
 ];
 
 function householdBadge(status: HouseholdStatus): LedgerRowBadge {
@@ -93,12 +105,28 @@ export function CollectionsList({ embedded = false, prefix }: CollectionsListPro
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
 
-  const isEntryView = filter === "cash" || filter === "upi";
+  const overview = useMemo(
+    () =>
+      buildFinancialOverview({
+        summary,
+        households,
+        collections,
+        festival,
+        today: todayDateInput(),
+      }),
+    [summary, households, collections, festival]
+  );
+
+  const coverage = overview.collections;
+  const isEntryView =
+    filter === "cash" || filter === "upi" || filter === "bank" || filter === "other";
 
   const visibleHouseholds = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return households.filter((household) => {
-      if (filter === "paid" || filter === "partial" || filter === "pending") {
+      if (filter === "open") {
+        if (household.status !== "pending" && household.status !== "partial") return false;
+      } else if (filter === "paid" || filter === "partial" || filter === "pending") {
         if (household.status !== filter) return false;
       }
       if (!needle) return true;
@@ -106,6 +134,7 @@ export function CollectionsList({ embedded = false, prefix }: CollectionsListPro
         household.name.toLowerCase().includes(needle)
         || (household.houseNumber ?? "").toLowerCase().includes(needle)
         || (household.mobile ?? "").includes(needle)
+        || (household.area ?? "").toLowerCase().includes(needle)
       );
     });
   }, [households, query, filter]);
@@ -120,15 +149,15 @@ export function CollectionsList({ embedded = false, prefix }: CollectionsListPro
         row.donorName.toLowerCase().includes(needle)
         || (row.houseNumber ?? "").toLowerCase().includes(needle)
         || (row.mobile ?? "").includes(needle)
+        || (row.receiptNumber ?? "").toLowerCase().includes(needle)
+        || memberDisplayName(members, row.collectorId).toLowerCase().includes(needle)
       );
     });
-  }, [collections, filter, isEntryView, query]);
-
-  const paidHouses = households.filter((household) => household.status === "paid").length;
-  const pendingHouses = households.filter((household) => household.status === "pending").length;
+  }, [collections, filter, isEntryView, members, query]);
 
   const canAdd = festival?.status === "open" && can("collections.create");
   const openAdd = useCallback(() => push("/(ganesh)/add-collection" as never), [push]);
+  const viewPendingHouses = useCallback(() => setFilter("open"), []);
 
   const renderHousehold = useCallback(
     (item: Household) => (
@@ -139,6 +168,7 @@ export function CollectionsList({ embedded = false, prefix }: CollectionsListPro
         meta={
           [
             item.houseNumber ? `House ${item.houseNumber}` : null,
+            item.area ? item.area : null,
             item.expectedAmount > 0 ? `Target ${formatInr(item.expectedAmount)}` : null,
           ]
             .filter(Boolean)
@@ -168,8 +198,10 @@ export function CollectionsList({ embedded = false, prefix }: CollectionsListPro
         title={item.donorName}
         meta={
           [
-            METHOD_LABEL[item.paymentMethod] ?? item.paymentMethod,
             item.houseNumber ? `House ${item.houseNumber}` : null,
+            METHOD_LABEL[item.paymentMethod] ?? item.paymentMethod,
+            memberDisplayName(members, item.collectorId),
+            item.receiptNumber ?? "Receipt pending",
           ]
             .filter(Boolean)
             .join(" · ")
@@ -192,6 +224,90 @@ export function CollectionsList({ embedded = false, prefix }: CollectionsListPro
     Household | GaneshCollection
   >;
 
+  const coverageStrip =
+    coverage.countableHouses > 0 || coverage.today.count > 0 || coverage.byArea.length > 0 ? (
+      <View
+        style={[
+          styles.coverageCard,
+          {
+            backgroundColor: theme.colors.card,
+            borderColor: theme.colors.border,
+          },
+        ]}
+      >
+        {coverage.countableHouses > 0 ? (
+          <Text
+            style={[
+              styles.coverageTitle,
+              { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold },
+            ]}
+          >
+            {coverage.paidHouses} / {coverage.countableHouses} houses paid
+            {coverage.coveragePct !== null ? ` · ${Math.round(coverage.coveragePct)}%` : ""}
+          </Text>
+        ) : null}
+        <Text
+          style={[
+            styles.coverageMeta,
+            { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular },
+          ]}
+        >
+          {[
+            coverage.pendingHouses > 0
+              ? `${coverage.pendingHouses} pending`
+              : coverage.countableHouses > 0
+                ? "All countable houses are paid"
+                : null,
+            coverage.notAvailable > 0 ? `${coverage.notAvailable} not available` : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+        </Text>
+        {coverage.pendingHouses > 0 ? (
+          <Pressable onPress={viewPendingHouses} accessibilityRole="button">
+            <Text
+              style={[
+                styles.coverageAction,
+                { color: g.saffron, fontFamily: theme.fontFamily.semibold },
+              ]}
+            >
+              View pending houses
+            </Text>
+          </Pressable>
+        ) : null}
+        {coverage.today.count > 0 ? (
+          <Text
+            style={[
+              styles.coverageMeta,
+              { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular },
+            ]}
+          >
+            Today · {coverage.today.count}{" "}
+            {coverage.today.count === 1 ? "entry" : "entries"} · {formatInr(coverage.today.amount)}
+            {" · "}
+            Cash {formatInr(coverage.today.cash)} · UPI {formatInr(coverage.today.upi)}
+            {coverage.today.bank > 0 ? ` · Bank ${formatInr(coverage.today.bank)}` : ""}
+            {coverage.today.other > 0 ? ` · Other ${formatInr(coverage.today.other)}` : ""}
+          </Text>
+        ) : null}
+        {coverage.byArea.length > 0 ? (
+          <View style={styles.areaList}>
+            {coverage.byArea.map((row) => (
+              <Text
+                key={row.area}
+                style={[
+                  styles.coverageMeta,
+                  { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular },
+                ]}
+              >
+                {row.area}: {row.paid}/{row.total} paid
+              </Text>
+            ))}
+          </View>
+        ) : null}
+      </View>
+    ) : null;
+
   const chrome = (
     <>
       {embedded ? null : (
@@ -210,19 +326,29 @@ export function CollectionsList({ embedded = false, prefix }: CollectionsListPro
           kind="god"
           footer={
             <Text
-              style={[styles.counts, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}
+              style={[
+                styles.counts,
+                { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular },
+              ]}
             >
               {summary.collectionCount} {summary.collectionCount === 1 ? "donor" : "donors"} ·{" "}
-              {paidHouses} paid {paidHouses === 1 ? "house" : "houses"} · {pendingHouses} pending
+              {coverage.paidHouses} paid {coverage.paidHouses === 1 ? "house" : "houses"} ·{" "}
+              {coverage.pendingHouses} pending
             </Text>
           }
         />
       )}
 
+      {coverageStrip}
+
       <SearchBar
         value={query}
         onChangeText={setQuery}
-        placeholder="Search name, house, or mobile"
+        placeholder={
+          isEntryView
+            ? "Search name, house, receipt, or collector"
+            : "Search name, house, or mobile"
+        }
       />
 
       <FilterChips value={filter} options={FILTER_OPTIONS} onChange={setFilter} />
@@ -257,7 +383,7 @@ export function CollectionsList({ embedded = false, prefix }: CollectionsListPro
           title={query.trim() ? "No matches" : "No collections yet"}
           description={
             query.trim()
-              ? "Try a different name, house number, or mobile."
+              ? "Try a different name, house number, mobile, or receipt."
               : "Start recording your Chanda collection. Entries stay on the device if the network drops."
           }
           action={
@@ -310,6 +436,30 @@ const styles = StyleSheet.create({
   counts: {
     fontSize: 12.5,
     lineHeight: 17,
+  },
+  coverageCard: {
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 14,
+    gap: 6,
+    borderCurve: "continuous",
+  },
+  coverageTitle: {
+    fontSize: 15,
+    lineHeight: 20,
+  },
+  coverageMeta: {
+    fontSize: 12.5,
+    lineHeight: 17,
+  },
+  coverageAction: {
+    fontSize: 13.5,
+    lineHeight: 18,
+    marginTop: 2,
+  },
+  areaList: {
+    gap: 2,
+    marginTop: 2,
   },
   fab: {
     position: "absolute",

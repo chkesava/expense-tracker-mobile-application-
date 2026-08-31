@@ -430,14 +430,139 @@ export function deriveHouseholdStatus(input: {
   collectedAmount: number;
   forcedStatus?: HouseholdStatus;
 }): HouseholdStatus {
-  if (input.forcedStatus === "not_interested" || input.forcedStatus === "not_available") {
-    return input.forcedStatus;
-  }
   const expected = money(input.expectedAmount);
   const collected = money(input.collectedAmount);
+  // Money received clears sticky visit statuses — not_available / not_interested
+  // only stick when there is no cash yet (edits and zero-amount visits).
+  if (
+    collected <= 0
+    && (input.forcedStatus === "not_interested" || input.forcedStatus === "not_available")
+  ) {
+    return input.forcedStatus;
+  }
   if (collected <= 0) return "pending";
   if (expected > 0 && collected < expected) return "partial";
   return "paid";
+}
+
+/** Year-aware receipt: GNS26-000182. Sequence is 1-based. */
+export function formatCollectionReceipt(year: number, sequence: number): string {
+  const yy = String(Math.abs(Math.trunc(year)) % 100).padStart(2, "0");
+  const n = Math.max(1, Math.trunc(sequence));
+  return `GNS${yy}-${String(n).padStart(6, "0")}`;
+}
+
+export type CollectionDuplicateMatch = {
+  id: string;
+  donorName: string;
+  houseNumber?: string;
+  amount: number;
+  date: string;
+  collectorId: string;
+  receiptNumber?: string;
+};
+
+/**
+ * Warn (do not block) when the same house looks like it already paid a
+ * similar amount on the same calendar day. Legitimate instalments on
+ * another day must not match.
+ */
+export function possibleDuplicateCollections(
+  collections: Array<{
+    id: string;
+    householdId?: string;
+    donorName: string;
+    houseNumber?: string;
+    amount: number;
+    date: string;
+    collectorId: string;
+    receiptNumber?: string;
+    voided?: boolean;
+  }>,
+  input: {
+    householdId?: string | null;
+    donorName: string;
+    houseNumber?: string;
+    amount: number;
+    date: string;
+    amountTolerance?: number;
+  }
+): CollectionDuplicateMatch[] {
+  if (!(input.amount > 0) || !input.date) return [];
+  const name = input.donorName.trim().toLowerCase();
+  const house = (input.houseNumber ?? "").trim().toLowerCase();
+  const tolerance = money(input.amountTolerance ?? 0.01);
+  return collections
+    .filter((row) => {
+      if (row.voided) return false;
+      if (row.date !== input.date) return false;
+      if (Math.abs(money(row.amount) - money(input.amount)) > tolerance) return false;
+      if (input.householdId && row.householdId === input.householdId) return true;
+      const sameName = name.length > 0 && row.donorName.trim().toLowerCase() === name;
+      const sameHouse =
+        house.length > 0 && (row.houseNumber ?? "").trim().toLowerCase() === house;
+      return sameName && (sameHouse || !house);
+    })
+    .map((row) => ({
+      id: row.id,
+      donorName: row.donorName,
+      houseNumber: row.houseNumber,
+      amount: row.amount,
+      date: row.date,
+      collectorId: row.collectorId,
+      receiptNumber: row.receiptNumber,
+    }));
+}
+
+export function householdOverpayAmount(input: {
+  expectedAmount: number;
+  collectedAmount: number;
+  thisAmount: number;
+}): number {
+  const expected = money(input.expectedAmount);
+  if (!(expected > 0)) return 0;
+  const next = money(input.collectedAmount + input.thisAmount);
+  return money(Math.max(0, next - expected));
+}
+
+/**
+ * Identity fields copied into a new festival (GS-062). Never copies
+ * `collectedAmount` or collection history.
+ */
+export function mapHouseholdForNewFestival(
+  prev: {
+    name?: unknown;
+    houseNumber?: unknown;
+    mobile?: unknown;
+    area?: unknown;
+    notes?: unknown;
+    expectedAmount?: unknown;
+    collectedAmount?: unknown;
+    status?: unknown;
+  },
+  fallbackExpected: number
+): {
+  name: string;
+  houseNumber?: string;
+  mobile?: string;
+  area?: string;
+  notes?: string;
+  expectedAmount: number;
+  collectedAmount: 0;
+  status: HouseholdStatus;
+} {
+  const previousExpected = Number(prev.expectedAmount ?? 0);
+  const previousStatus = prev.status as HouseholdStatus | undefined;
+  return {
+    name: typeof prev.name === "string" && prev.name.trim() ? prev.name : "Household",
+    houseNumber: typeof prev.houseNumber === "string" ? prev.houseNumber : undefined,
+    mobile: typeof prev.mobile === "string" ? prev.mobile : undefined,
+    area: typeof prev.area === "string" ? prev.area : undefined,
+    notes: typeof prev.notes === "string" ? prev.notes : undefined,
+    expectedAmount: previousExpected > 0 ? previousExpected : fallbackExpected,
+    collectedAmount: 0,
+    status: previousStatus === "not_interested" ? "not_interested" : "pending",
+  };
 }
 
 export function householdProgressLabel(household: Pick<

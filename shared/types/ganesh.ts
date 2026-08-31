@@ -370,6 +370,8 @@ export interface GaneshSummary {
   upi: number;
   bank: number;
   other: number;
+  /** Monotonic counter for collection receipt numbers (GS-077). */
+  nextReceiptNumber: number;
   updatedAt?: FirestoreTime;
 }
 
@@ -449,6 +451,10 @@ export interface GaneshCollection extends GaneshAuditFields, GaneshVoidFields {
   amount: number;
   paymentMethod: PaymentMethod;
   collectorId: string;
+  /** Human-readable receipt, e.g. GNS26-000182. Assigned online; may be pending offline. */
+  receiptNumber?: string;
+  /** Idempotency key for double-tap / retry. Often used as the document id. */
+  clientOpId?: string;
   notes?: string;
   date: string;
   ledgerType: "COLLECTION";
@@ -652,6 +658,7 @@ export const EMPTY_GANESH_SUMMARY: GaneshSummary = {
   upi: 0,
   bank: 0,
   other: 0,
+  nextReceiptNumber: 0,
 };
 
 export const EMPTY_PERMANENT_FUND: PermanentFundSummary = {

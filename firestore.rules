@@ -992,6 +992,7 @@ service cloud.firestore {
                 'sponsoredValue', 'collectionCount', 'expenseCount',
                 'assetPurchaseAmount', 'transferredToPermanentFund',
                 'receivedFromPermanentFund', 'cash', 'upi', 'bank', 'other',
+                'nextReceiptNumber',
                 'updatedAt'
               ])
               && okMoney(d, 'openingFunds')
@@ -1013,6 +1014,7 @@ service cloud.firestore {
               && okSignedMoney(d, 'upi')
               && okSignedMoney(d, 'bank')
               && okSignedMoney(d, 'other')
+              && okMoney(d, 'nextReceiptNumber')
             );
           }
 

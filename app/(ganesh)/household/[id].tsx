@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Text, View } from "react-native";
+import { useEffect, useState } from "react";
+import { Alert, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Home } from "lucide-react-native";
 
@@ -22,6 +22,8 @@ import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import { memberDisplayName } from "@/shared/utils/ganeshIdentity";
 import type { HouseholdStatus } from "@/shared/types/ganesh";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
+import { friendlyErrorMessage, logError } from "@/lib/errors";
+import { toast } from "@/lib/toast";
 import { useTheme } from "@/theme/ThemeProvider";
 
 const STATUS_OPTIONS: Array<{ id: HouseholdStatus; label: string }> = [
@@ -38,7 +40,7 @@ export default function HouseholdDetailScreen() {
   const { back } = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { pandalId, festivalId } = useGaneshSession();
-  const { households } = useHouseholds(pandalId, festivalId);
+  const { households, loading: householdsLoading } = useHouseholds(pandalId, festivalId);
   const { collections } = useCollections(pandalId, festivalId);
   const { members } = usePandalMembers(pandalId);
   const writes = useGaneshWrites();
@@ -47,7 +49,26 @@ export default function HouseholdDetailScreen() {
   const canVoid = can("expenses.void");
   const household = households.find((item) => item.id === id);
   const history = collections.filter((row) => row.householdId === id && !row.voided);
-  const [expected, setExpected] = useState(String(household?.expectedAmount ?? 0));
+  const [expected, setExpected] = useState("");
+  const [voidingId, setVoidingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!household) return;
+    setExpected(String(household.expectedAmount ?? ""));
+  }, [household?.id, household?.expectedAmount]);
+
+  if (householdsLoading && !household) {
+    return (
+      <GaneshScreen>
+        <GaneshHeader
+          title="Household"
+          icon={<Home size={22} color={g.saffron} strokeWidth={2.2} />}
+          onBack={back}
+        />
+        <Text style={{ color: theme.colors.mutedForeground }}>Loading household…</Text>
+      </GaneshScreen>
+    );
+  }
 
   if (!household) {
     return (
@@ -66,6 +87,34 @@ export default function HouseholdDetailScreen() {
     );
   }
 
+  const confirmVoid = (collectionId: string, amount: number) => {
+    Alert.alert(
+      "Void this collection?",
+      `This reverses ${amount} from the household running total. The receipt number is kept in history.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Void",
+          style: "destructive",
+          onPress: () => {
+            setVoidingId(collectionId);
+            writes
+              .voidFinancialRecord({
+                entityType: "collection",
+                entityId: collectionId,
+                reason: "Voided from household history",
+              })
+              .catch((error) => {
+                logError("ganesh.voidCollection", error);
+                toast.error(friendlyErrorMessage(error, "Could not void."));
+              })
+              .finally(() => setVoidingId(null));
+          },
+        },
+      ]
+    );
+  };
+
   return (
     <GaneshScreen>
       <GaneshHeader
@@ -82,10 +131,17 @@ export default function HouseholdDetailScreen() {
       <Money value={household.collectedAmount} size="title" />
       {canUpdate ? (
         <>
-          <Input label="Expected amount" value={expected} onChangeText={setExpected} keyboardType="numeric" />
+          <Input
+            label="Expected amount"
+            value={expected}
+            onChangeText={setExpected}
+            keyboardType="numeric"
+          />
           <Button
             onPress={() => {
-              void writes.updateHousehold(household.id, { expectedAmount: Number(expected) });
+              void writes.updateHousehold(household.id, {
+                expectedAmount: Number(expected),
+              });
             }}
           >
             Save expected
@@ -126,6 +182,13 @@ export default function HouseholdDetailScreen() {
             }}
           >
             <Money value={row.amount} size="primary" />
+            {row.receiptNumber ? (
+              <Text style={{ color: theme.colors.mutedForeground }}>
+                Receipt {row.receiptNumber}
+              </Text>
+            ) : (
+              <Text style={{ color: theme.colors.mutedForeground }}>Receipt pending sync</Text>
+            )}
             <AccountabilityLine
               collectedBy={memberDisplayName(members, row.collectorId)}
               enteredBy={memberDisplayName(members, row.createdBy)}
@@ -136,13 +199,9 @@ export default function HouseholdDetailScreen() {
               <Button
                 size="sm"
                 variant="outline"
-                onPress={() => {
-                  void writes.voidFinancialRecord({
-                    entityType: "collection",
-                    entityId: row.id,
-                    reason: "Voided from household history",
-                  });
-                }}
+                loading={voidingId === row.id}
+                disabled={voidingId !== null}
+                onPress={() => confirmVoid(row.id, row.amount)}
               >
                 Void
               </Button>

@@ -196,12 +196,25 @@ export function useGaneshWrites() {
         writes.addOpeningFunds(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, input)
       );
     },
-    addCollection: (input: Parameters<typeof writes.addCollection>[4]) => {
+    addCollection: async (input: Parameters<typeof writes.addCollection>[4]) => {
       requirePerm("collections.create");
       const ctx = requireFestival();
-      return run("Collection recorded", () =>
-        writes.addCollection(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, input)
-      );
+      if (!actor) throw new Error("You must be signed in.");
+      const result = await writes.addCollection(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, {
+        ...input,
+        assignReceipt: input.assignReceipt ?? isOnline,
+      });
+      if (result.receiptNumber) {
+        toast.success(`Collection recorded · Receipt ${result.receiptNumber}`);
+      } else {
+        toast.success("Collection recorded · Receipt pending sync");
+      }
+      if (isOnline) {
+        void writes
+          .assignPendingCollectionReceipts(ctx.db, ctx.pandalId, ctx.festivalId)
+          .catch(() => undefined);
+      }
+      return result;
     },
     updateHousehold: (householdId: string, input: Parameters<typeof writes.updateHousehold>[5]) => {
       requirePerm("collections.update");

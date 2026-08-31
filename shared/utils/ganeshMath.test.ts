@@ -9,10 +9,14 @@ import {
   festivalCashSpent,
   festivalCollectedCash,
   festivalLocationTotal,
+  formatCollectionReceipt,
+  householdOverpayAmount,
   locationDelta,
   locationInvariantHolds,
+  mapHouseholdForNewFestival,
   memberPendingReimbursement,
   parsePermanentFund,
+  possibleDuplicateCollections,
   possibleHouseholdDuplicates,
   regularExpenseAmount,
   repairFestivalLocations,
@@ -389,14 +393,24 @@ describe("household instalments reach paid", () => {
     expect(deriveHouseholdStatus({ expectedAmount: 500, collectedAmount: 300 })).toBe("partial");
   });
 
-  it("still respects a household marked not interested or not available", () => {
+  it("keeps not_interested only when no money has been collected yet", () => {
     expect(
       deriveHouseholdStatus({
         expectedAmount: 500,
-        collectedAmount: 500,
+        collectedAmount: 0,
         forcedStatus: "not_interested",
       })
     ).toBe("not_interested");
+  });
+
+  it("clears not_available once money is received", () => {
+    expect(
+      deriveHouseholdStatus({
+        expectedAmount: 500,
+        collectedAmount: 200,
+        forcedStatus: "not_available",
+      })
+    ).toBe("partial");
   });
 
   it("treats an overpayment against the target as paid", () => {
@@ -508,5 +522,116 @@ describe("festival Cash / UPI / Bank", () => {
   it("builds a single-key location bump", () => {
     expect(locationDelta("upi", 250)).toEqual({ upi: 250 });
     expect(locationDelta("cash", 0)).toEqual({});
+  });
+});
+
+describe("collection receipts and coverage helpers", () => {
+  it("formats receipt numbers as GNS{YY}-{NNNNNN}", () => {
+    expect(formatCollectionReceipt(2026, 182)).toBe("GNS26-000182");
+    expect(formatCollectionReceipt(1999, 1)).toBe("GNS99-000001");
+  });
+
+  it("reports overpay above the household expected target", () => {
+    expect(
+      householdOverpayAmount({
+        expectedAmount: 500,
+        collectedAmount: 400,
+        thisAmount: 200,
+      })
+    ).toBe(100);
+    expect(
+      householdOverpayAmount({
+        expectedAmount: 500,
+        collectedAmount: 100,
+        thisAmount: 200,
+      })
+    ).toBe(0);
+    expect(
+      householdOverpayAmount({
+        expectedAmount: 0,
+        collectedAmount: 0,
+        thisAmount: 900,
+      })
+    ).toBe(0);
+  });
+
+  it("flags same-house same-day similar-amount collections as duplicates", () => {
+    const matches = possibleDuplicateCollections(
+      [
+        {
+          id: "c1",
+          householdId: "h1",
+          donorName: "Ravi",
+          houseNumber: "12",
+          amount: 500,
+          date: "2026-08-31",
+          collectorId: "u1",
+          receiptNumber: "GNS26-000001",
+        },
+      ],
+      {
+        householdId: "h1",
+        donorName: "Ravi",
+        houseNumber: "12",
+        amount: 500,
+        date: "2026-08-31",
+      }
+    );
+    expect(matches).toHaveLength(1);
+    expect(matches[0].receiptNumber).toBe("GNS26-000001");
+  });
+
+  it("does not flag a legitimate next-day instalment as a duplicate", () => {
+    const matches = possibleDuplicateCollections(
+      [
+        {
+          id: "c1",
+          householdId: "h1",
+          donorName: "Ravi",
+          houseNumber: "12",
+          amount: 200,
+          date: "2026-08-30",
+          collectorId: "u1",
+        },
+      ],
+      {
+        householdId: "h1",
+        donorName: "Ravi",
+        houseNumber: "12",
+        amount: 300,
+        date: "2026-08-31",
+      }
+    );
+    expect(matches).toHaveLength(0);
+  });
+
+  it("copies household identity into a new festival without collectedAmount", () => {
+    const seeded = mapHouseholdForNewFestival(
+      {
+        name: "House 12",
+        houseNumber: "12",
+        mobile: "9999999999",
+        area: "Main Road",
+        notes: "Gate left",
+        expectedAmount: 750,
+        status: "paid",
+        collectedAmount: 750,
+      },
+      500
+    );
+    expect(seeded.collectedAmount).toBe(0);
+    expect(seeded.expectedAmount).toBe(750);
+    expect(seeded.status).toBe("pending");
+    expect(seeded.area).toBe("Main Road");
+  });
+
+  it("keeps not_interested when carrying households forward", () => {
+    const seeded = mapHouseholdForNewFestival(
+      { name: "Declined", expectedAmount: 0, status: "not_interested", collectedAmount: 0 },
+      500
+    );
+    expect(seeded.status).toBe("not_interested");
+    expect(seeded.expectedAmount).toBe(500);
+    expect(seeded.collectedAmount).toBe(0);
   });
 });

@@ -2,6 +2,7 @@ import type {
   Festival,
   FestivalMember,
   GaneshActivity,
+  GaneshCollection,
   GaneshContribution,
   GaneshSponsorship,
   GaneshSummary,
@@ -44,6 +45,34 @@ export type PendingReimbursementMember = {
   amount: number;
 };
 
+export type AreaCoverage = {
+  area: string;
+  paid: number;
+  total: number;
+};
+
+export type CollectionTodayTotals = {
+  count: number;
+  amount: number;
+  cash: number;
+  upi: number;
+  bank: number;
+  other: number;
+};
+
+export type CollectionCoverage = {
+  collected: number;
+  donors: number;
+  paidHouses: number;
+  pendingHouses: number;
+  notAvailable: number;
+  notInterested: number;
+  countableHouses: number;
+  coveragePct: number | null;
+  byArea: AreaCoverage[];
+  today: CollectionTodayTotals;
+};
+
 export type FinancialOverview = {
   summary: GaneshSummary;
   availableGodFund: number;
@@ -57,7 +86,7 @@ export type FinancialOverview = {
   pendingReimbursements: number;
   pendingReimbursementMembers: PendingReimbursementMember[];
   committee: { target: number; received: number; pending: number };
-  collections: { collected: number; donors: number; pendingHouses: number };
+  collections: CollectionCoverage;
   sponsors: { received: number; promised: number };
   inKindEstimated: number;
   contributionTotals: ContributionTotals;
@@ -78,6 +107,7 @@ export type FinancialOverviewInput = {
   sponsorships?: GaneshSponsorship[];
   members?: FestivalMember[];
   households?: Household[];
+  collections?: GaneshCollection[];
   activity?: GaneshActivity[];
   festival?: Pick<Festival, "contributionTargetAmount"> | null;
   today?: string;
@@ -86,6 +116,44 @@ export type FinancialOverviewInput = {
 function pct(part: number, whole: number): number | null {
   if (!(whole > 0)) return null;
   return Math.max(0, money((part / whole) * 100));
+}
+
+function summarizeCollectionToday(
+  collections: GaneshCollection[],
+  today: string
+): CollectionTodayTotals {
+  const todayRows = collections.filter(
+    (row) => !row.voided && row.date === today
+  );
+  const byMethod = { cash: 0, upi: 0, bank: 0, other: 0 };
+  let amount = 0;
+  for (const row of todayRows) {
+    const value = money(Number(row.amount ?? 0));
+    amount = money(amount + value);
+    const method = row.paymentMethod;
+    if (method === "cash" || method === "upi" || method === "bank" || method === "other") {
+      byMethod[method] = money(byMethod[method] + value);
+    } else {
+      byMethod.other = money(byMethod.other + value);
+    }
+  }
+  return { count: todayRows.length, amount, ...byMethod };
+}
+
+function summarizeCoverageByArea(households: Household[]): AreaCoverage[] {
+  const map = new Map<string, { paid: number; total: number }>();
+  for (const house of households) {
+    const area = (house.area ?? "").trim();
+    if (!area) continue;
+    if (house.status === "not_interested" || house.status === "not_available") continue;
+    const row = map.get(area) ?? { paid: 0, total: 0 };
+    row.total += 1;
+    if (house.status === "paid") row.paid += 1;
+    map.set(area, row);
+  }
+  return [...map.entries()]
+    .map(([area, row]) => ({ area, paid: row.paid, total: row.total }))
+    .sort((a, b) => a.area.localeCompare(b.area));
 }
 
 export function buildFinancialOverview(input: FinancialOverviewInput): FinancialOverview {
@@ -146,9 +214,16 @@ export function buildFinancialOverview(input: FinancialOverviewInput): Financial
     (house) => house.status === "pending" || house.status === "partial"
   ).length;
   const paidHouses = households.filter((house) => house.status === "paid").length;
+  const notAvailable = households.filter((house) => house.status === "not_available").length;
+  const notInterested = households.filter((house) => house.status === "not_interested").length;
   const countableHouses = households.filter(
     (house) => house.status !== "not_interested" && house.status !== "not_available"
   ).length;
+  const coveragePct = pct(paidHouses, countableHouses);
+  const todayKey = input.today ?? "";
+  const today = todayKey
+    ? summarizeCollectionToday(input.collections ?? [], todayKey)
+    : { count: 0, amount: 0, cash: 0, upi: 0, bank: 0, other: 0 };
 
   const memberPendingTotal = pendingReimbursementMembers.reduce(
     (sum, row) => money(sum + row.amount),
@@ -181,7 +256,14 @@ export function buildFinancialOverview(input: FinancialOverviewInput): Financial
     collections: {
       collected: summary.chanda,
       donors: summary.collectionCount,
+      paidHouses,
       pendingHouses,
+      notAvailable,
+      notInterested,
+      countableHouses,
+      coveragePct,
+      byArea: summarizeCoverageByArea(households),
+      today,
     },
     sponsors: {
       received: sponsorCash,
@@ -193,7 +275,7 @@ export function buildFinancialOverview(input: FinancialOverviewInput): Financial
     health: {
       spentPct: pct(godAndReimburseOut, moneyIn),
       committeePct: pct(committeeReceived, committeeTarget),
-      collectedPct: pct(paidHouses, countableHouses),
+      collectedPct: coveragePct,
     },
     hasFinancialActivity: moneyIn > 0 || moneyOut > 0 || pendingReimbursements > 0,
     recentActivity: (input.activity ?? []).slice(0, 8),

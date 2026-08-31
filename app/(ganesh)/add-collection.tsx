@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { useMemo, useRef, useState } from "react";
+import { Alert, Pressable, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { Home } from "lucide-react-native";
 
@@ -12,18 +12,25 @@ import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { useFestivalWriteLock } from "@/hooks/useFestivalWriteLock";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { useCollections } from "@/hooks/useCollections";
 import { useFestivals } from "@/hooks/useFestivals";
 import { useGaneshWrites } from "@/hooks/useGaneshWrites";
 import { useHouseholds } from "@/hooks/useHouseholds";
 import { usePandalMembers } from "@/hooks/usePandalMembers";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
+import { newId } from "@/lib/id";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
+import { useNetwork } from "@/providers/NetworkProvider";
 import { CLOSED_FESTIVAL_WRITE_MESSAGE } from "@/shared/utils/ganeshFestivalStatus";
-import { possibleHouseholdDuplicates } from "@/shared/utils/ganeshMath";
+import {
+  householdOverpayAmount,
+  possibleDuplicateCollections,
+  possibleHouseholdDuplicates,
+} from "@/shared/utils/ganeshMath";
 import { formatInr } from "@/shared/utils/ganeshMoney";
-import { todayDateInput } from "@/shared/utils/ganeshIdentity";
+import { memberDisplayName, todayDateInput } from "@/shared/utils/ganeshIdentity";
 import type { PaymentMethod } from "@/shared/types/ganesh";
 import { useTheme } from "@/theme/ThemeProvider";
 
@@ -39,11 +46,13 @@ export default function AddCollectionScreen() {
   const g = useGaneshTokens();
   const { back } = useRouter();
   const { realUser } = useAuth();
+  const { isOnline } = useNetwork();
   const { pandalId, festivalId } = useGaneshSession();
   const { festivals } = useFestivals(pandalId);
   const festival = festivals.find((item) => item.id === festivalId);
   const { members } = usePandalMembers(pandalId);
   const { households } = useHouseholds(pandalId, festivalId);
+  const { collections } = useCollections(pandalId, festivalId);
   const writes = useGaneshWrites();
   const { can } = useGaneshPermissions();
   const { closed } = useFestivalWriteLock();
@@ -54,20 +63,31 @@ export default function AddCollectionScreen() {
   const [mobile, setMobile] = useState("");
   const [houseNumber, setHouseNumber] = useState("");
   const [address, setAddress] = useState("");
+  const [area, setArea] = useState("");
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [matches, setMatches] = useState<typeof households>([]);
-  // When set, this collection is added to an existing household and increments
-  // its running total. When null, a new household is created. Nothing in the app
-  // ever set this before, so every collection minted a fresh household and the
-  // partial -> paid transition was unreachable (GS-006).
   const [householdId, setHouseholdId] = useState<string | null>(null);
   const [householdSearch, setHouseholdSearch] = useState("");
+  const clientOpIdRef = useRef<string | null>(null);
 
   const selectedHousehold = useMemo(
     () => households.find((household) => household.id === householdId) ?? null,
     [households, householdId]
   );
+
+  const amountNumber = Number(amount);
+  const overpay = selectedHousehold
+    ? householdOverpayAmount({
+        expectedAmount: selectedHousehold.expectedAmount,
+        collectedAmount: selectedHousehold.collectedAmount,
+        thisAmount: Number.isFinite(amountNumber) ? amountNumber : 0,
+      })
+    : 0;
+  const remaining =
+    selectedHousehold && selectedHousehold.expectedAmount > 0
+      ? Math.max(0, selectedHousehold.expectedAmount - selectedHousehold.collectedAmount)
+      : null;
 
   const householdResults = useMemo(() => {
     const query = householdSearch.trim().toLowerCase();
@@ -97,21 +117,38 @@ export default function AddCollectionScreen() {
       mobile,
       houseNumber,
       address,
+      area,
       notes,
       expectedAmount: festival?.householdTargetAmount ?? 0,
       createHousehold: true,
     }),
-    [address, amount, collectorId, donorName, festival?.householdTargetAmount, houseNumber, method, mobile, notes, realUser?.uid]
+    [
+      address,
+      amount,
+      area,
+      collectorId,
+      donorName,
+      festival?.householdTargetAmount,
+      houseNumber,
+      method,
+      mobile,
+      notes,
+      realUser?.uid,
+    ]
   );
 
   const save = async (targetHouseholdId?: string | null) => {
     if (busy) return;
     setBusy(true);
+    if (!clientOpIdRef.current) clientOpIdRef.current = newId();
     try {
       await writes.addCollection({
         ...payload,
         householdId: targetHouseholdId ?? undefined,
+        clientOpId: clientOpIdRef.current,
+        assignReceipt: isOnline,
       });
+      clientOpIdRef.current = null;
       back();
     } catch (error) {
       logError("ganesh.addCollection", error);
@@ -126,17 +163,48 @@ export default function AddCollectionScreen() {
     setHouseholdId(household.id);
     setHouseholdSearch("");
     setMatches([]);
-    // Prefill so the collection record carries the same identifying details as
-    // the household it joins; all three stay editable.
     if (!donorName.trim()) setDonorName(household.name);
     if (!houseNumber.trim() && household.houseNumber) setHouseNumber(household.houseNumber);
     if (!mobile.trim() && household.mobile) setMobile(household.mobile);
+    if (!area.trim() && household.area) setArea(household.area);
+  };
+
+  const proceedAfterDuplicateChecks = (targetHouseholdId?: string | null) => {
+    setMatches([]);
+    const resolvedHouseholdId = targetHouseholdId ?? householdId;
+    const duplicates = possibleDuplicateCollections(collections, {
+      householdId: resolvedHouseholdId,
+      donorName,
+      houseNumber,
+      amount: Number(amount),
+      date: todayDateInput(),
+    });
+    if (duplicates.length === 0) {
+      void save(resolvedHouseholdId);
+      return;
+    }
+    const first = duplicates[0];
+    const collector = memberDisplayName(members, first.collectorId);
+    Alert.alert(
+      "Possible duplicate collection",
+      `${first.donorName} already has ${formatInr(first.amount)} on ${first.date}${
+        collector ? ` · collected by ${collector}` : ""
+      }${first.receiptNumber ? ` · ${first.receiptNumber}` : ""}.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Record anyway",
+          onPress: () => {
+            void save(resolvedHouseholdId);
+          },
+        },
+      ]
+    );
   };
 
   const onSubmit = () => {
-    // An explicit choice is an answer to the duplicate question, so do not ask.
     if (householdId) {
-      void save(householdId);
+      proceedAfterDuplicateChecks(householdId);
       return;
     }
     const foundIds = new Set(
@@ -149,7 +217,7 @@ export default function AddCollectionScreen() {
       setMatches(found);
       return;
     }
-    void save(null);
+    proceedAfterDuplicateChecks(null);
   };
 
   if (!can("collections.create")) {
@@ -188,6 +256,16 @@ export default function AddCollectionScreen() {
               ? `Collected ${formatInr(selectedHousehold.collectedAmount)} of ${formatInr(selectedHousehold.expectedAmount)}`
               : `Collected ${formatInr(selectedHousehold.collectedAmount)}`}
           </Text>
+          {remaining !== null ? (
+            <Text style={{ color: theme.colors.mutedForeground }}>
+              Remaining target {formatInr(remaining)}
+            </Text>
+          ) : null}
+          {overpay > 0 ? (
+            <Text style={{ color: g.saffron, fontWeight: "700" }}>
+              This amount is {formatInr(overpay)} over the expected target. You can still save it.
+            </Text>
+          ) : null}
           <Button variant="outline" onPress={() => setHouseholdId(null)}>
             Record as a new household instead
           </Button>
@@ -231,7 +309,13 @@ export default function AddCollectionScreen() {
         </View>
       )}
       <Input label="Name" value={donorName} onChangeText={setDonorName} placeholder="Ramesh Kumar" />
-      <Input label="Amount" value={amount} onChangeText={setAmount} keyboardType="numeric" placeholder="500" />
+      <Input
+        label="Amount"
+        value={amount}
+        onChangeText={setAmount}
+        keyboardType="numeric"
+        placeholder="500"
+      />
       <FilterChips
         label="Payment method"
         layout="wrap"
@@ -247,9 +331,19 @@ export default function AddCollectionScreen() {
         onChange={setCollectorId}
       />
       <FormDetails>
-        <Input label="Mobile (optional)" value={mobile} onChangeText={setMobile} keyboardType="phone-pad" />
-        <Input label="House number (optional)" value={houseNumber} onChangeText={setHouseNumber} />
-        <Input label="Address / area (optional)" value={address} onChangeText={setAddress} />
+        <Input
+          label="Mobile (optional)"
+          value={mobile}
+          onChangeText={setMobile}
+          keyboardType="phone-pad"
+        />
+        <Input
+          label="House number (optional)"
+          value={houseNumber}
+          onChangeText={setHouseNumber}
+        />
+        <Input label="Address (optional)" value={address} onChangeText={setAddress} />
+        <Input label="Area (optional)" value={area} onChangeText={setArea} />
         <Input label="Notes (optional)" value={notes} onChangeText={setNotes} />
       </FormDetails>
       <Button loading={busy} onPress={onSubmit}>
@@ -262,9 +356,9 @@ export default function AddCollectionScreen() {
           onCancel={() => setMatches([])}
           onMerge={(id) => {
             setHouseholdId(id);
-            void save(id);
+            proceedAfterDuplicateChecks(id);
           }}
-          onCreateNew={() => void save(null)}
+          onCreateNew={() => proceedAfterDuplicateChecks(null)}
         />
       ) : null}
     </GaneshScreen>

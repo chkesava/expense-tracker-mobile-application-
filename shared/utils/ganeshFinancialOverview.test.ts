@@ -216,4 +216,148 @@ describe("buildFinancialOverview", () => {
     expect(first.moneyOut).toBe(8000);
     expect(first.locations.cash).toBe(12000);
   });
+
+  it("builds coverage that excludes not_interested / not_available from countable", () => {
+    const overview = buildFinancialOverview({
+      summary: { ...EMPTY_GANESH_SUMMARY, chanda: 1000, collectionCount: 2 },
+      households: [
+        {
+          id: "1",
+          name: "A",
+          expectedAmount: 500,
+          collectedAmount: 500,
+          status: "paid",
+          createdBy: "u",
+          updatedBy: "u",
+        },
+        {
+          id: "2",
+          name: "B",
+          expectedAmount: 500,
+          collectedAmount: 200,
+          status: "partial",
+          createdBy: "u",
+          updatedBy: "u",
+        },
+        {
+          id: "3",
+          name: "C",
+          expectedAmount: 500,
+          collectedAmount: 0,
+          status: "pending",
+          createdBy: "u",
+          updatedBy: "u",
+        },
+        {
+          id: "4",
+          name: "D",
+          expectedAmount: 500,
+          collectedAmount: 0,
+          status: "not_interested",
+          createdBy: "u",
+          updatedBy: "u",
+        },
+        {
+          id: "5",
+          name: "E",
+          expectedAmount: 500,
+          collectedAmount: 0,
+          status: "not_available",
+          createdBy: "u",
+          updatedBy: "u",
+        },
+      ],
+      collections: [
+        {
+          id: "c1",
+          donorName: "A",
+          amount: 500,
+          paymentMethod: "cash",
+          collectorId: "u",
+          date: "2026-08-31",
+          ledgerType: "COLLECTION",
+          voided: false,
+          createdBy: "u",
+          updatedBy: "u",
+        },
+        {
+          id: "c2",
+          donorName: "B",
+          amount: 200,
+          paymentMethod: "upi",
+          collectorId: "u",
+          date: "2026-08-31",
+          ledgerType: "COLLECTION",
+          voided: false,
+          createdBy: "u",
+          updatedBy: "u",
+        },
+        {
+          id: "c3",
+          donorName: "Old",
+          amount: 100,
+          paymentMethod: "bank",
+          collectorId: "u",
+          date: "2026-08-30",
+          ledgerType: "COLLECTION",
+          voided: false,
+          createdBy: "u",
+          updatedBy: "u",
+        },
+      ],
+      today: "2026-08-31",
+    });
+    expect(overview.collections.paidHouses).toBe(1);
+    expect(overview.collections.pendingHouses).toBe(2);
+    expect(overview.collections.countableHouses).toBe(3);
+    expect(overview.collections.notInterested).toBe(1);
+    expect(overview.collections.notAvailable).toBe(1);
+    expect(overview.collections.coveragePct).toBeCloseTo(33.33, 1);
+    expect(overview.health.collectedPct).toBe(overview.collections.coveragePct);
+    expect(overview.collections.today).toEqual({
+      count: 2,
+      amount: 700,
+      cash: 500,
+      upi: 200,
+      bank: 0,
+      other: 0,
+    });
+  });
+
+  it("groups coverage by area when households have an area", () => {
+    const overview = buildFinancialOverview({
+      households: [
+        {
+          id: "1",
+          name: "A",
+          area: "Main",
+          expectedAmount: 500,
+          collectedAmount: 500,
+          status: "paid",
+          createdBy: "u",
+          updatedBy: "u",
+        },
+        {
+          id: "2",
+          name: "B",
+          area: "Main",
+          expectedAmount: 500,
+          collectedAmount: 0,
+          status: "pending",
+          createdBy: "u",
+          updatedBy: "u",
+        },
+        {
+          id: "3",
+          name: "C",
+          expectedAmount: 500,
+          collectedAmount: 0,
+          status: "pending",
+          createdBy: "u",
+          updatedBy: "u",
+        },
+      ],
+    });
+    expect(overview.collections.byArea).toEqual([{ area: "Main", paid: 1, total: 2 }]);
+  });
 });
