@@ -58,6 +58,9 @@ android/app/*.jks
 # Expo module Gradle outputs
 modules/**/android/build/
 modules/**/android/.gradle/
+# Local Cursor plugin/workspace prefs (rules stay tracked)
+.cursor/settings.json
+
 # Local Netlify folder
 .netlify
 
