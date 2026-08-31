@@ -1122,6 +1122,52 @@ export async function setMemberContributionTarget(
   await commitWrite(() => batch.commit(), { label: "member target" });
 }
 
+export async function setCommitteeContributionWaiver(
+  db: Firestore,
+  actor: GaneshActor,
+  pandalId: string,
+  festivalId: string,
+  memberId: string,
+  input: { waived: boolean; reason?: string }
+): Promise<void> {
+  await requireOpenFestival(db, pandalId, festivalId);
+  const ref = pathRef(db, [...festivalCol(pandalId, festivalId, "members"), memberId]);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) throw new Error("Committee member not found.");
+  const reason = input.reason?.trim();
+  if (input.waived && !reason) throw new Error("Enter a reason for waiving this contribution.");
+  const batch = writeBatch(db);
+  batch.update(
+    ref,
+    input.waived
+      ? {
+          contributionWaived: true,
+          waivedBy: actor.uid,
+          waivedAt: serverTimestamp(),
+          waiveReason: reason,
+          updatedBy: actor.uid,
+          updatedAt: serverTimestamp(),
+        }
+      : {
+          contributionWaived: false,
+          waivedBy: deleteField(),
+          waivedAt: deleteField(),
+          waiveReason: deleteField(),
+          updatedBy: actor.uid,
+          updatedAt: serverTimestamp(),
+        }
+  );
+  audit(batch, db, pandalId, festivalId, actor.uid, "adjusted", "festivalMember", memberId, {
+    oldValue: {
+      contributionWaived: Boolean(snap.data().contributionWaived),
+      waiveReason: snap.data().waiveReason,
+    },
+    newValue: { contributionWaived: input.waived, waiveReason: reason },
+    reason: input.waived ? "Committee contribution waived" : "Committee contribution waiver removed",
+  });
+  await commitWrite(() => batch.commit(), { label: input.waived ? "contribution waived" : "waiver removed" });
+}
+
 export async function addOpeningFund(
   db: Firestore,
   actor: GaneshActor,
@@ -1625,6 +1671,7 @@ export async function addContribution(
     status?: ContributionStatus;
     paymentMethod?: PaymentMethod;
     pandalAsset?: AssetPurchaseDraft;
+    clientOpId?: string;
   }
 ): Promise<string> {
   await requireOpenFestival(db, pandalId, festivalId);
@@ -1646,7 +1693,7 @@ export async function addContribution(
     const valid = validateInKindValue(estimatedValue);
     if (!valid.ok) throw new Error(valid.error);
   }
-  const id = newId();
+  const id = input.clientOpId?.trim() || newId();
   const assetId = input.pandalAsset ? newId() : undefined;
   const isCommittee = Boolean(input.isCommitteeContribution && input.contributorMemberId);
   const received = status === "received";
@@ -1658,7 +1705,14 @@ export async function addContribution(
         ? "COMMITTEE_CONTRIBUTION"
         : "OTHER_DONATION"
       : undefined;
-  const batch = writeBatch(db);
+  const contributionReference = (year: number, sequence: number) =>
+    `GNS${String(year).slice(-2)}-CON-${String(sequence).padStart(6, "0")}`;
+
+  const appendContribution = (
+    batch: GaneshWriter,
+    reference?: string,
+    nextContributionNumber?: number
+  ) => {
   batch.set(
     pathRef(db, [...festivalCol(pandalId, festivalId, "contributions"), id]),
     omitUndefined({
@@ -1679,6 +1733,8 @@ export async function addContribution(
       receivedBy: status === "received" ? actor.uid : undefined,
       paymentMethod,
       assetId,
+      contributionReference: reference,
+      clientOpId: input.clientOpId?.trim() || undefined,
       ledgerType,
       voided: false,
       createdBy: actor.uid,
@@ -1687,6 +1743,20 @@ export async function addContribution(
       updatedAt: serverTimestamp(),
     })
   );
+
+  if (nextContributionNumber != null) {
+    batch.set(
+      pathRef(db, summaryDoc(pandalId, festivalId)),
+      { nextContributionNumber, updatedAt: serverTimestamp() },
+      { merge: true }
+    );
+  }
+  if (status === "promised") {
+    bumpSummary(batch, db, pandalId, festivalId, {
+      promisedCashContributions: input.kind === "money" ? amount : 0,
+      promisedInKindValue: input.kind === "money" ? 0 : estimatedValue,
+    });
+  }
 
   if (input.kind === "money" && received) {
     bumpSummary(batch, db, pandalId, festivalId, {
@@ -1741,8 +1811,32 @@ export async function addContribution(
   }
 
   audit(batch, db, pandalId, festivalId, actor.uid, "created", "contribution", id, {
-    newValue: { contributorName, kind: input.kind, amount, estimatedValue },
+    newValue: { contributorName, kind: input.kind, amount, estimatedValue, contributionReference: reference },
   });
+  };
+
+  if (input.kind === "money" && received) {
+    await runTransaction(db, async (txn) => {
+      const contributionRef = pathRef(db, [...festivalCol(pandalId, festivalId, "contributions"), id]);
+      if (input.clientOpId) {
+        const existing = await txn.get(contributionRef);
+        if (existing.exists()) return;
+      }
+      const festivalSnap = await txn.get(pathRef(db, festivalDoc(pandalId, festivalId)));
+      const summarySnap = await txn.get(pathRef(db, summaryDoc(pandalId, festivalId)));
+      const year = Number(festivalSnap.data()?.year ?? new Date().getFullYear());
+      const nextNumber = Number(summarySnap.data()?.nextContributionNumber ?? 0) + 1;
+      appendContribution(txn, contributionReference(year, nextNumber), nextNumber);
+    });
+    return id;
+  }
+
+  if (input.clientOpId) {
+    const existing = await getDoc(pathRef(db, [...festivalCol(pandalId, festivalId, "contributions"), id]));
+    if (existing.exists()) return id;
+  }
+  const batch = writeBatch(db);
+  appendContribution(batch);
   await commitWrite(() => batch.commit(), { label: "contribution" });
   return id;
 }
@@ -1839,12 +1933,14 @@ function bumpReceivedContribution(
     contributorMemberId?: string;
     contributorName?: string;
     paymentMethod?: PaymentMethod;
+    wasPromised?: boolean;
   }
 ) {
   if (data.kind === "money") {
     bumpSummary(batch, db, pandalId, festivalId, {
       committeeContributions: data.isCommittee ? data.amount : 0,
       otherCashContributions: data.isCommittee ? 0 : data.amount,
+      promisedCashContributions: data.wasPromised ? -data.amount : 0,
       ...locationBump(data.paymentMethod, data.amount),
     });
     if (data.isCommittee && data.contributorMemberId) {
@@ -1863,6 +1959,7 @@ function bumpReceivedContribution(
   bumpSummary(batch, db, pandalId, festivalId, {
     inKindValue: data.kind === "sponsorship" ? 0 : data.estimatedValue,
     sponsoredValue: data.kind === "sponsorship" ? data.estimatedValue : 0,
+    promisedInKindValue: data.wasPromised ? -data.estimatedValue : 0,
   });
 }
 
@@ -1912,6 +2009,7 @@ export async function receiveContribution(
     contributorMemberId: prev.contributorMemberId ? String(prev.contributorMemberId) : undefined,
     contributorName: prev.contributorName ? String(prev.contributorName) : undefined,
     paymentMethod,
+    wasPromised: prev.status === "promised",
   });
   if (input?.pandalAsset && assetId) {
     appendPandalAssetCreate(batch, db, actor, pandalId, assetId, {
@@ -1960,6 +2058,10 @@ export async function cancelContribution(
       updatedAt: serverTimestamp(),
     })
   );
+  bumpSummary(batch, db, pandalId, festivalId, {
+    promisedCashContributions: prev.kind === "money" ? -Number(prev.amount ?? 0) : 0,
+    promisedInKindValue: prev.kind === "money" ? 0 : -Number(prev.estimatedValue ?? 0),
+  });
   audit(batch, db, pandalId, festivalId, actor.uid, "edited", "contribution", contributionId, {
     oldValue: { status: prev.status },
     newValue: { status: "cancelled" },
@@ -3034,6 +3136,17 @@ export async function recomputeFestivalSummary(
       .map((docSnap) => Number(docSnap.data().estimatedValue ?? 0)),
     locationDeltas,
   });
+  summary.promisedCashContributions = money(
+    contributions
+      .filter((row) => notVoided(row) && row.data().status === "promised" && row.data().kind === "money")
+      .reduce((total, row) => total + Number(row.data().amount ?? 0), 0)
+  );
+  summary.promisedInKindValue = money(
+    contributions
+      .filter((row) => notVoided(row) && row.data().status === "promised" && row.data().kind !== "money")
+      .reduce((total, row) => total + Number(row.data().estimatedValue ?? 0), 0)
+  );
+  summary.nextContributionNumber = Number(beforeSnap.data()?.nextContributionNumber ?? 0);
   summary.transferredToPermanentFund = fundTransfers
     .filter((docSnap) => docSnap.data().direction === "to_permanent")
     .reduce((sum, docSnap) => sum + Number(docSnap.data().amount ?? 0), 0);

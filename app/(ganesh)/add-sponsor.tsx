@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Building2 } from "lucide-react-native";
@@ -18,6 +18,7 @@ import { useGaneshWrites } from "@/hooks/useGaneshWrites";
 import { usePandalSponsor } from "@/hooks/usePandalSponsors";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
+import { newId } from "@/lib/id";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import { useNetwork } from "@/providers/NetworkProvider";
 import type { PreparedGaneshImage } from "@/services/ganesh/storage/storageTypes";
@@ -90,6 +91,7 @@ export default function AddSponsorScreen() {
   const [photoStatus, setPhotoStatus] = useState<GaneshUploadStatus>("idle");
   const [savedId, setSavedId] = useState<string | null>(existingSponsorId || null);
   const [busy, setBusy] = useState(false);
+  const sponsorshipOpId = useRef(newId()).current;
   const closed = festivals.find((item) => item.id === festivalId)?.status === "closed";
   const canReceive = can("sponsors.receive");
   const canLinkAsset = can("assets.create") && dealType === "item" && status === "received";
@@ -317,6 +319,7 @@ export default function AddSponsorScreen() {
         onPress={() => {
           const saveDeal = (sponsorId: string) =>
             writes.addSponsorship(sponsorId, {
+              clientOpId: sponsorshipOpId,
               sponsoringType: dealType,
               purpose,
               purposeLabel: purpose === "other" ? purposeLabel : undefined,

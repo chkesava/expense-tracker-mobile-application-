@@ -1,6 +1,7 @@
 import type {
   FestivalMember,
   GaneshSummary,
+  CommitteeContributionStatus,
   Household,
   HouseholdStatus,
   PermanentFundLocation,
@@ -591,18 +592,41 @@ export function memberRemainingContribution(
   return money(Math.max(0, member.contributionTarget - member.contributionPaid));
 }
 
-export type CommitteePayStatus = "paid" | "partial" | "pending";
+export type CommitteePayStatus = "paid" | "partial" | "pending" | "waived";
 
 export function committeePayStatus(
   paid: number,
   target: number,
-  overridden = false
+  overridden = false,
+  waived = false
 ): CommitteePayStatus {
+  if (waived) return "waived";
   if (target <= 0 && overridden) return "paid";
   return deriveHouseholdStatus({
     expectedAmount: target,
     collectedAmount: paid,
   }) as CommitteePayStatus;
+}
+
+export function committeeContributionStatus(
+  member: Pick<FestivalMember, "contributionTarget" | "contributionPaid" | "contributionTargetOverridden" | "contributionWaived">,
+): CommitteeContributionStatus {
+  return committeePayStatus(
+    Number(member.contributionPaid ?? 0),
+    Number(member.contributionTarget ?? 0),
+    Boolean(member.contributionTargetOverridden),
+    Boolean(member.contributionWaived),
+  ) as CommitteeContributionStatus;
+}
+
+export function contributionAccountingKind(input: {
+  kind: string;
+  isCommitteeContribution?: boolean;
+}): "committee_cash" | "other_cash" | "in_kind" | "sponsorship" {
+  if (input.kind === "money") {
+    return input.isCommitteeContribution ? "committee_cash" : "other_cash";
+  }
+  return input.kind === "sponsorship" ? "sponsorship" : "in_kind";
 }
 
 export function effectiveCommitteeTarget(

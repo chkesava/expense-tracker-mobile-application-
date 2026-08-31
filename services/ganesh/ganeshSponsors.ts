@@ -1,5 +1,6 @@
 import {
   doc,
+  deleteField,
   getDoc,
   increment,
   serverTimestamp,
@@ -77,6 +78,7 @@ export type SponsorshipDraft = {
   paymentMethod?: PaymentMethod;
   expenseId?: string;
   pandalAsset?: SponsorAssetDraft;
+  clientOpId?: string;
 };
 
 function pathRef(db: Firestore, segments: string[]) {
@@ -232,9 +234,10 @@ function appendReceivedContribution(
     paymentMethod?: PaymentMethod;
     assetId?: string;
     receivedNotes?: string;
+    contributionReference?: string;
   }
 ): string {
-  const contributionId = newId();
+  const contributionId = `${input.sponsorshipId}-contribution`;
   const cash = input.type === "cash";
   const title =
     input.itemName?.trim() ||
@@ -260,6 +263,8 @@ function appendReceivedContribution(
       assetId: input.assetId,
       sponsorId: input.sponsorId,
       sponsorshipId: input.sponsorshipId,
+      contributionReference: input.contributionReference,
+      clientOpId: contributionId,
       ledgerType: cash ? "OTHER_DONATION" : undefined,
       voided: false,
       createdBy: actor.uid,
@@ -368,6 +373,49 @@ export async function updateSponsor(
   await commitWrite(() => batch.commit(), { label: "sponsor" });
 }
 
+export async function setSponsorArchived(
+  db: Firestore,
+  actor: GaneshActor,
+  pandalId: string,
+  sponsorId: string,
+  input: { archived: boolean; reason?: string }
+): Promise<void> {
+  const ref = pathRef(db, [...pandalSponsorsCol(pandalId), sponsorId]);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) throw new Error("Sponsor not found.");
+  const reason = input.reason?.trim();
+  if (input.archived && !reason) throw new Error("Enter a reason for archiving this sponsor.");
+  const batch = writeBatch(db);
+  batch.update(
+    ref,
+    input.archived
+      ? {
+          archived: true,
+          archivedBy: actor.uid,
+          archivedAt: serverTimestamp(),
+          archiveReason: reason,
+          updatedBy: actor.uid,
+          updatedAt: serverTimestamp(),
+        }
+      : {
+          archived: false,
+          archivedBy: deleteField(),
+          archivedAt: deleteField(),
+          archiveReason: deleteField(),
+          updatedBy: actor.uid,
+          updatedAt: serverTimestamp(),
+        }
+  );
+  sponsorAudit(batch, db, pandalId, {
+    actorId: actor.uid,
+    sponsorId,
+    action: "edited",
+    oldValue: { archived: Boolean(snap.data().archived) },
+    newValue: { archived: input.archived, reason },
+  });
+  await commitWrite(() => batch.commit(), { label: input.archived ? "sponsor archived" : "sponsor restored" });
+}
+
 /**
  * Returns the path of the photo this attach replaces, if any, so the caller can
  * remove the now-orphaned object from Storage after this write lands (GS-069).
@@ -424,6 +472,7 @@ function appendReceiveEffects(
     receivedNotes?: string;
     expenseId?: string;
     pandalAsset?: SponsorAssetDraft;
+    contributionReference?: string;
   }
 ): { contributionId?: string; assetId?: string } {
   if (data.sponsoringType === "expense") {
@@ -448,6 +497,7 @@ function appendReceiveEffects(
     paymentMethod: data.paymentMethod,
     assetId,
     receivedNotes: data.receivedNotes,
+    contributionReference: data.contributionReference,
   });
   if (data.pandalAsset && assetId) {
     appendPandalAssetCreate(batch, db, actor, pandalId, assetId, {
@@ -480,7 +530,11 @@ export async function addSponsorship(
   if (!sponsorSnap.exists()) throw new Error("Sponsor not found.");
   const status = input.status ?? "prospective";
   const { amount, estimatedValue } = validateDraft({ ...input, status });
-  const id = newId();
+  const id = input.clientOpId?.trim() || newId();
+  if (input.clientOpId?.trim()) {
+    const existing = await getDoc(pathRef(db, [...festivalCol(pandalId, festivalId, "sponsorships"), id]));
+    if (existing.exists()) return id;
+  }
   const batch = writeBatch(db);
   let contributionId: string | undefined;
   let assetId: string | undefined;
@@ -502,6 +556,7 @@ export async function addSponsorship(
       paymentMethod: input.paymentMethod,
       expenseId: input.expenseId,
       pandalAsset: input.pandalAsset,
+      contributionReference: `GNS-SP-${id.slice(0, 8).toUpperCase()}`,
     });
     contributionId = extras.contributionId;
     assetId = extras.assetId;
@@ -513,6 +568,7 @@ export async function addSponsorship(
       assetId,
       receivedAt: status === "received" ? serverTimestamp() : undefined,
       receivedBy: status === "received" ? actor.uid : undefined,
+      contributionReference: `GNS-SP-${id.slice(0, 8).toUpperCase()}`,
     })
   );
   festivalAudit(batch, db, pandalId, festivalId, actor.uid, id, undefined, {

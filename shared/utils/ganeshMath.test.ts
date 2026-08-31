@@ -35,6 +35,8 @@ import {
   canManagePandal,
   committeePayStatus,
   effectiveCommitteeTarget,
+  committeeContributionStatus,
+  contributionAccountingKind,
 } from "./ganeshMath";
 import { EMPTY_GANESH_SUMMARY, EMPTY_PERMANENT_FUND } from "@/shared/types/ganesh";
 
@@ -326,6 +328,20 @@ describe("committeePayStatus", () => {
 
   it("treats an overridden zero target as paid", () => {
     expect(committeePayStatus(0, 0, true)).toBe("paid");
+  });
+
+  it("derives a waived status without changing the paid amount", () => {
+    expect(committeePayStatus(0, 500, false, true)).toBe("waived");
+    expect(committeeContributionStatus({ contributionPaid: 0, contributionTarget: 500, contributionWaived: true })).toBe("waived");
+  });
+});
+
+describe("contributionAccountingKind", () => {
+  it("separates committee, other cash, in-kind, and sponsorship records", () => {
+    expect(contributionAccountingKind({ kind: "money", isCommitteeContribution: true })).toBe("committee_cash");
+    expect(contributionAccountingKind({ kind: "money", isCommitteeContribution: false })).toBe("other_cash");
+    expect(contributionAccountingKind({ kind: "item" })).toBe("in_kind");
+    expect(contributionAccountingKind({ kind: "sponsorship" })).toBe("sponsorship");
   });
 });
 

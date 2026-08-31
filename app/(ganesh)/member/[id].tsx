@@ -83,15 +83,17 @@ export default function MemberDetailScreen() {
   const defaultTarget = festival?.contributionTargetAmount ?? 0;
   const target = effectiveCommitteeTarget(festivalMember, defaultTarget);
   const overridden = Boolean(festivalMember?.contributionTargetOverridden);
+  const waived = Boolean(festivalMember?.contributionWaived);
   const due = memberRemainingContribution({
     contributionPaid: paid,
     contributionTarget: target,
-  });
-  const status = committeePayStatus(paid, target, overridden);
+  }) * (waived ? 0 : 1);
+  const status = committeePayStatus(paid, target, overridden, waived);
 
   const [_customTarget, setCustomTarget] = useState<string | undefined>(undefined);
   const customTarget = _customTarget ?? String(target);
   const [busy, setBusy] = useState(false);
+  const [waiveReason, setWaiveReason] = useState("");
   const [assigning, setAssigning] = useState(false);
   const [draftRoleIds, setDraftRoleIds] = useState<string[] | undefined>(undefined);
 
@@ -148,6 +150,23 @@ export default function MemberDetailScreen() {
   const pct = target > 0 ? Math.min(100, Math.round((paid / target) * 100)) : 0;
   const trackColor =
     status === "paid" ? g.godFund : status === "partial" ? theme.colors.warning : g.divider;
+
+  const saveWaiver = (waived: boolean) => {
+    if (!id) return;
+    if (waived && !waiveReason.trim()) {
+      toast.error("Enter a reason before waiving the contribution.");
+      return;
+    }
+    setBusy(true);
+    writes
+      .setCommitteeContributionWaiver(id, { waived, reason: waiveReason })
+      .then(() => setWaiveReason(""))
+      .catch((caught) => {
+        logError("ganesh.member.waiver", caught);
+        toast.error(friendlyErrorMessage(caught, "Could not update the waiver."));
+      })
+      .finally(() => setBusy(false));
+  };
 
   const saveRoles = () => {
     if (!id) return;
@@ -279,8 +298,8 @@ export default function MemberDetailScreen() {
         subtitle={festival?.name}
         badge={
           <StatusBadge
-            kind={status === "pending" ? "pending" : status}
-            label={status === "paid" ? "Paid" : status === "partial" ? "Partial" : "Not paid"}
+            kind={status === "waived" ? "neutral" : status === "pending" ? "pending" : status}
+            label={status === "waived" ? "Waived" : status === "paid" ? "Paid" : status === "partial" ? "Partial" : "Not paid"}
           />
         }
       >
@@ -332,6 +351,26 @@ export default function MemberDetailScreen() {
           </StatTile>
         </View>
       </Section>
+
+      {can("festival.update") && festival?.status === "open" ? (
+        <Section title="Committee contribution" subtitle="Waivers are audited and do not change festival cash.">
+          {waived ? (
+            <>
+              <StatusStrip tone="muted" message={`Waived${festivalMember?.waiveReason ? `: ${festivalMember.waiveReason}` : ""}`} />
+              <Button variant="outline" loading={busy} onPress={() => saveWaiver(false)}>
+                Remove waiver
+              </Button>
+            </>
+          ) : (
+            <View style={styles.form}>
+              <Input label="Waiver reason" value={waiveReason} onChangeText={setWaiveReason} placeholder="Optional contribution waived because..." />
+              <Button variant="outline" loading={busy} onPress={() => saveWaiver(true)}>
+                Waive contribution
+              </Button>
+            </View>
+          )}
+        </Section>
+      ) : null}
 
       {(can("contributions.create") && festival?.status === "open")
       || (can("reimbursements.create") && (festivalMember?.pendingReimbursement ?? 0) > 0) ? (

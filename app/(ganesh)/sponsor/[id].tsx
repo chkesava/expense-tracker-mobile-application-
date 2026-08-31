@@ -117,6 +117,7 @@ export default function SponsorDetailScreen() {
   const [receivedNotes, setReceivedNotes] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("upi");
   const [cancelReason, setCancelReason] = useState("");
+  const [archiveReason, setArchiveReason] = useState("");
   const [expectedDate, setExpectedDate] = useState("");
   const [purpose, setPurpose] = useState<SponsorshipPurpose>("other");
   const [purposeLabel, setPurposeLabel] = useState("");
@@ -240,9 +241,6 @@ export default function SponsorDetailScreen() {
     ]);
   };
 
-  const received = totals.cashReceived + totals.inKindReceived;
-  const promised = totals.promisedCash + totals.promisedInKind;
-
   return (
     <GaneshScreen safeTop>
       <GaneshHeader
@@ -254,19 +252,54 @@ export default function SponsorDetailScreen() {
 
       <PendingHint pending={sponsor.pendingWrite} />
 
+      {sponsor.archived ? (
+        <StatusStrip tone="muted" message="Archived sponsor. Historical sponsorships remain available." />
+      ) : null}
+
+      {can("sponsors.update") ? (
+        <Section title="Sponsor status" subtitle="Archive keeps history while removing this sponsor from new selections.">
+          {!sponsor.archived ? <Input label="Archive reason" value={archiveReason} onChangeText={setArchiveReason} /> : null}
+          <Button
+            variant="outline"
+            loading={busy}
+            onPress={() => {
+              if (!sponsor.archived && !archiveReason.trim()) {
+                toast.error("Enter a reason before archiving this sponsor.");
+                return;
+              }
+              void run(
+                writes.setSponsorArchived(sponsor.id, { archived: !sponsor.archived, reason: archiveReason }),
+                sponsor.archived ? "Could not restore sponsor." : "Could not archive sponsor."
+              );
+            }}
+          >
+            {sponsor.archived ? "Restore sponsor" : "Archive sponsor"}
+          </Button>
+        </Section>
+      ) : null}
+
       <Section title="This festival" subtitle={festival?.name}>
         <View style={styles.statRow}>
           <StatTile
-            label="Received"
-            meta={<MetaLabel>Counted in the ledger</MetaLabel>}
+            label="Cash received"
+            meta={<MetaLabel>In the God Fund</MetaLabel>}
           >
-            <Money value={received} size="primary" tone="positive" numberOfLines={1} adjustsFontSizeToFit />
+            <Money value={totals.cashReceived} size="primary" tone="positive" numberOfLines={1} adjustsFontSizeToFit />
           </StatTile>
-          <StatTile label="Promised" meta={<MetaLabel>Not cash yet</MetaLabel>}>
+          <StatTile label="In-kind received" meta={<MetaLabel>Estimated value</MetaLabel>}>
             <Money
-              value={promised}
+              value={totals.inKindReceived}
               size="primary"
-              tone={promised > 0 ? "warning" : "default"}
+              tone="default"
+              numberOfLines={1}
+              adjustsFontSizeToFit
+            />
+          </StatTile>
+          <StatTile label="Promised" meta={<MetaLabel>Cash + non-cash, not received</MetaLabel>}>
+            <Money
+              value={totals.promisedCash + totals.promisedInKind}
+              size="primary"
+              tone={totals.promisedCash + totals.promisedInKind > 0 ? "warning" : "default"}
               numberOfLines={1}
               adjustsFontSizeToFit
             />
@@ -744,7 +777,7 @@ export default function SponsorDetailScreen() {
         </>
       ) : null}
 
-      {can("sponsors.create") && openFestival ? (
+      {can("sponsors.create") && openFestival && !sponsor.archived ? (
         <Button
           variant="outline"
           onPress={() => push(`/(ganesh)/add-sponsor?sponsorId=${sponsor.id}` as never)}

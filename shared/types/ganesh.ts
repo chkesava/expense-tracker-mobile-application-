@@ -36,6 +36,7 @@ export type HouseholdStatus =
 
 export type ContributionKind = "money" | "item" | "service" | "sponsorship";
 export type ContributionStatus = "promised" | "received" | "cancelled";
+export type CommitteeContributionStatus = "not_started" | "partial" | "received" | "waived";
 
 export type GaneshLedgerType =
   | "OPENING_BALANCE"
@@ -230,6 +231,10 @@ export interface PandalSponsor extends GaneshAuditFields {
   email?: string;
   address?: string;
   notes?: string;
+  archived?: boolean;
+  archivedBy?: string;
+  archivedAt?: FirestoreTime;
+  archiveReason?: string;
   photo?: GaneshFileMeta;
   pendingWrite?: boolean;
 }
@@ -267,6 +272,8 @@ export interface GaneshSponsorship extends GaneshAuditFields {
   expenseId?: string;
   assetId?: string;
   notes?: string;
+  contributionReference?: string;
+  clientOpId?: string;
   pendingWrite?: boolean;
 }
 
@@ -347,6 +354,10 @@ export interface FestivalMember {
   personalExpenses: number;
   reimbursed: number;
   pendingReimbursement: number;
+  contributionWaived?: boolean;
+  waivedBy?: string;
+  waivedAt?: FirestoreTime;
+  waiveReason?: string;
 }
 
 export interface GaneshSummary {
@@ -360,6 +371,9 @@ export interface GaneshSummary {
   pendingReimbursements: number;
   inKindValue: number;
   sponsoredValue: number;
+  promisedCashContributions: number;
+  promisedInKindValue: number;
+  nextContributionNumber: number;
   collectionCount: number;
   expenseCount: number;
   assetPurchaseAmount: number;
@@ -487,6 +501,8 @@ export interface GaneshContribution extends GaneshAuditFields, GaneshVoidFields 
   ledgerType?: "COMMITTEE_CONTRIBUTION" | "OTHER_DONATION";
   sponsorId?: string;
   sponsorshipId?: string;
+  contributionReference?: string;
+  clientOpId?: string;
   pendingWrite?: boolean;
 }
 
@@ -657,6 +673,9 @@ export const EMPTY_GANESH_SUMMARY: GaneshSummary = {
   pendingReimbursements: 0,
   inKindValue: 0,
   sponsoredValue: 0,
+  promisedCashContributions: 0,
+  promisedInKindValue: 0,
+  nextContributionNumber: 0,
   collectionCount: 0,
   expenseCount: 0,
   assetPurchaseAmount: 0,

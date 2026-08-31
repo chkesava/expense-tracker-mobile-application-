@@ -111,6 +111,7 @@ export default function SponsorsScreen() {
   const [status, setStatus] = useState<StatusFilter>(asStatus(params.status) ?? "all");
   const [type, setType] = useState<TypeFilter>(asType(params.type) ?? "all");
   const [purpose, setPurpose] = useState<PurposeFilter>(asPurpose(params.purpose) ?? "all");
+  const [showArchived, setShowArchived] = useState(false);
   const [showMoreFilters, setShowMoreFilters] = useState(
     () => Boolean(asType(params.type) || asPurpose(params.purpose))
   );
@@ -155,10 +156,12 @@ export default function SponsorsScreen() {
         ? sponsors
         : sponsors.filter((sponsor) => filteredIds.has(sponsor.id));
     return narrowed.filter((sponsor) => {
+      if (!showArchived && sponsor.archived) return false;
+      if (showArchived && !sponsor.archived) return false;
       if (!needle) return true;
       return sponsor.name.toLowerCase().includes(needle);
     });
-  }, [purpose, query, sponsors, sponsorships, status, type]);
+  }, [purpose, query, showArchived, sponsors, sponsorships, status, type]);
 
   const renderItem = useCallback(
     ({ item }: { item: PandalSponsor }) => {
@@ -314,6 +317,12 @@ export default function SponsorsScreen() {
             value={purpose}
             options={[{ id: "all" as const, label: "All purposes" }, ...SPONSORSHIP_PURPOSES]}
             onChange={setPurpose}
+          />
+          <FilterChips
+            label="Archive"
+            value={showArchived ? "archived" : "active"}
+            options={[{ id: "active" as const, label: "Active" }, { id: "archived" as const, label: "Archived" }]}
+            onChange={(value) => setShowArchived(value === "archived")}
           />
         </>
       ) : null}

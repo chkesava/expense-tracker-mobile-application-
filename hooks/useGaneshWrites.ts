@@ -182,6 +182,23 @@ export function useGaneshWrites() {
           )
       );
     },
+    setCommitteeContributionWaiver: (
+      memberId: string,
+      input: Parameters<typeof writes.setCommitteeContributionWaiver>[5]
+    ) => {
+      requirePerm("festival.update");
+      const ctx = requireFestival();
+      return run(input.waived ? "Contribution waived" : "Waiver removed", () =>
+        writes.setCommitteeContributionWaiver(
+          ctx.db,
+          ctx.actor,
+          ctx.pandalId,
+          ctx.festivalId,
+          memberId,
+          input
+        )
+      );
+    },
     addOpeningFund: (input: Parameters<typeof writes.addOpeningFund>[4]) => {
       requirePerm("openingFunds.create");
       const ctx = requireFestival();
@@ -583,6 +600,16 @@ export function useGaneshWrites() {
       const ctx = requirePandal();
       return run("Sponsor saved", () =>
         sponsorWrites.updateSponsor(ctx.db, ctx.actor, ctx.pandalId, sponsorId, input)
+      );
+    },
+    setSponsorArchived: (
+      sponsorId: string,
+      input: Parameters<typeof sponsorWrites.setSponsorArchived>[4]
+    ) => {
+      requirePerm("sponsors.update");
+      const ctx = requirePandal();
+      return run(input.archived ? "Sponsor archived" : "Sponsor restored", () =>
+        sponsorWrites.setSponsorArchived(ctx.db, ctx.actor, ctx.pandalId, sponsorId, input)
       );
     },
     attachSponsorPhoto: (

@@ -38,19 +38,21 @@ import { formatInr } from "@/shared/utils/ganeshMoney";
 import { ganeshRoleLabel } from "@/shared/utils/ganeshPermissions";
 import { useTheme } from "@/theme/ThemeProvider";
 
-type Filter = "all" | "paid" | "partial" | "pending";
+type Filter = "all" | "paid" | "partial" | "pending" | "waived";
 
 const FILTER_OPTIONS: Array<{ id: Filter; label: string }> = [
   { id: "all", label: "Everyone" },
   { id: "pending", label: "Not paid" },
   { id: "partial", label: "Partial" },
   { id: "paid", label: "Paid" },
+  { id: "waived", label: "Waived" },
 ];
 
 const STATUS_LABEL: Record<CommitteePayStatus, string> = {
   paid: "Paid",
   partial: "Partial",
   pending: "Not paid",
+  waived: "Waived",
 };
 
 type CommitteeRow = {
@@ -73,6 +75,7 @@ function buildRow(
 ): CommitteeRow {
   const paid = festivalMember?.contributionPaid ?? 0;
   const target = effectiveCommitteeTarget(festivalMember, defaultTarget);
+  const waived = Boolean(festivalMember?.contributionWaived);
   const customTarget = Boolean(festivalMember?.contributionTargetOverridden);
   return {
     userId: member.userId,
@@ -80,8 +83,8 @@ function buildRow(
     roleLabel: ganeshRoleLabel(member.role),
     paid,
     target,
-    due: memberRemainingContribution({ contributionPaid: paid, contributionTarget: target }),
-    status: committeePayStatus(paid, target, customTarget),
+    due: waived ? 0 : memberRemainingContribution({ contributionPaid: paid, contributionTarget: target }),
+    status: committeePayStatus(paid, target, customTarget, waived),
     customTarget,
     personalExpenses: festivalMember?.personalExpenses ?? 0,
     pendingReimbursement: festivalMember?.pendingReimbursement ?? 0,
@@ -118,7 +121,7 @@ export default function CommitteeScreen() {
           )
         )
         .sort((a, b) => {
-          const order = { pending: 0, partial: 1, paid: 2 };
+          const order = { pending: 0, partial: 1, paid: 2, waived: 3 };
           const statusDiff = order[a.status] - order[b.status];
           if (statusDiff !== 0) return statusDiff;
           return a.name.localeCompare(b.name);
@@ -357,7 +360,7 @@ const CommitteePersonRow = memo(function CommitteePersonRow({
               {row.customTarget ? " · Custom target" : ""}
             </Text>
             <StatusBadge
-              kind={row.status === "pending" ? "pending" : row.status}
+              kind={row.status === "waived" ? "neutral" : row.status === "pending" ? "pending" : row.status}
               label={STATUS_LABEL[row.status]}
               size="sm"
             />

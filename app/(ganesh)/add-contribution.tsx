@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { Gift } from "lucide-react-native";
@@ -27,6 +27,7 @@ import {
   ASSET_UNITS,
 } from "@/shared/utils/ganeshAssets";
 import { useTheme } from "@/theme/ThemeProvider";
+import { newId } from "@/lib/id";
 
 const KIND_OPTIONS: Array<{ id: ContributionKind; label: string }> = [
   { id: "money", label: "Money" },
@@ -80,6 +81,7 @@ export default function AddContributionScreen() {
   const [photoStatus, setPhotoStatus] = useState<GaneshUploadStatus>("idle");
   const [savedId, setSavedId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const clientOpId = useRef(newId()).current;
   const canReceive = can("contributions.receive");
   const statusOptions = canReceive ? STATUS_OPTIONS : PROMISE_ONLY_STATUS_OPTIONS;
   const allowsPhoto = PHOTO_KINDS.includes(kind);
@@ -335,6 +337,7 @@ export default function AddContributionScreen() {
           setBusy(true);
           writes
             .addContribution({
+              clientOpId,
               kind,
               contributorName,
               mobile,
