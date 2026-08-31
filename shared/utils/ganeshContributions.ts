@@ -1,9 +1,6 @@
 import type { ContributionKind, ContributionStatus, GaneshContribution } from "@/shared/types/ganesh";
 import { todayDateInput } from "@/shared/utils/ganeshIdentity";
-
-function money(value: number): number {
-  return Math.round(value * 100) / 100;
-}
+import { money } from "@/shared/utils/ganeshMath";
 
 type ContributionStatusFields = Pick<
   Partial<GaneshContribution>,

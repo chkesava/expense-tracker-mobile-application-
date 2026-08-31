@@ -3,8 +3,7 @@ import { StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
 
 import { CollectionsList, ContributionsList, ExpensesList } from "@/components/ganesh/funds";
-import { FestivalCashPosition } from "@/components/ganesh/funds/FestivalCashPosition";
-import { FestivalReportStrip } from "@/components/ganesh/funds/FestivalReportStrip";
+import { FestivalFinancialDashboard } from "@/components/ganesh/funds/FestivalFinancialDashboard";
 import { FundLedgerTabs, type FundLedger } from "@/components/ganesh/funds/FundLedgerTabs";
 import {
   FundShortcuts,
@@ -16,14 +15,20 @@ import {
 import { PandalNidhiHero } from "@/components/ganesh/funds/PandalNidhiHero";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { GaneshSyncChip } from "@/components/ganesh/GaneshSyncChip";
+import { ListStateView } from "@/components/ganesh/ui";
 import { useContributions } from "@/hooks/useContributions";
+import { useFestivalMembers } from "@/hooks/useFestivalMembers";
 import { useFestivals } from "@/hooks/useFestivals";
+import { useGaneshActivity } from "@/hooks/useGaneshActivity";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { useGaneshSummary } from "@/hooks/useGaneshSummary";
+import { useHouseholds } from "@/hooks/useHouseholds";
+import { usePandalMembers } from "@/hooks/usePandalMembers";
+import { usePermanentFund } from "@/hooks/usePermanentFund";
+import { useSponsorships } from "@/hooks/useSponsorships";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
-import { summarizeContributions } from "@/shared/utils/ganeshContributions";
-import { todayDateInput } from "@/shared/utils/ganeshIdentity";
-import { availableGodFund, festivalCashSpent, totalCashIn } from "@/shared/utils/ganeshMath";
+import { memberDisplayName, todayDateInput } from "@/shared/utils/ganeshIdentity";
+import { buildFinancialOverview } from "@/shared/utils/ganeshFinancialOverview";
 
 /**
  * Pandal Nidhi — the single money surface.
@@ -37,18 +42,32 @@ export default function FundsScreen() {
   const { push } = useRouter();
   const { pandalId, festivalId } = useGaneshSession();
   const { festivals } = useFestivals(pandalId);
-  const { summary } = useGaneshSummary(pandalId, festivalId);
+  const { summary, loading: summaryLoading, error: summaryError, retry: retrySummary } =
+    useGaneshSummary(pandalId, festivalId);
   const { contributions } = useContributions(pandalId, festivalId);
+  const { sponsorships } = useSponsorships(pandalId, festivalId);
+  const { members: festivalMembers } = useFestivalMembers(pandalId, festivalId);
+  const { members: pandalMembers } = usePandalMembers(pandalId);
+  const { households } = useHouseholds(pandalId, festivalId);
+  const { fund } = usePermanentFund(pandalId);
+  const { activity } = useGaneshActivity(pandalId, festivalId);
   const { can } = useGaneshPermissions();
 
   const festival = festivals.find((item) => item.id === festivalId);
-  const godFund = availableGodFund(summary);
-  const moneyIn = totalCashIn(summary);
-  const spent = festivalCashSpent(summary);
-
-  const totals = useMemo(
-    () => summarizeContributions(contributions, todayDateInput()),
-    [contributions]
+  const overview = useMemo(
+    () =>
+      buildFinancialOverview({
+        summary,
+        permanentFund: fund,
+        contributions,
+        sponsorships,
+        members: festivalMembers,
+        households,
+        activity,
+        festival,
+        today: todayDateInput(),
+      }),
+    [summary, fund, contributions, sponsorships, festivalMembers, households, activity, festival]
   );
 
   const ledgers = useMemo(() => {
@@ -57,7 +76,9 @@ export default function FundsScreen() {
       options.push({
         id: "contributions",
         label: "Contributions",
-        badge: totals.promisedCount > 0 ? totals.promisedCount : undefined,
+        badge: overview.contributionTotals.promisedCount > 0
+          ? overview.contributionTotals.promisedCount
+          : undefined,
       });
     }
     if (can("collections.read")) {
@@ -67,7 +88,7 @@ export default function FundsScreen() {
       options.push({ id: "expenses", label: "Expenses" });
     }
     return options;
-  }, [can, totals.promisedCount]);
+  }, [can, overview.contributionTotals.promisedCount]);
 
   const [ledger, setLedger] = useState<FundLedger | undefined>(undefined);
   const selected = ledger ?? ledgers[0]?.id;
@@ -86,12 +107,34 @@ export default function FundsScreen() {
 
   const prefix = (
     <View style={styles.prefix}>
-      <FestivalCashPosition available={godFund} received={moneyIn} spent={spent} />
+      {summaryLoading ? (
+        <ListStateView loading title="Loading financial summary" skeletonCount={4} />
+      ) : summaryError ? (
+        <ListStateView
+          error={summaryError}
+          onRetry={retrySummary}
+          title="We couldn't load the financial summary."
+          description="Please check your connection and try again."
+        />
+      ) : (
+        <FestivalFinancialDashboard
+          overview={overview}
+          festivalName={festival?.name}
+          canSeePermanentFund={can("permanentFund.read")}
+          canSeeReimbursements={can("reimbursements.read")}
+          canSeeContributions={can("contributions.read")}
+          canSeeCollections={can("collections.read")}
+          activityActors={(actorId) => memberDisplayName(pandalMembers, actorId)}
+          onReport={() => push("/(ganesh)/report" as never)}
+          onPermanentFund={() => push("/(ganesh)/permanent-fund" as never)}
+          onReimburse={() => push("/(ganesh)/add-reimbursement" as never)}
+          onPromised={() => push("/(ganesh)/(tabs)/contributions?status=promised" as never)}
+          onHouses={() => push("/(ganesh)/(tabs)/collections" as never)}
+          onCommittee={() => push("/(ganesh)/committee" as never)}
+        />
+      )}
       <FundLedgerTabs options={ledgers} selected={selected} onChange={setLedger} />
       <FundShortcuts items={shortcuts} />
-      {can("contributions.read") ? (
-        <FestivalReportStrip totals={totals} onDetails={() => push("/(ganesh)/report" as never)} />
-      ) : null}
     </View>
   );
 

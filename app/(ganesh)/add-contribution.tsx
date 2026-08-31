@@ -20,7 +20,7 @@ import { toast } from "@/lib/toast";
 import type { PreparedGaneshImage } from "@/services/ganesh/storage/storageTypes";
 import { todayDateInput } from "@/shared/utils/ganeshIdentity";
 import { CLOSED_FESTIVAL_WRITE_MESSAGE } from "@/shared/utils/ganeshFestivalStatus";
-import type { ContributionKind, ContributionStatus } from "@/shared/types/ganesh";
+import type { ContributionKind, ContributionStatus, PaymentMethod } from "@/shared/types/ganesh";
 import {
   ASSET_CATEGORIES,
   ASSET_CONDITIONS,
@@ -44,6 +44,12 @@ const STATUS_OPTIONS: Array<{ id: ContributionStatus; label: string }> = [
 // (GS-037). Without this the option rendered and the save failed at the server.
 const PROMISE_ONLY_STATUS_OPTIONS = STATUS_OPTIONS.filter((option) => option.id !== "received");
 const PHOTO_KINDS: ContributionKind[] = ["item", "service", "sponsorship"];
+const METHOD_OPTIONS: Array<{ id: PaymentMethod; label: string }> = [
+  { id: "cash", label: "Cash" },
+  { id: "upi", label: "UPI" },
+  { id: "bank", label: "Bank" },
+  { id: "other", label: "Other" },
+];
 
 export default function AddContributionScreen() {
   const { theme } = useTheme();
@@ -55,6 +61,7 @@ export default function AddContributionScreen() {
   const { isOnline, uploadContributionPhoto } = useGaneshStorage();
   const [kind, setKind] = useState<ContributionKind>("item");
   const [status, setStatus] = useState<ContributionStatus>("promised");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
   const [contributorName, setContributorName] = useState("");
   const [mobile, setMobile] = useState("");
   const [itemName, setItemName] = useState("");
@@ -162,13 +169,24 @@ export default function AddContributionScreen() {
         editable={!ledgerSaved}
       />
       {kind === "money" ? (
-        <Input
-          label="Amount"
-          value={amount}
-          onChangeText={setAmount}
-          keyboardType="numeric"
-          editable={!ledgerSaved}
-        />
+        <>
+          <Input
+            label="Amount"
+            value={amount}
+            onChangeText={setAmount}
+            keyboardType="numeric"
+            editable={!ledgerSaved}
+          />
+          {status === "received" ? (
+            <ChoiceChips
+              label="Received as"
+              value={paymentMethod}
+              options={METHOD_OPTIONS}
+              disabled={ledgerSaved}
+              onChange={setPaymentMethod}
+            />
+          ) : null}
+        </>
       ) : (
         <>
           <Input
@@ -328,6 +346,8 @@ export default function AddContributionScreen() {
               date: todayDateInput(),
               expectedDate: status === "promised" ? expectedDate : undefined,
               status,
+              paymentMethod:
+                kind === "money" && status === "received" ? paymentMethod : undefined,
               pandalAsset:
                 addAsAsset && canLinkAsset
                   ? {

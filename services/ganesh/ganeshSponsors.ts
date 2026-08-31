@@ -42,7 +42,7 @@ import {
   purposeLabelOf,
   sponsorshipValue,
 } from "@/shared/utils/ganeshSponsors";
-import { validateCashContribution, validateInKindValue } from "@/shared/utils/ganeshMath";
+import { validateCashContribution, validateInKindValue, locationDelta, resolveFundLocation } from "@/shared/utils/ganeshMath";
 import { todayDateInput } from "@/shared/utils/ganeshIdentity";
 
 type GaneshActor = {
@@ -269,7 +269,10 @@ function appendReceivedContribution(
     })
   );
   if (cash) {
-    bumpSummary(batch, db, pandalId, festivalId, { otherCashContributions: input.amount });
+    bumpSummary(batch, db, pandalId, festivalId, {
+      otherCashContributions: input.amount,
+      ...locationDelta(resolveFundLocation(input.paymentMethod), input.amount),
+    });
   } else if (isInKindSponsoring(input.type)) {
     bumpSummary(batch, db, pandalId, festivalId, { sponsoredValue: input.estimatedValue });
   }

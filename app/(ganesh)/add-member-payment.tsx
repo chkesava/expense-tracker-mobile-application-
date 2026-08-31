@@ -121,7 +121,7 @@ export default function AddMemberPaymentScreen() {
               contributorMemberId: selected.userId,
               amount: Number(amount),
               isCommitteeContribution: true,
-              description: method,
+              paymentMethod: method,
               date: todayDateInput(),
               status: "received",
             })

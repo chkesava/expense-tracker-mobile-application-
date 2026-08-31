@@ -23,28 +23,27 @@ import { useGaneshWrites } from "@/hooks/useGaneshWrites";
 import { usePandalAssets } from "@/hooks/usePandalAssets";
 import { usePandalSponsors } from "@/hooks/usePandalSponsors";
 import { usePandals } from "@/hooks/usePandals";
+import { usePermanentFund } from "@/hooks/usePermanentFund";
 import { useSponsorships } from "@/hooks/useSponsorships";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import { summarizeAssets } from "@/shared/utils/ganeshAssets";
-import { summarizeContributions } from "@/shared/utils/ganeshContributions";
+import { buildFinancialOverview } from "@/shared/utils/ganeshFinancialOverview";
 import {
   assetPurchaseAmountOf,
-  availableGodFund,
+  fundLocationLabel,
   regularExpenseAmount,
-  totalCashIn,
   totalExpenses,
 } from "@/shared/utils/ganeshMath";
 import { formatInr } from "@/shared/utils/ganeshMoney";
-import { breakdownSponsors, summarizeSponsorships } from "@/shared/utils/ganeshSponsors";
+import { breakdownSponsors } from "@/shared/utils/ganeshSponsors";
 import { useTheme } from "@/theme/ThemeProvider";
 
 /**
  * Pandal Transparency — a committee-readable festival hisab.
  *
- * Same numbers as before (`ganeshMath`, `summarizeContributions`,
- * `summarizeSponsorships`, `summarizeAssets`). The layout is what you would
- * read aloud at a meeting: where money came from, where it went, what the
- * Pandal now owns. Promised-vs-received and the regular/asset split stay.
+ * Same `buildFinancialOverview()` numbers as Funds. The layout is what you
+ * would read aloud at a meeting: where money came from, where it went, what
+ * the Pandal now owns. Promised-vs-received and the regular/asset split stay.
  */
 export default function FestivalReportScreen() {
   const { theme } = useTheme();
@@ -53,19 +52,27 @@ export default function FestivalReportScreen() {
   const { pandalId, festivalId } = useGaneshSession();
   const { pandals } = usePandals();
   const { festivals } = useFestivals(pandalId);
-  const { summary } = useGaneshSummary(pandalId, festivalId);
-  const { contributions } = useContributions(pandalId, festivalId);
-  const contributionTotals = summarizeContributions(contributions);
-  const { sponsorships } = useSponsorships(pandalId, festivalId);
-  const { sponsors } = usePandalSponsors(pandalId);
-  const sponsorTotals = summarizeSponsorships(sponsorships);
-  const sponsorRows = breakdownSponsors(sponsorships, sponsors);
-  const { assets } = usePandalAssets(pandalId);
-  const assetSummary = summarizeAssets(assets);
   const writes = useGaneshWrites();
   const { can } = useGaneshPermissions();
   const pandal = pandals.find((item) => item.id === pandalId);
   const festival = festivals.find((item) => item.id === festivalId);
+  const { summary } = useGaneshSummary(pandalId, festivalId);
+  const { contributions } = useContributions(pandalId, festivalId);
+  const { sponsorships } = useSponsorships(pandalId, festivalId);
+  const { sponsors } = usePandalSponsors(pandalId);
+  const { fund } = usePermanentFund(pandalId);
+  const overview = buildFinancialOverview({
+    summary,
+    permanentFund: fund,
+    contributions,
+    sponsorships,
+    festival,
+  });
+  const contributionTotals = overview.contributionTotals;
+  const sponsorTotals = overview.sponsorTotals;
+  const sponsorRows = breakdownSponsors(sponsorships, sponsors);
+  const { assets } = usePandalAssets(pandalId);
+  const assetSummary = summarizeAssets(assets);
   const canRecalculate = can("festival.update");
 
   return (
@@ -85,38 +92,24 @@ export default function FestivalReportScreen() {
       <SectionPair>
         <Section title="Where money came from" subtitle="Cash that entered this festival">
           <StatStrip>
-            <StatTile label="Opening funds">
-              <Money value={summary.openingFunds} size="secondary" />
-            </StatTile>
-            <StatTile label="Chanda">
-              <Money value={summary.chanda} size="secondary" />
-            </StatTile>
-            <StatTile label="Committee">
-              <Money value={summary.committeeContributions} size="secondary" />
-            </StatTile>
-            <StatTile label="Other cash">
-              <Money value={summary.otherCashContributions} size="secondary" />
-            </StatTile>
-            <StatTile label="From Permanent Fund">
-              <Money value={summary.receivedFromPermanentFund} size="secondary" />
-            </StatTile>
+            {overview.moneyInLines.map((line) => (
+              <StatTile key={line.id} label={line.label}>
+                <Money value={line.amount} size="secondary" />
+              </StatTile>
+            ))}
             <StatTile label="Total cash in">
-              <Money value={totalCashIn(summary)} size="secondary" />
+              <Money value={overview.moneyIn} size="secondary" />
             </StatTile>
           </StatStrip>
         </Section>
 
         <Section title="Where it went" subtitle="Spend and returns this festival">
           <StatStrip>
-            <StatTile label="God Fund expenses">
-              <Money value={summary.godFundExpenses} size="secondary" />
-            </StatTile>
-            <StatTile label="Reimbursements">
-              <Money value={summary.reimbursements} size="secondary" />
-            </StatTile>
-            <StatTile label="Returned to Permanent Fund">
-              <Money value={summary.transferredToPermanentFund} size="secondary" />
-            </StatTile>
+            {overview.moneyOutLines.map((line) => (
+              <StatTile key={line.id} label={line.label}>
+                <Money value={line.amount} size="secondary" />
+              </StatTile>
+            ))}
             <StatTile label="Festival expenses">
               <Money value={totalExpenses(summary)} size="secondary" />
             </StatTile>
@@ -132,7 +125,7 @@ export default function FestivalReportScreen() {
               <Money value={summary.personalMoneyUsed} size="secondary" />
             </StatTile>
             <StatTile label="Pending reimbursements">
-              <Money value={summary.pendingReimbursements} size="secondary" />
+              <Money value={overview.pendingReimbursements} size="secondary" />
             </StatTile>
           </StatStrip>
         </Section>
@@ -141,8 +134,22 @@ export default function FestivalReportScreen() {
       <Section title="What the Pandal owns" subtitle="After this festival's spend">
         <StatStrip>
           <StatTile label="Closing cash / God Fund">
-            <Money value={availableGodFund(summary)} size="secondary" />
+            <Money value={overview.availableGodFund} size="secondary" />
           </StatTile>
+          <StatTile label="Cash">
+            <Money value={overview.locations.cash} size="secondary" />
+          </StatTile>
+          <StatTile label="UPI">
+            <Money value={overview.locations.upi} size="secondary" />
+          </StatTile>
+          <StatTile label="Bank">
+            <Money value={overview.locations.bank} size="secondary" />
+          </StatTile>
+          {overview.locations.other > 0 ? (
+            <StatTile label={fundLocationLabel("other")}>
+              <Money value={overview.locations.other} size="secondary" />
+            </StatTile>
+          ) : null}
           <StatTile label="Pandal estimated value">
             <Money value={assetSummary.estimatedValue} size="secondary" />
           </StatTile>

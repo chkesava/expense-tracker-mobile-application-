@@ -30,6 +30,7 @@ import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import { ganeshStoredPath } from "@/services/ganesh/storage/storageService";
 import { isAssetPurchaseExpense } from "@/shared/utils/ganeshAssets";
 import { memberDisplayName } from "@/shared/utils/ganeshIdentity";
+import { fundLocationLabel } from "@/shared/utils/ganeshMath";
 import { formatInr } from "@/shared/utils/ganeshMoney";
 import { useTheme } from "@/theme/ThemeProvider";
 
@@ -146,6 +147,9 @@ export default function ExpenseDetailScreen() {
       <Text style={{ color: theme.colors.mutedForeground }}>
         God Fund {formatInr(expense.godFundAmount)} · Personal {formatInr(expense.personalAmount)}
         {expense.sponsoredAmount > 0 ? ` · Sponsored ${formatInr(expense.sponsoredAmount)}` : ""}
+        {expense.godFundAmount > 0 && expense.paymentMethod
+          ? ` · Paid from ${fundLocationLabel(expense.paymentMethod)}`
+          : ""}
       </Text>
       {festival ? (
         <Text style={{ color: theme.colors.mutedForeground }}>{festival.name}</Text>

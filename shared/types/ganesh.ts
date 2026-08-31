@@ -365,6 +365,11 @@ export interface GaneshSummary {
   assetPurchaseAmount: number;
   transferredToPermanentFund: number;
   receivedFromPermanentFund: number;
+  /** Festival God Fund held as cash. Unclassified history is repaired into `other`. */
+  cash: number;
+  upi: number;
+  bank: number;
+  other: number;
   updatedAt?: FirestoreTime;
 }
 
@@ -499,6 +504,12 @@ export interface GaneshExpense extends GaneshAuditFields, GaneshVoidFields {
   linkedSponsorshipId?: string;
   expenseType?: GaneshExpenseType;
   assetId?: string;
+  /**
+   * Where God Fund cash left from. Personal / sponsored legs do not move
+   * festival Cash / UPI / Bank. Missing on historical records — recompute
+   * treats those as `other`.
+   */
+  paymentMethod?: PaymentMethod;
   ledgerType: "EXPENSE";
   pendingWrite?: boolean;
 }
@@ -637,6 +648,10 @@ export const EMPTY_GANESH_SUMMARY: GaneshSummary = {
   assetPurchaseAmount: 0,
   transferredToPermanentFund: 0,
   receivedFromPermanentFund: 0,
+  cash: 0,
+  upi: 0,
+  bank: 0,
+  other: 0,
 };
 
 export const EMPTY_PERMANENT_FUND: PermanentFundSummary = {

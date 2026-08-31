@@ -57,7 +57,7 @@ import {
   type PermanentFundSummary,
   type PermanentFundTransaction,
 } from "@/shared/types/ganesh";
-import { parsePermanentFund } from "@/shared/utils/ganeshMath";
+import { parseGaneshSummary, parsePermanentFund } from "@/shared/utils/ganeshMath";
 import {
   festivalCol,
   festivalsCol,
@@ -309,11 +309,7 @@ export function GaneshDataProvider({ children }: { children: ReactNode }) {
       doc(db, root, ...rest),
       (snap) => {
         logQuerySnapshot(path, snap);
-        setSummary(
-          snap.exists()
-            ? { ...EMPTY_GANESH_SUMMARY, ...(snap.data() as Partial<GaneshSummary>) }
-            : EMPTY_GANESH_SUMMARY
-        );
+        setSummary(snap.exists() ? parseGaneshSummary(snap.data()) : EMPTY_GANESH_SUMMARY);
         setSummaryPendingWrite(snap.metadata.hasPendingWrites);
         setSummaryError(null);
         setSummaryLoading(false);

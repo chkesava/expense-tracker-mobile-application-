@@ -4,16 +4,20 @@ import {
   collection,
   deleteField,
   doc,
+  documentId,
   getDoc,
   getDocs,
   increment,
   limit,
+  orderBy,
   query,
   runTransaction,
   serverTimestamp,
+  startAfter,
   where,
   writeBatch,
   type Firestore,
+  type QueryDocumentSnapshot,
   type Transaction,
   type WriteBatch,
 } from "firebase/firestore";
@@ -26,10 +30,15 @@ import { omitUndefined } from "@/shared/utils/firestorePayload";
 import {
   availableGodFund,
   deriveHouseholdStatus,
+  locationDelta,
+  money,
+  parseGaneshSummary,
+  resolveFundLocation,
   summarizeLedger,
   validateCashContribution,
   validateCollection,
   validateExpenseFunding,
+  validateGodFundLocationSpend,
   validateGodFundSpend,
   validateInKindValue,
   validateNonNegativeAmount,
@@ -242,6 +251,30 @@ function bumpSummary(
     }
   }
   batch.set(ref, payload, { merge: true });
+}
+
+function locationBump(method: string | undefined, signedAmount: number) {
+  return locationDelta(resolveFundLocation(method), signedAmount);
+}
+
+function requireCashMethod(paymentMethod?: PaymentMethod): PaymentMethod {
+  if (!paymentMethod) {
+    throw new Error("Choose Cash, UPI, Bank or Other.");
+  }
+  return resolveFundLocation(paymentMethod);
+}
+
+function requireGodFundMethod(
+  godFundAmount: number,
+  paymentMethod?: PaymentMethod
+): PaymentMethod | undefined {
+  if (!(godFundAmount > 0)) {
+    return paymentMethod ? resolveFundLocation(paymentMethod) : undefined;
+  }
+  if (!paymentMethod) {
+    throw new Error("Choose how the God Fund paid: Cash, UPI, Bank or Other.");
+  }
+  return resolveFundLocation(paymentMethod);
 }
 
 async function commitFestivalAndYearClaim(
@@ -1061,44 +1094,83 @@ export async function addOpeningFund(
   input: {
     amount: number;
     sourceType: OpeningFundSource;
+    location?: PermanentFundLocation;
     description?: string;
     date: string;
   }
 ): Promise<string> {
+  const ids = await addOpeningFunds(db, actor, pandalId, festivalId, {
+    amounts: {
+      [resolveFundLocation(input.location ?? input.sourceType)]: input.amount,
+    },
+    sourceType: input.sourceType,
+    description: input.description,
+    date: input.date,
+  });
+  return ids[0];
+}
+
+export async function addOpeningFunds(
+  db: Firestore,
+  actor: GaneshActor,
+  pandalId: string,
+  festivalId: string,
+  input: {
+    amounts: Partial<Record<PermanentFundLocation, number>>;
+    sourceType: OpeningFundSource;
+    description?: string;
+    date: string;
+  }
+): Promise<string[]> {
   await requireOpenFestival(db, pandalId, festivalId);
-  const valid = validatePositiveAmount(input.amount, "Opening fund");
-  if (!valid.ok) throw new Error(valid.error);
-  const id = newId();
+  const entries = (["cash", "upi", "bank", "other"] as PermanentFundLocation[])
+    .map((location) => ({ location, amount: Number(input.amounts[location] ?? 0) }))
+    .filter((entry) => entry.amount > 0);
+  if (entries.length === 0) throw new Error("Enter an opening fund amount.");
+  for (const entry of entries) {
+    const valid = validatePositiveAmount(entry.amount, "Opening fund");
+    if (!valid.ok) throw new Error(valid.error);
+  }
+
+  const ids: string[] = [];
   const batch = writeBatch(db);
-  batch.set(
-    pathRef(db, [...festivalCol(pandalId, festivalId, "openingFunds"), id]),
-    omitUndefined({
-      amount: input.amount,
-      sourceType: input.sourceType,
-      description: input.description?.trim() || undefined,
-      date: input.date,
-      ledgerType: "OPENING_BALANCE",
-      voided: false,
-      createdBy: actor.uid,
-      createdAt: serverTimestamp(),
-      updatedBy: actor.uid,
-      updatedAt: serverTimestamp(),
-    })
-  );
-  bumpSummary(batch, db, pandalId, festivalId, { openingFunds: input.amount });
-  activity(batch, db, pandalId, festivalId, {
-    title: "Opening fund",
-    subtitle: `Added by ${actor.displayName}`,
-    amount: input.amount,
-    actorId: actor.uid,
-    entityType: "openingFund",
-    entityId: id,
-  });
-  audit(batch, db, pandalId, festivalId, actor.uid, "created", "openingFund", id, {
-    newValue: input,
-  });
+  const totals = { openingFunds: 0, cash: 0, upi: 0, bank: 0, other: 0 };
+  for (const entry of entries) {
+    const id = newId();
+    ids.push(id);
+    totals.openingFunds += entry.amount;
+    totals[entry.location] += entry.amount;
+    batch.set(
+      pathRef(db, [...festivalCol(pandalId, festivalId, "openingFunds"), id]),
+      omitUndefined({
+        amount: entry.amount,
+        sourceType: input.sourceType,
+        location: entry.location,
+        description: input.description?.trim() || undefined,
+        date: input.date,
+        ledgerType: "OPENING_BALANCE",
+        voided: false,
+        createdBy: actor.uid,
+        createdAt: serverTimestamp(),
+        updatedBy: actor.uid,
+        updatedAt: serverTimestamp(),
+      })
+    );
+    activity(batch, db, pandalId, festivalId, {
+      title: "Opening fund",
+      subtitle: `Added by ${actor.displayName}`,
+      amount: entry.amount,
+      actorId: actor.uid,
+      entityType: "openingFund",
+      entityId: id,
+    });
+    audit(batch, db, pandalId, festivalId, actor.uid, "created", "openingFund", id, {
+      newValue: { ...input, amount: entry.amount, location: entry.location },
+    });
+  }
+  bumpSummary(batch, db, pandalId, festivalId, totals);
   await commitWrite(() => batch.commit(), { label: "opening fund" });
-  return id;
+  return ids;
 }
 
 export async function addCollection(
@@ -1198,6 +1270,7 @@ export async function addCollection(
   bumpSummary(batch, db, pandalId, festivalId, {
     chanda: input.amount,
     collectionCount: 1,
+    ...locationBump(input.paymentMethod, input.amount),
   });
   activity(batch, db, pandalId, festivalId, {
     title: `${donorName}`,
@@ -1280,6 +1353,7 @@ export async function addContribution(
     date: string;
     expectedDate?: string;
     status?: ContributionStatus;
+    paymentMethod?: PaymentMethod;
     pandalAsset?: AssetPurchaseDraft;
   }
 ): Promise<string> {
@@ -1305,6 +1379,9 @@ export async function addContribution(
   const id = newId();
   const assetId = input.pandalAsset ? newId() : undefined;
   const isCommittee = Boolean(input.isCommitteeContribution && input.contributorMemberId);
+  const received = status === "received";
+  const paymentMethod =
+    input.kind === "money" && received ? requireCashMethod(input.paymentMethod) : undefined;
   const ledgerType =
     input.kind === "money"
       ? isCommittee
@@ -1330,6 +1407,7 @@ export async function addContribution(
       status,
       receivedAt: status === "received" ? serverTimestamp() : undefined,
       receivedBy: status === "received" ? actor.uid : undefined,
+      paymentMethod,
       assetId,
       ledgerType,
       voided: false,
@@ -1340,11 +1418,11 @@ export async function addContribution(
     })
   );
 
-  const received = status === "received";
   if (input.kind === "money" && received) {
     bumpSummary(batch, db, pandalId, festivalId, {
       committeeContributions: isCommittee ? amount : 0,
       otherCashContributions: isCommittee ? 0 : amount,
+      ...locationBump(paymentMethod, amount),
     });
     if (isCommittee && input.contributorMemberId) {
       batch.set(
@@ -1451,10 +1529,7 @@ async function readSummaryInTxn(
   festivalId: string
 ) {
   const snap = await txn.get(pathRef(db, summaryDoc(pandalId, festivalId)));
-  return {
-    ...EMPTY_GANESH_SUMMARY,
-    ...(snap.exists() ? snap.data() : {}),
-  };
+  return parseGaneshSummary(snap.exists() ? snap.data() : null);
 }
 
 /**
@@ -1493,12 +1568,14 @@ function bumpReceivedContribution(
     isCommittee: boolean;
     contributorMemberId?: string;
     contributorName?: string;
+    paymentMethod?: PaymentMethod;
   }
 ) {
   if (data.kind === "money") {
     bumpSummary(batch, db, pandalId, festivalId, {
       committeeContributions: data.isCommittee ? data.amount : 0,
       otherCashContributions: data.isCommittee ? 0 : data.amount,
+      ...locationBump(data.paymentMethod, data.amount),
     });
     if (data.isCommittee && data.contributorMemberId) {
       batch.set(
@@ -1538,6 +1615,7 @@ export async function receiveContribution(
   const prev = snap.data();
   assertCanReceiveContribution(prev);
   const kind = String(prev.kind);
+  const paymentMethod = kind === "money" ? requireCashMethod(input?.paymentMethod) : undefined;
   if (input?.pandalAsset && kind !== "item" && kind !== "sponsorship") {
     throw new Error("Only item or sponsorship contributions can be added as Pandal assets.");
   }
@@ -1550,7 +1628,7 @@ export async function receiveContribution(
       receivedAt: serverTimestamp(),
       receivedBy: actor.uid,
       receivedNotes: input?.receivedNotes?.trim() || undefined,
-      paymentMethod: kind === "money" ? input?.paymentMethod : undefined,
+      paymentMethod,
       assetId: prev.assetId || assetId,
       updatedBy: actor.uid,
       updatedAt: serverTimestamp(),
@@ -1563,6 +1641,7 @@ export async function receiveContribution(
     isCommittee: Boolean(prev.isCommitteeContribution),
     contributorMemberId: prev.contributorMemberId ? String(prev.contributorMemberId) : undefined,
     contributorName: prev.contributorName ? String(prev.contributorName) : undefined,
+    paymentMethod,
   });
   if (input?.pandalAsset && assetId) {
     appendPandalAssetCreate(batch, db, actor, pandalId, assetId, {
@@ -1684,6 +1763,7 @@ export async function addExpense(
     linkedSponsorshipId?: string;
     sponsorshipPurpose?: SponsorshipPurpose;
     purposeLabel?: string;
+    paymentMethod?: PaymentMethod;
   }
 ): Promise<string> {
   await requireOpenFestival(db, pandalId, festivalId);
@@ -1697,6 +1777,7 @@ export async function addExpense(
     sponsoredAmount,
   });
   if (!valid.ok) throw new Error(valid.error);
+  const paymentMethod = requireGodFundMethod(input.godFundAmount, input.paymentMethod);
   const sponsorLink = await loadSponsoredExpenseLink(db, pandalId, festivalId, {
     sponsoredAmount,
     sponsorId: input.sponsorId,
@@ -1735,6 +1816,7 @@ export async function addExpense(
         linkedContributionId: input.linkedContributionId,
         linkedSponsorshipId,
         expenseType: "normal",
+        paymentMethod,
         ledgerType: "EXPENSE",
         voided: false,
         createdBy: actor.uid,
@@ -1748,6 +1830,7 @@ export async function addExpense(
       personalMoneyUsed: input.personalAmount,
       pendingReimbursements: input.personalAmount,
       expenseCount: 1,
+      ...(input.godFundAmount > 0 ? locationBump(paymentMethod, -input.godFundAmount) : {}),
     });
     if (input.personalAmount > 0) {
       writer.set(
@@ -1777,7 +1860,11 @@ export async function addExpense(
   if (input.godFundAmount > 0) {
     await runTransaction(db, async (txn) => {
       const summary = await readSummaryInTxn(txn, db, pandalId, festivalId);
-      const spendOk = validateGodFundSpend(input.godFundAmount, availableGodFund(summary));
+      const spendOk = validateGodFundLocationSpend(
+        input.godFundAmount,
+        resolveFundLocation(paymentMethod),
+        summary
+      );
       if (!spendOk.ok) throw new Error(spendOk.error);
       appendExpense(txn);
     });
@@ -1814,6 +1901,7 @@ export async function addAssetPurchase(
     sponsorshipPurpose?: SponsorshipPurpose;
     purposeLabel?: string;
     asset: AssetPurchaseDraft;
+    paymentMethod?: PaymentMethod;
   }
 ): Promise<{ expenseId: string; assetId: string }> {
   const name = input.name.trim();
@@ -1826,6 +1914,7 @@ export async function addAssetPurchase(
     sponsoredAmount,
   });
   if (!valid.ok) throw new Error(valid.error);
+  const paymentMethod = requireGodFundMethod(input.godFundAmount, input.paymentMethod);
   const estimatedValue =
     input.asset.estimatedValue != null && Number.isFinite(input.asset.estimatedValue)
       ? input.asset.estimatedValue
@@ -1870,6 +1959,7 @@ export async function addAssetPurchase(
       linkedSponsorshipId,
       expenseType: "asset_purchase",
       assetId,
+      paymentMethod,
       ledgerType: "EXPENSE",
       voided: false,
       createdBy: actor.uid,
@@ -1902,6 +1992,7 @@ export async function addAssetPurchase(
     pendingReimbursements: input.personalAmount,
     expenseCount: 1,
     assetPurchaseAmount: cashAmount,
+    ...(input.godFundAmount > 0 ? locationBump(paymentMethod, -input.godFundAmount) : {}),
   });
   if (input.personalAmount > 0) {
     writer.set(
@@ -1931,7 +2022,11 @@ export async function addAssetPurchase(
   if (input.godFundAmount > 0) {
     await runTransaction(db, async (txn) => {
       const summary = await readSummaryInTxn(txn, db, pandalId, festivalId);
-      const spendOk = validateGodFundSpend(input.godFundAmount, availableGodFund(summary));
+      const spendOk = validateGodFundLocationSpend(
+        input.godFundAmount,
+        resolveFundLocation(paymentMethod),
+        summary
+      );
       if (!spendOk.ok) throw new Error(spendOk.error);
       appendAssetPurchase(txn);
     });
@@ -1982,6 +2077,12 @@ export async function updateExpenseAmounts(
   const oldCash = oldGod + oldPersonal;
   const newCash = input.godFundAmount + input.personalAmount;
   const paidByMemberId = current.paidByMemberId ? String(current.paidByMemberId) : undefined;
+  const paymentMethod = resolveFundLocation(
+    typeof current.paymentMethod === "string" ? current.paymentMethod : undefined
+  );
+  if (godDelta > 0 && !current.paymentMethod && input.godFundAmount > 0) {
+    // Historical expenses have no method; new God Fund spend sits in Other.
+  }
 
   const appendUpdate = (writer: GaneshWriter) => {
   writer.update(
@@ -1991,6 +2092,7 @@ export async function updateExpenseAmounts(
       godFundAmount: input.godFundAmount,
       personalAmount: input.personalAmount,
       sponsoredAmount,
+      paymentMethod: input.godFundAmount > 0 ? paymentMethod : current.paymentMethod,
       updatedBy: actor.uid,
       updatedAt: serverTimestamp(),
     })
@@ -2000,6 +2102,7 @@ export async function updateExpenseAmounts(
     personalMoneyUsed: personalDelta,
     pendingReimbursements: personalDelta,
     assetPurchaseAmount: wasPurchase ? newCash - oldCash : 0,
+    ...(godDelta !== 0 ? locationBump(paymentMethod, -godDelta) : {}),
   });
   if (personalDelta !== 0 && paidByMemberId) {
     writer.set(
@@ -2048,7 +2151,7 @@ export async function updateExpenseAmounts(
         : null;
 
       if (summary) {
-        const spendOk = validateGodFundSpend(godDelta, availableGodFund(summary));
+        const spendOk = validateGodFundLocationSpend(godDelta, paymentMethod, summary);
         if (!spendOk.ok) throw new Error(spendOk.error);
       }
       if (member) assertReimbursementReversible(-personalDelta, member.pending);
@@ -2132,8 +2235,16 @@ export async function addReimbursement(
     // no warning anywhere (GS-008). Routed through validateGodFundSpend so the
     // rounding stays the one central formula — see GS-080 on local money() copies.
     const available = availableGodFund(summary);
-    if (!validateGodFundSpend(input.amount, available).ok) {
-      throw new InsufficientFundError("festival", available, input.amount);
+    const locOk = validateGodFundLocationSpend(
+      input.amount,
+      resolveFundLocation(input.paymentMethod),
+      summary
+    );
+    if (!locOk.ok) {
+      if (!validateGodFundSpend(input.amount, available).ok) {
+        throw new InsufficientFundError("festival", available, input.amount);
+      }
+      throw new Error(locOk.error);
     }
 
     txn.set(
@@ -2155,6 +2266,7 @@ export async function addReimbursement(
     bumpSummary(txn, db, pandalId, festivalId, {
       reimbursements: input.amount,
       pendingReimbursements: -input.amount,
+      ...locationBump(input.paymentMethod, -input.amount),
     });
     txn.set(
       pathRef(db, [...festivalCol(pandalId, festivalId, "members"), input.memberId]),
@@ -2249,11 +2361,23 @@ export async function voidFinancialRecord(
   });
 
   if (input.entityType === "openingFund") {
-    bumpSummary(batch, db, pandalId, festivalId, { openingFunds: -Number(data.amount ?? 0) });
-  } else if (input.entityType === "collection") {
+    const amount = Number(data.amount ?? 0);
     bumpSummary(batch, db, pandalId, festivalId, {
-      chanda: -Number(data.amount ?? 0),
+      openingFunds: -amount,
+      ...locationBump(
+        typeof data.location === "string" ? data.location : data.sourceType,
+        -amount
+      ),
+    });
+  } else if (input.entityType === "collection") {
+    const amount = Number(data.amount ?? 0);
+    bumpSummary(batch, db, pandalId, festivalId, {
+      chanda: -amount,
       collectionCount: -1,
+      ...locationBump(
+        typeof data.paymentMethod === "string" ? data.paymentMethod : undefined,
+        -amount
+      ),
     });
     if (data.householdId) {
       const householdRef = pathRef(db, [
@@ -2283,6 +2407,10 @@ export async function voidFinancialRecord(
       bumpSummary(batch, db, pandalId, festivalId, {
         committeeContributions: data.isCommitteeContribution ? -amount : 0,
         otherCashContributions: data.isCommitteeContribution ? 0 : -amount,
+        ...locationBump(
+          typeof data.paymentMethod === "string" ? data.paymentMethod : undefined,
+          -amount
+        ),
       });
       if (data.isCommitteeContribution && data.contributorMemberId) {
         batch.set(
@@ -2311,6 +2439,12 @@ export async function voidFinancialRecord(
       pendingReimbursements: -personalAmount,
       expenseCount: -1,
       assetPurchaseAmount: wasPurchase ? -(godFundAmount + personalAmount) : 0,
+      ...(godFundAmount > 0
+        ? locationBump(
+            typeof data.paymentMethod === "string" ? data.paymentMethod : undefined,
+            godFundAmount
+          )
+        : {}),
     });
     if (personalAmount > 0 && data.paidByMemberId) {
       batch.set(
@@ -2327,6 +2461,10 @@ export async function voidFinancialRecord(
     bumpSummary(batch, db, pandalId, festivalId, {
       reimbursements: -amount,
       pendingReimbursements: amount,
+      ...locationBump(
+        typeof data.paymentMethod === "string" ? data.paymentMethod : undefined,
+        amount
+      ),
     });
     batch.set(
       pathRef(db, [...festivalCol(pandalId, festivalId, "members"), String(data.memberId)]),
@@ -2441,67 +2579,196 @@ export async function reopenFestival(
   });
 }
 
+function timestampMillis(value: unknown): number | null {
+  if (!value || typeof value !== "object") return null;
+  const ts = value as { toMillis?: () => number; seconds?: number };
+  if (typeof ts.toMillis === "function") return ts.toMillis();
+  if (typeof ts.seconds === "number") return ts.seconds * 1000;
+  return null;
+}
+
+async function loadAllFestivalDocs(
+  db: Firestore,
+  pandalId: string,
+  festivalId: string,
+  name: Parameters<typeof festivalCol>[2]
+): Promise<QueryDocumentSnapshot[]> {
+  const out: QueryDocumentSnapshot[] = [];
+  let last: QueryDocumentSnapshot | undefined;
+  while (true) {
+    const q = last
+      ? query(
+          colRef(db, festivalCol(pandalId, festivalId, name)),
+          orderBy(documentId()),
+          startAfter(last),
+          limit(500)
+        )
+      : query(
+          colRef(db, festivalCol(pandalId, festivalId, name)),
+          orderBy(documentId()),
+          limit(500)
+        );
+    const snap = await getDocs(q);
+    out.push(...snap.docs);
+    if (snap.size < 500) break;
+    last = snap.docs[snap.docs.length - 1];
+  }
+  return out;
+}
+
 export async function recomputeFestivalSummary(
   db: Firestore,
   pandalId: string,
   festivalId: string
 ): Promise<void> {
-  const load = async (name: Parameters<typeof festivalCol>[2]) =>
-    getDocs(query(colRef(db, festivalCol(pandalId, festivalId, name)), limit(2000)));
+  const summaryRef = pathRef(db, summaryDoc(pandalId, festivalId));
+  const beforeSnap = await getDoc(summaryRef);
+  const beforeUpdatedAt = timestampMillis(beforeSnap.exists() ? beforeSnap.data().updatedAt : null);
 
-  const [opening, collections, contributions, expenses, reimbursements, fundTransfers] =
+  const [opening, collections, contributions, expenses, reimbursements, fundTransfers, members] =
     await Promise.all([
-      load("openingFunds"),
-      load("collections"),
-      load("contributions"),
-      load("expenses"),
-      load("reimbursements"),
-      load("fundTransfers"),
+      loadAllFestivalDocs(db, pandalId, festivalId, "openingFunds"),
+      loadAllFestivalDocs(db, pandalId, festivalId, "collections"),
+      loadAllFestivalDocs(db, pandalId, festivalId, "contributions"),
+      loadAllFestivalDocs(db, pandalId, festivalId, "expenses"),
+      loadAllFestivalDocs(db, pandalId, festivalId, "reimbursements"),
+      loadAllFestivalDocs(db, pandalId, festivalId, "fundTransfers"),
+      loadAllFestivalDocs(db, pandalId, festivalId, "members"),
     ]);
 
-  const notVoided = (docSnap: { data: () => { voided?: boolean } }) => !docSnap.data().voided;
-  const received = (docSnap: { data: () => { voided?: boolean; status?: string } }) =>
-    notVoided(docSnap) && docSnap.data().status !== "cancelled" && docSnap.data().status !== "promised";
+  const notVoided = (docSnap: QueryDocumentSnapshot) => !docSnap.data().voided;
+  const received = (docSnap: QueryDocumentSnapshot) =>
+    notVoided(docSnap) &&
+    docSnap.data().status !== "cancelled" &&
+    docSnap.data().status !== "promised";
+
+  const locationDeltas: Array<{ location: PermanentFundLocation; amount: number }> = [];
+  const addLoc = (location: string | undefined, amount: number) => {
+    if (!amount) return;
+    locationDeltas.push({ location: resolveFundLocation(location), amount });
+  };
+
+  for (const docSnap of opening.filter(notVoided)) {
+    const data = docSnap.data();
+    addLoc(
+      typeof data.location === "string" ? data.location : data.sourceType,
+      Number(data.amount ?? 0)
+    );
+  }
+  for (const docSnap of collections.filter(notVoided)) {
+    const data = docSnap.data();
+    addLoc(data.paymentMethod, Number(data.amount ?? 0));
+  }
+  for (const docSnap of contributions.filter((row) => received(row) && row.data().kind === "money")) {
+    const data = docSnap.data();
+    addLoc(data.paymentMethod, Number(data.amount ?? 0));
+  }
+  for (const docSnap of expenses.filter(notVoided)) {
+    const data = docSnap.data();
+    addLoc(data.paymentMethod, -Number(data.godFundAmount ?? 0));
+  }
+  for (const docSnap of reimbursements.filter(notVoided)) {
+    const data = docSnap.data();
+    addLoc(data.paymentMethod, -Number(data.amount ?? 0));
+  }
+  for (const docSnap of fundTransfers.filter((row) => row.data().direction === "to_permanent")) {
+    const data = docSnap.data();
+    addLoc(data.location, -Number(data.amount ?? 0));
+  }
 
   const summary = summarizeLedger({
-    openingFunds: opening.docs.filter(notVoided).map((docSnap) => Number(docSnap.data().amount ?? 0)),
-    collections: collections.docs.filter(notVoided).map((docSnap) => Number(docSnap.data().amount ?? 0)),
-    committeeContributions: contributions.docs
+    openingFunds: opening.filter(notVoided).map((docSnap) => Number(docSnap.data().amount ?? 0)),
+    collections: collections.filter(notVoided).map((docSnap) => Number(docSnap.data().amount ?? 0)),
+    committeeContributions: contributions
       .filter((docSnap) => received(docSnap) && docSnap.data().kind === "money" && docSnap.data().isCommitteeContribution)
       .map((docSnap) => Number(docSnap.data().amount ?? 0)),
-    otherCashContributions: contributions.docs
+    otherCashContributions: contributions
       .filter((docSnap) => received(docSnap) && docSnap.data().kind === "money" && !docSnap.data().isCommitteeContribution)
       .map((docSnap) => Number(docSnap.data().amount ?? 0)),
-    godFundExpenses: expenses.docs.filter(notVoided).map((docSnap) => Number(docSnap.data().godFundAmount ?? 0)),
-    reimbursements: reimbursements.docs.filter(notVoided).map((docSnap) => Number(docSnap.data().amount ?? 0)),
-    personalAmounts: expenses.docs.filter(notVoided).map((docSnap) => Number(docSnap.data().personalAmount ?? 0)),
-    assetPurchaseAmounts: expenses.docs
+    godFundExpenses: expenses.filter(notVoided).map((docSnap) => Number(docSnap.data().godFundAmount ?? 0)),
+    reimbursements: reimbursements.filter(notVoided).map((docSnap) => Number(docSnap.data().amount ?? 0)),
+    personalAmounts: expenses.filter(notVoided).map((docSnap) => Number(docSnap.data().personalAmount ?? 0)),
+    assetPurchaseAmounts: expenses
       .filter(notVoided)
       .filter((docSnap) => docSnap.data().expenseType === "asset_purchase" || docSnap.data().assetId)
       .map(
         (docSnap) =>
           Number(docSnap.data().godFundAmount ?? 0) + Number(docSnap.data().personalAmount ?? 0)
       ),
-    inKindValues: contributions.docs
+    inKindValues: contributions
       .filter((docSnap) => received(docSnap) && docSnap.data().kind !== "money" && docSnap.data().kind !== "sponsorship")
       .map((docSnap) => Number(docSnap.data().estimatedValue ?? 0)),
-    sponsoredValues: contributions.docs
+    sponsoredValues: contributions
       .filter((docSnap) => received(docSnap) && docSnap.data().kind === "sponsorship")
       .map((docSnap) => Number(docSnap.data().estimatedValue ?? 0)),
+    locationDeltas,
   });
-  summary.transferredToPermanentFund = fundTransfers.docs
+  summary.transferredToPermanentFund = fundTransfers
     .filter((docSnap) => docSnap.data().direction === "to_permanent")
     .reduce((sum, docSnap) => sum + Number(docSnap.data().amount ?? 0), 0);
-  summary.receivedFromPermanentFund = fundTransfers.docs
+  summary.receivedFromPermanentFund = fundTransfers
     .filter((docSnap) => docSnap.data().direction === "from_permanent")
     .reduce((sum, docSnap) => sum + Number(docSnap.data().amount ?? 0), 0);
 
-  const summaryBatch = writeBatch(db);
-  summaryBatch.set(pathRef(db, summaryDoc(pandalId, festivalId)), {
-    ...summary,
-    updatedAt: serverTimestamp(),
+  const contributionPaid = new Map<string, number>();
+  const personalExpenses = new Map<string, number>();
+  const reimbursed = new Map<string, number>();
+  const bumpMember = (map: Map<string, number>, id: string | undefined, amount: number) => {
+    if (!id || !amount) return;
+    map.set(id, money((map.get(id) ?? 0) + amount));
+  };
+  for (const docSnap of contributions.filter(
+    (row) => received(row) && row.data().kind === "money" && row.data().isCommitteeContribution
+  )) {
+    bumpMember(contributionPaid, docSnap.data().contributorMemberId, Number(docSnap.data().amount ?? 0));
+  }
+  for (const docSnap of expenses.filter(notVoided)) {
+    bumpMember(
+      personalExpenses,
+      docSnap.data().paidByMemberId,
+      Number(docSnap.data().personalAmount ?? 0)
+    );
+  }
+  for (const docSnap of reimbursements.filter(notVoided)) {
+    bumpMember(reimbursed, docSnap.data().memberId, Number(docSnap.data().amount ?? 0));
+  }
+
+  await runTransaction(db, async (txn) => {
+    const current = await txn.get(summaryRef);
+    const currentUpdatedAt = timestampMillis(current.exists() ? current.data().updatedAt : null);
+    if (
+      beforeUpdatedAt != null &&
+      currentUpdatedAt != null &&
+      currentUpdatedAt !== beforeUpdatedAt
+    ) {
+      throw new Error("Festival totals changed while recalculating. Try again.");
+    }
+    txn.set(summaryRef, {
+      ...summary,
+      updatedAt: serverTimestamp(),
+    });
   });
-  await commitWrite(() => summaryBatch.commit(), { label: "recompute" });
+
+  for (let i = 0; i < members.length; i += 400) {
+    const slice = members.slice(i, i + 400);
+    const batch = writeBatch(db);
+    for (const memberSnap of slice) {
+      const paid = contributionPaid.get(memberSnap.id) ?? 0;
+      const personal = personalExpenses.get(memberSnap.id) ?? 0;
+      const repaid = reimbursed.get(memberSnap.id) ?? 0;
+      batch.set(
+        memberSnap.ref,
+        {
+          contributionPaid: paid,
+          personalExpenses: personal,
+          reimbursed: repaid,
+          pendingReimbursement: money(Math.max(0, personal - repaid)),
+        },
+        { merge: true }
+      );
+    }
+    await commitWrite(() => batch.commit(), { label: "recompute members" });
+  }
 }
 
 export async function addCustomCategory(

@@ -14,8 +14,11 @@ import { omitUndefined } from "@/shared/utils/firestorePayload";
 import {
   applyPermanentFundDelta,
   availableGodFund,
+  locationDelta,
+  parseGaneshSummary,
   parsePermanentFund,
   validateFundTransfer,
+  validateGodFundLocationSpend,
   validatePositiveAmount,
   validateSettlement,
 } from "@/shared/utils/ganeshMath";
@@ -27,7 +30,6 @@ import {
   summaryDoc,
 } from "@/shared/utils/ganeshPaths";
 import {
-  EMPTY_GANESH_SUMMARY,
   EMPTY_PERMANENT_FUND,
   type GaneshSummary,
   type PermanentFundLocation,
@@ -94,8 +96,16 @@ function pathRef(db: Firestore, segments: string[]) {
   return doc(db, first, ...rest);
 }
 
+function incrementLocations(location: PermanentFundLocation, signedAmount: number) {
+  const payload: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(locationDelta(location, signedAmount))) {
+    if (typeof value === "number" && value !== 0) payload[key] = increment(value);
+  }
+  return payload;
+}
+
 function parseSummary(data?: Partial<GaneshSummary> | null): GaneshSummary {
-  return { ...EMPTY_GANESH_SUMMARY, ...(data ?? {}) };
+  return parseGaneshSummary(data);
 }
 
 async function readPermanentFund(
@@ -352,6 +362,7 @@ export async function transferPermanentToFestival(
       {
         openingFunds: increment(input.amount),
         receivedFromPermanentFund: increment(input.amount),
+        ...incrementLocations(input.location, input.amount),
         updatedAt: serverTimestamp(),
       },
       { merge: true }
@@ -410,6 +421,8 @@ export async function transferFestivalToPermanent(
         remaining: closing - amount,
       });
       if (!settlement.ok) throw new InsufficientFundError("festival", closing, amount);
+      const locOk = validateGodFundLocationSpend(amount, input.location, summary);
+      if (!locOk.ok) throw new Error(locOk.error);
       const applied = applyPermanentFundDelta(current, input.location, amount);
       if (!applied.ok) throw new Error(applied.error);
       writePermanentFund(txn, db, pandalId, actor, applied.next);
@@ -444,6 +457,7 @@ export async function transferFestivalToPermanent(
         pathRef(db, summaryDoc(pandalId, festivalId)),
         {
           transferredToPermanentFund: increment(amount),
+          ...incrementLocations(input.location, -amount),
           updatedAt: serverTimestamp(),
         },
         { merge: true }

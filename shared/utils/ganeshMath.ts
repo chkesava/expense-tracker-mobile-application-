@@ -9,8 +9,168 @@ import type {
 import { EMPTY_GANESH_SUMMARY, EMPTY_PERMANENT_FUND } from "@/shared/types/ganesh";
 import { formatInr } from "@/shared/utils/ganeshMoney";
 
-function money(value: number): number {
+/** Round to paise. The one formula every Ganesh money comparison must use. */
+export function money(value: number): number {
   return Math.round(value * 100) / 100;
+}
+
+export type FestivalLocations = {
+  cash: number;
+  upi: number;
+  bank: number;
+  other: number;
+};
+
+export const EMPTY_FESTIVAL_LOCATIONS: FestivalLocations = {
+  cash: 0,
+  upi: 0,
+  bank: 0,
+  other: 0,
+};
+
+export function fundLocationLabel(location: PermanentFundLocation): string {
+  if (location === "upi") return "UPI";
+  return location.charAt(0).toUpperCase() + location.slice(1);
+}
+
+export function resolveFundLocation(value?: string | null): PermanentFundLocation {
+  if (value === "cash" || value === "upi" || value === "bank" || value === "other") {
+    return value;
+  }
+  return "other";
+}
+
+export function festivalLocationsOf(
+  summary?: Pick<GaneshSummary, "cash" | "upi" | "bank" | "other"> | null
+): FestivalLocations {
+  return {
+    cash: money(Number(summary?.cash ?? 0)),
+    upi: money(Number(summary?.upi ?? 0)),
+    bank: money(Number(summary?.bank ?? 0)),
+    other: money(Number(summary?.other ?? 0)),
+  };
+}
+
+export function festivalLocationTotal(locations: FestivalLocations): number {
+  return money(locations.cash + locations.upi + locations.bank + locations.other);
+}
+
+export function locationDelta(
+  location: PermanentFundLocation,
+  signedAmount: number
+): Partial<FestivalLocations> {
+  const amount = money(signedAmount);
+  if (amount === 0) return {};
+  return { [location]: amount };
+}
+
+export function applyFestivalLocationDelta(
+  current: FestivalLocations,
+  location: PermanentFundLocation,
+  signedAmount: number
+): { ok: true; next: FestivalLocations } | { ok: false; error: string } {
+  if (!Number.isFinite(signedAmount) || signedAmount === 0) {
+    return { ok: false, error: "Enter an amount other than zero." };
+  }
+  const next: FestivalLocations = { ...current };
+  next[location] = money((current[location] ?? 0) + signedAmount);
+  if (next[location] < 0) {
+    return {
+      ok: false,
+      error:
+        `Insufficient ${fundLocationLabel(location)} in the God Fund. ` +
+        `Available: ${formatInr(money(current[location] ?? 0))}. ` +
+        `Requested: ${formatInr(money(Math.abs(signedAmount)))}.`,
+    };
+  }
+  return { ok: true, next };
+}
+
+/**
+ * Display/repair helper. Unclassified God Fund (legacy records, or location
+ * fields never written) is absorbed into `other` so Cash + UPI + Bank + Other
+ * equals Available God Fund. Does not mutate the ledger.
+ */
+export function repairFestivalLocations(
+  summary: Pick<
+    GaneshSummary,
+    | "openingFunds"
+    | "chanda"
+    | "committeeContributions"
+    | "otherCashContributions"
+    | "godFundExpenses"
+    | "reimbursements"
+    | "transferredToPermanentFund"
+    | "cash"
+    | "upi"
+    | "bank"
+    | "other"
+  >
+): FestivalLocations {
+  const locations = festivalLocationsOf(summary);
+  const available = availableGodFund(summary);
+  const remainder = money(available - festivalLocationTotal(locations));
+  if (remainder === 0) return locations;
+  const other = money(locations.other + remainder);
+  if (other < 0) return locations;
+  return { ...locations, other };
+}
+
+export function locationInvariantHolds(summary: GaneshSummary): boolean {
+  return festivalLocationTotal(festivalLocationsOf(summary)) === availableGodFund(summary);
+}
+
+export function validateGodFundLocationSpend(
+  godFundAmount: number,
+  location: PermanentFundLocation,
+  summary: Pick<
+    GaneshSummary,
+    | "openingFunds"
+    | "chanda"
+    | "committeeContributions"
+    | "otherCashContributions"
+    | "godFundExpenses"
+    | "reimbursements"
+    | "transferredToPermanentFund"
+    | "cash"
+    | "upi"
+    | "bank"
+    | "other"
+  >
+): ValidationResult {
+  const amount = money(godFundAmount);
+  if (amount <= 0) return { ok: true };
+  const total = validateGodFundSpend(amount, availableGodFund(summary));
+  if (!total.ok) return total;
+  const applied = applyFestivalLocationDelta(repairFestivalLocations(summary), location, -amount);
+  if (!applied.ok) return applied;
+  return { ok: true };
+}
+
+export function parseGaneshSummary(data?: Partial<GaneshSummary> | null): GaneshSummary {
+  const src = data ?? {};
+  const next = { ...EMPTY_GANESH_SUMMARY };
+  (Object.keys(EMPTY_GANESH_SUMMARY) as Array<keyof typeof EMPTY_GANESH_SUMMARY>).forEach((key) => {
+    next[key] = money(Number(src[key] ?? 0));
+  });
+  return { ...next, updatedAt: src.updatedAt };
+}
+
+export function repairPermanentFund(fund: PermanentFundSummary): PermanentFundSummary {
+  const parsed: PermanentFundSummary = {
+    total: money(Number(fund.total ?? 0)),
+    cash: money(Number(fund.cash ?? 0)),
+    upi: money(Number(fund.upi ?? 0)),
+    bank: money(Number(fund.bank ?? 0)),
+    other: money(Number(fund.other ?? 0)),
+  };
+  const parts = money(parsed.cash + parsed.upi + parsed.bank + parsed.other);
+  if (parts === parsed.total) return parsed;
+  const other = money(parsed.other + (parsed.total - parts));
+  if (other < 0) {
+    return { ...parsed, total: parts };
+  }
+  return { ...parsed, other };
 }
 
 export function availableGodFund(summary: Pick<
@@ -251,14 +411,14 @@ export function applyPermanentFundDelta(
 }
 
 export function parsePermanentFund(data?: Partial<PermanentFundSummary> | null): PermanentFundSummary {
-  return {
+  return repairPermanentFund({
     ...EMPTY_PERMANENT_FUND,
-    total: money(Number(data?.total ?? 0)),
-    cash: money(Number(data?.cash ?? 0)),
-    upi: money(Number(data?.upi ?? 0)),
-    bank: money(Number(data?.bank ?? 0)),
-    other: money(Number(data?.other ?? 0)),
-  };
+    total: Number(data?.total ?? 0),
+    cash: Number(data?.cash ?? 0),
+    upi: Number(data?.upi ?? 0),
+    bank: Number(data?.bank ?? 0),
+    other: Number(data?.other ?? 0),
+  });
 }
 
 export function validateInKindValue(estimatedValue: number): ValidationResult {
@@ -335,6 +495,11 @@ export function effectiveCommitteeTarget(
   return money(Number(defaultTarget ?? 0));
 }
 
+export type LedgerLocationDelta = {
+  location: PermanentFundLocation;
+  amount: number;
+};
+
 export type LedgerTotalsInput = {
   openingFunds: number[];
   collections: number[];
@@ -346,13 +511,23 @@ export type LedgerTotalsInput = {
   inKindValues: number[];
   sponsoredValues: number[];
   assetPurchaseAmounts?: number[];
+  locationDeltas?: LedgerLocationDelta[];
 };
+
+export function summarizeFestivalLocations(deltas: LedgerLocationDelta[]): FestivalLocations {
+  const next = { ...EMPTY_FESTIVAL_LOCATIONS };
+  for (const delta of deltas) {
+    const location = resolveFundLocation(delta.location);
+    next[location] = money(next[location] + delta.amount);
+  }
+  return next;
+}
 
 export function summarizeLedger(input: LedgerTotalsInput): GaneshSummary {
   const sum = (values: number[]) => money(values.reduce((acc, value) => acc + value, 0));
   const personalMoneyUsed = sum(input.personalAmounts);
   const reimbursed = sum(input.reimbursements);
-  return {
+  const summary: GaneshSummary = {
     ...EMPTY_GANESH_SUMMARY,
     openingFunds: sum(input.openingFunds),
     chanda: sum(input.collections),
@@ -368,6 +543,15 @@ export function summarizeLedger(input: LedgerTotalsInput): GaneshSummary {
     expenseCount: input.godFundExpenses.length,
     assetPurchaseAmount: sum(input.assetPurchaseAmounts ?? []),
   };
+  if (input.locationDeltas) {
+    const locations = summarizeFestivalLocations(input.locationDeltas);
+    const repaired = repairFestivalLocations({ ...summary, ...locations });
+    summary.cash = repaired.cash;
+    summary.upi = repaired.upi;
+    summary.bank = repaired.bank;
+    summary.other = repaired.other;
+  }
+  return summary;
 }
 
 export function canManagePandal(role: FestivalMember["role"] | undefined): boolean {

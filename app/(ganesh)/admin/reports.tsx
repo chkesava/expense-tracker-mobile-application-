@@ -22,14 +22,12 @@ import { usePermanentFund } from "@/hooks/usePermanentFund";
 import { useSponsorships } from "@/hooks/useSponsorships";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import { summarizeAssets } from "@/shared/utils/ganeshAssets";
-import { summarizeContributions } from "@/shared/utils/ganeshContributions";
+import { buildFinancialOverview } from "@/shared/utils/ganeshFinancialOverview";
 import { formatInr } from "@/shared/utils/ganeshMoney";
-import { breakdownSponsors, summarizeSponsorships } from "@/shared/utils/ganeshSponsors";
+import { breakdownSponsors } from "@/shared/utils/ganeshSponsors";
 import {
   assetPurchaseAmountOf,
-  availableGodFund,
   regularExpenseAmount,
-  totalCashIn,
   totalExpenses,
 } from "@/shared/utils/ganeshMath";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -41,15 +39,22 @@ export default function AdminReportsScreen() {
   const { festivals } = useFestivals(pandalId);
   const { summary } = useGaneshSummary(pandalId, festivalId);
   const { contributions } = useContributions(pandalId, festivalId);
-  const contributionTotals = summarizeContributions(contributions);
   const { sponsorships } = useSponsorships(pandalId, festivalId);
   const { sponsors } = usePandalSponsors(pandalId);
-  const sponsorTotals = summarizeSponsorships(sponsorships);
-  const sponsorRows = breakdownSponsors(sponsorships, sponsors);
   const { assets } = usePandalAssets(pandalId);
   const { fund } = usePermanentFund(pandalId);
-  const assetSummary = summarizeAssets(assets);
   const festival = festivals.find((item) => item.id === festivalId);
+  const overview = buildFinancialOverview({
+    summary,
+    permanentFund: fund,
+    contributions,
+    sponsorships,
+    festival,
+  });
+  const contributionTotals = overview.contributionTotals;
+  const sponsorTotals = overview.sponsorTotals;
+  const sponsorRows = breakdownSponsors(sponsorships, sponsors);
+  const assetSummary = summarizeAssets(assets);
 
   return (
     <GaneshScreen contentContainerStyle={ganeshStackLayout.bleed}>
@@ -69,7 +74,7 @@ export default function AdminReportsScreen() {
         <Section title="Cash this festival">
           <StatStrip>
             <StatTile label="Total cash in">
-              <Money value={totalCashIn(summary)} size="secondary" />
+              <Money value={overview.moneyIn} size="secondary" />
             </StatTile>
             <StatTile label="God Fund expenses">
               <Money value={summary.godFundExpenses} size="secondary" />
@@ -78,7 +83,7 @@ export default function AdminReportsScreen() {
               <Money value={summary.reimbursements} size="secondary" />
             </StatTile>
             <StatTile label="Closing / God Fund">
-              <Money value={availableGodFund(summary)} size="secondary" />
+              <Money value={overview.availableGodFund} size="secondary" />
             </StatTile>
           </StatStrip>
         </Section>

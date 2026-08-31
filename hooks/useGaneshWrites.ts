@@ -189,6 +189,13 @@ export function useGaneshWrites() {
         writes.addOpeningFund(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, input)
       );
     },
+    addOpeningFunds: (input: Parameters<typeof writes.addOpeningFunds>[4]) => {
+      requirePerm("openingFunds.create");
+      const ctx = requireFestival();
+      return run("Opening fund recorded", () =>
+        writes.addOpeningFunds(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, input)
+      );
+    },
     addCollection: (input: Parameters<typeof writes.addCollection>[4]) => {
       requirePerm("collections.create");
       const ctx = requireFestival();

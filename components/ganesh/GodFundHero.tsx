@@ -12,12 +12,14 @@ export function GodFundHero({
   festivalName,
   pandalName,
   breakdown,
+  emptyHint,
   onPress,
 }: {
   amount: number;
   festivalName?: string;
   pandalName?: string;
   breakdown?: FundBreakdownItem[];
+  emptyHint?: string;
   onPress?: () => void;
 }) {
   const g = useGaneshTokens();
@@ -31,6 +33,7 @@ export function GodFundHero({
       eyebrow="Available God Fund"
       amount={amount}
       breakdown={breakdown}
+      emptyHint={emptyHint}
       action={onPress ? { label: "Festival report", onPress } : undefined}
     />
   );

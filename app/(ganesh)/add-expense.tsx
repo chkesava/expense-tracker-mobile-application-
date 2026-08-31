@@ -24,7 +24,7 @@ import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import type { PreparedGaneshImage } from "@/services/ganesh/storage/storageTypes";
-import type { GaneshExpenseType } from "@/shared/types/ganesh";
+import type { GaneshExpenseType, PaymentMethod } from "@/shared/types/ganesh";
 import {
   ASSET_CATEGORIES,
   ASSET_CONDITIONS,
@@ -37,6 +37,13 @@ import { purposeLabelOf } from "@/shared/utils/ganeshSponsors";
 import { useTheme } from "@/theme/ThemeProvider";
 
 type Funding = "god" | "personal" | "split" | "sponsored";
+
+const METHOD_OPTIONS: Array<{ id: PaymentMethod; label: string }> = [
+  { id: "cash", label: "Cash" },
+  { id: "upi", label: "UPI" },
+  { id: "bank", label: "Bank" },
+  { id: "other", label: "Other" },
+];
 
 export default function AddExpenseScreen() {
   const { theme } = useTheme();
@@ -69,6 +76,7 @@ export default function AddExpenseScreen() {
   const [sponsorId, setSponsorId] = useState("");
   const [linkedSponsorshipId, setLinkedSponsorshipId] = useState("");
   const [funding, setFunding] = useState<Funding>("god");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
   const [categoryId, setCategoryId] = useState(visibleCategories[0]?.id ?? "");
   const [paidByMemberId, setPaidByMemberId] = useState(realUser?.uid ?? "");
   const [vendor, setVendor] = useState("");
@@ -202,6 +210,22 @@ export default function AddExpenseScreen() {
             />
           ) : null}
         </>
+      ) : null}
+      {funding === "god" || (funding === "split" && Number(godFund || 0) > 0) ? (
+        <FilterChips
+          label="Paid from"
+          layout="wrap"
+          value={paymentMethod}
+          options={METHOD_OPTIONS}
+          onChange={setPaymentMethod}
+          disabled={ledgerSaved}
+        />
+      ) : null}
+      {funding === "god" || (funding === "split" && Number(godFund || 0) > 0) ? (
+        <Text style={{ color: theme.colors.mutedForeground }}>
+          Which Cash, UPI, or Bank this God Fund spend leaves. Separate from who funded the
+          expense.
+        </Text>
       ) : null}
       {!canLinkSponsor ? (
         <Text style={{ color: theme.colors.mutedForeground }}>
@@ -362,6 +386,10 @@ export default function AddExpenseScreen() {
             toast.error("Choose a sponsor for the sponsored amount.");
             return;
           }
+          if (fundingAmounts.godFundAmount > 0 && !paymentMethod) {
+            toast.error("Choose how the God Fund paid: Cash, UPI, Bank or Other.");
+            return;
+          }
           const payload = {
             name,
             ...fundingAmounts,
@@ -373,6 +401,7 @@ export default function AddExpenseScreen() {
             date: todayDateInput(),
             sponsorId: fundingAmounts.sponsoredAmount > 0 ? sponsorId || undefined : undefined,
             linkedSponsorshipId: fundingAmounts.sponsoredAmount > 0 ? linkedSponsorshipId || undefined : undefined,
+            paymentMethod: fundingAmounts.godFundAmount > 0 ? paymentMethod : undefined,
           };
           if (isAssetPurchase) {
             const quantity = Number(assetQty);

@@ -11,8 +11,11 @@ import { ganeshStackLayout } from "@/components/ganesh/chrome/stackLayout";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { GaneshSyncChip } from "@/components/ganesh/GaneshSyncChip";
 import {
+  Money,
   NavRow,
   SectionPair,
+  StatStrip,
+  StatTile,
   useGaneshTokens,
   type StatusKind,
 } from "@/components/ganesh/ui";
@@ -33,8 +36,7 @@ import { usePermanentFund } from "@/hooks/usePermanentFund";
 import { logError } from "@/lib/errors";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import { summarizeAssets } from "@/shared/utils/ganeshAssets";
-import { summarizeContributions } from "@/shared/utils/ganeshContributions";
-import { summarizeSponsorships } from "@/shared/utils/ganeshSponsors";
+import { buildFinancialOverview } from "@/shared/utils/ganeshFinancialOverview";
 import { formatInr } from "@/shared/utils/ganeshMoney";
 
 type NeedTone = "attention" | "critical";
@@ -77,7 +79,7 @@ export default function AdminDashboardScreen() {
   } = useJoinRequests(pandalId);
   const { fund } = usePermanentFund(pandalId);
   const { assets } = usePandalAssets(pandalId);
-  const { isAdmin } = useGaneshPermissions();
+  const { isAdmin, can } = useGaneshPermissions();
   const writes = useGaneshWrites();
   const { summary } = useGaneshSummary(pandalId, festivalId);
   const { contributions } = useContributions(pandalId, festivalId);
@@ -89,15 +91,19 @@ export default function AdminDashboardScreen() {
   const activeMembers = members.filter(
     (member) => member.status === "active" || member.status == null
   );
-  const pendingReimb = summary.pendingReimbursements ?? 0;
-
-  const contributionTotals = useMemo(
-    () => summarizeContributions(contributions),
-    [contributions]
-  );
-  const sponsorTotals = useMemo(() => summarizeSponsorships(sponsorships), [sponsorships]);
+  const overview = buildFinancialOverview({
+    summary,
+    permanentFund: fund,
+    contributions,
+    sponsorships,
+    households,
+    festival,
+  });
+  const pendingReimb = overview.pendingReimbursements;
+  const contributionTotals = overview.contributionTotals;
+  const sponsorTotals = overview.sponsorTotals;
   const assetSummary = useMemo(() => summarizeAssets(assets), [assets]);
-  const pendingHouses = households.filter((house) => house.status === "pending").length;
+  const pendingHouses = overview.collections.pendingHouses;
 
   /**
    * Everything an admin has to act on, critical first. The predicates are
@@ -313,6 +319,88 @@ export default function AdminDashboardScreen() {
                 );
               })
             )}
+          </AdminSection>
+
+          <AdminSection
+            title="Financial overview"
+            icon={<AdminGlyph name="iconFund" size={30} />}
+            subtitle={
+              overview.hasFinancialActivity
+                ? `${formatInr(overview.availableGodFund)} available God Fund`
+                : "No financial activity yet"
+            }
+          >
+            <View style={{ paddingVertical: 8 }}>
+            <StatStrip>
+              <StatTile label="Available God Fund">
+                <Money value={overview.availableGodFund} size="secondary" />
+              </StatTile>
+              <StatTile label="Money in">
+                <Money value={overview.moneyIn} size="secondary" />
+              </StatTile>
+              <StatTile label="Money out">
+                <Money value={overview.moneyOut} size="secondary" />
+              </StatTile>
+              {can("permanentFund.read") ? (
+                <StatTile label="Permanent Fund">
+                  <Money value={overview.permanentFund.total} size="secondary" />
+                </StatTile>
+              ) : null}
+            </StatStrip>
+            </View>
+            {can("collections.read") || can("contributions.read") || can("expenses.read") ? (
+              <NavRow
+                title="Pandal Nidhi"
+                meta="God Fund, Cash / UPI / Bank, ledgers"
+                icon={<AdminGlyph name="iconFund" />}
+                chevronColor={g.saffron}
+                divider
+                onPress={() => push("/(ganesh)/(tabs)/funds" as never)}
+              />
+            ) : null}
+            {can("reimbursements.read") || can("reimbursements.create") ? (
+              <NavRow
+                title="Reimbursements"
+                meta={
+                  pendingReimb > 0
+                    ? `${formatInr(pendingReimb)} still owed to members`
+                    : "Settle personal spend from the God Fund"
+                }
+                icon={<AdminGlyph name="iconFund" />}
+                chevronColor={g.saffron}
+                divider
+                onPress={() => push("/(ganesh)/add-reimbursement" as never)}
+              />
+            ) : null}
+            {can("permanentFund.read") ? (
+              <NavRow
+                title="Permanent Fund"
+                meta={formatInr(overview.permanentFund.total)}
+                icon={<AdminGlyph name="iconFund" />}
+                chevronColor={g.saffron}
+                divider
+                onPress={() => push("/(ganesh)/permanent-fund" as never)}
+              />
+            ) : null}
+            {can("collections.read") || can("contributions.read") || can("expenses.read") ? (
+              <NavRow
+                title="Transparency report"
+                meta="Read-aloud hisab for this festival"
+                icon={<AdminGlyph name="iconReports" />}
+                chevronColor={g.saffron}
+                divider={Boolean(can("festival.update") && festival && festival.status === "open")}
+                onPress={() => push("/(ganesh)/report" as never)}
+              />
+            ) : null}
+            {can("festival.update") && festival && festival.status === "open" ? (
+              <NavRow
+                title="Close festival"
+                meta="Settle remaining God Fund when the utsav ends"
+                icon={<AdminGlyph name="iconFestival" />}
+                chevronColor={g.saffron}
+                onPress={() => push("/(ganesh)/close-festival" as never)}
+              />
+            ) : null}
           </AdminSection>
 
           <SectionPair>

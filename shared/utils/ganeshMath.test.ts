@@ -1,20 +1,28 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  applyFestivalLocationDelta,
   applyPermanentFundDelta,
   assetPurchaseAmountOf,
   availableGodFund,
   deriveHouseholdStatus,
   festivalCashSpent,
   festivalCollectedCash,
+  festivalLocationTotal,
+  locationDelta,
+  locationInvariantHolds,
   memberPendingReimbursement,
+  parsePermanentFund,
   possibleHouseholdDuplicates,
   regularExpenseAmount,
+  repairFestivalLocations,
+  resolveFundLocation,
   summarizeLedger,
   totalExpenses,
   validateCollection,
   validateExpenseFunding,
   validateFundTransfer,
+  validateGodFundLocationSpend,
   validateGodFundSpend,
   validateInKindValue,
   validateReimbursement,
@@ -24,7 +32,7 @@ import {
   committeePayStatus,
   effectiveCommitteeTarget,
 } from "./ganeshMath";
-import { EMPTY_PERMANENT_FUND } from "@/shared/types/ganesh";
+import { EMPTY_GANESH_SUMMARY, EMPTY_PERMANENT_FUND } from "@/shared/types/ganesh";
 
 describe("availableGodFund", () => {
   it("adds opening funds and cash inflows, subtracts god-fund expenses and reimbursements", () => {
@@ -415,5 +423,90 @@ describe("settlement rejects a claim that disagrees with the server balance", ()
 
   it("allows a full transfer that leaves nothing behind", () => {
     expect(validateSettlement({ closing: 50000, transfer: 50000, remaining: 0 }).ok).toBe(true);
+  });
+});
+
+describe("festival Cash / UPI / Bank", () => {
+  it("treats a missing payment method as other", () => {
+    expect(resolveFundLocation(undefined)).toBe("other");
+    expect(resolveFundLocation("cash")).toBe("cash");
+  });
+
+  it("repairs unclassified God Fund into other so locations equal available cash", () => {
+    const repaired = repairFestivalLocations({
+      ...EMPTY_GANESH_SUMMARY,
+      openingFunds: 10000,
+    });
+    expect(festivalLocationTotal(repaired)).toBe(10000);
+    expect(repaired.other).toBe(10000);
+  });
+
+  it("refuses to overspend a location even when total God Fund is enough", () => {
+    const summary = {
+      ...EMPTY_GANESH_SUMMARY,
+      openingFunds: 10000,
+      cash: 2000,
+      upi: 8000,
+    };
+    expect(availableGodFund(summary)).toBe(10000);
+    expect(validateGodFundLocationSpend(3000, "cash", summary).ok).toBe(false);
+    expect(validateGodFundLocationSpend(3000, "upi", summary).ok).toBe(true);
+  });
+
+  it("does not let a personal-sized spend move locations when god amount is zero", () => {
+    expect(
+      validateGodFundLocationSpend(0, "cash", {
+        ...EMPTY_GANESH_SUMMARY,
+        openingFunds: 10000,
+        cash: 0,
+      })
+    ).toEqual({ ok: true });
+  });
+
+  it("keeps location increments off personal money in summarizeLedger", () => {
+    const summary = summarizeLedger({
+      openingFunds: [10000],
+      collections: [5000],
+      committeeContributions: [],
+      otherCashContributions: [],
+      godFundExpenses: [3000],
+      reimbursements: [],
+      personalAmounts: [2000],
+      inKindValues: [15000],
+      sponsoredValues: [],
+      locationDeltas: [
+        { location: "cash", amount: 10000 },
+        { location: "upi", amount: 5000 },
+        { location: "cash", amount: -3000 },
+      ],
+    });
+    expect(availableGodFund(summary)).toBe(12000);
+    expect(summary.cash).toBe(7000);
+    expect(summary.upi).toBe(5000);
+    expect(locationInvariantHolds(summary)).toBe(true);
+    expect(summary.inKindValue).toBe(15000);
+  });
+
+  it("repairs Permanent Fund total to match its parts", () => {
+    const repaired = parsePermanentFund({
+      total: 20000,
+      cash: 12000,
+      upi: 5000,
+      bank: 0,
+      other: 0,
+    });
+    expect(repaired.other).toBe(3000);
+    expect(repaired.total).toBe(20000);
+    expect(repaired.cash + repaired.upi + repaired.bank + repaired.other).toBe(20000);
+  });
+
+  it("rejects a location overdraft on applyFestivalLocationDelta", () => {
+    const result = applyFestivalLocationDelta({ cash: 500, upi: 0, bank: 0, other: 0 }, "cash", -600);
+    expect(result.ok).toBe(false);
+  });
+
+  it("builds a single-key location bump", () => {
+    expect(locationDelta("upi", 250)).toEqual({ upi: 250 });
+    expect(locationDelta("cash", 0)).toEqual({});
   });
 });

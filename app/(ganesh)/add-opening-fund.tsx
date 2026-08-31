@@ -21,10 +21,10 @@ import type { OpeningFundSource } from "@/shared/types/ganesh";
 import { useTheme } from "@/theme/ThemeProvider";
 
 const SOURCE_OPTIONS: Array<{ id: OpeningFundSource; label: string }> = [
-  { id: "cash", label: "Cash" },
-  { id: "upi", label: "UPI" },
-  { id: "bank", label: "Bank" },
   { id: "previous_balance", label: "Previous balance" },
+  { id: "cash", label: "Cash on hand" },
+  { id: "upi", label: "UPI leftover" },
+  { id: "bank", label: "Bank leftover" },
   { id: "other", label: "Other" },
 ];
 
@@ -35,8 +35,11 @@ export default function AddOpeningFundScreen() {
   const writes = useGaneshWrites();
   const { can } = useGaneshPermissions();
   const { closed } = useFestivalWriteLock();
-  const [amount, setAmount] = useState("");
-  const [sourceType, setSourceType] = useState<OpeningFundSource>("cash");
+  const [cash, setCash] = useState("");
+  const [upi, setUpi] = useState("");
+  const [bank, setBank] = useState("");
+  const [other, setOther] = useState("");
+  const [sourceType, setSourceType] = useState<OpeningFundSource>("previous_balance");
   const [description, setDescription] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -55,9 +58,13 @@ export default function AddOpeningFundScreen() {
         onBack={back}
       />
       <Text style={{ color: theme.colors.mutedForeground, lineHeight: 21 }}>
-        Opening funds are the starting God Fund, not a new donation.
+        Opening funds are the starting God Fund, not a new donation. Enter where that money is
+        held — Cash, UPI, Bank, or Other.
       </Text>
-      <Input label="Amount" value={amount} onChangeText={setAmount} keyboardType="numeric" />
+      <Input label="Cash" value={cash} onChangeText={setCash} keyboardType="numeric" />
+      <Input label="UPI" value={upi} onChangeText={setUpi} keyboardType="numeric" />
+      <Input label="Bank" value={bank} onChangeText={setBank} keyboardType="numeric" />
+      <Input label="Other" value={other} onChangeText={setOther} keyboardType="numeric" />
       <ChoiceChips
         label="Source"
         value={sourceType}
@@ -77,8 +84,13 @@ export default function AddOpeningFundScreen() {
         onPress={() => {
           setBusy(true);
           writes
-            .addOpeningFund({
-              amount: Number(amount),
+            .addOpeningFunds({
+              amounts: {
+                cash: Number(cash || 0),
+                upi: Number(upi || 0),
+                bank: Number(bank || 0),
+                other: Number(other || 0),
+              },
               sourceType,
               description,
               date: todayDateInput(),

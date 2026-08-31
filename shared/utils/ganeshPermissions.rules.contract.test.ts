@@ -647,14 +647,19 @@ function payloadWellFormed(subcol: string, d: Record<string, unknown>): boolean 
   const flagsOk =
     (!("voided" in d) || typeof d.voided === "boolean")
     && (!("date" in d) || typeof d.date === "string")
+    && (!("paymentMethod" in d)
+      || ["cash", "upi", "bank", "other"].includes(d.paymentMethod as string))
+    && (!("location" in d)
+      || ["cash", "upi", "bank", "other"].includes(d.location as string))
     && (!("direction" in d)
       || subcol !== "fundTransfers"
       || ["to_permanent", "from_permanent"].includes(d.direction as string));
 
+  const summarySigned = new Set(["pendingReimbursements", "cash", "upi", "bank", "other"]);
   const summaryOk = subcol !== "summary"
     || (Object.keys(d).every((key) => RULE_SUMMARY_FIELDS.includes(key))
       && Object.keys(EMPTY_GANESH_SUMMARY).every((key) =>
-        key === "pendingReimbursements" ? okSignedMoney(d, key) : okMoney(d, key)
+        summarySigned.has(key) ? okSignedMoney(d, key) : okMoney(d, key)
       ));
 
   /** Mirrors `sevaCarriesNoMoney()` in firestore.rules. */

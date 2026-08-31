@@ -966,6 +966,10 @@ service cloud.firestore {
             let d = request.resource.data;
             return (!d.keys().hasAny(['voided']) || d.voided is bool)
               && (!d.keys().hasAny(['date']) || d.date is string)
+              && (!d.keys().hasAny(['paymentMethod'])
+                  || d.paymentMethod in ['cash', 'upi', 'bank', 'other'])
+              && (!d.keys().hasAny(['location'])
+                  || d.location in ['cash', 'upi', 'bank', 'other'])
               && (!d.keys().hasAny(['direction'])
                   || subcol != 'fundTransfers'
                   || d.direction in ['to_permanent', 'from_permanent']);
@@ -987,7 +991,8 @@ service cloud.firestore {
                 'personalMoneyUsed', 'pendingReimbursements', 'inKindValue',
                 'sponsoredValue', 'collectionCount', 'expenseCount',
                 'assetPurchaseAmount', 'transferredToPermanentFund',
-                'receivedFromPermanentFund', 'updatedAt'
+                'receivedFromPermanentFund', 'cash', 'upi', 'bank', 'other',
+                'updatedAt'
               ])
               && okMoney(d, 'openingFunds')
               && okMoney(d, 'chanda')
@@ -1004,6 +1009,10 @@ service cloud.firestore {
               && okMoney(d, 'assetPurchaseAmount')
               && okMoney(d, 'transferredToPermanentFund')
               && okMoney(d, 'receivedFromPermanentFund')
+              && okSignedMoney(d, 'cash')
+              && okSignedMoney(d, 'upi')
+              && okSignedMoney(d, 'bank')
+              && okSignedMoney(d, 'other')
             );
           }
 

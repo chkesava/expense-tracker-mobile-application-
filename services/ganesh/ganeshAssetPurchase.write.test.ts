@@ -33,6 +33,9 @@ vi.mock("firebase/firestore", () => ({
   query: (...args: unknown[]) => args,
   where: (...args: unknown[]) => args,
   limit: (...args: unknown[]) => args,
+  orderBy: (...args: unknown[]) => args,
+  startAfter: (...args: unknown[]) => args,
+  documentId: () => ({ __documentId: true }),
   writeBatch: vi.fn(),
   runTransaction: vi.fn(),
 }));
@@ -100,7 +103,10 @@ describe("addAssetPurchase", () => {
     // The God Fund path reads the summary inside the transaction before spending.
     const txn = {
       ...writer,
-      get: async () => ({ exists: () => true, data: () => ({ openingFunds: 100000 }) }),
+      get: async () => ({
+        exists: () => true,
+        data: () => ({ openingFunds: 100000, cash: 100000 }),
+      }),
     };
     vi.mocked(runTransaction).mockImplementation((async (
       _db: unknown,
@@ -112,7 +118,7 @@ describe("addAssetPurchase", () => {
       actor,
       "pandal-1",
       "festival-1",
-      { ...input, godFundAmount: 15000 }
+      { ...input, godFundAmount: 15000, paymentMethod: "cash" }
     );
 
     // The bug: this threw `Cannot access 'batch' before initialization`.
