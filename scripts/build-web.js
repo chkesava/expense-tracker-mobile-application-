@@ -19,16 +19,18 @@
  * working from the new dist-web/ output instead.
  */
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const Jimp = require('jimp-compact');
 
 const ROOT_DIR = path.resolve(__dirname, '..');
 const PRODUCTS_DIR = path.join(ROOT_DIR, 'products');
 const OUT_ROOT = path.join(ROOT_DIR, 'dist-web');
 
-// Product builds first, "landing" last (it writes to OUT_ROOT itself, and
-// each `expo export` copies public/** into its own output root — landing
-// going last means its copy of public/** is what ends up at the site root).
+// Product builds first, "landing" last. Order is no longer load-bearing:
+// each `expo export` copies public/** into its own output root, and landing
+// stages into a temp dir that is merged into OUT_ROOT (see outDirFor).
 const BUILD_ORDER = ['expense', 'nutrition', 'ganesh', 'landing'];
 
 function parseArgs(argv) {
@@ -48,8 +50,20 @@ function loadProduct(target) {
   return JSON.parse(fs.readFileSync(file, 'utf8'));
 }
 
+// "landing" is published at the site root, but `expo export` CLEARS its
+// output directory before writing. Pointing it straight at OUT_ROOT therefore
+// deleted the expense/nutrition/ganesh sub-apps already built into
+// OUT_ROOT/<basePath>/ — silently, since the build still exited 0 and
+// _redirects' `/*` catch-all then served the landing app at /expense with a
+// 200. Landing exports to a staging dir instead and is merged into OUT_ROOT
+// afterwards (buildTarget), which also makes `--target=landing` safe to run
+// on its own after a full build.
+function stagingDirForLanding() {
+  return fs.mkdtempSync(path.join(os.tmpdir(), 'spendly-web-landing-'));
+}
+
 function outDirFor(target, product) {
-  if (target === 'landing') return OUT_ROOT;
+  if (target === 'landing') return stagingDirForLanding();
   const basePath = product.web && product.web.basePath;
   if (!basePath) {
     throw new Error(`products/${target}.json is missing web.basePath.`);
@@ -122,13 +136,25 @@ function writeManifest(outDir, product) {
   fs.writeFileSync(path.join(outDir, 'manifest.webmanifest'), JSON.stringify(manifest, null, 2));
 }
 
-function copyPwaIcons(outDir, target) {
-  const pwaDir = path.join(ROOT_DIR, 'assets', 'branding', 'pwa');
-  for (const size of ['192', '512']) {
-    const src = path.join(pwaDir, `${target}-${size}.png`);
-    if (fs.existsSync(src)) {
-      fs.copyFileSync(src, path.join(outDir, `pwa-${size}.png`));
-    }
+/**
+ * Writes the pwa-192/pwa-512 icons that writeManifest() references, resized
+ * from the product's own `web.manifestIcon` (products/<target>.json). The
+ * source icons are 1024px+ and 0.2-1.7 MB, so they are downscaled rather than
+ * copied as-is. Throws rather than skipping: a manifest that points at a
+ * missing icon breaks "Add to Home Screen" with only a 404 to show for it.
+ */
+async function writePwaIcons(outDir, target, product) {
+  const rel = (product.web && product.web.manifestIcon) || '';
+  if (!rel) {
+    throw new Error(`products/${target}.json is missing web.manifestIcon.`);
+  }
+  const src = path.resolve(ROOT_DIR, rel);
+  if (!fs.existsSync(src)) {
+    throw new Error(`products/${target}.json web.manifestIcon "${rel}" does not exist.`);
+  }
+  const image = await Jimp.read(src);
+  for (const size of [192, 512]) {
+    await image.clone().resize(size, size).writeAsync(path.join(outDir, `pwa-${size}.png`));
   }
 }
 
@@ -168,7 +194,7 @@ function writeRedirectsAndHeaders() {
   fs.writeFileSync(path.join(OUT_ROOT, '_headers'), headers);
 }
 
-function buildTarget(target) {
+async function buildTarget(target) {
   const product = loadProduct(target);
   const outDir = outDirFor(target, product);
 
@@ -193,15 +219,21 @@ function buildTarget(target) {
   }
 
   writeManifest(outDir, product);
-  copyPwaIcons(outDir, target);
+  await writePwaIcons(outDir, target, product);
   injectHeadTags(outDir, product);
   paintGaneshBootBackground(outDir, product);
 
   const bytes = dirSizeBytes(outDir);
   console.log(`"${target}" bundle size: ${formatBytes(bytes)}`);
+
+  if (target === 'landing') {
+    // Merge (not replace) so the product sub-apps in OUT_ROOT survive.
+    fs.cpSync(outDir, OUT_ROOT, { recursive: true });
+    fs.rmSync(outDir, { recursive: true, force: true });
+  }
 }
 
-function main() {
+async function main() {
   const { target } = parseArgs(process.argv.slice(2));
   const targets = target === 'all' ? BUILD_ORDER : [target];
 
@@ -215,7 +247,7 @@ function main() {
   fs.mkdirSync(OUT_ROOT, { recursive: true });
 
   for (const t of targets) {
-    buildTarget(t);
+    await buildTarget(t);
   }
 
   if (target === 'all') {
@@ -224,4 +256,7 @@ function main() {
   }
 }
 
-main();
+main().catch((err) => {
+  console.error(err.message);
+  process.exitCode = 1;
+});

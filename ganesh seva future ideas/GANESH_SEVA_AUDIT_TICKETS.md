@@ -56,9 +56,9 @@ balance and stay offline-capable.
 | --- | ---: | ---: | ---: | ---: |
 | CRITICAL | 8 | 1 | 0 | 9 |
 | HIGH | 30 | 2 | 0 | 32 |
-| MEDIUM | 3 | 1 | 38 | 42 |
+| MEDIUM | 4 | 1 | 37 | 42 |
 | LOW | 0 | 0 | 20 | 20 |
-| **Total** | **41** | **4** | **58** | **103** |
+| **Total** | **42** | **4** | **57** | **103** |
 
 Every CRITICAL and HIGH is now closed or partial. The one CRITICAL partial is
 GS-004 (no whole-document field allowlist outside `summary`); the HIGH partials
@@ -76,21 +76,22 @@ or misfiled**, some for weeks:
 - N-05 and N-06, filed by the 2026-09-03 follow-up audit, were author error and
   were retracted rather than fixed
 
-**MEDIUM and LOW: mostly NOT verified.** 58 remain open, and only a handful
-have been re-checked against code (GS-044, GS-053, GS-063, GS-072 confirmed
-still real; GS-049, GS-056, GS-059 found already fixed). Given the hit rate
-above, expect roughly a quarter of the remaining 58 to be already fixed or no
+**MEDIUM and LOW: mostly NOT verified.** 57 remain open, and only a handful
+have been re-checked against code (GS-044, GS-063, GS-072 confirmed still real;
+GS-049, GS-056, GS-059 found already fixed; GS-053 confirmed real and then
+fixed). Given the hit rate above, expect roughly a quarter of the remaining 57
+to be already fixed or no
 longer applicable. **Triage before scheduling any of them** — re-fixing
 something already fixed costs more than checking did.
 
 ### Highest-value item still open
 
-**GS-053** — six state-changing writes produce no audit entry, including
-`recomputeFestivalSummary`, which rewrites every total on a festival. That
-recompute is now the documented repair path for the God Fund location split, so
-it is more likely than ever to be run, and it still leaves no record of who ran
-it or when. In an app whose purpose is a money trail a committee can trust,
-that is the write that most needs a trace.
+GS-053 held this slot and was fixed on 2026-09-03 — all six writes now leave a
+trail, including the recompute, which records exactly which totals it moved and
+who ran it.
+
+Nothing among the remaining 57 has been assessed as taking its place, because
+those 57 are mostly unverified. Triage first.
 
 ### Verification results (original audit, 2026-08-24)
 
@@ -251,7 +252,7 @@ Recording these explicitly so the fix cycle does not undo working design:
 | GS-050 | MEDIUM | REPORTING | Sponsors | Reports display the same rupees twice under two "Cash received" headings | OPEN |
 | GS-051 | MEDIUM | REPORTING | Sponsors | `summarizeSponsorships` and `breakdownSponsors` disagree on expense sponsorships | OPEN |
 | GS-052 | MEDIUM | REPORTING | Audit Trail | Asset and sponsor audits never reach the Pandal-wide audit screen | OPEN |
-| GS-053 | MEDIUM | REPORTING | Audit Trail | Household edits, category adds, profile edits and recomputes are unaudited | OPEN |
+| GS-053 | MEDIUM | REPORTING | Audit Trail | Household edits, category adds, profile edits and recomputes are unaudited | FIXED 2026-09-03 |
 | GS-054 | MEDIUM | UX | Admin Dashboard | `AdminGate` mounts admin children behind an overlay | OPEN |
 | GS-055 | MEDIUM | UX | Admin Dashboard | The dashboard duplicates eight destinations across five sections | OPEN |
 | GS-056 | MEDIUM | UX | Admin Dashboard | The dashboard error state ignores half of its queries | FIXED 2026-09-03 |
@@ -3482,7 +3483,7 @@ Related to GS-021, GS-053, GS-092.
 **Severity:** MEDIUM
 **Category:** REPORTING
 **Feature:** Audit Trail
-**Status:** OPEN — re-confirmed 2026-09-03
+**Status:** FIXED 2026-09-03
 
 ### Problem
 Several state-changing writes produce no audit entry and no activity entry.
@@ -3536,6 +3537,37 @@ from the pre-transaction era - so it is more likely to be run, and it still
 rewrites every total on a festival with no record that it happened or who did
 it. In an app whose stated purpose is a money trail a committee can trust, that
 is the one write that most needs a trace.
+
+### Resolution (2026-09-03)
+
+All six writes now record an entry. Each was verified as unaudited first by
+inspecting the function body, then fixed:
+
+| Write | Trail |
+| --- | --- |
+| `addCustomCategory` | `created` / `category`. `updateCategory` beside it already audited, so this was an inconsistency as much as a gap |
+| `updateHousehold` | `edited` / `household`, with the before and after of `expectedAmount` and `status` |
+| `updatePandalProfile` | `pandal_profile` in `pandalMemberAudits` — it is Pandal-scoped, so a festival's `auditLogs` is the wrong home. `memberAudit` gained `oldValue` / `newValue` slots for edits that are not role changes |
+| `attachExpenseReceipt` | `edited` / `expense`, recording paths only — enough to show evidence was replaced and which object it was, without copying file internals into the trail |
+| `attachContributionPhoto` | `edited` / `contribution`, same treatment. Asset and sponsor photos were already audited, so these two were the outliers |
+| `recomputeFestivalSummary` | `adjusted` / `summary`, described below |
+
+**The recompute is the one that mattered.** It had no `actor` parameter at all,
+so it could not have named who ran it even if it had written an entry; the
+signature now takes one, passed from the hook.
+
+Its entry records **only the totals that actually moved**, with before and
+after. A recompute that changes nothing is the common case, and an entry
+listing every unchanged total would bury the one that did move. The write goes
+through the same transaction as the summary rewrite, so a rebuild that fails
+cannot leave behind an entry claiming a rebuild that happened.
+
+3 tests in `services/ganesh/ganeshRecomputeAudit.test.ts`. One of them caught
+something worth recording: a fixture with `chanda: 5000` and an empty Cash
+bucket is *not* an unchanged festival — that is precisely the unbackfilled
+state described in `GANESH_GOD_FUND_LOCATION_AUDIT_2026-09-03.md`, and the
+recompute rightly reclassifies it. The audit trail makes that visible now
+instead of it happening silently.
 ---
 
 ## GS-054 — `AdminGate` mounts admin children behind an overlay

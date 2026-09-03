@@ -60,6 +60,7 @@
     "@types/node": "^26.1.2",
     "@types/react": "~19.2.2",
     "firebase-admin": "^14.2.0",
+    "jimp-compact": "0.16.1",
     "typescript": "~6.0.3",
     "vitest": "3.2.4"
   },

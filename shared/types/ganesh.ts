@@ -160,7 +160,8 @@ export type PandalMemberAuditAction =
   | "role_permissions"
   | "pandal_archived"
   | "pandal_restored"
-  | "ownership_transferred";
+  | "ownership_transferred"
+  | "pandal_profile";
 
 export interface PandalRole {
   id: string;

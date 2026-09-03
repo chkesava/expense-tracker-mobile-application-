@@ -230,6 +230,9 @@ function memberAudit(
     roleName?: string;
     oldPermissions?: string[];
     newPermissions?: string[];
+    /** Free-form before/after, for Pandal-level edits that are not role changes. */
+    oldValue?: unknown;
+    newValue?: unknown;
     reason?: string;
   }
 ) {
@@ -908,6 +911,23 @@ export async function updatePandalProfile(
       { merge: true }
     );
   }
+  // The Pandal's public identity — the name on every report and the invite
+  // record joiners see. Changing it left no trace at all.
+  memberAudit(batch, db, pandalId, {
+    actorId: actor.uid,
+    targetUserId: actor.uid,
+    action: "pandal_profile",
+    oldValue: {
+      name: String(pandalSnap.data().name ?? ""),
+      area: String(pandalSnap.data().area ?? ""),
+      contactPhone: String(pandalSnap.data().contactPhone ?? ""),
+    },
+    newValue: {
+      name,
+      area: input.area?.trim() || "",
+      contactPhone: input.contactPhone?.trim() || "",
+    },
+  });
   await commitWrite(() => batch.commit(), { label: "pandal profile" });
 }
 
@@ -1753,6 +1773,13 @@ export async function updateHousehold(
       updatedAt: serverTimestamp(),
     })
   );
+  audit(householdBatch, db, pandalId, festivalId, actor.uid, "edited", "household", householdId, {
+    oldValue: {
+      expectedAmount: Number(prev.expectedAmount ?? 0),
+      status: previousStatus ?? null,
+    },
+    newValue: { expectedAmount, status: input.status ?? null },
+  });
   await commitWrite(() => householdBatch.commit(), { label: "household" });
 }
 
@@ -1982,6 +2009,17 @@ export async function attachContributionPhoto(
     updatedBy: actor.uid,
     updatedAt: serverTimestamp(),
   });
+  audit(
+    batch, db, pandalId, festivalId, actor.uid, "edited", "contribution", contributionId,
+    {
+      // Paths only, not the whole meta: enough to tell that evidence was
+      // replaced and which object it was, without copying file internals into
+      // the audit trail.
+      oldValue: { photoPath: previousPath ?? null },
+      newValue: { photoPath: photo.path },
+      reason: previousPath && previousPath !== photo.path ? "Photo replaced" : "Photo attached",
+    }
+  );
   // Only report a previous path once the server has actually confirmed the new
   // one replaced it. A merely-"queued" (offline) outcome could still fail to
   // land, and deleting the previous object on that outcome would orphan the
@@ -2764,6 +2802,11 @@ export async function attachExpenseReceipt(
     updatedBy: actor.uid,
     updatedAt: serverTimestamp(),
   });
+  audit(batch, db, pandalId, festivalId, actor.uid, "edited", "expense", expenseId, {
+    oldValue: { receiptPath: previousPath ?? null },
+    newValue: { receiptPath: receipt.path },
+    reason: previousPath && previousPath !== receipt.path ? "Receipt replaced" : "Receipt attached",
+  });
   // See attachContributionPhoto above for why this waits for a real ack.
   const outcome = await commitWrite(() => batch.commit(), { label: "expense receipt" });
   return outcome === "acked" && previousPath !== receipt.path ? previousPath : undefined;
@@ -3253,6 +3296,7 @@ async function loadAllFestivalDocs(
 
 export async function recomputeFestivalSummary(
   db: Firestore,
+  actor: GaneshActor,
   pandalId: string,
   festivalId: string
 ): Promise<void> {
@@ -3404,6 +3448,32 @@ export async function recomputeFestivalSummary(
       ...summary,
       updatedAt: serverTimestamp(),
     });
+
+    // This rewrites every total on the festival, and until now left no record
+    // that it happened or who did it (GS-053). It is also the documented repair
+    // path for the God Fund location split, so it is the write most likely to
+    // be reached for when the numbers already look wrong — exactly when a
+    // committee needs to see what changed.
+    //
+    // Only the fields that actually moved are recorded. A recompute that
+    // changes nothing is the common case, and an audit entry listing every
+    // unchanged total would bury the one that did move.
+    const before = parseGaneshSummary(
+      current.exists() ? (current.data() as Partial<typeof EMPTY_GANESH_SUMMARY>) : null
+    );
+    // Same key-walk parseGaneshSummary uses: EMPTY_GANESH_SUMMARY's keys are
+    // exactly the numeric totals, so they index both sides cleanly.
+    const movedKeys = (
+      Object.keys(EMPTY_GANESH_SUMMARY) as Array<keyof typeof EMPTY_GANESH_SUMMARY>
+    ).filter((key) => before[key] !== summary[key]);
+    audit(txn, db, pandalId, festivalId, actor.uid, "adjusted", "summary", "summary", {
+      oldValue: Object.fromEntries(movedKeys.map((key) => [key, before[key]])),
+      newValue: Object.fromEntries(movedKeys.map((key) => [key, summary[key]])),
+      reason:
+        movedKeys.length === 0
+          ? "Recalculated from ledger; every total already agreed"
+          : `Recalculated from ledger; ${movedKeys.length} total(s) changed`,
+    });
   });
 
   for (let i = 0; i < members.length; i += 400) {
@@ -3446,6 +3516,9 @@ export async function addCustomCategory(
     createdBy: actor.uid,
     updatedBy: actor.uid,
     createdAt: serverTimestamp(),
+  });
+  audit(categoryBatch, db, pandalId, festivalId, actor.uid, "created", "category", id, {
+    newValue: { name: trimmed },
   });
   await commitWrite(() => categoryBatch.commit(), { label: "category" });
   return id;

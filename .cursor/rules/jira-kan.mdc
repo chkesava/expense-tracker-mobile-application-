@@ -1,0 +1,19 @@
+---
+description: Default Jira project for this repo is Ganesh seva (KAN).
+alwaysApply: true
+---
+
+# Jira: Ganesh seva (KAN)
+
+This repository uses the **Ganesh seva** Jira board.
+
+- Site: `https://kesavach.atlassian.net`
+- Project key: `KAN`
+- Board: https://kesavach.atlassian.net/jira/software/projects/KAN/board
+
+When creating, searching, updating, or commenting on Jira work:
+
+- Always use project `KAN` unless the user names a different project
+- Do not use the sample project `SAM1`
+- Prefer `cloudId` `https://kesavach.atlassian.net`
+- Keep JQL/CQL page size at 10 unless the user asks for more

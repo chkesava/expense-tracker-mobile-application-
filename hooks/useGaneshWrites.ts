@@ -557,7 +557,7 @@ export function useGaneshWrites() {
       requirePerm("festival.update");
       const ctx = requireFestival();
       return run("Totals recalculated", () =>
-        writes.recomputeFestivalSummary(ctx.db, ctx.pandalId, ctx.festivalId)
+        writes.recomputeFestivalSummary(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId)
       );
     },
     addCustomCategory: async (name: string) => {
