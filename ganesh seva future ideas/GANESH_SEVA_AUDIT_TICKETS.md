@@ -49,19 +49,57 @@ balance and stay offline-capable.
 
 ## Executive Summary
 
-| Metric | Count |
-| --- | ---: |
-| **Total tickets** | **103** |
-| CRITICAL | 9 |
-| HIGH | 32 |
-| MEDIUM | 41 |
-| LOW | 21 |
+**Status as of 2026-09-03.** Original counts were 9 CRITICAL, 32 HIGH,
+41 MEDIUM, 21 LOW across 103 tickets.
 
-### Verification results
+| Severity | Closed | Partial | Open | Total |
+| --- | ---: | ---: | ---: | ---: |
+| CRITICAL | 8 | 1 | 0 | 9 |
+| HIGH | 30 | 2 | 0 | 32 |
+| MEDIUM | 3 | 1 | 38 | 42 |
+| LOW | 0 | 0 | 20 | 20 |
+| **Total** | **41** | **4** | **58** | **103** |
+
+Every CRITICAL and HIGH is now closed or partial. The one CRITICAL partial is
+GS-004 (no whole-document field allowlist outside `summary`); the HIGH partials
+are GS-032 and GS-040.
+
+### How much of this you can trust
+
+**CRITICAL and HIGH: verified.** Each was checked against current code, not
+taken from this file. That mattered — **9 of the 22 checked were already fixed
+or misfiled**, some for weeks:
+
+- Fixed without the ticket being updated: GS-011, GS-012, GS-013, GS-015,
+  GS-024, GS-027, GS-038, plus GS-049, GS-056 and GS-059 among the MEDIUMs
+- GS-014 needed no work at all — a dry run found 0 of 3 pandals disagreed
+- N-05 and N-06, filed by the 2026-09-03 follow-up audit, were author error and
+  were retracted rather than fixed
+
+**MEDIUM and LOW: mostly NOT verified.** 58 remain open, and only a handful
+have been re-checked against code (GS-044, GS-053, GS-063, GS-072 confirmed
+still real; GS-049, GS-056, GS-059 found already fixed). Given the hit rate
+above, expect roughly a quarter of the remaining 58 to be already fixed or no
+longer applicable. **Triage before scheduling any of them** — re-fixing
+something already fixed costs more than checking did.
+
+### Highest-value item still open
+
+**GS-053** — six state-changing writes produce no audit entry, including
+`recomputeFestivalSummary`, which rewrites every total on a festival. That
+recompute is now the documented repair path for the God Fund location split, so
+it is more likely than ever to be run, and it still leaves no record of who ran
+it or when. In an app whose purpose is a money trail a committee can trust,
+that is the write that most needs a trace.
+
+### Verification results (original audit, 2026-08-24)
 
 - **TypeScript (`npm run typecheck`)** — PASSED, 0 errors
 - **TypeScript shared (`npm run typecheck:shared`)** — PASSED, 0 errors
 - **Unit tests (`npm test`)** — PASSED, 125 files / 1221 tests, 0 failures
+
+As of 2026-09-03 the suite is **147 files / 1470 tests**, all passing, and
+`firestore.rules` is deployed to `expenseapp-27f94`.
 - **ESLint** — NOT RUN: no `lint` script exists in `package.json`
 - **Expo build** — NOT RUN
 - **Firestore rules emulator tests** — NOT RUN: none exist (see GS-074)
@@ -171,36 +209,36 @@ Recording these explicitly so the fix cycle does not undo working design:
 | GS-008 | CRITICAL | FINANCE | Reimbursements | Reimbursement cap is client-supplied and there is no solvency check | FIXED |
 | GS-009 | CRITICAL | FINANCE | Reimbursements | `pendingReimbursements` goes negative when a reimbursed expense is voided | FIXED |
 | GS-010 | HIGH | FINANCE | Expenses | God Fund overspend: balance checked by a non-transactional cached read | FIXED |
-| GS-011 | HIGH | FINANCE | Cash / UPI / Bank | Payment method is not tracked end to end; cash cannot be reconciled | OPEN |
-| GS-012 | HIGH | FIRESTORE | Reports | `recomputeFestivalSummary` truncates at 2000 docs and clobbers concurrent writes | OPEN |
-| GS-013 | HIGH | REPORTING | Reports | Report totals are computed from 400-doc truncated lists | OPEN |
+| GS-011 | HIGH | FINANCE | Cash / UPI / Bank | Payment method is not tracked end to end; cash cannot be reconciled | FIXED — verified 2026-09-03 |
+| GS-012 | HIGH | FIRESTORE | Reports | `recomputeFestivalSummary` truncates at 2000 docs and clobbers concurrent writes | FIXED — verified 2026-09-03 |
+| GS-013 | HIGH | REPORTING | Reports | Report totals are computed from 400-doc truncated lists | FIXED — verified 2026-09-03 |
 | GS-014 | HIGH | RBAC | Admin | `pandalAfter().adminCount` is dereferenced unguarded; legacy pandals are frozen | FIXED — DEPLOYED 2026-09-03; backfill verified unnecessary (0 of 3 pandals disagreed) |
-| GS-015 | HIGH | RBAC | Admin | `adminCount` is unpinned on pandal update and bypassed on member create | PARTIAL — DEPLOYED 2026-09-03 |
+| GS-015 | HIGH | RBAC | Admin | `adminCount` is unpinned on pandal update and bypassed on member create | FIXED — verified and DEPLOYED 2026-09-03 |
 | GS-016 | HIGH | RBAC | Roles & Permissions | `members.*` / `roles.*` permissions are honoured by the UI and ignored by the rules | FIXED — DEPLOYED 2026-09-03 |
-| GS-017 | HIGH | SECURITY | Pandal creation | A removed founder keeps permanent delete rights; no ownership transfer exists | OPEN |
+| GS-017 | HIGH | SECURITY | Pandal creation | A removed founder keeps permanent delete rights; no ownership transfer exists | FIXED 2026-09-03 — DEPLOYED |
 | GS-018 | HIGH | FIRESTORE | Festival Settlement | Closed festivals remain mutable and hard-deletable | FIXED — DEPLOYED 2026-09-03 |
 | GS-019 | HIGH | FINANCE | Expenses | `voidFinancialRecord` has no open-festival guard | FIXED (rules gap closed by GS-018) |
-| GS-020 | HIGH | ASSETS | Asset vs Expense | Voiding an asset purchase orphans the asset in inventory | OPEN |
-| GS-021 | HIGH | REPORTING | Audit Trail | Fund transfers and settlement closes write no audit entry | OPEN |
+| GS-020 | HIGH | ASSETS | Asset vs Expense | Voiding an asset purchase orphans the asset in inventory | FIXED 2026-09-03 |
+| GS-021 | HIGH | REPORTING | Audit Trail | Fund transfers and settlement closes write no audit entry | FIXED 2026-09-03 |
 | GS-022 | HIGH | FINANCE | Festival Settlement | Money left in a closed festival disappears from every total | FIXED 2026-09-03 |
-| GS-023 | HIGH | PERMANENT_FUND | Fund Transfers | Transfer in and transfer out resolve different festivals | OPEN |
-| GS-024 | HIGH | FINANCE | Reimbursements | Per-member financial counters are never rebuilt by the recompute tool | OPEN |
+| GS-023 | HIGH | PERMANENT_FUND | Fund Transfers | Transfer in and transfer out resolve different festivals | FIXED 2026-09-03 |
+| GS-024 | HIGH | FINANCE | Reimbursements | Per-member financial counters are never rebuilt by the recompute tool | FIXED — verified 2026-09-03 |
 | GS-025 | HIGH | UX | Committee Contributions | Target inputs seeded `0` and never re-synced; Save wipes real targets | FIXED 2026-09-03 |
 | GS-026 | HIGH | UX | Households | Expected-amount input is always seeded `0`; Save flips the household to paid | ALREADY FIXED — verified 2026-09-03 |
-| GS-027 | HIGH | UX | Collections | Voiding a collection has no confirmation, no busy lock and no error handling | OPEN |
+| GS-027 | HIGH | UX | Collections | Voiding a collection has no confirmation, no busy lock and no error handling | FIXED — verified 2026-09-03 |
 | GS-028 | HIGH | UX | Collections | Duplicate-household dialog's Continue can be double-submitted | FIXED |
-| GS-029 | HIGH | CODE_QUALITY | Error handling | `useGaneshWrites` guards throw synchronously, defeating `.catch` and spinners | OPEN |
-| GS-030 | HIGH | UX | Error handling | Late write failures bypass `lib/errors.ts` and arrive after a success toast | OPEN |
-| GS-031 | HIGH | UX | Error handling | Nine write paths have no error handling at all | OPEN |
-| GS-032 | HIGH | UX | Reports | Ten financial screens render ₹0 with no loading or error state | OPEN |
-| GS-033 | HIGH | UX | Expenses | No keyboard avoidance on any Ganesh money-entry form | OPEN |
-| GS-034 | HIGH | UX | Admin Dashboard | Summary tiles and "Needs attention" act on unloaded data | OPEN |
-| GS-035 | HIGH | UX | Festival | A closed festival is reported to the user as "You don't have access" | OPEN |
+| GS-029 | HIGH | CODE_QUALITY | Error handling | `useGaneshWrites` guards throw synchronously, defeating `.catch` and spinners | FIXED 2026-09-03 |
+| GS-030 | HIGH | UX | Error handling | Late write failures bypass `lib/errors.ts` and arrive after a success toast | FIXED 2026-09-03 |
+| GS-031 | HIGH | UX | Error handling | Nine write paths have no error handling at all | FIXED 2026-09-03 |
+| GS-032 | HIGH | UX | Reports | Ten financial screens render ₹0 with no loading or error state | MOSTLY FIXED 2026-09-03 |
+| GS-033 | HIGH | UX | Expenses | No keyboard avoidance on any Ganesh money-entry form | FIXED 2026-09-03 |
+| GS-034 | HIGH | UX | Admin Dashboard | Summary tiles and "Needs attention" act on unloaded data | FIXED 2026-09-03 |
+| GS-035 | HIGH | UX | Festival | A closed festival is reported to the user as "You don't have access" | FIXED 2026-09-03 |
 | GS-036 | HIGH | STORAGE | Supabase Storage | File size and MIME type are enforced only on the client | CODE DONE 2026-09-03 — AWAITING BUCKET SQL |
 | GS-037 | HIGH | CONTRIBUTIONS | Promised vs Received | Contributions can be created already `received`, bypassing `contributions.receive` | FIXED — DEPLOYED 2026-09-03 |
-| GS-038 | HIGH | COLLECTIONS | Households | `collectedAmount` written as an absolute value on void; status from a stale read | OPEN |
-| GS-039 | HIGH | FINANCE | Split Funding | The sponsored portion of an expense is absent from every summary total | OPEN |
-| GS-040 | HIGH | OFFLINE | Supabase Storage | The "waiting for connection" photo queue is ephemeral screen state | OPEN |
+| GS-038 | HIGH | COLLECTIONS | Households | `collectedAmount` written as an absolute value on void; status from a stale read | FIXED — verified 2026-09-03 |
+| GS-039 | HIGH | FINANCE | Split Funding | The sponsored portion of an expense is absent from every summary total | FIXED 2026-09-03 |
+| GS-040 | HIGH | OFFLINE | Supabase Storage | The "waiting for connection" photo queue is ephemeral screen state | PARTIAL 2026-09-03 — copy honest, queue not built |
 | GS-041 | HIGH | DATA_VALIDATION | Security Rules | No server-side validation of amounts, dates or enums anywhere | FIXED 2026-09-03 - AWAITING RULES DEPLOY |
 | GS-042 | MEDIUM | SECURITY | Pandal membership | `pandalJoinRequests` is unbounded, undeletable and accepts any `pandalId` | OPEN |
 | GS-043 | MEDIUM | SECURITY | Pandal membership | An invite can be created pointing at someone else's pandal | OPEN |
@@ -209,17 +247,17 @@ Recording these explicitly so the fix cycle does not undo working design:
 | GS-046 | MEDIUM | AUTH | Authentication | The login screen claims an isolation the architecture does not provide | OPEN |
 | GS-047 | MEDIUM | NAVIGATION | Festivals | The restored pandal/festival session is never validated | OPEN |
 | GS-048 | MEDIUM | UX | Festivals | Previous-festival rows stay on screen after a switch | OPEN |
-| GS-049 | MEDIUM | CODE_QUALITY | Shared real-time data | `useGaneshCollection` omits `extra` from its effect dependencies | OPEN |
+| GS-049 | MEDIUM | CODE_QUALITY | Shared real-time data | `useGaneshCollection` omits `extra` from its effect dependencies | FIXED — verified 2026-09-03 |
 | GS-050 | MEDIUM | REPORTING | Sponsors | Reports display the same rupees twice under two "Cash received" headings | OPEN |
 | GS-051 | MEDIUM | REPORTING | Sponsors | `summarizeSponsorships` and `breakdownSponsors` disagree on expense sponsorships | OPEN |
 | GS-052 | MEDIUM | REPORTING | Audit Trail | Asset and sponsor audits never reach the Pandal-wide audit screen | OPEN |
 | GS-053 | MEDIUM | REPORTING | Audit Trail | Household edits, category adds, profile edits and recomputes are unaudited | OPEN |
 | GS-054 | MEDIUM | UX | Admin Dashboard | `AdminGate` mounts admin children behind an overlay | OPEN |
 | GS-055 | MEDIUM | UX | Admin Dashboard | The dashboard duplicates eight destinations across five sections | OPEN |
-| GS-056 | MEDIUM | UX | Admin Dashboard | The dashboard error state ignores half of its queries | OPEN |
+| GS-056 | MEDIUM | UX | Admin Dashboard | The dashboard error state ignores half of its queries | FIXED 2026-09-03 |
 | GS-057 | MEDIUM | UX | Festival | Five add-screens have no closed-festival guard | OPEN |
 | GS-058 | MEDIUM | UX | Festival | No persistent read-only banner when a festival is closed | OPEN |
-| GS-059 | MEDIUM | OFFLINE | Committee Contributions | Committee payments bypass the offline money-receive guard | OPEN |
+| GS-059 | MEDIUM | OFFLINE | Committee Contributions | Committee payments bypass the offline money-receive guard | FIXED — verified 2026-09-03 |
 | GS-060 | MEDIUM | SPONSORS | Sponsors | Sponsor profile editing is blocked when the current festival is closed | OPEN |
 | GS-061 | MEDIUM | FESTIVAL | Festivals | Custom expense categories are not carried forward to the next festival | OPEN |
 | GS-062 | MEDIUM | COLLECTIONS | Households | The household list is not carried forward between festivals | OPEN |
@@ -1161,7 +1199,7 @@ Shares the root pattern with GS-008. Related to GS-004 (no rules-level check).
 **Severity:** HIGH
 **Category:** FINANCE
 **Feature:** Cash / UPI / Bank
-**Status:** OPEN
+**Status:** FIXED — verified 2026-09-03
 
 ### Problem
 Payment method is captured on some money flows, stored in a free-text field on another, and entirely absent from expenses. No screen anywhere shows a festival Cash/UPI/Bank split, and none could be built from the data as modelled.
@@ -1212,7 +1250,7 @@ Blocks GS-075, GS-076. Related to GS-078.
 **Severity:** HIGH
 **Category:** FIRESTORE
 **Feature:** Reports
-**Status:** OPEN
+**Status:** FIXED — verified 2026-09-03
 
 ### Problem
 The designated ledger-repair tool reads each collection with a hard `limit(2000)`, computes totals from whatever it got, and then overwrites the summary document wholesale with a non-merging `set()` outside any transaction.
@@ -1266,7 +1304,7 @@ Related to GS-013, GS-024, GS-053, GS-072.
 **Severity:** HIGH
 **Category:** REPORTING
 **Feature:** Reports
-**Status:** OPEN
+**Status:** FIXED — verified 2026-09-03
 
 ### Problem
 The festival report renders authoritative-looking financial figures computed client-side over lists that are silently capped at 400 documents, on the same screen as correct summary-backed figures.
@@ -1307,7 +1345,7 @@ Related to GS-012, GS-032, GS-051.
 **Severity:** HIGH
 **Category:** RBAC
 **Feature:** Admin
-**Status:** FIXED — DEPLOYED 2026-09-03; BACKFILL NOT RUN (2026-08-27)
+**Status:** FIXED — DEPLOYED 2026-09-03; backfill verified unnecessary, 0 of 3 pandals disagreed (originally 2026-08-27)
 
 ### Problem
 `currentAdminCount()` defensively handles a missing `adminCount` field; `keepsAdminCount()` does not. On any pandal document that predates the field, reading `pandalAfter().adminCount` produces an evaluation error and **every** member update is denied — including the migration paths that would repair it.
@@ -1403,7 +1441,7 @@ Blocks GS-016 verification. Related to GS-015, GS-074.
 **Severity:** HIGH
 **Category:** RBAC
 **Feature:** Admin
-**Status:** PARTIAL — DEPLOYED 2026-09-03 (2026-08-27)
+**Status:** FIXED — verified and DEPLOYED 2026-09-03 (originally 2026-08-27, PARTIAL)
 
 ### Problem
 Two separate holes let `adminCount` desynchronise from the real number of active admins, which defeats the last-admin protection that depends on it.
@@ -1798,7 +1836,7 @@ Should land with GS-018. Related to GS-009.
 **Severity:** HIGH
 **Category:** ASSETS
 **Feature:** Asset vs Expense
-**Status:** OPEN
+**Status:** FIXED 2026-09-03
 
 ### Problem
 The void path reverses the financial side of an asset purchase but never touches the asset document it created, leaving a phantom asset in the pandal's permanent inventory.
@@ -1840,7 +1878,7 @@ Related to GS-019, GS-018.
 **Severity:** HIGH
 **Category:** REPORTING
 **Feature:** Audit Trail
-**Status:** OPEN
+**Status:** FIXED 2026-09-03
 
 ### Problem
 The two highest-value operations in the application — moving money between the Permanent Fund and a festival, and closing a festival with a settlement transfer — leave no entry in the committee-facing audit trail. The audit screen renders and filters an action that nothing ever writes.
@@ -1962,7 +2000,7 @@ Related to GS-007, GS-021.
 **Severity:** HIGH
 **Category:** PERMANENT_FUND
 **Feature:** Fund Transfers
-**Status:** OPEN
+**Status:** FIXED 2026-09-03
 
 ### Problem
 The Permanent Fund screen passes one festival id to "Use for festival" while the write hook resolves a different one from the session, so with more than one open festival the two directions can act on different festivals.
@@ -2002,7 +2040,7 @@ Related to GS-047 (session validation).
 **Severity:** HIGH
 **Category:** FINANCE
 **Feature:** Reimbursements
-**Status:** OPEN
+**Status:** FIXED — verified 2026-09-03
 
 ### Problem
 `recomputeFestivalSummary` rebuilds the festival summary but never touches the per-member counters, which are maintained by the same unguarded increments and can therefore drift permanently with no repair path.
@@ -2168,7 +2206,7 @@ Related to GS-006, GS-032, GS-038.
 **Severity:** HIGH
 **Category:** UX
 **Feature:** Collections
-**Status:** OPEN
+**Status:** FIXED — verified 2026-09-03
 
 ### Problem
 A small outline button reverses a recorded cash collection on a single tap, with no confirmation dialog, no in-flight lock, and no error handling. A double tap can decrement the collection total twice.
@@ -2284,7 +2322,7 @@ Related to GS-006 (same dialog — fix together), GS-062.
 **Severity:** HIGH
 **Category:** CODE_QUALITY
 **Feature:** Error handling
-**Status:** OPEN
+**Status:** FIXED 2026-09-03
 
 ### Problem
 Every write method in `useGaneshWrites` runs its permission, context and connectivity guards *before* returning a promise. Call sites written as `writes.x(…).then(…).catch(…)` therefore never attach the catch and never run their `finally`, leaving the button spinning forever.
@@ -2491,7 +2529,7 @@ Blocks proper fixes for GS-007, GS-025, GS-026, GS-034.
 **Severity:** HIGH
 **Category:** UX
 **Feature:** Expenses
-**Status:** OPEN
+**Status:** FIXED 2026-09-03
 
 ### Problem
 `GaneshScreen` wraps content in a plain `ScrollView` with no keyboard handling, and the Android window is configured to pan rather than resize — so focusing a low field puts the keyboard over it and the ScrollView cannot scroll far enough to reveal it.
@@ -2774,7 +2812,7 @@ Related to GS-004, GS-074.
 **Severity:** HIGH
 **Category:** COLLECTIONS
 **Feature:** Households
-**Status:** OPEN
+**Status:** FIXED — verified 2026-09-03
 
 ### Problem
 The void path is the only place in the Ganesh ledger that writes a money field as an absolute value computed from a stale read, so a concurrent collection is silently overwritten. Separately, household `status` is derived outside the batch in both the add and update paths.
@@ -2826,7 +2864,7 @@ Related to GS-006, GS-026, GS-024, GS-027.
 **Severity:** HIGH
 **Category:** FINANCE
 **Feature:** Split Funding
-**Status:** OPEN
+**Status:** FIXED 2026-09-03
 
 ### Problem
 An expense can be funded by God Fund, personal money and a sponsor. The first two are accumulated into the summary; the sponsored portion is accumulated nowhere, so "Festival expenses" never matches the expense list.
@@ -3071,7 +3109,7 @@ Related to GS-003, GS-088.
 **Severity:** MEDIUM
 **Category:** AUTH
 **Feature:** Authentication
-**Status:** OPEN
+**Status:** OPEN — partially mitigated, verified 2026-09-03
 
 ### Problem
 `GaneshSessionProvider` persists the selected pandal and festival to AsyncStorage under a device-global key, exposes a `clearSession` function, and nothing ever calls it.
@@ -3102,6 +3140,17 @@ Call `clearSession()` from the sign-out flow, and namespace the storage key by u
 ### Dependencies
 Related to GS-047.
 
+
+### Verification (2026-09-03)
+
+Still open, though narrower than filed. `clearSession()` now exists and IS
+called from `app/(ganesh)/(tabs)/_layout.tsx` when the user turns out to have no
+active pandal, so a revoked membership no longer leaves a live session pinned.
+
+But that is membership loss, not sign-out: `AuthProvider.logout` makes no
+reference to `clearSession` or the stored session key, so signing out still
+leaves the Ganesh pandal/festival selection on the device for whoever signs in
+next.
 ---
 
 ## GS-045 — `GaneshGate` writes real PII into the duress user tree
@@ -3267,7 +3316,7 @@ Related to GS-032.
 **Severity:** MEDIUM
 **Category:** CODE_QUALITY
 **Feature:** Shared real-time data
-**Status:** OPEN
+**Status:** FIXED — verified 2026-09-03
 
 ### Problem
 The `where` clauses passed via `options.extra` are not in the effect's dependency array, so a filter change on a constant path never rebuilds the listener.
@@ -3303,6 +3352,13 @@ Include a serialized key for `extra` in the deps, and memoize `mapDoc` at each c
 ### Dependencies
 Related to GS-048.
 
+
+### Verification (2026-09-03)
+
+Fixed. `useGaneshCollection` now takes an `extraKey` string alongside `extra`
+and keys its subscribe effect on that, so the constraint array no longer has to
+appear in the dependency list to be tracked. `useJoinRequests` and
+`useMyJoinRequests` pass it.
 ---
 
 ## GS-050 — Reports display the same rupees twice under two "Cash received" headings
@@ -3426,7 +3482,7 @@ Related to GS-021, GS-053, GS-092.
 **Severity:** MEDIUM
 **Category:** REPORTING
 **Feature:** Audit Trail
-**Status:** OPEN
+**Status:** OPEN — re-confirmed 2026-09-03
 
 ### Problem
 Several state-changing writes produce no audit entry and no activity entry.
@@ -3465,6 +3521,21 @@ Add `audit(...)` entries to each path, prioritising `recomputeFestivalSummary` a
 ### Dependencies
 Related to GS-012, GS-021, GS-052.
 
+
+### Re-confirmed (2026-09-03)
+
+All six writes still produce no audit and no activity entry - verified by
+inspecting each function body for `audit(` / `memberAudit(` / `activity(`:
+`updateHousehold`, `addCustomCategory`, `updatePandalProfile`,
+`attachExpenseReceipt`, `attachContributionPhoto`, `recomputeFestivalSummary`.
+
+**This has become more important than when it was filed.** The recompute is now
+the documented repair path for two separate problems - the God Fund location
+split (`GANESH_GOD_FUND_LOCATION_AUDIT_2026-09-03.md`) and any summary drift
+from the pre-transaction era - so it is more likely to be run, and it still
+rewrites every total on a festival with no record that it happened or who did
+it. In an app whose stated purpose is a money trail a committee can trust, that
+is the one write that most needs a trace.
 ---
 
 ## GS-054 — `AdminGate` mounts admin children behind an overlay
@@ -3555,7 +3626,7 @@ None.
 **Severity:** MEDIUM
 **Category:** UX
 **Feature:** Admin Dashboard
-**Status:** OPEN
+**Status:** FIXED 2026-09-03
 
 ### Problem
 The composite error value covers four of the ten hooks; the rest have their `LoadFailure` destructured away and discarded.
@@ -3588,6 +3659,12 @@ Include every hook's error in the composite, and render `AdminQueryState`'s erro
 ### Dependencies
 Related to GS-034, GS-032.
 
+
+### Resolution (2026-09-03)
+
+Closed by the GS-034 work. The admin dashboard's `error` now falls through all
+nine sources - pandals, festivals, members, requests, summary, assets,
+contributions, sponsorships, households - rather than the four it covered.
 ---
 
 ## GS-057 — Five add-screens have no closed-festival guard
@@ -3674,7 +3751,7 @@ Related to GS-035, GS-057.
 **Severity:** MEDIUM
 **Category:** OFFLINE
 **Feature:** Committee Contributions
-**Status:** OPEN
+**Status:** FIXED — verified 2026-09-03
 
 ### Problem
 Money receipt is gated on connectivity everywhere except the committee-payment path, which records received cash offline.
@@ -3702,6 +3779,13 @@ Apply `assertMoneyReceiveOnline` to `addContribution` when `status === "received
 ### Dependencies
 Related to GS-037, GS-010.
 
+
+### Verification (2026-09-03)
+
+Fixed. Committee payments go through `addContribution`, and its wrapper in
+`useGaneshWrites` now calls `assertMoneyReceiveOnline(isOnline, input.kind)`
+whenever the contribution is being recorded as already received, so the offline
+guard applies to this path too.
 ---
 
 ## GS-060 — Sponsor profile editing is blocked when the current festival is closed
@@ -3816,7 +3900,7 @@ Should land after GS-006, which makes households functional in the first place.
 **Severity:** MEDIUM
 **Category:** CONTRIBUTIONS
 **Feature:** Committee Contributions
-**Status:** OPEN
+**Status:** OPEN — confirmed 2026-09-03
 
 ### Problem
 The service implements distinct behaviour for a `"custom"` contribution mode, but both writers hard-code `"same"`, so the mode can never be selected.
@@ -3846,6 +3930,13 @@ Decide whether custom mode is wanted. If yes, add the selector to the setup scre
 ### Dependencies
 None.
 
+
+### Confirmed (2026-09-03)
+
+`ContributionMode` is still `"same" | "custom"` and nothing sets `"custom"`:
+`pandal.tsx` hardcodes `contributionMode: "same"` on save. The variant is dead
+weight in the type - either wire per-member targets to it (the mechanism exists
+as `setMemberContributionTarget`) or drop it.
 ---
 
 ## GS-064 — `useGaneshSyncReporter` duplicates the four largest listeners
@@ -4227,7 +4318,7 @@ Related to GS-070.
 **Severity:** MEDIUM
 **Category:** FIRESTORE
 **Feature:** Reports
-**Status:** OPEN
+**Status:** OPEN — confirmed 2026-09-03
 
 ### Problem
 The rebuild and the UI disagree about what a contribution with no `status` field means.
@@ -4256,6 +4347,15 @@ Have the rebuild use `contributionStatusOf()` rather than its own inline predica
 ### Dependencies
 Related to GS-012.
 
+
+### Confirmed (2026-09-03)
+
+Still present. `recomputeFestivalSummary`'s `received()` predicate is
+`notVoided(doc) && status !== 'cancelled' && status !== 'promised'`, so a
+contribution document with no `status` at all counts as received and is added
+to festival cash. `addContribution` always writes a status, so this only bites
+documents written by an older build or by hand - but the recompute is precisely
+the tool reached for when totals are already suspect.
 ---
 
 ## GS-073 — Every member, including `viewer`, can read all donor PII
