@@ -30,9 +30,11 @@
 | 2026-08-27 | GS-001 | Edge Function deployed; policies locked in production; client routed through it | **Deployed, outage until a build ships** — auth path unverified |
 | 2026-08-27 | GS-069 | Replacing a photo, and a failed attach, now clean up Storage | **Partial** — void does not delete a photo (deliberate: it's audit evidence); late-failure cleanup not closed |
 
-All four are `firestore.rules` changes only; no application code was touched. They compile
-(`firebase deploy --only firestore:rules --dry-run`) but **take effect only after the manual
-deploy** described in `docs/FIREBASE_RULES_DEPLOY.md` — CI does not deploy `firestore.rules`.
+All four are `firestore.rules` changes only; no application code was touched.
+**Deployed 2026-09-03** (`firebase deploy --only firestore:rules --project expenseapp-27f94`),
+together with the `sponsoredExpenseAmount` summary key added for GS-039. CI still does not
+deploy `firestore.rules`, so any future rules change needs the same manual step from
+`docs/FIREBASE_RULES_DEPLOY.md`.
 Coverage is mirrored in `shared/utils/ganeshPermissions.rules.contract.test.ts`, which is a
 hand-written mirror, not an emulator run (GS-074 remains open).
 
@@ -160,10 +162,10 @@ Recording these explicitly so the fix cycle does not undo working design:
 | ID | Severity | Category | Feature | Title | Status |
 | --- | --- | --- | --- | --- | --- |
 | GS-001 | CRITICAL | STORAGE | Supabase Storage | Supabase policies grant `anon` full CRUD over every pandal's files | CODE FIXED — AWAITING RELEASE BUILD |
-| GS-002 | CRITICAL | RBAC | Pandal membership | Open-join self-create accepts an arbitrary `permissions` array | FIXED — AWAITING RULES DEPLOY |
-| GS-003 | CRITICAL | SECURITY | Pandal membership | `pandalInvites` is listable by any signed-in user | FIXED — AWAITING RULES DEPLOY |
-| GS-004 | CRITICAL | SECURITY | Security Rules | Festival subcollections have no payload validation; `summary` is forgeable | PARTIAL — AWAITING RULES DEPLOY |
-| GS-005 | CRITICAL | SECURITY | Audit Trail | `fundTransfers` and `auditLogs` are mutable via the wildcard match | FIXED — AWAITING RULES DEPLOY |
+| GS-002 | CRITICAL | RBAC | Pandal membership | Open-join self-create accepts an arbitrary `permissions` array | FIXED — DEPLOYED 2026-09-03 |
+| GS-003 | CRITICAL | SECURITY | Pandal membership | `pandalInvites` is listable by any signed-in user | FIXED — DEPLOYED 2026-09-03 |
+| GS-004 | CRITICAL | SECURITY | Security Rules | Festival subcollections have no payload validation; `summary` is forgeable | PARTIAL — DEPLOYED 2026-09-03 |
+| GS-005 | CRITICAL | SECURITY | Audit Trail | `fundTransfers` and `auditLogs` are mutable via the wildcard match | FIXED — DEPLOYED 2026-09-03 |
 | GS-006 | CRITICAL | COLLECTIONS | Households | Every collection creates a new household; the merge path is unreachable | FIXED |
 | GS-007 | CRITICAL | FESTIVAL | Festival Settlement | A festival can be closed on an unloaded ₹0 summary | FIXED |
 | GS-008 | CRITICAL | FINANCE | Reimbursements | Reimbursement cap is client-supplied and there is no solvency check | FIXED |
@@ -172,11 +174,11 @@ Recording these explicitly so the fix cycle does not undo working design:
 | GS-011 | HIGH | FINANCE | Cash / UPI / Bank | Payment method is not tracked end to end; cash cannot be reconciled | OPEN |
 | GS-012 | HIGH | FIRESTORE | Reports | `recomputeFestivalSummary` truncates at 2000 docs and clobbers concurrent writes | OPEN |
 | GS-013 | HIGH | REPORTING | Reports | Report totals are computed from 400-doc truncated lists | OPEN |
-| GS-014 | HIGH | RBAC | Admin | `pandalAfter().adminCount` is dereferenced unguarded; legacy pandals are frozen | FIXED - AWAITING RULES DEPLOY; backfill not run |
-| GS-015 | HIGH | RBAC | Admin | `adminCount` is unpinned on pandal update and bypassed on member create | PARTIAL - AWAITING RULES DEPLOY |
-| GS-016 | HIGH | RBAC | Roles & Permissions | `members.*` / `roles.*` permissions are honoured by the UI and ignored by the rules | FIXED - AWAITING RULES DEPLOY |
+| GS-014 | HIGH | RBAC | Admin | `pandalAfter().adminCount` is dereferenced unguarded; legacy pandals are frozen | FIXED — DEPLOYED 2026-09-03; backfill still not run |
+| GS-015 | HIGH | RBAC | Admin | `adminCount` is unpinned on pandal update and bypassed on member create | PARTIAL — DEPLOYED 2026-09-03 |
+| GS-016 | HIGH | RBAC | Roles & Permissions | `members.*` / `roles.*` permissions are honoured by the UI and ignored by the rules | FIXED — DEPLOYED 2026-09-03 |
 | GS-017 | HIGH | SECURITY | Pandal creation | A removed founder keeps permanent delete rights; no ownership transfer exists | OPEN |
-| GS-018 | HIGH | FIRESTORE | Festival Settlement | Closed festivals remain mutable and hard-deletable | FIXED - AWAITING RULES DEPLOY |
+| GS-018 | HIGH | FIRESTORE | Festival Settlement | Closed festivals remain mutable and hard-deletable | FIXED — DEPLOYED 2026-09-03 |
 | GS-019 | HIGH | FINANCE | Expenses | `voidFinancialRecord` has no open-festival guard | FIXED (rules gap closed by GS-018) |
 | GS-020 | HIGH | ASSETS | Asset vs Expense | Voiding an asset purchase orphans the asset in inventory | OPEN |
 | GS-021 | HIGH | REPORTING | Audit Trail | Fund transfers and settlement closes write no audit entry | OPEN |
@@ -195,7 +197,7 @@ Recording these explicitly so the fix cycle does not undo working design:
 | GS-034 | HIGH | UX | Admin Dashboard | Summary tiles and "Needs attention" act on unloaded data | OPEN |
 | GS-035 | HIGH | UX | Festival | A closed festival is reported to the user as "You don't have access" | OPEN |
 | GS-036 | HIGH | STORAGE | Supabase Storage | File size and MIME type are enforced only on the client | OPEN |
-| GS-037 | HIGH | CONTRIBUTIONS | Promised vs Received | Contributions can be created already `received`, bypassing `contributions.receive` | FIXED - AWAITING RULES DEPLOY |
+| GS-037 | HIGH | CONTRIBUTIONS | Promised vs Received | Contributions can be created already `received`, bypassing `contributions.receive` | FIXED — DEPLOYED 2026-09-03 |
 | GS-038 | HIGH | COLLECTIONS | Households | `collectedAmount` written as an absolute value on void; status from a stale read | OPEN |
 | GS-039 | HIGH | FINANCE | Split Funding | The sponsored portion of an expense is absent from every summary total | OPEN |
 | GS-040 | HIGH | OFFLINE | Supabase Storage | The "waiting for connection" photo queue is ephemeral screen state | OPEN |
@@ -395,7 +397,7 @@ Blocks GS-036, GS-069, GS-096.
 **Severity:** CRITICAL
 **Category:** RBAC
 **Feature:** Pandal membership
-**Status:** FIXED — AWAITING RULES DEPLOY (2026-08-26)
+**Status:** FIXED — DEPLOYED 2026-09-03 (2026-08-26)
 
 ### Problem
 The Firestore rule that lets a user create their own member document when a pandal has `joinMode: 'open'` constrains `memberId`, `userId`, `status` and `role` — but places no constraint at all on `permissions` or `roleIds`. The `permissions` array on the member document is exactly what the rules read to authorize every subsequent action.
@@ -483,7 +485,7 @@ Enabled by GS-003. Related to GS-016.
 **Severity:** CRITICAL
 **Category:** SECURITY
 **Feature:** Pandal membership
-**Status:** FIXED — AWAITING RULES DEPLOY (2026-08-26)
+**Status:** FIXED — DEPLOYED 2026-09-03 (2026-08-26)
 
 ### Problem
 `pandalInvites` is a flat top-level collection keyed by the join code. Its read rule is `allow read: if signedIn()`, and in Firestore `read` covers `list` as well as `get`. Any authenticated account can enumerate the entire collection.
@@ -553,7 +555,7 @@ Blocks GS-002 and GS-042.
 **Severity:** CRITICAL
 **Category:** SECURITY
 **Feature:** Security Rules
-**Status:** PARTIAL — AWAITING RULES DEPLOY (2026-08-26)
+**Status:** PARTIAL — DEPLOYED 2026-09-03 (2026-08-26)
 
 ### Problem
 The wildcard rule governing every festival subcollection checks membership, festival status and role/permission — and nothing whatsoever about the document being written. There is no `keys().hasOnly(...)`, no type check, and no range check anywhere in the Ganesh section of the rules.
@@ -646,7 +648,7 @@ Related to GS-041. Should land with GS-074 so the coverage is provable.
 **Severity:** CRITICAL
 **Category:** SECURITY
 **Feature:** Audit Trail
-**Status:** FIXED — AWAITING RULES DEPLOY (2026-08-26)
+**Status:** FIXED — DEPLOYED 2026-09-03 (2026-08-26)
 
 ### Problem
 Firestore ORs all matching rules — a more specific `match` block cannot remove a grant made by a wildcard. The explicit `allow update, delete: if false` on `fundTransfers` is therefore dead code, and the festival `auditLogs` collection is writable and deletable.
@@ -1305,7 +1307,7 @@ Related to GS-012, GS-032, GS-051.
 **Severity:** HIGH
 **Category:** RBAC
 **Feature:** Admin
-**Status:** FIXED — AWAITING RULES DEPLOY; BACKFILL NOT RUN (2026-08-27)
+**Status:** FIXED — DEPLOYED 2026-09-03; BACKFILL NOT RUN (2026-08-27)
 
 ### Problem
 `currentAdminCount()` defensively handles a missing `adminCount` field; `keepsAdminCount()` does not. On any pandal document that predates the field, reading `pandalAfter().adminCount` produces an evaluation error and **every** member update is denied — including the migration paths that would repair it.
@@ -1401,7 +1403,7 @@ Blocks GS-016 verification. Related to GS-015, GS-074.
 **Severity:** HIGH
 **Category:** RBAC
 **Feature:** Admin
-**Status:** PARTIAL — AWAITING RULES DEPLOY (2026-08-27)
+**Status:** PARTIAL — DEPLOYED 2026-09-03 (2026-08-27)
 
 ### Problem
 Two separate holes let `adminCount` desynchronise from the real number of active admins, which defeats the last-admin protection that depends on it.
@@ -1484,7 +1486,7 @@ Depends on GS-014 (fix the guarded accessor first). Related to GS-017.
 **Severity:** HIGH
 **Category:** RBAC
 **Feature:** Roles & Permissions
-**Status:** FIXED — AWAITING RULES DEPLOY (2026-08-27)
+**Status:** FIXED — DEPLOYED 2026-09-03 (2026-08-27)
 
 ### Problem
 The TypeScript permission matrix treats membership and role management as ordinary, grantable permissions, and the UI gates on them. The Firestore rules recognise only a literal `role == 'admin'`. Custom roles carrying these permissions are therefore decorative — the user sees the buttons and gets permission-denied.
@@ -1627,7 +1629,7 @@ Related to GS-015, GS-083.
 **Severity:** HIGH
 **Category:** FIRESTORE
 **Feature:** Festival Settlement
-**Status:** FIXED — AWAITING RULES DEPLOY (2026-08-27)
+**Status:** FIXED — DEPLOYED 2026-09-03 (2026-08-27)
 
 ### Problem
 The rules require `festivalOpen()` for creating ledger documents but not for updating or deleting them, so a treasurer can edit or hard-delete records in a festival whose books have been settled and closed.
@@ -2560,7 +2562,7 @@ Depends on GS-001 (the access model decision).
 **Severity:** HIGH
 **Category:** CONTRIBUTIONS
 **Feature:** Promised vs Received
-**Status:** FIXED — AWAITING RULES DEPLOY (2026-08-27)
+**Status:** FIXED — DEPLOYED 2026-09-03 (2026-08-27)
 
 ### Problem
 The rules correctly prevent creating a *sponsorship* in the `received` state without the receive permission, but there is no equivalent guard for *contributions* — and the client defaults money contributions to `received`.

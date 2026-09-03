@@ -18,16 +18,16 @@ code; pattern sweeps for unguarded data access across the Ganesh UI.
 
 ---
 
-## The headline
+## The headline — RESOLVED 2026-09-03
 
-**The most serious exposure is not a bug — it is four CRITICAL security fixes
+**The most serious exposure was not a bug — it was four CRITICAL security fixes
 that were written, committed, and never deployed.**
 
-`firestore.rules` in this repo contains the fixes for GS-002, GS-003, GS-004
-and GS-005. I verified all four are present. The 2026-08-24 audit records them
-as "AWAITING RULES DEPLOY", CI does not deploy `firestore.rules`, and the file
-was last touched 2026-08-31. If no manual deploy has happened, then in
-production right now any signed-in user can:
+`firestore.rules` in this repo contained the fixes for GS-002, GS-003, GS-004
+and GS-005, all four verified present. The 2026-08-24 audit recorded them as
+"AWAITING RULES DEPLOY", CI does not deploy `firestore.rules`, and the file had
+last been touched 2026-08-31. Until the deploy below, any signed-in user
+could:
 
 | Ticket | Exposure |
 |---|---|
@@ -40,8 +40,33 @@ Two more items are pending in the same way: GS-001 (Supabase Storage lockdown �
 code fixed, awaiting a release build) and GS-014
 (`scripts/backfill-ganesh-admin-count.js` written, recorded as never run).
 
-**Action required is a deploy, not a code change.** See
-`docs/FIREBASE_RULES_DEPLOY.md`. No finding below outranks this.
+### Deployed
+
+`firebase deploy --only firestore:rules --project expenseapp-27f94`, run
+2026-09-03 against the version of `firestore.rules` committed here. Compiled
+successfully; the four `Invalid variable name: docId` warnings are pre-existing
+(a helper reading `docId` from the enclosing `match` scope) and were present
+before this change. `firestore:indexes` and `storage` were **not** deployed —
+neither changed.
+
+GS-002, GS-003, GS-004 (partial, per its ticket) and GS-005 are now live, along
+with GS-016, GS-018 and GS-037, which were waiting on the same deploy.
+
+**Watch for fallout on old app builds.** These rules were written against the
+current client and they begin *enforcing* checks that were previously not
+enforced at all. A device still running an older Ganesh build may now be denied
+where it used to succeed — most plausibly the join flow, which GS-002 pins to
+the built-in member permission set. The summary validator is safe in this
+direction: it uses `hasOnly`, older clients write a subset of the allowlist, and
+subsets pass. Shipping a current build is the mitigation, and GS-001 needs one
+anyway.
+
+### Still pending, and not deployable
+
+- **GS-001** — Supabase Storage lockdown: code is fixed but needs a release
+  build to reach users.
+- **GS-014** — `scripts/backfill-ganesh-admin-count.js` is written and still
+  recorded as never run.
 
 ---
 
