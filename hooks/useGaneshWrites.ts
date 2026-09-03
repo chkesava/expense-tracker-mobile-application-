@@ -1,7 +1,10 @@
 import { useCallback } from "react";
 
+import { useFestivals } from "@/hooks/useFestivals";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
+import { usePandals } from "@/hooks/usePandals";
 import { getFirestoreDb } from "@/lib/firebase";
+import { isPermissionError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import { useNetwork } from "@/providers/NetworkProvider";
@@ -24,6 +27,11 @@ import {
   assertVoidOnline,
 } from "@/services/ganesh/ganeshWrites";
 import { assertMoneyReceiveOnline } from "@/shared/utils/ganeshContributions";
+import {
+  ARCHIVED_PANDAL_WRITE_MESSAGE,
+  CLOSED_FESTIVAL_WRITE_MESSAGE,
+  festivalWriteLocked,
+} from "@/shared/utils/ganeshFestivalStatus";
 import type {
   DutyStatus,
   GaneshFileMeta,
@@ -45,15 +53,57 @@ export function useGaneshWrites() {
   const { actor, pandalId, festivalId } = useGaneshSession();
   const { isOnline } = useNetwork();
   const { can: hasPerm, isAdmin, permissions } = useGaneshPermissions();
+  // Shared provider data when this is the session pandal, so reading it here
+  // costs no extra listener — see useFestivals / usePandals.
+  const { festivals } = useFestivals(pandalId);
+  const { pandals } = usePandals();
+
+  /**
+   * Why a Ganesh write was actually refused (GS-035).
+   *
+   * Every festival-subcollection write requires `festivalOpen()`, and since
+   * GS-017 an archived Pandal is frozen too. Both surface as
+   * `permission-denied`, which `lib/errors.ts` maps to "You don't have access
+   * to this. Sign in again or ask the owner for access." That is wrong twice
+   * over: the user's access is fine, and it sends them to an admin over a
+   * non-problem.
+   *
+   * The client already knows the festival's status and the Pandal's archived
+   * flag, so say which it is. When it is neither, do not guess at a cause —
+   * name the two things that actually change underneath an open screen.
+   */
+  const explainRefusal = useCallback(
+    (error: unknown): unknown => {
+      if (!isPermissionError(error)) return error;
+      if (pandals.find((item) => item.id === pandalId)?.archived === true) {
+        return new Error(ARCHIVED_PANDAL_WRITE_MESSAGE);
+      }
+      if (festivalWriteLocked(festivals.find((item) => item.id === festivalId)?.status)) {
+        return new Error(CLOSED_FESTIVAL_WRITE_MESSAGE);
+      }
+      return new Error(
+        "That change was refused. Your role in this Pandal may have changed, or the festival may have just been closed. Reopen the screen to see the current state."
+      );
+    },
+    [festivals, pandals, pandalId, festivalId]
+  );
 
   const run = useCallback(
     async <T,>(label: string, work: () => Promise<T>): Promise<T> => {
       if (!actor) throw new Error("You must be signed in.");
-      const result = await work();
+      let result: T;
+      try {
+        result = await work();
+      } catch (error) {
+        // Rethrown so every existing caller's `.catch` keeps working; only the
+        // message changes, and `friendlyErrorMessage` surfaces a plain Error's
+        // own text rather than the permission-denied mapping.
+        throw explainRefusal(error);
+      }
       toast.success(label);
       return result;
     },
-    [actor]
+    [actor, explainRefusal]
   );
 
   const requirePerm = useCallback(

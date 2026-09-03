@@ -18,6 +18,7 @@
  * `onLateFailure` instead of becoming unhandled rejections.
  */
 
+import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
 
 /** How long to wait for a server ack before treating the write as queued. */
@@ -40,12 +41,25 @@ export type CommitWriteOptions = {
 
 const QUEUED = Symbol("queued");
 
+/**
+ * A write that failed *after* it was reported as queued (GS-030).
+ *
+ * This is the worst moment to be vague: the user was already told it saved and
+ * has very likely navigated away, so the message has to say what failed and
+ * why, and it is the only notice they will get.
+ *
+ * Goes through `lib/errors.ts` like every other user-facing failure — it used
+ * to call `console.error` and `toast.error` directly with fixed copy, which
+ * meant a permission denial and a lost connection read identically and neither
+ * was captured with the redaction and context the rest of the app uses.
+ */
 function defaultLateFailure(error: unknown, label?: string): void {
-  console.error(`Queued Firestore write failed${label ? ` (${label})` : ""}:`, error);
+  logError("firestoreWrite.lateFailure", error, { label });
+  const reason = friendlyErrorMessage(error, "It could not be synced.");
   toast.error(
     label
-      ? `A saved ${label} could not be synced. Please check it.`
-      : "A saved change could not be synced. Please check it."
+      ? `Your ${label} was not saved after all. ${reason}`
+      : `A change was not saved after all. ${reason}`
   );
 }
 

@@ -77,14 +77,17 @@ export default function AdminDashboardScreen() {
     error: requestsError,
     retry: retryRequests,
   } = useJoinRequests(pandalId);
-  const { fund } = usePermanentFund(pandalId);
-  const { assets } = usePandalAssets(pandalId);
+  const { fund, loading: fundLoading } = usePermanentFund(pandalId);
+  const { assets, loading: assetsLoading, error: assetsError } = usePandalAssets(pandalId);
   const { isAdmin, can } = useGaneshPermissions();
   const writes = useGaneshWrites();
-  const { summary } = useGaneshSummary(pandalId, festivalId);
-  const { contributions } = useContributions(pandalId, festivalId);
-  const { sponsorships } = useSponsorships(pandalId, festivalId);
-  const { households } = useHouseholds(pandalId, festivalId);
+  const { summary, loading: summaryLoading, error: summaryError } = useGaneshSummary(pandalId, festivalId);
+  const { contributions, loading: contributionsLoading, error: contributionsError } =
+    useContributions(pandalId, festivalId);
+  const { sponsorships, loading: sponsorshipsLoading, error: sponsorshipsError } =
+    useSponsorships(pandalId, festivalId);
+  const { households, loading: householdsLoading, error: householdsError } =
+    useHouseholds(pandalId, festivalId);
 
   const pandal = pandals.find((item) => item.id === pandalId);
   const festival = festivals.find((item) => item.id === festivalId);
@@ -236,12 +239,35 @@ export default function AdminDashboardScreen() {
     });
   }, [isAdmin, pandalId]);
 
+  // The gate used to cover four of this screen's ten sources, so tiles
+  // rendered zeros as settled facts and "Needs attention" raised false alarms
+  // on every cold open — telling an admin nothing needs doing, or that
+  // everything does (GS-034).
+  //
+  // Every source that feeds a money tile or an alert is now included. Each is
+  // "still loading AND nothing to show yet", so a warm cache renders straight
+  // away instead of flashing a skeleton on every visit.
   const loading =
     (pandalsLoading && !pandal)
     || (festivalsLoading && festivals.length === 0)
     || (membersLoading && members.length === 0)
-    || (requestsLoading && requests.length === 0 && !requestsError);
-  const error = pandalsError ?? festivalsError ?? membersError ?? requestsError;
+    || (requestsLoading && requests.length === 0 && !requestsError)
+    || summaryLoading
+    || fundLoading
+    || (assetsLoading && assets.length === 0)
+    || (contributionsLoading && contributions.length === 0)
+    || (sponsorshipsLoading && sponsorships.length === 0)
+    || (householdsLoading && households.length === 0);
+  const error =
+    pandalsError
+    ?? festivalsError
+    ?? membersError
+    ?? requestsError
+    ?? summaryError
+    ?? assetsError
+    ?? contributionsError
+    ?? sponsorshipsError
+    ?? householdsError;
 
   const membersMeta = requests.length > 0 ? `${requests.length} waiting` : "All approved";
   const reimbMeta = pendingReimb > 0 ? "Owed to members" : "All settled";

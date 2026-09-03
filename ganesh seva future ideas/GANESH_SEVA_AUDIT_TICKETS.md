@@ -2337,6 +2337,7 @@ Related to GS-030, GS-031.
 ## GS-030 — Late write failures bypass `lib/errors.ts` and arrive after a success toast
 
 **Severity:** HIGH
+**Status:** FIXED 2026-09-03
 **Category:** UX
 **Feature:** Error handling
 **Status:** OPEN
@@ -2530,6 +2531,7 @@ None.
 ## GS-034 — Admin dashboard tiles and "Needs attention" act on unloaded data
 
 **Severity:** HIGH
+**Status:** FIXED 2026-09-03
 **Category:** UX
 **Feature:** Admin Dashboard
 **Status:** OPEN
@@ -2587,6 +2589,7 @@ Related to GS-032, GS-056.
 ## GS-035 — A closed festival is reported to the user as "You don't have access"
 
 **Severity:** HIGH
+**Status:** FIXED 2026-09-03
 **Category:** UX
 **Feature:** Festival
 **Status:** OPEN
@@ -2863,6 +2866,7 @@ Related to GS-050, GS-051, GS-013.
 ## GS-040 — The "waiting for connection" photo queue is ephemeral screen state
 
 **Severity:** HIGH
+**Status:** PARTIAL 2026-09-03 - copy made honest, queue not built
 **Category:** OFFLINE
 **Feature:** Supabase Storage
 **Status:** OPEN
@@ -5595,3 +5599,75 @@ therefore MOSTLY FIXED, not FIXED.
 Both holes are guarded: `adminCountDeltaBounded()` pins the delta to +/-1 with a
 floor of 1 on pandal update, and `createKeepsAdminCount()` covers the member
 create bypass. The ticket had been left at PARTIAL.
+
+
+---
+
+## GS-030 / GS-034 / GS-035 / GS-040 resolution notes (2026-09-03)
+
+### GS-030 - late write failures now go through lib/errors.ts
+
+`defaultLateFailure` called `console.error` and `toast.error` directly with
+fixed copy, so a permission denial and a lost connection read identically and
+neither was captured with the redaction and context the rest of the app uses.
+It now uses `logError` plus `friendlyErrorMessage`, and names the record: "Your
+expense was not saved after all. <reason>". This is the worst moment to be
+vague - the user was told it saved and has already navigated away, so this is
+the only notice they get.
+
+### GS-034 - the dashboard gate now covers every money source
+
+It covered four of ten: pandals, festivals, members, requests. Summary,
+permanent fund, assets, contributions, sponsorships and households were all
+ungated, so tiles rendered zeros as settled facts and "Needs attention" raised
+false alarms on every cold open - telling an admin either that nothing needs
+doing or that everything does. All six are now in the gate and in the error
+fallback. Each is "still loading AND nothing to show yet", so a warm cache
+renders immediately rather than flashing a skeleton on every visit.
+
+### GS-035 - a refusal now says what actually happened
+
+Every festival-subcollection write requires `festivalOpen()`, and since GS-017
+an archived Pandal is frozen too. Both surface as `permission-denied`, which
+`lib/errors.ts` maps to "You don't have access to this. Sign in again or ask
+the owner for access." Wrong twice over: the user's access is fine, and it sends
+them to an admin over a non-problem.
+
+Fixed at the single choke point every Ganesh write already passes through -
+`run()` in `useGaneshWrites`. It inspects the state the client already has
+(shared provider data, so no extra listener) and rethrows a plain Error whose
+own message `friendlyErrorMessage` will surface: the archive message if the
+Pandal is archived, the closed-festival message if the festival is closed, and
+otherwise an honest "your role may have changed, or the festival may have just
+been closed - reopen the screen", which does not guess at a cause.
+
+### GS-040 - PARTIAL, and deliberately so
+
+There is no queue, exactly as filed. Building a real one is larger than the
+ticket implies, for two reasons that are not obvious from the description:
+
+1. **The local file does not survive.** `prepareGaneshImage` writes the
+   compressed image through `ImageManipulator`, which lands in a cache
+   location. Android clears cache dirs freely, so a persisted queue entry would
+   frequently point at a file that no longer exists. A real queue must first
+   copy the image into the document directory and then own its lifecycle -
+   deleting on success and on abandonment, or a committee phone slowly fills
+   with orphaned receipts.
+2. **Uploading is not the whole job.** `uploadExpenseReceipt` uploads and then
+   calls `attachExpenseReceipt`, with rollback if the attach fails. A queue
+   entry therefore has to replay a *Firestore write*, and cope with the record
+   having been voided or deleted while the photo sat in the queue.
+
+What was actually wrong today is narrower: the label `"Photo/Receipt - Waiting
+for connection"` promised a background upload that does not exist. The in-screen
+retry is real - the save keeps the user on the screen (`if (uploaded) back()`) -
+but a user who taps back loses the photo silently.
+
+So the promise was made honest rather than half-kept: the status reads "not
+uploaded yet", with an explicit note that it will upload only while the screen
+stays open, that there is no background upload, and that leaving means adding it
+again from the record. The failed state says the same. Applies to all four
+screens through the shared uploader.
+
+**Left to do:** the persisted queue itself, with the two constraints above as
+its real scope.

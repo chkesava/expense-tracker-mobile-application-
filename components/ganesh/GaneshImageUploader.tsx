@@ -90,7 +90,7 @@ export function GaneshImageUploader({
       : status === "uploaded"
         ? "Uploaded ✓"
         : status === "waiting"
-          ? `${noun} ⟳ Waiting for connection`
+          ? `${noun} not uploaded yet`
           : status === "failed"
             ? "⚠ Upload failed"
             : status === "selected"
@@ -105,6 +105,16 @@ export function GaneshImageUploader({
       ) : null}
       {statusLabel ? (
         <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>{statusLabel}</Text>
+      ) : null}
+      {status === "waiting" ? (
+        <Text style={{ color: theme.colors.mutedForeground, lineHeight: 19 }}>
+          {`Your record is saved. The ${noun.toLowerCase()} will upload on its own if you stay on this screen and the connection comes back — there is no background upload, so if you leave now you will need to add it again from the record itself.`}
+        </Text>
+      ) : null}
+      {status === "failed" ? (
+        <Text style={{ color: theme.colors.mutedForeground, lineHeight: 19 }}>
+          {`Your record is saved without the ${noun.toLowerCase()}. Retry below, or add it later from the record.`}
+        </Text>
       ) : null}
       {status === "idle" || status === "selected" || status === "failed" ? (
         <View style={styles.row}>
