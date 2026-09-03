@@ -65,15 +65,22 @@ anyway.
 
 - **GS-001** — Supabase Storage lockdown: code is fixed but needs a release
   build to reach users.
-- **GS-014** — `scripts/backfill-ganesh-admin-count.js` is written and
-  deliberately still not run (decision 2026-09-03). Dev and prod share the one
-  Firebase project `expenseapp-27f94`, so there is no environment to prove a
-  data mutation against before it touches live committee data. Nothing is
-  broken while the field is absent: the rules read a missing `adminCount` as 1.
-  The only symptom is a pandal that predates the field *and* has two or more
-  active admins, where demoting either is refused by the last-admin guard. The
-  script's `--dry-run` reports without writing and is the safe way in when
-  someone with the service-account credential chooses to.
+- **GS-014 — RESOLVED 2026-09-03, no backfill needed.** The dry run reported
+  `Checked 3 pandal(s). 0 disagreed with their member documents.` Every pandal
+  already holds a numeric `adminCount` matching its active admin count, so the
+  write pass was never run — with nothing to write, running it would only have
+  opened a pointless connection to production. The ticket's premise (pandals
+  predating the field read as 1 and cannot demote an admin) does not apply to
+  this project's data. Note the script counts a *missing* field as `null`, and
+  `null === actual` is never true, so a pre-field pandal would have been
+  reported; zero rows is positive evidence, not silence.
+
+  Getting there also required fixing the script: it used the
+  `admin.credential.*` namespace and `admin.firestore()`, both dropped in
+  firebase-admin v14 while the repo is on `^14.2.0`. It threw before reading a
+  document, so GS-014 had been recorded as a pending action since 2026-08-27
+  while being **unrunnable**. `scripts/publish-release-metadata.js` already
+  used the modular API and was unaffected.
 
 ---
 

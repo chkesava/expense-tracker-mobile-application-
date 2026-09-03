@@ -19,7 +19,7 @@
 | 2026-08-27 | GS-009 | Reversing a personal amount past what is still owed is refused | Fixed |
 | 2026-08-27 | GS-010 | God Fund spend checks the balance inside `runTransaction` | Fixed |
 | 2026-08-27 | GS-008 | Reimbursement re-reads its ceiling server-side and checks God Fund solvency | Fixed |
-| 2026-08-27 | GS-014 | Guarded `afterAdminCount()`; legacy pandals unfrozen | Fixed, **not deployed**; backfill script written, **not run** |
+| 2026-08-27 | GS-014 | Guarded `afterAdminCount()`; legacy pandals unfrozen | Fixed; **deployed 2026-09-03**. Backfill run in dry-run 2026-09-03: 0 of 3 pandals disagreed, so no write was needed. Script also had to be ported to firebase-admin v14 first — it was previously unrunnable. |
 | 2026-08-27 | GS-015 | `adminCount` pinned to +/-1 per update; member create must move it | **Partial**, not deployed |
 | 2026-08-27 | GS-016 | `members`/`roles`/`settings` no longer offered as grantable; `audit.read` un-inverted | Fixed (UI ships with app; rules half **not deployed**) |
 | 2026-08-27 | GS-018 | Closed festivals read-only; ledger records never hard-deleted | Fixed, **not deployed** |
@@ -174,7 +174,7 @@ Recording these explicitly so the fix cycle does not undo working design:
 | GS-011 | HIGH | FINANCE | Cash / UPI / Bank | Payment method is not tracked end to end; cash cannot be reconciled | OPEN |
 | GS-012 | HIGH | FIRESTORE | Reports | `recomputeFestivalSummary` truncates at 2000 docs and clobbers concurrent writes | OPEN |
 | GS-013 | HIGH | REPORTING | Reports | Report totals are computed from 400-doc truncated lists | OPEN |
-| GS-014 | HIGH | RBAC | Admin | `pandalAfter().adminCount` is dereferenced unguarded; legacy pandals are frozen | FIXED — DEPLOYED 2026-09-03; backfill still not run |
+| GS-014 | HIGH | RBAC | Admin | `pandalAfter().adminCount` is dereferenced unguarded; legacy pandals are frozen | FIXED — DEPLOYED 2026-09-03; backfill verified unnecessary (0 of 3 pandals disagreed) |
 | GS-015 | HIGH | RBAC | Admin | `adminCount` is unpinned on pandal update and bypassed on member create | PARTIAL — DEPLOYED 2026-09-03 |
 | GS-016 | HIGH | RBAC | Roles & Permissions | `members.*` / `roles.*` permissions are honoured by the UI and ignored by the rules | FIXED — DEPLOYED 2026-09-03 |
 | GS-017 | HIGH | SECURITY | Pandal creation | A removed founder keeps permanent delete rights; no ownership transfer exists | OPEN |
