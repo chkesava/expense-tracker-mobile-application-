@@ -16,7 +16,6 @@ import { useGaneshWrites } from "@/hooks/useGaneshWrites";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
 import { todayDateInput } from "@/shared/utils/ganeshIdentity";
-import { CLOSED_FESTIVAL_WRITE_MESSAGE } from "@/shared/utils/ganeshFestivalStatus";
 import type { OpeningFundSource } from "@/shared/types/ganesh";
 import { useTheme } from "@/theme/ThemeProvider";
 
@@ -34,7 +33,7 @@ export default function AddOpeningFundScreen() {
   const { back } = useRouter();
   const writes = useGaneshWrites();
   const { can } = useGaneshPermissions();
-  const { closed } = useFestivalWriteLock();
+  const { closed, lockMessage } = useFestivalWriteLock();
   const [cash, setCash] = useState("");
   const [upi, setUpi] = useState("");
   const [bank, setBank] = useState("");
@@ -47,7 +46,7 @@ export default function AddOpeningFundScreen() {
     return <GaneshWriteLock message="Your role cannot add opening funds." />;
   }
   if (closed) {
-    return <GaneshWriteLock message={CLOSED_FESTIVAL_WRITE_MESSAGE} />;
+    return <GaneshWriteLock message={lockMessage} />;
   }
 
   return (

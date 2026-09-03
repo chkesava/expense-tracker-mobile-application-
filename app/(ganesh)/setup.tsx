@@ -37,6 +37,11 @@ export default function GaneshSetupScreen() {
   const { setActiveWorkspace } = useWorkspace();
   const { setSession } = useGaneshSession();
   const { pandals, inactiveMemberships } = usePandals();
+  // An archived Pandal stays reachable but is listed apart, so a committee
+  // running several festivals is not picking their live Pandal out of a list of
+  // retired ones (GS-017).
+  const activePandals = pandals.filter((pandal) => pandal.archived !== true);
+  const archivedPandals = pandals.filter((pandal) => pandal.archived === true);
   const { pending, rejected } = useMyJoinRequests();
   const writes = useGaneshWrites();
   const [mode, setMode] = useState<"choose" | "create" | "join">("choose");
@@ -56,7 +61,7 @@ export default function GaneshSetupScreen() {
   const openedFromApproval = useRef(false);
 
   const focus = resolveGaneshSetupFocus({
-    activeCount: pandals.length,
+    activeCount: activePandals.length,
     pendingCount: pending.length,
     rejectedCount: rejected.length,
     removedCount: inactiveMemberships.length,
@@ -90,14 +95,14 @@ export default function GaneshSetupScreen() {
     const target = newlyActive[0];
     pendingIdsRef.current.delete(target.id);
     toast.success(`You're in ${target.name}.`);
-    if (pandals.length === 1) {
+    if (activePandals.length === 1) {
       openedFromApproval.current = true;
       void openPandal(target.id).catch((error) => {
         openedFromApproval.current = false;
         logError("ganesh.setup.autoOpen", error);
       });
     }
-  }, [pandals, mode]);
+  }, [pandals, activePandals.length, mode]);
 
   const create = async () => {
     const initial = hasExistingFund ? Number(initialAmount || 0) : 0;
@@ -224,13 +229,35 @@ export default function GaneshSetupScreen() {
           </Text>
         ) : null}
 
-        {pandals.length > 0 ? (
+        {activePandals.length > 0 ? (
           <PandalSectionCard
             title="My Pandals"
-            subtitle={pandals.length === 1 ? "1 Pandal" : `${pandals.length} Pandals`}
+            subtitle={activePandals.length === 1 ? "1 Pandal" : `${activePandals.length} Pandals`}
           >
             <View style={styles.stack}>
-              {pandals.map((pandal) => (
+              {activePandals.map((pandal) => (
+                <PandalPickRow
+                  key={pandal.id}
+                  pandalId={pandal.id}
+                  name={pandal.name}
+                  code={pandal.code}
+                  onOpen={openPandal}
+                />
+              ))}
+            </View>
+          </PandalSectionCard>
+        ) : null}
+
+        {/* Listed separately rather than hidden: an archived Pandal is still
+            the committee's own money history, and someone has to be able to
+            open it to read that or to restore it (GS-017). */}
+        {archivedPandals.length > 0 ? (
+          <PandalSectionCard
+            title="Archived"
+            subtitle="Readable, but nothing new can be added"
+          >
+            <View style={styles.stack}>
+              {archivedPandals.map((pandal) => (
                 <PandalPickRow
                   key={pandal.id}
                   pandalId={pandal.id}

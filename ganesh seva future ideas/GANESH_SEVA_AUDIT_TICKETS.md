@@ -1584,7 +1584,56 @@ Verification depends on GS-014. Related to GS-002, GS-073, GS-074.
 **Severity:** HIGH
 **Category:** SECURITY
 **Feature:** Pandal creation
-**Status:** OPEN
+**Status:** FIXED 2026-09-03 — AWAITING RULES DEPLOY
+
+### Resolution (2026-09-03)
+
+Confirmed live exactly as filed. `allow delete: if signedIn() &&
+resource.data.ownerId == request.auth.uid` had no membership check, so a founder
+suspended, removed or demoted months earlier could still destroy the pandal —
+contradicting this file's own stated principle, "ACTIVE membership is the only
+grant. ownerId / memberIds alone are not."
+
+**Hard delete is now refused outright, not admin-gated.** Requiring an active
+admin would have closed the reported hole, but a pandal delete can never be a
+good outcome: Firestore does not cascade, so every subcollection survives while
+the rules reaching them call `pandalData()` — a `get()` on the now-missing
+parent — and therefore start denying. The records end up unreachable *and*
+undeletable, and the money trail is gone irreversibly.
+
+**Archive replaces it.** `setPandalArchived` sets `archived` / `archivedBy` /
+`archivedAt` / `archiveReason`, following the `setSponsorArchived` convention
+already in the codebase, and is reversible by any active admin. It refuses while
+a festival is still open — an open festival may hold an unsettled balance, and
+closing implicitly would bypass `closeFestival`'s balance acknowledgement.
+`pandalNotArchived()` is ANDed into every write predicate so an archived pandal
+is frozen; it is deliberately **not** folded into `hasPermOf`, which also backs
+`canReadAuditOf`, because the committee must keep reading its own history and
+audit trail. The pandal document's own `allow update` is left ungated so an
+admin can restore.
+
+**Ownership is transferable, admin to admin.** `keepsPandalCore()` now permits
+`ownerId` to change onto an active admin of the same pandal. Gated on active
+admin rather than on the current owner, deliberately: the situation this ticket
+describes is a founder who is gone, so requiring their participation would make
+ownership permanently unmovable in exactly the case that matters. `ownerId` no
+longer authorizes anything — it is the record of who holds the pandal.
+
+Client: `useFestivalWriteLock` folds the archive freeze in, so all seven write
+screens refuse with the right reason instead of a bare permission error; a new
+`pandal-custody` screen carries archive / restore / transfer; the setup picker
+lists archived pandals separately rather than hiding them.
+
+Scoped out deliberately: member and role writes stay available on an archived
+pandal, so an admin can still fix membership before restoring. The freeze
+covers the ledger, funds, assets and sponsors.
+
+### Acceptance criteria
+
+- [x] A removed or demoted founder cannot delete the pandal — nobody can.
+- [x] An active admin can archive the pandal.
+- [x] Ownership can be transferred to another active admin.
+- [x] Deletion is replaced by an archive flag rather than cascading.
 
 ### Problem
 `ownerId` is set at creation, can never change, and grants unconditional delete of the pandal — independent of membership status.

@@ -122,6 +122,7 @@ function GaneshStack() {
       <Stack.Screen name="join-requests" options={{ headerShown: false }} />
       <Stack.Screen name="members" options={{ headerShown: false }} />
       <Stack.Screen name="permanent-fund" options={{ headerShown: false }} />
+      <Stack.Screen name="pandal-custody" options={{ headerShown: false }} />
       <Stack.Screen name="add-permanent-fund" options={{ headerShown: false }} />
       <Stack.Screen name="assets" options={{ headerShown: false }} />
       <Stack.Screen name="add-asset" options={{ headerShown: false }} />

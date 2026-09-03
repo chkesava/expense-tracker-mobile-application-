@@ -19,7 +19,6 @@ import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
 import type { PreparedGaneshImage } from "@/services/ganesh/storage/storageTypes";
 import { todayDateInput } from "@/shared/utils/ganeshIdentity";
-import { CLOSED_FESTIVAL_WRITE_MESSAGE } from "@/shared/utils/ganeshFestivalStatus";
 import type { ContributionKind, ContributionStatus, PaymentMethod } from "@/shared/types/ganesh";
 import {
   ASSET_CATEGORIES,
@@ -58,7 +57,7 @@ export default function AddContributionScreen() {
   const { back } = useRouter();
   const writes = useGaneshWrites();
   const { can } = useGaneshPermissions();
-  const { closed } = useFestivalWriteLock();
+  const { closed, lockMessage } = useFestivalWriteLock();
   const { isOnline, uploadContributionPhoto } = useGaneshStorage();
   const [kind, setKind] = useState<ContributionKind>("item");
   const [status, setStatus] = useState<ContributionStatus>("promised");
@@ -123,7 +122,7 @@ export default function AddContributionScreen() {
     return <GaneshWriteLock message="Your role cannot add contributions." />;
   }
   if (closed) {
-    return <GaneshWriteLock message={CLOSED_FESTIVAL_WRITE_MESSAGE} />;
+    return <GaneshWriteLock message={lockMessage} />;
   }
 
   return (

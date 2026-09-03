@@ -33,7 +33,6 @@ import {
 } from "@/shared/utils/ganeshAssets";
 import { todayDateInput } from "@/shared/utils/ganeshIdentity";
 import { newId } from "@/lib/id";
-import { CLOSED_FESTIVAL_WRITE_MESSAGE } from "@/shared/utils/ganeshFestivalStatus";
 import {
   availableGodFund,
   godFundSpendableAt,
@@ -65,7 +64,7 @@ export default function AddExpenseScreen() {
   const { sponsors } = usePandalSponsors(pandalId);
   const { sponsorships } = useSponsorships(pandalId, festivalId);
   const writes = useGaneshWrites();
-  const { closed } = useFestivalWriteLock();
+  const { closed, lockMessage } = useFestivalWriteLock();
   const { can } = useGaneshPermissions();
   const canLinkSponsor = can("sponsors.receive");
   const openExpenseDeals = sponsorships.filter(
@@ -178,7 +177,7 @@ export default function AddExpenseScreen() {
     return <GaneshWriteLock message="Your role cannot add expenses." />;
   }
   if (closed) {
-    return <GaneshWriteLock message={CLOSED_FESTIVAL_WRITE_MESSAGE} />;
+    return <GaneshWriteLock message={lockMessage} />;
   }
 
   return (

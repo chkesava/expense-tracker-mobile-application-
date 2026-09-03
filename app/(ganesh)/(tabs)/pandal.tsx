@@ -164,7 +164,20 @@ export default function PandalScreen() {
               }
             : undefined
         }
+        divider
         onPress={() => push("/(ganesh)/admin" as never)}
+      />
+      <NavRow
+        title="Pandal custody"
+        meta={
+          pandal?.archived
+            ? "Archived — restore it, or hand it over"
+            : "Who holds this Pandal, and archiving it"
+        }
+        icon={<AdminGlyph name="shield" size={36} />}
+        chevronColor={g.saffron}
+        badge={pandal?.archived ? { kind: "overdue", label: "Archived" } : undefined}
+        onPress={() => push("/(ganesh)/pandal-custody" as never)}
       />
     </PandalSectionCard>
   ) : null;

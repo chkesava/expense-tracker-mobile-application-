@@ -18,7 +18,6 @@ import { toast } from "@/lib/toast";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import { formatInr } from "@/shared/utils/ganeshMoney";
 import { todayDateInput } from "@/shared/utils/ganeshIdentity";
-import { CLOSED_FESTIVAL_WRITE_MESSAGE } from "@/shared/utils/ganeshFestivalStatus";
 import type { PaymentMethod } from "@/shared/types/ganesh";
 import { useTheme } from "@/theme/ThemeProvider";
 import { newId } from "@/lib/id";
@@ -39,7 +38,7 @@ export default function AddReimbursementScreen() {
   const { members } = useFestivalMembers(pandalId, festivalId);
   const writes = useGaneshWrites();
   const { can } = useGaneshPermissions();
-  const { closed } = useFestivalWriteLock();
+  const { closed, lockMessage } = useFestivalWriteLock();
   const [memberId, setMemberId] = useState(params.memberId ?? "");
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState<PaymentMethod>("upi");
@@ -62,7 +61,7 @@ export default function AddReimbursementScreen() {
     return <GaneshWriteLock message="Only a Pandal Admin or Treasurer can reimburse members." />;
   }
   if (closed) {
-    return <GaneshWriteLock message={CLOSED_FESTIVAL_WRITE_MESSAGE} />;
+    return <GaneshWriteLock message={lockMessage} />;
   }
 
   return (

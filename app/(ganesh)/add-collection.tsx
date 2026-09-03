@@ -23,7 +23,6 @@ import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import { useNetwork } from "@/providers/NetworkProvider";
-import { CLOSED_FESTIVAL_WRITE_MESSAGE } from "@/shared/utils/ganeshFestivalStatus";
 import {
   householdOverpayAmount,
   possibleDuplicateCollections,
@@ -55,7 +54,7 @@ export default function AddCollectionScreen() {
   const { collections } = useCollections(pandalId, festivalId);
   const writes = useGaneshWrites();
   const { can } = useGaneshPermissions();
-  const { closed } = useFestivalWriteLock();
+  const { closed, lockMessage } = useFestivalWriteLock();
   const [donorName, setDonorName] = useState("");
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState<PaymentMethod>("cash");
@@ -224,7 +223,7 @@ export default function AddCollectionScreen() {
     return <GaneshWriteLock message="Your role cannot add collections." />;
   }
   if (closed) {
-    return <GaneshWriteLock message={CLOSED_FESTIVAL_WRITE_MESSAGE} />;
+    return <GaneshWriteLock message={lockMessage} />;
   }
 
   return (

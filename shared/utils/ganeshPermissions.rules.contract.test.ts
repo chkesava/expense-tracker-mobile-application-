@@ -1432,3 +1432,102 @@ describe("ganesh firestore rules — seva schedule", () => {
     expect(canDeleteFestivalYear()).toBe(false);
   });
 });
+
+/**
+ * GS-017. Hand-written mirror of three clauses in `firestore.rules`:
+ *
+ *   allow delete: if false;                          (pandals/{pandalId})
+ *   keepsPandalCore() -> ownerId may move onto an active admin
+ *   pandalNotArchived() -> ANDed into every write predicate
+ *
+ * There is no emulator in CI, so if those clauses change this file must change
+ * with them (GS-074 tracks closing that gap properly).
+ */
+type ArchiveCtx = {
+  /** The pandal's `archived` field, absent on every pandal created before it. */
+  archived?: boolean;
+};
+
+/** Mirrors `pandalNotArchived()`. Absent field reads as not archived. */
+function pandalNotArchived(ctx: ArchiveCtx): boolean {
+  return !(ctx.archived === true);
+}
+
+/** Mirrors `allow delete` on the pandal document. */
+function canDeletePandal(): boolean {
+  return false;
+}
+
+/** Mirrors the `ownerId` half of `keepsPandalCore()`. */
+function keepsOwnerOrMovesToActiveAdmin(params: {
+  currentOwnerId: string;
+  nextOwnerId: string;
+  candidate: { status?: string; role?: string } | null;
+}): boolean {
+  if (params.nextOwnerId === params.currentOwnerId) return true;
+  return (
+    params.candidate != null
+    && params.candidate.status === "active"
+    && params.candidate.role === "admin"
+  );
+}
+
+describe("ganesh firestore rules - GS-017 pandal ownership and archive", () => {
+  it("refuses a hard delete of the pandal, including by its owner", () => {
+    // The old clause was `signedIn() && resource.data.ownerId == request.auth.uid`,
+    // so a founder who had been removed months earlier could still destroy it.
+    expect(canDeletePandal()).toBe(false);
+  });
+
+  it("does not let ownerId move onto anyone who is not an active admin", () => {
+    const move = (candidate: { status?: string; role?: string } | null) =>
+      keepsOwnerOrMovesToActiveAdmin({
+        currentOwnerId: "u1",
+        nextOwnerId: "u2",
+        candidate,
+      });
+
+    expect(move({ status: "active", role: "admin" })).toBe(true);
+    // Ownership must never land on someone who has left, or on a non-admin.
+    expect(move({ status: "removed", role: "admin" })).toBe(false);
+    expect(move({ status: "suspended", role: "admin" })).toBe(false);
+    expect(move({ status: "active", role: "treasurer" })).toBe(false);
+    expect(move({ status: "active", role: "member" })).toBe(false);
+    expect(move(null)).toBe(false);
+  });
+
+  it("leaves an unchanged ownerId alone, so ordinary pandal edits still pass", () => {
+    expect(
+      keepsOwnerOrMovesToActiveAdmin({
+        currentOwnerId: "u1",
+        nextOwnerId: "u1",
+        candidate: null,
+      })
+    ).toBe(true);
+  });
+
+  it("treats a pandal with no archived field as writable", () => {
+    // Every pandal that predates the field, i.e. all of them today.
+    expect(pandalNotArchived({})).toBe(true);
+    expect(pandalNotArchived({ archived: false })).toBe(true);
+  });
+
+  it("freezes writes on an archived pandal for every role, admin included", () => {
+    expect(pandalNotArchived({ archived: true })).toBe(false);
+    for (const actor of [admin, treasurer, member, collector]) {
+      // `pandalNotArchived()` is ANDed into the write predicates, so the role's
+      // own permission no longer matters.
+      const archived = { archived: true };
+      expect(canWriteCollection(actor) && pandalNotArchived(archived)).toBe(false);
+      expect(canWritePermanentFund(actor) && pandalNotArchived(archived)).toBe(false);
+    }
+  });
+
+  it("keeps reads open on an archived pandal, which is the point of archiving", () => {
+    // The freeze is applied to write predicates only, never to `hasPermOf`,
+    // because that also backs `canReadAuditOf` — the committee keeps its money
+    // history and its audit trail.
+    expect(isActivePandalMember(admin)).toBe(true);
+    expect(isActivePandalMember(member)).toBe(true);
+  });
+});

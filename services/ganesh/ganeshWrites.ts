@@ -765,6 +765,117 @@ export async function updatePandalJoinMode(
   await commitWrite(() => batch.commit(), { label: "join mode" });
 }
 
+/**
+ * Archive or restore a Pandal (GS-017).
+ *
+ * The replacement for hard delete, which `firestore.rules` now refuses: a
+ * Pandal delete cannot cascade in Firestore, so it would leave every festival
+ * ledger unreachable and undeletable rather than removed. Archiving keeps all
+ * of it readable and is reversible.
+ *
+ * Refuses while any festival is still open. An open festival means money is
+ * still moving and may hold an unsettled balance, so archiving around it would
+ * strand that money — the committee settles first. Closing implicitly here
+ * would bypass `closeFestival`'s balance acknowledgement, which is a
+ * deliberate money guard.
+ */
+export async function setPandalArchived(
+  db: Firestore,
+  actor: GaneshActor,
+  pandalId: string,
+  input: { archived: boolean; reason?: string }
+): Promise<void> {
+  const reason = input.reason?.trim();
+  if (input.archived && !reason) {
+    throw new Error("Enter a reason for archiving this Pandal.");
+  }
+
+  const pandalSnap = await getDoc(doc(db, "pandals", pandalId));
+  if (!pandalSnap.exists()) throw new Error("Pandal not found.");
+  const alreadyArchived = pandalSnap.data().archived === true;
+  if (alreadyArchived === input.archived) return;
+
+  if (input.archived) {
+    const open = await listOpenFestivalIds(db, pandalId);
+    if (open.length > 0) {
+      const names = open.map((festival) => festival.name).filter(Boolean).join(", ");
+      throw new Error(
+        names
+          ? `Close ${names} before archiving this Pandal, so any money left in it is settled first.`
+          : "Close this Pandal's open festival before archiving it."
+      );
+    }
+  }
+
+  const batch = writeBatch(db);
+  batch.update(doc(db, "pandals", pandalId), {
+    archived: input.archived,
+    // Cleared on restore so a stale reason cannot outlive the state.
+    archivedBy: input.archived ? actor.uid : deleteField(),
+    archivedAt: input.archived ? serverTimestamp() : deleteField(),
+    archiveReason: input.archived ? reason : deleteField(),
+    updatedBy: actor.uid,
+    updatedAt: serverTimestamp(),
+  });
+  memberAudit(batch, db, pandalId, {
+    actorId: actor.uid,
+    targetUserId: actor.uid,
+    action: input.archived ? "pandal_archived" : "pandal_restored",
+    reason: input.archived ? reason : "Pandal restored",
+  });
+  await commitWrite(() => batch.commit(), {
+    label: input.archived ? "archive pandal" : "restore pandal",
+  });
+}
+
+/**
+ * Move `ownerId` to another active admin (GS-017).
+ *
+ * `ownerId` was set at creation and pinned immutable, so a founder who left
+ * could never hand it over. It no longer authorizes anything — the delete it
+ * used to gate is refused outright — but it remains the record of who holds the
+ * Pandal, and that record should be able to follow reality.
+ *
+ * Gated on active admin rather than on the current owner, deliberately: the
+ * situation this ticket describes is a founder who is gone, suspended or
+ * unreachable. Requiring their participation would make ownership permanently
+ * unmovable in exactly the case that matters. The target must be an active
+ * admin so ownership never lands on someone who has left.
+ */
+export async function transferPandalOwnership(
+  db: Firestore,
+  actor: GaneshActor,
+  pandalId: string,
+  targetUserId: string
+): Promise<void> {
+  if (!targetUserId.trim()) throw new Error("Choose who should hold this Pandal.");
+  const [pandalSnap, targetSnap] = await Promise.all([
+    getDoc(doc(db, "pandals", pandalId)),
+    getDoc(doc(db, "pandals", pandalId, "members", targetUserId)),
+  ]);
+  if (!pandalSnap.exists()) throw new Error("Pandal not found.");
+  if (String(pandalSnap.data().ownerId ?? "") === targetUserId) return;
+  if (!targetSnap.exists()) throw new Error("That person is not a member of this Pandal.");
+  const targetData = targetSnap.data();
+  if (targetData.status !== "active" || targetData.role !== "admin") {
+    throw new Error("Only an active Pandal Admin can hold the Pandal.");
+  }
+
+  const batch = writeBatch(db);
+  batch.update(doc(db, "pandals", pandalId), {
+    ownerId: targetUserId,
+    updatedBy: actor.uid,
+    updatedAt: serverTimestamp(),
+  });
+  memberAudit(batch, db, pandalId, {
+    actorId: actor.uid,
+    targetUserId,
+    action: "ownership_transferred",
+    reason: `Pandal ownership moved from ${String(pandalSnap.data().ownerId ?? "unknown")}`,
+  });
+  await commitWrite(() => batch.commit(), { label: "transfer ownership" });
+}
+
 export async function updatePandalProfile(
   db: Firestore,
   actor: GaneshActor,

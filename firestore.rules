@@ -589,6 +589,17 @@ service cloud.firestore {
       function pandalData() {
         return get(/databases/$(database)/documents/pandals/$(pandalId)).data;
       }
+      // An archived pandal is readable but frozen (GS-017): the committee keeps
+      // its whole money history, and nothing new can be written to it.
+      //
+      // Deliberately NOT folded into `hasPermOf`, which also backs reads
+      // (`canReadAuditOf`) — guarding there would take the audit trail away at
+      // the moment it matters most. The freeze is applied to the write
+      // predicates only, and the pandal document's own `allow update` is left
+      // out of it so an admin can still restore.
+      function pandalNotArchived() {
+        return !(pandalData().keys().hasAny(['archived']) && pandalData().archived == true);
+      }
       function pandalAfter() {
         return getAfter(/databases/$(database)/documents/pandals/$(pandalId)).data;
       }
@@ -622,8 +633,29 @@ service cloud.firestore {
       function canWriteLedgerSideEffect() {
         return canWriteLedgerSideEffectOf(pandalId);
       }
+      // `ownerId` may move, but only onto an active admin of this same pandal
+      // (GS-017). It was pinned permanently immutable, so a founder who had
+      // left could never hand the pandal over. The actor is already an active
+      // admin — `allow update` requires canManageMembers() — so this is
+      // admin-to-admin by construction, which is the point: requiring the
+      // departed founder's participation would make ownership unmovable in
+      // exactly the case that matters.
+      //
+      // One get(), reading both fields, to stay inside the per-evaluation
+      // document access budget.
+      function ownerCandidate() {
+        return get(/databases/$(database)/documents/pandals/$(pandalId)/members/$(request.resource.data.ownerId)).data;
+      }
+      function ownerIsActiveAdmin() {
+        return exists(/databases/$(database)/documents/pandals/$(pandalId)/members/$(request.resource.data.ownerId))
+          && ownerCandidate().status == 'active'
+          && ownerCandidate().role == 'admin';
+      }
       function keepsPandalCore() {
-        return request.resource.data.ownerId == resource.data.ownerId
+        return (
+            request.resource.data.ownerId == resource.data.ownerId
+            || ownerIsActiveAdmin()
+          )
           && request.resource.data.code == resource.data.code
           && adminCountDeltaBounded();
       }
@@ -668,7 +700,26 @@ service cloud.firestore {
         && request.resource.data.adminCount == 1
         && ganeshIdentityCreate();
       allow update: if canManageMembers() && keepsPandalCore();
-      allow delete: if signedIn() && resource.data.ownerId == request.auth.uid;
+      // No hard delete, by anyone (GS-017).
+      //
+      // This line used to read `signedIn() && resource.data.ownerId ==
+      // request.auth.uid`, which had no membership check at all: a founder who
+      // had been suspended, removed or demoted months earlier could still
+      // destroy the pandal. That contradicted the principle stated at the top
+      // of this file — "ACTIVE membership is the only grant. ownerId /
+      // memberIds alone are not."
+      //
+      // Requiring an active admin instead would have closed that, but deleting
+      // a pandal can never be a good outcome here. Firestore does not cascade,
+      // so every subcollection survives — members, festivals, collections,
+      // expenses, permanentFund, auditLogs — while the rules that reach them
+      // call `pandalData()`, a get() on the now-missing parent, and therefore
+      // start denying. The records end up unreachable *and* undeletable, and
+      // the money trail this app exists to keep is gone irreversibly.
+      //
+      // Archive is the replacement: reversible, keeps everything readable, and
+      // refuses while a festival is still open. See `setPandalArchived`.
+      allow delete: if false;
 
       match /members/{memberId} {
         function wasActiveAdmin() {
@@ -765,13 +816,13 @@ service cloud.firestore {
 
       match /permanentFund/{docId} {
         allow read: if isActivePandalMember();
-        allow create, update: if canWritePermanentFund();
+        allow create, update: if canWritePermanentFund() && pandalNotArchived();
         allow delete: if false;
       }
 
       match /permanentFundTransactions/{txId} {
         allow read: if isActivePandalMember();
-        allow create: if canWritePermanentFund() && ganeshIdentityCreate();
+        allow create: if canWritePermanentFund() && ganeshIdentityCreate() && pandalNotArchived();
         allow update, delete: if false;
       }
 
@@ -809,20 +860,20 @@ service cloud.firestore {
 
       match /assetAudits/{auditId} {
         allow read: if canReadAssetOf(pandalId) || hasPermOf(pandalId, 'audit.read');
-        allow create: if canWriteAssetOf(pandalId);
+        allow create: if canWriteAssetOf(pandalId) && pandalNotArchived();
         allow update, delete: if false;
       }
 
       match /sponsors/{sponsorId} {
         allow read: if canReadSponsorOf(pandalId);
-        allow create: if canCreateSponsorOf(pandalId) && ganeshIdentityCreate();
-        allow update: if canUpdateSponsorOf(pandalId) && ganeshIdentityUpdate();
+        allow create: if canCreateSponsorOf(pandalId) && ganeshIdentityCreate() && pandalNotArchived();
+        allow update: if canUpdateSponsorOf(pandalId) && ganeshIdentityUpdate() && pandalNotArchived();
         allow delete: if false;
       }
 
       match /sponsorAudits/{auditId} {
         allow read: if canReadSponsorOf(pandalId) || hasPermOf(pandalId, 'audit.read');
-        allow create: if canWriteSponsorOf(pandalId);
+        allow create: if canWriteSponsorOf(pandalId) && pandalNotArchived();
         allow update, delete: if false;
       }
 
@@ -844,7 +895,7 @@ service cloud.firestore {
         }
 
         allow read: if isActivePandalMember();
-        allow create: if canCreateFestival() && ganeshIdentityCreate();
+        allow create: if canCreateFestival() && ganeshIdentityCreate() && pandalNotArchived();
         allow update: if canCloseOrUpdateFestival()
           && request.resource.data.updatedBy == request.auth.uid;
         allow delete: if canManageMembers();
@@ -861,7 +912,8 @@ service cloud.firestore {
 
         match /{subcol}/{docId} {
           function canWriteFestivalSubcol() {
-            return (subcol == 'collections' && canWriteCollection())
+            return pandalNotArchived()
+              && ((subcol == 'collections' && canWriteCollection())
               || (subcol == 'households' && canWriteCollection())
               || ((subcol == 'expenses' || subcol == 'contributions')
                   && canWriteExpenseOrContribution())
@@ -883,7 +935,7 @@ service cloud.firestore {
               || (subcol == 'sponsorships' && canWriteSponsorOf(pandalId))
               // Seva is the operational schedule, not a ledger. Planning and
               // staffing are separate permissions; neither can touch money.
-              || (subcol == 'seva' && canWriteSevaOf(pandalId));
+              || (subcol == 'seva' && canWriteSevaOf(pandalId)));
           }
 
           // Nested matches OR together, so the explicit

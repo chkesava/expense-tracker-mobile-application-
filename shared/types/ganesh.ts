@@ -99,6 +99,17 @@ export interface Pandal extends GaneshAuditFields {
   joinMode?: PandalJoinMode;
   adminCount?: number;
   contactPhone?: string;
+  /**
+   * A finished or abandoned Pandal. Everything stays readable — the committee
+   * keeps its money history, which is the point of the app — but no new
+   * collections, expenses, contributions or transfers can be written, and it is
+   * hidden from the Pandal switcher by default. Reversible by an active admin.
+   * Replaces hard delete, which Firestore cannot cascade (GS-017).
+   */
+  archived?: boolean;
+  archivedBy?: string;
+  archivedAt?: FirestoreTime;
+  archiveReason?: string;
 }
 
 export interface PandalInvite {
@@ -146,7 +157,10 @@ export type PandalMemberAuditAction =
   | "role_unassigned"
   | "make_admin"
   | "remove_admin"
-  | "role_permissions";
+  | "role_permissions"
+  | "pandal_archived"
+  | "pandal_restored"
+  | "ownership_transferred";
 
 export interface PandalRole {
   id: string;

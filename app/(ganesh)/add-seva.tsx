@@ -24,7 +24,6 @@ import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
 import type { SevaKind } from "@/shared/types/ganesh";
 import { todayDateInput } from "@/shared/utils/ganeshIdentity";
-import { CLOSED_FESTIVAL_WRITE_MESSAGE } from "@/shared/utils/ganeshFestivalStatus";
 import { validateSeva } from "@/shared/utils/ganeshSeva";
 import { useTheme } from "@/theme/ThemeProvider";
 
@@ -42,7 +41,7 @@ export default function AddSevaScreen() {
   const params = useLocalSearchParams<{ date?: string }>();
   const writes = useGaneshWrites();
   const { can } = useGaneshPermissions();
-  const { closed } = useFestivalWriteLock();
+  const { closed, lockMessage } = useFestivalWriteLock();
 
   const [name, setName] = useState("");
   const [kind, setKind] = useState<SevaKind>("aarti");
@@ -66,7 +65,7 @@ export default function AddSevaScreen() {
     return <GaneshWriteLock message="Your role cannot plan seva. Ask a Pandal Admin or the treasurer." />;
   }
   if (closed) {
-    return <GaneshWriteLock message={CLOSED_FESTIVAL_WRITE_MESSAGE} />;
+    return <GaneshWriteLock message={lockMessage} />;
   }
 
   return (

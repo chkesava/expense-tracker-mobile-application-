@@ -142,6 +142,24 @@ export function useGaneshWrites() {
         writes.updatePandalJoinMode(requireDb(), actor, pandalId, joinMode)
       );
     },
+    // Archiving retires a whole Pandal and transferring ownership changes who
+    // holds it. Both are admin-only, gated the same way as setPandalAdmin
+    // rather than on a grantable permission — `settings.update` can be given to
+    // a custom role, and neither of these should follow it.
+    setPandalArchived: async (input: { archived: boolean; reason?: string }) => {
+      if (!pandalId || !actor) throw new Error("Select a Pandal first.");
+      if (!isAdmin) throw new Error("Only a Pandal Admin can archive or restore a Pandal.");
+      return run(input.archived ? "Pandal archived" : "Pandal restored", () =>
+        writes.setPandalArchived(requireDb(), actor, pandalId, input)
+      );
+    },
+    transferPandalOwnership: async (targetUserId: string) => {
+      if (!pandalId || !actor) throw new Error("Select a Pandal first.");
+      if (!isAdmin) throw new Error("Only a Pandal Admin can transfer the Pandal.");
+      return run("Pandal ownership transferred", () =>
+        writes.transferPandalOwnership(requireDb(), actor, pandalId, targetUserId)
+      );
+    },
     updatePandalMember: async (
       targetUserId: string,
       input: { role?: GaneshRole; status?: GaneshMemberStatus; reason?: string }
