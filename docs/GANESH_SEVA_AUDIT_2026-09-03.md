@@ -65,8 +65,15 @@ anyway.
 
 - **GS-001** — Supabase Storage lockdown: code is fixed but needs a release
   build to reach users.
-- **GS-014** — `scripts/backfill-ganesh-admin-count.js` is written and still
-  recorded as never run.
+- **GS-014** — `scripts/backfill-ganesh-admin-count.js` is written and
+  deliberately still not run (decision 2026-09-03). Dev and prod share the one
+  Firebase project `expenseapp-27f94`, so there is no environment to prove a
+  data mutation against before it touches live committee data. Nothing is
+  broken while the field is absent: the rules read a missing `adminCount` as 1.
+  The only symptom is a pandal that predates the field *and* has two or more
+  active admins, where demoting either is refused by the last-admin guard. The
+  script's `--dry-run` reports without writing and is the safe way in when
+  someone with the service-account credential chooses to.
 
 ---
 
