@@ -25,12 +25,18 @@
  * Run --dry-run first and read the report. This writes to production data.
  */
 
-const admin = require('firebase-admin');
+// Modular entry points, matching scripts/publish-release-metadata.js. This
+// file used to reach for the `admin.credential.*` namespace and
+// `admin.firestore()`, which firebase-admin dropped in v14 — the repo is on
+// ^14.2.0, so the script threw before it read a single document and had in
+// fact never been runnable here.
+const { initializeApp, getApps, applicationDefault, cert } = require('firebase-admin/app');
+const { getFirestore } = require('firebase-admin/firestore');
 
 function loadCredential() {
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
-  if (raw) return admin.credential.cert(JSON.parse(raw));
-  if (process.env.GOOGLE_APPLICATION_CREDENTIALS) return admin.credential.applicationDefault();
+  if (raw) return cert(JSON.parse(raw));
+  if (process.env.GOOGLE_APPLICATION_CREDENTIALS) return applicationDefault();
   throw new Error(
     'Set GOOGLE_APPLICATION_CREDENTIALS to a service account JSON path, or FIREBASE_SERVICE_ACCOUNT to its contents.'
   );
@@ -39,8 +45,8 @@ function loadCredential() {
 async function main() {
   const dryRun = process.argv.includes('--dry-run');
 
-  admin.initializeApp({ credential: loadCredential() });
-  const db = admin.firestore();
+  const app = getApps().length ? getApps()[0] : initializeApp({ credential: loadCredential() });
+  const db = getFirestore(app);
 
   const pandals = await db.collection('pandals').get();
   if (pandals.empty) {

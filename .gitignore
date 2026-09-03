@@ -66,3 +66,10 @@ modules/**/android/.gradle/
 
 # Supabase CLI local project link/cache
 supabase/.temp/
+
+# Firebase service-account keys. These are long-lived credentials with broad
+# project access — far wider than any rules-scoped app client. Keep them out of
+# the repo entirely; scripts read them from GOOGLE_APPLICATION_CREDENTIALS.
+*service-account*.json
+*-firebase-adminsdk-*.json
+*-sa.json
