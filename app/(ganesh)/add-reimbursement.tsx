@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Text } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Wallet } from "lucide-react-native";
@@ -40,13 +40,23 @@ export default function AddReimbursementScreen() {
   const writes = useGaneshWrites();
   const { can } = useGaneshPermissions();
   const { closed } = useFestivalWriteLock();
-  const [memberId, setMemberId] = useState(params.memberId ?? members[0]?.userId ?? "");
+  const [memberId, setMemberId] = useState(params.memberId ?? "");
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState<PaymentMethod>("upi");
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const clientOpIdRef = useRef<string | null>(null);
   const selected = members.find((member) => member.userId === memberId);
+
+  // `members` is an async read, so seeding this from `members[0]` in the
+  // useState initialiser produced "" on the first render and never re-synced:
+  // arriving without a `memberId` param left no chip selected and the Reimburse
+  // button silently no-oping, because the submit guards on `selected`. Seed
+  // once, only while nothing is chosen, so it never fights the user's pick.
+  useEffect(() => {
+    if (memberId || members.length === 0) return;
+    setMemberId(members[0].userId);
+  }, [memberId, members]);
 
   if (!can("reimbursements.create")) {
     return <GaneshWriteLock message="Only a Pandal Admin or Treasurer can reimburse members." />;

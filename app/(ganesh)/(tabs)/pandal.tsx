@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
 import { AdminGlyph } from "@/components/ganesh/admin/adminArt";
@@ -21,6 +21,8 @@ import { usePandals } from "@/hooks/usePandals";
 import { usePermanentFund } from "@/hooks/usePermanentFund";
 import { useAuth } from "@/providers/AuthProvider";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
+import { friendlyErrorMessage, logError } from "@/lib/errors";
+import { toast } from "@/lib/toast";
 import { useWorkspace } from "@/providers/WorkspaceProvider";
 import { formatPandalCode } from "@/shared/utils/ganeshIdentity";
 import { formatInr } from "@/shared/utils/ganeshMoney";
@@ -54,10 +56,58 @@ export default function PandalScreen() {
 
   const pandal = pandals.find((item) => item.id === pandalId);
   const festival = festivals.find((item) => item.id === festivalId);
-  const [memberTarget, setMemberTarget] = useState(
-    String(festival?.contributionTargetAmount ?? 0)
-  );
-  const [houseTarget, setHouseTarget] = useState(String(festival?.householdTargetAmount ?? 0));
+  // Seeded empty and filled in by the effect below, never from `festival` on
+  // first render. A `useState` initialiser runs once, before `useFestivals`
+  // resolves, so these used to seed "0" and never re-sync: a treasurer opened
+  // this tab, saw a target of 0, pressed Save, and wrote 0 over the real target
+  // for every committee member and every household (GS-025).
+  const [memberTarget, setMemberTarget] = useState("");
+  const [houseTarget, setHouseTarget] = useState("");
+  const [savingTargets, setSavingTargets] = useState(false);
+
+  // Keyed on the festival's identity, not its amounts. Re-seeding whenever the
+  // stored numbers change would let a snapshot echo overwrite what the
+  // treasurer is part-way through typing — including another committee member's
+  // concurrent edit landing mid-keystroke. Seeding once per festival can show a
+  // stale figure if someone else changes it while this tab is open, which is
+  // the better failure: it loses nobody's input.
+  useEffect(() => {
+    if (!festival) return;
+    setMemberTarget(String(festival.contributionTargetAmount ?? ""));
+    setHouseTarget(String(festival.householdTargetAmount ?? ""));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [festival?.id]);
+
+  const targetsReady = Boolean(festival);
+
+  const saveTargets = () => {
+    // An empty field parses to 0, which is the same wipe by another route.
+    const member = Number(memberTarget);
+    const house = Number(houseTarget);
+    if (
+      memberTarget.trim() === ""
+      || houseTarget.trim() === ""
+      || !Number.isFinite(member)
+      || !Number.isFinite(house)
+      || member < 0
+      || house < 0
+    ) {
+      toast.error("Enter both targets as amounts of 0 or more.");
+      return;
+    }
+    setSavingTargets(true);
+    writes
+      .updateFestivalTargets({
+        contributionMode: "same",
+        contributionTargetAmount: member,
+        householdTargetAmount: house,
+      })
+      .catch((caught) => {
+        logError("ganesh.pandal.targets", caught);
+        toast.error(friendlyErrorMessage(caught, "Could not save the targets."));
+      })
+      .finally(() => setSavingTargets(false));
+  };
 
   const committee = pandalMembers
     .filter((member) => member.status === "active" || member.status == null)
@@ -184,22 +234,20 @@ export default function PandalScreen() {
                 value={memberTarget}
                 onChangeText={setMemberTarget}
                 keyboardType="numeric"
+                editable={targetsReady && !savingTargets}
               />
               <Input
                 label="Household chanda target"
                 value={houseTarget}
                 onChangeText={setHouseTarget}
                 keyboardType="numeric"
+                editable={targetsReady && !savingTargets}
               />
               <Button
                 variant="outline"
-                onPress={() =>
-                  void writes.updateFestivalTargets({
-                    contributionMode: "same",
-                    contributionTargetAmount: Number(memberTarget),
-                    householdTargetAmount: Number(houseTarget),
-                  })
-                }
+                disabled={!targetsReady}
+                loading={savingTargets}
+                onPress={saveTargets}
               >
                 Save targets
               </Button>

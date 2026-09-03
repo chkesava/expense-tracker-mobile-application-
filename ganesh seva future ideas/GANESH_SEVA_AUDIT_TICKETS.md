@@ -185,8 +185,8 @@ Recording these explicitly so the fix cycle does not undo working design:
 | GS-022 | HIGH | FINANCE | Festival Settlement | Money left in a closed festival disappears from every total | OPEN |
 | GS-023 | HIGH | PERMANENT_FUND | Fund Transfers | Transfer in and transfer out resolve different festivals | OPEN |
 | GS-024 | HIGH | FINANCE | Reimbursements | Per-member financial counters are never rebuilt by the recompute tool | OPEN |
-| GS-025 | HIGH | UX | Committee Contributions | Target inputs seeded `0` and never re-synced; Save wipes real targets | OPEN |
-| GS-026 | HIGH | UX | Households | Expected-amount input is always seeded `0`; Save flips the household to paid | OPEN |
+| GS-025 | HIGH | UX | Committee Contributions | Target inputs seeded `0` and never re-synced; Save wipes real targets | FIXED 2026-09-03 |
+| GS-026 | HIGH | UX | Households | Expected-amount input is always seeded `0`; Save flips the household to paid | ALREADY FIXED — verified 2026-09-03 |
 | GS-027 | HIGH | UX | Collections | Voiding a collection has no confirmation, no busy lock and no error handling | OPEN |
 | GS-028 | HIGH | UX | Collections | Duplicate-household dialog's Continue can be double-submitted | FIXED |
 | GS-029 | HIGH | CODE_QUALITY | Error handling | `useGaneshWrites` guards throw synchronously, defeating `.catch` and spinners | OPEN |
@@ -1959,7 +1959,22 @@ Depends on GS-012. Related to GS-009.
 **Severity:** HIGH
 **Category:** UX
 **Feature:** Committee Contributions
-**Status:** OPEN
+**Status:** FIXED 2026-09-03
+
+### Resolution (2026-09-03)
+
+Confirmed live exactly as described. Both inputs now seed empty and are filled
+by an effect once the festival loads, keyed on `festival?.id` rather than on the
+amounts — re-seeding on every value change would let a snapshot echo overwrite
+what the treasurer is part-way through typing, including a concurrent edit from
+another committee member landing mid-keystroke. Seeding once per festival can
+show a stale figure if someone else changes it while the tab is open, which is
+the better failure: it loses nobody's input.
+
+Save is also guarded against the same wipe by another route — an empty field
+parses to `0` — and now has the error handling it never had (that half was
+GS-031): it was `void writes.updateFestivalTargets(...)`, which since GS-029
+made the wrappers async would have discarded a rejection entirely.
 
 ### Problem
 Two money inputs on the Pandal tab are initialised from data that has not loaded yet, default to `"0"`, and never re-sync when the data arrives. Saving writes those zeros over the real targets.
@@ -2007,7 +2022,20 @@ Same class as GS-026 and GS-032. Related to GS-031.
 **Severity:** HIGH
 **Category:** UX
 **Feature:** Households
-**Status:** OPEN
+**Status:** ALREADY FIXED — verified 2026-09-03
+
+### Verification (2026-09-03)
+
+Both halves are already fixed; the ticket was stale.
+
+`app/(ganesh)/household/[id].tsx` now takes `loading: householdsLoading` from
+`useHouseholds`, renders a "Loading household…" state instead of "not found" on
+the first render, seeds `useState("")`, and re-syncs `expected` from an effect.
+
+The sticky-status half is fixed too: `updateHousehold` passes
+`forcedStatus: previousStatus` (`ganeshWrites.ts`), and the collection void path
+passes the household's own stored status, so `not_interested` / `not_available`
+survive an edit.
 
 ### Problem
 The household detail screen returns "not found" on its first render, so its expected-amount input is *always* initialised to `"0"` and never re-syncs. Saving writes `expectedAmount: 0`, which flips the household's status to `paid`.
