@@ -212,11 +212,25 @@ export default function MemberDetailScreen() {
       toast.error(lastAdminSafetyMessage(isSelf));
       return;
     }
+    // Say where they land, not just what they lose. Demotion restores the roles
+    // they held before being promoted, so an admin handing the seat back should
+    // see that "Treasurer" is coming with them rather than assume they have to
+    // re-assign it by hand.
+    const returningTo = (pandalMember?.roleIdsBeforeAdmin ?? [])
+      .map((roleId) => roles.find((item) => item.id === roleId)?.name)
+      .filter(Boolean)
+      .join(", ");
     Alert.alert(
       targetIsAdmin ? "Remove Admin?" : "Make Pandal Admin?",
       targetIsAdmin
-        ? `${name} will lose full Pandal control.`
-        : `Making ${name} an Admin gives them full control over this Pandal.`,
+        ? returningTo
+          ? `${name} will lose full Pandal control and go back to ${returningTo}.`
+          : `${name} will lose full Pandal control and become a regular member.`
+        : `Making ${name} an Admin gives them full control over this Pandal.${
+            assignedIds.length > 0
+              ? " Their current roles are kept and restored if Admin is removed later."
+              : ""
+          }`,
       [
         { text: "Cancel", style: "cancel" },
         {

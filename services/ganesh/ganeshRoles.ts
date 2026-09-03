@@ -1,5 +1,6 @@
 import {
   collection,
+  deleteField,
   doc,
   getDoc,
   getDocs,
@@ -512,18 +513,38 @@ export async function setPandalAdmin(
     throw new Error("You cannot make yourself a Pandal Admin.");
   }
   const nextAdminCount = adminCount + (makeAdmin ? 1 : -1);
-  const roleIds = makeAdmin
-    ? []
-    : ["member"];
+
+  // Admin already carries every permission, so an admin holds no roleIds — two
+  // sources of truth for permissions is where rules-vs-client drift starts.
+  // But clearing them outright used to *destroy* the assignment: a Treasurer
+  // promoted for the festival came back a bare member, and nothing recorded
+  // what they had been. Park the list instead and put it back on the way down.
+  const currentRoleIds = Array.isArray(memberSnap.data().roleIds)
+    ? (memberSnap.data().roleIds as string[]).filter((id) => typeof id === "string")
+    : [];
+  const parkedRoleIds = Array.isArray(memberSnap.data().roleIdsBeforeAdmin)
+    ? (memberSnap.data().roleIdsBeforeAdmin as string[]).filter((id) => typeof id === "string")
+    : [];
+
+  // A parked role can be deleted while its holder is Admin: deletePandalRole
+  // counts `roleIds` only, and an admin's is empty, so nothing blocks it. Drop
+  // anything that no longer exists rather than restoring a dangling id, which
+  // would resolve to no permissions at all.
+  const restorable = parkedRoleIds.filter((id) => roles.some((role) => role.id === id));
+  const roleIds = makeAdmin ? [] : restorable.length > 0 ? restorable : ["member"];
+
   const permissions = makeAdmin
     ? [...ALL_GANESH_PERMISSIONS]
     : permissionsForRoleIds(roleIds, roles, false, "member");
-  const nextRole: GaneshRole = makeAdmin ? "admin" : "member";
+  const nextRole: GaneshRole = makeAdmin ? "admin" : legacyRoleFromIds(roleIds, false);
   const batch = writeBatch(db);
   batch.update(memberSnap.ref, {
     role: nextRole,
     roleIds,
     permissions,
+    // Written on promotion, cleared on demotion so a stale list cannot be
+    // restored by a later, unrelated promotion.
+    roleIdsBeforeAdmin: makeAdmin ? currentRoleIds : deleteField(),
     updatedAt: serverTimestamp(),
   });
   batch.update(doc(db, "pandals", pandalId), {

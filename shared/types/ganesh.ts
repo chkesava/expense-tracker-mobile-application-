@@ -318,6 +318,12 @@ export interface PandalMember {
   role: GaneshRole;
   status: GaneshMemberStatus;
   roleIds?: string[];
+  /**
+   * Roles the member held before being made Pandal Admin, parked so demotion
+   * restores them instead of dropping the person to a bare member. Present only
+   * while they are Admin; ids that no longer exist are skipped on restore.
+   */
+  roleIdsBeforeAdmin?: string[];
   permissions?: import("@/shared/utils/ganeshPermissions").GaneshPermission[];
   permissionOverrides?: import("@/shared/utils/ganeshPermissions").GaneshPermission[];
   createdAt?: FirestoreTime;
