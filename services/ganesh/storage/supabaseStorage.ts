@@ -65,7 +65,14 @@ async function requireIdToken(): Promise<string> {
 
 async function callGaneshFiles(
   operation: "upload" | "download" | "delete",
-  path: string
+  path: string,
+  /**
+   * Declared for an upload so the function can refuse a type or size the
+   * bucket would reject anyway, before any bytes move (GS-036). Advisory
+   * only — the bucket's own limits are the enforcement, because this is the
+   * client describing itself.
+   */
+  declared?: { contentType: string; declaredSize: number }
 ): Promise<FunctionResult> {
   if (!env.supabase.url) throw new Error("Storage is not configured.");
   const idToken = await requireIdToken();
@@ -75,7 +82,7 @@ async function callGaneshFiles(
       "content-type": "application/json",
       authorization: `Bearer ${idToken}`,
     },
-    body: JSON.stringify({ operation, path }),
+    body: JSON.stringify({ operation, path, ...declared }),
   });
   const body = (await response.json().catch(() => ({}))) as FunctionResult;
   if (!response.ok) {
@@ -87,7 +94,10 @@ async function callGaneshFiles(
 export async function uploadObject(path: string, uri: string, mimeType: string): Promise<void> {
   try {
     const bytes = await bytesFromUri(uri);
-    const grant = await callGaneshFiles("upload", path);
+    const grant = await callGaneshFiles("upload", path, {
+      contentType: mimeType,
+      declaredSize: bytes.byteLength,
+    });
     if (!grant.path || !grant.token) throw new Error("No signed upload URL.");
     const { error } = await getSupabaseClient()
       .storage.from(GANESH_FILES_BUCKET)

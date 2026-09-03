@@ -37,6 +37,25 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const BUCKET = "ganesh-files";
 const DOWNLOAD_URL_TTL_SECONDS = 60 * 5;
 
+/**
+ * Mirrors ALLOWED_IMAGE_TYPES and MAX_UPLOAD_BYTES in
+ * services/ganesh/storage/storageTypes.ts (GS-036).
+ *
+ * These are a fast, clear rejection — NOT the enforcement. Bytes never pass
+ * through this function: it mints a signed upload URL and the client uploads
+ * straight to Storage, so nothing here can weigh a file or see its real
+ * content-type. The authoritative check is the bucket's own `file_size_limit`
+ * and `allowed_mime_types` (see supabase/ganesh-files.bucket-limits.sql), which
+ * Storage applies to the actual upload. A crafted client can declare
+ * `image/jpeg` here and send anything; the bucket is what refuses it.
+ *
+ * `declaredSize` and `contentType` are optional on purpose. Builds already in
+ * users' hands send neither, and rejecting those would break every upload in
+ * the field for no security gain — the bucket still catches them.
+ */
+const ALLOWED_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+
 const FIREBASE_PROJECT_ID = Deno.env.get("FIREBASE_PROJECT_ID") ?? "";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -134,7 +153,12 @@ Deno.serve(async (req) => {
   const idToken = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "").trim();
   if (!idToken) return json({ error: "Sign in again to use files." }, 401);
 
-  let body: { operation?: Operation; path?: string; contentType?: string };
+  let body: {
+    operation?: Operation;
+    path?: string;
+    contentType?: string;
+    declaredSize?: number;
+  };
   try {
     body = await req.json();
   } catch {
@@ -145,6 +169,22 @@ Deno.serve(async (req) => {
   const path = typeof body.path === "string" ? body.path : "";
   if (operation !== "upload" && operation !== "download" && operation !== "delete") {
     return json({ error: "Unknown operation." }, 400);
+  }
+
+  // Refuse an upload the bucket would reject anyway, before minting a URL for
+  // it. Absent fields are not an error — see ALLOWED_MIME_TYPES above.
+  if (operation === "upload") {
+    const declaredType = typeof body.contentType === "string" ? body.contentType : null;
+    if (declaredType && !ALLOWED_MIME_TYPES.includes(declaredType.toLowerCase())) {
+      return json({ error: "Only JPEG, PNG or WebP images can be stored." }, 415);
+    }
+    const declaredSize = typeof body.declaredSize === "number" ? body.declaredSize : null;
+    if (declaredSize !== null && (!Number.isFinite(declaredSize) || declaredSize < 0)) {
+      return json({ error: "Malformed request." }, 400);
+    }
+    if (declaredSize !== null && declaredSize > MAX_UPLOAD_BYTES) {
+      return json({ error: "This image is too large." }, 413);
+    }
   }
 
   const pandalId = pandalIdForPath(path);

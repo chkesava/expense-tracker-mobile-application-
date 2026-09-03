@@ -1,18 +1,29 @@
 # Closing the Ganesh Seva storage hole (GS-001) — manual runbook
 
-**Status as of 2026-08-27: Steps 2, 3 and 5 are done. The bucket is locked in
-production and the client change has landed in this repo (commit `1d51b4e`), but
-that commit has not reached a shipped build yet.**
+**Status as of 2026-09-03: Steps 1, 2, 3 and 5 are done in the repo. Step 1's
+SQL still has to be run; Step 6 has not been done.**
 
-This happened out of the order this document recommends — the policies were
-locked before a build carrying the client fix was in anyone's hands. That means
-**every photo upload, view and delete in the live app is broken right now**, for
-every installed copy, until Step 4 below (build and ship) completes. That is not
-a future risk this document is warning you about; it is the current state.
+The lockdown was applied out of the order this document recommends — the
+policies were locked (Step 5) on 2026-08-27, before a build carrying the client
+fix was in anyone's hands. Photo upload, view and delete were therefore broken
+in the live app for every installed copy.
 
-**What is left:** Step 4 (build a release and get it installed) and Step 6
-(verify). Steps 0, 1 and 2 in this document are historical at this point — skip to
-Step 4.
+**That is no longer the current state, and the note here saying otherwise was
+stale.** The client fix (`1d51b4e`, 2026-08-27) is contained in build 12 /
+v0.0.9, bumped 2026-08-31 — verified with `git merge-base --is-ancestor
+1d51b4e 156383a`. Photos work again for anyone on v0.0.9 or later. Anyone still
+on an older install remains broken until they update, which is what Step 4's
+"get it installed" half means.
+
+**Correction, 2026-09-03:** the previous status block said "Steps 0, 1 and 2 ...
+are historical at this point — skip to Step 4". Step 1 was **never done** and is
+not historical. Telling readers to skip it is why GS-036 stayed open for a week
+while being a five-minute change that breaks nothing. Step 1 is independent of
+the whole rollout and its SQL now lives at
+`supabase/ganesh-files.bucket-limits.sql` — run that, it is safe at any time.
+
+**What is left:** run Step 1's SQL, confirm the v0.0.9 rollout has actually
+reached users (Step 4's second half), and Step 6 (verify).
 
 Ticket: **GS-001** in `GANESH_SEVA_AUDIT_TICKETS.md`. Related: **GS-036** (size and
 MIME enforced only on the client — Step 2 below fixes it), **GS-096** (signed URL
@@ -111,8 +122,16 @@ Anything else was not written by this app.
 
 ## Step 1 — Turn on the bucket's own limits (5 minutes, closes GS-036)
 
+**Not yet done as of 2026-09-03.** The SQL is committed at
+`supabase/ganesh-files.bucket-limits.sql`; run it, or set the same two fields in
+the dashboard.
+
 This is independent of everything else and safe to do immediately — it only
-rejects uploads the app already refuses on the client.
+rejects uploads the app already refuses on the client. It is also the *only*
+server-side size/MIME check that a hostile client cannot talk its way past: the
+Edge Function mints a signed upload URL and the bytes go straight to Storage, so
+the function never sees the file and can only check what the client claims about
+it.
 
 **Storage → ganesh-files → Configuration:**
 

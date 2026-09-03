@@ -196,7 +196,7 @@ Recording these explicitly so the fix cycle does not undo working design:
 | GS-033 | HIGH | UX | Expenses | No keyboard avoidance on any Ganesh money-entry form | OPEN |
 | GS-034 | HIGH | UX | Admin Dashboard | Summary tiles and "Needs attention" act on unloaded data | OPEN |
 | GS-035 | HIGH | UX | Festival | A closed festival is reported to the user as "You don't have access" | OPEN |
-| GS-036 | HIGH | STORAGE | Supabase Storage | File size and MIME type are enforced only on the client | OPEN |
+| GS-036 | HIGH | STORAGE | Supabase Storage | File size and MIME type are enforced only on the client | CODE DONE 2026-09-03 — AWAITING BUCKET SQL |
 | GS-037 | HIGH | CONTRIBUTIONS | Promised vs Received | Contributions can be created already `received`, bypassing `contributions.receive` | FIXED — DEPLOYED 2026-09-03 |
 | GS-038 | HIGH | COLLECTIONS | Households | `collectedAmount` written as an absolute value on void; status from a stale read | OPEN |
 | GS-039 | HIGH | FINANCE | Split Funding | The sponsored portion of an expense is absent from every summary total | OPEN |
@@ -2521,7 +2521,29 @@ Related to GS-030, GS-057, GS-058.
 **Severity:** HIGH
 **Category:** STORAGE
 **Feature:** Supabase Storage
-**Status:** OPEN
+**Status:** CODE DONE 2026-09-03 — AWAITING BUCKET SQL
+
+### Resolution (2026-09-03)
+
+The enforcement is `supabase/ganesh-files.bucket-limits.sql`, which sets
+`file_size_limit = 5242880` and `allowed_mime_types = {image/jpeg,image/png,image/webp}`
+on the bucket. **It still has to be run** — it needs Supabase project access.
+Safe at any time: it revokes nothing and only refuses what the client already
+refuses.
+
+It has to be the bucket, not the Edge Function: bytes never pass through that
+function (it mints a signed upload URL and the client uploads straight to
+Storage), so it cannot weigh a file or see its real content-type. The function
+now *does* reject a disallowed declared type (415) or oversize declared length
+(413) before minting a URL, and the client sends both — but that is a faster,
+clearer error, not the enforcement, because a crafted client can declare
+anything. Both fields are optional in the function so builds already in the
+field, which send neither, keep working.
+
+This was Step 1 of `docs/GANESH_STORAGE_LOCKDOWN.md` all along — independent of
+the rest of that rollout and explicitly "safe to do immediately". It stayed open
+because that runbook's status block told readers to skip Steps 0–2 as
+"historical" when Step 1 had never been done. Corrected in the same change.
 
 ### Problem
 Image type and size limits run in the app before upload. The Supabase insert policy imposes no constraint, and no bucket-level limits are configured anywhere in the repo.
