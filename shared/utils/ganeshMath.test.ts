@@ -10,6 +10,8 @@ import {
   festivalCollectedCash,
   festivalLocationTotal,
   formatCollectionReceipt,
+  godFundSpendableAt,
+  unclassifiedGodFund,
   householdOverpayAmount,
   locationDelta,
   locationInvariantHolds,
@@ -498,6 +500,68 @@ describe("festival Cash / UPI / Bank", () => {
     expect(availableGodFund(summary)).toBe(10000);
     expect(validateGodFundLocationSpend(3000, "cash", summary).ok).toBe(false);
     expect(validateGodFundLocationSpend(3000, "upi", summary).ok).toBe(true);
+  });
+
+  it("lets a festival spend money that predates location tracking", () => {
+    // The reported bug: buckets shipped after this festival had already
+    // collected, nothing backfilled them, so every Cash/UPI/Bank spend was
+    // refused while the festival plainly held money.
+    const legacy = {
+      ...EMPTY_GANESH_SUMMARY,
+      openingFunds: 20000,
+      chanda: 26911,
+    };
+    expect(availableGodFund(legacy)).toBe(46911);
+    expect(unclassifiedGodFund(legacy)).toBe(46911);
+    expect(godFundSpendableAt("cash", legacy)).toBe(46911);
+    expect(validateGodFundLocationSpend(222, "cash", legacy)).toEqual({ ok: true });
+    expect(validateGodFundLocationSpend(222, "bank", legacy)).toEqual({ ok: true });
+  });
+
+  it("still caps an unclassified festival at what it actually holds", () => {
+    const legacy = { ...EMPTY_GANESH_SUMMARY, chanda: 1000 };
+    expect(validateGodFundLocationSpend(1001, "cash", legacy).ok).toBe(false);
+  });
+
+  it("enforces location limits once every rupee is classified", () => {
+    const classified = {
+      ...EMPTY_GANESH_SUMMARY,
+      openingFunds: 10000,
+      cash: 2000,
+      upi: 8000,
+    };
+    expect(unclassifiedGodFund(classified)).toBe(0);
+    expect(godFundSpendableAt("cash", classified)).toBe(2000);
+    expect(validateGodFundLocationSpend(3000, "cash", classified).ok).toBe(false);
+  });
+
+  it("keeps unclassified money spendable after a location is overdrawn", () => {
+    // Spending unclassified money as cash drives the cash bucket negative.
+    // That is the honest record of the draw, and must not wedge later spends.
+    const drawn = {
+      ...EMPTY_GANESH_SUMMARY,
+      openingFunds: 20000,
+      chanda: 26911,
+      godFundExpenses: 222,
+      cash: -222,
+    };
+    expect(availableGodFund(drawn)).toBe(46689);
+    expect(unclassifiedGodFund(drawn)).toBe(46911);
+    expect(godFundSpendableAt("cash", drawn)).toBe(46689);
+    expect(validateGodFundLocationSpend(100, "cash", drawn)).toEqual({ ok: true });
+    expect(validateGodFundLocationSpend(46690, "cash", drawn).ok).toBe(false);
+  });
+
+  it("shows an overdrawn location as empty rather than negative", () => {
+    const repaired = repairFestivalLocations({
+      ...EMPTY_GANESH_SUMMARY,
+      openingFunds: 20000,
+      chanda: 26911,
+      godFundExpenses: 222,
+      cash: -222,
+    });
+    expect(repaired.cash).toBe(0);
+    expect(festivalLocationTotal(repaired)).toBe(46689);
   });
 
   it("does not let a personal-sized spend move locations when god amount is zero", () => {

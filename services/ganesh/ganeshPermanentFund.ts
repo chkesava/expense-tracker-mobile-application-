@@ -379,6 +379,19 @@ export async function transferPermanentToFestival(
         createdAt: serverTimestamp(),
       })
     );
+    // Activity is a feed the committee reads; `auditLogs` is the trail an audit
+    // is reconstructed from. Money moving in or out of the Permanent Fund was
+    // only ever in the feed (GS-021), so it was absent from the record that
+    // matters, and `fundTransfers` is now immutable precisely so this trail can
+    // be trusted.
+    writeFestivalAudit(txn, db, pandalId, festivalId, actor.uid, "transferred", "fundTransfer", txId, {
+      newValue: {
+        direction: "from_permanent",
+        amount: input.amount,
+        location: input.location,
+      },
+      reason: input.description?.trim() || undefined,
+    });
   });
   return txId;
 }
@@ -476,6 +489,17 @@ export async function transferFestivalToPermanent(
           })
         );
       }
+      // Audited whether or not this is part of a close: a settlement transfer
+      // is exactly the movement an audit most needs to see (GS-021).
+      writeFestivalAudit(txn, db, pandalId, festivalId, actor.uid, "transferred", "fundTransfer", txId!, {
+        newValue: {
+          direction: "to_permanent",
+          amount,
+          location: input.location,
+          type: input.type,
+        },
+        reason: input.description?.trim() || undefined,
+      });
     } else if (!input.closeFestival) {
       return;
     }

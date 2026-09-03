@@ -87,34 +87,80 @@ export function applyFestivalLocationDelta(
   return { ok: true, next };
 }
 
+/** The summary fields every God Fund balance question needs. */
+export type GodFundLedger = Pick<
+  GaneshSummary,
+  | "openingFunds"
+  | "chanda"
+  | "committeeContributions"
+  | "otherCashContributions"
+  | "godFundExpenses"
+  | "reimbursements"
+  | "transferredToPermanentFund"
+  | "cash"
+  | "upi"
+  | "bank"
+  | "other"
+>;
+
+/**
+ * God Fund money whose Cash/UPI/Bank location was never recorded.
+ *
+ * The per-location buckets landed after festivals were already collecting and
+ * nothing backfilled them, so a live festival can hold real money with every
+ * bucket still at zero. The committee knows where that money is; the summary
+ * document does not. Treating it as spendable from any location is what keeps
+ * such a festival usable, instead of rejecting every Cash/UPI/Bank spend until
+ * an admin happens to find "Recalculate from ledger".
+ *
+ * Self-limiting: once every rupee is classified this is zero and the per
+ * location ceilings bite exactly as written.
+ */
+export function unclassifiedGodFund(summary: GodFundLedger): number {
+  const onDisk = festivalLocationTotal(festivalLocationsOf(summary));
+  return money(Math.max(0, availableGodFund(summary) - onDisk));
+}
+
+/**
+ * What a God Fund spend from `location` may actually draw on: the bucket plus
+ * any unclassified money, never more than the festival holds in total.
+ */
+export function godFundSpendableAt(
+  location: PermanentFundLocation,
+  summary: GodFundLedger
+): number {
+  const locations = festivalLocationsOf(summary);
+  return money(
+    Math.min(
+      availableGodFund(summary),
+      (locations[location] ?? 0) + unclassifiedGodFund(summary)
+    )
+  );
+}
+
 /**
  * Display/repair helper. Unclassified God Fund (legacy records, or location
  * fields never written) is absorbed into `other` so Cash + UPI + Bank + Other
  * equals Available God Fund. Does not mutate the ledger.
  */
-export function repairFestivalLocations(
-  summary: Pick<
-    GaneshSummary,
-    | "openingFunds"
-    | "chanda"
-    | "committeeContributions"
-    | "otherCashContributions"
-    | "godFundExpenses"
-    | "reimbursements"
-    | "transferredToPermanentFund"
-    | "cash"
-    | "upi"
-    | "bank"
-    | "other"
-  >
-): FestivalLocations {
+export function repairFestivalLocations(summary: GodFundLedger): FestivalLocations {
   const locations = festivalLocationsOf(summary);
   const available = availableGodFund(summary);
-  const remainder = money(available - festivalLocationTotal(locations));
-  if (remainder === 0) return locations;
-  const other = money(locations.other + remainder);
-  if (other < 0) return locations;
-  return { ...locations, other };
+  // A bucket sits negative when unclassified money was spent from it (see
+  // unclassifiedGodFund). "Cash -₹222" tells a committee nothing true, so an
+  // overdrawn bucket reads as empty and `other` carries the difference — the
+  // same treatment money of unknown location already gets.
+  const shown: FestivalLocations = {
+    cash: Math.max(0, locations.cash),
+    upi: Math.max(0, locations.upi),
+    bank: Math.max(0, locations.bank),
+    other: Math.max(0, locations.other),
+  };
+  const remainder = money(available - festivalLocationTotal(shown));
+  if (remainder === 0) return shown;
+  const other = money(shown.other + remainder);
+  if (other < 0) return shown;
+  return { ...shown, other };
 }
 
 export function locationInvariantHolds(summary: GaneshSummary): boolean {
@@ -124,27 +170,22 @@ export function locationInvariantHolds(summary: GaneshSummary): boolean {
 export function validateGodFundLocationSpend(
   godFundAmount: number,
   location: PermanentFundLocation,
-  summary: Pick<
-    GaneshSummary,
-    | "openingFunds"
-    | "chanda"
-    | "committeeContributions"
-    | "otherCashContributions"
-    | "godFundExpenses"
-    | "reimbursements"
-    | "transferredToPermanentFund"
-    | "cash"
-    | "upi"
-    | "bank"
-    | "other"
-  >
+  summary: GodFundLedger
 ): ValidationResult {
   const amount = money(godFundAmount);
   if (amount <= 0) return { ok: true };
   const total = validateGodFundSpend(amount, availableGodFund(summary));
   if (!total.ok) return total;
-  const applied = applyFestivalLocationDelta(repairFestivalLocations(summary), location, -amount);
-  if (!applied.ok) return applied;
+  const spendable = godFundSpendableAt(location, summary);
+  if (amount > spendable) {
+    return {
+      ok: false,
+      error:
+        `Insufficient ${fundLocationLabel(location)} in the God Fund. ` +
+        `Available: ${formatInr(spendable)}. ` +
+        `Requested: ${formatInr(amount)}.`,
+    };
+  }
   return { ok: true };
 }
 
@@ -661,6 +702,7 @@ export type LedgerTotalsInput = {
   inKindValues: number[];
   sponsoredValues: number[];
   assetPurchaseAmounts?: number[];
+  sponsoredExpenseAmounts?: number[];
   locationDeltas?: LedgerLocationDelta[];
 };
 
@@ -693,6 +735,7 @@ export function summarizeLedger(input: LedgerTotalsInput): GaneshSummary {
     collectionCount: input.collections.length,
     expenseCount: input.godFundExpenses.length,
     assetPurchaseAmount: sum(input.assetPurchaseAmounts ?? []),
+    sponsoredExpenseAmount: sum(input.sponsoredExpenseAmounts ?? []),
   };
   if (input.locationDeltas) {
     const locations = summarizeFestivalLocations(input.locationDeltas);

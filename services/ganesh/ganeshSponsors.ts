@@ -3,8 +3,10 @@ import {
   deleteField,
   getDoc,
   increment,
+  runTransaction,
   serverTimestamp,
   writeBatch,
+  type DocumentData,
   type Firestore,
   type WriteBatch,
 } from "firebase/firestore";
@@ -693,51 +695,101 @@ export async function receiveSponsorship(
 ): Promise<void> {
   await requireOpenFestival(db, pandalId, festivalId);
   const ref = pathRef(db, [...festivalCol(pandalId, festivalId, "sponsorships"), sponsorshipId]);
-  const snap = await getDoc(ref);
-  if (!snap.exists()) throw new Error("Sponsorship not found.");
-  const prev = snap.data();
-  assertCanReceiveSponsorship(prev);
-  const sponsorSnap = await getDoc(pathRef(db, [...pandalSponsorsCol(pandalId), String(prev.sponsorId)]));
-  if (!sponsorSnap.exists()) throw new Error("Sponsor not found.");
-  const type = String(prev.sponsoringType) as SponsoringType;
-  const batch = writeBatch(db);
-  const received = appendReceiveEffects(batch, db, actor, pandalId, festivalId, sponsorshipId, {
-    id: String(prev.sponsorId),
-    name: String(sponsorSnap.data().name ?? ""),
-    mobile: sponsorSnap.data().mobile ? String(sponsorSnap.data().mobile) : undefined,
-  }, {
-    sponsoringType: type,
-    purpose: prev.purpose,
-    purposeLabel: prev.purposeLabel,
-    amount: Number(prev.amount ?? 0),
-    estimatedValue: Number(prev.estimatedValue ?? 0),
-    itemName: prev.itemName,
-    quantity: prev.quantity,
-    serviceDescription: prev.serviceDescription,
-    notes: prev.notes,
-    paymentMethod: input?.paymentMethod ?? prev.paymentMethod,
-    receivedNotes: input?.receivedNotes,
-    expenseId: input?.expenseId ?? prev.expenseId,
-    pandalAsset: input?.pandalAsset,
-  });
-  batch.update(
-    ref,
-    omitUndefined({
-      status: "received",
-      receivedAt: serverTimestamp(),
-      receivedBy: actor.uid,
-      receivedNotes: input?.receivedNotes?.trim() || undefined,
-      paymentMethod: type === "cash" ? input?.paymentMethod ?? prev.paymentMethod : undefined,
-      contributionId: received.contributionId,
-      assetId: prev.assetId || received.assetId,
+
+  // Receiving a *cash* sponsorship puts real money into the festival, so its
+  // status check must read through a transaction. The mirror contribution is
+  // written at a deterministic id, so a double-receive left exactly one
+  // contribution document and the defect was invisible — but the `increment()`
+  // beside it is not idempotent, so the summary silently counted the cash twice
+  // and only a recalculate would have disagreed.
+  //
+  // Item and service sponsorships stay on a batch: they move an estimated
+  // value, not cash, and the hook gates only `sponsoringType === "cash"`
+  // online, so a volunteer can still record a donated item with no signal.
+  // This pre-read only routes; the cash path re-reads and re-validates inside
+  // its transaction.
+  const routing = await getDoc(ref);
+  if (!routing.exists()) throw new Error("Sponsorship not found.");
+  const isCash = String(routing.data().sponsoringType) === "cash";
+  const sponsorRef = pathRef(db, [
+    ...pandalSponsorsCol(pandalId),
+    String(routing.data().sponsorId),
+  ]);
+
+  const append = (
+    writer: GaneshWriter,
+    prev: DocumentData,
+    sponsor: { name: string; mobile?: string }
+  ) => {
+    const type = String(prev.sponsoringType) as SponsoringType;
+    const received = appendReceiveEffects(writer, db, actor, pandalId, festivalId, sponsorshipId, {
+      id: String(prev.sponsorId),
+      name: sponsor.name,
+      mobile: sponsor.mobile,
+    }, {
+      sponsoringType: type,
+      purpose: prev.purpose,
+      purposeLabel: prev.purposeLabel,
+      amount: Number(prev.amount ?? 0),
+      estimatedValue: Number(prev.estimatedValue ?? 0),
+      itemName: prev.itemName,
+      quantity: prev.quantity,
+      serviceDescription: prev.serviceDescription,
+      notes: prev.notes,
+      paymentMethod: input?.paymentMethod ?? prev.paymentMethod,
+      receivedNotes: input?.receivedNotes,
       expenseId: input?.expenseId ?? prev.expenseId,
-      updatedBy: actor.uid,
-      updatedAt: serverTimestamp(),
-    })
-  );
-  festivalAudit(batch, db, pandalId, festivalId, actor.uid, sponsorshipId, { status: prev.status }, {
-    status: "received",
-  }, input?.receivedNotes?.trim() || "Marked received");
+      pandalAsset: input?.pandalAsset,
+    });
+    writer.update(
+      ref,
+      omitUndefined({
+        status: "received",
+        receivedAt: serverTimestamp(),
+        receivedBy: actor.uid,
+        receivedNotes: input?.receivedNotes?.trim() || undefined,
+        paymentMethod: type === "cash" ? input?.paymentMethod ?? prev.paymentMethod : undefined,
+        contributionId: received.contributionId,
+        assetId: prev.assetId || received.assetId,
+        expenseId: input?.expenseId ?? prev.expenseId,
+        updatedBy: actor.uid,
+        updatedAt: serverTimestamp(),
+      })
+    );
+    festivalAudit(writer, db, pandalId, festivalId, actor.uid, sponsorshipId, {
+      status: prev.status,
+    }, { status: "received" }, input?.receivedNotes?.trim() || "Marked received");
+  };
+
+  const sponsorOf = (snap: {
+    exists: () => boolean;
+    data: () => DocumentData | undefined;
+  }) => {
+    if (!snap.exists()) throw new Error("Sponsor not found.");
+    const data = snap.data() ?? {};
+    return {
+      name: String(data.name ?? ""),
+      mobile: data.mobile ? String(data.mobile) : undefined,
+    };
+  };
+
+  if (isCash) {
+    await runTransaction(db, async (txn) => {
+      const snap = await txn.get(ref);
+      if (!snap.exists()) throw new Error("Sponsorship not found.");
+      const sponsorSnap = await txn.get(sponsorRef);
+      const prev = snap.data();
+      assertCanReceiveSponsorship(prev);
+      append(txn, prev, sponsorOf(sponsorSnap));
+    });
+    return;
+  }
+
+  const prev = routing.data();
+  assertCanReceiveSponsorship(prev);
+  const sponsor = sponsorOf(await getDoc(sponsorRef));
+  const batch = writeBatch(db);
+  append(batch, prev, sponsor);
   await commitWrite(() => batch.commit(), { label: "receive sponsorship" });
 }
 

@@ -19,6 +19,7 @@ import * as sponsorWrites from "@/services/ganesh/ganeshSponsors";
 import * as writes from "@/services/ganesh/ganeshWrites";
 import {
   assertGodFundSpendOnline,
+  assertPromiseCancelOnline,
   assertReimbursementOnline,
   assertVoidOnline,
 } from "@/services/ganesh/ganeshWrites";
@@ -63,6 +64,17 @@ export function useGaneshWrites() {
     [hasPerm, isAdmin, permissions]
   );
 
+  /**
+   * The guards below throw. Every write method in the returned object is
+   * therefore `async` — do not "simplify" that away.
+   *
+   * A plain arrow that calls one of these throws *before* it returns a promise,
+   * so a caller written as `writes.addExpense(...).catch(showToast)` never
+   * reaches its `.catch` and the error escapes as an unhandled exception
+   * instead of a message. That defeated `lib/errors.ts` on 61 write paths
+   * (GS-029). Marking each method `async` turns a synchronous throw into a
+   * rejected promise, which every existing caller already handles.
+   */
   const requireFestival = useCallback((overrideFestivalId?: string) => {
     if (!actor) throw new Error("You must be signed in.");
     const targetFestivalId = overrideFestivalId ?? festivalId;
@@ -80,7 +92,7 @@ export function useGaneshWrites() {
     actor,
     pandalId,
     festivalId,
-    createPandalAndFestival: (input: Parameters<typeof writes.createPandalAndFestival>[2]) => {
+    createPandalAndFestival: async (input: Parameters<typeof writes.createPandalAndFestival>[2]) => {
       if (Number(input.initialFund?.amount ?? 0) > 0 || Number(input.allocateToFestival?.amount ?? 0) > 0) {
         assertPermanentFundOnline(isOnline);
       }
@@ -96,7 +108,7 @@ export function useGaneshWrites() {
       );
       return result;
     },
-    decideJoinRequest: (
+    decideJoinRequest: async (
       requestId: string,
       decision: "approved" | "rejected",
       roleForJoin?: Parameters<typeof writes.decideJoinRequest>[4]
@@ -106,14 +118,14 @@ export function useGaneshWrites() {
         writes.decideJoinRequest(requireDb(), actor!, requestId, decision, roleForJoin)
       );
     },
-    updatePandalProfile: (input: Parameters<typeof writes.updatePandalProfile>[3]) => {
+    updatePandalProfile: async (input: Parameters<typeof writes.updatePandalProfile>[3]) => {
       if (!pandalId || !actor) throw new Error("Select a Pandal first.");
       requirePerm("settings.update");
       return run("Pandal saved", () =>
         writes.updatePandalProfile(requireDb(), actor, pandalId, input)
       );
     },
-    updateFestivalDetails: (
+    updateFestivalDetails: async (
       targetFestivalId: string,
       input: Parameters<typeof writes.updateFestivalDetails>[4]
     ) => {
@@ -123,14 +135,14 @@ export function useGaneshWrites() {
         writes.updateFestivalDetails(requireDb(), actor, pandalId, targetFestivalId, input)
       );
     },
-    updatePandalJoinMode: (joinMode: Parameters<typeof writes.updatePandalJoinMode>[3]) => {
+    updatePandalJoinMode: async (joinMode: Parameters<typeof writes.updatePandalJoinMode>[3]) => {
       if (!pandalId || !actor) throw new Error("Select a Pandal first.");
       requirePerm("settings.update");
       return run(joinMode === "open" ? "Open join enabled" : "Approval required to join", () =>
         writes.updatePandalJoinMode(requireDb(), actor, pandalId, joinMode)
       );
     },
-    updatePandalMember: (
+    updatePandalMember: async (
       targetUserId: string,
       input: { role?: GaneshRole; status?: GaneshMemberStatus; reason?: string }
     ) => {
@@ -142,28 +154,28 @@ export function useGaneshWrites() {
         writes.updatePandalMember(requireDb(), actor, pandalId, targetUserId, input)
       );
     },
-    createFestival: (input: { name: string; year: number; startDate?: string; endDate?: string }) => {
+    createFestival: async (input: { name: string; year: number; startDate?: string; endDate?: string }) => {
       if (!pandalId || !actor) throw new Error("Select a Pandal first.");
       requirePerm("festival.create");
       return run("Festival created", () =>
         writes.createFestival(requireDb(), actor, pandalId, input)
       );
     },
-    reopenFestival: () => {
+    reopenFestival: async () => {
       requirePerm("festival.close");
       const ctx = requireFestival();
       return run("Festival reopened", () =>
         writes.reopenFestival(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId)
       );
     },
-    updateFestivalTargets: (input: Parameters<typeof writes.updateFestivalTargets>[4]) => {
+    updateFestivalTargets: async (input: Parameters<typeof writes.updateFestivalTargets>[4]) => {
       requirePerm("festival.update");
       const ctx = requireFestival();
       return run("Targets updated", () =>
         writes.updateFestivalTargets(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, input)
       );
     },
-    setMemberContributionTarget: (
+    setMemberContributionTarget: async (
       memberId: string,
       input: Parameters<typeof writes.setMemberContributionTarget>[5]
     ) => {
@@ -182,7 +194,7 @@ export function useGaneshWrites() {
           )
       );
     },
-    setCommitteeContributionWaiver: (
+    setCommitteeContributionWaiver: async (
       memberId: string,
       input: Parameters<typeof writes.setCommitteeContributionWaiver>[5]
     ) => {
@@ -199,14 +211,14 @@ export function useGaneshWrites() {
         )
       );
     },
-    addOpeningFund: (input: Parameters<typeof writes.addOpeningFund>[4]) => {
+    addOpeningFund: async (input: Parameters<typeof writes.addOpeningFund>[4]) => {
       requirePerm("openingFunds.create");
       const ctx = requireFestival();
       return run("Opening fund recorded", () =>
         writes.addOpeningFund(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, input)
       );
     },
-    addOpeningFunds: (input: Parameters<typeof writes.addOpeningFunds>[4]) => {
+    addOpeningFunds: async (input: Parameters<typeof writes.addOpeningFunds>[4]) => {
       requirePerm("openingFunds.create");
       const ctx = requireFestival();
       return run("Opening fund recorded", () =>
@@ -233,14 +245,14 @@ export function useGaneshWrites() {
       }
       return result;
     },
-    updateHousehold: (householdId: string, input: Parameters<typeof writes.updateHousehold>[5]) => {
+    updateHousehold: async (householdId: string, input: Parameters<typeof writes.updateHousehold>[5]) => {
       requirePerm("collections.update");
       const ctx = requireFestival();
       return run("Household updated", () =>
         writes.updateHousehold(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, householdId, input)
       );
     },
-    addContribution: (input: Parameters<typeof writes.addContribution>[4]) => {
+    addContribution: async (input: Parameters<typeof writes.addContribution>[4]) => {
       requirePerm("contributions.create");
       if (input.pandalAsset) requirePerm("assets.create");
       // Recording a contribution as already received IS receiving it. The rules
@@ -257,7 +269,7 @@ export function useGaneshWrites() {
         writes.addContribution(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, input)
       );
     },
-    attachContributionPhoto: (contributionId: string, photo: GaneshFileMeta) => {
+    attachContributionPhoto: async (contributionId: string, photo: GaneshFileMeta) => {
       requirePerm("contributions.update");
       const ctx = requireFestival();
       return writes.attachContributionPhoto(
@@ -269,7 +281,7 @@ export function useGaneshWrites() {
         photo
       );
     },
-    receiveContribution: (
+    receiveContribution: async (
       contributionId: string,
       input?: Parameters<typeof writes.receiveContribution>[5] & { kind?: string }
     ) => {
@@ -288,8 +300,9 @@ export function useGaneshWrites() {
         )
       );
     },
-    cancelContribution: (contributionId: string, reason?: string) => {
+    cancelContribution: async (contributionId: string, reason?: string) => {
       requirePerm("contributions.cancel");
+      assertPromiseCancelOnline(isOnline);
       const ctx = requireFestival();
       return run("Contribution cancelled", () =>
         writes.cancelContribution(
@@ -302,7 +315,7 @@ export function useGaneshWrites() {
         )
       );
     },
-    updatePromisedContribution: (
+    updatePromisedContribution: async (
       contributionId: string,
       input: Parameters<typeof writes.updatePromisedContribution>[5]
     ) => {
@@ -319,7 +332,7 @@ export function useGaneshWrites() {
         )
       );
     },
-    addExpense: (input: Parameters<typeof writes.addExpense>[4]) => {
+    addExpense: async (input: Parameters<typeof writes.addExpense>[4]) => {
       requirePerm("expenses.create");
       if ((input.sponsoredAmount ?? 0) > 0) requirePerm("sponsors.receive");
       assertGodFundSpendOnline(isOnline, input.godFundAmount);
@@ -328,7 +341,7 @@ export function useGaneshWrites() {
         writes.addExpense(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, input)
       );
     },
-    addAssetPurchase: (input: Parameters<typeof writes.addAssetPurchase>[4]) => {
+    addAssetPurchase: async (input: Parameters<typeof writes.addAssetPurchase>[4]) => {
       requirePerm("expenses.create");
       requirePerm("assets.create");
       if ((input.sponsoredAmount ?? 0) > 0) requirePerm("sponsors.receive");
@@ -338,7 +351,7 @@ export function useGaneshWrites() {
         writes.addAssetPurchase(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, input)
       );
     },
-    updateExpenseAmounts: (
+    updateExpenseAmounts: async (
       expenseId: string,
       input: Parameters<typeof writes.updateExpenseAmounts>[5],
       options?: { festivalId?: string }
@@ -352,7 +365,7 @@ export function useGaneshWrites() {
         writes.updateExpenseAmounts(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, expenseId, input)
       );
     },
-    attachExpenseReceipt: (expenseId: string, receipt: GaneshFileMeta) => {
+    attachExpenseReceipt: async (expenseId: string, receipt: GaneshFileMeta) => {
       requirePerm("expenses.update");
       const ctx = requireFestival();
       return writes.attachExpenseReceipt(
@@ -364,7 +377,7 @@ export function useGaneshWrites() {
         receipt
       );
     },
-    addReimbursement: (input: Parameters<typeof writes.addReimbursement>[4]) => {
+    addReimbursement: async (input: Parameters<typeof writes.addReimbursement>[4]) => {
       requirePerm("reimbursements.create");
       assertReimbursementOnline(isOnline);
       const ctx = requireFestival();
@@ -372,7 +385,7 @@ export function useGaneshWrites() {
         writes.addReimbursement(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, input)
       );
     },
-    voidFinancialRecord: (
+    voidFinancialRecord: async (
       input: Parameters<typeof writes.voidFinancialRecord>[4],
       options?: { festivalId?: string }
     ) => {
@@ -383,7 +396,7 @@ export function useGaneshWrites() {
         writes.voidFinancialRecord(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, input)
       );
     },
-    closeFestival: (settlement?: Parameters<typeof writes.closeFestival>[4]) => {
+    closeFestival: async (settlement?: Parameters<typeof writes.closeFestival>[4]) => {
       requirePerm("festival.close");
       const ctx = requireFestival();
       if (settlement && settlement.transferAmount > 0) {
@@ -397,7 +410,7 @@ export function useGaneshWrites() {
         () => writes.closeFestival(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, settlement)
       );
     },
-    seedPermanentFund: (input?: {
+    seedPermanentFund: async (input?: {
       amount?: number;
       location?: PermanentFundLocation;
       description?: string;
@@ -409,7 +422,7 @@ export function useGaneshWrites() {
         seedPermanentFund(requireDb(), actor, pandalId, input)
       );
     },
-    addPermanentFundDonation: (input: {
+    addPermanentFundDonation: async (input: {
       amount: number;
       location: PermanentFundLocation;
       description?: string;
@@ -421,7 +434,7 @@ export function useGaneshWrites() {
         addPermanentFundDonation(requireDb(), actor, pandalId, input)
       );
     },
-    adjustPermanentFund: (input: {
+    adjustPermanentFund: async (input: {
       amount: number;
       location: PermanentFundLocation;
       reason: string;
@@ -433,7 +446,7 @@ export function useGaneshWrites() {
         adjustPermanentFund(requireDb(), actor, pandalId, input)
       );
     },
-    transferPermanentToFestival: (input: {
+    transferPermanentToFestival: async (input: {
       festivalId?: string;
       amount: number;
       location: PermanentFundLocation;
@@ -449,7 +462,13 @@ export function useGaneshWrites() {
         transferPermanentToFestival(requireDb(), actor, pandalId, targetFestivalId, input)
       );
     },
-    transferFestivalToPermanent: (input: {
+    transferFestivalToPermanent: async (input: {
+      // Both directions must name the same festival. This used to ignore the
+      // caller and always use the session festival, while its transfer-out
+      // counterpart honoured an explicit id — so with two open festivals money
+      // left the Permanent Fund into one and came back out of another, leaving
+      // both God Funds wrong while the Fund's own balance still reconciled.
+      festivalId?: string;
       amount: number;
       location: PermanentFundLocation;
       festivalName?: string;
@@ -457,7 +476,7 @@ export function useGaneshWrites() {
       type?: "CARRY_FORWARD" | "TRANSFER_IN";
     }) => {
       requirePerm("permanentFund.transfer");
-      const ctx = requireFestival();
+      const ctx = requireFestival(input.festivalId);
       assertPermanentFundOnline(isOnline);
       return run("Transferred to Permanent Fund", () =>
         transferFestivalToPermanent(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, {
@@ -466,21 +485,21 @@ export function useGaneshWrites() {
         })
       );
     },
-    recomputeFestivalSummary: () => {
+    recomputeFestivalSummary: async () => {
       requirePerm("festival.update");
       const ctx = requireFestival();
       return run("Totals recalculated", () =>
         writes.recomputeFestivalSummary(ctx.db, ctx.pandalId, ctx.festivalId)
       );
     },
-    addCustomCategory: (name: string) => {
+    addCustomCategory: async (name: string) => {
       requirePerm("festival.update");
       const ctx = requireFestival();
       return run("Category added", () =>
         writes.addCustomCategory(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, name)
       );
     },
-    updateCategory: (
+    updateCategory: async (
       categoryId: string,
       input: Parameters<typeof writes.updateCategory>[5]
     ) => {
@@ -495,12 +514,12 @@ export function useGaneshWrites() {
       requirePerm("roles.read");
       return roleWrites.ensurePandalRoles(requireDb(), actor, pandalId);
     },
-    createPandalRole: (input: Parameters<typeof roleWrites.createPandalRole>[3]) => {
+    createPandalRole: async (input: Parameters<typeof roleWrites.createPandalRole>[3]) => {
       if (!pandalId || !actor) throw new Error("Select a Pandal first.");
       requirePerm("roles.create");
       return run("Role created", () => roleWrites.createPandalRole(requireDb(), actor, pandalId, input));
     },
-    updatePandalRole: (
+    updatePandalRole: async (
       roleId: string,
       input: Parameters<typeof roleWrites.updatePandalRole>[4]
     ) => {
@@ -510,33 +529,33 @@ export function useGaneshWrites() {
         roleWrites.updatePandalRole(requireDb(), actor, pandalId, roleId, input)
       );
     },
-    deletePandalRole: (roleId: string) => {
+    deletePandalRole: async (roleId: string) => {
       if (!pandalId || !actor) throw new Error("Select a Pandal first.");
       requirePerm("roles.delete");
       return run("Role deleted", () => roleWrites.deletePandalRole(requireDb(), actor, pandalId, roleId));
     },
-    setMemberRoleIds: (targetUserId: string, roleIds: string[]) => {
+    setMemberRoleIds: async (targetUserId: string, roleIds: string[]) => {
       if (!pandalId || !actor) throw new Error("Select a Pandal first.");
       requirePerm("roles.assign");
       return run("Roles saved", () =>
         roleWrites.setMemberRoleIds(requireDb(), actor, pandalId, targetUserId, roleIds)
       );
     },
-    setPandalAdmin: (targetUserId: string, makeAdmin: boolean) => {
+    setPandalAdmin: async (targetUserId: string, makeAdmin: boolean) => {
       if (!pandalId || !actor) throw new Error("Select a Pandal first.");
       if (!isAdmin) throw new Error("Only a Pandal Admin can change Admin access.");
       return run(makeAdmin ? "Made Pandal Admin" : "Removed Admin access", () =>
         roleWrites.setPandalAdmin(requireDb(), actor, pandalId, targetUserId, makeAdmin)
       );
     },
-    createPandalAsset: (input: Parameters<typeof assetWrites.createPandalAsset>[3]) => {
+    createPandalAsset: async (input: Parameters<typeof assetWrites.createPandalAsset>[3]) => {
       requirePerm("assets.create");
       const ctx = requirePandal();
       return run("Asset added", () =>
         assetWrites.createPandalAsset(ctx.db, ctx.actor, ctx.pandalId, input)
       );
     },
-    updatePandalAsset: (
+    updatePandalAsset: async (
       assetId: string,
       patch: Parameters<typeof assetWrites.updatePandalAsset>[4]
     ) => {
@@ -546,7 +565,7 @@ export function useGaneshWrites() {
         assetWrites.updatePandalAsset(ctx.db, ctx.actor, ctx.pandalId, assetId, patch)
       );
     },
-    adjustAssetQuantity: (
+    adjustAssetQuantity: async (
       assetId: string,
       input: Parameters<typeof assetWrites.adjustAssetQuantity>[4]
     ) => {
@@ -556,7 +575,7 @@ export function useGaneshWrites() {
         assetWrites.adjustAssetQuantity(ctx.db, ctx.actor, ctx.pandalId, assetId, input)
       );
     },
-    setAssetStatus: (
+    setAssetStatus: async (
       assetId: string,
       input: Parameters<typeof assetWrites.setAssetStatus>[4]
     ) => {
@@ -575,7 +594,7 @@ export function useGaneshWrites() {
         () => assetWrites.setAssetStatus(ctx.db, ctx.actor, ctx.pandalId, assetId, input)
       );
     },
-    attachAssetPhoto: (
+    attachAssetPhoto: async (
       assetId: string,
       photo: Parameters<typeof assetWrites.attachAssetPhoto>[4]
     ) => {
@@ -585,14 +604,14 @@ export function useGaneshWrites() {
       const ctx = requirePandal();
       return assetWrites.attachAssetPhoto(ctx.db, ctx.actor, ctx.pandalId, assetId, photo);
     },
-    createSponsor: (input: Parameters<typeof sponsorWrites.createSponsor>[3]) => {
+    createSponsor: async (input: Parameters<typeof sponsorWrites.createSponsor>[3]) => {
       requirePerm("sponsors.create");
       const ctx = requirePandal();
       return run("Sponsor added", () =>
         sponsorWrites.createSponsor(ctx.db, ctx.actor, ctx.pandalId, input)
       );
     },
-    updateSponsor: (
+    updateSponsor: async (
       sponsorId: string,
       input: Parameters<typeof sponsorWrites.updateSponsor>[4]
     ) => {
@@ -602,7 +621,7 @@ export function useGaneshWrites() {
         sponsorWrites.updateSponsor(ctx.db, ctx.actor, ctx.pandalId, sponsorId, input)
       );
     },
-    setSponsorArchived: (
+    setSponsorArchived: async (
       sponsorId: string,
       input: Parameters<typeof sponsorWrites.setSponsorArchived>[4]
     ) => {
@@ -612,7 +631,7 @@ export function useGaneshWrites() {
         sponsorWrites.setSponsorArchived(ctx.db, ctx.actor, ctx.pandalId, sponsorId, input)
       );
     },
-    attachSponsorPhoto: (
+    attachSponsorPhoto: async (
       sponsorId: string,
       photo: Parameters<typeof sponsorWrites.attachSponsorPhoto>[4]
     ) => {
@@ -622,7 +641,7 @@ export function useGaneshWrites() {
       const ctx = requirePandal();
       return sponsorWrites.attachSponsorPhoto(ctx.db, ctx.actor, ctx.pandalId, sponsorId, photo);
     },
-    addSponsorship: (
+    addSponsorship: async (
       sponsorId: string,
       input: Parameters<typeof sponsorWrites.addSponsorship>[5]
     ) => {
@@ -637,7 +656,7 @@ export function useGaneshWrites() {
         sponsorWrites.addSponsorship(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, sponsorId, input)
       );
     },
-    updateOpenSponsorship: (
+    updateOpenSponsorship: async (
       sponsorshipId: string,
       input: Parameters<typeof sponsorWrites.updateOpenSponsorship>[5]
     ) => {
@@ -654,21 +673,21 @@ export function useGaneshWrites() {
         )
       );
     },
-    promiseSponsorship: (sponsorshipId: string) => {
+    promiseSponsorship: async (sponsorshipId: string) => {
       requirePerm("sponsors.update");
       const ctx = requireFestival();
       return run("Marked promised", () =>
         sponsorWrites.promiseSponsorship(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, sponsorshipId)
       );
     },
-    confirmSponsorship: (sponsorshipId: string) => {
+    confirmSponsorship: async (sponsorshipId: string) => {
       requirePerm("sponsors.update");
       const ctx = requireFestival();
       return run("Sponsorship confirmed", () =>
         sponsorWrites.confirmSponsorship(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, sponsorshipId)
       );
     },
-    receiveSponsorship: (
+    receiveSponsorship: async (
       sponsorshipId: string,
       input?: Parameters<typeof sponsorWrites.receiveSponsorship>[5] & { sponsoringType?: string }
     ) => {
@@ -689,7 +708,7 @@ export function useGaneshWrites() {
         )
       );
     },
-    cancelSponsorship: (sponsorshipId: string, reason?: string) => {
+    cancelSponsorship: async (sponsorshipId: string, reason?: string) => {
       requirePerm("sponsors.cancel");
       const ctx = requireFestival();
       return run("Sponsorship cancelled", () =>
@@ -707,21 +726,21 @@ export function useGaneshWrites() {
     // Seva writes take no online gate: none of them reads a balance, so they
     // stay plain batches and keep working with no signal at the pandal, which
     // is exactly when a schedule gets changed.
-    createSeva: (input: Parameters<typeof sevaWrites.createSeva>[4]) => {
+    createSeva: async (input: Parameters<typeof sevaWrites.createSeva>[4]) => {
       requirePerm("seva.write");
       const ctx = requireFestival();
       return run("Seva recorded", () =>
         sevaWrites.createSeva(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, input)
       );
     },
-    updateSeva: (sevaId: string, input: Parameters<typeof sevaWrites.updateSeva>[5]) => {
+    updateSeva: async (sevaId: string, input: Parameters<typeof sevaWrites.updateSeva>[5]) => {
       requirePerm("seva.write");
       const ctx = requireFestival();
       return run("Seva updated", () =>
         sevaWrites.updateSeva(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, sevaId, input)
       );
     },
-    setSevaStatus: (sevaId: string, next: SevaStatus) => {
+    setSevaStatus: async (sevaId: string, next: SevaStatus) => {
       requirePerm("seva.write");
       const ctx = requireFestival();
       const label = next === "completed" ? "Seva completed" : next === "in_progress" ? "Seva started" : "Seva updated";
@@ -729,28 +748,28 @@ export function useGaneshWrites() {
         sevaWrites.setSevaStatus(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, sevaId, next)
       );
     },
-    voidSeva: (sevaId: string, reason?: string) => {
+    voidSeva: async (sevaId: string, reason?: string) => {
       requirePerm("seva.write");
       const ctx = requireFestival();
       return run("Seva removed", () =>
         sevaWrites.voidSeva(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, sevaId, reason)
       );
     },
-    assignSevaDuty: (sevaId: string, input: Parameters<typeof sevaWrites.assignDuty>[5]) => {
+    assignSevaDuty: async (sevaId: string, input: Parameters<typeof sevaWrites.assignDuty>[5]) => {
       requirePerm("seva.assign");
       const ctx = requireFestival();
       return run("Volunteer assigned", () =>
         sevaWrites.assignDuty(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, sevaId, input)
       );
     },
-    removeSevaDuty: (sevaId: string, dutyId: string) => {
+    removeSevaDuty: async (sevaId: string, dutyId: string) => {
       requirePerm("seva.assign");
       const ctx = requireFestival();
       return run("Volunteer removed", () =>
         sevaWrites.removeDuty(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, sevaId, dutyId)
       );
     },
-    setSevaDutyStatus: (sevaId: string, dutyId: string, next: DutyStatus, isOwnDuty = false) => {
+    setSevaDutyStatus: async (sevaId: string, dutyId: string, next: DutyStatus, isOwnDuty = false) => {
       // A volunteer reporting on their own duty needs no permission - the rules
       // allow it for the assignee, restricted to the status field. Staffing
       // anyone else still requires seva.assign.

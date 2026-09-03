@@ -90,14 +90,17 @@ export default function FestivalReportScreen() {
       </Text>
 
       <SectionPair>
-        <Section title="Where money came from" subtitle="Cash that entered this festival">
+        <Section title="Where money came from" subtitle="Money that entered this festival">
           <StatStrip>
             {overview.moneyInLines.map((line) => (
               <StatTile key={line.id} label={line.label}>
                 <Money value={line.amount} size="secondary" />
               </StatTile>
             ))}
-            <StatTile label="Total cash in">
+            {/* "Money in", not "cash in". "Cash" in the tiles below means the
+                Cash location, and one word for two things reads as the festival
+                holding all of this as physical cash. */}
+            <StatTile label="Total money in">
               <Money value={overview.moneyIn} size="secondary" />
             </StatTile>
           </StatStrip>
@@ -127,11 +130,27 @@ export default function FestivalReportScreen() {
             <StatTile label="Pending reimbursements">
               <Money value={overview.pendingReimbursements} size="secondary" />
             </StatTile>
+            {/* Its own line on purpose: a sponsor paying part of an expense
+                directly is real spending the Pandal benefited from, but it
+                never entered the God Fund, so folding it into "Festival
+                expenses" would stop that figure reconciling with cash out. */}
+            {summary.sponsoredExpenseAmount > 0 ? (
+              <StatTile label="Paid directly by sponsors">
+                <Money value={summary.sponsoredExpenseAmount} size="secondary" />
+              </StatTile>
+            ) : null}
           </StatStrip>
         </Section>
       </SectionPair>
 
-      <Section title="What the Pandal owns" subtitle="After this festival's spend">
+      <Section
+        title="What the Pandal owns"
+        subtitle={
+          overview.unclassifiedGodFund > 0
+            ? `After this festival's spend. ${formatInr(overview.unclassifiedGodFund)} was recorded before funds were split by location, so it sits under Other and can be spent from anywhere. Recalculate from ledger to split it properly.`
+            : "After this festival's spend"
+        }
+      >
         <StatStrip>
           <StatTile label="Closing cash / God Fund">
             <Money value={overview.availableGodFund} size="secondary" />

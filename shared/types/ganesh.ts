@@ -377,6 +377,12 @@ export interface GaneshSummary {
   collectionCount: number;
   expenseCount: number;
   assetPurchaseAmount: number;
+  /**
+   * Expense money paid directly by a sponsor. Never enters the God Fund, so it
+   * is not cash in and not a God Fund expense — reported on its own line so a
+   * sponsor covering part of the mandap is visible rather than absent (GS-039).
+   */
+  sponsoredExpenseAmount: number;
   transferredToPermanentFund: number;
   receivedFromPermanentFund: number;
   /** Festival God Fund held as cash. Unclassified history is repaired into `other`. */
@@ -679,6 +685,7 @@ export const EMPTY_GANESH_SUMMARY: GaneshSummary = {
   collectionCount: 0,
   expenseCount: 0,
   assetPurchaseAmount: 0,
+  sponsoredExpenseAmount: 0,
   transferredToPermanentFund: 0,
   receivedFromPermanentFund: 0,
   cash: 0,

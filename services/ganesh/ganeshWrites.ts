@@ -17,6 +17,7 @@ import {
   where,
   writeBatch,
   type Firestore,
+  type DocumentData,
   type QueryDocumentSnapshot,
   type Transaction,
   type WriteBatch,
@@ -64,6 +65,7 @@ import {
   festivalDoc,
   festivalYearDoc,
   membershipDoc,
+  pandalAssetsCol,
   pandalMemberAuditsCol,
   summaryDoc,
 } from "@/shared/utils/ganeshPaths";
@@ -118,11 +120,13 @@ export { requireOpenFestival };
 export {
   assertGodFundSpendOnline,
   assertMoneyReceiveOnline,
+  assertPromiseCancelOnline,
   assertReimbursementOnline,
   assertVoidOnline,
   GOD_FUND_SPEND_OFFLINE_ERROR,
   LEDGER_VOID_OFFLINE_ERROR,
   MONEY_RECEIVE_OFFLINE_ERROR,
+  PROMISE_CANCEL_OFFLINE_ERROR,
   REIMBURSEMENT_OFFLINE_ERROR,
 } from "@/shared/utils/ganeshContributions";
 
@@ -1183,7 +1187,9 @@ export async function addOpeningFund(
 ): Promise<string> {
   const ids = await addOpeningFunds(db, actor, pandalId, festivalId, {
     amounts: {
-      [resolveFundLocation(input.location ?? input.sourceType)]: input.amount,
+      // `sourceType` is a provenance ("permanent_fund", "donation"), never a
+      // location — feeding it to resolveFundLocation only ever yielded "other".
+      [resolveFundLocation(input.location)]: input.amount,
     },
     sourceType: input.sourceType,
     description: input.description,
@@ -1921,7 +1927,7 @@ async function readMemberPendingInTxn(
 }
 
 function bumpReceivedContribution(
-  batch: WriteBatch,
+  batch: GaneshWriter,
   db: Firestore,
   pandalId: string,
   festivalId: string,
@@ -1977,60 +1983,91 @@ export async function receiveContribution(
 ): Promise<void> {
   await requireOpenFestival(db, pandalId, festivalId);
   const ref = pathRef(db, [...festivalCol(pandalId, festivalId, "contributions"), contributionId]);
-  const snap = await getDoc(ref);
-  if (!snap.exists()) throw new Error("Contribution not found.");
-  const prev = snap.data();
-  assertCanReceiveContribution(prev);
-  const kind = String(prev.kind);
-  const paymentMethod = kind === "money" ? requireCashMethod(input?.paymentMethod) : undefined;
-  if (input?.pandalAsset && kind !== "item" && kind !== "sponsorship") {
-    throw new Error("Only item or sponsorship contributions can be added as Pandal assets.");
-  }
+  // Generated outside the transaction so a retry reuses the same id rather than
+  // minting a fresh one on every attempt.
   const assetId = input?.pandalAsset ? newId() : undefined;
-  const batch = writeBatch(db);
-  batch.update(
-    ref,
-    omitUndefined({
-      status: "received",
-      receivedAt: serverTimestamp(),
-      receivedBy: actor.uid,
-      receivedNotes: input?.receivedNotes?.trim() || undefined,
+
+  // Receiving *money* adds real cash to the festival, so its status check has
+  // to read through a transaction. Read with `getDoc` and written with a batch,
+  // two committee members marking one promise received both saw
+  // `status: "promised"` and both committed: the summary counted the gift twice
+  // while the contribution document still looked like a single clean row.
+  //
+  // In-kind and sponsorship receives stay on a batch. They move an *estimated
+  // value*, not cash, and `assertMoneyReceiveOnline` gates only the money path
+  // precisely so a volunteer can still record a donated item with no signal.
+  // This pre-read only routes between the two; the money path re-reads and
+  // re-validates inside its transaction, so nothing trusts it as a check.
+  const routing = await getDoc(ref);
+  if (!routing.exists()) throw new Error("Contribution not found.");
+  const isMoney = String(routing.data().kind) === "money";
+
+  const append = (writer: GaneshWriter, prev: DocumentData) => {
+    const kind = String(prev.kind);
+    const paymentMethod = kind === "money" ? requireCashMethod(input?.paymentMethod) : undefined;
+    if (input?.pandalAsset && kind !== "item" && kind !== "sponsorship") {
+      throw new Error("Only item or sponsorship contributions can be added as Pandal assets.");
+    }
+    writer.update(
+      ref,
+      omitUndefined({
+        status: "received",
+        receivedAt: serverTimestamp(),
+        receivedBy: actor.uid,
+        receivedNotes: input?.receivedNotes?.trim() || undefined,
+        paymentMethod,
+        assetId: prev.assetId || assetId,
+        updatedBy: actor.uid,
+        updatedAt: serverTimestamp(),
+      })
+    );
+    bumpReceivedContribution(writer, db, pandalId, festivalId, {
+      kind,
+      amount: Number(prev.amount ?? 0),
+      estimatedValue: Number(prev.estimatedValue ?? 0),
+      isCommittee: Boolean(prev.isCommitteeContribution),
+      contributorMemberId: prev.contributorMemberId ? String(prev.contributorMemberId) : undefined,
+      contributorName: prev.contributorName ? String(prev.contributorName) : undefined,
       paymentMethod,
-      assetId: prev.assetId || assetId,
-      updatedBy: actor.uid,
-      updatedAt: serverTimestamp(),
-    })
-  );
-  bumpReceivedContribution(batch, db, pandalId, festivalId, {
-    kind,
-    amount: Number(prev.amount ?? 0),
-    estimatedValue: Number(prev.estimatedValue ?? 0),
-    isCommittee: Boolean(prev.isCommitteeContribution),
-    contributorMemberId: prev.contributorMemberId ? String(prev.contributorMemberId) : undefined,
-    contributorName: prev.contributorName ? String(prev.contributorName) : undefined,
-    paymentMethod,
-    wasPromised: prev.status === "promised",
-  });
-  if (input?.pandalAsset && assetId) {
-    appendPandalAssetCreate(batch, db, actor, pandalId, assetId, {
-      name: input.pandalAsset.name,
-      category: input.pandalAsset.category,
-      quantity: input.pandalAsset.quantity,
-      unit: input.pandalAsset.unit,
-      ownershipType: kind === "sponsorship" ? "sponsored" : "donated",
-      estimatedValue: input.pandalAsset.estimatedValue ?? Number(prev.estimatedValue ?? 0),
-      condition: input.pandalAsset.condition ?? "good",
-      location: input.pandalAsset.location,
-      description: input.pandalAsset.description ?? String(prev.description ?? ""),
-      sourceName: String(prev.contributorName ?? ""),
-      relatedContributionId: contributionId,
+      wasPromised: prev.status === "promised",
     });
+    if (input?.pandalAsset && assetId) {
+      appendPandalAssetCreate(writer, db, actor, pandalId, assetId, {
+        name: input.pandalAsset.name,
+        category: input.pandalAsset.category,
+        quantity: input.pandalAsset.quantity,
+        unit: input.pandalAsset.unit,
+        ownershipType: kind === "sponsorship" ? "sponsored" : "donated",
+        estimatedValue: input.pandalAsset.estimatedValue ?? Number(prev.estimatedValue ?? 0),
+        condition: input.pandalAsset.condition ?? "good",
+        location: input.pandalAsset.location,
+        description: input.pandalAsset.description ?? String(prev.description ?? ""),
+        sourceName: String(prev.contributorName ?? ""),
+        relatedContributionId: contributionId,
+      });
+    }
+    audit(writer, db, pandalId, festivalId, actor.uid, "edited", "contribution", contributionId, {
+      oldValue: { status: prev.status },
+      newValue: { status: "received" },
+      reason: input?.receivedNotes?.trim() || "Marked received",
+    });
+  };
+
+  if (isMoney) {
+    await runTransaction(db, async (txn) => {
+      const snap = await txn.get(ref);
+      if (!snap.exists()) throw new Error("Contribution not found.");
+      const prev = snap.data();
+      assertCanReceiveContribution(prev);
+      append(txn, prev);
+    });
+    return;
   }
-  audit(batch, db, pandalId, festivalId, actor.uid, "edited", "contribution", contributionId, {
-    oldValue: { status: prev.status },
-    newValue: { status: "received" },
-    reason: input?.receivedNotes?.trim() || "Marked received",
-  });
+
+  const prev = routing.data();
+  assertCanReceiveContribution(prev);
+  const batch = writeBatch(db);
+  append(batch, prev);
   await commitWrite(() => batch.commit(), { label: "receive contribution" });
 }
 
@@ -2044,30 +2081,35 @@ export async function cancelContribution(
 ): Promise<void> {
   await requireOpenFestival(db, pandalId, festivalId);
   const ref = pathRef(db, [...festivalCol(pandalId, festivalId, "contributions"), contributionId]);
-  const snap = await getDoc(ref);
-  if (!snap.exists()) throw new Error("Contribution not found.");
-  const prev = snap.data();
-  assertCanCancelContribution(prev);
-  const batch = writeBatch(db);
-  batch.update(
-    ref,
-    omitUndefined({
-      status: "cancelled",
-      cancelReason: reason?.trim() || undefined,
-      updatedBy: actor.uid,
-      updatedAt: serverTimestamp(),
-    })
-  );
-  bumpSummary(batch, db, pandalId, festivalId, {
-    promisedCashContributions: prev.kind === "money" ? -Number(prev.amount ?? 0) : 0,
-    promisedInKindValue: prev.kind === "money" ? 0 : -Number(prev.estimatedValue ?? 0),
+
+  // Cancelling withdraws a promise from the promised totals. Two cancels of one
+  // promise used to subtract it twice and drive those totals negative — and
+  // "Promised" versus "Received" is a distinction the committee is asked to
+  // trust, so a negative promise is worse than a merely wrong one.
+  await runTransaction(db, async (txn) => {
+    const snap = await txn.get(ref);
+    if (!snap.exists()) throw new Error("Contribution not found.");
+    const prev = snap.data();
+    assertCanCancelContribution(prev);
+    txn.update(
+      ref,
+      omitUndefined({
+        status: "cancelled",
+        cancelReason: reason?.trim() || undefined,
+        updatedBy: actor.uid,
+        updatedAt: serverTimestamp(),
+      })
+    );
+    bumpSummary(txn, db, pandalId, festivalId, {
+      promisedCashContributions: prev.kind === "money" ? -Number(prev.amount ?? 0) : 0,
+      promisedInKindValue: prev.kind === "money" ? 0 : -Number(prev.estimatedValue ?? 0),
+    });
+    audit(txn, db, pandalId, festivalId, actor.uid, "edited", "contribution", contributionId, {
+      oldValue: { status: prev.status },
+      newValue: { status: "cancelled" },
+      reason: reason?.trim() || "Cancelled",
+    });
   });
-  audit(batch, db, pandalId, festivalId, actor.uid, "edited", "contribution", contributionId, {
-    oldValue: { status: prev.status },
-    newValue: { status: "cancelled" },
-    reason: reason?.trim() || "Cancelled",
-  });
-  await commitWrite(() => batch.commit(), { label: "cancel contribution" });
 }
 
 export async function updatePromisedContribution(
@@ -2207,6 +2249,10 @@ export async function addExpense(
       personalMoneyUsed: input.personalAmount,
       pendingReimbursements: reimbursementRequired ? input.personalAmount : 0,
       expenseCount: 1,
+      // Sponsor-paid money never enters the God Fund, so it is neither cash in
+      // nor a God Fund expense. Tracked on its own so the report can show it
+      // instead of dropping it (GS-039).
+      sponsoredExpenseAmount: sponsoredAmount,
       ...(input.godFundAmount > 0 ? locationBump(paymentMethod, -input.godFundAmount) : {}),
     });
     if (reimbursementRequired && input.personalAmount > 0) {
@@ -2390,6 +2436,7 @@ export async function addAssetPurchase(
     pendingReimbursements: reimbursementRequired ? input.personalAmount : 0,
     expenseCount: 1,
     assetPurchaseAmount: cashAmount,
+    sponsoredExpenseAmount: sponsoredAmount,
     ...(input.godFundAmount > 0 ? locationBump(paymentMethod, -input.godFundAmount) : {}),
   });
   if (reimbursementRequired && input.personalAmount > 0) {
@@ -2485,8 +2532,10 @@ export async function updateExpenseAmounts(
   if (!valid.ok) throw new Error(valid.error);
   const oldGod = Number(current.godFundAmount ?? 0);
   const oldPersonal = Number(current.personalAmount ?? 0);
+  const oldSponsored = Number(current.sponsoredAmount ?? 0);
   const godDelta = input.godFundAmount - oldGod;
   const personalDelta = input.personalAmount - oldPersonal;
+  const sponsoredDelta = sponsoredAmount - oldSponsored;
   const reimbursementRequired = current.reimbursementRequired !== false;
   const wasPurchase = current.expenseType === "asset_purchase" || Boolean(current.assetId);
   const oldCash = oldGod + oldPersonal;
@@ -2517,6 +2566,7 @@ export async function updateExpenseAmounts(
     personalMoneyUsed: personalDelta,
     pendingReimbursements: reimbursementRequired ? personalDelta : 0,
     assetPurchaseAmount: wasPurchase ? newCash - oldCash : 0,
+    sponsoredExpenseAmount: sponsoredDelta,
     ...(godDelta !== 0 ? locationBump(paymentMethod, -godDelta) : {}),
   });
   if (reimbursementRequired && personalDelta !== 0 && paidByMemberId) {
@@ -2745,171 +2795,216 @@ export async function voidFinancialRecord(
   await requireOpenFestival(db, pandalId, festivalId);
 
   const ref = pathRef(db, [...festivalCol(pandalId, festivalId, colName), input.entityId]);
-  const snap = await getDoc(ref);
-  if (!snap.exists()) throw new Error("Record not found.");
-  if (snap.data().voided) throw new Error("This record is already voided.");
-  const data = snap.data();
-  if (input.entityType === "openingFund" && data.sourceType === "permanent_fund") {
-    throw new Error(
-      "Return Permanent Fund money from the Permanent Fund screen. Do not void this opening fund."
-    );
-  }
 
-  // Voiding an expense hands the member's personal money back, which subtracts
-  // from what they are owed. If they have already been paid, that subtraction is
-  // what drives the counter negative (GS-009), so re-read the live figure and
-  // refuse rather than corrupt it.
-  const voidsPersonalMoney =
-    input.entityType === "expense"
-    && Number(data.personalAmount ?? 0) > 0
-    && data.reimbursementRequired !== false
-    && Boolean(data.paidByMemberId);
-  if (voidsPersonalMoney) {
-    const memberSnap = await getDoc(
-      pathRef(db, [
-        ...festivalCol(pandalId, festivalId, "members"),
-        String(data.paidByMemberId),
-      ])
-    );
-    assertReimbursementReversible(
-      Number(data.personalAmount ?? 0),
-      memberSnap.exists() ? Number(memberSnap.data().pendingReimbursement ?? 0) : 0
-    );
-  }
+  // A void is the one operation that puts money *back*, so voiding the same
+  // record twice invents money that never existed. Reading the `voided` flag
+  // outside the write made that reachable: two admins voiding one record both
+  // saw `voided: false` and both reversed it. The read belongs inside the
+  // transaction, so the second writer retries and then fails the guard.
+  // `assertVoidOnline` already gates this path, so requiring a connection here
+  // costs nothing that was not already required.
+  await runTransaction(db, async (txn) => {
+    const snap = await txn.get(ref);
+    if (!snap.exists()) throw new Error("Record not found.");
+    if (snap.data().voided) throw new Error("This record is already voided.");
+    const data = snap.data();
+    if (input.entityType === "openingFund" && data.sourceType === "permanent_fund") {
+      throw new Error(
+        "Return Permanent Fund money from the Permanent Fund screen. Do not void this opening fund."
+      );
+    }
 
-  const batch = writeBatch(db);
-  batch.update(ref, {
-    voided: true,
-    voidReason: input.reason.trim() || "Voided",
-    voidedBy: actor.uid,
-    voidedAt: serverTimestamp(),
-    ...(input.entityType === "reimbursement" ? { status: "voided" } : {}),
-    updatedBy: actor.uid,
-    updatedAt: serverTimestamp(),
-  });
+    // Every read has to happen before the first write in a transaction, so the
+    // member and household lookups are hoisted here rather than sitting inside
+    // the branches that use them.
 
-  if (input.entityType === "openingFund") {
-    const amount = Number(data.amount ?? 0);
-    bumpSummary(batch, db, pandalId, festivalId, {
-      openingFunds: -amount,
-      ...locationBump(
-        typeof data.location === "string" ? data.location : data.sourceType,
-        -amount
-      ),
-    });
-  } else if (input.entityType === "collection") {
-    const amount = Number(data.amount ?? 0);
-    bumpSummary(batch, db, pandalId, festivalId, {
-      chanda: -amount,
-      collectionCount: -1,
-      ...locationBump(
-        typeof data.paymentMethod === "string" ? data.paymentMethod : undefined,
-        -amount
-      ),
-    });
-    if (data.householdId) {
-      const householdRef = pathRef(db, [
-        ...festivalCol(pandalId, festivalId, "households"),
-        String(data.householdId),
-      ]);
-      const household = await getDoc(householdRef);
-      if (household.exists()) {
-        const nextCollected = money(
-          Math.max(0, Number(household.data().collectedAmount ?? 0) - amount)
+    // Voiding an expense hands the member's personal money back, which subtracts
+    // from what they are owed. If they have already been paid, that subtraction is
+    // what drives the counter negative (GS-009), so re-read the live figure and
+    // refuse rather than corrupt it.
+    const voidsPersonalMoney =
+      input.entityType === "expense"
+      && Number(data.personalAmount ?? 0) > 0
+      && data.reimbursementRequired !== false
+      && Boolean(data.paidByMemberId);
+    if (voidsPersonalMoney) {
+      const memberSnap = await txn.get(
+        pathRef(db, [
+          ...festivalCol(pandalId, festivalId, "members"),
+          String(data.paidByMemberId),
+        ])
+      );
+      assertReimbursementReversible(
+        Number(data.personalAmount ?? 0),
+        memberSnap.exists() ? Number(memberSnap.data().pendingReimbursement ?? 0) : 0
+      );
+    }
+
+    const householdRef =
+      input.entityType === "collection" && data.householdId
+        ? pathRef(db, [
+            ...festivalCol(pandalId, festivalId, "households"),
+            String(data.householdId),
+          ])
+        : null;
+    const householdSnap = householdRef ? await txn.get(householdRef) : null;
+
+    // An asset purchase creates a thing the Pandal owns. Voiding only the
+    // expense used to leave that asset in inventory with its acquisition cost
+    // and a link to a voided expense (GS-020) — the Pandal's estimated value
+    // still counted chairs it had no record of buying.
+    //
+    // Refusing is the honest resolution: whether the Pandal still owns the item
+    // is a fact only the committee knows, so they settle it on the Assets
+    // screen first. Same treatment as voiding a Permanent Fund opening entry
+    // above. Once the asset is disposed, lost, or gone, the void proceeds.
+    if (input.entityType === "expense" && data.assetId) {
+      const assetSnap = await txn.get(
+        pathRef(db, [...pandalAssetsCol(pandalId), String(data.assetId)])
+      );
+      const assetStatus = assetSnap.exists() ? String(assetSnap.data().status ?? "") : null;
+      const assetIsLive =
+        assetSnap.exists()
+        && !assetSnap.data().voided
+        && assetStatus !== "disposed"
+        && assetStatus !== "lost";
+      if (assetIsLive) {
+        throw new Error(
+          "This expense bought a Pandal asset. Mark the asset disposed or lost on the Pandal assets screen first, then void this expense."
         );
-        batch.update(householdRef, {
-          // Increment keeps concurrent voids from clobbering each other (GS-038).
-          collectedAmount: increment(-amount),
-          status: deriveHouseholdStatus({
-            expectedAmount: Number(household.data().expectedAmount ?? 0),
-            collectedAmount: nextCollected,
-            forcedStatus: household.data().status as HouseholdStatus | undefined,
-          }),
-          updatedBy: actor.uid,
-          updatedAt: serverTimestamp(),
-        });
       }
     }
-  } else if (input.entityType === "contribution") {
-    if (data.status === "received" && data.kind === "money") {
+
+    txn.update(ref, {
+      voided: true,
+      voidReason: input.reason.trim() || "Voided",
+      voidedBy: actor.uid,
+      voidedAt: serverTimestamp(),
+      ...(input.entityType === "reimbursement" ? { status: "voided" } : {}),
+      updatedBy: actor.uid,
+      updatedAt: serverTimestamp(),
+    });
+
+    if (input.entityType === "openingFund") {
       const amount = Number(data.amount ?? 0);
-      bumpSummary(batch, db, pandalId, festivalId, {
-        committeeContributions: data.isCommitteeContribution ? -amount : 0,
-        otherCashContributions: data.isCommitteeContribution ? 0 : -amount,
+      bumpSummary(txn, db, pandalId, festivalId, {
+        openingFunds: -amount,
+        // Mirror of the create path: `sourceType` is never a location.
+        ...locationBump(
+          typeof data.location === "string" ? data.location : undefined,
+          -amount
+        ),
+      });
+    } else if (input.entityType === "collection") {
+      const amount = Number(data.amount ?? 0);
+      bumpSummary(txn, db, pandalId, festivalId, {
+        chanda: -amount,
+        collectionCount: -1,
         ...locationBump(
           typeof data.paymentMethod === "string" ? data.paymentMethod : undefined,
           -amount
         ),
       });
-      if (data.isCommitteeContribution && data.contributorMemberId) {
-        batch.set(
+      if (householdRef && householdSnap?.exists()) {
+        const nextCollected = money(
+          Math.max(0, Number(householdSnap.data().collectedAmount ?? 0) - amount)
+        );
+        txn.update(householdRef, {
+          // Increment keeps concurrent voids from clobbering each other (GS-038).
+          collectedAmount: increment(-amount),
+          status: deriveHouseholdStatus({
+            expectedAmount: Number(householdSnap.data().expectedAmount ?? 0),
+            collectedAmount: nextCollected,
+            forcedStatus: householdSnap.data().status as HouseholdStatus | undefined,
+          }),
+          updatedBy: actor.uid,
+          updatedAt: serverTimestamp(),
+        });
+      }
+    } else if (input.entityType === "contribution") {
+      if (data.status === "received" && data.kind === "money") {
+        const amount = Number(data.amount ?? 0);
+        bumpSummary(txn, db, pandalId, festivalId, {
+          committeeContributions: data.isCommitteeContribution ? -amount : 0,
+          otherCashContributions: data.isCommitteeContribution ? 0 : -amount,
+          ...locationBump(
+            typeof data.paymentMethod === "string" ? data.paymentMethod : undefined,
+            -amount
+          ),
+        });
+        if (data.isCommitteeContribution && data.contributorMemberId) {
+          txn.set(
+            pathRef(db, [
+              ...festivalCol(pandalId, festivalId, "members"),
+              String(data.contributorMemberId),
+            ]),
+            { contributionPaid: increment(-amount) },
+            { merge: true }
+          );
+        }
+      } else if (data.status === "received" && data.kind !== "money") {
+        const estimatedValue = Number(data.estimatedValue ?? 0);
+        bumpSummary(txn, db, pandalId, festivalId, {
+          inKindValue: data.kind === "sponsorship" ? 0 : -estimatedValue,
+          sponsoredValue: data.kind === "sponsorship" ? -estimatedValue : 0,
+        });
+      }
+    } else if (input.entityType === "expense") {
+      const godFundAmount = Number(data.godFundAmount ?? 0);
+      const personalAmount = Number(data.personalAmount ?? 0);
+      const wasPurchase = data.expenseType === "asset_purchase" || Boolean(data.assetId);
+      bumpSummary(txn, db, pandalId, festivalId, {
+        godFundExpenses: -godFundAmount,
+        personalMoneyUsed: -personalAmount,
+        pendingReimbursements: data.reimbursementRequired === false ? 0 : -personalAmount,
+        expenseCount: -1,
+        assetPurchaseAmount: wasPurchase ? -(godFundAmount + personalAmount) : 0,
+        sponsoredExpenseAmount: -Number(data.sponsoredAmount ?? 0),
+        ...(godFundAmount > 0
+          ? locationBump(
+              typeof data.paymentMethod === "string" ? data.paymentMethod : undefined,
+              godFundAmount
+            )
+          : {}),
+      });
+      if (personalAmount > 0 && data.reimbursementRequired !== false && data.paidByMemberId) {
+        txn.set(
           pathRef(db, [
             ...festivalCol(pandalId, festivalId, "members"),
-            String(data.contributorMemberId),
+            String(data.paidByMemberId),
           ]),
-          { contributionPaid: increment(-amount) },
+          {
+            personalExpenses: increment(-personalAmount),
+            pendingReimbursement: increment(-personalAmount),
+          },
           { merge: true }
         );
       }
-    } else if (data.status === "received" && data.kind !== "money") {
-      const estimatedValue = Number(data.estimatedValue ?? 0);
-      bumpSummary(batch, db, pandalId, festivalId, {
-        inKindValue: data.kind === "sponsorship" ? 0 : -estimatedValue,
-        sponsoredValue: data.kind === "sponsorship" ? -estimatedValue : 0,
+    } else if (input.entityType === "reimbursement") {
+      const amount = Number(data.amount ?? 0);
+      bumpSummary(txn, db, pandalId, festivalId, {
+        reimbursements: -amount,
+        pendingReimbursements: amount,
+        ...locationBump(
+          typeof data.paymentMethod === "string" ? data.paymentMethod : undefined,
+          amount
+        ),
       });
-    }
-  } else if (input.entityType === "expense") {
-    const godFundAmount = Number(data.godFundAmount ?? 0);
-    const personalAmount = Number(data.personalAmount ?? 0);
-    const wasPurchase = data.expenseType === "asset_purchase" || Boolean(data.assetId);
-    bumpSummary(batch, db, pandalId, festivalId, {
-      godFundExpenses: -godFundAmount,
-      personalMoneyUsed: -personalAmount,
-    pendingReimbursements: data.reimbursementRequired === false ? 0 : -personalAmount,
-      expenseCount: -1,
-      assetPurchaseAmount: wasPurchase ? -(godFundAmount + personalAmount) : 0,
-      ...(godFundAmount > 0
-        ? locationBump(
-            typeof data.paymentMethod === "string" ? data.paymentMethod : undefined,
-            godFundAmount
-          )
-        : {}),
-    });
-    if (personalAmount > 0 && data.reimbursementRequired !== false && data.paidByMemberId) {
-      batch.set(
-        pathRef(db, [...festivalCol(pandalId, festivalId, "members"), String(data.paidByMemberId)]),
+      txn.set(
+        pathRef(db, [...festivalCol(pandalId, festivalId, "members"), String(data.memberId)]),
         {
-          personalExpenses: increment(-personalAmount),
-          pendingReimbursement: increment(-personalAmount),
+          reimbursed: increment(-amount),
+          pendingReimbursement: increment(amount),
         },
         { merge: true }
       );
     }
-  } else if (input.entityType === "reimbursement") {
-    const amount = Number(data.amount ?? 0);
-    bumpSummary(batch, db, pandalId, festivalId, {
-      reimbursements: -amount,
-      pendingReimbursements: amount,
-      ...locationBump(
-        typeof data.paymentMethod === "string" ? data.paymentMethod : undefined,
-        amount
-      ),
-    });
-    batch.set(
-      pathRef(db, [...festivalCol(pandalId, festivalId, "members"), String(data.memberId)]),
-      {
-        reimbursed: increment(-amount),
-        pendingReimbursement: increment(amount),
-      },
-      { merge: true }
-    );
-  }
 
-  audit(batch, db, pandalId, festivalId, actor.uid, "voided", input.entityType, input.entityId, {
-    oldValue: data,
-    reason: input.reason,
+    audit(txn, db, pandalId, festivalId, actor.uid, "voided", input.entityType, input.entityId, {
+      oldValue: data,
+      reason: input.reason,
+    });
   });
-  await commitWrite(() => batch.commit(), { label: "void" });
 }
 
 export async function closeFestival(
@@ -3079,10 +3174,10 @@ export async function recomputeFestivalSummary(
 
   for (const docSnap of opening.filter(notVoided)) {
     const data = docSnap.data();
-    addLoc(
-      typeof data.location === "string" ? data.location : data.sourceType,
-      Number(data.amount ?? 0)
-    );
+    // Opening funds written before locations existed carry no `location`, so
+    // they resolve to "other" and stay unclassified. Never fall back to
+    // `sourceType`: it is a provenance, not a place money sits.
+    addLoc(data.location, Number(data.amount ?? 0));
   }
   for (const docSnap of collections.filter(notVoided)) {
     const data = docSnap.data();
@@ -3128,6 +3223,9 @@ export async function recomputeFestivalSummary(
         (docSnap) =>
           Number(docSnap.data().godFundAmount ?? 0) + Number(docSnap.data().personalAmount ?? 0)
       ),
+    sponsoredExpenseAmounts: expenses
+      .filter(notVoided)
+      .map((docSnap) => Number(docSnap.data().sponsoredAmount ?? 0)),
     inKindValues: contributions
       .filter((docSnap) => received(docSnap) && docSnap.data().kind !== "money" && docSnap.data().kind !== "sponsorship")
       .map((docSnap) => Number(docSnap.data().estimatedValue ?? 0)),
@@ -3146,7 +3244,11 @@ export async function recomputeFestivalSummary(
       .filter((row) => notVoided(row) && row.data().status === "promised" && row.data().kind !== "money")
       .reduce((total, row) => total + Number(row.data().estimatedValue ?? 0), 0)
   );
+  // Monotonic counters are not derivable from the ledger, and this write
+  // replaces the whole document. Dropping either one restarts numbering and
+  // duplicates receipt/contribution numbers already handed to donors (GS-077).
   summary.nextContributionNumber = Number(beforeSnap.data()?.nextContributionNumber ?? 0);
+  summary.nextReceiptNumber = Number(beforeSnap.data()?.nextReceiptNumber ?? 0);
   summary.transferredToPermanentFund = fundTransfers
     .filter((docSnap) => docSnap.data().direction === "to_permanent")
     .reduce((sum, docSnap) => sum + Number(docSnap.data().amount ?? 0), 0);

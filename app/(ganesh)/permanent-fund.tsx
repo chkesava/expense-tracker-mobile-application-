@@ -330,6 +330,7 @@ function FundActions({
     description?: string;
   }) => Promise<unknown>;
   onTransferIn: (input: {
+    festivalId?: string;
     amount: number;
     location: PermanentFundLocation;
     festivalName?: string;
@@ -386,6 +387,9 @@ function FundActions({
                   description,
                 })
               : onTransferIn({
+                  // Same festival the transfer-out branch above targets, so
+                  // money returns from where it went (GS-023).
+                  festivalId: openFestivalId ?? undefined,
                   amount: parsedAmount,
                   location,
                   festivalName: openFestivalName,

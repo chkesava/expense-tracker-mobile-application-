@@ -155,12 +155,14 @@ export const LEDGER_VOID_OFFLINE_ERROR =
 export const REIMBURSEMENT_OFFLINE_ERROR =
   "Record a reimbursement when you are online, so the amount owed is checked against the live ledger.";
 
+export const PROMISE_CANCEL_OFFLINE_ERROR =
+  "Cancel a promise when you are online, so it is withdrawn from the promised total once.";
+
 /**
- * The three gates below front write paths that run inside a Firestore
- * transaction, because a balance has to be read and enforced with nothing
- * committing in between. Transactions need a server, so refuse offline with a
- * reason rather than letting the save hang or queueing a write that can never
- * commit.
+ * The gates below front write paths that run inside a Firestore transaction,
+ * because a balance has to be read and enforced with nothing committing in
+ * between. Transactions need a server, so refuse offline with a reason rather
+ * than letting the save hang or queueing a write that can never commit.
  *
  * God Fund spending is gated only when it actually spends: an expense paid
  * entirely from personal money or by a sponsor touches no balance, stays a
@@ -176,4 +178,8 @@ export function assertVoidOnline(isOnline: boolean): void {
 
 export function assertReimbursementOnline(isOnline: boolean): void {
   if (!isOnline) throw new Error(REIMBURSEMENT_OFFLINE_ERROR);
+}
+
+export function assertPromiseCancelOnline(isOnline: boolean): void {
+  if (!isOnline) throw new Error(PROMISE_CANCEL_OFFLINE_ERROR);
 }

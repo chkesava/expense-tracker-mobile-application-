@@ -1019,7 +1019,8 @@ service cloud.firestore {
                 'otherCashContributions', 'godFundExpenses', 'reimbursements',
                 'personalMoneyUsed', 'pendingReimbursements', 'inKindValue',
                 'sponsoredValue', 'collectionCount', 'expenseCount',
-                'assetPurchaseAmount', 'transferredToPermanentFund',
+                'assetPurchaseAmount', 'sponsoredExpenseAmount',
+                'transferredToPermanentFund',
                 'receivedFromPermanentFund', 'cash', 'upi', 'bank', 'other',
                 'nextReceiptNumber',
                 'promisedCashContributions', 'promisedInKindValue',
@@ -1039,6 +1040,7 @@ service cloud.firestore {
               && okMoney(d, 'collectionCount')
               && okMoney(d, 'expenseCount')
               && okMoney(d, 'assetPurchaseAmount')
+              && okMoney(d, 'sponsoredExpenseAmount')
               && okMoney(d, 'transferredToPermanentFund')
               && okMoney(d, 'receivedFromPermanentFund')
               && okSignedMoney(d, 'cash')

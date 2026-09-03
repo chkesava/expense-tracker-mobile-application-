@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 import {
+  KeyboardAvoidingView,
+  Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -88,7 +90,19 @@ export function GaneshScreen({
   };
 
   return (
-    <View style={[styles.fill, { backgroundColor: theme.colors.background }, widthStyle, style]}>
+    <KeyboardAvoidingView
+      // Every Ganesh money form — expense, collection, contribution — renders
+      // inside this shell, so the amount field and the save button used to sit
+      // behind the keyboard on a small phone (GS-033). Fixing it here fixes it
+      // once, for all of them.
+      //
+      // iOS only, matching `components/common/Modal.tsx`: the Android activity
+      // is `windowSoftInputMode="adjustResize"`, so the ScrollView already
+      // shrinks and scrolls the focused input into view. Adding padding on top
+      // of that double-counts the keyboard.
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      style={[styles.fill, { backgroundColor: theme.colors.background }, widthStyle, style]}
+    >
       <GaneshStatusBarGap />
       {scroll ? (
         <ScrollView
@@ -116,7 +130,7 @@ export function GaneshScreen({
         <View style={[styles.fill, content, contentContainerStyle]}>{children}</View>
       )}
       {overlay}
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

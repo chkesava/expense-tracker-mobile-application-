@@ -15,6 +15,7 @@ import { useGaneshCategories } from "@/hooks/useGaneshCategories";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { useFestivalWriteLock } from "@/hooks/useFestivalWriteLock";
 import { useGaneshStorage } from "@/hooks/useGaneshStorage";
+import { useGaneshSummary } from "@/hooks/useGaneshSummary";
 import { useGaneshWrites } from "@/hooks/useGaneshWrites";
 import { usePandalMembers } from "@/hooks/usePandalMembers";
 import { usePandalSponsors } from "@/hooks/usePandalSponsors";
@@ -33,6 +34,12 @@ import {
 import { todayDateInput } from "@/shared/utils/ganeshIdentity";
 import { newId } from "@/lib/id";
 import { CLOSED_FESTIVAL_WRITE_MESSAGE } from "@/shared/utils/ganeshFestivalStatus";
+import {
+  availableGodFund,
+  godFundSpendableAt,
+  parseGaneshSummary,
+  unclassifiedGodFund,
+} from "@/shared/utils/ganeshMath";
 import { formatInr } from "@/shared/utils/ganeshMoney";
 import { purposeLabelOf } from "@/shared/utils/ganeshSponsors";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -105,6 +112,26 @@ export default function AddExpenseScreen() {
     { id: "split", label: "Split" },
   ];
   if (canLinkSponsor) fundingOptions.push({ id: "sponsored", label: "Sponsored" });
+
+  // What each location can actually pay out, so "Paid from" is a choice made
+  // with the balance in view instead of a guess the save button rejects.
+  const { summary: rawSummary } = useGaneshSummary(pandalId, festivalId);
+  const godFundLedger = parseGaneshSummary(rawSummary);
+  const methodOptions = METHOD_OPTIONS.map((option) => ({
+    id: option.id,
+    label: `${option.label} · ${formatInr(godFundSpendableAt(option.id, godFundLedger))}`,
+  }));
+  // Only steer away from empty locations while some location has money. On a
+  // festival with nothing in it — or one whose summary is still loading — every
+  // chip would otherwise be dead and the total-balance error is the honest one.
+  const godFundAvailable = availableGodFund(godFundLedger);
+  const unclassifiedFund = unclassifiedGodFund(godFundLedger);
+  const emptyMethods =
+    godFundAvailable > 0
+      ? METHOD_OPTIONS.filter(
+          (option) => godFundSpendableAt(option.id, godFundLedger) <= 0
+        ).map((option) => option.id)
+      : [];
 
   const resolvedFunding = () => {
     const totalAmount = Number(total);
@@ -232,15 +259,17 @@ export default function AddExpenseScreen() {
           label="Paid from"
           layout="wrap"
           value={paymentMethod}
-          options={METHOD_OPTIONS}
+          options={methodOptions}
+          disabledIds={emptyMethods}
           onChange={setPaymentMethod}
           disabled={ledgerSaved}
         />
       ) : null}
       {funding === "god" || (funding === "split" && Number(godFund || 0) > 0) ? (
         <Text style={{ color: theme.colors.mutedForeground }}>
-          Which Cash, UPI, or Bank this God Fund spend leaves. Separate from who funded the
-          expense.
+          {unclassifiedFund > 0
+            ? `Which Cash, UPI, or Bank this God Fund spend leaves. Separate from who funded the expense. ${formatInr(unclassifiedFund)} was recorded before the Pandal started splitting funds by location, so it can be paid out from any of these.`
+            : "Which Cash, UPI, or Bank this God Fund spend leaves. Separate from who funded the expense."}
         </Text>
       ) : null}
       {!canLinkSponsor ? (

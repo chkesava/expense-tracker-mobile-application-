@@ -18,14 +18,13 @@ import {
   availableGodFund,
   effectiveCommitteeTarget,
   festivalCashSpent,
-  festivalLocationTotal,
-  festivalLocationsOf,
   locationInvariantHolds,
   money,
   parseGaneshSummary,
   parsePermanentFund,
   repairFestivalLocations,
   totalCashIn,
+  unclassifiedGodFund,
   type FestivalLocations,
 } from "@/shared/utils/ganeshMath";
 import {
@@ -80,6 +79,11 @@ export type FinancialOverview = {
   moneyOut: number;
   locations: FestivalLocations;
   locationInvariantHolds: boolean;
+  /**
+   * God Fund whose Cash/UPI/Bank location was never recorded. Spendable from
+   * any location; shown under "Other" until a recalculate classifies it.
+   */
+  unclassifiedGodFund: number;
   permanentFund: PermanentFundSummary;
   moneyInLines: MoneyLine[];
   moneyOutLines: MoneyLine[];
@@ -233,7 +237,7 @@ export function buildFinancialOverview(input: FinancialOverviewInput): Financial
     members.length > 0 ? memberPendingTotal : money(summary.pendingReimbursements ?? 0);
 
   const locations = repairFestivalLocations(summary);
-  const diskLocations = festivalLocationsOf(summary);
+  const unclassified = unclassifiedGodFund(summary);
 
   return {
     summary,
@@ -241,8 +245,12 @@ export function buildFinancialOverview(input: FinancialOverviewInput): Financial
     moneyIn,
     moneyOut,
     locations,
-    locationInvariantHolds:
-      locationInvariantHolds(summary) || festivalLocationTotal(diskLocations) === 0,
+    // Every bucket sitting at zero on a festival holding money used to count as
+    // healthy here, which is exactly the unbackfilled state that blocked spends
+    // while claiming nothing was wrong. Unclassified money is now reported, not
+    // excused.
+    locationInvariantHolds: locationInvariantHolds(summary),
+    unclassifiedGodFund: unclassified,
     permanentFund,
     moneyInLines,
     moneyOutLines,
