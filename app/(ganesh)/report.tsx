@@ -1,4 +1,5 @@
-import { Text } from "react-native";
+import { useState } from "react";
+import { Alert, Text } from "react-native";
 import { useRouter } from "expo-router";
 import { FileBarChart } from "lucide-react-native";
 
@@ -9,6 +10,7 @@ import {
   MetaLabel,
   Money,
   Section,
+  ListStateView,
   SectionPair,
   StatStrip,
   StatTile,
@@ -25,6 +27,8 @@ import { usePandalSponsors } from "@/hooks/usePandalSponsors";
 import { usePandals } from "@/hooks/usePandals";
 import { usePermanentFund } from "@/hooks/usePermanentFund";
 import { useSponsorships } from "@/hooks/useSponsorships";
+import { friendlyErrorMessage, logError } from "@/lib/errors";
+import { toast } from "@/lib/toast";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import { summarizeAssets } from "@/shared/utils/ganeshAssets";
 import { buildFinancialOverview } from "@/shared/utils/ganeshFinancialOverview";
@@ -56,7 +60,12 @@ export default function FestivalReportScreen() {
   const { can } = useGaneshPermissions();
   const pandal = pandals.find((item) => item.id === pandalId);
   const festival = festivals.find((item) => item.id === festivalId);
-  const { summary } = useGaneshSummary(pandalId, festivalId);
+  const {
+    summary,
+    loading: summaryLoading,
+    error: summaryError,
+    retry: retrySummary,
+  } = useGaneshSummary(pandalId, festivalId);
   const { contributions } = useContributions(pandalId, festivalId);
   const { sponsorships } = useSponsorships(pandalId, festivalId);
   const { sponsors } = usePandalSponsors(pandalId);
@@ -75,6 +84,37 @@ export default function FestivalReportScreen() {
   const assetSummary = summarizeAssets(assets);
   const canRecalculate = can("festival.update");
 
+  const [recalculating, setRecalculating] = useState(false);
+
+  // This rewrites every total on the festival from the ledger, and it can
+  // legitimately refuse — `recomputeFestivalSummary` rejects if the summary
+  // changed while it was reading, so a concurrent write means "try again".
+  // Fired with `void` and no catch, that refusal was completely invisible: the
+  // committee pressed the button, saw nothing, and had no idea whether their
+  // totals had been rebuilt or not (GS-031).
+  const recalculate = () => {
+    Alert.alert(
+      "Recalculate from ledger?",
+      "Every total on this festival is rebuilt from its collections, expenses and contributions. Nothing in the ledger changes.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Recalculate",
+          onPress: () => {
+            setRecalculating(true);
+            writes
+              .recomputeFestivalSummary()
+              .catch((caught) => {
+                logError("ganesh.report.recompute", caught);
+                toast.error(friendlyErrorMessage(caught, "Could not recalculate the totals."));
+              })
+              .finally(() => setRecalculating(false));
+          },
+        },
+      ]
+    );
+  };
+
   return (
     <GaneshScreen>
       <GaneshHeader
@@ -88,6 +128,18 @@ export default function FestivalReportScreen() {
         Read this aloud at a meeting: where the money came from, where it went, and what the
         Pandal now owns. Promises are not cash.
       </Text>
+
+      {summaryLoading ? (
+        <ListStateView loading title="Loading the festival totals" skeletonCount={5} />
+      ) : summaryError ? (
+        <ListStateView
+          error={summaryError}
+          onRetry={retrySummary}
+          title="We couldn't load the festival totals."
+          description="Don't read this report out until it loads — every figure below would show zero."
+        />
+      ) : (
+        <>
 
       <SectionPair>
         <Section title="Where money came from" subtitle="Money that entered this festival">
@@ -241,8 +293,11 @@ export default function FestivalReportScreen() {
         )}
       </Section>
 
+        </>
+      )}
+
       {canRecalculate ? (
-        <Button variant="outline" onPress={() => void writes.recomputeFestivalSummary()}>
+        <Button variant="outline" loading={recalculating} onPress={recalculate}>
           Recalculate from ledger
         </Button>
       ) : null}

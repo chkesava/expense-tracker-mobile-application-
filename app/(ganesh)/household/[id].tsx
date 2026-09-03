@@ -51,6 +51,7 @@ export default function HouseholdDetailScreen() {
   const history = collections.filter((row) => row.householdId === id && !row.voided);
   const [expected, setExpected] = useState("");
   const [voidingId, setVoidingId] = useState<string | null>(null);
+  const [savingExpected, setSavingExpected] = useState(false);
 
   useEffect(() => {
     if (!household) return;
@@ -138,10 +139,24 @@ export default function HouseholdDetailScreen() {
             keyboardType="numeric"
           />
           <Button
+            loading={savingExpected}
             onPress={() => {
-              void writes.updateHousehold(household.id, {
-                expectedAmount: Number(expected),
-              });
+              // An empty field parses to 0, and deriveHouseholdStatus turns an
+              // expected of 0 with anything collected into "paid" — the same
+              // wipe GS-026 described, reachable by clearing the box.
+              const next = Number(expected);
+              if (expected.trim() === "" || !Number.isFinite(next) || next < 0) {
+                toast.error("Enter the expected amount as 0 or more.");
+                return;
+              }
+              setSavingExpected(true);
+              writes
+                .updateHousehold(household.id, { expectedAmount: next })
+                .catch((caught) => {
+                  logError("ganesh.household.expected", caught);
+                  toast.error(friendlyErrorMessage(caught, "Could not save the expected amount."));
+                })
+                .finally(() => setSavingExpected(false));
             }}
           >
             Save expected
@@ -152,7 +167,10 @@ export default function HouseholdDetailScreen() {
             value={household.status}
             options={STATUS_OPTIONS}
             onChange={(status) => {
-              void writes.updateHousehold(household.id, { status });
+              writes.updateHousehold(household.id, { status }).catch((caught) => {
+                logError("ganesh.household.status", caught);
+                toast.error(friendlyErrorMessage(caught, "Could not change the status."));
+              });
             }}
           />
         </>

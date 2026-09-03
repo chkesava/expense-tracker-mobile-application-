@@ -41,6 +41,13 @@ export default function AdminPandalSettingsScreen() {
   const description = _description ?? pandal?.description ?? "";
   const contactPhone = _contactPhone ?? pandal?.contactPhone ?? "";
 
+  const setJoinMode = (mode: "approval" | "open") => {
+    writes.updatePandalJoinMode(mode).catch((caught) => {
+      logError("ganesh.admin.joinMode", caught);
+      toast.error(friendlyErrorMessage(caught, "Could not change who can join."));
+    });
+  };
+
   return (
     <GaneshScreen contentContainerStyle={ganeshStackLayout.bleed}>
       <FestivalStackHero
@@ -108,14 +115,14 @@ export default function AdminPandalSettingsScreen() {
               <Button
                 variant={joinMode === "approval" ? "primary" : "outline"}
                 disabled={!canUpdate}
-                onPress={() => void writes.updatePandalJoinMode("approval")}
+                onPress={() => setJoinMode("approval")}
               >
                 Approval
               </Button>
               <Button
                 variant={joinMode === "open" ? "primary" : "outline"}
                 disabled={!canUpdate}
-                onPress={() => void writes.updatePandalJoinMode("open")}
+                onPress={() => setJoinMode("open")}
               >
                 Open
               </Button>

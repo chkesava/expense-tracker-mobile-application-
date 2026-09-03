@@ -114,11 +114,16 @@ export default function AddExpenseScreen() {
 
   // What each location can actually pay out, so "Paid from" is a choice made
   // with the balance in view instead of a guess the save button rejects.
-  const { summary: rawSummary } = useGaneshSummary(pandalId, festivalId);
+  const { summary: rawSummary, loading: summaryLoading } = useGaneshSummary(pandalId, festivalId);
   const godFundLedger = parseGaneshSummary(rawSummary);
+  // While the summary is loading every balance reads 0, and a chip labelled
+  // "Cash · ₹0" states something the app does not know yet — the same false
+  // certainty as GS-032. Show the plain label until the figures are real.
   const methodOptions = METHOD_OPTIONS.map((option) => ({
     id: option.id,
-    label: `${option.label} · ${formatInr(godFundSpendableAt(option.id, godFundLedger))}`,
+    label: summaryLoading
+      ? option.label
+      : `${option.label} · ${formatInr(godFundSpendableAt(option.id, godFundLedger))}`,
   }));
   // Only steer away from empty locations while some location has money. On a
   // festival with nothing in it — or one whose summary is still loading — every
@@ -126,7 +131,7 @@ export default function AddExpenseScreen() {
   const godFundAvailable = availableGodFund(godFundLedger);
   const unclassifiedFund = unclassifiedGodFund(godFundLedger);
   const emptyMethods =
-    godFundAvailable > 0
+    !summaryLoading && godFundAvailable > 0
       ? METHOD_OPTIONS.filter(
           (option) => godFundSpendableAt(option.id, godFundLedger) <= 0
         ).map((option) => option.id)
@@ -266,7 +271,7 @@ export default function AddExpenseScreen() {
       ) : null}
       {funding === "god" || (funding === "split" && Number(godFund || 0) > 0) ? (
         <Text style={{ color: theme.colors.mutedForeground }}>
-          {unclassifiedFund > 0
+          {!summaryLoading && unclassifiedFund > 0
             ? `Which Cash, UPI, or Bank this God Fund spend leaves. Separate from who funded the expense. ${formatInr(unclassifiedFund)} was recorded before the Pandal started splitting funds by location, so it can be paid out from any of these.`
             : "Which Cash, UPI, or Bank this God Fund spend leaves. Separate from who funded the expense."}
         </Text>

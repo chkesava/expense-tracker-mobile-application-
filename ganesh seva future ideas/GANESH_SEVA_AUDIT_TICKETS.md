@@ -2386,6 +2386,7 @@ Related to GS-035, GS-029, GS-057.
 ## GS-031 — Nine write paths have no error handling at all
 
 **Severity:** HIGH
+**Status:** FIXED 2026-09-03
 **Category:** UX
 **Feature:** Error handling
 **Status:** OPEN
@@ -2433,6 +2434,7 @@ Related to GS-029, GS-030, GS-027, GS-025.
 ## GS-032 — Ten financial screens render ₹0 with no loading or error state
 
 **Severity:** HIGH
+**Status:** MOSTLY FIXED 2026-09-03
 **Category:** UX
 **Feature:** Reports
 **Status:** OPEN
@@ -5539,3 +5541,57 @@ Recorded honestly — these were not confirmed and must not be treated as findin
 *End of audit. 103 tickets. No application code was modified.*
 
 
+
+
+---
+
+## GS-031 / GS-032 resolution notes (2026-09-03)
+
+### GS-031 - all eight closed
+
+The ticket said nine; one (the Pandal tab's "Save targets") was closed with
+GS-025. The remaining eight were verified live and each now logs through
+`lib/errors.ts` and tells the user what failed:
+
+| Call site | Why it mattered |
+| --- | --- |
+| `admin/settings.tsx` join mode x2 | Who may join the Pandal is a security setting; a silent failure leaves the admin believing open join is off when it is not |
+| `household/[id].tsx` expected amount | Also gained the empty-field guard - an empty box parses to 0, and `deriveHouseholdStatus` turns expected 0 with anything collected into "paid", the same wipe GS-026 described |
+| `household/[id].tsx` status | Sticky visit statuses silently failing to save |
+| `member/[id].tsx` suspend / restore / remove | The worst of the set: an admin believes a person's access is gone when it is not |
+| `report.tsx` recalculate | Rewrites every total on the festival, and legitimately refuses when the summary changed mid-read. That refusal was invisible. Now confirms first and reports the outcome |
+
+Since GS-029 made the write wrappers `async`, these `void` calls had become
+unhandled promise rejections rather than merely unreported ones.
+
+### GS-032 - fixed where a false zero is presented as fact
+
+Eight of the ten screens ignored `loading` and `error`. Fixed by harm rather
+than uniformly, using the `ListStateView` pattern `funds.tsx` already
+established:
+
+- **`report.tsx`** - the whole report is gated. This is read aloud at meetings,
+  so zeros meaning "not loaded" are the most damaging false certainty in the
+  app. The error state says explicitly not to read the report out yet.
+- **`(tabs)/index.tsx`** - the funds card is gated; seva and quick actions stay
+  usable while totals load.
+- **`add-expense.tsx`** - a regression introduced by the God Fund location work
+  in this same session: the "Paid from" chips read balances from the summary, so
+  a cold open labelled every one "Cash / UPI / Bank / Other - Rs 0". Now shows
+  the plain label until the figures are real, and the empty-location steering
+  waits for load.
+- **`admin/reports.tsx`** - totals gated.
+- **`(tabs)/committee.tsx`** - one stat, so it shows a dash rather than zero.
+
+**Deliberately not changed:** `components/ganesh/funds/CollectionsList.tsx` and
+`ExpensesList.tsx` each show one summary-derived figure in a list header, where
+a momentary zero is materially less harmful than a report that states the Pandal
+holds nothing; and `admin/index.tsx`, whose loading gate is **GS-034**'s subject
+and belongs with that ticket rather than being half-changed here. Status is
+therefore MOSTLY FIXED, not FIXED.
+
+### GS-015 - already fixed, verified 2026-09-03
+
+Both holes are guarded: `adminCountDeltaBounded()` pins the delta to +/-1 with a
+floor of 1 on pandal update, and `createKeepsAdminCount()` covers the member
+create bypass. The ticket had been left at PARTIAL.

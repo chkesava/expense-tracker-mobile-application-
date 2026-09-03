@@ -17,6 +17,7 @@ import { CommandHero, PandalOverview, TodaySevaPanel } from "@/components/ganesh
 import {
   DataRow,
   GaneshEmptyState,
+  ListStateView,
   MetaLabel,
   Money,
   RowGlyph,
@@ -66,7 +67,12 @@ export default function GaneshHomeScreen() {
   const { pandals } = usePandals();
   const { festivals } = useFestivals(pandalId);
   const { members } = usePandalMembers(pandalId);
-  const { summary } = useGaneshSummary(pandalId, festivalId);
+  const {
+    summary,
+    loading: summaryLoading,
+    error: summaryError,
+    retry: retrySummary,
+  } = useGaneshSummary(pandalId, festivalId);
   const { activity, loading: activityLoading } = useGaneshActivity(pandalId, festivalId);
   const { contributions } = useContributions(pandalId, festivalId);
   const { seva, loading: sevaLoading, retry: retrySeva } = useFestivalSeva(pandalId, festivalId);
@@ -226,6 +232,16 @@ export default function GaneshHomeScreen() {
           </Section>
         ) : null}
 
+        {summaryLoading ? (
+          <ListStateView loading title="Loading Pandal funds" skeletonCount={3} />
+        ) : summaryError ? (
+          <ListStateView
+            error={summaryError}
+            onRetry={retrySummary}
+            title="We couldn't load the Pandal's funds."
+            description="Amounts are hidden rather than shown as zero."
+          />
+        ) : (
         <PandalOverview
           available={godFund}
           received={moneyIn}
@@ -234,6 +250,7 @@ export default function GaneshHomeScreen() {
           expenseCount={summary.expenseCount}
           onDetails={() => push("/(ganesh)/(tabs)/funds" as never)}
         />
+        )}
         <GaneshQuickActions disabled={closed} />
 
         {closed && can("festival.create") ? (

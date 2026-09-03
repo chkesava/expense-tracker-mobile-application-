@@ -100,7 +100,7 @@ export default function CommitteeScreen() {
   const { pandalId, festivalId } = useGaneshSession();
   const { festivals } = useFestivals(pandalId);
   const festival = festivals.find((item) => item.id === festivalId);
-  const { summary } = useGaneshSummary(pandalId, festivalId);
+  const { summary, loading: summaryLoading } = useGaneshSummary(pandalId, festivalId);
   const { members: pandalMembers, loading, error } = usePandalMembers(pandalId);
   const { members: festivalMembers } = useFestivalMembers(pandalId, festivalId);
   const { can } = useGaneshPermissions();
@@ -199,13 +199,18 @@ export default function CommitteeScreen() {
             </Text>
           }
         >
-          <Money
-            value={summary.committeeContributions}
-            size="primary"
-            tone="positive"
-            numberOfLines={1}
-            adjustsFontSizeToFit
-          />
+          {/* A dash, not zero, until the figure is real (GS-032). */}
+          {summaryLoading ? (
+            <MetaLabel>—</MetaLabel>
+          ) : (
+            <Money
+              value={summary.committeeContributions}
+              size="primary"
+              tone="positive"
+              numberOfLines={1}
+              adjustsFontSizeToFit
+            />
+          )}
         </StatTile>
         <StatTile
           label="Paid"

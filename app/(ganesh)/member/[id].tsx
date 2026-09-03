@@ -53,6 +53,7 @@ import {
   ganeshStatusLabel,
   getEffectivePermissions,
 } from "@/shared/utils/ganeshPermissions";
+import type { GaneshMemberStatus } from "@/shared/types/ganesh";
 import { useTheme } from "@/theme/ThemeProvider";
 
 export default function MemberDetailScreen() {
@@ -204,6 +205,14 @@ export default function MemberDetailScreen() {
       return;
     }
     save();
+  };
+
+  const setMemberStatus = (status: GaneshMemberStatus, failure: string) => {
+    if (!id) return;
+    writes.updatePandalMember(id, { status }).catch((caught) => {
+      logError("ganesh.member.status", caught);
+      toast.error(friendlyErrorMessage(caught, failure));
+    });
   };
 
   const toggleAdmin = () => {
@@ -614,7 +623,7 @@ export default function MemberDetailScreen() {
                           {
                             text: "Suspend",
                             onPress: () =>
-                              void writes.updatePandalMember(id!, { status: "suspended" }),
+                              setMemberStatus("suspended", "Could not suspend this member."),
                           },
                         ]
                       );
@@ -626,7 +635,7 @@ export default function MemberDetailScreen() {
                   <Button
                     variant="outline"
                     style={styles.actionButton}
-                    onPress={() => void writes.updatePandalMember(id!, { status: "active" })}
+                    onPress={() => setMemberStatus("active", "Could not restore this member.")}
                   >
                     Restore
                   </Button>
@@ -646,7 +655,7 @@ export default function MemberDetailScreen() {
                             text: "Remove",
                             style: "destructive",
                             onPress: () =>
-                              void writes.updatePandalMember(id!, { status: "removed" }),
+                              setMemberStatus("removed", "Could not remove this member."),
                           },
                         ]
                       );

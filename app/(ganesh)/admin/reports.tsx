@@ -7,6 +7,7 @@ import { ganeshStackLayout } from "@/components/ganesh/chrome/stackLayout";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import {
   DataRow,
+  ListStateView,
   Money,
   Section,
   SectionPair,
@@ -37,7 +38,12 @@ export default function AdminReportsScreen() {
   const { push, back } = useRouter();
   const { pandalId, festivalId } = useGaneshSession();
   const { festivals } = useFestivals(pandalId);
-  const { summary } = useGaneshSummary(pandalId, festivalId);
+  const {
+    summary,
+    loading: summaryLoading,
+    error: summaryError,
+    retry: retrySummary,
+  } = useGaneshSummary(pandalId, festivalId);
   const { contributions } = useContributions(pandalId, festivalId);
   const { sponsorships } = useSponsorships(pandalId, festivalId);
   const { sponsors } = usePandalSponsors(pandalId);
@@ -69,6 +75,18 @@ export default function AdminReportsScreen() {
         Quick totals for the current festival. Open a section when you need the list behind the
         number.
       </Text>
+
+      {summaryLoading ? (
+        <ListStateView loading title="Loading totals" skeletonCount={4} />
+      ) : summaryError ? (
+        <ListStateView
+          error={summaryError}
+          onRetry={retrySummary}
+          title="We couldn't load these totals."
+          description="Nothing is shown rather than showing zero."
+        />
+      ) : (
+        <>
 
       <SectionPair>
         <Section title="Cash this festival">
@@ -222,6 +240,8 @@ export default function AdminReportsScreen() {
           onPress={() => push("/(ganesh)/permanent-fund" as never)}
         />
       </Section>
+        </>
+      )}
       </View>
     </GaneshScreen>
   );
