@@ -244,6 +244,48 @@ export function festivalCollectedCash(summary: Pick<
   );
 }
 
+/**
+ * God Fund still sitting in festivals that have been closed (GS-022).
+ *
+ * Closing a festival does not require moving the balance out — the settlement
+ * screen deliberately offers keeping it — so a closed festival can hold real
+ * cash. That money appeared in no Pandal-level figure anywhere: the dashboard
+ * shows the *active* festival only, and the Permanent Fund total does not
+ * include it, so the Pandal understated what it held by the sum of every closed
+ * festival's residue and the money could not be found in the app at all.
+ *
+ * Derived from the summaries rather than stored, so festivals closed long
+ * before this existed are counted with no migration.
+ */
+export function closedFestivalResidue(
+  festivals: Array<{ id: string; status?: string }>,
+  summaries: Record<string, GodFundLedger | undefined>
+): number {
+  return money(
+    festivals
+      .filter((festival) => festival.status === "closed")
+      .reduce((total, festival) => {
+        const summary = summaries[festival.id];
+        if (!summary) return total;
+        // Only a positive residue is money the Pandal holds. A negative
+        // closing balance is a drift bug, not cash, and adding it would quietly
+        // net real money away against it.
+        return total + Math.max(0, availableGodFund(summary));
+      }, 0)
+  );
+}
+
+/** What the Pandal holds in total: Permanent Fund + live festival + residue. */
+export function totalPandalFunds(input: {
+  permanentFundTotal: number;
+  activeFestivalGodFund: number;
+  closedFestivalResidue: number;
+}): number {
+  return money(
+    input.permanentFundTotal + input.activeFestivalGodFund + input.closedFestivalResidue
+  );
+}
+
 export function festivalCashSpent(summary: Pick<
   GaneshSummary,
   "godFundExpenses" | "reimbursements"

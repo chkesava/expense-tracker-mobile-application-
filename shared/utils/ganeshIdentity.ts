@@ -30,6 +30,20 @@ export function memberDisplayName(
   return members.find((member) => member.userId === uid)?.displayName || "Member";
 }
 
+/**
+ * The one date shape Ganesh accepts: YYYY-MM-DD, with real month and day
+ * ranges. `todayDateInput()` below produces it.
+ *
+ * `firestore.rules` mirrors this in `okDate()` (GS-041). Keep the two in step:
+ * a client check looser than the rules means the user is told their input is
+ * fine and then gets a bare permission error from the server, which is worse
+ * than either check alone.
+ *
+ * Month and day ranges only — Feb 30 passes both. Calendar correctness is not
+ * what a shape check is for.
+ */
+export const GANESH_DATE_PATTERN = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+
 export function todayDateInput(): string {
   const now = new Date();
   const month = `${now.getMonth() + 1}`.padStart(2, "0");

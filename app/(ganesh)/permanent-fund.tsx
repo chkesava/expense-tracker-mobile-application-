@@ -15,6 +15,8 @@ import {
   MetaLabel,
   Money,
   Section,
+  StatStrip,
+  StatTile,
   StatusStrip,
   useGaneshTokens,
 } from "@/components/ganesh/ui";
@@ -30,6 +32,7 @@ import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import { useNetwork } from "@/providers/NetworkProvider";
+import { EMPTY_GANESH_SUMMARY } from "@/shared/types/ganesh";
 import type {
   PermanentFundLocation,
   PermanentFundTransaction,
@@ -37,7 +40,13 @@ import type {
 } from "@/shared/types/ganesh";
 import { formatGaneshWhen, memberDisplayName } from "@/shared/utils/ganeshIdentity";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
-import { festivalCashSpent, festivalCollectedCash } from "@/shared/utils/ganeshMath";
+import {
+  availableGodFund,
+  closedFestivalResidue,
+  festivalCashSpent,
+  festivalCollectedCash,
+  totalPandalFunds,
+} from "@/shared/utils/ganeshMath";
 import { formatInr } from "@/shared/utils/ganeshMoney";
 import { useTheme } from "@/theme/ThemeProvider";
 
@@ -75,6 +84,20 @@ export default function PermanentFundScreen() {
   const canTransfer = can("permanentFund.transfer");
   const openFestivals = festivals.filter((festival) => festival.status === "open");
 
+  // Closing a festival does not require moving its balance out, so a closed
+  // festival can still hold real cash. That money used to appear in no
+  // Pandal-level figure at all (GS-022), which meant the Pandal understated
+  // what it held and the cash could not be found anywhere in the app.
+  const residue = closedFestivalResidue(festivals, summaries);
+  const activeGodFund = festivalId ? availableGodFund(
+    summaries[festivalId] ?? EMPTY_GANESH_SUMMARY
+  ) : 0;
+  const pandalTotal = totalPandalFunds({
+    permanentFundTotal: fund.total,
+    activeFestivalGodFund: activeGodFund,
+    closedFestivalResidue: residue,
+  });
+
   const renderItem = useCallback(
     ({ item }: { item: PermanentFundTransaction }) => (
       <FundTransactionRow item={item} enteredBy={memberDisplayName(members, item.createdBy)} />
@@ -108,6 +131,35 @@ export default function PermanentFundScreen() {
                   : undefined
               }
             />
+
+            {/* Everything the Pandal holds, not just this fund. The residue
+                line only appears when there is one, so a Pandal that always
+                settles fully never sees it. */}
+            <Section title="What the Pandal holds" subtitle="Across the fund and every festival">
+              <StatStrip>
+                <StatTile label="Permanent Fund">
+                  <Money value={fund.total} size="secondary" />
+                </StatTile>
+                <StatTile label="This festival">
+                  <Money value={activeGodFund} size="secondary" />
+                </StatTile>
+                {residue > 0 ? (
+                  <StatTile label="Left in closed festivals">
+                    <Money value={residue} size="secondary" />
+                  </StatTile>
+                ) : null}
+                <StatTile label="Total">
+                  <Money value={pandalTotal} size="secondary" />
+                </StatTile>
+              </StatStrip>
+              {residue > 0 ? (
+                <MetaLabel>
+                  Money stays in a festival when it is closed without returning the balance. It is
+                  still the Pandal's — move it here from that festival's settlement if you want it
+                  carried forward.
+                </MetaLabel>
+              ) : null}
+            </Section>
 
             {!isOnline ? (
               <StatusStrip
@@ -206,6 +258,15 @@ export default function PermanentFundScreen() {
                           <MetaLabel>Returned</MetaLabel>
                           <Money
                             value={summary?.transferredToPermanentFund ?? 0}
+                            size="secondary"
+                          />
+                        </View>
+                        <View style={styles.festivalCell}>
+                          <MetaLabel>
+                            {festival.status === "open" ? "Available" : "Still holds"}
+                          </MetaLabel>
+                          <Money
+                            value={summary ? Math.max(0, availableGodFund(summary)) : 0}
                             size="secondary"
                           />
                         </View>

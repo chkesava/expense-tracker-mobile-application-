@@ -8,8 +8,10 @@ import {
   deriveHouseholdStatus,
   festivalCashSpent,
   festivalCollectedCash,
+  closedFestivalResidue,
   festivalLocationTotal,
   formatCollectionReceipt,
+  totalPandalFunds,
   godFundSpendableAt,
   unclassifiedGodFund,
   householdOverpayAmount,
@@ -730,5 +732,62 @@ describe("collection receipts and coverage helpers", () => {
     expect(seeded.status).toBe("not_interested");
     expect(seeded.expectedAmount).toBe(500);
     expect(seeded.collectedAmount).toBe(0);
+  });
+});
+
+describe("closed festival residue (GS-022)", () => {
+  const withBalance = (openingFunds: number) => ({ ...EMPTY_GANESH_SUMMARY, openingFunds });
+
+  it("counts money left in closed festivals, and ignores open ones", () => {
+    const festivals = [
+      { id: "f1", status: "closed" },
+      { id: "f2", status: "closed" },
+      { id: "f3", status: "open" },
+    ];
+    const summaries = {
+      f1: withBalance(5000),
+      f2: withBalance(1200),
+      // The live festival is counted separately, not here.
+      f3: withBalance(9999),
+    };
+    expect(closedFestivalResidue(festivals, summaries)).toBe(6200);
+  });
+
+  it("is zero when every closed festival was fully settled", () => {
+    expect(
+      closedFestivalResidue(
+        [{ id: "f1", status: "closed" }],
+        { f1: { ...EMPTY_GANESH_SUMMARY, openingFunds: 5000, transferredToPermanentFund: 5000 } }
+      )
+    ).toBe(0);
+  });
+
+  it("ignores a festival whose summary has not loaded", () => {
+    expect(closedFestivalResidue([{ id: "f1", status: "closed" }], {})).toBe(0);
+  });
+
+  it("never lets a negative closing balance net away real money", () => {
+    // A negative balance is drift, not cash. Summing it would quietly reduce
+    // the Pandal's stated holdings by a bug.
+    const festivals = [
+      { id: "f1", status: "closed" },
+      { id: "f2", status: "closed" },
+    ];
+    const summaries = {
+      f1: withBalance(5000),
+      f2: { ...EMPTY_GANESH_SUMMARY, godFundExpenses: 800 },
+    };
+    expect(availableGodFund(summaries.f2)).toBe(-800);
+    expect(closedFestivalResidue(festivals, summaries)).toBe(5000);
+  });
+
+  it("adds up everything the Pandal holds", () => {
+    expect(
+      totalPandalFunds({
+        permanentFundTotal: 20000,
+        activeFestivalGodFund: 46911,
+        closedFestivalResidue: 6200,
+      })
+    ).toBe(73111);
   });
 });

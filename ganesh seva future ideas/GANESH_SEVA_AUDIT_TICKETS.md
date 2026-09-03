@@ -182,7 +182,7 @@ Recording these explicitly so the fix cycle does not undo working design:
 | GS-019 | HIGH | FINANCE | Expenses | `voidFinancialRecord` has no open-festival guard | FIXED (rules gap closed by GS-018) |
 | GS-020 | HIGH | ASSETS | Asset vs Expense | Voiding an asset purchase orphans the asset in inventory | OPEN |
 | GS-021 | HIGH | REPORTING | Audit Trail | Fund transfers and settlement closes write no audit entry | OPEN |
-| GS-022 | HIGH | FINANCE | Festival Settlement | Money left in a closed festival disappears from every total | OPEN |
+| GS-022 | HIGH | FINANCE | Festival Settlement | Money left in a closed festival disappears from every total | FIXED 2026-09-03 |
 | GS-023 | HIGH | PERMANENT_FUND | Fund Transfers | Transfer in and transfer out resolve different festivals | OPEN |
 | GS-024 | HIGH | FINANCE | Reimbursements | Per-member financial counters are never rebuilt by the recompute tool | OPEN |
 | GS-025 | HIGH | UX | Committee Contributions | Target inputs seeded `0` and never re-synced; Save wipes real targets | FIXED 2026-09-03 |
@@ -201,7 +201,7 @@ Recording these explicitly so the fix cycle does not undo working design:
 | GS-038 | HIGH | COLLECTIONS | Households | `collectedAmount` written as an absolute value on void; status from a stale read | OPEN |
 | GS-039 | HIGH | FINANCE | Split Funding | The sponsored portion of an expense is absent from every summary total | OPEN |
 | GS-040 | HIGH | OFFLINE | Supabase Storage | The "waiting for connection" photo queue is ephemeral screen state | OPEN |
-| GS-041 | HIGH | DATA_VALIDATION | Security Rules | No server-side validation of amounts, dates or enums anywhere | OPEN |
+| GS-041 | HIGH | DATA_VALIDATION | Security Rules | No server-side validation of amounts, dates or enums anywhere | FIXED 2026-09-03 - AWAITING RULES DEPLOY |
 | GS-042 | MEDIUM | SECURITY | Pandal membership | `pandalJoinRequests` is unbounded, undeletable and accepts any `pandalId` | OPEN |
 | GS-043 | MEDIUM | SECURITY | Pandal membership | An invite can be created pointing at someone else's pandal | OPEN |
 | GS-044 | MEDIUM | AUTH | Authentication | The Ganesh session is never cleared on sign-out | OPEN |
@@ -1888,7 +1888,40 @@ Related to GS-005 (audit entries must also be immutable), GS-052, GS-053.
 **Severity:** HIGH
 **Category:** FINANCE
 **Feature:** Festival Settlement
-**Status:** OPEN
+**Status:** FIXED 2026-09-03
+
+### Resolution (2026-09-03)
+
+Took the aggregate option, not the forced-transfer one. Requiring
+`transferAmount == closing` would have removed a deliberate feature - the
+settlement screen offers keeping the balance on purpose - and would not have
+touched festivals already closed with a residue, failing this ticket's own third
+criterion.
+
+`closedFestivalResidue()` and `totalPandalFunds()` in `ganeshMath.ts` derive the
+figure from the summaries rather than storing it, so festivals closed long
+before this existed are counted with no migration. A negative closing balance is
+clamped at zero: that is drift, not cash, and summing it would quietly net real
+money away.
+
+Surfaced as "What the Pandal holds" on the Permanent Fund screen - Permanent
+Fund + this festival + left in closed festivals + total, with the residue line
+appearing only when there is one. The per-festival history rows gained the
+closing balance they were missing; the ticket noted they showed Collected and
+Spent but never the number in question.
+
+The close confirmation now names the consequence and where to find the money, so
+leaving it behind is a deliberate choice rather than a silent one.
+
+**Note:** the ticket's `index.tsx:92` reference was stale. The Ganesh redesign
+removed the combined "Total Pandal funds" figure from the dashboard, which now
+shows the active festival only.
+
+### Acceptance criteria
+
+- [x] Closed-festival residue is visible in a Pandal-level total.
+- [x] That total accounts for every rupee: fund + active festival + residue.
+- [x] Historical closed festivals are handled - the figure is derived, not stored.
 
 ### Problem
 A festival can be closed with a positive, untransferred balance. That cash is real, but it then appears in no pandal-level aggregate anywhere in the application.
@@ -2870,7 +2903,39 @@ Related to GS-069, GS-001.
 **Severity:** HIGH
 **Category:** DATA_VALIDATION
 **Feature:** Security Rules
-**Status:** OPEN
+**Status:** FIXED 2026-09-03 - AWAITING RULES DEPLOY
+
+### Resolution (2026-09-03)
+
+The matrix below was largely closed already by work that did not update this
+ticket. Re-verified row by row against current `firestore.rules`: amounts and
+in-kind values are covered by `okMoney` / `okSignedMoney` across 29 call sites
+on **create and update**; `okMoney` also asserts `is number`, which was the
+"Neither" row; God Fund overspend and over-reimbursement were fixed in
+transactions (GS-010, GS-008); contribution, sponsorship, household, seva and
+reimbursement status enums are all in `statusWellFormed`; festival `year` is
+`is int`.
+
+Two genuine gaps remained, and are what this change closes:
+
+- **Date validity.** `date` was checked as `is string` only, so "banana" and
+  "9999-99-99" were both accepted and anything grouping or sorting by date
+  inherited the garbage. `okDate()` now enforces YYYY-MM-DD with real month and
+  day ranges, applied to `date` and `expectedDate`.
+- **`paymentMethod`.** Unvalidated, and it decides which Cash/UPI/Bank bucket
+  money moves between. A junk value silently landed in `other` via
+  `resolveFundLocation`'s default - harmless by design, but the buckets became
+  load-bearing with the God Fund location work, so the vocabulary is pinned.
+
+**A client/server mismatch was found and fixed in the same pass.** The seva date
+check accepted 2026-99-99. Left alone, the client would have told the user their
+input was fine and the new rules would have refused the write with a bare
+permission error - worse than either check alone. There is now one canonical
+`GANESH_DATE_PATTERN` in `ganeshIdentity.ts`, used by the client and mirrored by
+`okDate()`, with a test pinning its exact source so the two cannot drift.
+
+Still open, tracked under **GS-004**: no whole-document field allowlist outside
+`summary`, so arbitrary extra fields remain writable on other subcollections.
 
 ### Problem
 Validation is almost entirely client-side. This ticket records the full coverage matrix so the gaps can be closed systematically rather than one screen at a time.

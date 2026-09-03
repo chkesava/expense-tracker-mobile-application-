@@ -970,6 +970,38 @@ service cloud.firestore {
               );
           }
 
+          // `date` was validated as `is string` only, so "banana" or
+          // "9999-99-99" were accepted and every report that groups or sorts by
+          // date inherited the garbage (GS-041). Month and day ranges are in the
+          // pattern; Feb 30 still passes, which is the right depth for a rules
+          // check — the client owns calendar correctness, this owns the shape.
+          //
+          // matches() is a full-string match in Firestore rules, so the anchors
+          // are belt-and-braces rather than load-bearing.
+          function okDate(d, key) {
+            return !d.keys().hasAny([key])
+              || (
+                d[key] is string
+                && d[key].matches('^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$')
+              );
+          }
+
+          // Drives which Cash/UPI/Bank bucket money moves between, so a junk
+          // value silently lands in `other` (resolveFundLocation's default).
+          // Harmless today by design, but the buckets are load-bearing since
+          // the God Fund location work, so pin the vocabulary.
+          function okPaymentMethod(d) {
+            return !d.keys().hasAny(['paymentMethod'])
+              || d.paymentMethod in ['cash', 'upi', 'bank', 'other'];
+          }
+
+          function datesWellFormed() {
+            let d = request.resource.data;
+            return okDate(d, 'date')
+              && okDate(d, 'expectedDate')
+              && okPaymentMethod(d);
+          }
+
           function amountsWellFormed() {
             let d = request.resource.data;
             return okMoney(d, 'amount')
@@ -1108,6 +1140,7 @@ service cloud.firestore {
 
           function payloadWellFormed() {
             return amountsWellFormed()
+              && datesWellFormed()
               && statusWellFormed()
               && flagsWellFormed()
               && contributionWellFormed()

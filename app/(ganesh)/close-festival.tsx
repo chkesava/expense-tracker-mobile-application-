@@ -84,7 +84,9 @@ export default function CloseFestivalScreen() {
     }
     Alert.alert(
       "Close this festival?",
-      "Closing cannot be undone from this screen. Money and seva cannot be added until an admin reopens it.",
+      remainingAmount > 0
+        ? `${formatInr(remainingAmount)} stays in this festival. It is still the Pandal's money and shows under "What the Pandal holds" on the Permanent Fund screen, but it will not be in this festival's ledger for next year. Closing cannot be undone from this screen.`
+        : "Closing cannot be undone from this screen. Money and seva cannot be added until an admin reopens it.",
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -211,7 +213,8 @@ export default function CloseFestivalScreen() {
         </Text>
         <Text style={{ color: theme.colors.mutedForeground }}>
           Transfer + remaining must equal {formatInr(closing)}. Enter {formatInr(closing)} to move
-          everything, or 0 to keep the closing balance in this festival.
+          everything, or 0 to keep the closing balance in this festival — it stays the Pandal's
+          either way, and anything left here is listed under "What the Pandal holds".
         </Text>
       </View>
       {!isOnline && transfer > 0 ? (

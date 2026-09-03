@@ -5,7 +5,7 @@ import type {
   SevaKind,
   SevaStatus,
 } from "@/shared/types/ganesh";
-import { todayDateInput } from "@/shared/utils/ganeshIdentity";
+import { GANESH_DATE_PATTERN, todayDateInput } from "@/shared/utils/ganeshIdentity";
 
 /**
  * Seva schedule logic.
@@ -22,7 +22,9 @@ import { todayDateInput } from "@/shared/utils/ganeshIdentity";
  * wrong day.
  */
 
-const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+// Was /^\d{4}-\d{2}-\d{2}$/, which accepted 2026-99-99 and let the rules
+// reject it instead (GS-041).
+const DATE_PATTERN = GANESH_DATE_PATTERN;
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 type SevaRow = Pick<
