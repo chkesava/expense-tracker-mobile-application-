@@ -37,6 +37,14 @@ vi.mock("react-native", () => ({
   Platform: { OS: "ios" }, // non-Android so channel setup is skipped
 }));
 
+// A single reconcile schedules up to 12 slots, each awaiting two dynamic
+// imports, so these tests are slow enough to exceed vitest's default 5s timeout
+// on a machine saturated by the full suite. That mattered: a timed-out test is
+// abandoned but its promise keeps running, and its scheduleNotificationAsync
+// calls then land inside the *next* test and break its "not called" assertion.
+// Give the file headroom so load can't turn a slow test into a false failure.
+vi.setConfig({ testTimeout: 30_000 });
+
 import { reconcileBillReminders } from "./billReminderScheduler";
 
 // ── fixture helpers ────────────────────────────────────────────────────────────
@@ -82,9 +90,14 @@ function makeBill(overrides: Partial<CreditCardBill> = {}): CreditCardBill {
 describe("reconcileBillReminders orchestration", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Re-arm every mock the file defines, so no test inherits an
+    // implementation configured at definition time or by an earlier test.
     mockGetPermissions.mockResolvedValue({ status: "granted" });
     mockRequestPermissions.mockResolvedValue({ status: "granted" });
     mockGetAllScheduled.mockResolvedValue([]);
+    mockCancelScheduled.mockResolvedValue(undefined);
+    mockScheduleNotification.mockResolvedValue("notif-id");
+    mockSetNotificationChannel.mockResolvedValue(undefined);
   });
 
   it("skips scheduling when global reminders are disabled", async () => {
@@ -189,7 +202,7 @@ describe("reconcileBillReminders orchestration", () => {
   it("silently skips a bill whose account is not in the accountsById map", async () => {
     const logs: unknown[] = [];
     await reconcileBillReminders({
-      bills: [makeBill({ accountId: "card-MISSING" })],
+      bills: [makeBill({ id: "bill-ORPHAN", accountId: "card-MISSING" })],
       accountsById: new Map([["card-1", account]]),
       globalPrefs,
       onLog: (entry) => {
@@ -197,8 +210,16 @@ describe("reconcileBillReminders orchestration", () => {
       },
     });
 
-    // No scheduling; no log entry for a missing account (quiet skip)
-    expect(mockScheduleNotification).not.toHaveBeenCalled();
+    // No scheduling; no log entry for a missing account (quiet skip).
+    // Asserted per-bill rather than "never called" so the test reports on its
+    // own bill only, and not on stray calls from elsewhere in the run.
+    const scheduledIds = mockScheduleNotification.mock.calls.map(
+      (call) => (call[0] as { identifier?: string })?.identifier
+    );
+    expect(
+      scheduledIds.filter((id) => String(id).includes("bill-ORPHAN"))
+    ).toEqual([]);
+    expect(logs).toEqual([]);
   });
 
   it("processes multiple bills independently", async () => {
