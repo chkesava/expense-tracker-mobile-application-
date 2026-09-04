@@ -254,10 +254,15 @@ export default function FestivalReportScreen() {
 
       <Section
         title="Sponsors"
-        subtitle="Separate from Closing / God Fund. Expense sponsorship is not income."
+        subtitle="Sponsor cash is already counted above, in Cash received. Only expenses a sponsor paid directly stay outside the God Fund."
       >
         <StatStrip>
-          <StatTile label="Cash received">
+          {/* Labelled as a subset, not a separate figure (GS-050). Receiving a
+              cash sponsorship writes a money contribution and bumps
+              otherCashContributions, so this money IS in the God Fund and is
+              already inside contributionTotals.cashReceived above. The old
+              subtitle said the opposite of the truth. */}
+          <StatTile label="Of which from sponsors">
             <Money value={sponsorTotals.cashReceived} size="secondary" />
           </StatTile>
           <StatTile label="Promised cash">
@@ -269,6 +274,13 @@ export default function FestivalReportScreen() {
           <StatTile label="Promised in-kind">
             <Money value={sponsorTotals.promisedInKind} size="secondary" />
           </StatTile>
+          {/* Genuinely outside the God Fund: no cash entered the festival.
+              Counted nowhere at all before (GS-051). */}
+          {sponsorTotals.expenseReceived > 0 ? (
+            <StatTile label="Expenses paid by sponsors">
+              <Money value={sponsorTotals.expenseReceived} size="secondary" />
+            </StatTile>
+          ) : null}
           <StatTile label="Cancelled">
             <Money value={sponsorTotals.cancelledValue} size="secondary" />
           </StatTile>
@@ -283,6 +295,7 @@ export default function FestivalReportScreen() {
                   `Received ${formatInr(row.received)}`,
                   `Promised ${formatInr(row.promised)}`,
                   row.inKind > 0 ? `In-kind ${formatInr(row.inKind)}` : null,
+                  row.expensePaid > 0 ? `Paid expenses ${formatInr(row.expensePaid)}` : null,
                 ]
                   .filter(Boolean)
                   .join(" · ")}

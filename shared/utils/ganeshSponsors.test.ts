@@ -169,3 +169,49 @@ describe("sponsor permissions", () => {
     expect(can("viewer", "sponsors.create")).toBe(false);
   });
 });
+
+describe("expense sponsorships are classified once (GS-051)", () => {
+  const deals = [
+    { sponsorId: "s1", sponsoringType: "cash" as const, amount: 5000, estimatedValue: 0, status: "received" as const },
+    { sponsorId: "s1", sponsoringType: "expense" as const, amount: 3000, estimatedValue: 0, status: "received" as const },
+    { sponsorId: "s1", sponsoringType: "item" as const, amount: 0, estimatedValue: 1200, status: "received" as const },
+  ];
+  const sponsors = [{ id: "s1", name: "Sharma Traders" }];
+
+  it("counts a received expense deal, instead of counting it nowhere", () => {
+    // summarizeSponsorships handled only cash and in-kind, so an expense deal
+    // fell through every branch and vanished from the totals.
+    const totals = summarizeSponsorships(deals, today);
+    expect(totals.cashReceived).toBe(5000);
+    expect(totals.inKindReceived).toBe(1200);
+    expect(totals.expenseReceived).toBe(3000);
+  });
+
+  it("keeps it out of cash received, because no cash reached the festival", () => {
+    const totals = summarizeSponsorships(deals, today);
+    expect(totals.cashReceived).toBe(5000);
+  });
+
+  it("makes the per-sponsor rows agree with the totals", () => {
+    // The visible defect: breakdownSponsors used `else current.received`, so
+    // the same deal was cash here and nothing there — the rows on report.tsx
+    // did not sum to the total printed above them.
+    const totals = summarizeSponsorships(deals, today);
+    const rows = breakdownSponsors(deals, sponsors);
+    const row = rows.find((item) => item.sponsorId === "s1");
+
+    expect(row?.received).toBe(totals.cashReceived);
+    expect(row?.inKind).toBe(totals.inKindReceived);
+    expect(row?.expensePaid).toBe(totals.expenseReceived);
+  });
+
+  it("classifies a promised expense deal too", () => {
+    const totals = summarizeSponsorships(
+      [{ sponsorId: "s1", sponsoringType: "expense" as const, amount: 2000, estimatedValue: 0, status: "promised" as const }],
+      today
+    );
+    expect(totals.promisedExpense).toBe(2000);
+    expect(totals.promisedCash).toBe(0);
+    expect(totals.promisedInKind).toBe(0);
+  });
+});

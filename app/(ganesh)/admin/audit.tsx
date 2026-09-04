@@ -12,6 +12,8 @@ import {
 } from "@/components/ganesh/ui";
 import { useFestivalAuditLogs } from "@/hooks/useFestivalAuditLogs";
 import { useMemberAudits } from "@/hooks/useMemberAudits";
+import { usePandalAssetAudits } from "@/hooks/usePandalAssets";
+import { usePandalSponsorAudits } from "@/hooks/usePandalSponsors";
 import { usePandalMembers } from "@/hooks/usePandalMembers";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import type { GaneshFestivalAudit, PandalMember, PandalMemberAudit } from "@/shared/types/ganesh";
@@ -25,7 +27,7 @@ type Row = {
   title: string;
   detail?: string;
   actorId: string;
-  action: "members" | "money" | "festival";
+  action: "members" | "money" | "festival" | "property";
   at?: PandalMemberAudit["at"];
 };
 
@@ -68,7 +70,15 @@ export default function AdminAuditScreen() {
   const { members } = usePandalMembers(pandalId);
   const memberAudits = useMemberAudits(pandalId, true);
   const festivalAudits = useFestivalAuditLogs(pandalId, festivalId, true);
-  const [actionFilter, setActionFilter] = useState<"all" | "members" | "money" | "festival">("all");
+  // Four audit trails exist; this screen merged two (GS-052). Asset disposals,
+  // quantity write-downs and sponsor edits appeared nowhere Pandal-wide — the
+  // asset ones only on an individual asset's detail screen, the sponsor ones
+  // not at all. Both hooks already existed and both are readable under
+  // `audit.read` per the rules.
+  const assetAudits = usePandalAssetAudits(pandalId);
+  const sponsorAudits = usePandalSponsorAudits(pandalId);
+  const [actionFilter, setActionFilter] =
+    useState<"all" | "members" | "money" | "festival" | "property">("all");
   const [actorId, setActorId] = useState<string>("all");
   const [day, setDay] = useState<"all" | "today">("all");
 
@@ -95,8 +105,50 @@ export default function AdminAuditScreen() {
           : "festival",
       at: audit.at,
     }));
-    return [...memberRows, ...festivalRows].sort((a, b) => (b.at?.seconds ?? 0) - (a.at?.seconds ?? 0));
-  }, [festivalAudits.audits, memberAudits.audits, members]);
+    const assetRows: Row[] = assetAudits.audits.map((audit) => ({
+      id: `asset-${audit.id}`,
+      title: `${memberDisplayName(members, audit.actorId)} ${
+        audit.action === "disposed"
+          ? "disposed of an asset"
+          : audit.action === "quantity"
+            ? "changed an asset quantity"
+            : audit.action === "status"
+              ? "changed an asset status"
+              : audit.action === "created"
+                ? "added an asset"
+                : audit.action === "photo"
+                  ? "changed an asset photo"
+                  : "edited an asset"
+      }`,
+      detail: changeText(audit.oldValue, audit.newValue) ?? audit.reason,
+      actorId: audit.actorId,
+      action: "property",
+      at: audit.at,
+    }));
+    const sponsorRows: Row[] = sponsorAudits.audits.map((audit) => ({
+      id: `sponsor-${audit.id}`,
+      title: `${memberDisplayName(members, audit.actorId)} ${
+        audit.action === "created"
+          ? "added a sponsor"
+          : audit.action === "photo"
+            ? "changed a sponsor photo"
+            : "edited a sponsor"
+      }`,
+      detail: changeText(audit.oldValue, audit.newValue) ?? audit.reason,
+      actorId: audit.actorId,
+      action: "property",
+      at: audit.at,
+    }));
+    return [...memberRows, ...festivalRows, ...assetRows, ...sponsorRows].sort(
+      (a, b) => (b.at?.seconds ?? 0) - (a.at?.seconds ?? 0)
+    );
+  }, [
+    assetAudits.audits,
+    festivalAudits.audits,
+    memberAudits.audits,
+    sponsorAudits.audits,
+    members,
+  ]);
 
   const actors = useMemo(() => {
     const ids = new Set(rows.map((row) => row.actorId));
@@ -116,8 +168,11 @@ export default function AdminAuditScreen() {
 
   const loading =
     (memberAudits.loading && memberAudits.audits.length === 0) ||
-    (festivalAudits.loading && festivalAudits.audits.length === 0);
-  const error = memberAudits.error ?? festivalAudits.error;
+    (festivalAudits.loading && festivalAudits.audits.length === 0) ||
+    (assetAudits.loading && assetAudits.audits.length === 0) ||
+    (sponsorAudits.loading && sponsorAudits.audits.length === 0);
+  const error =
+    memberAudits.error ?? festivalAudits.error ?? assetAudits.error ?? sponsorAudits.error;
 
   return (
     <GaneshScreen contentContainerStyle={ganeshStackLayout.bleed}>
@@ -137,6 +192,7 @@ export default function AdminAuditScreen() {
           { id: "all", label: "All" },
           { id: "members", label: "Members" },
           { id: "money", label: "Money" },
+          { id: "property", label: "Property" },
           { id: "festival", label: "Festival" },
         ]}
         onChange={setActionFilter}

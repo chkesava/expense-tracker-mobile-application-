@@ -125,6 +125,21 @@ export type SponsorshipTotals = {
   promisedCash: number;
   inKindReceived: number;
   promisedInKind: number;
+  /**
+   * Received `sponsoringType: "expense"` deals — a sponsor paying an expense
+   * directly (GS-051).
+   *
+   * Counted nowhere before: `summarizeSponsorships` handled only cash and
+   * in-kind, so an expense deal fell through every branch, while
+   * `breakdownSponsors` added it to `received`. The per-sponsor rows therefore
+   * did not sum to the totals shown above them on the same screen.
+   *
+   * It gets its own bucket rather than being folded into `cashReceived`,
+   * because no cash entered the festival — the same reasoning as
+   * `summary.sponsoredExpenseAmount` (GS-039).
+   */
+  expenseReceived: number;
+  promisedExpense: number;
   cancelledValue: number;
   sponsorCount: number;
   prospectiveCount: number;
@@ -148,6 +163,8 @@ export function summarizeSponsorships(
     promisedCash: 0,
     inKindReceived: 0,
     promisedInKind: 0,
+    expenseReceived: 0,
+    promisedExpense: 0,
     cancelledValue: 0,
     sponsorCount: 0,
     prospectiveCount: 0,
@@ -171,15 +188,18 @@ export function summarizeSponsorships(
       totals.pendingCount += 1;
       if (row.sponsoringType === "cash") totals.promisedCash += value;
       else if (isInKindSponsoring(row.sponsoringType)) totals.promisedInKind += value;
+      else totals.promisedExpense += value;
       if (isSponsorshipOverdue(row, today)) totals.overdueCount += 1;
     } else if (status === "confirmed") {
       totals.confirmedCount += 1;
       totals.pendingCount += 1;
       if (row.sponsoringType === "cash") totals.promisedCash += value;
       else if (isInKindSponsoring(row.sponsoringType)) totals.promisedInKind += value;
+      else totals.promisedExpense += value;
     } else if (status === "received") {
       if (row.sponsoringType === "cash") totals.cashReceived += value;
       else if (isInKindSponsoring(row.sponsoringType)) totals.inKindReceived += value;
+      else totals.expenseReceived += value;
     } else if (status === "cancelled") {
       totals.cancelledValue += value;
     }
@@ -190,6 +210,8 @@ export function summarizeSponsorships(
     promisedCash: money(totals.promisedCash),
     inKindReceived: money(totals.inKindReceived),
     promisedInKind: money(totals.promisedInKind),
+    expenseReceived: money(totals.expenseReceived),
+    promisedExpense: money(totals.promisedExpense),
     cancelledValue: money(totals.cancelledValue),
     sponsorCount: sponsors.size,
     prospectiveCount: totals.prospectiveCount,
@@ -203,9 +225,12 @@ export function summarizeSponsorships(
 export type SponsorBreakdownRow = {
   sponsorId: string;
   name: string;
+  /** Cash that reached the festival. */
   received: number;
   promised: number;
   inKind: number;
+  /** Expenses the sponsor paid directly; never festival cash (GS-051). */
+  expensePaid: number;
 };
 
 export function breakdownSponsors(
@@ -226,12 +251,17 @@ export function breakdownSponsors(
       received: 0,
       promised: 0,
       inKind: 0,
+      expensePaid: 0,
     };
     const value = sponsorshipValue(row);
     const status = sponsorshipStatusOf(row);
     if (status === "received") {
+      // Classified the same way summarizeSponsorships does, so the rows sum
+      // to the totals above them (GS-051). `else current.received` counted an
+      // expense deal as cash received here while the totals counted it nowhere.
       if (isInKindSponsoring(row.sponsoringType)) current.inKind += value;
-      else current.received += value;
+      else if (row.sponsoringType === "cash") current.received += value;
+      else current.expensePaid += value;
     } else if (status === "promised" || status === "confirmed") {
       current.promised += value;
     }

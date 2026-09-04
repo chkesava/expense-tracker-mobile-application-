@@ -249,14 +249,14 @@ Recording these explicitly so the fix cycle does not undo working design:
 | GS-047 | MEDIUM | NAVIGATION | Festivals | The restored pandal/festival session is never validated | OPEN |
 | GS-048 | MEDIUM | UX | Festivals | Previous-festival rows stay on screen after a switch | OPEN |
 | GS-049 | MEDIUM | CODE_QUALITY | Shared real-time data | `useGaneshCollection` omits `extra` from its effect dependencies | FIXED — verified 2026-09-03 |
-| GS-050 | MEDIUM | REPORTING | Sponsors | Reports display the same rupees twice under two "Cash received" headings | OPEN |
-| GS-051 | MEDIUM | REPORTING | Sponsors | `summarizeSponsorships` and `breakdownSponsors` disagree on expense sponsorships | OPEN |
-| GS-052 | MEDIUM | REPORTING | Audit Trail | Asset and sponsor audits never reach the Pandal-wide audit screen | OPEN |
+| GS-050 | MEDIUM | REPORTING | Sponsors | Reports display the same rupees twice under two "Cash received" headings | FIXED 2026-09-04 |
+| GS-051 | MEDIUM | REPORTING | Sponsors | `summarizeSponsorships` and `breakdownSponsors` disagree on expense sponsorships | FIXED 2026-09-04 |
+| GS-052 | MEDIUM | REPORTING | Audit Trail | Asset and sponsor audits never reach the Pandal-wide audit screen | FIXED 2026-09-04 |
 | GS-053 | MEDIUM | REPORTING | Audit Trail | Household edits, category adds, profile edits and recomputes are unaudited | FIXED 2026-09-03 |
 | GS-054 | MEDIUM | UX | Admin Dashboard | `AdminGate` mounts admin children behind an overlay | OPEN |
 | GS-055 | MEDIUM | UX | Admin Dashboard | The dashboard duplicates eight destinations across five sections | OPEN |
 | GS-056 | MEDIUM | UX | Admin Dashboard | The dashboard error state ignores half of its queries | FIXED 2026-09-03 |
-| GS-057 | MEDIUM | UX | Festival | Five add-screens have no closed-festival guard | OPEN |
+| GS-057 | MEDIUM | UX | Festival | Five add-screens have no closed-festival guard | FIXED 2026-09-04 |
 | GS-058 | MEDIUM | UX | Festival | No persistent read-only banner when a festival is closed | OPEN |
 | GS-059 | MEDIUM | OFFLINE | Committee Contributions | Committee payments bypass the offline money-receive guard | FIXED — verified 2026-09-03 |
 | GS-060 | MEDIUM | SPONSORS | Sponsors | Sponsor profile editing is blocked when the current festival is closed | OPEN |
@@ -3367,7 +3367,7 @@ appear in the dependency list to be tracked. `useJoinRequests` and
 **Severity:** MEDIUM
 **Category:** REPORTING
 **Feature:** Sponsors
-**Status:** OPEN
+**Status:** FIXED 2026-09-04
 
 ### Problem
 Receiving a cash sponsorship writes both a sponsorship record and a money contribution. The report shows a contributions block and a sponsors block, both labelled "Cash received", where one is a subset of the other — under a note claiming they are separate.
@@ -3406,7 +3406,7 @@ Related to GS-039, GS-051, GS-013.
 **Severity:** MEDIUM
 **Category:** REPORTING
 **Feature:** Sponsors
-**Status:** OPEN
+**Status:** FIXED 2026-09-04
 
 ### Problem
 Two helpers in the same file classify a `sponsoringType: "expense"` sponsorship differently, so the totals and the per-sponsor rows on the same screen do not agree.
@@ -3446,7 +3446,7 @@ Related to GS-050, GS-039.
 **Severity:** MEDIUM
 **Category:** REPORTING
 **Feature:** Audit Trail
-**Status:** OPEN
+**Status:** FIXED 2026-09-04
 
 ### Problem
 Four audit trails exist, but the audit screen merges only two of them.
@@ -3704,7 +3704,7 @@ contributions, sponsorships, households - rather than the four it covered.
 **Severity:** MEDIUM
 **Category:** UX
 **Feature:** Festival
-**Status:** OPEN
+**Status:** FIXED 2026-09-04
 
 ### Problem
 Two of the seven money-entry screens disable Save when the festival is closed; five do not, so the user fills in a whole form that the rules will reject.
@@ -6021,3 +6021,56 @@ retried.
 
 The lesson is the same one this session keeps teaching: I verified the *rule*
 compiled and never checked it against the payload the app actually sends.
+
+---
+
+## Group B resolution notes (2026-09-04)
+
+### GS-050 — the report said the opposite of the truth
+
+Receiving a cash sponsorship writes a money contribution and bumps
+`otherCashContributions`, which feeds `availableGodFund`. So sponsor cash **is**
+in the God Fund and is already inside `contributionTotals.cashReceived`. The
+report showed it again under a second "Cash received" heading, beneath a
+subtitle reading "Separate from Closing / God Fund" — the reverse of what the
+ledger does.
+
+The sponsor figure is now labelled "Of which from sponsors", and the subtitle
+says plainly that sponsor cash is already counted above and that only
+directly-paid expenses sit outside the God Fund. Same correction applied to
+`admin/reports.tsx`, which carried the identical text.
+
+### GS-051 — two helpers, two answers, one screen
+
+`summarizeSponsorships` handled `cash` and in-kind explicitly, so a
+`sponsoringType: "expense"` deal fell through every branch and was counted
+**nowhere**. `breakdownSponsors` used `else current.received += value`, so the
+same deal **was** counted, as cash received. The per-sponsor rows on
+`report.tsx` therefore did not sum to the total printed above them, and
+`sponsor/[id].tsx` contradicted the report's own row for that sponsor.
+
+Fixed by giving the case its own bucket rather than forcing it into cash or
+in-kind: `expenseReceived` / `promisedExpense` on the totals, `expensePaid` on
+each breakdown row. That matches the reasoning already applied to
+`summary.sponsoredExpenseAmount` (GS-039) — a sponsor paying an expense
+directly is real spending the Pandal benefited from, but no cash entered the
+festival, so it must not be added to cash received. 4 tests, one of which
+asserts the rows and the totals now agree.
+
+### GS-052 — two of four audit trails were invisible
+
+`admin/audit.tsx` merged `useMemberAudits` and `useFestivalAuditLogs` only.
+`usePandalAssetAudits` and `usePandalSponsorAudits` both already existed and are
+both readable under `audit.read`, but asset disposals, quantity write-downs and
+sponsor edits appeared nowhere Pandal-wide — the asset ones only on an
+individual asset's detail screen, the sponsor ones not at all.
+
+All four now merge, with a new "Property" filter to separate them from money and
+membership, and both hooks included in the loading and error gates. This matters
+more since GS-053 added six new trails.
+
+### GS-057 — one screen left, not five
+
+The ticket listed five money screens with no closed-festival guard. The
+`useFestivalWriteLock` work for GS-017 covered seven, and `add-sponsor` has its
+own `closed` check, so only `add-asset` remained. Guarded.

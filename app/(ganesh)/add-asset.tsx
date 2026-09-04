@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/Input";
 import { useGaneshExpenses } from "@/hooks/useGaneshExpenses";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { useGaneshStorage } from "@/hooks/useGaneshStorage";
+import { useFestivalWriteLock } from "@/hooks/useFestivalWriteLock";
 import { useGaneshWrites } from "@/hooks/useGaneshWrites";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
@@ -36,6 +37,7 @@ export default function AddAssetScreen() {
   const { pandalId, festivalId } = useGaneshSession();
   const { expenses } = useGaneshExpenses(pandalId, festivalId);
   const writes = useGaneshWrites();
+  const { closed, lockMessage } = useFestivalWriteLock();
   const { can } = useGaneshPermissions();
   const { isOnline, uploadAssetPhoto } = useGaneshStorage();
   const [name, setName] = useState("");
@@ -85,6 +87,11 @@ export default function AddAssetScreen() {
 
   if (!can("assets.create")) {
     return <GaneshWriteLock message="Your role cannot add Pandal assets." />;
+  }
+  if (closed) {
+    // The last money screen with no closed-festival guard (GS-057): the user
+    // could fill in a whole asset form that the rules would then refuse.
+    return <GaneshWriteLock message={lockMessage} />;
   }
 
   return (

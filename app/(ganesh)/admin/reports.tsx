@@ -154,10 +154,10 @@ export default function AdminReportsScreen() {
 
       <Section
         title="Sponsors"
-        subtitle="Separate from Closing / God Fund. Expense sponsorship is not income."
+        subtitle="Sponsor cash is already counted above, in Cash received. Only expenses a sponsor paid directly stay outside the God Fund."
       >
         <StatStrip>
-          <StatTile label="Cash received">
+          <StatTile label="Of which from sponsors">
             <Money value={sponsorTotals.cashReceived} size="secondary" />
           </StatTile>
           <StatTile label="Promised cash">
@@ -225,7 +225,7 @@ export default function AdminReportsScreen() {
         <AdminLinkRow
           divider
           title="Sponsor summary"
-          subtitle="Cash received, promised cash, in-kind, and cancelled. Separate from God Fund."
+          subtitle="Sponsor cash is inside the God Fund and already counted in Cash received; only directly-paid expenses sit outside it."
           onPress={() => push("/(ganesh)/sponsors" as never)}
         />
         <AdminLinkRow
