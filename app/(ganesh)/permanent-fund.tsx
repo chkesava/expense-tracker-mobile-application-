@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { FlashList } from "@shopify/flash-list";
 import { useRouter } from "expo-router";
@@ -29,6 +29,7 @@ import { useGaneshWrites } from "@/hooks/useGaneshWrites";
 import { usePandalMembers } from "@/hooks/usePandalMembers";
 import { usePermanentFund } from "@/hooks/usePermanentFund";
 import { usePermanentFundTransactions } from "@/hooks/usePermanentFundTransactions";
+import { newId } from "@/lib/id";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
@@ -415,6 +416,7 @@ function FundActions({
     location: PermanentFundLocation;
     festivalName?: string;
     description?: string;
+    clientOpId?: string;
   }) => Promise<unknown>;
   onTransferIn: (input: {
     festivalId?: string;
@@ -423,6 +425,7 @@ function FundActions({
     festivalName?: string;
     description?: string;
     type?: "CARRY_FORWARD" | "TRANSFER_IN";
+    clientOpId?: string;
   }) => Promise<unknown>;
 }) {
   const [mode, setMode] = useState<ActionMode>("hidden");
@@ -431,6 +434,11 @@ function FundActions({
   const [location, setLocation] = useState<PermanentFundLocation>("cash");
   const [adjustSign, setAdjustSign] = useState<1 | -1>(1);
   const [busy, setBusy] = useState(false);
+  // GS-085: a transfer that appears to time out is often one that landed. The
+  // key survives a failure so a retry is recognised as the same transfer, and
+  // rotates on success so two genuinely distinct transfers of the same amount
+  // are both recorded.
+  const opIdRef = useRef(newId());
 
   const parsedAmount = Number(amount);
 
@@ -472,6 +480,7 @@ function FundActions({
                   location,
                   festivalName: openFestivalName,
                   description,
+                  clientOpId: opIdRef.current,
                 })
               : onTransferIn({
                   // Same festival the transfer-out branch above targets, so
@@ -482,10 +491,14 @@ function FundActions({
                   festivalName: openFestivalName,
                   description,
                   type: "TRANSFER_IN",
+                  clientOpId: opIdRef.current,
                 });
 
     work
       .then(() => {
+        // Only on success: a failed attempt keeps its key so the retry is the
+        // same transfer, not a new one.
+        opIdRef.current = newId();
         setAmount("");
         setDescription("");
         setMode("hidden");

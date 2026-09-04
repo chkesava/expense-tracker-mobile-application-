@@ -17,6 +17,14 @@ export type PreparedGaneshImage = {
   mimeType: AllowedImageType;
   fileName: string;
   size: number;
+  /**
+   * The file's bytes, when `prepareGaneshImage` already had to read them
+   * (GS-097). `uploadObject` reuses these instead of fetching the URI again.
+   * Optional because a picked image whose size the picker reported, and which
+   * needs no compression, is never read before upload - and must not be, just
+   * to populate this.
+   */
+  bytes?: ArrayBuffer;
 };
 
 export type UploadFestivalFileInput = {

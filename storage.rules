@@ -9,17 +9,20 @@ service firebase.storage {
       allow write: if false;
     }
 
-    match /pandals/{pandalId}/festivals/{festivalId}/{allPaths=**} {
-      function isPandalMember() {
-        return request.auth != null
-          && exists(/databases/(default)/documents/pandals/$(pandalId))
-          && (
-            get(/databases/(default)/documents/pandals/$(pandalId)).data.ownerId == request.auth.uid
-            || request.auth.uid in get(/databases/(default)/documents/pandals/$(pandalId)).data.memberIds
-          );
-      }
-      allow read, write: if isPandalMember();
-    }
+    // No Ganesh pandal rule here on purpose (GS-098).
+    //
+    // A `pandals/{pandalId}/festivals/{festivalId}/**` block with a
+    // Firestore-backed membership check used to sit here. Nothing wrote to it:
+    // every Ganesh file lives in Supabase, and the only Firebase Storage
+    // consumer in the app is `lib/apkUpdate.ts` reading `/releases` above.
+    //
+    // It was removed because it was worse than unused. It read as the Ganesh
+    // access control — a membership-scoped rule, in a rules file, next to the
+    // real one — so anyone auditing file access for this feature would find it
+    // and be reassured. The actual enforcement point is
+    // `supabase/ganesh-files.policies.sql`, which has no membership check at
+    // all (GS-001, still open). Deleting the decoy makes that gap visible
+    // instead of covered.
 
     match /{allPaths=**} {
       allow read, write: if false;

@@ -15,6 +15,7 @@ import { useFestivals } from "@/hooks/useFestivals";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { useGaneshStorage } from "@/hooks/useGaneshStorage";
 import { useGaneshWrites } from "@/hooks/useGaneshWrites";
+import { useUnsavedChangesGuard } from "@/hooks/useUnsavedChangesGuard";
 import { usePandalSponsor } from "@/hooks/usePandalSponsors";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
@@ -77,6 +78,21 @@ export default function AddSponsorScreen() {
   const [estimatedValue, setEstimatedValue] = useState("");
   const [itemName, setItemName] = useState("");
   const [quantity, setQuantity] = useState("");
+  // GS-101, same reasoning as add-expense: only typed text counts, so the
+  // pre-set chips (sponsorType, dealType, purpose, status) do not arm it.
+  const dirty = Boolean(
+    name.trim()
+    || mobile.trim()
+    || email.trim()
+    || address.trim()
+    || notes.trim()
+    || purposeLabel.trim()
+    || amount.trim()
+    || estimatedValue.trim()
+    || itemName.trim()
+    || quantity.trim()
+  );
+  const { confirmLeave } = useUnsavedChangesGuard(dirty);
   const [serviceDescription, setServiceDescription] = useState("");
   const [expectedDate, setExpectedDate] = useState("");
   const [dealNotes, setDealNotes] = useState("");
@@ -157,7 +173,7 @@ export default function AddSponsorScreen() {
       <GaneshHeader
         title={existingSponsorId ? "Add sponsorship" : "Add sponsor"}
         icon={<Building2 size={22} color={g.saffron} strokeWidth={2.2} />}
-        onBack={back}
+        onBack={() => confirmLeave(back)}
       />
       <Text style={{ color: theme.colors.mutedForeground, lineHeight: 21 }}>
         Prospective and promised deals do not change festival cash. In-kind is not cash.

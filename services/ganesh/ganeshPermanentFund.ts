@@ -131,6 +131,32 @@ function writePermanentFund(
   });
 }
 
+/**
+ * Has this exact transfer already landed? (GS-085)
+ *
+ * Transfer ids were minted with `newId()` before `runTransaction`, which makes
+ * Firestore's own internal retries safe — the same id is reused — but does
+ * nothing for a *user* retry. Someone who taps again after an apparent timeout
+ * produced a second, distinct transfer. Balances stayed self-consistent,
+ * because the second transaction re-read the post-first balance, so this was
+ * duplication needing manual correction rather than corruption. The only guard
+ * was the Button's own `loading` state, which does not survive the screen.
+ *
+ * With a caller-supplied `clientOpId` the id becomes deterministic, so the
+ * repeat can be recognised inside the transaction and skipped. Read through the
+ * transaction, not `getDoc`, so the check participates in the same isolation as
+ * the balance read it guards.
+ */
+async function transferAlreadyRecorded(
+  txn: Transaction,
+  db: Firestore,
+  pandalId: string,
+  txId: string
+): Promise<boolean> {
+  const existing = await txn.get(pathRef(db, [...permanentFundTransactionsCol(pandalId), txId]));
+  return existing.exists();
+}
+
 function writePermanentTx(
   txn: Transaction,
   db: Firestore,
@@ -287,15 +313,24 @@ export async function transferPermanentToFestival(
     location: PermanentFundLocation;
     festivalName?: string;
     description?: string;
+    /**
+     * Idempotency key held across retries by the caller (GS-085). Omitting it
+     * keeps the old behaviour — a fresh id each call — so an existing caller is
+     * unchanged, but a retry is then indistinguishable from a second transfer.
+     */
+    clientOpId?: string;
   }
 ): Promise<string> {
   const valid = validatePositiveAmount(input.amount, "Transfer");
   if (!valid.ok) throw new Error(valid.error);
-  const txId = newId();
-  const openingId = newId();
-  const festivalTransferId = newId();
+  const txId = input.clientOpId?.trim() || newId();
+  // Derived from txId rather than minted separately, so a retry cannot leave
+  // orphan siblings behind even if it got part-way through once.
+  const openingId = `${txId}-opening`;
+  const festivalTransferId = `${txId}-festival`;
 
   await runTransaction(db, async (txn) => {
+    if (await transferAlreadyRecorded(txn, db, pandalId, txId)) return;
     const current = await readPermanentFund(txn, db, pandalId);
     const festivalSnap = await txn.get(pathRef(db, festivalDoc(pandalId, festivalId)));
     if (!festivalSnap.exists()) throw new Error("Festival not found.");
@@ -408,6 +443,8 @@ export async function transferFestivalToPermanent(
     description?: string;
     type: "CARRY_FORWARD" | "TRANSFER_IN";
     closeFestival?: boolean;
+    /** Idempotency key held across retries by the caller (GS-085). */
+    clientOpId?: string;
   }
 ): Promise<string | null> {
   const amount = Number(input.amount ?? 0);
@@ -415,10 +452,15 @@ export async function transferFestivalToPermanent(
   if (amount === 0 && !input.closeFestival) {
     throw new Error("Enter a transfer amount.");
   }
-  const txId = amount > 0 ? newId() : null;
-  const festivalTransferId = amount > 0 ? newId() : null;
+  const opId = input.clientOpId?.trim();
+  const txId = amount > 0 ? opId || newId() : null;
+  const festivalTransferId = txId ? `${txId}-festival` : null;
 
   await runTransaction(db, async (txn) => {
+    // A zero-amount call is a close-only operation with no transaction
+    // document, so there is nothing to deduplicate against - closing is
+    // already idempotent through the festival's own status.
+    if (txId && (await transferAlreadyRecorded(txn, db, pandalId, txId))) return;
     const current = await readPermanentFund(txn, db, pandalId);
     const festivalSnap = await txn.get(pathRef(db, festivalDoc(pandalId, festivalId)));
     if (!festivalSnap.exists()) throw new Error("Festival not found.");

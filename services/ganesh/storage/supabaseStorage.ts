@@ -91,9 +91,16 @@ async function callGaneshFiles(
   return body;
 }
 
-export async function uploadObject(path: string, uri: string, mimeType: string): Promise<void> {
+export async function uploadObject(
+  path: string,
+  uri: string,
+  mimeType: string,
+  // Already-read bytes from `prepareGaneshImage` (GS-097). Falls back to
+  // reading the URI so any other caller keeps working unchanged.
+  prepared?: ArrayBuffer
+): Promise<void> {
   try {
-    const bytes = await bytesFromUri(uri);
+    const bytes = prepared ?? (await bytesFromUri(uri));
     const grant = await callGaneshFiles("upload", path, {
       contentType: mimeType,
       declaredSize: bytes.byteLength,

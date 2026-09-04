@@ -17,6 +17,7 @@ import { useFestivalWriteLock } from "@/hooks/useFestivalWriteLock";
 import { useGaneshStorage } from "@/hooks/useGaneshStorage";
 import { useGaneshSummary } from "@/hooks/useGaneshSummary";
 import { useGaneshWrites } from "@/hooks/useGaneshWrites";
+import { useUnsavedChangesGuard } from "@/hooks/useUnsavedChangesGuard";
 import { usePandalMembers } from "@/hooks/usePandalMembers";
 import { usePandalSponsors } from "@/hooks/usePandalSponsors";
 import { useSponsorships } from "@/hooks/useSponsorships";
@@ -104,6 +105,26 @@ export default function AddExpenseScreen() {
   const selectedCategory =
     visibleCategories.find((category) => category.id === categoryId) ?? visibleCategories[0];
   const ledgerSaved = Boolean(savedId);
+  // GS-101: roughly twenty fields, and leaving mid-entry used to discard the
+  // lot in silence. Anything the user typed or picked counts as dirty; the
+  // chips that start with a value (funding, payment method, category) do not,
+  // or opening the screen would immediately arm the prompt. Once the ledger row
+  // is saved there is nothing left to lose, so the guard stands down — the
+  // receipt upload has its own retry.
+  const dirty =
+    !ledgerSaved
+    && Boolean(
+      name.trim()
+      || total.trim()
+      || godFund.trim()
+      || personal.trim()
+      || sponsored.trim()
+      || vendor.trim()
+      || notes.trim()
+      || assetName.trim()
+      || receipt
+    );
+  const { confirmLeave } = useUnsavedChangesGuard(dirty);
   const isAssetPurchase = kind === "asset_purchase" && canBuyAsset;
   const fundingOptions: Array<{ id: Funding; label: string }> = [
     { id: "god", label: "God Fund" },
@@ -189,7 +210,7 @@ export default function AddExpenseScreen() {
     <GaneshScreen>
       <GaneshHeader
         title={isAssetPurchase ? "Add Pandal asset" : "Add expense"}
-        onBack={back}
+        onBack={() => confirmLeave(back)}
       />
       <View style={styles.kindRow}>
         <ExpenseKindCard

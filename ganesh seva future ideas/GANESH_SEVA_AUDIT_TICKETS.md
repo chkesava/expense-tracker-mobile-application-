@@ -58,16 +58,18 @@ balance and stay offline-capable.
 | CRITICAL | 9 | 1 | 0 | 10 |
 | HIGH | 31 | 1 | 0 | 32 |
 | MEDIUM | 32 | 0 | 10 | 42 |
-| LOW | 12 | 0 | 8 | 20 |
-| **Total** | **84** | **2** | **18** | **104** |
+| LOW | 16 | 1 | 3 | 20 |
+| **Total** | **88** | **3** | **13** | **104** |
 
-Every CRITICAL and HIGH is now closed or partial. Two partials remain: GS-004
+Every CRITICAL and HIGH is now closed or partial. Three partials remain: GS-004
 (no whole-document field allowlist outside `summary`, CRITICAL) and GS-040 (the
 photo queue is still not persisted, HIGH). Both are blocked on work larger than
 a rules edit or a screen fix, and each ticket records what that is: GS-004 needs
 the emulator harness in GS-074 before an allowlist can be deployed safely
 against a Firebase project that also serves production, and GS-040 needs a
-durable queue with a provider-level worker.
+durable queue with a provider-level worker. The third is GS-096, whose only
+open criterion (batch signed-URL minting) needs a new action on the
+`ganesh-files` Edge Function and a Supabase deploy.
 
 ### How much of this you can trust
 
@@ -289,7 +291,7 @@ Recording these explicitly so the fix cycle does not undo working design:
 | GS-082 | MEDIUM | SECURITY | Asset vs Expense | `expenseCreateAllowed()` guards create but not update | FIXED 2026-09-04 — DEPLOYED |
 | GS-083 | LOW | SECURITY | Festivals | Deleting a pandal or festival orphans every subcollection | FIXED 2026-09-04 — DEPLOYED |
 | GS-084 | LOW | SECURITY | Pandal membership | An admin can write arbitrary fields into another user's membership index | FIXED 2026-09-04 — DEPLOYED |
-| GS-085 | LOW | PERMANENT_FUND | Fund Transfers | Fund transfers have no idempotency key | OPEN — confirmed 2026-09-04 |
+| GS-085 | LOW | PERMANENT_FUND | Fund Transfers | Fund transfers have no idempotency key | FIXED - 2026-09-05 |
 | GS-086 | MEDIUM | DATA_VALIDATION | Collections | `collectorId` is arbitrary and unvalidated | FIXED 2026-09-04 — DEPLOYED |
 | GS-087 | LOW | FESTIVAL | Festivals | Two festivals can be created for the same year | FIXED — verified 2026-09-04 |
 | GS-088 | LOW | SECURITY | Pandal creation | Duplicate pandals are unconstrained and the code fallback is unchecked | FIXED 2026-09-04 |
@@ -300,12 +302,12 @@ Recording these explicitly so the fix cycle does not undo working design:
 | GS-093 | LOW | COLLECTIONS | Households | `assignedCollectorId` and `notes` are dead fields | FIXED - 2026-09-04 (exposed, not deleted) |
 | GS-094 | LOW | UX | Collections | The payment-method filter ignores the search box | CLOSED - was already fixed |
 | GS-095 | LOW | ASSETS | Pandal Assets | Asset detail resolves from a 400-doc list and shows a misleading message | FIXED — 2026-09-04 |
-| GS-096 | LOW | STORAGE | Supabase Storage | Signed URLs live 30 minutes and the cache map never evicts | OPEN |
-| GS-097 | LOW | PERFORMANCE | Supabase Storage | Each upload reads the image into memory three times | OPEN — confirmed 2026-09-04 |
-| GS-098 | LOW | CODE_QUALITY | Supabase Storage | Dead `ganeshStorage.ts` barrel and a decoy block in `storage.rules` | OPEN — confirmed 2026-09-04 |
+| GS-096 | LOW | STORAGE | Supabase Storage | Signed URLs live 30 minutes and the cache map never evicts | PARTIAL - 2026-09-05 (cache bounded; expiry already fine) |
+| GS-097 | LOW | PERFORMANCE | Supabase Storage | Each upload reads the image into memory three times | FIXED - 2026-09-05 |
+| GS-098 | LOW | CODE_QUALITY | Supabase Storage | Dead `ganeshStorage.ts` barrel and a decoy block in `storage.rules` | FIXED - 2026-09-05 |
 | GS-099 | LOW | NAVIGATION | Admin Dashboard | Pushing a tab route from the admin stack unwinds the stack | OPEN |
 | GS-100 | LOW | CODE_QUALITY | Navigation | Every Ganesh href is cast `as never`, disabling typed routes | OPEN — confirmed 2026-09-04 |
-| GS-101 | LOW | UX | Expenses | No unsaved-changes guard on long forms | OPEN |
+| GS-101 | LOW | UX | Expenses | No unsaved-changes guard on long forms | FIXED - 2026-09-05 |
 | GS-102 | LOW | CODE_QUALITY | Platform | `EXPO_PUBLIC_GEMINI_API_KEY` is bundled into the client (outside Ganesh scope) | OPEN — confirmed 2026-09-04, needs a proxy |
 | GS-103 | MEDIUM | FIRESTORE | Committee Contributions | Festival member increment writes may be rejected when the doc carries `createdBy` | FIXED 2026-09-04 |
 | GS-104 | CRITICAL | SECURITY | Security Rules | Legacy members could not record money: summary rule exceeded the 1000-expression budget | FIXED - 2026-09-04, DEPLOYED |
@@ -5301,7 +5303,7 @@ None.
 **Severity:** LOW
 **Category:** PERMANENT_FUND
 **Feature:** Fund Transfers
-**Status:** OPEN — confirmed 2026-09-04
+**Status:** FIXED - 2026-09-05
 
 ### Problem
 A user-driven retry after a timeout creates a second transfer.
@@ -5328,6 +5330,27 @@ Derive the transfer id from a client-supplied idempotency key held across retrie
 ### Dependencies
 Related to GS-021.
 
+
+### Resolution (2026-09-05)
+Both transfer functions now accept a `clientOpId` and derive the transaction
+id from it, so a repeat is recognised inside `runTransaction` and skipped. The
+existence check reads through the transaction rather than `getDoc`, so it shares
+isolation with the balance read it guards.
+
+The sibling documents (`-opening`, `-festival`) are derived from the same key
+instead of being minted separately, so a retry that once got part-way through
+cannot leave orphans behind.
+
+`permanent-fund.tsx` holds the key in a `useRef` and **rotates it only on
+success**. That is what satisfies both criteria at once: a failed attempt keeps
+its key, so the retry is the same transfer; a successful one gets a fresh key,
+so two genuinely distinct transfers of the same amount are both recorded.
+
+Omitting the key keeps the old behaviour, so any other caller is unchanged -
+`add-permanent-fund.tsx` and `create-festival.tsx` still pass none, and both are
+single-shot flows rather than a retryable sheet.
+
+6 tests, covering both criteria plus the no-key path.
 ---
 
 ## GS-086 — `collectorId` is arbitrary and unvalidated
@@ -5812,7 +5835,7 @@ in flight, and its wording drops the removed-from-view hedge.
 **Severity:** LOW
 **Category:** STORAGE
 **Feature:** Supabase Storage
-**Status:** OPEN
+**Status:** PARTIAL - 2026-09-05 (cache bounded; expiry already fine; batch minting needs Edge Function work)
 
 ### Problem
 Signed URLs are long-lived, minted one per row, and cached in an unbounded module-level map.
@@ -5841,6 +5864,31 @@ Reduce thumbnail expiry, bound the cache with an LRU or periodic sweep, and use 
 ### Dependencies
 Depends on GS-001.
 
+
+### Resolution (2026-09-05)
+Two of three criteria met; the third is recorded as needing server work.
+
+**Criterion 1 was already met, and the ticket's premise is stale.** It says
+`expiresIn` defaults to 30 minutes with a 25-minute cache. Since the GS-001
+lockdown, download URLs are minted by the `ganesh-files` Edge Function with
+`DOWNLOAD_URL_TTL_SECONDS = 60 * 5`, and the client cache is 4 minutes -
+deliberately a minute short of the grant, so it can never hand out a link that
+looks valid but has expired server-side. The stated impact, "a leaked URL grants
+30 minutes of unauthenticated read", is now 5 minutes and behind a Firebase
+token check.
+
+**Criterion 2 is now met.** The cache `Map` had no eviction and no size bound,
+so a long-lived session grew it once per distinct file ever previewed and never
+shrank. It now sweeps expired entries on write and caps at 300 live entries,
+evicting the soonest-to-expire. A sweep suffices because entries live 4 minutes,
+so almost everything in there is stale almost all of the time; the cap is the
+backstop for the one case a sweep cannot help - more than 300 distinct files
+previewed inside a single 4-minute window.
+
+**Criterion 3 is not done.** Batch minting would need a new batch action on the
+`ganesh-files` Edge Function plus a Supabase deploy, which is server work rather
+than a client fix. Each `GaneshSignedPreview` still mints its own URL. Recorded
+here rather than silently dropped.
 ---
 
 ## GS-097 — Each upload reads the image into memory three times
@@ -5848,7 +5896,7 @@ Depends on GS-001.
 **Severity:** LOW
 **Category:** PERFORMANCE
 **Feature:** Supabase Storage
-**Status:** OPEN — confirmed 2026-09-04
+**Status:** FIXED - 2026-09-05
 
 ### Problem
 The full image is materialised as an ArrayBuffer up to three times per upload.
@@ -5875,6 +5923,33 @@ Return the ArrayBuffer from `prepareGaneshImage` and pass it to `uploadObject`.
 ### Dependencies
 None.
 
+
+### Resolution (2026-09-05)
+`prepareGaneshImage` now reads the file **once on every path**, and carries the
+bytes on its result so `uploadObject` reuses them instead of re-fetching the
+URI.
+
+Getting to one read took a second change beyond threading the buffer.
+`shouldCompressGaneshImage` returns true whenever either dimension exceeds
+`RECEIPT_MAX_EDGE`, regardless of size - so when the picker reports large
+dimensions, the original's size cannot change the decision and measuring it was
+pure waste. That read is now skipped entirely. The four paths:
+
+| picker gave fileSize | compression | reads before | reads now |
+| --- | --- | ---: | ---: |
+| yes | no | 1 | 1 |
+| no | no | 2 | 1 |
+| yes | yes | 2 | 1 |
+| no | yes | 3 | 1 |
+
+`bytes` is optional on `PreparedGaneshImage` on purpose: an image whose size the
+picker reported and which needs no compression is never read before upload, and
+must not be read just to populate the field.
+
+**A latent bug fixed in passing.** The webp-to-jpeg extension decision used
+`size !== originalSize` to ask "was this re-encoded?". A compression landing on
+the identical byte count would answer no, leaving a file saved as JPEG labelled
+`.webp`. Replaced with an explicit `compressed` flag.
 ---
 
 ## GS-098 — Dead `ganeshStorage.ts` barrel and a decoy block in `storage.rules`
@@ -5882,7 +5957,7 @@ None.
 **Severity:** LOW
 **Category:** CODE_QUALITY
 **Feature:** Supabase Storage
-**Status:** OPEN — confirmed 2026-09-04
+**Status:** FIXED - 2026-09-05
 
 ### Problem
 Two pieces of dead code, one of which actively misleads a security reviewer.
@@ -5912,6 +5987,35 @@ Delete both.
 ### Dependencies
 Related to GS-001.
 
+
+### Resolution (2026-09-05)
+Both deleted. `services/ganesh/ganeshStorage.ts` is gone - it was a pure
+re-export barrel with zero importers, verified before removal - and the
+`pandals/{pandalId}/festivals/{festivalId}/**` block is out of `storage.rules`,
+replaced by a comment explaining why there is deliberately no Ganesh rule there.
+
+**The decoy was worse than the ticket knew.** Attempting to deploy the change
+revealed that **Firebase Storage has never been provisioned on
+`expenseapp-27f94`**:
+
+```
+Error: Firebase Storage has not been set up on project 'expenseapp-27f94'.
+```
+
+So `storage.rules` has never been deployed and currently cannot be. The block
+was not merely unused - it was a membership-scoped access rule, in a rules file
+that has never been in force, for a service the project does not have. Anyone
+auditing Ganesh file access would have found it and been reassured by something
+that was never even loaded. The real enforcement point is the `ganesh-files`
+Edge Function plus `supabase/ganesh-files.policies.sql` (GS-001).
+
+The `/releases` rule is untouched. Its consumer, `lib/apkUpdate.ts`, treats
+Firebase Storage as optional and falls through to the GitHub Release URL when
+`getFirebaseStorage()` returns nothing - which is what actually runs today - so
+nothing depends on this file being deployed.
+
+**Nothing to deploy.** Recorded because the natural assumption on reading the
+diff is that a storage-rules change needs one.
 ---
 
 ## GS-099 — Pushing a tab route from the admin stack unwinds the stack
@@ -5994,7 +6098,7 @@ None.
 **Severity:** LOW
 **Category:** UX
 **Feature:** Expenses
-**Status:** OPEN
+**Status:** FIXED - 2026-09-05
 
 ### Problem
 Leaving a partially completed form discards the entry silently.
@@ -6021,6 +6125,28 @@ Add a dirty-state check and a confirmation prompt on the long add-screens.
 ### Dependencies
 Related to GS-033.
 
+
+### Resolution (2026-09-05)
+`hooks/useUnsavedChangesGuard.ts` added and wired into the two longest forms,
+`add-expense.tsx` (~20 fields) and `add-sponsor.tsx`.
+
+Done as a hook rather than per screen because there are two ways out and the
+header button can only intercept one of them:
+
+- The header back button, through `confirmLeave`.
+- The Android hardware back button and the iOS swipe gesture, through
+  navigation's `beforeRemove` event - the more likely accident of the two, and
+  the one no screen-level handler catches.
+
+The listener is registered only while the form is dirty, so a pristine form is
+not intercepted at all - no prompt, and nothing in the way of someone who opened
+the screen by mistake, which is criterion 2.
+
+Dirtiness counts typed text and a picked receipt only. The chips that start with
+a value - funding, payment method, category, sponsor type, deal type, purpose,
+status - are excluded, or merely opening the screen would arm the prompt. On
+`add-expense` the guard also stands down once the ledger row is saved: there is
+nothing left to lose at that point, and the receipt upload has its own retry.
 ---
 
 ## GS-102 — `EXPO_PUBLIC_GEMINI_API_KEY` is bundled into the client

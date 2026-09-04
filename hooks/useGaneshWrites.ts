@@ -530,6 +530,8 @@ export function useGaneshWrites() {
       location: PermanentFundLocation;
       festivalName?: string;
       description?: string;
+      /** Idempotency key held across retries by the caller (GS-085). */
+      clientOpId?: string;
     }) => {
       if (!actor || !pandalId) throw new Error("Select a Pandal first.");
       requirePerm("permanentFund.transfer");
@@ -552,6 +554,8 @@ export function useGaneshWrites() {
       festivalName?: string;
       description?: string;
       type?: "CARRY_FORWARD" | "TRANSFER_IN";
+      /** Idempotency key held across retries by the caller (GS-085). */
+      clientOpId?: string;
     }) => {
       requirePerm("permanentFund.transfer");
       const ctx = requireFestival(input.festivalId);
