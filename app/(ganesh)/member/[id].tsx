@@ -677,6 +677,7 @@ export default function MemberDetailScreen() {
         </Section>
       ) : null}
 
+      {can("contributions.read") ? (
       <Section title="Festival payments" subtitle={`${payments.length} recorded`}>
         {payments.length === 0 ? (
           <GaneshEmptyState
@@ -704,6 +705,7 @@ export default function MemberDetailScreen() {
           </View>
         )}
       </Section>
+      ) : null}
     </GaneshScreen>
   );
 }

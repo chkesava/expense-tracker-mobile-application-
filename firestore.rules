@@ -485,6 +485,33 @@ service cloud.firestore {
         || canWriteSponsorOf(pandalId);
     }
 
+    // Donor PII read gates (GS-073). Assets and sponsors already gate reads on
+    // a permission; the ledger did not, so every active member — `viewer`
+    // included — could read every household's name, mobile number and address.
+    //
+    // `households` is gated with `collections` on purpose: it carries the same
+    // name, house number and mobile, so gating only `collections` would leave
+    // the same data readable one collection over. The ticket did not mention it.
+    //
+    // The `!hasPermissionsField` fallback is the same legacy clause the asset
+    // and sponsor gates use: a member document written before RBAC has no
+    // `permissions` array, and must not lose access on the day these deploy.
+    function canReadCollectionsOf(pandalId) {
+      return hasPermOf(pandalId, 'collections.read')
+        || (
+          isActivePandalMemberOf(pandalId)
+          && !hasPermissionsField(pandalId)
+        );
+    }
+
+    function canReadContributionsOf(pandalId) {
+      return hasPermOf(pandalId, 'contributions.read')
+        || (
+          isActivePandalMemberOf(pandalId)
+          && !hasPermissionsField(pandalId)
+        );
+    }
+
     function canReadAssetOf(pandalId) {
       return hasPermOf(pandalId, 'assets.read')
         || (
@@ -538,6 +565,12 @@ service cloud.firestore {
           && request.resource.data.pandalId == pandalId
           && request.resource.data.role is string
           && request.resource.data.status in ['active', 'suspended', 'removed']
+          // GS-084: three validated fields did not stop an admin writing any
+          // others, which made this an arbitrary write primitive into another
+          // user's personal tree. Bounded before, pinned now.
+          && request.resource.data.keys().hasOnly([
+               'pandalId', 'role', 'status', 'pandalName', 'updatedAt'
+             ])
         );
       allow delete: if isOwner(uid) || canManageMembersOf(pandalId);
     }
@@ -551,7 +584,11 @@ service cloud.firestore {
       allow list: if false;
       allow create: if signedIn()
         && request.resource.data.createdBy == request.auth.uid
-        && request.resource.data.pandalId is string;
+        && request.resource.data.pandalId is string
+        // GS-043: without this, anyone could mint pandalInvites/<code> carrying
+        // another committee's pandalId and an arbitrary name — a phishing and
+        // code-squatting vector against uniquePandalCode()'s retry loop.
+        && canManageMembersOf(request.resource.data.pandalId);
       allow update: if signedIn()
         && (
           resource.data.createdBy == request.auth.uid
@@ -567,9 +604,18 @@ service cloud.firestore {
       allow read: if signedIn()
         && (resource.data.userId == request.auth.uid
             || canManageMembersOf(resource.data.pandalId));
+      // One slot per user per pandal (GS-042). The client already writes
+      // `{pandalId}__{uid}` by convention; nothing enforced it, so a single
+      // account could mint unlimited requests with attacker-controlled
+      // displayName and phone strings, and `allow delete: if false` meant an
+      // admin could never clear them. The queue was floodable and permanent.
+      function idIsOwnSlot() {
+        return requestId == request.resource.data.pandalId + '__' + request.auth.uid;
+      }
       allow create: if signedIn()
         && request.resource.data.userId == request.auth.uid
-        && request.resource.data.status == 'pending';
+        && request.resource.data.status == 'pending'
+        && idIsOwnSlot();
       allow update: if (
           canManageMembersOf(resource.data.pandalId)
           && request.resource.data.pandalId == resource.data.pandalId
@@ -582,7 +628,13 @@ service cloud.firestore {
           && request.resource.data.pandalId == resource.data.pandalId
           && request.resource.data.status == 'pending'
         );
-      allow delete: if false;
+      // An admin of the target pandal can dismiss a request, which is what
+      // makes a flooded queue recoverable; the requester can withdraw their own
+      // (GS-042). This was `if false`, so nothing could ever be cleared.
+      allow delete: if signedIn() && (
+        resource.data.userId == request.auth.uid
+        || canManageMembersOf(resource.data.pandalId)
+      );
     }
 
     match /pandals/{pandalId} {
@@ -898,7 +950,13 @@ service cloud.firestore {
         allow create: if canCreateFestival() && ganeshIdentityCreate() && pandalNotArchived();
         allow update: if canCloseOrUpdateFestival()
           && request.resource.data.updatedBy == request.auth.uid;
-        allow delete: if canManageMembers();
+        // No hard delete (GS-083), for the same reason the pandal document
+        // refuses one (GS-017): Firestore does not cascade, so this would leave
+        // every collection, expense, contribution and the festival's summary
+        // alive but unreachable — and the rules that reach them call
+        // `pandalData()`, so they would start denying too. Close the festival
+        // instead; that is what the settlement flow is for.
+        allow delete: if false;
 
         match /fundTransfers/{docId} {
           allow read: if isActivePandalMember();
@@ -1252,7 +1310,21 @@ service cloud.firestore {
           // Festival auditLogs stay writable as ledger side-effects, but only
           // admin/treasurer may read them. Nested matches OR together, so the
           // wildcard read must exclude this subcollection.
-          allow read: if isActivePandalMember() && subcol != 'auditLogs';
+          //
+          // Donor-bearing subcollections gate on a read permission (GS-073);
+          // everything else stays open to any active member, because it is
+          // aggregate or operational rather than personal.
+          function canReadSubcol() {
+            return subcol != 'auditLogs' && (
+              subcol == 'collections' || subcol == 'households'
+                ? canReadCollectionsOf(pandalId)
+                : subcol == 'contributions'
+                  ? canReadContributionsOf(pandalId)
+                  : isActivePandalMember()
+            );
+          }
+
+          allow read: if canReadSubcol();
           allow create: if isActivePandalMember()
             && festivalOpen()
             && canWriteFestivalSubcol()
@@ -1267,6 +1339,11 @@ service cloud.firestore {
           allow update: if isActivePandalMember()
             && !isAppendOnlyLog()
             && payloadWellFormed()
+            // GS-082: this guard was on create only, so an update could add an
+            // `assetId` or flip `expenseType` to `asset_purchase` with no
+            // sibling asset, breaking the asset-versus-expense split that
+            // `assetPurchaseAmount` and the report both rely on.
+            && expenseCreateAllowed()
             && (
               (subcol == 'contributions' && contributionStatusChanged() && contributionUpdateAllowed())
               || (subcol == 'sponsorships' && sponsorshipStatusChanged() && sponsorshipUpdateAllowed())

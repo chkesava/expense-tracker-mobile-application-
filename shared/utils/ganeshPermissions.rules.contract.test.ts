@@ -1531,3 +1531,126 @@ describe("ganesh firestore rules - GS-017 pandal ownership and archive", () => {
     expect(isActivePandalMember(member)).toBe(true);
   });
 });
+
+/**
+ * Group A, 2026-09-04. Hand-written mirrors of the access-control clauses added
+ * for GS-042, GS-043, GS-073, GS-082, GS-083 and GS-084. No emulator in CI
+ * (GS-074), so these move with `firestore.rules` or they are worthless.
+ */
+
+/** Mirrors `canReadCollectionsOf` / `canReadContributionsOf`. */
+function canReadDonorData(params: {
+  permissions?: string[];
+  permission: "collections.read" | "contributions.read";
+  active: boolean;
+}): boolean {
+  if (!params.active) return false;
+  // A member document written before RBAC has no `permissions` array and must
+  // not lose access the day these deploy.
+  if (params.permissions === undefined) return true;
+  return params.permissions.includes(params.permission);
+}
+
+/** Mirrors `idIsOwnSlot()` on pandalJoinRequests. */
+function joinRequestIdAllowed(requestId: string, pandalId: string, uid: string): boolean {
+  return requestId === `${pandalId}__${uid}`;
+}
+
+/** Mirrors the pandalJoinRequests delete rule. */
+function canDeleteJoinRequest(params: {
+  requesterUid: string;
+  uid: string;
+  isAdminOfPandal: boolean;
+}): boolean {
+  return params.requesterUid === params.uid || params.isAdminOfPandal;
+}
+
+/** Mirrors the pandalInvites create rule. */
+function canCreateInvite(params: { createdByIsSelf: boolean; isAdminOfNamedPandal: boolean }) {
+  return params.createdByIsSelf && params.isAdminOfNamedPandal;
+}
+
+/** Mirrors the membership-index admin-stamp key allowlist. */
+function membershipStampAllowed(keys: string[]): boolean {
+  const allowed = ["pandalId", "role", "status", "pandalName", "updatedAt"];
+  return keys.every((key) => allowed.includes(key));
+}
+
+function canDeleteFestival(): boolean {
+  return false;
+}
+
+describe("ganesh firestore rules - Group A access control (2026-09-04)", () => {
+  it("keeps donor PII from a viewer while leaving it to everyone who had it", () => {
+    const forRole = (role: "admin" | "treasurer" | "member" | "collector" | "viewer") =>
+      canReadDonorData({
+        permissions: [...ROLE_PERMISSIONS[role]],
+        permission: "collections.read",
+        active: true,
+      });
+
+    // Households and collections carry donor name, mobile and address.
+    expect(forRole("admin")).toBe(true);
+    expect(forRole("treasurer")).toBe(true);
+    expect(forRole("member")).toBe(true);
+    // A collector needs the household list to collect from it.
+    expect(forRole("collector")).toBe(true);
+    // The one case being closed: least privilege no longer means full donor DB.
+    expect(forRole("viewer")).toBe(false);
+    expect(
+      canReadDonorData({
+        permissions: [...ROLE_PERMISSIONS.viewer],
+        permission: "contributions.read",
+        active: true,
+      })
+    ).toBe(false);
+  });
+
+  it("does not strip access from a member document written before RBAC", () => {
+    // No `permissions` array at all. Denying these would break every legacy
+    // member on the day the rules deploy.
+    expect(
+      canReadDonorData({ permissions: undefined, permission: "collections.read", active: true })
+    ).toBe(true);
+    // Inactive is still denied, permissions or not.
+    expect(
+      canReadDonorData({ permissions: undefined, permission: "collections.read", active: false })
+    ).toBe(false);
+  });
+
+  it("pins a join request to one slot per user per pandal", () => {
+    expect(joinRequestIdAllowed("p1__u1", "p1", "u1")).toBe(true);
+    // The flood: unlimited ids under one account, each with attacker-supplied
+    // displayName and phone rendering into the admin's approval queue.
+    expect(joinRequestIdAllowed("anything-else", "p1", "u1")).toBe(false);
+    expect(joinRequestIdAllowed("p1__u2", "p1", "u1")).toBe(false);
+    expect(joinRequestIdAllowed("p2__u1", "p1", "u1")).toBe(false);
+  });
+
+  it("lets an admin clear a join request, and a requester withdraw their own", () => {
+    // Was `allow delete: if false`, so a flooded queue was permanent.
+    expect(canDeleteJoinRequest({ requesterUid: "u1", uid: "u1", isAdminOfPandal: false })).toBe(true);
+    expect(canDeleteJoinRequest({ requesterUid: "u9", uid: "u1", isAdminOfPandal: true })).toBe(true);
+    expect(canDeleteJoinRequest({ requesterUid: "u9", uid: "u1", isAdminOfPandal: false })).toBe(false);
+  });
+
+  it("refuses an invite minted for a pandal the caller does not administer", () => {
+    expect(canCreateInvite({ createdByIsSelf: true, isAdminOfNamedPandal: true })).toBe(true);
+    // Code squatting and a misleading name published against a real pandal.
+    expect(canCreateInvite({ createdByIsSelf: true, isAdminOfNamedPandal: false })).toBe(false);
+    expect(canCreateInvite({ createdByIsSelf: false, isAdminOfNamedPandal: true })).toBe(false);
+  });
+
+  it("bounds what an admin may stamp into another user's membership index", () => {
+    expect(membershipStampAllowed(["pandalId", "role", "status"])).toBe(true);
+    expect(membershipStampAllowed(["pandalId", "role", "status", "pandalName", "updatedAt"])).toBe(true);
+    // The write primitive being removed: any extra field into someone's tree.
+    expect(membershipStampAllowed(["pandalId", "role", "status", "injected"])).toBe(false);
+  });
+
+  it("refuses a festival hard delete, as the pandal document already does", () => {
+    // Firestore does not cascade: this would leave every collection, expense
+    // and contribution alive but unreachable (GS-083, same as GS-017).
+    expect(canDeleteFestival()).toBe(false);
+  });
+});

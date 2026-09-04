@@ -241,8 +241,8 @@ Recording these explicitly so the fix cycle does not undo working design:
 | GS-039 | HIGH | FINANCE | Split Funding | The sponsored portion of an expense is absent from every summary total | FIXED 2026-09-03 |
 | GS-040 | HIGH | OFFLINE | Supabase Storage | The "waiting for connection" photo queue is ephemeral screen state | PARTIAL 2026-09-03 — copy honest, queue not built |
 | GS-041 | HIGH | DATA_VALIDATION | Security Rules | No server-side validation of amounts, dates or enums anywhere | FIXED 2026-09-03 - AWAITING RULES DEPLOY |
-| GS-042 | MEDIUM | SECURITY | Pandal membership | `pandalJoinRequests` is unbounded, undeletable and accepts any `pandalId` | OPEN |
-| GS-043 | MEDIUM | SECURITY | Pandal membership | An invite can be created pointing at someone else's pandal | OPEN |
+| GS-042 | MEDIUM | SECURITY | Pandal membership | `pandalJoinRequests` is unbounded, undeletable and accepts any `pandalId` | FIXED 2026-09-04 — DEPLOYED |
+| GS-043 | MEDIUM | SECURITY | Pandal membership | An invite can be created pointing at someone else's pandal | FIXED 2026-09-04 — DEPLOYED |
 | GS-044 | MEDIUM | AUTH | Authentication | The Ganesh session is never cleared on sign-out | OPEN |
 | GS-045 | MEDIUM | AUTH | Authentication | `GaneshGate` writes real PII into the duress user tree | OPEN |
 | GS-046 | MEDIUM | AUTH | Authentication | The login screen claims an isolation the architecture does not provide | OPEN |
@@ -272,7 +272,7 @@ Recording these explicitly so the fix cycle does not undo working design:
 | GS-070 | MEDIUM | FINANCE | Permanent Fund | Seed-then-transfer runs as two non-atomic steps with no rollback | OPEN |
 | GS-071 | MEDIUM | FIRESTORE | Pandal creation | Multi-batch pandal and festival creation has no rollback | OPEN |
 | GS-072 | MEDIUM | FIRESTORE | Reports | The recompute treats a missing contribution status as `received` | OPEN |
-| GS-073 | MEDIUM | SECURITY | Collections | Every member, including `viewer`, can read all donor PII | OPEN |
+| GS-073 | MEDIUM | SECURITY | Collections | Every member, including `viewer`, can read all donor PII | FIXED 2026-09-04 — DEPLOYED |
 | GS-074 | MEDIUM | CODE_QUALITY | Security Rules | Rules are deployed by hand and the contract test is a hand-written mirror | OPEN |
 | GS-075 | MEDIUM | RECONCILIATION | Cash Reconciliation | Cash Reconciliation is entirely missing | OPEN |
 | GS-076 | MEDIUM | COLLECTIONS | Daily Collection Sessions | Daily Collection Sessions are entirely missing | OPEN |
@@ -281,13 +281,13 @@ Recording these explicitly so the fix cycle does not undo working design:
 | GS-079 | MEDIUM | REPORTING | Reports | No export, no date range, and two "report" rows are plain list links | OPEN |
 | GS-080 | MEDIUM | FINANCE | Split Funding | Local `money()` copies drop the epsilon guard, causing false rejections | OPEN |
 | GS-081 | LOW | FINANCE | Reports | Summary counters are unrounded float accumulators | OPEN |
-| GS-082 | MEDIUM | SECURITY | Asset vs Expense | `expenseCreateAllowed()` guards create but not update | OPEN |
-| GS-083 | LOW | SECURITY | Festivals | Deleting a pandal or festival orphans every subcollection | OPEN |
-| GS-084 | LOW | SECURITY | Pandal membership | An admin can write arbitrary fields into another user's membership index | OPEN |
+| GS-082 | MEDIUM | SECURITY | Asset vs Expense | `expenseCreateAllowed()` guards create but not update | FIXED 2026-09-04 — DEPLOYED |
+| GS-083 | LOW | SECURITY | Festivals | Deleting a pandal or festival orphans every subcollection | FIXED 2026-09-04 — DEPLOYED |
+| GS-084 | LOW | SECURITY | Pandal membership | An admin can write arbitrary fields into another user's membership index | FIXED 2026-09-04 — DEPLOYED |
 | GS-085 | LOW | PERMANENT_FUND | Fund Transfers | Fund transfers have no idempotency key | OPEN |
 | GS-086 | MEDIUM | DATA_VALIDATION | Collections | `collectorId` is arbitrary and unvalidated | OPEN |
 | GS-087 | LOW | FESTIVAL | Festivals | Two festivals can be created for the same year | OPEN |
-| GS-088 | LOW | SECURITY | Pandal creation | Duplicate pandals are unconstrained and the code fallback is unchecked | OPEN |
+| GS-088 | LOW | SECURITY | Pandal creation | Duplicate pandals are unconstrained and the code fallback is unchecked | FIXED 2026-09-04 |
 | GS-089 | LOW | CONTRIBUTIONS | In-Kind | "Cancelled" is offered as a creation status | OPEN |
 | GS-090 | LOW | CONTRIBUTIONS | In-Kind | Sponsorship-kind value is hidden from the contributions tab metrics | OPEN |
 | GS-091 | LOW | CONTRIBUTIONS | Committee Contributions | Overpayment is indistinguishable from exact payment | OPEN |
@@ -3035,7 +3035,7 @@ Umbrella for GS-004, GS-008, GS-010, GS-018, GS-037, GS-086.
 **Severity:** MEDIUM
 **Category:** SECURITY
 **Feature:** Pandal membership
-**Status:** OPEN
+**Status:** FIXED 2026-09-04 — DEPLOYED
 
 ### Problem
 Join-request creation validates only the caller's own uid and a `pending` status. The document id is unconstrained, the target pandal is never checked to exist, there is no rate limit, and nobody can ever delete a request.
@@ -3074,7 +3074,7 @@ Depends on GS-003. Related to GS-043.
 **Severity:** MEDIUM
 **Category:** SECURITY
 **Feature:** Pandal membership
-**Status:** OPEN
+**Status:** FIXED 2026-09-04 — DEPLOYED
 
 ### Problem
 Invite creation checks only that `createdBy` is the caller and `pandalId` is a string. It never checks that the caller administers that pandal.
@@ -4395,7 +4395,7 @@ the tool reached for when totals are already suspect.
 **Severity:** MEDIUM
 **Category:** SECURITY
 **Feature:** Collections
-**Status:** OPEN
+**Status:** FIXED 2026-09-04 — DEPLOYED
 
 ### Problem
 Assets and sponsors have dedicated read permissions; festival ledger subcollections do not. Every active member — including `viewer` and `collector` — can read all collections and contributions, and therefore every donor's name, mobile number and address.
@@ -4729,7 +4729,7 @@ Related to GS-080.
 **Severity:** MEDIUM
 **Category:** SECURITY
 **Feature:** Asset vs Expense
-**Status:** OPEN
+**Status:** FIXED 2026-09-04 — DEPLOYED
 
 ### Problem
 The rule that couples an asset-purchase expense to a real sibling asset applies only on create. On update a client can freely add an `assetId` or flip `expenseType` to `asset_purchase` with no corresponding asset.
@@ -4764,7 +4764,7 @@ Related to GS-020, GS-004.
 **Severity:** LOW
 **Category:** SECURITY
 **Feature:** Festivals
-**Status:** OPEN
+**Status:** FIXED 2026-09-04 — DEPLOYED
 
 ### Problem
 Firestore does not cascade deletes, so removing a parent document leaves all its subcollection data as unreachable orphans.
@@ -4798,7 +4798,7 @@ Related to GS-017.
 **Severity:** LOW
 **Category:** SECURITY
 **Feature:** Pandal membership
-**Status:** OPEN
+**Status:** FIXED 2026-09-04 — DEPLOYED
 
 ### Problem
 The exception that lets a pandal admin stamp a user's membership index validates three fields and permits any others.
@@ -4934,7 +4934,7 @@ Related to GS-041, GS-047.
 **Severity:** LOW
 **Category:** SECURITY
 **Feature:** Pandal creation
-**Status:** OPEN
+**Status:** FIXED 2026-09-04
 
 ### Problem
 Nothing prevents creating multiple pandals with the same name and area, and the invite-code generator's last-resort fallback skips its own uniqueness check.
@@ -5803,3 +5803,72 @@ screens through the shared uploader.
 
 **Left to do:** the persisted queue itself, with the two constraints above as
 its real scope.
+
+---
+
+## Group A resolution notes (2026-09-04)
+
+Seven access-control tickets, all verified live against current code first, all
+rules-layer except GS-088. `firestore.rules` deployed to `expenseapp-27f94`.
+
+**GS-073 — donor PII.** Every festival subcollection read was
+`isActivePandalMember()`, so a `viewer` could read every household's name,
+mobile number and address. `collections.read` and `contributions.read` already
+existed in the permission registry and the **UI already gated on them**
+(`funds.tsx`, `people.tsx`, `admin/index.tsx`) — only the rules never enforced
+them. Added `canReadCollectionsOf` / `canReadContributionsOf`, mirroring the
+`canReadAssetOf` / `canReadSponsorOf` pattern including its
+`!hasPermissionsField` legacy fallback, so a pre-RBAC member document does not
+lose access on deploy day. `households` is gated with `collections` because it
+carries the same PII — the ticket did not mention it.
+
+Viewer no longer holds those two permissions; every other role keeps them, so
+nothing an existing build does starts failing except the case being closed.
+Three screens read contributions without gating, which would have shown zeros
+meaning "no access": `report.tsx`'s promised-vs-received and
+`member/[id].tsx`'s Festival payments are now gated; `admin/reports.tsx` sits
+behind AdminGate so only admins reach it.
+
+**GS-042 — join-request flood.** The document id is now pinned to
+`{pandalId}__{uid}`, which the client already wrote by convention and nothing
+enforced, so one account could mint unlimited requests carrying
+attacker-controlled `displayName` and `phone`. `allow delete: if false` meant a
+flooded queue was permanent; an admin of the target pandal can now dismiss, and
+a requester can withdraw their own. The read side was already gated by GS-016.
+
+**GS-043 — invite squatting.** Create now requires
+`canManageMembersOf(request.resource.data.pandalId)`. Anyone could previously
+mint `pandalInvites/<code>` carrying another committee's `pandalId` and an
+arbitrary name.
+
+**GS-082 — asset link on update.** `expenseCreateAllowed()` was referenced
+only from `allow create`, so an update could add an `assetId` or flip
+`expenseType` to `asset_purchase` with no sibling asset, breaking the split
+that `assetPurchaseAmount` and the report both rely on. Now on both.
+
+**GS-083 — festival delete.** Refused outright, for the same reason the
+pandal document refuses one (GS-017): Firestore does not cascade, so it would
+leave every collection, expense and contribution alive but unreachable, and the
+rules that reach them call `pandalData()`. This was filed LOW while the
+identical pandal-side problem was HIGH.
+
+**GS-084 — membership index.** The admin stamp validated three fields and
+permitted any others, making it an arbitrary write primitive into another
+user's personal tree. Key set now pinned.
+
+**GS-088 — code fallback.** `uniquePandalCode`'s last-resort return skipped
+the uniqueness check its eight attempts exist to perform. It now retries eight
+times with the check and throws rather than returning an unverified code.
+The duplicate-pandal-name half is **not** addressed — that needs a product
+decision on whether two committees may share a name.
+
+7 contract-test mirrors added; there is no emulator in CI (GS-074).
+
+### Correction
+
+An early edit placed the GS-042 id guard in the **vaults** match block by
+mistake — a `replace` on `allow create: if signedIn()` hit the first
+occurrence in the file, which belongs to the Expense app. The rules compiler
+caught it as `Invalid variable name: requestId`. Reverted and re-anchored
+before any deploy. Two edits in this session silently no-matched on whitespace
+or an em-dash, so each change is now verified present rather than assumed.

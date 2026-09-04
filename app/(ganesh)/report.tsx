@@ -227,6 +227,7 @@ export default function FestivalReportScreen() {
         </StatStrip>
       </Section>
 
+      {can("contributions.read") ? (
       <Section
         title="Promised vs received"
         subtitle="Promised and cancelled amounts are not cash and are not part of Closing / God Fund."
@@ -249,6 +250,7 @@ export default function FestivalReportScreen() {
           </StatTile>
         </StatStrip>
       </Section>
+      ) : null}
 
       <Section
         title="Sponsors"

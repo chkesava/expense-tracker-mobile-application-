@@ -164,7 +164,21 @@ const COLLECTOR_PERMISSIONS: GaneshPermission[] = [
   "seva.read",
 ];
 
-const VIEWER_PERMISSIONS: GaneshPermission[] = [...READ_LEDGER];
+/**
+ * Viewer sees the money, not the donors (GS-073).
+ *
+ * `collections.read` and `contributions.read` are withheld, so a viewer keeps
+ * every total, expense and report but cannot list households or contributions —
+ * which is where donor names, mobile numbers and addresses live. The rules gate
+ * those two subcollections on exactly these permissions; assets and sponsors
+ * were already gated this way, the ledger was the inconsistency.
+ *
+ * Every other role keeps both, so nothing an existing build does starts
+ * failing except the case being closed deliberately.
+ */
+const VIEWER_PERMISSIONS: GaneshPermission[] = READ_LEDGER.filter(
+  (permission) => permission !== "collections.read" && permission !== "contributions.read"
+);
 
 export const ROLE_PERMISSIONS: Record<GaneshRole, readonly GaneshPermission[]> = {
   admin: ADMIN_PERMISSIONS,

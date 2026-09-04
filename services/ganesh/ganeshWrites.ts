@@ -323,7 +323,17 @@ async function uniquePandalCode(db: Firestore): Promise<string> {
     const snap = await getDoc(doc(db, "pandalInvites", code));
     if (!snap.exists()) return code;
   }
-  return `${generatePandalCode()}${generatePandalCode().slice(0, 2)}`;
+  // GS-088: the last-resort code skipped the uniqueness check the eight
+  // attempts above exist to perform. A collision here is not silent — the
+  // batch's `set` on an existing pandalInvites document is refused by the
+  // rules, failing the whole creation — but failing loudly at the end of a
+  // Pandal setup is a poor outcome when checking costs one read.
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const code = `${generatePandalCode()}${generatePandalCode().slice(0, 2)}`;
+    const snap = await getDoc(doc(db, "pandalInvites", code));
+    if (!snap.exists()) return code;
+  }
+  throw new Error("Could not allocate a Pandal code. Please try again.");
 }
 
 async function seedFirstFestival(
