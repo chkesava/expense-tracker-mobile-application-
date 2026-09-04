@@ -1572,7 +1572,7 @@ function canCreateInvite(params: { createdByIsSelf: boolean; isAdminOfNamedPanda
 
 /** Mirrors the membership-index admin-stamp key allowlist. */
 function membershipStampAllowed(keys: string[]): boolean {
-  const allowed = ["pandalId", "role", "status", "pandalName", "updatedAt"];
+  const allowed = ["pandalId", "role", "status", "pandalName", "joinedAt", "updatedAt"];
   return keys.every((key) => allowed.includes(key));
 }
 
@@ -1644,6 +1644,10 @@ describe("ganesh firestore rules - Group A access control (2026-09-04)", () => {
   it("bounds what an admin may stamp into another user's membership index", () => {
     expect(membershipStampAllowed(["pandalId", "role", "status"])).toBe(true);
     expect(membershipStampAllowed(["pandalId", "role", "status", "pandalName", "updatedAt"])).toBe(true);
+    // What stampPandalMembershipIndex actually writes when an admin stamps
+    // another user. Omitting `joinedAt` from the allowlist would have denied
+    // every admin role change on another person's index.
+    expect(membershipStampAllowed(["pandalId", "role", "status", "pandalName", "joinedAt"])).toBe(true);
     // The write primitive being removed: any extra field into someone's tree.
     expect(membershipStampAllowed(["pandalId", "role", "status", "injected"])).toBe(false);
   });

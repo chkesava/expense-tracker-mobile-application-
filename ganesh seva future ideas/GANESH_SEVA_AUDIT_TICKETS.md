@@ -270,13 +270,13 @@ Recording these explicitly so the fix cycle does not undo working design:
 | GS-068 | MEDIUM | OFFLINE | Offline behaviour | The Firestore persistence fallback cannot work and the cache mode is fabricated | OPEN |
 | GS-069 | MEDIUM | STORAGE | Supabase Storage | No cleanup path exists; orphaned files accumulate permanently | PARTIAL |
 | GS-070 | MEDIUM | FINANCE | Permanent Fund | Seed-then-transfer runs as two non-atomic steps with no rollback | OPEN |
-| GS-071 | MEDIUM | FIRESTORE | Pandal creation | Multi-batch pandal and festival creation has no rollback | OPEN |
-| GS-072 | MEDIUM | FIRESTORE | Reports | The recompute treats a missing contribution status as `received` | OPEN |
+| GS-071 | MEDIUM | FIRESTORE | Pandal creation | Multi-batch pandal and festival creation has no rollback | OPEN — assessed 2026-09-04 |
+| GS-072 | MEDIUM | FIRESTORE | Reports | The recompute treats a missing contribution status as `received` | FIXED 2026-09-04 |
 | GS-073 | MEDIUM | SECURITY | Collections | Every member, including `viewer`, can read all donor PII | FIXED 2026-09-04 — DEPLOYED |
 | GS-074 | MEDIUM | CODE_QUALITY | Security Rules | Rules are deployed by hand and the contract test is a hand-written mirror | OPEN |
 | GS-075 | MEDIUM | RECONCILIATION | Cash Reconciliation | Cash Reconciliation is entirely missing | OPEN |
 | GS-076 | MEDIUM | COLLECTIONS | Daily Collection Sessions | Daily Collection Sessions are entirely missing | OPEN |
-| GS-077 | MEDIUM | COLLECTIONS | Receipt Numbers | Collection receipt numbers are entirely missing | OPEN |
+| GS-077 | MEDIUM | COLLECTIONS | Receipt Numbers | Collection receipt numbers are entirely missing | FIXED — verified 2026-09-04 |
 | GS-078 | MEDIUM | FINANCE | Money Purpose | Money Purpose is missing for every money movement | OPEN |
 | GS-079 | MEDIUM | REPORTING | Reports | No export, no date range, and two "report" rows are plain list links | OPEN |
 | GS-080 | MEDIUM | FINANCE | Split Funding | Local `money()` copies drop the epsilon guard, causing false rejections | FIXED 2026-09-04 |
@@ -301,8 +301,8 @@ Recording these explicitly so the fix cycle does not undo working design:
 | GS-099 | LOW | NAVIGATION | Admin Dashboard | Pushing a tab route from the admin stack unwinds the stack | OPEN |
 | GS-100 | LOW | CODE_QUALITY | Navigation | Every Ganesh href is cast `as never`, disabling typed routes | OPEN |
 | GS-101 | LOW | UX | Expenses | No unsaved-changes guard on long forms | OPEN |
-| GS-102 | LOW | CODE_QUALITY | Platform | `EXPO_PUBLIC_GEMINI_API_KEY` is bundled into the client (outside Ganesh scope) | OPEN |
-| GS-103 | MEDIUM | FIRESTORE | Committee Contributions | Festival member increment writes may be rejected when the doc carries `createdBy` | OPEN |
+| GS-102 | LOW | CODE_QUALITY | Platform | `EXPO_PUBLIC_GEMINI_API_KEY` is bundled into the client (outside Ganesh scope) | OPEN — confirmed 2026-09-04, needs a proxy |
+| GS-103 | MEDIUM | FIRESTORE | Committee Contributions | Festival member increment writes may be rejected when the doc carries `createdBy` | FIXED 2026-09-04 |
 
 ---
 
@@ -4310,7 +4310,7 @@ Related to GS-071.
 **Severity:** MEDIUM
 **Category:** FIRESTORE
 **Feature:** Pandal creation
-**Status:** OPEN
+**Status:** OPEN — assessed 2026-09-04
 
 ### Problem
 Pandal creation issues three sequential batch commits plus two transactions. A failure in a later step leaves a partially created pandal.
@@ -4350,7 +4350,7 @@ Related to GS-070.
 **Severity:** MEDIUM
 **Category:** FIRESTORE
 **Feature:** Reports
-**Status:** OPEN — confirmed 2026-09-03
+**Status:** FIXED 2026-09-04
 
 ### Problem
 The rebuild and the UI disagree about what a contribution with no `status` field means.
@@ -4543,7 +4543,7 @@ Depends on GS-011. Related to GS-075, GS-077.
 **Severity:** MEDIUM
 **Category:** COLLECTIONS
 **Feature:** Receipt Numbers
-**Status:** OPEN
+**Status:** FIXED — verified 2026-09-04
 
 ### Problem
 There is no receipt or serial number on a collection. "Receipt" in this codebase only ever means a JPEG attached to an expense.
@@ -5420,7 +5420,7 @@ Related to GS-033.
 **Severity:** LOW
 **Category:** CODE_QUALITY
 **Feature:** Platform (outside Ganesh scope)
-**Status:** OPEN
+**Status:** OPEN — confirmed 2026-09-04, needs a proxy
 
 ### Problem
 A billable API credential is inlined into the release bundle.
@@ -5456,7 +5456,7 @@ Outside Ganesh scope — route to the owning backlog.
 **Severity:** MEDIUM
 **Category:** FIRESTORE
 **Feature:** Committee Contributions
-**Status:** OPEN
+**Status:** FIXED 2026-09-04
 
 ### Problem
 The increment writes to festival member documents never set `updatedBy`. If the target document carries `createdBy`, the rules require `updatedBy == request.auth.uid`, and the merge preserves whoever wrote it last — so a *different* actor's write is rejected.
@@ -5943,3 +5943,81 @@ Added an `exists` check on the named member. `exists` only, deliberately: one
 document read rather than the two an active-status check costs, and the festival
 wildcard already spends several against the per-evaluation budget. The service
 layer remains what enforces *active* membership; this is the floor beneath it.
+
+---
+
+## Group H resolution notes (2026-09-04)
+
+### GS-103 — FIXED. Its own "LIKELY, not confirmed" resolves to confirmed
+
+`firestore.rules` applies `ganeshIdentityUpdate()` once a festival member
+document carries `createdBy`, and that requires `updatedBy == request.auth.uid`.
+None of the member-counter increment writes set `updatedBy`. So on any member
+whose contribution target had been set individually — the only path that
+writes `createdBy` — a **second** actor's contribution, expense or
+reimbursement write was refused outright. Recording a payment worked for one
+committee member and failed for another, with no stated reason.
+
+`updatedBy: actor.uid` added at all eight member-counter payloads.
+`bumpReceivedContribution` had no access to the actor, so it now takes an
+`actorId`.
+
+### GS-072 — FIXED. Two definitions of "received", now one
+
+The recompute rolled its own predicate — "not cancelled and not promised" —
+which counts a contribution with **no status at all** as received, while
+`contributionStatusOf` defaults an absent status to *promised*. A statusless
+document was invisible-as-promised throughout the UI and became cash the moment
+anyone pressed "Recalculate from ledger". It now calls the shared `isReceived`.
+2 regression tests.
+
+### GS-077 — ALREADY FIXED, ticket was stale
+
+Filed as "MISSING. There is no receipt or serial number on a collection."
+`receiptNumber` is on `GaneshCollection`, `add-collection.tsx` displays it, and
+`ganeshWrites.ts` carries 13 references including sequence allocation,
+`formatCollectionReceipt` and `assignPendingCollectionReceipts` for the offline
+path. Tenth stale ticket found this session.
+
+### GS-102 — CONFIRMED, and it needs a server
+
+`EXPO_PUBLIC_GEMINI_API_KEY` is still inlined by Metro into every release
+bundle (`lib/env.ts:28`), and consumed by `services/nutritionAiService.ts:42`.
+Unlike the Firebase apiKey, which is a genuine public identifier, a Gemini key
+is **spendable** — anyone who unzips the APK can bill the account.
+
+Left open deliberately. The only real fix is to hold the credential server-side
+and proxy the call, which means a new deployable (the `ganesh-files` Edge
+Function is the precedent), a client change, and secret management. That is its
+own piece of work, and it is a Nutrition concern rather than a Ganesh one.
+Recording it here with the mechanism confirmed so it can be scheduled honestly
+rather than sitting at LOW/CODE_QUALITY, which understates it.
+
+### GS-071 — ASSESSED, not fixed
+
+Confirmed as described: creation runs several sequential commits and a later
+failure leaves a pandal with no festival, or a festival with no summary or
+categories. The ticket is right that the *first* batch is correctly atomic —
+pandal document, invite, membership index and the creator's admin member all
+commit together, so creator-becomes-admin cannot half-happen.
+
+Not fixed, because "leaves nothing behind" is not achievable here: the steps
+span multiple documents beyond one batch's reach and Firestore has no
+cross-batch rollback. The achievable goal is the ticket's second clause —
+detectable and repairable — and `setup.tsx` already detects the main partial
+state ("This Pandal has no festival yet"). A proper repair path is a separate
+piece of design work, not a fix to slip into a group.
+
+### Correction to Group A, found and deployed today
+
+The GS-084 key allowlist I deployed yesterday omitted **`joinedAt`**, which is
+exactly what `stampPandalMembershipIndex` writes when an admin stamps another
+user's index (`setPandalAdmin`, `updatePandalMember`). That branch is the only
+reason the allowlist exists, so the rule I shipped to close a write primitive
+would have **denied every admin role change on another person's index**. Found
+while reading the creation path for GS-071, fixed, contract mirror updated, and
+deployed. The first deploy attempt failed on a transient upload error and was
+retried.
+
+The lesson is the same one this session keeps teaching: I verified the *rule*
+compiled and never checked it against the payload the app actually sends.

@@ -569,7 +569,7 @@ service cloud.firestore {
           // others, which made this an arbitrary write primitive into another
           // user's personal tree. Bounded before, pinned now.
           && request.resource.data.keys().hasOnly([
-               'pandalId', 'role', 'status', 'pandalName', 'updatedAt'
+               'pandalId', 'role', 'status', 'pandalName', 'joinedAt', 'updatedAt'
              ])
         );
       allow delete: if isOwner(uid) || canManageMembersOf(pandalId);

@@ -139,3 +139,38 @@ describe("recomputeFestivalSummary audit trail", () => {
     expect(auditEntry()).toBeDefined();
   });
 });
+
+describe("recompute status agreement (GS-072)", () => {
+  it("treats a contribution with no status as promised, not as cash", async () => {
+    // The recompute rolled its own predicate — "not cancelled and not
+    // promised" — which counted an absent status as received, while
+    // contributionStatusOf defaults it to promised. A statusless document was
+    // invisible-as-promised in the UI and became cash the moment anyone
+    // pressed "Recalculate from ledger".
+    storedSummary = {};
+    collections.contributions = [
+      { kind: "money", amount: 5000, isCommitteeContribution: false },
+    ];
+
+    await recomputeFestivalSummary({} as never, actor, "pandal-1", "festival-1");
+
+    const summary = writes.find((w) => w.path.includes("/summary/"))?.data as
+      | Record<string, number>
+      | undefined;
+    expect(summary?.otherCashContributions).toBe(0);
+  });
+
+  it("still counts an explicitly received contribution as cash", async () => {
+    storedSummary = {};
+    collections.contributions = [
+      { kind: "money", amount: 5000, status: "received", isCommitteeContribution: false },
+    ];
+
+    await recomputeFestivalSummary({} as never, actor, "pandal-1", "festival-1");
+
+    const summary = writes.find((w) => w.path.includes("/summary/"))?.data as
+      | Record<string, number>
+      | undefined;
+    expect(summary?.otherCashContributions).toBe(5000);
+  });
+});

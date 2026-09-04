@@ -91,6 +91,7 @@ import {
 import {
   assertCanCancelContribution,
   assertCanReceiveContribution,
+  isReceived,
 } from "@/shared/utils/ganeshContributions";
 import { JOIN_APPROVE_ROLES, ALL_GANESH_PERMISSIONS, ROLE_PERMISSIONS } from "@/shared/utils/ganeshPermissions";
 import { expandPermissions } from "@/shared/utils/ganeshPermissionRegistry";
@@ -1932,6 +1933,11 @@ export async function addContribution(
           userId: input.contributorMemberId,
           displayName: contributorName,
           contributionPaid: increment(amount),
+          // GS-103: the rules apply ganeshIdentityUpdate() once a member
+          // document carries `createdBy`, which setMemberContributionTarget
+          // writes. Without `updatedBy` a *second* actor's write is refused, so
+          // recording a payment failed for one committee member and not another.
+          updatedBy: actor.uid,
         },
         { merge: true }
       );
@@ -2103,6 +2109,8 @@ function bumpReceivedContribution(
     contributorName?: string;
     paymentMethod?: PaymentMethod;
     wasPromised?: boolean;
+    /** Needed so the member counter write can set `updatedBy` (GS-103). */
+    actorId: string;
   }
 ) {
   if (data.kind === "money") {
@@ -2119,6 +2127,7 @@ function bumpReceivedContribution(
           userId: data.contributorMemberId,
           displayName: data.contributorName,
           contributionPaid: increment(data.amount),
+          updatedBy: data.actorId,
         },
         { merge: true }
       );
@@ -2193,6 +2202,7 @@ export async function receiveContribution(
       contributorName: prev.contributorName ? String(prev.contributorName) : undefined,
       paymentMethod,
       wasPromised: prev.status === "promised",
+      actorId: actor.uid,
     });
     if (input?.pandalAsset && assetId) {
       appendPandalAssetCreate(writer, db, actor, pandalId, assetId, {
@@ -2424,6 +2434,7 @@ export async function addExpense(
         {
           personalExpenses: increment(input.personalAmount),
           pendingReimbursement: increment(input.personalAmount),
+          updatedBy: actor.uid,
         },
         { merge: true }
       );
@@ -2608,6 +2619,7 @@ export async function addAssetPurchase(
       {
         personalExpenses: increment(input.personalAmount),
         pendingReimbursement: increment(input.personalAmount),
+        updatedBy: actor.uid,
       },
       { merge: true }
     );
@@ -2738,6 +2750,7 @@ export async function updateExpenseAmounts(
       {
         personalExpenses: increment(personalDelta),
         pendingReimbursement: increment(personalDelta),
+        updatedBy: actor.uid,
       },
       { merge: true }
     );
@@ -2917,6 +2930,7 @@ export async function addReimbursement(
       {
         reimbursed: increment(input.amount),
         pendingReimbursement: increment(-input.amount),
+        updatedBy: actor.uid,
       },
       { merge: true }
     );
@@ -3106,7 +3120,7 @@ export async function voidFinancialRecord(
               ...festivalCol(pandalId, festivalId, "members"),
               String(data.contributorMemberId),
             ]),
-            { contributionPaid: increment(-amount) },
+            { contributionPaid: increment(-amount), updatedBy: actor.uid },
             { merge: true }
           );
         }
@@ -3144,6 +3158,7 @@ export async function voidFinancialRecord(
           {
             personalExpenses: increment(-personalAmount),
             pendingReimbursement: increment(-personalAmount),
+            updatedBy: actor.uid,
           },
           { merge: true }
         );
@@ -3163,6 +3178,7 @@ export async function voidFinancialRecord(
         {
           reimbursed: increment(-amount),
           pendingReimbursement: increment(amount),
+          updatedBy: actor.uid,
         },
         { merge: true }
       );
@@ -3330,10 +3346,18 @@ export async function recomputeFestivalSummary(
     ]);
 
   const notVoided = (docSnap: QueryDocumentSnapshot) => !docSnap.data().voided;
+  // The shared definition, not a second one (GS-072). This rolled its own as
+  // "not cancelled and not promised", which counts a contribution with **no
+  // status at all** as received — while `contributionStatusOf` in
+  // ganeshContributions.ts defaults an absent status to *promised*. A statusless
+  // document was therefore invisible-as-promised everywhere in the UI and
+  // counted as cash the moment anyone pressed "Recalculate from ledger".
+  //
+  // Every current write path sets a status, so this reaches only legacy or
+  // externally written data — which is precisely what a rebuild tool exists to
+  // handle correctly.
   const received = (docSnap: QueryDocumentSnapshot) =>
-    notVoided(docSnap) &&
-    docSnap.data().status !== "cancelled" &&
-    docSnap.data().status !== "promised";
+    isReceived(docSnap.data() as Parameters<typeof isReceived>[0]);
 
   const locationDeltas: Array<{ location: PermanentFundLocation; amount: number }> = [];
   const addLoc = (location: string | undefined, amount: number) => {
