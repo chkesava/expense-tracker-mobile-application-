@@ -27,7 +27,7 @@ import { useTheme } from "@/theme/ThemeProvider";
 export default function AddPermanentFundScreen() {
   const { theme } = useTheme();
   const g = useGaneshTokens();
-  const { back } = useRouter();
+  const { back, replace } = useRouter();
   const { isOnline } = useNetwork();
   const { pandalId, festivalId } = useGaneshSession();
   const { fund } = usePermanentFund(pandalId);
@@ -74,20 +74,25 @@ export default function AddPermanentFundScreen() {
     }
     setBusy(true);
     try {
-      await writes.seedPermanentFund({
+      // One call, one transaction (GS-070). This used to await the seed and
+      // then await the transfer: each atomic on its own, the pair not — so a
+      // failure between them left the Fund holding everything and the festival
+      // with nothing, and this screen then refused to re-run because
+      // `fund.total > 0`.
+      const allocating = canAllocate && parsedAllocate > 0 && festival;
+      await writes.seedPermanentFundWithAllocation({
         amount: parsedAmount,
         location,
         description,
+        allocation: allocating
+          ? {
+              festivalId: festival.id,
+              amount: parsedAllocate,
+              festivalName: festival.name,
+              description: `Opening funds for ${festival.name}`,
+            }
+          : undefined,
       });
-      if (canAllocate && parsedAllocate > 0 && festival) {
-        await writes.transferPermanentToFestival({
-          festivalId: festival.id,
-          amount: parsedAllocate,
-          location,
-          festivalName: festival.name,
-          description: `Opening funds for ${festival.name}`,
-        });
-      }
       back();
     } catch (error) {
       logError("ganesh.addPermanentFund", error);
@@ -114,9 +119,19 @@ export default function AddPermanentFundScreen() {
         </Text>
         <Text style={{ color: theme.colors.mutedForeground, lineHeight: 22 }}>
           This Pandal already has {formatInr(fund.total)}. Open the Permanent Fund to add a
-          donation or adjust the balance.
+          donation, adjust the balance, or use part of it for this festival.
         </Text>
-        <Button onPress={back}>Go back</Button>
+        {/* GS-070 criterion 2: a Pandal left half-set-up by the old
+            non-atomic flow — Fund seeded, festival unfunded — needs a way
+            through from here. This screen refuses to re-seed, correctly, but
+            used to dead-end on "Go back" without naming where the allocation
+            can still be completed. */}
+        <Button onPress={() => replace("/(ganesh)/permanent-fund" as never)}>
+          Open Permanent Fund
+        </Button>
+        <Button variant="outline" onPress={back}>
+          Go back
+        </Button>
       </GaneshScreen>
     );
   }

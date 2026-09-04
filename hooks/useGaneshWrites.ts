@@ -13,6 +13,7 @@ import {
   adjustPermanentFund,
   assertPermanentFundOnline,
   seedPermanentFund,
+  seedPermanentFundWithAllocation,
   transferFestivalToPermanent,
   transferPermanentToFestival,
 } from "@/services/ganesh/ganeshPermanentFund";
@@ -486,6 +487,21 @@ export function useGaneshWrites() {
           ? "Festival settled and closed"
           : "Festival closed",
         () => writes.closeFestival(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, settlement)
+      );
+    },
+    /**
+     * Seed the Fund and allocate to a festival atomically (GS-070). Needs both
+     * permissions, because it performs both operations.
+     */
+    seedPermanentFundWithAllocation: async (
+      input: Parameters<typeof seedPermanentFundWithAllocation>[3]
+    ) => {
+      if (!actor || !pandalId) throw new Error("Select a Pandal first.");
+      requirePerm("permanentFund.add");
+      if (input.allocation) requirePerm("permanentFund.transfer");
+      if (Number(input.amount ?? 0) > 0) assertPermanentFundOnline(isOnline);
+      return run("Permanent Fund saved", () =>
+        seedPermanentFundWithAllocation(requireDb(), actor, pandalId, input)
       );
     },
     seedPermanentFund: async (input?: {

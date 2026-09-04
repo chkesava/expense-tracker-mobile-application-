@@ -57,11 +57,11 @@ balance and stay offline-capable.
 | --- | ---: | ---: | ---: | ---: |
 | CRITICAL | 9 | 1 | 0 | 10 |
 | HIGH | 31 | 1 | 0 | 32 |
-| MEDIUM | 32 | 0 | 10 | 42 |
+| MEDIUM | 36 | 1 | 5 | 42 |
 | LOW | 16 | 1 | 3 | 20 |
-| **Total** | **88** | **3** | **13** | **104** |
+| **Total** | **92** | **4** | **8** | **104** |
 
-Every CRITICAL and HIGH is now closed or partial. Three partials remain: GS-004
+Every CRITICAL and HIGH is now closed or partial. Four partials remain: GS-004
 (no whole-document field allowlist outside `summary`, CRITICAL) and GS-040 (the
 photo queue is still not persisted, HIGH). Both are blocked on work larger than
 a rules edit or a screen fix, and each ticket records what that is: GS-004 needs
@@ -250,9 +250,9 @@ Recording these explicitly so the fix cycle does not undo working design:
 | GS-041 | HIGH | DATA_VALIDATION | Security Rules | No server-side validation of amounts, dates or enums anywhere | FIXED 2026-09-03 - AWAITING RULES DEPLOY |
 | GS-042 | MEDIUM | SECURITY | Pandal membership | `pandalJoinRequests` is unbounded, undeletable and accepts any `pandalId` | FIXED 2026-09-04 — DEPLOYED |
 | GS-043 | MEDIUM | SECURITY | Pandal membership | An invite can be created pointing at someone else's pandal | FIXED 2026-09-04 — DEPLOYED |
-| GS-044 | MEDIUM | AUTH | Authentication | The Ganesh session is never cleared on sign-out | OPEN |
+| GS-044 | MEDIUM | AUTH | Authentication | The Ganesh session is never cleared on sign-out | CLOSED - was already fixed |
 | GS-045 | MEDIUM | AUTH | Authentication | `GaneshGate` writes real PII into the duress user tree | FIXED 2026-09-04 |
-| GS-046 | MEDIUM | AUTH | Authentication | The login screen claims an isolation the architecture does not provide | OPEN |
+| GS-046 | MEDIUM | AUTH | Authentication | The login screen claims an isolation the architecture does not provide | CLOSED - was already fixed |
 | GS-047 | MEDIUM | NAVIGATION | Festivals | The restored pandal/festival session is never validated | FIXED — verified 2026-09-04 |
 | GS-048 | MEDIUM | UX | Festivals | Previous-festival rows stay on screen after a switch | FIXED — verified 2026-09-04 |
 | GS-049 | MEDIUM | CODE_QUALITY | Shared real-time data | `useGaneshCollection` omits `extra` from its effect dependencies | FIXED — verified 2026-09-03 |
@@ -274,13 +274,13 @@ Recording these explicitly so the fix cycle does not undo working design:
 | GS-065 | MEDIUM | PERFORMANCE | Households | Households, members, roles and join-request listeners have no `limit` | FIXED — 2026-09-04 |
 | GS-066 | MEDIUM | PERFORMANCE | Sponsors | `useSponsorHistory` is an unbounded N+1 with client-side filtering | FIXED — 2026-09-04 (the `where` was already there) |
 | GS-067 | MEDIUM | ASSETS | Pandal Assets | Per-asset history is truncated by a pandal-wide 80-document cap | FIXED — 2026-09-04 |
-| GS-068 | MEDIUM | OFFLINE | Offline behaviour | The Firestore persistence fallback cannot work and the cache mode is fabricated | OPEN |
+| GS-068 | MEDIUM | OFFLINE | Offline behaviour | The Firestore persistence fallback cannot work and the cache mode is fabricated | CLOSED - was already fixed |
 | GS-069 | MEDIUM | STORAGE | Supabase Storage | No cleanup path exists; orphaned files accumulate permanently | FIXED - 2026-09-04 (void deletion wont-do) |
-| GS-070 | MEDIUM | FINANCE | Permanent Fund | Seed-then-transfer runs as two non-atomic steps with no rollback | OPEN |
+| GS-070 | MEDIUM | FINANCE | Permanent Fund | Seed-then-transfer runs as two non-atomic steps with no rollback | FIXED - 2026-09-05 |
 | GS-071 | MEDIUM | FIRESTORE | Pandal creation | Multi-batch pandal and festival creation has no rollback | OPEN — assessed 2026-09-04 |
 | GS-072 | MEDIUM | FIRESTORE | Reports | The recompute treats a missing contribution status as `received` | FIXED 2026-09-04 |
 | GS-073 | MEDIUM | SECURITY | Collections | Every member, including `viewer`, can read all donor PII | FIXED 2026-09-04 — DEPLOYED |
-| GS-074 | MEDIUM | CODE_QUALITY | Security Rules | Rules are deployed by hand and the contract test is a hand-written mirror | OPEN — confirmed 2026-09-04 |
+| GS-074 | MEDIUM | CODE_QUALITY | Security Rules | Rules are deployed by hand and the contract test is a hand-written mirror | PARTIAL - 2026-09-04 (emulator harness built) |
 | GS-075 | MEDIUM | RECONCILIATION | Cash Reconciliation | Cash Reconciliation is entirely missing | OPEN — confirmed 2026-09-04 |
 | GS-076 | MEDIUM | COLLECTIONS | Daily Collection Sessions | Daily Collection Sessions are entirely missing | OPEN — confirmed 2026-09-04 |
 | GS-077 | MEDIUM | COLLECTIONS | Receipt Numbers | Collection receipt numbers are entirely missing | FIXED — verified 2026-09-04 |
@@ -3298,7 +3298,7 @@ Related to GS-003, GS-088.
 **Severity:** MEDIUM
 **Category:** AUTH
 **Feature:** Authentication
-**Status:** OPEN — partially mitigated, verified 2026-09-03
+**Status:** CLOSED - already fixed (verified 2026-09-05)
 
 ### Problem
 `GaneshSessionProvider` persists the selected pandal and festival to AsyncStorage under a device-global key, exposes a `clearSession` function, and nothing ever calls it.
@@ -3340,6 +3340,35 @@ But that is membership loss, not sign-out: `AuthProvider.logout` makes no
 reference to `clearSession` or the stored session key, so signing out still
 leaves the Ganesh pandal/festival selection on the device for whoever signs in
 next.
+
+### Resolution (2026-09-05)
+Already fixed - stale ticket, no code changed. This is the second time it has
+been checked, and the earlier "partially mitigated" note undersold it: all three
+criteria are met.
+
+The ticket's premise is out of date on both counts.
+
+**The key is namespaced.** It is not the device-global `"@ganesh_session"` any
+more. `GaneshSessionProvider` reads and writes `ganeshSessionStorageKey(uid)`
+(`shared/utils/ganeshSessionStorage.ts`), and reloads whenever `uid` changes -
+with a one-time migration that moves a legacy value under the new key and
+deletes the old one. So a second user signing in on the same device cannot
+inherit the first user's Pandal, which is criterion 2.
+
+**And it is cleared on sign-out.** The provider tracks the previous uid in a
+ref; when `uid` becomes null it removes that uid's namespaced key. Sign-out
+therefore clears the stored Pandal and festival, which is criterion 1 - the
+mechanism is just not a call to `clearSession` from the logout path, which is
+what the grep in the ticket was looking for.
+
+Criterion 3 holds: the live user's session still persists across restarts,
+because only a uid transition to null triggers the removal.
+
+Worth recording as a method note: the ticket's evidence was "a repo-wide grep
+for `clearSession` returns only its own definition". That was true and the
+conclusion drawn from it was still wrong - the clearing happens, under a
+different name, in the provider's own effect. A grep for the fix you expect can
+miss the fix that exists.
 ---
 
 ## GS-045 — `GaneshGate` writes real PII into the duress user tree
@@ -3394,7 +3423,7 @@ None.
 **Severity:** MEDIUM
 **Category:** AUTH
 **Feature:** Authentication
-**Status:** OPEN
+**Status:** CLOSED - already fixed (verified 2026-09-05)
 
 ### Problem
 The Ganesh login screen tells the user it never opens Expense Tracker. It is the same Firebase account, and a workspace switch is one tap away with no re-authentication.
@@ -3423,6 +3452,23 @@ Reword the copy to describe what actually happens, or add a re-auth gate to the 
 ### Dependencies
 None.
 
+
+### Resolution (2026-09-05)
+Already fixed - stale ticket, no code changed.
+
+The claim is gone. `app/(ganesh-auth)/login.tsx` now offers "Choose Expense
+Tracker or Ganesh Seva", which describes a chooser rather than asserting an
+isolation boundary. A grep across `app/(ganesh-auth)/` and `app/welcome.tsx` for
+"never opens", "sandbox", "isolated", "separate from Expense" and "does not
+open" returns nothing.
+
+Criterion 1 is therefore met. Criterion 2 was conditional - "if the claim is
+kept, switching requires re-authentication" - and does not apply now the claim
+is not kept.
+
+The ticket's own note remains correct and worth preserving: the auth reuse is
+intentional and there is no unnecessary second OTP. The defect was only ever the
+copy.
 ---
 
 ## GS-047 — The restored pandal/festival session is never validated
@@ -4523,7 +4569,7 @@ is Pandal-wide by design and cannot answer a per-asset question.
 **Severity:** MEDIUM
 **Category:** OFFLINE
 **Feature:** Offline behaviour
-**Status:** OPEN
+**Status:** CLOSED - already fixed (verified 2026-09-05)
 
 ### Problem
 The fallback for a failed persistence init retries the same persistent cache, and the reported cache mode is computed from the platform rather than from what actually happened.
@@ -4566,6 +4612,23 @@ Import and use `memoryLocalCache` in the catch, and track the chosen mode in a v
 ### Dependencies
 None. Applies app-wide, not only to Ganesh.
 
+
+### Resolution (2026-09-05)
+Already fixed - stale ticket, no code changed. All three criteria met.
+
+`lib/firebase.ts` imports `memoryLocalCache` and the catch in `createDb` uses
+it, so a failed persistence init now degrades to an in-memory Firestore instead
+of retrying the same persistent cache and leaving `db = null`.
+
+`firestoreCacheMode` is no longer computed from `Platform.OS`. A module-level
+`cacheMode` variable is assigned at each of the three real outcomes -
+`persistent-indexeddb`, `persistent-sqlite`, `memory` - and reported through
+`reportedCacheMode`, which only overrides to `uninitialized` when there is
+genuinely no `db`. So the declared `"memory"` variant is now reachable and the
+diagnostic reflects what actually happened.
+
+Normal persistent operation is untouched: `persistentSingleTabManager({
+forceOwnership: true })` on native, `persistentMultipleTabManager` on web.
 ---
 
 ## GS-069 — No cleanup path exists; orphaned files accumulate permanently
@@ -4709,7 +4772,7 @@ that is where the subtle failure was.
 **Severity:** MEDIUM
 **Category:** FINANCE
 **Feature:** Permanent Fund
-**Status:** OPEN
+**Status:** FIXED - 2026-09-05
 
 ### Problem
 Seeding the Permanent Fund and immediately allocating part of it to a festival are two separately awaited operations. Each is internally transactional; the pair is not.
@@ -4738,6 +4801,38 @@ Combine the two into a single transaction, or detect the partial state on load a
 ### Dependencies
 Related to GS-071.
 
+
+### Resolution (2026-09-05)
+Both criteria met.
+
+**Criterion 1 - atomicity.** `seedPermanentFundWithAllocation` performs both
+halves in a single `runTransaction`, and `add-permanent-fund.tsx` now makes one
+call instead of awaiting the seed and then awaiting the transfer. The fund
+document is written **once**, already net of the allocation, so there is no
+intermediate "seeded but not yet debited" state to observe even inside the
+transaction.
+
+Rather than duplicate the transfer's ninety-odd lines of effects, they were
+extracted into `appendTransferOutEffects`, which both callers now share - so the
+two paths produce identical writes by construction rather than by matching
+edits. That helper takes the fund state as an argument instead of reading it,
+which is the crux: the seed path debits a balance it is creating in the same
+transaction, and a second read would see the pre-seed state.
+
+`transferPermanentToFestival`'s own behaviour is unchanged; its GS-085
+idempotency tests pass untouched, which is what makes the extraction safe to
+believe.
+
+**Criterion 2 - existing partial states.** New ones can no longer be created.
+For a Pandal already left half-set-up by the old flow, this screen still refuses
+to re-seed - correctly, since re-seeding would double the balance - but it used
+to dead-end on "Go back" without saying where the allocation could be finished.
+It now offers **Open Permanent Fund**, where "Use for festival" completes the
+allocation. The recovery path already existed; nothing named it.
+
+7 tests, including the one that matters: with the allocation half failing
+part-way, **no writes land at all** - modelled by staging transaction writes and
+committing only on success, which is what a real Firestore transaction does.
 ---
 
 ## GS-071 — Multi-batch pandal and festival creation has no rollback
