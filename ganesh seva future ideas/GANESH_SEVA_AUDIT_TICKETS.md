@@ -57,9 +57,9 @@ balance and stay offline-capable.
 | --- | ---: | ---: | ---: | ---: |
 | CRITICAL | 9 | 1 | 0 | 10 |
 | HIGH | 31 | 1 | 0 | 32 |
-| MEDIUM | 27 | 0 | 15 | 42 |
+| MEDIUM | 30 | 0 | 12 | 42 |
 | LOW | 12 | 0 | 8 | 20 |
-| **Total** | **79** | **2** | **23** | **104** |
+| **Total** | **82** | **2** | **20** | **104** |
 
 Every CRITICAL and HIGH is now closed or partial. Two partials remain: GS-004
 (no whole-document field allowlist outside `summary`, CRITICAL) and GS-040 (the
@@ -262,12 +262,12 @@ Recording these explicitly so the fix cycle does not undo working design:
 | GS-055 | MEDIUM | UX | Admin Dashboard | The dashboard duplicates eight destinations across five sections | OPEN |
 | GS-056 | MEDIUM | UX | Admin Dashboard | The dashboard error state ignores half of its queries | FIXED 2026-09-03 |
 | GS-057 | MEDIUM | UX | Festival | Five add-screens have no closed-festival guard | FIXED 2026-09-04 |
-| GS-058 | MEDIUM | UX | Festival | No persistent read-only banner when a festival is closed | OPEN — confirmed 2026-09-04 |
+| GS-058 | MEDIUM | UX | Festival | No persistent read-only banner when a festival is closed | FIXED - 2026-09-04 |
 | GS-059 | MEDIUM | OFFLINE | Committee Contributions | Committee payments bypass the offline money-receive guard | FIXED — verified 2026-09-03 |
 | GS-060 | MEDIUM | SPONSORS | Sponsors | Sponsor profile editing is blocked when the current festival is closed | FIXED — verified 2026-09-04 |
-| GS-061 | MEDIUM | FESTIVAL | Festivals | Custom expense categories are not carried forward to the next festival | OPEN — confirmed 2026-09-04 |
+| GS-061 | MEDIUM | FESTIVAL | Festivals | Custom expense categories are not carried forward to the next festival | FIXED - 2026-09-04 |
 | GS-062 | MEDIUM | COLLECTIONS | Households | The household list is not carried forward between festivals | FIXED — verified 2026-09-04 |
-| GS-063 | MEDIUM | CONTRIBUTIONS | Committee Contributions | `ContributionMode: "custom"` is unreachable from the UI | OPEN |
+| GS-063 | MEDIUM | CONTRIBUTIONS | Committee Contributions | `ContributionMode: "custom"` is unreachable from the UI | FIXED - 2026-09-04 (removed) |
 | GS-064 | MEDIUM | PERFORMANCE | Shared real-time data | `useGaneshSyncReporter` duplicates the four largest listeners | FIXED — verified 2026-09-04 |
 | GS-065 | MEDIUM | PERFORMANCE | Households | Households, members, roles and join-request listeners have no `limit` | FIXED — 2026-09-04 |
 | GS-066 | MEDIUM | PERFORMANCE | Sponsors | `useSponsorHistory` is an unbounded N+1 with client-side filtering | FIXED — 2026-09-04 (the `where` was already there) |
@@ -3935,7 +3935,7 @@ Related to GS-035, GS-058.
 **Severity:** MEDIUM
 **Category:** UX
 **Feature:** Festival
-**Status:** OPEN — confirmed 2026-09-04
+**Status:** FIXED - 2026-09-04
 
 ### Problem
 Nothing tells the user the ledger is frozen. The closed state is communicated only by absent buttons, which reads as a permissions problem.
@@ -3962,6 +3962,27 @@ Add the banner to `GaneshScreen` or the tabs layout, driven by the festival stat
 ### Dependencies
 Related to GS-035, GS-057.
 
+
+### Resolution (2026-09-04)
+`components/ganesh/GaneshClosedBanner.tsx` added and placed on all five
+festival-scoped surfaces: Home, and the Collections, Expenses, Contributions and
+Committee screens.
+
+Self-contained on purpose - it reads the session and festival status itself and
+returns `null` while the festival is open. A screen adds it with one line and
+cannot get the condition subtly wrong, which matters when the same condition has
+to agree across five screens.
+
+Only `status === "closed"` shows it. An unknown or still-loading status must not
+claim the books are shut - that is GS-032's mistake in the opposite direction.
+
+The "Create the next festival" route is offered only to a role holding
+`festival.create`. On Home this **replaces** a bare "Create next festival"
+button, which had been offering the way out without ever saying what was wrong.
+The copy differs by role for the same reason: a member who cannot create the
+next festival is told the year is a record rather than a permissions problem,
+which is the exact misreading the ticket describes - and the same false signal
+`explainRefusal` was added to remove on the write path (GS-035).
 ---
 
 ## GS-059 — Committee payments bypass the offline money-receive guard
@@ -4047,7 +4068,7 @@ None.
 **Severity:** MEDIUM
 **Category:** FESTIVAL
 **Feature:** Festivals
-**Status:** OPEN — confirmed 2026-09-04
+**Status:** FIXED - 2026-09-04
 
 ### Problem
 Creating a festival seeds only the built-in default categories, so every custom category must be recreated each year.
@@ -4075,6 +4096,42 @@ At festival creation, copy the previous festival's non-default categories, ideal
 ### Dependencies
 Related to GS-062.
 
+
+### Resolution (2026-09-04)
+`customCategoriesToCarryForward` added to `ganeshMath.ts` beside its household
+sibling `mapHouseholdForNewFestival`, and wired into `createFestival` as its own
+batch after the seed - the same shape as the GS-062 household carry-forward, and
+for the same reason: a failure there leaves a usable festival with default
+categories rather than no festival at all.
+
+Offered rather than automatic, per the acceptance criteria: a "Carry them
+forward / Start with defaults only" chip on `create-festival.tsx`, shown only
+when a previous festival exists, because otherwise the question is meaningless.
+`carryForwardCategories` defaults to **true** in the service, so a caller that
+omits it gets the safe behaviour - silently losing the committee's categories is
+the bug this flag exists to fix, and that should not be the default anyone gets
+by accident.
+
+Four filtering rules, each with a reason recorded at the helper:
+
+- **Defaults are skipped.** The new festival seeds its own, and the shipped
+  default list can change between releases; copying last year's copies would
+  freeze an old default set forever.
+- **Disabled categories are skipped.** The committee explicitly turned those
+  off; carrying them forward would undo that decision every single year.
+- **A custom name that has since become a default is skipped**, so a category
+  promoted into the shipped list does not appear twice and split its expenses.
+- **Names compare case- and whitespace-insensitively**, and duplicates within
+  the previous year collapse - which is the actual cause of the ticket's
+  "inconsistent naming across years makes comparison harder".
+
+Historical festivals are untouched: this only ever writes into the new
+festival's own subcollection.
+
+9 tests on the helper, including the malformed documents a real collection
+contains (missing name, numeric name, non-numeric sortOrder, missing
+`isDefault`). A missing or nonsensical `sortOrder` falls back to the same 500
+`addCustomCategory` writes, so carried categories sort where custom ones do.
 ---
 
 ## GS-062 — The household list is not carried forward between festivals
@@ -4118,7 +4175,7 @@ Should land after GS-006, which makes households functional in the first place.
 **Severity:** MEDIUM
 **Category:** CONTRIBUTIONS
 **Feature:** Committee Contributions
-**Status:** OPEN — confirmed 2026-09-03
+**Status:** FIXED - 2026-09-04
 
 ### Problem
 The service implements distinct behaviour for a `"custom"` contribution mode, but both writers hard-code `"same"`, so the mode can never be selected.
@@ -4155,6 +4212,29 @@ None.
 `pandal.tsx` hardcodes `contributionMode: "same"` on save. The variant is dead
 weight in the type - either wire per-member targets to it (the mechanism exists
 as `setMemberContributionTarget`) or drop it.
+
+### Resolution (2026-09-04)
+Removed, not wired - and the branch turned out to be worse than dead.
+
+Had `"custom"` ever been reachable, it read each member's target as
+`Number(input.customTargets?.[memberSnap.id] ?? 0)`, so **every member absent
+from that map would have had their target silently set to zero**. And unlike the
+`"same"` path it did not skip members with `contributionTargetOverridden`, so a
+bulk save would have wiped individually agreed targets. A dead branch that
+destroys data when woken is not a feature waiting to be enabled.
+
+Nothing was lost by deleting it: per-member targets already exist and are
+reachable, through `setMemberContributionTarget` on `member/[id].tsx` and
+`effectiveCommitteeTarget`. `"custom"` was a second, redundant route to an
+outcome the app already supports properly.
+
+`ContributionMode` is now a one-member union rather than a removed field,
+because every stored festival document carries `contributionMode: "same"`. The
+`contributionTargetOverridden` skip in `setContributionTargets` is now
+unconditional, which is what it always effectively was.
+
+Verified `ContributionMode` and `customTargets` had no other reader anywhere in
+the repo before removing them; `typecheck` and `typecheck:shared` both clean.
 ---
 
 ## GS-064 — `useGaneshSyncReporter` duplicates the four largest listeners

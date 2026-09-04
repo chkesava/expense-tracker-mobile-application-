@@ -222,7 +222,7 @@ export function useGaneshWrites() {
         writes.updatePandalMember(requireDb(), actor, pandalId, targetUserId, input)
       );
     },
-    createFestival: async (input: { name: string; year: number; startDate?: string; endDate?: string }) => {
+    createFestival: async (input: Parameters<typeof writes.createFestival>[3]) => {
       if (!pandalId || !actor) throw new Error("Select a Pandal first.");
       requirePerm("festival.create");
       return run("Festival created", () =>

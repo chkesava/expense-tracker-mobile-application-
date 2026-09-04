@@ -6,6 +6,7 @@ import { Home as HomeIcon, IndianRupee, Smartphone, Wallet } from "lucide-react-
 
 import { accountabilityText } from "@/components/ganesh/AccountabilityLine";
 import { GaneshScreen, useGaneshListPadding } from "@/components/ganesh/GaneshScreen";
+import { GaneshClosedBanner } from "@/components/ganesh/GaneshClosedBanner";
 import { GaneshSyncChip } from "@/components/ganesh/GaneshSyncChip";
 import {
   FilterChips,
@@ -402,6 +403,8 @@ export function CollectionsList({ embedded = false, prefix }: CollectionsListPro
           }
         />
       )}
+
+      <GaneshClosedBanner />
 
       {truncationNotice}
 

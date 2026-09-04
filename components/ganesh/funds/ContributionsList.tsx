@@ -7,6 +7,7 @@ import { Building2, Gift, HandHeart, IndianRupee, Package } from "lucide-react-n
 import { accountabilityText } from "@/components/ganesh/AccountabilityLine";
 import { GaneshScreen, useGaneshListPadding } from "@/components/ganesh/GaneshScreen";
 import { GaneshSignedPreview } from "@/components/ganesh/GaneshSignedPreview";
+import { GaneshClosedBanner } from "@/components/ganesh/GaneshClosedBanner";
 import { GaneshSyncChip } from "@/components/ganesh/GaneshSyncChip";
 import {
   FilterChips,
@@ -297,6 +298,8 @@ export function ContributionsList({
           rightElement={<GaneshSyncChip />}
         />
       )}
+
+      <GaneshClosedBanner />
 
       {/* GS-032: these tiles are computed from `contributions`, so during load
           they summed an empty array and rendered a settled ₹0 — "nothing has

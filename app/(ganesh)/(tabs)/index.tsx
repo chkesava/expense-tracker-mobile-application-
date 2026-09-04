@@ -12,6 +12,7 @@ import {
 } from "@/components/ganesh/art/icons";
 import { GaneshQuickActions } from "@/components/ganesh/GaneshQuickActions";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
+import { GaneshClosedBanner } from "@/components/ganesh/GaneshClosedBanner";
 import { GaneshSyncChip } from "@/components/ganesh/GaneshSyncChip";
 import { CommandHero, PandalOverview, TodaySevaPanel } from "@/components/ganesh/home";
 import {
@@ -251,13 +252,11 @@ export default function GaneshHomeScreen() {
           onDetails={() => push("/(ganesh)/(tabs)/funds" as never)}
         />
         )}
-        <GaneshQuickActions disabled={closed} />
+        {/* GS-058: replaces a bare "Create next festival" button, which
+            offered the way out without ever saying what was wrong. */}
+        <GaneshClosedBanner />
 
-        {closed && can("festival.create") ? (
-          <Button onPress={() => push("/(ganesh)/create-festival" as never)}>
-            Create next festival
-          </Button>
-        ) : null}
+        <GaneshQuickActions disabled={closed} />
 
         <View style={styles.activityWrap}>
           <View pointerEvents="none" style={styles.lotusWrap}>

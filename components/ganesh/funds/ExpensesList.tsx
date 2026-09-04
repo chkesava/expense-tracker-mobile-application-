@@ -7,6 +7,7 @@ import { Package, Receipt } from "lucide-react-native";
 import { accountabilityText } from "@/components/ganesh/AccountabilityLine";
 import { GaneshScreen, useGaneshListPadding } from "@/components/ganesh/GaneshScreen";
 import { GaneshSignedPreview } from "@/components/ganesh/GaneshSignedPreview";
+import { GaneshClosedBanner } from "@/components/ganesh/GaneshClosedBanner";
 import { GaneshSyncChip } from "@/components/ganesh/GaneshSyncChip";
 import {
   FilterChips,
@@ -163,6 +164,8 @@ export function ExpensesList({ embedded = false, prefix }: ExpensesListProps) {
           rightElement={<GaneshSyncChip />}
         />
       )}
+
+      <GaneshClosedBanner />
 
       {/* GS-032: the list rows were gated on their own loading state, but the
           hero and tiles read the summary and consulted neither of its flags —

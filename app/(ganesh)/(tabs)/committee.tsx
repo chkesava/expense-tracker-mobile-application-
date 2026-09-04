@@ -5,6 +5,7 @@ import { FlashList } from "@shopify/flash-list";
 import { ChevronRight, Plus, Users } from "lucide-react-native";
 
 import { GaneshScreen, useGaneshListPadding } from "@/components/ganesh/GaneshScreen";
+import { GaneshClosedBanner } from "@/components/ganesh/GaneshClosedBanner";
 import { GaneshSyncChip } from "@/components/ganesh/GaneshSyncChip";
 import {
   Avatar,
@@ -197,6 +198,8 @@ export default function CommitteeScreen() {
         icon={<Users size={22} color={g.saffron} strokeWidth={2.2} />}
         rightElement={<GaneshSyncChip />}
       />
+
+      <GaneshClosedBanner />
 
       <View style={styles.statRow}>
         <StatTile

@@ -642,6 +642,51 @@ export function householdOverpayAmount(input: {
  * Identity fields copied into a new festival (GS-062). Never copies
  * `collectedAmount` or collection history.
  */
+/**
+ * The previous festival's custom categories, ready to seed into a new one
+ * (GS-061).
+ *
+ * Categories are festival-scoped on purpose — that is what lets a closed year
+ * keep the labels its expenses were filed under. But `createFestival` seeded
+ * only `DEFAULT_GANESH_CATEGORIES`, so a committee that had added "Dhol Tasha"
+ * or "Visarjan Truck" had to recreate them every year, and if they spelled one
+ * differently the two years stopped comparing.
+ *
+ * Rules applied here, each for a reason:
+ *
+ * - Defaults are skipped. The new festival already seeds its own, and the
+ *   default list can change between releases; copying last year's copies would
+ *   freeze an old default set forever.
+ * - Disabled categories are skipped. The committee explicitly turned those off;
+ *   carrying them forward would undo that decision every year.
+ * - A custom category whose name now collides with a default is skipped, so a
+ *   category promoted into the default list does not appear twice.
+ * - Names are compared case- and whitespace-insensitively, and duplicates
+ *   within the previous year collapse to one.
+ *
+ * Pure so it can be tested without Firestore; the caller does the writing.
+ */
+export function customCategoriesToCarryForward(
+  previous: Array<{ name?: unknown; isDefault?: unknown; disabled?: unknown; sortOrder?: unknown }>,
+  defaultNames: string[]
+): Array<{ name: string; sortOrder: number }> {
+  const normalize = (value: string) => value.trim().toLowerCase().replace(/\s+/g, " ");
+  const taken = new Set(defaultNames.map(normalize));
+  const out: Array<{ name: string; sortOrder: number }> = [];
+  for (const row of previous) {
+    if (row.isDefault === true) continue;
+    if (row.disabled === true) continue;
+    const name = typeof row.name === "string" ? row.name.trim() : "";
+    if (!name) continue;
+    const key = normalize(name);
+    if (taken.has(key)) continue;
+    taken.add(key);
+    const sortOrder = Number(row.sortOrder);
+    out.push({ name, sortOrder: Number.isFinite(sortOrder) && sortOrder > 0 ? sortOrder : 500 });
+  }
+  return out;
+}
+
 export function mapHouseholdForNewFestival(
   prev: {
     name?: unknown;

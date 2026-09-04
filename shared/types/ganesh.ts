@@ -2,7 +2,23 @@ export type GaneshRole = "admin" | "treasurer" | "member" | "collector" | "viewe
 export type GaneshMemberStatus = "active" | "suspended" | "removed";
 export type PandalJoinMode = "approval" | "open";
 export type FestivalStatus = "open" | "closed";
-export type ContributionMode = "same" | "custom";
+/**
+ * How committee contribution targets are set.
+ *
+ * `"custom"` was removed (GS-063). It was unreachable — both writers
+ * hard-coded `"same"` — and the branch it guarded was worse than dead: it read
+ * each member's target from a `customTargets` map with `?? 0`, so every member
+ * absent from that map would have had their target silently set to zero, and
+ * unlike the `"same"` path it did not skip members with
+ * `contributionTargetOverridden`. Wiring it up would have wiped individually
+ * agreed targets on save.
+ *
+ * Per-member targets already exist and are reachable, through
+ * `setMemberContributionTarget` and `effectiveCommitteeTarget`, so nothing was
+ * lost by deleting it. Kept as a one-member union rather than dropping the
+ * field, because every stored festival document carries it.
+ */
+export type ContributionMode = "same";
 
 export type PaymentMethod = "cash" | "upi" | "bank" | "other";
 export type OpeningFundSource =

@@ -7,7 +7,7 @@ import { FestivalWindowFields } from "@/components/ganesh/FestivalWindowFields";
 import { FundLocationChips } from "@/components/ganesh/FundLocationChips";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { GaneshWriteLock } from "@/components/ganesh/GaneshWriteLock";
-import { GaneshHeader, useGaneshTokens } from "@/components/ganesh/ui";
+import { FilterChips, GaneshHeader, useGaneshTokens } from "@/components/ganesh/ui";
 import { useFestivals } from "@/hooks/useFestivals";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { PermanentFundCard } from "@/components/ganesh/PermanentFundCard";
@@ -48,6 +48,12 @@ export default function CreateFestivalScreen() {
   const [endDate, setEndDate] = useState("");
   const [location, setLocation] = useState<PermanentFundLocation>("cash");
   const [busy, setBusy] = useState(false);
+  // GS-061: the committee's own expense categories used to be lost every year,
+  // because createFestival seeded only the built-in defaults. Offered rather
+  // than silent, per the ticket, and defaulted on — carrying them is what a
+  // committee almost always wants, and the previous festival's documents are
+  // untouched either way.
+  const [carryCategories, setCarryCategories] = useState(true);
   const allocateAmount = Number(allocate || 0);
   const remaining = fund.total - (Number.isFinite(allocateAmount) ? allocateAmount : 0);
 
@@ -93,6 +99,7 @@ export default function CreateFestivalScreen() {
         year: festivalYear,
         startDate: startDate.trim() || undefined,
         endDate: endDate.trim() || undefined,
+        carryForwardCategories: carryCategories,
       });
       if (allocateAmount > 0) {
         await writes.transferPermanentToFestival({
@@ -135,6 +142,19 @@ export default function CreateFestivalScreen() {
         <Text style={{ color: theme.colors.mutedForeground, lineHeight: 20 }}>
           {duplicateFestivalYearMessage(Number(year))}
         </Text>
+      ) : null}
+      {/* Only asked when there is a previous festival to carry from —
+          otherwise the question has no meaning. */}
+      {festivals.length > 0 ? (
+        <FilterChips
+          label="Carry forward last festival's own expense categories"
+          value={carryCategories ? "yes" : "no"}
+          options={[
+            { id: "yes", label: "Carry them forward" },
+            { id: "no", label: "Start with defaults only" },
+          ]}
+          onChange={(next) => setCarryCategories(next === "yes")}
+        />
       ) : null}
       <FestivalWindowFields
         startDate={startDate}

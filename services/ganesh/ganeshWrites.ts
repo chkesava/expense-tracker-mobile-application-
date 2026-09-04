@@ -33,6 +33,7 @@ import {
   deriveHouseholdStatus,
   formatCollectionReceipt,
   locationDelta,
+  customCategoriesToCarryForward,
   mapHouseholdForNewFestival,
   money,
   parseGaneshSummary,
@@ -1076,7 +1077,19 @@ export async function createFestival(
   db: Firestore,
   actor: GaneshActor,
   pandalId: string,
-  input: { name: string; year: number; startDate?: string; endDate?: string }
+  input: {
+    name: string;
+    year: number;
+    startDate?: string;
+    endDate?: string;
+    /**
+     * Carry the previous festival's custom categories into this one (GS-061).
+     * Defaults to true: omitting it silently losing the committee's own
+     * categories is the bug this flag exists to fix, so the safe value is the
+     * one you get for free.
+     */
+     carryForwardCategories?: boolean;
+  }
 ): Promise<string> {
   assertFestivalWindow(input.startDate, input.endDate);
   const festivalsSnap = await getDocs(collection(db, "pandals", pandalId, "festivals"));
@@ -1140,7 +1153,7 @@ export async function createFestival(
   }
 
   audit(seedBatch, db, pandalId, festivalId, actor.uid, "created", "festival", festivalId, {
-    newValue: input,
+    newValue: { name: input.name, year: input.year },
   });
   await commitWrite(() => seedBatch.commit(), { label: "festival seed" });
 
@@ -1151,6 +1164,39 @@ export async function createFestival(
       year: Number(docSnap.data().year ?? 0),
     }))
     .sort((a, b) => b.year - a.year || a.id.localeCompare(b.id))[0];
+  // GS-061 - the previous year's own categories, not just the built-in
+  // defaults the seed batch already wrote. Done in its own batch after the
+  // seed for the same reason the household carry-forward is: a failure here
+  // leaves a usable festival with default categories rather than no festival.
+  if (previousFestival && input.carryForwardCategories !== false) {
+    const previousCategories = await getDocs(
+      colRef(db, festivalCol(pandalId, previousFestival.id, "categories"))
+    );
+    const carried = customCategoriesToCarryForward(
+      previousCategories.docs.map((docSnap) => docSnap.data()),
+      DEFAULT_GANESH_CATEGORIES.map((category) => category.name)
+    );
+    for (let i = 0; i < carried.length; i += 400) {
+      const slice = carried.slice(i, i + 400);
+      const categoryBatch = writeBatch(db);
+      for (const category of slice) {
+        categoryBatch.set(
+          pathRef(db, [...festivalCol(pandalId, festivalId, "categories"), newId()]),
+          {
+            name: category.name,
+            isDefault: false,
+            sortOrder: category.sortOrder,
+            createdBy: actor.uid,
+            createdAt: serverTimestamp(),
+            updatedBy: actor.uid,
+            updatedAt: serverTimestamp(),
+          }
+        );
+      }
+      await commitWrite(() => categoryBatch.commit(), { label: "festival categories" });
+    }
+  }
+
   if (previousFestival) {
     const previousHouseholds = await getDocs(
       colRef(db, festivalCol(pandalId, previousFestival.id, "households"))
@@ -1185,10 +1231,9 @@ export async function updateFestivalTargets(
   pandalId: string,
   festivalId: string,
   input: {
-    contributionMode: "same" | "custom";
+    contributionMode: "same";
     contributionTargetAmount: number;
     householdTargetAmount: number;
-    customTargets?: Record<string, number>;
   }
 ): Promise<void> {
   const batch = writeBatch(db);
@@ -1201,14 +1246,11 @@ export async function updateFestivalTargets(
   });
   const members = await getDocs(colRef(db, festivalCol(pandalId, festivalId, "members")));
   members.forEach((memberSnap) => {
-    if (input.contributionMode === "same" && memberSnap.data().contributionTargetOverridden) {
-      return;
-    }
-    const target =
-      input.contributionMode === "custom"
-        ? Number(input.customTargets?.[memberSnap.id] ?? 0)
-        : input.contributionTargetAmount;
-    batch.update(memberSnap.ref, { contributionTarget: target });
+    // A member whose target was agreed individually keeps it: this is the
+    // festival-wide default, not an override of an override. The removed
+    // "custom" branch bypassed this check (GS-063).
+    if (memberSnap.data().contributionTargetOverridden) return;
+    batch.update(memberSnap.ref, { contributionTarget: input.contributionTargetAmount });
   });
   audit(batch, db, pandalId, festivalId, actor.uid, "adjusted", "festival", festivalId, {
     newValue: input,
