@@ -73,3 +73,6 @@ supabase/.temp/
 *service-account*.json
 *-firebase-adminsdk-*.json
 *-sa.json
+
+# Firestore emulator debug output (npm run test:rules)
+firestore-debug.log

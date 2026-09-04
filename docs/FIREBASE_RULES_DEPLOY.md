@@ -147,3 +147,37 @@ a `failed-precondition` error until it is ready.
 Firestore keeps a rules version history in the console under Firestore →
 Rules → History. Roll back there, then revert the corresponding commit here so
 the two stay in sync.
+
+## Test the rules before deploying (added 2026-09-04)
+
+```bash
+npm run test:rules
+```
+
+Runs `firestore/*.rules.test.ts` against the real rules engine in a Firestore
+emulator. These are **not** part of `npm test`, which has no emulator.
+
+Do this before every rules deploy. Two defects have now shipped past the
+hand-written TypeScript mirror in
+`shared/utils/ganeshPermissions.rules.contract.test.ts`: GS-084 (an allowlist
+that omitted a field the app sends, which would have denied every admin role
+change) and GS-104 (the summary rule exceeding Firestore's 1000-expression
+evaluation budget, so legacy members could not record money). A mirror proves
+the mirror. It cannot know about evaluation budgets at all.
+
+### JDK requirement
+
+`firebase-tools` 14+ needs **JDK 21**. If the emulator refuses to start with
+`no longer supports Java version before 21`, either install JDK 21 or keep using
+the pinned older CLI the script already uses for the emulator:
+
+```bash
+npx -y firebase-tools@13.35.1 emulators:exec --only firestore "npx vitest run --config vitest.rules.config.ts"
+```
+
+Deployment itself is unaffected and still uses the current CLI.
+
+### Still manual
+
+Nothing enforces that these tests ran before a deploy. That is the open half of
+GS-074.

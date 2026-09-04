@@ -57,6 +57,7 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2",
     "@types/node": "^26.1.2",
     "@types/react": "~19.2.2",
     "firebase-admin": "^14.2.0",
@@ -76,6 +77,7 @@
     "build:web:landing": "node scripts/build-web.js --target=landing",
     "build:web:all": "node scripts/build-web.js --target=all",
     "test": "vitest run",
+    "test:rules": "firebase emulators:exec --only firestore \"vitest run --config vitest.rules.config.ts\"",
     "test:watch": "vitest",
     "typecheck:shared": "tsc -p tsconfig.shared.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",

@@ -1213,6 +1213,32 @@ service cloud.firestore {
                  );
           }
 
+          /**
+           * The summary document's own write predicate (GS-004, found by the
+           * emulator suite in GS-074).
+           *
+           * Firestore caps one rule evaluation at 1000 expressions and returns
+           * PERMISSION_DENIED when a rule exceeds it — indistinguishable from a
+           * real authorization failure. Routing `summary` through the full
+           * festival-subcollection wildcard walked ~10 branches of
+           * canWriteFestivalSubcol(), all nine sub-predicates of
+           * payloadWellFormed(), and four *Allowed() predicates that cannot
+           * apply to a summary at all. On a member whose document predates the
+           * denormalized `permissions` array — where every permission check
+           * takes its expensive role-document fallback — that ran out of
+           * budget, so a legacy treasurer or collector could not bump the
+           * totals. `bumpSummary` writes the summary in the same batch as the
+           * ledger row and batches are atomic, so the whole money write failed.
+           *
+           * Evaluated through a ternary below so it genuinely short-circuits:
+           * only these three checks run for a summary write.
+           */
+          function summaryWriteAllowed() {
+            return pandalNotArchived()
+              && summaryWellFormed()
+              && (canWriteLedgerSideEffect() || canCreateFestival());
+          }
+
           function payloadWellFormed() {
             return collectorIsMember()
               && amountsWellFormed()
@@ -1356,17 +1382,31 @@ service cloud.firestore {
           allow read: if canReadSubcol();
           allow create: if isActivePandalMember()
             && festivalOpen()
-            && canWriteFestivalSubcol()
-            && payloadWellFormed()
-            && expenseCreateAllowed()
-            && contributionCreateAllowed()
-            && contributionNotBornCancelled()
-            && sponsorshipCreateAllowed()
-            && (
-              !request.resource.data.keys().hasAny(['createdBy'])
-              || ganeshIdentityCreate()
-            );
-          allow update: if isActivePandalMember()
+            && (subcol == 'summary'
+              ? summaryWriteAllowed()
+              : (
+                canWriteFestivalSubcol()
+                && payloadWellFormed()
+                && expenseCreateAllowed()
+                && contributionCreateAllowed()
+                && contributionNotBornCancelled()
+                && sponsorshipCreateAllowed()
+                && (
+                  !request.resource.data.keys().hasAny(['createdBy'])
+                  || ganeshIdentityCreate()
+                )
+              ));
+          // Same short-circuit as create. `festivalOpen()` is kept for the
+          // summary branch so a settled year stays settled (GS-018), and the
+          // createdBy identity clause is skipped because summaryWellFormed()'s
+          // key allowlist does not admit that field — a summary never carries
+          // one.
+          allow update: if subcol == 'summary'
+            && isActivePandalMember()
+            && festivalOpen()
+            && summaryWriteAllowed();
+          allow update: if subcol != 'summary'
+            && isActivePandalMember()
             && !isAppendOnlyLog()
             && payloadWellFormed()
             // GS-082: this guard was on create only, so an update could add an

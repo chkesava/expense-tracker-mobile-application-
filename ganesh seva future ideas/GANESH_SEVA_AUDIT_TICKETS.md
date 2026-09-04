@@ -50,15 +50,16 @@ balance and stay offline-capable.
 ## Executive Summary
 
 **Status as of 2026-09-04.** Original counts were 9 CRITICAL, 32 HIGH,
-41 MEDIUM, 21 LOW across 103 tickets.
+41 MEDIUM, 21 LOW across 103 tickets. GS-104 was found and fixed on
+2026-09-04 by the new emulator harness, taking the total to 104.
 
 | Severity | Closed | Partial | Open | Total |
 | --- | ---: | ---: | ---: | ---: |
-| CRITICAL | 8 | 1 | 0 | 9 |
+| CRITICAL | 9 | 1 | 0 | 10 |
 | HIGH | 31 | 1 | 0 | 32 |
 | MEDIUM | 27 | 0 | 15 | 42 |
 | LOW | 12 | 0 | 8 | 20 |
-| **Total** | **78** | **2** | **23** | **103** |
+| **Total** | **79** | **2** | **23** | **104** |
 
 Every CRITICAL and HIGH is now closed or partial. Two partials remain: GS-004
 (no whole-document field allowlist outside `summary`, CRITICAL) and GS-040 (the
@@ -307,6 +308,7 @@ Recording these explicitly so the fix cycle does not undo working design:
 | GS-101 | LOW | UX | Expenses | No unsaved-changes guard on long forms | OPEN |
 | GS-102 | LOW | CODE_QUALITY | Platform | `EXPO_PUBLIC_GEMINI_API_KEY` is bundled into the client (outside Ganesh scope) | OPEN — confirmed 2026-09-04, needs a proxy |
 | GS-103 | MEDIUM | FIRESTORE | Committee Contributions | Festival member increment writes may be rejected when the doc carries `createdBy` | FIXED 2026-09-04 |
+| GS-104 | CRITICAL | SECURITY | Security Rules | Legacy members could not record money: summary rule exceeded the 1000-expression budget | FIXED - 2026-09-04, DEPLOYED |
 
 ---
 
@@ -593,6 +595,98 @@ Blocks GS-002 and GS-042.
 
 ---
 
+## GS-104 - Legacy members could not record money: the summary rule exceeded Firestore's 1000-expression budget
+
+**Severity:** CRITICAL
+**Category:** SECURITY
+**Feature:** Security Rules
+**Status:** FIXED - 2026-09-04, DEPLOYED
+
+### Problem
+Writing the festival `summary` document exhausted Firestore's cap of 1000
+expressions per rule evaluation for any member whose document predates the
+denormalized `permissions` array. Firestore reports an overrun as
+`PERMISSION_DENIED`, so it is indistinguishable from an authorization failure -
+by the client, by the logs, and by every hand-written mirror test in this repo.
+
+Because `bumpSummary` writes the summary **in the same batch** as the ledger
+row, and Firestore batches are atomic, the whole money write failed. A legacy
+treasurer or collector could not record a collection, an expense or a
+contribution at all.
+
+### Current Behavior (before the fix)
+`summary` was governed by the festival-subcollection wildcard, so a summary
+write evaluated:
+
+- `canWriteFestivalSubcol()` - walking ~10 subcollection branches before
+  reaching its own, each branch a permission check
+- all nine sub-predicates of `payloadWellFormed()`, eight of which cannot apply
+  to a summary
+- `expenseCreateAllowed()`, `contributionCreateAllowed()`,
+  `contributionNotBornCancelled()`, `sponsorshipCreateAllowed()`
+
+Each permission check has two paths: cheap when the member carries a
+`permissions` array, and an expensive role-plus-role-document fallback when it
+does not. On the fallback path the total went over 1000.
+
+Measured in the emulator (`firestore/ganeshSummaryBudget.rules.test.ts`):
+
+| member shape | ledger row | summary |
+| --- | --- | --- |
+| has `permissions` array | accepted | accepted |
+| legacy treasurer, no `permissions` | accepted | **refused - budget** |
+| legacy collector, no `permissions` | accepted | **refused - budget** |
+| legacy admin, no `permissions` | accepted | accepted |
+
+### Why it went unnoticed
+The last row. An owner-admin exercising the app sees every money flow work,
+because the admin predicate short-circuits before the expensive fallbacks. The
+failure only reaches a non-admin committee member on a legacy Pandal - who has
+no way to distinguish it from "you don't have permission".
+
+It is also invisible to this repo's other rules tests by construction: they are
+TypeScript mirrors of the rules, and a mirror has no notion of an evaluation
+budget. This was found within minutes of the emulator harness existing
+(GS-074), and it is the second defect a mirror passed that the real engine
+rejects - GS-084 was the first.
+
+### Fix
+`summaryWriteAllowed()` added to `firestore.rules`, reached through a ternary on
+`allow create` and a dedicated `allow update` guarded on `subcol == 'summary'`
+so it genuinely short-circuits. A summary write now evaluates three checks:
+`pandalNotArchived()`, `summaryWellFormed()` and
+`canWriteLedgerSideEffect() || canCreateFestival()`.
+
+`festivalOpen()` is kept so a settled year stays settled (GS-018). The
+`createdBy` identity clause is skipped because `summaryWellFormed()`'s key
+allowlist does not admit that field - a summary never carries one. The
+non-summary rule now tests `subcol != 'summary'` first so it bails before doing
+any document reads.
+
+Deployed to `expenseapp-27f94`.
+
+### Verification
+`npm run test:rules` - 26 tests. The four that reproduced this now assert the
+fix, and three guard the obvious ways to over-correct: a viewer with no money
+permission is still refused, a summary field outside the allowlist is still
+refused, and a plausible-but-wrong value is still accepted (GS-004's recorded
+residual gap, asserted so it cannot change silently).
+
+Unit suite unaffected: 1505 tests pass, `tsc` clean.
+
+### Follow-up
+This is the ceiling GS-004's remaining field allowlist would have to fit under.
+Headroom on the *other* subcollections has not been measured; the emulator log
+still shows overruns on the non-summary rules for some evaluations, which
+succeed only because rule matches OR together and the cheap summary rule grants
+first. Measuring per-subcollection headroom is the prerequisite for GS-004, and
+is now possible.
+
+### Dependencies
+Found by GS-074. Blocks GS-004.
+
+---
+
 ## GS-004 — Festival subcollections have no payload validation; the `summary` document is forgeable
 
 **Severity:** CRITICAL
@@ -684,6 +778,44 @@ the malformed flags, and both accepted and forged summary writes. Full suite gre
 ### Dependencies
 Related to GS-041. Should land with GS-074 so the coverage is provable.
 
+
+### Resolution (2026-09-04)
+Still PARTIAL, but the blocker is now measured rather than assumed - and it is
+not the one this ticket has been carrying.
+
+**The remaining acceptance criterion may not be reachable in rules at all.** The
+emulator harness built for GS-074 shows the festival-subcollection rule is
+already at Firestore's ceiling of 1000 expressions per evaluation for some
+writers. A `keys().hasOnly(...)` allowlist can only add expressions. Adding one
+across 13 subcollections would push writers that currently pass over the limit,
+and an overrun surfaces as `PERMISSION_DENIED` - indistinguishable from an
+authorization failure, on a rules file deployed by hand to a Firebase project
+that also serves production. The earlier note called this sequencing; it is
+closer to a hard constraint.
+
+That was not a hypothetical: the summary path was **already over** the limit for
+legacy members. See GS-104, found and fixed today.
+
+**Progress that does help.** Routing `summary` through its own short-circuited
+predicate rather than the full wildcard removed ~10 permission branches, eight
+irrelevant `payloadWellFormed()` sub-predicates and four `*Allowed()` calls from
+that path. The summary document is now the one place with a tight,
+purpose-built rule - which is also where forgery mattered most.
+
+**The design that would make an allowlist safe, when it is attempted.** Use
+`hasOnly` on **create** only, and on update use
+`request.resource.data.diff(resource.data).affectedKeys().hasOnly(...)`. On an
+update, `request.resource.data` is the whole post-write document, so a plain
+`hasOnly` would reject any edit to an older document still carrying a
+since-removed field - wedging real records permanently. `affectedKeys()` checks
+only what the write touches. This is worth recording because it is the
+non-obvious half of the fix.
+
+**Residual gap unchanged:** a member who may write a ledger side-effect can
+still write a *plausible* wrong number (`chanda: 9999999`). That needs
+server-side summary maintenance, not a rules change. The emulator suite asserts
+this is still accepted, so the day it stops being true the test fails and this
+ticket gets revisited.
 ---
 
 ## GS-005 — `fundTransfers` and `auditLogs` are mutable and deletable via the wildcard match
@@ -4599,7 +4731,7 @@ Related to GS-016, GS-042.
 **Severity:** MEDIUM
 **Category:** CODE_QUALITY
 **Feature:** Security Rules
-**Status:** OPEN — confirmed 2026-09-04
+**Status:** PARTIAL - 2026-09-04 (emulator harness built; manual deploy unchanged)
 
 ### Problem
 `firestore.rules` is not deployed by CI, and the only test covering it is a TypeScript re-implementation of the rules rather than an execution of them. It cannot catch the class of defect this audit found most of.
@@ -4630,6 +4762,42 @@ Stand up `@firebase/rules-unit-testing` against the real `firestore.rules` with 
 ### Dependencies
 Supports verification of GS-002 – GS-005, GS-014 – GS-018, GS-037, GS-041, GS-073.
 
+
+### Resolution (2026-09-04)
+Half closed: the emulator harness now exists and the hand-mirror problem is
+solved for anything written against it. Manual deployment is unchanged, so this
+stays PARTIAL rather than closed.
+
+**Built.** `firestore/*.rules.test.ts` run the real `firestore.rules` through the
+real rules engine via `@firebase/rules-unit-testing`, against payloads the app
+actually writes. `npm run test:rules` starts a Firestore emulator around the
+suite. They are deliberately excluded from `vitest.config.ts` and given their
+own `vitest.rules.config.ts`, so `npm test` still passes on a machine with no
+emulator; `fileParallelism` is off because the suite shares one emulator and
+resets it with `clearFirestore()` between tests.
+
+26 tests: the ledger payloads including every optional field, the GS-004 value
+and enum validation, summary forgery, GS-017/GS-083 hard-delete refusal,
+GS-073 donor-read gating, and the budget matrix below. Two of them exist only
+to prove the harness is really evaluating rules - an unauthenticated write and
+a non-member write must fail, or a suite where everything passes proves nothing.
+
+**Why this mattered immediately.** The first run found a live production defect
+that no mirror could have caught, now filed as GS-104 and fixed: the summary
+write path exceeded Firestore's 1000-expression evaluation cap for members whose
+documents predate the denormalized `permissions` array. A mirror test cannot
+find that class of bug at all - it has no notion of an evaluation budget - and
+it is the second time a mirror passed something the engine would reject
+(GS-084 was the first).
+
+**Prerequisite worth recording.** `firebase-tools` 14+ requires JDK 21; this
+machine has JDK 17, so the script pins `firebase-tools@13.35.1` for the emulator
+only. Deployment still uses the current CLI. Installing JDK 21 would let the pin
+be dropped.
+
+**Still open.** `firestore.rules` is deployed by hand - these tests are not in
+CI, and nothing prevents a deploy that has not run them. That is the remaining
+half of this ticket and the reason it is not closed.
 ---
 
 ## GS-075 — Cash Reconciliation is entirely missing
