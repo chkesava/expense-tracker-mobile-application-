@@ -90,7 +90,12 @@ export function CollectionsList({ embedded = false, prefix }: CollectionsListPro
   const { pandalId, festivalId } = useGaneshSession();
   const { festivals } = useFestivals(pandalId);
   const festival = festivals.find((item) => item.id === festivalId);
-  const { summary } = useGaneshSummary(pandalId, festivalId);
+  const {
+    summary,
+    loading: summaryLoading,
+    error: summaryError,
+    retry: retrySummary,
+  } = useGaneshSummary(pandalId, festivalId);
   const {
     households,
     loading: householdsLoading,
@@ -365,7 +370,20 @@ export function CollectionsList({ embedded = false, prefix }: CollectionsListPro
         />
       )}
 
-      {embedded ? null : (
+      {/* GS-032: "Collected this festival ₹0 · 0 donors · 0 paid houses" was
+          rendered while the summary was still loading, and identically when it
+          failed — a collector could read it as a drive that had brought in
+          nothing. The rows below were already gated; the headline was not. */}
+      {embedded ? null : summaryLoading ? (
+        <ListStateView loading title="Loading the collection totals" skeletonCount={3} />
+      ) : summaryError ? (
+        <ListStateView
+          error={summaryError}
+          onRetry={retrySummary}
+          title="We couldn't load the collection totals."
+          description="Showing ₹0 here would read as nothing collected, so the figures stay hidden until they load."
+        />
+      ) : (
         <FundHero
           eyebrow="Collected this festival"
           amount={summary.chanda}

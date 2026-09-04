@@ -105,7 +105,11 @@ export default function CommitteeScreen() {
   const { pandalId, festivalId } = useGaneshSession();
   const { festivals } = useFestivals(pandalId);
   const festival = festivals.find((item) => item.id === festivalId);
-  const { summary, loading: summaryLoading } = useGaneshSummary(pandalId, festivalId);
+  const {
+    summary,
+    loading: summaryLoading,
+    error: summaryError,
+  } = useGaneshSummary(pandalId, festivalId);
   const { members: pandalMembers, loading, error } = usePandalMembers(pandalId);
   const { members: festivalMembers } = useFestivalMembers(pandalId, festivalId);
   const { can } = useGaneshPermissions();
@@ -145,6 +149,10 @@ export default function CommitteeScreen() {
     });
   }, [allRows, filter, query]);
 
+  // GS-032: with no rows loaded these counts read "Paid 0 of 0" and, worse,
+  // "Not paid 0 · All done" — an affirmative claim that every member has
+  // settled, made before we know of a single member.
+  const rowsUnknown = (loading || Boolean(error)) && allRows.length === 0;
   const paidCount = allRows.filter((row) => row.status === "paid").length;
   const pendingCount = allRows.filter((row) => row.status === "pending").length;
 
@@ -204,8 +212,11 @@ export default function CommitteeScreen() {
             </Text>
           }
         >
-          {/* A dash, not zero, until the figure is real (GS-032). */}
-          {summaryLoading ? (
+          {/* A dash, not zero, until the figure is real (GS-032). The error
+              case took the same branch as a loaded summary, so a failed load
+              printed a settled ₹0 — the dash covers both: unknown is unknown
+              whether we are still asking or the ask failed. */}
+          {summaryLoading || summaryError ? (
             <MetaLabel>—</MetaLabel>
           ) : (
             <Money
@@ -226,7 +237,7 @@ export default function CommitteeScreen() {
                 { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular },
               ]}
             >
-              of {allRows.length}
+              {rowsUnknown ? "of —" : `of ${allRows.length}`}
             </Text>
           }
         >
@@ -236,7 +247,7 @@ export default function CommitteeScreen() {
               { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold },
             ]}
           >
-            {paidCount}
+            {rowsUnknown ? "—" : paidCount}
           </Text>
         </StatTile>
         <StatTile
@@ -251,7 +262,7 @@ export default function CommitteeScreen() {
                 },
               ]}
             >
-              {pendingCount > 0 ? "Needs follow-up" : "All done"}
+              {rowsUnknown ? "Not loaded yet" : pendingCount > 0 ? "Needs follow-up" : "All done"}
             </Text>
           }
         >
@@ -264,7 +275,7 @@ export default function CommitteeScreen() {
               },
             ]}
           >
-            {pendingCount}
+            {rowsUnknown ? "—" : pendingCount}
           </Text>
         </StatTile>
       </View>

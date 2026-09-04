@@ -55,14 +55,18 @@ balance and stay offline-capable.
 | Severity | Closed | Partial | Open | Total |
 | --- | ---: | ---: | ---: | ---: |
 | CRITICAL | 8 | 1 | 0 | 9 |
-| HIGH | 30 | 2 | 0 | 32 |
-| MEDIUM | 26 | 1 | 15 | 42 |
+| HIGH | 31 | 1 | 0 | 32 |
+| MEDIUM | 27 | 0 | 15 | 42 |
 | LOW | 12 | 0 | 8 | 20 |
-| **Total** | **76** | **4** | **23** | **103** |
+| **Total** | **78** | **2** | **23** | **103** |
 
-Every CRITICAL and HIGH is now closed or partial. The one CRITICAL partial is
-GS-004 (no whole-document field allowlist outside `summary`); the HIGH partials
-are GS-032 and GS-040.
+Every CRITICAL and HIGH is now closed or partial. Two partials remain: GS-004
+(no whole-document field allowlist outside `summary`, CRITICAL) and GS-040 (the
+photo queue is still not persisted, HIGH). Both are blocked on work larger than
+a rules edit or a screen fix, and each ticket records what that is: GS-004 needs
+the emulator harness in GS-074 before an allowlist can be deployed safely
+against a Firebase project that also serves production, and GS-040 needs a
+durable queue with a provider-level worker.
 
 ### How much of this you can trust
 
@@ -231,7 +235,7 @@ Recording these explicitly so the fix cycle does not undo working design:
 | GS-029 | HIGH | CODE_QUALITY | Error handling | `useGaneshWrites` guards throw synchronously, defeating `.catch` and spinners | FIXED 2026-09-03 |
 | GS-030 | HIGH | UX | Error handling | Late write failures bypass `lib/errors.ts` and arrive after a success toast | FIXED 2026-09-03 |
 | GS-031 | HIGH | UX | Error handling | Nine write paths have no error handling at all | FIXED 2026-09-03 |
-| GS-032 | HIGH | UX | Reports | Ten financial screens render ₹0 with no loading or error state | MOSTLY FIXED 2026-09-03 |
+| GS-032 | HIGH | UX | Reports | Ten financial screens render 0 with no loading or error state | FIXED - 2026-09-04 |
 | GS-033 | HIGH | UX | Expenses | No keyboard avoidance on any Ganesh money-entry form | FIXED 2026-09-03 |
 | GS-034 | HIGH | UX | Admin Dashboard | Summary tiles and "Needs attention" act on unloaded data | FIXED 2026-09-03 |
 | GS-035 | HIGH | UX | Festival | A closed festival is reported to the user as "You don't have access" | FIXED 2026-09-03 |
@@ -268,7 +272,7 @@ Recording these explicitly so the fix cycle does not undo working design:
 | GS-066 | MEDIUM | PERFORMANCE | Sponsors | `useSponsorHistory` is an unbounded N+1 with client-side filtering | FIXED — 2026-09-04 (the `where` was already there) |
 | GS-067 | MEDIUM | ASSETS | Pandal Assets | Per-asset history is truncated by a pandal-wide 80-document cap | FIXED — 2026-09-04 |
 | GS-068 | MEDIUM | OFFLINE | Offline behaviour | The Firestore persistence fallback cannot work and the cache mode is fabricated | OPEN |
-| GS-069 | MEDIUM | STORAGE | Supabase Storage | No cleanup path exists; orphaned files accumulate permanently | PARTIAL |
+| GS-069 | MEDIUM | STORAGE | Supabase Storage | No cleanup path exists; orphaned files accumulate permanently | FIXED - 2026-09-04 (void deletion wont-do) |
 | GS-070 | MEDIUM | FINANCE | Permanent Fund | Seed-then-transfer runs as two non-atomic steps with no rollback | OPEN |
 | GS-071 | MEDIUM | FIRESTORE | Pandal creation | Multi-batch pandal and festival creation has no rollback | OPEN — assessed 2026-09-04 |
 | GS-072 | MEDIUM | FIRESTORE | Reports | The recompute treats a missing contribution status as `received` | FIXED 2026-09-04 |
@@ -2474,10 +2478,9 @@ Related to GS-029, GS-030, GS-027, GS-025.
 ## GS-032 — Ten financial screens render ₹0 with no loading or error state
 
 **Severity:** HIGH
-**Status:** MOSTLY FIXED 2026-09-03
 **Category:** UX
 **Feature:** Reports
-**Status:** OPEN
+**Status:** FIXED - 2026-09-04
 
 ### Problem
 `useGaneshSummary` starts at all-zeros and only clears `loading` on the first snapshot. Ten screens read the summary and consult neither `loading` nor `error`, so an unloaded or permission-denied state is indistinguishable from "the pandal has no money".
@@ -2523,6 +2526,57 @@ Extend `AdminQueryState` (or an equivalent) to the non-admin screens and gate ea
 ### Dependencies
 Blocks proper fixes for GS-007, GS-025, GS-026, GS-034.
 
+
+### Resolution (2026-09-04)
+Closed. The remaining screens are gated, and two defects the ticket had not
+identified were found while checking it.
+
+First, a correction to this ticket's own record: it carried **two contradictory
+Status lines** - "MOSTLY FIXED 2026-09-03" and "OPEN" - with no resolution
+section and no evidence for either. The duplicate is removed.
+
+**Stale rows in the table.** `(tabs)/pandal.tsx` no longer reads the summary at
+all; that screen was redesigned and its "Target 0 / Collected 0" row was
+describing code that no longer exists. `assets.tsx` and `sponsors.tsx`
+(criterion 4) already pass `error` to `ListStateView`, and
+`household/[id].tsx` (criterion 3) already gates on load.
+
+**Fixed now.** Each of these gated its *rows* on a loading state while
+rendering summary-derived figures above that gate - the numbers a treasurer
+would actually read:
+
+- `CollectionsList` - "Collected this festival 0 - 0 donors - 0 paid houses".
+- `ExpensesList` - the "Spent this festival" hero and its four tiles.
+- `ContributionsList` - the tiles are computed from `contributions`, so during
+  load they summed an empty array and printed a settled 0 while the rows below
+  correctly showed a skeleton. On an error it was worse: the tiles claimed zero
+  and the list claimed a failure, on the same screen.
+- `permanent-fund.tsx` - the fund card.
+- `member/[id].tsx` - rendered "Member not found - they may have been removed
+  from this Pandal" during every load.
+- `(tabs)/committee.tsx` - gated loading but discarded `error`, so a failed
+  summary took the same branch as a loaded one and printed 0. The paid/pending
+  counts were worse than the ticket describes: with no rows loaded they read
+  "Not paid 0 - **All done**", an affirmative claim that every member had
+  settled, made before a single member was known.
+
+**Two defects the ticket did not name.**
+
+`usePermanentFund` **discarded its error entirely**. `snapshotErrorHandler`
+hands over a `LoadFailure` and both the hook and the provider threw it away,
+clearing loading and leaving `EMPTY_PERMANENT_FUND` - so a permission-denied
+Permanent Fund was indistinguishable from an empty one, with no error available
+to any screen. Now threaded through both the local listener and the shared
+provider slice (`fundError`, `retryFund`), mirroring the existing
+`summaryError`/`retrySummary` pattern.
+
+That mattered beyond display: `fund.total === 0` also decides whether to offer
+**"add initial balance"**, so during load and after a failed load the app was
+offering to seed a fund that might already hold the Pandal's savings.
+
+Criterion 1's wording is met by hiding the figures rather than by showing a
+dash everywhere - on the money screens a skeleton plus a retry is the honest
+shape, since a dash in place of a hero amount reads as a layout bug.
 ---
 
 ## GS-033 — No keyboard avoidance on any Ganesh money-entry form
@@ -4252,7 +4306,7 @@ None. Applies app-wide, not only to Ganesh.
 **Severity:** MEDIUM
 **Category:** STORAGE
 **Feature:** Supabase Storage
-**Status:** PARTIAL (2026-08-27)
+**Status:** FIXED - 2026-09-04 (one criterion recorded as wont-do)
 
 ### Problem
 `deleteFile` exists and is never called. Nothing removes storage objects when a record is voided, when a photo is replaced with a different extension, or when the Firestore attach fails after a successful upload.
@@ -4338,6 +4392,49 @@ below, not by an automated test.
 ### Dependencies
 Related to GS-001, GS-040.
 
+
+### Resolution (2026-09-04)
+Closed, with one acceptance criterion recorded as **won't do** rather than left
+open indefinitely.
+
+**Now done: the late-failure orphan.** This was the real remaining gap. The
+2026-08-27 pass wrapped each attach in try/catch, but per `commitWrite`'s
+contract that only ever catches a failure arriving *inside* the ~1.5s ack grace
+window. A failure after it is delivered through `onLateFailure` and never
+rejects, so the catch did not run and the uploaded object stayed in Storage
+with no record pointing at it.
+
+`onLateFailure` was already a supported option - the four attach functions
+simply never passed one. They now take it and hand it to `commitWrite`, and
+`useGaneshStorage` supplies `lateFailureCleanup`, which deletes the just-
+uploaded object and **also** calls `reportLateWriteFailure`.
+
+That second half matters and is easy to get wrong: supplying `onLateFailure`
+*replaces* `commitWrite`'s own reporter rather than adding to it, so a caller
+that only cleans up silences the toast and leaves the user believing the photo
+attached. `defaultLateFailure` is now exported as `reportLateWriteFailure` for
+exactly this composition, and the contract is asserted by a test rather than
+left to a comment.
+
+**Won't do: deleting a photo on void.** The 2026-08-27 pass declined this with
+a good reason - a voided expense's receipt is the evidence for *why* it was
+voided, `expense/[id].tsx` renders it unconditionally, and deleting it would
+produce a broken image on the record someone is most likely to review. That
+directly contradicts this ticket's own criterion 4, "no user-visible regression
+in photo attachment." Two criteria of one ticket cannot both be satisfied;
+recording the conflict and choosing evidence-retention is the answer, not a
+permanent PARTIAL.
+
+**Still open, tracked elsewhere:** an offline photo *replacement* leaves the
+previous object in place until the write is acked, because reporting the
+previous path on a merely-queued outcome could delete a photo the record still
+points at. Closing that needs the persisted upload queue in GS-040, which is
+where it now belongs.
+
+6 tests added on `commitWrite`'s late-failure contract - the previous pass
+shipped these cleanup paths with none, noting the test setup does not model
+Storage. It does not, but the *hook contract* they depend on is testable, and
+that is where the subtle failure was.
 ---
 
 ## GS-070 — Seed-then-transfer runs as two non-atomic steps with no rollback

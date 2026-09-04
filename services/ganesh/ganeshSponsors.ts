@@ -440,7 +440,11 @@ export async function attachSponsorPhoto(
   actor: GaneshActor,
   pandalId: string,
   sponsorId: string,
-  photo: GaneshFileMeta
+  photo: GaneshFileMeta,
+  // GS-069: a failure arriving after commitWrite's grace window is reported
+  // through this hook rather than rejecting, so without it the caller's
+  // try/catch never runs and the just-uploaded object is orphaned.
+  onLateFailure?: (error: unknown) => void
 ): Promise<string | undefined> {
   const ref = pathRef(db, [...pandalSponsorsCol(pandalId), sponsorId]);
   const snap = await getDoc(ref);
@@ -459,7 +463,10 @@ export async function attachSponsorPhoto(
     newValue: { path: photo.path },
   });
   // See attachAssetPhoto for why this waits for a real ack.
-  const outcome = await commitWrite(() => batch.commit(), { label: "sponsor photo" });
+  const outcome = await commitWrite(() => batch.commit(), {
+    label: "sponsor photo",
+    onLateFailure,
+  });
   return outcome === "acked" && previousPath && previousPath !== photo.path
     ? previousPath
     : undefined;

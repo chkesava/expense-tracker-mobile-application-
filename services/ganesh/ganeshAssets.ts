@@ -357,7 +357,11 @@ export async function attachAssetPhoto(
   actor: GaneshActor,
   pandalId: string,
   assetId: string,
-  photo: GaneshFileMeta
+  photo: GaneshFileMeta,
+  // GS-069: a failure arriving after commitWrite's grace window is reported
+  // through this hook rather than rejecting, so without it the caller's
+  // try/catch never runs and the just-uploaded object is orphaned.
+  onLateFailure?: (error: unknown) => void
 ): Promise<string | undefined> {
   const ref = pathRef(db, [...pandalAssetsCol(pandalId), assetId]);
   const snap = await getDoc(ref);
@@ -379,7 +383,10 @@ export async function attachAssetPhoto(
   // one replaced it. A merely-"queued" (offline) outcome could still fail to
   // land, and deleting the previous object on that outcome would orphan the
   // record itself.
-  const outcome = await commitWrite(() => batch.commit(), { label: "asset photo" });
+  const outcome = await commitWrite(() => batch.commit(), {
+    label: "asset photo",
+    onLateFailure,
+  });
   return outcome === "acked" && previousPath && previousPath !== photo.path
     ? previousPath
     : undefined;

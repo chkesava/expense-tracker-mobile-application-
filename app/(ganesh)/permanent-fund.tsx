@@ -9,6 +9,7 @@ import { GaneshScreen, useGaneshListPadding } from "@/components/ganesh/GaneshSc
 import { PermanentFundCard } from "@/components/ganesh/PermanentFundCard";
 import {
   FilterChips,
+  ListStateView,
   GaneshEmptyState,
   GaneshHeader,
   LedgerRow,
@@ -69,7 +70,12 @@ export default function PermanentFundScreen() {
   const { isOnline } = useNetwork();
 
   const { pandalId, festivalId } = useGaneshSession();
-  const { fund } = usePermanentFund(pandalId);
+  const {
+    fund,
+    loading: fundLoading,
+    error: fundError,
+    retry: retryFund,
+  } = usePermanentFund(pandalId);
   const { transactions, loading } = usePermanentFundTransactions(pandalId);
   const { festivals } = useFestivals(pandalId);
   const { summaries } = useFestivalSummaries(
@@ -122,6 +128,21 @@ export default function PermanentFundScreen() {
         ItemSeparatorComponent={() => <View style={styles.separator} />}
         ListHeaderComponent={
           <View style={styles.header}>
+            {/* GS-032: the card rendered ₹0 while loading and after a failed
+                load alike. Worse, `fund.total === 0` also decides whether to
+                offer "add initial balance", so that action was being offered
+                on a fund that might already hold the Pandal's savings. */}
+            {fundLoading ? (
+              <ListStateView loading title="Loading the Permanent Fund" skeletonCount={3} />
+            ) : fundError ? (
+              <ListStateView
+                error={fundError}
+                onRetry={retryFund}
+                title="We couldn't load the Permanent Fund."
+                description="The balance stays hidden rather than showing ₹0, which would read as an empty fund."
+              />
+            ) : (
+              <>
             <PermanentFundCard
               fund={fund}
               variant="hero"
@@ -192,7 +213,12 @@ export default function PermanentFundScreen() {
                 message="Members can view this fund. Adding or transferring money needs a role that allows it."
               />
             )}
+              </>
+            )}
 
+            {/* Outside the gate on purpose: the per-festival history reads each
+                festival's own summary, not the fund document, so it is still
+                worth showing when the fund itself failed to load. */}
             <Section title="Festival history" subtitle="What each festival took and returned">
               {festivals.length === 0 ? (
                 <GaneshEmptyState

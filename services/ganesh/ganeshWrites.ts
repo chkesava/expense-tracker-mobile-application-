@@ -2019,7 +2019,11 @@ export async function attachContributionPhoto(
   pandalId: string,
   festivalId: string,
   contributionId: string,
-  photo: GaneshFileMeta
+  photo: GaneshFileMeta,
+  // GS-069: a failure arriving after commitWrite's grace window is reported
+  // through this hook rather than rejecting, so without it the caller's
+  // try/catch never runs and the just-uploaded object is orphaned.
+  onLateFailure?: (error: unknown) => void
 ): Promise<string | undefined> {
   const ref = pathRef(db, [...festivalCol(pandalId, festivalId, "contributions"), contributionId]);
   const snap = await getDoc(ref);
@@ -2046,7 +2050,10 @@ export async function attachContributionPhoto(
   // one replaced it. A merely-"queued" (offline) outcome could still fail to
   // land, and deleting the previous object on that outcome would orphan the
   // record itself — it would keep pointing at a photo that no longer exists.
-  const outcome = await commitWrite(() => batch.commit(), { label: "contribution photo" });
+  const outcome = await commitWrite(() => batch.commit(), {
+    label: "contribution photo",
+    onLateFailure,
+  });
   return outcome === "acked" && previousPath !== photo.path ? previousPath : undefined;
 }
 
@@ -2815,7 +2822,12 @@ export async function attachExpenseReceipt(
   pandalId: string,
   festivalId: string,
   expenseId: string,
-  receipt: GaneshFileMeta
+  receipt: GaneshFileMeta,
+  // GS-069: `commitWrite` reports "queued" after ~1.5s and any later failure
+  // arrives through this hook instead of rejecting, so without it the caller's
+  // try/catch never runs and the uploaded object is orphaned with the record
+  // never pointing at it.
+  onLateFailure?: (error: unknown) => void
 ): Promise<string | undefined> {
   const ref = pathRef(db, [...festivalCol(pandalId, festivalId, "expenses"), expenseId]);
   const snap = await getDoc(ref);
@@ -2837,7 +2849,10 @@ export async function attachExpenseReceipt(
     reason: previousPath && previousPath !== receipt.path ? "Receipt replaced" : "Receipt attached",
   });
   // See attachContributionPhoto above for why this waits for a real ack.
-  const outcome = await commitWrite(() => batch.commit(), { label: "expense receipt" });
+  const outcome = await commitWrite(() => batch.commit(), {
+    label: "expense receipt",
+    onLateFailure,
+  });
   return outcome === "acked" && previousPath !== receipt.path ? previousPath : undefined;
 }
 

@@ -8,6 +8,7 @@ import { PermissionSummary } from "@/components/ganesh/PermissionChecklist";
 import {
   Avatar,
   GaneshEmptyState,
+  ListStateView,
   GaneshHeader,
   LedgerRow,
   MetaLabel,
@@ -67,7 +68,7 @@ export default function MemberDetailScreen() {
   const { festivals } = useFestivals(pandalId);
   const festival = festivals.find((item) => item.id === festivalId);
   const { members } = useFestivalMembers(pandalId, festivalId);
-  const { members: pandalMembers } = usePandalMembers(pandalId);
+  const { members: pandalMembers, loading: membersLoading } = usePandalMembers(pandalId);
   const { contributions } = useContributions(pandalId, festivalId);
   const writes = useGaneshWrites();
   const { can, isAdmin } = useGaneshPermissions();
@@ -138,6 +139,9 @@ export default function MemberDetailScreen() {
       && item.kind === "money"
   );
 
+  // GS-032: this rendered "Member not found — they may have been removed from
+  // this Pandal" during every load, telling the user something false about a
+  // member who was simply not fetched yet.
   if (!name) {
     return (
       <GaneshScreen safeTop>
@@ -146,11 +150,15 @@ export default function MemberDetailScreen() {
           icon={<Users size={22} color={g.saffron} strokeWidth={2.2} />}
           onBack={back}
         />
-        <GaneshEmptyState
-          icon={<Users size={22} color={g.saffron} strokeWidth={2.2} />}
-          title="Member not found"
-          description="They may have been removed from this Pandal."
-        />
+        {membersLoading ? (
+          <ListStateView loading title="Loading the member" skeletonCount={3} />
+        ) : (
+          <GaneshEmptyState
+            icon={<Users size={22} color={g.saffron} strokeWidth={2.2} />}
+            title="Member not found"
+            description="They may have been removed from this Pandal."
+          />
+        )}
       </GaneshScreen>
     );
   }

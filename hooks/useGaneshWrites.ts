@@ -337,7 +337,11 @@ export function useGaneshWrites() {
         writes.addContribution(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, input)
       );
     },
-    attachContributionPhoto: async (contributionId: string, photo: GaneshFileMeta) => {
+    attachContributionPhoto: async (
+      contributionId: string,
+      photo: GaneshFileMeta,
+      onLateFailure?: (error: unknown) => void
+    ) => {
       requirePerm("contributions.update");
       const ctx = requireFestival();
       return writes.attachContributionPhoto(
@@ -346,7 +350,8 @@ export function useGaneshWrites() {
         ctx.pandalId,
         ctx.festivalId,
         contributionId,
-        photo
+        photo,
+        onLateFailure
       );
     },
     receiveContribution: async (
@@ -433,7 +438,11 @@ export function useGaneshWrites() {
         writes.updateExpenseAmounts(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, expenseId, input)
       );
     },
-    attachExpenseReceipt: async (expenseId: string, receipt: GaneshFileMeta) => {
+    attachExpenseReceipt: async (
+      expenseId: string,
+      receipt: GaneshFileMeta,
+      onLateFailure?: (error: unknown) => void
+    ) => {
       requirePerm("expenses.update");
       const ctx = requireFestival();
       return writes.attachExpenseReceipt(
@@ -442,7 +451,8 @@ export function useGaneshWrites() {
         ctx.pandalId,
         ctx.festivalId,
         expenseId,
-        receipt
+        receipt,
+        onLateFailure
       );
     },
     addReimbursement: async (input: Parameters<typeof writes.addReimbursement>[4]) => {
@@ -664,13 +674,21 @@ export function useGaneshWrites() {
     },
     attachAssetPhoto: async (
       assetId: string,
-      photo: Parameters<typeof assetWrites.attachAssetPhoto>[4]
+      photo: Parameters<typeof assetWrites.attachAssetPhoto>[4],
+      onLateFailure?: (error: unknown) => void
     ) => {
       if (!hasPerm("assets.create") && !hasPerm("assets.update")) {
         requirePerm("assets.update");
       }
       const ctx = requirePandal();
-      return assetWrites.attachAssetPhoto(ctx.db, ctx.actor, ctx.pandalId, assetId, photo);
+      return assetWrites.attachAssetPhoto(
+        ctx.db,
+        ctx.actor,
+        ctx.pandalId,
+        assetId,
+        photo,
+        onLateFailure
+      );
     },
     createSponsor: async (input: Parameters<typeof sponsorWrites.createSponsor>[3]) => {
       requirePerm("sponsors.create");
@@ -701,13 +719,21 @@ export function useGaneshWrites() {
     },
     attachSponsorPhoto: async (
       sponsorId: string,
-      photo: Parameters<typeof sponsorWrites.attachSponsorPhoto>[4]
+      photo: Parameters<typeof sponsorWrites.attachSponsorPhoto>[4],
+      onLateFailure?: (error: unknown) => void
     ) => {
       if (!hasPerm("sponsors.create") && !hasPerm("sponsors.update")) {
         requirePerm("sponsors.update");
       }
       const ctx = requirePandal();
-      return sponsorWrites.attachSponsorPhoto(ctx.db, ctx.actor, ctx.pandalId, sponsorId, photo);
+      return sponsorWrites.attachSponsorPhoto(
+        ctx.db,
+        ctx.actor,
+        ctx.pandalId,
+        sponsorId,
+        photo,
+        onLateFailure
+      );
     },
     addSponsorship: async (
       sponsorId: string,

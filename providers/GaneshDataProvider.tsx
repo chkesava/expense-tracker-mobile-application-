@@ -132,6 +132,8 @@ export type GaneshData = {
   memberAudits: Slice<PandalMemberAudit>;
   fund: PermanentFundSummary;
   fundLoading: boolean;
+  fundError: LoadFailure | null;
+  retryFund: () => void;
   fundTransactions: Slice<PermanentFundTransaction>;
   request: (slice: GaneshIdleSlice) => void;
   sessionPandalId: string | null;
@@ -455,7 +457,12 @@ export function GaneshDataProvider({ children }: { children: ReactNode }) {
 
   const [fund, setFund] = useState<PermanentFundSummary>(EMPTY_PERMANENT_FUND);
   const [fundKey, setFundKey] = useState("");
-  const fundLoading = wantFund && fundKey !== (pandalId ?? "");
+  // GS-032: the failure handed over by `snapshotErrorHandler` was discarded,
+  // so a permission-denied Permanent Fund cleared loading and left the fund at
+  // EMPTY_PERMANENT_FUND — a balance of ₹0 that read as settled fact.
+  const [fundError, setFundError] = useState<LoadFailure | null>(null);
+  const [fundAttempt, setFundAttempt] = useState(0);
+  const fundLoading = wantFund && fundKey !== (pandalId ?? "") && !fundError;
 
   useEffect(() => {
     if (!wantFund || !db || !pandalId) {
@@ -473,10 +480,14 @@ export function GaneshDataProvider({ children }: { children: ReactNode }) {
         logQuerySnapshot(path, snap);
         setFund(snap.exists() ? parsePermanentFund(snap.data()) : EMPTY_PERMANENT_FUND);
         setFundKey(pandalId);
+        setFundError(null);
       },
       snapshotErrorHandler(
         "snapshot.ganesh.permanentFund",
-        () => setFundKey(pandalId),
+        (failure) => {
+          setFundKey(pandalId);
+          setFundError(failure);
+        },
         "Couldn't load Permanent Fund."
       )
     );
@@ -484,7 +495,7 @@ export function GaneshDataProvider({ children }: { children: ReactNode }) {
       forgetSnapshotPath(path);
       unsub();
     };
-  }, [wantFund, db, pandalId]);
+  }, [wantFund, db, pandalId, fundAttempt]);
 
   const fundTransactions = useGaneshCollection<PermanentFundTransaction>(
     wanted("permanentFundTx") && pandalId ? permanentFundTransactionsCol(pandalId) : null,
@@ -656,6 +667,11 @@ export function GaneshDataProvider({ children }: { children: ReactNode }) {
       ),
       fund,
       fundLoading,
+      fundError,
+      retryFund: () => {
+        setFundError(null);
+        setFundAttempt((n) => n + 1);
+      },
       fundTransactions: toSlice(
         fundTransactions.items,
         fundTransactions.loading,
@@ -700,6 +716,7 @@ export function GaneshDataProvider({ children }: { children: ReactNode }) {
       memberAudits,
       fund,
       fundLoading,
+      fundError,
       fundTransactions,
       request,
       pandalId,

@@ -52,8 +52,14 @@ const QUEUED = Symbol("queued");
  * to call `console.error` and `toast.error` directly with fixed copy, which
  * meant a permission denial and a lost connection read identically and neither
  * was captured with the redaction and context the rest of the app uses.
+ *
+ * Exported so a caller that needs its own `onLateFailure` — to clean up a
+ * Storage object the failed write was going to reference (GS-069) — can still
+ * give the user the notice this would have given. Supplying `onLateFailure`
+ * replaces this reporter rather than adding to it, so a caller that forgets to
+ * call it leaves the user believing a write landed when it did not.
  */
-function defaultLateFailure(error: unknown, label?: string): void {
+export function reportLateWriteFailure(error: unknown, label?: string): void {
   logError("firestoreWrite.lateFailure", error, { label });
   const reason = friendlyErrorMessage(error, "It could not be synced.");
   toast.error(
@@ -82,7 +88,7 @@ export async function commitWrite(
     (error: unknown) => {
       if (!graceElapsed) throw error;
       if (options.onLateFailure) options.onLateFailure(error);
-      else defaultLateFailure(error, options.label);
+      else reportLateWriteFailure(error, options.label);
       return undefined;
     }
   );

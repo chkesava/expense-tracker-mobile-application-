@@ -3,6 +3,7 @@ import { useCallback } from "react";
 import { useFestivals } from "@/hooks/useFestivals";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { useGaneshWrites } from "@/hooks/useGaneshWrites";
+import { reportLateWriteFailure } from "@/lib/firestoreWrite";
 import { logWarning } from "@/lib/errors";
 import { useAuth } from "@/providers/AuthProvider";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
@@ -73,11 +74,40 @@ export function useGaneshStorage() {
     });
   }, [pandalId, festivalId]);
 
+  /**
+   * Cleanup for a failure that arrives *after* `commitWrite` reported the
+   * attach as queued (GS-069).
+   *
+   * The try/catch below only ever sees a rejection from inside the ~1.5s ack
+   * grace window. A failure after that window is delivered through
+   * `onLateFailure` instead, so the object we just uploaded was left in Storage
+   * with no record ever pointing at it and nothing to notice.
+   *
+   * Supplying `onLateFailure` *replaces* commitWrite's own reporter, so this
+   * calls `reportLateWriteFailure` explicitly — otherwise the user would be
+   * left believing the photo attached.
+   */
+  const lateFailureCleanup = useCallback(
+    (path: string, scope: string, label: string) => (error: unknown) => {
+      bestEffortCleanup(path, scope);
+      reportLateWriteFailure(error, label);
+    },
+    [bestEffortCleanup]
+  );
+
   const uploadExpenseReceipt = useCallback(
     async (expenseId: string, file: PreparedGaneshImage): Promise<GaneshFileMeta> => {
       const meta = await uploadPrepared({ category: "expenses", recordId: expenseId, file });
       try {
-        const previousPath = await writes.attachExpenseReceipt(expenseId, meta);
+        const previousPath = await writes.attachExpenseReceipt(
+          expenseId,
+          meta,
+          lateFailureCleanup(
+            meta.path,
+            "ganesh.storage.lateOrphanExpenseReceipt",
+            "expense receipt"
+          )
+        );
         bestEffortCleanup(previousPath, "ganesh.storage.replaceExpenseReceipt");
       } catch (error) {
         bestEffortCleanup(meta.path, "ganesh.storage.orphanExpenseReceipt");
@@ -85,7 +115,7 @@ export function useGaneshStorage() {
       }
       return meta;
     },
-    [bestEffortCleanup, uploadPrepared, writes]
+    [bestEffortCleanup, lateFailureCleanup, uploadPrepared, writes]
   );
 
   const uploadContributionPhoto = useCallback(
@@ -96,7 +126,15 @@ export function useGaneshStorage() {
         file,
       });
       try {
-        const previousPath = await writes.attachContributionPhoto(contributionId, meta);
+        const previousPath = await writes.attachContributionPhoto(
+          contributionId,
+          meta,
+          lateFailureCleanup(
+            meta.path,
+            "ganesh.storage.lateOrphanContributionPhoto",
+            "contribution photo"
+          )
+        );
         bestEffortCleanup(previousPath, "ganesh.storage.replaceContributionPhoto");
       } catch (error) {
         bestEffortCleanup(meta.path, "ganesh.storage.orphanContributionPhoto");
@@ -104,7 +142,7 @@ export function useGaneshStorage() {
       }
       return meta;
     },
-    [bestEffortCleanup, uploadPrepared, writes]
+    [bestEffortCleanup, lateFailureCleanup, uploadPrepared, writes]
   );
 
   const uploadAssetPhoto = useCallback(
@@ -125,7 +163,11 @@ export function useGaneshStorage() {
         file,
       });
       try {
-        const previousPath = await writes.attachAssetPhoto(assetId, meta);
+        const previousPath = await writes.attachAssetPhoto(
+          assetId,
+          meta,
+          lateFailureCleanup(meta.path, "ganesh.storage.lateOrphanAssetPhoto", "asset photo")
+        );
         bestEffortCleanup(previousPath, "ganesh.storage.replaceAssetPhoto");
       } catch (error) {
         bestEffortCleanup(meta.path, "ganesh.storage.orphanAssetPhoto");
@@ -133,7 +175,17 @@ export function useGaneshStorage() {
       }
       return meta;
     },
-    [bestEffortCleanup, can, pandalId, permissions, realUser?.uid, role, status, writes]
+    [
+      bestEffortCleanup,
+      lateFailureCleanup,
+      can,
+      pandalId,
+      permissions,
+      realUser?.uid,
+      role,
+      status,
+      writes,
+    ]
   );
 
   const uploadSponsorPhoto = useCallback(
@@ -154,7 +206,11 @@ export function useGaneshStorage() {
         file,
       });
       try {
-        const previousPath = await writes.attachSponsorPhoto(sponsorId, meta);
+        const previousPath = await writes.attachSponsorPhoto(
+          sponsorId,
+          meta,
+          lateFailureCleanup(meta.path, "ganesh.storage.lateOrphanSponsorPhoto", "sponsor photo")
+        );
         bestEffortCleanup(previousPath, "ganesh.storage.replaceSponsorPhoto");
       } catch (error) {
         bestEffortCleanup(meta.path, "ganesh.storage.orphanSponsorPhoto");
@@ -162,7 +218,17 @@ export function useGaneshStorage() {
       }
       return meta;
     },
-    [bestEffortCleanup, can, pandalId, permissions, realUser?.uid, role, status, writes]
+    [
+      bestEffortCleanup,
+      lateFailureCleanup,
+      can,
+      pandalId,
+      permissions,
+      realUser?.uid,
+      role,
+      status,
+      writes,
+    ]
   );
 
   const signedUrl = useCallback(

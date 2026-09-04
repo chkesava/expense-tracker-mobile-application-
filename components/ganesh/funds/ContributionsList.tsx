@@ -298,7 +298,20 @@ export function ContributionsList({
         />
       )}
 
-      {hideSummary ? null : (
+      {/* GS-032: these tiles are computed from `contributions`, so during load
+          they summed an empty array and rendered a settled ₹0 — "nothing has
+          been given yet" — while the rows below correctly showed a skeleton.
+          An error was worse: the tiles claimed zero and the list claimed a
+          failure, on the same screen. */}
+      {hideSummary ? null : loading ? (
+        <ListStateView loading title="Loading the contribution totals" skeletonCount={3} />
+      ) : error ? (
+        <ListStateView
+          error={error}
+          title="We couldn't load the contribution totals."
+          description="Zero here would read as nothing given, so the figures stay hidden until they load."
+        />
+      ) : (
         <View style={styles.statRow}>
           <StatTile
             label="Received"

@@ -61,7 +61,12 @@ export function ExpensesList({ embedded = false, prefix }: ExpensesListProps) {
   const { pandalId, festivalId } = useGaneshSession();
   const { festivals } = useFestivals(pandalId);
   const festival = festivals.find((item) => item.id === festivalId);
-  const { summary } = useGaneshSummary(pandalId, festivalId);
+  const {
+    summary,
+    loading: summaryLoading,
+    error: summaryError,
+    retry: retrySummary,
+  } = useGaneshSummary(pandalId, festivalId);
   const { expenses, loading, error } = useGaneshExpenses(pandalId, festivalId);
   const { members } = usePandalMembers(pandalId);
   const { sponsors } = usePandalSponsors(pandalId);
@@ -159,7 +164,22 @@ export function ExpensesList({ embedded = false, prefix }: ExpensesListProps) {
         />
       )}
 
-      {embedded ? null : (
+      {/* GS-032: the list rows were gated on their own loading state, but the
+          hero and tiles read the summary and consulted neither of its flags —
+          so "Spent this festival" read a settled ₹0 while loading, and a
+          permission-denied summary read as a Pandal that had spent nothing.
+          On the tab a treasurer opens to check spending, that is a number they
+          could act on. */}
+      {embedded ? null : summaryLoading ? (
+        <ListStateView loading title="Loading the festival totals" skeletonCount={3} />
+      ) : summaryError ? (
+        <ListStateView
+          error={summaryError}
+          onRetry={retrySummary}
+          title="We couldn't load the festival totals."
+          description="The spending figures are hidden until this loads — showing zero here would read as nothing spent."
+        />
+      ) : (
         <>
           <FundHero
             eyebrow="Spent this festival"
