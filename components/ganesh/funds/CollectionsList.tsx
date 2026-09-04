@@ -137,9 +137,17 @@ export function CollectionsList({ embedded = false, prefix }: CollectionsListPro
         || (household.houseNumber ?? "").toLowerCase().includes(needle)
         || (household.mobile ?? "").includes(needle)
         || (household.area ?? "").toLowerCase().includes(needle)
+        // Searchable so a collector can pull up their own houses by name.
+        // A dedicated "my houses" filter belongs with the Daily Collection
+        // Sessions work (GS-076), not here.
+        || (household.assignedCollectorId
+          ? memberDisplayName(members, household.assignedCollectorId)
+              .toLowerCase()
+              .includes(needle)
+          : false)
       );
     });
-  }, [households, query, filter]);
+  }, [households, query, filter, members]);
 
   const visibleCollections = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -172,6 +180,11 @@ export function CollectionsList({ embedded = false, prefix }: CollectionsListPro
             item.houseNumber ? `House ${item.houseNumber}` : null,
             item.area ? item.area : null,
             item.expectedAmount > 0 ? `Target ${formatInr(item.expectedAmount)}` : null,
+            // Assignment is only worth making if a collector can see it
+            // without opening each house (GS-093).
+            item.assignedCollectorId
+              ? `For ${memberDisplayName(members, item.assignedCollectorId)}`
+              : null,
           ]
             .filter(Boolean)
             .join(" · ") || undefined
@@ -182,7 +195,7 @@ export function CollectionsList({ embedded = false, prefix }: CollectionsListPro
         onPress={(id) => push(`/(ganesh)/household/${id}` as never)}
       />
     ),
-    [push, theme.colors.mutedForeground]
+    [members, push, theme.colors.mutedForeground]
   );
 
   const renderCollection = useCallback(

@@ -57,8 +57,8 @@ balance and stay offline-capable.
 | CRITICAL | 8 | 1 | 0 | 9 |
 | HIGH | 30 | 2 | 0 | 32 |
 | MEDIUM | 26 | 1 | 15 | 42 |
-| LOW | 6 | 0 | 14 | 20 |
-| **Total** | **70** | **4** | **29** | **103** |
+| LOW | 12 | 0 | 8 | 20 |
+| **Total** | **76** | **4** | **23** | **103** |
 
 Every CRITICAL and HIGH is now closed or partial. The one CRITICAL partial is
 GS-004 (no whole-document field allowlist outside `summary`); the HIGH partials
@@ -288,12 +288,12 @@ Recording these explicitly so the fix cycle does not undo working design:
 | GS-086 | MEDIUM | DATA_VALIDATION | Collections | `collectorId` is arbitrary and unvalidated | FIXED 2026-09-04 — DEPLOYED |
 | GS-087 | LOW | FESTIVAL | Festivals | Two festivals can be created for the same year | FIXED — verified 2026-09-04 |
 | GS-088 | LOW | SECURITY | Pandal creation | Duplicate pandals are unconstrained and the code fallback is unchecked | FIXED 2026-09-04 |
-| GS-089 | LOW | CONTRIBUTIONS | In-Kind | "Cancelled" is offered as a creation status | OPEN — confirmed 2026-09-04 |
-| GS-090 | LOW | CONTRIBUTIONS | In-Kind | Sponsorship-kind value is hidden from the contributions tab metrics | OPEN |
-| GS-091 | LOW | CONTRIBUTIONS | Committee Contributions | Overpayment is indistinguishable from exact payment | OPEN |
-| GS-092 | LOW | SPONSORS | Audit Trail | Every sponsorship audit records `action: "edited"` | OPEN — confirmed 2026-09-04 |
-| GS-093 | LOW | COLLECTIONS | Households | `assignedCollectorId` and `notes` are dead fields | OPEN — confirmed 2026-09-04 |
-| GS-094 | LOW | UX | Collections | The payment-method filter ignores the search box | OPEN |
+| GS-089 | LOW | CONTRIBUTIONS | In-Kind | "Cancelled" is offered as a creation status | FIXED - 2026-09-04 (rules deployed) |
+| GS-090 | LOW | CONTRIBUTIONS | In-Kind | Sponsorship-kind value is hidden from the contributions tab metrics | FIXED - 2026-09-04 |
+| GS-091 | LOW | CONTRIBUTIONS | Committee Contributions | Overpayment is indistinguishable from exact payment | FIXED - 2026-09-04 |
+| GS-092 | LOW | SPONSORS | Audit Trail | Every sponsorship audit records `action: "edited"` | FIXED - 2026-09-04 |
+| GS-093 | LOW | COLLECTIONS | Households | `assignedCollectorId` and `notes` are dead fields | FIXED - 2026-09-04 (exposed, not deleted) |
+| GS-094 | LOW | UX | Collections | The payment-method filter ignores the search box | CLOSED - was already fixed |
 | GS-095 | LOW | ASSETS | Pandal Assets | Asset detail resolves from a 400-doc list and shows a misleading message | FIXED — 2026-09-04 |
 | GS-096 | LOW | STORAGE | Supabase Storage | Signed URLs live 30 minutes and the cache map never evicts | OPEN |
 | GS-097 | LOW | PERFORMANCE | Supabase Storage | Each upload reads the image into memory three times | OPEN — confirmed 2026-09-04 |
@@ -5041,7 +5041,7 @@ Related to GS-043.
 **Severity:** LOW
 **Category:** CONTRIBUTIONS
 **Feature:** In-Kind
-**Status:** OPEN — confirmed 2026-09-04
+**Status:** FIXED - 2026-09-04
 
 ### Problem
 A contribution can be created already cancelled, which has no real-world meaning.
@@ -5068,6 +5068,22 @@ Remove `cancelled` from the creation options, and reject it on create in the rul
 ### Dependencies
 Related to GS-037.
 
+
+### Resolution (2026-09-04)
+`cancelled` removed from `STATUS_OPTIONS` in `add-contribution.tsx`, and
+refused server-side by a new `contributionNotBornCancelled()` in
+`firestore.rules` (**deployed**). Both halves, because the client is not the
+only writer.
+
+Checked before forbidding it that nothing legitimate creates a cancelled row:
+`cancelContribution` and `cancelSponsorship` both `update` an existing document,
+so the only source was the stale option.
+
+Why it mattered beyond tidiness: those rows landed in the report's "Cancelled"
+figure, which is on the document a committee reads aloud to donors - money shown
+as cancelled that was never given and never withdrawn.
+
+Contract-test mirror updated and 1 test added (81 in that file).
 ---
 
 ## GS-090 — Sponsorship-kind value is hidden from the contributions tab metrics
@@ -5075,7 +5091,7 @@ Related to GS-037.
 **Severity:** LOW
 **Category:** CONTRIBUTIONS
 **Feature:** In-Kind
-**Status:** OPEN
+**Status:** FIXED - 2026-09-04
 
 ### Problem
 `summarizeContributions` computes a sponsored-received figure that the contributions tab never displays.
@@ -5101,6 +5117,26 @@ Add a sponsored-received tile, or fold it into the in-kind figure with a clear l
 ### Dependencies
 Related to GS-051.
 
+
+### Resolution (2026-09-04)
+The header was worse than the ticket describes. It renders three tiles -
+Received, Promised, Pending - and *Received showed cash only* while *Promised
+combined cash and in-kind*. So receiving a promised item made Promised fall with
+nothing rising to meet it: the value visibly left the header. `inKindReceived`
+was as absent as `sponsoredReceived`.
+
+Fixed by putting the non-cash received total (`inKindReceived +
+sponsoredReceived`) on the Received tile's meta line - "plus X in kind" - not by
+adding it to the headline figure and not by adding a fourth tile.
+
+Two reasons for that shape. The headline is cash in the God Fund, and folding
+donated goods into it would overstate what the Pandal can actually spend, which
+is the same conflation GS-050 and GS-051 were about. And three tiles already
+fill a phone row.
+
+No double counting: a *cash* sponsorship is mirrored into the ledger as a
+`kind: "money"` contribution and so is already inside `cashReceived`;
+`sponsoredReceived` only ever holds `kind: "sponsorship"` rows.
 ---
 
 ## GS-091 — Committee overpayment is indistinguishable from exact payment
@@ -5108,7 +5144,7 @@ Related to GS-051.
 **Severity:** LOW
 **Category:** CONTRIBUTIONS
 **Feature:** Committee Contributions
-**Status:** OPEN
+**Status:** FIXED - 2026-09-04
 
 ### Problem
 A member who pays more than their target is displayed identically to one who paid exactly.
@@ -5135,6 +5171,22 @@ Show the excess on the committee tab and the member detail screen.
 ### Dependencies
 None.
 
+
+### Resolution (2026-09-04)
+`memberExcessContribution` added to `ganeshMath.ts` beside
+`memberRemainingContribution`, and surfaced in both places the ticket asked for:
+
+- Committee tab: `X above share` on the member row's footer line.
+- Member detail: the Due tile becomes **Above share** and shows the excess.
+  That tile reads 0 when someone has overpaid - true, but saying nothing, and
+  identical to a member who paid to the rupee - so it was the right slot to
+  reuse rather than adding a fourth tile.
+
+Display only. `memberRemainingContribution` still clamps at zero and
+`committeePayStatus` still returns `paid`, so no ledger total, status or sort
+order changed - the excess was always banked correctly in
+`committeeContributions`, it was just invisible in the one direction a committee
+would want to see it.
 ---
 
 ## GS-092 — Every sponsorship audit records `action: "edited"`
@@ -5142,7 +5194,7 @@ None.
 **Severity:** LOW
 **Category:** SPONSORS
 **Feature:** Audit Trail
-**Status:** OPEN — confirmed 2026-09-04
+**Status:** FIXED - 2026-09-04
 
 ### Problem
 The sponsorship audit helper hard-codes a single action, so creation, receipt and cancellation are indistinguishable in the audit log.
@@ -5168,6 +5220,38 @@ Pass the real action through to the audit helper.
 ### Dependencies
 Related to GS-052.
 
+
+### Resolution (2026-09-04)
+`festivalAudit` took its action from a hard-coded `"edited"`. All 8 call sites
+now pass their real verb, and `action` is a **required** positional parameter
+rather than an optional one defaulting to `"edited"` - so a new call site has to
+state its verb instead of silently inheriting the wrong one.
+
+`AuditAction` needed widening: the union had no verb for the sponsorship
+lifecycle, which is why "edited" was reachable as a default in the first place.
+Added `promised`, `confirmed`, `received`, `cancelled`. Deliberately *not*
+mapped onto existing verbs: cancelling is not voiding - voiding reverses a
+recorded fact, cancelling withdraws a promise that was never banked.
+
+Checked before widening that the rules place no enum constraint on `action`
+(they don't), so the new values are not denied at the server, and that
+`AuditAction` is Ganesh-only with three consumers - no Expense or Nutrition
+impact.
+
+`admin/audit.tsx` renders the four new verbs, without which the generic fallback
+would have read "X received sponsorship". It also reclassifies `received` and
+`cancelled` from the Festival filter to **Money**: those move festival money or
+withdraw a promise of it, and while every sponsorship event was written as
+"edited" the Money filter showed no sponsorship activity at all. Creation,
+promise and confirmation stay under Festival - nothing has moved yet.
+
+Historical rows keep `action: "edited"` and will still render as "edited a
+sponsorship". Not backfilled: what those events actually were is not recoverable
+from the stored document, and inventing a verb for them would be worse than an
+honest vague one.
+
+5 tests added, driving the real write functions rather than the helper - the
+defect was never in `festivalAudit`, it was that no call site passed a verb.
 ---
 
 ## GS-093 — `assignedCollectorId` and `notes` are dead fields on households
@@ -5175,7 +5259,7 @@ Related to GS-052.
 **Severity:** LOW
 **Category:** COLLECTIONS
 **Feature:** Households
-**Status:** OPEN — confirmed 2026-09-04
+**Status:** FIXED - 2026-09-04
 
 ### Problem
 Two household fields are declared and accepted by the service but no screen ever sets them, so collector assignment for door-to-door rounds does not exist.
@@ -5201,6 +5285,31 @@ Expose assignment on the household screen, or delete the fields.
 ### Dependencies
 Related to GS-006, GS-076.
 
+
+### Resolution (2026-09-04)
+Exposed rather than deleted. The acceptance criterion allowed either, and
+removing a designed capability is the larger decision of the two; the data model
+was built for dividing streets between collectors and nothing was wrong with it
+except that no screen reached it.
+
+On `household/[id].tsx`, both behind the existing `collections.update`
+permission:
+
+- **Assigned collector** - the same `FilterChips` pattern as "Collected by" on
+  `add-collection.tsx`, with an Unassigned sentinel that writes `null` to clear.
+- **Notes** - a multiline input with its own save. `updateHousehold` already
+  wrote `notes: input.notes`, but typed it `string | undefined`, so the note
+  could be set and never cleared; widened to `string | null` since
+  `omitUndefined` drops undefined and keeps null. Read-only roles see the note
+  as text.
+
+An assignment nobody can see is not a capability, so it also appears on the
+household row in `CollectionsList` as "For <name>", and is matched by the search
+box so a collector can pull up their own houses. A dedicated "my houses" filter
+chip belongs with the Daily Collection Sessions work (GS-076), not here - that
+boundary is recorded in a comment at the search predicate.
+
+No rules change needed: households have no key allowlist.
 ---
 
 ## GS-094 — The payment-method filter ignores the search box
@@ -5208,7 +5317,7 @@ Related to GS-006, GS-076.
 **Severity:** LOW
 **Category:** UX
 **Feature:** Collections
-**Status:** OPEN
+**Status:** CLOSED - already fixed (verified 2026-09-04)
 
 ### Problem
 Selecting a cash or UPI filter returns before the search term is applied, so search and filter cannot be combined.
@@ -5234,6 +5343,19 @@ Apply both predicates.
 ### Dependencies
 None.
 
+
+### Resolution (2026-09-04)
+Already fixed - stale ticket, no code changed.
+
+`visibleCollections` in `components/ganesh/funds/CollectionsList.tsx` applies
+both predicates: `if (isEntryView && row.paymentMethod !== filter) return
+false;` and only then the `needle` check. Search and the payment-method filter
+compose, across donor name, house number, mobile, receipt number and collector
+name.
+
+The ticket cites `app/(ganesh)/(tabs)/collections.tsx:60`. That screen was
+refactored into `CollectionsList` and the cited line no longer exists - the same
+stale path GS-065 was carrying.
 ---
 
 ## GS-095 — Asset detail resolves from a 400-document list and shows a misleading message

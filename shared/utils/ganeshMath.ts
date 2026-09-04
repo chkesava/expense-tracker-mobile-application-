@@ -704,6 +704,22 @@ export function memberRemainingContribution(
   return money(Math.max(0, member.contributionTarget - member.contributionPaid));
 }
 
+/**
+ * How much a member has given *above* their share (GS-091).
+ *
+ * `memberRemainingContribution` clamps at zero and `committeePayStatus` returns
+ * "paid", so a member who gave more than their target was displayed identically
+ * to one who gave exactly it. The excess is banked correctly in
+ * `committeeContributions` — it was only ever invisible, and invisible in the
+ * one direction a committee would want to see: who carried more than their
+ * share. Ledger totals are untouched by this; it is a display figure.
+ */
+export function memberExcessContribution(
+  member: Pick<FestivalMember, "contributionTarget" | "contributionPaid">
+): number {
+  return money(Math.max(0, member.contributionPaid - member.contributionTarget));
+}
+
 export type CommitteePayStatus = "paid" | "partial" | "pending" | "waived";
 
 export function committeePayStatus(

@@ -1278,6 +1278,17 @@ service cloud.firestore {
           // without this a member without `contributions.receive` could skip the
           // permission entirely by setting the final state at creation time and
           // minting received cash (GS-037). Mirrors sponsorshipCreateAllowed().
+          // A contribution cannot be born cancelled (GS-089). Cancelling is a
+          // transition — `cancelContribution` updates an existing row — so the
+          // only reason a create carried this status was the stale option in
+          // add-contribution.tsx. Enforced here as well as removed from the UI,
+          // because the report's "Cancelled" figure is read aloud to donors.
+          function contributionNotBornCancelled() {
+            return subcol != 'contributions'
+              || !request.resource.data.keys().hasAll(['status'])
+              || request.resource.data.status != 'cancelled';
+          }
+
           function contributionCreateAllowed() {
             return subcol != 'contributions' || (
               !request.resource.data.keys().hasAll(['status'])
@@ -1349,6 +1360,7 @@ service cloud.firestore {
             && payloadWellFormed()
             && expenseCreateAllowed()
             && contributionCreateAllowed()
+            && contributionNotBornCancelled()
             && sponsorshipCreateAllowed()
             && (
               !request.resource.data.keys().hasAny(['createdBy'])

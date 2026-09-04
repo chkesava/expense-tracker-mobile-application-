@@ -1092,6 +1092,9 @@ function canCreateContribution(
 ): boolean {
   if (!isActivePandalMember(ctx) || !ctx.festivalOpen) return false;
   if (!canWriteExpenseOrContribution(ctx)) return false;
+  // GS-089: a contribution cannot be created already cancelled. Cancelling is
+  // a transition on an existing row, so this can only ever be a stale client.
+  if (payload.status === "cancelled") return false;
   if (payload.status !== "received") return true;
   if (canReceiveContribution(ctx)) return true;
   return Boolean(payload.sponsorshipId) && canReceiveSponsor(ctx);
@@ -1249,6 +1252,13 @@ describe("ganesh firestore rules - GS-037 receiving on create needs the permissi
 
   it("lets a treasurer record a received contribution in one step", () => {
     expect(canCreateContribution(treasurer, { status: "received" })).toBe(true);
+  });
+
+  // GS-089
+  it("refuses a contribution created already cancelled, whatever the role", () => {
+    expect(canCreateContribution(member, { status: "cancelled" })).toBe(false);
+    expect(canCreateContribution(treasurer, { status: "cancelled" })).toBe(false);
+    expect(canCreateContribution(admin, { status: "cancelled" })).toBe(false);
   });
 
   it("honours a denormalized contributions.receive grant", () => {

@@ -31,6 +31,7 @@ import type { FestivalMember, PandalMember } from "@/shared/types/ganesh";
 import {
   committeePayStatus,
   effectiveCommitteeTarget,
+  memberExcessContribution,
   memberRemainingContribution,
   type CommitteePayStatus,
 } from "@/shared/utils/ganeshMath";
@@ -62,6 +63,7 @@ type CommitteeRow = {
   paid: number;
   target: number;
   due: number;
+  excess: number;
   status: CommitteePayStatus;
   customTarget: boolean;
   personalExpenses: number;
@@ -84,6 +86,9 @@ function buildRow(
     paid,
     target,
     due: waived ? 0 : memberRemainingContribution({ contributionPaid: paid, contributionTarget: target }),
+    // A member who gave above their share used to read exactly like one who
+    // gave precisely it (GS-091).
+    excess: waived ? 0 : memberExcessContribution({ contributionPaid: paid, contributionTarget: target }),
     status: committeePayStatus(paid, target, customTarget, waived),
     customTarget,
     personalExpenses: festivalMember?.personalExpenses ?? 0,
@@ -382,7 +387,7 @@ const CommitteePersonRow = memo(function CommitteePersonRow({
 
       {row.target > 0 ? <ProgressTrack pct={pct} color={trackColor} /> : null}
 
-      {row.due > 0 || row.personalExpenses > 0 || row.pendingReimbursement > 0 ? (
+      {row.due > 0 || row.excess > 0 || row.personalExpenses > 0 || row.pendingReimbursement > 0 ? (
         <Text
           numberOfLines={2}
           style={[
@@ -392,6 +397,7 @@ const CommitteePersonRow = memo(function CommitteePersonRow({
         >
           {[
             row.due > 0 ? `Due ${formatInr(row.due)}` : null,
+            row.excess > 0 ? `${formatInr(row.excess)} above share` : null,
             row.personalExpenses > 0 ? `Personal spent ${formatInr(row.personalExpenses)}` : null,
             row.pendingReimbursement > 0
               ? `Reimburse ${formatInr(row.pendingReimbursement)}`

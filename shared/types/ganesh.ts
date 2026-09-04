@@ -66,7 +66,17 @@ export type AuditAction =
   | "adjusted"
   | "closed"
   | "transferred"
-  | "reopened";
+  | "reopened"
+  // GS-092: the sponsorship lifecycle had no verbs here, so every sponsorship
+  // event — creation, promise, confirmation, receipt, cancellation — was
+  // written as "edited" and rendered as "X edited a sponsorship". These are
+  // status transitions, not edits, and a cancellation is not a void: voiding
+  // reverses a recorded fact, cancelling withdraws a promise that was never
+  // banked.
+  | "promised"
+  | "confirmed"
+  | "received"
+  | "cancelled";
 
 export type FirestoreTime = {
   seconds?: number;

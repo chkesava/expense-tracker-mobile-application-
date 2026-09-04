@@ -20,6 +20,7 @@ import {
   type CreatePandalAssetInput,
 } from "@/services/ganesh/ganeshAssets";
 import type {
+  AuditAction,
   GaneshFileMeta,
   PaymentMethod,
   SponsorType,
@@ -110,6 +111,17 @@ function sponsorAudit(
   );
 }
 
+/**
+ * Append one sponsorship event to the festival audit log.
+ *
+ * `action` is a required positional argument rather than an optional one with
+ * an "edited" default (GS-092). Every one of these events used to be written as
+ * "edited", so the admin audit screen rendered creation, promise, confirmation,
+ * receipt and cancellation identically as "X edited a sponsorship" — a log that
+ * recorded that something happened without recording what. Making it required
+ * means a new call site has to state its verb instead of silently inheriting
+ * the wrong one.
+ */
 function festivalAudit(
   batch: GaneshWriter,
   db: Firestore,
@@ -117,6 +129,7 @@ function festivalAudit(
   festivalId: string,
   actorId: string,
   entityId: string,
+  action: AuditAction,
   oldValue?: unknown,
   newValue?: unknown,
   reason?: string
@@ -125,7 +138,7 @@ function festivalAudit(
     pathRef(db, [...festivalCol(pandalId, festivalId, "auditLogs"), newId()]),
     omitUndefined({
       actorId,
-      action: "edited",
+      action,
       entityType: "sponsorship",
       entityId,
       oldValue,
@@ -283,7 +296,7 @@ function appendReceivedContribution(
   } else if (isInKindSponsoring(input.type)) {
     bumpSummary(batch, db, pandalId, festivalId, { sponsoredValue: input.estimatedValue });
   }
-  festivalAudit(batch, db, pandalId, festivalId, actor.uid, input.sponsorshipId, undefined, {
+  festivalAudit(batch, db, pandalId, festivalId, actor.uid, input.sponsorshipId, "received", undefined, {
     contributionId,
     kind: cash ? "money" : "sponsorship",
   }, "Linked contribution");
@@ -573,7 +586,7 @@ export async function addSponsorship(
       contributionReference: `GNS-SP-${id.slice(0, 8).toUpperCase()}`,
     })
   );
-  festivalAudit(batch, db, pandalId, festivalId, actor.uid, id, undefined, {
+  festivalAudit(batch, db, pandalId, festivalId, actor.uid, id, "created", undefined, {
     sponsorId,
     status,
     type: input.sponsoringType,
@@ -625,7 +638,7 @@ export async function updateOpenSponsorship(
       updatedAt: serverTimestamp(),
     })
   );
-  festivalAudit(batch, db, pandalId, festivalId, actor.uid, sponsorshipId, {
+  festivalAudit(batch, db, pandalId, festivalId, actor.uid, sponsorshipId, "edited", {
     purpose: prev.purpose,
     amount: prev.amount,
   }, input, "Sponsorship updated");
@@ -650,7 +663,7 @@ export async function promiseSponsorship(
     updatedBy: actor.uid,
     updatedAt: serverTimestamp(),
   });
-  festivalAudit(batch, db, pandalId, festivalId, actor.uid, sponsorshipId, { status: "prospective" }, {
+  festivalAudit(batch, db, pandalId, festivalId, actor.uid, sponsorshipId, "promised", { status: "prospective" }, {
     status: "promised",
   }, "Marked promised");
   await commitWrite(() => batch.commit(), { label: "sponsorship" });
@@ -674,7 +687,7 @@ export async function confirmSponsorship(
     updatedBy: actor.uid,
     updatedAt: serverTimestamp(),
   });
-  festivalAudit(batch, db, pandalId, festivalId, actor.uid, sponsorshipId, { status: "promised" }, {
+  festivalAudit(batch, db, pandalId, festivalId, actor.uid, sponsorshipId, "confirmed", { status: "promised" }, {
     status: "confirmed",
   }, "Confirmed");
   await commitWrite(() => batch.commit(), { label: "sponsorship" });
@@ -756,7 +769,7 @@ export async function receiveSponsorship(
         updatedAt: serverTimestamp(),
       })
     );
-    festivalAudit(writer, db, pandalId, festivalId, actor.uid, sponsorshipId, {
+    festivalAudit(writer, db, pandalId, festivalId, actor.uid, sponsorshipId, "received", {
       status: prev.status,
     }, { status: "received" }, input?.receivedNotes?.trim() || "Marked received");
   };
@@ -816,7 +829,7 @@ export async function cancelSponsorship(
       updatedAt: serverTimestamp(),
     })
   );
-  festivalAudit(batch, db, pandalId, festivalId, actor.uid, sponsorshipId, { status: snap.data().status }, {
+  festivalAudit(batch, db, pandalId, festivalId, actor.uid, sponsorshipId, "cancelled", { status: snap.data().status }, {
     status: "cancelled",
   }, reason?.trim() || "Cancelled");
   await commitWrite(() => batch.commit(), { label: "cancel sponsorship" });
@@ -927,7 +940,7 @@ export function appendExpenseSponsorship(
       })
     );
   }
-  festivalAudit(batch, db, pandalId, festivalId, actor.uid, id, { status: input.existing?.status }, {
+  festivalAudit(batch, db, pandalId, festivalId, actor.uid, id, "received", { status: input.existing?.status }, {
     status: "received",
     expenseId: input.expenseId,
   }, "Linked to expense");

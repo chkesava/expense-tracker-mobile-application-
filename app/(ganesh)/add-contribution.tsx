@@ -34,10 +34,15 @@ const KIND_OPTIONS: Array<{ id: ContributionKind; label: string }> = [
   { id: "service", label: "Service" },
   { id: "sponsorship", label: "Sponsorship" },
 ];
+// Only the two states a contribution can begin in. "Cancelled" used to be
+// offered here (GS-089), which let a donation be recorded as already cancelled
+// — a promise that never existed. Those entries then landed in the report's
+// "Cancelled" figure, so a document the committee reads aloud showed cancelled
+// money that was never given or withdrawn. Cancelling is a transition, handled
+// by `cancelContribution` from the contribution's own screen.
 const STATUS_OPTIONS: Array<{ id: ContributionStatus; label: string }> = [
   { id: "promised", label: "Promised" },
   { id: "received", label: "Received" },
-  { id: "cancelled", label: "Cancelled" },
 ];
 // Recording something as already received IS receiving it, and the rules now
 // enforce contributions.receive on create as well as on the transition

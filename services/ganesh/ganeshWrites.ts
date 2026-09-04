@@ -1758,7 +1758,9 @@ export async function updateHousehold(
     expectedAmount?: number;
     assignedCollectorId?: string | null;
     status?: HouseholdStatus;
-    notes?: string;
+    // Nullable so the note can be cleared: omitUndefined drops undefined but
+    // keeps null, which is what actually erases the stored field (GS-093).
+    notes?: string | null;
   }
 ): Promise<void> {
   const current = await getDoc(

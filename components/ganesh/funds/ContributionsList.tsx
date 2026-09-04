@@ -139,6 +139,17 @@ export function ContributionsList({
   const today = todayDateInput();
   const totals = useMemo(() => summarizeContributions(contributions, today), [contributions, today]);
   const promisedTotal = totals.promisedCash + totals.promisedInKind;
+  // GS-090: the header accounted for less than the list beneath it. "Received"
+  // showed cash only, while "Promised" combined cash and in-kind — so
+  // receiving a promised item made Promised fall with nothing rising to meet
+  // it, and a received item, service or sponsorship-kind row appeared in the
+  // list but in no metric at all.
+  //
+  // Kept out of the headline figure rather than added to it: that number is
+  // cash in the God Fund, and folding donated goods into it would overstate
+  // what the Pandal can actually spend. It goes on the tile's meta line, so
+  // every row below is represented without conflating the two.
+  const nonCashReceived = totals.inKindReceived + totals.sponsoredReceived;
 
   useEffect(() => {
     if (embedded) return;
@@ -295,7 +306,9 @@ export function ContributionsList({
               <Text
                 style={[styles.tileMeta, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}
               >
-                Cash · in the God Fund
+                {nonCashReceived > 0
+                  ? `Cash · in the God Fund · plus ${formatInr(nonCashReceived)} in kind`
+                  : "Cash · in the God Fund"}
               </Text>
             }
           >

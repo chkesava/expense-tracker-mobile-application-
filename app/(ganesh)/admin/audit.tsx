@@ -46,6 +46,13 @@ function festivalLine(audit: GaneshFestivalAudit, members: PandalMember[]): stri
     return `${actor} ${audit.reason === "Disabled category" ? "disabled" : "updated"} a category`;
   }
   if (audit.entityType === "festival") return `${actor} edited the festival`;
+  // GS-092: sponsorship status transitions now carry their real verb instead
+  // of arriving as "edited". Without these lines the fallback below would read
+  // "X received sponsorship".
+  if (audit.action === "promised") return `${actor} marked a ${audit.entityType} promised`;
+  if (audit.action === "confirmed") return `${actor} confirmed a ${audit.entityType}`;
+  if (audit.action === "received") return `${actor} received a ${audit.entityType}`;
+  if (audit.action === "cancelled") return `${actor} cancelled a ${audit.entityType}`;
   if (audit.action === "created") return `${actor} added a ${audit.entityType}`;
   if (audit.action === "edited") return `${actor} edited a ${audit.entityType}`;
   return `${actor} ${audit.action} ${audit.entityType}`;
@@ -99,8 +106,18 @@ export default function AdminAuditScreen() {
       title: festivalLine(audit, members),
       detail: changeText(audit.oldValue, audit.newValue) ?? audit.reason,
       actorId: audit.actorId,
+      // Receiving or cancelling a sponsorship moves festival money, or
+      // withdraws a promise of it, so those belong under Money rather than
+      // Festival (GS-092). While every sponsorship event was written as
+      // "edited" they all landed under Festival, and the Money filter showed
+      // no sponsorship activity at all. Creation, promise and confirmation
+      // stay under Festival: nothing has moved yet.
       action:
-        audit.action === "transferred" || audit.action === "voided" || audit.action === "reimbursed"
+        audit.action === "transferred"
+        || audit.action === "voided"
+        || audit.action === "reimbursed"
+        || audit.action === "received"
+        || audit.action === "cancelled"
           ? "money"
           : "festival",
       at: audit.at,

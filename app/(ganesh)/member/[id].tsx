@@ -39,6 +39,7 @@ import { lastAdminSafetyMessage } from "@/shared/utils/ganeshMemberCopy";
 import {
   committeePayStatus,
   effectiveCommitteeTarget,
+  memberExcessContribution,
   memberRemainingContribution,
 } from "@/shared/utils/ganeshMath";
 import { formatInr } from "@/shared/utils/ganeshMoney";
@@ -89,6 +90,12 @@ export default function MemberDetailScreen() {
     contributionPaid: paid,
     contributionTarget: target,
   }) * (waived ? 0 : 1);
+  // When a member has given above their share the Due tile reads zero, which
+  // is true but says nothing — the same as someone who paid exactly (GS-091).
+  // That slot carries the excess instead, since there is no "due" to show.
+  const excess = waived
+    ? 0
+    : memberExcessContribution({ contributionPaid: paid, contributionTarget: target });
   const status = committeePayStatus(paid, target, overridden, waived);
 
   const [_customTarget, setCustomTarget] = useState<string | undefined>(undefined);
@@ -333,11 +340,11 @@ export default function MemberDetailScreen() {
           <StatTile label="Target" meta={overridden ? <MetaLabel>Custom</MetaLabel> : undefined}>
             <Money value={target} size="primary" numberOfLines={1} adjustsFontSizeToFit />
           </StatTile>
-          <StatTile label="Due">
+          <StatTile label={excess > 0 ? "Above share" : "Due"}>
             <Money
-              value={due}
+              value={excess > 0 ? excess : due}
               size="primary"
-              tone={due > 0 ? "warning" : "default"}
+              tone={excess > 0 ? "positive" : due > 0 ? "warning" : "default"}
               numberOfLines={1}
               adjustsFontSizeToFit
             />

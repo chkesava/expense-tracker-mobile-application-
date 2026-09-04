@@ -26,6 +26,9 @@ import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
 import { useTheme } from "@/theme/ThemeProvider";
 
+/** Sentinel for the "no collector" chip — FilterChips needs a non-empty id. */
+const UNASSIGNED = "__unassigned__";
+
 const STATUS_OPTIONS: Array<{ id: HouseholdStatus; label: string }> = [
   { id: "pending", label: "Pending" },
   { id: "partial", label: "Partial" },
@@ -50,13 +53,16 @@ export default function HouseholdDetailScreen() {
   const household = households.find((item) => item.id === id);
   const history = collections.filter((row) => row.householdId === id && !row.voided);
   const [expected, setExpected] = useState("");
+  const [notes, setNotes] = useState("");
+  const [savingNotes, setSavingNotes] = useState(false);
   const [voidingId, setVoidingId] = useState<string | null>(null);
   const [savingExpected, setSavingExpected] = useState(false);
 
   useEffect(() => {
     if (!household) return;
     setExpected(String(household.expectedAmount ?? ""));
-  }, [household?.id, household?.expectedAmount]);
+    setNotes(household.notes ?? "");
+  }, [household?.id, household?.expectedAmount, household?.notes]);
 
   if (householdsLoading && !household) {
     return (
@@ -173,7 +179,61 @@ export default function HouseholdDetailScreen() {
               });
             }}
           />
+          {/* GS-093: `assignedCollectorId` and `notes` were declared on the
+              type and accepted by `updateHousehold`, but no screen ever set
+              them and nothing read them — so dividing streets between
+              collectors, which the data model was built for, could not be done
+              at all. Same chip pattern as "Collected by" on add-collection. */}
+          <FilterChips
+            label="Assigned collector"
+            layout="wrap"
+            value={household.assignedCollectorId ?? UNASSIGNED}
+            options={[
+              { id: UNASSIGNED, label: "Unassigned" },
+              ...members.map((member) => ({ id: member.userId, label: member.displayName })),
+            ]}
+            onChange={(next) => {
+              writes
+                .updateHousehold(household.id, {
+                  // null clears the field; updateHousehold already maps null
+                  // through rather than dropping it as undefined would.
+                  assignedCollectorId: next === UNASSIGNED ? null : next,
+                })
+                .catch((caught) => {
+                  logError("ganesh.household.collector", caught);
+                  toast.error(friendlyErrorMessage(caught, "Could not assign the collector."));
+                });
+            }}
+          />
+          <Input
+            label="Notes (optional)"
+            value={notes}
+            onChangeText={setNotes}
+            multiline
+            placeholder="Anything the collector should know — best time to call, gate code"
+          />
+          <Button
+            variant="outline"
+            loading={savingNotes}
+            onPress={() => {
+              setSavingNotes(true);
+              writes
+                .updateHousehold(household.id, { notes: notes.trim() || null })
+                .catch((caught) => {
+                  logError("ganesh.household.notes", caught);
+                  toast.error(friendlyErrorMessage(caught, "Could not save the note."));
+                })
+                .finally(() => setSavingNotes(false));
+            }}
+          >
+            Save note
+          </Button>
         </>
+      ) : null}
+      {!canUpdate && household.notes ? (
+        <Text style={{ color: theme.colors.mutedForeground, lineHeight: 20 }}>
+          {household.notes}
+        </Text>
       ) : null}
       <Text style={{ color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold }}>
         Collection history
