@@ -57,9 +57,9 @@ balance and stay offline-capable.
 | --- | ---: | ---: | ---: | ---: |
 | CRITICAL | 9 | 1 | 0 | 10 |
 | HIGH | 31 | 1 | 0 | 32 |
-| MEDIUM | 30 | 0 | 12 | 42 |
+| MEDIUM | 32 | 0 | 10 | 42 |
 | LOW | 12 | 0 | 8 | 20 |
-| **Total** | **82** | **2** | **20** | **104** |
+| **Total** | **84** | **2** | **18** | **104** |
 
 Every CRITICAL and HIGH is now closed or partial. Two partials remain: GS-004
 (no whole-document field allowlist outside `summary`, CRITICAL) and GS-040 (the
@@ -258,8 +258,8 @@ Recording these explicitly so the fix cycle does not undo working design:
 | GS-051 | MEDIUM | REPORTING | Sponsors | `summarizeSponsorships` and `breakdownSponsors` disagree on expense sponsorships | FIXED 2026-09-04 |
 | GS-052 | MEDIUM | REPORTING | Audit Trail | Asset and sponsor audits never reach the Pandal-wide audit screen | FIXED 2026-09-04 |
 | GS-053 | MEDIUM | REPORTING | Audit Trail | Household edits, category adds, profile edits and recomputes are unaudited | FIXED 2026-09-03 |
-| GS-054 | MEDIUM | UX | Admin Dashboard | `AdminGate` mounts admin children behind an overlay | OPEN |
-| GS-055 | MEDIUM | UX | Admin Dashboard | The dashboard duplicates eight destinations across five sections | OPEN |
+| GS-054 | MEDIUM | UX | Admin Dashboard | `AdminGate` mounts admin children behind an overlay | FIXED - 2026-09-05 |
+| GS-055 | MEDIUM | UX | Admin Dashboard | The dashboard duplicates eight destinations across five sections | FIXED - 2026-09-05 (one real duplicate; rest stale) |
 | GS-056 | MEDIUM | UX | Admin Dashboard | The dashboard error state ignores half of its queries | FIXED 2026-09-03 |
 | GS-057 | MEDIUM | UX | Festival | Five add-screens have no closed-festival guard | FIXED 2026-09-04 |
 | GS-058 | MEDIUM | UX | Festival | No persistent read-only banner when a festival is closed | FIXED - 2026-09-04 |
@@ -3761,7 +3761,7 @@ instead of it happening silently.
 **Severity:** MEDIUM
 **Category:** UX
 **Feature:** Admin Dashboard
-**Status:** OPEN
+**Status:** FIXED - 2026-09-05
 
 ### Problem
 The gate renders its children unconditionally and paints the loading spinner and the denial screen as absolute-fill siblings on top, rather than rendering them instead of the children.
@@ -3794,6 +3794,27 @@ Early-return the denial and loading states instead of overlaying them.
 ### Dependencies
 None.
 
+
+### Resolution (2026-09-05)
+`AdminGate` now returns each state instead of overlaying it: loading returns a
+spinner screen, non-admin returns the denial screen, and only an admin reaches
+`children`. The `useEffect` holding the redirect timer stays above the early
+returns so hook order is stable across the loading -> allowed/denied
+transition.
+
+All four acceptance criteria met, and the third is met **by construction**
+rather than by adding a prop: with nothing rendered behind the denial screen
+there is no admin content for a screen reader to traverse, so no
+`accessibilityViewIsModal` or `importantForAccessibility` is needed - and none
+can later be forgotten.
+
+The listener waste this fixes was real: a non-admin deep-linking to
+`/(ganesh)/admin/audit` mounted the whole admin subtree for the 1600 ms before
+the redirect, so `useFestivalAuditLogs`, `useMemberAudits`, `usePandalRoles` and
+`useJoinRequests` each opened a live listener the rules then rejected.
+
+The server rules remain the real boundary - this was always defence in depth.
+What changed is what the client asks for, not what it is allowed to have.
 ---
 
 ## GS-055 — The admin dashboard duplicates eight destinations across five sections
@@ -3801,7 +3822,7 @@ None.
 **Severity:** MEDIUM
 **Category:** UX
 **Feature:** Admin Dashboard
-**Status:** OPEN
+**Status:** FIXED - 2026-09-05 (largely stale; one real duplicate, which leaked a gated figure)
 
 ### Problem
 All 25 dashboard rows navigate somewhere real, but the screen has five overlapping sections that repeat the same destinations, roughly doubling its length.
@@ -3837,6 +3858,38 @@ Consolidate into a single set of sections with no repeated destinations.
 ### Dependencies
 None.
 
+
+### Resolution (2026-09-05)
+Mostly stale, with one real duplicate that turned out to be a permission bug
+rather than clutter.
+
+**Stale.** The ticket describes eight duplicated destinations across five
+overlapping sections and 25 rows. The screen has since been restructured into
+the groups CLAUDE.md asks for - Admin summary, Needs attention, Financial
+overview, People, Festival & funds, Pandal property, Review & settings - and of
+the 17 destinations on it, exactly **one** was reachable twice. None of the
+specific duplications the ticket lists still exists: `/members`,
+`/admin/reports`, `/admin/setup`, `/admin/festivals`, `/sponsors` and
+`/join-requests` each appear once. The "Members metric tile twice" claim does
+not hold either; there are four metric tiles and no repeats.
+
+**Real.** `/(ganesh)/permanent-fund` appeared in both *Financial overview* and
+*Festival & funds*, same destination and same figure. The copy under Festival &
+funds was removed, for two reasons - and the second is the one that matters:
+
+- The Permanent Fund is Pandal-level, not festival-scoped, so it does not
+  belong under a festival heading.
+- Unlike the Financial-overview row, that copy was **not** gated on
+  `can("permanentFund.read")`. It rendered `formatInr(fund.total)`
+  unconditionally, so a member the permission was meant to keep the balance
+  from could read it off the admin dashboard. Deduplicating closed a permission
+  inconsistency, not just shortened a screen.
+
+**Judgement recorded:** the *Needs attention* section is left alone. It is a
+dynamic alert list driven by `needs`, so a route it surfaces may also live in
+its own section - that is a contextual alert pointing at work to do, not a
+duplicated navigation entry, and collapsing it would remove the one part of the
+dashboard that tells an admin where to start.
 ---
 
 ## GS-056 — The admin dashboard error state ignores half of its queries

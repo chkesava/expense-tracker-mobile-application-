@@ -484,14 +484,14 @@ export default function AdminDashboardScreen() {
                 divider
                 onPress={() => push("/(ganesh)/admin/festivals" as never)}
               />
-              <NavRow
-                title="Permanent Fund"
-                meta={formatInr(fund.total)}
-                icon={<AdminGlyph name="iconFund" />}
-                chevronColor={g.saffron}
-                divider
-                onPress={() => push("/(ganesh)/permanent-fund" as never)}
-              />
+              {/* The Permanent Fund row used to appear here as well as under
+                  Financial overview (GS-055) — the same destination and the
+                  same figure, twice on one screen. This copy was the one to
+                  drop for two reasons: the fund is Pandal-level rather than
+                  festival-scoped, so it does not belong under "Festival &
+                  funds"; and unlike the other row it was not gated on
+                  `permanentFund.read`, so it showed the balance to a member
+                  the permission was meant to keep it from. */}
               <NavRow
                 title="Contribution setup"
                 meta={contributionMeta}
