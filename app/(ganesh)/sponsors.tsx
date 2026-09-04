@@ -136,8 +136,8 @@ export default function SponsorsScreen() {
   }, [isAdmin, pandalId]);
 
   const canAdd = can("sponsors.create");
-  const openAdd = useCallback(() => push("/(ganesh)/add-sponsor" as never), [push]);
-  const onOpen = useCallback((id: string) => push(`/(ganesh)/sponsor/${id}` as never), [push]);
+  const openAdd = useCallback(() => push("/(ganesh)/add-sponsor"), [push]);
+  const onOpen = useCallback((id: string) => push(`/(ganesh)/sponsor/${id}`), [push]);
 
   const rows = useMemo(() => {
     const needle = query.trim().toLowerCase();

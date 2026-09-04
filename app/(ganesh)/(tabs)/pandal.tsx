@@ -135,7 +135,7 @@ export default function PandalScreen() {
         icon={<AdminGlyph name="iconCommittee" />}
         chevronColor={g.saffron}
         divider={can("members.read")}
-        onPress={() => push("/(ganesh)/committee" as never)}
+        onPress={() => push("/(ganesh)/(tabs)/committee")}
       />
       {can("members.read") ? (
         <NavRow
@@ -143,7 +143,7 @@ export default function PandalScreen() {
           meta="Who holds which role in the Pandal"
           icon={<AdminGlyph name="iconMembers" />}
           chevronColor={g.saffron}
-          onPress={() => push("/(ganesh)/members" as never)}
+          onPress={() => push("/(ganesh)/members")}
         />
       ) : null}
     </PandalSectionCard>
@@ -165,7 +165,7 @@ export default function PandalScreen() {
             : undefined
         }
         divider
-        onPress={() => push("/(ganesh)/admin" as never)}
+        onPress={() => push("/(ganesh)/admin")}
       />
       <NavRow
         title="Pandal custody"
@@ -177,7 +177,7 @@ export default function PandalScreen() {
         icon={<AdminGlyph name="shield" size={36} />}
         chevronColor={g.saffron}
         badge={pandal?.archived ? { kind: "overdue", label: "Archived" } : undefined}
-        onPress={() => push("/(ganesh)/pandal-custody" as never)}
+        onPress={() => push("/(ganesh)/pandal-custody")}
       />
     </PandalSectionCard>
   ) : null;
@@ -205,7 +205,7 @@ export default function PandalScreen() {
                 icon={<AdminGlyph name="iconAssets" />}
                 chevronColor={g.saffron}
                 divider={can("sponsors.read") || can("permanentFund.read")}
-                onPress={() => push("/(ganesh)/assets" as never)}
+                onPress={() => push("/(ganesh)/assets")}
               />
             ) : null}
             {can("sponsors.read") ? (
@@ -215,7 +215,7 @@ export default function PandalScreen() {
                 icon={<AdminGlyph name="iconSponsors" />}
                 chevronColor={g.saffron}
                 divider={can("permanentFund.read")}
-                onPress={() => push("/(ganesh)/sponsors" as never)}
+                onPress={() => push("/(ganesh)/sponsors")}
               />
             ) : null}
             {can("permanentFund.read") ? (
@@ -228,7 +228,7 @@ export default function PandalScreen() {
                 }
                 icon={<AdminGlyph name="iconFund" />}
                 chevronColor={g.saffron}
-                onPress={() => push("/(ganesh)/permanent-fund" as never)}
+                onPress={() => push("/(ganesh)/permanent-fund")}
               />
             ) : null}
           </PandalSectionCard>
@@ -270,7 +270,7 @@ export default function PandalScreen() {
                   meta="Lock the ledger and settle up"
                   icon={<AdminGlyph name="iconFestival" />}
                   chevronColor={g.saffron}
-                  onPress={() => push("/(ganesh)/close-festival" as never)}
+                  onPress={() => push("/(ganesh)/close-festival")}
                 />
               ) : null}
             </View>
@@ -284,14 +284,14 @@ export default function PandalScreen() {
             icon={<AdminGlyph name="iconReports" />}
             chevronColor={g.saffron}
             divider
-            onPress={() => push("/(ganesh)/report" as never)}
+            onPress={() => push("/(ganesh)/report")}
           />
           <NavRow
             title="Switch Pandal or festival"
             meta={festival?.name}
             icon={<AdminGlyph name="iconFestival" />}
             chevronColor={g.saffron}
-            onPress={() => push("/(ganesh)/setup" as never)}
+            onPress={() => push("/(ganesh)/setup")}
           />
         </PandalSectionCard>
 

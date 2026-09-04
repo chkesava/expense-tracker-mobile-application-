@@ -87,7 +87,7 @@ export default function AdminContributionSetupScreen() {
               >
                 Save targets
               </Button>
-              <Button variant="outline" onPress={() => push("/(ganesh)/committee" as never)}>
+              <Button variant="outline" onPress={() => push("/(ganesh)/(tabs)/committee")}>
                 Set a custom amount for one person
               </Button>
             </View>

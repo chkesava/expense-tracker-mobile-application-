@@ -486,7 +486,7 @@ export default function SponsorDetailScreen() {
                   meta="The record this gift created"
                   divider={Boolean(selected.expenseId || selected.assetId)}
                   onPress={() =>
-                    push(`/(ganesh)/contribution/${selected.contributionId}` as never)
+                    push(`/(ganesh)/contribution/${selected.contributionId}`)
                   }
                 />
               ) : null}
@@ -496,7 +496,7 @@ export default function SponsorDetailScreen() {
                   title="Expense"
                   meta="The spend this sponsorship covers"
                   divider={Boolean(selected.assetId)}
-                  onPress={() => push(`/(ganesh)/expense/${selected.expenseId}` as never)}
+                  onPress={() => push(`/(ganesh)/expense/${selected.expenseId}`)}
                 />
               ) : null}
               {selected.assetId ? (
@@ -504,7 +504,7 @@ export default function SponsorDetailScreen() {
                   icon={<Package size={17} color={theme.colors.mutedForeground} strokeWidth={2.2} />}
                   title="Pandal asset"
                   meta="Where this item now lives"
-                  onPress={() => push(`/(ganesh)/asset/${selected.assetId}` as never)}
+                  onPress={() => push(`/(ganesh)/asset/${selected.assetId}`)}
                 />
               ) : null}
             </Section>
@@ -780,7 +780,7 @@ export default function SponsorDetailScreen() {
       {can("sponsors.create") && openFestival && !sponsor.archived ? (
         <Button
           variant="outline"
-          onPress={() => push(`/(ganesh)/add-sponsor?sponsorId=${sponsor.id}` as never)}
+          onPress={() => push(`/(ganesh)/add-sponsor?sponsorId=${sponsor.id}`)}
         >
           Add another sponsorship
         </Button>

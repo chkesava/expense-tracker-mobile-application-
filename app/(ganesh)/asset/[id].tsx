@@ -298,7 +298,7 @@ export default function AssetDetailScreen() {
               divider={Boolean(asset.relatedContributionId)}
               onPress={() =>
                 push(
-                  `/(ganesh)/expense/${relatedExpense.id}?festivalId=${relatedFestivalId ?? ""}` as never
+                  `/(ganesh)/expense/${relatedExpense.id}?festivalId=${relatedFestivalId ?? ""}`
                 )
               }
             />
@@ -311,7 +311,7 @@ export default function AssetDetailScreen() {
               title="Related contribution"
               meta="This item came in as a contribution"
               onPress={() =>
-                push(`/(ganesh)/contribution/${asset.relatedContributionId}` as never)
+                push(`/(ganesh)/contribution/${asset.relatedContributionId}`)
               }
             />
           ) : null}

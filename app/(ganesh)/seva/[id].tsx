@@ -107,7 +107,7 @@ export default function SevaDetailScreen() {
           icon={<MapPin size={24} color={g.saffron} strokeWidth={1.9} />}
           title="This seva is no longer here"
           description="It may have been removed from the schedule."
-          action={{ label: "Back to schedule", onPress: () => push("/(ganesh)/(tabs)/seva" as never) }}
+          action={{ label: "Back to schedule", onPress: () => push("/(ganesh)/(tabs)/seva") }}
         />
       </GaneshScreen>
     );

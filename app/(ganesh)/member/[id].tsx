@@ -416,7 +416,7 @@ export default function MemberDetailScreen() {
           {can("contributions.create") && festival?.status === "open" ? (
             <Button
               style={styles.actionButton}
-              onPress={() => push(`/(ganesh)/add-member-payment?memberId=${id}` as never)}
+              onPress={() => push(`/(ganesh)/add-member-payment?memberId=${id}`)}
             >
               Record payment
             </Button>
@@ -425,7 +425,7 @@ export default function MemberDetailScreen() {
             <Button
               variant="outline"
               style={styles.actionButton}
-              onPress={() => push(`/(ganesh)/add-reimbursement?memberId=${id}` as never)}
+              onPress={() => push(`/(ganesh)/add-reimbursement?memberId=${id}`)}
             >
               Reimburse
             </Button>

@@ -176,7 +176,7 @@ export default function ExpenseDetailScreen() {
         <Pressable
           onPress={() =>
             push(
-              `/(ganesh)/sponsor/${linkedSponsorship?.sponsorId ?? linkedSponsor?.id}` as never
+              `/(ganesh)/sponsor/${linkedSponsorship?.sponsorId ?? linkedSponsor?.id}`
             )
           }
           style={{
@@ -197,7 +197,7 @@ export default function ExpenseDetailScreen() {
       ) : null}
       {linkedAsset ? (
         <Pressable
-          onPress={() => push(`/(ganesh)/asset/${linkedAsset.id}` as never)}
+          onPress={() => push(`/(ganesh)/asset/${linkedAsset.id}`)}
           style={{
             backgroundColor: theme.colors.card,
             borderColor: theme.colors.border,

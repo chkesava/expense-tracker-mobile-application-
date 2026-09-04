@@ -123,7 +123,7 @@ export default function GaneshHomeScreen() {
         meta: "Waiting for your review",
         icon: UserPlus,
         tint: g.saffron,
-        onPress: () => push("/(ganesh)/join-requests" as never),
+        onPress: () => push("/(ganesh)/join-requests"),
       });
     }
 
@@ -134,7 +134,7 @@ export default function GaneshHomeScreen() {
         meta: `Starting with ${unstaffed[0].name}`,
         icon: Users,
         tint: theme.colors.warning,
-        onPress: () => push("/(ganesh)/(tabs)/seva" as never),
+        onPress: () => push("/(ganesh)/(tabs)/seva"),
       });
     }
 
@@ -145,7 +145,7 @@ export default function GaneshHomeScreen() {
         meta: "Members are owed for personal money spent",
         icon: Clock,
         tint: theme.colors.warning,
-        onPress: () => push("/(ganesh)/(tabs)/expenses" as never),
+        onPress: () => push("/(ganesh)/(tabs)/expenses"),
       });
     }
 
@@ -161,7 +161,7 @@ export default function GaneshHomeScreen() {
             : "Not counted as cash until received",
         icon: ClipboardCheck,
         tint: theme.colors.info,
-        onPress: () => push("/(ganesh)/(tabs)/contributions?status=promised" as never),
+        onPress: () => push("/(ganesh)/(tabs)/contributions?status=promised"),
       });
     }
 
@@ -190,8 +190,8 @@ export default function GaneshHomeScreen() {
         festivalName={festival?.name}
         festival={festival}
         today={today}
-        onNotify={isAdmin ? () => push("/(ganesh)/admin" as never) : undefined}
-        onFestivalDates={isAdmin ? () => push("/(ganesh)/admin/festivals" as never) : undefined}
+        onNotify={isAdmin ? () => push("/(ganesh)/admin") : undefined}
+        onFestivalDates={isAdmin ? () => push("/(ganesh)/admin/festivals") : undefined}
         rightAccessory={<GaneshSyncChip onDark />}
       />
 
@@ -204,9 +204,9 @@ export default function GaneshHomeScreen() {
           today={today}
           nowTime={nowTime}
           canPlan={canPlanSeva}
-          onSchedule={() => push("/(ganesh)/(tabs)/seva" as never)}
-          onPlan={() => push("/(ganesh)/add-seva" as never)}
-          onOpen={(id) => push(`/(ganesh)/seva/${id}` as never)}
+          onSchedule={() => push("/(ganesh)/(tabs)/seva")}
+          onPlan={() => push("/(ganesh)/add-seva")}
+          onOpen={(id) => push(`/(ganesh)/seva/${id}`)}
         />
 
         {pendingActions.length > 0 ? (
@@ -249,7 +249,7 @@ export default function GaneshHomeScreen() {
           spent={spent}
           collectionCount={summary.collectionCount}
           expenseCount={summary.expenseCount}
-          onDetails={() => push("/(ganesh)/(tabs)/funds" as never)}
+          onDetails={() => push("/(ganesh)/(tabs)/funds")}
         />
         )}
         {/* GS-058: replaces a bare "Create next festival" button, which
@@ -266,7 +266,7 @@ export default function GaneshHomeScreen() {
             title="Recent Activity"
             action={
               activity.length > 0 ? (
-                <SectionAction label="View Report" onPress={() => push("/(ganesh)/report" as never)} />
+                <SectionAction label="View Report" onPress={() => push("/(ganesh)/report")} />
               ) : undefined
             }
           >
@@ -317,7 +317,7 @@ export default function GaneshHomeScreen() {
             <Pressable
               onPress={() => {
                 void haptic.selection();
-                push("/(ganesh)/report" as never);
+                push("/(ganesh)/report");
               }}
               accessibilityRole="button"
               accessibilityLabel="View more activity"

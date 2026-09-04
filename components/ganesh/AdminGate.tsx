@@ -41,7 +41,7 @@ export function AdminGate({ children }: { children: React.ReactNode }) {
   // the loading -> allowed/denied transition.
   useEffect(() => {
     if (loading || isAdmin) return;
-    const timer = setTimeout(() => replace("/(ganesh)" as never), 1600);
+    const timer = setTimeout(() => replace("/(ganesh)/(tabs)"), 1600);
     return () => clearTimeout(timer);
   }, [isAdmin, loading, replace]);
 
@@ -63,7 +63,7 @@ export function AdminGate({ children }: { children: React.ReactNode }) {
           <Text style={{ color: theme.colors.mutedForeground, lineHeight: 22 }}>
             Only a Pandal Admin can open the Admin Dashboard.
           </Text>
-          <Button onPress={() => replace("/(ganesh)" as never)}>Back to Ganesh Seva</Button>
+          <Button onPress={() => replace("/(ganesh)/(tabs)")}>Back to Ganesh Seva</Button>
         </GaneshScreen>
       </View>
     );

@@ -83,7 +83,7 @@ export default function PeopleScreen() {
           members={active}
           loading={membersLoading}
           onMemberPress={
-            canOpenMember ? (userId) => push(`/(ganesh)/member/${userId}` as never) : undefined
+            canOpenMember ? (userId) => push(`/(ganesh)/member/${userId}`) : undefined
           }
         />
 
@@ -99,7 +99,7 @@ export default function PeopleScreen() {
                 label: `${requests.length} waiting`,
               }}
               divider
-              onPress={() => push("/(ganesh)/join-requests" as never)}
+              onPress={() => push("/(ganesh)/join-requests")}
             />
           ) : null}
 
@@ -109,7 +109,7 @@ export default function PeopleScreen() {
             icon={<AdminGlyph name="iconCommittee" />}
             chevronColor={g.saffron}
             divider={showMembers || showHouseholds}
-            onPress={() => push("/(ganesh)/(tabs)/committee" as never)}
+            onPress={() => push("/(ganesh)/(tabs)/committee")}
           />
 
           {showMembers ? (
@@ -119,7 +119,7 @@ export default function PeopleScreen() {
               icon={<AdminGlyph name="iconMembers" />}
               chevronColor={g.saffron}
               divider={showHouseholds}
-              onPress={() => push("/(ganesh)/members" as never)}
+              onPress={() => push("/(ganesh)/members")}
             />
           ) : null}
 
@@ -141,7 +141,7 @@ export default function PeopleScreen() {
                   </Text>
                 ) : undefined
               }
-              onPress={() => push("/(ganesh)/(tabs)/collections" as never)}
+              onPress={() => push("/(ganesh)/(tabs)/collections")}
             />
           ) : null}
         </ManageSection>

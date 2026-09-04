@@ -115,8 +115,8 @@ export default function PandalAssetsScreen() {
   }, [assets, category, query, scope]);
 
   const canAdd = can("assets.create");
-  const openAdd = useCallback(() => push("/(ganesh)/add-asset" as never), [push]);
-  const onOpen = useCallback((id: string) => push(`/(ganesh)/asset/${id}` as never), [push]);
+  const openAdd = useCallback(() => push("/(ganesh)/add-asset"), [push]);
+  const onOpen = useCallback((id: string) => push(`/(ganesh)/asset/${id}`), [push]);
 
   const renderItem = useCallback(
     ({ item }: { item: PandalAsset }) => (

@@ -172,7 +172,7 @@ export function CollectionsList({ embedded = false, prefix }: CollectionsListPro
   }, [collections, filter, isEntryView, members, query]);
 
   const canAdd = festival?.status === "open" && can("collections.create");
-  const openAdd = useCallback(() => push("/(ganesh)/add-collection" as never), [push]);
+  const openAdd = useCallback(() => push("/(ganesh)/add-collection"), [push]);
   const viewPendingHouses = useCallback(() => setFilter("open"), []);
 
   const renderHousehold = useCallback(
@@ -198,7 +198,7 @@ export function CollectionsList({ embedded = false, prefix }: CollectionsListPro
         badges={[householdBadge(item.status)]}
         amount={item.collectedAmount}
         pending={item.pendingWrite}
-        onPress={(id) => push(`/(ganesh)/household/${id}` as never)}
+        onPress={(id) => push(`/(ganesh)/household/${id}`)}
       />
     ),
     [members, push, theme.colors.mutedForeground]

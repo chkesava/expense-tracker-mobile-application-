@@ -77,9 +77,9 @@ export function ExpensesList({ embedded = false, prefix }: ExpensesListProps) {
   const [filter, setFilter] = useState<Filter>("all");
 
   const canAdd = festival?.status === "open" && can("expenses.create");
-  const openAdd = useCallback(() => push("/(ganesh)/add-expense" as never), [push]);
+  const openAdd = useCallback(() => push("/(ganesh)/add-expense"), [push]);
   const onOpen = useCallback(
-    (id: string) => push(`/(ganesh)/expense/${id}` as never),
+    (id: string) => push(`/(ganesh)/expense/${id}`),
     [push]
   );
 

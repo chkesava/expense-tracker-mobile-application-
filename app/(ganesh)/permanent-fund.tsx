@@ -149,7 +149,7 @@ export default function PermanentFundScreen() {
               variant="hero"
               onAddPress={
                 canAdd && fund.total === 0
-                  ? () => push("/(ganesh)/add-permanent-fund" as never)
+                  ? () => push("/(ganesh)/add-permanent-fund")
                   : undefined
               }
             />

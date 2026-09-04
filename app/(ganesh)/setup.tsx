@@ -79,7 +79,7 @@ export default function GaneshSetupScreen() {
       return;
     }
     await setSession({ pandalId, festivalId });
-    replace("/(ganesh)" as never);
+    replace("/(ganesh)/(tabs)");
   };
 
   useEffect(() => {
@@ -142,7 +142,7 @@ export default function GaneshSetupScreen() {
       });
       await setSession({ pandalId: created.pandalId, festivalId: created.festivalId });
       toast.success(`Pandal code ${formatPandalCode(created.code)}`);
-      replace("/(ganesh)" as never);
+      replace("/(ganesh)/(tabs)");
     } catch (error) {
       logError("ganesh.setup.create", error);
       toast.error(friendlyErrorMessage(error, "Could not create Pandal."));

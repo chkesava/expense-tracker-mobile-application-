@@ -197,7 +197,7 @@ export default function AdminRoleDetailScreen() {
                         iconTint="none"
                         title={member.displayName}
                         meta={member.role === "admin" ? "Pandal Admin" : "Committee"}
-                        onPress={(userId) => push(`/(ganesh)/member/${userId}` as never)}
+                        onPress={(userId) => push(`/(ganesh)/member/${userId}`)}
                       />
                     ))}
                   </View>

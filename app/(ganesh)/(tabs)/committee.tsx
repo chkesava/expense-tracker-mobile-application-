@@ -159,16 +159,16 @@ export default function CommitteeScreen() {
 
   const canRecord = can("contributions.create") && festival?.status === "open";
   const openAdd = useCallback(
-    () => push("/(ganesh)/add-member-payment" as never),
+    () => push("/(ganesh)/add-member-payment"),
     [push]
   );
 
   const onOpen = useCallback(
-    (userId: string) => push(`/(ganesh)/member/${userId}` as never),
+    (userId: string) => push(`/(ganesh)/member/${userId}`),
     [push]
   );
   const onPay = useCallback(
-    (userId: string) => push(`/(ganesh)/add-member-payment?memberId=${userId}` as never),
+    (userId: string) => push(`/(ganesh)/add-member-payment?memberId=${userId}`),
     [push]
   );
 

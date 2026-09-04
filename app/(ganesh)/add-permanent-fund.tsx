@@ -126,7 +126,7 @@ export default function AddPermanentFundScreen() {
             through from here. This screen refuses to re-seed, correctly, but
             used to dead-end on "Go back" without naming where the allocation
             can still be completed. */}
-        <Button onPress={() => replace("/(ganesh)/permanent-fund" as never)}>
+        <Button onPress={() => replace("/(ganesh)/permanent-fund")}>
           Open Permanent Fund
         </Button>
         <Button variant="outline" onPress={back}>

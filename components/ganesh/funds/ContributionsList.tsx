@@ -166,9 +166,9 @@ export function ContributionsList({
 
   const canAdd = festival?.status === "open" && can("contributions.create");
   const canReceive = festival?.status === "open" && can("contributions.receive");
-  const openAdd = useCallback(() => push("/(ganesh)/add-contribution" as never), [push]);
+  const openAdd = useCallback(() => push("/(ganesh)/add-contribution"), [push]);
   const onOpen = useCallback(
-    (id: string) => push(`/(ganesh)/contribution/${id}` as never),
+    (id: string) => push(`/(ganesh)/contribution/${id}`),
     [push]
   );
 

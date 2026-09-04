@@ -101,7 +101,7 @@ export default function SevaScreen() {
         festivalName={festival?.name}
         festival={festival}
         today={today}
-        onFestivalDates={isAdmin ? () => push("/(ganesh)/admin/festivals" as never) : undefined}
+        onFestivalDates={isAdmin ? () => push("/(ganesh)/admin/festivals") : undefined}
         rightAccessory={<GaneshSyncChip onDark />}
       />
 
@@ -127,7 +127,7 @@ export default function SevaScreen() {
               canPlan
                 ? {
                     label: "Plan a Seva",
-                    onPress: () => push("/(ganesh)/add-seva" as never),
+                    onPress: () => push("/(ganesh)/add-seva"),
                   }
                 : undefined
             }
@@ -148,7 +148,7 @@ export default function SevaScreen() {
                     canPlan
                       ? {
                           label: "Plan a Seva",
-                          onPress: () => push("/(ganesh)/add-seva" as never),
+                          onPress: () => push("/(ganesh)/add-seva"),
                         }
                       : undefined
                   }
@@ -162,7 +162,7 @@ export default function SevaScreen() {
                     nowTime={nowTime}
                     isNext={item.id === upNext?.id}
                     isLast={index === sevaToday.length - 1}
-                    onPress={() => push(`/(ganesh)/seva/${item.id}` as never)}
+                    onPress={() => push(`/(ganesh)/seva/${item.id}`)}
                   />
                 ))
               )}
@@ -222,7 +222,7 @@ export default function SevaScreen() {
                     <Pressable
                       onPress={() => {
                         void haptic.selection();
-                        push("/(ganesh)/add-seva" as never);
+                        push("/(ganesh)/add-seva");
                       }}
                       accessibilityRole="button"
                       accessibilityLabel="Plan a Seva"
@@ -257,7 +257,7 @@ export default function SevaScreen() {
                     <Pressable
                       onPress={() => {
                         void haptic.selection();
-                        push("/(ganesh)/(tabs)/people" as never);
+                        push("/(ganesh)/(tabs)/people");
                       }}
                       accessibilityRole="button"
                       accessibilityLabel="Volunteer"
@@ -323,7 +323,7 @@ export default function SevaScreen() {
                     onPress={() => {
                       void haptic.selection();
                       if (isAdmin) {
-                        push("/(ganesh)/admin/festivals" as never);
+                        push("/(ganesh)/admin/festivals");
                       } else {
                         setSelectedDate(today);
                       }
@@ -471,7 +471,7 @@ export default function SevaScreen() {
                       <Pressable
                         onPress={() => {
                           void haptic.selection();
-                          push(`/(ganesh)/add-seva?date=${activeDate}` as never);
+                          push(`/(ganesh)/add-seva?date=${activeDate}`);
                         }}
                         accessibilityRole="button"
                         accessibilityLabel="Add a seva on this day"
@@ -497,7 +497,7 @@ export default function SevaScreen() {
                         canPlan
                           ? {
                               label: "Add seva",
-                              onPress: () => push(`/(ganesh)/add-seva?date=${activeDate}` as never),
+                              onPress: () => push(`/(ganesh)/add-seva?date=${activeDate}`),
                             }
                           : undefined
                       }
@@ -511,7 +511,7 @@ export default function SevaScreen() {
                         nowTime={nowTime}
                         isNext={item.id === upNext?.id}
                         isLast={index === dayItems.length - 1}
-                        onPress={() => push(`/(ganesh)/seva/${item.id}` as never)}
+                        onPress={() => push(`/(ganesh)/seva/${item.id}`)}
                       />
                     ))
                   )}

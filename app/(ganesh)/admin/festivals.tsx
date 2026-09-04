@@ -145,7 +145,7 @@ export default function AdminFestivalsScreen() {
                   "You can transfer unused cash to the Permanent Fund first. This cannot be undone from here.",
                   [
                     { text: "Cancel", style: "cancel" },
-                    { text: "Continue", onPress: () => push("/(ganesh)/close-festival" as never) },
+                    { text: "Continue", onPress: () => push("/(ganesh)/close-festival") },
                   ]
                 );
               }}
@@ -179,7 +179,7 @@ export default function AdminFestivalsScreen() {
           ) : null}
         </View>
       ) : null}
-      <Button onPress={() => push("/(ganesh)/create-festival" as never)}>Create festival</Button>
+      <Button onPress={() => push("/(ganesh)/create-festival")}>Create festival</Button>
       </View>
     </GaneshScreen>
   );

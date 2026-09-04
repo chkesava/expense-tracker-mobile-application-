@@ -48,7 +48,7 @@ function GaneshGate({ children }: { children: React.ReactNode }) {
         </View>
       );
     }
-    return <Redirect href={"/(ganesh-auth)/login" as never} />;
+    return <Redirect href={"/(ganesh-auth)/login"} />;
   }
 
   return (

@@ -239,7 +239,7 @@ export default function ContributionDetailScreen() {
       ) : null}
       {contribution.sponsorId ? (
         <Pressable
-          onPress={() => push(`/(ganesh)/sponsor/${contribution.sponsorId}` as never)}
+          onPress={() => push(`/(ganesh)/sponsor/${contribution.sponsorId}`)}
           style={{
             backgroundColor: theme.colors.card,
             borderColor: theme.colors.border,
@@ -264,7 +264,7 @@ export default function ContributionDetailScreen() {
       <PendingHint pending={contribution.pendingWrite} />
       {linkedAsset ? (
         <Pressable
-          onPress={() => push(`/(ganesh)/asset/${linkedAsset.id}` as never)}
+          onPress={() => push(`/(ganesh)/asset/${linkedAsset.id}`)}
           style={{
             backgroundColor: theme.colors.card,
             borderColor: theme.colors.border,

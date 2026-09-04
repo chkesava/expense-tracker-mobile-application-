@@ -42,7 +42,7 @@ export default function AdminCreateRoleScreen() {
       setBusy(true);
       writes
         .createPandalRole({ name, description, permissions })
-        .then((id) => replace(`/(ganesh)/admin/roles/${id}` as never))
+        .then((id) => replace(`/(ganesh)/admin/roles/${id}`))
         .catch((caught) => {
           logError("ganesh.roles.create", caught);
           toast.error(friendlyErrorMessage(caught, "Could not create the role."));

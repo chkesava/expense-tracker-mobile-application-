@@ -122,7 +122,7 @@ export default function GaneshMembersScreen() {
                 ? { kind: "overdue", label: `${requests.length} waiting` }
                 : undefined
             }
-            onPress={() => push("/(ganesh)/join-requests" as never)}
+            onPress={() => push("/(ganesh)/join-requests")}
           />
         </Section>
       ) : null}
@@ -144,7 +144,7 @@ export default function GaneshMembersScreen() {
           }
           action={
             can("members.approve") && !query.trim() && filter === "all"
-              ? { label: "Join requests", onPress: () => push("/(ganesh)/join-requests" as never) }
+              ? { label: "Join requests", onPress: () => push("/(ganesh)/join-requests") }
               : undefined
           }
         />
@@ -166,7 +166,7 @@ export default function GaneshMembersScreen() {
                     : undefined
               }
               when={member.createdAt ? `Joined ${formatGaneshWhen(member.createdAt)}` : undefined}
-              onPress={(userId) => push(`/(ganesh)/member/${userId}` as never)}
+              onPress={(userId) => push(`/(ganesh)/member/${userId}`)}
             />
           ))}
         </View>

@@ -82,7 +82,7 @@ export default function GaneshLoginScreen() {
   }
 
   if (user) {
-    return <Redirect href={"/(ganesh)" as never} />;
+    return <Redirect href={"/(ganesh)/(tabs)"} />;
   }
 
   const iconColor = theme.colors.mutedForeground;
@@ -95,7 +95,7 @@ export default function GaneshLoginScreen() {
       await upsertGaneshProfile(db, current);
     }
     await setActiveWorkspace("ganesh");
-    replace("/(ganesh)" as never);
+    replace("/(ganesh)/(tabs)");
   };
 
   const onGoogle = async () => {
@@ -357,7 +357,7 @@ export default function GaneshLoginScreen() {
               </View>
             )}
 
-            <Pressable onPress={() => replace("/welcome" as never)} hitSlop={8}>
+            <Pressable onPress={() => replace("/welcome")} hitSlop={8}>
               <Text
                 style={[
                   styles.mutedLink,

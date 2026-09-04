@@ -111,7 +111,7 @@ export default function CreateFestivalScreen() {
         });
       }
       if (pandalId) await setSession({ pandalId, festivalId });
-      replace("/(ganesh)" as never);
+      replace("/(ganesh)/(tabs)");
     } catch (error) {
       logError("ganesh.createFestival", error);
       toast.error(friendlyErrorMessage(error, "Could not create the festival."));

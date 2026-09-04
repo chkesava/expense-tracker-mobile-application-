@@ -55,7 +55,7 @@ export function GaneshClosedBanner() {
       />
       {canCreateNext ? (
         <Pressable
-          onPress={() => push("/(ganesh)/create-festival" as never)}
+          onPress={() => push("/(ganesh)/create-festival")}
           accessibilityRole="button"
         >
           <Text

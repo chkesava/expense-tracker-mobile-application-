@@ -196,48 +196,48 @@ export default function AdminReportsScreen() {
           divider
           title="Festival summary"
           subtitle="Cash in, expenses, and closing balance"
-          onPress={() => push("/(ganesh)/report" as never)}
+          onPress={() => push("/(ganesh)/report")}
         />
         <AdminLinkRow
           divider
           title="Collection summary"
           subtitle="Households, collectors, and payment methods"
-          onPress={() => push("/(ganesh)/collections" as never)}
+          onPress={() => push("/(ganesh)/(tabs)/collections")}
         />
         <AdminLinkRow
           divider
           title="Expense summary"
           subtitle="God Fund, personal, and pending reimbursements"
-          onPress={() => push("/(ganesh)/expenses" as never)}
+          onPress={() => push("/(ganesh)/(tabs)/expenses")}
         />
         <AdminLinkRow
           divider
           title="Committee contribution summary"
           subtitle="Who paid this festival"
-          onPress={() => push("/(ganesh)/committee" as never)}
+          onPress={() => push("/(ganesh)/(tabs)/committee")}
         />
         <AdminLinkRow
           divider
           title="Contribution summary"
           subtitle="Cash received, promised, in-kind, and cancelled. Promises do not add cash."
-          onPress={() => push("/(ganesh)/contributions" as never)}
+          onPress={() => push("/(ganesh)/(tabs)/contributions")}
         />
         <AdminLinkRow
           divider
           title="Sponsor summary"
           subtitle="Sponsor cash is inside the God Fund and already counted in Cash received; only directly-paid expenses sit outside it."
-          onPress={() => push("/(ganesh)/sponsors" as never)}
+          onPress={() => push("/(ganesh)/sponsors")}
         />
         <AdminLinkRow
           divider
           title="Reimbursement summary"
           subtitle="Personal money still to be paid back"
-          onPress={() => push("/(ganesh)/committee" as never)}
+          onPress={() => push("/(ganesh)/(tabs)/committee")}
         />
         <AdminLinkRow
           title="Permanent Fund history"
           subtitle="Donations and festival transfers"
-          onPress={() => push("/(ganesh)/permanent-fund" as never)}
+          onPress={() => push("/(ganesh)/permanent-fund")}
         />
       </Section>
         </>

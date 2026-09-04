@@ -109,12 +109,12 @@ export default function FundsScreen() {
   const shortcuts = useMemo(() => {
     const items: FundShortcut[] = [];
     if (can("sponsors.read")) {
-      items.push(sponsorShortcut(() => push("/(ganesh)/sponsors" as never)));
+      items.push(sponsorShortcut(() => push("/(ganesh)/sponsors")));
     }
     if (can("permanentFund.read")) {
-      items.push(permanentFundShortcut(() => push("/(ganesh)/permanent-fund" as never)));
+      items.push(permanentFundShortcut(() => push("/(ganesh)/permanent-fund")));
     }
-    items.push(recordedShortcut(() => push("/(ganesh)/report" as never)));
+    items.push(recordedShortcut(() => push("/(ganesh)/report")));
     return items;
   }, [can, push]);
 
@@ -138,12 +138,12 @@ export default function FundsScreen() {
           canSeeContributions={can("contributions.read")}
           canSeeCollections={can("collections.read")}
           activityActors={(actorId) => memberDisplayName(pandalMembers, actorId)}
-          onReport={() => push("/(ganesh)/report" as never)}
-          onPermanentFund={() => push("/(ganesh)/permanent-fund" as never)}
-          onReimburse={() => push("/(ganesh)/add-reimbursement" as never)}
-          onPromised={() => push("/(ganesh)/(tabs)/contributions?status=promised" as never)}
-          onHouses={() => push("/(ganesh)/(tabs)/collections" as never)}
-          onCommittee={() => push("/(ganesh)/committee" as never)}
+          onReport={() => push("/(ganesh)/report")}
+          onPermanentFund={() => push("/(ganesh)/permanent-fund")}
+          onReimburse={() => push("/(ganesh)/add-reimbursement")}
+          onPromised={() => push("/(ganesh)/(tabs)/contributions?status=promised")}
+          onHouses={() => push("/(ganesh)/(tabs)/collections")}
+          onCommittee={() => push("/(ganesh)/(tabs)/committee")}
         />
       )}
       <FundLedgerTabs options={ledgers} selected={selected} onChange={setLedger} />

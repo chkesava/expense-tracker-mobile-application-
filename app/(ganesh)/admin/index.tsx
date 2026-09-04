@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from "react";
 import { Image, StyleSheet, Text, View } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, type Href } from "expo-router";
 
 import { AdminGlyph, ADMIN_ART } from "@/components/ganesh/admin/adminArt";
 import { AdminHero } from "@/components/ganesh/admin/AdminHero";
@@ -44,7 +44,11 @@ type NeedTone = "attention" | "critical";
 type Need = {
   title: string;
   subtitle: string;
-  href: string;
+  // Typed rather than `string` (GS-100), so a route rename breaks the build
+  // here too. These are the dynamic hrefs the ticket said to start with, and
+  // two of them were pointing at undeclared paths — `/(ganesh)/committee` and
+  // `/(ganesh)/contributions`, both of which live under the (tabs) group.
+  href: Href;
   tone: NeedTone;
 };
 
@@ -151,7 +155,7 @@ export default function AdminDashboardScreen() {
           contributionTotals.overdueCount === 1 ? "" : "s"
         } overdue`,
         subtitle: "Still promised after the expected date. They are not cancelled automatically.",
-        href: "/(ganesh)/contributions?status=overdue",
+        href: "/(ganesh)/(tabs)/contributions?status=overdue",
         tone: "critical",
       });
     }
@@ -169,7 +173,7 @@ export default function AdminDashboardScreen() {
       rows.push({
         title: `${formatInr(pendingReimb)} reimbursement pending`,
         subtitle: "Committee people are waiting to be paid back.",
-        href: "/(ganesh)/committee",
+        href: "/(ganesh)/(tabs)/committee",
         tone: "attention",
       });
     }
@@ -185,7 +189,7 @@ export default function AdminDashboardScreen() {
       rows.push({
         title: `${pendingHouses} household${pendingHouses === 1 ? "" : "s"} still pending`,
         subtitle: "Chanda not collected yet.",
-        href: "/(ganesh)/collections",
+        href: "/(ganesh)/(tabs)/collections",
         tone: "attention",
       });
     }
@@ -195,7 +199,7 @@ export default function AdminDashboardScreen() {
           contributionTotals.promisedCount === 1 ? "" : "s"
         } promised`,
         subtitle: "Promised gifts are not cash until they are received.",
-        href: "/(ganesh)/contributions?status=promised",
+        href: "/(ganesh)/(tabs)/contributions?status=promised",
         tone: "attention",
       });
     }
@@ -381,7 +385,7 @@ export default function AdminDashboardScreen() {
                 icon={<AdminGlyph name="iconFund" />}
                 chevronColor={g.saffron}
                 divider
-                onPress={() => push("/(ganesh)/(tabs)/funds" as never)}
+                onPress={() => push("/(ganesh)/(tabs)/funds")}
               />
             ) : null}
             {can("reimbursements.read") || can("reimbursements.create") ? (
@@ -395,7 +399,7 @@ export default function AdminDashboardScreen() {
                 icon={<AdminGlyph name="iconFund" />}
                 chevronColor={g.saffron}
                 divider
-                onPress={() => push("/(ganesh)/add-reimbursement" as never)}
+                onPress={() => push("/(ganesh)/add-reimbursement")}
               />
             ) : null}
             {can("permanentFund.read") ? (
@@ -405,7 +409,7 @@ export default function AdminDashboardScreen() {
                 icon={<AdminGlyph name="iconFund" />}
                 chevronColor={g.saffron}
                 divider
-                onPress={() => push("/(ganesh)/permanent-fund" as never)}
+                onPress={() => push("/(ganesh)/permanent-fund")}
               />
             ) : null}
             {can("collections.read") || can("contributions.read") || can("expenses.read") ? (
@@ -415,7 +419,7 @@ export default function AdminDashboardScreen() {
                 icon={<AdminGlyph name="iconReports" />}
                 chevronColor={g.saffron}
                 divider={Boolean(can("festival.update") && festival && festival.status === "open")}
-                onPress={() => push("/(ganesh)/report" as never)}
+                onPress={() => push("/(ganesh)/report")}
               />
             ) : null}
             {can("festival.update") && festival && festival.status === "open" ? (
@@ -424,7 +428,7 @@ export default function AdminDashboardScreen() {
                 meta="Settle remaining God Fund when the utsav ends"
                 icon={<AdminGlyph name="iconFestival" />}
                 chevronColor={g.saffron}
-                onPress={() => push("/(ganesh)/close-festival" as never)}
+                onPress={() => push("/(ganesh)/close-festival")}
               />
             ) : null}
           </AdminSection>
@@ -440,7 +444,7 @@ export default function AdminDashboardScreen() {
                 icon={<AdminGlyph name="iconMembers" />}
                 chevronColor={g.saffron}
                 divider
-                onPress={() => push("/(ganesh)/members" as never)}
+                onPress={() => push("/(ganesh)/members")}
               />
               <NavRow
                 title="Join requests"
@@ -453,7 +457,7 @@ export default function AdminDashboardScreen() {
                     ? { kind: "overdue", label: `${requests.length} pending` }
                     : undefined
                 }
-                onPress={() => push("/(ganesh)/join-requests" as never)}
+                onPress={() => push("/(ganesh)/join-requests")}
               />
               <NavRow
                 title="Roles & permissions"
@@ -461,14 +465,14 @@ export default function AdminDashboardScreen() {
                 icon={<AdminGlyph name="iconRoles" />}
                 chevronColor={g.saffron}
                 divider
-                onPress={() => push("/(ganesh)/admin/roles" as never)}
+                onPress={() => push("/(ganesh)/admin/roles")}
               />
               <NavRow
                 title="Committee tracker"
                 meta="Who paid their share this festival"
                 icon={<AdminGlyph name="iconCommittee" />}
                 chevronColor={g.saffron}
-                onPress={() => push("/(ganesh)/committee" as never)}
+                onPress={() => push("/(ganesh)/(tabs)/committee")}
               />
             </AdminSection>
 
@@ -482,7 +486,7 @@ export default function AdminDashboardScreen() {
                 icon={<AdminGlyph name="iconFestival" />}
                 chevronColor={g.saffron}
                 divider
-                onPress={() => push("/(ganesh)/admin/festivals" as never)}
+                onPress={() => push("/(ganesh)/admin/festivals")}
               />
               {/* The Permanent Fund row used to appear here as well as under
                   Financial overview (GS-055) — the same destination and the
@@ -497,7 +501,7 @@ export default function AdminDashboardScreen() {
                 meta={contributionMeta}
                 icon={<AdminGlyph name="iconContribution" />}
                 chevronColor={g.saffron}
-                onPress={() => push("/(ganesh)/admin/setup" as never)}
+                onPress={() => push("/(ganesh)/admin/setup")}
               />
             </AdminSection>
           </SectionPair>
@@ -518,14 +522,14 @@ export default function AdminDashboardScreen() {
                     ? { kind: "pending", label: `${assetSummary.damaged} damaged` }
                     : undefined
                 }
-                onPress={() => push("/(ganesh)/assets" as never)}
+                onPress={() => push("/(ganesh)/assets")}
               />
               <NavRow
                 title="Sponsors"
                 meta="Profiles and this festival's deals. Promises are not cash."
                 icon={<AdminGlyph name="iconSponsors" />}
                 chevronColor={g.saffron}
-                onPress={() => push("/(ganesh)/sponsors" as never)}
+                onPress={() => push("/(ganesh)/sponsors")}
               />
             </AdminSection>
 
@@ -539,7 +543,7 @@ export default function AdminDashboardScreen() {
                 icon={<AdminGlyph name="iconReports" />}
                 chevronColor={g.saffron}
                 divider
-                onPress={() => push("/(ganesh)/admin/reports" as never)}
+                onPress={() => push("/(ganesh)/admin/reports")}
               />
               <NavRow
                 title="Audit log"
@@ -547,7 +551,7 @@ export default function AdminDashboardScreen() {
                 icon={<AdminGlyph name="iconAudit" />}
                 chevronColor={g.saffron}
                 divider
-                onPress={() => push("/(ganesh)/admin/audit" as never)}
+                onPress={() => push("/(ganesh)/admin/audit")}
               />
               <NavRow
                 title="Expense categories"
@@ -555,14 +559,14 @@ export default function AdminDashboardScreen() {
                 icon={<AdminGlyph name="iconCategories" />}
                 chevronColor={g.saffron}
                 divider
-                onPress={() => push("/(ganesh)/admin/categories" as never)}
+                onPress={() => push("/(ganesh)/admin/categories")}
               />
               <NavRow
                 title="Pandal settings"
                 meta="Name, area, join rules"
                 icon={<AdminGlyph name="iconSettings" />}
                 chevronColor={g.saffron}
-                onPress={() => push("/(ganesh)/admin/settings" as never)}
+                onPress={() => push("/(ganesh)/admin/settings")}
               />
             </AdminSection>
           </SectionPair>

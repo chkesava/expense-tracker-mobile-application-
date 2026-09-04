@@ -64,7 +64,7 @@ export default function AdminRolesScreen() {
       />
 
       {can("roles.create") ? (
-        <Button onPress={() => push("/(ganesh)/admin/roles/new" as never)}>
+        <Button onPress={() => push("/(ganesh)/admin/roles/new")}>
           <View style={styles.ctaInner}>
             <Plus size={17} color={theme.colors.primaryForeground} strokeWidth={2.6} />
             <Text
@@ -100,7 +100,7 @@ export default function AdminRolesScreen() {
                 title={role.name}
                 meta={roleMeta(role.permissions.length, assignedCount(role.id))}
                 divider={index < builtin.length - 1}
-                onPress={() => push(`/(ganesh)/admin/roles/${role.id}` as never)}
+                onPress={() => push(`/(ganesh)/admin/roles/${role.id}`)}
               />
             ))}
           </Section>
@@ -114,7 +114,7 @@ export default function AdminRolesScreen() {
                 title={role.name}
                 meta={roleMeta(role.permissions.length, assignedCount(role.id))}
                 divider={index < custom.length - 1}
-                onPress={() => push(`/(ganesh)/admin/roles/${role.id}` as never)}
+                onPress={() => push(`/(ganesh)/admin/roles/${role.id}`)}
               />
             ))}
           </Section>

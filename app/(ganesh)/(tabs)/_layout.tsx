@@ -64,11 +64,11 @@ export default function GaneshTabsLayout() {
   }
 
   if (!pandalId || !festivalId) {
-    return <Redirect href={"/(ganesh)/setup" as never} />;
+    return <Redirect href={"/(ganesh)/setup"} />;
   }
 
   if (!loading && (pandals.length === 0 || !hasActivePandal)) {
-    return <Redirect href={"/(ganesh)/setup" as never} />;
+    return <Redirect href={"/(ganesh)/setup"} />;
   }
 
   return (

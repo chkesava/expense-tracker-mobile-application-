@@ -58,8 +58,8 @@ balance and stay offline-capable.
 | CRITICAL | 9 | 1 | 0 | 10 |
 | HIGH | 31 | 1 | 0 | 32 |
 | MEDIUM | 36 | 1 | 5 | 42 |
-| LOW | 16 | 1 | 3 | 20 |
-| **Total** | **92** | **4** | **8** | **104** |
+| LOW | 17 | 1 | 2 | 20 |
+| **Total** | **93** | **4** | **7** | **104** |
 
 Every CRITICAL and HIGH is now closed or partial. Four partials remain: GS-004
 (no whole-document field allowlist outside `summary`, CRITICAL) and GS-040 (the
@@ -305,8 +305,8 @@ Recording these explicitly so the fix cycle does not undo working design:
 | GS-096 | LOW | STORAGE | Supabase Storage | Signed URLs live 30 minutes and the cache map never evicts | PARTIAL - 2026-09-05 (cache bounded; expiry already fine) |
 | GS-097 | LOW | PERFORMANCE | Supabase Storage | Each upload reads the image into memory three times | FIXED - 2026-09-05 |
 | GS-098 | LOW | CODE_QUALITY | Supabase Storage | Dead `ganeshStorage.ts` barrel and a decoy block in `storage.rules` | FIXED - 2026-09-05 |
-| GS-099 | LOW | NAVIGATION | Admin Dashboard | Pushing a tab route from the admin stack unwinds the stack | OPEN |
-| GS-100 | LOW | CODE_QUALITY | Navigation | Every Ganesh href is cast `as never`, disabling typed routes | OPEN — confirmed 2026-09-04 |
+| GS-099 | LOW | NAVIGATION | Admin Dashboard | Pushing a tab route from the admin stack unwinds the stack | OPEN - needs a device check |
+| GS-100 | LOW | CODE_QUALITY | Navigation | Every Ganesh href is cast `as never`, disabling typed routes | FIXED - 2026-09-05 (found 20 broken hrefs) |
 | GS-101 | LOW | UX | Expenses | No unsaved-changes guard on long forms | FIXED - 2026-09-05 |
 | GS-102 | LOW | CODE_QUALITY | Platform | `EXPO_PUBLIC_GEMINI_API_KEY` is bundled into the client (outside Ganesh scope) | OPEN — confirmed 2026-09-04, needs a proxy |
 | GS-103 | MEDIUM | FIRESTORE | Committee Contributions | Festival member increment writes may be rejected when the doc carries `createdBy` | FIXED 2026-09-04 |
@@ -6118,7 +6118,7 @@ diff is that a storage-rules change needs one.
 **Severity:** LOW
 **Category:** NAVIGATION
 **Feature:** Admin Dashboard
-**Status:** OPEN
+**Status:** OPEN - needs a device check; premise changed by GS-100
 
 ### Problem
 Admin cross-links to tab routes pop the admin screen instead of pushing on top of it.
@@ -6149,6 +6149,31 @@ Either present the target as a modal or a pushed detail route from within the ad
 ### Dependencies
 Related to GS-055.
 
+
+### Resolution (2026-09-05)
+Not fixed - and its premise has changed, so it needs re-checking before anything
+is built.
+
+**Why not fixed.** The ticket's own status is `LIKELY - inferred from the router
+structure; worth confirming on a device`, and its second acceptance criterion is
+"Verified on a device". I cannot run the app on a device here, and both offered
+remedies are UX decisions rather than corrections: presenting the targets as
+modals changes how the admin dashboard behaves, and removing the cross-links
+takes away navigation people may rely on. Guessing at either from the router
+structure alone is how a "fix" becomes a regression.
+
+**What changed.** GS-100 found that five of the exact cross-links this ticket
+cites - `admin/reports.tsx` pushing `/(ganesh)/collections`,
+`/(ganesh)/expenses`, `/(ganesh)/committee`, `/(ganesh)/contributions` - matched
+**no declared route** at all. They are now the canonical
+`/(ganesh)/(tabs)/...` forms. The structural analysis in this ticket still
+holds - `(tabs)` is a sibling of `admin` and already below it in the stack, so
+navigating there unwinds - but it was being reasoned about from hrefs that were
+themselves wrong.
+
+**What to do next.** One device check: open Admin, tap a cross-link, press Back.
+If it returns to Admin, this closes as fixed-by-GS-100. If it still exits to
+Home, the choice between "modal" and "drop the cross-links" is a product call.
 ---
 
 ## GS-100 — Every Ganesh href is cast `as never`, disabling typed routes
@@ -6156,7 +6181,7 @@ Related to GS-055.
 **Severity:** LOW
 **Category:** CODE_QUALITY
 **Feature:** Navigation
-**Status:** OPEN — confirmed 2026-09-04
+**Status:** FIXED - 2026-09-05
 
 ### Problem
 Every navigation call in the feature casts its href to `never`, so Expo Router's typed-route checking is disabled at every call site.
@@ -6186,6 +6211,54 @@ Type the href constants properly and remove the casts, starting with the dynamic
 ### Dependencies
 None.
 
+
+### Resolution (2026-09-05)
+Done - and the ticket's reassuring note turned out to be wrong.
+
+**122 `as never` casts removed** across 34 files in `app/(ganesh)`,
+`app/(ganesh-auth)` and `components/ganesh`. Only string and template literals
+were touched, so unrelated casts (`{} as never` in tests) are untouched.
+
+Typed routes were already enabled (`app.json` `experiments.typedRoutes`) and
+`.expo/types/router.d.ts` is generated, so these casts were not working around
+a missing type system - they were switching off a working one. Verified by
+inserting a deliberately bogus route, which the compiler rejects.
+
+**The ticket says "all 41 destinations currently resolve - navigation integrity
+was verified as clean". That is not true.** With the casts off, the compiler
+found **20 hrefs that match no declared route**:
+
+| written | declared |
+| --- | --- |
+| `/(ganesh)/committee` (5 sites) | `/(ganesh)/(tabs)/committee` |
+| `/(ganesh)/collections` | `/(ganesh)/(tabs)/collections` |
+| `/(ganesh)/expenses` | `/(ganesh)/(tabs)/expenses` |
+| `/(ganesh)/contributions` (x3, two with query strings) | `/(ganesh)/(tabs)/contributions` |
+| `/(ganesh)` (7 sites) | `/(ganesh)/(tabs)` |
+
+Five of those are the admin -> tab cross-links in `admin/reports.tsx`, which is
+the same set GS-099 is about - so that ticket's premise has changed and it
+should be re-checked against corrected hrefs.
+
+All rewritten to the canonical forms taken from the generated table, not
+guessed.
+
+**A method note worth keeping.** The first typecheck ran against a
+`router.d.ts` generated on 2026-08-31, five days stale - it did not contain
+`pandal-custody`, a route added on 2026-09-03. Acting on that would have meant
+"fixing" correct code to satisfy an out-of-date table. Regenerating first (a
+brief `expo start`) was what made the remaining errors trustworthy. `.expo/` is
+gitignored, so this is a step anyone repeating the work has to take.
+
+**Criterion 3, the dynamic hrefs.** `Need.href` was `string` and is now `Href`.
+That immediately caught two more bad paths the literal search could not see,
+because their query strings made them distinct literals -
+`/(ganesh)/contributions?status=overdue` and `?status=promised`. This is the
+part of the ticket that asked to "start with the dynamic `needs[].href`
+strings", and it is where the compiler earned its keep.
+
+`typecheck` and `typecheck:shared` clean; 1527 tests pass. A route rename is now
+a build failure at every Ganesh call site.
 ---
 
 ## GS-101 — No unsaved-changes guard on long forms
