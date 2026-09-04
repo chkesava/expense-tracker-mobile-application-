@@ -22,7 +22,7 @@ import { useCollections } from "@/hooks/useCollections";
 import { useFestivals } from "@/hooks/useFestivals";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { useGaneshSummary } from "@/hooks/useGaneshSummary";
-import { useHouseholds } from "@/hooks/useHouseholds";
+import { HOUSEHOLD_LIMIT, useHouseholds } from "@/hooks/useHouseholds";
 import { usePandalMembers } from "@/hooks/usePandalMembers";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import type { GaneshCollection, Household, HouseholdStatus } from "@/shared/types/ganesh";
@@ -91,10 +91,12 @@ export function CollectionsList({ embedded = false, prefix }: CollectionsListPro
   const { festivals } = useFestivals(pandalId);
   const festival = festivals.find((item) => item.id === festivalId);
   const { summary } = useGaneshSummary(pandalId, festivalId);
-  const { households, loading: householdsLoading, error: householdsError } = useHouseholds(
-    pandalId,
-    festivalId
-  );
+  const {
+    households,
+    loading: householdsLoading,
+    error: householdsError,
+    truncated: householdsTruncated,
+  } = useHouseholds(pandalId, festivalId);
   const { collections, loading: collectionsLoading, error: collectionsError } = useCollections(
     pandalId,
     festivalId
@@ -224,6 +226,37 @@ export function CollectionsList({ embedded = false, prefix }: CollectionsListPro
     Household | GaneshCollection
   >;
 
+  // The household listener is capped (GS-065). A collector works through this
+  // list door to door, so if the cap is actually reached they have to be told —
+  // a silently short list reads as "these are all the houses", and the coverage
+  // percentages above it would be computed over a partial set.
+  const truncationNotice = householdsTruncated ? (
+    <View
+      style={[
+        styles.coverageCard,
+        { backgroundColor: theme.colors.card, borderColor: g.saffron },
+      ]}
+    >
+      <Text
+        style={[
+          styles.coverageTitle,
+          { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold },
+        ]}
+      >
+        Showing the first {HOUSEHOLD_LIMIT} houses
+      </Text>
+      <Text
+        style={[
+          styles.coverageMeta,
+          { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular },
+        ]}
+      >
+        This festival has more houses than the list can load at once, so the counts above cover
+        only these. Search by name, house number or area to find a house that is not listed.
+      </Text>
+    </View>
+  ) : null;
+
   const coverageStrip =
     coverage.countableHouses > 0 || coverage.today.count > 0 || coverage.byArea.length > 0 ? (
       <View
@@ -338,6 +371,8 @@ export function CollectionsList({ embedded = false, prefix }: CollectionsListPro
           }
         />
       )}
+
+      {truncationNotice}
 
       {coverageStrip}
 

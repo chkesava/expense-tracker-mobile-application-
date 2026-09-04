@@ -11,6 +11,8 @@ export function usePandalRoles(pandalId: string | null) {
     shared: data.roles,
     path: pandalId ? pandalRolesCol(pandalId) : null,
     mapDoc: (id, docData) => ({ id, ...(docData as Omit<PandalRole, "id">) }),
+    // A hand-curated set of roles (GS-065).
+    query: { limitTo: 200 },
   });
   return { roles: items, loading, error, retry };
 }

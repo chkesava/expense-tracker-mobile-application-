@@ -14,6 +14,10 @@ export function useJoinRequests(pandalId: string | null) {
     query: {
       extra: pandalId ? [where("pandalId", "==", pandalId)] : [],
       extraKey: pandalId ?? "",
+      // Root-collection query, so this was the one listener a stranger could
+      // grow. No `orderBy`: it would need a composite index alongside the
+      // `pandalId` filter (GS-065).
+      limitTo: 300,
     },
   });
   return {

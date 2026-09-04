@@ -10,6 +10,7 @@ import { PendingHint } from "@/components/ganesh/GaneshSyncChip";
 import {
   FilterChips,
   GaneshHeader,
+  ListStateView,
   MetaLabel,
   Money,
   Section,
@@ -27,7 +28,7 @@ import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { useGaneshStorage } from "@/hooks/useGaneshStorage";
 import { useGaneshWrites } from "@/hooks/useGaneshWrites";
 import { usePandalMembers } from "@/hooks/usePandalMembers";
-import { usePandalAssetAudits, usePandalAssets } from "@/hooks/usePandalAssets";
+import { usePandalAsset, usePandalAssetAuditsFor } from "@/hooks/usePandalAssets";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { haptic } from "@/lib/haptics";
 import { toast } from "@/lib/toast";
@@ -77,14 +78,17 @@ export default function AssetDetailScreen() {
   const { pandalId } = useGaneshSession();
 
   const { festivals } = useFestivals(pandalId);
-  const { assets } = usePandalAssets(pandalId);
-  const { audits } = usePandalAssetAudits(pandalId);
+  // Read by id, and query the history per asset (GS-095, GS-067). Resolving
+  // from the capped Pandal-wide lists told the user an existing asset belonged
+  // to another Pandal, and showed an empty history for anything older than the
+  // most recent 80 asset events.
+  const { asset, loading: assetLoading } = usePandalAsset(pandalId, id ?? null);
+  const { audits } = usePandalAssetAuditsFor(pandalId, id ?? null);
   const { members } = usePandalMembers(pandalId);
   const { can } = useGaneshPermissions();
   const writes = useGaneshWrites();
   const { isOnline, signedUrl, uploadAssetPhoto } = useGaneshStorage();
 
-  const asset = assets.find((item) => item.id === id);
 
   const [name, setName] = useState("");
   const [category, setCategory] = useState<(typeof ASSET_CATEGORIES)[number]["id"]>("furniture");
@@ -114,8 +118,8 @@ export default function AssetDetailScreen() {
   const purchaseFestival = festivals.find((item) => item.id === relatedFestivalId);
 
   const recentAudits = useMemo(
-    () => audits.filter((item) => item.assetId === id).slice(0, 12),
-    [audits, id]
+    () => audits.slice(0, 12),
+    [audits]
   );
 
   useEffect(() => {
@@ -155,6 +159,9 @@ export default function AssetDetailScreen() {
     return <GaneshWriteLock message="Your role cannot view Pandal assets." />;
   }
 
+  // The asset now arrives from its own query rather than out of an
+  // already-loaded list, so the first render has no asset yet. Without this
+  // gate the screen would flash "Asset not found" on every open.
   if (!asset) {
     return (
       <GaneshScreen safeTop>
@@ -163,11 +170,15 @@ export default function AssetDetailScreen() {
           icon={<Package size={22} color={g.saffron} strokeWidth={2.2} />}
           onBack={back}
         />
-        <GaneshEmptyState
-          icon={<Package size={22} color={g.saffron} strokeWidth={2.2} />}
-          title="Asset not found"
-          description="It may have been removed from this view, or it belongs to another Pandal."
-        />
+        {assetLoading ? (
+          <ListStateView loading title="Loading the asset" skeletonCount={3} />
+        ) : (
+          <GaneshEmptyState
+            icon={<Package size={22} color={g.saffron} strokeWidth={2.2} />}
+            title="Asset not found"
+            description="It may have been removed, or it belongs to another Pandal."
+          />
+        )}
       </GaneshScreen>
     );
   }

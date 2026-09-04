@@ -13,7 +13,7 @@ export function useGaneshCategories(pandalId: string | null, festivalId: string 
     shared: data.categories,
     path: pandalId && festivalId ? festivalCol(pandalId, festivalId, "categories") : null,
     mapDoc: (id, docData) => ({ id, ...(docData as Omit<GaneshCategory, "id">) }),
-    query: { orderByField: "sortOrder", orderDirection: "asc" },
+    query: { orderByField: "sortOrder", orderDirection: "asc", limitTo: 200 },
   });
   return { categories: items, loading, error, retry };
 }

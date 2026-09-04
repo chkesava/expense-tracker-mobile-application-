@@ -10,7 +10,9 @@ export function useFestivals(pandalId: string | null) {
     shared: data.festivals,
     path: pandalId ? festivalsCol(pandalId) : null,
     mapDoc: (id, docData) => ({ id, ...(docData as Omit<Festival, "id">) }),
-    query: { orderByField: "year", orderDirection: "desc" },
+    // Newest first, and `loadSponsorHistory` relies on that ordering when it
+    // takes the most recent festivals (GS-065, GS-066).
+    query: { orderByField: "year", orderDirection: "desc", limitTo: 100 },
   });
   return { festivals: items, loading, error, retry };
 }

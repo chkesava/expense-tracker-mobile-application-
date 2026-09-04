@@ -14,6 +14,9 @@ export function useFestivalMembers(pandalId: string | null, festivalId: string |
     shared: data.festivalMembers,
     path: pandalId && festivalId ? festivalCol(pandalId, festivalId, "members") : null,
     mapDoc: (id, docData) => ({ id, ...(docData as Omit<FestivalMember, "id">) }),
+    // Bounded by the Pandal's own membership, so 500 is unreachable in
+    // practice (GS-065).
+    query: { limitTo: 500 },
   });
   return { members: items, loading, error };
 }

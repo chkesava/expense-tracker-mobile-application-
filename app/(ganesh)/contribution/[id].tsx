@@ -21,7 +21,7 @@ import { useFestivals } from "@/hooks/useFestivals";
 import { useGaneshContribution } from "@/hooks/useContributions";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { useGaneshWrites } from "@/hooks/useGaneshWrites";
-import { usePandalAssets } from "@/hooks/usePandalAssets";
+import { usePandalAsset } from "@/hooks/usePandalAssets";
 import { usePandalMembers } from "@/hooks/usePandalMembers";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
@@ -59,7 +59,6 @@ export default function ContributionDetailScreen() {
   const { isOnline } = useNetwork();
   const { festivals } = useFestivals(pandalId);
   const { contribution, loading } = useGaneshContribution(pandalId, festivalId, params.id ?? null);
-  const { assets } = usePandalAssets(pandalId);
   const { members } = usePandalMembers(pandalId);
   const { can } = useGaneshPermissions();
   const writes = useGaneshWrites();
@@ -77,7 +76,10 @@ export default function ContributionDetailScreen() {
   const [assetLocation, setAssetLocation] = useState("");
   const [busy, setBusy] = useState(false);
   const festival = festivals.find((item) => item.id === festivalId);
-  const linkedAsset = assets.find((item) => item.id === contribution?.assetId);
+  // Read by id rather than looked up in the capped asset list (GS-095): past
+  // the cap the linked-asset card simply vanished from a contribution that
+  // does have an asset.
+  const { asset: linkedAsset } = usePandalAsset(pandalId, contribution?.assetId ?? null);
   const photoPath = ganeshStoredPath(contribution?.photo, contribution?.photoPath);
   const openFestival = festival?.status === "open";
   const promised = isPromised(contribution);

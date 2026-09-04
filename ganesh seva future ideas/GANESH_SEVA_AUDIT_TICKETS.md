@@ -49,16 +49,16 @@ balance and stay offline-capable.
 
 ## Executive Summary
 
-**Status as of 2026-09-03.** Original counts were 9 CRITICAL, 32 HIGH,
+**Status as of 2026-09-04.** Original counts were 9 CRITICAL, 32 HIGH,
 41 MEDIUM, 21 LOW across 103 tickets.
 
 | Severity | Closed | Partial | Open | Total |
 | --- | ---: | ---: | ---: | ---: |
 | CRITICAL | 8 | 1 | 0 | 9 |
 | HIGH | 30 | 2 | 0 | 32 |
-| MEDIUM | 23 | 1 | 18 | 42 |
-| LOW | 5 | 0 | 15 | 20 |
-| **Total** | **66** | **4** | **33** | **103** |
+| MEDIUM | 26 | 1 | 15 | 42 |
+| LOW | 6 | 0 | 14 | 20 |
+| **Total** | **70** | **4** | **29** | **103** |
 
 Every CRITICAL and HIGH is now closed or partial. The one CRITICAL partial is
 GS-004 (no whole-document field allowlist outside `summary`); the HIGH partials
@@ -264,9 +264,9 @@ Recording these explicitly so the fix cycle does not undo working design:
 | GS-062 | MEDIUM | COLLECTIONS | Households | The household list is not carried forward between festivals | FIXED — verified 2026-09-04 |
 | GS-063 | MEDIUM | CONTRIBUTIONS | Committee Contributions | `ContributionMode: "custom"` is unreachable from the UI | OPEN |
 | GS-064 | MEDIUM | PERFORMANCE | Shared real-time data | `useGaneshSyncReporter` duplicates the four largest listeners | FIXED — verified 2026-09-04 |
-| GS-065 | MEDIUM | PERFORMANCE | Households | Households, members, roles and join-request listeners have no `limit` | OPEN — confirmed 2026-09-04 |
-| GS-066 | MEDIUM | PERFORMANCE | Sponsors | `useSponsorHistory` is an unbounded N+1 with client-side filtering | OPEN — confirmed 2026-09-04 |
-| GS-067 | MEDIUM | ASSETS | Pandal Assets | Per-asset history is truncated by a pandal-wide 80-document cap | OPEN — confirmed 2026-09-04 |
+| GS-065 | MEDIUM | PERFORMANCE | Households | Households, members, roles and join-request listeners have no `limit` | FIXED — 2026-09-04 |
+| GS-066 | MEDIUM | PERFORMANCE | Sponsors | `useSponsorHistory` is an unbounded N+1 with client-side filtering | FIXED — 2026-09-04 (the `where` was already there) |
+| GS-067 | MEDIUM | ASSETS | Pandal Assets | Per-asset history is truncated by a pandal-wide 80-document cap | FIXED — 2026-09-04 |
 | GS-068 | MEDIUM | OFFLINE | Offline behaviour | The Firestore persistence fallback cannot work and the cache mode is fabricated | OPEN |
 | GS-069 | MEDIUM | STORAGE | Supabase Storage | No cleanup path exists; orphaned files accumulate permanently | PARTIAL |
 | GS-070 | MEDIUM | FINANCE | Permanent Fund | Seed-then-transfer runs as two non-atomic steps with no rollback | OPEN |
@@ -294,7 +294,7 @@ Recording these explicitly so the fix cycle does not undo working design:
 | GS-092 | LOW | SPONSORS | Audit Trail | Every sponsorship audit records `action: "edited"` | OPEN — confirmed 2026-09-04 |
 | GS-093 | LOW | COLLECTIONS | Households | `assignedCollectorId` and `notes` are dead fields | OPEN — confirmed 2026-09-04 |
 | GS-094 | LOW | UX | Collections | The payment-method filter ignores the search box | OPEN |
-| GS-095 | LOW | ASSETS | Pandal Assets | Asset detail resolves from a 400-doc list and shows a misleading message | OPEN — confirmed 2026-09-04 |
+| GS-095 | LOW | ASSETS | Pandal Assets | Asset detail resolves from a 400-doc list and shows a misleading message | FIXED — 2026-09-04 |
 | GS-096 | LOW | STORAGE | Supabase Storage | Signed URLs live 30 minutes and the cache map never evicts | OPEN |
 | GS-097 | LOW | PERFORMANCE | Supabase Storage | Each upload reads the image into memory three times | OPEN — confirmed 2026-09-04 |
 | GS-098 | LOW | CODE_QUALITY | Supabase Storage | Dead `ganeshStorage.ts` barrel and a decoy block in `storage.rules` | OPEN — confirmed 2026-09-04 |
@@ -4011,7 +4011,7 @@ None.
 **Severity:** MEDIUM
 **Category:** PERFORMANCE
 **Feature:** Households
-**Status:** OPEN — confirmed 2026-09-04
+**Status:** FIXED — 2026-09-04
 
 ### Problem
 Several collection listeners build unconstrained queries. The household listener is the one that matters, because it grows with every collection drive.
@@ -4043,6 +4043,39 @@ Add `limitTo` to all of them and paginate the household list.
 ### Dependencies
 Related to GS-006, GS-013.
 
+
+### Resolution (2026-09-04)
+Caps added to every listener the ticket named. The five naturally-small ones
+(`usePandalMembers` 500, `useFestivalMembers` 500, `usePandalRoles` 200,
+`useGaneshCategories` 200, `useFestivals` 100, `useJoinRequests` 300) got bounds
+high enough to be unreachable in practice — an upper bound on a runaway query,
+not a page size.
+
+`useHouseholds` was treated differently on purpose. It is the only Ganesh
+listener that scales with the community rather than the committee, and it is the
+list a collector works through door to door, so a bare cap would have been worse
+than none: a silently short list reads as "these are all the houses", and the
+coverage percentages on `CollectionsList` would be computed over a partial set
+while looking authoritative. It is capped at `HOUSEHOLD_LIMIT = 2000` and the
+hook returns `truncated`, which `CollectionsList` renders as a saffron-bordered
+notice above the coverage strip saying the counts cover only the loaded houses
+and that search still finds the rest. Full pagination remains open as a
+follow-up; this makes the bound honest in the meantime.
+
+Two judgement calls worth recording:
+
+- No `orderBy` was added to `usePandalMembers`. `joinedAt` is optional on
+  `PandalMember` (and `ganeshWrites.ts:1071` sets it from `createdAt`, which can
+  be absent), and Firestore excludes documents that lack the ordered field — so
+  ordering there would have hidden members rather than sorting them. That is the
+  same silent-exclusion defect this group exists to remove.
+- No `orderBy` was added to `useJoinRequests` or `useFestivalMembers` either:
+  alongside their `where` filter it would require a composite index, and the
+  query would fail with `failed-precondition` until that index finished
+  building.
+
+The ticket's `app/(ganesh)/(tabs)/collections.tsx:33` reference was stale — the
+household list lives in `components/ganesh/funds/CollectionsList.tsx`.
 ---
 
 ## GS-066 — `useSponsorHistory` is an unbounded N+1 with client-side filtering
@@ -4050,7 +4083,7 @@ Related to GS-006, GS-013.
 **Severity:** MEDIUM
 **Category:** PERFORMANCE
 **Feature:** Sponsors
-**Status:** OPEN — confirmed 2026-09-04
+**Status:** FIXED — 2026-09-04
 
 ### Problem
 Opening one sponsor's detail page reads every sponsorship of every festival and filters in JavaScript.
@@ -4088,6 +4121,25 @@ Add the `where` clause and a limit, or denormalize a per-sponsor history collect
 ### Dependencies
 None.
 
+
+### Resolution (2026-09-04)
+Half of this ticket was already fixed and never updated: the `where("sponsorId",
+"==", sponsorId)` it asks for exists as `sponsorHistoryWhere` in
+`services/ganesh/ganeshSponsorHistory.ts`, and nothing is filtered in JavaScript.
+The quoted `snap.docs.filter(...)` is not current code.
+
+What was genuinely unbounded is now bounded: `limit(MAX_PER_FESTIVAL = 100)` per
+festival, and `festivalIds.slice(0, MAX_FESTIVALS = 12)` so the fan-out no longer
+grows with the Pandal's whole history. The festival cap is safe because
+`useFestivals` orders by `year` descending, so callers pass newest-first — that
+dependency is asserted by a test rather than left as a comment.
+
+`limit` is applied without an `orderBy` deliberately: an equality filter alone
+needs no composite index, so this shipped without an index build. 100 deals for
+one sponsor in one festival does not occur, so the cap stops a runaway query
+without truncating a real history.
+
+2 tests added (4 in the file).
 ---
 
 ## GS-067 — Per-asset history is truncated by a pandal-wide 80-document cap
@@ -4095,7 +4147,7 @@ None.
 **Severity:** MEDIUM
 **Category:** ASSETS
 **Feature:** Pandal Assets
-**Status:** OPEN — confirmed 2026-09-04
+**Status:** FIXED — 2026-09-04
 
 ### Problem
 The asset detail screen filters a pandal-wide audit list client-side, and that list is capped at 80 entries ordered by time — so older assets show no history at all.
@@ -4124,6 +4176,25 @@ Add `where("assetId","==",id)` to a per-asset audit query.
 ### Dependencies
 Related to GS-095.
 
+
+### Resolution (2026-09-04)
+`usePandalAssetAuditsFor(pandalId, assetId)` added, querying the audit
+collection with `where("assetId", "==", assetId)` ordered by `at` descending,
+capped at 200. `app/(ganesh)/asset/[id].tsx` uses it instead of filtering the
+Pandal-wide 80-document feed client-side.
+
+This was filed as PERFORMANCE but it is a correctness bug: an asset's audit
+trail was silently incomplete while looking complete, and the empty state
+asserted "No changes recorded yet" over documents that existed. On a Pandal with
+any real asset volume, the older the asset the emptier its history looked.
+
+The composite index on (`assetId` ASC, `at` DESC) was added to
+`firestore.indexes.json` and deployed **before** this code, because index builds
+are asynchronous and the query would otherwise fail with `failed-precondition`.
+
+The hook always queries locally and never uses the shared slice — the shared one
+is Pandal-wide by design and cannot answer a per-asset question.
+`usePandalAssetAudits` is unchanged and still feeds `admin/audit.tsx`.
 ---
 
 ## GS-068 — The Firestore persistence fallback cannot work and the cache mode is fabricated
@@ -5170,7 +5241,7 @@ None.
 **Severity:** LOW
 **Category:** ASSETS
 **Feature:** Pandal Assets
-**Status:** OPEN — confirmed 2026-09-04
+**Status:** FIXED — 2026-09-04
 
 ### Problem
 The asset detail screen finds its asset inside a capped list rather than reading it by id, so past 400 assets it claims the asset belongs to another pandal.
@@ -5197,6 +5268,23 @@ Fetch the asset document directly by id on the detail screen.
 ### Dependencies
 Related to GS-067.
 
+
+### Resolution (2026-09-04)
+`usePandalAsset(pandalId, assetId)` added, reading the asset by id via a
+`documentId()` equality query rather than `assets.find(...)` over the 400-cap
+list. Implemented as a query rather than a new doc-subscribe primitive so it
+inherits `useGaneshCollection`'s error handling, retry and read logging
+unchanged.
+
+Both call sites named in the ticket are fixed: `asset/[id].tsx` and the
+linked-asset card in `contribution/[id].tsx` (where the card simply vanished
+from a contribution that did have an asset).
+
+One consequence needed handling: the asset no longer arrives from an
+already-loaded list, so the first render has no asset. Without a gate the screen
+would flash "Asset not found" on every open — trading a rare false message for a
+constant one. The not-found branch now shows a loading state while the query is
+in flight, and its wording drops the removed-from-view hedge.
 ---
 
 ## GS-096 — Signed URLs live 30 minutes and the cache map never evicts
@@ -6097,17 +6185,20 @@ Result: **6 closed as already fixed, 17 confirmed still real, 14 not verified.**
 
 GS-058 (`displayStatus` is exposed by the hook and rendered nowhere) ·
 GS-061 (`createFestival` seeds `DEFAULT_GANESH_CATEGORIES` only, so custom
-categories are lost) · GS-065 (no `limit` on households, members, roles or
-join-request listeners) · GS-066 (`useSponsorHistory` loops festival ids) ·
-GS-067 (`limitTo: 80` pandal-wide on asset audits) · GS-074 (rules still
+categories are lost) · GS-074 (rules still
 deployed by hand and the contract test is still a hand-written mirror — this
 session added 14 more mirrors to it) · GS-075, GS-076, GS-078 (genuinely
 missing features) · GS-085 (no `clientOpId` anywhere in
 `ganeshPermanentFund`) · GS-089 (`{ id: "cancelled" }` is offered as a creation
 status) · GS-092 (three `action: "edited"` writes; the union has no status
 verbs) · GS-093 (`assignedCollectorId` is written by `updateHousehold` and read
-by nothing) · GS-095 (`limitTo: 400` on assets) · GS-097 · GS-098 (dead
+by nothing) · GS-097 · GS-098 (dead
 `ganeshStorage.ts` barrel) · GS-100 (113 `as never` casts)
+
+Four of those confirmed-real ones — GS-065, GS-066, GS-067 and GS-095, the
+query-bounds group — were fixed on 2026-09-04 and are no longer open. GS-066's
+own description was half stale even after being "confirmed": the `where` clause
+it asks for already existed.
 
 ### Not verified
 
