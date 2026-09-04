@@ -56,9 +56,9 @@ balance and stay offline-capable.
 | --- | ---: | ---: | ---: | ---: |
 | CRITICAL | 8 | 1 | 0 | 9 |
 | HIGH | 30 | 2 | 0 | 32 |
-| MEDIUM | 4 | 1 | 37 | 42 |
-| LOW | 0 | 0 | 20 | 20 |
-| **Total** | **42** | **4** | **57** | **103** |
+| MEDIUM | 23 | 1 | 18 | 42 |
+| LOW | 5 | 0 | 15 | 20 |
+| **Total** | **66** | **4** | **33** | **103** |
 
 Every CRITICAL and HIGH is now closed or partial. The one CRITICAL partial is
 GS-004 (no whole-document field allowlist outside `summary`); the HIGH partials
@@ -76,11 +76,11 @@ or misfiled**, some for weeks:
 - N-05 and N-06, filed by the 2026-09-03 follow-up audit, were author error and
   were retracted rather than fixed
 
-**MEDIUM and LOW: mostly NOT verified.** 57 remain open, and only a handful
-have been re-checked against code (GS-044, GS-063, GS-072 confirmed still real;
-GS-049, GS-056, GS-059 found already fixed; GS-053 confirmed real and then
-fixed). Given the hit rate above, expect roughly a quarter of the remaining 57
-to be already fixed or no
+**MEDIUM and LOW: now swept.** All 37 that were open on 2026-09-04 were read and
+checked against code (see "Stale-ticket sweep" at the end of this file): 6
+closed as already fixed, 17 confirmed still real, 14 left unverified because
+they need more than a grep. 33 remain open. The 14 unverified are named
+explicitly there rather than counted as if they had been checked. Expect no
 longer applicable. **Triage before scheduling any of them** — re-fixing
 something already fixed costs more than checking did.
 
@@ -246,8 +246,8 @@ Recording these explicitly so the fix cycle does not undo working design:
 | GS-044 | MEDIUM | AUTH | Authentication | The Ganesh session is never cleared on sign-out | OPEN |
 | GS-045 | MEDIUM | AUTH | Authentication | `GaneshGate` writes real PII into the duress user tree | FIXED 2026-09-04 |
 | GS-046 | MEDIUM | AUTH | Authentication | The login screen claims an isolation the architecture does not provide | OPEN |
-| GS-047 | MEDIUM | NAVIGATION | Festivals | The restored pandal/festival session is never validated | OPEN |
-| GS-048 | MEDIUM | UX | Festivals | Previous-festival rows stay on screen after a switch | OPEN |
+| GS-047 | MEDIUM | NAVIGATION | Festivals | The restored pandal/festival session is never validated | FIXED — verified 2026-09-04 |
+| GS-048 | MEDIUM | UX | Festivals | Previous-festival rows stay on screen after a switch | FIXED — verified 2026-09-04 |
 | GS-049 | MEDIUM | CODE_QUALITY | Shared real-time data | `useGaneshCollection` omits `extra` from its effect dependencies | FIXED — verified 2026-09-03 |
 | GS-050 | MEDIUM | REPORTING | Sponsors | Reports display the same rupees twice under two "Cash received" headings | FIXED 2026-09-04 |
 | GS-051 | MEDIUM | REPORTING | Sponsors | `summarizeSponsorships` and `breakdownSponsors` disagree on expense sponsorships | FIXED 2026-09-04 |
@@ -257,49 +257,49 @@ Recording these explicitly so the fix cycle does not undo working design:
 | GS-055 | MEDIUM | UX | Admin Dashboard | The dashboard duplicates eight destinations across five sections | OPEN |
 | GS-056 | MEDIUM | UX | Admin Dashboard | The dashboard error state ignores half of its queries | FIXED 2026-09-03 |
 | GS-057 | MEDIUM | UX | Festival | Five add-screens have no closed-festival guard | FIXED 2026-09-04 |
-| GS-058 | MEDIUM | UX | Festival | No persistent read-only banner when a festival is closed | OPEN |
+| GS-058 | MEDIUM | UX | Festival | No persistent read-only banner when a festival is closed | OPEN — confirmed 2026-09-04 |
 | GS-059 | MEDIUM | OFFLINE | Committee Contributions | Committee payments bypass the offline money-receive guard | FIXED — verified 2026-09-03 |
-| GS-060 | MEDIUM | SPONSORS | Sponsors | Sponsor profile editing is blocked when the current festival is closed | OPEN |
-| GS-061 | MEDIUM | FESTIVAL | Festivals | Custom expense categories are not carried forward to the next festival | OPEN |
-| GS-062 | MEDIUM | COLLECTIONS | Households | The household list is not carried forward between festivals | OPEN |
+| GS-060 | MEDIUM | SPONSORS | Sponsors | Sponsor profile editing is blocked when the current festival is closed | FIXED — verified 2026-09-04 |
+| GS-061 | MEDIUM | FESTIVAL | Festivals | Custom expense categories are not carried forward to the next festival | OPEN — confirmed 2026-09-04 |
+| GS-062 | MEDIUM | COLLECTIONS | Households | The household list is not carried forward between festivals | FIXED — verified 2026-09-04 |
 | GS-063 | MEDIUM | CONTRIBUTIONS | Committee Contributions | `ContributionMode: "custom"` is unreachable from the UI | OPEN |
-| GS-064 | MEDIUM | PERFORMANCE | Shared real-time data | `useGaneshSyncReporter` duplicates the four largest listeners | OPEN |
-| GS-065 | MEDIUM | PERFORMANCE | Households | Households, members, roles and join-request listeners have no `limit` | OPEN |
-| GS-066 | MEDIUM | PERFORMANCE | Sponsors | `useSponsorHistory` is an unbounded N+1 with client-side filtering | OPEN |
-| GS-067 | MEDIUM | ASSETS | Pandal Assets | Per-asset history is truncated by a pandal-wide 80-document cap | OPEN |
+| GS-064 | MEDIUM | PERFORMANCE | Shared real-time data | `useGaneshSyncReporter` duplicates the four largest listeners | FIXED — verified 2026-09-04 |
+| GS-065 | MEDIUM | PERFORMANCE | Households | Households, members, roles and join-request listeners have no `limit` | OPEN — confirmed 2026-09-04 |
+| GS-066 | MEDIUM | PERFORMANCE | Sponsors | `useSponsorHistory` is an unbounded N+1 with client-side filtering | OPEN — confirmed 2026-09-04 |
+| GS-067 | MEDIUM | ASSETS | Pandal Assets | Per-asset history is truncated by a pandal-wide 80-document cap | OPEN — confirmed 2026-09-04 |
 | GS-068 | MEDIUM | OFFLINE | Offline behaviour | The Firestore persistence fallback cannot work and the cache mode is fabricated | OPEN |
 | GS-069 | MEDIUM | STORAGE | Supabase Storage | No cleanup path exists; orphaned files accumulate permanently | PARTIAL |
 | GS-070 | MEDIUM | FINANCE | Permanent Fund | Seed-then-transfer runs as two non-atomic steps with no rollback | OPEN |
 | GS-071 | MEDIUM | FIRESTORE | Pandal creation | Multi-batch pandal and festival creation has no rollback | OPEN — assessed 2026-09-04 |
 | GS-072 | MEDIUM | FIRESTORE | Reports | The recompute treats a missing contribution status as `received` | FIXED 2026-09-04 |
 | GS-073 | MEDIUM | SECURITY | Collections | Every member, including `viewer`, can read all donor PII | FIXED 2026-09-04 — DEPLOYED |
-| GS-074 | MEDIUM | CODE_QUALITY | Security Rules | Rules are deployed by hand and the contract test is a hand-written mirror | OPEN |
-| GS-075 | MEDIUM | RECONCILIATION | Cash Reconciliation | Cash Reconciliation is entirely missing | OPEN |
-| GS-076 | MEDIUM | COLLECTIONS | Daily Collection Sessions | Daily Collection Sessions are entirely missing | OPEN |
+| GS-074 | MEDIUM | CODE_QUALITY | Security Rules | Rules are deployed by hand and the contract test is a hand-written mirror | OPEN — confirmed 2026-09-04 |
+| GS-075 | MEDIUM | RECONCILIATION | Cash Reconciliation | Cash Reconciliation is entirely missing | OPEN — confirmed 2026-09-04 |
+| GS-076 | MEDIUM | COLLECTIONS | Daily Collection Sessions | Daily Collection Sessions are entirely missing | OPEN — confirmed 2026-09-04 |
 | GS-077 | MEDIUM | COLLECTIONS | Receipt Numbers | Collection receipt numbers are entirely missing | FIXED — verified 2026-09-04 |
-| GS-078 | MEDIUM | FINANCE | Money Purpose | Money Purpose is missing for every money movement | OPEN |
+| GS-078 | MEDIUM | FINANCE | Money Purpose | Money Purpose is missing for every money movement | OPEN — confirmed 2026-09-04 |
 | GS-079 | MEDIUM | REPORTING | Reports | No export, no date range, and two "report" rows are plain list links | OPEN |
 | GS-080 | MEDIUM | FINANCE | Split Funding | Local `money()` copies drop the epsilon guard, causing false rejections | FIXED 2026-09-04 |
 | GS-081 | LOW | FINANCE | Reports | Summary counters are unrounded float accumulators | FIXED 2026-09-04 |
 | GS-082 | MEDIUM | SECURITY | Asset vs Expense | `expenseCreateAllowed()` guards create but not update | FIXED 2026-09-04 — DEPLOYED |
 | GS-083 | LOW | SECURITY | Festivals | Deleting a pandal or festival orphans every subcollection | FIXED 2026-09-04 — DEPLOYED |
 | GS-084 | LOW | SECURITY | Pandal membership | An admin can write arbitrary fields into another user's membership index | FIXED 2026-09-04 — DEPLOYED |
-| GS-085 | LOW | PERMANENT_FUND | Fund Transfers | Fund transfers have no idempotency key | OPEN |
+| GS-085 | LOW | PERMANENT_FUND | Fund Transfers | Fund transfers have no idempotency key | OPEN — confirmed 2026-09-04 |
 | GS-086 | MEDIUM | DATA_VALIDATION | Collections | `collectorId` is arbitrary and unvalidated | FIXED 2026-09-04 — DEPLOYED |
-| GS-087 | LOW | FESTIVAL | Festivals | Two festivals can be created for the same year | OPEN |
+| GS-087 | LOW | FESTIVAL | Festivals | Two festivals can be created for the same year | FIXED — verified 2026-09-04 |
 | GS-088 | LOW | SECURITY | Pandal creation | Duplicate pandals are unconstrained and the code fallback is unchecked | FIXED 2026-09-04 |
-| GS-089 | LOW | CONTRIBUTIONS | In-Kind | "Cancelled" is offered as a creation status | OPEN |
+| GS-089 | LOW | CONTRIBUTIONS | In-Kind | "Cancelled" is offered as a creation status | OPEN — confirmed 2026-09-04 |
 | GS-090 | LOW | CONTRIBUTIONS | In-Kind | Sponsorship-kind value is hidden from the contributions tab metrics | OPEN |
 | GS-091 | LOW | CONTRIBUTIONS | Committee Contributions | Overpayment is indistinguishable from exact payment | OPEN |
-| GS-092 | LOW | SPONSORS | Audit Trail | Every sponsorship audit records `action: "edited"` | OPEN |
-| GS-093 | LOW | COLLECTIONS | Households | `assignedCollectorId` and `notes` are dead fields | OPEN |
+| GS-092 | LOW | SPONSORS | Audit Trail | Every sponsorship audit records `action: "edited"` | OPEN — confirmed 2026-09-04 |
+| GS-093 | LOW | COLLECTIONS | Households | `assignedCollectorId` and `notes` are dead fields | OPEN — confirmed 2026-09-04 |
 | GS-094 | LOW | UX | Collections | The payment-method filter ignores the search box | OPEN |
-| GS-095 | LOW | ASSETS | Pandal Assets | Asset detail resolves from a 400-doc list and shows a misleading message | OPEN |
+| GS-095 | LOW | ASSETS | Pandal Assets | Asset detail resolves from a 400-doc list and shows a misleading message | OPEN — confirmed 2026-09-04 |
 | GS-096 | LOW | STORAGE | Supabase Storage | Signed URLs live 30 minutes and the cache map never evicts | OPEN |
-| GS-097 | LOW | PERFORMANCE | Supabase Storage | Each upload reads the image into memory three times | OPEN |
-| GS-098 | LOW | CODE_QUALITY | Supabase Storage | Dead `ganeshStorage.ts` barrel and a decoy block in `storage.rules` | OPEN |
+| GS-097 | LOW | PERFORMANCE | Supabase Storage | Each upload reads the image into memory three times | OPEN — confirmed 2026-09-04 |
+| GS-098 | LOW | CODE_QUALITY | Supabase Storage | Dead `ganeshStorage.ts` barrel and a decoy block in `storage.rules` | OPEN — confirmed 2026-09-04 |
 | GS-099 | LOW | NAVIGATION | Admin Dashboard | Pushing a tab route from the admin stack unwinds the stack | OPEN |
-| GS-100 | LOW | CODE_QUALITY | Navigation | Every Ganesh href is cast `as never`, disabling typed routes | OPEN |
+| GS-100 | LOW | CODE_QUALITY | Navigation | Every Ganesh href is cast `as never`, disabling typed routes | OPEN — confirmed 2026-09-04 |
 | GS-101 | LOW | UX | Expenses | No unsaved-changes guard on long forms | OPEN |
 | GS-102 | LOW | CODE_QUALITY | Platform | `EXPO_PUBLIC_GEMINI_API_KEY` is bundled into the client (outside Ganesh scope) | OPEN — confirmed 2026-09-04, needs a proxy |
 | GS-103 | MEDIUM | FIRESTORE | Committee Contributions | Festival member increment writes may be rejected when the doc carries `createdBy` | FIXED 2026-09-04 |
@@ -3242,7 +3242,7 @@ None.
 **Severity:** MEDIUM
 **Category:** NAVIGATION
 **Feature:** Festivals
-**Status:** OPEN
+**Status:** FIXED — verified 2026-09-04
 
 ### Problem
 The persisted session is restored verbatim with no check that the festival still exists, still belongs to that pandal, or that the user is still a member of it.
@@ -3279,7 +3279,7 @@ Related to GS-044, GS-023, GS-035.
 **Severity:** MEDIUM
 **Category:** UX
 **Feature:** Festivals
-**Status:** OPEN
+**Status:** FIXED — verified 2026-09-04
 
 ### Problem
 When the festival scope changes, the collection hooks re-subscribe but never clear the existing items, so the previous year's rows remain rendered under the new year's heading until the first snapshot arrives.
@@ -3749,7 +3749,7 @@ Related to GS-035, GS-058.
 **Severity:** MEDIUM
 **Category:** UX
 **Feature:** Festival
-**Status:** OPEN
+**Status:** OPEN — confirmed 2026-09-04
 
 ### Problem
 Nothing tells the user the ledger is frozen. The closed state is communicated only by absent buttons, which reads as a permissions problem.
@@ -3825,7 +3825,7 @@ guard applies to this path too.
 **Severity:** MEDIUM
 **Category:** SPONSORS
 **Feature:** Sponsors
-**Status:** OPEN
+**Status:** FIXED — verified 2026-09-04
 
 ### Problem
 Sponsor profiles are pandal-level and the rules impose no festival condition on them, but the UI gates profile editing on an open festival.
@@ -3861,7 +3861,7 @@ None.
 **Severity:** MEDIUM
 **Category:** FESTIVAL
 **Feature:** Festivals
-**Status:** OPEN
+**Status:** OPEN — confirmed 2026-09-04
 
 ### Problem
 Creating a festival seeds only the built-in default categories, so every custom category must be recreated each year.
@@ -3896,7 +3896,7 @@ Related to GS-062.
 **Severity:** MEDIUM
 **Category:** COLLECTIONS
 **Feature:** Households
-**Status:** OPEN
+**Status:** FIXED — verified 2026-09-04
 
 ### Problem
 Households are festival-scoped and nothing imports the previous year's list, so the street roster must be rebuilt from scratch each year.
@@ -3976,7 +3976,7 @@ as `setMemberContributionTarget`) or drop it.
 **Severity:** MEDIUM
 **Category:** PERFORMANCE
 **Feature:** Shared real-time data
-**Status:** OPEN
+**Status:** FIXED — verified 2026-09-04
 
 ### Problem
 To produce a single pending-write integer, the tabs layout subscribes to the four largest collections, which every individual tab then subscribes to again.
@@ -4011,7 +4011,7 @@ None.
 **Severity:** MEDIUM
 **Category:** PERFORMANCE
 **Feature:** Households
-**Status:** OPEN
+**Status:** OPEN — confirmed 2026-09-04
 
 ### Problem
 Several collection listeners build unconstrained queries. The household listener is the one that matters, because it grows with every collection drive.
@@ -4050,7 +4050,7 @@ Related to GS-006, GS-013.
 **Severity:** MEDIUM
 **Category:** PERFORMANCE
 **Feature:** Sponsors
-**Status:** OPEN
+**Status:** OPEN — confirmed 2026-09-04
 
 ### Problem
 Opening one sponsor's detail page reads every sponsorship of every festival and filters in JavaScript.
@@ -4095,7 +4095,7 @@ None.
 **Severity:** MEDIUM
 **Category:** ASSETS
 **Feature:** Pandal Assets
-**Status:** OPEN
+**Status:** OPEN — confirmed 2026-09-04
 
 ### Problem
 The asset detail screen filters a pandal-wide audit list client-side, and that list is capped at 80 entries ordered by time — so older assets show no history at all.
@@ -4431,7 +4431,7 @@ Related to GS-016, GS-042.
 **Severity:** MEDIUM
 **Category:** CODE_QUALITY
 **Feature:** Security Rules
-**Status:** OPEN
+**Status:** OPEN — confirmed 2026-09-04
 
 ### Problem
 `firestore.rules` is not deployed by CI, and the only test covering it is a TypeScript re-implementation of the rules rather than an execution of them. It cannot catch the class of defect this audit found most of.
@@ -4469,7 +4469,7 @@ Supports verification of GS-002 – GS-005, GS-014 – GS-018, GS-037, GS-041, G
 **Severity:** MEDIUM
 **Category:** RECONCILIATION
 **Feature:** Cash Reconciliation
-**Status:** OPEN
+**Status:** OPEN — confirmed 2026-09-04
 
 ### Problem
 There is no way to record physical cash counted against ledger cash, and no variance tracking.
@@ -4506,7 +4506,7 @@ Depends on GS-011. Related to GS-076.
 **Severity:** MEDIUM
 **Category:** COLLECTIONS
 **Feature:** Daily Collection Sessions
-**Status:** OPEN
+**Status:** OPEN — confirmed 2026-09-04
 
 ### Problem
 There is no concept of a collection round: no session, no starting cash, no running total, no close, no handover.
@@ -4581,7 +4581,7 @@ Related to GS-076.
 **Severity:** MEDIUM
 **Category:** FINANCE
 **Feature:** Money Purpose
-**Status:** OPEN
+**Status:** OPEN — confirmed 2026-09-04
 
 ### Problem
 Only sponsorships carry a structured purpose. Every other money movement has free text only.
@@ -4832,7 +4832,7 @@ None.
 **Severity:** LOW
 **Category:** PERMANENT_FUND
 **Feature:** Fund Transfers
-**Status:** OPEN
+**Status:** OPEN — confirmed 2026-09-04
 
 ### Problem
 A user-driven retry after a timeout creates a second transfer.
@@ -4900,7 +4900,7 @@ Related to GS-004, GS-041, GS-076.
 **Severity:** LOW
 **Category:** FESTIVAL
 **Feature:** Festivals
-**Status:** OPEN
+**Status:** FIXED — verified 2026-09-04
 
 ### Problem
 Nothing enforces uniqueness of `(pandalId, year)`.
@@ -4970,7 +4970,7 @@ Related to GS-043.
 **Severity:** LOW
 **Category:** CONTRIBUTIONS
 **Feature:** In-Kind
-**Status:** OPEN
+**Status:** OPEN — confirmed 2026-09-04
 
 ### Problem
 A contribution can be created already cancelled, which has no real-world meaning.
@@ -5071,7 +5071,7 @@ None.
 **Severity:** LOW
 **Category:** SPONSORS
 **Feature:** Audit Trail
-**Status:** OPEN
+**Status:** OPEN — confirmed 2026-09-04
 
 ### Problem
 The sponsorship audit helper hard-codes a single action, so creation, receipt and cancellation are indistinguishable in the audit log.
@@ -5104,7 +5104,7 @@ Related to GS-052.
 **Severity:** LOW
 **Category:** COLLECTIONS
 **Feature:** Households
-**Status:** OPEN
+**Status:** OPEN — confirmed 2026-09-04
 
 ### Problem
 Two household fields are declared and accepted by the service but no screen ever sets them, so collector assignment for door-to-door rounds does not exist.
@@ -5170,7 +5170,7 @@ None.
 **Severity:** LOW
 **Category:** ASSETS
 **Feature:** Pandal Assets
-**Status:** OPEN
+**Status:** OPEN — confirmed 2026-09-04
 
 ### Problem
 The asset detail screen finds its asset inside a capped list rather than reading it by id, so past 400 assets it claims the asset belongs to another pandal.
@@ -5240,7 +5240,7 @@ Depends on GS-001.
 **Severity:** LOW
 **Category:** PERFORMANCE
 **Feature:** Supabase Storage
-**Status:** OPEN
+**Status:** OPEN — confirmed 2026-09-04
 
 ### Problem
 The full image is materialised as an ArrayBuffer up to three times per upload.
@@ -5274,7 +5274,7 @@ None.
 **Severity:** LOW
 **Category:** CODE_QUALITY
 **Feature:** Supabase Storage
-**Status:** OPEN
+**Status:** OPEN — confirmed 2026-09-04
 
 ### Problem
 Two pieces of dead code, one of which actively misleads a security reviewer.
@@ -5349,7 +5349,7 @@ Related to GS-055.
 **Severity:** LOW
 **Category:** CODE_QUALITY
 **Feature:** Navigation
-**Status:** OPEN
+**Status:** OPEN — confirmed 2026-09-04
 
 ### Problem
 Every navigation call in the feature casts its href to `never`, so Expo Router's typed-route checking is disabled at every call site.
@@ -6074,3 +6074,53 @@ more since GS-053 added six new trails.
 The ticket listed five money screens with no closed-festival guard. The
 `useFestivalWriteLock` work for GS-017 covered seven, and `add-sponsor` has its
 own `closed` check, so only `add-asset` remained. Guarded.
+
+---
+
+## Stale-ticket sweep (2026-09-04)
+
+All 37 then-open MEDIUM/LOW tickets were read and checked against current code.
+Result: **6 closed as already fixed, 17 confirmed still real, 14 not verified.**
+
+### Closed — already fixed, ticket never updated
+
+| Ticket | Evidence |
+| --- | --- |
+| GS-047 — restored session never validated | `(tabs)/_layout.tsx` checks `hasActivePandal`, resolves through `resolveSessionFestival`, and calls `clearSession()` when the pandal is gone |
+| GS-048 — previous-festival rows linger after a switch | `useGaneshCollection` calls `setItems([])` when its `subscribeKey` changes, and that key contains the path, so a festival switch clears |
+| GS-060 — sponsor profile editing blocked by a closed festival | `sponsor/[id].tsx` has no `closed` reference at all now, and `updateSponsor` does not call `requireOpenFestival` — only the sponsorship *state* changes do, correctly |
+| GS-062 — household list not carried forward | `mapHouseholdForNewFestival` is used inside `createFestival` |
+| GS-064 — useGaneshSyncReporter duplicates four listeners | It opens none: it reads `pendingCount` off the shared `useGaneshData()` provider |
+| GS-087 — two festivals for one year | `yearTakenByAnotherFestival` guards `createFestival`, backed by the `festivalYears` sentinel and `planFestivalYearClaim` |
+
+### Confirmed still real
+
+GS-058 (`displayStatus` is exposed by the hook and rendered nowhere) ·
+GS-061 (`createFestival` seeds `DEFAULT_GANESH_CATEGORIES` only, so custom
+categories are lost) · GS-065 (no `limit` on households, members, roles or
+join-request listeners) · GS-066 (`useSponsorHistory` loops festival ids) ·
+GS-067 (`limitTo: 80` pandal-wide on asset audits) · GS-074 (rules still
+deployed by hand and the contract test is still a hand-written mirror — this
+session added 14 more mirrors to it) · GS-075, GS-076, GS-078 (genuinely
+missing features) · GS-085 (no `clientOpId` anywhere in
+`ganeshPermanentFund`) · GS-089 (`{ id: "cancelled" }` is offered as a creation
+status) · GS-092 (three `action: "edited"` writes; the union has no status
+verbs) · GS-093 (`assignedCollectorId` is written by `updateHousehold` and read
+by nothing) · GS-095 (`limitTo: 400` on assets) · GS-097 · GS-098 (dead
+`ganeshStorage.ts` barrel) · GS-100 (113 `as never` casts)
+
+### Not verified
+
+GS-044 (already recorded as partially mitigated), GS-046, GS-054, GS-055,
+GS-068, GS-070, GS-079, GS-090, GS-091, GS-094, GS-096, GS-099, GS-101. Each
+needs more than a grep — mostly UI behaviour or a claim about a whole
+subsystem. They stay OPEN and unverified rather than being marked either way.
+
+### Why this pass was worth running
+
+Counting the six above, **seventeen of the tickets checked across this session
+were already fixed, misfiled, or wrong about their own mechanism.** Three named
+a cause that measurement disproved (GS-080's epsilon, GS-041's enum coverage,
+GS-057's five screens). The backlog's own numbers were the least reliable thing
+in it, which is why every group in this session started by verifying rather
+than by reading.
