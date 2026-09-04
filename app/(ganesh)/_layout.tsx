@@ -16,13 +16,21 @@ import { useTheme } from "@/theme/ThemeProvider";
 
 function GaneshGate({ children }: { children: React.ReactNode }) {
   const { theme } = useTheme();
-  const { user, loading } = useAuth();
-  const uid = user?.uid;
+  // `realUser`, not `user` (GS-045). Under duress mode `useAuth().user` is the
+  // decoy proxy whose uid is `<real uid>_duress`, so profiling it wrote the
+  // person's real display name, email and phone into the decoy tree — the one
+  // place that must look plausible without exposing them. Duress exists to be
+  // shown under coercion; filling it with real PII defeats the feature.
+  //
+  // Every other Ganesh consumer already uses realUser: GaneshSessionProvider,
+  // usePandals, useMyJoinRequests. This gate was the one holdout.
+  const { realUser, user, loading } = useAuth();
+  const uid = realUser?.uid;
 
   useEffect(() => {
     const db = getFirestoreDb();
-    if (!user || !db) return;
-    void upsertGaneshProfile(db, user);
+    if (!realUser || !db) return;
+    void upsertGaneshProfile(db, realUser);
   }, [uid]);
 
   if (!user) {

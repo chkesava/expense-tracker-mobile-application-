@@ -256,7 +256,11 @@ function bumpSummary(
   const payload: Record<string, unknown> = { updatedAt: serverTimestamp() };
   for (const [key, value] of Object.entries(deltas)) {
     if (typeof value === "number" && value !== 0) {
-      payload[key] = increment(value);
+      // Rounded before it is stored (GS-081). Raw values went straight into
+      // `increment()`, so the stored components drifted permanently; only the
+      // derived figures were rounded, which hid the drift rather than avoiding
+      // it, and comparisons against the stored values were unrounded.
+      payload[key] = increment(money(value));
     }
   }
   batch.set(ref, payload, { merge: true });
@@ -3414,12 +3418,18 @@ export async function recomputeFestivalSummary(
   // duplicates receipt/contribution numbers already handed to donors (GS-077).
   summary.nextContributionNumber = Number(beforeSnap.data()?.nextContributionNumber ?? 0);
   summary.nextReceiptNumber = Number(beforeSnap.data()?.nextReceiptNumber ?? 0);
-  summary.transferredToPermanentFund = fundTransfers
-    .filter((docSnap) => docSnap.data().direction === "to_permanent")
-    .reduce((sum, docSnap) => sum + Number(docSnap.data().amount ?? 0), 0);
-  summary.receivedFromPermanentFund = fundTransfers
-    .filter((docSnap) => docSnap.data().direction === "from_permanent")
-    .reduce((sum, docSnap) => sum + Number(docSnap.data().amount ?? 0), 0);
+  // Rounded like every other field summarizeLedger produces; these two were
+  // the exceptions (GS-081).
+  summary.transferredToPermanentFund = money(
+    fundTransfers
+      .filter((docSnap) => docSnap.data().direction === "to_permanent")
+      .reduce((sum, docSnap) => sum + Number(docSnap.data().amount ?? 0), 0)
+  );
+  summary.receivedFromPermanentFund = money(
+    fundTransfers
+      .filter((docSnap) => docSnap.data().direction === "from_permanent")
+      .reduce((sum, docSnap) => sum + Number(docSnap.data().amount ?? 0), 0)
+  );
 
   const contributionPaid = new Map<string, number>();
   const personalExpenses = new Map<string, number>();

@@ -1196,8 +1196,26 @@ service cloud.firestore {
             );
           }
 
+          // Cash-handling attribution is the primary accountability control in a
+          // chanda ledger, and the rules validated nothing (GS-086), so a
+          // crafted client could name a fabricated id or a non-member.
+          //
+          // `exists` only, deliberately: one document read rather than the two
+          // an active-status check would cost, and this wildcard already spends
+          // several against the per-evaluation budget. The service layer
+          // (`resolveCollectorId`) is what enforces *active* membership, and it
+          // falls back to the actor rather than failing. This is the floor
+          // beneath it, not a replacement for it.
+          function collectorIsMember() {
+            return !request.resource.data.keys().hasAny(['collectorId'])
+              || exists(
+                   /databases/$(database)/documents/pandals/$(pandalId)/members/$(request.resource.data.collectorId)
+                 );
+          }
+
           function payloadWellFormed() {
-            return amountsWellFormed()
+            return collectorIsMember()
+              && amountsWellFormed()
               && datesWellFormed()
               && statusWellFormed()
               && flagsWellFormed()

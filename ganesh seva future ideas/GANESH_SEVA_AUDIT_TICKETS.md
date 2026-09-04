@@ -244,7 +244,7 @@ Recording these explicitly so the fix cycle does not undo working design:
 | GS-042 | MEDIUM | SECURITY | Pandal membership | `pandalJoinRequests` is unbounded, undeletable and accepts any `pandalId` | FIXED 2026-09-04 — DEPLOYED |
 | GS-043 | MEDIUM | SECURITY | Pandal membership | An invite can be created pointing at someone else's pandal | FIXED 2026-09-04 — DEPLOYED |
 | GS-044 | MEDIUM | AUTH | Authentication | The Ganesh session is never cleared on sign-out | OPEN |
-| GS-045 | MEDIUM | AUTH | Authentication | `GaneshGate` writes real PII into the duress user tree | OPEN |
+| GS-045 | MEDIUM | AUTH | Authentication | `GaneshGate` writes real PII into the duress user tree | FIXED 2026-09-04 |
 | GS-046 | MEDIUM | AUTH | Authentication | The login screen claims an isolation the architecture does not provide | OPEN |
 | GS-047 | MEDIUM | NAVIGATION | Festivals | The restored pandal/festival session is never validated | OPEN |
 | GS-048 | MEDIUM | UX | Festivals | Previous-festival rows stay on screen after a switch | OPEN |
@@ -279,13 +279,13 @@ Recording these explicitly so the fix cycle does not undo working design:
 | GS-077 | MEDIUM | COLLECTIONS | Receipt Numbers | Collection receipt numbers are entirely missing | OPEN |
 | GS-078 | MEDIUM | FINANCE | Money Purpose | Money Purpose is missing for every money movement | OPEN |
 | GS-079 | MEDIUM | REPORTING | Reports | No export, no date range, and two "report" rows are plain list links | OPEN |
-| GS-080 | MEDIUM | FINANCE | Split Funding | Local `money()` copies drop the epsilon guard, causing false rejections | OPEN |
-| GS-081 | LOW | FINANCE | Reports | Summary counters are unrounded float accumulators | OPEN |
+| GS-080 | MEDIUM | FINANCE | Split Funding | Local `money()` copies drop the epsilon guard, causing false rejections | FIXED 2026-09-04 |
+| GS-081 | LOW | FINANCE | Reports | Summary counters are unrounded float accumulators | FIXED 2026-09-04 |
 | GS-082 | MEDIUM | SECURITY | Asset vs Expense | `expenseCreateAllowed()` guards create but not update | FIXED 2026-09-04 — DEPLOYED |
 | GS-083 | LOW | SECURITY | Festivals | Deleting a pandal or festival orphans every subcollection | FIXED 2026-09-04 — DEPLOYED |
 | GS-084 | LOW | SECURITY | Pandal membership | An admin can write arbitrary fields into another user's membership index | FIXED 2026-09-04 — DEPLOYED |
 | GS-085 | LOW | PERMANENT_FUND | Fund Transfers | Fund transfers have no idempotency key | OPEN |
-| GS-086 | MEDIUM | DATA_VALIDATION | Collections | `collectorId` is arbitrary and unvalidated | OPEN |
+| GS-086 | MEDIUM | DATA_VALIDATION | Collections | `collectorId` is arbitrary and unvalidated | FIXED 2026-09-04 — DEPLOYED |
 | GS-087 | LOW | FESTIVAL | Festivals | Two festivals can be created for the same year | OPEN |
 | GS-088 | LOW | SECURITY | Pandal creation | Duplicate pandals are unconstrained and the code fallback is unchecked | FIXED 2026-09-04 |
 | GS-089 | LOW | CONTRIBUTIONS | In-Kind | "Cancelled" is offered as a creation status | OPEN |
@@ -3159,7 +3159,7 @@ next.
 **Severity:** MEDIUM
 **Category:** AUTH
 **Feature:** Authentication
-**Status:** OPEN
+**Status:** FIXED 2026-09-04
 
 ### Problem
 The Ganesh gate is the one Ganesh consumer that uses `useAuth().user` rather than `realUser`. Under duress mode that uid is the decoy tree, so the user's real display name, email and phone are written into it.
@@ -4656,7 +4656,7 @@ Depends on GS-013, GS-039, GS-050, GS-051.
 **Severity:** MEDIUM
 **Category:** FINANCE
 **Feature:** Split Funding
-**Status:** OPEN
+**Status:** FIXED 2026-09-04
 
 ### Problem
 The canonical rounding helper adds `Number.EPSILON` before rounding, with a comment explaining why. Three Ganesh copies omit it, and two validators compare rounded sums with exact equality.
@@ -4693,7 +4693,7 @@ None.
 **Severity:** LOW
 **Category:** FINANCE
 **Feature:** Reports
-**Status:** OPEN
+**Status:** FIXED 2026-09-04
 
 ### Problem
 Stored summary components accumulate unrounded floats, so they drift even though the displayed derivation rounds.
@@ -4866,7 +4866,7 @@ Related to GS-021.
 **Severity:** MEDIUM
 **Category:** DATA_VALIDATION
 **Feature:** Collections
-**Status:** OPEN
+**Status:** FIXED 2026-09-04 — DEPLOYED
 
 ### Problem
 The "Collected by" attribution can be set to any string, and nothing validates that it names an actual member.
@@ -5872,3 +5872,74 @@ occurrence in the file, which belongs to the Expense app. The rules compiler
 caught it as `Invalid variable name: requestId`. Reverted and re-anchored
 before any deploy. Two edits in this session silently no-matched on whitespace
 or an em-dash, so each change is now verified present rather than assumed.
+
+---
+
+## Group F resolution notes (2026-09-04)
+
+### GS-080 — the ticket named the wrong cause, and the real one is worse
+
+The ticket said three `money()` copies drop `Number.EPSILON` and that this
+causes false rejections. Two of those three do not exist: `ganeshContributions`
+and `ganeshSponsors` import `money` from `ganeshMath`, so there was one Ganesh
+implementation, not three.
+
+More importantly, **the epsilon was never the cause.** `Number.EPSILON` is
+relative to 1.0, so for a figure like 8.165 it sits far below that value's own
+float spacing and changes nothing. Measured: adding it altered the result for
+**0 of 500,000** randomised two-decimal splits, and made the false-rejection
+count very slightly *worse* on three-decimal input.
+
+The real cause is that `validateExpenseFunding` rounded each component to paise
+**independently** and then demanded the three rounded parts equal the rounded
+whole. They frequently do not. Over 400,000 randomised balanced three-decimal
+splits:
+
+| Comparison | Balanced entries falsely rejected |
+| --- | ---: |
+| Round each component, then exact equality (as shipped) | **136,817** (~1 in 3) |
+| Sum the raw values, round once | **0** |
+| Half-paise tolerance on raw values | 0 |
+
+Both validators now sum the raw inputs and round once. Rounding-the-sum was
+chosen over a tolerance because it keeps exact equality rather than introducing
+a fuzzy margin, and it still refuses an entry that is off by a genuine paise
+(verified: 0 wrong acceptances in 200,000 trials).
+
+`money()` also now delegates to `roundMoney` so there is genuinely one
+implementation — worth doing for consistency with the canonical helper that
+documents its own reasoning, but recorded here as hygiene, not as the fix.
+
+Reachability: two-decimal input was always immune. This bit anyone typing three
+decimals into an amount field, which nothing prevents.
+
+### GS-045 — real PII in the duress tree
+
+Confirmed. `app/(ganesh)/_layout.tsx` used `useAuth().user`, which under duress
+mode is the decoy proxy with uid `<real uid>_duress`, and passed it to
+`upsertGaneshProfile` — which writes `displayName`, `email`, `phone` and
+`photoURL`. Duress mode exists so a person under coercion can show a plausible
+decoy; filling that decoy with their real name, email and phone defeats it.
+
+Now uses `realUser`, matching every other Ganesh consumer. `user` is retained
+for the `if (!user)` gate, which is about session presence, where the duress
+proxy is the correct value.
+
+### GS-081 — rounded before storage
+
+`bumpSummary` passed raw values to `increment()`, and the recompute's two fund
+transfer totals were built with a bare `reduce`. `availableGodFund` rounds its
+result, which hid the drift rather than preventing it, and comparisons against
+the stored components were unrounded. All three now round.
+
+### GS-086 — a floor under the collector attribution
+
+The service side was already fixed and the ticket was stale on that point:
+`resolveCollectorId` validates the candidate is a member and is not removed or
+suspended, falling back to the actor otherwise. The rules validated nothing, so
+a crafted client could still write a fabricated id.
+
+Added an `exists` check on the named member. `exists` only, deliberately: one
+document read rather than the two an active-status check costs, and the festival
+wildcard already spends several against the per-evaluation budget. The service
+layer remains what enforces *active* membership; this is the floor beneath it.

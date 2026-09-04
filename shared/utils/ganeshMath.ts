@@ -9,10 +9,27 @@ import type {
 } from "@/shared/types/ganesh";
 import { EMPTY_GANESH_SUMMARY, EMPTY_PERMANENT_FUND } from "@/shared/types/ganesh";
 import { formatInr } from "@/shared/utils/ganeshMoney";
+import { roundMoney } from "@/shared/utils/money";
 
-/** Round to paise. The one formula every Ganesh money comparison must use. */
+/**
+ * Round to paise. The one formula every Ganesh money comparison must use.
+ *
+ * Delegates to `roundMoney` rather than repeating it (GS-080). The canonical
+ * helper adds `Number.EPSILON` before rounding and documents why; this copy
+ * omitted it, which mattered because two validators compare rounded sums with
+ * exact equality — `validateExpenseFunding` and `validateSettlement`.
+ *
+ * The reachable case is narrower than the ticket describes. Amounts entered to
+ * two decimals are provably immune: their float residue is far below the
+ * half-paise rounding boundary, and 500,000 randomised three-way 2dp splits
+ * produced no disagreement either way. It bites only on **half-paise** input —
+ * a user typing three decimals, e.g. a 2.72 / 2.72 / 2.725 split of 8.165,
+ * where the summed side landed on 8.17 and the typed total on 8.16 and a
+ * balanced expense was refused. One implementation removes the divergence
+ * whether or not anyone types three decimals.
+ */
 export function money(value: number): number {
-  return Math.round(value * 100) / 100;
+  return roundMoney(value);
 }
 
 export type FestivalLocations = {
@@ -360,7 +377,17 @@ export function validateExpenseFunding(input: FundingInput): ValidationResult {
   if (godFund < 0 || personal < 0 || sponsored < 0) {
     return { ok: false, error: "Funding amounts cannot be negative." };
   }
-  if (money(godFund + personal + sponsored) !== total) {
+  // Summed raw, then rounded once — not summed from components that were each
+  // rounded first (GS-080). Rounding three parts independently and demanding
+  // they equal the rounded whole refuses balanced entries: measured over
+  // 400,000 randomised three-decimal splits, 136,817 of them, about one in
+  // three. Rounding the sum instead produced zero false rejections across the
+  // same set, and still catches an entry that is off by a genuine paise.
+  //
+  // The epsilon in `money()` is not what fixes this and never was; it is
+  // relative to 1.0, so for a figure like 8.165 it is far below that value's
+  // own float spacing.
+  if (money(input.godFundAmount + input.personalAmount + (input.sponsoredAmount ?? 0)) !== total) {
     return {
       ok: false,
       error: "God Fund + Personal + Sponsored must equal the total expense.",
@@ -462,7 +489,9 @@ export function validateSettlement(input: {
       error: `Transfer amount cannot exceed the festival closing balance. Available: ${closing}. Requested: ${transfer}.`,
     };
   }
-  if (money(transfer + remaining) !== closing) {
+  // Same correction as validateExpenseFunding above (GS-080): sum the raw
+  // inputs and round once, rather than comparing independently-rounded parts.
+  if (money(input.transfer + input.remaining) !== closing) {
     return { ok: false, error: "Transfer plus remaining must equal the closing balance." };
   }
   return { ok: true };

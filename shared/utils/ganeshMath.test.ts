@@ -10,6 +10,7 @@ import {
   festivalCollectedCash,
   closedFestivalResidue,
   festivalLocationTotal,
+  money,
   formatCollectionReceipt,
   totalPandalFunds,
   godFundSpendableAt,
@@ -43,6 +44,7 @@ import {
   contributionAccountingKind,
 } from "./ganeshMath";
 import { EMPTY_GANESH_SUMMARY, EMPTY_PERMANENT_FUND } from "@/shared/types/ganesh";
+import { roundMoney } from "@/shared/utils/money";
 
 describe("availableGodFund", () => {
   it("adds opening funds and cash inflows, subtracts god-fund expenses and reimbursements", () => {
@@ -789,5 +791,56 @@ describe("closed festival residue (GS-022)", () => {
         closedFestivalResidue: 6200,
       })
     ).toBe(73111);
+  });
+});
+
+describe("money() and the split validators (GS-080)", () => {
+  it("uses one rounding implementation", () => {
+    expect(money(0.145)).toBe(roundMoney(0.145));
+    expect(money(1.005)).toBe(roundMoney(1.005));
+    expect(money(8.165)).toBe(roundMoney(8.165));
+  });
+
+  it("leaves ordinary two-decimal amounts exactly where they were", () => {
+    // The regression risk of touching the rounding at all.
+    for (const value of [0, 1, 0.1, 0.5, 99.99, 222, 26911, 46911.5, 1000.05]) {
+      expect(money(value)).toBe(Math.round(value * 100) / 100);
+    }
+    expect(money(0.1 + 0.2)).toBe(0.3);
+    expect(money(26911 + 20000)).toBe(46911);
+  });
+
+  it("accepts a balanced split whose parts each need rounding", () => {
+    // The real defect: each component was rounded before summing, so three
+    // rounded parts did not equal the rounded whole and a balanced expense was
+    // refused. 2.725 rounds to 2.72, so the parts summed to 8.16 against a
+    // total of 8.17.
+    expect(
+      validateExpenseFunding({
+        totalAmount: 8.175,
+        godFundAmount: 2.725,
+        personalAmount: 2.725,
+        sponsoredAmount: 2.725,
+      })
+    ).toEqual({ ok: true });
+  });
+
+  it("still refuses a split that is genuinely off by a paise", () => {
+    expect(
+      validateExpenseFunding({
+        totalAmount: 100.01,
+        godFundAmount: 50,
+        personalAmount: 50,
+        sponsoredAmount: 0,
+      }).ok
+    ).toBe(false);
+  });
+
+  it("applies the same correction to festival settlement", () => {
+    expect(
+      validateSettlement({ closing: 8.175, transfer: 2.725, remaining: 5.45 })
+    ).toEqual({ ok: true });
+    // A real mismatch is still caught.
+    expect(validateSettlement({ closing: 100, transfer: 50, remaining: 49 }).ok).toBe(false);
   });
 });
