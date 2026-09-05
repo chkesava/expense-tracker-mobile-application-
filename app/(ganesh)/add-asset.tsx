@@ -1,11 +1,11 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { Package } from "lucide-react-native";
 
 import { ChoiceChips } from "@/components/ganesh/ChoiceChips";
 import { FormDetails } from "@/components/ganesh/FormDetails";
-import { GaneshImageUploader, type GaneshUploadStatus } from "@/components/ganesh/GaneshImageUploader";
+import { GaneshImageUploader } from "@/components/ganesh/GaneshImageUploader";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { GaneshWriteLock } from "@/components/ganesh/GaneshWriteLock";
 import { FilterChips, GaneshHeader, useGaneshTokens } from "@/components/ganesh/ui";
@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useGaneshExpenses } from "@/hooks/useGaneshExpenses";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
-import { useGaneshStorage } from "@/hooks/useGaneshStorage";
+import { pickerStatus, useGaneshPhotoUpload } from "@/hooks/useGaneshPhotoUpload";
 import { useFestivalWriteLock } from "@/hooks/useFestivalWriteLock";
 import { useGaneshWrites } from "@/hooks/useGaneshWrites";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
@@ -39,7 +39,7 @@ export default function AddAssetScreen() {
   const writes = useGaneshWrites();
   const { closed, lockMessage } = useFestivalWriteLock();
   const { can } = useGaneshPermissions();
-  const { isOnline, uploadAssetPhoto } = useGaneshStorage();
+  const photoUpload = useGaneshPhotoUpload("assetPhoto");
   const [name, setName] = useState("");
   const [category, setCategory] = useState<(typeof ASSET_CATEGORIES)[number]["id"]>("furniture");
   const [quantity, setQuantity] = useState("1");
@@ -52,38 +52,30 @@ export default function AddAssetScreen() {
   const [location, setLocation] = useState("");
   const [description, setDescription] = useState("");
   const [photo, setPhoto] = useState<PreparedGaneshImage | null>(null);
-  const [photoStatus, setPhotoStatus] = useState<GaneshUploadStatus>("idle");
   const [savedId, setSavedId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const photoJob = photoUpload.jobFor(savedId);
   const openExpenses = expenses.filter((expense) => !expense.voided);
 
-  const persistPhoto = async (assetId: string, file: PreparedGaneshImage) => {
-    if (!isOnline) {
-      setPhotoStatus("waiting");
-      return false;
-    }
-    setPhotoStatus("uploading");
+  /**
+   * Hand the photo to the durable queue (GS-040).
+   *
+   * The old path uploaded inline and, when offline, kept the image in component
+   * state to re-try from an effect — so the photo lived exactly as long as this
+   * screen did. The enqueue below resolves only once the image is staged on
+   * disk and the job is written, which is what makes leaving the screen,
+   * backgrounding, or killing the app survivable.
+   */
+  const queuePhoto = async (recordId: string, file: PreparedGaneshImage) => {
     try {
-      await uploadAssetPhoto(assetId, file);
-      setPhotoStatus("uploaded");
+      await photoUpload.queue(recordId, file);
       return true;
     } catch (error) {
-      logError("ganesh.assetPhotoUpload", error);
-      setPhotoStatus("failed");
-      toast.error("Asset saved, but photo upload failed.");
+      logError("ganesh.assetPhotoQueue", error);
+      toast.error(friendlyErrorMessage(error, "Asset saved, but the photo could not be queued."));
       return false;
     }
   };
-
-  useEffect(() => {
-    if (!isOnline || photoStatus !== "waiting" || !savedId || !photo) return;
-    setBusy(true);
-    void persistPhoto(savedId, photo)
-      .then((ok) => {
-        if (ok) back();
-      })
-      .finally(() => setBusy(false));
-  }, [isOnline, photoStatus, savedId, photo]);
 
   if (!can("assets.create")) {
     return <GaneshWriteLock message="Your role cannot add Pandal assets." />;
@@ -227,21 +219,30 @@ export default function AddAssetScreen() {
       <GaneshImageUploader
         title="Photo"
         kind="photo"
-        status={photoStatus}
+        status={pickerStatus({
+          job: photoJob,
+          hasSelection: Boolean(photo),
+          recordSaved: Boolean(savedId),
+          busy,
+        })}
         previewUri={photo?.uri}
         disabled={busy}
-        onPrepared={(file) => {
-          setPhoto(file);
-          setPhotoStatus("selected");
-        }}
+        onPrepared={setPhoto}
         onRemove={() => {
           setPhoto(null);
-          setPhotoStatus("idle");
+          if (savedId) void photoUpload.cancel(savedId);
         }}
         onRetry={() => {
-          if (!savedId || !photo) return;
+          if (!savedId) return;
           setBusy(true);
-          void persistPhoto(savedId, photo)
+          // A job that gave up is re-armed in the queue; no job at all means
+          // the enqueue never landed, so it is attempted from scratch.
+          const again = photoJob
+            ? photoUpload.retry(savedId).then(() => true)
+            : photo
+              ? queuePhoto(savedId, photo)
+              : Promise.resolve(false);
+          void again
             .then((ok) => {
               if (ok) back();
             })
@@ -278,8 +279,8 @@ export default function AddAssetScreen() {
                 back();
                 return;
               }
-              const uploaded = await persistPhoto(id, photo);
-              if (uploaded) back();
+              const queued = await queuePhoto(id, photo);
+              if (queued) back();
             })
             .catch((error) => {
               logError("ganesh.addAsset", error);

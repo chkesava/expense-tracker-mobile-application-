@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { Package, Receipt } from "lucide-react-native";
 
 import { ChoiceChips } from "@/components/ganesh/ChoiceChips";
 import { FormDetails } from "@/components/ganesh/FormDetails";
-import { GaneshImageUploader, type GaneshUploadStatus } from "@/components/ganesh/GaneshImageUploader";
+import { GaneshImageUploader } from "@/components/ganesh/GaneshImageUploader";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { GaneshWriteLock } from "@/components/ganesh/GaneshWriteLock";
 import { FilterChips, GaneshHeader, useGaneshTokens } from "@/components/ganesh/ui";
@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/Input";
 import { useGaneshCategories } from "@/hooks/useGaneshCategories";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { useFestivalWriteLock } from "@/hooks/useFestivalWriteLock";
-import { useGaneshStorage } from "@/hooks/useGaneshStorage";
+import { pickerStatus, useGaneshPhotoUpload } from "@/hooks/useGaneshPhotoUpload";
 import { useGaneshSummary } from "@/hooks/useGaneshSummary";
 import { useGaneshWrites } from "@/hooks/useGaneshWrites";
 import { useUnsavedChangesGuard } from "@/hooks/useUnsavedChangesGuard";
@@ -73,7 +73,7 @@ export default function AddExpenseScreen() {
       row.sponsoringType === "expense" &&
       (row.status === "promised" || row.status === "confirmed")
   );
-  const { isOnline, uploadExpenseReceipt } = useGaneshStorage();
+  const receiptUpload = useGaneshPhotoUpload("expenseReceipt");
   const canBuyAsset = can("assets.create");
   const [kind, setKind] = useState<GaneshExpenseType>("normal");
   const [name, setName] = useState("");
@@ -99,9 +99,9 @@ export default function AddExpenseScreen() {
   const [assetCondition, setAssetCondition] = useState<(typeof ASSET_CONDITIONS)[number]["id"]>("good");
   const [assetLocation, setAssetLocation] = useState("");
   const [receipt, setReceipt] = useState<PreparedGaneshImage | null>(null);
-  const [receiptStatus, setReceiptStatus] = useState<GaneshUploadStatus>("idle");
   const [savedId, setSavedId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const receiptJob = receiptUpload.jobFor(savedId);
   const selectedCategory =
     visibleCategories.find((category) => category.id === categoryId) ?? visibleCategories[0];
   const ledgerSaved = Boolean(savedId);
@@ -171,33 +171,27 @@ export default function AddExpenseScreen() {
     };
   };
 
-  const persistReceipt = async (expenseId: string, file: PreparedGaneshImage) => {
-    if (!isOnline) {
-      setReceiptStatus("waiting");
-      return false;
-    }
-    setReceiptStatus("uploading");
+  /**
+   * Hand the receipt to the durable queue (GS-040).
+   *
+   * This used to upload inline and, when offline, park the image in component
+   * state and re-try it from an effect — which meant the receipt existed only
+   * for as long as this screen did. Now the enqueue resolves once the image is
+   * staged on disk and the job is written, so leaving, backgrounding or killing
+   * the app are all survivable and there is nothing left here to retry.
+   */
+  const queueReceipt = async (expenseId: string, file: PreparedGaneshImage) => {
     try {
-      await uploadExpenseReceipt(expenseId, file);
-      setReceiptStatus("uploaded");
+      await receiptUpload.queue(expenseId, file);
       return true;
     } catch (error) {
-      logError("ganesh.receiptUpload", error);
-      setReceiptStatus("failed");
-      toast.error("Expense saved, but receipt upload failed.");
+      logError("ganesh.receiptQueue", error);
+      toast.error(
+        friendlyErrorMessage(error, "Expense saved, but the receipt could not be queued.")
+      );
       return false;
     }
   };
-
-  useEffect(() => {
-    if (!isOnline || receiptStatus !== "waiting" || !savedId || !receipt) return;
-    setBusy(true);
-    void persistReceipt(savedId, receipt)
-      .then((ok) => {
-        if (ok) back();
-      })
-      .finally(() => setBusy(false));
-  }, [isOnline, receiptStatus, savedId, receipt]);
 
   if (!can("expenses.create")) {
     return <GaneshWriteLock message="Your role cannot add expenses." />;
@@ -421,21 +415,30 @@ export default function AddExpenseScreen() {
       <GaneshImageUploader
         title="Receipt"
         kind="receipt"
-        status={receiptStatus}
+        status={pickerStatus({
+          job: receiptJob,
+          hasSelection: Boolean(receipt),
+          recordSaved: ledgerSaved,
+          busy,
+        })}
         previewUri={receipt?.uri}
         disabled={busy}
-        onPrepared={(file) => {
-          setReceipt(file);
-          setReceiptStatus("selected");
-        }}
+        onPrepared={setReceipt}
         onRemove={() => {
           setReceipt(null);
-          setReceiptStatus("idle");
+          if (savedId) void receiptUpload.cancel(savedId);
         }}
         onRetry={() => {
-          if (!savedId || !receipt) return;
+          if (!savedId) return;
           setBusy(true);
-          void persistReceipt(savedId, receipt)
+          // A job that gave up is re-armed in the queue; no job at all means the
+          // enqueue never landed, so the whole thing is attempted again.
+          const again = receiptJob
+            ? receiptUpload.retry(savedId).then(() => true)
+            : receipt
+              ? queueReceipt(savedId, receipt)
+              : Promise.resolve(false);
+          void again
             .then((ok) => {
               if (ok) back();
             })
@@ -503,8 +506,8 @@ export default function AddExpenseScreen() {
                   back();
                   return;
                 }
-                const uploaded = await persistReceipt(expenseId, receipt);
-                if (uploaded) back();
+                const queued = await queueReceipt(expenseId, receipt);
+                if (queued) back();
               })
               .catch((error) => {
                 logError("ganesh.addAssetPurchase", error);
@@ -522,8 +525,8 @@ export default function AddExpenseScreen() {
                 back();
                 return;
               }
-              const uploaded = await persistReceipt(id, receipt);
-              if (uploaded) back();
+              const queued = await queueReceipt(id, receipt);
+              if (queued) back();
             })
             .catch((error) => {
               logError("ganesh.addExpense", error);

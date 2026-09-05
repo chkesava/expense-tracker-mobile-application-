@@ -9,6 +9,7 @@ import { useAuth } from "@/providers/AuthProvider";
 import { GaneshDataProvider } from "@/providers/GaneshDataProvider";
 import { GaneshSessionProvider } from "@/providers/GaneshSessionProvider";
 import { GaneshThemeProvider } from "@/providers/GaneshThemeProvider";
+import { GaneshUploadQueueProvider } from "@/providers/GaneshUploadQueueProvider";
 import { upsertGaneshProfile } from "@/services/ganesh/ganeshProfile";
 import { claimOwnPandalMembership } from "@/services/ganesh/ganeshMembershipIndex";
 import { useMyJoinRequests } from "@/hooks/useMyJoinRequests";
@@ -54,7 +55,9 @@ function GaneshGate({ children }: { children: React.ReactNode }) {
   return (
     <GaneshDataProvider>
       <ClaimApprovedMemberships />
-      {children}
+      {/* Above the screens, so a queued photo keeps uploading after the screen
+          that picked it is gone (GS-040). */}
+      <GaneshUploadQueueProvider>{children}</GaneshUploadQueueProvider>
       {loading ? (
         <View
           pointerEvents="auto"

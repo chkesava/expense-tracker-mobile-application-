@@ -5,7 +5,7 @@ import { Building2 } from "lucide-react-native";
 
 import { ChoiceChips } from "@/components/ganesh/ChoiceChips";
 import { FormDetails } from "@/components/ganesh/FormDetails";
-import { GaneshImageUploader, type GaneshUploadStatus } from "@/components/ganesh/GaneshImageUploader";
+import { GaneshImageUploader } from "@/components/ganesh/GaneshImageUploader";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { GaneshWriteLock } from "@/components/ganesh/GaneshWriteLock";
 import { GaneshHeader, useGaneshTokens } from "@/components/ganesh/ui";
@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useFestivals } from "@/hooks/useFestivals";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
-import { useGaneshStorage } from "@/hooks/useGaneshStorage";
+import { pickerStatus, useGaneshPhotoUpload } from "@/hooks/useGaneshPhotoUpload";
 import { useGaneshWrites } from "@/hooks/useGaneshWrites";
 import { useUnsavedChangesGuard } from "@/hooks/useUnsavedChangesGuard";
 import { usePandalSponsor } from "@/hooks/usePandalSponsors";
@@ -62,7 +62,7 @@ export default function AddSponsorScreen() {
   const { sponsor: existing } = usePandalSponsor(pandalId, existingSponsorId || null);
   const writes = useGaneshWrites();
   const { can } = useGaneshPermissions();
-  const { isOnline, uploadSponsorPhoto } = useGaneshStorage();
+  const photoUpload = useGaneshPhotoUpload("sponsorPhoto");
   const { isOnline: networkOnline } = useNetwork();
   const [name, setName] = useState("");
   const [sponsorType, setSponsorType] = useState<SponsorType>("person");
@@ -104,9 +104,9 @@ export default function AddSponsorScreen() {
   const [assetCondition, setAssetCondition] = useState<(typeof ASSET_CONDITIONS)[number]["id"]>("good");
   const [assetLocation, setAssetLocation] = useState("");
   const [photo, setPhoto] = useState<PreparedGaneshImage | null>(null);
-  const [photoStatus, setPhotoStatus] = useState<GaneshUploadStatus>("idle");
   const [savedId, setSavedId] = useState<string | null>(existingSponsorId || null);
   const [busy, setBusy] = useState(false);
+  const photoJob = photoUpload.jobFor(savedId);
   const sponsorshipOpId = useRef(newId()).current;
   const closed = festivals.find((item) => item.id === festivalId)?.status === "closed";
   const canReceive = can("sponsors.receive");
@@ -134,33 +134,25 @@ export default function AddSponsorScreen() {
     setSavedId(existing.id);
   }, [existing?.id]);
 
-  const persistPhoto = async (sponsorId: string, file: PreparedGaneshImage) => {
-    if (!isOnline) {
-      setPhotoStatus("waiting");
-      return false;
-    }
-    setPhotoStatus("uploading");
+  /**
+   * Hand the photo to the durable queue (GS-040).
+   *
+   * The old path uploaded inline and, when offline, kept the image in component
+   * state to re-try from an effect — so the photo lived exactly as long as this
+   * screen did. The enqueue below resolves only once the image is staged on
+   * disk and the job is written, which is what makes leaving the screen,
+   * backgrounding, or killing the app survivable.
+   */
+  const queuePhoto = async (recordId: string, file: PreparedGaneshImage) => {
     try {
-      await uploadSponsorPhoto(sponsorId, file);
-      setPhotoStatus("uploaded");
+      await photoUpload.queue(recordId, file);
       return true;
     } catch (error) {
-      logError("ganesh.sponsorPhotoUpload", error);
-      setPhotoStatus("failed");
-      toast.error("Sponsor saved, but photo upload failed.");
+      logError("ganesh.sponsorPhotoQueue", error);
+      toast.error(friendlyErrorMessage(error, "Sponsor saved, but the photo could not be queued."));
       return false;
     }
   };
-
-  useEffect(() => {
-    if (!isOnline || photoStatus !== "waiting" || !savedId || !photo) return;
-    setBusy(true);
-    void persistPhoto(savedId, photo)
-      .then((ok) => {
-        if (ok) back();
-      })
-      .finally(() => setBusy(false));
-  }, [isOnline, photoStatus, savedId, photo]);
 
   if (!can("sponsors.create")) {
     return <GaneshWriteLock message="Your role cannot add sponsors." />;
@@ -190,21 +182,30 @@ export default function AddSponsorScreen() {
             <GaneshImageUploader
               title="Photo"
               kind="photo"
-              status={photoStatus}
+              status={pickerStatus({
+                job: photoJob,
+                hasSelection: Boolean(photo),
+                recordSaved: Boolean(savedId),
+                busy,
+              })}
               previewUri={photo?.uri}
               disabled={busy}
-              onPrepared={(file) => {
-                setPhoto(file);
-                setPhotoStatus("selected");
-              }}
+              onPrepared={setPhoto}
               onRemove={() => {
                 setPhoto(null);
-                setPhotoStatus("idle");
+                if (savedId) void photoUpload.cancel(savedId);
               }}
               onRetry={() => {
-                if (!savedId || !photo) return;
+                if (!savedId) return;
                 setBusy(true);
-                void persistPhoto(savedId, photo)
+                // A job that gave up is re-armed in the queue; no job at all means
+                // the enqueue never landed, so it is attempted from scratch.
+                const again = photoJob
+                  ? photoUpload.retry(savedId).then(() => true)
+                  : photo
+                    ? queuePhoto(savedId, photo)
+                    : Promise.resolve(false);
+                void again
                   .then((ok) => {
                     if (ok) back();
                   })
@@ -369,8 +370,8 @@ export default function AddSponsorScreen() {
               back();
               return;
             }
-            const uploaded = await persistPhoto(sponsorId, photo);
-            if (uploaded) back();
+            const queued = await queuePhoto(sponsorId, photo);
+            if (queued) back();
           };
 
           const work = existingSponsorId
