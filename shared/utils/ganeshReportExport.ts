@@ -54,6 +54,8 @@ export function reportToCsv(report: GaneshReport): string {
   lines.push(csvRow(["Contributions received", report.summary.contributions]));
   lines.push(csvRow(["Expenses", report.summary.expenses]));
   lines.push(csvRow(["Reimbursements", report.summary.reimbursements]));
+  lines.push(csvRow(["Transfers in (from Permanent Fund)", report.summary.transfersIn]));
+  lines.push(csvRow(["Transfers out (to Permanent Fund)", report.summary.transfersOut]));
   lines.push(csvRow(["Closing balance", report.summary.closingBalance]));
   lines.push(csvRow(["Promised, not yet received", report.summary.promisedOutstanding]));
   if (report.summary.partialRange) {
@@ -239,6 +241,10 @@ export function reportToHtml(report: GaneshReport): string {
     <tr><td class="k">Contributions received</td><td class="v">${inr(s.contributions)}</td></tr>
     <tr><td class="k">Expenses</td><td class="v">-${inr(s.expenses)}</td></tr>
     <tr><td class="k">Reimbursements</td><td class="v">-${inr(s.reimbursements)}</td></tr>
+    <tr><td class="k">Transfers in, from the Permanent Fund</td>
+        <td class="v">${inr(s.transfersIn)}</td></tr>
+    <tr><td class="k">Transfers out, to the Permanent Fund</td>
+        <td class="v">-${inr(s.transfersOut)}</td></tr>
     <tr class="closing"><td class="k"><strong>Closing balance</strong></td>
         <td class="v">${inr(s.closingBalance)}</td></tr>
     <tr><td class="k">Promised, not yet received</td>

@@ -1,8 +1,10 @@
 import type {
+  FestivalFundTransfer,
   GaneshCollection,
   GaneshContribution,
   GaneshExpense,
   GaneshReimbursement,
+  OpeningFund,
 } from "@/shared/types/ganesh";
 import type { CashReconciliation, CollectionSession } from "@/shared/types/ganeshSessions";
 import { money } from "@/shared/utils/ganeshMath";
@@ -103,6 +105,15 @@ export type GaneshReport = {
   warnings: string[];
 };
 
+/** The calendar day of a Firestore timestamp, for rows written before `date`. */
+function firestoreDayOf(value: unknown): string | undefined {
+  const seconds = (value as { seconds?: number } | undefined)?.seconds;
+  if (typeof seconds !== "number") return undefined;
+  const date = new Date(seconds * 1000);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
 function sum(rows: Array<{ amount?: number }>): number {
   return money(rows.reduce((total, row) => total + Number(row.amount ?? 0), 0));
 }
@@ -114,13 +125,22 @@ export function buildGaneshReport(input: {
   range: ReportRange;
   generatedAt: Date;
   generatedBy: string;
-  openingFunds?: number;
 
   /** Pass empty arrays for anything the reader may not see. */
   collections: GaneshCollection[];
   contributions: GaneshContribution[];
   expenses: GaneshExpense[];
   reimbursements: GaneshReimbursement[];
+  /**
+   * Opening-fund rows, not a pre-summed total.
+   *
+   * The rows are needed rather than `summary.openingFunds` because a transfer
+   * from the Permanent Fund writes **both** an opening-fund row and a
+   * fund-transfer row — two views of one movement. Counting the summary scalar
+   * and the transfers together would report that money twice.
+   */
+  openingFundRows: OpeningFund[];
+  fundTransfers: FestivalFundTransfer[];
   sessions: CollectionSession[];
   reconciliations: CashReconciliation[];
 
@@ -144,6 +164,22 @@ export function buildGaneshReport(input: {
   const contributions = can.contributions ? inRange(input.contributions) : [];
   const expenses = can.expenses ? inRange(input.expenses) : [];
   const reimbursements = can.reimbursements ? inRange(input.reimbursements) : [];
+
+  // Opening funds that were genuinely seeded, excluding the rows a Permanent
+  // Fund transfer created — those are reported as transfers instead, so one
+  // movement is counted once.
+  const seededOpening = inRange(
+    input.openingFundRows.filter((row) => row.sourceType !== "permanent_fund")
+  );
+  // Legacy transfers have no `date`; fall back to createdAt's day rather than
+  // dropping them from every bounded range.
+  const datedTransfers = input.fundTransfers.map((row) => ({
+    ...row,
+    date: row.date ?? firestoreDayOf(row.createdAt),
+  }));
+  const transfers = inRange(datedTransfers);
+  const transfersIn = sum(transfers.filter((row) => row.direction === "from_permanent"));
+  const transfersOut = sum(transfers.filter((row) => row.direction === "to_permanent"));
   const reconciliations = can.reconciliation
     ? input.reconciliations.filter((row) => {
         const session = input.sessions.find((item) => item.id === row.sessionId);
@@ -260,9 +296,26 @@ export function buildGaneshReport(input: {
       legacyPurpose: "legacy" in purpose,
     });
   }
+  for (const row of transfers) {
+    const incoming = row.direction === "from_permanent";
+    push({
+      date: row.date ?? "",
+      type: "Fund transfer",
+      purpose: purposeLabel(
+        purposeOf("fundTransfers", row as never)
+      ),
+      description: row.description ?? (incoming ? "From Permanent Fund" : "To Permanent Fund"),
+      amount: Number(row.amount ?? 0),
+      direction: incoming ? "in" : "out",
+      paymentMethod: row.location ?? "",
+      person: input.nameFor(row.createdBy),
+      reference: row.linkedPermanentTxId ?? "",
+      legacyPurpose: !(row as { purposeType?: string }).purposeType,
+    });
+  }
   transactions.sort((a, b) => a.date.localeCompare(b.date));
 
-  const openingFunds = money(input.openingFunds ?? 0);
+  const openingFunds = sum(seededOpening);
 
   return {
     pandalName: input.pandalName,
@@ -278,10 +331,16 @@ export function buildGaneshReport(input: {
       contributions: contributionTotal,
       expenses: expenseTotal,
       reimbursements: reimbursementTotal,
-      transfersIn: 0,
-      transfersOut: 0,
+      transfersIn,
+      transfersOut,
       closingBalance: money(
-        openingFunds + collectionTotal + contributionTotal - expenseTotal - reimbursementTotal
+        openingFunds
+          + collectionTotal
+          + contributionTotal
+          + transfersIn
+          - expenseTotal
+          - reimbursementTotal
+          - transfersOut
       ),
       promisedOutstanding: money(
         promisedOutstanding.reduce(

@@ -699,11 +699,21 @@ export function useGaneshWrites() {
         writes.recomputeFestivalSummary(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId)
       );
     },
-    addCustomCategory: async (name: string) => {
+    addCustomCategory: async (
+      name: string,
+      purposeCategory?: Parameters<typeof writes.addCustomCategory>[5]
+    ) => {
       requirePerm("festival.update");
       const ctx = requireFestival();
       return run("Category added", () =>
-        writes.addCustomCategory(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, name)
+        writes.addCustomCategory(
+          ctx.db,
+          ctx.actor,
+          ctx.pandalId,
+          ctx.festivalId,
+          name,
+          purposeCategory
+        )
       );
     },
     updateCategory: async (

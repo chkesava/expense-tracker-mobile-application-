@@ -3843,7 +3843,18 @@ export async function updateCategory(
   pandalId: string,
   festivalId: string,
   categoryId: string,
-  input: { name?: string; disabled?: boolean }
+  input: {
+    name?: string;
+    disabled?: boolean;
+    /**
+     * Which canonical purpose this category reports under (GS-078).
+     *
+     * Editable because the name-based guess cannot know what a committee's own
+     * category means. "Dhol Tasha" lands on `other_festival_expense` until
+     * somebody who knows says it is really volunteer support.
+     */
+    purposeCategory?: ExpensePurposeCategory;
+  }
 ): Promise<void> {
   const categoryRef = pathRef(db, [...festivalCol(pandalId, festivalId, "categories"), categoryId]);
   const snap = await getDoc(categoryRef);
@@ -3854,6 +3865,7 @@ export async function updateCategory(
   batch.update(categoryRef, omitUndefined({
     name: name || undefined,
     disabled: input.disabled,
+    purposeCategory: input.purposeCategory,
     updatedBy: actor.uid,
     updatedAt: serverTimestamp(),
   }));

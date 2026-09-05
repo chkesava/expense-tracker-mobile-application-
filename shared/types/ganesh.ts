@@ -490,6 +490,13 @@ export interface FestivalFundTransfer extends GaneshAuditFields {
   location: PermanentFundLocation;
   linkedPermanentTxId: string;
   description?: string;
+  /**
+   * The calendar day, `yyyy-mm-dd` (GS-079).
+   *
+   * Optional because rows written before reports existed carry only
+   * `createdAt`; the report falls back to that rather than dropping them.
+   */
+  date?: string;
 }
 
 export interface Household {

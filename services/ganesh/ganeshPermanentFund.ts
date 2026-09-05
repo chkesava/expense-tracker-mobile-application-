@@ -502,6 +502,10 @@ function appendTransferOutEffects(
       amount: input.amount,
       location: input.location,
       linkedPermanentTxId: txId,
+      // GS-079: a report filtered by date needs one. These rows carried only a
+      // server `createdAt`, which is an instant rather than the calendar day a
+      // committee reasons about.
+      date: todayDateInput(),
       // GS-078. `direction` above is the ledger's own from/to wording; these
       // three are the canonical reporting axis, and both are kept because the
       // first is what the fund screen reads and the second is what reports
@@ -688,6 +692,7 @@ export async function transferFestivalToPermanent(
         pathRef(db, [...festivalCol(pandalId, festivalId, "fundTransfers"), festivalTransferId!]),
         omitUndefined({
           direction: "to_permanent",
+          date: todayDateInput(),
           purposeType: "fund_transfer",
           purposeCategory: "festival_to_permanent",
           moneyDirection: "transfer",
@@ -729,6 +734,7 @@ export async function transferFestivalToPermanent(
       writeFestivalAudit(txn, db, pandalId, festivalId, actor.uid, "transferred", "fundTransfer", txId!, {
         newValue: {
           direction: "to_permanent",
+          date: todayDateInput(),
           purposeType: "fund_transfer",
           purposeCategory: "festival_to_permanent",
           moneyDirection: "transfer",

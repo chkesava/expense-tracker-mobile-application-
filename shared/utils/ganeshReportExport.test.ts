@@ -39,7 +39,22 @@ function report(overrides: Partial<Parameters<typeof buildGaneshReport>[0]> = {}
     range: RANGE,
     generatedAt: new Date("2026-09-05T18:30:00.000Z"),
     generatedBy: "Treasurer",
-    openingFunds: 10_000,
+    openingFundRows: [
+      { id: "o1", date: "2026-09-01", amount: 10_000, sourceType: "cash" },
+      // From a Permanent Fund transfer: reported as a transfer, never as
+      // opening funds, or one movement would be counted twice.
+      {
+        id: "o2",
+        date: "2026-09-01",
+        amount: 4_000,
+        sourceType: "permanent_fund",
+        linkedTransferId: "t1",
+      },
+    ] as never,
+    fundTransfers: [
+      { id: "t1", date: "2026-09-01", direction: "from_permanent", amount: 4_000, location: "cash" },
+      { id: "t2", date: "2026-09-04", direction: "to_permanent", amount: 1_000, location: "cash" },
+    ] as never,
     collections: [
       {
         id: "c1",
@@ -140,8 +155,55 @@ describe("the report respects the range", () => {
   });
 
   it("computes the closing balance from the range's own movements", () => {
-    // 10,000 opening + 500 collected + 2,000 received - 3,000 spent
-    expect(report().summary.closingBalance).toBe(9_500);
+    // 10,000 opening + 4,000 in + 500 collected + 2,000 received
+    //  - 3,000 spent - 1,000 out
+    expect(report().summary.closingBalance).toBe(12_500);
+  });
+
+  it("reports transfers in and out separately", () => {
+    const built = report();
+    expect(built.summary.transfersIn).toBe(4_000);
+    expect(built.summary.transfersOut).toBe(1_000);
+  });
+
+  it("does not count a Permanent Fund transfer as opening funds as well", () => {
+    // A transfer writes BOTH an openingFunds row and a fundTransfers row - two
+    // views of one movement. Counting both would inflate the festival by the
+    // transferred amount, which is the kind of error a committee only finds
+    // when the cash does not match the report.
+    expect(report().summary.openingFunds).toBe(10_000);
+  });
+
+  it("puts transfers in the transaction list with the right direction", () => {
+    const rows = report().transactions.filter((t) => t.type === "Fund transfer");
+    expect(rows).toHaveLength(2);
+    expect(rows.find((r) => r.amount === 4_000)?.direction).toBe("in");
+    expect(rows.find((r) => r.amount === 1_000)?.direction).toBe("out");
+  });
+
+  it("excludes a transfer outside the range", () => {
+    const built = report({
+      fundTransfers: [
+        { id: "t9", date: "2026-08-01", direction: "from_permanent", amount: 50_000, location: "cash" },
+      ] as never,
+    });
+    expect(built.summary.transfersIn).toBe(0);
+  });
+
+  it("falls back to createdAt for a transfer written before dates existed", () => {
+    // 2026-09-03 as epoch seconds.
+    const built = report({
+      fundTransfers: [
+        {
+          id: "t-legacy",
+          direction: "from_permanent",
+          amount: 2_500,
+          location: "cash",
+          createdAt: { seconds: Math.floor(new Date(2026, 8, 3).getTime() / 1000) },
+        },
+      ] as never,
+    });
+    expect(built.summary.transfersIn).toBe(2_500);
   });
 
   it("flags that a bounded range is not the whole festival", () => {

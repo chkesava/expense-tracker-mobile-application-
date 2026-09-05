@@ -26,6 +26,8 @@ import { useGaneshCategories } from "@/hooks/useGaneshCategories";
 import { useGaneshExpenses } from "@/hooks/useGaneshExpenses";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { useGaneshSummary } from "@/hooks/useGaneshSummary";
+import { useOpeningFunds } from "@/hooks/useOpeningFunds";
+import { useFestivalFundTransfers } from "@/hooks/useFestivalFundTransfers";
 import { usePandalMembers } from "@/hooks/usePandalMembers";
 import { usePandals } from "@/hooks/usePandals";
 import { useReimbursements } from "@/hooks/useReimbursements";
@@ -67,6 +69,8 @@ export default function ExportReportScreen() {
   const { pandals } = usePandals();
   const { festivals } = useFestivals(pandalId);
   const { summary } = useGaneshSummary(pandalId, festivalId);
+  const { openingFunds } = useOpeningFunds(pandalId, festivalId);
+  const { transfers } = useFestivalFundTransfers(pandalId, festivalId);
   const { collections } = useCollections(pandalId, festivalId);
   const { contributions } = useContributions(pandalId, festivalId);
   const { expenses } = useGaneshExpenses(pandalId, festivalId);
@@ -111,7 +115,8 @@ export default function ExportReportScreen() {
         range,
         generatedAt: new Date(),
         generatedBy: realUser?.displayName || realUser?.phoneNumber || "A committee member",
-        openingFunds: summary.openingFunds,
+        openingFundRows: openingFunds,
+        fundTransfers: transfers,
         collections,
         contributions,
         expenses,
@@ -136,7 +141,8 @@ export default function ExportReportScreen() {
       range,
       realUser?.displayName,
       realUser?.phoneNumber,
-      summary.openingFunds,
+      openingFunds,
+      transfers,
       collections,
       contributions,
       expenses,
