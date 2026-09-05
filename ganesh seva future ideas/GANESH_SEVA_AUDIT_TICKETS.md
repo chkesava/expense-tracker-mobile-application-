@@ -305,7 +305,7 @@ Recording these explicitly so the fix cycle does not undo working design:
 | GS-096 | LOW | STORAGE | Supabase Storage | Signed URLs live 30 minutes and the cache map never evicts | PARTIAL - 2026-09-05 (cache bounded; expiry already fine) |
 | GS-097 | LOW | PERFORMANCE | Supabase Storage | Each upload reads the image into memory three times | FIXED - 2026-09-05 |
 | GS-098 | LOW | CODE_QUALITY | Supabase Storage | Dead `ganeshStorage.ts` barrel and a decoy block in `storage.rules` | FIXED - 2026-09-05 |
-| GS-099 | LOW | NAVIGATION | Admin Dashboard | Pushing a tab route from the admin stack unwinds the stack | OPEN - needs a device check |
+| GS-099 | LOW | NAVIGATION | Admin Dashboard | Pushing a tab route from the admin stack unwinds the stack | RESOLVED - 2026-09-05 by GS-100; premise was wrong |
 | GS-100 | LOW | CODE_QUALITY | Navigation | Every Ganesh href is cast `as never`, disabling typed routes | FIXED - 2026-09-05 (found 20 broken hrefs) |
 | GS-101 | LOW | UX | Expenses | No unsaved-changes guard on long forms | FIXED - 2026-09-05 |
 | GS-102 | LOW | CODE_QUALITY | Platform | `EXPO_PUBLIC_GEMINI_API_KEY` is bundled into the client (outside Ganesh scope) | OPEN — confirmed 2026-09-04, needs a proxy |
@@ -6166,7 +6166,7 @@ diff is that a storage-rules change needs one.
 **Severity:** LOW
 **Category:** NAVIGATION
 **Feature:** Admin Dashboard
-**Status:** OPEN - needs a device check; premise changed by GS-100
+**Status:** RESOLVED - 2026-09-05 by GS-100; the unwind premise was wrong
 
 ### Problem
 Admin cross-links to tab routes pop the admin screen instead of pushing on top of it.
@@ -6222,6 +6222,67 @@ themselves wrong.
 **What to do next.** One device check: open Admin, tap a cross-link, press Back.
 If it returns to Admin, this closes as fixed-by-GS-100. If it still exits to
 Home, the choice between "modal" and "drop the cross-links" is a product call.
+
+
+### Resolution (2026-09-05, second pass)
+
+Closed as **resolved by GS-100**, and the ticket's central claim was wrong.
+
+**The unwind does not happen.** The premise - "`(tabs)` is a sibling of `admin`
+and already below it in the stack, so navigating to it unwinds rather than
+pushes" - describes `navigate` semantics, not `push`. Every admin cross-link
+uses `push`. Traced through Expo Router 57's own code rather than inferred:
+
+1. `router.push` calls `linkTo` with `event: 'PUSH'`
+   (`global-state/router.js`).
+2. `getNavigateAction` asks `findDivergentState` where the requested path and
+   the current state part company. That function compares the action route
+   against `navigationState.routes[navigationState.index]` - the *focused*
+   route - not the whole routes array. Focused is `admin`, requested is
+   `(tabs)`, so they diverge at the `(ganesh)` stack, which becomes the target
+   navigator.
+3. `PUSH` is only downgraded to `NAVIGATE` when the target navigator is not a
+   stack. It is a stack, so it stays `PUSH`.
+4. `StackRouter`'s `PUSH` branch only reuses an existing route when a `getId` is
+   declared for the screen. `app/(ganesh)/_layout.tsx` declares none - nor any
+   `singular` or `initialRouteName` - so a new `(tabs)` entry is appended above
+   `admin`.
+
+Executed step 2 against the real `findDivergentState` with the actual stack
+shape: target `ganesh-stack`, action route `(tabs)`, dispatched type `PUSH`.
+Admin stays on the stack; Back returns to it. **No device needed** - the
+question was answerable from the router's implementation, and the acceptance
+criterion "Navigating from Admin to a list and pressing Back returns to Admin"
+holds.
+
+**What GS-100 actually fixed.** The five `admin/reports.tsx` cross-links did
+have a real defect, just not this one: `/(ganesh)/collections` and friends
+matched no declared route, so they resolved to `app/+not-found.tsx`. The
+symptom was a Not Found screen, not a lost place in the stack. GS-100 rewrote
+them to the canonical `(tabs)` forms, which is what makes the flow work today.
+
+**Nothing was redesigned.** Neither offered remedy - modals, or removing the
+cross-links - was needed, because neither addressed a real defect.
+
+**Two changes made.**
+
+- `app/(ganesh)/admin/index.tsx:347` - removed a leftover `push(item.href as
+  never)`. GS-100 typed `Need.href` as `Href` but left the cast at the one call
+  site that consumes it, which threw the typing away exactly where it was meant
+  to pay off. `npm run typecheck` is clean without it, confirming the cast was
+  residue rather than a workaround.
+- `services/ganesh/ganeshAdminNavigation.test.ts` - a source-contract
+  regression test in the style of `ganeshMembership.foundation.test.ts`,
+  guarding the three properties this determination rests on: admin hrefs
+  address tab screens through the `(tabs)` group (the GS-100 fix), tab routes
+  are reached with `push` and not `navigate`/`replace` (what keeps Admin on the
+  stack), and the dynamic hrefs stay `Href`-typed and uncast. Tab screen names
+  are read from the `(tabs)` directory, so a new tab is covered automatically.
+  Verified by mutation: reverting either property fails the suite.
+
+**Note for anyone repeating this.** A comment in `admin/index.tsx` quotes the
+old broken hrefs on purpose, so the test strips comments before scanning. A
+naive grep over these files reports offenders that are prose.
 ---
 
 ## GS-100 — Every Ganesh href is cast `as never`, disabling typed routes

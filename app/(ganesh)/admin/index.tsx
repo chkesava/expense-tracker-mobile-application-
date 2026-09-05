@@ -348,7 +348,7 @@ export default function AdminDashboardScreen() {
                     divider={index < needs.length - 1}
                     chevronColor={g.saffron}
                     badge={{ kind, label: item.tone === "critical" ? "Act now" : "Review" }}
-                    onPress={() => push(item.href as never)}
+                    onPress={() => push(item.href)}
                   />
                 );
               })
