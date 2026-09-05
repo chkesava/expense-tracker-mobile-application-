@@ -1,6 +1,5 @@
 import {
   doc,
-  increment,
   runTransaction,
   serverTimestamp,
   type Firestore,
@@ -14,7 +13,6 @@ import { omitUndefined } from "@/shared/utils/firestorePayload";
 import {
   applyPermanentFundDelta,
   availableGodFund,
-  locationDelta,
   parseGaneshSummary,
   parsePermanentFund,
   validateFundTransfer,
@@ -94,14 +92,6 @@ function writeFestivalAudit(
 function pathRef(db: Firestore, segments: string[]) {
   const [first, ...rest] = segments;
   return doc(db, first, ...rest);
-}
-
-function incrementLocations(location: PermanentFundLocation, signedAmount: number) {
-  const payload: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(locationDelta(location, signedAmount))) {
-    if (typeof value === "number" && value !== 0) payload[key] = increment(value);
-  }
-  return payload;
 }
 
 function parseSummary(data?: Partial<GaneshSummary> | null): GaneshSummary {
@@ -521,16 +511,6 @@ function appendTransferOutEffects(
     })
   );
   txn.set(
-    pathRef(db, summaryDoc(pandalId, festivalId)),
-    {
-      openingFunds: increment(input.amount),
-      receivedFromPermanentFund: increment(input.amount),
-      ...incrementLocations(input.location, input.amount),
-      updatedAt: serverTimestamp(),
-    },
-    { merge: true }
-  );
-  txn.set(
     pathRef(db, [...festivalCol(pandalId, festivalId, "activity"), newId()]),
     omitUndefined({
       title: "Funded from Permanent Pandal Fund",
@@ -705,15 +685,6 @@ export async function transferFestivalToPermanent(
           updatedBy: actor.uid,
           updatedAt: serverTimestamp(),
         })
-      );
-      txn.set(
-        pathRef(db, summaryDoc(pandalId, festivalId)),
-        {
-          transferredToPermanentFund: increment(amount),
-          ...incrementLocations(input.location, -amount),
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true }
       );
       if (!input.closeFestival) {
         txn.set(

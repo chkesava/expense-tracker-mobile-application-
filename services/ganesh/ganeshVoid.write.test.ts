@@ -116,10 +116,11 @@ describe("voidFinancialRecord", () => {
     const record = writes.find((w) => w.path.includes("/expenses/exp-1"));
     expect(record?.data.voided).toBe(true);
 
-    const summary = writes.find((w) => w.path.includes("/summary/"));
-    expect(summary?.data.godFundExpenses).toEqual({ __increment: -8000 });
-    // The cash the expense took leaves the Cash bucket back where it came from.
-    expect(summary?.data.cash).toEqual({ __increment: 8000 });
+    // The reversal itself is no longer written here. GS-004 moved the derived
+    // totals to a trusted trigger, which rebuilds them from the ledger — and a
+    // voided row is excluded from that rebuild, so flipping the flag *is* the
+    // reversal. A client-side summary write would now be refused by the rules.
+    expect(writes.find((w) => w.path.includes("/summary/"))).toBeUndefined();
   });
 
   it("refuses a record that is already voided, so money is not returned twice", async () => {
@@ -189,10 +190,12 @@ describe("voidFinancialRecord", () => {
       reason: "Wrong amount",
     });
 
-    const summary = writes.find((w) => w.path.includes("/summary/"));
-    expect(summary?.data.godFundExpenses).toEqual({ __increment: -8000 });
-    // An asset purchase also unwinds the purchase total.
-    expect(summary?.data.assetPurchaseAmount).toEqual({ __increment: -8000 });
+    // The void is permitted, and the record is flagged. Unwinding the totals —
+    // godFundExpenses and assetPurchaseAmount alike — is the trigger's job now
+    // (GS-004); it excludes voided rows when it rebuilds from the ledger.
+    const record = writes.find((w) => w.path.includes("/expenses/exp-1"));
+    expect(record?.data.voided).toBe(true);
+    expect(writes.find((w) => w.path.includes("/summary/"))).toBeUndefined();
   });
 
   it("reads the voided flag inside the transaction, not before it", async () => {

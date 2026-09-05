@@ -2,7 +2,6 @@ import {
   doc,
   deleteField,
   getDoc,
-  increment,
   runTransaction,
   serverTimestamp,
   writeBatch,
@@ -42,11 +41,10 @@ import {
   assertCanPromiseSponsorship,
   assertCanReceiveSponsorship,
   canLinkSponsoredExpense,
-  isInKindSponsoring,
   purposeLabelOf,
   sponsorshipValue,
 } from "@/shared/utils/ganeshSponsors";
-import { validateCashContribution, validateInKindValue, locationDelta, resolveFundLocation } from "@/shared/utils/ganeshMath";
+import { validateCashContribution, validateInKindValue } from "@/shared/utils/ganeshMath";
 import { todayDateInput } from "@/shared/utils/ganeshIdentity";
 
 type GaneshActor = {
@@ -147,20 +145,6 @@ function festivalAudit(
       at: serverTimestamp(),
     })
   );
-}
-
-function bumpSummary(
-  batch: GaneshWriter,
-  db: Firestore,
-  pandalId: string,
-  festivalId: string,
-  deltas: Partial<Record<keyof typeof EMPTY_GANESH_SUMMARY, number>>
-) {
-  const payload: Record<string, unknown> = { updatedAt: serverTimestamp() };
-  for (const [key, value] of Object.entries(deltas)) {
-    if (typeof value === "number" && value !== 0) payload[key] = increment(value);
-  }
-  batch.set(pathRef(db, summaryDoc(pandalId, festivalId)), payload, { merge: true });
 }
 
 async function requireOpenFestival(db: Firestore, pandalId: string, festivalId: string) {
@@ -294,14 +278,6 @@ function appendReceivedContribution(
       updatedAt: serverTimestamp(),
     })
   );
-  if (cash) {
-    bumpSummary(batch, db, pandalId, festivalId, {
-      otherCashContributions: input.amount,
-      ...locationDelta(resolveFundLocation(input.paymentMethod), input.amount),
-    });
-  } else if (isInKindSponsoring(input.type)) {
-    bumpSummary(batch, db, pandalId, festivalId, { sponsoredValue: input.estimatedValue });
-  }
   festivalAudit(batch, db, pandalId, festivalId, actor.uid, input.sponsorshipId, "received", undefined, {
     contributionId,
     kind: cash ? "money" : "sponsorship",

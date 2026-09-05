@@ -19,6 +19,7 @@ import {
   type Firestore,
 } from "firebase/firestore";
 import { getStorage, type FirebaseStorage } from "firebase/storage";
+import { getFunctions, type Functions } from "firebase/functions";
 import { Platform } from "react-native";
 
 import { createAuth } from "./createAuth";
@@ -45,6 +46,7 @@ let app: FirebaseApp | null = null;
 let auth: Auth | null = null;
 let db: Firestore | null = null;
 let storage: FirebaseStorage | null = null;
+let functions: Functions | null = null;
 let initError: string | null = null;
 let cacheMode: FirebaseClients["firestoreCacheMode"] = "uninitialized";
 
@@ -110,6 +112,8 @@ export function getFirebaseClients(): FirebaseClients {
       auth = createAuth(app);
       db = createDb(app);
       storage = getStorage(app);
+      // Same region the Ganesh functions are deployed to (functions/src/index.ts).
+      functions = getFunctions(app, "asia-south1");
       initError = null;
     } catch (e) {
       initError = e instanceof Error ? e.message : String(e);
@@ -117,6 +121,7 @@ export function getFirebaseClients(): FirebaseClients {
       auth = null;
       db = null;
       storage = null;
+      functions = null;
     }
   }
 
@@ -153,4 +158,13 @@ export function getFirestoreDb(): Firestore | null {
 export function getFirebaseStorage(): FirebaseStorage | null {
   getFirebaseClients();
   return storage;
+}
+
+/**
+ * Callable functions. The Ganesh festival summary is maintained server-side
+ * (GS-004), so the client asks for a recompute rather than performing one.
+ */
+export function getFirebaseFunctions(): Functions | null {
+  getFirebaseClients();
+  return functions;
 }

@@ -210,7 +210,7 @@ Recording these explicitly so the fix cycle does not undo working design:
 | GS-001 | CRITICAL | STORAGE | Supabase Storage | Supabase policies grant `anon` full CRUD over every pandal's files | CODE FIXED — AWAITING RELEASE BUILD |
 | GS-002 | CRITICAL | RBAC | Pandal membership | Open-join self-create accepts an arbitrary `permissions` array | FIXED — DEPLOYED 2026-09-03 |
 | GS-003 | CRITICAL | SECURITY | Pandal membership | `pandalInvites` is listable by any signed-in user | FIXED — DEPLOYED 2026-09-03 |
-| GS-004 | CRITICAL | SECURITY | Security Rules | Festival subcollections have no payload validation; `summary` is forgeable | PARTIAL — DEPLOYED 2026-09-03 |
+| GS-004 | CRITICAL | SECURITY | Security Rules | Festival subcollections have no payload validation; `summary` is forgeable | FIXED - 2026-09-05 (summary moved server-side); NOT DEPLOYED |
 | GS-005 | CRITICAL | SECURITY | Audit Trail | `fundTransfers` and `auditLogs` are mutable via the wildcard match | FIXED — DEPLOYED 2026-09-03 |
 | GS-006 | CRITICAL | COLLECTIONS | Households | Every collection creates a new household; the merge path is unreachable | FIXED |
 | GS-007 | CRITICAL | FESTIVAL | Festival Settlement | A festival can be closed on an unloaded ₹0 summary | FIXED |
@@ -694,7 +694,7 @@ Found by GS-074. Blocks GS-004.
 **Severity:** CRITICAL
 **Category:** SECURITY
 **Feature:** Security Rules
-**Status:** PARTIAL — DEPLOYED 2026-09-03 (2026-08-26)
+**Status:** FIXED - 2026-09-05 (server-side summary). NOT DEPLOYED - the rules and the functions must go out together.
 
 ### Problem
 The wildcard rule governing every festival subcollection checks membership, festival status and role/permission — and nothing whatsoever about the document being written. There is no `keys().hasOnly(...)`, no type check, and no range check anywhere in the Ganesh section of the rules.
@@ -779,6 +779,128 @@ the malformed flags, and both accepted and forged summary writes. Full suite gre
 
 ### Dependencies
 Related to GS-041. Should land with GS-074 so the coverage is provable.
+
+
+### Resolution (2026-09-05) — the summary is no longer the client's to write
+
+The remaining acceptance criterion was measured to be unbuildable in rules, so
+the forgeable half of the document moved to a trusted backend instead. The
+security property was the point; keeping all validation in the client-facing
+rule was not.
+
+#### The measurement that settled it
+
+Emulator harness, `firestore.rules` as deployed. Each writer's path was padded
+with filler conjuncts and bisected to the point where Firestore returns
+`PERMISSION_DENIED: ... maximum of 1000 expressions`:
+
+| writer | headroom |
+| --- | --- |
+| **expense create (legacy treasurer)** | **12 conjuncts** |
+| contribution receive (legacy treasurer) | 18 |
+| collection create (legacy collector) | 24 |
+| collection create (denormalized collector) | 32 |
+| summary write (legacy) | 41 |
+
+Then the direct test. A real `keys().hasOnly(...)` allowlist built from
+`shared/types/ganesh.ts`, covering **four** of the thirteen subcollections:
+
+```
+=== allowlist absent (baseline) ===        === allowlist ADDED ===
+  PASS collection create (legacy)            PASS collection create (legacy)
+  PASS expense create (legacy treasurer)     FAIL expense create - BUDGET EXCEEDED
+  PASS contribution receive (legacy)         PASS contribution receive (legacy)
+  PASS collection create (denormalized)      PASS collection create (denormalized)
+```
+
+Four subcollections already break a legitimate writer. Thirteen is not close.
+Two further static limits surfaced while building the harness and are worth
+recording, because they rule out the obvious workarounds: a long conjunct chain
+is rejected at compile time as "too complex to evaluate safely", and a
+descending call chain is capped at **depth 20**.
+
+#### Authoritative vs derived
+
+- **Authoritative** (user intent, client-written): `collections`, `expenses`,
+  `contributions`, `reimbursements`, `sponsorships`, `openingFunds`,
+  `fundTransfers`, `households`, festival `members`, `categories`,
+  `collectionSessions`, `reconciliations`, `cashAdjustments`, `seva`.
+- **Derived**: the summary, the festival-member counters, household
+  `collectedAmount`, seva `dutyCount`, pandal `adminCount`.
+
+The decisive fact is that **22 of the summary's 24 fields are a pure function of
+the ledger** — `recomputeFestivalSummary` already computed exactly that. The
+other two, `nextReceiptNumber` and `nextContributionNumber`, are monotonic
+allocators handing out numbers already read aloud to donors; they are not
+derivable and must never be reset (GS-077).
+
+#### What was built
+
+- **`shared/utils/ganeshSummaryDerive.ts`** — the derivation lifted out of
+  `recomputeFestivalSummary` as a pure function, so the trigger and the repair
+  button share one definition instead of drifting. Also exports
+  `DERIVED_SUMMARY_FIELDS` / `CARRIED_SUMMARY_FIELDS` and `summaryAuditDelta`.
+- **`functions/`** (new Cloud Functions codebase, region `asia-south1`):
+  `ganeshLedgerSummary` rebuilds the summary on any ledger write;
+  `ganeshFestivalSummarySeed` seeds it on festival create;
+  `recomputeGaneshSummary` is the callable behind "Recalculate from ledger",
+  re-checking `festival.update` against the member document because admin
+  credentials bypass the rules.
+- **`firestore.rules`** — the summary allowlist drops from 25 fields to the two
+  allocators plus `updatedAt`. It is a **diff** (`affectedKeys().hasOnly`), not a
+  key allowlist: on an update `request.resource.data` is the whole resulting
+  document, so a key allowlist would have refused every legitimate allocator
+  bump the moment the backend wrote the derived fields. That distinction is easy
+  to get wrong and was caught only by running it.
+- **Client** — 21 `bumpSummary` call sites removed along with the helper, both
+  summary seeds, and two direct derived-field writes in `ganeshPermanentFund.ts`
+  that did not go through `bumpSummary` at all. Those last two were nearly
+  missed; the source-contract test below is what found them.
+
+The new rule is measurably *cheaper*: the summary path went from 41 conjuncts of
+headroom to **68**.
+
+#### Verification
+
+- **The forgery, before and after**, run against both rulesets on the emulator:
+  `old rules (HEAD): ACCEPTED the forged total` / `new rules: refused`, for an
+  ordinary treasurer writing `chanda: 9999999`.
+- `firestore/ganeshSummaryOwnership.rules.test.ts` — 24 tests over the five
+  required categories: legitimate writes succeed (including the legacy member
+  shape), forged derived values fail, cross-pandal and non-member writes fail,
+  malformed values fail, trusted backend writes succeed.
+- `shared/utils/ganeshSummaryDerive.test.ts` — 16 tests. The GS-072
+  status-agreement and GS-053 audit cases were ported here from
+  `ganeshRecomputeAudit.test.ts`, which tested the same logic in its old home;
+  that file is deleted.
+- `services/ganesh/ganeshSummaryOwnership.test.ts` — source contract, because
+  `npm test` starts no emulator: a re-added client summary write would otherwise
+  only fail in production, as a permission denial on a money write.
+- Rules suite 66 tests green; unit suite 157 files / 1583 tests green; `tsc`
+  clean for both the app and `functions/`.
+
+#### Consequences to know about
+
+- **The summary is now eventually consistent**, not atomic with the ledger row.
+  It used to be written in the same batch. The God Fund spend guard and the
+  settlement `closing` figure read it, so both can briefly lag by the trigger's
+  latency. Neither was ever a security control — a crafted client could always
+  bypass a client-side guard, which is what this ticket was about — but the UX
+  changes and someone should watch it on a real festival.
+- **Offline writes still work**: the ledger row is written offline as before and
+  the trigger fires on sync.
+- **Member counters** (`contributionPaid`, `personalExpenses`, `reimbursed`,
+  `pendingReimbursement`) are rebuilt by the trigger, because the client
+  recompute that used to do it is gone. Their client-side `increment()` writes
+  are deliberately left in place and still rules-writable: closing that is
+  GS-009's scope, not this ticket's. The trigger converges them regardless, and
+  the derivation floors `pendingReimbursement` at zero where the increments
+  drift negative.
+- **Deploy is coupled and manual.** The rules and the functions must go out
+  together. Rules first means every money write fails; functions first is safe
+  but leaves the hole open. There is no staging project. `functions/` also
+  requires the Blaze plan, which this project may not be on yet.
+
 
 
 ### Resolution (2026-09-04)

@@ -40,7 +40,7 @@ beforeAll(async () => {
     firestore: {
       rules: readFileSync("firestore.rules", "utf8"),
       host: "127.0.0.1",
-      port: 8080,
+      port: Number(process.env.FIRESTORE_EMULATOR_PORT ?? 8080),
     },
   });
 });
@@ -199,18 +199,29 @@ describe("GS-004 summary forgery", () => {
     );
   });
 
-  it("still allows the shape bumpSummary writes", async () => {
+  it("refuses the increment shape the client used to write", async () => {
+    // This used to succeed, and had to: the client maintained the totals. The
+    // trigger in functions/src/summary.ts does now, so the client has no
+    // legitimate reason to touch a derived field.
     const db = as(COLLECTOR);
-    await assertSucceeds(setDoc(doc(db, ...summaryPath), { chanda: 1000 }, { merge: true }));
+    await assertFails(setDoc(doc(db, ...summaryPath), { chanda: 1000 }, { merge: true }));
   });
 
-  it("records the residual gap: a plausible wrong number is still accepted", async () => {
-    // Not a hole this suite can close — see GS-004's residual-gap note. The
-    // allowlist and ranges stop malformed and stray-field writes; stopping a
-    // *plausible* forgery needs server-side summary maintenance. Asserted so
-    // the day that changes, this test fails and the ticket gets revisited.
+  it("closes the residual gap: a plausible wrong number is refused", async () => {
+    // The counterpart of this test used to assert the opposite, with a note
+    // saying that stopping a *plausible* forgery needed server-side summary
+    // maintenance. That is what GS-004 finally did, so the assertion flips.
     const db = as(COLLECTOR);
-    await assertSucceeds(setDoc(doc(db, ...summaryPath), { chanda: 9_999_999 }, { merge: true }));
+    await assertFails(setDoc(doc(db, ...summaryPath), { chanda: 9_999_999 }, { merge: true }));
+  });
+
+  it("still lets the client allocate a receipt number", async () => {
+    // The two monotonic allocators stay client-owned; they cannot be derived
+    // from the ledger (GS-077).
+    const db = as(COLLECTOR);
+    await assertSucceeds(
+      setDoc(doc(db, ...summaryPath), { nextReceiptNumber: 1 }, { merge: true })
+    );
   });
 });
 
@@ -258,16 +269,18 @@ describe("GS-073 donor data is gated by permission", () => {
 describe("the summary write budget", () => {
   const summaryPath = ["pandals", PANDAL, "festivals", FESTIVAL, "summary", "totals"] as const;
 
-  it("accepts the single-field increment shape bumpSummary uses", async () => {
+  it("accepts the allocator write that still travels with a ledger write", async () => {
     const db = as(COLLECTOR);
     await assertSucceeds(
-      setDoc(doc(db, ...summaryPath), { chanda: 1000 }, { merge: true })
+      setDoc(doc(db, ...summaryPath), { nextReceiptNumber: 1 }, { merge: true })
     );
   });
 
-  it("accepts a full EMPTY_GANESH_SUMMARY-shaped seed", async () => {
+  it("refuses a full EMPTY_GANESH_SUMMARY-shaped seed from a client", async () => {
+    // Seeding a new festival's summary is the trigger's job now
+    // (ganeshFestivalSummarySeed), so even an admin is refused here.
     const db = as(ADMIN);
-    await assertSucceeds(
+    await assertFails(
       setDoc(doc(db, ...summaryPath), {
         chanda: 0,
         collectionCount: 0,
