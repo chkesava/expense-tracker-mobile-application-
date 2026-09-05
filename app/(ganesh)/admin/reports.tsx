@@ -1,5 +1,6 @@
 import { Text, View } from "react-native";
 import { useRouter } from "expo-router";
+import { Button } from "@/components/ui/Button";
 import { AdminGlyph } from "@/components/ganesh/admin/adminArt";
 import { AdminLinkRow } from "@/components/ganesh/AdminLinkRow";
 import { FestivalStackHero } from "@/components/ganesh/chrome/FestivalStackHero";
@@ -87,6 +88,11 @@ export default function AdminReportsScreen() {
         />
       ) : (
         <>
+
+      {/* GS-079 */}
+      <Button variant="outline" onPress={() => push("/(ganesh)/export-report")}>
+        Export or print this report
+      </Button>
 
       <SectionPair>
         <Section title="Cash this festival">

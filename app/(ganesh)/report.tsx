@@ -52,7 +52,7 @@ import { useTheme } from "@/theme/ThemeProvider";
 export default function FestivalReportScreen() {
   const { theme } = useTheme();
   const g = useGaneshTokens();
-  const { back } = useRouter();
+  const { back, push } = useRouter();
   const { pandalId, festivalId } = useGaneshSession();
   const { pandals } = usePandals();
   const { festivals } = useFestivals(pandalId);
@@ -310,6 +310,11 @@ export default function FestivalReportScreen() {
 
         </>
       )}
+
+      {/* GS-079: the same figures, as a file the committee can keep. */}
+      <Button variant="outline" onPress={() => push("/(ganesh)/export-report")}>
+        Export or print this report
+      </Button>
 
       {canRecalculate ? (
         <Button variant="outline" loading={recalculating} onPress={recalculate}>

@@ -127,6 +127,7 @@ function GaneshStack() {
       <Stack.Screen name="household/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="sessions" options={{ headerShown: false }} />
       <Stack.Screen name="session/[id]" options={{ headerShown: false }} />
+      <Stack.Screen name="export-report" options={{ headerShown: false }} />
       <Stack.Screen name="report" options={{ headerShown: false }} />
       <Stack.Screen name="close-festival" options={{ headerShown: false }} />
       <Stack.Screen name="join-requests" options={{ headerShown: false }} />
