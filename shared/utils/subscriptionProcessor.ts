@@ -3,6 +3,7 @@ import { subscriptionFrequency } from "@/shared/types/subscription";
 import type { Expense, AccountTransfer } from "@/shared/types/expense";
 import {
   isValidDateKey,
+  isValidMonthKey,
   parseLocalDate,
   shiftDateKey,
   toLocalDateKey,
@@ -30,6 +31,19 @@ export function isEmiTermCompleted(
   return false;
 }
 
+/**
+ * Whether the recurring item has not reached its first billing month yet.
+ *
+ * `startMonth` lets a monthly item be scheduled ahead of its first debit — an
+ * EMI added on the 5th with billing day 3 must first debit on the *next*
+ * month's 3rd, not backdate one into the current month. Month keys are
+ * zero-padded "YYYY-MM", so a string comparison orders them correctly.
+ */
+export function isBeforeStartMonth(sub: Subscription, monthKey: string): boolean {
+  if (!sub.startMonth || !isValidMonthKey(sub.startMonth)) return false;
+  return monthKey < sub.startMonth;
+}
+
 function intervalDaysOf(sub: Subscription): number {
   return Math.max(1, Math.round(sub.intervalDays || 1));
 }
@@ -54,6 +68,10 @@ function evaluateIntervalDue(
 
   if (isEmiTermCompleted(sub, year, month)) {
     return { isDue: false, isCompleted: true, targetDateStr: "", monthKey };
+  }
+
+  if (isBeforeStartMonth(sub, monthKey)) {
+    return { isDue: false, isCompleted: false, targetDateStr: "", monthKey };
   }
 
   const lastDate =
@@ -102,6 +120,11 @@ export function evaluateSubscriptionDue(
   // Check if past its final EMI month/year
   if (isEmiTermCompleted(sub, year, month)) {
     return { isDue: false, isCompleted: true, targetDateStr: "", monthKey };
+  }
+
+  // Scheduled to begin in a later month — nothing to post yet.
+  if (isBeforeStartMonth(sub, monthKey)) {
+    return { isDue: false, isCompleted: false, targetDateStr: "", monthKey };
   }
 
   // Determine effective day for the month (clamped to number of days in current month)
@@ -189,6 +212,18 @@ function nextMonthlyRenewal(
     }
     const daysInNextMonth = new Date(nextYear, nextMonth, 0).getDate();
     nextDay = Math.min(Math.max(1, sub.dayOfMonth || 1), daysInNextMonth);
+  }
+
+  // An item scheduled to start later must not advertise a renewal date before
+  // its first billing month.
+  if (sub.startMonth && isValidMonthKey(sub.startMonth)) {
+    const nextKey = `${nextYear}-${String(nextMonth).padStart(2, "0")}`;
+    if (nextKey < sub.startMonth) {
+      nextYear = Number(sub.startMonth.slice(0, 4));
+      nextMonth = Number(sub.startMonth.slice(5, 7));
+      const daysInStartMonth = new Date(nextYear, nextMonth, 0).getDate();
+      nextDay = Math.min(Math.max(1, sub.dayOfMonth || 1), daysInStartMonth);
+    }
   }
 
   const nextDateStr = `${nextYear}-${String(nextMonth).padStart(2, "0")}-${String(

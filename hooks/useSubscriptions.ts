@@ -1,4 +1,12 @@
-import { collection, deleteDoc, doc, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
+import {
+  collection,
+  deleteDoc,
+  deleteField,
+  doc,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
+} from "firebase/firestore";
 
 import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
@@ -7,6 +15,39 @@ import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import { useExpenseReferenceData } from "@/providers/ExpenseReferenceDataProvider";
 import type { Subscription } from "@/shared/types/subscription";
+
+/**
+ * Firestore rejects `undefined` field values outright — the client throws
+ * "Unsupported field value: undefined" before anything reaches the server, and
+ * `ignoreUndefinedProperties` is not enabled on this app's Firestore instance.
+ *
+ * The recurring form always builds a full `Subscription` shape and leaves the
+ * fields that do not apply to the chosen type as `undefined` (`intervalDays` on
+ * a monthly EMI, `toAccountId` on anything but a transfer, ...), so every create
+ * was failing on the payload rather than on permissions.
+ */
+function withoutUndefined<T extends Record<string, unknown>>(value: T): T {
+  const out: Record<string, unknown> = {};
+  for (const [key, val] of Object.entries(value)) {
+    if (val !== undefined) out[key] = val;
+  }
+  return out as T;
+}
+
+/**
+ * On an update, an `undefined` field means "this no longer applies" (switching
+ * an EMI back to a subscription, clearing an end term). Dropping the key would
+ * silently leave the stale value on the document, so send an explicit delete.
+ */
+function withFieldDeletes<T extends Record<string, unknown>>(
+  value: T
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, val] of Object.entries(value)) {
+    out[key] = val === undefined ? deleteField() : val;
+  }
+  return out;
+}
 
 export function useSubscriptions(options?: { enabled?: boolean }) {
   const enabled = options?.enabled !== false;
@@ -33,7 +74,11 @@ export function useSubscriptions(options?: { enabled?: boolean }) {
     try {
       const docRef = doc(collection(db, "users", uid, "subscriptions"));
       const outcome = await commitWrite(
-        () => setDoc(docRef, { ...sub, createdAt: serverTimestamp() }),
+        () =>
+          setDoc(
+            docRef,
+            withoutUndefined({ ...sub, createdAt: serverTimestamp() })
+          ),
         { label: "subscription" }
       );
       toast.success(writeSavedMessage(outcome, "Subscription added"));
@@ -54,7 +99,11 @@ export function useSubscriptions(options?: { enabled?: boolean }) {
 
     try {
       const outcome = await commitWrite(
-        () => updateDoc(doc(db, "users", uid, "subscriptions", id), updates),
+        () =>
+          updateDoc(
+            doc(db, "users", uid, "subscriptions", id),
+            withFieldDeletes(updates)
+          ),
         { label: "subscription" }
       );
       toast.success(writeSavedMessage(outcome, "Subscription updated"));
