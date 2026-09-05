@@ -525,6 +525,14 @@ export interface GaneshCollection extends GaneshAuditFields, GaneshVoidFields {
   notes?: string;
   date: string;
   ledgerType: "COLLECTION";
+  /**
+   * The collector's session this was recorded in (GS-076). Optional: rows
+   * predating sessions have none, and a collection recorded outside a session
+   * is still valid — it simply is not part of a cash handover.
+   */
+  sessionId?: string;
+  /** Street or area, carried for reporting (GS-076: street is metadata). */
+  area?: string;
   pendingWrite?: boolean;
 }
 

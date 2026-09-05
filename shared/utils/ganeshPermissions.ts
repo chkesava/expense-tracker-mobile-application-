@@ -51,7 +51,18 @@ export type GaneshPermission =
   | "sponsors.cancel"
   | "seva.read"
   | "seva.write"
-  | "seva.assign";
+  | "seva.assign"
+  // GS-076 / GS-075. `sessions.write` is a collector's own accountability
+  // trail; `reconciliation.count` is entering a physical count; and
+  // `reconciliation.approve` is the financial-approval authority that
+  // separation of duties turns on — a collector must not hold it by default,
+  // or they could sign off their own cash.
+  | "sessions.read"
+  | "sessions.write"
+  | "reconciliation.read"
+  | "reconciliation.count"
+  | "reconciliation.approve"
+  | "reconciliation.resolve";
 
 export const ALL_GANESH_PERMISSIONS: GaneshPermission[] = [
   "collections.read",
@@ -103,6 +114,12 @@ export const ALL_GANESH_PERMISSIONS: GaneshPermission[] = [
   "seva.read",
   "seva.write",
   "seva.assign",
+  "sessions.read",
+  "sessions.write",
+  "reconciliation.read",
+  "reconciliation.count",
+  "reconciliation.approve",
+  "reconciliation.resolve",
 ];
 
 const READ_LEDGER: GaneshPermission[] = [
@@ -146,6 +163,14 @@ const TREASURER_PERMISSIONS: GaneshPermission[] = [
   "sponsors.cancel",
   "seva.write",
   "seva.assign",
+  // The finance-authorized member of GS-075: counts the cash, approves the
+  // reconciliation, resolves a discrepancy.
+  "sessions.read",
+  "sessions.write",
+  "reconciliation.read",
+  "reconciliation.count",
+  "reconciliation.approve",
+  "reconciliation.resolve",
 ];
 
 const ADMIN_PERMISSIONS: GaneshPermission[] = [...ALL_GANESH_PERMISSIONS];
@@ -162,6 +187,12 @@ const COLLECTOR_PERMISSIONS: GaneshPermission[] = [
   "assets.read",
   "sponsors.read",
   "seva.read",
+  // Runs their own session and declares the handover (GS-076). Deliberately no
+  // `reconciliation.count` or `.approve`: the person who collected the cash is
+  // not the person who signs off that it is all there (GS-075 point 9).
+  "sessions.read",
+  "sessions.write",
+  "reconciliation.read",
 ];
 
 /**

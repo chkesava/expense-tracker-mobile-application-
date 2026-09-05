@@ -475,6 +475,23 @@ service cloud.firestore {
       return canPlanSevaOf(pandalId) || canAssignSevaOf(pandalId);
     }
 
+    // GS-076 / GS-075 --------------------------------------------------
+    function canWriteSessionOf(pandalId) {
+      return hasPermOf(pandalId, 'sessions.write');
+    }
+    function canReadSessionOf(pandalId) {
+      return hasPermOf(pandalId, 'sessions.read') || hasPermOf(pandalId, 'reconciliation.read');
+    }
+    function canCountCashOf(pandalId) {
+      return hasPermOf(pandalId, 'reconciliation.count');
+    }
+    function canApproveReconciliationOf(pandalId) {
+      return hasPermOf(pandalId, 'reconciliation.approve');
+    }
+    function canResolveReconciliationOf(pandalId) {
+      return hasPermOf(pandalId, 'reconciliation.resolve');
+    }
+
     function canWriteLedgerSideEffectOf(pandalId) {
       return canWriteCollectionOf(pandalId)
         || canWriteExpenseOrContributionOf(pandalId)
@@ -991,6 +1008,12 @@ service cloud.firestore {
               || ((subcol == 'activity' || subcol == 'auditLogs' || subcol == 'summary')
                   && (canWriteLedgerSideEffect() || canCreateFestival()))
               || (subcol == 'sponsorships' && canWriteSponsorOf(pandalId))
+              // GS-076: a collector runs their own session.
+              || (subcol == 'collectionSessions' && canWriteSessionOf(pandalId))
+              // GS-075: counting is a separate authority from collecting, and
+              // adjustments are the only way to touch a settled discrepancy.
+              || (subcol == 'reconciliations' && canCountCashOf(pandalId))
+              || (subcol == 'cashAdjustments' && canResolveReconciliationOf(pandalId))
               // Seva is the operational schedule, not a ledger. Planning and
               // staffing are separate permissions; neither can touch money.
               || (subcol == 'seva' && canWriteSevaOf(pandalId)));
@@ -1371,6 +1394,11 @@ service cloud.firestore {
           // aggregate or operational rather than personal.
           function canReadSubcol() {
             return subcol != 'auditLogs' && (
+              subcol == 'collectionSessions'
+                || subcol == 'reconciliations'
+                || subcol == 'cashAdjustments'
+                ? canReadSessionOf(pandalId)
+                :
               subcol == 'collections' || subcol == 'households'
                 ? canReadCollectionsOf(pandalId)
                 : subcol == 'contributions'
@@ -1380,6 +1408,41 @@ service cloud.firestore {
           }
 
           allow read: if canReadSubcol();
+          /**
+           * A cash count may not be approved by the person who collected the
+           * cash (GS-075 point 9). Enforced here as well as in the service,
+           * because separation of duties that only the client checks is not
+           * separation of duties.
+           */
+          function reconciliationApproverIsNotCollector() {
+            return subcol != 'reconciliations'
+              || !request.resource.data.keys().hasAll(['collectorId'])
+              || request.resource.data.collectorId != request.auth.uid;
+          }
+
+          /**
+           * A reconciliation locks on approval (point 10). After that the only
+           * permitted change is mismatch -> resolved, which `resolveReconciliation`
+           * makes when it appends an adjustment; the counted and expected
+           * figures can never move.
+           */
+          function reconciliationUpdateAllowed() {
+            return subcol != 'reconciliations'
+              || !resource.data.locked
+              || (
+                canResolveReconciliationOf(pandalId)
+                && request.resource.data.diff(resource.data).affectedKeys()
+                     .hasOnly(['status', 'updatedBy', 'updatedAt'])
+                && resource.data.status == 'mismatch'
+                && request.resource.data.status == 'resolved'
+              );
+          }
+
+          /** Adjustments are evidence; they are never edited or removed. */
+          function cashAdjustmentIsAppendOnly() {
+            return subcol != 'cashAdjustments';
+          }
+
           allow create: if isActivePandalMember()
             && festivalOpen()
             && (subcol == 'summary'
@@ -1391,6 +1454,7 @@ service cloud.firestore {
                 && contributionCreateAllowed()
                 && contributionNotBornCancelled()
                 && sponsorshipCreateAllowed()
+                && reconciliationApproverIsNotCollector()
                 && (
                   !request.resource.data.keys().hasAny(['createdBy'])
                   || ganeshIdentityCreate()
@@ -1407,6 +1471,8 @@ service cloud.firestore {
             && summaryWriteAllowed();
           allow update: if subcol != 'summary'
             && isActivePandalMember()
+            && cashAdjustmentIsAppendOnly()
+            && reconciliationUpdateAllowed()
             && !isAppendOnlyLog()
             && payloadWellFormed()
             // GS-082: this guard was on create only, so an update could add an

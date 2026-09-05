@@ -19,6 +19,7 @@ import {
 } from "@/services/ganesh/ganeshPermanentFund";
 import * as assetWrites from "@/services/ganesh/ganeshAssets";
 import * as sevaWrites from "@/services/ganesh/ganeshSeva";
+import * as sessionWrites from "@/services/ganesh/ganeshSessions";
 import * as sponsorWrites from "@/services/ganesh/ganeshSponsors";
 import * as writes from "@/services/ganesh/ganeshWrites";
 import {
@@ -159,6 +160,83 @@ export function useGaneshWrites() {
       requirePerm("festival.create");
       return run("Setup completed", () =>
         writes.repairPandalSetup(ctx.db, ctx.actor, ctx.pandalId)
+      );
+    },
+    /* ---- GS-076 collection sessions / GS-075 reconciliation ---- */
+    startCollectionSession: async (
+      input?: Parameters<typeof sessionWrites.startCollectionSession>[4]
+    ) => {
+      requirePerm("sessions.write");
+      const ctx = requireFestival();
+      return run("Collection session started", () =>
+        sessionWrites.startCollectionSession(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, input)
+      );
+    },
+    closeCollectionSession: async (sessionId: string, input: { declaredCash: number }) => {
+      requirePerm("sessions.write");
+      const ctx = requireFestival();
+      return run("Session closed", () =>
+        sessionWrites.closeCollectionSession(
+          ctx.db,
+          ctx.actor,
+          ctx.pandalId,
+          ctx.festivalId,
+          sessionId,
+          input
+        )
+      );
+    },
+    cancelCollectionSession: async (sessionId: string, reason?: string) => {
+      requirePerm("sessions.write");
+      const ctx = requireFestival();
+      return run("Session cancelled", () =>
+        sessionWrites.cancelCollectionSession(
+          ctx.db,
+          ctx.actor,
+          ctx.pandalId,
+          ctx.festivalId,
+          sessionId,
+          reason
+        )
+      );
+    },
+    /**
+     * Count a session's cash (GS-075). Counting and approving are one act
+     * here because a count that nobody stands behind is not a control — the
+     * approval authority is what `reconciliation.approve` grants, and the
+     * rules re-check that the counter is not the collector.
+     */
+    recordCashCount: async (
+      sessionId: string,
+      input: { countedCash: number; reason?: string }
+    ) => {
+      requirePerm("reconciliation.count");
+      requirePerm("reconciliation.approve");
+      const ctx = requireFestival();
+      assertMoneyReceiveOnline(isOnline, "money");
+      return run("Cash count recorded", () =>
+        sessionWrites.recordCashCount(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, sessionId, {
+          ...input,
+          hasApprovalPermission: hasPerm("reconciliation.approve"),
+        })
+      );
+    },
+    resolveReconciliation: async (
+      sessionId: string,
+      input: Parameters<typeof sessionWrites.resolveReconciliation>[5]
+    ) => {
+      requirePerm("reconciliation.resolve");
+      const ctx = requireFestival();
+      assertMoneyReceiveOnline(isOnline, "money");
+      return run("Discrepancy resolved", () =>
+        sessionWrites.resolveReconciliation(
+          ctx.db,
+          ctx.actor,
+          ctx.pandalId,
+          ctx.festivalId,
+          sessionId,
+          input
+        )
       );
     },
     requestPandalJoin: async (code: string) => {

@@ -1584,6 +1584,8 @@ export async function addCollection(
     clientOpId?: string;
     /** When false, skip receipt allocation (offline / weak network). */
     assignReceipt?: boolean;
+    /** The collector's open session, when they are running one (GS-076). */
+    sessionId?: string;
   }
 ): Promise<AddCollectionResult> {
   await requireOpenFestival(db, pandalId, festivalId);
@@ -1710,6 +1712,10 @@ export async function addCollection(
           notes: input.notes?.trim() || undefined,
           date: input.date,
           ledgerType: "COLLECTION",
+          // GS-076: the session this belongs to, and the street it came from.
+          // Street is metadata on the row, not a reason to split sessions.
+          sessionId: input.sessionId?.trim() || undefined,
+          area: input.area?.trim() || undefined,
           voided: false,
           createdBy: actor.uid,
           createdAt: serverTimestamp(),
@@ -1764,6 +1770,8 @@ export async function addCollection(
       notes: input.notes?.trim() || undefined,
       date: input.date,
       ledgerType: "COLLECTION",
+      sessionId: input.sessionId?.trim() || undefined,
+      area: input.area?.trim() || undefined,
       voided: false,
       createdBy: actor.uid,
       createdAt: serverTimestamp(),

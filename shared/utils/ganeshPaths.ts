@@ -36,6 +36,10 @@ export function festivalCol(
     | "fundTransfers"
     | "sponsorships"
     | "seva"
+    // GS-076 / GS-075
+    | "collectionSessions"
+    | "reconciliations"
+    | "cashAdjustments"
 ): string[] {
   return ["pandals", pandalId, "festivals", festivalId, name];
 }
