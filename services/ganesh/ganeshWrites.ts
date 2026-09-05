@@ -24,6 +24,11 @@ import {
 } from "firebase/firestore";
 
 import { DEFAULT_GANESH_CATEGORIES } from "@/shared/data/ganeshCategories";
+import { purposeForCategoryName } from "@/shared/utils/ganeshMoneyPurpose";
+import type {
+  ExpensePurposeCategory,
+  ReimbursementPurposeCategory,
+} from "@/shared/types/ganeshSessions";
 import {
   diagnosePandalSetup,
   type PandalSetupDiagnosis,
@@ -1254,6 +1259,7 @@ export async function createFestival(
       name: category.name,
       isDefault: true,
       sortOrder: category.sortOrder,
+      purposeCategory: category.purposeCategory,
       createdBy: actor.uid,
       updatedBy: actor.uid,
       createdAt: serverTimestamp(),
@@ -1716,6 +1722,12 @@ export async function addCollection(
           // Street is metadata on the row, not a reason to split sessions.
           sessionId: input.sessionId?.trim() || undefined,
           area: input.area?.trim() || undefined,
+          // GS-078: stamped at the write, not inferred from the screen. A
+          // collection tied to a household is a household collection; one
+          // recorded loose on a street round is a street collection.
+          purposeType: "collection",
+          purposeCategory: householdId ? "household" : input.area?.trim() ? "street" : "other",
+          direction: "in",
           voided: false,
           createdBy: actor.uid,
           createdAt: serverTimestamp(),
@@ -1772,6 +1784,9 @@ export async function addCollection(
       ledgerType: "COLLECTION",
       sessionId: input.sessionId?.trim() || undefined,
       area: input.area?.trim() || undefined,
+      purposeType: "collection",
+      purposeCategory: householdId ? "household" : input.area?.trim() ? "street" : "other",
+      direction: "in",
       voided: false,
       createdBy: actor.uid,
       createdAt: serverTimestamp(),
@@ -2055,6 +2070,17 @@ export async function addContribution(
       contributionReference: reference,
       clientOpId: input.clientOpId?.trim() || undefined,
       ledgerType,
+      // GS-078. Derived from the contribution's own kind, which the user chose,
+      // rather than from which screen recorded it — a sponsorship mirrored into
+      // the ledger classifies as `sponsor` wherever it came from.
+      purposeType: "contribution",
+      purposeCategory:
+        input.kind === "sponsorship"
+          ? "sponsor"
+          : input.kind === "money"
+            ? "cash_donation"
+            : "in_kind",
+      direction: "in",
       voided: false,
       createdBy: actor.uid,
       createdAt: serverTimestamp(),
@@ -2493,6 +2519,38 @@ export async function updatePromisedContribution(
   await commitWrite(() => batch.commit(), { label: "contribution" });
 }
 
+/**
+ * The canonical reporting purpose for an expense, taken from the category the
+ * user actually chose (GS-078).
+ *
+ * Resolved server-side rather than passed in by the caller. The screen knows
+ * the category's purpose, but trusting it would let a client send a purpose
+ * that disagrees with the category on the same record — and the two must never
+ * be able to tell different stories about one expense.
+ *
+ * Falls back by name for a category created before purpose existed, and to
+ * `other_festival_expense` when the category has since been deleted. An
+ * honest "other" beats refusing to record real spending.
+ */
+async function resolveExpensePurpose(
+  db: Firestore,
+  pandalId: string,
+  festivalId: string,
+  categoryId: string
+): Promise<ExpensePurposeCategory> {
+  try {
+    const snap = await getDoc(
+      pathRef(db, [...festivalCol(pandalId, festivalId, "categories"), categoryId])
+    );
+    if (!snap.exists()) return "other_festival_expense";
+    const stored = snap.data().purposeCategory as ExpensePurposeCategory | undefined;
+    return stored ?? purposeForCategoryName(String(snap.data().name ?? ""));
+  } catch (error) {
+    logError("ganesh.resolveExpensePurpose", error);
+    return "other_festival_expense";
+  }
+}
+
 export async function addExpense(
   db: Firestore,
   actor: GaneshActor,
@@ -2541,6 +2599,12 @@ export async function addExpense(
   });
   const id = input.clientOpId?.trim() || newId();
   const reimbursementRequired = input.reimbursementRequired !== false;
+  const expensePurposeCategory = await resolveExpensePurpose(
+    db,
+    pandalId,
+    festivalId,
+    input.categoryId
+  );
 
   const appendExpense = (writer: GaneshWriter) => {
     const linkedSponsorshipId = sponsorLink
@@ -2577,6 +2641,12 @@ export async function addExpense(
         expenseType: "normal",
         paymentMethod,
         ledgerType: "EXPENSE",
+        // GS-078: the canonical purpose is the one on the category the user
+        // chose, so the committee's own label and the reporting axis can never
+        // disagree. Falls back by name for a category predating purpose.
+        purposeType: "expense",
+        purposeCategory: expensePurposeCategory,
+        direction: "out",
         voided: false,
         createdBy: actor.uid,
         createdAt: serverTimestamp(),
@@ -2701,6 +2771,12 @@ export async function addAssetPurchase(
     input.asset.estimatedValue != null && Number.isFinite(input.asset.estimatedValue)
       ? input.asset.estimatedValue
       : input.totalAmount;
+  const expensePurposeCategory = await resolveExpensePurpose(
+    db,
+    pandalId,
+    festivalId,
+    input.categoryId
+  );
   const sponsorLink = await loadSponsoredExpenseLink(db, pandalId, festivalId, {
     sponsoredAmount,
     sponsorId: input.sponsorId,
@@ -2746,6 +2822,9 @@ export async function addAssetPurchase(
       assetId,
       paymentMethod,
       ledgerType: "EXPENSE",
+      purposeType: "expense",
+      purposeCategory: expensePurposeCategory,
+      direction: "out",
       voided: false,
       createdBy: actor.uid,
       createdAt: serverTimestamp(),
@@ -3023,6 +3102,8 @@ export async function addReimbursement(
     memberId: string;
     amount: number;
     paymentMethod: PaymentMethod;
+    /** GS-078; defaults to `volunteer`. */
+    purposeCategory?: ReimbursementPurposeCategory;
     date: string;
     notes?: string;
     pendingPersonalExpense: number;
@@ -3088,6 +3169,12 @@ export async function addReimbursement(
         status: "paid",
         clientOpId: input.clientOpId?.trim() || id,
         ledgerType: "REIMBURSEMENT",
+        // GS-078. Every reimbursement in this app pays a member back for money
+        // they spent on the festival, so `volunteer` is the honest default;
+        // `admin` and `other` exist in the enum for a caller that knows better.
+        purposeType: "reimbursement",
+        purposeCategory: input.purposeCategory ?? "volunteer",
+        direction: "out",
         voided: false,
         createdBy: actor.uid,
         createdAt: serverTimestamp(),
@@ -3722,7 +3809,13 @@ export async function addCustomCategory(
   actor: GaneshActor,
   pandalId: string,
   festivalId: string,
-  name: string
+  name: string,
+  /**
+   * Which canonical purpose this category reports under (GS-078). Defaults to
+   * the name-based guess, which for an unrecognised custom name is
+   * `other_festival_expense` - honest rather than tidy.
+   */
+  purposeCategory?: ExpensePurposeCategory
 ): Promise<string> {
   const trimmed = name.trim();
   if (!trimmed) throw new Error("Enter a category name.");
@@ -3732,6 +3825,7 @@ export async function addCustomCategory(
     name: trimmed,
     isDefault: false,
     sortOrder: 500,
+    purposeCategory: purposeCategory ?? purposeForCategoryName(trimmed),
     createdBy: actor.uid,
     updatedBy: actor.uid,
     createdAt: serverTimestamp(),

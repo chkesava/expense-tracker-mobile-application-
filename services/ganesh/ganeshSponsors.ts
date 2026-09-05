@@ -273,6 +273,12 @@ function appendReceivedContribution(
       status: "received",
       receivedAt: serverTimestamp(),
       receivedBy: actor.uid,
+      // GS-078: a sponsorship mirrored into the contributions ledger is a
+      // sponsor contribution regardless of whether it arrived as cash or in
+      // kind, so it classifies the same either way.
+      purposeType: "contribution",
+      purposeCategory: "sponsor",
+      direction: "in",
       receivedNotes: input.receivedNotes,
       paymentMethod: cash ? input.paymentMethod : undefined,
       assetId: input.assetId,

@@ -502,6 +502,13 @@ function appendTransferOutEffects(
       amount: input.amount,
       location: input.location,
       linkedPermanentTxId: txId,
+      // GS-078. `direction` above is the ledger's own from/to wording; these
+      // three are the canonical reporting axis, and both are kept because the
+      // first is what the fund screen reads and the second is what reports
+      // group on.
+      purposeType: "fund_transfer",
+      purposeCategory: "permanent_to_festival",
+      moneyDirection: "transfer",
       description: input.description?.trim() || `₹${input.amount} funded from Permanent Pandal Fund`,
       createdBy: actor.uid,
       createdAt: serverTimestamp(),
@@ -681,6 +688,9 @@ export async function transferFestivalToPermanent(
         pathRef(db, [...festivalCol(pandalId, festivalId, "fundTransfers"), festivalTransferId!]),
         omitUndefined({
           direction: "to_permanent",
+          purposeType: "fund_transfer",
+          purposeCategory: "festival_to_permanent",
+          moneyDirection: "transfer",
           amount,
           location: input.location,
           linkedPermanentTxId: txId,
@@ -719,6 +729,9 @@ export async function transferFestivalToPermanent(
       writeFestivalAudit(txn, db, pandalId, festivalId, actor.uid, "transferred", "fundTransfer", txId!, {
         newValue: {
           direction: "to_permanent",
+          purposeType: "fund_transfer",
+          purposeCategory: "festival_to_permanent",
+          moneyDirection: "transfer",
           amount,
           location: input.location,
           type: input.type,

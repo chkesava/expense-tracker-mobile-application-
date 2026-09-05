@@ -228,6 +228,12 @@ export async function closeCollectionSession(
         closedOnBehalfOf: onBehalf ? session.collectorId : undefined,
         closeReason: onBehalf ? input.reason?.trim() : undefined,
         declaredCash: Number(input.declaredCash ?? 0),
+        // GS-078: closing a session with cash in it IS a movement — the
+        // collector hands physical notes to a treasurer — so it carries a
+        // purpose like everything else rather than being invisible to reports.
+        purposeType: "cash_handover",
+        purposeCategory: "collector_to_treasurer",
+        direction: "transfer",
         ...totals,
         updatedBy: actor.uid,
         updatedAt: serverTimestamp(),

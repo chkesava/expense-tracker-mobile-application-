@@ -74,6 +74,8 @@ export type GaneshFileMeta = {
   uploadedBy?: string;
 };
 
+import type { ExpensePurposeCategory } from "@/shared/types/ganeshSessions";
+
 export type AuditAction =
   | "created"
   | "edited"
@@ -619,6 +621,14 @@ export type GaneshReimbursementStatus = "paid" | "voided";
 export interface GaneshCategory {
   id: string;
   name: string;
+  /**
+   * The canonical purpose expenses in this category roll up to (GS-078).
+   *
+   * Optional because categories created before purpose existed have none; the
+   * reports fall back to `other_festival_expense` for those rather than
+   * dropping them.
+   */
+  purposeCategory?: ExpensePurposeCategory;
   isDefault?: boolean;
   disabled?: boolean;
   sortOrder?: number;

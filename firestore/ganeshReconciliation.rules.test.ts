@@ -352,3 +352,58 @@ describe("GS-075 point 8 - adjustments are append-only evidence", () => {
     await assertFails(updateDoc(adjustmentDoc(ADMIN, "adj-3"), { reason: "changed my mind" }));
   });
 });
+
+describe("GS-078 money purpose is a controlled enum", () => {
+  const SESSION_WITH_PURPOSE = {
+    ...SESSION,
+    purposeType: "cash_handover",
+    purposeCategory: "collector_to_treasurer",
+    direction: "transfer",
+  };
+
+  it("accepts the purpose the app stamps on a handover", () =>
+    assertSucceeds(setDoc(sessionDoc(COLLECTOR, "s-p1"), SESSION_WITH_PURPOSE)));
+
+  it("refuses a purposeType outside the enum", () =>
+    assertFails(
+      setDoc(sessionDoc(COLLECTOR, "s-p2"), {
+        ...SESSION_WITH_PURPOSE,
+        purposeType: "shopping",
+      })
+    ));
+
+  it("refuses a purposeCategory outside the enum", () =>
+    // Otherwise a client could invent a category and land its spending outside
+    // every report grouping.
+    assertFails(
+      setDoc(sessionDoc(COLLECTOR, "s-p3"), {
+        ...SESSION_WITH_PURPOSE,
+        purposeCategory: "chai_and_samosa",
+      })
+    ));
+
+  it("still accepts a record with no purpose at all", () =>
+    // Rows written before GS-078 have none, and refusing them would make
+    // existing data uneditable.
+    assertSucceeds(setDoc(sessionDoc(COLLECTOR, "s-p4"), SESSION)));
+
+  it("refuses a bad purpose on a collection too", async () => {
+    await assertFails(
+      setDoc(
+        doc(as(COLLECTOR), "pandals", PANDAL, "festivals", FESTIVAL, "collections", "c-bad"),
+        {
+          donorName: "Ramesh",
+          amount: 500,
+          paymentMethod: "cash",
+          collectorId: COLLECTOR,
+          date: "2026-09-05",
+          ledgerType: "COLLECTION",
+          purposeType: "collection",
+          purposeCategory: "not_a_real_category",
+          createdBy: COLLECTOR,
+          updatedBy: COLLECTOR,
+        }
+      )
+    );
+  });
+});

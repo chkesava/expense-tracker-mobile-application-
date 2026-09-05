@@ -1129,6 +1129,42 @@ service cloud.firestore {
             ]);
           }
 
+          /**
+           * Money purpose is a controlled enum (GS-078).
+           *
+           * Validated so a client cannot invent a category and quietly land its
+           * spending outside every report grouping. Only shape is checked here,
+           * not which category suits which type — that would be a matrix of
+           * comparisons on a rule already at its evaluation ceiling, and the
+           * service resolves the pairing from the category document anyway.
+           */
+          function purposeWellFormed() {
+            return (
+              !request.resource.data.keys().hasAny(['purposeType'])
+              || request.resource.data.purposeType in [
+                'collection', 'contribution', 'expense', 'reimbursement',
+                'fund_transfer', 'cash_handover', 'adjustment'
+              ]
+            ) && (
+              !request.resource.data.keys().hasAny(['purposeCategory'])
+              || request.resource.data.purposeCategory in [
+                'household', 'street', 'other',
+                'cash_donation', 'sponsor', 'in_kind',
+                'pandal_setup', 'decoration', 'electrical', 'sound', 'lighting',
+                'idol_religious', 'flowers_pooja', 'food_prasadam', 'water',
+                'transportation', 'printing_publicity', 'cleaning', 'security',
+                'volunteer_support', 'government_fees', 'vendor_payment',
+                'other_festival_expense',
+                'volunteer', 'admin',
+                'personal_to_fund', 'fund_to_personal',
+                'festival_to_permanent', 'permanent_to_festival', 'other_authorized',
+                'collector_to_treasurer', 'treasurer_to_bank',
+                'treasurer_to_custodian',
+                'correction', 'reconciliation_discrepancy', 'refund', 'reversal'
+              ]
+            );
+          }
+
           function flagsWellFormed() {
             let d = request.resource.data;
             return (!d.keys().hasAny(['voided']) || d.voided is bool)
@@ -1276,7 +1312,7 @@ service cloud.firestore {
 
           /** GS-076: a collector runs their own session. */
           function sessionWriteAllowed() {
-            return pandalNotArchived() && canWriteSessionOf(pandalId);
+            return pandalNotArchived() && canWriteSessionOf(pandalId) && purposeWellFormed();
           }
 
           /** GS-075: a count is created unapproved, and never by the collector. */
@@ -1290,7 +1326,9 @@ service cloud.firestore {
 
           /** GS-075 point 8: adjustments are append-only evidence. */
           function cashAdjustmentCreateAllowed() {
-            return pandalNotArchived() && canResolveReconciliationOf(pandalId);
+            return pandalNotArchived()
+              && canResolveReconciliationOf(pandalId)
+              && purposeWellFormed();
           }
 
           function summaryWriteAllowed() {
@@ -1300,7 +1338,8 @@ service cloud.firestore {
           }
 
           function payloadWellFormed() {
-            return collectorIsMember()
+            return purposeWellFormed()
+              && collectorIsMember()
               && amountsWellFormed()
               && datesWellFormed()
               && statusWellFormed()
