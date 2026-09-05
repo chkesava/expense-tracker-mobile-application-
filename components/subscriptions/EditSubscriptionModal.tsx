@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Alert,
   Modal,
@@ -38,6 +38,26 @@ export interface EditSubscriptionModalProps {
   onClose: () => void;
 }
 
+/**
+ * The month a new monthly item should first debit in.
+ *
+ * Adding an EMI billed on the 3rd on the 5th of the month must not backdate a
+ * payment into the month that has already passed its billing day — the first
+ * debit belongs to the next month. Returns `{ month, year }` (month is 1-12).
+ */
+export function defaultFirstDebit(
+  billingDay: number,
+  today = new Date()
+): { month: number; year: number } {
+  const month = today.getMonth() + 1;
+  const year = today.getFullYear();
+  const daysThisMonth = new Date(year, month, 0).getDate();
+  const effectiveDay = Math.min(Math.max(1, billingDay || 1), daysThisMonth);
+
+  if (today.getDate() <= effectiveDay) return { month, year };
+  return month === 12 ? { month: 1, year: year + 1 } : { month: month + 1, year };
+}
+
 export function EditSubscriptionModal({
   visible,
   subscription,
@@ -63,6 +83,9 @@ export function EditSubscriptionModal({
   const [category, setCategory] = useState("Subscriptions");
   const [accountId, setAccountId] = useState("");
   const [toAccountId, setToAccountId] = useState("");
+  const [startMonth, setStartMonth] = useState("");
+  const [startYear, setStartYear] = useState("");
+  const startTouched = useRef(false);
   const [endMonth, setEndMonth] = useState("");
   const [endYear, setEndYear] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -78,6 +101,11 @@ export function EditSubscriptionModal({
       setCategory(subscription.category || "Entertainment");
       setAccountId(subscription.accountId || "");
       setToAccountId(subscription.toAccountId || "");
+      startTouched.current = true;
+      setStartMonth(
+        subscription.startMonth ? String(Number(subscription.startMonth.slice(5, 7))) : ""
+      );
+      setStartYear(subscription.startMonth ? subscription.startMonth.slice(0, 4) : "");
       setEndMonth(subscription.endMonth ? String(subscription.endMonth) : "");
       setEndYear(subscription.endYear ? String(subscription.endYear) : "");
     } else {
@@ -90,10 +118,24 @@ export function EditSubscriptionModal({
       setCategory("Subscriptions");
       setAccountId(accounts.length > 0 ? accounts[0].id : "");
       setToAccountId(accounts.length > 1 ? accounts[1].id : "");
+      startTouched.current = false;
+      setStartMonth("");
+      setStartYear("");
       setEndMonth("");
       setEndYear("");
     }
   }, [subscription, visible, accounts]);
+
+  // Suggest the first debit month for a new monthly item, and keep the
+  // suggestion in step with the billing day until the user overrides it.
+  const monthlyCadence = type === "emi" || frequency === "monthly";
+  useEffect(() => {
+    if (subscription?.id || startTouched.current || !monthlyCadence) return;
+    const day = parseInt(dayOfMonth, 10);
+    const suggestion = defaultFirstDebit(Number.isFinite(day) ? day : 1);
+    setStartMonth(String(suggestion.month));
+    setStartYear(String(suggestion.year));
+  }, [dayOfMonth, monthlyCadence, subscription?.id, visible]);
 
   const handleSave = async () => {
     if (!name.trim()) {
@@ -128,6 +170,44 @@ export function EditSubscriptionModal({
 
     const numDay = parseInt(dayOfMonth, 10);
 
+    const numStartMonth = parseInt(startMonth, 10);
+    const numStartYear = parseInt(startYear, 10);
+    const hasStart =
+      effectiveFrequency === "monthly" && !!startMonth.trim() && !!startYear.trim();
+    if (hasStart) {
+      if (
+        isNaN(numStartMonth) ||
+        numStartMonth < 1 ||
+        numStartMonth > 12 ||
+        isNaN(numStartYear) ||
+        numStartYear < 2000 ||
+        numStartYear > 2100
+      ) {
+        Alert.alert("Error", "First debit month must be 1-12 with a valid year.");
+        return;
+      }
+    } else if (
+      effectiveFrequency === "monthly" &&
+      (startMonth.trim() || startYear.trim())
+    ) {
+      Alert.alert("Error", "Enter both the first debit month and year.");
+      return;
+    }
+
+    const startKey = hasStart
+      ? `${numStartYear}-${String(numStartMonth).padStart(2, "0")}`
+      : undefined;
+
+    const numEndMonth = parseInt(endMonth, 10);
+    const numEndYear = parseInt(endYear, 10);
+    if (type === "emi" && endMonth && endYear && startKey) {
+      const endKey = `${numEndYear}-${String(numEndMonth).padStart(2, "0")}`;
+      if (endKey < startKey) {
+        Alert.alert("Error", "The final term cannot be before the first debit.");
+        return;
+      }
+    }
+
     if (type === "transfer" && accountId && toAccountId && accountId === toAccountId) {
       Alert.alert("Error", "Source and destination accounts must be different.");
       return;
@@ -151,8 +231,9 @@ export function EditSubscriptionModal({
           (effectiveFrequency === "every_n_days" ? todayDateKey() : undefined),
         accountId: accountId || undefined,
         toAccountId: type === "transfer" ? toAccountId || undefined : undefined,
-        endMonth: type === "emi" && endMonth ? parseInt(endMonth, 10) : undefined,
-        endYear: type === "emi" && endYear ? parseInt(endYear, 10) : undefined,
+        startMonth: startKey,
+        endMonth: type === "emi" && endMonth ? numEndMonth : undefined,
+        endYear: type === "emi" && endYear ? numEndYear : undefined,
         source: subscription?.source,
       };
 
@@ -173,6 +254,32 @@ export function EditSubscriptionModal({
       setIsSubmitting(false);
     }
   };
+
+  /** Plain-language echo of when the first payment will actually be posted. */
+  const firstDebitHint = (() => {
+    const month = parseInt(startMonth, 10);
+    const year = parseInt(startYear, 10);
+    const day = parseInt(dayOfMonth, 10);
+    if (
+      isNaN(month) ||
+      month < 1 ||
+      month > 12 ||
+      isNaN(year) ||
+      String(year).length !== 4
+    ) {
+      return "Leave blank to start from the current month.";
+    }
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const effectiveDay = Math.min(
+      Math.max(1, Number.isFinite(day) ? day : 1),
+      daysInMonth
+    );
+    const key = `${year}-${String(month).padStart(2, "0")}-${String(
+      effectiveDay
+    ).padStart(2, "0")}`;
+    const verb = type === "transfer" ? "transfer" : "debit";
+    return `First ${verb} on ${key}, then every month on day ${effectiveDay}.`;
+  })();
 
   const handleDelete = () => {
     if (!subscription?.id) return;
@@ -493,6 +600,73 @@ export function EditSubscriptionModal({
               </View>
             )}
 
+            {/* First debit month — monthly cadence only */}
+            {monthlyCadence && (
+              <View style={{ gap: 6 }}>
+                <Text
+                  style={[
+                    styles.fieldLabel,
+                    { color: theme.colors.mutedForeground },
+                  ]}
+                >
+                  {type === "transfer"
+                    ? "FIRST TRANSFER FROM (MONTH & YEAR)"
+                    : "FIRST DEBIT FROM (MONTH & YEAR)"}
+                </Text>
+                <View style={{ flexDirection: "row", gap: 10 }}>
+                  <TextInput
+                    value={startMonth}
+                    onChangeText={(value) => {
+                      startTouched.current = true;
+                      setStartMonth(value);
+                    }}
+                    placeholder="Month (1-12)"
+                    keyboardType="number-pad"
+                    maxLength={2}
+                    placeholderTextColor={theme.colors.mutedForeground}
+                    style={[
+                      styles.input,
+                      {
+                        flex: 1,
+                        backgroundColor: isDark
+                          ? "rgba(255,255,255,0.04)"
+                          : "rgba(0,0,0,0.02)",
+                        borderColor: theme.colors.border,
+                        color: theme.colors.foreground,
+                      },
+                    ]}
+                  />
+                  <TextInput
+                    value={startYear}
+                    onChangeText={(value) => {
+                      startTouched.current = true;
+                      setStartYear(value);
+                    }}
+                    placeholder="Year (e.g. 2026)"
+                    keyboardType="number-pad"
+                    maxLength={4}
+                    placeholderTextColor={theme.colors.mutedForeground}
+                    style={[
+                      styles.input,
+                      {
+                        flex: 1,
+                        backgroundColor: isDark
+                          ? "rgba(255,255,255,0.04)"
+                          : "rgba(0,0,0,0.02)",
+                        borderColor: theme.colors.border,
+                        color: theme.colors.foreground,
+                      },
+                    ]}
+                  />
+                </View>
+                <Text
+                  style={[styles.helperText, { color: theme.colors.mutedForeground }]}
+                >
+                  {firstDebitHint}
+                </Text>
+              </View>
+            )}
+
             {/* Category (if not transfer) */}
             {type !== "transfer" && (
               <View style={{ gap: 6 }}>
@@ -557,7 +731,11 @@ export function EditSubscriptionModal({
                   { color: theme.colors.mutedForeground },
                 ]}
               >
-                {type === "transfer" ? "SOURCE ACCOUNT" : "LINKED ACCOUNT"}
+                {type === "transfer"
+                  ? "SOURCE ACCOUNT"
+                  : type === "emi"
+                    ? "AUTO-DEBIT ACCOUNT"
+                    : "LINKED ACCOUNT"}
               </Text>
               <ScrollView
                 horizontal
@@ -807,6 +985,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     paddingHorizontal: 14,
     fontSize: 14,
+  },
+  helperText: {
+    fontSize: 11,
+    lineHeight: 15,
   },
   chip: {
     paddingHorizontal: 12,

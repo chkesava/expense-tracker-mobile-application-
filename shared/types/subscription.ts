@@ -17,6 +17,13 @@ export interface Subscription {
     type: "subscription" | "emi" | "transfer";
     /** `sms` = detected from repeating expenses; skip auto-post to avoid double-counting. */
     source?: "manual" | "sms";
+    /**
+     * "YYYY-MM" — first month this may auto-post. Missing on older docs, which
+     * keeps their existing behaviour (due from whenever they were created).
+     * Set when the first debit is only meant to happen in a later month, e.g. an
+     * EMI added on the 5th whose billing day (the 3rd) has already passed.
+     */
+    startMonth?: string;
     endMonth?: number; // 1-12
     endYear?: number;
     isCompleted?: boolean;

@@ -262,4 +262,47 @@ describe("subscriptionProcessor utilities", () => {
       expect(summary.totalMonthly).toBe(3000);
     });
   });
+
+  describe("startMonth (first debit month)", () => {
+    // An EMI added on 5 Sep 2026, billed on the 3rd, must first debit on
+    // 3 Oct 2026 rather than backdating a payment into September.
+    const emi: Subscription = {
+      id: "emi-1",
+      name: "Moustaraizer loan",
+      amount: 111,
+      category: "Online Shopping",
+      dayOfMonth: 3,
+      isActive: true,
+      lastProcessed: "",
+      type: "emi",
+      startMonth: "2026-10",
+      endMonth: 12,
+      endYear: 2026,
+    };
+
+    it("is not due in the month before it starts", () => {
+      const result = evaluateSubscriptionDue(emi, new Date(2026, 8, 5, 12, 0, 0));
+      expect(result.isDue).toBe(false);
+      expect(result.isCompleted).toBe(false);
+      expect(planDueSubscriptionPosts([emi], new Date(2026, 8, 5, 12, 0, 0))).toHaveLength(0);
+    });
+
+    it("becomes due on the billing day of the start month", () => {
+      const result = evaluateSubscriptionDue(emi, new Date(2026, 9, 3, 12, 0, 0));
+      expect(result.isDue).toBe(true);
+      expect(result.targetDateStr).toBe("2026-10-03");
+    });
+
+    it("reports the start month as the next renewal, not an earlier one", () => {
+      const { dateStr } = getNextRenewalDate(emi, new Date(2026, 8, 1, 12, 0, 0));
+      expect(dateStr).toBe("2026-10-03");
+    });
+
+    it("leaves items without a startMonth unchanged", () => {
+      const { startMonth: _omitted, ...noStart } = emi;
+      const result = evaluateSubscriptionDue(noStart, new Date(2026, 8, 5, 12, 0, 0));
+      expect(result.isDue).toBe(true);
+      expect(result.targetDateStr).toBe("2026-09-03");
+    });
+  });
 });
