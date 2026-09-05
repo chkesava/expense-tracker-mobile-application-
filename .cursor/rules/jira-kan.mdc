@@ -26,3 +26,12 @@ Put the issue key in the branch name, commit message, and PR title so GitHub for
 - Branch: `KAN-123-short-slug` or `feat/KAN-123-short-slug`
 - Commit and PR title must include `KAN-123`
 - For Ganesh Seva PRs, put the issue key in the title and a browse link in the body, e.g. https://kesavach.atlassian.net/browse/KAN-123
+
+## Ticket status
+
+Keep the Jira issue in sync with the work. Do not leave status stale.
+
+- When we pick a ticket to implement: move it to **In Progress**, leave a short comment if the plan or scope is not already on the issue, and keep the issue key on the branch/commit/PR.
+- While working: comment when the security boundary, UX, or leftovers change.
+- When the code is merged to `main` (or the PR is merged): move it to **Done** and comment with the commit/PR link plus leftovers (next tickets).
+- Do not mark Done until the merge (or a direct push to `main`) has succeeded.

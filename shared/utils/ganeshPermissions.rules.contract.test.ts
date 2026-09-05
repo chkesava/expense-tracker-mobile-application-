@@ -387,6 +387,7 @@ describe("ganesh firestore rules contract", () => {
         uid: "u1",
         requestUserId: "u1",
         nextStatus: "pending",
+        pandalExists: true,
       })
     ).toBe(true);
     expect(
@@ -395,6 +396,16 @@ describe("ganesh firestore rules contract", () => {
         uid: "u1",
         requestUserId: "u1",
         nextStatus: "approved",
+        pandalExists: true,
+      })
+    ).toBe(false);
+    expect(
+      canWriteOwnJoinRequest({
+        signedIn: true,
+        uid: "u1",
+        requestUserId: "u1",
+        nextStatus: "pending",
+        pandalExists: false,
       })
     ).toBe(false);
     expect(canManageMembers(member)).toBe(false);
@@ -966,8 +977,12 @@ function canWriteOwnJoinRequest(params: {
   uid: string;
   requestUserId: string;
   nextStatus: "pending" | "approved" | "rejected";
+  pandalExists?: boolean;
 }): boolean {
-  return params.signedIn && params.requestUserId === params.uid && params.nextStatus === "pending";
+  return params.signedIn
+    && params.requestUserId === params.uid
+    && params.nextStatus === "pending"
+    && params.pandalExists !== false;
 }
 
 function canWritePandalMembershipIndex(params: {

@@ -59,6 +59,10 @@ import {
   type PermanentFundSummary,
   type PermanentFundTransaction,
 } from "@/shared/types/ganesh";
+import {
+  isActiveMembershipIndexStatus,
+  sessionPandalIsActive,
+} from "@/shared/utils/ganeshAuthorization";
 import { parseGaneshSummary, parsePermanentFund } from "@/shared/utils/ganeshMath";
 import {
   festivalCol,
@@ -103,6 +107,9 @@ export type GaneshData = {
   pandalsLoading: boolean;
   pandalsError: LoadFailure | null;
   inactiveMemberships: PandalMembershipIndex[];
+  membershipsReady: boolean;
+  activeMembershipIds: string[];
+  sessionMembershipActive: boolean;
   festivals: Slice<Festival>;
   members: Slice<PandalMember>;
   summary: GaneshSummary;
@@ -166,7 +173,14 @@ export function GaneshDataProvider({ children }: { children: ReactNode }) {
   const { pandalId, festivalId } = useGaneshSession();
   const { isOnline } = useNetwork();
   const db = getFirestoreDb();
-  const festivalReady = Boolean(pandalId && festivalId);
+  const [membershipsReady, setMembershipsReady] = useState(!uid);
+  const [activeMembershipIds, setActiveMembershipIds] = useState<string[]>([]);
+  const sessionMembershipActive = sessionPandalIsActive({
+    pandalId,
+    activePandalIds: activeMembershipIds,
+  });
+  const pandalReady = Boolean(pandalId && sessionMembershipActive);
+  const festivalReady = Boolean(pandalId && festivalId && sessionMembershipActive);
 
   const [idle, setIdle] = useState<Partial<Record<GaneshIdleSlice, true>>>({});
   const request = useCallback((slice: GaneshIdleSlice) => {
@@ -177,9 +191,9 @@ export function GaneshDataProvider({ children }: { children: ReactNode }) {
   const wantRoles = wanted("roles");
 
   useEffect(() => {
-    if (!isOnline || !db || !pandalId || !festivalId) return;
+    if (!isOnline || !db || !pandalId || !festivalId || !sessionMembershipActive) return;
     void assignPendingCollectionReceipts(db, pandalId, festivalId).catch(() => undefined);
-  }, [isOnline, db, pandalId, festivalId]);
+  }, [isOnline, db, pandalId, festivalId, sessionMembershipActive]);
 
   const [pandals, setPandals] = useState<Pandal[]>([]);
   const [pandalsLoading, setPandalsLoading] = useState(true);
@@ -190,9 +204,13 @@ export function GaneshDataProvider({ children }: { children: ReactNode }) {
     if (!uid || !db) {
       setPandals([]);
       setInactiveMemberships([]);
+      setActiveMembershipIds([]);
+      setMembershipsReady(true);
       setPandalsLoading(false);
       return;
     }
+
+    setMembershipsReady(false);
 
     const membershipPath = `users/${uid}/pandalMemberships`;
     const pandalUnsubs = new Map<string, () => void>();
@@ -213,13 +231,15 @@ export function GaneshDataProvider({ children }: { children: ReactNode }) {
             pandalName: typeof data.pandalName === "string" ? data.pandalName : undefined,
             joinedAt: data.joinedAt,
           };
-          if (status == null || status === "active") {
+          if (isActiveMembershipIndexStatus(status)) {
             activeIds.add(docSnap.id);
           } else if (status === "removed" || status === "suspended") {
             inactive.push(row);
           }
         }
         setInactiveMemberships(inactive);
+        setActiveMembershipIds([...activeIds]);
+        setMembershipsReady(true);
         for (const [id, unsub] of pandalUnsubs) {
           if (activeIds.has(id)) continue;
           forgetSnapshotPath(`pandals/${id}`);
@@ -273,6 +293,7 @@ export function GaneshDataProvider({ children }: { children: ReactNode }) {
         (failure) => {
           setPandalsError(failure);
           setPandalsLoading(false);
+          setMembershipsReady(true);
         },
         "Couldn't load your Pandals."
       )
@@ -289,12 +310,12 @@ export function GaneshDataProvider({ children }: { children: ReactNode }) {
   }, [uid, db]);
 
   const festivalsColHook = useGaneshCollection<Festival>(
-    pandalId ? festivalsCol(pandalId) : null,
+    pandalReady ? festivalsCol(pandalId!) : null,
     (id, data) => mapPlain<Festival>(id, data),
     { orderByField: "year", orderDirection: "desc" }
   );
   const membersColHook = useGaneshCollection<PandalMember>(
-    pandalId ? pandalMembersCol(pandalId) : null,
+    pandalReady ? pandalMembersCol(pandalId!) : null,
     (id, data) => mapPlain<PandalMember>(id, data)
   );
 
@@ -305,7 +326,7 @@ export function GaneshDataProvider({ children }: { children: ReactNode }) {
   const [summaryAttempt, setSummaryAttempt] = useState(0);
 
   useEffect(() => {
-    if (!db || !pandalId || !festivalId) {
+    if (!db || !pandalId || !festivalId || !sessionMembershipActive) {
       setSummary(EMPTY_GANESH_SUMMARY);
       setSummaryLoading(false);
       setSummaryPendingWrite(false);
@@ -337,7 +358,7 @@ export function GaneshDataProvider({ children }: { children: ReactNode }) {
       forgetSnapshotPath(path);
       unsub();
     };
-  }, [db, pandalId, festivalId, summaryAttempt]);
+  }, [db, pandalId, festivalId, sessionMembershipActive, summaryAttempt]);
 
   const contributions = useGaneshCollection<GaneshContribution>(
     festivalReady ? festivalCol(pandalId!, festivalId!, "contributions") : null,
@@ -374,11 +395,11 @@ export function GaneshDataProvider({ children }: { children: ReactNode }) {
     { orderByField: "sortOrder", orderDirection: "asc" }
   );
   const joinRequests = useGaneshCollection<PandalJoinRequest>(
-    pandalId ? ["pandalJoinRequests"] : null,
+    pandalReady ? ["pandalJoinRequests"] : null,
     (id, data) => mapPlain<PandalJoinRequest>(id, data),
     {
-      extra: pandalId ? [where("pandalId", "==", pandalId)] : [],
-      extraKey: pandalId ?? "",
+      extra: pandalReady && pandalId ? [where("pandalId", "==", pandalId)] : [],
+      extraKey: pandalReady ? (pandalId ?? "") : "",
     }
   );
   const myJoinRequests = useGaneshCollection<PandalJoinRequest>(
@@ -392,22 +413,22 @@ export function GaneshDataProvider({ children }: { children: ReactNode }) {
   );
 
   const assets = useGaneshCollection<PandalAsset>(
-    wanted("assets") && pandalId ? pandalAssetsCol(pandalId) : null,
+    wanted("assets") && pandalReady ? pandalAssetsCol(pandalId!) : null,
     mapDoc,
     { orderByField: "updatedAt", orderDirection: "desc", limitTo: 400 }
   );
   const assetAudits = useGaneshCollection<PandalAssetAudit>(
-    wanted("assetAudits") && pandalId ? pandalAssetAuditsCol(pandalId) : null,
+    wanted("assetAudits") && pandalReady ? pandalAssetAuditsCol(pandalId!) : null,
     (id, data) => mapPlain<PandalAssetAudit>(id, data),
     { orderByField: "at", orderDirection: "desc", limitTo: 80 }
   );
   const sponsors = useGaneshCollection<PandalSponsor>(
-    wanted("sponsors") && pandalId ? pandalSponsorsCol(pandalId) : null,
+    wanted("sponsors") && pandalReady ? pandalSponsorsCol(pandalId!) : null,
     mapDoc,
     { orderByField: "updatedAt", orderDirection: "desc", limitTo: 400 }
   );
   const sponsorAudits = useGaneshCollection<PandalSponsorAudit>(
-    wanted("sponsorAudits") && pandalId ? pandalSponsorAuditsCol(pandalId) : null,
+    wanted("sponsorAudits") && pandalReady ? pandalSponsorAuditsCol(pandalId!) : null,
     (id, data) => mapPlain<PandalSponsorAudit>(id, data),
     { orderByField: "at", orderDirection: "desc", limitTo: 80 }
   );
@@ -425,7 +446,7 @@ export function GaneshDataProvider({ children }: { children: ReactNode }) {
     (id, data) => mapPlain<FestivalMember>(id, data)
   );
   const roles = useGaneshCollection<PandalRole>(
-    wanted("roles") && pandalId ? pandalRolesCol(pandalId) : null,
+    wanted("roles") && pandalReady ? pandalRolesCol(pandalId!) : null,
     (id, data) => mapPlain<PandalRole>(id, data)
   );
   const openingFunds = useGaneshCollection<OpeningFund>(
@@ -450,7 +471,7 @@ export function GaneshDataProvider({ children }: { children: ReactNode }) {
     { orderByField: "at", orderDirection: "desc", limitTo: 80 }
   );
   const memberAudits = useGaneshCollection<PandalMemberAudit>(
-    wanted("memberAudits") && pandalId ? pandalMemberAuditsCol(pandalId) : null,
+    wanted("memberAudits") && pandalReady ? pandalMemberAuditsCol(pandalId!) : null,
     (id, data) => mapPlain<PandalMemberAudit>(id, data),
     { orderByField: "at", orderDirection: "desc", limitTo: 40 }
   );
@@ -462,10 +483,10 @@ export function GaneshDataProvider({ children }: { children: ReactNode }) {
   // EMPTY_PERMANENT_FUND — a balance of ₹0 that read as settled fact.
   const [fundError, setFundError] = useState<LoadFailure | null>(null);
   const [fundAttempt, setFundAttempt] = useState(0);
-  const fundLoading = wantFund && fundKey !== (pandalId ?? "") && !fundError;
+  const fundLoading = wantFund && pandalReady && fundKey !== (pandalId ?? "") && !fundError;
 
   useEffect(() => {
-    if (!wantFund || !db || !pandalId) {
+    if (!wantFund || !db || !pandalId || !sessionMembershipActive) {
       if (!wantFund) {
         setFund(EMPTY_PERMANENT_FUND);
         setFundKey("");
@@ -495,10 +516,10 @@ export function GaneshDataProvider({ children }: { children: ReactNode }) {
       forgetSnapshotPath(path);
       unsub();
     };
-  }, [wantFund, db, pandalId, fundAttempt]);
+  }, [wantFund, db, pandalId, sessionMembershipActive, fundAttempt]);
 
   const fundTransactions = useGaneshCollection<PermanentFundTransaction>(
-    wanted("permanentFundTx") && pandalId ? permanentFundTransactionsCol(pandalId) : null,
+    wanted("permanentFundTx") && pandalReady ? permanentFundTransactionsCol(pandalId!) : null,
     mapDoc,
     { orderByField: "createdAt", orderDirection: "desc", limitTo: 200 }
   );
@@ -524,6 +545,9 @@ export function GaneshDataProvider({ children }: { children: ReactNode }) {
       pandalsLoading,
       pandalsError,
       inactiveMemberships,
+      membershipsReady,
+      activeMembershipIds,
+      sessionMembershipActive,
       festivals: toSlice(
         festivalsColHook.items,
         festivalsColHook.loading,
@@ -688,6 +712,9 @@ export function GaneshDataProvider({ children }: { children: ReactNode }) {
       pandalsLoading,
       pandalsError,
       inactiveMemberships,
+      membershipsReady,
+      activeMembershipIds,
+      sessionMembershipActive,
       festivalsColHook,
       membersColHook,
       summary,

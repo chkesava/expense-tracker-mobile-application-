@@ -12,10 +12,16 @@ describe("ganesh membership foundation source contract", () => {
   it("namespaces session storage by uid and clears it when membership is gone", () => {
     const session = read("providers/GaneshSessionProvider.tsx");
     const tabs = read("app/(ganesh)/(tabs)/_layout.tsx");
+    const gate = read("components/ganesh/GaneshMembershipGate.tsx");
+    const data = read("providers/GaneshDataProvider.tsx");
     expect(session).toContain("ganeshSessionStorageKey(uid)");
     expect(session).toContain("GANESH_SESSION_LEGACY_KEY");
     expect(tabs).toContain("clearSession");
     expect(tabs).toContain("hasActivePandal");
+    expect(tabs).toContain("sessionMembershipActive");
+    expect(gate).toContain("sessionMembershipActive");
+    expect(data).toContain("sessionMembershipActive");
+    expect(data).toContain("festivalReady = Boolean(pandalId && festivalId && sessionMembershipActive)");
   });
 
   it("seeds festival members after open join without claiming memberIds or memberAudits", () => {

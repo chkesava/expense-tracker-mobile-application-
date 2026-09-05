@@ -5,11 +5,11 @@
 | Jira | [KAN-10](https://kesavach.atlassian.net/browse/KAN-10) |
 | Feature | RBAC-02 |
 | Type | Feature |
-| Status | To Do |
+| Status | Done |
 | Priority | Medium |
 | Project | KAN (Ganesh seva) |
 | Created | 2026-08-31T13:20:13.480+0530 |
-| Updated | 2026-08-31T14:31:01.218+0530 |
+| Updated | 2026-09-06T00:50:00.000+0530 |
 
 This file is the implementation brief for this ticket. Do not treat UI permission checks as the security boundary. Firestore Rules (and trusted backend writes) are.
 
@@ -64,13 +64,21 @@ All protected queries depend on validated membership and Security Rules enforce 
 
 ## Implementation status
 
-- [ ] Inspected existing code
-- [ ] Security boundary implemented (Rules / trusted write)
-- [ ] Client UX updated
-- [ ] Tests added
-- [ ] Manual verification
-- [ ] Jira KAN-10 updated
+- [x] Inspected existing code
+- [x] Security boundary implemented (Rules / trusted write)
+- [x] Client UX updated
+- [x] Tests added
+- [x] Manual verification
+- [x] Jira KAN-10 updated
 
 ## Notes
 
-_Add implementation notes, decisions, and leftovers here while building this ticket._
+KAN-10 reused the existing member + join-request model (do not add `"pending"` to `GaneshMemberStatus`).
+
+- PENDING stays on `pandalJoinRequests`. ACTIVE / SUSPENDED / REMOVED stay on `pandals/{pandalId}/members/{uid}` and the membership index.
+- Join-request create now requires `exists(pandals/{pandalId})`. Invite-code proof stays on KAN-15.
+- Open join remains the admin-configured exception. Open-join `memberAudit` was not added: `memberAudits` create is admin-only, so a self-join batch would fail.
+- Client listeners and stack routes now require an active membership-index row for the session Pandal (`sessionMembershipActive`). Own `pandalMemberships` and `myJoinRequests` still load.
+- Setup splits suspended vs removed copy and lists. Admin approve/suspend/remove UI was left to KAN-15 / KAN-20.
+- Emulator coverage: `firestore/ganeshMembership.rules.test.ts`.
+- Rules are not deployed by CI. After review, deploy manually per `docs/FIREBASE_RULES_DEPLOY.md`.

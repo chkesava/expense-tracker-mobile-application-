@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import { ROLE_PERMISSIONS } from "./ganeshPermissions";
-import { buildGaneshAuthorization } from "./ganeshAuthorization";
+import {
+  buildGaneshAuthorization,
+  isActiveMembershipIndexStatus,
+  sessionPandalIsActive,
+} from "./ganeshAuthorization";
 
 describe("buildGaneshAuthorization", () => {
   it("returns an empty deny context when there is no uid", () => {
@@ -104,5 +108,19 @@ describe("buildGaneshAuthorization", () => {
     expect(ctx.role).toBeNull();
     expect(ctx.isAdmin).toBe(false);
     expect(ctx.can("festival.read")).toBe(false);
+  });
+
+  it("treats a missing membership-index status as active", () => {
+    expect(isActiveMembershipIndexStatus(undefined)).toBe(true);
+    expect(isActiveMembershipIndexStatus(null)).toBe(true);
+    expect(isActiveMembershipIndexStatus("active")).toBe(true);
+    expect(isActiveMembershipIndexStatus("suspended")).toBe(false);
+    expect(isActiveMembershipIndexStatus("removed")).toBe(false);
+  });
+
+  it("refuses a session pandal that is not in the active index", () => {
+    expect(sessionPandalIsActive({ pandalId: "p1", activePandalIds: ["p1"] })).toBe(true);
+    expect(sessionPandalIsActive({ pandalId: "p1", activePandalIds: ["p2"] })).toBe(false);
+    expect(sessionPandalIsActive({ pandalId: null, activePandalIds: ["p1"] })).toBe(false);
   });
 });

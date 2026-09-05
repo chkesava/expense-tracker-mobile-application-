@@ -20,3 +20,8 @@ When using Atlassian Rovo MCP for this repository:
 Branch, commit, and PR titles must include the issue key so GitHub for Jira links them to the KAN issue:
 - Branch: `KAN-123-short-slug` or `feat/KAN-123-short-slug`
 - For Ganesh Seva PRs, put `KAN-123` in the title and https://kesavach.atlassian.net/browse/KAN-123 in the body
+
+Keep the Jira issue status in sync:
+- Pick a ticket → **In Progress** (comment if scope/plan changed)
+- Merged to `main` → **Done** (comment with commit/PR link and leftovers)
+- Do not mark Done until the merge or direct push to `main` succeeds

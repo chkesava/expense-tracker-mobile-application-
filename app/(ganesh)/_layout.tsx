@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { Redirect, Stack } from "expo-router";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 
+import { GaneshMembershipGate } from "@/components/ganesh/GaneshMembershipGate";
 import { PrivacyLock } from "@/components/PrivacyLock";
 import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
@@ -57,7 +58,9 @@ function GaneshGate({ children }: { children: React.ReactNode }) {
       <ClaimApprovedMemberships />
       {/* Above the screens, so a queued photo keeps uploading after the screen
           that picked it is gone (GS-040). */}
-      <GaneshUploadQueueProvider>{children}</GaneshUploadQueueProvider>
+      <GaneshUploadQueueProvider>
+        <GaneshMembershipGate>{children}</GaneshMembershipGate>
+      </GaneshUploadQueueProvider>
       {loading ? (
         <View
           pointerEvents="auto"

@@ -23,7 +23,12 @@ import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import { useWorkspace } from "@/providers/WorkspaceProvider";
 import { pickFestivalIdForPandal } from "@/services/ganesh/ganeshOpenSession";
 import type { PermanentFundLocation } from "@/shared/types/ganesh";
-import { ganeshSetupCopy, resolveGaneshSetupFocus } from "@/shared/utils/ganeshSetupState";
+import { ganeshStatusLabel } from "@/shared/utils/ganeshPermissions";
+import {
+  ganeshSetupCopy,
+  partitionInactiveMemberships,
+  resolveGaneshSetupFocus,
+} from "@/shared/utils/ganeshSetupState";
 import { validateFundTransfer, validateNonNegativeAmount } from "@/shared/utils/ganeshMath";
 import { formatPandalCode } from "@/shared/utils/ganeshIdentity";
 import { formatInr } from "@/shared/utils/ganeshMoney";
@@ -60,15 +65,20 @@ export default function GaneshSetupScreen() {
   const pendingIdsRef = useRef(new Set<string>());
   const openedFromApproval = useRef(false);
 
+  const { suspended, removed } = partitionInactiveMemberships(inactiveMemberships);
   const focus = resolveGaneshSetupFocus({
     activeCount: activePandals.length,
     pendingCount: pending.length,
     rejectedCount: rejected.length,
-    removedCount: inactiveMemberships.length,
+    suspendedCount: suspended.length,
+    removedCount: removed.length,
     mode,
   });
   const copy = ganeshSetupCopy(focus);
   const waiting = focus === "pending";
+  const showPending = pending.length > 0 && mode === "choose";
+  const showSuspended = suspended.length > 0 && mode === "choose";
+  const showRemoved = removed.length > 0 && mode === "choose";
 
   const openPandal = async (pandalId: string) => {
     const db = getFirestoreDb();
@@ -172,7 +182,6 @@ export default function GaneshSetupScreen() {
     }
   };
 
-  const removedName = inactiveMemberships.find((item) => item.pandalName)?.pandalName;
   const rejectedName = rejected.find((item) => item.pandalName)?.pandalName;
 
   return (
@@ -193,7 +202,7 @@ export default function GaneshSetupScreen() {
           </Text>
         </View>
 
-        {waiting ? (
+        {showPending ? (
           <PandalSectionCard title="Pending requests" subtitle={`${pending.length} waiting`}>
             <View style={styles.stack}>
               {pending.map((request) => (
@@ -213,19 +222,51 @@ export default function GaneshSetupScreen() {
           </PandalSectionCard>
         ) : null}
 
+        {showSuspended ? (
+          <PandalSectionCard
+            title="Access paused"
+            subtitle={suspended.length === 1 ? "1 Pandal" : `${suspended.length} Pandals`}
+          >
+            <View style={styles.stack}>
+              {suspended.map((item) => (
+                <View key={item.id} style={[styles.pendingRow, { borderColor: g.divider }]}>
+                  <Text style={[styles.pendingName, { color: theme.colors.foreground, fontFamily: theme.fontFamily.bold }]}>
+                    {item.pandalName || "Pandal"}
+                  </Text>
+                  <Text style={[styles.pendingMeta, { color: theme.colors.mutedForeground }]}>
+                    {ganeshStatusLabel(item.status)}. Ask the Pandal Admin to restore you.
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </PandalSectionCard>
+        ) : null}
+
+        {showRemoved ? (
+          <PandalSectionCard
+            title="Access ended"
+            subtitle={removed.length === 1 ? "1 Pandal" : `${removed.length} Pandals`}
+          >
+            <View style={styles.stack}>
+              {removed.map((item) => (
+                <View key={item.id} style={[styles.pendingRow, { borderColor: g.divider }]}>
+                  <Text style={[styles.pendingName, { color: theme.colors.foreground, fontFamily: theme.fontFamily.bold }]}>
+                    {item.pandalName || "Pandal"}
+                  </Text>
+                  <Text style={[styles.pendingMeta, { color: theme.colors.mutedForeground }]}>
+                    {ganeshStatusLabel(item.status)}. Request to join again with the Pandal code.
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </PandalSectionCard>
+        ) : null}
+
         {focus === "rejected" ? (
           <Text style={{ color: theme.colors.mutedForeground, lineHeight: 20 }}>
             {rejectedName
               ? `Your request to join ${rejectedName} was not approved.`
               : "Your request was not approved."}
-          </Text>
-        ) : null}
-
-        {focus === "removed" ? (
-          <Text style={{ color: theme.colors.mutedForeground, lineHeight: 20 }}>
-            {removedName
-              ? `You no longer have access to ${removedName}.`
-              : "You no longer have access to this Pandal."}
           </Text>
         ) : null}
 

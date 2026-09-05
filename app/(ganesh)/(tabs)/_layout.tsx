@@ -13,11 +13,11 @@ import { useTheme } from "@/theme/ThemeProvider";
 export default function GaneshTabsLayout() {
   const { theme } = useTheme();
   const { ready, pandalId, festivalId, clearSession, setSession } = useGaneshSession();
-  const { pandals, loading } = usePandals();
+  const { loading, membershipsReady, sessionMembershipActive } = usePandals();
   const { festivals, loading: festivalsLoading } = useFestivals(pandalId);
   useGaneshSyncReporter();
 
-  const hasActivePandal = pandals.some((item) => item.id === pandalId);
+  const hasActivePandal = sessionMembershipActive;
   const festivalResolution = resolveSessionFestival(
     festivalId,
     festivals,
@@ -26,7 +26,7 @@ export default function GaneshTabsLayout() {
   const switchingFestival = festivalResolution.action === "switch";
 
   useEffect(() => {
-    if (!ready || loading || !pandalId) return;
+    if (!ready || !membershipsReady || !pandalId) return;
     if (!hasActivePandal) {
       void clearSession();
       return;
@@ -39,6 +39,7 @@ export default function GaneshTabsLayout() {
   }, [
     ready,
     loading,
+    membershipsReady,
     pandalId,
     festivalId,
     festivals,
@@ -67,7 +68,7 @@ export default function GaneshTabsLayout() {
     return <Redirect href={"/(ganesh)/setup"} />;
   }
 
-  if (!loading && (pandals.length === 0 || !hasActivePandal)) {
+  if (membershipsReady && !hasActivePandal) {
     return <Redirect href={"/(ganesh)/setup"} />;
   }
 

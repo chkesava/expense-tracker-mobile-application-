@@ -73,6 +73,18 @@ function normalizeStatus(status: string | null | undefined): GaneshAuthorization
     : null;
 }
 
+/** Membership-index rows without a status are treated as active (legacy). */
+export function isActiveMembershipIndexStatus(status?: string | null): boolean {
+  return status == null || status === "" || status === "active";
+}
+
+export function sessionPandalIsActive(input: {
+  pandalId?: string | null;
+  activePandalIds: readonly string[];
+}): boolean {
+  return Boolean(input.pandalId && input.activePandalIds.includes(input.pandalId));
+}
+
 export function buildGaneshAuthorization(
   input: GaneshAuthorizationInput
 ): GaneshAuthorizationContext {

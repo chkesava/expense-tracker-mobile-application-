@@ -1,10 +1,32 @@
+import type { PandalMembershipIndex } from "@/shared/types/ganesh";
+
 export type GaneshSetupMode = "choose" | "create" | "join";
-export type GaneshSetupFocus = "active" | "pending" | "rejected" | "removed" | "none";
+export type GaneshSetupFocus =
+  | "active"
+  | "pending"
+  | "suspended"
+  | "rejected"
+  | "removed"
+  | "none";
+
+export function partitionInactiveMemberships(items: PandalMembershipIndex[]): {
+  suspended: PandalMembershipIndex[];
+  removed: PandalMembershipIndex[];
+} {
+  const suspended: PandalMembershipIndex[] = [];
+  const removed: PandalMembershipIndex[] = [];
+  for (const item of items) {
+    if (item.status === "suspended") suspended.push(item);
+    else if (item.status === "removed") removed.push(item);
+  }
+  return { suspended, removed };
+}
 
 export function resolveGaneshSetupFocus(input: {
   activeCount: number;
   pendingCount: number;
   rejectedCount: number;
+  suspendedCount: number;
   removedCount: number;
   mode: GaneshSetupMode;
 }): GaneshSetupFocus {
@@ -13,6 +35,7 @@ export function resolveGaneshSetupFocus(input: {
   }
   if (input.activeCount > 0) return "active";
   if (input.pendingCount > 0) return "pending";
+  if (input.suspendedCount > 0) return "suspended";
   if (input.removedCount > 0) return "removed";
   if (input.rejectedCount > 0) return "rejected";
   return "none";
@@ -36,6 +59,14 @@ export function ganeshSetupCopy(focus: GaneshSetupFocus): {
       title: "Request not approved",
       subtitle: "You can request again",
       intro: "Your request was not approved. You can request again with the Pandal code, or create a new Pandal.",
+    };
+  }
+  if (focus === "suspended") {
+    return {
+      title: "Access paused",
+      subtitle: "Ask the Pandal Admin",
+      intro:
+        "Your access to this Pandal is paused. You cannot open its funds or seva until an Admin restores you. You cannot restore yourself.",
     };
   }
   if (focus === "removed") {
