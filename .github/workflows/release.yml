@@ -37,8 +37,17 @@ permissions:
   contents: write
 
 jobs:
+  # GS-074: nothing ships on rules that do not pass. A release runs from main,
+  # which PR checks already gate — but main can still go red between merges,
+  # and a release is the worst moment to find that out. The gate uses no
+  # secrets, so calling it from this secrets-bearing workflow is safe.
+  rules:
+    name: Firestore rules
+    uses: ./.github/workflows/rules-tests.yml
+
   build:
     name: Build, distribute and announce
+    needs: rules
     runs-on: ubuntu-latest
     timeout-minutes: 60
 

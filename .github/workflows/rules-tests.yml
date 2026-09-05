@@ -1,0 +1,81 @@
+name: Firestore rules tests
+
+# The security-rule gate (GS-074).
+#
+# Defined once as a reusable workflow and called by both pr-checks.yml and
+# web-deploy.yml, so the gate cannot drift between "what a PR checks" and "what
+# a deploy checks" — which is exactly how a gate quietly stops gating.
+#
+# Why this exists at all: every other rules test in the repo is a hand-written
+# TypeScript mirror of firestore.rules, and a mirror proves the mirror. Two real
+# defects have shipped past one — GS-084 (an allowlist that omitted a field the
+# app sends, which would have denied every admin role change) and GS-104 (the
+# summary rule exceeding Firestore's 1000-expression evaluation budget, so
+# legacy members could not record money at all). Neither was findable without
+# running the real rules engine.
+#
+# Quality gate only. No Firebase service account, no signing keystore — this
+# runs on fork PRs, so it must never be given release credentials.
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  rules:
+    name: Rules (Firestore emulator)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # The Firestore emulator is a Java process, and firebase-tools 14+
+      # refuses to start it on anything below JDK 21.
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Pinned rather than floating: firebase-tools controls both the emulator
+      # and the rules engine version this gate tests against, and a silent
+      # major bump would change what "passing" means.
+      - name: Install Firebase CLI
+        run: npm install --global firebase-tools@15.29.0
+
+      - name: Cache emulator binaries
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ runner.os }}
+
+      # `npm run test:rules` starts the emulator around the suite. It is the
+      # same command the runbook and every developer uses, deliberately — a CI
+      # gate that runs something different from the local command is a gate
+      # people learn to distrust.
+      - name: Firestore rules tests
+        run: npm run test:rules
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "## Firestore rules"
+            echo ""
+            echo "- Command: \`npm run test:rules\`"
+            echo "- Runs the real rules engine in the Firestore emulator, not a mirror."
+            echo "- Secrets used: **none**."
+          } >> "$GITHUB_STEP_SUMMARY"

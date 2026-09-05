@@ -22,6 +22,12 @@ permissions:
   contents: read
 
 jobs:
+  # The security-rule gate (GS-074). Called rather than copied, so PR checks
+  # and the deploy pipeline can never gate on different versions of it.
+  rules:
+    name: Firestore rules
+    uses: ./.github/workflows/rules-tests.yml
+
   quality:
     name: Unit, integration-lite, typecheck
     runs-on: ubuntu-latest
@@ -58,5 +64,6 @@ jobs:
             echo "- Suite: \`npm test\` (Vitest unit + integration-lite)"
             echo "- Shared: \`npm run typecheck:shared\`"
             echo "- App: \`npm run typecheck\`"
+            echo "- Rules: \`npm run test:rules\` (separate job, real rules engine)"
             echo "- Secrets used: **none** (no keystore / service account on this workflow)"
           } >> "$GITHUB_STEP_SUMMARY"

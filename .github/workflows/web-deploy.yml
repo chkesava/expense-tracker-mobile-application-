@@ -37,8 +37,16 @@ permissions:
   contents: read
 
 jobs:
+  # GS-074: the same rule gate the PR runs, as a dependency of the deploy.
+  # `needs` below means a failure here stops the deploy before it checks out —
+  # nothing reaches Netlify on rules that do not pass.
+  rules:
+    name: Firestore rules
+    uses: ./.github/workflows/rules-tests.yml
+
   deploy:
     name: Build and deploy web
+    needs: rules
     runs-on: ubuntu-latest
     timeout-minutes: 30
 

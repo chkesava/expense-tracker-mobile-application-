@@ -148,7 +148,7 @@ Firestore keeps a rules version history in the console under Firestore →
 Rules → History. Roll back there, then revert the corresponding commit here so
 the two stay in sync.
 
-## Test the rules before deploying (added 2026-09-04)
+## The rules test gate (GS-074, enforced 2026-09-05)
 
 ```bash
 npm run test:rules
@@ -157,27 +157,78 @@ npm run test:rules
 Runs `firestore/*.rules.test.ts` against the real rules engine in a Firestore
 emulator. These are **not** part of `npm test`, which has no emulator.
 
-Do this before every rules deploy. Two defects have now shipped past the
-hand-written TypeScript mirror in
-`shared/utils/ganeshPermissions.rules.contract.test.ts`: GS-084 (an allowlist
-that omitted a field the app sends, which would have denied every admin role
-change) and GS-104 (the summary rule exceeding Firestore's 1000-expression
-evaluation budget, so legacy members could not record money). A mirror proves
-the mirror. It cannot know about evaluation budgets at all.
+You do not have to remember to run it. It is enforced in three places, and all
+three run the same command:
 
-### JDK requirement
+| Where | What it stops |
+| --- | --- |
+| `pr-checks.yml` -> `rules` job | A PR merging with failing rules |
+| `web-deploy.yml` -> `needs: rules` | A web deploy starting at all |
+| `firebase.json` -> `firestore.predeploy` | `firebase deploy --only firestore:*` proceeding |
 
-`firebase-tools` 14+ needs **JDK 21**. If the emulator refuses to start with
-`no longer supports Java version before 21`, either install JDK 21 or keep using
-the pinned older CLI the script already uses for the emulator:
+The third one is the important one, because **rules ship by a manual
+`firebase deploy`, not from CI**. Gating only the pipelines would have left the
+path rules actually travel completely ungated. The hook runs before the upload
+and a non-zero exit aborts the deploy:
+
+```
+Error: firestore predeploy error: Command terminated with non-zero exit code 1
+```
+
+No `Deploy complete`, nothing uploaded.
+
+All three call `npm run test:rules` rather than each spelling out their own
+invocation. A gate that runs something different from the local command is one
+people learn to distrust, and one that can drift between "what the PR checked"
+and "what the deploy checked".
+
+### Why this gate exists
+
+Every other rules test in the repo is a hand-written TypeScript mirror of
+`firestore.rules` (`shared/utils/ganeshPermissions.rules.contract.test.ts`), and
+a mirror proves the mirror. Two real defects have shipped past one:
+
+- **GS-084** - an allowlist that omitted a field the app actually sends, which
+  would have denied every admin role change.
+- **GS-104** - the summary rule exceeding Firestore's 1000-expression
+  evaluation budget, so legacy members could not record money at all. A mirror
+  cannot know about evaluation budgets; only the real engine does.
+
+### JDK 21 is required
+
+The Firestore emulator is a Java process and `firebase-tools` 14+ refuses to
+start it below **JDK 21**:
+
+```
+Error: firebase-tools no longer supports Java version before 21.
+```
+
+Because the gate is a predeploy hook, this is now a hard prerequisite for
+deploying rules at all - on JDK 17 the tests cannot run, so the deploy stops.
+That is the gate working as intended, but it means **anyone who deploys rules
+needs JDK 21 installed**. CI installs it explicitly (`actions/setup-java`), so
+this only affects local deploys.
+
+If you only want to *run* the suite on an older JDK, an older CLI still works,
+but do not use this to deploy - it tests against an older emulator than
+production runs:
 
 ```bash
 npx -y firebase-tools@13.35.1 emulators:exec --only firestore "npx vitest run --config vitest.rules.config.ts"
 ```
 
-Deployment itself is unaffected and still uses the current CLI.
+### Known friction
 
-### Still manual
+The hook starts an emulator on port 8080. If you already have one running the
+deploy will fail with `Port 8080 is not open`. Stop it and retry - the gate
+failing loudly is preferable to it being skipped.
 
-Nothing enforces that these tests ran before a deploy. That is the open half of
-GS-074.
+### Not covered by this gate
+
+`storage.rules` has no test suite, so no hook is attached to it - a predeploy
+running the Firestore tests would assert coverage that does not exist. (Firebase
+Storage is not provisioned on this project anyway; see GS-098.)
+
+Cloud Functions (`functions/`) enforce the festival summary server-side since
+GS-004. They have their own `predeploy` build step but are **not** covered by
+the rules suite.
