@@ -1154,7 +1154,7 @@ service cloud.firestore {
                 'idol_religious', 'flowers_pooja', 'food_prasadam', 'water',
                 'transportation', 'printing_publicity', 'cleaning', 'security',
                 'volunteer_support', 'government_fees', 'vendor_payment',
-                'other_festival_expense',
+                'visarjan', 'cultural_programs', 'other_festival_expense',
                 'volunteer', 'admin',
                 'personal_to_fund', 'fund_to_personal',
                 'festival_to_permanent', 'permanent_to_festival', 'other_authorized',

@@ -59,6 +59,12 @@ export type ExpensePurposeCategory =
   | "volunteer_support"
   | "government_fees"
   | "vendor_payment"
+  // Added after the first pass: both are substantial, recurring Ganesh
+  // spending with no home in the original list, and both were landing in
+  // "other" — which made that bucket the second-largest line in a report
+  // while saying nothing about what the money did.
+  | "visarjan"
+  | "cultural_programs"
   | "other_festival_expense";
 
 export type ReimbursementPurposeCategory = "volunteer" | "admin" | "other";

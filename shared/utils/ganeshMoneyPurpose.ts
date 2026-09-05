@@ -62,6 +62,8 @@ export const MONEY_PURPOSE_CATEGORY_LABELS: Record<MoneyPurposeCategory, string>
   volunteer_support: "Volunteer support",
   government_fees: "Government / permission fees",
   vendor_payment: "Vendor payment",
+  visarjan: "Immersion / Visarjan",
+  cultural_programs: "Cultural programmes",
   other_festival_expense: "Other festival expense",
   // reimbursement
   volunteer: "Volunteer reimbursement",
@@ -112,17 +114,22 @@ export const EXPENSE_PURPOSE_CATEGORIES: ExpensePurposeCategory[] = [
   "volunteer_support",
   "government_fees",
   "vendor_payment",
+  "visarjan",
+  "cultural_programs",
   "other_festival_expense",
 ];
 
 /**
  * Default category name → canonical purpose.
  *
- * Three land on `other_festival_expense` on purpose. "Cultural Programs",
- * "Immersion / Visarjan" and "Miscellaneous" have no honest home in the
- * canonical list, and forcing Visarjan into `transportation` — it is a
- * procession, not a delivery — would make the transport figure wrong in every
- * report. A truthful "other" beats a tidy lie.
+ * Visarjan and cultural programmes have their own canonical categories rather
+ * than being folded into `transportation` or `volunteer_support`. A Visarjan is
+ * a procession, not a delivery, and the two were previously the reason "other"
+ * was one of the largest lines in a report — a bucket that big tells a
+ * committee nothing about where the money went.
+ *
+ * "Miscellaneous" still maps to `other_festival_expense`, which is not a
+ * compromise: that is what the category means.
  */
 const DEFAULT_CATEGORY_PURPOSE: Record<string, ExpensePurposeCategory> = {
   idol: "idol_religious",
@@ -141,10 +148,10 @@ const DEFAULT_CATEGORY_PURPOSE: Record<string, ExpensePurposeCategory> = {
   cleaning: "cleaning",
   printing: "printing_publicity",
   invitations: "printing_publicity",
-  "cultural programs": "other_festival_expense",
+  "cultural programs": "cultural_programs",
   music: "sound",
   security: "security",
-  "immersion / visarjan": "other_festival_expense",
+  "immersion / visarjan": "visarjan",
   miscellaneous: "other_festival_expense",
 };
 

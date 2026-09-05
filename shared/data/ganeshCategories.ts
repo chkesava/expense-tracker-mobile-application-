@@ -29,10 +29,10 @@ export const DEFAULT_GANESH_CATEGORIES: Array<{
   { name: "Cleaning", sortOrder: 140, purposeCategory: "cleaning" },
   { name: "Printing", sortOrder: 150, purposeCategory: "printing_publicity" },
   { name: "Invitations", sortOrder: 160, purposeCategory: "printing_publicity" },
-  { name: "Cultural Programs", sortOrder: 170, purposeCategory: "other_festival_expense" },
+  { name: "Cultural Programs", sortOrder: 170, purposeCategory: "cultural_programs" },
   { name: "Music", sortOrder: 180, purposeCategory: "sound" },
   { name: "Security", sortOrder: 190, purposeCategory: "security" },
-  { name: "Immersion / Visarjan", sortOrder: 200, purposeCategory: "other_festival_expense" },
+  { name: "Immersion / Visarjan", sortOrder: 200, purposeCategory: "visarjan" },
   { name: "Miscellaneous", sortOrder: 210, purposeCategory: "other_festival_expense" },
 ];
 

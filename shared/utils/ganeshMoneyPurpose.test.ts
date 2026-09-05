@@ -53,10 +53,17 @@ describe("classifying a category by name", () => {
     expect(purposeForCategoryName("Generator hire")).toBe("other_festival_expense");
   });
 
-  it("keeps Visarjan out of transportation", () => {
-    // A procession is not a delivery. Forcing it into transportation would
-    // make that figure wrong in every report.
-    expect(purposeForCategoryName("Immersion / Visarjan")).toBe("other_festival_expense");
+  it("gives Visarjan and cultural programmes their own categories", () => {
+    // Both were folded into "other" in the first pass, which made that bucket
+    // one of the largest lines in a report while saying nothing about where the
+    // money went. Neither belongs in transportation — a procession is not a
+    // delivery.
+    expect(purposeForCategoryName("Immersion / Visarjan")).toBe("visarjan");
+    expect(purposeForCategoryName("Cultural Programs")).toBe("cultural_programs");
+  });
+
+  it("still sends Miscellaneous to other, which is what it means", () => {
+    expect(purposeForCategoryName("Miscellaneous")).toBe("other_festival_expense");
   });
 });
 
