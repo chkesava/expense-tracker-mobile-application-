@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { Alert, StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
 import { AdminGlyph } from "@/components/ganesh/admin/adminArt";
 
@@ -291,7 +291,33 @@ export default function PandalScreen() {
             meta={festival?.name}
             icon={<AdminGlyph name="iconFestival" />}
             chevronColor={g.saffron}
+            divider
             onPress={() => push("/(ganesh)/setup")}
+          />
+          <NavRow
+            title="Leave this Pandal"
+            meta="You will lose access until an Admin accepts you again"
+            icon={<AdminGlyph name="iconMembers" />}
+            chevronColor={g.saffron}
+            onPress={() => {
+              Alert.alert(
+                "Leave this Pandal?",
+                "You will lose access to its funds and seva until an Admin accepts you again.",
+                [
+                  { text: "Stay", style: "cancel" },
+                  {
+                    text: "Leave",
+                    style: "destructive",
+                    onPress: () => {
+                      writes.leavePandal().catch((error) => {
+                        logError("ganesh.pandal.leave", error);
+                        toast.error(friendlyErrorMessage(error, "Could not leave this Pandal."));
+                      });
+                    },
+                  },
+                ]
+              );
+            }}
           />
         </PandalSectionCard>
 

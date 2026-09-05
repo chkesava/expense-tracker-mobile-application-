@@ -179,6 +179,7 @@ export type PandalMemberAuditAction =
   | "approved"
   | "rejected"
   | "joined"
+  | "left"
   | "pandal_created"
   | "join_mode"
   | "role_assigned"

@@ -2,7 +2,7 @@
 
 Jira project: **KAN** ([Ganesh seva board](https://kesavach.atlassian.net/jira/software/projects/KAN/board))
 
-These files are implementation briefs for **KAN-9 through KAN-32** (RBAC-01 through RBAC-24). Each file contains the Jira ticket, existing code to start from, and a checklist.
+These files are implementation briefs for **KAN-9 through KAN-32** (RBAC-01 through RBAC-24) and the KAN-33 epic features that reuse that foundation. Each file contains the Jira ticket, existing code to start from, and a checklist.
 
 Do not implement from these files blindly. Inspect the current membership, role, permission, and Firestore Rules code first. Some of this is already partially built (see `ganesh seva future ideas/GANESH_SEVA_AUDIT_TICKETS.md`).
 
@@ -32,6 +32,7 @@ Do not implement from these files blindly. Inspect the current membership, role,
 | [KAN-30](https://kesavach.atlassian.net/browse/KAN-30) | RBAC-22 | Sensitive Data Visibility Permissions | [KAN-30-rbac-22-sensitive-data-visibility-permissions.md](./KAN-30-rbac-22-sensitive-data-visibility-permissions.md) |
 | [KAN-31](https://kesavach.atlassian.net/browse/KAN-31) | RBAC-23 | Critical Action Approval Controls | [KAN-31-rbac-23-critical-action-approval-controls.md](./KAN-31-rbac-23-critical-action-approval-controls.md) |
 | [KAN-32](https://kesavach.atlassian.net/browse/KAN-32) | RBAC-24 | Security Monitoring & Emergency Controls | [KAN-32-rbac-24-security-monitoring-emergency-controls.md](./KAN-32-rbac-24-security-monitoring-emergency-controls.md) |
+| [KAN-34](https://kesavach.atlassian.net/browse/KAN-34) | Feature 01 | Foundation Auth & Pandal Membership | [KAN-34-foundation-auth-pandal-membership.md](./KAN-34-foundation-auth-pandal-membership.md) |
 
 ## Suggested order
 

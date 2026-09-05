@@ -7,6 +7,7 @@ import { getFirestoreDb } from "@/lib/firebase";
 import { isPermissionError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
+import { leavePandal as leavePandalWrite } from "@/services/ganesh/ganeshMembership";
 import { useNetwork } from "@/providers/NetworkProvider";
 import {
   addPermanentFundDonation,
@@ -52,7 +53,7 @@ function requireDb() {
 }
 
 export function useGaneshWrites() {
-  const { actor, pandalId, festivalId } = useGaneshSession();
+  const { actor, pandalId, festivalId, clearSession } = useGaneshSession();
   const { isOnline } = useNetwork();
   const { can: hasPerm, isAdmin, permissions } = useGaneshPermissions();
   // Shared provider data when this is the session pandal, so reading it here
@@ -331,6 +332,17 @@ export function useGaneshWrites() {
       return run("Member updated", () =>
         writes.updatePandalMember(requireDb(), actor, pandalId, targetUserId, input)
       );
+    },
+    leavePandal: async (targetPandalId?: string) => {
+      if (!actor) throw new Error("You must be signed in.");
+      const id = targetPandalId ?? pandalId;
+      if (!id) throw new Error("Select a Pandal first.");
+      if (!isOnline) throw new Error("Connect to the internet to leave a Pandal.");
+      const result = await run("You left the Pandal", () =>
+        leavePandalWrite(requireDb(), actor, id)
+      );
+      if (id === pandalId) await clearSession();
+      return result;
     },
     createFestival: async (input: Parameters<typeof writes.createFestival>[3]) => {
       if (!pandalId || !actor) throw new Error("Select a Pandal first.");

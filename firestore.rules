@@ -897,10 +897,24 @@ service cloud.firestore {
               && createKeepsAdminCount()
             )
           );
-        allow update: if canManageMembers()
-          && request.resource.data.userId == resource.data.userId
-          && cannotSelfPromoteToAdmin()
-          && keepsAdminCount();
+        function isSelfLeave() {
+          return memberId == request.auth.uid
+            && resource.data.status == 'active'
+            && request.resource.data.status == 'removed'
+            && request.resource.data.userId == resource.data.userId
+            && request.resource.data.role == resource.data.role
+            && keepsAdminCount();
+        }
+
+        allow update: if (
+            (
+              canManageMembers()
+              && request.resource.data.userId == resource.data.userId
+              && cannotSelfPromoteToAdmin()
+              && keepsAdminCount()
+            )
+            || isSelfLeave()
+          );
         allow delete: if false;
       }
 
@@ -913,7 +927,15 @@ service cloud.firestore {
 
       match /memberAudits/{auditId} {
         allow read: if canReadAuditOf(pandalId);
-        allow create: if canManageMembers();
+        // KAN-34: a member may record their own leave. Everything else stays
+        // admin-only so a committee member cannot forge role or join history.
+        allow create: if canManageMembers()
+          || (
+            signedIn()
+            && request.resource.data.actorId == request.auth.uid
+            && request.resource.data.targetUserId == request.auth.uid
+            && request.resource.data.action == 'left'
+          );
         allow update, delete: if false;
       }
 

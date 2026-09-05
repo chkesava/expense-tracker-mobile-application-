@@ -9,6 +9,21 @@ export function lastAdminSafetyMessage(isSelf: boolean): string {
   return "This is the only Pandal Admin. Assign another before suspending or removing them.";
 }
 
+/** KAN-34: a member may leave unless they are the last active Admin. */
+export function canLeavePandal(input: {
+  role?: string | null;
+  status?: string | null;
+  adminCount: number;
+}): { ok: true } | { ok: false; error: string } {
+  if (input.status != null && input.status !== "active") {
+    return { ok: false, error: "You are not an active member of this Pandal." };
+  }
+  if (input.role === "admin" && input.adminCount <= 1) {
+    return { ok: false, error: lastAdminSafetyMessage(true) };
+  }
+  return { ok: true };
+}
+
 export function memberAuditLine(audit: PandalMemberAudit, members: PandalMember[]): string {
   const actor = memberDisplayName(members, audit.actorId);
   const target = memberDisplayName(members, audit.targetUserId);
@@ -16,6 +31,7 @@ export function memberAuditLine(audit: PandalMemberAudit, members: PandalMember[
   if (audit.action === "approved") return `${actor} approved ${target}`;
   if (audit.action === "rejected") return `${actor} did not approve ${target}`;
   if (audit.action === "joined") return `${target} joined`;
+  if (audit.action === "left") return `${target} left`;
   if (audit.action === "suspended") return `${actor} suspended ${target}`;
   if (audit.action === "removed") return `${actor} removed ${target}`;
   if (audit.action === "join_mode") return `${actor} changed who can join`;

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { PandalMember, PandalMemberAudit } from "@/shared/types/ganesh";
-import { lastAdminSafetyMessage, memberAuditLine } from "@/shared/utils/ganeshMemberCopy";
+import { canLeavePandal, lastAdminSafetyMessage, memberAuditLine } from "@/shared/utils/ganeshMemberCopy";
 
 const members: PandalMember[] = [
   { id: "a", userId: "a", displayName: "Anita", role: "admin", status: "active" },
@@ -24,10 +24,32 @@ describe("lastAdminSafetyMessage", () => {
   });
 });
 
+describe("canLeavePandal", () => {
+  it("lets an ordinary member leave", () => {
+    expect(canLeavePandal({ role: "member", status: "active", adminCount: 1 })).toEqual({ ok: true });
+  });
+
+  it("blocks the last Admin from leaving", () => {
+    expect(canLeavePandal({ role: "admin", status: "active", adminCount: 1 })).toEqual({
+      ok: false,
+      error: lastAdminSafetyMessage(true),
+    });
+  });
+
+  it("lets an Admin leave when another Admin remains", () => {
+    expect(canLeavePandal({ role: "admin", status: "active", adminCount: 2 })).toEqual({ ok: true });
+  });
+
+  it("blocks a non-active member from leaving", () => {
+    expect(canLeavePandal({ role: "member", status: "removed", adminCount: 1 }).ok).toBe(false);
+  });
+});
+
 describe("memberAuditLine", () => {
   it("labels create, reject, and join events", () => {
     expect(memberAuditLine(audit("pandal_created"), members)).toContain("created this Pandal");
     expect(memberAuditLine(audit("rejected"), members)).toContain("did not approve Ravi");
     expect(memberAuditLine(audit("joined"), members)).toContain("Ravi joined");
+    expect(memberAuditLine(audit("left"), members)).toContain("Ravi left");
   });
 });

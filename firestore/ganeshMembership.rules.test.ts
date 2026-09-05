@@ -5,7 +5,7 @@ import {
   initializeTestEnvironment,
   type RulesTestEnvironment,
 } from "@firebase/rules-unit-testing";
-import { deleteDoc, doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
+import { deleteDoc, doc, getDoc, setDoc, updateDoc, writeBatch } from "firebase/firestore";
 import { afterAll, beforeAll, beforeEach, describe, it } from "vitest";
 
 /**
@@ -278,6 +278,102 @@ describe("KAN-10 cross-pandal membership", () => {
         pandalId: OTHER_PANDAL,
         role: "member",
         status: "active",
+      })
+    );
+  });
+});
+
+describe("KAN-34 leave Pandal", () => {
+  it("lets an ordinary member mark themselves removed without changing role", async () => {
+    const db = as(MEMBER);
+    await assertSucceeds(
+      updateDoc(doc(db, "pandals", PANDAL, "members", MEMBER), {
+        userId: MEMBER,
+        role: "member",
+        status: "removed",
+      })
+    );
+    await assertFails(getDoc(doc(db, "pandals", PANDAL)));
+    await assertFails(getDoc(doc(db, "pandals", PANDAL, "festivals", FESTIVAL)));
+  });
+
+  it("does not let a member change their role while leaving", async () => {
+    const db = as(MEMBER);
+    await assertFails(
+      updateDoc(doc(db, "pandals", PANDAL, "members", MEMBER), {
+        userId: MEMBER,
+        role: "admin",
+        status: "removed",
+      })
+    );
+  });
+
+  it("does not let the last Admin leave", async () => {
+    const db = as(ADMIN);
+    await assertFails(
+      updateDoc(doc(db, "pandals", PANDAL, "members", ADMIN), {
+        userId: ADMIN,
+        role: "admin",
+        status: "removed",
+      })
+    );
+  });
+
+  it("lets an Admin leave when another Admin remains and adminCount moves", async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      await setDoc(doc(db, "pandals", PANDAL, "members", "u-admin-2"), {
+        userId: "u-admin-2",
+        displayName: "Second Admin",
+        role: "admin",
+        status: "active",
+      });
+      await updateDoc(doc(db, "pandals", PANDAL), { adminCount: 2 });
+    });
+    const db = as(ADMIN);
+    const batch = writeBatch(db);
+    batch.update(doc(db, "pandals", PANDAL), {
+      name: "Test Pandal",
+      code: "GNSH-TEST",
+      ownerId: ADMIN,
+      memberIds: [ADMIN, MEMBER, SUSPENDED, REMOVED, "u-admin-2"],
+      adminCount: 1,
+      createdBy: ADMIN,
+      updatedBy: ADMIN,
+    });
+    batch.update(doc(db, "pandals", PANDAL, "members", ADMIN), {
+      userId: ADMIN,
+      role: "admin",
+      status: "removed",
+    });
+    await assertSucceeds(batch.commit());
+  });
+
+  it("lets a leaving member write their own left audit and nobody else's", async () => {
+    const db = as(MEMBER);
+    await assertSucceeds(
+      setDoc(doc(db, "pandals", PANDAL, "memberAudits", "leave-1"), {
+        actorId: MEMBER,
+        targetUserId: MEMBER,
+        action: "left",
+      })
+    );
+    await assertFails(
+      setDoc(doc(db, "pandals", PANDAL, "memberAudits", "leave-2"), {
+        actorId: MEMBER,
+        targetUserId: ADMIN,
+        action: "removed",
+      })
+    );
+  });
+
+  it("denies unauthenticated leave", async () => {
+    const db = env.unauthenticatedContext().firestore();
+    await assertFails(
+      updateDoc(doc(db, "pandals", PANDAL, "members", MEMBER), {
+        userId: MEMBER,
+        role: "member",
+        status: "removed",
       })
     );
   });
