@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/Input";
 import { useCollections } from "@/hooks/useCollections";
 import { useFestivals } from "@/hooks/useFestivals";
 import { useGaneshWrites } from "@/hooks/useGaneshWrites";
+import { useMyOpenSession } from "@/hooks/useCollectionSessions";
 import { useHouseholds } from "@/hooks/useHouseholds";
 import { usePandalMembers } from "@/hooks/usePandalMembers";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
@@ -53,6 +54,7 @@ export default function AddCollectionScreen() {
   const { households } = useHouseholds(pandalId, festivalId);
   const { collections } = useCollections(pandalId, festivalId);
   const writes = useGaneshWrites();
+  const { session: openSession } = useMyOpenSession();
   const { can } = useGaneshPermissions();
   const { closed, lockMessage } = useFestivalWriteLock();
   const [donorName, setDonorName] = useState("");
@@ -146,6 +148,10 @@ export default function AddCollectionScreen() {
         householdId: targetHouseholdId ?? undefined,
         clientOpId: clientOpIdRef.current,
         assignReceipt: isOnline,
+        // GS-076: joins the collector's open session, if they have one. A
+        // collection recorded outside a session is still valid — it is simply
+        // not part of a cash handover — so this never blocks the save.
+        sessionId: openSession?.id,
       });
       clientOpIdRef.current = null;
       back();

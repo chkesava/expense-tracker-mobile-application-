@@ -27,6 +27,7 @@ import { useGaneshSummary } from "@/hooks/useGaneshSummary";
 import { useGaneshWrites } from "@/hooks/useGaneshWrites";
 import { useHouseholds } from "@/hooks/useHouseholds";
 import { useJoinRequests } from "@/hooks/useJoinRequests";
+import { useSessionsAwaitingCount } from "@/hooks/useCollectionSessions";
 import { usePandalAssets } from "@/hooks/usePandalAssets";
 import { useSponsorships } from "@/hooks/useSponsorships";
 import { usePandalMembers } from "@/hooks/usePandalMembers";
@@ -92,6 +93,9 @@ export default function AdminDashboardScreen() {
     useSponsorships(pandalId, festivalId);
   const { households, loading: householdsLoading, error: householdsError } =
     useHouseholds(pandalId, festivalId);
+
+  const { sessions: awaitingCount } = useSessionsAwaitingCount(pandalId, festivalId);
+  const sessionsAwaitingCount = awaitingCount.length;
 
   const pandal = pandals.find((item) => item.id === pandalId);
   const festival = festivals.find((item) => item.id === festivalId);
@@ -472,8 +476,30 @@ export default function AdminDashboardScreen() {
                 meta="Who paid their share this festival"
                 icon={<AdminGlyph name="iconCommittee" />}
                 chevronColor={g.saffron}
+                divider
                 onPress={() => push("/(ganesh)/(tabs)/committee")}
               />
+              {/* GS-076/GS-075: the treasurer's end-of-evening work. Badged
+                  when cash is waiting, because an uncounted handover is the
+                  one thing on this screen that goes stale overnight. */}
+              {can("sessions.read") ? (
+                <NavRow
+                  title="Collection sessions"
+                  meta={
+                    sessionsAwaitingCount > 0
+                      ? `${sessionsAwaitingCount} waiting to be counted`
+                      : "Cash handovers and reconciliation"
+                  }
+                  icon={<AdminGlyph name="iconFund" />}
+                  chevronColor={g.saffron}
+                  badge={
+                    sessionsAwaitingCount > 0
+                      ? { kind: "pending", label: "Count cash" }
+                      : undefined
+                  }
+                  onPress={() => push("/(ganesh)/sessions")}
+                />
+              ) : null}
             </AdminSection>
 
             <AdminSection
