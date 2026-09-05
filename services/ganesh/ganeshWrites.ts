@@ -112,6 +112,7 @@ import {
   shouldSeedFestivalMember,
 } from "@/shared/utils/ganeshFestivalMemberSeed";
 import { tryStampPandalMembershipIndex } from "@/services/ganesh/ganeshMembershipIndex";
+import { canLeavePandal, lastAdminSafetyMessage } from "@/shared/utils/ganeshMemberCopy";
 import { ensurePandalRoles } from "@/services/ganesh/ganeshRoles";
 import {
   InsufficientFundError,
@@ -1141,6 +1142,67 @@ export async function updatePandalMember(
     pandalId,
     role: nextRole,
     status: nextStatus,
+    pandalName: String(pandalSnap.data().name ?? ""),
+    joinedAt: memberSnap.data().createdAt,
+  });
+}
+
+/**
+ * KAN-34: a member leaves their own Pandal. Does not delete the member
+ * document. Last Admin must transfer Admin first.
+ */
+export async function leavePandal(
+  db: Firestore,
+  actor: GaneshActor,
+  pandalId: string
+): Promise<void> {
+  const [pandalSnap, memberSnap] = await Promise.all([
+    getDoc(doc(db, "pandals", pandalId)),
+    getDoc(doc(db, "pandals", pandalId, "members", actor.uid)),
+  ]);
+  if (!pandalSnap.exists() || !memberSnap.exists()) {
+    throw new Error("You are not a member of this Pandal.");
+  }
+  const oldRole = String(memberSnap.data().role ?? "member") as GaneshRole;
+  const oldStatus = String(memberSnap.data().status ?? "active") as GaneshMemberStatus;
+  const storedAdminCount = pandalSnap.data().adminCount;
+  const adminCount = typeof storedAdminCount === "number" ? storedAdminCount : 1;
+  const allowed = canLeavePandal({ role: oldRole, status: oldStatus, adminCount });
+  if (!allowed.ok) throw new Error(allowed.error);
+
+  const wasAdmin = oldRole === "admin" && oldStatus === "active";
+  const nextAdminCount = adminCount - (wasAdmin ? 1 : 0);
+  if (nextAdminCount < 1) throw new Error(lastAdminSafetyMessage(true));
+
+  const batch = writeBatch(db);
+  batch.update(doc(db, "pandals", pandalId, "members", actor.uid), {
+    status: "removed" satisfies GaneshMemberStatus,
+    updatedAt: serverTimestamp(),
+  });
+  // Ordinary members cannot update the Pandal document. Admin leavers can,
+  // and must move adminCount in the same request as the member status change.
+  if (wasAdmin) {
+    batch.update(doc(db, "pandals", pandalId), {
+      adminCount: nextAdminCount,
+      memberIds: arrayRemove(actor.uid),
+      updatedBy: actor.uid,
+      updatedAt: serverTimestamp(),
+    });
+  }
+  memberAudit(batch, db, pandalId, {
+    actorId: actor.uid,
+    targetUserId: actor.uid,
+    action: "left",
+    oldRole,
+    newRole: oldRole,
+    oldStatus,
+    newStatus: "removed",
+  });
+  await commitWrite(() => batch.commit(), { label: "leave pandal" });
+  await tryStampPandalMembershipIndex(db, actor.uid, {
+    pandalId,
+    role: oldRole,
+    status: "removed",
     pandalName: String(pandalSnap.data().name ?? ""),
     joinedAt: memberSnap.data().createdAt,
   });

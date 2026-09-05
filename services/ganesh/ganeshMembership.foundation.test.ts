@@ -35,5 +35,28 @@ describe("ganesh membership foundation source contract", () => {
     expect(openJoin).not.toContain("memberAudit");
     expect(writes).toContain('action: "pandal_created"');
     expect(writes).toContain('action: "rejected"');
+    expect(writes).toContain("export async function leavePandal");
+    expect(writes).toContain('action: "left"');
+  });
+
+  it("exposes KAN-34 operations through one membership facade", () => {
+    const facade = read("services/ganesh/ganeshMembership.ts");
+    for (const name of [
+      "getCurrentUser",
+      "getPandalMembership",
+      "createPandal",
+      "createInvitation",
+      "acceptInvitation",
+      "leavePandal",
+      "updateMemberRole",
+      "listMyPandals",
+      "getCurrentPandal",
+      "getCurrentFestival",
+    ]) {
+      expect(facade).toContain(`export async function ${name}`);
+    }
+    expect(facade).toContain("createPandalAndFestival");
+    expect(facade).toContain("requestPandalJoin");
+    expect(facade).not.toContain("invitations/");
   });
 });

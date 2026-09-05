@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { AdminGlyph } from "@/components/ganesh/admin/adminArt";
 
@@ -161,6 +161,30 @@ export default function GaneshSetupScreen() {
     }
   };
 
+  const leaveListed = (targetPandalId: string, name: string) => {
+    Alert.alert(
+      "Leave this Pandal?",
+      `You will lose access to ${name} until an Admin accepts you again.`,
+      [
+        { text: "Stay", style: "cancel" },
+        {
+          text: "Leave",
+          style: "destructive",
+          onPress: () => {
+            setBusy(true);
+            writes
+              .leavePandal(targetPandalId)
+              .catch((error) => {
+                logError("ganesh.setup.leave", error);
+                toast.error(friendlyErrorMessage(error, "Could not leave this Pandal."));
+              })
+              .finally(() => setBusy(false));
+          },
+        },
+      ]
+    );
+  };
+
   const join = async () => {
     setBusy(true);
     try {
@@ -283,6 +307,7 @@ export default function GaneshSetupScreen() {
                   name={pandal.name}
                   code={pandal.code}
                   onOpen={openPandal}
+                  onLeave={leaveListed}
                 />
               ))}
             </View>
@@ -428,11 +453,13 @@ function PandalPickRow({
   name,
   code,
   onOpen,
+  onLeave,
 }: {
   pandalId: string;
   name: string;
   code: string;
   onOpen: (pandalId: string) => Promise<void>;
+  onLeave?: (pandalId: string, name: string) => void;
 }) {
   const { theme } = useTheme();
   const g = useGaneshTokens();
@@ -452,28 +479,44 @@ function PandalPickRow({
   };
 
   return (
-    <Pressable
-      disabled={busy}
-      onPress={() => {
-        void open();
-      }}
-      style={({ pressed }) => [
+    <View
+      style={[
         styles.pick,
         {
           backgroundColor: g.wash(g.saffron),
           borderColor: g.divider,
           opacity: busy ? 0.7 : 1,
         },
-        pressed ? { opacity: 0.88 } : null,
       ]}
     >
-      <Text style={[styles.pickName, { color: theme.colors.foreground, fontFamily: theme.fontFamily.bold }]}>
-        {name}
-      </Text>
-      <Text style={[styles.pickMeta, { color: g.saffron, fontFamily: theme.fontFamily.semibold }]}>
-        Code {formatPandalCode(code)}
-      </Text>
-    </Pressable>
+      <Pressable
+        disabled={busy}
+        onPress={() => {
+          void open();
+        }}
+        style={({ pressed }) => [pressed ? { opacity: 0.88 } : null]}
+      >
+        <Text style={[styles.pickName, { color: theme.colors.foreground, fontFamily: theme.fontFamily.bold }]}>
+          {name}
+        </Text>
+        <Text style={[styles.pickMeta, { color: g.saffron, fontFamily: theme.fontFamily.semibold }]}>
+          Code {formatPandalCode(code)}
+        </Text>
+      </Pressable>
+      {onLeave ? (
+        <Pressable
+          disabled={busy}
+          accessibilityRole="button"
+          accessibilityLabel={`Leave ${name}`}
+          onPress={() => onLeave(pandalId, name)}
+          style={({ pressed }) => [styles.leaveBtn, pressed ? { opacity: 0.7 } : null]}
+        >
+          <Text style={[styles.leaveLabel, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.semibold }]}>
+            Leave
+          </Text>
+        </Pressable>
+      ) : null}
+    </View>
   );
 }
 
@@ -525,6 +568,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 12,
     gap: 4,
+  },
+  leaveBtn: {
+    alignSelf: "flex-start",
+    minHeight: 36,
+    justifyContent: "center",
+    paddingTop: 4,
+  },
+  leaveLabel: {
+    fontSize: 13,
   },
   pickName: {
     fontSize: 16,
