@@ -61,7 +61,8 @@ export function reconciliationDifference(countedCash: number, expectedCash: numb
   return money(Number(countedCash ?? 0) - Number(expectedCash ?? 0));
 }
 
-export function reconciliationStatusFor(difference: number): ReconciliationStatus {
+/** The outcome an approval will settle on, given the difference. */
+export function reconciliationOutcomeFor(difference: number): ReconciliationStatus {
   return money(difference) === 0 ? "matched" : "mismatch";
 }
 
@@ -135,15 +136,44 @@ export function canCancelSession(
 }
 
 /**
- * Who may approve a count (GS-075 point 9).
+ * Who may **count** the cash (GS-075 step 3).
  *
- * Separation of duties: the person who collected the cash is not the person who
- * signs off that it is all there. A collector without financial approval
- * authority cannot approve at all — their own or anyone's.
+ * Not the collector: the person who carried the money does not also produce the
+ * figure it is checked against.
  */
-export function canApproveReconciliation(input: {
+export function canRecordCount(input: {
   actorId: string;
   collectorId: string;
+  hasCountPermission: boolean;
+}): Refusal {
+  if (!input.hasCountPermission) {
+    return {
+      ok: false,
+      error: "Your role cannot count cash. A treasurer or admin must do this.",
+    };
+  }
+  if (input.actorId === input.collectorId) {
+    return {
+      ok: false,
+      error:
+        "You collected this cash, so someone else has to count it. Ask a treasurer or another admin.",
+    };
+  }
+  return OK;
+}
+
+/**
+ * Who may **approve** a count (GS-075 step 6, two-person flow).
+ *
+ * Three people are kept apart here: the collector who carried the cash, the
+ * counter who produced the figure, and the approver who signs it off. The
+ * counter approving their own count would collapse the two-person flow back
+ * into one person, which is the whole thing this is designed to prevent.
+ */
+export function canApproveCount(input: {
+  actorId: string;
+  collectorId: string;
+  countedBy: string;
   hasApprovalPermission: boolean;
 }): Refusal {
   if (!input.hasApprovalPermission) {
@@ -152,11 +182,43 @@ export function canApproveReconciliation(input: {
       error: "Your role cannot approve a cash count. A treasurer or admin must do this.",
     };
   }
-  if (input.actorId === input.collectorId) {
+  if (input.actorId === input.countedBy) {
     return {
       ok: false,
       error:
-        "You collected this cash, so someone else has to count and approve it. Ask a treasurer or another admin.",
+        "You counted this cash, so someone else has to approve it. Ask a treasurer or another admin.",
+    };
+  }
+  if (input.actorId === input.collectorId) {
+    return {
+      ok: false,
+      error: "You collected this cash, so you cannot approve the count of it.",
+    };
+  }
+  return OK;
+}
+
+/**
+ * May this actor close the session? (GS-076 point 6, with the admin override.)
+ *
+ * The collector closes their own. Anyone else needs the override authority and
+ * has to say why, so the handover trail records that a second person ended
+ * someone else's session rather than it simply appearing closed.
+ */
+export function canCloseOnBehalf(input: {
+  actorId: string;
+  collectorId: string;
+  hasOverridePermission: boolean;
+  reason?: string;
+}): Refusal {
+  if (input.actorId === input.collectorId) return OK;
+  if (!input.hasOverridePermission) {
+    return { ok: false, error: "This session belongs to another collector." };
+  }
+  if (!input.reason?.trim()) {
+    return {
+      ok: false,
+      error: "Say why you are closing another collector's session.",
     };
   }
   return OK;

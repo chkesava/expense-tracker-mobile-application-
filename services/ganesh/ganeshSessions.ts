@@ -25,11 +25,13 @@ import { todayDateInput } from "@/shared/utils/ganeshIdentity";
 import {
   assertMismatchReason,
   assertReconciliationEditable,
-  canApproveReconciliation,
+  canApproveCount,
   canCancelSession,
+  canCloseOnBehalf,
   canCloseSession,
+  canRecordCount,
   reconciliationDifference,
-  reconciliationStatusFor,
+  reconciliationOutcomeFor,
   sessionStatusForReconciliation,
   summarizeSession,
 } from "@/shared/utils/ganeshReconciliation";
@@ -179,7 +181,16 @@ export async function closeCollectionSession(
   pandalId: string,
   festivalId: string,
   sessionId: string,
-  input: { declaredCash: number }
+  input: {
+    declaredCash: number;
+    /**
+     * Required when closing someone else's session. Recorded on the session so
+     * the override is auditable rather than invisible.
+     */
+    reason?: string;
+    /** From the caller's permission check; the rules enforce it again. */
+    hasOverridePermission?: boolean;
+  }
 ): Promise<void> {
   await requireOpenFestival(db, pandalId, festivalId);
   const totals = summarizeSession(
@@ -191,23 +202,37 @@ export async function closeCollectionSession(
     const snap = await txn.get(ref);
     if (!snap.exists()) throw new Error("Collection session not found.");
     const session = snap.data() as CollectionSession;
-    if (session.collectorId !== actor.uid && session.createdBy !== actor.uid) {
-      // Someone else's session. An admin closing on a collector's behalf is a
-      // real need, but it must be an explicit act rather than a side effect, so
-      // it goes through `closeSessionAsAdmin` where the actor is recorded.
-      throw new Error("This session belongs to another collector.");
-    }
+
+    // A collector who goes home without closing would otherwise leave cash
+    // uncounted and the session open forever, so an admin or treasurer may
+    // close on their behalf — named, reasoned and timestamped.
+    const onBehalf = actor.uid !== session.collectorId;
+    const allowedActor = canCloseOnBehalf({
+      actorId: actor.uid,
+      collectorId: session.collectorId,
+      hasOverridePermission: Boolean(input.hasOverridePermission),
+      reason: input.reason,
+    });
+    if (!allowedActor.ok) throw new Error(allowedActor.error);
+
     const allowed = canCloseSession(session, input.declaredCash, totals.expectedCash);
     if (!allowed.ok) throw new Error(allowed.error);
 
-    txn.update(ref, {
-      status: "closed",
-      closedAt: serverTimestamp(),
-      declaredCash: Number(input.declaredCash ?? 0),
-      ...totals,
-      updatedBy: actor.uid,
-      updatedAt: serverTimestamp(),
-    });
+    txn.update(
+      ref,
+      omitUndefined({
+        status: "closed",
+        closedAt: serverTimestamp(),
+        closedBy: actor.uid,
+        closedByName: actor.displayName,
+        closedOnBehalfOf: onBehalf ? session.collectorId : undefined,
+        closeReason: onBehalf ? input.reason?.trim() : undefined,
+        declaredCash: Number(input.declaredCash ?? 0),
+        ...totals,
+        updatedBy: actor.uid,
+        updatedAt: serverTimestamp(),
+      })
+    );
   });
 }
 
@@ -240,14 +265,15 @@ export async function cancelCollectionSession(
 }
 
 /**
- * Count the cash and record the outcome (GS-075 points 3-7).
+ * Step one: count the cash (GS-075 steps 3-5).
  *
- * Never adjusts a collection. A mismatch is recorded as a mismatch, with both
- * figures preserved and a reason required, and the session is marked so the
- * discrepancy is visible rather than absorbed.
+ * Records what was physically counted and what the ledger expected, and leaves
+ * the reconciliation `counted` — visible, unlocked, and waiting for a second
+ * person. Nothing is settled here, so nothing locks yet: a miscount found
+ * before sign-off should be fixed by re-counting, not by an adjustment against
+ * a figure nobody ever stood behind.
  *
- * One transaction over the session and the reconciliation, so the two cannot
- * disagree about whether this session has been counted.
+ * The counter may not be the collector.
  */
 export async function recordCashCount(
   db: Firestore,
@@ -259,9 +285,9 @@ export async function recordCashCount(
     countedCash: number;
     reason?: string;
     /** From the caller's permission check; the rules enforce it again. */
-    hasApprovalPermission: boolean;
+    hasCountPermission: boolean;
   }
-): Promise<{ difference: number; status: CashReconciliation["status"] }> {
+): Promise<{ difference: number; outcome: CashReconciliation["status"] }> {
   await requireOpenFestival(db, pandalId, festivalId);
   const counted = Number(input.countedCash ?? 0);
   if (!Number.isFinite(counted) || counted < 0) {
@@ -286,16 +312,16 @@ export async function recordCashCount(
     );
     if (!editable.ok) throw new Error(editable.error);
 
-    const approval = canApproveReconciliation({
+    const allowed = canRecordCount({
       actorId: actor.uid,
       collectorId: session.collectorId,
-      hasApprovalPermission: input.hasApprovalPermission,
+      hasCountPermission: input.hasCountPermission,
     });
-    if (!approval.ok) throw new Error(approval.error);
+    if (!allowed.ok) throw new Error(allowed.error);
 
     const expectedCash = Number(session.expectedCash ?? 0);
     const difference = reconciliationDifference(counted, expectedCash);
-    const status = reconciliationStatusFor(difference);
+    const outcome = reconciliationOutcomeFor(difference);
 
     const reasonCheck = assertMismatchReason(difference, input.reason);
     if (!reasonCheck.ok) throw new Error(reasonCheck.error);
@@ -309,26 +335,97 @@ export async function recordCashCount(
         declaredCash: Number(session.declaredCash ?? 0),
         countedCash: counted,
         difference,
-        status,
+        status: "counted",
         reason: input.reason?.trim() || undefined,
         countedBy: actor.uid,
         countedByName: actor.displayName,
-        approvedBy: actor.uid,
-        approvedAt: serverTimestamp(),
-        // Point 10 — immutable from here; corrections go through an adjustment.
-        locked: true,
+        countedAt: serverTimestamp(),
+        locked: false,
         createdBy: actor.uid,
         createdAt: serverTimestamp(),
         updatedBy: actor.uid,
         updatedAt: serverTimestamp(),
       })
     );
+    // The session says "awaiting approval" by staying `closed` until someone
+    // signs off — it must not read as reconciled on one person's say-so.
     txn.update(sRef, {
-      status: sessionStatusForReconciliation(status),
       reconciliationId: sessionId,
       updatedBy: actor.uid,
       updatedAt: serverTimestamp(),
     });
+
+    return { difference, outcome };
+  });
+}
+
+/**
+ * Step two: a second person approves the count (GS-075 step 6).
+ *
+ * Settles the reconciliation as `matched` or `mismatch` from the figures
+ * already recorded — the approver signs off what was counted, they do not get
+ * to change it — and locks it. The session's status follows, so a discrepancy
+ * stays visible on the session itself.
+ *
+ * The approver may be neither the counter nor the collector.
+ */
+export async function approveCashCount(
+  db: Firestore,
+  actor: GaneshActor,
+  pandalId: string,
+  festivalId: string,
+  sessionId: string,
+  input: { reason?: string; hasApprovalPermission: boolean }
+): Promise<{ difference: number; status: CashReconciliation["status"] }> {
+  await requireOpenFestival(db, pandalId, festivalId);
+
+  return runTransaction(db, async (txn) => {
+    const sRef = sessionRef(db, pandalId, festivalId, sessionId);
+    const rRef = reconciliationRef(db, pandalId, festivalId, sessionId);
+    const [sSnap, rSnap] = await Promise.all([txn.get(sRef), txn.get(rRef)]);
+    if (!rSnap.exists()) throw new Error("This session has not been counted yet.");
+    const reconciliation = rSnap.data() as CashReconciliation;
+    if (reconciliation.locked) {
+      throw new Error("This count has already been approved.");
+    }
+    if (reconciliation.status !== "counted") {
+      throw new Error("This count is not waiting for approval.");
+    }
+
+    const allowed = canApproveCount({
+      actorId: actor.uid,
+      collectorId: reconciliation.collectorId,
+      countedBy: reconciliation.countedBy,
+      hasApprovalPermission: input.hasApprovalPermission,
+    });
+    if (!allowed.ok) throw new Error(allowed.error);
+
+    const difference = Number(reconciliation.difference ?? 0);
+    const status = reconciliationOutcomeFor(difference);
+    const reason = input.reason?.trim() || reconciliation.reason;
+    const reasonCheck = assertMismatchReason(difference, reason);
+    if (!reasonCheck.ok) throw new Error(reasonCheck.error);
+
+    txn.update(
+      rRef,
+      omitUndefined({
+        status,
+        reason: reason || undefined,
+        approvedBy: actor.uid,
+        approvedByName: actor.displayName,
+        approvedAt: serverTimestamp(),
+        locked: true,
+        updatedBy: actor.uid,
+        updatedAt: serverTimestamp(),
+      })
+    );
+    if (sSnap.exists()) {
+      txn.update(sRef, {
+        status: sessionStatusForReconciliation(status),
+        updatedBy: actor.uid,
+        updatedAt: serverTimestamp(),
+      });
+    }
 
     return { difference, status };
   });

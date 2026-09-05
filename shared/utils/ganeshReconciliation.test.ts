@@ -4,12 +4,14 @@ import {
   assertMismatchReason,
   assertReconciliationEditable,
   assertSessionAcceptsCollections,
-  canApproveReconciliation,
+  canApproveCount,
+  canCloseOnBehalf,
+  canRecordCount,
   canCancelSession,
   canCloseSession,
   describeDifference,
   reconciliationDifference,
-  reconciliationStatusFor,
+  reconciliationOutcomeFor,
   sessionExpectedCash,
   sessionExpectedNonCash,
   sessionStatusForReconciliation,
@@ -79,9 +81,9 @@ describe("the difference", () => {
   });
 
   it("treats an exact match as matched and anything else as a mismatch", () => {
-    expect(reconciliationStatusFor(0)).toBe("matched");
-    expect(reconciliationStatusFor(-1)).toBe("mismatch");
-    expect(reconciliationStatusFor(0.5)).toBe("mismatch");
+    expect(reconciliationOutcomeFor(0)).toBe("matched");
+    expect(reconciliationOutcomeFor(-1)).toBe("mismatch");
+    expect(reconciliationOutcomeFor(0.5)).toBe("mismatch");
   });
 
   it("marks the session so a discrepancy stays visible on it", () => {
@@ -159,23 +161,18 @@ describe("cancelling a session", () => {
   });
 });
 
-describe("who may approve a count (GS-075 point 9)", () => {
-  it("refuses a collector with no approval authority", () => {
-    const result = canApproveReconciliation({
-      actorId: "u-1",
-      collectorId: "u-2",
-      hasApprovalPermission: false,
-    });
-    expect(result.ok).toBe(false);
+describe("who may count the cash (GS-075 step 3)", () => {
+  it("refuses someone without count authority", () => {
+    expect(
+      canRecordCount({ actorId: "u-1", collectorId: "u-2", hasCountPermission: false }).ok
+    ).toBe(false);
   });
 
-  it("refuses self-approval even with the permission", () => {
-    // Separation of duties is the point: the person who carried the cash does
-    // not sign off that all of it arrived.
-    const result = canApproveReconciliation({
+  it("refuses the collector counting their own cash", () => {
+    const result = canRecordCount({
       actorId: "u-1",
       collectorId: "u-1",
-      hasApprovalPermission: true,
+      hasCountPermission: true,
     });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toContain("someone else");
@@ -183,10 +180,86 @@ describe("who may approve a count (GS-075 point 9)", () => {
 
   it("allows an authorized second person", () => {
     expect(
-      canApproveReconciliation({
+      canRecordCount({
         actorId: "u-treasurer",
         collectorId: "u-collector",
-        hasApprovalPermission: true,
+        hasCountPermission: true,
+      }).ok
+    ).toBe(true);
+  });
+});
+
+describe("who may approve a count (GS-075 step 6, two-person flow)", () => {
+  const BASE = {
+    actorId: "u-approver",
+    collectorId: "u-collector",
+    countedBy: "u-counter",
+    hasApprovalPermission: true,
+  };
+
+  it("allows a genuine third person", () => {
+    expect(canApproveCount(BASE).ok).toBe(true);
+  });
+
+  it("refuses the counter approving their own count", () => {
+    // This is the whole point of two people. Without it the flow collapses
+    // back into one.
+    const result = canApproveCount({ ...BASE, actorId: "u-counter" });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toContain("You counted this cash");
+  });
+
+  it("refuses the collector approving the count of their own cash", () => {
+    const result = canApproveCount({ ...BASE, actorId: "u-collector" });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toContain("You collected this cash");
+  });
+
+  it("refuses anyone without approval authority", () => {
+    expect(canApproveCount({ ...BASE, hasApprovalPermission: false }).ok).toBe(false);
+  });
+});
+
+describe("closing another collector's session (GS-076 override)", () => {
+  it("needs no override for your own session", () => {
+    expect(
+      canCloseOnBehalf({
+        actorId: "u-1",
+        collectorId: "u-1",
+        hasOverridePermission: false,
+      }).ok
+    ).toBe(true);
+  });
+
+  it("refuses someone else's session without the authority", () => {
+    expect(
+      canCloseOnBehalf({
+        actorId: "u-2",
+        collectorId: "u-1",
+        hasOverridePermission: false,
+        reason: "went home",
+      }).ok
+    ).toBe(false);
+  });
+
+  it("requires a reason when closing on someone's behalf", () => {
+    // The override has to be auditable, not silent.
+    const result = canCloseOnBehalf({
+      actorId: "u-2",
+      collectorId: "u-1",
+      hasOverridePermission: true,
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toContain("why");
+  });
+
+  it("allows an authorized override with a reason", () => {
+    expect(
+      canCloseOnBehalf({
+        actorId: "u-2",
+        collectorId: "u-1",
+        hasOverridePermission: true,
+        reason: "Ravi went home without closing; cash handed to me at the pandal",
       }).ok
     ).toBe(true);
   });

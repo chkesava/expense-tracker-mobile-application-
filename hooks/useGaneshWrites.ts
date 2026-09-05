@@ -172,7 +172,10 @@ export function useGaneshWrites() {
         sessionWrites.startCollectionSession(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, input)
       );
     },
-    closeCollectionSession: async (sessionId: string, input: { declaredCash: number }) => {
+    closeCollectionSession: async (
+      sessionId: string,
+      input: { declaredCash: number; reason?: string }
+    ) => {
       requirePerm("sessions.write");
       const ctx = requireFestival();
       return run("Session closed", () =>
@@ -182,7 +185,12 @@ export function useGaneshWrites() {
           ctx.pandalId,
           ctx.festivalId,
           sessionId,
-          input
+          {
+            ...input,
+            // Closing someone else's session is an override, gated on the
+            // same authority that approves money (GS-076 + your decision 2).
+            hasOverridePermission: hasPerm("reconciliation.approve"),
+          }
         )
       );
     },
@@ -211,11 +219,22 @@ export function useGaneshWrites() {
       input: { countedCash: number; reason?: string }
     ) => {
       requirePerm("reconciliation.count");
-      requirePerm("reconciliation.approve");
       const ctx = requireFestival();
       assertMoneyReceiveOnline(isOnline, "money");
       return run("Cash count recorded", () =>
         sessionWrites.recordCashCount(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, sessionId, {
+          ...input,
+          hasCountPermission: hasPerm("reconciliation.count"),
+        })
+      );
+    },
+    /** The second person (GS-075). Never the counter, never the collector. */
+    approveCashCount: async (sessionId: string, input?: { reason?: string }) => {
+      requirePerm("reconciliation.approve");
+      const ctx = requireFestival();
+      assertMoneyReceiveOnline(isOnline, "money");
+      return run("Reconciliation approved", () =>
+        sessionWrites.approveCashCount(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, sessionId, {
           ...input,
           hasApprovalPermission: hasPerm("reconciliation.approve"),
         })

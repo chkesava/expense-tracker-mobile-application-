@@ -1256,6 +1256,43 @@ service cloud.firestore {
            * Evaluated through a ternary below so it genuinely short-circuits:
            * only these three checks run for a summary write.
            */
+          /**
+           * Subcollections with their own short-circuited rules below.
+           *
+           * The shared festival wildcard is at Firestore's ceiling of 1000
+           * expressions per evaluation — that is what GS-104 was, and the
+           * emulator hit it again the moment reconciliation predicates were
+           * added to it. Anything money-shaped and new therefore gets its own
+           * rule evaluating only what applies to it, rather than a fourteenth
+           * branch of `canWriteFestivalSubcol()` plus nine sub-predicates of
+           * `payloadWellFormed()` that cannot apply.
+           */
+          function hasDedicatedRule() {
+            return subcol == 'summary'
+              || subcol == 'collectionSessions'
+              || subcol == 'reconciliations'
+              || subcol == 'cashAdjustments';
+          }
+
+          /** GS-076: a collector runs their own session. */
+          function sessionWriteAllowed() {
+            return pandalNotArchived() && canWriteSessionOf(pandalId);
+          }
+
+          /** GS-075: a count is created unapproved, and never by the collector. */
+          function reconciliationCreateAllowed() {
+            return pandalNotArchived()
+              && canCountCashOf(pandalId)
+              && request.resource.data.collectorId != request.auth.uid
+              && request.resource.data.status == 'counted'
+              && request.resource.data.locked == false;
+          }
+
+          /** GS-075 point 8: adjustments are append-only evidence. */
+          function cashAdjustmentCreateAllowed() {
+            return pandalNotArchived() && canResolveReconciliationOf(pandalId);
+          }
+
           function summaryWriteAllowed() {
             return pandalNotArchived()
               && summaryWellFormed()
@@ -1408,16 +1445,43 @@ service cloud.firestore {
           }
 
           allow read: if canReadSubcol();
+
           /**
-           * A cash count may not be approved by the person who collected the
-           * cash (GS-075 point 9). Enforced here as well as in the service,
-           * because separation of duties that only the client checks is not
-           * separation of duties.
+           * Approving a count (GS-075 step 6, two-person flow).
+           *
+           * Three people are held apart, and all three by the server rather
+           * than by the client: the collector who carried the cash, the counter
+           * who produced the figure, and the approver who signs it off. The
+           * approver changes no number — only the status, who approved, when,
+           * and the lock — so signing off cannot quietly become re-counting.
            */
-          function reconciliationApproverIsNotCollector() {
-            return subcol != 'reconciliations'
-              || !request.resource.data.keys().hasAll(['collectorId'])
-              || request.resource.data.collectorId != request.auth.uid;
+          function reconciliationApprovalAllowed() {
+            return canApproveReconciliationOf(pandalId)
+              && resource.data.status == 'counted'
+              && resource.data.countedBy != request.auth.uid
+              && resource.data.collectorId != request.auth.uid
+              && request.resource.data.locked == true
+              && request.resource.data.status in ['matched', 'mismatch']
+              && request.resource.data.diff(resource.data).affectedKeys()
+                   .hasOnly([
+                     'status', 'reason', 'approvedBy', 'approvedByName',
+                     'approvedAt', 'locked', 'updatedBy', 'updatedAt'
+                   ]);
+          }
+
+          /**
+           * Re-counting before anyone has signed off.
+           *
+           * A miscount found before approval is fixed by counting again, not by
+           * an adjustment against a figure nobody ever stood behind. Still
+           * never the collector, and it must stay unapproved.
+           */
+          function reconciliationRecountAllowed() {
+            return canCountCashOf(pandalId)
+              && resource.data.status == 'counted'
+              && resource.data.collectorId != request.auth.uid
+              && request.resource.data.status == 'counted'
+              && request.resource.data.locked == false;
           }
 
           /**
@@ -1427,26 +1491,30 @@ service cloud.firestore {
            * figures can never move.
            */
           function reconciliationUpdateAllowed() {
-            return subcol != 'reconciliations'
-              || !resource.data.locked
-              || (
-                canResolveReconciliationOf(pandalId)
-                && request.resource.data.diff(resource.data).affectedKeys()
-                     .hasOnly(['status', 'updatedBy', 'updatedAt'])
-                && resource.data.status == 'mismatch'
-                && request.resource.data.status == 'resolved'
+            return (
+                resource.data.locked
+                  ? (
+                    canResolveReconciliationOf(pandalId)
+                    && request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['status', 'updatedBy', 'updatedAt'])
+                    && resource.data.status == 'mismatch'
+                    && request.resource.data.status == 'resolved'
+                  )
+                  : (reconciliationApprovalAllowed() || reconciliationRecountAllowed())
               );
           }
 
-          /** Adjustments are evidence; they are never edited or removed. */
-          function cashAdjustmentIsAppendOnly() {
-            return subcol != 'cashAdjustments';
-          }
 
           allow create: if isActivePandalMember()
             && festivalOpen()
             && (subcol == 'summary'
               ? summaryWriteAllowed()
+              : subcol == 'collectionSessions'
+              ? sessionWriteAllowed()
+              : subcol == 'reconciliations'
+              ? reconciliationCreateAllowed()
+              : subcol == 'cashAdjustments'
+              ? cashAdjustmentCreateAllowed()
               : (
                 canWriteFestivalSubcol()
                 && payloadWellFormed()
@@ -1454,7 +1522,6 @@ service cloud.firestore {
                 && contributionCreateAllowed()
                 && contributionNotBornCancelled()
                 && sponsorshipCreateAllowed()
-                && reconciliationApproverIsNotCollector()
                 && (
                   !request.resource.data.keys().hasAny(['createdBy'])
                   || ganeshIdentityCreate()
@@ -1469,10 +1536,27 @@ service cloud.firestore {
             && isActivePandalMember()
             && festivalOpen()
             && summaryWriteAllowed();
-          allow update: if subcol != 'summary'
+          // GS-076: only the collector or an override-holder closes a session,
+          // and the service records who and why. The rules keep it to members
+          // who may write sessions at all; the on-behalf audit fields are the
+          // service's job because rules cannot know intent.
+          allow update: if subcol == 'collectionSessions'
             && isActivePandalMember()
-            && cashAdjustmentIsAppendOnly()
-            && reconciliationUpdateAllowed()
+            && festivalOpen()
+            && sessionWriteAllowed();
+
+          // GS-075: approve, or re-count before approval, or resolve after it.
+          allow update: if subcol == 'reconciliations'
+            && isActivePandalMember()
+            && festivalOpen()
+            && pandalNotArchived()
+            && reconciliationUpdateAllowed();
+
+          // cashAdjustments: create only. No update rule at all, so there is
+          // nothing to get wrong.
+
+          allow update: if !hasDedicatedRule()
+            && isActivePandalMember()
             && !isAppendOnlyLog()
             && payloadWellFormed()
             // GS-082: this guard was on create only, so an update could add an

@@ -26,6 +26,8 @@ const FESTIVAL = "festival-1";
 const ADMIN = "u-admin";
 const TREASURER = "u-treasurer";
 const COLLECTOR = "u-collector";
+/** The second authorized person: approves, never counts. */
+const APPROVER = "u-approver";
 
 let env: RulesTestEnvironment;
 
@@ -52,7 +54,7 @@ beforeEach(async () => {
       name: "Test Pandal",
       code: "GNSH-TEST",
       ownerId: ADMIN,
-      memberIds: [ADMIN, TREASURER, COLLECTOR],
+      memberIds: [ADMIN, TREASURER, COLLECTOR, APPROVER],
       adminCount: 1,
       createdBy: ADMIN,
       updatedBy: ADMIN,
@@ -91,6 +93,20 @@ beforeEach(async () => {
         "sessions.read",
         "sessions.write",
         "reconciliation.read",
+      ],
+    });
+    await setDoc(doc(db, "pandals", PANDAL, "members", APPROVER), {
+      userId: APPROVER,
+      displayName: "Second Treasurer",
+      role: "treasurer",
+      status: "active",
+      permissions: [
+        "collections.read",
+        "sessions.read",
+        "reconciliation.read",
+        "reconciliation.count",
+        "reconciliation.approve",
+        "reconciliation.resolve",
       ],
     });
     await setDoc(doc(db, "pandals", PANDAL, "festivals", FESTIVAL), {
@@ -140,11 +156,10 @@ function reconciliation(overrides: Record<string, unknown> = {}) {
     declaredCash: 5000,
     countedCash: 5000,
     difference: 0,
-    status: "matched",
     countedBy: TREASURER,
     countedByName: "Treasurer",
-    approvedBy: TREASURER,
-    locked: true,
+    status: "counted",
+    locked: false,
     createdBy: TREASURER,
     updatedBy: TREASURER,
     ...overrides,
@@ -189,10 +204,75 @@ describe("GS-075 separation of duties", () => {
     await assertSucceeds(setDoc(reconDoc(TREASURER, "s-1"), reconciliation()));
   });
 
+  it("leaves that count unapproved, awaiting a second person", async () => {
+    await assertSucceeds(setDoc(reconDoc(TREASURER, "s-4"), reconciliation({ sessionId: "s-4" })));
+  });
+
   it("refuses an admin approving their own collection too", async () => {
     // Admin holds every permission, and still cannot self-approve.
     await assertFails(
       setDoc(reconDoc(ADMIN, "s-3"), reconciliation({ collectorId: ADMIN, countedBy: ADMIN }))
+    );
+  });
+});
+
+describe("GS-075 two-person flow", () => {
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(
+        doc(context.firestore(), "pandals", PANDAL, "festivals", FESTIVAL, "reconciliations", "s-1"),
+        reconciliation({ countedCash: 4500, difference: -500, reason: "short" })
+      );
+    });
+  });
+
+  const APPROVAL = {
+    status: "mismatch",
+    approvedBy: APPROVER,
+    approvedByName: "Second Treasurer",
+    locked: true,
+    updatedBy: APPROVER,
+  };
+
+  it("refuses the counter approving their own count", () => 
+    assertFails(updateDoc(reconDoc(TREASURER, "s-1"), { ...APPROVAL, approvedBy: TREASURER })));
+
+  it("refuses the collector approving it", () =>
+    assertFails(updateDoc(reconDoc(COLLECTOR, "s-1"), { ...APPROVAL, approvedBy: COLLECTOR })));
+
+  it("lets a genuine second person approve", () =>
+    assertSucceeds(updateDoc(reconDoc(APPROVER, "s-1"), APPROVAL)));
+
+  it("refuses an approver silently changing the counted figure", async () => {
+    // Signing off must not become re-counting.
+    await assertFails(
+      updateDoc(reconDoc(APPROVER, "s-1"), { ...APPROVAL, countedCash: 5000 })
+    );
+  });
+
+  it("refuses an approval that does not lock", async () => {
+    await assertFails(updateDoc(reconDoc(APPROVER, "s-1"), { ...APPROVAL, locked: false }));
+  });
+
+  it("refuses creating a count that is already approved", async () => {
+    // Otherwise one person could write a locked, signed-off reconciliation and
+    // skip the second person entirely.
+    await assertFails(
+      setDoc(
+        reconDoc(TREASURER, "s-9"),
+        reconciliation({ sessionId: "s-9", status: "matched", locked: true, approvedBy: TREASURER })
+      )
+    );
+  });
+
+  it("lets a different counter re-count before anyone has approved", async () => {
+    await assertSucceeds(
+      updateDoc(reconDoc(APPROVER, "s-1"), {
+        countedCash: 5000,
+        difference: 0,
+        countedBy: APPROVER,
+        updatedBy: APPROVER,
+      })
     );
   });
 });
@@ -202,36 +282,37 @@ describe("GS-075 point 10 - approved reconciliations are immutable", () => {
     await env.withSecurityRulesDisabled(async (context) => {
       await setDoc(
         doc(context.firestore(), "pandals", PANDAL, "festivals", FESTIVAL, "reconciliations", "s-1"),
-        reconciliation({ status: "mismatch", countedCash: 4500, difference: -500, reason: "short" })
+        reconciliation({
+          status: "mismatch",
+          countedCash: 4500,
+          difference: -500,
+          reason: "short",
+          approvedBy: APPROVER,
+          locked: true,
+        })
       );
     });
   });
 
-  it("refuses changing the counted amount after approval", async () => {
-    await assertFails(updateDoc(reconDoc(TREASURER, "s-1"), { countedCash: 5000 }));
-  });
+  it("refuses changing the counted amount after approval", () =>
+    assertFails(updateDoc(reconDoc(TREASURER, "s-1"), { countedCash: 5000 })));
 
-  it("refuses changing the expected amount after approval", async () => {
-    await assertFails(updateDoc(reconDoc(ADMIN, "s-1"), { expectedCash: 4500 }));
-  });
+  it("refuses changing the expected amount after approval", () =>
+    assertFails(updateDoc(reconDoc(ADMIN, "s-1"), { expectedCash: 4500 })));
 
-  it("refuses quietly flipping a mismatch to matched", async () => {
-    // The discrepancy must stay visible. Only mismatch -> resolved is allowed,
-    // and only alongside an adjustment.
-    await assertFails(updateDoc(reconDoc(TREASURER, "s-1"), { status: "matched" }));
-  });
+  it("refuses quietly flipping a mismatch to matched", () =>
+    // The discrepancy must stay visible. Only mismatch -> resolved is allowed.
+    assertFails(updateDoc(reconDoc(TREASURER, "s-1"), { status: "matched" })));
 
-  it("allows exactly the mismatch -> resolved transition", async () => {
-    await assertSucceeds(
+  it("allows exactly the mismatch -> resolved transition", () =>
+    assertSucceeds(
       updateDoc(reconDoc(TREASURER, "s-1"), { status: "resolved", updatedBy: TREASURER })
-    );
-  });
+    ));
 
-  it("refuses that transition from someone without resolve authority", async () => {
-    await assertFails(
+  it("refuses that transition from someone without resolve authority", () =>
+    assertFails(
       updateDoc(reconDoc(COLLECTOR, "s-1"), { status: "resolved", updatedBy: COLLECTOR })
-    );
-  });
+    ));
 });
 
 describe("GS-075 point 8 - adjustments are append-only evidence", () => {

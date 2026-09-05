@@ -139,6 +139,19 @@ export interface CollectionSession extends GaneshAuditFields {
   startedAt?: FirestoreTime;
   closedAt?: FirestoreTime;
 
+  /**
+   * Who actually closed it. Equal to `collectorId` in the normal case.
+   *
+   * A collector who goes home without closing leaves cash uncounted and the
+   * session open forever, so an admin or treasurer may close on their behalf —
+   * but the override is recorded rather than silent: `closedOnBehalfOf` names
+   * the collector, and `closeReason` says why someone else did it.
+   */
+  closedBy?: string;
+  closedByName?: string;
+  closedOnBehalfOf?: string;
+  closeReason?: string;
+
   /** Totals frozen at close, from the session's own collection rows. */
   expectedCash: number;
   expectedNonCash: number;
@@ -158,10 +171,19 @@ export interface CollectionSession extends GaneshAuditFields {
  * GS-075 — cash reconciliation
  * ------------------------------------------------------------------ */
 
+/**
+ * Two people, two steps.
+ *
+ * One authorized person counts the cash; a **different** authorized person
+ * approves the count. `counted` is the gap between them — the figures are
+ * recorded and visible, but nobody has signed off yet, so nothing is locked.
+ */
 export type ReconciliationStatus =
-  /** Counted, and counted equals expected. */
+  /** Counted and awaiting a second person's approval. Not yet locked. */
+  | "counted"
+  /** Approved, and counted equals expected. */
   | "matched"
-  /** Counted, and it did not match. Both figures preserved. */
+  /** Approved, and it did not match. Both figures preserved. */
   | "mismatch"
   /** A mismatch that has since been explained by an adjustment. */
   | "resolved";
@@ -196,9 +218,23 @@ export interface CashReconciliation extends GaneshAuditFields {
 
   countedBy: string;
   countedByName: string;
+  countedAt?: FirestoreTime;
+
+  /**
+   * The second person. Never the counter and never the collector — both are
+   * refused by the rules, not just by the service.
+   */
   approvedBy?: string;
+  approvedByName?: string;
   approvedAt?: FirestoreTime;
-  /** Set on approval. Blocks further edits at the rules level. */
+
+  /**
+   * Set on approval. Blocks further edits at the rules level.
+   *
+   * False while `counted`, because a miscount discovered before sign-off should
+   * be correctable by re-counting rather than by an adjustment against a figure
+   * nobody ever stood behind.
+   */
   locked: boolean;
   pendingWrite?: boolean;
 }
