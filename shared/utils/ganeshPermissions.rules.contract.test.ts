@@ -162,11 +162,13 @@ function canReadFestivalYear(ctx: Ctx): boolean {
 
 function canCreateFestivalYear(
   ctx: Ctx,
-  data: { festivalId: unknown; year: unknown }
+  data: { festivalId: unknown; year: unknown; yearId?: string; festivalExists?: boolean }
 ): boolean {
   return canCreateFestival(ctx)
     && typeof data.festivalId === "string"
-    && typeof data.year === "number";
+    && typeof data.year === "number"
+    && (data.yearId == null || String(data.year) === data.yearId)
+    && data.festivalExists !== false;
 }
 
 function canUpdateFestivalYear(): boolean {
@@ -415,6 +417,9 @@ describe("ganesh firestore rules contract", () => {
         pandalId: "p1",
         payloadPandalId: "p1",
         status: "active",
+        role: "member",
+        liveMemberRole: "member",
+        liveMemberStatus: "active",
       })
     ).toBe(true);
     expect(
@@ -433,6 +438,87 @@ describe("ganesh firestore rules contract", () => {
         pandalId: "p1",
         payloadPandalId: "other",
         status: "active",
+      })
+    ).toBe(false);
+  });
+
+  it("refuses an owner forging role or status on their membership index", () => {
+    expect(
+      canWritePandalMembershipIndex({
+        isOwner: true,
+        actor: member,
+        pandalId: "p1",
+        payloadPandalId: "p1",
+        status: "active",
+        role: "admin",
+        liveMemberRole: "member",
+        liveMemberStatus: "active",
+      })
+    ).toBe(false);
+    expect(
+      canWritePandalMembershipIndex({
+        isOwner: true,
+        actor: member,
+        pandalId: "p1",
+        payloadPandalId: "other",
+        status: "active",
+        role: "member",
+        liveMemberRole: "member",
+      })
+    ).toBe(false);
+    expect(
+      canWritePandalMembershipIndex({
+        isOwner: true,
+        actor: member,
+        pandalId: "p1",
+        payloadPandalId: "p1",
+        status: "active",
+        role: "member",
+        liveMemberExists: false,
+      })
+    ).toBe(false);
+  });
+
+  it("refuses redundant pandalId or festivalId that disagree with the path", () => {
+    expect(scopeIdsMatch({ pathPandalId: "p1", pathFestivalId: "f1" })).toBe(true);
+    expect(
+      scopeIdsMatch({
+        pathPandalId: "p1",
+        pathFestivalId: "f1",
+        payload: { pandalId: "p1", festivalId: "f1" },
+      })
+    ).toBe(true);
+    expect(
+      scopeIdsMatch({
+        pathPandalId: "p1",
+        pathFestivalId: "f1",
+        payload: { pandalId: "other" },
+      })
+    ).toBe(false);
+    expect(
+      scopeIdsMatch({
+        pathPandalId: "p1",
+        pathFestivalId: "f1",
+        payload: { festivalId: "other" },
+      })
+    ).toBe(false);
+  });
+
+  it("requires festivalYears to name an existing festival", () => {
+    expect(
+      canCreateFestivalYear(admin, {
+        festivalId: "f1",
+        year: 2026,
+        yearId: "2026",
+        festivalExists: true,
+      })
+    ).toBe(true);
+    expect(
+      canCreateFestivalYear(admin, {
+        festivalId: "missing",
+        year: 2026,
+        yearId: "2026",
+        festivalExists: false,
       })
     ).toBe(false);
   });
@@ -890,13 +976,37 @@ function canWritePandalMembershipIndex(params: {
   pandalId: string;
   payloadPandalId: string;
   status: string;
+  role?: string;
+  keys?: string[];
+  liveMemberExists?: boolean;
+  liveMemberRole?: string;
+  liveMemberStatus?: string;
 }): boolean {
-  if (params.isOwner) return true;
-  return (
-    canManageMembers(params.actor)
-    && params.payloadPandalId === params.pandalId
-    && (params.status === "active" || params.status === "suspended" || params.status === "removed")
-  );
+  const keys = params.keys ?? ["pandalId", "role", "status"];
+  if (!membershipStampAllowed(keys)) return false;
+  if (params.payloadPandalId !== params.pandalId) return false;
+  if (params.status !== "active" && params.status !== "suspended" && params.status !== "removed") {
+    return false;
+  }
+  if (params.isOwner) {
+    if (params.liveMemberExists === false) return false;
+    const liveRole = params.liveMemberRole ?? params.role ?? "member";
+    const liveStatus = params.liveMemberStatus ?? "active";
+    const role = params.role ?? liveRole;
+    return role === liveRole && params.status === liveStatus;
+  }
+  return canManageMembers(params.actor);
+}
+
+function scopeIdsMatch(params: {
+  pathPandalId: string;
+  pathFestivalId: string;
+  payload?: { pandalId?: string; festivalId?: string };
+}): boolean {
+  const payload = params.payload ?? {};
+  if (payload.pandalId != null && payload.pandalId !== params.pathPandalId) return false;
+  if (payload.festivalId != null && payload.festivalId !== params.pathFestivalId) return false;
+  return true;
 }
 
 function canReceiveContribution(ctx: Ctx): boolean {

@@ -39,8 +39,12 @@ service cloud.firestore {
     match /users/{uid} {
       allow read, write: if isOwner(uid);
 
+      // KAN-9: pandalMemberships is matched separately with a field
+      // allowlist and a live-member check. Nested matches OR together, so
+      // this recursive owner grant must not cover that collection or a
+      // client could forge role/status on their own index.
       match /{document=**} {
-        allow read, write: if isOwner(uid);
+        allow read, write: if isOwner(uid) && document[0] != 'pandalMemberships';
       }
     }
 
@@ -574,20 +578,46 @@ service cloud.firestore {
     // Approving a join request stamps users/{uid}/pandalMemberships/{pandalId}.
     // The personal users/{uid} tree is owner-only, so this is the explicit
     // exception — still limited to a Pandal the writer actually admins.
+    //
+    // KAN-9: the owner branch used to accept any payload. Real authorization
+    // still reads pandals/.../members/{uid}, but a forged role/status on the
+    // index can mislead the Pandal list. Owner writes must now match the live
+    // member document and the same field allowlist as the admin stamp.
     match /users/{uid}/pandalMemberships/{pandalId} {
-      allow read: if isOwner(uid);
-      allow create, update: if isOwner(uid)
-        || (
-          canManageMembersOf(pandalId)
+      function membershipIndexMemberPath() {
+        return /databases/$(database)/documents/pandals/$(pandalId)/members/$(uid);
+      }
+
+      function membershipIndexKeysAllowed() {
+        return request.resource.data.keys().hasOnly([
+          'pandalId', 'role', 'status', 'pandalName', 'joinedAt', 'updatedAt'
+        ]);
+      }
+
+      function membershipIndexStatusOk() {
+        return request.resource.data.status in ['active', 'suspended', 'removed'];
+      }
+
+      function membershipIndexMatchesLiveMember() {
+        let live = getAfter(membershipIndexMemberPath()).data;
+        let liveStatus = live.keys().hasAny(['status']) && live.status is string
+          ? live.status
+          : 'active';
+        return existsAfter(membershipIndexMemberPath())
           && request.resource.data.pandalId == pandalId
-          && request.resource.data.role is string
-          && request.resource.data.status in ['active', 'suspended', 'removed']
-          // GS-084: three validated fields did not stop an admin writing any
-          // others, which made this an arbitrary write primitive into another
-          // user's personal tree. Bounded before, pinned now.
-          && request.resource.data.keys().hasOnly([
-               'pandalId', 'role', 'status', 'pandalName', 'joinedAt', 'updatedAt'
-             ])
+          && request.resource.data.role == live.role
+          && request.resource.data.status == liveStatus
+          && membershipIndexStatusOk();
+      }
+
+      allow read: if isOwner(uid);
+      allow create, update: if membershipIndexKeysAllowed()
+        && request.resource.data.pandalId == pandalId
+        && request.resource.data.role is string
+        && membershipIndexStatusOk()
+        && (
+          (isOwner(uid) && membershipIndexMatchesLiveMember())
+          || canManageMembersOf(pandalId)
         );
       allow delete: if isOwner(uid) || canManageMembersOf(pandalId);
     }
@@ -951,7 +981,8 @@ service cloud.firestore {
         allow create: if canCreateFestival()
           && request.resource.data.festivalId is string
           && request.resource.data.year is int
-          && string(request.resource.data.year) == year;
+          && string(request.resource.data.year) == year
+          && exists(/databases/$(database)/documents/pandals/$(pandalId)/festivals/$(request.resource.data.festivalId));
         allow update, delete: if false;
       }
 
@@ -963,10 +994,24 @@ service cloud.firestore {
           return festivalData().status == 'open';
         }
 
+        // KAN-9: path nesting already scopes data. If a write also carries
+        // redundant pandalId / festivalId, they must agree with the path so
+        // those fields cannot become a forge vector later.
+        function scopeIdsMatch() {
+          return (
+            !request.resource.data.keys().hasAny(['pandalId'])
+            || request.resource.data.pandalId == pandalId
+          ) && (
+            !request.resource.data.keys().hasAny(['festivalId'])
+            || request.resource.data.festivalId == festivalId
+          );
+        }
+
         allow read: if isActivePandalMember();
-        allow create: if canCreateFestival() && ganeshIdentityCreate() && pandalNotArchived();
+        allow create: if canCreateFestival() && ganeshIdentityCreate() && pandalNotArchived() && scopeIdsMatch();
         allow update: if canCloseOrUpdateFestival()
-          && request.resource.data.updatedBy == request.auth.uid;
+          && request.resource.data.updatedBy == request.auth.uid
+          && scopeIdsMatch();
         // No hard delete (GS-083), for the same reason the pandal document
         // refuses one (GS-017): Firestore does not cascade, so this would leave
         // every collection, expense, contribution and the festival's summary
@@ -1569,6 +1614,7 @@ service cloud.firestore {
 
           allow create: if isActivePandalMember()
             && festivalOpen()
+            && scopeIdsMatch()
             && (subcol == 'summary'
               ? summaryWriteAllowed()
               : subcol == 'collectionSessions'
@@ -1597,6 +1643,7 @@ service cloud.firestore {
           allow update: if subcol == 'summary'
             && isActivePandalMember()
             && festivalOpen()
+            && scopeIdsMatch()
             && summaryWriteAllowed();
           // GS-076: only the collector or an override-holder closes a session,
           // and the service records who and why. The rules keep it to members
@@ -1605,6 +1652,7 @@ service cloud.firestore {
           allow update: if subcol == 'collectionSessions'
             && isActivePandalMember()
             && festivalOpen()
+            && scopeIdsMatch()
             && sessionWriteAllowed();
 
           // GS-075: approve, or re-count before approval, or resolve after it.
@@ -1612,6 +1660,7 @@ service cloud.firestore {
             && isActivePandalMember()
             && festivalOpen()
             && pandalNotArchived()
+            && scopeIdsMatch()
             && reconciliationUpdateAllowed();
 
           // cashAdjustments: create only. No update rule at all, so there is
@@ -1620,6 +1669,7 @@ service cloud.firestore {
           allow update: if !hasDedicatedRule()
             && isActivePandalMember()
             && !isAppendOnlyLog()
+            && scopeIdsMatch()
             && payloadWellFormed()
             // GS-082: this guard was on create only, so an update could add an
             // `assetId` or flip `expenseType` to `asset_purchase` with no

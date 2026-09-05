@@ -10,6 +10,7 @@ This repository uses the **Ganesh seva** Jira board.
 - Site: `https://kesavach.atlassian.net`
 - Project key: `KAN`
 - Board: https://kesavach.atlassian.net/jira/software/projects/KAN/board
+- GitHub: https://github.com/chkesava/expense-tracker-mobile-application-
 
 When creating, searching, updating, or commenting on Jira work:
 
@@ -17,3 +18,11 @@ When creating, searching, updating, or commenting on Jira work:
 - Do not use the sample project `SAM1`
 - Prefer `cloudId` `https://kesavach.atlassian.net`
 - Keep JQL/CQL page size at 10 unless the user asks for more
+
+## GitHub linking
+
+Put the issue key in the branch name, commit message, and PR title so GitHub for Jira can attach development work to the KAN issue.
+
+- Branch: `KAN-123-short-slug` or `feat/KAN-123-short-slug`
+- Commit and PR title must include `KAN-123`
+- For Ganesh Seva PRs, put the issue key in the title and a browse link in the body, e.g. https://kesavach.atlassian.net/browse/KAN-123

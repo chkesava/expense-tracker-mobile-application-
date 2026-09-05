@@ -2,6 +2,10 @@
   "name": "spendly",
   "main": "expo-router/entry",
   "version": "4.3.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/chkesava/expense-tracker-mobile-application-.git"
+  },
   "dependencies": {
     "@expo-google-fonts/inter": "^0.4.2",
     "@gorhom/bottom-sheet": "^5.2.14",

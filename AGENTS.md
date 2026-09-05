@@ -15,3 +15,8 @@ When using Atlassian Rovo MCP for this repository:
 - **MUST** use `maxResults: 10` or `limit: 10` for ALL Jira JQL and Confluence CQL search operations
 - Do not create or search issues in `SAM1` or other Jira projects unless the user explicitly asks
 - Board: https://kesavach.atlassian.net/jira/software/projects/KAN/board
+- GitHub: https://github.com/chkesava/expense-tracker-mobile-application-
+
+Branch, commit, and PR titles must include the issue key so GitHub for Jira links them to the KAN issue:
+- Branch: `KAN-123-short-slug` or `feat/KAN-123-short-slug`
+- For Ganesh Seva PRs, put `KAN-123` in the title and https://kesavach.atlassian.net/browse/KAN-123 in the body

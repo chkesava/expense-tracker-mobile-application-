@@ -70,13 +70,20 @@ Rules deployed successfully, emulator tests cover allow/deny paths, no sensitive
 
 ## Implementation status
 
-- [ ] Inspected existing code
-- [ ] Security boundary implemented (Rules / trusted write)
-- [ ] Client UX updated
-- [ ] Tests added
-- [ ] Manual verification
-- [ ] Jira KAN-9 updated
+- [x] Inspected existing code
+- [x] Security boundary implemented (Rules / trusted write)
+- [x] Client UX updated
+- [x] Tests added
+- [x] Manual verification
+- [x] Jira KAN-9 updated
 
 ## Notes
 
-_Add implementation notes, decisions, and leftovers here while building this ticket._
+KAN-9 closed the remaining foundation gaps on top of the existing Ganesh rules (do not rewrite `firestore.rules`).
+
+- Canonical client context: `shared/utils/ganeshAuthorization.ts` + `useGaneshPermissions`. UI `can()` is still convenience only.
+- Owner writes on `users/{uid}/pandalMemberships/{pandalId}` must match the live member doc and the GS-084 field allowlist. The recursive `users/{uid}/**` owner grant now excludes `pandalMemberships` because nested matches OR together.
+- `scopeIdsMatch()` refuses redundant `pandalId` / `festivalId` that disagree with the path. `festivalYears` create requires the named festival to exist.
+- Emulator coverage: `firestore/ganeshFoundation.rules.test.ts` (KAN-9 attack list). Full collection matrix stays on KAN-23.
+- Expense / Nutrition `users/{uid}` personal-data rules are unchanged except the `pandalMemberships` exclusion.
+- Rules are not deployed by CI. After review, deploy manually per `docs/FIREBASE_RULES_DEPLOY.md`.
