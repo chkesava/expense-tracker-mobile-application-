@@ -49,7 +49,7 @@ balance and stay offline-capable.
 
 ## Executive Summary
 
-**Status as of 2026-09-04.** Original counts were 9 CRITICAL, 32 HIGH,
+**Status as of 2026-09-05.** Original counts were 9 CRITICAL, 32 HIGH,
 41 MEDIUM, 21 LOW across 103 tickets. GS-104 was found and fixed on
 2026-09-04 by the new emulator harness, taking the total to 104.
 
@@ -58,18 +58,18 @@ balance and stay offline-capable.
 | CRITICAL | 9 | 1 | 0 | 10 |
 | HIGH | 31 | 1 | 0 | 32 |
 | MEDIUM | 37 | 1 | 4 | 42 |
-| LOW | 17 | 1 | 2 | 20 |
-| **Total** | **94** | **4** | **6** | **104** |
+| LOW | 18 | 0 | 2 | 20 |
+| **Total** | **95** | **3** | **6** | **104** |
 
-Every CRITICAL and HIGH is now closed or partial. Four partials remain: GS-004
+Every CRITICAL and HIGH is now closed or partial. Three partials remain: GS-004
 (no whole-document field allowlist outside `summary`, CRITICAL) and GS-040 (the
 photo queue is still not persisted, HIGH). Both are blocked on work larger than
 a rules edit or a screen fix, and each ticket records what that is: GS-004 needs
 the emulator harness in GS-074 before an allowlist can be deployed safely
 against a Firebase project that also serves production, and GS-040 needs a
-durable queue with a provider-level worker. The third is GS-096, whose only
-open criterion (batch signed-URL minting) needs a new action on the
-`ganesh-files` Edge Function and a Supabase deploy.
+durable queue with a provider-level worker. GS-096 was the third; its last open
+criterion (batch signed-URL minting) is now done — a `downloadBatch` action on
+the `ganesh-files` Edge Function, deployed 2026-09-05.
 
 ### How much of this you can trust
 
@@ -302,7 +302,7 @@ Recording these explicitly so the fix cycle does not undo working design:
 | GS-093 | LOW | COLLECTIONS | Households | `assignedCollectorId` and `notes` are dead fields | FIXED - 2026-09-04 (exposed, not deleted) |
 | GS-094 | LOW | UX | Collections | The payment-method filter ignores the search box | CLOSED - was already fixed |
 | GS-095 | LOW | ASSETS | Pandal Assets | Asset detail resolves from a 400-doc list and shows a misleading message | FIXED — 2026-09-04 |
-| GS-096 | LOW | STORAGE | Supabase Storage | Signed URLs live 30 minutes and the cache map never evicts | PARTIAL - 2026-09-05 (cache bounded; expiry already fine) |
+| GS-096 | LOW | STORAGE | Supabase Storage | Signed URLs live 30 minutes and the cache map never evicts | FIXED - 2026-09-05 (batch minting deployed; cache bounded; expiry already fine) |
 | GS-097 | LOW | PERFORMANCE | Supabase Storage | Each upload reads the image into memory three times | FIXED - 2026-09-05 |
 | GS-098 | LOW | CODE_QUALITY | Supabase Storage | Dead `ganeshStorage.ts` barrel and a decoy block in `storage.rules` | FIXED - 2026-09-05 |
 | GS-099 | LOW | NAVIGATION | Admin Dashboard | Pushing a tab route from the admin stack unwinds the stack | RESOLVED - 2026-09-05 by GS-100; premise was wrong |
@@ -6100,7 +6100,7 @@ in flight, and its wording drops the removed-from-view hedge.
 **Severity:** LOW
 **Category:** STORAGE
 **Feature:** Supabase Storage
-**Status:** PARTIAL - 2026-09-05 (cache bounded; expiry already fine; batch minting needs Edge Function work)
+**Status:** FIXED - 2026-09-05 (batch minting deployed; cache bounded; expiry already fine)
 
 ### Problem
 Signed URLs are long-lived, minted one per row, and cached in an unbounded module-level map.
@@ -6122,9 +6122,9 @@ Short expiry for thumbnails, a bounded cache, and batch minting for list views.
 Reduce thumbnail expiry, bound the cache with an LRU or periodic sweep, and use batch signed-URL creation for lists.
 
 ### Acceptance Criteria
-- [ ] Thumbnail URLs expire in five minutes or less.
-- [ ] The URL cache is bounded.
-- [ ] List views mint URLs in batches.
+- [x] Thumbnail URLs expire in five minutes or less.
+- [x] The URL cache is bounded.
+- [x] List views mint URLs in batches.
 
 ### Dependencies
 Depends on GS-001.
@@ -6150,10 +6150,51 @@ so almost everything in there is stale almost all of the time; the cap is the
 backstop for the one case a sweep cannot help - more than 300 distinct files
 previewed inside a single 4-minute window.
 
-**Criterion 3 is not done.** Batch minting would need a new batch action on the
-`ganesh-files` Edge Function plus a Supabase deploy, which is server work rather
-than a client fix. Each `GaneshSignedPreview` still mints its own URL. Recorded
-here rather than silently dropped.
+**Criterion 3 was not done at that point.** Batch minting needed a new action on
+the `ganesh-files` Edge Function plus a Supabase deploy, which is server work
+rather than a client fix. Recorded here rather than silently dropped.
+
+### Resolution, part 2 (2026-09-05) — batch minting
+
+**Criterion 3 is now met, server and client, and the function is deployed.**
+
+**Server.** `ganesh-files` gained a `downloadBatch` action taking a list of
+paths. It authorizes *every* path independently — the pandal id is read out of
+each path and membership is checked per distinct pandal — so a batch can never
+reach a file a single request could not. Bounds: at most 50 paths and at most 4
+distinct pandals per request (a session has one active pandal; the pandal cap is
+what stops a 50-path batch becoming 50 Firestore reads). Results map positionally
+onto the request, including duplicates, because the client keys its cache off
+that mapping. Partial failure is normal: an unauthorized or malformed entry
+carries an error and the rest are still minted; only a malformed request or a
+token Firestore refuses fails with a status code. Expiry is unchanged —
+`DOWNLOAD_URL_TTL_SECONDS` is shared with the single-path action, so a batch
+grant and a single grant expire at the same age. The service-role key is
+untouched and still never leaves the function.
+
+The function was also split: `handler.ts` holds every authorization decision as
+plain TypeScript with injected ports, `index.ts` is the Deno wiring that owns the
+service-role client. That is what makes the rules testable —
+`supabase/functions/ganesh-files/handler.test.ts` runs in `npm test` (29 cases:
+authorized, unauthorized, mixed, oversized, invalid paths, expired and garbage
+tokens, per-object signing failure) instead of the rules being provable only by
+curling a deployment.
+
+**Client.** No component changed. Batching is coalesced inside
+`storageService.getSignedUrl`: calls landing within a 20 ms window become one
+`downloadBatch`, duplicates share one request, and each caller still gets its own
+promise. A list of twenty receipts is now one round trip rather than twenty. The
+bounded cache is unchanged apart from honouring its own cap when a whole batch is
+written at once. If the deployed function predates the action it answers
+`400 Unknown operation`; the client latches that once and falls back to one
+request per file, so an app build can never outrun the deploy and break photos
+the way GS-001's rollout did.
+
+**Deployed** 2026-09-05 via `npm run supabase:deploy:ganesh-files`
+(`supabase functions deploy ganesh-files --no-verify-jwt`), verified live: no
+token → 401, garbage token → 401, 60 paths → 400, unknown operation → 400. The
+authorized-path case needs a real Firebase ID token and is covered by the
+handler tests. Old app builds are unaffected — they never send `downloadBatch`.
 ---
 
 ## GS-097 — Each upload reads the image into memory three times

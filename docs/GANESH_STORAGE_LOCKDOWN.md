@@ -201,13 +201,18 @@ not a Supabase one, so Supabase's own JWT gate would reject every request before
 the function ran.
 
 ```bash
-supabase functions deploy ganesh-files --no-verify-jwt
+npm run supabase:deploy:ganesh-files
 ```
+
+That is `supabase functions deploy ganesh-files --no-verify-jwt`, kept as a
+script so nobody deploys it without the flag. It uploads the whole function
+directory, so `handler.ts` — where every authorization decision actually lives —
+goes with `index.ts`.
 
 Watch it while you test:
 
 ```bash
-supabase functions logs ganesh-files
+npm run supabase:logs:ganesh-files
 ```
 
 ### Verify the function before touching anything else
@@ -226,10 +231,42 @@ Expect `200` with a `signedUrl`. Then confirm it actually refuses things:
 | A path under a pandal you are **not** a member of | `403` |
 | `"path":"pandals/../../etc"` or any other shape | `400 Invalid storage path` |
 | No `Authorization` header | `401` |
-| A garbage token | `403` |
+| A garbage or expired token | `401` |
 | A token from a **removed** member | `403` |
 
 If any of these returns `200`, stop and fix the function before continuing.
+
+Most of this is now covered by `supabase/functions/ganesh-files/handler.test.ts`,
+which runs in `npm test` — the curls above are the deployment check, not the only
+proof the rules hold.
+
+### The batch action (GS-096)
+
+`downloadBatch` mints many download URLs in one request, so a list view stops
+making one round trip per visible row:
+
+```bash
+curl -i -X POST "https://<project-ref>.supabase.co/functions/v1/ganesh-files" -H "Authorization: Bearer <firebase-id-token>" -H "content-type: application/json" -d '{"operation":"downloadBatch","paths":["pandals/<your-pandal-id>/assets/<asset-id>/<file>.jpg","pandals/<some-other-pandal>/assets/x/y.jpg"]}'
+```
+
+Expect `200` and a `results` array **the same length and order as `paths`**: the
+first entry with a `signedUrl`, the second with `"error"` and a null URL. Every
+path is authorized on its own, so a batch can never be used to reach a pandal a
+single request could not.
+
+| Try this | Expect |
+| --- | --- |
+| More than 50 paths | `400` |
+| Paths spanning more than 4 pandals | `400` |
+| `"paths": []` or a non-array | `400` |
+| A garbage or expired token | `401` |
+| A mix of your own and another pandal's paths | `200`, with per-entry errors |
+
+Deploying this is safe for builds already in the field — they never send
+`downloadBatch`. The reverse is also safe: a build that batches, talking to a
+function deployed before this action existed, gets `400 Unknown operation` once,
+latches it, and falls back to one request per file (see
+`BatchUnsupportedError` in `services/ganesh/storage/supabaseStorage.ts`).
 
 ---
 

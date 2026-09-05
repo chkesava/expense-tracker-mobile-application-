@@ -20,6 +20,10 @@ describe("ganesh storage security", () => {
       ".env.example",
       "services/ganesh/storage/supabaseStorage.ts",
       "services/ganesh/storage/storageService.ts",
+      // The Edge Function's decision logic (GS-096). It signs URLs but must
+      // never hold the key that does so — that stays in index.ts, which is the
+      // only file the service role reaches.
+      "supabase/functions/ganesh-files/handler.ts",
     ]
       .map(read)
       .join("\n");

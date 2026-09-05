@@ -84,6 +84,8 @@
     "typecheck:shared": "tsc -p tsconfig.shared.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "env:copy-from-web": "node ./scripts/copy-env-from-web.mjs",
+    "supabase:deploy:ganesh-files": "supabase functions deploy ganesh-files --no-verify-jwt",
+    "supabase:logs:ganesh-files": "supabase functions logs ganesh-files",
     "release:verify": "node scripts/verify-environment.js && node scripts/verify-keystore.js && node scripts/verify-google-services.js && node scripts/verify-gradle.js",
     "release:prepare": "node scripts/prepare-release.js",
     "release:build": "node scripts/build-release.js",

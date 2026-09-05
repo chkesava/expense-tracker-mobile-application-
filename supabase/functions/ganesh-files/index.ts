@@ -27,197 +27,81 @@
  * either: uploads go straight to Supabase Storage on a signed upload URL, so the
  * Edge Function request-size limit does not apply.
  *
- * NOT YET DEPLOYED OR TESTED. See docs/GANESH_STORAGE_LOCKDOWN.md for the ordered
- * rollout — the policy lockdown in that runbook MUST come after an app build that
- * calls this function is in users' hands, or photo features break for everyone.
+ * WHAT IS IN THIS FILE
+ * --------------------
+ * Only the wiring: environment, the service-role Supabase client, and
+ * `Deno.serve`. Every authorization decision lives in `handler.ts`, which has no
+ * Deno and no SDK in it so that the repository's Vitest suite can test it
+ * (`handler.test.ts`). Adding an operation means editing `handler.ts`, not this.
+ *
+ * Deploy with `npm run supabase:deploy:ganesh-files`. See
+ * docs/GANESH_STORAGE_LOCKDOWN.md for the ordered rollout.
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const BUCKET = "ganesh-files";
-const DOWNLOAD_URL_TTL_SECONDS = 60 * 5;
+import { CORS_HEADERS, handleGaneshFiles, json, type StoragePort } from "./handler.ts";
 
-/**
- * Mirrors ALLOWED_IMAGE_TYPES and MAX_UPLOAD_BYTES in
- * services/ganesh/storage/storageTypes.ts (GS-036).
- *
- * These are a fast, clear rejection — NOT the enforcement. Bytes never pass
- * through this function: it mints a signed upload URL and the client uploads
- * straight to Storage, so nothing here can weigh a file or see its real
- * content-type. The authoritative check is the bucket's own `file_size_limit`
- * and `allowed_mime_types` (see supabase/ganesh-files.bucket-limits.sql), which
- * Storage applies to the actual upload. A crafted client can declare
- * `image/jpeg` here and send anything; the bucket is what refuses it.
- *
- * `declaredSize` and `contentType` are optional on purpose. Builds already in
- * users' hands send neither, and rejecting those would break every upload in
- * the field for no security gain — the bucket still catches them.
- */
-const ALLOWED_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"];
-const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+const BUCKET = "ganesh-files";
 
 const FIREBASE_PROJECT_ID = Deno.env.get("FIREBASE_PROJECT_ID") ?? "";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
-const CORS_HEADERS: Record<string, string> = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
-
-type Operation = "upload" | "download" | "delete";
-
-function json(body: unknown, status: number): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...CORS_HEADERS, "content-type": "application/json" },
+/**
+ * The service-role client, adapted to the narrow port the handler is allowed to
+ * use. Errors are thrown rather than returned so the handler's single catch can
+ * turn any of them into the one opaque "Storage is unavailable" answer — the
+ * exception is `createSignedUrls`, which reports per-object failures the batch
+ * path deliberately keeps and answers individually.
+ */
+function storagePort(): StoragePort {
+  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
   });
-}
+  const storage = supabase.storage.from(BUCKET);
 
-/**
- * Mirrors services/ganesh/storage/storagePaths.ts. Kept strict on purpose: the
- * pandal id is taken from the path, so a malformed path must never be allowed to
- * smuggle a different segment into position 1.
- */
-const SAFE_SEGMENT = /^[A-Za-z0-9_-]{1,64}$/;
-const SAFE_FILE = /^[A-Za-z0-9._-]{1,80}$/;
-const FESTIVAL_CATEGORIES = ["expenses", "contributions", "documents"];
-
-function pandalIdForPath(path: string): string | null {
-  if (path.includes("..") || path.startsWith("/")) return null;
-  const parts = path.split("/");
-  if (parts[0] !== "pandals") return null;
-  if (!SAFE_SEGMENT.test(parts[1] ?? "")) return null;
-  if (!SAFE_FILE.test(parts[parts.length - 1] ?? "")) return null;
-  if (!parts.slice(1, -1).every((segment) => SAFE_SEGMENT.test(segment))) return null;
-
-  // pandals/{pandalId}/festivals/{festivalId}/{category}/{recordId}/{file}
-  const isFestivalFile =
-    parts.length === 7 && parts[2] === "festivals" && FESTIVAL_CATEGORIES.includes(parts[4]);
-  // pandals/{pandalId}/assets|sponsors/{recordId}/{file}
-  const isPandalFile =
-    parts.length === 5 && (parts[2] === "assets" || parts[2] === "sponsors");
-
-  return isFestivalFile || isPandalFile ? parts[1] : null;
-}
-
-/**
- * Reads the caller's own member document as the caller. Firestore verifies the
- * ID token and applies the Ganesh rules, so this is both authentication and
- * authorization in one call.
- */
-async function isActiveMember(idToken: string, pandalId: string): Promise<boolean> {
-  const uid = uidFromToken(idToken);
-  if (!uid) return false;
-
-  const url =
-    `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}` +
-    `/databases/(default)/documents/pandals/${pandalId}/members/${uid}`;
-
-  const response = await fetch(url, { headers: { Authorization: `Bearer ${idToken}` } });
-  if (!response.ok) return false;
-
-  const doc = await response.json();
-  return doc?.fields?.status?.stringValue === "active";
-}
-
-/**
- * The uid is read from the token WITHOUT verifying the signature, and is only
- * ever used to build the Firestore path. Firestore then rejects the request if
- * the token is forged, expired, or does not match that uid — so an attacker
- * cannot gain anything by lying here.
- */
-function uidFromToken(idToken: string): string | null {
-  try {
-    const [, payload] = idToken.split(".");
-    if (!payload) return null;
-    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
-    const claims = JSON.parse(atob(normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=")));
-    const uid = claims.user_id ?? claims.sub;
-    return typeof uid === "string" && SAFE_SEGMENT.test(uid) ? uid : null;
-  } catch {
-    return null;
-  }
+  return {
+    async createSignedUploadUrl(path) {
+      const { data, error } = await storage.createSignedUploadUrl(path, { upsert: true });
+      if (error || !data) throw error ?? new Error("No signed upload URL.");
+      return { path: data.path, token: data.token, signedUrl: data.signedUrl };
+    },
+    async createSignedUrl(path, expiresIn) {
+      const { data, error } = await storage.createSignedUrl(path, expiresIn);
+      if (error || !data?.signedUrl) throw error ?? new Error("No signed URL.");
+      return data.signedUrl;
+    },
+    async createSignedUrls(paths, expiresIn) {
+      const { data, error } = await storage.createSignedUrls(paths, expiresIn);
+      if (error || !data) throw error ?? new Error("No signed URLs.");
+      return data.map((entry) => ({
+        path: entry.path ?? "",
+        signedUrl: entry.signedUrl ?? null,
+        error: entry.error ?? null,
+      }));
+    },
+    async remove(paths) {
+      const { error } = await storage.remove(paths);
+      if (error) throw error;
+    },
+  };
 }
 
 Deno.serve(async (req) => {
+  // The preflight is answered before the configuration check so a misconfigured
+  // deployment still fails at the real request, with the real reason, instead of
+  // as an opaque CORS error in the browser.
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS_HEADERS });
-  if (req.method !== "POST") return json({ error: "Method not allowed." }, 405);
 
   if (!FIREBASE_PROJECT_ID || !SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
     console.error("ganesh-files: missing configuration");
     return json({ error: "Storage is not configured." }, 500);
   }
 
-  const idToken = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "").trim();
-  if (!idToken) return json({ error: "Sign in again to use files." }, 401);
-
-  let body: {
-    operation?: Operation;
-    path?: string;
-    contentType?: string;
-    declaredSize?: number;
-  };
-  try {
-    body = await req.json();
-  } catch {
-    return json({ error: "Malformed request." }, 400);
-  }
-
-  const operation = body.operation;
-  const path = typeof body.path === "string" ? body.path : "";
-  if (operation !== "upload" && operation !== "download" && operation !== "delete") {
-    return json({ error: "Unknown operation." }, 400);
-  }
-
-  // Refuse an upload the bucket would reject anyway, before minting a URL for
-  // it. Absent fields are not an error — see ALLOWED_MIME_TYPES above.
-  if (operation === "upload") {
-    const declaredType = typeof body.contentType === "string" ? body.contentType : null;
-    if (declaredType && !ALLOWED_MIME_TYPES.includes(declaredType.toLowerCase())) {
-      return json({ error: "Only JPEG, PNG or WebP images can be stored." }, 415);
-    }
-    const declaredSize = typeof body.declaredSize === "number" ? body.declaredSize : null;
-    if (declaredSize !== null && (!Number.isFinite(declaredSize) || declaredSize < 0)) {
-      return json({ error: "Malformed request." }, 400);
-    }
-    if (declaredSize !== null && declaredSize > MAX_UPLOAD_BYTES) {
-      return json({ error: "This image is too large." }, 413);
-    }
-  }
-
-  const pandalId = pandalIdForPath(path);
-  if (!pandalId) return json({ error: "Invalid storage path." }, 400);
-
-  if (!(await isActiveMember(idToken, pandalId))) {
-    return json({ error: "You do not have permission to store this file." }, 403);
-  }
-
-  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { persistSession: false, autoRefreshToken: false },
+  return handleGaneshFiles(req, {
+    storage: storagePort(),
+    firebaseProjectId: FIREBASE_PROJECT_ID,
+    fetch: globalThis.fetch,
   });
-  const storage = supabase.storage.from(BUCKET);
-
-  try {
-    if (operation === "upload") {
-      const { data, error } = await storage.createSignedUploadUrl(path, { upsert: true });
-      if (error || !data) throw error ?? new Error("No signed upload URL.");
-      return json({ path: data.path, token: data.token, signedUrl: data.signedUrl }, 200);
-    }
-
-    if (operation === "download") {
-      const { data, error } = await storage.createSignedUrl(path, DOWNLOAD_URL_TTL_SECONDS);
-      if (error || !data?.signedUrl) throw error ?? new Error("No signed URL.");
-      return json({ signedUrl: data.signedUrl, expiresIn: DOWNLOAD_URL_TTL_SECONDS }, 200);
-    }
-
-    const { error } = await storage.remove([path]);
-    if (error) throw error;
-    return json({ ok: true }, 200);
-  } catch (error) {
-    // Never echo the storage error back — it can leak bucket internals.
-    console.error("ganesh-files", operation, error);
-    return json({ error: "Storage is unavailable right now." }, 502);
-  }
 });

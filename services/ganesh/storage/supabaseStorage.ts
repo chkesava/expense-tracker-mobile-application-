@@ -5,7 +5,7 @@ import { bytesFromUri } from "@/services/ganesh/storage/imagePrepare";
 import { GANESH_FILES_BUCKET } from "@/services/ganesh/storage/storageTypes";
 
 /**
- * All three operations below route through the `ganesh-files` Supabase Edge
+ * Every operation below routes through the `ganesh-files` Supabase Edge
  * Function rather than calling Storage directly (GS-001).
  *
  * The Supabase publishable key used to be enough on its own: the bucket's RLS
@@ -29,7 +29,15 @@ type FunctionResult = {
   token?: string;
   signedUrl?: string;
   expiresIn?: number;
+  results?: BatchSignedUrl[];
   error?: string;
+};
+
+/** One entry of a `downloadBatch` answer, positionally matched to the request. */
+export type BatchSignedUrl = {
+  path: string;
+  signedUrl: string | null;
+  error: string | null;
 };
 
 function friendlyStorageError(error: unknown, fallback: string): Error {
@@ -74,6 +82,10 @@ async function callGaneshFiles(
    */
   declared?: { contentType: string; declaredSize: number }
 ): Promise<FunctionResult> {
+  return callGaneshFilesRaw({ operation, path, ...declared });
+}
+
+async function callGaneshFilesRaw(payload: Record<string, unknown>): Promise<FunctionResult> {
   if (!env.supabase.url) throw new Error("Storage is not configured.");
   const idToken = await requireIdToken();
   const response = await fetch(`${env.supabase.url}/functions/v1/ganesh-files`, {
@@ -82,7 +94,7 @@ async function callGaneshFiles(
       "content-type": "application/json",
       authorization: `Bearer ${idToken}`,
     },
-    body: JSON.stringify({ operation, path, ...declared }),
+    body: JSON.stringify(payload),
   });
   const body = (await response.json().catch(() => ({}))) as FunctionResult;
   if (!response.ok) {
@@ -123,6 +135,52 @@ export async function createObjectSignedUrl(path: string): Promise<string> {
   } catch (error) {
     throw friendlyStorageError(error, "Could not open this file.");
   }
+}
+
+/**
+ * Thrown when the deployed function does not know the `downloadBatch` action —
+ * i.e. an app build carrying batching is talking to a function deployed before
+ * it (GS-096).
+ *
+ * The Edge Function and the app ship on separate clocks: the function is
+ * deployed by hand (`npm run supabase:deploy:ganesh-files`) and the app through
+ * a store release. GS-001's rollout is the cautionary tale — the server half
+ * landed first and broke photos in every installed copy. So the batch path
+ * degrades to one request per file rather than failing, and thumbnails keep
+ * working either way.
+ */
+export class BatchUnsupportedError extends Error {
+  constructor() {
+    super("ganesh-files does not support downloadBatch.");
+    this.name = "BatchUnsupportedError";
+  }
+}
+
+/**
+ * Mint many download URLs in one request (GS-096).
+ *
+ * Returns one entry per requested path, in request order — the function
+ * guarantees that mapping, and the caller relies on it to attach each URL to the
+ * right row. A path the caller may not read comes back with `error` set rather
+ * than failing the whole batch.
+ */
+export async function createObjectSignedUrls(paths: string[]): Promise<BatchSignedUrl[]> {
+  let body: FunctionResult;
+  try {
+    body = await callGaneshFilesRaw({ operation: "downloadBatch", paths });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (/^400 Unknown operation/.test(message)) throw new BatchUnsupportedError();
+    throw friendlyStorageError(error, "Could not open these files.");
+  }
+  const results = body.results;
+  // A well-formed answer is exactly as long as the request. Anything else means
+  // the positional mapping is not trustworthy, and guessing which URL belongs to
+  // which row is worse than re-minting them one at a time.
+  if (!Array.isArray(results) || results.length !== paths.length) {
+    throw new Error("Could not open these files.");
+  }
+  return results;
 }
 
 export async function removeObject(path: string): Promise<void> {
