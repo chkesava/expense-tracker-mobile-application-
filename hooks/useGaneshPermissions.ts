@@ -17,6 +17,7 @@ export function useGaneshPermissions() {
 
   return {
     ...ctx,
+    role: ctx.role ?? undefined,
     status: ctx.membershipStatus ?? undefined,
     loading: !ready || Boolean(pandalId && members.loading),
   };
