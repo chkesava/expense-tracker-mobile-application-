@@ -13,6 +13,7 @@ import {
 import { GaneshQuickActions } from "@/components/ganesh/GaneshQuickActions";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { GaneshClosedBanner } from "@/components/ganesh/GaneshClosedBanner";
+import { GaneshSetupRepairBanner } from "@/components/ganesh/GaneshSetupRepairBanner";
 import { GaneshSyncChip } from "@/components/ganesh/GaneshSyncChip";
 import { CommandHero, PandalOverview, TodaySevaPanel } from "@/components/ganesh/home";
 import {
@@ -254,6 +255,11 @@ export default function GaneshHomeScreen() {
         )}
         {/* GS-058: replaces a bare "Create next festival" button, which
             offered the way out without ever saying what was wrong. */}
+        {/* GS-071: a half-created Pandal has no other symptom the committee
+            can act on - an expense form with no categories, or totals stuck at
+            zero, do not point back at setup. */}
+        <GaneshSetupRepairBanner />
+
         <GaneshClosedBanner />
 
         <GaneshQuickActions disabled={closed} />

@@ -57,9 +57,9 @@ balance and stay offline-capable.
 | --- | ---: | ---: | ---: | ---: |
 | CRITICAL | 9 | 1 | 0 | 10 |
 | HIGH | 31 | 1 | 0 | 32 |
-| MEDIUM | 36 | 1 | 5 | 42 |
+| MEDIUM | 37 | 1 | 4 | 42 |
 | LOW | 17 | 1 | 2 | 20 |
-| **Total** | **93** | **4** | **7** | **104** |
+| **Total** | **94** | **4** | **6** | **104** |
 
 Every CRITICAL and HIGH is now closed or partial. Four partials remain: GS-004
 (no whole-document field allowlist outside `summary`, CRITICAL) and GS-040 (the
@@ -277,7 +277,7 @@ Recording these explicitly so the fix cycle does not undo working design:
 | GS-068 | MEDIUM | OFFLINE | Offline behaviour | The Firestore persistence fallback cannot work and the cache mode is fabricated | CLOSED - was already fixed |
 | GS-069 | MEDIUM | STORAGE | Supabase Storage | No cleanup path exists; orphaned files accumulate permanently | FIXED - 2026-09-04 (void deletion wont-do) |
 | GS-070 | MEDIUM | FINANCE | Permanent Fund | Seed-then-transfer runs as two non-atomic steps with no rollback | FIXED - 2026-09-05 |
-| GS-071 | MEDIUM | FIRESTORE | Pandal creation | Multi-batch pandal and festival creation has no rollback | OPEN — assessed 2026-09-04 |
+| GS-071 | MEDIUM | FIRESTORE | Pandal creation | Multi-batch pandal and festival creation has no rollback | FIXED - 2026-09-05 (detect + repair) |
 | GS-072 | MEDIUM | FIRESTORE | Reports | The recompute treats a missing contribution status as `received` | FIXED 2026-09-04 |
 | GS-073 | MEDIUM | SECURITY | Collections | Every member, including `viewer`, can read all donor PII | FIXED 2026-09-04 — DEPLOYED |
 | GS-074 | MEDIUM | CODE_QUALITY | Security Rules | Rules are deployed by hand and the contract test is a hand-written mirror | PARTIAL - 2026-09-04 (emulator harness built) |
@@ -4840,7 +4840,7 @@ committing only on success, which is what a real Firestore transaction does.
 **Severity:** MEDIUM
 **Category:** FIRESTORE
 **Feature:** Pandal creation
-**Status:** OPEN — assessed 2026-09-04
+**Status:** FIXED - 2026-09-05 (detection and repair; rollback not possible)
 
 ### Problem
 Pandal creation issues three sequential batch commits plus two transactions. A failure in a later step leaves a partially created pandal.
@@ -4873,6 +4873,54 @@ Where the writes fit within Firestore's limits, merge them into fewer atomic ope
 ### Dependencies
 Related to GS-070.
 
+
+### Resolution (2026-09-05)
+All three criteria met — by detection and repair, not rollback. Firestore
+cannot roll back across batches, so "leaves nothing behind" was never
+achievable for the later steps; the ticket's own criteria ask for a
+*detectable, repairable* state instead, which is the right target.
+
+**How much is genuinely at risk turned out to be smaller than the ticket
+implies.** The first batch is atomic (Pandal, invite, membership index, admin
+member row), as the ticket notes. But the seed step is also one batch — the
+creator's festival-member row, the summary and all the default categories
+commit together. So the reachable partial states are only two: a festival whose
+seed batch never landed (all three missing at once), or no festival at all.
+That is why `diagnosePandalSetup` reports every gap together rather than one
+per repair round-trip, and why merging the writes further is not available:
+what is left is a transaction (the year claim, which must be one for
+uniqueness) and a batch, and those cannot be combined.
+
+**Detection.** `inspectPandalSetup` reads the festivals, then the newest open
+festival's summary, categories and the actor's member row, and hands them to
+the pure `diagnosePandalSetup`. The categories probe uses `limit(1)` — it only
+asks "is this empty", and reading the whole collection would cost ~24 reads per
+app open to answer a yes/no about a state that should never occur.
+
+**Repair.** `repairPandalSetup` re-runs `seedFirstFestival`, which was already
+written to be safe to repeat: it creates the festival document only when
+absent, merges the member and summary rows, and seeds categories only when the
+collection is empty. Repair is therefore the same code path as creation rather
+than a second implementation that can drift from it. It re-inspects afterwards
+and **throws if anything is still missing**, rather than reporting success —
+the entire complaint here is a partial state nobody was told about.
+
+**The one case it refuses.** `no-festival` is reported as not repairable. The
+festival's name and year were the user's choice and did not survive the
+failure; inventing them would put wrong data in the ledger's title. The banner
+sends the user to create-festival instead.
+
+**Surfacing.** `GaneshSetupRepairBanner` on Home, rendering nothing when setup
+is complete. It exists because a half-created Pandal has no symptom a committee
+can act on — an expense form with no categories, or totals stuck at zero, do
+not point back at Pandal creation. Copy names the consequence rather than
+saying "setup incomplete". Only an admin is offered the action, since only an
+admin can write those documents; everyone else is told what is wrong instead of
+being handed a button that will be refused (GS-035).
+
+Normal creation is untouched — `createPandalAndFestival` is unchanged.
+
+10 tests on the diagnosis and its copy; 1537 pass overall.
 ---
 
 ## GS-072 — The recompute treats a missing contribution status as `received`

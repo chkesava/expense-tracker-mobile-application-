@@ -149,6 +149,18 @@ export function useGaneshWrites() {
       }
       return run("Pandal created", () => writes.createPandalAndFestival(requireDb(), actor!, input));
     },
+    /**
+     * Finish a half-created Pandal (GS-071). Admin-only: it writes the seed
+     * documents creation should have written, so it needs the same authority
+     * creation had.
+     */
+    repairPandalSetup: async () => {
+      const ctx = requirePandal();
+      requirePerm("festival.create");
+      return run("Setup completed", () =>
+        writes.repairPandalSetup(ctx.db, ctx.actor, ctx.pandalId)
+      );
+    },
     requestPandalJoin: async (code: string) => {
       if (!actor) throw new Error("You must be signed in.");
       const result = await writes.requestPandalJoin(requireDb(), actor, code);

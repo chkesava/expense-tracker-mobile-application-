@@ -24,6 +24,11 @@ import {
 } from "firebase/firestore";
 
 import { DEFAULT_GANESH_CATEGORIES } from "@/shared/data/ganeshCategories";
+import {
+  diagnosePandalSetup,
+  type PandalSetupDiagnosis,
+  type PandalSetupGap,
+} from "@/shared/utils/ganeshPandalSetup";
 import { errorCode, logError } from "@/lib/errors";
 import { newId } from "@/lib/id";
 import { commitWrite } from "@/lib/firestoreWrite";
@@ -583,6 +588,109 @@ export async function createPandalAndFestival(
   }
 
   return { pandalId, festivalId, code };
+}
+
+/**
+ * Is this Pandal's first-festival setup actually finished? (GS-071)
+ *
+ * Creation runs one atomic batch and then several separate steps, so a failure
+ * part-way leaves a real Pandal missing its summary, its categories or the
+ * creator's festival-member row — with nothing in the app saying so. The
+ * symptom a committee sees is an expense form with no categories, or totals
+ * stuck at zero, neither of which points back at setup.
+ *
+ * Reads only; safe to call on every Pandal open.
+ */
+export async function inspectPandalSetup(
+  db: Firestore,
+  pandalId: string,
+  actorUid: string
+): Promise<PandalSetupDiagnosis> {
+  const festivalsSnap = await getDocs(collection(db, "pandals", pandalId, "festivals"));
+  const festivals = festivalsSnap.docs.map((docSnap) => ({
+    id: docSnap.id,
+    status: String(docSnap.data().status ?? ""),
+  }));
+  if (festivals.length === 0) {
+    return diagnosePandalSetup({
+      festivals: [],
+      summaryExists: false,
+      categoryCount: 0,
+      memberExists: false,
+    });
+  }
+  const target = festivals.find((festival) => festival.status === "open") ?? festivals[0];
+  const [summarySnap, categoriesSnap, memberSnap] = await Promise.all([
+    getDoc(pathRef(db, summaryDoc(pandalId, target.id))),
+    // limit(1): this only asks "is it empty", and reading the whole
+    // collection would cost ~24 reads per app open to answer a yes/no about a
+    // state that should never occur.
+    getDocs(query(colRef(db, festivalCol(pandalId, target.id, "categories")), limit(1))),
+    getDoc(pathRef(db, [...festivalCol(pandalId, target.id, "members"), actorUid])),
+  ]);
+  return diagnosePandalSetup({
+    festivals,
+    summaryExists: summarySnap.exists(),
+    categoryCount: categoriesSnap.size,
+    memberExists: memberSnap.exists(),
+  });
+}
+
+/**
+ * Finish a half-created Pandal (GS-071).
+ *
+ * Re-runs the first-festival seed, which was already written to be safe to
+ * repeat: it creates the festival document only when absent, merges the member
+ * and summary rows, and seeds categories only when the collection is empty. So
+ * repair is the same code path as creation rather than a second implementation
+ * that can drift from it.
+ *
+ * Refuses the `no-festival` case rather than inventing one. The festival's name
+ * and year were the user's choice and did not survive the failure; guessing
+ * them would put wrong data in the ledger's title. The caller sends the user to
+ * create-festival instead.
+ *
+ * @returns the gaps it closed, for the caller to report.
+ */
+export async function repairPandalSetup(
+  db: Firestore,
+  actor: GaneshActor,
+  pandalId: string
+): Promise<PandalSetupGap[]> {
+  const before = await inspectPandalSetup(db, pandalId, actor.uid);
+  if (before.complete) return [];
+  if (!before.repairable || !before.festivalId) {
+    throw new Error(
+      "This Pandal has no festival yet. Create one to finish setting up."
+    );
+  }
+  const festivalSnap = await getDoc(pathRef(db, festivalDoc(pandalId, before.festivalId)));
+  if (!festivalSnap.exists()) throw new Error("Festival not found.");
+  const data = festivalSnap.data();
+  await seedFirstFestival(
+    db,
+    actor,
+    pandalId,
+    before.festivalId,
+    String(data.name ?? "Festival"),
+    Number(data.year ?? new Date().getFullYear()),
+    {
+      createdBy: actor.uid,
+      createdAt: serverTimestamp(),
+      updatedBy: actor.uid,
+      updatedAt: serverTimestamp(),
+    }
+  );
+
+  const after = await inspectPandalSetup(db, pandalId, actor.uid);
+  if (!after.complete) {
+    // Report what is still wrong rather than claiming success - the whole
+    // point of this ticket is a partial state nobody was told about.
+    throw new Error(
+      "Some of the setup could not be completed. Please try again, or contact support if it keeps failing."
+    );
+  }
+  return before.gaps;
 }
 
 export async function requestPandalJoin(
