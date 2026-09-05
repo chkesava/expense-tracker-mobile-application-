@@ -3,7 +3,7 @@ import { Alert, Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ChevronRight, Package, Receipt } from "lucide-react-native";
 
-import { GaneshImageUploader, type GaneshUploadStatus } from "@/components/ganesh/GaneshImageUploader";
+import { GaneshImageUploader } from "@/components/ganesh/GaneshImageUploader";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { GaneshWriteLock } from "@/components/ganesh/GaneshWriteLock";
 import { PendingHint } from "@/components/ganesh/GaneshSyncChip";
@@ -25,6 +25,7 @@ import { Input } from "@/components/ui/Input";
 import { useFestivals } from "@/hooks/useFestivals";
 import { useGaneshExpense } from "@/hooks/useGaneshExpenses";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
+import { pickerStatus, useGaneshPhotoUpload } from "@/hooks/useGaneshPhotoUpload";
 import { useGaneshStorage } from "@/hooks/useGaneshStorage";
 import { useGaneshWrites } from "@/hooks/useGaneshWrites";
 import { usePandalMembers } from "@/hooks/usePandalMembers";
@@ -87,7 +88,8 @@ export default function AssetDetailScreen() {
   const { members } = usePandalMembers(pandalId);
   const { can } = useGaneshPermissions();
   const writes = useGaneshWrites();
-  const { isOnline, signedUrl, uploadAssetPhoto } = useGaneshStorage();
+  const { isOnline, signedUrl } = useGaneshStorage();
+  const photoUpload = useGaneshPhotoUpload("assetPhoto");
 
 
   const [name, setName] = useState("");
@@ -104,9 +106,27 @@ export default function AssetDetailScreen() {
   const [disposeReason, setDisposeReason] = useState("");
   const [photoUrl, setPhotoUrl] = useState<string | undefined>(undefined);
   const [photo, setPhoto] = useState<PreparedGaneshImage | null>(null);
-  const [photoStatus, setPhotoStatus] = useState<GaneshUploadStatus>("idle");
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
+
+  const photoJob = photoUpload.jobFor(asset?.id);
+  /**
+   * Queue a replacement photo (GS-040).
+   *
+   * The previous object is not deleted here: `attachAssetPhoto` reports the
+   * path it replaced once the write is acknowledged, and the queue reclaims it
+   * then. Deleting up front would strand the asset with no photo at all if the
+   * new one never uploaded.
+   */
+  const queuePhoto = async (file: PreparedGaneshImage) => {
+    if (!asset?.id) return;
+    try {
+      await photoUpload.queue(asset.id, file);
+    } catch (error) {
+      logError("ganesh.assetPhotoQueue", error);
+      toast.error(friendlyErrorMessage(error, "Could not save that photo for upload."));
+    }
+  };
 
   const photoPath = ganeshStoredPath(asset?.photo);
   const relatedFestivalId = asset?.relatedExpenseFestivalId ?? null;
@@ -426,29 +446,43 @@ export default function AssetDetailScreen() {
                 <GaneshImageUploader
                   title="Replace photo"
                   kind="photo"
-                  status={photoStatus}
+                  status={pickerStatus({
+                    job: photoJob,
+                    hasSelection: Boolean(photo),
+                    // The asset already exists, so a picked photo with no job
+                    // can only mean the enqueue failed.
+                    recordSaved: true,
+                    busy,
+                  })}
                   previewUri={photo?.uri}
-                  disabled={busy || !isOnline}
+                  // No longer gated on connectivity (GS-040): the record is
+                  // already saved, so the photo can be queued offline and will
+                  // upload when the connection returns.
+                  disabled={busy}
                   onPrepared={(file) => {
                     setPhoto(file);
-                    setPhotoStatus("selected");
                     setBusy(true);
-                    uploadAssetPhoto(asset.id, file)
-                      .then(() => setPhotoStatus("uploaded"))
-                      .catch((error) => {
-                        logError("ganesh.assetPhotoUpload", error);
-                        setPhotoStatus("failed");
-                        toast.error(friendlyErrorMessage(error, "Could not upload photo."));
-                      })
-                      .finally(() => setBusy(false));
+                    void queuePhoto(file).finally(() => setBusy(false));
                   }}
                   onRemove={() => {
                     setPhoto(null);
-                    setPhotoStatus("idle");
+                    if (asset.id) void photoUpload.cancel(asset.id);
+                  }}
+                  onRetry={() => {
+                    setBusy(true);
+                    const again = photoJob
+                      ? photoUpload.retry(asset.id)
+                      : photo
+                        ? queuePhoto(photo)
+                        : Promise.resolve();
+                    void again.finally(() => setBusy(false));
                   }}
                 />
                 {!isOnline ? (
-                  <StatusStrip tone="muted" message="Photo upload needs a connection." />
+                  <StatusStrip
+                    tone="muted"
+                    message="Offline — a photo you add now uploads once you are back online."
+                  />
                 ) : null}
               </Section>
             ) : null}

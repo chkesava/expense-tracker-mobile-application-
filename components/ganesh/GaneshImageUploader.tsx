@@ -5,17 +5,12 @@ import * as ImagePicker from "expo-image-picker";
 import { Button } from "@/components/ui/Button";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
+import type { GaneshUploadStatus } from "@/hooks/useGaneshPhotoUpload";
 import { prepareGaneshImage } from "@/services/ganesh/storage/storageService";
 import type { PreparedGaneshImage } from "@/services/ganesh/storage/storageTypes";
 import { useTheme } from "@/theme/ThemeProvider";
 
-export type GaneshUploadStatus =
-  | "idle"
-  | "selected"
-  | "uploading"
-  | "uploaded"
-  | "waiting"
-  | "failed";
+export type { GaneshUploadStatus } from "@/hooks/useGaneshPhotoUpload";
 
 type Props = {
   title: string;
@@ -89,8 +84,8 @@ export function GaneshImageUploader({
       ? "Uploading..."
       : status === "uploaded"
         ? "Uploaded ✓"
-        : status === "waiting"
-          ? `${noun} not uploaded yet`
+        : status === "queued"
+          ? `${noun} queued for upload`
           : status === "failed"
             ? "⚠ Upload failed"
             : status === "selected"
@@ -106,14 +101,14 @@ export function GaneshImageUploader({
       {statusLabel ? (
         <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>{statusLabel}</Text>
       ) : null}
-      {status === "waiting" ? (
+      {status === "queued" ? (
         <Text style={{ color: theme.colors.mutedForeground, lineHeight: 19 }}>
-          {`Your record is saved. The ${noun.toLowerCase()} will upload on its own if you stay on this screen and the connection comes back — there is no background upload, so if you leave now you will need to add it again from the record itself.`}
+          {`The ${noun.toLowerCase()} is saved on this device and will upload by itself when the connection allows. You can leave this screen — if the app is closed first, it resumes the next time you open it.`}
         </Text>
       ) : null}
       {status === "failed" ? (
         <Text style={{ color: theme.colors.mutedForeground, lineHeight: 19 }}>
-          {`Your record is saved without the ${noun.toLowerCase()}. Retry below, or add it later from the record.`}
+          {`The ${noun.toLowerCase()} has stopped retrying. Your record is saved without it — retry below, or add it later from the record.`}
         </Text>
       ) : null}
       {status === "idle" || status === "selected" || status === "failed" ? (

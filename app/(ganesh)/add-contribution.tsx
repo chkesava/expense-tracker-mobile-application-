@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { Gift } from "lucide-react-native";
 
 import { ChoiceChips } from "@/components/ganesh/ChoiceChips";
 import { FormDetails } from "@/components/ganesh/FormDetails";
-import { GaneshImageUploader, type GaneshUploadStatus } from "@/components/ganesh/GaneshImageUploader";
+import { GaneshImageUploader } from "@/components/ganesh/GaneshImageUploader";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { GaneshWriteLock } from "@/components/ganesh/GaneshWriteLock";
 import { GaneshHeader, useGaneshTokens } from "@/components/ganesh/ui";
@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { useFestivalWriteLock } from "@/hooks/useFestivalWriteLock";
-import { useGaneshStorage } from "@/hooks/useGaneshStorage";
+import { pickerStatus, useGaneshPhotoUpload } from "@/hooks/useGaneshPhotoUpload";
 import { useGaneshWrites } from "@/hooks/useGaneshWrites";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
@@ -63,7 +63,7 @@ export default function AddContributionScreen() {
   const writes = useGaneshWrites();
   const { can } = useGaneshPermissions();
   const { closed, lockMessage } = useFestivalWriteLock();
-  const { isOnline, uploadContributionPhoto } = useGaneshStorage();
+  const photoUpload = useGaneshPhotoUpload("contributionPhoto");
   const [kind, setKind] = useState<ContributionKind>("item");
   const [status, setStatus] = useState<ContributionStatus>("promised");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
@@ -82,7 +82,6 @@ export default function AddContributionScreen() {
   const [assetCondition, setAssetCondition] = useState<(typeof ASSET_CONDITIONS)[number]["id"]>("good");
   const [assetLocation, setAssetLocation] = useState("");
   const [photo, setPhoto] = useState<PreparedGaneshImage | null>(null);
-  const [photoStatus, setPhotoStatus] = useState<GaneshUploadStatus>("idle");
   const [savedId, setSavedId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const clientOpId = useRef(newId()).current;
@@ -94,34 +93,27 @@ export default function AddContributionScreen() {
     status === "received" &&
     (kind === "item" || kind === "sponsorship");
   const ledgerSaved = Boolean(savedId);
+  const photoJob = photoUpload.jobFor(savedId);
 
-  const persistPhoto = async (contributionId: string, file: PreparedGaneshImage) => {
-    if (!isOnline) {
-      setPhotoStatus("waiting");
-      return false;
-    }
-    setPhotoStatus("uploading");
+  /**
+   * Hand the photo to the durable queue (GS-040).
+   *
+   * The old path uploaded inline and, when offline, kept the image in component
+   * state to re-try from an effect — so the photo lived exactly as long as this
+   * screen did. The enqueue below resolves only once the image is staged on
+   * disk and the job is written, which is what makes leaving the screen,
+   * backgrounding, or killing the app survivable.
+   */
+  const queuePhoto = async (recordId: string, file: PreparedGaneshImage) => {
     try {
-      await uploadContributionPhoto(contributionId, file);
-      setPhotoStatus("uploaded");
+      await photoUpload.queue(recordId, file);
       return true;
     } catch (error) {
-      logError("ganesh.photoUpload", error);
-      setPhotoStatus("failed");
-      toast.error("Contribution saved, but photo upload failed.");
+      logError("ganesh.contributionPhotoQueue", error);
+      toast.error(friendlyErrorMessage(error, "Contribution saved, but the photo could not be queued."));
       return false;
     }
   };
-
-  useEffect(() => {
-    if (!isOnline || photoStatus !== "waiting" || !savedId || !photo) return;
-    setBusy(true);
-    void persistPhoto(savedId, photo)
-      .then((ok) => {
-        if (ok) back();
-      })
-      .finally(() => setBusy(false));
-  }, [isOnline, photoStatus, savedId, photo]);
 
   if (!can("contributions.create")) {
     return <GaneshWriteLock message="Your role cannot add contributions." />;
@@ -153,7 +145,6 @@ export default function AddContributionScreen() {
           }
           if (!PHOTO_KINDS.includes(next)) {
             setPhoto(null);
-            setPhotoStatus("idle");
           }
         }}
       />
@@ -300,21 +291,30 @@ export default function AddContributionScreen() {
         <GaneshImageUploader
           title="Contribution photo"
           kind="photo"
-          status={photoStatus}
+          status={pickerStatus({
+            job: photoJob,
+            hasSelection: Boolean(photo),
+            recordSaved: ledgerSaved,
+            busy,
+          })}
           previewUri={photo?.uri}
           disabled={busy}
-          onPrepared={(file) => {
-            setPhoto(file);
-            setPhotoStatus("selected");
-          }}
+          onPrepared={setPhoto}
           onRemove={() => {
             setPhoto(null);
-            setPhotoStatus("idle");
+            if (savedId) void photoUpload.cancel(savedId);
           }}
           onRetry={() => {
-            if (!savedId || !photo) return;
+            if (!savedId) return;
             setBusy(true);
-            void persistPhoto(savedId, photo)
+            // A job that gave up is re-armed in the queue; no job at all means
+            // the enqueue never landed, so it is attempted from scratch.
+            const again = photoJob
+              ? photoUpload.retry(savedId).then(() => true)
+              : photo
+                ? queuePhoto(savedId, photo)
+                : Promise.resolve(false);
+            void again
               .then((ok) => {
                 if (ok) back();
               })
@@ -374,8 +374,8 @@ export default function AddContributionScreen() {
                 back();
                 return;
               }
-              const uploaded = await persistPhoto(id, photo);
-              if (uploaded) back();
+              const queued = await queuePhoto(id, photo);
+              if (queued) back();
             })
             .catch((error) => {
               logError("ganesh.addContribution", error);
