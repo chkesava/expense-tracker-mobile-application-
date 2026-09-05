@@ -1,0 +1,28 @@
+{
+  "name": "ganesh-functions",
+  "description": "Trusted server-side maintenance of the Ganesh Seva festival summary (GS-004)",
+  "private": true,
+  "type": "commonjs",
+  "main": "lib/functions/src/index.js",
+  "engines": {
+    "node": "22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "serve": "npm run build && firebase emulators:start --only functions",
+    "deploy": "npm run build && firebase deploy --only functions"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.0.2",
+    "firebase-functions": "^6.3.2",
+    "module-alias": "^2.3.4"
+  },
+  "devDependencies": {
+    "@types/module-alias": "^2.0.4",
+    "typescript": "^5.9.2"
+  },
+  "_moduleAliases": {
+    "@": "lib"
+  }
+}

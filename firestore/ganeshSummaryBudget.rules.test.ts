@@ -11,6 +11,13 @@ import { afterAll, beforeAll, describe, it } from "vitest";
 /**
  * The festival-subcollection rule's evaluation budget (GS-004).
  *
+ * The summary writes below allocate a receipt number rather than bumping a
+ * total. That is the only summary write a client still makes: GS-004 moved the
+ * derived totals to a trusted trigger, because the measurement this file exists
+ * to make came back saying the field allowlist could not fit. The budget
+ * question is unchanged — a legacy member takes the expensive permission path,
+ * and this pins that the path still evaluates inside the ceiling.
+ *
  * Firestore caps a single rule evaluation at 1000 expressions. The emulator
  * reports overruns as `PERMISSION_DENIED: Unable to evaluate the expression as
  * the maximum of 1000 expressions to evaluate has been reached`, which is
@@ -39,7 +46,7 @@ beforeAll(async () => {
     firestore: {
       rules: readFileSync("firestore.rules", "utf8"),
       host: "127.0.0.1",
-      port: 8080,
+      port: Number(process.env.FIRESTORE_EMULATOR_PORT ?? 8080),
     },
   });
 });
@@ -118,14 +125,14 @@ const HONEST_COLLECTION = {
 };
 
 describe("summary writes with a denormalized permissions array", () => {
-  it("a treasurer carrying `permissions` can bump the summary", async () => {
+  it("a treasurer carrying `permissions` can allocate a receipt number", async () => {
     await seed("u-1", "treasurer", [
       "collections.create",
       "expenses.create",
       "contributions.create",
       "contributions.receive",
     ]);
-    await assertSucceeds(setDoc(summaryRef("u-1"), { chanda: 1000 }, { merge: true }));
+    await assertSucceeds(setDoc(summaryRef("u-1"), { nextReceiptNumber: 1 }, { merge: true }));
   });
 
   it("and can write the ledger document alongside it", async () => {
@@ -140,40 +147,47 @@ describe("summary writes on the legacy member shape (no permissions field)", () 
     await assertSucceeds(setDoc(ledgerRef("u-1", "c-2"), HONEST_COLLECTION));
   });
 
-  it("can bump the summary - the regression this file was written to catch", async () => {
+  it("can write the summary - the regression this file was written to catch", async () => {
     // Before the summary short-circuit this was refused, and not by an
     // authorization decision: the rule ran out of its 1000-expression
     // allowance part-way through and Firestore returned PERMISSION_DENIED.
-    // Because `bumpSummary` writes the summary in the same batch as the ledger
-    // row, and batches are atomic, a legacy treasurer could not record money
-    // at all - while the identical write from a member carrying a
-    // `permissions` array went through.
+    // The summary used to be written in the same batch as the ledger row, and
+    // batches are atomic, so a legacy treasurer could not record money at all -
+    // while the identical write from a member carrying a `permissions` array
+    // went through. The totals have since moved to the trigger, but the receipt
+    // allocator still travels with the ledger write, so the budget still
+    // matters here.
     await seed("u-1", "treasurer");
-    await assertSucceeds(setDoc(summaryRef("u-1"), { chanda: 1000 }, { merge: true }));
+    await assertSucceeds(setDoc(summaryRef("u-1"), { nextReceiptNumber: 1 }, { merge: true }));
   });
 
   it("and so can a legacy collector, the cheapest-permission writer", async () => {
     await seed("u-1", "collector");
-    await assertSucceeds(setDoc(summaryRef("u-1"), { chanda: 1000 }, { merge: true }));
+    await assertSucceeds(setDoc(summaryRef("u-1"), { nextReceiptNumber: 1 }, { merge: true }));
   });
 
   it("a legacy admin was never affected - admin short-circuits cheaply", async () => {
     // Recorded because it explains why this went unnoticed: an owner-admin
     // testing the app sees every money flow work.
     await seed("u-1", "admin");
-    await assertSucceeds(setDoc(summaryRef("u-1"), { chanda: 1000 }, { merge: true }));
+    await assertSucceeds(setDoc(summaryRef("u-1"), { nextReceiptNumber: 1 }, { merge: true }));
   });
 
   it("still refuses a member with no money permission at all", async () => {
     // The short-circuit must not have turned the summary into a free-for-all.
     await seed("u-1", "viewer", []);
-    await assertFails(setDoc(summaryRef("u-1"), { chanda: 1000 }, { merge: true }));
+    await assertFails(setDoc(summaryRef("u-1"), { nextReceiptNumber: 1 }, { merge: true }));
   });
 
   it("still refuses a summary field outside the allowlist", async () => {
     await seed("u-1", "treasurer", ["collections.create"]);
     await assertFails(
-      setDoc(summaryRef("u-1"), { chanda: 1000, notASummaryField: true }, { merge: true })
+      setDoc(summaryRef("u-1"), { nextReceiptNumber: 1, notASummaryField: true }, { merge: true })
     );
+  });
+
+  it("and refuses a derived total, which is the trigger's to write now", async () => {
+    await seed("u-1", "treasurer", ["collections.create"]);
+    await assertFails(setDoc(summaryRef("u-1"), { chanda: 1000 }, { merge: true }));
   });
 });

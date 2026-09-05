@@ -1205,53 +1205,76 @@ service cloud.firestore {
             );
           }
 
-          // The summary document is the sole input to availableGodFund() and
-          // therefore to every displayed balance, the God Fund spend guard and
-          // the settlement figure. It is written by increment() side-effects, by
-          // the festival seed and by the recompute tool — all of which stay
-          // inside this key set. Note the residual gap: a member who may write a
-          // ledger side-effect can still write a *plausible* wrong number here.
-          // Closing that needs server-side summary maintenance (see GS-004).
+          /**
+           * The summary document is the sole input to availableGodFund() and
+           * therefore to every displayed balance, the God Fund spend guard and
+           * the settlement figure. Until GS-004 was closed it was maintained by
+           * client `increment()` writes, and the rules could only check that the
+           * numbers were well-shaped — so a member who could write a ledger
+           * side-effect could write a *plausible* wrong number and nothing could
+           * tell the difference.
+           *
+           * The twenty-two derived fields are now written only by the trusted
+           * backend (`functions/src/summary.ts`), which recomputes them from the
+           * ledger and bypasses these rules. So the client allowlist is reduced
+           * to what a client legitimately still owns:
+           *
+           *   - `nextReceiptNumber` / `nextContributionNumber` — monotonic
+           *     allocators handed out in a client transaction. They are not
+           *     derivable from the ledger and must never be reset (GS-077), so
+           *     the backend never writes them and the rule only checks that they
+           *     advance.
+           *   - `updatedAt` — written alongside either allocator.
+           *
+           * Everything else is refused outright. Note this rule is now far
+           * *cheaper* than the twenty-five-field version it replaces, which
+           * matters: the festival-subcollection wildcard was measured at the
+           * 1000-expression ceiling, and that measurement is why the field
+           * allowlist GS-004 originally asked for could not be built here.
+           */
+          function allocatorsOnlyAdvance() {
+            let d = request.resource.data;
+            return (
+                !d.keys().hasAny(['nextReceiptNumber'])
+                || resource == null
+                || d.nextReceiptNumber >= (
+                     resource.data.keys().hasAny(['nextReceiptNumber'])
+                       ? resource.data.nextReceiptNumber
+                       : 0
+                   )
+              ) && (
+                !d.keys().hasAny(['nextContributionNumber'])
+                || resource == null
+                || d.nextContributionNumber >= (
+                     resource.data.keys().hasAny(['nextContributionNumber'])
+                       ? resource.data.nextContributionNumber
+                       : 0
+                   )
+              );
+          }
+
+          /**
+           * Note this is a *diff*, not `request.resource.data.keys().hasOnly()`.
+           * On an update `request.resource.data` is the whole document as it
+           * will be after the write, merge or not — so a key allowlist over it
+           * would refuse every allocator bump the moment the backend had
+           * written the derived fields. What the client is actually restricted
+           * from is *changing* them.
+           */
+          function summaryClientKeysAllowed() {
+            let allowed = ['nextReceiptNumber', 'nextContributionNumber', 'updatedAt'];
+            return resource == null
+              ? request.resource.data.keys().hasOnly(allowed)
+              : request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowed);
+          }
+
           function summaryWellFormed() {
             let d = request.resource.data;
             return subcol != 'summary' || (
-              d.keys().hasOnly([
-                'openingFunds', 'chanda', 'committeeContributions',
-                'otherCashContributions', 'godFundExpenses', 'reimbursements',
-                'personalMoneyUsed', 'pendingReimbursements', 'inKindValue',
-                'sponsoredValue', 'collectionCount', 'expenseCount',
-                'assetPurchaseAmount', 'sponsoredExpenseAmount',
-                'transferredToPermanentFund',
-                'receivedFromPermanentFund', 'cash', 'upi', 'bank', 'other',
-                'nextReceiptNumber',
-                'promisedCashContributions', 'promisedInKindValue',
-                'nextContributionNumber',
-                'updatedAt'
-              ])
-              && okMoney(d, 'openingFunds')
-              && okMoney(d, 'chanda')
-              && okMoney(d, 'committeeContributions')
-              && okMoney(d, 'otherCashContributions')
-              && okMoney(d, 'godFundExpenses')
-              && okMoney(d, 'reimbursements')
-              && okMoney(d, 'personalMoneyUsed')
-              && okSignedMoney(d, 'pendingReimbursements')
-              && okMoney(d, 'inKindValue')
-              && okMoney(d, 'sponsoredValue')
-              && okMoney(d, 'collectionCount')
-              && okMoney(d, 'expenseCount')
-              && okMoney(d, 'assetPurchaseAmount')
-              && okMoney(d, 'sponsoredExpenseAmount')
-              && okMoney(d, 'transferredToPermanentFund')
-              && okMoney(d, 'receivedFromPermanentFund')
-              && okSignedMoney(d, 'cash')
-              && okSignedMoney(d, 'upi')
-              && okSignedMoney(d, 'bank')
-              && okSignedMoney(d, 'other')
+              summaryClientKeysAllowed()
               && okMoney(d, 'nextReceiptNumber')
-              && okMoney(d, 'promisedCashContributions')
-              && okMoney(d, 'promisedInKindValue')
               && okMoney(d, 'nextContributionNumber')
+              && allocatorsOnlyAdvance()
             );
           }
 
