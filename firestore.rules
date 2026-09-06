@@ -43,8 +43,16 @@ service cloud.firestore {
       // allowlist and a live-member check. Nested matches OR together, so
       // this recursive owner grant must not cover that collection or a
       // client could forge role/status on their own index.
-      match /{document=**} {
-        allow read, write: if isOwner(uid) && document[0] != 'pandalMemberships';
+      //
+      // The excluded name is read off `{collection}`, a single-segment
+      // wildcard, and never off the recursive `{document=**}`. A recursive
+      // wildcard is unbound on a `list`, so indexing it there raises
+      // "Variable is not bound in path template" and denies the query --
+      // which took every personal collection list (expenses, accounts,
+      // statements, ...) down while single-document gets and writes kept
+      // working.
+      match /{collection}/{document=**} {
+        allow read, write: if isOwner(uid) && collection != 'pandalMemberships';
       }
     }
 
