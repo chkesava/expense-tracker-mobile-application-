@@ -235,14 +235,19 @@ service cloud.firestore {
     // update prompt can attach before sign-in finishes (Ganesh login especially).
     // Only `global` is writable from the app (onboarding currency).
     // Product docs are written by the Admin SDK in CI.
-    function isReleasePointer() {
-      return docId == "latest_release"
-        || docId == "latest_release_expense"
-        || docId == "latest_release_nutrition"
-        || docId == "latest_release_ganesh";
-    }
-
     match /system_settings/{docId} {
+      // Must live INSIDE the match: `docId` is bound by the match, so a
+      // top-level function referencing it compiles with "Invalid variable
+      // name: docId" and then errors at call time. An errored condition
+      // denies, which silently killed the signed-out read this grant exists
+      // for -- the update prompt could not attach before sign-in.
+      function isReleasePointer() {
+        return docId == "latest_release"
+          || docId == "latest_release_expense"
+          || docId == "latest_release_nutrition"
+          || docId == "latest_release_ganesh";
+      }
+
       allow read: if isReleasePointer() || signedIn();
       allow write: if signedIn() && docId == "global";
     }
