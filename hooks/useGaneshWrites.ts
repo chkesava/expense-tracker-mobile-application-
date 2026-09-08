@@ -45,6 +45,7 @@ import type {
 } from "@/shared/types/ganesh";
 import * as roleWrites from "@/services/ganesh/ganeshRoles";
 import { assertHasPermission, type GaneshPermission } from "@/shared/utils/ganeshPermissions";
+import { requestFestivalSummaryRebuild, requestFestivalSummarySeed } from "@/services/ganesh/ganeshSummaryClient";
 
 function requireDb() {
   const db = getFirestoreDb();
@@ -109,6 +110,29 @@ export function useGaneshWrites() {
     [actor, explainRefusal]
   );
 
+  const scheduleSummaryRebuild = useCallback(
+    (targetPandalId?: string | null, targetFestivalId?: string | null) => {
+      const p = targetPandalId ?? pandalId;
+      const f = targetFestivalId ?? festivalId;
+      if (!p || !f) return;
+      requestFestivalSummaryRebuild({ pandalId: p, festivalId: f, mode: "rebuild" });
+    },
+    [pandalId, festivalId]
+  );
+
+  const runLedger = useCallback(
+    async <T,>(
+      label: string,
+      work: () => Promise<T>,
+      ids?: { pandalId?: string; festivalId?: string }
+    ): Promise<T> => {
+      const result = await run(label, work);
+      scheduleSummaryRebuild(ids?.pandalId, ids?.festivalId);
+      return result;
+    },
+    [run, scheduleSummaryRebuild]
+  );
+
   const requirePerm = useCallback(
     (permission: GaneshPermission) => {
       if (hasPerm(permission)) return;
@@ -149,7 +173,19 @@ export function useGaneshWrites() {
       if (Number(input.initialFund?.amount ?? 0) > 0 || Number(input.allocateToFestival?.amount ?? 0) > 0) {
         assertPermanentFundOnline(isOnline);
       }
-      return run("Pandal created", () => writes.createPandalAndFestival(requireDb(), actor!, input));
+      return run("Pandal created", () => writes.createPandalAndFestival(requireDb(), actor!, input)).then(
+        async (created) => {
+          await requestFestivalSummarySeed({
+            pandalId: created.pandalId,
+            festivalId: created.festivalId,
+          });
+          requestFestivalSummaryRebuild({
+            pandalId: created.pandalId,
+            festivalId: created.festivalId,
+          });
+          return created;
+        }
+      );
     },
     /**
      * Finish a half-created Pandal (GS-071). Admin-only: it writes the seed
@@ -161,7 +197,19 @@ export function useGaneshWrites() {
       requirePerm("festival.create");
       return run("Setup completed", () =>
         writes.repairPandalSetup(ctx.db, ctx.actor, ctx.pandalId)
-      );
+      ).then(async (gaps) => {
+        if (festivalId) {
+          await requestFestivalSummarySeed({
+            pandalId: ctx.pandalId,
+            festivalId,
+          });
+          requestFestivalSummaryRebuild({
+            pandalId: ctx.pandalId,
+            festivalId,
+          });
+        }
+        return gaps;
+      });
     },
     /* ---- GS-076 collection sessions / GS-075 reconciliation ---- */
     startCollectionSession: async (
@@ -349,7 +397,13 @@ export function useGaneshWrites() {
       requirePerm("festival.create");
       return run("Festival created", () =>
         writes.createFestival(requireDb(), actor, pandalId, input)
-      );
+      ).then(async (createdFestivalId) => {
+        await requestFestivalSummarySeed({
+          pandalId,
+          festivalId: createdFestivalId,
+        });
+        return createdFestivalId;
+      });
     },
     reopenFestival: async () => {
       requirePerm("festival.close");
@@ -404,14 +458,14 @@ export function useGaneshWrites() {
     addOpeningFund: async (input: Parameters<typeof writes.addOpeningFund>[4]) => {
       requirePerm("openingFunds.create");
       const ctx = requireFestival();
-      return run("Opening fund recorded", () =>
+      return runLedger("Opening fund recorded", () =>
         writes.addOpeningFund(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, input)
       );
     },
     addOpeningFunds: async (input: Parameters<typeof writes.addOpeningFunds>[4]) => {
       requirePerm("openingFunds.create");
       const ctx = requireFestival();
-      return run("Opening fund recorded", () =>
+      return runLedger("Opening fund recorded", () =>
         writes.addOpeningFunds(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, input)
       );
     },
@@ -433,6 +487,7 @@ export function useGaneshWrites() {
           .assignPendingCollectionReceipts(ctx.db, ctx.pandalId, ctx.festivalId)
           .catch(() => undefined);
       }
+      scheduleSummaryRebuild(ctx.pandalId, ctx.festivalId);
       return result;
     },
     updateHousehold: async (householdId: string, input: Parameters<typeof writes.updateHousehold>[5]) => {
@@ -455,7 +510,7 @@ export function useGaneshWrites() {
         writes.assertMoneyReceiveOnline(isOnline, input.kind);
       }
       const ctx = requireFestival();
-      return run(status === "received" ? "Contribution received" : "Contribution recorded", () =>
+      return runLedger(status === "received" ? "Contribution received" : "Contribution recorded", () =>
         writes.addContribution(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, input)
       );
     },
@@ -484,7 +539,7 @@ export function useGaneshWrites() {
       const ctx = requireFestival();
       writes.assertMoneyReceiveOnline(isOnline, input?.kind ?? "item");
       const { kind: _kind, ...payload } = input ?? {};
-      return run("Contribution received", () =>
+      return runLedger("Contribution received", () =>
         writes.receiveContribution(
           ctx.db,
           ctx.actor,
@@ -499,7 +554,7 @@ export function useGaneshWrites() {
       requirePerm("contributions.cancel");
       assertPromiseCancelOnline(isOnline);
       const ctx = requireFestival();
-      return run("Contribution cancelled", () =>
+      return runLedger("Contribution cancelled", () =>
         writes.cancelContribution(
           ctx.db,
           ctx.actor,
@@ -516,7 +571,7 @@ export function useGaneshWrites() {
     ) => {
       requirePerm("contributions.update");
       const ctx = requireFestival();
-      return run("Contribution recorded", () =>
+      return runLedger("Contribution recorded", () =>
         writes.updatePromisedContribution(
           ctx.db,
           ctx.actor,
@@ -532,7 +587,7 @@ export function useGaneshWrites() {
       if ((input.sponsoredAmount ?? 0) > 0) requirePerm("sponsors.receive");
       assertGodFundSpendOnline(isOnline, input.godFundAmount);
       const ctx = requireFestival();
-      return run("Expense recorded", () =>
+      return runLedger("Expense recorded", () =>
         writes.addExpense(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, input)
       );
     },
@@ -542,7 +597,7 @@ export function useGaneshWrites() {
       if ((input.sponsoredAmount ?? 0) > 0) requirePerm("sponsors.receive");
       assertGodFundSpendOnline(isOnline, input.godFundAmount);
       const ctx = requireFestival();
-      return run("Asset purchase recorded", () =>
+      return runLedger("Asset purchase recorded", () =>
         writes.addAssetPurchase(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, input)
       );
     },
@@ -556,7 +611,7 @@ export function useGaneshWrites() {
       // it cannot see the old amount from here, so gate on any God Fund share.
       assertGodFundSpendOnline(isOnline, input.godFundAmount);
       const ctx = requireFestival(options?.festivalId);
-      return run("Expense updated", () =>
+      return runLedger("Expense updated", () =>
         writes.updateExpenseAmounts(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, expenseId, input)
       );
     },
@@ -581,7 +636,7 @@ export function useGaneshWrites() {
       requirePerm("reimbursements.create");
       assertReimbursementOnline(isOnline);
       const ctx = requireFestival();
-      return run("Reimbursement recorded", () =>
+      return runLedger("Reimbursement recorded", () =>
         writes.addReimbursement(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, input)
       );
     },
@@ -592,7 +647,7 @@ export function useGaneshWrites() {
       requirePerm("expenses.void");
       assertVoidOnline(isOnline);
       const ctx = requireFestival(options?.festivalId);
-      return run("Record voided", () =>
+      return runLedger("Record voided", () =>
         writes.voidFinancialRecord(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, input)
       );
     },
@@ -603,7 +658,7 @@ export function useGaneshWrites() {
         requirePerm("permanentFund.transfer");
         assertPermanentFundOnline(isOnline);
       }
-      return run(
+      return runLedger(
         settlement && settlement.transferAmount > 0
           ? "Festival settled and closed"
           : "Festival closed",
@@ -621,8 +676,9 @@ export function useGaneshWrites() {
       requirePerm("permanentFund.add");
       if (input.allocation) requirePerm("permanentFund.transfer");
       if (Number(input.amount ?? 0) > 0) assertPermanentFundOnline(isOnline);
-      return run("Permanent Fund saved", () =>
-        seedPermanentFundWithAllocation(requireDb(), actor, pandalId, input)
+      return runLedger("Permanent Fund saved", () =>
+        seedPermanentFundWithAllocation(requireDb(), actor, pandalId, input),
+        { festivalId: input.allocation?.festivalId ?? festivalId ?? undefined }
       );
     },
     seedPermanentFund: async (input?: {
@@ -675,8 +731,9 @@ export function useGaneshWrites() {
       const targetFestivalId = input.festivalId ?? festivalId;
       if (!targetFestivalId) throw new Error("Select a festival first.");
       assertPermanentFundOnline(isOnline);
-      return run("Transferred to festival", () =>
-        transferPermanentToFestival(requireDb(), actor, pandalId, targetFestivalId, input)
+      return runLedger("Transferred to festival", () =>
+        transferPermanentToFestival(requireDb(), actor, pandalId, targetFestivalId, input),
+        { festivalId: targetFestivalId }
       );
     },
     transferFestivalToPermanent: async (input: {
@@ -697,7 +754,7 @@ export function useGaneshWrites() {
       requirePerm("permanentFund.transfer");
       const ctx = requireFestival(input.festivalId);
       assertPermanentFundOnline(isOnline);
-      return run("Transferred to Permanent Fund", () =>
+      return runLedger("Transferred to Permanent Fund", () =>
         transferFestivalToPermanent(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, {
           ...input,
           type: input.type ?? "TRANSFER_IN",
@@ -897,7 +954,7 @@ export function useGaneshWrites() {
         assertMoneyReceiveOnline(isOnline, "money");
       }
       const ctx = requireFestival();
-      return run("Sponsorship saved", () =>
+      return runLedger("Sponsorship saved", () =>
         sponsorWrites.addSponsorship(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, sponsorId, input)
       );
     },
@@ -907,7 +964,7 @@ export function useGaneshWrites() {
     ) => {
       requirePerm("sponsors.update");
       const ctx = requireFestival();
-      return run("Sponsorship saved", () =>
+      return runLedger("Sponsorship saved", () =>
         sponsorWrites.updateOpenSponsorship(
           ctx.db,
           ctx.actor,
@@ -921,14 +978,14 @@ export function useGaneshWrites() {
     promiseSponsorship: async (sponsorshipId: string) => {
       requirePerm("sponsors.update");
       const ctx = requireFestival();
-      return run("Marked promised", () =>
+      return runLedger("Marked promised", () =>
         sponsorWrites.promiseSponsorship(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, sponsorshipId)
       );
     },
     confirmSponsorship: async (sponsorshipId: string) => {
       requirePerm("sponsors.update");
       const ctx = requireFestival();
-      return run("Sponsorship confirmed", () =>
+      return runLedger("Sponsorship confirmed", () =>
         sponsorWrites.confirmSponsorship(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, sponsorshipId)
       );
     },
@@ -942,7 +999,7 @@ export function useGaneshWrites() {
         assertMoneyReceiveOnline(isOnline, "money");
       }
       const { sponsoringType: _type, ...payload } = input ?? {};
-      return run("Sponsorship received", () =>
+      return runLedger("Sponsorship received", () =>
         sponsorWrites.receiveSponsorship(
           ctx.db,
           ctx.actor,
@@ -956,7 +1013,7 @@ export function useGaneshWrites() {
     cancelSponsorship: async (sponsorshipId: string, reason?: string) => {
       requirePerm("sponsors.cancel");
       const ctx = requireFestival();
-      return run("Sponsorship cancelled", () =>
+      return runLedger("Sponsorship cancelled", () =>
         sponsorWrites.cancelSponsorship(
           ctx.db,
           ctx.actor,

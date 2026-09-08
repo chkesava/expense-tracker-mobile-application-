@@ -9,7 +9,7 @@ import {
   summaryAuditDelta,
   type FestivalLedger,
   type LedgerDoc,
-} from "@/shared/utils/ganeshSummaryDerive";
+} from "../../shared/utils/ganeshSummaryDerive";
 
 /**
  * The subcollections the summary is derived from. A write to any of them makes
@@ -38,6 +38,10 @@ export const DERIVED_AT_FIELD = "summaryDerivedAt";
 
 const festivalPath = (pandalId: string, festivalId: string) =>
   `pandals/${pandalId}/festivals/${festivalId}`;
+
+/** Canonical id — matches `summaryDoc()` in the app. Never write the leftover client id. */
+const summaryTotalsPath = (pandalId: string, festivalId: string) =>
+  `${festivalPath(pandalId, festivalId)}/summary/totals`;
 
 async function loadSubcollection(
   db: Firestore,
@@ -102,7 +106,7 @@ export async function rebuildFestivalSummary(
   auditActorId?: string
 ): Promise<RebuildResult> {
   const ledger = await loadLedger(db, pandalId, festivalId);
-  const summaryRef = db.doc(`${festivalPath(pandalId, festivalId)}/summary/totals`);
+  const summaryRef = db.doc(summaryTotalsPath(pandalId, festivalId));
 
   const outcome = await db.runTransaction(async (txn) => {
     const current = await txn.get(summaryRef);
@@ -205,7 +209,7 @@ export async function seedFestivalSummary(
   pandalId: string,
   festivalId: string
 ): Promise<void> {
-  const summaryRef = db.doc(`${festivalPath(pandalId, festivalId)}/summary/totals`);
+  const summaryRef = db.doc(summaryTotalsPath(pandalId, festivalId));
   const empty = deriveFestivalSummary(
     {
       openingFunds: [],

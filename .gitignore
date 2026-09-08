@@ -76,3 +76,6 @@ supabase/.temp/
 
 # Firestore emulator debug output (npm run test:rules)
 firestore-debug.log
+
+# Bundled Netlify function output (scripts/bundle-ganesh-summary-fn.js)
+netlify/functions-dist/

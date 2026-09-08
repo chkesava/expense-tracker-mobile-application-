@@ -10,6 +10,7 @@ import {
 } from "firebase/firestore";
 
 import { getFirebaseAuth, getFirestoreDb } from "@/lib/firebase";
+import { summaryDoc } from "@/shared/utils/ganeshPaths";
 import {
   GANESH_SESSION_LEGACY_KEY,
   ganeshSessionStorageKey,
@@ -56,7 +57,7 @@ async function runPrefetch(): Promise<void> {
   await Promise.all([
     soft(getDoc(doc(db, "pandals", pandalId))),
     soft(getDoc(doc(db, "pandals", pandalId, "festivals", festivalId))),
-    soft(getDoc(doc(db, "pandals", pandalId, "festivals", festivalId, "summary", "current"))),
+    soft(getDoc(doc(db, summaryDoc(pandalId, festivalId).join("/")))),
     soft(getDocs(query(festival, orderBy("date", "asc"), limit(40)))),
     soft(getDocs(query(contributions, orderBy("createdAt", "desc"), limit(40)))),
     soft(getDocs(query(collections, orderBy("createdAt", "desc"), limit(40)))),

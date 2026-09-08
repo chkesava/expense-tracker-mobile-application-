@@ -71,3 +71,32 @@ describe("ganesh festival management source contract", () => {
     expect(block).toContain("request.resource.data.closedBy == request.auth.uid");
   });
 });
+
+describe("KAN-36 summary path source contract", () => {
+  it("writes and reads summary/totals, and repair merges current onto it", () => {
+    const paths = read("shared/utils/ganeshPaths.ts");
+    const summaryFn = paths.slice(paths.indexOf("export function summaryDoc"));
+    expect(summaryFn).toContain('"totals"');
+    expect(summaryFn.slice(0, summaryFn.indexOf("export function legacySummaryDoc"))).not.toContain(
+      '"current"'
+    );
+
+    const writes = read("services/ganesh/ganeshWrites.ts");
+    expect(writes).toContain("migrateSummaryAllocators");
+    expect(writes).toContain("legacySummaryDoc");
+    expect(writes).toContain("planSummaryAllocatorMerge");
+
+    const prefetch = read("services/ganesh/ganeshStartupPrefetch.ts");
+    expect(prefetch).toContain("summaryDoc");
+    expect(prefetch).not.toContain('"current"');
+
+    const functions = read("functions/src/summary.ts");
+    expect(functions).toContain("summary/totals");
+    expect(functions).not.toContain("summary/current");
+
+    const netlify = read("netlify/functions/ganesh-summary.ts");
+    expect(netlify).toContain("rebuildFestivalSummary");
+    expect(netlify).toContain("seedFestivalSummary");
+    expect(read("hooks/useGaneshWrites.ts")).toContain("requestFestivalSummaryRebuild");
+  });
+});

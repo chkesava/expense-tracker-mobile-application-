@@ -60,9 +60,11 @@ describe("client-side festival summary ownership", () => {
     }
   });
 
-  it("asks the backend to recalculate rather than doing it locally", () => {
+  it("asks the Netlify function to recalculate rather than doing it locally", () => {
     const source = read("services/ganesh/ganeshWrites.ts");
-    expect(source).toContain("recomputeGaneshSummary");
+    expect(source).toContain("recomputeFestivalSummaryRemote");
+    expect(source).not.toContain("recomputeGaneshSummary");
+    expect(read("shared/utils/ganeshSummaryRemote.ts")).toContain("ganesh-summary");
     // The old implementation read every ledger document and wrote the totals.
     expect(source).not.toContain("loadAllFestivalDocs");
   });

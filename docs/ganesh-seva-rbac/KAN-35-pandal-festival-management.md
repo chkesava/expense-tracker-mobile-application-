@@ -91,4 +91,3 @@ No new install is required if `npx expo start` is already running; hot reload pi
 - Separate `festival.reopen` permission (reopen keeps using `festival.close`)
 - In-app pandal switcher (setup-only today)
 - Stored `planning` / festival archive
-- `summary/current` vs `summary/totals` (KAN-36)
