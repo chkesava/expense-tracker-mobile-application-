@@ -65,7 +65,19 @@ export function permanentFundTransactionsCol(pandalId: string): string[] {
   return ["pandals", pandalId, "permanentFundTransactions"];
 }
 
+/**
+ * Canonical festival summary. Cloud Functions write derived totals here;
+ * the app reads the same document. Do not introduce a second summary id.
+ */
 export function summaryDoc(pandalId: string, festivalId: string): string[] {
+  return ["pandals", pandalId, "festivals", festivalId, "summary", "totals"];
+}
+
+/**
+ * Pre-KAN-36 client path. Repair copies allocators from here onto
+ * `summary/totals`. Do not listen, increment, or write derived fields here.
+ */
+export function legacySummaryDoc(pandalId: string, festivalId: string): string[] {
   return ["pandals", pandalId, "festivals", festivalId, "summary", "current"];
 }
 

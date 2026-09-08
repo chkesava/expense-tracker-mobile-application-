@@ -12,6 +12,7 @@ import {
   query,
   runTransaction,
   serverTimestamp,
+  setDoc,
   where,
   writeBatch,
   type Firestore,
@@ -71,11 +72,17 @@ import {
   festivalCol,
   festivalDoc,
   festivalYearDoc,
+  legacySummaryDoc,
   membershipDoc,
   pandalAssetsCol,
   pandalMemberAuditsCol,
   summaryDoc,
 } from "@/shared/utils/ganeshPaths";
+import {
+  emptySummaryAllocators,
+  legacySummaryNeedsMerge,
+  planSummaryAllocatorMerge,
+} from "@/shared/utils/ganeshSummaryMigrate";
 import type {
   AuditAction,
   ContributionKind,
@@ -589,8 +596,9 @@ export async function inspectPandalSetup(
   }
   const target = festivals.find((festival) => festival.status === "open") ?? festivals[0];
   const yearClaimable = Number.isFinite(target.year) && target.year >= 2000;
-  const [summarySnap, categoriesSnap, memberSnap, yearSnap] = await Promise.all([
+  const [summarySnap, legacySummarySnap, categoriesSnap, memberSnap, yearSnap] = await Promise.all([
     getDoc(pathRef(db, summaryDoc(pandalId, target.id))),
+    getDoc(pathRef(db, legacySummaryDoc(pandalId, target.id))),
     // limit(1): this only asks "is it empty", and reading the whole
     // collection would cost ~24 reads per app open to answer a yes/no about a
     // state that should never occur.
@@ -607,9 +615,13 @@ export async function inspectPandalSetup(
           String(yearSnap.data()?.festivalId ?? "") === target.id
       )
     : true;
+  const totalsData = summarySnap.exists() ? summarySnap.data() : null;
+  const legacyData = legacySummarySnap.exists() ? legacySummarySnap.data() : null;
   return diagnosePandalSetup({
     festivals,
     summaryExists: summarySnap.exists(),
+    legacySummaryExists: legacySummarySnap.exists(),
+    legacyAllocatorsAhead: legacySummaryNeedsMerge(totalsData, legacyData),
     categoryCount: categoriesSnap.size,
     memberExists: memberSnap.exists(),
     yearClaimExists,
@@ -617,14 +629,51 @@ export async function inspectPandalSetup(
 }
 
 /**
+ * Copy receipt allocators from pre-KAN-36 `summary/current` onto
+ * `summary/totals`. Derived money fields stay with the Cloud Function rebuild.
+ * `current` is left in place — leftover, not deleted.
+ */
+async function migrateSummaryAllocators(
+  db: Firestore,
+  pandalId: string,
+  festivalId: string,
+  options?: { seedIfMissing?: boolean }
+): Promise<void> {
+  const totalsRef = pathRef(db, summaryDoc(pandalId, festivalId));
+  const legacyRef = pathRef(db, legacySummaryDoc(pandalId, festivalId));
+  const [totalsSnap, legacySnap] = await Promise.all([getDoc(totalsRef), getDoc(legacyRef)]);
+  const planned =
+    planSummaryAllocatorMerge(
+      totalsSnap.exists() ? totalsSnap.data() : null,
+      legacySnap.exists() ? legacySnap.data() : null
+    ) ??
+    (options?.seedIfMissing && !totalsSnap.exists() ? emptySummaryAllocators() : null);
+  if (!planned) return;
+  await commitWrite(
+    () =>
+      setDoc(
+        totalsRef,
+        {
+          nextReceiptNumber: planned.nextReceiptNumber,
+          nextContributionNumber: planned.nextContributionNumber,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      ),
+    { label: "summary migrate" }
+  );
+}
+
+/**
  * Finish a half-created Pandal (GS-071).
  *
  * Re-runs the first-festival seed, which was already written to be safe to
  * repeat: it creates the festival document only when absent, merges the member
- * and summary rows, seeds categories only when the collection is empty, and
- * claims `festivalYears/{year}` when the sentinel is missing (KAN-35). So
- * repair is the same code path as creation rather than a second implementation
- * that can drift from it.
+ * row, seeds categories only when the collection is empty, claims
+ * `festivalYears/{year}` when the sentinel is missing (KAN-35), and copies
+ * receipt allocators from `summary/current` onto `summary/totals` (KAN-36).
+ * So repair is the same code path as creation rather than a second
+ * implementation that can drift from it.
  *
  * Refuses the `no-festival` case rather than inventing one. The festival's name
  * and year were the user's choice and did not survive the failure; guessing
@@ -648,6 +697,9 @@ export async function repairPandalSetup(
   const festivalSnap = await getDoc(pathRef(db, festivalDoc(pandalId, before.festivalId)));
   if (!festivalSnap.exists()) throw new Error("Festival not found.");
   const data = festivalSnap.data();
+  await migrateSummaryAllocators(db, pandalId, before.festivalId, {
+    seedIfMissing: before.gaps.includes("missing-summary"),
+  });
   await seedFirstFestival(
     db,
     actor,

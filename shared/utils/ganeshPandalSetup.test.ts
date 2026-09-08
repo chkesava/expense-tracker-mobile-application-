@@ -97,6 +97,26 @@ describe("diagnosePandalSetup", () => {
     expect(diagnosePandalSetup({ ...HEALTHY, yearClaimExists: false }).gaps).toEqual([
       "missing-year-claim",
     ]);
+    expect(
+      diagnosePandalSetup({
+        ...HEALTHY,
+        summaryExists: false,
+        legacySummaryExists: true,
+      }).gaps
+    ).toEqual(["legacy-summary-path"]);
+    expect(diagnosePandalSetup({ ...HEALTHY, legacyAllocatorsAhead: true }).gaps).toEqual([
+      "legacy-summary-path",
+    ]);
+  });
+
+  it("does not report a leftover current document when totals already leads", () => {
+    const result = diagnosePandalSetup({
+      ...HEALTHY,
+      legacySummaryExists: true,
+      legacyAllocatorsAhead: false,
+    });
+    expect(result.complete).toBe(true);
+    expect(result.gaps).toEqual([]);
   });
 });
 
@@ -133,5 +153,11 @@ describe("describePandalSetupGaps", () => {
 
   it("names a missing year claim", () => {
     expect(describePandalSetupGaps(["missing-year-claim"])).toContain("year was never reserved");
+  });
+
+  it("names a leftover summary path", () => {
+    expect(describePandalSetupGaps(["legacy-summary-path"])).toContain(
+      "previous document"
+    );
   });
 });

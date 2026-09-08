@@ -27,6 +27,11 @@ export type PandalSetupGap =
   | "no-festival"
   /** The festival exists but its summary document was never written. */
   | "missing-summary"
+  /**
+   * Allocators still live on pre-KAN-36 `summary/current`, or `totals` is
+   * missing while `current` exists. Repair copies the higher numbers across.
+   */
+  | "legacy-summary-path"
   /** The festival exists but no expense categories were seeded. */
   | "missing-categories"
   /** The festival exists but the creator has no festival-member row. */
@@ -54,8 +59,15 @@ export type PandalSetupDiagnosis = {
 export function diagnosePandalSetup(found: {
   /** Festivals on the Pandal, in any order. */
   festivals: Array<{ id: string; status?: string }>;
-  /** Whether the newest festival's summary document exists. */
+  /** Whether the newest festival's canonical `summary/totals` document exists. */
   summaryExists: boolean;
+  /** Whether pre-KAN-36 `summary/current` exists. */
+  legacySummaryExists?: boolean;
+  /**
+   * Whether `current` holds a higher allocator than `totals` (or `totals` is
+   * missing while `current` exists). Omit to skip the check.
+   */
+  legacyAllocatorsAhead?: boolean;
   /** How many category documents the newest festival has. */
   categoryCount: number;
   /** Whether the creator has a member row on the newest festival. */
@@ -83,7 +95,12 @@ export function diagnosePandalSetup(found: {
     found.festivals.find((festival) => festival.status === "open") ?? found.festivals[0];
 
   const gaps: PandalSetupGap[] = [];
-  if (!found.summaryExists) gaps.push("missing-summary");
+  if (!found.summaryExists) {
+    if (found.legacySummaryExists) gaps.push("legacy-summary-path");
+    else gaps.push("missing-summary");
+  } else if (found.legacyAllocatorsAhead) {
+    gaps.push("legacy-summary-path");
+  }
   if (found.categoryCount === 0) gaps.push("missing-categories");
   if (!found.memberExists) gaps.push("missing-member");
   if (found.yearClaimExists === false) gaps.push("missing-year-claim");
@@ -108,6 +125,9 @@ export function describePandalSetupGaps(gaps: PandalSetupGap[]): string {
   }
   const parts: string[] = [];
   if (gaps.includes("missing-summary")) parts.push("its totals were never started");
+  if (gaps.includes("legacy-summary-path")) {
+    parts.push("its totals are still on the previous document");
+  }
   if (gaps.includes("missing-categories")) parts.push("it has no expense categories");
   if (gaps.includes("missing-member")) parts.push("you were not added to it");
   if (gaps.includes("missing-year-claim")) parts.push("its year was never reserved");
