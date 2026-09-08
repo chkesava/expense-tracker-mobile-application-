@@ -62,13 +62,27 @@ No new composite indexes. No Expense Tracker / `users/{uid}` rule changes.
 - [x] Idempotent `current` → `totals` allocator merge
 - [x] Tests added
 - [x] Netlify function added (replaces Cloud Functions / Blaze)
-- [ ] Deploy Web (Netlify) workflow run with `FIREBASE_SERVICE_ACCOUNT` set on the spendly-share site
+- [x] Deploy Web (Netlify) Action copies `FIREBASE_SERVICE_ACCOUNT` from GitHub secrets
+- [ ] After merge: run **Deploy Web (Netlify)** once
 - [ ] Manual verification
 - [ ] Jira KAN-36 updated after merge
 
+## After merge (you do this)
+
+Do **not** click Deploy in the Netlify dashboard. Continuous Deployment stays off. A Netlify UI build would publish the old `netlify.toml` site and drop `/expense`, `/ganesh`, and `ganesh-summary`.
+
+1. Merge [PR 74](https://github.com/chkesava/expense-tracker-mobile-application-/pull/74) to `main`.
+2. GitHub → **Actions** → **Deploy Web (Netlify)** → **Run workflow** → branch `main`.
+3. Wait until it is green. The Action builds the four web apps, bundles `ganesh-summary`, writes `FIREBASE_SERVICE_ACCOUNT` onto the spendly-share site from the GitHub secret, and deploys.
+4. Confirm https://spendly-share.netlify.app/.netlify/functions/ganesh-summary answers (POST without a token should be 401, not 404).
+5. In Ganesh Seva, add a cash collection and check Home Available / Funds God Fund.
+6. Do not enable Blaze or deploy Firebase Cloud Functions for this ticket.
+
+No new Expo install if `npx expo start` is already running. A store/APK release is only needed later so installed testers get the client that calls Netlify.
+
 ## Manual testing guide
 
-No new install is required if `npx expo start` is already running; hot reload picks the client path change up. The Netlify function must be deployed (GitHub → Actions → Deploy Web) and `FIREBASE_SERVICE_ACCOUNT` must be set on the spendly-share Netlify site.
+No new install is required if `npx expo start` is already running; hot reload picks the client path change up. After merge, run **Deploy Web (Netlify)** once so the function is live.
 
 1. Combined build: Expense Tracker still lists personal expenses after sign-in.
 2. Ganesh Seva: add a cash collection. Home Available and Funds God Fund increase by that amount (not promised, not in-kind).
@@ -88,4 +102,3 @@ No new install is required if `npx expo start` is already running; hot reload pi
 - Per-line money-in drill-down filters
 - Per-subcollection `hasOnly` allowlist (rules expression budget)
 - Expense Tracker / Nutrition financial screens
-- Set `FIREBASE_SERVICE_ACCOUNT` on the spendly-share Netlify site, then run **Deploy Web (Netlify)** so `ganesh-summary` is live
