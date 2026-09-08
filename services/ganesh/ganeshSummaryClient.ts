@@ -27,11 +27,20 @@ async function postFestivalSummary(input: {
     },
     body: JSON.stringify(input),
   });
-  const payload = (await response.json().catch(() => ({}))) as { error?: string };
+  const payload = (await response.json().catch(() => ({}))) as {
+    error?: string;
+    membersWritten?: number;
+    seeded?: boolean;
+    skipped?: boolean;
+  };
   if (!response.ok) {
     throw new Error(payload.error || "Could not update festival totals.");
   }
-  return payload;
+  return {
+    membersWritten: payload.membersWritten,
+    seeded: payload.seeded,
+    skipped: payload.skipped,
+  };
 }
 
 /** Fire-and-forget after a ledger write. Never fails the money save. */
