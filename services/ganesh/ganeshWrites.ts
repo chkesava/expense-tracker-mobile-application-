@@ -62,6 +62,7 @@ import { generatePandalCode, normalizePandalCode } from "@/shared/utils/ganeshId
 import { validateFestivalWindow } from "@/shared/utils/ganeshSeva";
 import { requireOpenFestival } from "@/services/ganesh/ganeshFestivalGuard";
 import {
+  assertFestivalYearUnchanged,
   duplicateFestivalYearMessage,
   planFestivalYearClaim,
   yearTakenByAnotherFestival,
@@ -576,6 +577,7 @@ export async function inspectPandalSetup(
   const festivals = festivalsSnap.docs.map((docSnap) => ({
     id: docSnap.id,
     status: String(docSnap.data().status ?? ""),
+    year: Number(docSnap.data().year ?? 0),
   }));
   if (festivals.length === 0) {
     return diagnosePandalSetup({
@@ -586,19 +588,31 @@ export async function inspectPandalSetup(
     });
   }
   const target = festivals.find((festival) => festival.status === "open") ?? festivals[0];
-  const [summarySnap, categoriesSnap, memberSnap] = await Promise.all([
+  const yearClaimable = Number.isFinite(target.year) && target.year >= 2000;
+  const [summarySnap, categoriesSnap, memberSnap, yearSnap] = await Promise.all([
     getDoc(pathRef(db, summaryDoc(pandalId, target.id))),
     // limit(1): this only asks "is it empty", and reading the whole
     // collection would cost ~24 reads per app open to answer a yes/no about a
     // state that should never occur.
     getDocs(query(colRef(db, festivalCol(pandalId, target.id, "categories")), limit(1))),
     getDoc(pathRef(db, [...festivalCol(pandalId, target.id, "members"), actorUid])),
+    yearClaimable
+      ? getDoc(pathRef(db, festivalYearDoc(pandalId, target.year)))
+      : Promise.resolve(null),
   ]);
+  const yearClaimExists = yearClaimable
+    ? Boolean(
+        yearSnap != null &&
+          yearSnap.exists() &&
+          String(yearSnap.data()?.festivalId ?? "") === target.id
+      )
+    : true;
   return diagnosePandalSetup({
     festivals,
     summaryExists: summarySnap.exists(),
     categoryCount: categoriesSnap.size,
     memberExists: memberSnap.exists(),
+    yearClaimExists,
   });
 }
 
@@ -607,7 +621,8 @@ export async function inspectPandalSetup(
  *
  * Re-runs the first-festival seed, which was already written to be safe to
  * repeat: it creates the festival document only when absent, merges the member
- * and summary rows, and seeds categories only when the collection is empty. So
+ * and summary rows, seeds categories only when the collection is empty, and
+ * claims `festivalYears/{year}` when the sentinel is missing (KAN-35). So
  * repair is the same code path as creation rather than a second implementation
  * that can drift from it.
  *
@@ -1041,11 +1056,13 @@ export async function updateFestivalDetails(
 ): Promise<void> {
   const festivalSnap = await getDoc(pathRef(db, festivalDoc(pandalId, festivalId)));
   if (!festivalSnap.exists()) throw new Error("Festival not found.");
-  const name = input.name?.trim() || String(festivalSnap.data().name ?? "");
-  if (!name) throw new Error("Enter a festival name.");
-  const year = Number(input.year ?? festivalSnap.data().year);
-  if (!Number.isFinite(year) || year < 2000) throw new Error("Enter a valid year.");
   const previous = festivalSnap.data();
+  if (previous.status === "closed") {
+    throw new Error("Reopen the festival before changing its name or dates.");
+  }
+  const name = input.name?.trim() || String(previous.name ?? "");
+  if (!name) throw new Error("Enter a festival name.");
+  assertFestivalYearUnchanged(Number(previous.year), input.year);
   // Undefined means "leave alone"; an empty string means "clear it".
   const startDate = input.startDate === undefined
     ? (previous.startDate as string | undefined)
@@ -1057,7 +1074,6 @@ export async function updateFestivalDetails(
   const batch = writeBatch(db);
   batch.update(pathRef(db, festivalDoc(pandalId, festivalId)), {
     name,
-    year,
     startDate: startDate ?? "",
     endDate: endDate ?? "",
     updatedBy: actor.uid,
@@ -1070,7 +1086,7 @@ export async function updateFestivalDetails(
       startDate: previous.startDate,
       endDate: previous.endDate,
     },
-    newValue: { name, year, startDate, endDate },
+    newValue: { name, year: previous.year, startDate, endDate },
   });
   await commitWrite(() => batch.commit(), { label: "festival details" });
 }
@@ -1368,6 +1384,7 @@ export async function updateFestivalTargets(
     householdTargetAmount: number;
   }
 ): Promise<void> {
+  await requireOpenFestival(db, pandalId, festivalId);
   const batch = writeBatch(db);
   batch.update(pathRef(db, festivalDoc(pandalId, festivalId)), {
     contributionMode: input.contributionMode,

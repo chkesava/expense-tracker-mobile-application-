@@ -48,4 +48,26 @@ describe("ganesh festival management source contract", () => {
     expect(block).toContain("allow update, delete: if false");
     expect(block).toContain("isActivePandalMember()");
   });
+
+  it("refuses year changes in updateFestivalDetails and omits year from the write", () => {
+    const writes = read("services/ganesh/ganeshWrites.ts");
+    const start = writes.indexOf("export async function updateFestivalDetails");
+    const end = writes.indexOf("export async function updatePandalMember");
+    const update = writes.slice(start, end);
+    expect(update).toContain("assertFestivalYearUnchanged");
+    expect(update).toContain("Reopen the festival before changing its name or dates.");
+    const payload = update.slice(update.indexOf("batch.update"), update.indexOf("audit("));
+    expect(payload).not.toMatch(/\byear\b/);
+  });
+
+  it("constrains festival document updates to metadata, close, and reopen shapes", () => {
+    const rules = read("firestore.rules");
+    const start = rules.indexOf("match /festivals/{festivalId}");
+    const block = rules.slice(start, rules.indexOf("match /fundTransfers/{docId}"));
+    expect(block).toContain("festivalMetadataUpdate()");
+    expect(block).toContain("festivalCloseUpdate()");
+    expect(block).toContain("festivalReopenUpdate()");
+    expect(block).toContain("festivalYearUnchanged()");
+    expect(block).toContain("request.resource.data.closedBy == request.auth.uid");
+  });
 });

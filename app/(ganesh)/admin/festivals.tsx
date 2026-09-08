@@ -30,11 +30,9 @@ export default function AdminFestivalsScreen() {
   const { can } = useGaneshPermissions();
   const current = festivals.find((item) => item.id === festivalId);
   const [_name, setName] = useState<string | undefined>(undefined);
-  const [_year, setYear] = useState<string | undefined>(undefined);
   const [_startDate, setStartDate] = useState<string | undefined>(undefined);
   const [_endDate, setEndDate] = useState<string | undefined>(undefined);
   const name = _name ?? current?.name ?? "";
-  const year = _year ?? (current ? String(current.year) : "");
   const startDate = _startDate ?? current?.startDate ?? "";
   const endDate = _endDate ?? current?.endDate ?? "";
 
@@ -107,7 +105,12 @@ export default function AdminFestivalsScreen() {
             Edit current festival
           </Text>
           <Input label="Festival name" value={name} onChangeText={setName} />
-          <Input label="Year" value={year} onChangeText={setYear} keyboardType="numeric" />
+          <Input
+            label="Year"
+            value={current ? String(current.year) : ""}
+            editable={false}
+            helperText="The year cannot be changed after the festival is created."
+          />
           <FestivalWindowFields
             startDate={startDate}
             endDate={endDate}
@@ -115,6 +118,7 @@ export default function AdminFestivalsScreen() {
             onEndDateChange={setEndDate}
           />
           <Button
+            disabled={current.status !== "open"}
             onPress={() => {
               const window = validateFestivalWindow(startDate, endDate);
               if (!window.ok) {
@@ -124,7 +128,6 @@ export default function AdminFestivalsScreen() {
               writes
                 .updateFestivalDetails(current.id, {
                   name,
-                  year: Number(year),
                   startDate,
                   endDate,
                 })

@@ -33,6 +33,7 @@ Do not implement from these files blindly. Inspect the current membership, role,
 | [KAN-31](https://kesavach.atlassian.net/browse/KAN-31) | RBAC-23 | Critical Action Approval Controls | [KAN-31-rbac-23-critical-action-approval-controls.md](./KAN-31-rbac-23-critical-action-approval-controls.md) |
 | [KAN-32](https://kesavach.atlassian.net/browse/KAN-32) | RBAC-24 | Security Monitoring & Emergency Controls | [KAN-32-rbac-24-security-monitoring-emergency-controls.md](./KAN-32-rbac-24-security-monitoring-emergency-controls.md) |
 | [KAN-34](https://kesavach.atlassian.net/browse/KAN-34) | Feature 01 | Foundation Auth & Pandal Membership | [KAN-34-foundation-auth-pandal-membership.md](./KAN-34-foundation-auth-pandal-membership.md) |
+| [KAN-35](https://kesavach.atlassian.net/browse/KAN-35) | Feature 02 | Pandal & Festival Management | [KAN-35-pandal-festival-management.md](./KAN-35-pandal-festival-management.md) |
 
 ## Suggested order
 

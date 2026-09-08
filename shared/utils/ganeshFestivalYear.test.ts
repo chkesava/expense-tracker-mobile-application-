@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  assertFestivalYearUnchanged,
   duplicateFestivalYearMessage,
+  immutableFestivalYearMessage,
   planFestivalYearClaim,
   yearTakenByAnotherFestival,
 } from "@/shared/utils/ganeshFestivalYear";
@@ -49,6 +51,14 @@ describe("festival year uniqueness", () => {
         festivalExists: true,
       })
     ).toEqual({ ok: true, writeFestival: false, writeSentinel: false });
+  });
+
+  it("rejects a year change after create and allows the same year or omit", () => {
+    expect(() => assertFestivalYearUnchanged(2026, 2027)).toThrow(
+      immutableFestivalYearMessage(2026)
+    );
+    expect(() => assertFestivalYearUnchanged(2026, 2026)).not.toThrow();
+    expect(() => assertFestivalYearUnchanged(2026, undefined)).not.toThrow();
   });
 
   it("treats an existing festival list year as taken", () => {
