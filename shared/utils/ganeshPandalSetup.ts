@@ -30,7 +30,9 @@ export type PandalSetupGap =
   /** The festival exists but no expense categories were seeded. */
   | "missing-categories"
   /** The festival exists but the creator has no festival-member row. */
-  | "missing-member";
+  | "missing-member"
+  /** The festival exists but `festivalYears/{year}` was never claimed. */
+  | "missing-year-claim";
 
 export type PandalSetupDiagnosis = {
   complete: boolean;
@@ -58,6 +60,12 @@ export function diagnosePandalSetup(found: {
   categoryCount: number;
   /** Whether the creator has a member row on the newest festival. */
   memberExists: boolean;
+  /**
+   * Whether `festivalYears/{year}` exists for the target festival. Omit to
+   * skip the check (older call sites). Pass `false` when the sentinel is
+   * missing so repair can claim it without inventing a year.
+   */
+  yearClaimExists?: boolean;
 }): PandalSetupDiagnosis {
   if (found.festivals.length === 0) {
     return {
@@ -78,6 +86,7 @@ export function diagnosePandalSetup(found: {
   if (!found.summaryExists) gaps.push("missing-summary");
   if (found.categoryCount === 0) gaps.push("missing-categories");
   if (!found.memberExists) gaps.push("missing-member");
+  if (found.yearClaimExists === false) gaps.push("missing-year-claim");
 
   return {
     complete: gaps.length === 0,
@@ -101,6 +110,7 @@ export function describePandalSetupGaps(gaps: PandalSetupGap[]): string {
   if (gaps.includes("missing-summary")) parts.push("its totals were never started");
   if (gaps.includes("missing-categories")) parts.push("it has no expense categories");
   if (gaps.includes("missing-member")) parts.push("you were not added to it");
+  if (gaps.includes("missing-year-claim")) parts.push("its year was never reserved");
   if (parts.length === 0) return "";
   const joined =
     parts.length === 1

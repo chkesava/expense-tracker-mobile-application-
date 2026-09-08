@@ -1048,9 +1048,40 @@ service cloud.firestore {
 
         allow read: if isActivePandalMember();
         allow create: if canCreateFestival() && ganeshIdentityCreate() && pandalNotArchived() && scopeIdsMatch();
+        // KAN-35: the festival document is the lock, not only the UI. Metadata
+        // (name, dates, targets) may change while open. Status may only move
+        // through the close/reopen shapes that closeFestival/reopenFestival write.
+        // Year, id and createdBy cannot move — year uniqueness lives on
+        // festivalYears/{year}, which is append-only.
+        function festivalYearUnchanged() {
+          return request.resource.data.year == resource.data.year;
+        }
+        function festivalMetadataUpdate() {
+          return resource.data.status == 'open'
+            && request.resource.data.status == 'open'
+            && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['name', 'startDate', 'endDate', 'contributionMode', 'contributionTargetAmount', 'householdTargetAmount', 'updatedBy', 'updatedAt']);
+        }
+        function festivalCloseUpdate() {
+          return resource.data.status == 'open'
+            && request.resource.data.status == 'closed'
+            && request.resource.data.closedBy == request.auth.uid
+            && request.resource.data.closedAt is timestamp
+            && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['status', 'closedAt', 'closedBy', 'updatedBy', 'updatedAt']);
+        }
+        function festivalReopenUpdate() {
+          return resource.data.status == 'closed'
+            && request.resource.data.status == 'open'
+            && !request.resource.data.keys().hasAny(['closedAt', 'closedBy'])
+            && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['status', 'closedAt', 'closedBy', 'updatedBy', 'updatedAt']);
+        }
         allow update: if canCloseOrUpdateFestival()
           && request.resource.data.updatedBy == request.auth.uid
-          && scopeIdsMatch();
+          && scopeIdsMatch()
+          && festivalYearUnchanged()
+          && (festivalMetadataUpdate() || festivalCloseUpdate() || festivalReopenUpdate());
         // No hard delete (GS-083), for the same reason the pandal document
         // refuses one (GS-017): Firestore does not cascade, so this would leave
         // every collection, expense, contribution and the festival's summary

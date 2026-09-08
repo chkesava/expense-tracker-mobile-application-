@@ -5,7 +5,7 @@ import {
   initializeTestEnvironment,
   type RulesTestEnvironment,
 } from "@firebase/rules-unit-testing";
-import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
+import { deleteField, doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
 import { afterAll, beforeAll, beforeEach, describe, it } from "vitest";
 
 /**
@@ -262,6 +262,79 @@ describe("KAN-9 festival parent validation", () => {
         doc(db, "pandals", PANDAL, "festivals", FESTIVAL, "collections", "c-forge"),
         honestCollection({ festivalId: OTHER_FESTIVAL })
       )
+    );
+  });
+});
+
+describe("KAN-35 festival document lifecycle", () => {
+  const festivalRef = () => doc(as(ADMIN), "pandals", PANDAL, "festivals", FESTIVAL);
+
+  it("lets an admin rename an open festival without touching year", async () => {
+    await assertSucceeds(
+      updateDoc(festivalRef(), {
+        name: "Ganesh Utsav Renamed",
+        updatedBy: ADMIN,
+        updatedAt: new Date(),
+      })
+    );
+  });
+
+  it("refuses a year change on the festival document", async () => {
+    await assertFails(
+      updateDoc(festivalRef(), {
+        year: 2027,
+        updatedBy: ADMIN,
+        updatedAt: new Date(),
+      })
+    );
+  });
+
+  it("refuses a raw status: closed write without closedAt and closedBy", async () => {
+    await assertFails(
+      updateDoc(festivalRef(), {
+        status: "closed",
+        updatedBy: ADMIN,
+        updatedAt: new Date(),
+      })
+    );
+  });
+
+  it("lets an admin close then reopen with the service shapes", async () => {
+    await assertSucceeds(
+      updateDoc(festivalRef(), {
+        status: "closed",
+        closedAt: new Date(),
+        closedBy: ADMIN,
+        updatedBy: ADMIN,
+        updatedAt: new Date(),
+      })
+    );
+    await assertFails(
+      setDoc(
+        doc(as(ADMIN), "pandals", PANDAL, "festivals", FESTIVAL, "collections", "c-closed"),
+        honestCollection({ createdBy: ADMIN, updatedBy: ADMIN, collectorId: ADMIN })
+      )
+    );
+    await assertSucceeds(
+      updateDoc(festivalRef(), {
+        status: "open",
+        closedAt: deleteField(),
+        closedBy: deleteField(),
+        updatedBy: ADMIN,
+        updatedAt: new Date(),
+      })
+    );
+  });
+
+  it("refuses a member close even with the close shape", async () => {
+    await assertFails(
+      updateDoc(doc(as(MEMBER), "pandals", PANDAL, "festivals", FESTIVAL), {
+        status: "closed",
+        closedAt: new Date(),
+        closedBy: MEMBER,
+        updatedBy: MEMBER,
+        updatedAt: new Date(),
+      })
     );
   });
 });

@@ -94,6 +94,9 @@ describe("diagnosePandalSetup", () => {
     expect(diagnosePandalSetup({ ...HEALTHY, memberExists: false }).gaps).toEqual([
       "missing-member",
     ]);
+    expect(diagnosePandalSetup({ ...HEALTHY, yearClaimExists: false }).gaps).toEqual([
+      "missing-year-claim",
+    ]);
   });
 });
 
@@ -126,5 +129,9 @@ describe("describePandalSetupGaps", () => {
 
   it("returns nothing for no gaps", () => {
     expect(describePandalSetupGaps([])).toBe("");
+  });
+
+  it("names a missing year claim", () => {
+    expect(describePandalSetupGaps(["missing-year-claim"])).toContain("year was never reserved");
   });
 });

@@ -2,6 +2,21 @@ export function duplicateFestivalYearMessage(year: number): string {
   return `A festival for ${year} already exists.`;
 }
 
+export function immutableFestivalYearMessage(year: number): string {
+  return `The festival year is ${year} and cannot be changed. Create a new festival for a different year.`;
+}
+
+/** Year is the uniqueness key (`festivalYears/{year}`). It cannot move after create. */
+export function assertFestivalYearUnchanged(
+  storedYear: number,
+  requestedYear: number | undefined
+): void {
+  if (requestedYear === undefined) return;
+  if (Number(requestedYear) !== Number(storedYear)) {
+    throw new Error(immutableFestivalYearMessage(storedYear));
+  }
+}
+
 export function yearTakenByAnotherFestival(
   festivals: Array<{ id: string; year: number }>,
   year: number,
