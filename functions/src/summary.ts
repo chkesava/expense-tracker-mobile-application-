@@ -9,7 +9,7 @@ import {
   summaryAuditDelta,
   type FestivalLedger,
   type LedgerDoc,
-} from "@/shared/utils/ganeshSummaryDerive";
+} from "../../shared/utils/ganeshSummaryDerive";
 
 /**
  * The subcollections the summary is derived from. A write to any of them makes

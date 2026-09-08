@@ -93,5 +93,10 @@ describe("KAN-36 summary path source contract", () => {
     const functions = read("functions/src/summary.ts");
     expect(functions).toContain("summary/totals");
     expect(functions).not.toContain("summary/current");
+
+    const netlify = read("netlify/functions/ganesh-summary.ts");
+    expect(netlify).toContain("rebuildFestivalSummary");
+    expect(netlify).toContain("seedFestivalSummary");
+    expect(read("hooks/useGaneshWrites.ts")).toContain("requestFestivalSummaryRebuild");
   });
 });

@@ -161,8 +161,8 @@ export function getFirebaseStorage(): FirebaseStorage | null {
 }
 
 /**
- * Callable functions. The Ganesh festival summary is maintained server-side
- * (GS-004), so the client asks for a recompute rather than performing one.
+ * Callable functions. Unused for Ganesh summary (KAN-36 uses the Netlify
+ * `ganesh-summary` function). Kept for any future Firebase callables.
  */
 export function getFirebaseFunctions(): Functions | null {
   getFirebaseClients();

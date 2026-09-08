@@ -127,7 +127,36 @@ jobs:
       - name: Build web (expense, nutrition, ganesh, landing)
         run: npm run build:web:all
 
+      - name: Bundle Ganesh summary function
+        run: |
+          npm run build:ganesh-summary-fn
+          npm install --omit=dev --prefix netlify/functions-dist
+
       - name: Deploy to Netlify
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+        run: |
+          if [ -z "$NETLIFY_AUTH_TOKEN" ] || [ -z "$NETLIFY_SITE_ID" ]; then
+            echo "::error::NETLIFY_AUTH_TOKEN and/or NETLIFY_SITE_ID secrets are missing."
+            exit 1
+          fi
+          npm install -g netlify-cli@17
+          # Deploy from outside the repo (no netlify.toml here) so this site
+          # never picks up the OTHER site's root netlify.toml — routing for
+          # this deploy comes entirely from dist-web/_redirects + _headers.
+          # netlify-cli v17's `deploy` has no --no-build flag — omitting
+          # --build (the opt-in flag to run a build first) already means
+          # "deploy --dir as-is", which is what we want since GitHub Actions
+          # already built dist-web/ in the previous step.
+          cp -R "$GITHUB_WORKSPACE/dist-web" "$RUNNER_TEMP/publish"
+          cp -R "$GITHUB_WORKSPACE/netlify/functions-dist" "$RUNNER_TEMP/functions"
+          cd "$RUNNER_TEMP"
+          netlify deploy --prod \
+            --dir "$RUNNER_TEMP/publish" \
+            --functions "$RUNNER_TEMP/functions" \
+            --site "$NETLIFY_SITE_ID" \
+            --message "$GITHUB_SHA"
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
           NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
@@ -148,6 +177,7 @@ jobs:
           cd "$RUNNER_TEMP"
           netlify deploy --prod \
             --dir "$RUNNER_TEMP/publish" \
+            --functions "$RUNNER_TEMP/functions" \
             --site "$NETLIFY_SITE_ID" \
             --message "$GITHUB_SHA"
 
@@ -167,4 +197,5 @@ jobs:
             echo "- https://spendly-share.netlify.app/ganesh"
             echo "- https://spendly-share.netlify.app/split/<slug> (unchanged)"
             echo "- https://spendly-share.netlify.app/payment/<slug> (unchanged)"
+            echo "- https://spendly-share.netlify.app/.netlify/functions/ganesh-summary"
           } >> "$GITHUB_STEP_SUMMARY"

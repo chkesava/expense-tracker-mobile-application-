@@ -3517,14 +3517,14 @@ export async function reopenFestival(
  * summary and write it, which is exactly the capability the rules had to grant
  * — and therefore exactly the capability a crafted client abused to write a
  * plausible wrong total. The derived summary fields are denied to clients now,
- * so the recompute runs in `recomputeGaneshSummary` (functions/src/index.ts)
- * under admin credentials, against the same `deriveFestivalSummary` this file
- * used to call directly.
+ * so the recompute runs on the Netlify `ganesh-summary` function under admin
+ * credentials, against the same `deriveFestivalSummary` this file used to call
+ * directly.
  *
- * The trigger already rebuilds the summary on every ledger write, so this is a
- * repair button rather than routine maintenance: it is what a committee reaches
- * for when the numbers look wrong, and it still rebuilds the per-member
- * counters that no ledger write touches on its own.
+ * The client asks that function after every ledger write, so the Recalculate
+ * button is a repair tool rather than routine maintenance: it is what a
+ * committee reaches for when the numbers look wrong, and it still rebuilds the
+ * per-member counters that no ledger write touches on its own.
  */
 export async function recomputeFestivalSummary(
   _db: Firestore,
@@ -3532,21 +3532,11 @@ export async function recomputeFestivalSummary(
   pandalId: string,
   festivalId: string
 ): Promise<void> {
-  // Imported lazily: `@/lib/firebase` reaches react-native for its Platform
-  // check, and this module is otherwise pure enough to run under the
-  // node-environment unit suite. A static import pulled react-native into every
-  // one of those tests and broke them at parse time.
-  const [{ getFirebaseFunctions }, { httpsCallable }] = await Promise.all([
-    import("@/lib/firebase"),
-    import("firebase/functions"),
-  ]);
-  const functions = getFirebaseFunctions();
-  if (!functions) throw new Error("Cannot reach the server. Check your connection and try again.");
-  const call = httpsCallable<{ pandalId: string; festivalId: string }, { membersWritten: number }>(
-    functions,
-    "recomputeGaneshSummary"
-  );
-  await call({ pandalId, festivalId });
+  // Imported lazily: the client helper reaches `@/lib/firebase` (react-native
+  // Platform), and this module is otherwise pure enough to run under the
+  // node-environment unit suite.
+  const { recomputeFestivalSummaryRemote } = await import("@/services/ganesh/ganeshSummaryClient");
+  await recomputeFestivalSummaryRemote(pandalId, festivalId);
 }
 
 export async function addCustomCategory(

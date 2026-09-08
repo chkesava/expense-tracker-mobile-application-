@@ -34,7 +34,7 @@ No new composite indexes. No Expense Tracker / `users/{uid}` rule changes.
 | Path helper | `summaryDoc()` → `summary/totals` |
 | Leftover path | `legacySummaryDoc()` → `summary/current` (repair only) |
 | Allocator merge | `planSummaryAllocatorMerge` / `repairPandalSetup` |
-| Derived totals | `functions/src/summary.ts` (`ganeshLedgerSummary`, `ganeshFestivalSummarySeed`, `recomputeGaneshSummary`) |
+| Derived totals | Netlify `ganesh-summary` → `rebuildFestivalSummary` in `functions/src/summary.ts` |
 | God Fund formula | `availableGodFund` in `shared/utils/ganeshMath.ts` |
 | Dashboard | `FestivalFinancialDashboard` + Home `PandalOverview` (unchanged) |
 
@@ -43,6 +43,7 @@ No new composite indexes. No Expense Tracker / `users/{uid}` rule changes.
 - `shared/utils/ganeshPaths.ts`
 - `shared/utils/ganeshSummaryMigrate.ts`
 - `shared/utils/ganeshMath.ts`
+- `netlify/functions/ganesh-summary.ts`
 - `functions/src/summary.ts`
 - `app/(ganesh)/(tabs)/funds.tsx`
 - `firestore/ganeshSummaryOwnership.rules.test.ts`
@@ -52,7 +53,7 @@ No new composite indexes. No Expense Tracker / `users/{uid}` rule changes.
 1. One summary document. All listeners and allocator writes go through `summaryDoc()`.
 2. Repair copies the higher `nextReceiptNumber` / `nextContributionNumber` from `current` onto `totals`. Do not delete `current`.
 3. Keep God Fund vs Personal Money, Permanent Fund, promised vs received, and in-kind exclusion as they are.
-4. Deploy Ganesh Cloud Functions to `expenseapp-27f94` so a ledger write rebuilds `totals`. Do not deploy Expense/Nutrition functions or indexes.
+4. Rebuild derived totals on Netlify (free tier), not Firebase Cloud Functions. After a ledger write the app POSTs to `/.netlify/functions/ganesh-summary` with the user's ID token. The function verifies membership and writes `summary/totals` with the Admin SDK.
 
 ## Implementation status
 
@@ -60,13 +61,14 @@ No new composite indexes. No Expense Tracker / `users/{uid}` rule changes.
 - [x] `summaryDoc()` unified on `totals`
 - [x] Idempotent `current` → `totals` allocator merge
 - [x] Tests added
-- [ ] Ganesh Cloud Functions deployed — blocked: `expenseapp-27f94` is not on Blaze, so `cloudfunctions.googleapis.com` cannot be enabled
+- [x] Netlify function added (replaces Cloud Functions / Blaze)
+- [ ] Deploy Web (Netlify) workflow run with `FIREBASE_SERVICE_ACCOUNT` set on the spendly-share site
 - [ ] Manual verification
 - [ ] Jira KAN-36 updated after merge
 
 ## Manual testing guide
 
-No new install is required if `npx expo start` is already running; hot reload picks the client path change up. Functions deploy is required before production Home/Funds stay live.
+No new install is required if `npx expo start` is already running; hot reload picks the client path change up. The Netlify function must be deployed (GitHub → Actions → Deploy Web) and `FIREBASE_SERVICE_ACCOUNT` must be set on the spendly-share Netlify site.
 
 1. Combined build: Expense Tracker still lists personal expenses after sign-in.
 2. Ganesh Seva: add a cash collection. Home Available and Funds God Fund increase by that amount (not promised, not in-kind).
@@ -75,6 +77,7 @@ No new install is required if `npx expo start` is already running; hot reload pi
 5. Permanent Fund donation: PF screen changes; festival God Fund does not.
 6. Close-festival remaining figure matches Funds God Fund.
 7. If a festival still has only `summary/current`, Admin repair (or the setup banner) copies allocators onto `totals`. Receipt numbering does not restart.
+8. Recalculate from ledger (reports) updates Home/Funds without a second collection.
 
 ## Leftovers
 
@@ -85,4 +88,4 @@ No new install is required if `npx expo start` is already running; hot reload pi
 - Per-line money-in drill-down filters
 - Per-subcollection `hasOnly` allowlist (rules expression budget)
 - Expense Tracker / Nutrition financial screens
-- Enable Blaze on `expenseapp-27f94`, then `npx firebase deploy --only functions --project expenseapp-27f94` so Home/Funds stay live after the path change
+- Set `FIREBASE_SERVICE_ACCOUNT` on the spendly-share Netlify site, then run **Deploy Web (Netlify)** so `ganesh-summary` is live

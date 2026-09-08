@@ -21,17 +21,13 @@ const LEDGER = new Set<string>(LEDGER_SUBCOLLECTIONS);
 const REGION = "asia-south1";
 
 /**
- * Trusted maintenance of the derived festival summary (GS-004).
+ * Firebase Cloud Functions copy of the summary writer. Not deployed: Spark
+ * cannot enable `cloudfunctions.googleapis.com`. The live writer is the
+ * Netlify `ganesh-summary` function, which calls `rebuildFestivalSummary` in
+ * `summary.ts`.
  *
- * The client can no longer write the twenty-two derived summary fields — the
- * rules deny them — so this trigger is the only writer. It fires on any ledger
- * document change and rebuilds the summary from the ledger, which makes the
- * summary a function of the ledger by construction rather than by the client's
- * good behaviour.
- *
- * The wildcard has to be a single `{subcol}` segment because Firestore triggers
- * take one path; non-ledger subcollections are filtered out below rather than
- * registered as six separate functions, which would each pay a cold start.
+ * Kept so a later Blaze upgrade can turn the Firestore trigger back on
+ * without rewriting the derive logic.
  */
 export const ganeshLedgerSummary = onDocumentWritten(
   {
