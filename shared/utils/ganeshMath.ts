@@ -1,5 +1,6 @@
 import type {
   FestivalMember,
+  GaneshExpense,
   GaneshSummary,
   CommitteeContributionStatus,
   Household,
@@ -781,6 +782,35 @@ export function memberPendingReimbursement(
   member: Pick<FestivalMember, "personalExpenses" | "reimbursed">
 ): number {
   return money(Math.max(0, member.personalExpenses - member.reimbursed));
+}
+
+/** Personal spend that still sits on the member's reimbursement obligation. */
+export function expenseCountsTowardReimbursement(
+  expense: Pick<GaneshExpense, "voided" | "personalAmount" | "reimbursementRequired">
+): boolean {
+  return !expense.voided && expense.personalAmount > 0 && expense.reimbursementRequired !== false;
+}
+
+export function personalExpensesForMember<T extends Pick<
+  GaneshExpense,
+  "paidByMemberId" | "voided" | "personalAmount" | "reimbursementRequired"
+>>(expenses: T[], memberId: string): T[] {
+  if (!memberId) return [];
+  return expenses.filter(
+    (expense) => expense.paidByMemberId === memberId && expenseCountsTowardReimbursement(expense)
+  );
+}
+
+export function expenseMatchesQuery(
+  expense: Pick<GaneshExpense, "name" | "vendor">,
+  query: string
+): boolean {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return true;
+  return (
+    expense.name.toLowerCase().includes(needle) ||
+    (expense.vendor ?? "").toLowerCase().includes(needle)
+  );
 }
 
 export function memberRemainingContribution(
