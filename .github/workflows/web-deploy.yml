@@ -160,13 +160,16 @@ jobs:
           cp -R "$GITHUB_WORKSPACE/dist-web" "$RUNNER_TEMP/publish"
           cp -R "$GITHUB_WORKSPACE/netlify/functions-dist" "$RUNNER_TEMP/functions"
           cd "$RUNNER_TEMP"
-          # Runtime env for the function. GitHub already holds the key; do not
-          # paste it into the Netlify UI or turn Continuous Deployment back on.
-          # netlify-cli@17 `env:set` has no --site flag (that is deploy-only).
-          # It targets the site via NETLIFY_SITE_ID in the environment instead.
-          # --secret requires a non-dev context; production matches `deploy --prod`.
+          # Runtime env for the function. netlify-cli@17 `env:set` has no --site
+          # flag; it targets the site via NETLIFY_SITE_ID. Do not pass --scope
+          # and --context together: that creates a new var, but Netlify rejects
+          # the combo on an existing one (KAN-36: the UI-set value then blocked
+          # deploy). --secret still needs a non-dev context. If the site already
+          # has the var, keep it and deploy.
           FN_JSON=$(python3 -c 'import json,os; print(json.dumps(json.loads(os.environ["FIREBASE_SERVICE_ACCOUNT"]), separators=(",", ":")))')
-          netlify env:set FIREBASE_SERVICE_ACCOUNT "$FN_JSON" --force --secret --scope functions --context production
+          if ! netlify env:set FIREBASE_SERVICE_ACCOUNT "$FN_JSON" --force --secret --context production; then
+            echo "::warning::Could not overwrite FIREBASE_SERVICE_ACCOUNT. Deploying with the value already on the Netlify site."
+          fi
           unset FN_JSON
           netlify deploy --prod \
             --dir "$RUNNER_TEMP/publish" \
