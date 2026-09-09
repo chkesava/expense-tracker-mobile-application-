@@ -32,6 +32,15 @@ export interface ModalContextType {
   setIsSetupWizardOpen: (open: boolean) => void;
   setupWizardInitialStep: number;
   setSetupWizardInitialStep: (step: number) => void;
+  /** Global FAB Add chooser (expense / income / transfer / investment / debt). */
+  isAddSheetOpen: boolean;
+  setIsAddSheetOpen: (open: boolean) => void;
+  isTransferOpen: boolean;
+  setIsTransferOpen: (open: boolean) => void;
+  isCreateInvestmentOpen: boolean;
+  setIsCreateInvestmentOpen: (open: boolean) => void;
+  isDebtPaymentOpen: boolean;
+  setIsDebtPaymentOpen: (open: boolean) => void;
 }
 
 const ModalContext = createContext<ModalContextType | undefined>(undefined);
@@ -49,6 +58,10 @@ export function ModalProvider({ children }: { children: ReactNode }) {
   const [globalMonth, setGlobalMonth] = useState<string | null>(currentMonthKey());
   const [isSetupWizardOpen, setIsSetupWizardOpen] = useState(false);
   const [setupWizardInitialStep, setSetupWizardInitialStep] = useState(0);
+  const [isAddSheetOpen, setIsAddSheetOpen] = useState(false);
+  const [isTransferOpen, setIsTransferOpen] = useState(false);
+  const [isCreateInvestmentOpen, setIsCreateInvestmentOpen] = useState(false);
+  const [isDebtPaymentOpen, setIsDebtPaymentOpen] = useState(false);
 
   return (
     <ModalContext.Provider
@@ -75,6 +88,14 @@ export function ModalProvider({ children }: { children: ReactNode }) {
         setIsSetupWizardOpen,
         setupWizardInitialStep,
         setSetupWizardInitialStep,
+        isAddSheetOpen,
+        setIsAddSheetOpen,
+        isTransferOpen,
+        setIsTransferOpen,
+        isCreateInvestmentOpen,
+        setIsCreateInvestmentOpen,
+        isDebtPaymentOpen,
+        setIsDebtPaymentOpen,
       }}
     >
       {children}

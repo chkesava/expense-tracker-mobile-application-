@@ -15,6 +15,13 @@ export const BOTTOM_NAV_FAB_GAP = 12;
 /** Inset from the trailing screen edge for the floating add button. */
 export const BOTTOM_NAV_FAB_EDGE = 16;
 export const BOTTOM_NAV_CONTENT_CLEARANCE = 24;
+/** Extra scroll room so the last card clears the trailing FAB. */
+export const BOTTOM_NAV_FAB_CLEARANCE =
+  BOTTOM_NAV_FAB_SIZE + BOTTOM_NAV_FAB_GAP;
 
 export const BOTTOM_NAV_SCROLL_PADDING =
   BOTTOM_NAV_BAR_HEIGHT + BOTTOM_NAV_CONTENT_CLEARANCE;
+
+/** Spendly PageShell clearance: nav bar + FAB so content is never covered. */
+export const BOTTOM_NAV_SCROLL_PADDING_WITH_FAB =
+  BOTTOM_NAV_SCROLL_PADDING + BOTTOM_NAV_FAB_CLEARANCE;

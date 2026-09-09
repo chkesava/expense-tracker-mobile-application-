@@ -83,7 +83,7 @@ export function FinancialGoalsWidget({
       action={<SectionAction label="Manage" onPress={openGoals} />}
       contentStyle={styles.list}
     >
-      {goals.map((goal) => {
+      {goals.slice(0, 2).map((goal) => {
         const current = goal.currentAmount || 0;
         const target = goal.targetAmount || 1;
         const pct = Math.min(100, Math.round((current / target) * 100));

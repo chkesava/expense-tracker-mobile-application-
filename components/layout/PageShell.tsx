@@ -14,7 +14,7 @@ import { useTheme } from "@/theme/ThemeProvider";
 import { AuraBackground } from "./AuraBackground";
 import {
   APP_BAR_CONTENT_HEIGHT,
-  BOTTOM_NAV_SCROLL_PADDING,
+  BOTTOM_NAV_SCROLL_PADDING_WITH_FAB,
 } from "./chrome";
 import { haptic } from "@/lib/haptics";
 
@@ -70,7 +70,7 @@ export function PageShell({
   // Bottom offset: nav bar + clearance + system inset
   const minBottom = hideBottomOffset
     ? insets.bottom + theme.space.md
-    : insets.bottom + BOTTOM_NAV_SCROLL_PADDING;
+    : insets.bottom + BOTTOM_NAV_SCROLL_PADDING_WITH_FAB;
 
   const effectivePaddingTop = Math.max(minTop, customPaddingTop);
   const effectivePaddingBottom = Math.max(minBottom, customPaddingBottom);

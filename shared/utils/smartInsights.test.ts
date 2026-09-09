@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildSmartInsights } from "./smartInsights";
+import { buildSmartInsights, selectSmartInsights } from "./smartInsights";
 
 const today = "2026-08-12";
 
@@ -186,5 +186,18 @@ describe("firstDayOfWeek", () => {
     });
     expect(lakhs.find((i) => i.kind === "week_total")?.text).toContain("10,00,000");
     expect(standard.find((i) => i.kind === "week_total")?.text).toContain("1,000,000");
+  });
+});
+
+describe("selectSmartInsights", () => {
+  it("keeps the top three non-budget insights", () => {
+    const selected = selectSmartInsights([
+      { id: "budget", kind: "budget", text: "over", tone: "warning" },
+      { id: "a", kind: "week_total", text: "week", tone: "info" },
+      { id: "b", kind: "category_change", text: "up", tone: "up" },
+      { id: "c", kind: "category_change", text: "down", tone: "down" },
+      { id: "d", kind: "week_total", text: "extra", tone: "info" },
+    ]);
+    expect(selected.map((item) => item.id)).toEqual(["b", "c", "a"]);
   });
 });

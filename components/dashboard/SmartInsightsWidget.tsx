@@ -16,6 +16,7 @@ import {
 import type { Expense } from "@/shared/types/expense";
 import {
   buildSmartInsights,
+  selectSmartInsights,
   type SmartInsight,
 } from "@/shared/utils/smartInsights";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -32,17 +33,17 @@ export interface SmartInsightsWidgetProps {
 function presentation(tone: SmartInsight["tone"]): {
   tone: Tone;
   Icon: typeof AlertTriangle;
-  priority: number;
+  label: string;
 } {
   switch (tone) {
     case "warning":
-      return { tone: "negative", Icon: AlertTriangle, priority: 0 };
+      return { tone: "negative", Icon: AlertTriangle, label: "Needs attention" };
     case "up":
-      return { tone: "warning", Icon: TrendingUp, priority: 1 };
+      return { tone: "warning", Icon: TrendingUp, label: "Watch" };
     case "down":
-      return { tone: "positive", Icon: TrendingDown, priority: 2 };
+      return { tone: "positive", Icon: TrendingDown, label: "Positive" };
     default:
-      return { tone: "muted", Icon: Lightbulb, priority: 3 };
+      return { tone: "muted", Icon: Lightbulb, label: "Watch" };
   }
 }
 
@@ -81,11 +82,11 @@ export function SmartInsightsWidget({
     ]
   );
 
-  /** Most important first — warnings above movers above informational. */
   const ordered = useMemo(() => {
-    return insights
-      .map((insight) => ({ insight, ...presentation(insight.tone) }))
-      .sort((a, b) => a.priority - b.priority);
+    return selectSmartInsights(insights).map((insight) => ({
+      insight,
+      ...presentation(insight.tone),
+    }));
   }, [insights]);
 
   if (ordered.length === 0) return null;
@@ -93,29 +94,39 @@ export function SmartInsightsWidget({
   return (
     <Section
       title="Smart Insights"
-      subtitle="From this week's spending"
+      subtitle="What needs my attention?"
       icon={<Lightbulb size={16} color={theme.colors.warning} strokeWidth={2.3} />}
       iconTint={surfaces.wash(theme.colors.warning)}
       contentStyle={styles.list}
     >
-      {ordered.map(({ insight, tone, Icon }) => {
+      {ordered.map(({ insight, tone, Icon, label }) => {
         const color = toneColor(theme.colors, tone);
         return (
           <View key={insight.id} style={styles.row}>
             {/* Semantic rail carries the importance; text stays readable. */}
             <View style={[styles.rail, { backgroundColor: color }]} />
             <Icon size={15} color={color} strokeWidth={2.3} />
-            <Text
-              style={[
-                styles.text,
-                {
-                  color: theme.colors.foreground,
-                  fontFamily: theme.fontFamily.regular,
-                },
-              ]}
-            >
-              {stripLeadingEmoji(insight.text)}
-            </Text>
+            <View style={styles.copy}>
+              <Text
+                style={[
+                  styles.label,
+                  { color, fontFamily: theme.fontFamily.semibold },
+                ]}
+              >
+                {label}
+              </Text>
+              <Text
+                style={[
+                  styles.text,
+                  {
+                    color: theme.colors.foreground,
+                    fontFamily: theme.fontFamily.regular,
+                  },
+                ]}
+              >
+                {stripLeadingEmoji(insight.text)}
+              </Text>
+            </View>
           </View>
         );
       })}
@@ -139,8 +150,17 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     minHeight: 18,
   },
-  text: {
+  copy: {
     flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  label: {
+    fontSize: 11,
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+  },
+  text: {
     fontSize: 13.5,
     lineHeight: 19,
   },

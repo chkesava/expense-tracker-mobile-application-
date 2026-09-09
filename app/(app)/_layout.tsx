@@ -1,7 +1,9 @@
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { Redirect, Stack } from "expo-router";
 
+import { AddActionSheet } from "@/components/AddActionSheet";
 import { AddTransactionModal } from "@/components/AddTransactionModal";
+import { GlobalAddModals } from "@/components/GlobalAddModals";
 import { BottomNav } from "@/components/BottomNav";
 import { Header } from "@/components/Header";
 import { MaintenanceScreen } from "@/components/MaintenanceScreen";
@@ -119,6 +121,8 @@ function AppShellInner() {
 
       {settings.navigationStyle === "dock" ? <MobileActionDock /> : <BottomNav />}
       <AddTransactionModal />
+      <AddActionSheet />
+      <GlobalAddModals />
       <SetupWizardModal />
     </View>
   );

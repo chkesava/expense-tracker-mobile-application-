@@ -12,7 +12,7 @@ import { themeUsesDarkPalette } from "@/theme/tokens";
 
 export function MobileActionDock() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const { setIsAddExpenseOpen } = useModals();
+  const { setIsAddSheetOpen } = useModals();
   const insets = useSafeAreaInsets();
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
@@ -37,8 +37,8 @@ export function MobileActionDock() {
         <View style={styles.centerFab}>
           <AddFab
             size="lg"
-            onPress={() => setIsAddExpenseOpen(true)}
-            accessibilityLabel="Add transaction"
+            onPress={() => setIsAddSheetOpen(true)}
+            accessibilityLabel="Add"
           />
         </View>
 

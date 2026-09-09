@@ -1,5 +1,5 @@
 import { StyleSheet, Text, View } from "react-native";
-import { Activity, Flame, Shield, Trophy } from "lucide-react-native";
+import { Activity, Flame, Trophy } from "lucide-react-native";
 
 import {
   MetaLabel,
@@ -19,8 +19,8 @@ export interface GamificationWidgetProps {
   budgetHealthScore?: number;
 }
 
-const BADGE_ICONS: Record<string, typeof Shield> = {
-  no_spend: Shield,
+const BADGE_ICONS: Record<string, typeof Trophy> = {
+  no_spend: Trophy,
   streak_7: Flame,
   saver_pro: Trophy,
 };
@@ -37,7 +37,6 @@ export function GamificationWidget({
   void budgetHealthScore;
 
   const currentStreak = stats?.currentStreak ?? streak ?? 0;
-  const shields = stats?.shields ?? 0;
 
   return (
     <Section
@@ -86,7 +85,7 @@ export function GamificationWidget({
         <View style={styles.tiles}>
           <StatTile
             label="Logging streak"
-            meta={<MetaLabel>Keep tracking daily</MetaLabel>}
+            meta={<MetaLabel>Am I building good habits?</MetaLabel>}
           >
             <View style={styles.tileValueRow}>
               <Flame size={15} color={theme.colors.success} strokeWidth={2.3} />
@@ -104,34 +103,13 @@ export function GamificationWidget({
               </Text>
             </View>
           </StatTile>
-
-          <StatTile
-            label="No-spend shields"
-            meta={<MetaLabel>Zero-spend days saved</MetaLabel>}
-          >
-            <View style={styles.tileValueRow}>
-              <Shield size={15} color={theme.colors.info} strokeWidth={2.3} />
-              <Text
-                style={[
-                  styles.tileValue,
-                  {
-                    color: theme.colors.foreground,
-                    fontFamily: theme.fontFamily.semibold,
-                  },
-                ]}
-                numberOfLines={1}
-              >
-                {shields} {shields === 1 ? "shield" : "shields"}
-              </Text>
-            </View>
-          </StatTile>
         </View>
 
         {/* Badges kept, but muted to metadata weight rather than game trophies. */}
         <View style={styles.badgesRow}>
           {Object.values(BADGES).map((b) => {
             const earned = stats?.badges?.includes(b.id) ?? false;
-            const BadgeIcon = BADGE_ICONS[b.id] ?? Shield;
+            const BadgeIcon = BADGE_ICONS[b.id] ?? Trophy;
             const color = earned
               ? theme.colors.foreground
               : theme.colors.mutedForeground;
