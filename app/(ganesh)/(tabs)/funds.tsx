@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, type Href } from "expo-router";
 
 import { CollectionsList, ContributionsList, ExpensesList } from "@/components/ganesh/funds";
 import { FestivalFinancialDashboard } from "@/components/ganesh/funds/FestivalFinancialDashboard";
@@ -140,7 +140,7 @@ export default function FundsScreen() {
           activityActors={(actorId) => memberDisplayName(pandalMembers, actorId)}
           onReport={() => push("/(ganesh)/report")}
           onPermanentFund={() => push("/(ganesh)/permanent-fund")}
-          onReimburse={() => push("/(ganesh)/add-reimbursement")}
+          onReimburse={() => push("/(ganesh)/reimbursements" as Href)}
           onPromised={() => push("/(ganesh)/(tabs)/contributions?status=promised")}
           onHouses={() => push("/(ganesh)/(tabs)/collections")}
           onCommittee={() => push("/(ganesh)/(tabs)/committee")}

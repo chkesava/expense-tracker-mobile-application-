@@ -53,6 +53,8 @@ const METHOD_OPTIONS: Array<{ id: PaymentMethod; label: string }> = [
   { id: "other", label: "Other" },
 ];
 
+const QUICK_AMOUNTS = [500, 1000, 2000, 5000];
+
 export default function AddExpenseScreen() {
   const { theme } = useTheme();
   const g = useGaneshTokens();
@@ -91,6 +93,7 @@ export default function AddExpenseScreen() {
   const [paidByMemberId, setPaidByMemberId] = useState(realUser?.uid ?? "");
   const [vendor, setVendor] = useState("");
   const [notes, setNotes] = useState("");
+  const [date, setDate] = useState(todayDateInput());
   const [assetName, setAssetName] = useState("");
   const [assetQty, setAssetQty] = useState("1");
   const [assetCategory, setAssetCategory] = useState<(typeof ASSET_CATEGORIES)[number]["id"]>("furniture");
@@ -121,10 +124,29 @@ export default function AddExpenseScreen() {
       || sponsored.trim()
       || vendor.trim()
       || notes.trim()
+      || date !== todayDateInput()
       || assetName.trim()
       || receipt
     );
   const { confirmLeave } = useUnsavedChangesGuard(dirty);
+
+  const resetForAnother = () => {
+    clientOpIdRef.current = null;
+    setSavedId(null);
+    setName("");
+    setTotal("");
+    setGodFund("");
+    setPersonal("");
+    setSponsored("");
+    setVendor("");
+    setNotes("");
+    setDate(todayDateInput());
+    setAssetName("");
+    setAssetQty("1");
+    setAssetValue("");
+    setAssetLocation("");
+    setReceipt(null);
+  };
   const isAssetPurchase = kind === "asset_purchase" && canBuyAsset;
   const fundingOptions: Array<{ id: Funding; label: string }> = [
     { id: "god", label: "God Fund" },
@@ -237,6 +259,32 @@ export default function AddExpenseScreen() {
       ) : null}
       <Input label="Expense name" value={name} onChangeText={setName} placeholder="Flowers" editable={!ledgerSaved} />
       <Input label="Amount" value={total} onChangeText={setTotal} keyboardType="numeric" editable={!ledgerSaved} />
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+        {QUICK_AMOUNTS.map((value) => (
+          <Pressable
+            key={value}
+            disabled={ledgerSaved}
+            onPress={() => setTotal(String(value))}
+            style={{
+              backgroundColor: total === String(value) ? g.wash(g.saffron) : g.tile,
+              borderRadius: 999,
+              paddingHorizontal: 12,
+              paddingVertical: 8,
+              borderCurve: "continuous",
+              opacity: ledgerSaved ? 0.45 : 1,
+            }}
+          >
+            <Text
+              style={{
+                color: total === String(value) ? g.saffron : theme.colors.mutedForeground,
+                fontFamily: theme.fontFamily.semibold,
+              }}
+            >
+              {formatInr(value)}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
       <FilterChips
         label="Funding"
         layout="wrap"
@@ -380,6 +428,13 @@ export default function AddExpenseScreen() {
         disabled={ledgerSaved}
       />
       <Input label="Vendor (optional)" value={vendor} onChangeText={setVendor} editable={!ledgerSaved} />
+      <Input
+        label="Date"
+        value={date}
+        onChangeText={setDate}
+        placeholder="YYYY-MM-DD"
+        editable={!ledgerSaved}
+      />
       <Input label="Notes (optional)" value={notes} onChangeText={setNotes} editable={!ledgerSaved} />
       {isAssetPurchase ? (
         <View style={{ gap: 16 }}>
@@ -438,11 +493,7 @@ export default function AddExpenseScreen() {
             : receipt
               ? queueReceipt(savedId, receipt)
               : Promise.resolve(false);
-          void again
-            .then((ok) => {
-              if (ok) back();
-            })
-            .finally(() => setBusy(false));
+          void again.finally(() => setBusy(false));
         }}
       />
       </FormDetails>
@@ -475,7 +526,7 @@ export default function AddExpenseScreen() {
             clientOpId: clientOpIdRef.current ?? (clientOpIdRef.current = newId()),
             vendor,
             notes,
-            date: todayDateInput(),
+            date: date.trim() || todayDateInput(),
             sponsorId: fundingAmounts.sponsoredAmount > 0 ? sponsorId || undefined : undefined,
             linkedSponsorshipId: fundingAmounts.sponsoredAmount > 0 ? linkedSponsorshipId || undefined : undefined,
             paymentMethod: fundingAmounts.godFundAmount > 0 ? paymentMethod : undefined,
@@ -502,12 +553,7 @@ export default function AddExpenseScreen() {
               })
               .then(async ({ expenseId }) => {
                 setSavedId(expenseId);
-                if (!receipt) {
-                  back();
-                  return;
-                }
-                const queued = await queueReceipt(expenseId, receipt);
-                if (queued) back();
+                if (receipt) await queueReceipt(expenseId, receipt);
               })
               .catch((error) => {
                 logError("ganesh.addAssetPurchase", error);
@@ -521,12 +567,7 @@ export default function AddExpenseScreen() {
             .addExpense(payload)
             .then(async (id) => {
               setSavedId(id);
-              if (!receipt) {
-                back();
-                return;
-              }
-              const queued = await queueReceipt(id, receipt);
-              if (queued) back();
+              if (receipt) await queueReceipt(id, receipt);
             })
             .catch((error) => {
               logError("ganesh.addExpense", error);
@@ -537,6 +578,11 @@ export default function AddExpenseScreen() {
       >
         {isAssetPurchase ? "Save purchase" : "Save expense"}
       </Button>
+      {ledgerSaved ? (
+        <Button variant="outline" onPress={resetForAnother}>
+          Add another
+        </Button>
+      ) : null}
     </GaneshScreen>
   );
 }

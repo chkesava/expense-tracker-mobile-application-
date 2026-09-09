@@ -403,7 +403,7 @@ export default function AdminDashboardScreen() {
                 icon={<AdminGlyph name="iconFund" />}
                 chevronColor={g.saffron}
                 divider
-                onPress={() => push("/(ganesh)/add-reimbursement")}
+                onPress={() => push("/(ganesh)/reimbursements" as Href)}
               />
             ) : null}
             {can("permanentFund.read") ? (

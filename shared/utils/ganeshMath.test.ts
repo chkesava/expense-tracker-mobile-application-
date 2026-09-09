@@ -22,6 +22,9 @@ import {
   locationInvariantHolds,
   mapHouseholdForNewFestival,
   memberPendingReimbursement,
+  expenseCountsTowardReimbursement,
+  expenseMatchesQuery,
+  personalExpensesForMember,
   parsePermanentFund,
   possibleDuplicateCollections,
   possibleHouseholdDuplicates,
@@ -255,6 +258,61 @@ describe("memberPendingReimbursement", () => {
     expect(
       memberPendingReimbursement({ personalExpenses: 3000, reimbursed: 1000 })
     ).toBe(2000);
+  });
+});
+
+describe("personal reimbursement obligation", () => {
+  const raviPersonal = {
+    id: "e1",
+    name: "Flowers",
+    vendor: "City florist",
+    paidByMemberId: "ravi",
+    personalAmount: 8000,
+    reimbursementRequired: true,
+  };
+  const raviContribution = {
+    id: "e2",
+    name: "Oil",
+    paidByMemberId: "ravi",
+    personalAmount: 500,
+    reimbursementRequired: false,
+  };
+  const sureshPersonal = {
+    id: "e3",
+    name: "Wire",
+    paidByMemberId: "suresh",
+    personalAmount: 200,
+    reimbursementRequired: true,
+  };
+  const voided = {
+    id: "e4",
+    name: "Voided flowers",
+    paidByMemberId: "ravi",
+    personalAmount: 8000,
+    reimbursementRequired: true,
+    voided: true,
+  };
+
+  it("counts only live personal spend that asked for reimbursement", () => {
+    expect(expenseCountsTowardReimbursement(raviPersonal)).toBe(true);
+    expect(expenseCountsTowardReimbursement(raviContribution)).toBe(false);
+    expect(expenseCountsTowardReimbursement(voided)).toBe(false);
+  });
+
+  it("lists one member's obligation rows without mixing other payers", () => {
+    expect(
+      personalExpensesForMember(
+        [raviPersonal, raviContribution, sureshPersonal, voided],
+        "ravi"
+      )
+    ).toEqual([raviPersonal]);
+  });
+
+  it("matches expense search on name or vendor", () => {
+    expect(expenseMatchesQuery(raviPersonal, "flow")).toBe(true);
+    expect(expenseMatchesQuery(raviPersonal, "florist")).toBe(true);
+    expect(expenseMatchesQuery(raviPersonal, "tent")).toBe(false);
+    expect(expenseMatchesQuery(raviPersonal, "  ")).toBe(true);
   });
 });
 

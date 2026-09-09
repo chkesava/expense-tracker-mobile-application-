@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, type Href } from "expo-router";
 import { ChevronRight, ClipboardCheck, Clock, Sparkles, UserPlus, Users } from "lucide-react-native";
 
 import { GaneshArt } from "@/components/ganesh/art/GaneshArt";
@@ -146,7 +146,7 @@ export default function GaneshHomeScreen() {
         meta: "Members are owed for personal money spent",
         icon: Clock,
         tint: theme.colors.warning,
-        onPress: () => push("/(ganesh)/(tabs)/expenses"),
+        onPress: () => push("/(ganesh)/reimbursements" as Href),
       });
     }
 

@@ -101,7 +101,7 @@ No new install is required if `npx expo start` is already running; hot reload pi
 - [KAN-37](https://kesavach.atlassian.net/browse/KAN-37) household / collection coverage — in progress, see [KAN-37-collections-households-coverage.md](./KAN-37-collections-households-coverage.md)
 - [KAN-44](https://kesavach.atlassian.net/browse/KAN-44) Street as a first-class entity
 - [KAN-53](https://kesavach.atlassian.net/browse/KAN-53) Dedicated offline field-collection mode
-- [KAN-38](https://kesavach.atlassian.net/browse/KAN-38) expense-spec UX leftovers
+- [KAN-38](https://kesavach.atlassian.net/browse/KAN-38) expense-spec UX leftovers — see [KAN-38-expenses-god-fund-reimbursements.md](./KAN-38-expenses-god-fund-reimbursements.md)
 - [KAN-42](https://kesavach.atlassian.net/browse/KAN-42) settlement / Permanent Fund transfer product polish
 - Budget vs actual by category
 - Per-line money-in drill-down filters

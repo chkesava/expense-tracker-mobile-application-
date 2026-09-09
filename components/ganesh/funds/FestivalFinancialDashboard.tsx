@@ -186,6 +186,7 @@ export function FestivalFinancialDashboard({
               divider={false}
               title={member.displayName}
               value={<Money value={member.amount} size="secondary" />}
+              onPress={onReimburse}
             />
           ))}
         </Section>

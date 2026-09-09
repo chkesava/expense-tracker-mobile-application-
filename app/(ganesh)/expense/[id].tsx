@@ -5,6 +5,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { Receipt } from "lucide-react-native";
 
 import { AccountabilityLine } from "@/components/ganesh/AccountabilityLine";
+import { GaneshImageUploader } from "@/components/ganesh/GaneshImageUploader";
 import { GaneshSignedPreview } from "@/components/ganesh/GaneshSignedPreview";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { PendingHint } from "@/components/ganesh/GaneshSyncChip";
@@ -19,6 +20,7 @@ import { Input } from "@/components/ui/Input";
 import { useFestivals } from "@/hooks/useFestivals";
 import { useGaneshExpense } from "@/hooks/useGaneshExpenses";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
+import { pickerStatus, useGaneshPhotoUpload } from "@/hooks/useGaneshPhotoUpload";
 import { useGaneshWrites } from "@/hooks/useGaneshWrites";
 import { usePandalAssets } from "@/hooks/usePandalAssets";
 import { usePandalMembers } from "@/hooks/usePandalMembers";
@@ -28,9 +30,10 @@ import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import { ganeshStoredPath } from "@/services/ganesh/storage/storageService";
+import type { PreparedGaneshImage } from "@/services/ganesh/storage/storageTypes";
 import { isAssetPurchaseExpense } from "@/shared/utils/ganeshAssets";
 import { memberDisplayName } from "@/shared/utils/ganeshIdentity";
-import { fundLocationLabel } from "@/shared/utils/ganeshMath";
+import { expenseCountsTowardReimbursement, fundLocationLabel } from "@/shared/utils/ganeshMath";
 import { formatInr } from "@/shared/utils/ganeshMoney";
 import { useTheme } from "@/theme/ThemeProvider";
 
@@ -50,10 +53,12 @@ export default function ExpenseDetailScreen() {
   const { sponsorships } = useSponsorships(pandalId, expenseFestivalId);
   const { can } = useGaneshPermissions();
   const writes = useGaneshWrites();
+  const receiptUpload = useGaneshPhotoUpload("expenseReceipt");
   const [total, setTotal] = useState("");
   const [godFund, setGodFund] = useState("");
   const [personal, setPersonal] = useState("");
   const [sponsored, setSponsored] = useState("");
+  const [receipt, setReceipt] = useState<PreparedGaneshImage | null>(null);
   const [busy, setBusy] = useState(false);
   const festival = festivals.find((item) => item.id === expenseFestivalId);
   const linkedAsset = assets.find((item) => item.id === expense?.assetId);
@@ -63,6 +68,8 @@ export default function ExpenseDetailScreen() {
   const isPurchase = isAssetPurchaseExpense(expense);
   const canEdit = can("expenses.update") && festival?.status === "open" && expense && !expense.voided;
   const canVoid = can("expenses.void") && expense && !expense.voided;
+  const receiptJob = receiptUpload.jobFor(expense?.id);
+  const payerName = memberDisplayName(members, expense?.paidByMemberId);
 
   useEffect(() => {
     if (!expense) return;
@@ -159,8 +166,16 @@ export default function ExpenseDetailScreen() {
           Voided{expense.voidReason ? ` · ${expense.voidReason}` : ""}
         </Text>
       ) : null}
+      {expense.categoryName ? (
+        <Text style={{ color: theme.colors.mutedForeground }}>Category {expense.categoryName}</Text>
+      ) : null}
+      {expenseCountsTowardReimbursement(expense) ? (
+        <Text style={{ color: theme.colors.mutedForeground }}>
+          Counts toward pending reimbursement for {payerName}
+        </Text>
+      ) : null}
       <AccountabilityLine
-        paidBy={memberDisplayName(members, expense.paidByMemberId)}
+        paidBy={payerName}
         enteredBy={memberDisplayName(members, expense.createdBy)}
         at={expense.createdAt}
         date={expense.date}
@@ -222,6 +237,51 @@ export default function ExpenseDetailScreen() {
           path={receiptPath}
           pandalId={pandalId}
           festivalId={expenseFestivalId}
+        />
+      ) : null}
+      {canEdit ? (
+        <GaneshImageUploader
+          title={receiptPath ? "Replace receipt" : "Attach receipt"}
+          kind="receipt"
+          status={pickerStatus({
+            job: receiptJob,
+            hasSelection: Boolean(receipt),
+            recordSaved: true,
+            busy,
+          })}
+          previewUri={receipt?.uri}
+          disabled={busy}
+          onPrepared={(file) => {
+            setReceipt(file);
+            setBusy(true);
+            void receiptUpload
+              .queue(expense.id, file)
+              .catch((error) => {
+                logError("ganesh.receiptQueue", error);
+                toast.error(
+                  friendlyErrorMessage(error, "Expense saved, but the receipt could not be queued.")
+                );
+              })
+              .finally(() => setBusy(false));
+          }}
+          onRemove={() => {
+            setReceipt(null);
+            void receiptUpload.cancel(expense.id);
+          }}
+          onRetry={() => {
+            setBusy(true);
+            const again = receiptJob
+              ? receiptUpload.retry(expense.id)
+              : receipt
+                ? receiptUpload.queue(expense.id, receipt)
+                : Promise.resolve();
+            void again
+              .catch((error) => {
+                logError("ganesh.receiptRetry", error);
+                toast.error(friendlyErrorMessage(error, "Could not retry the receipt."));
+              })
+              .finally(() => setBusy(false));
+          }}
         />
       ) : null}
 

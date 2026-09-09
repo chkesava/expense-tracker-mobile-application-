@@ -21,6 +21,7 @@ import {
   useGaneshTokens,
   type LedgerRowBadge,
 } from "@/components/ganesh/ui";
+import { SearchBar } from "@/components/common/SearchBar";
 import { AddFab } from "@/components/ui/AddFab";
 import { useFestivals } from "@/hooks/useFestivals";
 import { useGaneshExpenses } from "@/hooks/useGaneshExpenses";
@@ -34,16 +35,23 @@ import { ganeshStoredPath } from "@/services/ganesh/storage/storageService";
 import type { GaneshExpense } from "@/shared/types/ganesh";
 import { isAssetPurchaseExpense } from "@/shared/utils/ganeshAssets";
 import { formatGaneshWhen, memberDisplayName } from "@/shared/utils/ganeshIdentity";
-import { assetPurchaseAmountOf, regularExpenseAmount, totalExpenses } from "@/shared/utils/ganeshMath";
+import {
+  assetPurchaseAmountOf,
+  expenseCountsTowardReimbursement,
+  expenseMatchesQuery,
+  regularExpenseAmount,
+  totalExpenses,
+} from "@/shared/utils/ganeshMath";
 import { formatInr } from "@/shared/utils/ganeshMoney";
 import { useTheme } from "@/theme/ThemeProvider";
 
-type Filter = "all" | "god" | "personal" | "assets";
+type Filter = "all" | "god" | "personal" | "pending_personal" | "assets";
 
 const FILTER_OPTIONS: Array<{ id: Filter; label: string }> = [
   { id: "all", label: "All" },
   { id: "god", label: "God Fund" },
   { id: "personal", label: "Personal money" },
+  { id: "pending_personal", label: "Pending personal" },
   { id: "assets", label: "Assets" },
 ];
 
@@ -74,7 +82,33 @@ export function ExpensesList({ embedded = false, prefix }: ExpensesListProps) {
   const { sponsorships } = useSponsorships(pandalId, festivalId);
   const { can } = useGaneshPermissions();
 
+  const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [paidByFilter, setPaidByFilter] = useState("all");
+
+  const categoryOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const expense of expenses) {
+      if (expense.voided || !expense.categoryId) continue;
+      if (!seen.has(expense.categoryId)) {
+        seen.set(expense.categoryId, expense.categoryName || expense.categoryId);
+      }
+    }
+    return [...seen.entries()]
+      .map(([id, label]) => ({ id, label }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [expenses]);
+
+  const paidByOptions = useMemo(() => {
+    const ids = new Set<string>();
+    for (const expense of expenses) {
+      if (!expense.voided && expense.paidByMemberId) ids.add(expense.paidByMemberId);
+    }
+    return members
+      .filter((member) => ids.has(member.userId))
+      .map((member) => ({ id: member.userId, label: member.displayName }));
+  }, [expenses, members]);
 
   const canAdd = festival?.status === "open" && can("expenses.create");
   const openAdd = useCallback(() => push("/(ganesh)/add-expense"), [push]);
@@ -87,12 +121,16 @@ export function ExpensesList({ embedded = false, prefix }: ExpensesListProps) {
     () =>
       expenses.filter((expense) => {
         if (expense.voided) return false;
+        if (!expenseMatchesQuery(expense, query)) return false;
+        if (categoryFilter !== "all" && expense.categoryId !== categoryFilter) return false;
+        if (paidByFilter !== "all" && expense.paidByMemberId !== paidByFilter) return false;
         if (filter === "god") return expense.godFundAmount > 0;
         if (filter === "personal") return expense.personalAmount > 0;
+        if (filter === "pending_personal") return expenseCountsTowardReimbursement(expense);
         if (filter === "assets") return isAssetPurchaseExpense(expense);
         return true;
       }),
-    [expenses, filter]
+    [categoryFilter, expenses, filter, paidByFilter, query]
   );
 
   const renderItem = useCallback(
@@ -231,7 +269,30 @@ export function ExpensesList({ embedded = false, prefix }: ExpensesListProps) {
         </>
       )}
 
+      <SearchBar
+        value={query}
+        onChangeText={setQuery}
+        placeholder="Search name or vendor"
+      />
       <FilterChips value={filter} options={FILTER_OPTIONS} onChange={setFilter} />
+      {categoryOptions.length > 1 ? (
+        <FilterChips
+          label="Category"
+          layout="wrap"
+          value={categoryFilter}
+          options={[{ id: "all", label: "All categories" }, ...categoryOptions]}
+          onChange={setCategoryFilter}
+        />
+      ) : null}
+      {paidByOptions.length > 1 ? (
+        <FilterChips
+          label="Paid by"
+          layout="wrap"
+          value={paidByFilter}
+          options={[{ id: "all", label: "Anyone" }, ...paidByOptions]}
+          onChange={setPaidByFilter}
+        />
+      ) : null}
     </>
   );
 
@@ -262,7 +323,9 @@ export function ExpensesList({ embedded = false, prefix }: ExpensesListProps) {
           description={
             filter === "all"
               ? "Record what the Pandal spends — from the God Fund, from someone's own pocket, or split between both."
-              : "Try another filter to see the rest of this festival's spending."
+              : filter === "pending_personal"
+                ? "No live personal spend is waiting to be reimbursed."
+                : "Try another filter to see the rest of this festival's spending."
           }
           action={canAdd && filter === "all" ? { label: "Add expense", onPress: openAdd } : undefined}
         />
