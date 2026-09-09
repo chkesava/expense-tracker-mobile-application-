@@ -147,9 +147,6 @@ jobs:
             exit 1
           fi
           npm install -g netlify-cli@17
-          # Runtime env for the function. GitHub already holds the key; do not
-          # paste it into the Netlify UI or turn Continuous Deployment back on.
-          python3 -c 'import os, subprocess; subprocess.check_call(["netlify","env:set","FIREBASE_SERVICE_ACCOUNT",os.environ["FIREBASE_SERVICE_ACCOUNT"],"--site",os.environ["NETLIFY_SITE_ID"]])'
           # Deploy from outside the repo (no netlify.toml here) so this site
           # never picks up the OTHER site's root netlify.toml — routing for
           # this deploy comes entirely from dist-web/_redirects + _headers.
@@ -160,6 +157,13 @@ jobs:
           cp -R "$GITHUB_WORKSPACE/dist-web" "$RUNNER_TEMP/publish"
           cp -R "$GITHUB_WORKSPACE/netlify/functions-dist" "$RUNNER_TEMP/functions"
           cd "$RUNNER_TEMP"
+          # Runtime env for the function. GitHub already holds the key; do not
+          # paste it into the Netlify UI or turn Continuous Deployment back on.
+          # netlify-cli@17 `env:set` has no --site flag (that is deploy-only).
+          # It targets the site via NETLIFY_SITE_ID in the environment instead.
+          FN_JSON=$(python3 -c 'import json,os; print(json.dumps(json.loads(os.environ["FIREBASE_SERVICE_ACCOUNT"]), separators=(",", ":")))')
+          netlify env:set FIREBASE_SERVICE_ACCOUNT "$FN_JSON" --force --secret --scope functions
+          unset FN_JSON
           netlify deploy --prod \
             --dir "$RUNNER_TEMP/publish" \
             --functions "$RUNNER_TEMP/functions" \
