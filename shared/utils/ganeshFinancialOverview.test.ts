@@ -309,10 +309,17 @@ describe("buildFinancialOverview", () => {
     });
     expect(overview.collections.paidHouses).toBe(1);
     expect(overview.collections.pendingHouses).toBe(2);
+    expect(overview.collections.notVisitedHouses).toBe(1);
+    expect(overview.collections.partialHouses).toBe(1);
+    expect(overview.collections.visitedHouses).toBe(0);
+    expect(overview.collections.promisedHouses).toBe(0);
+    expect(overview.collections.followUpHouses).toBe(1);
     expect(overview.collections.countableHouses).toBe(3);
     expect(overview.collections.notInterested).toBe(1);
     expect(overview.collections.notAvailable).toBe(1);
     expect(overview.collections.coveragePct).toBeCloseTo(33.33, 1);
+    expect(overview.collections.visitCoveragePct).toBeCloseTo(75, 1);
+    expect(overview.collections.promisedAmount).toBe(0);
     expect(overview.health.collectedPct).toBe(overview.collections.coveragePct);
     expect(overview.collections.today).toEqual({
       count: 2,
@@ -359,5 +366,47 @@ describe("buildFinancialOverview", () => {
       ],
     });
     expect(overview.collections.byArea).toEqual([{ area: "Main", paid: 1, total: 2 }]);
+  });
+
+  it("keeps household promises out of received chanda and coverage paid count", () => {
+    const overview = buildFinancialOverview({
+      summary: { ...EMPTY_GANESH_SUMMARY, chanda: 200, collectionCount: 1 },
+      households: [
+        {
+          id: "1",
+          name: "Paid",
+          expectedAmount: 500,
+          collectedAmount: 200,
+          status: "partial",
+          createdBy: "u",
+          updatedBy: "u",
+        },
+        {
+          id: "2",
+          name: "Promised",
+          expectedAmount: 500,
+          collectedAmount: 0,
+          promisedAmount: 500,
+          status: "promised",
+          createdBy: "u",
+          updatedBy: "u",
+        },
+        {
+          id: "3",
+          name: "Visited",
+          expectedAmount: 500,
+          collectedAmount: 0,
+          status: "visited",
+          createdBy: "u",
+          updatedBy: "u",
+        },
+      ],
+    });
+    expect(overview.collections.collected).toBe(200);
+    expect(overview.collections.promisedAmount).toBe(500);
+    expect(overview.collections.promisedHouses).toBe(1);
+    expect(overview.collections.visitedHouses).toBe(1);
+    expect(overview.collections.paidHouses).toBe(0);
+    expect(overview.collections.pendingHouses).toBe(3);
   });
 });

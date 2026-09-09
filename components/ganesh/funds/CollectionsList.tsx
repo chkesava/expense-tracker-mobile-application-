@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, type Href } from "expo-router";
 import { FlashList } from "@shopify/flash-list";
 import { Home as HomeIcon, IndianRupee, Smartphone, Wallet } from "lucide-react-native";
 
@@ -30,15 +30,19 @@ import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import type { GaneshCollection, Household, HouseholdStatus } from "@/shared/types/ganesh";
 import { formatGaneshWhen, memberDisplayName, todayDateInput } from "@/shared/utils/ganeshIdentity";
 import { buildFinancialOverview } from "@/shared/utils/ganeshFinancialOverview";
+import { householdStatusLabel } from "@/shared/utils/ganeshMath";
 import { formatInr } from "@/shared/utils/ganeshMoney";
 import { useTheme } from "@/theme/ThemeProvider";
 
 type Filter =
   | "all"
   | "open"
-  | "paid"
-  | "partial"
   | "pending"
+  | "visited"
+  | "promised"
+  | "partial"
+  | "paid"
+  | "not_available"
   | "cash"
   | "upi"
   | "bank"
@@ -46,14 +50,25 @@ type Filter =
 
 const FILTER_OPTIONS: Array<{ id: Filter; label: string }> = [
   { id: "all", label: "All houses" },
-  { id: "open", label: "Pending" },
-  { id: "paid", label: "Paid" },
+  { id: "open", label: "Still to collect" },
+  { id: "pending", label: "Not visited" },
+  { id: "visited", label: "Visited" },
+  { id: "promised", label: "Promised" },
   { id: "partial", label: "Partial" },
+  { id: "paid", label: "Paid" },
+  { id: "not_available", label: "Follow-up" },
   { id: "cash", label: "Cash" },
   { id: "upi", label: "UPI" },
   { id: "bank", label: "Bank" },
   { id: "other", label: "Other" },
 ];
+
+const OPEN_STATUSES: ReadonlySet<HouseholdStatus> = new Set([
+  "pending",
+  "visited",
+  "promised",
+  "partial",
+]);
 
 function householdBadge(status: HouseholdStatus): LedgerRowBadge {
   switch (status) {
@@ -61,12 +76,16 @@ function householdBadge(status: HouseholdStatus): LedgerRowBadge {
       return { kind: "paid" };
     case "partial":
       return { kind: "partial" };
+    case "promised":
+      return { kind: "promised" };
+    case "visited":
+      return { kind: "pending", label: householdStatusLabel(status) };
     case "not_interested":
-      return { kind: "cancelled", label: "Not interested" };
+      return { kind: "cancelled", label: householdStatusLabel(status) };
     case "not_available":
-      return { kind: "neutral", label: "Not available" };
+      return { kind: "overdue", label: householdStatusLabel(status) };
     default:
-      return { kind: "pending" };
+      return { kind: "pending", label: householdStatusLabel(status) };
   }
 }
 
@@ -113,6 +132,8 @@ export function CollectionsList({ embedded = false, prefix }: CollectionsListPro
 
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
+  const [areaFilter, setAreaFilter] = useState("all");
+  const [collectorFilter, setCollectorFilter] = useState("all");
 
   const overview = useMemo(
     () =>
@@ -130,13 +151,45 @@ export function CollectionsList({ embedded = false, prefix }: CollectionsListPro
   const isEntryView =
     filter === "cash" || filter === "upi" || filter === "bank" || filter === "other";
 
+  const areaOptions = useMemo(() => {
+    const areas = [...new Set(households.map((house) => (house.area ?? "").trim()).filter(Boolean))];
+    areas.sort((a, b) => a.localeCompare(b));
+    return areas;
+  }, [households]);
+
+  const collectorOptions = useMemo(() => {
+    const ids = new Set<string>();
+    for (const house of households) {
+      if (house.assignedCollectorId) ids.add(house.assignedCollectorId);
+    }
+    for (const row of collections) {
+      if (!row.voided && row.collectorId) ids.add(row.collectorId);
+    }
+    return members.filter((member) => ids.has(member.userId));
+  }, [collections, households, members]);
+
   const visibleHouseholds = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return households.filter((household) => {
       if (filter === "open") {
-        if (household.status !== "pending" && household.status !== "partial") return false;
-      } else if (filter === "paid" || filter === "partial" || filter === "pending") {
+        if (!OPEN_STATUSES.has(household.status)) return false;
+      } else if (
+        filter === "paid"
+        || filter === "partial"
+        || filter === "pending"
+        || filter === "visited"
+        || filter === "promised"
+        || filter === "not_available"
+      ) {
         if (household.status !== filter) return false;
+      }
+      if (areaFilter !== "all" && (household.area ?? "").trim() !== areaFilter) return false;
+      if (collectorFilter !== "all") {
+        const assigned = household.assignedCollectorId === collectorFilter;
+        const collected = collections.some(
+          (row) => !row.voided && row.householdId === household.id && row.collectorId === collectorFilter
+        );
+        if (!assigned && !collected) return false;
       }
       if (!needle) return true;
       return (
@@ -144,9 +197,6 @@ export function CollectionsList({ embedded = false, prefix }: CollectionsListPro
         || (household.houseNumber ?? "").toLowerCase().includes(needle)
         || (household.mobile ?? "").includes(needle)
         || (household.area ?? "").toLowerCase().includes(needle)
-        // Searchable so a collector can pull up their own houses by name.
-        // A dedicated "my houses" filter belongs with the Daily Collection
-        // Sessions work (GS-076), not here.
         || (household.assignedCollectorId
           ? memberDisplayName(members, household.assignedCollectorId)
               .toLowerCase()
@@ -154,7 +204,7 @@ export function CollectionsList({ embedded = false, prefix }: CollectionsListPro
           : false)
       );
     });
-  }, [households, query, filter, members]);
+  }, [areaFilter, collectorFilter, collections, filter, households, members, query]);
 
   const visibleCollections = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -173,7 +223,9 @@ export function CollectionsList({ embedded = false, prefix }: CollectionsListPro
   }, [collections, filter, isEntryView, members, query]);
 
   const canAdd = festival?.status === "open" && can("collections.create");
+  const canAddHousehold = festival?.status === "open" && can("collections.update");
   const openAdd = useCallback(() => push("/(ganesh)/add-collection"), [push]);
+  const openAddHousehold = useCallback(() => push("/(ganesh)/add-household" as Href), [push]);
   const viewPendingHouses = useCallback(() => setFilter("open"), []);
 
   const renderHousehold = useCallback(
@@ -278,7 +330,7 @@ export function CollectionsList({ embedded = false, prefix }: CollectionsListPro
   ) : null;
 
   const coverageStrip =
-    coverage.countableHouses > 0 || coverage.today.count > 0 || coverage.byArea.length > 0 ? (
+    coverage.countableHouses > 0 || coverage.today.count > 0 || coverage.byArea.length > 0 || coverage.promisedAmount > 0 || coverage.pendingHouses > 0 ? (
       <View
         style={[
           styles.coverageCard,
@@ -296,7 +348,7 @@ export function CollectionsList({ embedded = false, prefix }: CollectionsListPro
             ]}
           >
             {coverage.paidHouses} / {coverage.countableHouses} houses paid
-            {coverage.coveragePct !== null ? ` · ${Math.round(coverage.coveragePct)}%` : ""}
+            {coverage.coveragePct !== null ? ` · ${Math.round(coverage.coveragePct)}% received` : ""}
           </Text>
         ) : null}
         <Text
@@ -306,12 +358,21 @@ export function CollectionsList({ embedded = false, prefix }: CollectionsListPro
           ]}
         >
           {[
+            coverage.visitCoveragePct !== null
+              ? `${Math.round(coverage.visitCoveragePct)}% visited`
+              : null,
+            coverage.promisedAmount > 0
+              ? `Promised ${formatInr(coverage.promisedAmount)}`
+              : coverage.promisedHouses > 0
+                ? `${coverage.promisedHouses} promised`
+                : null,
+            coverage.collected > 0 ? `Received ${formatInr(coverage.collected)}` : null,
             coverage.pendingHouses > 0
-              ? `${coverage.pendingHouses} pending`
+              ? `${coverage.pendingHouses} still to collect`
               : coverage.countableHouses > 0
                 ? "All countable houses are paid"
                 : null,
-            coverage.notAvailable > 0 ? `${coverage.notAvailable} not available` : null,
+            coverage.followUpHouses > 0 ? `${coverage.followUpHouses} follow-up` : null,
           ]
             .filter(Boolean)
             .join(" · ")}
@@ -324,7 +385,7 @@ export function CollectionsList({ embedded = false, prefix }: CollectionsListPro
                 { color: g.saffron, fontFamily: theme.fontFamily.semibold },
               ]}
             >
-              View pending houses
+              View houses still to collect
             </Text>
           </Pressable>
         ) : null}
@@ -399,7 +460,7 @@ export function CollectionsList({ embedded = false, prefix }: CollectionsListPro
             >
               {summary.collectionCount} {summary.collectionCount === 1 ? "donor" : "donors"} ·{" "}
               {coverage.paidHouses} paid {coverage.paidHouses === 1 ? "house" : "houses"} ·{" "}
-              {coverage.pendingHouses} pending
+              {coverage.pendingHouses} still to collect
             </Text>
           }
         />
@@ -425,6 +486,31 @@ export function CollectionsList({ embedded = false, prefix }: CollectionsListPro
       />
 
       <FilterChips value={filter} options={FILTER_OPTIONS} onChange={setFilter} />
+      {areaOptions.length > 0 ? (
+        <FilterChips
+          label="Area"
+          value={areaFilter}
+          options={[
+            { id: "all", label: "All areas" },
+            ...areaOptions.map((area) => ({ id: area, label: area })),
+          ]}
+          onChange={setAreaFilter}
+        />
+      ) : null}
+      {collectorOptions.length > 0 ? (
+        <FilterChips
+          label="Collector"
+          value={collectorFilter}
+          options={[
+            { id: "all", label: "All collectors" },
+            ...collectorOptions.map((member) => ({
+              id: member.userId,
+              label: member.displayName,
+            })),
+          ]}
+          onChange={setCollectorFilter}
+        />
+      ) : null}
     </>
   );
 
@@ -453,16 +539,26 @@ export function CollectionsList({ embedded = false, prefix }: CollectionsListPro
           loading={loading}
           error={error}
           illustration="collect"
-          title={query.trim() ? "No matches" : "No collections yet"}
+          title={
+            query.trim()
+              ? "No matches"
+              : households.length === 0
+                ? "No households yet"
+                : "No collections yet"
+          }
           description={
             query.trim()
               ? "Try a different name, house number, mobile, or receipt."
-              : "Start recording your Chanda collection. Entries stay on the device if the network drops."
+              : households.length === 0
+                ? "Add the houses on your street so collectors can record chanda at the door."
+                : "Start recording your Chanda collection. Entries stay on the device if the network drops."
           }
           action={
-            canAdd && !query.trim()
-              ? { label: "Add collection", onPress: openAdd }
-              : undefined
+            !query.trim() && households.length === 0 && canAddHousehold
+              ? { label: "Add household", onPress: openAddHousehold }
+              : canAdd && !query.trim()
+                ? { label: "Add collection", onPress: openAdd }
+                : undefined
           }
         />
       }

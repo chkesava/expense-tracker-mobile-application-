@@ -480,7 +480,7 @@ export function useGaneshWrites() {
       if (result.receiptNumber) {
         toast.success(`Collection recorded · Receipt ${result.receiptNumber}`);
       } else {
-        toast.success("Collection recorded · Receipt pending sync");
+        toast.success("Collection saved on this device · Receipt pending sync");
       }
       if (isOnline) {
         void writes
@@ -495,6 +495,20 @@ export function useGaneshWrites() {
       const ctx = requireFestival();
       return run("Household updated", () =>
         writes.updateHousehold(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, householdId, input)
+      );
+    },
+    createHousehold: async (input: Parameters<typeof writes.createHousehold>[4]) => {
+      requirePerm("collections.update");
+      const ctx = requireFestival();
+      return run("Household added", () =>
+        writes.createHousehold(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, input)
+      );
+    },
+    recordVisit: async (input: Parameters<typeof writes.recordVisit>[4]) => {
+      requirePerm("collections.create");
+      const ctx = requireFestival();
+      return run("Visit recorded", () =>
+        writes.recordVisit(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, input)
       );
     },
     addContribution: async (input: Parameters<typeof writes.addContribution>[4]) => {

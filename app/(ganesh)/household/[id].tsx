@@ -21,6 +21,8 @@ import { usePandalMembers } from "@/hooks/usePandalMembers";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import { memberDisplayName } from "@/shared/utils/ganeshIdentity";
 import type { HouseholdStatus } from "@/shared/types/ganesh";
+import { householdStatusLabel } from "@/shared/utils/ganeshMath";
+import { formatInr } from "@/shared/utils/ganeshMoney";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
@@ -30,11 +32,13 @@ import { useTheme } from "@/theme/ThemeProvider";
 const UNASSIGNED = "__unassigned__";
 
 const STATUS_OPTIONS: Array<{ id: HouseholdStatus; label: string }> = [
-  { id: "pending", label: "Pending" },
+  { id: "pending", label: "Not visited" },
+  { id: "visited", label: "Visited" },
+  { id: "promised", label: "Promised" },
   { id: "partial", label: "Partial" },
   { id: "paid", label: "Paid" },
+  { id: "not_available", label: "Follow-up" },
   { id: "not_interested", label: "Not interested" },
-  { id: "not_available", label: "Not available" },
 ];
 
 export default function HouseholdDetailScreen() {
@@ -128,7 +132,7 @@ export default function HouseholdDetailScreen() {
         title={household.name}
         subtitle={[
           household.houseNumber ? `House ${household.houseNumber}` : null,
-          household.status.replace("_", " "),
+          householdStatusLabel(household.status),
         ]
           .filter(Boolean)
           .join(" · ")}
@@ -136,6 +140,11 @@ export default function HouseholdDetailScreen() {
         onBack={back}
       />
       <Money value={household.collectedAmount} size="title" />
+      {household.status === "promised" && Number(household.promisedAmount ?? 0) > 0 ? (
+        <Text style={{ color: theme.colors.mutedForeground }}>
+          Promised {formatInr(household.promisedAmount ?? 0)} · not received cash
+        </Text>
+      ) : null}
       {canUpdate ? (
         <>
           <Input

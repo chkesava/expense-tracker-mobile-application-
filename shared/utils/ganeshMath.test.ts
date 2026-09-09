@@ -16,6 +16,8 @@ import {
   godFundSpendableAt,
   unclassifiedGodFund,
   householdOverpayAmount,
+  householdStatusFromVisitOutcome,
+  householdStatusLabel,
   locationDelta,
   locationInvariantHolds,
   mapHouseholdForNewFestival,
@@ -201,6 +203,50 @@ describe("deriveHouseholdStatus", () => {
     expect(deriveHouseholdStatus({ expectedAmount: 500, collectedAmount: 500 })).toBe(
       "paid"
     );
+  });
+
+  it("keeps visited and promised sticky until cash arrives", () => {
+    expect(
+      deriveHouseholdStatus({
+        expectedAmount: 500,
+        collectedAmount: 0,
+        forcedStatus: "visited",
+      })
+    ).toBe("visited");
+    expect(
+      deriveHouseholdStatus({
+        expectedAmount: 500,
+        collectedAmount: 0,
+        forcedStatus: "promised",
+      })
+    ).toBe("promised");
+  });
+
+  it("clears a visit or promise once money is received", () => {
+    expect(
+      deriveHouseholdStatus({
+        expectedAmount: 500,
+        collectedAmount: 200,
+        forcedStatus: "visited",
+      })
+    ).toBe("partial");
+    expect(
+      deriveHouseholdStatus({
+        expectedAmount: 500,
+        collectedAmount: 500,
+        forcedStatus: "promised",
+      })
+    ).toBe("paid");
+  });
+});
+
+describe("household visit labels", () => {
+  it("maps follow-up to not_available and never treats a promise as cash", () => {
+    expect(householdStatusFromVisitOutcome("follow_up")).toBe("not_available");
+    expect(householdStatusFromVisitOutcome("promised")).toBe("promised");
+    expect(householdStatusLabel("pending")).toBe("Not visited");
+    expect(householdStatusLabel("not_available")).toBe("Follow-up");
+    expect(householdStatusLabel("promised")).toBe("Promised");
   });
 });
 
@@ -724,6 +770,19 @@ describe("collection receipts and coverage helpers", () => {
     expect(seeded.expectedAmount).toBe(750);
     expect(seeded.status).toBe("pending");
     expect(seeded.area).toBe("Main Road");
+  });
+
+  it("resets visited and promised houses to not visited on a new festival", () => {
+    const visited = mapHouseholdForNewFestival(
+      { name: "Visited", expectedAmount: 500, status: "visited", collectedAmount: 0 },
+      500
+    );
+    const promised = mapHouseholdForNewFestival(
+      { name: "Promised", expectedAmount: 500, status: "promised", collectedAmount: 0 },
+      500
+    );
+    expect(visited.status).toBe("pending");
+    expect(promised.status).toBe("pending");
   });
 
   it("keeps not_interested when carrying households forward", () => {

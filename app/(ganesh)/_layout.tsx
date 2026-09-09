@@ -122,6 +122,7 @@ function GaneshStack() {
       <Stack.Screen name="admin" options={{ headerShown: false }} />
       <Stack.Screen name="setup" options={{ headerShown: false }} />
       <Stack.Screen name="add-collection" options={{ headerShown: false }} />
+      <Stack.Screen name="add-household" options={{ headerShown: false }} />
       <Stack.Screen name="add-expense" options={{ headerShown: false }} />
       <Stack.Screen name="expense/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="add-contribution" options={{ headerShown: false }} />

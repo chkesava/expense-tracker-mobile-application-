@@ -41,6 +41,8 @@ import {
   deriveHouseholdStatus,
   formatCollectionReceipt,
   customCategoriesToCarryForward,
+  householdStatusFromVisitOutcome,
+  householdStatusLabel,
   mapHouseholdForNewFestival,
   money,
   parseGaneshSummary,
@@ -92,6 +94,7 @@ import type {
   GaneshMemberStatus,
   GaneshRole,
   HouseholdStatus,
+  HouseholdVisitOutcome,
   OpeningFundSource,
   PaymentMethod,
   PermanentFundLocation,
@@ -1652,6 +1655,7 @@ export async function addOpeningFunds(
 export type AddCollectionResult = {
   id: string;
   receiptNumber?: string;
+  householdId?: string;
 };
 
 export async function addCollection(
@@ -1704,6 +1708,10 @@ export async function addCollection(
       if (existingCollection.exists() && !existingCollection.data().voided) {
         return {
           id: collectionId,
+          householdId:
+            typeof existingCollection.data().householdId === "string"
+              ? existingCollection.data().householdId
+              : householdId,
           receiptNumber:
             typeof existingCollection.data().receiptNumber === "string"
               ? existingCollection.data().receiptNumber
@@ -1737,6 +1745,7 @@ export async function addCollection(
             txn.update(householdRef, {
               collectedAmount: increment(input.amount),
               status: householdStatus,
+              promisedAmount: 0,
               updatedBy: actor.uid,
               updatedAt: serverTimestamp(),
             });
@@ -1838,7 +1847,7 @@ export async function addCollection(
       audit(txn, db, pandalId, festivalId, actor.uid, "created", "collection", collectionId, {
         newValue: { donorName, amount: input.amount, receiptNumber },
       });
-      return { id: collectionId, receiptNumber };
+      return { id: collectionId, householdId, receiptNumber };
     });
   }
 
@@ -1889,6 +1898,7 @@ export async function addCollection(
       batch.update(householdRef, {
         collectedAmount: increment(input.amount),
         status: deriveHouseholdStatus({ expectedAmount, collectedAmount }),
+        promisedAmount: 0,
         updatedBy: actor.uid,
         updatedAt: serverTimestamp(),
       });
@@ -1928,7 +1938,7 @@ export async function addCollection(
     newValue: { donorName, amount: input.amount },
   });
   await commitWrite(() => batch.commit(), { label: "collection" });
-  return { id: collectionId };
+  return { id: collectionId, householdId };
 }
 
 async function resolveCollectorId(
@@ -1995,6 +2005,136 @@ export async function assignPendingCollectionReceipts(
     });
   }
   return assigned;
+}
+
+export async function createHousehold(
+  db: Firestore,
+  actor: GaneshActor,
+  pandalId: string,
+  festivalId: string,
+  input: {
+    name: string;
+    houseNumber?: string;
+    mobile?: string;
+    area?: string;
+    expectedAmount?: number;
+    notes?: string;
+    assignedCollectorId?: string;
+  }
+): Promise<string> {
+  await requireOpenFestival(db, pandalId, festivalId);
+  const name = input.name.trim();
+  if (!name) throw new Error("Enter the household name.");
+  const expectedAmount = Number(input.expectedAmount ?? 0);
+  if (!Number.isFinite(expectedAmount) || expectedAmount < 0) {
+    throw new Error("Enter the expected amount as 0 or more.");
+  }
+  if (input.assignedCollectorId?.trim()) {
+    await resolveCollectorId(db, pandalId, actor.uid, input.assignedCollectorId);
+  }
+  const householdId = newId();
+  const batch = writeBatch(db);
+  batch.set(
+    pathRef(db, [...festivalCol(pandalId, festivalId, "households"), householdId]),
+    omitUndefined({
+      name,
+      houseNumber: input.houseNumber?.trim() || undefined,
+      mobile: input.mobile?.trim() || undefined,
+      area: input.area?.trim() || undefined,
+      expectedAmount: money(expectedAmount),
+      collectedAmount: 0,
+      status: "pending" as HouseholdStatus,
+      assignedCollectorId: input.assignedCollectorId?.trim() || undefined,
+      notes: input.notes?.trim() || undefined,
+      createdBy: actor.uid,
+      createdAt: serverTimestamp(),
+      updatedBy: actor.uid,
+      updatedAt: serverTimestamp(),
+    })
+  );
+  audit(batch, db, pandalId, festivalId, actor.uid, "created", "household", householdId, {
+    newValue: { name, houseNumber: input.houseNumber?.trim() || null, area: input.area?.trim() || null },
+  });
+  activity(batch, db, pandalId, festivalId, {
+    title: name,
+    subtitle: `Household added · Added by ${actor.displayName}`,
+    actorId: actor.uid,
+    entityType: "household",
+    entityId: householdId,
+  });
+  await commitWrite(() => batch.commit(), { label: "household" });
+  return householdId;
+}
+
+export async function recordVisit(
+  db: Firestore,
+  actor: GaneshActor,
+  pandalId: string,
+  festivalId: string,
+  input: {
+    householdId: string;
+    outcome: HouseholdVisitOutcome;
+    promisedAmount?: number;
+    followUpAt?: string;
+    notes?: string;
+  }
+): Promise<void> {
+  await requireOpenFestival(db, pandalId, festivalId);
+  const householdId = input.householdId.trim();
+  if (!householdId) throw new Error("Select a household.");
+  const nextStatus = householdStatusFromVisitOutcome(input.outcome);
+  let promisedAmount = 0;
+  if (input.outcome === "promised") {
+    promisedAmount = Number(input.promisedAmount ?? 0);
+    const valid = validatePositiveAmount(promisedAmount, "Promised amount");
+    if (!valid.ok) throw new Error(valid.error);
+    promisedAmount = money(promisedAmount);
+  }
+  const followUpAt =
+    input.outcome === "follow_up" ? input.followUpAt?.trim() || undefined : undefined;
+
+  await runTransaction(db, async (txn) => {
+    const householdRef = pathRef(db, [
+      ...festivalCol(pandalId, festivalId, "households"),
+      householdId,
+    ]);
+    const snap = await txn.get(householdRef);
+    if (!snap.exists()) throw new Error("Household not found.");
+    const prev = snap.data();
+    const collectedAmount = Number(prev.collectedAmount ?? 0);
+    if (collectedAmount > 0) {
+      throw new Error("This house already has a collection. Record another payment instead.");
+    }
+    const expectedAmount = Number(prev.expectedAmount ?? 0);
+    const status = deriveHouseholdStatus({
+      expectedAmount,
+      collectedAmount,
+      forcedStatus: nextStatus,
+    });
+    txn.update(
+      householdRef,
+      omitUndefined({
+        status,
+        promisedAmount: input.outcome === "promised" ? promisedAmount : 0,
+        followUpAt: followUpAt ?? null,
+        lastVisitAt: serverTimestamp(),
+        notes: input.notes?.trim() || undefined,
+        updatedBy: actor.uid,
+        updatedAt: serverTimestamp(),
+      })
+    );
+    audit(txn, db, pandalId, festivalId, actor.uid, "edited", "household", householdId, {
+      oldValue: { status: prev.status ?? null, promisedAmount: Number(prev.promisedAmount ?? 0) },
+      newValue: { status, promisedAmount, outcome: input.outcome },
+    });
+    activity(txn, db, pandalId, festivalId, {
+      title: typeof prev.name === "string" ? prev.name : "Household",
+      subtitle: `${householdStatusLabel(status)} · Added by ${actor.displayName}`,
+      actorId: actor.uid,
+      entityType: "household",
+      entityId: householdId,
+    });
+  });
 }
 
 export async function updateHousehold(

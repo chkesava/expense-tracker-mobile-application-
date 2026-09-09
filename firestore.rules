@@ -1195,6 +1195,7 @@ service cloud.firestore {
             let d = request.resource.data;
             return okDate(d, 'date')
               && okDate(d, 'expectedDate')
+              && okDate(d, 'followUpAt')
               && okPaymentMethod(d);
           }
 
@@ -1208,6 +1209,7 @@ service cloud.firestore {
               && okMoney(d, 'estimatedValue')
               && okMoney(d, 'expectedAmount')
               && okMoney(d, 'collectedAmount')
+              && okMoney(d, 'promisedAmount')
               && okMoney(d, 'contributionTarget')
               && okSignedMoney(d, 'contributionPaid')
               && okSignedMoney(d, 'personalExpenses')
@@ -1224,7 +1226,7 @@ service cloud.firestore {
                   : subcol == 'sponsorships'
                     ? d.status in ['prospective', 'promised', 'confirmed', 'received', 'cancelled']
                     : subcol == 'households'
-                      ? d.status in ['pending', 'partial', 'paid', 'not_interested', 'not_available']
+                      ? d.status in ['pending', 'visited', 'promised', 'partial', 'paid', 'not_interested', 'not_available']
                     : subcol == 'seva'
                         ? d.status in ['scheduled', 'in_progress', 'completed', 'cancelled']
                         : subcol == 'reimbursements'

@@ -45,10 +45,15 @@ export type FestivalFundTransferDirection = "to_permanent" | "from_permanent";
 
 export type HouseholdStatus =
   | "pending"
+  | "visited"
+  | "promised"
   | "partial"
   | "paid"
   | "not_interested"
   | "not_available";
+
+/** Door outcome with no cash. `follow_up` stores as household status `not_available`. */
+export type HouseholdVisitOutcome = "visited" | "promised" | "follow_up" | "not_interested";
 
 export type ContributionKind = "money" | "item" | "service" | "sponsorship";
 export type ContributionStatus = "promised" | "received" | "cancelled";
@@ -511,6 +516,14 @@ export interface Household {
   status: HouseholdStatus;
   assignedCollectorId?: string;
   notes?: string;
+  /**
+   * Operational promise only (KAN-37). Never counted in `summary.chanda` /
+   * God Fund — collections are the received-cash source of truth.
+   */
+  promisedAmount?: number;
+  lastVisitAt?: FirestoreTime;
+  /** Calendar day `yyyy-mm-dd` when a follow-up was requested. */
+  followUpAt?: string;
   createdBy: string;
   createdAt?: FirestoreTime;
   updatedBy: string;

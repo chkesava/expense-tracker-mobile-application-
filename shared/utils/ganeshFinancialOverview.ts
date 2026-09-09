@@ -64,10 +64,17 @@ export type CollectionCoverage = {
   donors: number;
   paidHouses: number;
   pendingHouses: number;
+  notVisitedHouses: number;
+  visitedHouses: number;
+  promisedHouses: number;
+  partialHouses: number;
+  followUpHouses: number;
   notAvailable: number;
   notInterested: number;
   countableHouses: number;
   coveragePct: number | null;
+  visitCoveragePct: number | null;
+  promisedAmount: number;
   byArea: AreaCoverage[];
   today: CollectionTodayTotals;
 };
@@ -214,16 +221,28 @@ export function buildFinancialOverview(input: FinancialOverviewInput): Financial
   const committeePending = money(Math.max(0, committeeTarget - committeeReceived));
 
   const households = input.households ?? [];
-  const pendingHouses = households.filter(
-    (house) => house.status === "pending" || house.status === "partial"
-  ).length;
+  const notVisitedHouses = households.filter((house) => house.status === "pending").length;
+  const visitedHouses = households.filter((house) => house.status === "visited").length;
+  const promisedHouses = households.filter((house) => house.status === "promised").length;
+  const partialHouses = households.filter((house) => house.status === "partial").length;
   const paidHouses = households.filter((house) => house.status === "paid").length;
-  const notAvailable = households.filter((house) => house.status === "not_available").length;
+  const followUpHouses = households.filter((house) => house.status === "not_available").length;
+  const notAvailable = followUpHouses;
   const notInterested = households.filter((house) => house.status === "not_interested").length;
+  const pendingHouses = notVisitedHouses + visitedHouses + promisedHouses + partialHouses;
   const countableHouses = households.filter(
     (house) => house.status !== "not_interested" && house.status !== "not_available"
   ).length;
   const coveragePct = pct(paidHouses, countableHouses);
+  const visitCountable = households.filter((house) => house.status !== "not_interested").length;
+  const approachedHouses = visitCountable - notVisitedHouses;
+  const visitCoveragePct = pct(Math.max(0, approachedHouses), visitCountable);
+  const promisedAmount = money(
+    households.reduce((sum, house) => {
+      if (house.status !== "promised") return sum;
+      return sum + Number(house.promisedAmount ?? 0);
+    }, 0)
+  );
   const todayKey = input.today ?? "";
   const today = todayKey
     ? summarizeCollectionToday(input.collections ?? [], todayKey)
@@ -266,10 +285,17 @@ export function buildFinancialOverview(input: FinancialOverviewInput): Financial
       donors: summary.collectionCount,
       paidHouses,
       pendingHouses,
+      notVisitedHouses,
+      visitedHouses,
+      promisedHouses,
+      partialHouses,
+      followUpHouses,
       notAvailable,
       notInterested,
       countableHouses,
       coveragePct,
+      visitCoveragePct,
+      promisedAmount,
       byArea: summarizeCoverageByArea(households),
       today,
     },
