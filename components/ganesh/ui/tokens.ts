@@ -15,6 +15,14 @@
  *   and the distinction always carries a text label, never colour alone.
  * - **Seva kinds** — a colour and meaning per kind of pandal activity.
  *
+ * - **Text family** — Inter has no Devanagari, Telugu, Tamil, Kannada or
+ *   Malayalam glyphs, so `font` resolves to the Noto family for the member's
+ *   assigned language and falls back to Inter for English. This lives here
+ *   rather than in `theme/ganeshPalette.ts` on purpose: the palette
+ *   deliberately inherits typography from the shared theme, and putting Indic
+ *   fonts there would reach the Expense Tracker and Nutrition Tracker. This
+ *   module is unreachable from their builds.
+ *
  * Rule: colour marks actions, identity and status. Amounts stay in
  * `foreground`.
  */
@@ -25,6 +33,8 @@ import {
   useSurfaces,
   withAlpha,
 } from "./surfaces";
+import { useGaneshI18n } from "@/providers/GaneshI18nProvider";
+import type { GaneshFontFamily } from "@/shared/i18n/ganesh/fonts";
 import type { SevaKind } from "@/shared/types/ganesh";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
@@ -36,6 +46,11 @@ export type FundKind = "god" | "personal" | "permanent" | "inKind";
 
 export type GaneshTokens = {
   isDark: boolean;
+  /**
+   * Text families for the member's assigned language. Inter for English, the
+   * matching Noto family for an Indic script. Always populated.
+   */
+  font: GaneshFontFamily;
   /** Festival accent — primary actions, active tab, selected chip. */
   saffron: string;
   /** Permanent Pandal Fund identity. Used nowhere else. */
@@ -66,6 +81,8 @@ export type GaneshTokens = {
 export function useGaneshTokens(): GaneshTokens {
   const { theme, themeName } = useTheme();
   const surfaces = useSurfaces();
+  const { fontFamily } = useGaneshI18n();
+  const font: GaneshFontFamily = fontFamily ?? theme.fontFamily;
   const isDark = themeUsesDarkPalette(themeName);
 
   // Saffron is the palette's primary; naming it keeps screens readable.
@@ -133,6 +150,17 @@ export function useGaneshTokens(): GaneshTokens {
 
   return {
     isDark,
+    /**
+     * Text families for the member's assigned language.
+     *
+     * Falls back to Inter for English and while a Noto font is still loading,
+     * so text is always readable — never gate a render on this.
+     *
+     * `components/ganesh/ui/Money.tsx` deliberately does **not** use it:
+     * amounts are Latin digits with lakh grouping and rely on Inter's tabular
+     * figures to line up down a list.
+     */
+    font,
     saffron,
     maroon,
     gold,

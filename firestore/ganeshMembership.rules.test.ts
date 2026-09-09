@@ -5,7 +5,15 @@ import {
   initializeTestEnvironment,
   type RulesTestEnvironment,
 } from "@firebase/rules-unit-testing";
-import { deleteDoc, doc, getDoc, setDoc, updateDoc, writeBatch } from "firebase/firestore";
+import {
+  deleteDoc,
+  deleteField,
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  writeBatch,
+} from "firebase/firestore";
 import { afterAll, beforeAll, beforeEach, describe, it } from "vitest";
 
 /**
@@ -375,6 +383,113 @@ describe("KAN-34 leave Pandal", () => {
         role: "member",
         status: "removed",
       })
+    );
+  });
+});
+
+/**
+ * Admin-assigned display language.
+ *
+ * These are *regression guards*, not new rules. Language assignment relies on
+ * two properties the rules already have — member update needs
+ * `canManageMembers()` (a literal `role == 'admin'`) and carries no field
+ * allowlist, and a member can always read their own member document — so no
+ * rules change shipped with the feature.
+ *
+ * That is precisely why these tests exist: `firestore.rules` is deployed by
+ * hand (docs/FIREBASE_RULES_DEPLOY.md), so if a later refactor adds a `hasOnly`
+ * allowlist to member update, language assignment would break silently in
+ * production. This makes it break in CI instead.
+ */
+describe("member display language", () => {
+  it("lets an active admin set another member's language", async () => {
+    const db = as(ADMIN);
+    await assertSucceeds(
+      updateDoc(doc(db, "pandals", PANDAL, "members", MEMBER), {
+        language: "te",
+      })
+    );
+  });
+
+  it("lets an active admin clear an assignment back to the Pandal default", async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), "pandals", PANDAL, "members", MEMBER), {
+        language: "te",
+      });
+    });
+    const db = as(ADMIN);
+    await assertSucceeds(
+      updateDoc(doc(db, "pandals", PANDAL, "members", MEMBER), {
+        language: deleteField(),
+      })
+    );
+  });
+
+  it("lets an admin set their own language, so they can preview it", async () => {
+    const db = as(ADMIN);
+    await assertSucceeds(
+      updateDoc(doc(db, "pandals", PANDAL, "members", ADMIN), { language: "hi" })
+    );
+  });
+
+  it("does not let an ordinary member set their own language", async () => {
+    // The feature is admin-assigned by design: a collector who cannot navigate
+    // settings is exactly who it exists for, so self-selection is not a path.
+    const db = as(MEMBER);
+    await assertFails(
+      updateDoc(doc(db, "pandals", PANDAL, "members", MEMBER), { language: "ta" })
+    );
+  });
+
+  it("does not let an ordinary member set someone else's language", async () => {
+    const db = as(MEMBER);
+    await assertFails(
+      updateDoc(doc(db, "pandals", PANDAL, "members", ADMIN), { language: "ta" })
+    );
+  });
+
+  it("does not let an admin of another Pandal set a language here", async () => {
+    const db = as(OTHER_ADMIN);
+    await assertFails(
+      updateDoc(doc(db, "pandals", PANDAL, "members", MEMBER), { language: "kn" })
+    );
+  });
+
+  it("lets a member read their own assigned language", async () => {
+    // The client resolves the language off this document before anything else
+    // loads, so this read has to work — including for a suspended member.
+    await env.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), "pandals", PANDAL, "members", SUSPENDED), {
+        language: "ml",
+      });
+    });
+    const db = as(SUSPENDED);
+    await assertSucceeds(getDoc(doc(db, "pandals", PANDAL, "members", SUSPENDED)));
+  });
+
+  it("does not let a language write smuggle in a role change", async () => {
+    // `keepsAdminCount()` and `cannotSelfPromoteToAdmin()` must still apply to
+    // a write that happens to carry a language field.
+    const db = as(MEMBER);
+    await assertFails(
+      updateDoc(doc(db, "pandals", PANDAL, "members", MEMBER), {
+        language: "te",
+        role: "admin",
+      })
+    );
+  });
+
+  it("lets an active admin set the Pandal's default language", async () => {
+    const db = as(ADMIN);
+    await assertSucceeds(
+      updateDoc(doc(db, "pandals", PANDAL), { defaultLanguage: "te" })
+    );
+  });
+
+  it("does not let an ordinary member set the Pandal's default language", async () => {
+    const db = as(MEMBER);
+    await assertFails(
+      updateDoc(doc(db, "pandals", PANDAL), { defaultLanguage: "te" })
     );
   });
 });
