@@ -30,17 +30,17 @@ import { usePandalMembers } from "@/hooks/usePandalMembers";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
-import { useNetwork } from "@/providers/NetworkProvider";
 import { ganeshStoredPath } from "@/services/ganesh/storage/storageService";
 import type { ContributionKind, GaneshContribution } from "@/shared/types/ganesh";
 import {
-  MONEY_RECEIVE_OFFLINE_ERROR,
+  contributionMatchesSource,
   contributionStatusLabel,
   contributionValue,
   isCancelled,
   isOverdue,
   isPromised,
   isReceived,
+  isSponsorMirrorContribution,
   summarizeContributions,
 } from "@/shared/utils/ganeshContributions";
 import { formatGaneshWhen, memberDisplayName, todayDateInput } from "@/shared/utils/ganeshIdentity";
@@ -49,9 +49,11 @@ import { useTheme } from "@/theme/ThemeProvider";
 
 const STATUS_FILTERS = ["all", "promised", "received", "cancelled", "overdue"] as const;
 const KIND_FILTERS = ["all", "money", "item", "service", "sponsorship"] as const;
+const SOURCE_FILTERS = ["all", "committee", "other_cash", "via_sponsor"] as const;
 
 type StatusFilter = (typeof STATUS_FILTERS)[number];
 type KindFilter = (typeof KIND_FILTERS)[number];
+type SourceFilter = (typeof SOURCE_FILTERS)[number];
 
 const STATUS_OPTIONS: Array<{ id: StatusFilter; label: string }> = [
   { id: "all", label: "All" },
@@ -67,6 +69,13 @@ const KIND_OPTIONS: Array<{ id: KindFilter; label: string }> = [
   { id: "item", label: "Items" },
   { id: "service", label: "Service" },
   { id: "sponsorship", label: "Sponsors" },
+];
+
+const SOURCE_OPTIONS: Array<{ id: SourceFilter; label: string }> = [
+  { id: "all", label: "All sources" },
+  { id: "committee", label: "Committee" },
+  { id: "other_cash", label: "Other cash" },
+  { id: "via_sponsor", label: "Via sponsor" },
 ];
 
 const KIND_LABEL: Record<ContributionKind, string> = {
@@ -128,12 +137,12 @@ export function ContributionsList({
   const { members } = usePandalMembers(pandalId);
   const { can } = useGaneshPermissions();
   const writes = useGaneshWrites();
-  const { isOnline } = useNetwork();
 
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(
     () => asStatusFilter(params.status) ?? "all"
   );
   const [kindFilter, setKindFilter] = useState<KindFilter>(() => asKindFilter(params.kind) ?? "all");
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
   const [search, setSearch] = useState("");
   const [receivingId, setReceivingId] = useState<string | null>(null);
 
@@ -174,16 +183,11 @@ export function ContributionsList({
 
   const confirmReceive = useCallback(
     (item: GaneshContribution) => {
-      if (item.kind === "money" && !isOnline) {
-        toast.error(MONEY_RECEIVE_OFFLINE_ERROR);
+      if (item.kind === "money") {
+        onOpen(item.id);
         return;
       }
-      const value = contributionValue(item);
-      const message =
-        item.kind === "money"
-          ? `This adds ${formatInr(value)} to festival cash as cash. Open the contribution to choose UPI or bank.`
-          : "This marks the gift as received. It does not change festival cash.";
-      Alert.alert("Mark received?", message, [
+      Alert.alert("Mark received?", "This marks the gift as received. It does not change festival cash.", [
         { text: "Not now", style: "cancel" },
         {
           text: "Mark received",
@@ -192,7 +196,6 @@ export function ContributionsList({
             writes
               .receiveContribution(item.id, {
                 kind: item.kind,
-                paymentMethod: item.kind === "money" ? "cash" : undefined,
               })
               .catch((caught) => {
                 logError("ganesh.contributions.receive", caught);
@@ -203,7 +206,7 @@ export function ContributionsList({
         },
       ]);
     },
-    [isOnline, writes]
+    [onOpen, writes]
   );
 
   const rows = useMemo(
@@ -215,6 +218,7 @@ export function ContributionsList({
         if (statusFilter === "received" && !isReceived(row)) return false;
         if (statusFilter === "cancelled" && !isCancelled(row)) return false;
         if (statusFilter === "overdue" && !isOverdue(row, today)) return false;
+        if (!contributionMatchesSource(row, sourceFilter)) return false;
         if (
           search.trim()
           && !row.contributorName.toLowerCase().includes(search.trim().toLowerCase())
@@ -224,7 +228,7 @@ export function ContributionsList({
         }
         return true;
       }),
-    [contributions, kindFilter, search, statusFilter, today]
+    [contributions, kindFilter, search, sourceFilter, statusFilter, today]
   );
 
   const renderItem = useCallback(
@@ -234,9 +238,17 @@ export function ContributionsList({
       const Icon = kindIcon(item.kind);
       const isCash = item.kind === "money";
       const promised = isPromised(item);
+      const viaSponsor = isSponsorMirrorContribution(item);
       const title = promised ? item.contributorName : item.itemName || item.contributorName;
       const kindLine = [KIND_LABEL[item.kind], item.quantity || null].filter(Boolean).join(" · ");
-      const meta = promised && item.itemName ? `${kindLine} · ${item.itemName}` : kindLine;
+      const sourceLabel = viaSponsor
+        ? "Via sponsor deal"
+        : item.isCommitteeContribution
+          ? "Committee"
+          : null;
+      const meta = [sourceLabel, promised && item.itemName ? `${kindLine} · ${item.itemName}` : kindLine]
+        .filter(Boolean)
+        .join(" · ");
 
       return (
         <LedgerRow
@@ -380,6 +392,7 @@ export function ContributionsList({
 
       <FilterChips value={statusFilter} options={STATUS_OPTIONS} onChange={setStatusFilter} />
       <FilterChips value={kindFilter} options={KIND_OPTIONS} onChange={setKindFilter} />
+      <FilterChips value={sourceFilter} options={SOURCE_OPTIONS} onChange={setSourceFilter} />
     </>
   );
 
@@ -406,17 +419,21 @@ export function ContributionsList({
           error={error}
           illustration="splits"
           title={
-            search.trim() || statusFilter !== "all" || kindFilter !== "all"
+            search.trim() || statusFilter !== "all" || kindFilter !== "all" || sourceFilter !== "all"
               ? "Nothing matches these filters"
               : "No contributions yet"
           }
           description={
-            search.trim() || statusFilter !== "all" || kindFilter !== "all"
+            search.trim() || statusFilter !== "all" || kindFilter !== "all" || sourceFilter !== "all"
               ? "Clear a filter to see the rest of this festival's support."
               : "Record money, idols, laddus, services, or sponsorships. Promised gifts never increase cash."
           }
           action={
-            canAdd && !search.trim() && statusFilter === "all" && kindFilter === "all"
+            canAdd &&
+            !search.trim() &&
+            statusFilter === "all" &&
+            kindFilter === "all" &&
+            sourceFilter === "all"
               ? { label: "Add contribution", onPress: openAdd }
               : undefined
           }

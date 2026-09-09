@@ -45,6 +45,24 @@ export function isInKindKind(kind: ContributionKind): boolean {
   return kind === "item" || kind === "service";
 }
 
+export type ContributionSourceFilter = "all" | "committee" | "other_cash" | "via_sponsor";
+
+export function contributionMatchesSource(
+  row: Pick<GaneshContribution, "kind" | "isCommitteeContribution" | "sponsorshipId">,
+  source: ContributionSourceFilter
+): boolean {
+  if (source === "all") return true;
+  if (source === "committee") return Boolean(row.isCommitteeContribution);
+  if (source === "via_sponsor") return Boolean(row.sponsorshipId);
+  return row.kind === "money" && !row.isCommitteeContribution && !row.sponsorshipId;
+}
+
+export function isSponsorMirrorContribution(
+  row?: Pick<GaneshContribution, "sponsorshipId"> | null
+): boolean {
+  return Boolean(row?.sponsorshipId);
+}
+
 export type ContributionTotals = {
   cashReceived: number;
   promisedCash: number;

@@ -37,6 +37,7 @@ Do not implement from these files blindly. Inspect the current membership, role,
 | [KAN-36](https://kesavach.atlassian.net/browse/KAN-36) | Feature 03 | Financial Dashboard & Fund Architecture | [KAN-36-financial-dashboard-fund-architecture.md](./KAN-36-financial-dashboard-fund-architecture.md) |
 | [KAN-37](https://kesavach.atlassian.net/browse/KAN-37) | Feature 04 | Collections, Households & Coverage | [KAN-37-collections-households-coverage.md](./KAN-37-collections-households-coverage.md) |
 | [KAN-38](https://kesavach.atlassian.net/browse/KAN-38) | Feature 05 | Expenses, God Fund, Personal Money & Reimbursements | [KAN-38-expenses-god-fund-reimbursements.md](./KAN-38-expenses-god-fund-reimbursements.md) |
+| [KAN-39](https://kesavach.atlassian.net/browse/KAN-39) | Feature 06 | Contributions, In-kind & Sponsors | [KAN-39-contributions-in-kind-sponsors.md](./KAN-39-contributions-in-kind-sponsors.md) |
 
 ## Suggested order
 

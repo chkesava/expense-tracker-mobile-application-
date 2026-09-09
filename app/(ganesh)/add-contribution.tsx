@@ -8,15 +8,17 @@ import { FormDetails } from "@/components/ganesh/FormDetails";
 import { GaneshImageUploader } from "@/components/ganesh/GaneshImageUploader";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { GaneshWriteLock } from "@/components/ganesh/GaneshWriteLock";
-import { GaneshHeader, useGaneshTokens } from "@/components/ganesh/ui";
+import { FilterChips, GaneshHeader, useGaneshTokens } from "@/components/ganesh/ui";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { useFestivalWriteLock } from "@/hooks/useFestivalWriteLock";
 import { pickerStatus, useGaneshPhotoUpload } from "@/hooks/useGaneshPhotoUpload";
 import { useGaneshWrites } from "@/hooks/useGaneshWrites";
+import { usePandalMembers } from "@/hooks/usePandalMembers";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
+import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import type { PreparedGaneshImage } from "@/services/ganesh/storage/storageTypes";
 import { todayDateInput } from "@/shared/utils/ganeshIdentity";
 import type { ContributionKind, ContributionStatus, PaymentMethod } from "@/shared/types/ganesh";
@@ -55,11 +57,18 @@ const METHOD_OPTIONS: Array<{ id: PaymentMethod; label: string }> = [
   { id: "bank", label: "Bank" },
   { id: "other", label: "Other" },
 ];
+const CASH_SOURCE_OPTIONS = [
+  { id: "other" as const, label: "Other cash" },
+  { id: "committee" as const, label: "Committee" },
+];
+type CashSource = (typeof CASH_SOURCE_OPTIONS)[number]["id"];
 
 export default function AddContributionScreen() {
   const { theme } = useTheme();
   const g = useGaneshTokens();
   const { back } = useRouter();
+  const { pandalId } = useGaneshSession();
+  const { members } = usePandalMembers(pandalId);
   const writes = useGaneshWrites();
   const { can } = useGaneshPermissions();
   const { closed, lockMessage } = useFestivalWriteLock();
@@ -67,6 +76,8 @@ export default function AddContributionScreen() {
   const [kind, setKind] = useState<ContributionKind>("item");
   const [status, setStatus] = useState<ContributionStatus>("promised");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
+  const [cashSource, setCashSource] = useState<CashSource>("other");
+  const [contributorMemberId, setContributorMemberId] = useState("");
   const [contributorName, setContributorName] = useState("");
   const [mobile, setMobile] = useState("");
   const [itemName, setItemName] = useState("");
@@ -88,6 +99,9 @@ export default function AddContributionScreen() {
   const canReceive = can("contributions.receive");
   const statusOptions = canReceive ? STATUS_OPTIONS : PROMISE_ONLY_STATUS_OPTIONS;
   const allowsPhoto = PHOTO_KINDS.includes(kind);
+  const committee = members.filter((member) => member.status === "active" || member.status == null);
+  const isCommitteeCash = kind === "money" && cashSource === "committee";
+  const selectedMember = committee.find((member) => member.userId === contributorMemberId);
   const canLinkAsset =
     can("assets.create") &&
     status === "received" &&
@@ -140,6 +154,10 @@ export default function AddContributionScreen() {
         disabled={ledgerSaved}
         onChange={(next) => {
           setKind(next);
+          if (next !== "money") {
+            setCashSource("other");
+            setContributorMemberId("");
+          }
           if (next !== "item" && next !== "sponsorship") {
             setAddAsAsset(false);
           }
@@ -158,13 +176,36 @@ export default function AddContributionScreen() {
           if (next !== "received") setAddAsAsset(false);
         }}
       />
-      <Input
-        label="Contributor"
-        value={contributorName}
-        onChangeText={setContributorName}
-        placeholder="Suresh Kumar"
-        editable={!ledgerSaved}
-      />
+      {kind === "money" ? (
+        <ChoiceChips
+          label="Cash source"
+          value={cashSource}
+          options={CASH_SOURCE_OPTIONS}
+          disabled={ledgerSaved}
+          onChange={(next) => {
+            setCashSource(next);
+            if (next !== "committee") setContributorMemberId("");
+          }}
+        />
+      ) : null}
+      {isCommitteeCash ? (
+        <FilterChips
+          label="Committee person"
+          layout="wrap"
+          value={contributorMemberId}
+          options={committee.map((member) => ({ id: member.userId, label: member.displayName }))}
+          onChange={setContributorMemberId}
+          disabled={ledgerSaved}
+        />
+      ) : (
+        <Input
+          label="Contributor"
+          value={contributorName}
+          onChangeText={setContributorName}
+          placeholder="Suresh Kumar"
+          editable={!ledgerSaved}
+        />
+      )}
       {kind === "money" ? (
         <>
           <Input
@@ -338,12 +379,20 @@ export default function AddContributionScreen() {
               return;
             }
           }
+          if (isCommitteeCash && !selectedMember) {
+            toast.error("Choose the committee person who paid.");
+            return;
+          }
           setBusy(true);
           writes
             .addContribution({
               clientOpId,
               kind,
-              contributorName,
+              contributorName: isCommitteeCash
+                ? selectedMember?.displayName ?? ""
+                : contributorName,
+              contributorMemberId: isCommitteeCash ? selectedMember?.userId : undefined,
+              isCommitteeContribution: isCommitteeCash,
               mobile,
               itemName,
               quantity,
