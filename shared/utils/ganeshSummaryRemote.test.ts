@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   canRequestFestivalSummary,
+  festivalSummaryNeedsRebuild,
   ganeshSummaryFunctionUrl,
   parseSummaryRemoteMode,
 } from "@/shared/utils/ganeshSummaryRemote";
@@ -43,5 +44,58 @@ describe("parseSummaryRemoteMode", () => {
   it("accepts only the three modes the function serves", () => {
     expect(parseSummaryRemoteMode("rebuild")).toBe("rebuild");
     expect(parseSummaryRemoteMode("wipe")).toBeNull();
+  });
+});
+
+describe("festivalSummaryNeedsRebuild", () => {
+  const emptyLedger = {
+    collectionCount: 0,
+    receivedMoneyContributionCount: 0,
+    expenseCount: 0,
+    fundTransferCount: 0,
+    openingFundCount: 0,
+  };
+  const emptySummary = {
+    openingFunds: 0,
+    chanda: 0,
+    committeeContributions: 0,
+    otherCashContributions: 0,
+    godFundExpenses: 0,
+    reimbursements: 0,
+    collectionCount: 0,
+    expenseCount: 0,
+    receivedFromPermanentFund: 0,
+    transferredToPermanentFund: 0,
+  };
+
+  it("is false when both the summary and the ledger are empty", () => {
+    expect(festivalSummaryNeedsRebuild(emptySummary, emptyLedger)).toBe(false);
+  });
+
+  it("is true when collections exist but totals are still zero", () => {
+    expect(
+      festivalSummaryNeedsRebuild(emptySummary, { ...emptyLedger, collectionCount: 2 })
+    ).toBe(true);
+  });
+
+  it("is true for a received contribution or Permanent Fund transfer with empty totals", () => {
+    expect(
+      festivalSummaryNeedsRebuild(emptySummary, {
+        ...emptyLedger,
+        receivedMoneyContributionCount: 1,
+      })
+    ).toBe(true);
+    expect(
+      festivalSummaryNeedsRebuild(emptySummary, { ...emptyLedger, fundTransferCount: 1 })
+    ).toBe(true);
+  });
+
+  it("is false once the summary already has the money", () => {
+    expect(
+      festivalSummaryNeedsRebuild(
+        { ...emptySummary, chanda: 24411, collectionCount: 2 },
+        { ...emptyLedger, collectionCount: 2 }
+      )
+    ).toBe(false);
   });
 });

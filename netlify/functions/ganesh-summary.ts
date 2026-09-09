@@ -56,6 +56,9 @@ function initAdmin() {
 /**
  * Trusted festival-summary writer (KAN-36). Replaces Firebase Cloud Functions
  * so Spark-plan projects do not need `cloudfunctions.googleapis.com`.
+ *
+ * Deployed as CJS. firebase-admin@14 pulls jwks-rsa which `require()`s jose;
+ * the bundle script pins a CJS jose so this module can load on Netlify.
  */
 export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
   if (event.httpMethod === "OPTIONS") {

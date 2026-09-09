@@ -63,7 +63,8 @@ No new composite indexes. No Expense Tracker / `users/{uid}` rule changes.
 - [x] Tests added
 - [x] Netlify function added (replaces Cloud Functions / Blaze)
 - [x] Deploy Web (Netlify) Action copies `FIREBASE_SERVICE_ACCOUNT` from GitHub secrets
-- [ ] After merge: run **Deploy Web (Netlify)** once
+- [x] Pin CJS `jose` so `ganesh-summary` can load under Netlify (firebase-admin → jwks-rsa)
+- [ ] After this fix merges: run **Deploy Web (Netlify)** once
 - [ ] Manual verification
 - [ ] Jira KAN-36 updated after merge
 
@@ -74,9 +75,10 @@ Do **not** click Deploy in the Netlify dashboard. Continuous Deployment stays of
 1. Merge [PR 74](https://github.com/chkesava/expense-tracker-mobile-application-/pull/74) to `main`.
 2. GitHub → **Actions** → **Deploy Web (Netlify)** → **Run workflow** → branch `main`.
 3. Wait until it is green. The Action builds the four web apps, bundles `ganesh-summary`, writes `FIREBASE_SERVICE_ACCOUNT` onto the spendly-share site from the GitHub secret, and deploys.
-4. Confirm https://spendly-share.netlify.app/.netlify/functions/ganesh-summary answers (POST without a token should be 401, not 404).
-5. In Ganesh Seva, add a cash collection and check Home Available / Funds God Fund.
-6. Do not enable Blaze or deploy Firebase Cloud Functions for this ticket.
+4. Confirm https://spendly-share.netlify.app/.netlify/functions/ganesh-summary answers (POST without a token should be **401**, not a `jose` / `ERR_REQUIRE_ESM` crash, and not 404).
+5. Open Ganesh Seva Home on a festival that already has collections or contributions. Pandal Overview Available / Received should fill in after the automatic rebuild (no need to add another collection).
+6. Add a cash collection and check Home Available / Funds God Fund increase by that amount (not promised, not in-kind).
+7. Do not enable Blaze or deploy Firebase Cloud Functions for this ticket.
 
 No new Expo install if `npx expo start` is already running. A store/APK release is only needed later so installed testers get the client that calls Netlify.
 
@@ -85,13 +87,14 @@ No new Expo install if `npx expo start` is already running. A store/APK release 
 No new install is required if `npx expo start` is already running; hot reload picks the client path change up. After merge, run **Deploy Web (Netlify)** once so the function is live.
 
 1. Combined build: Expense Tracker still lists personal expenses after sign-in.
-2. Ganesh Seva: add a cash collection. Home Available and Funds God Fund increase by that amount (not promised, not in-kind).
-3. Add a personal-only expense: God Fund unchanged; pending reimbursement increases.
-4. Promised contribution: dashboard promised tile moves; Available does not.
-5. Permanent Fund donation: PF screen changes; festival God Fund does not.
-6. Close-festival remaining figure matches Funds God Fund.
-7. If a festival still has only `summary/current`, Admin repair (or the setup banner) copies allocators onto `totals`. Receipt numbering does not restart.
-8. Recalculate from ledger (reports) updates Home/Funds without a second collection.
+2. Open Home on a festival that already has Recent Activity but ₹0 Available. Totals should fill in without adding another collection.
+3. Ganesh Seva: add a cash collection. Home Available and Funds God Fund increase by that amount (not promised, not in-kind).
+4. Add a personal-only expense: God Fund unchanged; pending reimbursement increases.
+5. Promised contribution: dashboard promised tile moves; Available does not.
+6. Permanent Fund donation: PF screen changes; festival God Fund does not.
+7. Close-festival remaining figure matches Funds God Fund.
+8. If a festival still has only `summary/current`, Admin repair (or the setup banner) copies allocators onto `totals`. Receipt numbering does not restart.
+9. Recalculate from ledger (reports) updates Home/Funds without a second collection.
 
 ## Leftovers
 
