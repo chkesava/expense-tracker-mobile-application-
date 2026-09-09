@@ -126,7 +126,7 @@ export default function PeopleScreen() {
           {showHouseholds ? (
             <NavRow
               title="Households"
-              meta="Door-to-door chanda rounds"
+              meta={households.length > 0 ? "Door-to-door chanda rounds" : "Add houses for the chanda round"}
               icon={<CollectionIcon size={36} framed={false} />}
               chevronColor={g.saffron}
               value={

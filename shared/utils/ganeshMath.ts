@@ -4,6 +4,7 @@ import type {
   CommitteeContributionStatus,
   Household,
   HouseholdStatus,
+  HouseholdVisitOutcome,
   PermanentFundLocation,
   PermanentFundSummary,
 } from "@/shared/types/ganesh";
@@ -538,6 +539,45 @@ export function validateInKindValue(estimatedValue: number): ValidationResult {
   return validateNonNegativeAmount(estimatedValue, "Estimated value");
 }
 
+const STICKY_VISIT_STATUSES: ReadonlySet<HouseholdStatus> = new Set([
+  "visited",
+  "promised",
+  "not_interested",
+  "not_available",
+]);
+
+export function isStickyVisitStatus(
+  status?: HouseholdStatus | null
+): status is HouseholdStatus {
+  return Boolean(status && STICKY_VISIT_STATUSES.has(status));
+}
+
+export function householdStatusLabel(status: HouseholdStatus): string {
+  switch (status) {
+    case "visited":
+      return "Visited";
+    case "promised":
+      return "Promised";
+    case "partial":
+      return "Partial";
+    case "paid":
+      return "Paid";
+    case "not_interested":
+      return "Not interested";
+    case "not_available":
+      return "Follow-up";
+    default:
+      return "Not visited";
+  }
+}
+
+export function householdStatusFromVisitOutcome(
+  outcome: HouseholdVisitOutcome
+): HouseholdStatus {
+  if (outcome === "follow_up") return "not_available";
+  return outcome;
+}
+
 export function deriveHouseholdStatus(input: {
   expectedAmount: number;
   collectedAmount: number;
@@ -545,12 +585,9 @@ export function deriveHouseholdStatus(input: {
 }): HouseholdStatus {
   const expected = money(input.expectedAmount);
   const collected = money(input.collectedAmount);
-  // Money received clears sticky visit statuses — not_available / not_interested
-  // only stick when there is no cash yet (edits and zero-amount visits).
-  if (
-    collected <= 0
-    && (input.forcedStatus === "not_interested" || input.forcedStatus === "not_available")
-  ) {
+  // Money received clears sticky visit statuses — they only stick when there
+  // is no cash yet (edits and zero-amount visits).
+  if (collected <= 0 && isStickyVisitStatus(input.forcedStatus)) {
     return input.forcedStatus;
   }
   if (collected <= 0) return "pending";
@@ -727,14 +764,17 @@ export function householdProgressLabel(household: Pick<
   Household,
   "expectedAmount" | "collectedAmount" | "status"
 >): string {
-  if (household.status === "not_interested") return "Not interested";
-  if (household.status === "not_available") return "Not available";
+  if (household.status === "not_interested") return householdStatusLabel(household.status);
+  if (household.status === "not_available") return householdStatusLabel(household.status);
+  if (household.status === "visited" || household.status === "promised") {
+    return householdStatusLabel(household.status);
+  }
   if (household.expectedAmount > 0) {
     return `${household.collectedAmount} / ${household.expectedAmount}`;
   }
   if (household.status === "paid") return "Paid";
   if (household.status === "partial") return "Partial";
-  return "Pending";
+  return householdStatusLabel("pending");
 }
 
 export function memberPendingReimbursement(

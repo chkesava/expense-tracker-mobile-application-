@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { Alert, Pressable, Text, View } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, type Href } from "expo-router";
 import { Home } from "lucide-react-native";
 
 import { DuplicateHouseholdDialog } from "@/components/ganesh/DuplicateHouseholdDialog";
@@ -26,12 +26,13 @@ import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import { useNetwork } from "@/providers/NetworkProvider";
 import {
   householdOverpayAmount,
+  householdStatusLabel,
   possibleDuplicateCollections,
   possibleHouseholdDuplicates,
 } from "@/shared/utils/ganeshMath";
 import { formatInr } from "@/shared/utils/ganeshMoney";
 import { memberDisplayName, todayDateInput } from "@/shared/utils/ganeshIdentity";
-import type { PaymentMethod } from "@/shared/types/ganesh";
+import type { HouseholdVisitOutcome, PaymentMethod } from "@/shared/types/ganesh";
 import { useTheme } from "@/theme/ThemeProvider";
 
 const METHOD_OPTIONS: Array<{ id: PaymentMethod; label: string }> = [
@@ -41,10 +42,24 @@ const METHOD_OPTIONS: Array<{ id: PaymentMethod; label: string }> = [
   { id: "other", label: "Other" },
 ];
 
+const QUICK_AMOUNTS = [100, 200, 500, 1000];
+
+const VISIT_ACTIONS: Array<{ id: HouseholdVisitOutcome; label: string }> = [
+  { id: "visited", label: "Visited" },
+  { id: "promised", label: "Promised" },
+  { id: "follow_up", label: "Follow-up" },
+];
+
+function quickAmountOptions(target?: number): number[] {
+  const amounts = new Set(QUICK_AMOUNTS);
+  if (target && target > 0) amounts.add(Math.round(target));
+  return [...amounts].sort((a, b) => a - b);
+}
+
 export default function AddCollectionScreen() {
   const { theme } = useTheme();
   const g = useGaneshTokens();
-  const { back } = useRouter();
+  const { back, push } = useRouter();
   const { realUser } = useAuth();
   const { isOnline } = useNetwork();
   const { pandalId, festivalId } = useGaneshSession();
@@ -92,25 +107,35 @@ export default function AddCollectionScreen() {
 
   const householdResults = useMemo(() => {
     const query = householdSearch.trim().toLowerCase();
-    if (query.length < 2) return [];
+    if (query.length < 1) return [];
     const digits = query.replace(/\D/g, "");
     return households
       .filter((household) => {
         const name = household.name.trim().toLowerCase();
         const house = (household.houseNumber ?? "").trim().toLowerCase();
         const mobileDigits = (household.mobile ?? "").replace(/\D/g, "");
+        const areaValue = (household.area ?? "").trim().toLowerCase();
         return (
           name.includes(query)
           || (house.length > 0 && house.includes(query))
+          || (areaValue.length > 0 && areaValue.includes(query))
           || (digits.length >= 3 && mobileDigits.includes(digits))
         );
       })
       .slice(0, 6);
   }, [households, householdSearch]);
 
+  const quickAmounts = useMemo(
+    () =>
+      quickAmountOptions(
+        remaining && remaining > 0 ? remaining : festival?.householdTargetAmount
+      ),
+    [festival?.householdTargetAmount, remaining]
+  );
+
   const payload = useMemo(
     () => ({
-      donorName,
+      donorName: donorName.trim() || selectedHousehold?.name || "",
       amount: Number(amount),
       paymentMethod: method,
       collectorId: collectorId || realUser?.uid || "",
@@ -135,26 +160,41 @@ export default function AddCollectionScreen() {
       mobile,
       notes,
       realUser?.uid,
+      selectedHousehold?.name,
     ]
   );
+
+  const clearAmount = () => {
+    setAmount("");
+    clientOpIdRef.current = null;
+  };
+
+  const nextHouse = () => {
+    setHouseholdId(null);
+    setDonorName("");
+    setHouseNumber("");
+    setMobile("");
+    setAddress("");
+    setArea("");
+    setNotes("");
+    setHouseholdSearch("");
+    clearAmount();
+  };
 
   const save = async (targetHouseholdId?: string | null) => {
     if (busy) return;
     setBusy(true);
     if (!clientOpIdRef.current) clientOpIdRef.current = newId();
     try {
-      await writes.addCollection({
+      const result = await writes.addCollection({
         ...payload,
         householdId: targetHouseholdId ?? undefined,
         clientOpId: clientOpIdRef.current,
         assignReceipt: isOnline,
-        // GS-076: joins the collector's open session, if they have one. A
-        // collection recorded outside a session is still valid — it is simply
-        // not part of a cash handover — so this never blocks the save.
         sessionId: openSession?.id,
       });
-      clientOpIdRef.current = null;
-      back();
+      if (result.householdId) setHouseholdId(result.householdId);
+      clearAmount();
     } catch (error) {
       logError("ganesh.addCollection", error);
       toast.error(friendlyErrorMessage(error, "Could not save collection."));
@@ -168,10 +208,10 @@ export default function AddCollectionScreen() {
     setHouseholdId(household.id);
     setHouseholdSearch("");
     setMatches([]);
-    if (!donorName.trim()) setDonorName(household.name);
-    if (!houseNumber.trim() && household.houseNumber) setHouseNumber(household.houseNumber);
-    if (!mobile.trim() && household.mobile) setMobile(household.mobile);
-    if (!area.trim() && household.area) setArea(household.area);
+    setDonorName(household.name);
+    if (household.houseNumber) setHouseNumber(household.houseNumber);
+    if (household.mobile) setMobile(household.mobile);
+    if (household.area) setArea(household.area);
   };
 
   const proceedAfterDuplicateChecks = (targetHouseholdId?: string | null) => {
@@ -179,7 +219,7 @@ export default function AddCollectionScreen() {
     const resolvedHouseholdId = targetHouseholdId ?? householdId;
     const duplicates = possibleDuplicateCollections(collections, {
       householdId: resolvedHouseholdId,
-      donorName,
+      donorName: payload.donorName,
       houseNumber,
       amount: Number(amount),
       date: todayDateInput(),
@@ -208,14 +248,20 @@ export default function AddCollectionScreen() {
   };
 
   const onSubmit = () => {
+    if (!payload.donorName.trim()) {
+      toast.error("Select a household or enter the donor name.");
+      return;
+    }
     if (householdId) {
       proceedAfterDuplicateChecks(householdId);
       return;
     }
     const foundIds = new Set(
-      possibleHouseholdDuplicates(households, { name: donorName, houseNumber, mobile }).map(
-        (household) => household.id
-      )
+      possibleHouseholdDuplicates(households, {
+        name: payload.donorName,
+        houseNumber,
+        mobile,
+      }).map((household) => household.id)
     );
     const found = households.filter((household) => foundIds.has(household.id));
     if (found.length > 0) {
@@ -225,12 +271,50 @@ export default function AddCollectionScreen() {
     proceedAfterDuplicateChecks(null);
   };
 
+  const recordVisit = async (outcome: HouseholdVisitOutcome) => {
+    if (!selectedHousehold) {
+      toast.error("Select a household first.");
+      return;
+    }
+    if (busy) return;
+    let promisedAmount: number | undefined;
+    if (outcome === "promised") {
+      const typed = Number(amount);
+      const fallback =
+        remaining && remaining > 0
+          ? remaining
+          : Number(selectedHousehold.expectedAmount ?? 0);
+      promisedAmount = Number.isFinite(typed) && typed > 0 ? typed : fallback;
+      if (!(promisedAmount > 0)) {
+        toast.error("Enter the promised amount.");
+        return;
+      }
+    }
+    setBusy(true);
+    try {
+      await writes.recordVisit({
+        householdId: selectedHousehold.id,
+        outcome,
+        promisedAmount,
+        followUpAt: outcome === "follow_up" ? todayDateInput() : undefined,
+      });
+      if (outcome === "promised") setAmount("");
+    } catch (error) {
+      logError("ganesh.recordVisit", error);
+      toast.error(friendlyErrorMessage(error, "Could not record the visit."));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (!can("collections.create")) {
     return <GaneshWriteLock message="Your role cannot add collections." />;
   }
   if (closed) {
     return <GaneshWriteLock message={lockMessage} />;
   }
+
+  const canSeedHousehold = can("collections.update");
 
   return (
     <GaneshScreen>
@@ -239,6 +323,19 @@ export default function AddCollectionScreen() {
         icon={<Home size={22} color={g.saffron} strokeWidth={2.2} />}
         onBack={back}
       />
+      {!isOnline ? (
+        <Text
+          style={{
+            color: g.saffron,
+            fontFamily: theme.fontFamily.semibold,
+            lineHeight: 20,
+          }}
+        >
+          You are offline. Saves stay on this device until they sync — they are not confirmed in
+          the cloud yet.
+        </Text>
+      ) : null}
+
       {selectedHousehold ? (
         <View
           style={{
@@ -247,10 +344,11 @@ export default function AddCollectionScreen() {
             borderRadius: 14,
             padding: 12,
             gap: 6,
+            borderCurve: "continuous",
           }}
         >
           <Text style={{ color: theme.colors.mutedForeground, fontWeight: "700" }}>
-            Adding to an existing household
+            {householdStatusLabel(selectedHousehold.status)}
           </Text>
           <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>
             {selectedHousehold.name}
@@ -260,6 +358,9 @@ export default function AddCollectionScreen() {
             {selectedHousehold.expectedAmount > 0
               ? `Collected ${formatInr(selectedHousehold.collectedAmount)} of ${formatInr(selectedHousehold.expectedAmount)}`
               : `Collected ${formatInr(selectedHousehold.collectedAmount)}`}
+            {selectedHousehold.status === "promised" && Number(selectedHousehold.promisedAmount ?? 0) > 0
+              ? ` · promised ${formatInr(selectedHousehold.promisedAmount ?? 0)}`
+              : ""}
           </Text>
           {remaining !== null ? (
             <Text style={{ color: theme.colors.mutedForeground }}>
@@ -271,17 +372,34 @@ export default function AddCollectionScreen() {
               This amount is {formatInr(overpay)} over the expected target. You can still save it.
             </Text>
           ) : null}
-          <Button variant="outline" onPress={() => setHouseholdId(null)}>
-            Record as a new household instead
+          {selectedHousehold.collectedAmount <= 0 ? (
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
+              {VISIT_ACTIONS.map((action) => (
+                <Button
+                  key={action.id}
+                  size="sm"
+                  variant="outline"
+                  disabled={busy}
+                  onPress={() => {
+                    void recordVisit(action.id);
+                  }}
+                >
+                  {action.label}
+                </Button>
+              ))}
+            </View>
+          ) : null}
+          <Button variant="outline" onPress={nextHouse}>
+            Next house
           </Button>
         </View>
       ) : (
         <View style={{ gap: 8 }}>
           <Input
-            label="Already collected from this house before? (optional)"
+            label="Search household"
             value={householdSearch}
             onChangeText={setHouseholdSearch}
-            placeholder="Search by name, house number or mobile"
+            placeholder="Name, house number, area or mobile"
           />
           {householdResults.map((household) => (
             <Pressable
@@ -293,6 +411,7 @@ export default function AddCollectionScreen() {
                 borderRadius: 12,
                 paddingHorizontal: 12,
                 paddingVertical: 10,
+                borderCurve: "continuous",
               }}
             >
               <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>
@@ -300,20 +419,36 @@ export default function AddCollectionScreen() {
                 {household.houseNumber ? ` · House #${household.houseNumber}` : ""}
               </Text>
               <Text style={{ color: theme.colors.mutedForeground }}>
+                {householdStatusLabel(household.status)}
+                {household.area ? ` · ${household.area}` : ""}
                 {household.expectedAmount > 0
-                  ? `Collected ${formatInr(household.collectedAmount)} of ${formatInr(household.expectedAmount)}`
-                  : `Collected ${formatInr(household.collectedAmount)}`}
+                  ? ` · ${formatInr(household.collectedAmount)} of ${formatInr(household.expectedAmount)}`
+                  : ` · ${formatInr(household.collectedAmount)}`}
               </Text>
             </Pressable>
           ))}
-          {householdSearch.trim().length >= 2 && householdResults.length === 0 ? (
+          {householdSearch.trim().length >= 1 && householdResults.length === 0 ? (
             <Text style={{ color: theme.colors.mutedForeground }}>
-              No household matches that. Fill the form below to start a new one.
+              No household matches that. Enter a name below to record a new collection, or add the
+              household first.
             </Text>
+          ) : null}
+          {canSeedHousehold ? (
+            <Button variant="outline" onPress={() => push("/(ganesh)/add-household" as Href)}>
+              Add household
+            </Button>
           ) : null}
         </View>
       )}
-      <Input label="Name" value={donorName} onChangeText={setDonorName} placeholder="Ramesh Kumar" />
+
+      {selectedHousehold ? null : (
+        <Input
+          label="Name"
+          value={donorName}
+          onChangeText={setDonorName}
+          placeholder="Ramesh Kumar"
+        />
+      )}
       <Input
         label="Amount"
         value={amount}
@@ -321,6 +456,30 @@ export default function AddCollectionScreen() {
         keyboardType="numeric"
         placeholder="500"
       />
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+        {quickAmounts.map((value) => (
+          <Pressable
+            key={value}
+            onPress={() => setAmount(String(value))}
+            style={{
+              backgroundColor: amount === String(value) ? g.wash(g.saffron) : g.tile,
+              borderRadius: 999,
+              paddingHorizontal: 12,
+              paddingVertical: 8,
+              borderCurve: "continuous",
+            }}
+          >
+            <Text
+              style={{
+                color: amount === String(value) ? g.saffron : theme.colors.mutedForeground,
+                fontFamily: theme.fontFamily.semibold,
+              }}
+            >
+              {formatInr(value)}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
       <FilterChips
         label="Payment method"
         layout="wrap"
@@ -336,6 +495,9 @@ export default function AddCollectionScreen() {
         onChange={setCollectorId}
       />
       <FormDetails>
+        {selectedHousehold ? (
+          <Input label="Name" value={donorName} onChangeText={setDonorName} />
+        ) : null}
         <Input
           label="Mobile (optional)"
           value={mobile}
@@ -348,7 +510,7 @@ export default function AddCollectionScreen() {
           onChangeText={setHouseNumber}
         />
         <Input label="Address (optional)" value={address} onChangeText={setAddress} />
-        <Input label="Area (optional)" value={area} onChangeText={setArea} />
+        <Input label="Area / street (optional)" value={area} onChangeText={setArea} />
         <Input label="Notes (optional)" value={notes} onChangeText={setNotes} />
       </FormDetails>
       <Button loading={busy} onPress={onSubmit}>

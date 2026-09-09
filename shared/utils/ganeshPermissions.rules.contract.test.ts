@@ -709,6 +709,7 @@ const RULE_MONEY_FIELDS = [
   "estimatedValue",
   "expectedAmount",
   "collectedAmount",
+  "promisedAmount",
   "contributionTarget",
 ];
 
@@ -734,7 +735,7 @@ function payloadWellFormed(subcol: string, d: Record<string, unknown>): boolean 
             d.status as string
           )
         : subcol === "households"
-          ? ["pending", "partial", "paid", "not_interested", "not_available"].includes(
+          ? ["pending", "visited", "promised", "partial", "paid", "not_interested", "not_available"].includes(
               d.status as string
             )
           : subcol === "seva"

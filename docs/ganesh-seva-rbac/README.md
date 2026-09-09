@@ -35,6 +35,7 @@ Do not implement from these files blindly. Inspect the current membership, role,
 | [KAN-34](https://kesavach.atlassian.net/browse/KAN-34) | Feature 01 | Foundation Auth & Pandal Membership | [KAN-34-foundation-auth-pandal-membership.md](./KAN-34-foundation-auth-pandal-membership.md) |
 | [KAN-35](https://kesavach.atlassian.net/browse/KAN-35) | Feature 02 | Pandal & Festival Management | [KAN-35-pandal-festival-management.md](./KAN-35-pandal-festival-management.md) |
 | [KAN-36](https://kesavach.atlassian.net/browse/KAN-36) | Feature 03 | Financial Dashboard & Fund Architecture | [KAN-36-financial-dashboard-fund-architecture.md](./KAN-36-financial-dashboard-fund-architecture.md) |
+| [KAN-37](https://kesavach.atlassian.net/browse/KAN-37) | Feature 04 | Collections, Households & Coverage | [KAN-37-collections-households-coverage.md](./KAN-37-collections-households-coverage.md) |
 
 ## Suggested order
 

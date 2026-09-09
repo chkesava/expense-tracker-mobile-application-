@@ -187,6 +187,31 @@ describe("GS-004 value validation is live", () => {
       })
     );
   });
+
+  it("accepts visited and promised household statuses (KAN-37)", async () => {
+    const db = as(COLLECTOR);
+    await assertSucceeds(
+      setDoc(doc(db, "pandals", PANDAL, "festivals", FESTIVAL, "households", "h-visited"), {
+        name: "House 10",
+        expectedAmount: 500,
+        collectedAmount: 0,
+        status: "visited",
+        createdBy: COLLECTOR,
+        updatedBy: COLLECTOR,
+      })
+    );
+    await assertSucceeds(
+      setDoc(doc(db, "pandals", PANDAL, "festivals", FESTIVAL, "households", "h-promised"), {
+        name: "House 11",
+        expectedAmount: 500,
+        collectedAmount: 0,
+        promisedAmount: 500,
+        status: "promised",
+        createdBy: COLLECTOR,
+        updatedBy: COLLECTOR,
+      })
+    );
+  });
 });
 
 describe("GS-004 summary forgery", () => {
