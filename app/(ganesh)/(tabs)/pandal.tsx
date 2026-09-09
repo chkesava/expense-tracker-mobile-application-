@@ -26,7 +26,8 @@ import { toast } from "@/lib/toast";
 import { useWorkspace } from "@/providers/WorkspaceProvider";
 import { formatPandalCode } from "@/shared/utils/ganeshIdentity";
 import { formatInr } from "@/shared/utils/ganeshMoney";
-import { ganeshRoleLabel } from "@/shared/utils/ganeshPermissions";
+import { useGaneshT } from "@/providers/GaneshI18nProvider";
+import { ganeshRoleLabelKey } from "@/shared/utils/ganeshPermissions";
 
 const ROLE_ORDER: Record<string, number> = {
   admin: 0,
@@ -41,6 +42,7 @@ const ROLE_ORDER: Record<string, number> = {
  * People. This tab answers who we are, what we own, and who can change it.
  */
 export default function PandalScreen() {
+  const t = useGaneshT();
   const g = useGaneshTokens();
   const { push } = useRouter();
   const { logout } = useAuth();
@@ -193,7 +195,7 @@ export default function PandalScreen() {
           festivalName={festival?.name}
           festival={festival}
           committeeSize={committee.length}
-          roleLabel={role ? ganeshRoleLabel(role) : undefined}
+          roleLabel={role ? t(ganeshRoleLabelKey(role)) : undefined}
         />
 
         {showProperty ? (

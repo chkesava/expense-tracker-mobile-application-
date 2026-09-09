@@ -25,7 +25,8 @@ import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import type { PandalMember, PandalMemberAudit, PandalRole } from "@/shared/types/ganesh";
 import { formatGaneshWhen } from "@/shared/utils/ganeshIdentity";
 import { memberAuditLine } from "@/shared/utils/ganeshMemberCopy";
-import { ganeshRoleLabel, ganeshStatusLabel } from "@/shared/utils/ganeshPermissions";
+import { useGaneshT, type GaneshTranslate } from "@/providers/GaneshI18nProvider";
+import { ganeshRoleLabelKey, ganeshStatusLabelKey } from "@/shared/utils/ganeshPermissions";
 import { useTheme } from "@/theme/ThemeProvider";
 
 type Filter = "all" | "admin" | "active" | "suspended";
@@ -37,13 +38,24 @@ const FILTER_OPTIONS: Array<{ id: Filter; label: string }> = [
   { id: "suspended", label: "Suspended" },
 ];
 
-function memberRolesLabel(member: PandalMember, roles: PandalRole[]): string {
-  if (member.role === "admin") return "Pandal Admin";
+/**
+ * `t` is threaded in rather than called here: this is a module-level pure
+ * function and the language lives in a React context.
+ *
+ * Custom role *names* are committee-authored free text stored in Firestore, so
+ * they stay exactly as typed — only the built-in role names are translated.
+ */
+function memberRolesLabel(
+  member: PandalMember,
+  roles: PandalRole[],
+  t: GaneshTranslate
+): string {
+  if (member.role === "admin") return t("common.role.admin");
   const names = (member.roleIds ?? [])
     .map((roleId) => roles.find((role) => role.id === roleId)?.name)
     .filter(Boolean);
   if (names.length > 0) return names.join(" · ");
-  return ganeshRoleLabel(member.role);
+  return t(ganeshRoleLabelKey(member.role));
 }
 
 function auditLine(audit: PandalMemberAudit, members: PandalMember[]): string {
@@ -53,6 +65,7 @@ function auditLine(audit: PandalMemberAudit, members: PandalMember[]): string {
 export default function GaneshMembersScreen() {
   const { theme } = useTheme();
   const g = useGaneshTokens();
+  const t = useGaneshT();
   const { push, back } = useRouter();
   const { pandalId } = useGaneshSession();
   const { members, loading, error } = usePandalMembers(pandalId);
@@ -82,7 +95,7 @@ export default function GaneshMembersScreen() {
         if (!needle) return true;
         return (
           member.displayName.toLowerCase().includes(needle)
-          || memberRolesLabel(member, roles).toLowerCase().includes(needle)
+          || memberRolesLabel(member, roles, t).toLowerCase().includes(needle)
         );
       })
       .slice()
@@ -157,12 +170,12 @@ export default function GaneshMembersScreen() {
               icon={<Avatar name={member.displayName} seed={member.userId} />}
               iconTint="none"
               title={member.displayName}
-              meta={memberRolesLabel(member, roles)}
+              meta={memberRolesLabel(member, roles, t)}
               badges={
                 member.role === "admin"
                   ? [{ kind: "permanent", label: "Admin" }]
                   : member.status === "suspended"
-                    ? [{ kind: "cancelled", label: ganeshStatusLabel(member.status) }]
+                    ? [{ kind: "cancelled", label: t(ganeshStatusLabelKey(member.status)) }]
                     : undefined
               }
               when={member.createdAt ? `Joined ${formatGaneshWhen(member.createdAt)}` : undefined}

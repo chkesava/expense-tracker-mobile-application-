@@ -10,10 +10,12 @@ import Animated, {
 import { Flame, Home, IndianRupee, Landmark, Users, type LucideIcon } from "lucide-react-native";
 
 import { GaneshArt } from "@/components/ganesh/art/GaneshArt";
+import { GANESH_TAB_LABEL_KEYS } from "@/components/ganesh/i18n/ganeshTabs";
 import { BOTTOM_NAV_BAR_HEIGHT } from "@/components/layout/chrome";
 import { useGaneshTokens } from "@/components/ganesh/ui/tokens";
 import { haptic } from "@/lib/haptics";
 import { durations, easing } from "@/theme/motion";
+import { useGaneshT } from "@/providers/GaneshI18nProvider";
 import { useTheme } from "@/theme/ThemeProvider";
 
 /**
@@ -29,27 +31,33 @@ import { useTheme } from "@/theme/ThemeProvider";
  * routes and keep working; they are simply no longer top-level destinations.
  * Every existing deep link still resolves.
  */
-const TABS: Array<{ name: string; label: string; Icon: LucideIcon }> = [
-  { name: "index", label: "Home", Icon: Home },
-  { name: "seva", label: "Seva", Icon: Flame },
-  { name: "funds", label: "Funds", Icon: IndianRupee },
-  { name: "people", label: "People", Icon: Users },
-  { name: "pandal", label: "Pandal", Icon: Landmark },
+/**
+ * Labels come from `GANESH_TAB_LABEL_KEYS` rather than being spelled out here,
+ * so the bar and the route titles in `(tabs)/_layout.tsx` cannot drift apart.
+ */
+const TABS: Array<{ name: string; Icon: LucideIcon }> = [
+  { name: "index", Icon: Home },
+  { name: "seva", Icon: Flame },
+  { name: "funds", Icon: IndianRupee },
+  { name: "people", Icon: Users },
+  { name: "pandal", Icon: Landmark },
 ];
 
 function TabDestination({
-  label,
+  routeName,
   Icon,
   isFocused,
   onPress,
 }: {
-  label: string;
+  routeName: string;
   Icon: LucideIcon;
   isFocused: boolean;
   onPress: () => void;
 }) {
   const { theme } = useTheme();
   const g = useGaneshTokens();
+  const t = useGaneshT();
+  const label = t(GANESH_TAB_LABEL_KEYS[routeName]);
   const progress = useSharedValue(isFocused ? 1 : 0);
 
   useEffect(() => {
@@ -72,7 +80,7 @@ function TabDestination({
     <Pressable
       accessibilityRole="tab"
       accessibilityState={{ selected: isFocused }}
-      accessibilityLabel={`Go to ${label}`}
+      accessibilityLabel={t("nav.a11y.goTo", { screen: label })}
       onPress={onPress}
       android_ripple={{
         color: g.isDark ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.06)",
@@ -92,7 +100,7 @@ function TabDestination({
           minimumFontScale={0.8}
           style={[
             styles.label,
-            { color, fontFamily: isFocused ? theme.fontFamily.semibold : theme.fontFamily.medium },
+            { color, fontFamily: isFocused ? g.font.semibold : g.font.medium },
           ]}
         >
           {label}
@@ -144,7 +152,7 @@ export function GaneshTabBar({
         return (
           <TabDestination
             key={route.key}
-            label={meta.label}
+            routeName={route.name}
             Icon={meta.Icon}
             isFocused={isFocused}
             onPress={() => {
