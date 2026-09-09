@@ -131,6 +131,9 @@ jobs:
         run: |
           npm run build:ganesh-summary-fn
           npm install --omit=dev --prefix netlify/functions-dist
+          # Reproduce Netlify's CJS runtime: jose@6 is ESM-only and must not be
+          # the copy jwks-rsa require()s, or the function crashes before 401.
+          node --no-experimental-require-module -e "require('./netlify/functions-dist/ganesh-summary.js'); console.log('ganesh-summary loaded')"
 
       - name: Deploy to Netlify
         env:

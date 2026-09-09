@@ -31,6 +31,11 @@ if (result.status !== 0) {
   process.exit(result.status ?? 1);
 }
 
+// firebase-admin@14 → jwks-rsa@4 → jose@6. jose 6 is ESM-only; jwks-rsa still
+// `require()`s it, which crashes Netlify's CJS runtime (ERR_REQUIRE_ESM) before
+// the handler runs. Pin a dual CJS/ESM jose so verifyIdToken can load.
+const JOSE_CJS = "4.15.9";
+
 fs.writeFileSync(
   path.join(outDir, "package.json"),
   `${JSON.stringify(
@@ -38,6 +43,7 @@ fs.writeFileSync(
       name: "ganesh-summary-fn",
       private: true,
       dependencies: { "firebase-admin": "14.2.0" },
+      overrides: { jose: JOSE_CJS, "jwks-rsa": { jose: JOSE_CJS } },
     },
     null,
     2

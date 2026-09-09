@@ -16,6 +16,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -28,6 +29,7 @@ import { useAuth } from "@/providers/AuthProvider";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import { useNetwork } from "@/providers/NetworkProvider";
 import { rememberGaneshRoleSeed } from "@/services/ganesh/ganeshHydrated";
+import { requestFestivalSummaryRebuild } from "@/services/ganesh/ganeshSummaryClient";
 import { assignPendingCollectionReceipts } from "@/services/ganesh/ganeshWrites";
 import {
   EMPTY_GANESH_SUMMARY,
@@ -63,7 +65,9 @@ import {
   isActiveMembershipIndexStatus,
   sessionPandalIsActive,
 } from "@/shared/utils/ganeshAuthorization";
+import { isReceived } from "@/shared/utils/ganeshContributions";
 import { parseGaneshSummary, parsePermanentFund } from "@/shared/utils/ganeshMath";
+import { festivalSummaryNeedsRebuild } from "@/shared/utils/ganeshSummaryRemote";
 import {
   festivalCol,
   festivalsCol,
@@ -523,6 +527,57 @@ export function GaneshDataProvider({ children }: { children: ReactNode }) {
     mapDoc,
     { orderByField: "createdAt", orderDirection: "desc", limitTo: 200 }
   );
+
+  const staleSummaryHealKey = useRef("");
+  useEffect(() => {
+    staleSummaryHealKey.current = "";
+  }, [pandalId, festivalId]);
+
+  useEffect(() => {
+    if (!isOnline || !pandalId || !festivalId || !sessionMembershipActive) return;
+    if (summaryLoading || summaryError) return;
+    if (collections.loading || contributions.loading || expenses.loading || activity.loading) {
+      return;
+    }
+    const key = `${pandalId}:${festivalId}`;
+    if (staleSummaryHealKey.current === key) return;
+    const fundOrOpening = activity.items.filter((row) => {
+      const type = String(row.entityType ?? "");
+      return type.includes("fundTransfer") || type.includes("opening");
+    }).length;
+    if (
+      !festivalSummaryNeedsRebuild(summary, {
+        collectionCount: collections.items.filter((row) => !row.voided).length,
+        receivedMoneyContributionCount: contributions.items.filter(
+          (row) => isReceived(row) && row.kind === "money"
+        ).length,
+        expenseCount: expenses.items.filter((row) => !row.voided).length,
+        fundTransferCount: fundOrOpening,
+        openingFundCount: openingFunds.items.filter((row) => !row.voided).length,
+      })
+    ) {
+      return;
+    }
+    staleSummaryHealKey.current = key;
+    requestFestivalSummaryRebuild({ pandalId, festivalId });
+  }, [
+    activity.items,
+    activity.loading,
+    collections.items,
+    collections.loading,
+    contributions.items,
+    contributions.loading,
+    expenses.items,
+    expenses.loading,
+    festivalId,
+    isOnline,
+    openingFunds.items,
+    pandalId,
+    sessionMembershipActive,
+    summary,
+    summaryError,
+    summaryLoading,
+  ]);
 
   useEffect(() => {
     rememberGaneshRoleSeed(
