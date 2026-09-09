@@ -35,8 +35,8 @@ import {
   SPONSORSHIP_PURPOSES,
   isSponsorshipOverdue,
   purposeLabelOf,
+  sponsorListAmounts,
   sponsorshipStatusLabel,
-  sponsorshipValue,
   summarizeSponsorships,
 } from "@/shared/utils/ganeshSponsors";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -166,7 +166,7 @@ export default function SponsorsScreen() {
   const renderItem = useCallback(
     ({ item }: { item: PandalSponsor }) => {
       const deals = sponsorships.filter((row) => row.sponsorId === item.id);
-      const value = deals.reduce((sum, row) => sum + sponsorshipValue(row), 0);
+      const amounts = sponsorListAmounts(deals);
       const first = deals[0];
       const overdue = deals.some((row) => isSponsorshipOverdue(row));
 
@@ -190,9 +190,11 @@ export default function SponsorsScreen() {
           badges={
             first ? [sponsorBadge(sponsorshipStatusLabel(first), overdue)] : undefined
           }
-          amount={value > 0 ? value : undefined}
+          amount={amounts.received > 0 ? amounts.received : undefined}
           amountMeta={
-            value > 0 && deals.length > 1 ? <MetaLabel>Total</MetaLabel> : undefined
+            amounts.promised > 0 ? (
+              <MetaLabel>Promised {formatInr(amounts.promised)}</MetaLabel>
+            ) : undefined
           }
           pending={item.pendingWrite}
           onPress={onOpen}

@@ -233,6 +233,35 @@ export type SponsorBreakdownRow = {
   expensePaid: number;
 };
 
+export type SponsorListAmounts = {
+  /** Cash + in-kind that has already arrived. Expense deals stay out. */
+  received: number;
+  /** Promised and confirmed leftover — never the row amount. */
+  promised: number;
+};
+
+export function sponsorListAmounts(
+  deals: Array<
+    Pick<GaneshSponsorship, "sponsoringType" | "amount" | "estimatedValue" | "status">
+  >
+): SponsorListAmounts {
+  let received = 0;
+  let promised = 0;
+  for (const deal of deals ?? []) {
+    if (!deal) continue;
+    const value = sponsorshipValue(deal);
+    const status = sponsorshipStatusOf(deal);
+    if (status === "received") {
+      if (deal.sponsoringType === "cash" || isInKindSponsoring(deal.sponsoringType)) {
+        received += value;
+      }
+    } else if (status === "promised" || status === "confirmed") {
+      promised += value;
+    }
+  }
+  return { received: money(received), promised: money(promised) };
+}
+
 export function breakdownSponsors(
   rows: Array<
     Pick<

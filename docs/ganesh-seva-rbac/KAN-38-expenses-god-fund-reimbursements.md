@@ -104,7 +104,7 @@ No new install is required if `npx expo start` is already running; hot reload pi
 - Per-expense reimbursement lifecycle (`pending` → `partial` → `paid`)
 - Budget vs actual by category
 - [KAN-42](https://kesavach.atlassian.net/browse/KAN-42) settlement / Permanent Fund polish
-- [KAN-39](https://kesavach.atlassian.net/browse/KAN-39) contributions / sponsors
+- [KAN-39](https://kesavach.atlassian.net/browse/KAN-39) contributions / sponsors — see [KAN-39-contributions-in-kind-sponsors.md](./KAN-39-contributions-in-kind-sponsors.md)
 - [KAN-40](https://kesavach.atlassian.net/browse/KAN-40) assets / document vault
 - Full expense metadata edit (category / funding-source change as a new audited event)
 - Dedicated `reimbursements.void` permission

@@ -8,11 +8,13 @@ import {
   assertMoneyReceiveOnline,
   assertReimbursementOnline,
   assertVoidOnline,
+  contributionMatchesSource,
   contributionStatusLabel,
   isCancelled,
   isOverdue,
   isPromised,
   isReceived,
+  isSponsorMirrorContribution,
   summarizeContributions,
 } from "./ganeshContributions";
 import { availableGodFund, summarizeLedger } from "./ganeshMath";
@@ -92,6 +94,25 @@ describe("summarizeContributions", () => {
     expect(promised.promisedCash).toBe(5000);
     expect(promised.cashReceived).toBe(0);
     expect(availableGodFund(ledger)).toBe(10000);
+  });
+});
+
+describe("contribution source filters", () => {
+  it("separates committee cash, other cash, and sponsor-mirror rows", () => {
+    const committee = { kind: "money" as const, isCommitteeContribution: true };
+    const otherCash = { kind: "money" as const };
+    const viaSponsor = { kind: "money" as const, sponsorshipId: "deal-1" };
+    const idol = { kind: "item" as const };
+
+    expect(contributionMatchesSource(committee, "committee")).toBe(true);
+    expect(contributionMatchesSource(otherCash, "committee")).toBe(false);
+    expect(contributionMatchesSource(otherCash, "other_cash")).toBe(true);
+    expect(contributionMatchesSource(viaSponsor, "other_cash")).toBe(false);
+    expect(contributionMatchesSource(viaSponsor, "via_sponsor")).toBe(true);
+    expect(contributionMatchesSource(idol, "other_cash")).toBe(false);
+    expect(contributionMatchesSource(committee, "all")).toBe(true);
+    expect(isSponsorMirrorContribution(viaSponsor)).toBe(true);
+    expect(isSponsorMirrorContribution({})).toBe(false);
   });
 });
 

@@ -8,6 +8,7 @@ import {
   breakdownSponsors,
   canLinkSponsoredExpense,
   isSponsorshipOverdue,
+  sponsorListAmounts,
   sponsorshipStatusLabel,
   summarizeSponsorships,
 } from "./ganeshSponsors";
@@ -95,6 +96,17 @@ describe("summarizeSponsorships", () => {
     expect(fest2026.pendingCount).toBe(3);
     expect(fest2027.cashReceived).toBe(0);
     expect(fest2027.sponsorCount).toBe(0);
+  });
+
+  it("uses received cash and in-kind as the list amount, not promised leftover", () => {
+    const amounts = sponsorListAmounts([
+      { sponsoringType: "cash", amount: 8000, estimatedValue: 0, status: "received" },
+      { sponsoringType: "item", amount: 0, estimatedValue: 15000, status: "received" },
+      { sponsoringType: "cash", amount: 5000, estimatedValue: 0, status: "promised" },
+      { sponsoringType: "expense", amount: 3000, estimatedValue: 0, status: "received" },
+    ]);
+    expect(amounts.received).toBe(23000);
+    expect(amounts.promised).toBe(5000);
   });
 
   it("groups received and promised totals per sponsor", () => {

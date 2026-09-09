@@ -68,6 +68,7 @@ export default function ContributionDetailScreen() {
   const [receivedNotes, setReceivedNotes] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
   const [cancelReason, setCancelReason] = useState("");
+  const [voidReason, setVoidReason] = useState("");
   const [addAsAsset, setAddAsAsset] = useState(false);
   const [assetCategory, setAssetCategory] = useState<(typeof ASSET_CATEGORIES)[number]["id"]>("other");
   const [assetUnit, setAssetUnit] = useState<(typeof ASSET_UNITS)[number]["id"]>("pieces");
@@ -86,6 +87,11 @@ export default function ContributionDetailScreen() {
   const canReceive = can("contributions.receive") && openFestival && promised;
   const canCancel = can("contributions.cancel") && openFestival && promised;
   const canEdit = can("contributions.update") && openFestival && promised;
+  const canVoid =
+    can("expenses.void") &&
+    openFestival &&
+    contribution?.status === "received" &&
+    !contribution.voided;
   const canLinkAsset =
     can("assets.create") &&
     (contribution?.kind === "item" || contribution?.kind === "sponsorship") &&
@@ -189,6 +195,37 @@ export default function ContributionDetailScreen() {
     ]);
   };
 
+  const confirmVoid = () => {
+    const isCash = contribution.kind === "money";
+    const message = isCash
+      ? contribution.isCommitteeContribution
+        ? `This reverses ${formatInr(value)} from festival cash and the member's committee paid amount. The record stays in history.`
+        : `This reverses ${formatInr(value)} from festival cash. The record stays in history.`
+      : "This does not change festival cash. The in-kind record stays in history.";
+    Alert.alert("Void this contribution?", message, [
+      { text: "Keep", style: "cancel" },
+      {
+        text: "Void",
+        style: "destructive",
+        onPress: () =>
+          run(
+            writes.voidFinancialRecord({
+              entityType: "contribution",
+              entityId: contribution.id,
+              reason:
+                voidReason.trim() ||
+                (isCash
+                  ? contribution.isCommitteeContribution
+                    ? "Voided received committee cash from contribution detail"
+                    : "Voided received cash from contribution detail"
+                  : "Voided received in-kind from contribution detail"),
+            }),
+            "Could not void."
+          ),
+      },
+    ]);
+  };
+
   return (
     <GaneshScreen>
       <GaneshHeader
@@ -229,6 +266,11 @@ export default function ContributionDetailScreen() {
       {contribution.cancelReason ? (
         <Text style={{ color: theme.colors.mutedForeground }}>
           Cancelled: {contribution.cancelReason}
+        </Text>
+      ) : null}
+      {contribution.voided ? (
+        <Text style={{ color: theme.colors.mutedForeground, fontWeight: "700" }}>
+          Voided{contribution.voidReason ? ` · ${contribution.voidReason}` : ""}
         </Text>
       ) : null}
       {contribution.mobile ? (
@@ -406,6 +448,27 @@ export default function ContributionDetailScreen() {
           />
           <Button variant="outline" loading={busy} onPress={confirmCancel}>
             Cancel contribution
+          </Button>
+        </View>
+      ) : null}
+
+      {canVoid ? (
+        <View style={{ gap: 16 }}>
+          <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>Void contribution</Text>
+          <Text style={{ color: theme.colors.mutedForeground }}>
+            {contribution.kind === "money"
+              ? contribution.isCommitteeContribution
+                ? "Reverses festival cash and the member's committee paid amount. The row stays in history."
+                : "Reverses festival cash. The row stays in history."
+              : "Does not change festival cash. The in-kind row stays in history."}
+          </Text>
+          <Input
+            label="Reason (optional)"
+            value={voidReason}
+            onChangeText={setVoidReason}
+          />
+          <Button variant="outline" loading={busy} onPress={confirmVoid}>
+            Void contribution
           </Button>
         </View>
       ) : null}
