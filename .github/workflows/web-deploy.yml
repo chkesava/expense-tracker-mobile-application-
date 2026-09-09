@@ -161,8 +161,9 @@ jobs:
           # paste it into the Netlify UI or turn Continuous Deployment back on.
           # netlify-cli@17 `env:set` has no --site flag (that is deploy-only).
           # It targets the site via NETLIFY_SITE_ID in the environment instead.
+          # --secret requires a non-dev context; production matches `deploy --prod`.
           FN_JSON=$(python3 -c 'import json,os; print(json.dumps(json.loads(os.environ["FIREBASE_SERVICE_ACCOUNT"]), separators=(",", ":")))')
-          netlify env:set FIREBASE_SERVICE_ACCOUNT "$FN_JSON" --force --secret --scope functions
+          netlify env:set FIREBASE_SERVICE_ACCOUNT "$FN_JSON" --force --secret --scope functions --context production
           unset FN_JSON
           netlify deploy --prod \
             --dir "$RUNNER_TEMP/publish" \
