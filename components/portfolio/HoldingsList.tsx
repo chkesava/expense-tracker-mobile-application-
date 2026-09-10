@@ -1,5 +1,6 @@
-import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -18,6 +19,7 @@ import {
 import { EmptyState } from "@/components/common/EmptyState";
 import { BOTTOM_NAV_FAB_GAP, BOTTOM_NAV_FAB_SIZE } from "@/components/layout/chrome";
 import { HoldingCard } from "@/components/portfolio/HoldingCard";
+import { HoldingDetailModal } from "@/components/portfolio/HoldingDetailModal";
 import { AddHoldingModal } from "@/components/portfolio/AddHoldingModal";
 import { CsvImportModal } from "@/components/portfolio/CsvImportModal";
 import { MockTradeModal } from "@/components/portfolio/MockTradeModal";
@@ -64,9 +66,11 @@ export function HoldingsList({ listHeader }: { listHeader?: ReactNode }) {
 
   const {
     holdings,
+    transactions,
     settings: portfolioSettings,
     addHolding,
     overwriteHoldings,
+    deleteHolding,
     executeMockBuy,
     executeMockSell,
     placeLimitBuyOrder,
@@ -87,7 +91,8 @@ export function HoldingsList({ listHeader }: { listHeader?: ReactNode }) {
   const [sort, setSort] = useState<SortOption>("value");
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [importModalVisible, setImportModalVisible] = useState(false);
-  const [selectedHolding, setSelectedHolding] = useState<HoldingWithMetrics | null>(
+  const [detailHoldingId, setDetailHoldingId] = useState<string | null>(null);
+  const [trade, setTrade] = useState<{ id: string; side: "BUY" | "SELL" } | null>(
     null
   );
   const [searchFocused, setSearchFocused] = useState(false);
@@ -167,12 +172,82 @@ export function HoldingsList({ listHeader }: { listHeader?: ReactNode }) {
     setSort("value");
   }, []);
 
-  const onPressHolding = useCallback(
+  const detailHolding = useMemo(
+    () =>
+      detailHoldingId
+        ? holdingsWithMetrics.find((item) => item.id === detailHoldingId) ?? null
+        : null,
+    [detailHoldingId, holdingsWithMetrics]
+  );
+
+  const tradeHolding = useMemo(
+    () =>
+      trade
+        ? holdingsWithMetrics.find((item) => item.id === trade.id) ?? null
+        : null,
+    [trade, holdingsWithMetrics]
+  );
+
+  const detailTransactions = useMemo(() => {
+    if (!detailHoldingId) return [];
+    return transactions.filter((tx) => tx.holdingId === detailHoldingId);
+  }, [detailHoldingId, transactions]);
+
+  useEffect(() => {
+    if (detailHoldingId && !detailHolding) setDetailHoldingId(null);
+  }, [detailHolding, detailHoldingId]);
+
+  useEffect(() => {
+    if (trade && !tradeHolding) setTrade(null);
+  }, [trade, tradeHolding]);
+
+  const openTrade = useCallback((id: string, side: "BUY" | "SELL") => {
+    void haptic.selection();
+    setTrade({ id, side });
+  }, []);
+
+  const onPressHolding = useCallback((id: string) => {
+    setDetailHoldingId(id);
+  }, []);
+
+  const confirmDelete = useCallback(
+    (id: string, symbol: string) => {
+      Alert.alert(
+        `Remove ${symbol}?`,
+        "This deletes the holding from your portfolio. Past mock trades stay in history.",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Delete",
+            style: "destructive",
+            onPress: () => {
+              void deleteHolding(id);
+              setDetailHoldingId((current) => (current === id ? null : current));
+              setTrade((current) => (current?.id === id ? null : current));
+            },
+          },
+        ]
+      );
+    },
+    [deleteHolding]
+  );
+
+  const onMenuHolding = useCallback(
     (id: string) => {
       const found = holdingsWithMetrics.find((item) => item.id === id);
-      if (found) setSelectedHolding(found);
+      if (!found) return;
+      Alert.alert(found.symbol, undefined, [
+        { text: "Buy", onPress: () => openTrade(id, "BUY") },
+        { text: "Sell", onPress: () => openTrade(id, "SELL") },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => confirmDelete(id, found.symbol),
+        },
+        { text: "Cancel", style: "cancel" },
+      ]);
     },
-    [holdingsWithMetrics]
+    [confirmDelete, holdingsWithMetrics, openTrade]
   );
 
   const renderHolding = useCallback(
@@ -181,9 +256,10 @@ export function HoldingsList({ listHeader }: { listHeader?: ReactNode }) {
         holding={item}
         currency={displayCurrency}
         onPress={onPressHolding}
+        onMenu={onMenuHolding}
       />
     ),
-    [displayCurrency, onPressHolding]
+    [displayCurrency, onMenuHolding, onPressHolding]
   );
 
   const keyExtractor = useCallback((item: HoldingWithMetrics) => item.id, []);
@@ -433,7 +509,7 @@ export function HoldingsList({ listHeader }: { listHeader?: ReactNode }) {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.listContent}
-        extraData={`${filter}-${sort}-${search}-${isDark}`}
+        extraData={`${filter}-${sort}-${search}-${isDark}-${detailHoldingId}-${trade?.id ?? ""}`}
         onScrollBeginDrag={() => sampleScrollFps("portfolio_holdings")}
       />
 
@@ -447,10 +523,24 @@ export function HoldingsList({ listHeader }: { listHeader?: ReactNode }) {
         onClose={() => setImportModalVisible(false)}
         onImport={overwriteHoldings}
       />
+      <HoldingDetailModal
+        visible={!!detailHolding}
+        holding={detailHolding}
+        transactions={detailTransactions}
+        currency={displayCurrency}
+        onClose={() => setDetailHoldingId(null)}
+        onBuy={() => {
+          if (detailHoldingId) openTrade(detailHoldingId, "BUY");
+        }}
+        onSell={() => {
+          if (detailHoldingId) openTrade(detailHoldingId, "SELL");
+        }}
+      />
       <MockTradeModal
-        visible={!!selectedHolding}
-        holding={selectedHolding}
-        onClose={() => setSelectedHolding(null)}
+        visible={!!tradeHolding}
+        holding={tradeHolding}
+        initialTradeType={trade?.side ?? "BUY"}
+        onClose={() => setTrade(null)}
         onBuy={executeMockBuy}
         onSell={executeMockSell}
         onPlaceLimitBuy={placeLimitBuyOrder}

@@ -17,9 +17,10 @@ interface MockTradeModalProps {
   onPlaceLimitBuy: (holding: Holding, qty: number, targetPrice: number) => Promise<boolean>;
   cashBalance: number;
   currency: string;
+  initialTradeType?: "BUY" | "SELL";
 }
 
-export function MockTradeModal({ visible, holding, onClose, onBuy, onSell, onPlaceLimitBuy, cashBalance, currency }: MockTradeModalProps) {
+export function MockTradeModal({ visible, holding, onClose, onBuy, onSell, onPlaceLimitBuy, cashBalance, currency, initialTradeType = "BUY" }: MockTradeModalProps) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
 
@@ -34,13 +35,14 @@ export function MockTradeModal({ visible, holding, onClose, onBuy, onSell, onPla
 
   useEffect(() => {
     if (holding && visible) {
+      setTradeType(initialTradeType);
       setPrice(holding.currentPrice.toString());
       setQuantity('');
       setFees('0');
       setOrderType('MARKET');
       setError('');
     }
-  }, [holding, visible]);
+  }, [holding, visible, initialTradeType]);
 
   const handleClose = () => {
     setQuantity('');

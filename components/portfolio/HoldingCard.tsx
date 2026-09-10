@@ -1,11 +1,13 @@
 import { memo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { MoreVertical } from "lucide-react-native";
 
 import {
   ACCOUNT_GREEN,
   ACCOUNT_RED,
 } from "@/components/accounts/accountScreenTheme";
 import { Amount } from "@/components/common/Amount";
+import { haptic } from "@/lib/haptics";
 import { currencySymbol } from "@/shared/utils/formatCurrency";
 import type { HoldingWithMetrics, InstrumentType } from "@/shared/features/portfolio/types";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -34,10 +36,12 @@ export const HoldingCard = memo(function HoldingCard({
   holding,
   currency,
   onPress,
+  onMenu,
 }: {
   holding: HoldingWithMetrics;
   currency: string;
   onPress: (id: string) => void;
+  onMenu: (id: string) => void;
 }) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
@@ -59,7 +63,10 @@ export const HoldingCard = memo(function HoldingCard({
 
   return (
     <Pressable
-      onPress={() => onPress(holding.id)}
+      onPress={() => {
+        void haptic.selection();
+        onPress(holding.id);
+      }}
       style={({ pressed }) => [
         styles.card,
         {
@@ -151,6 +158,19 @@ export const HoldingCard = memo(function HoldingCard({
           </Text>
         </View>
       </View>
+
+      <Pressable
+        onPress={() => {
+          void haptic.selection();
+          onMenu(holding.id);
+        }}
+        hitSlop={8}
+        style={({ pressed }) => [styles.menuHit, pressed && styles.menuPressed]}
+        accessibilityRole="button"
+        accessibilityLabel={`Actions for ${holding.symbol}`}
+      >
+        <MoreVertical size={18} color={muted} />
+      </Pressable>
     </Pressable>
   );
 });
@@ -248,5 +268,16 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
     fontVariant: ["tabular-nums"],
+  },
+  menuHit: {
+    width: 32,
+    height: 32,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 16,
+    marginRight: -4,
+  },
+  menuPressed: {
+    opacity: 0.7,
   },
 });
