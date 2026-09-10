@@ -28,6 +28,22 @@ export const KNOWN_DASHBOARD_WIDGETS: readonly DashboardWidgetId[] = [
   "recentActivity",
 ] as const;
 
+/** Default control-center order. Legacy ids stay known so old settings parse. */
+export const DEFAULT_DASHBOARD_ORDER: readonly DashboardWidgetId[] = [
+  "focus",
+  "budgetAlerts",
+  "subscriptions",
+  "topCategories",
+  "overview",
+  "financialGoals",
+  "recentActivity",
+  "gamification",
+  "quickAdd",
+] as const;
+
+/** Merged into Budget + Forecast / Net Worth — never render as their own cards. */
+export const SKIP_WIDGETS = new Set<DashboardWidgetId>(["insight", "investments"]);
+
 const KNOWN_WIDGETS_SET = new Set<string>(KNOWN_DASHBOARD_WIDGETS);
 
 /**
@@ -39,7 +55,7 @@ export function getOrderedDashboardWidgets(
   widgetsConfig: DashboardWidgets | undefined,
   enableInvestments: boolean
 ): DashboardWidgetId[] {
-  const sourceOrder = order && order.length > 0 ? order : KNOWN_DASHBOARD_WIDGETS;
+  const sourceOrder = order && order.length > 0 ? order : DEFAULT_DASHBOARD_ORDER;
   const seen = new Set<DashboardWidgetId>();
   const result: DashboardWidgetId[] = [];
 
@@ -47,6 +63,7 @@ export function getOrderedDashboardWidgets(
     if (!KNOWN_WIDGETS_SET.has(rawId)) continue;
     const id = rawId as DashboardWidgetId;
     if (seen.has(id)) continue;
+    if (SKIP_WIDGETS.has(id)) continue;
 
     // Feature flag for investments
     if (id === "investments" && !enableInvestments) {

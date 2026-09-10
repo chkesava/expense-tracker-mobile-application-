@@ -30,7 +30,9 @@ import { themeUsesDarkPalette } from "@/theme/tokens";
 import { useCelebration } from "@/providers/CelebrationProvider";
 import { useSettings } from "@/providers/SettingsProvider";
 import {
+  DEFAULT_DASHBOARD_ORDER,
   KNOWN_DASHBOARD_WIDGETS,
+  SKIP_WIDGETS,
 } from "@/shared/utils/dashboardWidgets";
 import { useCategorizationRules } from "@/hooks/useCategorizationRules";
 import { useCategoryBudgets } from "@/hooks/useCategoryBudgets";
@@ -146,9 +148,9 @@ function CollapsibleSection({
 // 1. Dashboard Widget Toggles (Personalization)
 // -------------------------------------------------------------
 const WIDGET_DEFS = [
-  { id: "subscriptions", label: "Subscriptions", desc: "Recurring subscriptions & bills" },
-  { id: "focus", label: "Focus Mode", desc: "Monthly limits & financial goals" },
-  { id: "gamification", label: "Gamification", desc: "Daily streaks, badges & XP" },
+  { id: "subscriptions", label: "Upcoming Commitments", desc: "Recurring bills and nearby dues" },
+  { id: "focus", label: "Safe to Spend", desc: "Flexible remaining budget per day" },
+  { id: "gamification", label: "Financial Health", desc: "Logging streak and XP" },
   { id: "topCategories", label: "Top Categories", desc: "Top spending distribution" },
 ] as const;
 
@@ -227,15 +229,13 @@ export function DashboardWidgetToggles() {
 // 1b. Dashboard Widget Order (Personalization)
 // -------------------------------------------------------------
 const WIDGET_ORDER_LABELS: Record<string, string> = {
-  focus: "Focus Mode",
-  gamification: "Gamification",
-  subscriptions: "Subscriptions",
+  focus: "Safe to Spend",
+  gamification: "Financial Health",
+  subscriptions: "Upcoming Commitments",
   topCategories: "Top Categories",
-  overview: "Monthly Overview",
-  investments: "Investments",
+  overview: "Net Worth",
   quickAdd: "Quick Add",
-  insight: "Smart Insights",
-  budgetAlerts: "Budget Alerts",
+  budgetAlerts: "Monthly Budget",
   financialGoals: "Financial Goals",
   recentActivity: "Recent Activity",
 };
@@ -247,10 +247,12 @@ export function DashboardWidgetOrder() {
 
   // Saved order first, then any widget the saved order predates.
   const order = useMemo(() => {
-    const saved = (settings.dashboardOrder || []).filter((id) =>
-      KNOWN_DASHBOARD_WIDGETS.includes(id as never)
+    const saved = (settings.dashboardOrder || []).filter(
+      (id) =>
+        KNOWN_DASHBOARD_WIDGETS.includes(id as never) &&
+        !SKIP_WIDGETS.has(id as never)
     );
-    const missing = KNOWN_DASHBOARD_WIDGETS.filter((id) => !saved.includes(id));
+    const missing = DEFAULT_DASHBOARD_ORDER.filter((id) => !saved.includes(id));
     return [...saved, ...missing];
   }, [settings.dashboardOrder]);
 

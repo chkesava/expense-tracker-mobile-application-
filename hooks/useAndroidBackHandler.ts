@@ -30,6 +30,26 @@ export function useAndroidBackHandler() {
 
     const onBackPress = () => {
       // 1. Priority: Close open modals / bottom sheets / drawers
+      if (modals.isAddSheetOpen) {
+        modals.setIsAddSheetOpen(false);
+        return true;
+      }
+
+      if (modals.isTransferOpen) {
+        modals.setIsTransferOpen(false);
+        return true;
+      }
+
+      if (modals.isCreateInvestmentOpen) {
+        modals.setIsCreateInvestmentOpen(false);
+        return true;
+      }
+
+      if (modals.isDebtPaymentOpen) {
+        modals.setIsDebtPaymentOpen(false);
+        return true;
+      }
+
       if (modals.isAddExpenseOpen) {
         modals.setIsAddExpenseOpen(false);
         modals.setEditingExpense(null);

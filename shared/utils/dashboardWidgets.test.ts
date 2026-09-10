@@ -1,18 +1,37 @@
 import { describe, expect, it } from "vitest";
 import type { Expense } from "@/shared/types/expense";
 import type { DashboardWidgets } from "@/shared/types/settings";
+import { SETTINGS_DEFAULTS } from "@/shared/types/settings";
 import {
   computeDailySpendingPace,
   computeTopCategories,
+  DEFAULT_DASHBOARD_ORDER,
   getOrderedDashboardWidgets,
   KNOWN_DASHBOARD_WIDGETS,
 } from "./dashboardWidgets";
 
 describe("dashboardWidgets utilities", () => {
   describe("getOrderedDashboardWidgets", () => {
-    it("returns default widget list when order is undefined", () => {
+    it("returns the control-center default order when order is undefined", () => {
       const widgets = getOrderedDashboardWidgets(undefined, undefined, true);
-      expect(widgets).toEqual(KNOWN_DASHBOARD_WIDGETS);
+      expect(widgets).toEqual([
+        "focus",
+        "budgetAlerts",
+        "subscriptions",
+        "topCategories",
+        "overview",
+        "financialGoals",
+        "recentActivity",
+        "gamification",
+        "quickAdd",
+      ]);
+      expect(widgets).not.toContain("insight");
+      expect(widgets).not.toContain("investments");
+      expect(KNOWN_DASHBOARD_WIDGETS).toContain("insight");
+    });
+
+    it("keeps settings defaults aligned with the control-center order", () => {
+      expect(SETTINGS_DEFAULTS.dashboardOrder).toEqual([...DEFAULT_DASHBOARD_ORDER]);
     });
 
     it("respects custom order and filters out unknown keys safely", () => {
@@ -47,9 +66,9 @@ describe("dashboardWidgets utilities", () => {
       expect(widgets).toEqual(["gamification", "overview"]);
     });
 
-    it("omits investments widget when enableInvestments is false", () => {
-      const order = ["overview", "investments", "recentActivity"];
-      const widgets = getOrderedDashboardWidgets(order, undefined, false);
+    it("omits the merged investments and insight cards even when they are saved", () => {
+      const order = ["overview", "investments", "insight", "recentActivity"];
+      const widgets = getOrderedDashboardWidgets(order, undefined, true);
       expect(widgets).toEqual(["overview", "recentActivity"]);
     });
 

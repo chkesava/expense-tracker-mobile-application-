@@ -169,3 +169,27 @@ export function buildSmartInsights(
 
   return insights;
 }
+
+const INSIGHT_PRIORITY: Record<SmartInsightTone, number> = {
+  warning: 0,
+  up: 1,
+  down: 2,
+  info: 3,
+};
+
+export const SMART_INSIGHT_LIMIT = 3;
+
+/**
+ * Dashboard shows at most three high-value insights. Budget warnings stay on
+ * the Monthly Budget card so the two surfaces do not contradict each other.
+ */
+export function selectSmartInsights(
+  insights: SmartInsight[],
+  limit = SMART_INSIGHT_LIMIT
+): SmartInsight[] {
+  return insights
+    .filter((insight) => insight.kind !== "budget")
+    .slice()
+    .sort((a, b) => INSIGHT_PRIORITY[a.tone] - INSIGHT_PRIORITY[b.tone])
+    .slice(0, limit);
+}

@@ -14,11 +14,17 @@ import {
 } from "@/components/dashboard/primitives";
 import { useSubscriptions } from "@/hooks/useSubscriptions";
 import type { Subscription } from "@/shared/types/subscription";
+import {
+  amountDueWithinDays,
+  duesWithinDays,
+  type UpcomingDueItem,
+} from "@/shared/utils/spendlyBudget";
 import { computeMonthlyCommitments, getNextRenewalDate } from "@/shared/utils/subscriptionProcessor";
 import { useTheme } from "@/theme/ThemeProvider";
 
 export interface SubscriptionsWidgetProps {
   currency: string;
+  extraDues?: UpcomingDueItem[];
 }
 
 const PREVIEW_LIMIT = 4;
@@ -35,7 +41,10 @@ function dueLabel(days: number): string {
   return `Due in ${days} days`;
 }
 
-export function SubscriptionsWidget({ currency }: SubscriptionsWidgetProps) {
+export function SubscriptionsWidget({
+  currency,
+  extraDues = [],
+}: SubscriptionsWidgetProps) {
   const { push } = useRouter();
   const { theme } = useTheme();
   const surfaces = useSurfaces();
@@ -45,33 +54,62 @@ export function SubscriptionsWidget({ currency }: SubscriptionsWidgetProps) {
     return computeMonthlyCommitments(subscriptions);
   }, [subscriptions]);
 
-  /** Soonest-due first so the list answers "what's next?". */
   const preview = useMemo(() => {
-    return subscriptions
+    const recurring: UpcomingDueItem[] = subscriptions
       .filter((sub) => sub.isActive && !sub.isCompleted)
-      .map((sub) => ({ sub, days: getNextRenewalDate(sub).daysRemaining }))
-      .sort((a, b) => a.days - b.days)
-      .slice(0, PREVIEW_LIMIT);
-  }, [subscriptions]);
+      .map((sub) => {
+        const next = getNextRenewalDate(sub);
+        return {
+          id: sub.id || sub.name,
+          name: sub.name,
+          amount: sub.amount || 0,
+          dueDate: next.dateStr,
+          daysRemaining: next.daysRemaining,
+          kind: "subscription" as const,
+        };
+      });
+    return duesWithinDays([...recurring, ...extraDues], 45).slice(0, PREVIEW_LIMIT);
+  }, [extraDues, subscriptions]);
+
+  const dueInSeven = useMemo(() => {
+    const recurring: UpcomingDueItem[] = subscriptions
+      .filter((sub) => sub.isActive && !sub.isCompleted)
+      .map((sub) => {
+        const next = getNextRenewalDate(sub);
+        return {
+          id: sub.id || sub.name,
+          name: sub.name,
+          amount: sub.amount || 0,
+          dueDate: next.dateStr,
+          daysRemaining: next.daysRemaining,
+          kind: "subscription" as const,
+        };
+      });
+    return amountDueWithinDays([...recurring, ...extraDues], 7);
+  }, [extraDues, subscriptions]);
 
   const openSubscriptions = () => push("/ledger?tab=subscriptions");
 
   return (
     <Section
-      title="Recurring Payments"
-      subtitle={`${commitments.activeCount} active · ${currency} ${commitments.totalMonthly.toLocaleString()} / mo`}
+      title="Upcoming Commitments"
+      subtitle={
+        dueInSeven > 0
+          ? `${currency} ${dueInSeven.toLocaleString()} due in 7 days · ${currency} ${commitments.totalMonthly.toLocaleString()} / mo`
+          : `${commitments.activeCount} active · ${currency} ${commitments.totalMonthly.toLocaleString()} / mo`
+      }
       icon={<Repeat size={16} color={theme.colors.primary} strokeWidth={2.3} />}
       iconTint={surfaces.wash(theme.colors.primary)}
       action={<SectionAction label="Manage" onPress={openSubscriptions} />}
     >
       {preview.length > 0 ? (
         <View>
-          {preview.map(({ sub, days }, idx) => {
-            const Icon = TYPE_ICONS[sub.type] ?? Repeat;
-            const isImminent = days <= 3;
+          {preview.map((item, idx) => {
+            const Icon = item.kind === "card" ? Landmark : item.kind === "borrowing" ? Wallet : Repeat;
+            const isImminent = item.daysRemaining <= 3;
             return (
               <DataRow
-                key={sub.id || sub.name}
+                key={`${item.kind}-${item.id}`}
                 onPress={openSubscriptions}
                 divider={idx < preview.length - 1}
                 leading={
@@ -83,10 +121,10 @@ export function SubscriptionsWidget({ currency }: SubscriptionsWidgetProps) {
                     />
                   </RowGlyph>
                 }
-                title={sub.name}
+                title={item.name}
                 value={
                   <Amount
-                    value={sub.amount}
+                    value={item.amount}
                     currency={currency}
                     ghostable
                     style={{
@@ -109,10 +147,10 @@ export function SubscriptionsWidget({ currency }: SubscriptionsWidgetProps) {
                     ]}
                     numberOfLines={1}
                   >
-                    {dueLabel(days)}
+                    {dueLabel(item.daysRemaining)}
                   </Text>
                 }
-                accessibilityLabel={`${sub.name}, ${dueLabel(days)}`}
+                accessibilityLabel={`${item.name}, ${dueLabel(item.daysRemaining)}`}
               />
             );
           })}

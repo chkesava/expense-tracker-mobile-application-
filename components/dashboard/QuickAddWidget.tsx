@@ -34,7 +34,7 @@ export function QuickAddWidget({ onAddExpense }: QuickAddWidgetProps) {
   const chips = [
     {
       id: "add",
-      label: "Log Expense",
+      label: "Add",
       icon: Plus,
       featured: true,
       onPress: () => {

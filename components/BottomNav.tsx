@@ -183,7 +183,7 @@ function AddExpenseFab({
         <Animated.View
           accessible
           accessibilityRole="button"
-          accessibilityLabel="Add Expense"
+          accessibilityLabel="Add"
           style={[
             styles.fab,
             {
@@ -207,7 +207,7 @@ export function BottomNav() {
   const { navigate, dismissTo } = useRouter();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
-  const { setIsAddExpenseOpen } = useModals();
+  const { setIsAddSheetOpen } = useModals();
   const { settings } = useSettings();
   const investmentsEnabled = useInvestmentsEnabled();
   const { theme, themeName } = useTheme();
@@ -256,7 +256,7 @@ export function BottomNav() {
   };
 
   const handleAddExpense = () => {
-    setIsAddExpenseOpen(true);
+    setIsAddSheetOpen(true);
   };
 
   const keyboardStyle = useAnimatedStyle(() => ({

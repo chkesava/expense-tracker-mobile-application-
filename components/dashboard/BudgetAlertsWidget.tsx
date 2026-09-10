@@ -8,8 +8,13 @@ import {
   MetaLabel,
   ProgressTrack,
   Section,
+  StatusStrip,
   useSurfaces,
 } from "@/components/dashboard/primitives";
+import {
+  budgetStatusMessage,
+  type SpendlyBudget,
+} from "@/shared/utils/spendlyBudget";
 import { useTheme } from "@/theme/ThemeProvider";
 
 export interface CategoryBudgetAlertItem {
@@ -29,6 +34,16 @@ export interface BudgetAlertsWidgetProps {
   currency: string;
   activeCategoryBudgets: CategoryBudgetAlertItem[];
   activeMonth: string;
+  budget: SpendlyBudget;
+}
+
+function statusColorOf(
+  status: SpendlyBudget["status"],
+  colors: { destructive: string; warning: string; success: string }
+) {
+  if (status === "attention") return colors.destructive;
+  if (status === "watch") return colors.warning;
+  return colors.success;
 }
 
 export function BudgetAlertsWidget({
@@ -37,23 +52,15 @@ export function BudgetAlertsWidget({
   currency,
   activeCategoryBudgets,
   activeMonth,
+  budget,
 }: BudgetAlertsWidgetProps) {
   const router = useRouter();
   const { theme } = useTheme();
   const surfaces = useSurfaces();
 
-  /** Uncapped so "148% used" stays truthful; the bar itself clamps. */
-  const budgetProgress =
-    monthlyBudget > 0 ? Math.round((monthlySpent / monthlyBudget) * 100) : 0;
-
-  const isOverBudget = monthlyBudget > 0 && monthlySpent > monthlyBudget;
-  const remaining = Math.abs(monthlyBudget - monthlySpent);
-
-  const statusColor = isOverBudget
-    ? theme.colors.destructive
-    : budgetProgress >= 80
-      ? theme.colors.warning
-      : theme.colors.success;
+  const statusColor = statusColorOf(budget.status, theme.colors);
+  const remainingLabel = budget.isOverBudget ? "Over budget" : "Remaining";
+  const remainingValue = Math.abs(budget.remaining);
 
   if (monthlyBudget === 0 && activeCategoryBudgets.length === 0) {
     return (
@@ -91,11 +98,11 @@ export function BudgetAlertsWidget({
                 { color: statusColor, fontFamily: theme.fontFamily.bold },
               ]}
             >
-              {budgetProgress}%
+              {budget.pctUsed}%
             </Text>
           }
         >
-          <ProgressTrack pct={budgetProgress} color={statusColor} height={8} />
+          <ProgressTrack pct={budget.pctUsed} color={statusColor} height={8} />
 
           <View style={styles.footerRow}>
             <View style={styles.footerItem}>
@@ -112,21 +119,90 @@ export function BudgetAlertsWidget({
               />
             </View>
             <View style={[styles.footerItem, styles.footerRight]}>
-              <MetaLabel>{isOverBudget ? "Over budget" : "Remaining"}</MetaLabel>
+              <MetaLabel>{remainingLabel}</MetaLabel>
               <Amount
-                value={remaining}
+                value={remainingValue}
                 currency={currency}
                 ghostable
                 style={{
                   fontSize: 14.5,
                   fontFamily: theme.fontFamily.semibold,
-                  color: isOverBudget
-                    ? theme.colors.destructive
-                    : theme.colors.success,
+                  color: statusColor,
                 }}
               />
             </View>
           </View>
+
+          <View style={styles.forecastRow}>
+            <View style={styles.footerItem}>
+              <MetaLabel>Projected</MetaLabel>
+              <Amount
+                value={budget.projectedMonthEnd}
+                currency={currency}
+                ghostable
+                style={{
+                  fontSize: 13.5,
+                  fontFamily: theme.fontFamily.semibold,
+                  color: theme.colors.foreground,
+                }}
+              />
+            </View>
+            <View style={[styles.footerItem, styles.footerRight]}>
+              <MetaLabel>Daily limit left</MetaLabel>
+              <Amount
+                value={budget.requiredDailyLimit}
+                currency={currency}
+                ghostable
+                style={{
+                  fontSize: 13.5,
+                  fontFamily: theme.fontFamily.semibold,
+                  color: theme.colors.foreground,
+                }}
+              />
+            </View>
+          </View>
+
+          {budget.committedMonthly > 0 ? (
+            <View style={styles.forecastRow}>
+              <View style={styles.footerItem}>
+                <MetaLabel>Committed left</MetaLabel>
+                <Amount
+                  value={budget.committedMonthly}
+                  currency={currency}
+                  ghostable
+                  style={{
+                    fontSize: 13.5,
+                    fontFamily: theme.fontFamily.medium,
+                    color: theme.colors.mutedForeground,
+                  }}
+                />
+              </View>
+              <View style={[styles.footerItem, styles.footerRight]}>
+                <MetaLabel>Flexible</MetaLabel>
+                <Amount
+                  value={budget.flexibleRemaining}
+                  currency={currency}
+                  ghostable
+                  style={{
+                    fontSize: 13.5,
+                    fontFamily: theme.fontFamily.medium,
+                    color: theme.colors.mutedForeground,
+                  }}
+                />
+              </View>
+            </View>
+          ) : null}
+
+          <StatusStrip
+            tone={
+              budget.status === "attention"
+                ? "negative"
+                : budget.status === "watch"
+                  ? "warning"
+                  : "positive"
+            }
+            message={budgetStatusMessage(budget)}
+          />
         </Section>
       ) : null}
 
@@ -198,6 +274,11 @@ const styles = StyleSheet.create({
   },
   footerRight: {
     alignItems: "flex-end",
+  },
+  forecastRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 10,
   },
   categoryList: {
     gap: 12,
