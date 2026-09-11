@@ -10,3 +10,6 @@ export * from "./EpfContributionEditSheet";
 export * from "./EpfCurrentMonthCard";
 export * from "./EpfCurrentContributions";
 export * from "./EpfCreditSheet";
+export * from "./EpfTransfersList";
+export * from "./EpfTransferFormModal";
+export * from "./EpfTransferDetailModal";

@@ -236,6 +236,12 @@ export const EPF_CONTRIBUTIONS_COLLECTION = "epfContributions";
 /** Append-only audit trail of contribution status changes — KAN-68. */
 export const EPF_CONTRIBUTION_EVENTS_COLLECTION = "epfContributionEvents";
 
+/** Balance movements between establishments under one UAN — KAN-69. */
+export const EPF_TRANSFERS_COLLECTION = "epfTransfers";
+
+/** Append-only audit trail of transfer status changes — KAN-69. */
+export const EPF_TRANSFER_EVENTS_COLLECTION = "epfTransferEvents";
+
 /** Who caused a status change. */
 export type EpfContributionActor = "system" | "user";
 
@@ -259,4 +265,90 @@ export interface EpfContributionEvent {
   actor: EpfContributionActor;
   reason?: string;
   at?: unknown;
+}
+
+/* ---------------------------------------------------------------------------
+ * Transfers — KAN-69
+ * ------------------------------------------------------------------------ */
+
+/**
+ * Stored lifecycle of a transfer.
+ *
+ * `reversed` is deliberately NOT here: a reversal is a compensating transfer
+ * plus a pointer, so the original keeps `completed` — it did happen, and the
+ * ledger says so. "Reversed" is derived from `reversedBy` at render time.
+ */
+export type EpfTransferStatus = "initiated" | "completed" | "failed";
+
+/** What the UI shows, including the derived reversed state. */
+export type EpfTransferDisplayState = EpfTransferStatus | "reversed";
+
+export interface EpfTransfer {
+  id: string;
+  sourceEstablishmentId: string;
+  destinationEstablishmentId: string;
+  /** Rupees. Positive; direction comes from the two establishment ids. */
+  amount: number;
+  /** YYYY-MM-DD the transfer was filed or settled. */
+  date: string;
+  status: EpfTransferStatus;
+  /** EPFO claim number or similar. */
+  reference?: string;
+  notes?: string;
+  /**
+   * Set only when a person confirmed this against a real EPFO transfer.
+   *
+   * Transfers are simulated moves by default; this is what distinguishes a
+   * projection from a reconciled fact, exactly as it does for credits in
+   * KAN-68.
+   */
+  reconciledAt?: string;
+  /** Set on a compensating row: the transfer this one reverses. */
+  reversalOf?: string;
+  /** Set on the original: the compensating row that reversed it. */
+  reversedBy?: string;
+  /** Why the transfer failed, or why an over-balance amount was allowed. */
+  statusReason?: string;
+  /** Explanation required when the amount exceeds the transferable balance. */
+  adjustmentReason?: string;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+  statusUpdatedAt?: unknown;
+}
+
+export type EpfTransferIssueCode =
+  | "self_transfer"
+  | "missing_establishment"
+  | "non_positive_amount"
+  | "exceeds_balance"
+  | "future_date"
+  | "invalid_date";
+
+export interface EpfTransferIssue {
+  field?: string;
+  code: EpfTransferIssueCode;
+  severity: "error" | "warning";
+  message: string;
+}
+
+export interface EpfTransferEvent {
+  id: string;
+  transferId: string;
+  from: EpfTransferStatus | "none";
+  to: EpfTransferStatus;
+  amount?: number;
+  actor: EpfContributionActor;
+  reason?: string;
+  at?: unknown;
+}
+
+export interface EpfTransferSummary {
+  /** Completed transfers into this establishment. */
+  transferredIn: number;
+  /** Completed transfers out of this establishment. */
+  transferredOut: number;
+  /** in − out. */
+  net: number;
+  /** Transfers still awaiting settlement. */
+  pending: number;
 }
