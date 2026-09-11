@@ -9,11 +9,12 @@ import { SkeletonCard } from "@/components/common/Skeleton";
 import { EpfBackfillScreen } from "@/components/epf/EpfBackfillScreen";
 import { EpfContributionHistory } from "@/components/epf/EpfContributionHistory";
 import { EpfCurrentContributions } from "@/components/epf/EpfCurrentContributions";
+import { EpfTransfersList } from "@/components/epf/EpfTransfersList";
 import { useEpf } from "@/hooks/useEpf";
 import { maskIdentifier } from "@/shared/features/epf/utils";
 import { useTheme } from "@/theme/ThemeProvider";
 
-type Tab = "current" | "history" | "backfill";
+type Tab = "current" | "history" | "backfill" | "transfers";
 
 /**
  * Contributions for one establishment — KAN-66.
@@ -44,6 +45,7 @@ export default function EpfEstablishmentContributionsScreen() {
     ...(isCurrentEmployment ? ([{ id: "current", label: "Current" }] as const) : []),
     { id: "history", label: "History" },
     { id: "backfill", label: "Backfill" },
+    { id: "transfers", label: "Transfers" },
   ];
 
   return (
@@ -123,6 +125,11 @@ export default function EpfEstablishmentContributionsScreen() {
 
           {activeTab === "current" ? (
             <EpfCurrentContributions establishment={establishment} />
+          ) : activeTab === "transfers" ? (
+            <EpfTransfersList
+              establishment={establishment}
+              establishments={establishments}
+            />
           ) : activeTab === "history" ? (
             <EpfContributionHistory
               establishment={establishment}

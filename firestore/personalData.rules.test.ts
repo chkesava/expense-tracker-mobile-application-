@@ -82,6 +82,9 @@ describe("personal tree", () => {
     "epfMeta",
     // KAN-68 — append-only contribution status audit trail.
     "epfContributionEvents",
+    // KAN-69 — balance movements between establishments and their audit trail.
+    "epfTransfers",
+    "epfTransferEvents",
   ];
 
   it("owner reads their own user doc", async () => {

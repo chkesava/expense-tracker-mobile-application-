@@ -194,3 +194,45 @@ export const epfCreditFormSchema = z
   });
 
 export type EpfCreditFormInput = z.infer<typeof epfCreditFormSchema>;
+
+/* ---------------------------------------------------------------------------
+ * Transfers — KAN-69
+ * ------------------------------------------------------------------------ */
+
+/**
+ * Shape-level validation for the transfer form.
+ *
+ * Balance and establishment-ownership rules need context the schema does not
+ * have, so they live in `validateTransfer` — the same split KAN-65 used for
+ * employment overlap and KAN-66 used for month-in-period.
+ */
+export const epfTransferFormSchema = z
+  .object({
+    sourceEstablishmentId: z.string().min(1, "Pick the employer to transfer from"),
+    destinationEstablishmentId: z.string().min(1, "Pick the employer to transfer to"),
+    amount: z.coerce
+      .number({ message: "Enter a valid amount" })
+      .refine(Number.isFinite, "Enter a valid amount")
+      .positive("Transfer amount must be greater than zero")
+      .max(100_000_000, "Amount is too large"),
+    date: z.string().regex(dateKeyRegex, "Invalid transfer date"),
+    reference: z.string().trim().max(60, "Reference is too long").optional().or(z.literal("")),
+    notes: z.string().trim().max(500, "Notes are too long").optional().or(z.literal("")),
+    adjustmentReason: z
+      .string()
+      .trim()
+      .max(200, "Reason is too long")
+      .optional()
+      .or(z.literal("")),
+  })
+  .superRefine((data, ctx) => {
+    if (data.sourceEstablishmentId === data.destinationEstablishmentId) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["destinationEstablishmentId"],
+        message: "Source and destination must be different employers",
+      });
+    }
+  });
+
+export type EpfTransferFormInput = z.infer<typeof epfTransferFormSchema>;
