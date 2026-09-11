@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { StyleSheet } from "react-native";
 import { Redirect, useLocalSearchParams } from "expo-router";
-import { BarChart3, Calendar, TrendingUp } from "lucide-react-native";
+import { BarChart3, Calendar, IdCard, TrendingUp } from "lucide-react-native";
 
+import { EpfDashboard } from "@/components/epf/EpfDashboard";
 import { InvestmentsList } from "@/components/investments/InvestmentsList";
 import { PageHeader, type PageHeaderTab } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
@@ -58,6 +59,11 @@ export default function InvestmentsScreen() {
       label: "Virtual SIPs",
       icon: <Calendar size={16} color={tabIconColor("sip")} />,
     },
+    {
+      id: "epf",
+      label: "EPF",
+      icon: <IdCard size={16} color={tabIconColor("epf")} />,
+    },
   ];
 
   const isPortfolioTab = activeTab === "portfolio";
@@ -93,6 +99,7 @@ export default function InvestmentsScreen() {
           {pageHeader}
           {activeTab === "investments" ? <InvestmentsList /> : null}
           {activeTab === "sip" ? <SipDashboard /> : null}
+          {activeTab === "epf" ? <EpfDashboard /> : null}
         </>
       )}
     </PageShell>

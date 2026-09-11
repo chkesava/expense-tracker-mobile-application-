@@ -73,6 +73,9 @@ describe("personal tree", () => {
     "accountTransfers",
     "categories",
     "subscriptions",
+    // KAN-65 — EPF lives on the recursive owner grant like everything else here.
+    "epfProfile",
+    "epfEstablishments",
   ];
 
   it("owner reads their own user doc", async () => {
@@ -123,6 +126,36 @@ describe("personal tree", () => {
   it("a stranger cannot read the owner's expenses", async () => {
     const db = env.authenticatedContext(OTHER).firestore();
     await assertFails(getDocs(collection(db, "users", OWNER, "expenses")));
+  });
+
+  // KAN-65 — a UAN and PF member IDs are strong identity artifacts, so the
+  // ownership boundary is asserted explicitly rather than only by the loop.
+  it("a stranger cannot list the owner's EPF establishments", async () => {
+    const db = env.authenticatedContext(OTHER).firestore();
+    await assertFails(
+      getDocs(collection(db, "users", OWNER, "epfEstablishments"))
+    );
+  });
+
+  it("a stranger cannot read the owner's EPF profile", async () => {
+    const db = env.authenticatedContext(OTHER).firestore();
+    await assertFails(getDoc(doc(db, "users", OWNER, "epfProfile", "main")));
+  });
+
+  it("a stranger cannot write the owner's EPF profile", async () => {
+    const db = env.authenticatedContext(OTHER).firestore();
+    await assertFails(
+      setDoc(doc(db, "users", OWNER, "epfProfile", "main"), {
+        uan: "100123456789",
+      })
+    );
+  });
+
+  it("owner reads their duress EPF tree", async () => {
+    const db = env.authenticatedContext(OWNER).firestore();
+    await assertSucceeds(
+      getDocs(collection(db, "users", `${OWNER}_duress`, "epfEstablishments"))
+    );
   });
 
   it("owner lists their own membership index", async () => {
