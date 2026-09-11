@@ -1,7 +1,7 @@
+import { appDialog } from "@/lib/appDialog";
 import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Modal,
   Pressable,
   ScrollView,
@@ -165,7 +165,7 @@ export function SplitDetailModal({
       if (spent) return;
       if (participant.isCurrentUser) {
         if (participantRemainingDue(participant) > 0.009) {
-          Alert.alert(
+          appDialog.alert(
             "Mark your extra share?",
             "This records that you are covering the top-up after someone dropped out. It does not move money between accounts.",
             [
@@ -182,7 +182,7 @@ export function SplitDetailModal({
       const key = participant.key;
       if (!key) return;
       if (participant.paid) {
-        Alert.alert(
+        appDialog.alert(
           "Undo collection?",
           `Remove ${participant.name}'s collection and reverse the credit on the receiving account?`,
           [
@@ -304,11 +304,11 @@ export function SplitDetailModal({
     if (!split.id || !participant.key) return;
     const blocked = optOutBlockedReason(split, participant.key);
     if (blocked) {
-      Alert.alert("Can't drop this person", blocked);
+      appDialog.alert("Can't drop this person", blocked);
       return;
     }
     const alreadyPaid = participantPaidAmount(participant) > 0.009;
-    Alert.alert(
+    appDialog.alert(
       `${participant.name} won’t contribute?`,
       alreadyPaid
         ? `${participant.name} already paid. That money stays collected — we won't refund it. They’ll stay on the list as not contributing, with nothing extra due. Everyone still in will cover the rest.`
@@ -337,7 +337,7 @@ export function SplitDetailModal({
     const plan = planClaim(split.id, claim);
 
     if (plan.action === "dismiss") {
-      Alert.alert("Can't apply this", plan.reason, [
+      appDialog.alert("Can't apply this", plan.reason, [
         { text: "Keep", style: "cancel" },
         {
           text: "Dismiss",
@@ -388,7 +388,7 @@ export function SplitDetailModal({
       run();
       return;
     }
-    Alert.alert(
+    appDialog.alert(
       "Dismiss this update?",
       "Nothing changes on the split, and that person can send another one.",
       [
@@ -410,7 +410,7 @@ export function SplitDetailModal({
 
   const handleSettleAll = async () => {
     if (!split.id) return;
-    Alert.alert(
+    appDialog.alert(
       "Mark All Settled",
       "Are you sure you want to mark all participants as paid?",
       [
@@ -427,7 +427,7 @@ export function SplitDetailModal({
 
   const handleUseGift = () => {
     if (!othersFullyCollected(split)) {
-      Alert.alert(
+      appDialog.alert(
         "Some people haven't paid",
         "You can still buy the gift now. Unpaid shares won't be credited.",
         [
@@ -442,7 +442,7 @@ export function SplitDetailModal({
 
   const handleDelete = () => {
     if (!split.id) return;
-    Alert.alert(
+    appDialog.alert(
       "Delete Split",
       `Are you sure you want to delete "${split.title}"?`,
       [

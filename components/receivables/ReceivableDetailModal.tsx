@@ -1,6 +1,6 @@
+import { appDialog } from "@/lib/appDialog";
 import React, { useMemo, useState } from "react";
 import {
-  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -222,7 +222,7 @@ export function ReceivableDetailModal({
 
   const confirmDeleteReceivable = () => {
     if (!receivable.id) return;
-    Alert.alert(
+    appDialog.alert(
       "Delete receivable?",
       "This removes the receivable and all of its repayment records. Expenses and accounts are not affected.",
       [
@@ -240,7 +240,7 @@ export function ReceivableDetailModal({
 
   const confirmCancelReceivable = () => {
     if (!receivable.id) return;
-    Alert.alert(
+    appDialog.alert(
       "Cancel receivable?",
       "This marks the receivable as cancelled. Outstanding balance will no longer count toward totals.",
       [
@@ -258,7 +258,7 @@ export function ReceivableDetailModal({
 
   const confirmDeleteRepayment = (repaymentId: string) => {
     if (!receivable.id) return;
-    Alert.alert("Remove repayment?", "The outstanding balance will go back up.", [
+    appDialog.alert("Remove repayment?", "The outstanding balance will go back up.", [
       { text: "Cancel", style: "cancel" },
       {
         text: "Remove",

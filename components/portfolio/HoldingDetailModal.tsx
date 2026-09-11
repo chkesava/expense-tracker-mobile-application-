@@ -1,6 +1,5 @@
 import { useMemo, type ReactNode } from "react";
 import {
-  Alert,
   Modal,
   Pressable,
   ScrollView,
@@ -16,6 +15,7 @@ import {
   ACCOUNT_RED,
 } from "@/components/accounts/accountScreenTheme";
 import { Amount } from "@/components/common/Amount";
+import { appDialog } from "@/lib/appDialog";
 import { haptic } from "@/lib/haptics";
 import type {
   HoldingWithMetrics,
@@ -128,7 +128,7 @@ export function HoldingDetailModal({
 
   const explainXirr = () => {
     void haptic.selection();
-    Alert.alert(
+    appDialog.alert(
       "XIRR",
       "Annualised return from this holding's buy and sell cashflows, including today's market value. Imported lots without trades show NA."
     );

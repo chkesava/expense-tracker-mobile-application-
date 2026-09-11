@@ -1,4 +1,5 @@
-import { Alert, Linking, Pressable, Share, StyleSheet, Text, View } from "react-native";
+import { appDialog } from "@/lib/appDialog";
+import { Linking, Pressable, Share, StyleSheet, Text, View } from "react-native";
 import QRCode from "react-native-qrcode-svg";
 import { Ban, Copy, Share2, Trash2 } from "lucide-react-native";
 
@@ -64,13 +65,13 @@ export function PaymentRequestCard({ request }: PaymentRequestCardProps) {
     if (canOpen) {
       await Linking.openURL(upiLink);
     } else {
-      Alert.alert("UPI Not Available", "No UPI app found on this device.");
+      appDialog.alert("UPI Not Available", "No UPI app found on this device.");
     }
   };
 
   const handleCancel = () => {
     if (!request.id) return;
-    Alert.alert("Cancel Request", "Mark this request as cancelled?", [
+    appDialog.alert("Cancel Request", "Mark this request as cancelled?", [
       { text: "No", style: "cancel" },
       {
         text: "Yes, Cancel",
@@ -81,7 +82,7 @@ export function PaymentRequestCard({ request }: PaymentRequestCardProps) {
 
   const handleDelete = () => {
     if (!request.id) return;
-    Alert.alert("Delete Request", "Permanently delete this payment request?", [
+    appDialog.alert("Delete Request", "Permanently delete this payment request?", [
       { text: "Cancel", style: "cancel" },
       {
         text: "Delete",

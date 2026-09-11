@@ -1,6 +1,6 @@
+import { appDialog } from "@/lib/appDialog";
 import { useEffect, useMemo, useState } from "react";
 import {
-  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -284,7 +284,7 @@ export function EditAccountModal({
     if (!account?.id) return;
 
     if (linkedStats.total > 0) {
-      Alert.alert(
+      appDialog.alert(
         "Cannot Delete Account",
         `This account has ${linkedStats.total} linked record(s) (${linkedStats.countExp} expenses, ${linkedStats.countInc} incomes, ${linkedStats.countTransfers} transfers, ${linkedStats.countPayments} payments). Please reassign or delete these records before removing the account.`,
         [{ text: "OK" }]
@@ -292,7 +292,7 @@ export function EditAccountModal({
       return;
     }
 
-    Alert.alert(
+    appDialog.alert(
       "Delete Account",
       `Are you sure you want to delete "${account.name}"? This action cannot be undone.`,
       [

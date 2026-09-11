@@ -1,6 +1,6 @@
+import { toast } from "@/lib/toast";
 import { useEffect, useState } from "react";
 import {
-  Alert,
   Modal,
   Pressable,
   ScrollView,
@@ -70,22 +70,22 @@ export function CreateTripModal({ visible, onClose }: CreateTripModalProps) {
   const handleNext = () => {
     if (step === 1) {
       if (!destination.trim()) {
-        Alert.alert("Error", "Please enter a destination.");
+        toast.error("Please enter a destination.");
         return;
       }
       if (!startDate || !endDate) {
-        Alert.alert("Error", "Please enter both start and end dates (YYYY-MM-DD).");
+        toast.error("Please enter both start and end dates (YYYY-MM-DD).");
         return;
       }
       if (startDate > endDate) {
-        Alert.alert("Error", "Start date must be before end date.");
+        toast.error("Start date must be before end date.");
         return;
       }
     }
 
     if (step === 2) {
       if (!totalBudget || parseFloat(totalBudget) <= 0) {
-        Alert.alert("Error", "Please enter a valid total budget.");
+        toast.error("Please enter a valid total budget.");
         return;
       }
     }

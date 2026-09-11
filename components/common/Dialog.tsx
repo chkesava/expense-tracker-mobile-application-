@@ -8,6 +8,8 @@ export type DialogAction = {
   label: string;
   onPress: () => void;
   variant?: "primary" | "destructive" | "ghost";
+  loading?: boolean;
+  disabled?: boolean;
 };
 
 export type DialogProps = {
@@ -17,16 +19,36 @@ export type DialogProps = {
   description?: string;
   children?: ReactNode;
   actions?: DialogAction[];
+  /** Row for short confirms; stacked for 3+ actions or explicit long labels. */
+  actionsLayout?: "row" | "stacked";
+  /** When false, scrim tap does not dismiss (back still calls onClose). */
+  dismissible?: boolean;
 };
 
 /** MD3 alert dialog — centered, for confirm/alert-style prompts. */
-export function Dialog({ isOpen, onClose, title, description, children, actions }: DialogProps) {
+export function Dialog({
+  isOpen,
+  onClose,
+  title,
+  description,
+  children,
+  actions,
+  actionsLayout,
+  dismissible = true,
+}: DialogProps) {
   const { theme } = useTheme();
+  const layout =
+    actionsLayout ??
+    (actions && actions.length > 2 ? "stacked" : "row");
 
   return (
     <RNModal visible={isOpen} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
       <View style={[styles.overlay, { backgroundColor: theme.colors.scrim }]}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close dialog overlay" />
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={dismissible ? onClose : undefined}
+          accessibilityLabel="Close dialog overlay"
+        />
         <View
           style={[
             styles.card,
@@ -34,11 +56,15 @@ export function Dialog({ isOpen, onClose, title, description, children, actions 
             {
               backgroundColor: theme.colors.card,
               borderRadius: theme.radius.xl,
+              borderCurve: "continuous",
               padding: theme.space.xl,
             },
           ]}
+          accessibilityRole="alert"
+          accessibilityViewIsModal
         >
           <Text
+            accessibilityRole="header"
             style={{
               color: theme.colors.foreground,
               fontSize: theme.type.titleMedium.fontSize,
@@ -64,9 +90,21 @@ export function Dialog({ isOpen, onClose, title, description, children, actions 
           ) : null}
           {children}
           {actions?.length ? (
-            <View style={[styles.actions, { gap: theme.space.sm, marginTop: theme.space.md }]}>
+            <View
+              style={[
+                layout === "stacked" ? styles.actionsStacked : styles.actionsRow,
+                { gap: theme.space.sm, marginTop: theme.space.md },
+              ]}
+            >
               {actions.map((action) => (
-                <Button key={action.label} variant={action.variant ?? "ghost"} onPress={action.onPress}>
+                <Button
+                  key={action.label}
+                  variant={action.variant ?? "ghost"}
+                  loading={action.loading}
+                  disabled={action.disabled}
+                  onPress={action.onPress}
+                  style={layout === "stacked" ? styles.actionFull : undefined}
+                >
                   {action.label}
                 </Button>
               ))}
@@ -88,9 +126,17 @@ const styles = StyleSheet.create({
   card: {
     width: "100%",
     maxWidth: 400,
+    zIndex: 1,
   },
-  actions: {
+  actionsRow: {
     flexDirection: "row",
     justifyContent: "flex-end",
+    flexWrap: "wrap",
+  },
+  actionsStacked: {
+    flexDirection: "column",
+  },
+  actionFull: {
+    width: "100%",
   },
 });

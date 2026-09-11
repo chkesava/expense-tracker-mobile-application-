@@ -1,6 +1,6 @@
+import { appDialog } from "@/lib/appDialog";
 import React, { useMemo, useState } from "react";
 import {
-  Alert,
   FlatList,
   Modal,
   Pressable,
@@ -72,7 +72,7 @@ export function VaultDetailModal({
   const themeColor = vault.themeColor || "#6366F1";
 
   const handleDelete = () => {
-    Alert.alert(
+    appDialog.alert(
       "Delete Vault",
       `Are you sure you want to delete "${vault.name}"? This action cannot be undone.`,
       [

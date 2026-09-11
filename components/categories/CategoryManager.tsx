@@ -1,6 +1,6 @@
+import { appDialog } from "@/lib/appDialog";
 import { useMemo, useState } from "react";
 import {
-  Alert,
   Modal,
   Pressable,
   ScrollView,
@@ -120,7 +120,7 @@ export function CategoryManager() {
   };
 
   const handleDeletePrompt = (id: string, name: string) => {
-    Alert.alert(
+    appDialog.alert(
       "Delete Category",
       `Are you sure you want to delete “${name}” and all its subcategories?`,
       [

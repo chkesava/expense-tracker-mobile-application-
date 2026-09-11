@@ -30,6 +30,7 @@ import { installGlobalErrorHandlers } from "@/lib/globalErrorHandler";
 import { perfMark } from "@/lib/perf";
 import { bindQueryClientToNetwork } from "@/lib/queryNetworkBinding";
 import { ToastProvider } from "@/lib/toast";
+import { AppDialogProvider } from "@/providers/AppDialogProvider";
 import { AuthProvider, useAuth } from "@/providers/AuthProvider";
 import { CelebrationProvider } from "@/providers/CelebrationProvider";
 import { LocalizationProvider } from "@/providers/LocalizationProvider";
@@ -263,6 +264,7 @@ export default function RootLayout() {
                         <LocalizationProvider>
                           <CelebrationProvider>
                             <ToastProvider>
+                              <AppDialogProvider>
                               <AppInitializer>
                                 {/* Inner net: a screen crash keeps providers,
                                     session and cached data alive. */}
@@ -271,6 +273,7 @@ export default function RootLayout() {
                                 </AppErrorBoundary>
                                 <CelebrationOverlay />
                               </AppInitializer>
+                              </AppDialogProvider>
                             </ToastProvider>
                           </CelebrationProvider>
                         </LocalizationProvider>

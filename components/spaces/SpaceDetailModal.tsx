@@ -1,6 +1,6 @@
+import { appDialog } from "@/lib/appDialog";
 import React, { useMemo, useState } from "react";
 import {
-  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -155,7 +155,7 @@ export function SpaceDetailModal({
 
   const confirmDelete = () => {
     if (!space.id) return;
-    Alert.alert(
+    appDialog.alert(
       "Delete space?",
       "The space is removed and its expenses are unlinked. No expense is deleted.",
       [

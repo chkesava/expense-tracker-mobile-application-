@@ -1,6 +1,7 @@
+import { appDialog } from "@/lib/appDialog";
+import { toast } from "@/lib/toast";
 import { useEffect, useMemo, useState } from "react";
 import {
-  Alert,
   Modal,
   Pressable,
   ScrollView,
@@ -150,7 +151,7 @@ export function CreateSplitModal({ visible, onClose }: CreateSplitModalProps) {
 
   const handleRemoveParticipant = (id: string) => {
     if (participants.length <= 2) {
-      Alert.alert("Notice", "A split requires at least 2 participants.");
+      toast.info("A split requires at least 2 participants.");
       return;
     }
     haptic.selection().catch(() => undefined);
@@ -188,23 +189,23 @@ export function CreateSplitModal({ visible, onClose }: CreateSplitModalProps) {
 
   const handleSave = async () => {
     if (!title.trim()) {
-      Alert.alert("Error", "Please enter a split title.");
+      toast.error("Please enter a split title.");
       return;
     }
 
     if (numTotal <= 0) {
-      Alert.alert("Error", "Please enter a valid total amount.");
+      toast.error("Please enter a valid total amount.");
       return;
     }
 
     const namedParticipants = participants.filter((p) => p.name.trim().length > 0);
     if (namedParticipants.length < 2) {
-      Alert.alert("Error", "Please provide names for at least 2 participants.");
+      toast.error("Please provide names for at least 2 participants.");
       return;
     }
 
     if (isCollect && !(userSettings.upiId || "").trim()) {
-      Alert.alert(
+      appDialog.alert(
         "UPI ID Required",
         "Set your UPI ID in Settings so friends can pay with a QR code or link."
       );
@@ -217,7 +218,7 @@ export function CreateSplitModal({ visible, onClose }: CreateSplitModalProps) {
       finalParticipants = calculateEqualSplits(numTotal, namedParticipants);
     } else {
       if (!customValidation.isValid) {
-        Alert.alert(
+        appDialog.alert(
           "Amount Mismatch",
           `The sum of custom amounts is off by ${displayCurrency} ${Math.abs(
             customValidation.difference
