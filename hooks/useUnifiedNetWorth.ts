@@ -76,7 +76,7 @@ export function useUnifiedNetWorth(): UnifiedNetWorthSummary {
   const { investments, loading: investmentsLoading } = useInvestments();
   const {
     holdings,
-    settings: portfolioSettings,
+    cashBalance: investmentCashBalance,
     loading: portfolioLoading,
   } = usePortfolio({ includeSecondary: false });
 
@@ -136,7 +136,9 @@ export function useUnifiedNetWorth(): UnifiedNetWorthSummary {
       const livePrice = quotes.get(h.yahooSymbol)?.currentPrice ?? h.averageBuyPrice;
       stocksHoldingsValue += h.quantity * livePrice;
     });
-    const stocksCashBalance = portfolioSettings?.cashBalance ?? 0;
+    // Derived from the cash ledger, not the stored scalar — the scalar could still
+    // be carrying money a holding purchase had already spent (KAN-77).
+    const stocksCashBalance = investmentCashBalance;
     const totalStocksValue = stocksHoldingsValue + stocksCashBalance;
 
     // Borrowings are a liability; receivables are a non-cash asset that offsets
@@ -182,7 +184,7 @@ export function useUnifiedNetWorth(): UnifiedNetWorthSummary {
     investments,
     holdings,
     quotes,
-    portfolioSettings,
+    investmentCashBalance,
     today,
   ]);
 

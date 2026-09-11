@@ -7,6 +7,17 @@ export const instrumentTypeSchema = z.enum(["stock", "etf", "mutual_fund", "gold
 export const brokerSchema = z.enum(["Groww", "Zerodha", "Upstox", "Angel One", "Other"]);
 export const transactionTypeSchema = z.enum(["BUY", "SELL", "BONUS", "SPLIT", "DIVIDEND"]);
 export const alertConditionSchema = z.enum(["price_above", "price_below", "profit_above", "loss_above"]);
+export const investmentCashDirectionSchema = z.enum(["credit", "debit"]);
+
+/**
+ * Where the money for a holding came from.
+ *
+ * `investment_cash` deducts from the Investment Cash Balance; `external` records a
+ * holding bought outside the app (CSV import, pre-existing portfolio) and moves no
+ * cash at all. Without the second option a user with no investment cash could not
+ * record the holdings they already own.
+ */
+export const holdingFundingSourceSchema = z.enum(["investment_cash", "external"]);
 
 export const onboardingStep1Schema = z.object({
   initialInvestmentAmount: z.number().min(0, "Amount must be 0 or more"),
@@ -24,6 +35,7 @@ export const addHoldingSchema = z
     targetPrice: z.number().positive("Target price must be greater than 0").optional(),
     broker: brokerSchema.optional(),
     datePurchased: z.string().regex(dateKeyRegex, "Invalid date").optional().or(z.literal("")),
+    fundingSource: holdingFundingSourceSchema.default("investment_cash"),
   })
   .superRefine((data, ctx) => {
     if (data.instrumentType === "mutual_fund" && !/^\d+$/.test(data.symbol.trim())) {
@@ -62,6 +74,23 @@ export const mockSellSchema = z.object({
   notes: z.string().max(500).optional(),
 });
 
+/**
+ * A manual correction to the Investment Cash Balance.
+ *
+ * The reason is mandatory and trimmed: an adjustment with no explanation is
+ * indistinguishable from the drift it is meant to correct (KAN-77).
+ */
+export const investmentCashAdjustmentSchema = z.object({
+  amount: z.number().positive("Amount must be greater than 0"),
+  direction: investmentCashDirectionSchema,
+  date: z.string().regex(dateKeyRegex, "Invalid date"),
+  reason: z
+    .string()
+    .trim()
+    .min(3, "Please give a reason for this adjustment")
+    .max(500, "Reason is too long"),
+});
+
 export const watchlistSchema = z.object({
   symbol: z.string().min(1),
   yahooSymbol: z.string().min(1),
@@ -80,6 +109,8 @@ export const alertSchema = z.object({
 
 export type OnboardingStep1Input = z.infer<typeof onboardingStep1Schema>;
 export type AddHoldingInput = z.infer<typeof addHoldingSchema>;
+export type HoldingFundingSource = z.infer<typeof holdingFundingSourceSchema>;
+export type InvestmentCashAdjustmentInput = z.infer<typeof investmentCashAdjustmentSchema>;
 export type MockBuyInput = z.infer<typeof mockBuySchema>;
 export type MockSellInput = z.infer<typeof mockSellSchema>;
 export type WatchlistInput = z.infer<typeof watchlistSchema>;

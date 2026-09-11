@@ -44,7 +44,15 @@ export interface SearchResult {
 export interface PortfolioSettings {
   id: string;
   initialInvestmentAmount: number;
+  /**
+   * Cache of the investment cash balance, kept for the web app that shares this
+   * Firestore project. The authoritative value is derived from `cashBaseline` plus
+   * the `investmentCashTransactions` ledger — read it via `useInvestmentCash`, not
+   * from here.
+   */
   cashBalance: number;
+  /** Opening balance the cash ledger folds onto. Absent until first captured. */
+  cashBaseline?: InvestmentCashBaseline;
   hasExistingHoldings: boolean;
   onboardingComplete: boolean;
   createdAt?: unknown;
@@ -167,4 +175,69 @@ export interface AllocationSlice {
   label: string;
   value: number;
   color: string;
+}
+
+/**
+ * Movements of the Investment Cash Balance — the broker-style wallet money is
+ * transferred into from a bank account and then spent on holdings.
+ *
+ * The balance is derived by folding these entries onto `PortfolioSettings.cashBaseline`
+ * rather than read from a stored scalar, so a recalculation can never restore cash a
+ * purchase already consumed (KAN-77).
+ */
+export type InvestmentCashEntryType =
+  | "TOP_UP"
+  | "WITHDRAWAL"
+  | "PURCHASE"
+  | "SALE"
+  | "ADJUSTMENT"
+  | "REVERSAL";
+
+/** Where an entry came from. `csv_import` and `onboarding` never move cash. */
+export type InvestmentCashSource = "app" | "csv_import" | "onboarding";
+
+export interface InvestmentCashEntry {
+  /** Equal to `correlationId` — the doc id is the idempotency key. */
+  id: string;
+  type: InvestmentCashEntryType;
+  /** Always positive; the sign lives in `direction`. */
+  amount: number;
+  direction: "credit" | "debit";
+  /** YYYY-MM-DD, the date the user picked. */
+  date: string;
+  note?: string;
+  /** Mandatory for ADJUSTMENT — why the balance was corrected by hand. */
+  reason?: string;
+  holdingId?: string;
+  symbol?: string;
+  quantity?: number;
+  price?: number;
+  /** Bank side of a transfer. */
+  accountId?: string;
+  accountEntryId?: string;
+  /** The PURCHASE/TOP_UP entry a REVERSAL undoes. Never mutates the original. */
+  reversesId?: string;
+  correlationId: string;
+  source: InvestmentCashSource;
+  createdAt?: unknown;
+  /**
+   * Client clock in ms. `createdAt` is still null locally on an offline write,
+   * so ordering needs a value that exists before the server ack.
+   */
+  createdAtMs: number;
+}
+
+/**
+ * The opening balance the cash ledger folds onto.
+ *
+ * Captured once per user from whatever the legacy `cashBalance` scalar held, which
+ * is what lets the ledger ship without a backfill against the shared Firebase
+ * project. Legacy `portfolioTransactions` CASH rows are already inside this amount,
+ * so they must never also be summed.
+ */
+export interface InvestmentCashBaseline {
+  amount: number;
+  capturedAt: string;
+  capturedAtMs: number;
+  reason: string;
 }

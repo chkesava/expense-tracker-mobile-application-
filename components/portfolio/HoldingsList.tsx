@@ -19,7 +19,8 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { BOTTOM_NAV_FAB_GAP, BOTTOM_NAV_FAB_SIZE } from "@/components/layout/chrome";
 import { HoldingCard } from "@/components/portfolio/HoldingCard";
 import { HoldingDetailModal } from "@/components/portfolio/HoldingDetailModal";
-import { AddHoldingModal } from "@/components/portfolio/AddHoldingModal";
+import { AddHoldingModal, type AddHoldingOptions } from "@/components/portfolio/AddHoldingModal";
+import { ManageStockCashModal } from "@/components/portfolio/ManageStockCashModal";
 import { CsvImportModal } from "@/components/portfolio/CsvImportModal";
 import { MockTradeModal } from "@/components/portfolio/MockTradeModal";
 import { appDialog } from "@/lib/appDialog";
@@ -67,10 +68,12 @@ export function HoldingsList({ listHeader }: { listHeader?: ReactNode }) {
   const {
     holdings,
     transactions,
-    settings: portfolioSettings,
+    cashBalance,
+    availableCash,
     addHolding,
     overwriteHoldings,
     deleteHolding,
+    findHoldingPurchase,
     executeMockBuy,
     executeMockSell,
     placeLimitBuyOrder,
@@ -90,6 +93,7 @@ export function HoldingsList({ listHeader }: { listHeader?: ReactNode }) {
   const [filter, setFilter] = useState<InstrumentType | "all">("all");
   const [sort, setSort] = useState<SortOption>("value");
   const [addModalVisible, setAddModalVisible] = useState(false);
+  const [cashModalVisible, setCashModalVisible] = useState(false);
   const [importModalVisible, setImportModalVisible] = useState(false);
   const [detailHoldingId, setDetailHoldingId] = useState<string | null>(null);
   const [trade, setTrade] = useState<{ id: string; side: "BUY" | "SELL" } | null>(
@@ -151,10 +155,10 @@ export function HoldingsList({ listHeader }: { listHeader?: ReactNode }) {
   }, [holdingsWithMetrics, filter, search, sort]);
 
   const handleAddHolding = async (
-    params: Omit<Holding, "id" | "createdAt" | "updatedAt">
+    params: Omit<Holding, "id" | "createdAt" | "updatedAt">,
+    options: AddHoldingOptions
   ) => {
-    await addHolding(params);
-    return "success";
+    return addHolding(params, options);
   };
 
   const openAdd = useCallback(() => {
@@ -212,6 +216,41 @@ export function HoldingsList({ listHeader }: { listHeader?: ReactNode }) {
 
   const confirmDelete = useCallback(
     (id: string, symbol: string) => {
+      const clearSelection = () => {
+        setDetailHoldingId((current) => (current === id ? null : current));
+        setTrade((current) => (current?.id === id ? null : current));
+      };
+      const purchase = findHoldingPurchase(id);
+
+      // Only a holding that was funded from investment cash can offer a refund,
+      // and the refund stays an explicit choice: removing a holding must never
+      // silently put spent money back on the balance.
+      if (purchase) {
+        appDialog.alert(
+          `Remove ${symbol}?`,
+          `This holding used ${displayCurrency}${purchase.amount.toLocaleString("en-IN")} of investment cash. Return that cash to your balance, or delete the holding and leave the balance as it is?`,
+          [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "Delete only",
+              style: "destructive",
+              onPress: () => {
+                void deleteHolding(id);
+                clearSelection();
+              },
+            },
+            {
+              text: "Delete and refund",
+              onPress: () => {
+                void deleteHolding(id, { refundCash: true });
+                clearSelection();
+              },
+            },
+          ]
+        );
+        return;
+      }
+
       appDialog.alert(
         `Remove ${symbol}?`,
         "This deletes the holding from your portfolio. Past mock trades stay in history.",
@@ -222,14 +261,13 @@ export function HoldingsList({ listHeader }: { listHeader?: ReactNode }) {
             style: "destructive",
             onPress: () => {
               void deleteHolding(id);
-              setDetailHoldingId((current) => (current === id ? null : current));
-              setTrade((current) => (current?.id === id ? null : current));
+              clearSelection();
             },
           },
         ]
       );
     },
-    [deleteHolding]
+    [deleteHolding, findHoldingPurchase, displayCurrency]
   );
 
   const onMenuHolding = useCallback(
@@ -516,6 +554,17 @@ export function HoldingsList({ listHeader }: { listHeader?: ReactNode }) {
         visible={addModalVisible}
         onClose={() => setAddModalVisible(false)}
         onAdd={handleAddHolding}
+        availableCash={availableCash}
+        currency={displayCurrency}
+        onAddCash={() => {
+          setAddModalVisible(false);
+          setCashModalVisible(true);
+        }}
+      />
+      <ManageStockCashModal
+        visible={cashModalVisible}
+        onClose={() => setCashModalVisible(false)}
+        currency={displayCurrency}
       />
       <CsvImportModal
         visible={importModalVisible}
@@ -543,7 +592,7 @@ export function HoldingsList({ listHeader }: { listHeader?: ReactNode }) {
         onBuy={executeMockBuy}
         onSell={executeMockSell}
         onPlaceLimitBuy={placeLimitBuyOrder}
-        cashBalance={portfolioSettings?.cashBalance ?? 0}
+        cashBalance={cashBalance}
         currency={displayCurrency}
       />
     </View>

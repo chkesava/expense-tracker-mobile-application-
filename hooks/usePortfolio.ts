@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   addDoc,
   collection,
@@ -15,12 +15,29 @@ import {
 } from "firebase/firestore";
 
 import { getFirestoreDb } from "@/lib/firebase";
+import { writeSavedMessage } from "@/lib/firestoreWrite";
+import { newId } from "@/lib/id";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
+import {
+  INVESTMENT_CASH_COLLECTION,
+  createHoldingWithCash,
+  ensureCashBaseline,
+  recordInvestmentCashEntry,
+  reverseInvestmentCashEntry,
+} from "@/services/portfolio/investmentCash";
 import { scheduleIdleWork } from "@/shared/utils/scheduleIdle";
+import {
+  availableInvestmentCash,
+  computeInvestmentCashBalance,
+  holdingPurchaseAmount,
+} from "@/shared/features/portfolio/utils/investmentCash";
+import type { HoldingFundingSource } from "@/shared/features/portfolio/schemas";
 import type {
   Holding,
+  InvestmentCashEntry,
+  InvestmentCashSource,
   PortfolioOrder,
   PortfolioSettings,
   PortfolioSnapshot,
@@ -74,6 +91,7 @@ export function usePortfolio(options?: {
   const [alerts, setAlerts] = useState<PriceAlert[]>([]);
   const [snapshots, setSnapshots] = useState<PortfolioSnapshot[]>([]);
   const [settings, setSettings] = useState<PortfolioSettings | null>(null);
+  const [cashEntries, setCashEntries] = useState<InvestmentCashEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -85,6 +103,7 @@ export function usePortfolio(options?: {
       setAlerts([]);
       setSnapshots([]);
       setSettings(null);
+      setCashEntries([]);
       setLoading(false);
       return;
     }
@@ -117,6 +136,21 @@ export function usePortfolio(options?: {
         logError("portfolio.loadHoldings", error);
         setLoading(false);
       }),
+      // Primary, not secondary: useUnifiedNetWorth subscribes with
+      // includeSecondary:false and still needs the cash balance.
+      onSnapshot(
+        query(collection(db, "users", uid, INVESTMENT_CASH_COLLECTION)),
+        (snapshot) => {
+          setCashEntries(
+            snapshot.docs.map(
+              (item) => ({ id: item.id, ...item.data() } as InvestmentCashEntry)
+            )
+          );
+        },
+        (error) => {
+          logError("portfolio.loadInvestmentCash", error);
+        }
+      ),
     ];
 
     // Secondary collections after idle — skip for net-worth-only consumers
@@ -171,21 +205,74 @@ export function usePortfolio(options?: {
     };
   }, [db, uid, enabled, includeSecondary]);
 
-  const addHolding = useCallback(async (holding: CreateHoldingInput): Promise<string | null> => {
+  /**
+   * The authoritative Investment Cash Balance: the captured baseline plus every
+   * ledger movement. `settings.cashBalance` is only a cache for the web app that
+   * shares this Firestore project — reading it here is what let a purchase leave
+   * spent money looking available (KAN-77).
+   */
+  const cashBalance = useMemo(() => {
+    // Before the baseline is captured the ledger is empty by construction, and the
+    // scalar is all there is. Folding entries onto the scalar instead would
+    // double-count them for the moment between the baseline write and the ledger
+    // write arriving from the local cache.
+    if (!settings?.cashBaseline) return Number(settings?.cashBalance ?? 0);
+    return computeInvestmentCashBalance(settings.cashBaseline, cashEntries);
+  }, [settings, cashEntries]);
+
+  /** What may actually be spent — never negative, however far the balance drifted. */
+  const availableCash = useMemo(() => availableInvestmentCash(cashBalance), [cashBalance]);
+
+  /**
+   * Adds a holding and, when it is funded from investment cash, deducts the
+   * purchase in the same batch.
+   *
+   * `fundingSource: "external"` records a holding bought outside the app and moves
+   * no cash — the CSV import and the "I already have holdings" onboarding path both
+   * rely on that, since those holdings were never funded through the app.
+   */
+  const addHolding = useCallback(async (
+    holding: CreateHoldingInput,
+    options?: {
+      fundingSource?: HoldingFundingSource;
+      /** Minted once by the caller and reused across retries. */
+      entryId?: string;
+      holdingId?: string;
+      date?: string;
+      source?: InvestmentCashSource;
+    }
+  ): Promise<string | null> => {
     if (!user || !db) return null;
+    const fundingSource = options?.fundingSource ?? "investment_cash";
+    const purchaseAmount = holdingPurchaseAmount(holding.quantity, holding.averageBuyPrice);
     try {
-      const created = await addDoc(
-        collection(db, "users", user.uid, "holdings"),
-        stripUndefined({ ...holding, createdAt: serverTimestamp(), updatedAt: serverTimestamp() })
+      if (fundingSource === "investment_cash" && purchaseAmount > 0) {
+        // Freeze the legacy scalar as the opening balance before the first ledger
+        // entry lands, or that entry would be double-counted against it.
+        await ensureCashBaseline(user.uid, settings?.cashBalance ?? 0);
+      }
+      const result = await createHoldingWithCash(user.uid, {
+        holding,
+        fundingSource,
+        purchaseAmount,
+        entryId: options?.entryId,
+        holdingId: options?.holdingId,
+        date: options?.date ?? (holding.datePurchased || todayKey()),
+        source: options?.source,
+      });
+      toast.success(
+        writeSavedMessage(
+          result.outcome,
+          result.entryId ? "Holding added and cash deducted" : "Holding added"
+        )
       );
-      toast.success("Holding added");
-      return created.id;
+      return result.holdingId;
     } catch (error) {
       logError("portfolio.addHolding", error);
-      toast.error("Failed to add holding");
+      toast.error(friendlyErrorMessage(error, "Failed to add holding"));
       return null;
     }
-  }, [db, user]);
+  }, [db, user, settings]);
 
   const updateHolding = useCallback(async (id: string, updates: Partial<CreateHoldingInput>) => {
     if (!user || !db) return false;
@@ -202,18 +289,51 @@ export function usePortfolio(options?: {
     }
   }, [db, user]);
 
-  const deleteHolding = useCallback(async (id: string) => {
+  /**
+   * Removes a holding, optionally returning the cash its purchase consumed.
+   *
+   * The refund is opt-in and writes a new REVERSAL entry rather than deleting the
+   * original PURCHASE, so history keeps showing that the money was spent and then
+   * came back. Deleting a holding must never silently restore cash — that is the
+   * behaviour KAN-77 exists to prevent.
+   */
+  const deleteHolding = useCallback(async (
+    id: string,
+    options?: { refundCash?: boolean }
+  ) => {
     if (!user || !db) return false;
     try {
+      if (options?.refundCash) {
+        const purchase = cashEntries.find(
+          (entry) => entry.type === "PURCHASE" && entry.holdingId === id
+        );
+        if (purchase) {
+          await reverseInvestmentCashEntry(user.uid, purchase, {
+            date: todayKey(),
+            reason: `Refund for removing ${purchase.symbol ?? "a holding"}`,
+          });
+        }
+      }
       await deleteDoc(doc(db, "users", user.uid, "holdings", id));
-      toast.success("Holding removed");
+      toast.success(
+        options?.refundCash ? "Holding removed and cash returned" : "Holding removed"
+      );
       return true;
     } catch (error) {
       logError("portfolio.deleteHolding", error);
-      toast.error("Failed to remove holding");
+      toast.error(friendlyErrorMessage(error, "Failed to remove holding"));
       return false;
     }
-  }, [db, user]);
+  }, [db, user, cashEntries]);
+
+  /** The purchase entry a holding's cash came from, if it was funded in-app. */
+  const findHoldingPurchase = useCallback(
+    (holdingId: string) =>
+      cashEntries.find(
+        (entry) => entry.type === "PURCHASE" && entry.holdingId === holdingId
+      ) ?? null,
+    [cashEntries]
+  );
 
   const overwriteHoldings = useCallback(async (nextHoldings: CreateHoldingInput[]) => {
     if (!user || !db) return false;
@@ -346,7 +466,10 @@ export function usePortfolio(options?: {
     const holdingRef = doc(db, "users", user.uid, "holdings", holdingId);
     const settingsRef = doc(db, "users", user.uid, "portfolioSettings", SETTINGS_DOC_ID);
     const transactionRef = doc(collection(db, "users", user.uid, "portfolioTransactions"));
+    const cashEntryId = newId();
+    const cashEntryRef = doc(db, "users", user.uid, INVESTMENT_CASH_COLLECTION, cashEntryId);
     try {
+      await ensureCashBaseline(user.uid, settings?.cashBalance ?? 0);
       await runTransaction(db, async (firestoreTransaction) => {
         const [holdingSnapshot, settingsSnapshot] = await Promise.all([
           firestoreTransaction.get(holdingRef),
@@ -374,6 +497,23 @@ export function usePortfolio(options?: {
           orderStatus: "executed",
           createdAt: serverTimestamp(),
         });
+        // Written inside the same transaction as the scalar it mirrors, so a mock
+        // trade can never move one without the other.
+        firestoreTransaction.set(cashEntryRef, {
+          type: "PURCHASE",
+          amount: cost,
+          direction: "debit",
+          date: todayKey(),
+          holdingId,
+          symbol: holding.symbol,
+          quantity,
+          price,
+          note: `Bought ${quantity} ${holding.symbol}`,
+          correlationId: cashEntryId,
+          source: "app",
+          createdAt: serverTimestamp(),
+          createdAtMs: Date.now(),
+        });
       });
       toast.success("Mock buy executed");
       return true;
@@ -383,7 +523,7 @@ export function usePortfolio(options?: {
       toast.error(friendlyErrorMessage(error, "Couldn't complete the buy order."));
       return false;
     }
-  }, [db, user]);
+  }, [db, user, settings]);
 
   const executeMockSell = useCallback(async (holdingId: string, quantity: number, price: number, fees = 0) => {
     if (!user || !db) return false;
@@ -391,7 +531,10 @@ export function usePortfolio(options?: {
     const holdingRef = doc(db, "users", user.uid, "holdings", holdingId);
     const settingsRef = doc(db, "users", user.uid, "portfolioSettings", SETTINGS_DOC_ID);
     const transactionRef = doc(collection(db, "users", user.uid, "portfolioTransactions"));
+    const cashEntryId = newId();
+    const cashEntryRef = doc(db, "users", user.uid, INVESTMENT_CASH_COLLECTION, cashEntryId);
     try {
+      await ensureCashBaseline(user.uid, settings?.cashBalance ?? 0);
       await runTransaction(db, async (firestoreTransaction) => {
         const [holdingSnapshot, settingsSnapshot] = await Promise.all([
           firestoreTransaction.get(holdingRef),
@@ -416,6 +559,21 @@ export function usePortfolio(options?: {
           orderStatus: "executed",
           createdAt: serverTimestamp(),
         });
+        firestoreTransaction.set(cashEntryRef, {
+          type: "SALE",
+          amount: quantity * price - fees,
+          direction: "credit",
+          date: todayKey(),
+          holdingId,
+          symbol: holding.symbol,
+          quantity,
+          price,
+          note: `Sold ${quantity} ${holding.symbol}`,
+          correlationId: cashEntryId,
+          source: "app",
+          createdAt: serverTimestamp(),
+          createdAtMs: Date.now(),
+        });
       });
       toast.success("Mock sell executed");
       return true;
@@ -425,7 +583,7 @@ export function usePortfolio(options?: {
       toast.error(friendlyErrorMessage(error, "Couldn't complete the sell order."));
       return false;
     }
-  }, [db, user]);
+  }, [db, user, settings]);
 
   const placeLimitBuyOrder = useCallback(async (holding: Holding, quantity: number, targetPrice: number) => {
     if (!user || !db || !(quantity > 0) || !(targetPrice > 0)) return false;
@@ -466,87 +624,77 @@ export function usePortfolio(options?: {
     }
   }, [db, user]);
 
-  const depositCash = useCallback(async (amount: number, note?: string) => {
+  /**
+   * Money arriving from a bank account.
+   *
+   * Now a ledger entry rather than a read-modify-write of the scalar, and it keeps
+   * the date the user picked — the old path overwrote it with today's, so a
+   * back-dated transfer landed on the wrong day.
+   */
+  const depositCash = useCallback(async (
+    amount: number,
+    note?: string,
+    options?: { date?: string; entryId?: string; accountId?: string; accountEntryId?: string }
+  ) => {
     if (!user || !db || !(amount > 0)) return false;
-    const settingsRef = doc(db, "users", user.uid, "portfolioSettings", SETTINGS_DOC_ID);
-    const transactionRef = doc(collection(db, "users", user.uid, "portfolioTransactions"));
     try {
-      await runTransaction(db, async (firestoreTransaction) => {
-        const settingsSnapshot = await firestoreTransaction.get(settingsRef);
-        const currentBalance = Number(settingsSnapshot.data()?.cashBalance ?? 0);
-        firestoreTransaction.set(
-          settingsRef,
-          {
-            cashBalance: currentBalance + amount,
-            updatedAt: serverTimestamp(),
-            createdAt: settingsSnapshot.data()?.createdAt ?? serverTimestamp(),
-          },
-          { merge: true }
-        );
-        firestoreTransaction.set(transactionRef, {
-          holdingId: "cash",
-          symbol: "CASH",
-          type: "BUY",
-          quantity: 1,
-          price: amount,
-          fees: 0,
-          notes: note || "Cash deposit to Stocks Demat",
-          date: todayKey(),
-          orderStatus: "executed",
-          createdAt: serverTimestamp(),
-        });
-      });
-      toast.success("Cash deposited to Stocks Demat");
+      await ensureCashBaseline(user.uid, settings?.cashBalance ?? 0);
+      const result = await recordInvestmentCashEntry(
+        user.uid,
+        {
+          type: "TOP_UP",
+          amount,
+          direction: "credit",
+          date: options?.date ?? todayKey(),
+          note: note || "Cash deposit to Stocks Demat",
+          accountId: options?.accountId,
+          accountEntryId: options?.accountEntryId,
+        },
+        options?.entryId
+      );
+      toast.success(writeSavedMessage(result.outcome, "Cash deposited to Stocks Demat"));
       return true;
     } catch (error) {
       logError("portfolio.depositCash", error);
-      toast.error("Failed to deposit cash");
+      toast.error(friendlyErrorMessage(error, "Failed to deposit cash"));
       return false;
     }
-  }, [db, user]);
+  }, [db, user, settings]);
 
-  const withdrawCash = useCallback(async (amount: number, note?: string) => {
+  /** Money returning to a bank account. Guarded against overdrawing the wallet. */
+  const withdrawCash = useCallback(async (
+    amount: number,
+    note?: string,
+    options?: { date?: string; entryId?: string; accountId?: string; accountEntryId?: string }
+  ) => {
     if (!user || !db || !(amount > 0)) return false;
-    const settingsRef = doc(db, "users", user.uid, "portfolioSettings", SETTINGS_DOC_ID);
-    const transactionRef = doc(collection(db, "users", user.uid, "portfolioTransactions"));
+    if (amount > availableCash) {
+      toast.error("Insufficient cash balance");
+      return false;
+    }
     try {
-      await runTransaction(db, async (firestoreTransaction) => {
-        const settingsSnapshot = await firestoreTransaction.get(settingsRef);
-        const currentBalance = Number(settingsSnapshot.data()?.cashBalance ?? 0);
-        if (currentBalance < amount) {
-          throw new Error("Insufficient cash balance");
-        }
-        firestoreTransaction.set(
-          settingsRef,
-          {
-            cashBalance: currentBalance - amount,
-            updatedAt: serverTimestamp(),
-            createdAt: settingsSnapshot.data()?.createdAt ?? serverTimestamp(),
-          },
-          { merge: true }
-        );
-        firestoreTransaction.set(transactionRef, {
-          holdingId: "cash",
-          symbol: "CASH",
-          type: "SELL",
-          quantity: 1,
-          price: amount,
-          fees: 0,
-          notes: note || "Cash withdrawal from Stocks Demat",
-          date: todayKey(),
-          orderStatus: "executed",
-          createdAt: serverTimestamp(),
-        });
-      });
-      toast.success("Cash withdrawn from Stocks Demat");
+      await ensureCashBaseline(user.uid, settings?.cashBalance ?? 0);
+      const result = await recordInvestmentCashEntry(
+        user.uid,
+        {
+          type: "WITHDRAWAL",
+          amount,
+          direction: "debit",
+          date: options?.date ?? todayKey(),
+          note: note || "Cash withdrawal from Stocks Demat",
+          accountId: options?.accountId,
+          accountEntryId: options?.accountEntryId,
+        },
+        options?.entryId
+      );
+      toast.success(writeSavedMessage(result.outcome, "Cash withdrawn from Stocks Demat"));
       return true;
     } catch (error) {
       logError("portfolio.withdrawCash", error);
-      logError("portfolio.withdraw", error);
       toast.error(friendlyErrorMessage(error, "Couldn't withdraw the cash."));
       return false;
     }
-  }, [db, user]);
+  }, [db, user, settings, availableCash]);
 
   return {
     holdings,
@@ -556,10 +704,17 @@ export function usePortfolio(options?: {
     alerts,
     snapshots,
     settings,
+    /** Investment Cash ledger movements, newest-first rendering is the caller's job. */
+    cashEntries,
+    /** Authoritative Investment Cash Balance — derived, not the stored scalar. */
+    cashBalance,
+    /** `cashBalance` clamped at zero: what may actually be spent. */
+    availableCash,
     loading,
     addHolding,
     updateHolding,
     deleteHolding,
+    findHoldingPurchase,
     overwriteHoldings,
     addToWatchlist,
     removeFromWatchlist,

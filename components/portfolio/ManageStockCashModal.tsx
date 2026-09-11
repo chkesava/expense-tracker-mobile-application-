@@ -10,6 +10,7 @@ import {
 import {
   ArrowDownLeft,
   ArrowUpRight,
+  History,
   Landmark,
   SlidersHorizontal,
   Wallet,
@@ -17,6 +18,7 @@ import {
 } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
+import { InvestmentCashHistoryModal } from "@/components/portfolio/InvestmentCashHistoryModal";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
@@ -24,7 +26,13 @@ import { useAccountEntries } from "@/hooks/useAccountEntries";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
 import { usePortfolio } from "@/hooks/usePortfolio";
+import { newId } from "@/lib/id";
+import { recordInvestmentCashAdjustment } from "@/services/portfolio/investmentCash";
+import { investmentCashAdjustmentSchema } from "@/shared/features/portfolio/schemas";
+import { findRecentDuplicateAdjustment } from "@/shared/features/portfolio/utils/investmentCash";
+import { useAuth } from "@/providers/AuthProvider";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
+import { writeSavedMessage } from "@/lib/firestoreWrite";
 import { toast } from "@/lib/toast";
 import { getAccountKind } from "@/shared/utils/accountKind";
 import { formatDateKey } from "@/shared/utils/dates";
@@ -40,6 +48,11 @@ interface ManageStockCashModalProps {
 
 type Mode = "deposit" | "withdraw" | "adjust";
 
+const ADJUST_DIRECTIONS: { value: "credit" | "debit"; label: string }[] = [
+  { value: "debit", label: "Decrease" },
+  { value: "credit", label: "Increase" },
+];
+
 export function ManageStockCashModal({
   visible,
   onClose,
@@ -48,7 +61,8 @@ export function ManageStockCashModal({
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
 
-  const { settings, depositCash, withdrawCash } = usePortfolio();
+  const { cashBalance, availableCash, cashEntries, depositCash, withdrawCash } = usePortfolio();
+  const { user } = useAuth();
   const { accounts } = useAccounts();
   const { accountTypes } = useAccountTypes();
   const { addEntry } = useAccountEntries();
@@ -58,9 +72,25 @@ export function ManageStockCashModal({
   const [amount, setAmount] = useState<string>("");
   const [date, setDate] = useState<string>(formatDateKey(new Date()));
   const [note, setNote] = useState<string>("");
+  const [adjustDirection, setAdjustDirection] = useState<"credit" | "debit">("debit");
+  const [reason, setReason] = useState<string>("");
   const [loading, setLoading] = useState(false);
 
-  const currentCash = settings?.cashBalance ?? 0;
+  const [historyVisible, setHistoryVisible] = useState(false);
+
+  /** Minted once per open so a retried save rewrites the same adjustment. */
+  const adjustmentId = React.useRef(newId());
+
+  const currentCash = cashBalance;
+
+  /** Shows the user what the balance becomes before they commit the correction. */
+  const adjustedPreview = React.useMemo(() => {
+    const numAmount = parseFloat(amount);
+    if (!Number.isFinite(numAmount) || numAmount <= 0) return null;
+    return adjustDirection === "credit"
+      ? currentCash + numAmount
+      : currentCash - numAmount;
+  }, [amount, adjustDirection, currentCash]);
 
   const typeMap = React.useMemo(() => {
     const map = new Map<string, string>();
@@ -76,14 +106,23 @@ export function ManageStockCashModal({
     });
   }, [accounts, typeMap]);
 
+  // Clearing the form is tied to the modal opening, not to every dependency of
+  // this effect: `selectedAccountId` is in it, so picking a source account used to
+  // wipe the amount the user had already typed.
   React.useEffect(() => {
-    if (visible) {
-      if (bankAccounts.length > 0 && !selectedAccountId) {
-        setSelectedAccountId(bankAccounts[0].id);
-      }
-      setAmount("");
-      setDate(formatDateKey(new Date()));
-      setNote("");
+    if (!visible) return;
+    setAmount("");
+    setDate(formatDateKey(new Date()));
+    setNote("");
+    setReason("");
+    setAdjustDirection("debit");
+    adjustmentId.current = newId();
+  }, [visible]);
+
+  React.useEffect(() => {
+    if (!visible) return;
+    if (bankAccounts.length > 0 && !selectedAccountId) {
+      setSelectedAccountId(bankAccounts[0].id);
     }
   }, [visible, bankAccounts, selectedAccountId]);
 
@@ -123,14 +162,17 @@ export function ManageStockCashModal({
         }
 
         // 2. Credit Stocks Demat
-        const depositOk = await depositCash(numAmount, transferNote);
+        const depositOk = await depositCash(numAmount, transferNote, {
+          date,
+          accountId: selectedAccountId,
+        });
         if (depositOk) {
           toast.success(`Transferred ${currency} ${numAmount} to Stocks Demat`);
           onClose();
         }
       } else if (mode === "withdraw") {
         // Transfer from Demat Stocks Cash to Bank Account
-        if (numAmount > currentCash) {
+        if (numAmount > availableCash) {
           toast.error("Insufficient Demat cash balance");
           setLoading(false);
           return;
@@ -145,7 +187,10 @@ export function ManageStockCashModal({
         const transferNote = note.trim() || `Withdrawal from Stocks Demat to ${bankAcc?.name ?? "Bank"}`;
 
         // 1. Debit Stocks Demat Cash
-        const withdrawOk = await withdrawCash(numAmount, transferNote);
+        const withdrawOk = await withdrawCash(numAmount, transferNote, {
+          date,
+          accountId: selectedAccountId,
+        });
         if (!withdrawOk) {
           setLoading(false);
           return;
@@ -163,15 +208,56 @@ export function ManageStockCashModal({
         toast.success(`Transferred ${currency} ${numAmount} to ${bankAcc?.name ?? "Bank"}`);
         onClose();
       } else if (mode === "adjust") {
-        // Direct Demat Cash Deposit/Adjustment
-        const depositOk = await depositCash(
-          numAmount,
-          note.trim() || "Direct Demat cash adjustment"
-        );
-        if (depositOk) {
-          toast.success("Demat balance updated");
-          onClose();
+        // A manual correction of the balance itself — used to repair the drift
+        // left by holdings that were added before purchases deducted cash. It
+        // writes only a new ledger entry; the original holding and transfer
+        // records are never touched.
+        if (!user?.uid) {
+          toast.error("Please sign in again");
+          setLoading(false);
+          return;
         }
+
+        const parsed = investmentCashAdjustmentSchema.safeParse({
+          amount: numAmount,
+          direction: adjustDirection,
+          date,
+          reason,
+        });
+        if (!parsed.success) {
+          toast.error(parsed.error.issues[0]?.message ?? "Check the adjustment details");
+          setLoading(false);
+          return;
+        }
+
+        if (adjustDirection === "debit" && numAmount > cashBalance) {
+          toast.error(
+            `A decrease of ${currency} ${numAmount} would take the balance below zero`
+          );
+          setLoading(false);
+          return;
+        }
+
+        // A double-tap can land two distinct ids, which the write-level
+        // idempotency key cannot catch — so an identical adjustment moments ago
+        // is worth confirming rather than silently doubling the correction.
+        const duplicate = findRecentDuplicateAdjustment(
+          cashEntries,
+          { amount: numAmount, direction: adjustDirection, reason: parsed.data.reason },
+          Date.now()
+        );
+        if (duplicate) {
+          toast.error("You just made an identical adjustment. Change the reason to record another.");
+          setLoading(false);
+          return;
+        }
+
+        const result = await recordInvestmentCashAdjustment(user.uid, {
+          ...parsed.data,
+          entryId: adjustmentId.current,
+        });
+        toast.success(writeSavedMessage(result.outcome, "Investment cash balance adjusted"));
+        onClose();
       }
     } catch (err: any) {
       logError("manageStockCashModal.manageStockCash", err);
@@ -268,6 +354,23 @@ export function ManageStockCashModal({
               }}
             />
           </View>
+
+          <Pressable
+            onPress={() => setHistoryVisible(true)}
+            accessibilityRole="button"
+            style={styles.historyLinkRow}
+          >
+            <History size={14} color={theme.colors.primary} />
+            <Text
+              style={{
+                fontSize: theme.typography.sm,
+                fontWeight: "700",
+                color: theme.colors.primary,
+              }}
+            >
+              View cash history
+            </Text>
+          </Pressable>
 
           {/* Mode Tabs */}
           <View style={styles.modeTabsRow}>
@@ -396,7 +499,7 @@ export function ManageStockCashModal({
                       : theme.colors.foreground,
                 }}
               >
-                Direct Credit
+                Adjust Balance
               </Text>
             </Pressable>
           </View>
@@ -473,6 +576,86 @@ export function ManageStockCashModal({
               </View>
             )}
 
+            {mode === "adjust" && (
+              <>
+                <View
+                  style={[
+                    styles.warningBanner,
+                    {
+                      borderColor: theme.colors.border,
+                      backgroundColor: isDark
+                        ? "rgba(234, 179, 8, 0.12)"
+                        : "rgba(234, 179, 8, 0.10)",
+                    },
+                  ]}
+                >
+                  <Text
+                    style={{
+                      fontSize: theme.typography.xs,
+                      color: theme.colors.foreground,
+                      lineHeight: 17,
+                    }}
+                  >
+                    This changes your available investment cash. It records a separate
+                    correction entry and does not alter any holding or bank transfer.
+                  </Text>
+                </View>
+
+                <View style={{ gap: 6 }}>
+                  <Text
+                    style={{
+                      fontSize: theme.typography.sm,
+                      fontWeight: "600",
+                      color: theme.colors.foreground,
+                    }}
+                  >
+                    Direction *
+                  </Text>
+                  <View style={styles.modeTabsRow}>
+                    {ADJUST_DIRECTIONS.map((option) => {
+                      const isSelected = adjustDirection === option.value;
+                      return (
+                        <Pressable
+                          key={option.value}
+                          onPress={() => {
+                            haptic.selection().catch(() => undefined);
+                            setAdjustDirection(option.value);
+                          }}
+                          accessibilityRole="radio"
+                          accessibilityState={{ selected: isSelected }}
+                          style={[
+                            styles.modeTab,
+                            {
+                              backgroundColor: isSelected
+                                ? theme.colors.primary
+                                : isDark
+                                  ? "rgba(255,255,255,0.06)"
+                                  : "rgba(0,0,0,0.04)",
+                              borderColor: isSelected
+                                ? theme.colors.primary
+                                : theme.colors.border,
+                            },
+                          ]}
+                        >
+                          <Text
+                            style={{
+                              fontSize: 12,
+                              fontWeight: "700",
+                              color: isSelected
+                                ? theme.colors.primaryForeground
+                                : theme.colors.foreground,
+                            }}
+                          >
+                            {option.label}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+              </>
+            )}
+
             <View style={{ gap: 6 }}>
               <Text
                 style={{
@@ -508,37 +691,93 @@ export function ManageStockCashModal({
               />
             </View>
 
-            <View style={{ gap: 6 }}>
-              <Text
-                style={{
-                  fontSize: theme.typography.sm,
-                  fontWeight: "600",
-                  color: theme.colors.foreground,
-                }}
-              >
-                Notes (Optional)
-              </Text>
-              <Input
-                placeholder="E.g. Trading fund allocation"
-                value={note}
-                onChangeText={setNote}
-              />
-            </View>
+            {mode === "adjust" ? (
+              <View style={{ gap: 6 }}>
+                <Text
+                  style={{
+                    fontSize: theme.typography.sm,
+                    fontWeight: "600",
+                    color: theme.colors.foreground,
+                  }}
+                >
+                  Reason *
+                </Text>
+                <Input
+                  placeholder="E.g. Correcting cash not deducted when a holding was added"
+                  value={reason}
+                  onChangeText={setReason}
+                  multiline
+                />
+                <Text
+                  style={{
+                    fontSize: theme.typography.xs,
+                    color: theme.colors.mutedForeground,
+                  }}
+                >
+                  Shown in your cash history so this correction can be understood later.
+                </Text>
+              </View>
+            ) : (
+              <View style={{ gap: 6 }}>
+                <Text
+                  style={{
+                    fontSize: theme.typography.sm,
+                    fontWeight: "600",
+                    color: theme.colors.foreground,
+                  }}
+                >
+                  Notes (Optional)
+                </Text>
+                <Input
+                  placeholder="E.g. Trading fund allocation"
+                  value={note}
+                  onChangeText={setNote}
+                />
+              </View>
+            )}
+
+            {mode === "adjust" && adjustedPreview !== null && (
+              <View style={styles.previewRow}>
+                <Text
+                  style={{
+                    fontSize: theme.typography.xs,
+                    color: theme.colors.mutedForeground,
+                    fontWeight: "600",
+                  }}
+                >
+                  Balance after adjustment
+                </Text>
+                <Amount
+                  value={adjustedPreview}
+                  currency={currency}
+                  style={{ fontSize: 16, fontWeight: "800", color: theme.colors.foreground }}
+                />
+              </View>
+            )}
 
             <Button
               onPress={handleSubmit}
               loading={loading}
+              // An adjustment with no explanation is indistinguishable from the
+              // drift it is meant to correct, so the reason gates the save.
+              disabled={mode === "adjust" && reason.trim().length < 3}
               style={{ marginTop: 8 }}
             >
               {mode === "deposit"
                 ? "Transfer to Demat"
                 : mode === "withdraw"
                   ? "Withdraw to Bank"
-                  : "Add Direct Credit"}
+                  : "Save Adjustment"}
             </Button>
           </ScrollView>
         </Card>
       </View>
+
+      <InvestmentCashHistoryModal
+        visible={historyVisible}
+        onClose={() => setHistoryVisible(false)}
+        currency={currency}
+      />
     </Modal>
   );
 }
@@ -576,6 +815,23 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
+  },
+  historyLinkRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 2,
+  },
+  warningBanner: {
+    padding: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  previewRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
   balanceBanner: {
     padding: 12,

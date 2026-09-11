@@ -100,7 +100,8 @@ export function TransferFundsModal({
         // Stocks Demat -> Bank Account
         const withdrawOk = await withdrawCash(
           parsedAmount,
-          note.trim() || `Transfer from Stocks Demat`
+          note.trim() || `Transfer from Stocks Demat`,
+          { date: date.trim(), accountId: toAccountId }
         );
         if (!withdrawOk) {
           setSaving(false);
@@ -136,7 +137,8 @@ export function TransferFundsModal({
 
         await depositCash(
           parsedAmount,
-          note.trim() || `Transfer from ${fromAccount?.name ?? "Bank Account"}`
+          note.trim() || `Transfer from ${fromAccount?.name ?? "Bank Account"}`,
+          { date: date.trim(), accountId: fromAccountId }
         );
 
         toast.success("Transferred funds to Stocks Demat");
