@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useRouter } from "expo-router";
 import { ChevronDown, ChevronRight, IdCard, Plus } from "lucide-react-native";
 
 import { EmptyState } from "@/components/common/EmptyState";
@@ -17,6 +18,7 @@ import { useTheme } from "@/theme/ThemeProvider";
 
 export function EpfDashboard() {
   const { theme } = useTheme();
+  const router = useRouter();
   const {
     profile,
     profileLoading,
@@ -54,6 +56,11 @@ export function EpfDashboard() {
   const openEdit = (establishment: EpfEstablishment) => {
     setEditing(establishment);
     setEstablishmentModalOpen(true);
+  };
+
+  // Archived establishments get this too — their history must stay reachable.
+  const openContributions = (establishment: EpfEstablishment) => {
+    router.push(`/epf/${establishment.id}`);
   };
 
   const modals = (
@@ -142,6 +149,7 @@ export function EpfDashboard() {
             establishment={establishment}
             todayKey={todayKey}
             onEdit={openEdit}
+            onOpenContributions={openContributions}
           />
         ))
       )}
@@ -173,6 +181,7 @@ export function EpfDashboard() {
                   establishment={establishment}
                   todayKey={todayKey}
                   onEdit={openEdit}
+                  onOpenContributions={openContributions}
                 />
               ))
             : null}

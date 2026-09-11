@@ -44,7 +44,7 @@ import {
 } from "@/shared/utils/rangeAnalytics";
 import { groupByCategory } from "@/shared/utils/analytics";
 import { formatMonthLabel } from "@/shared/utils/dateDisplay";
-import { currentMonthKey } from "@/shared/utils/dates";
+import { currentMonthKey, shiftMonthKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 
 /** Ordered vertical structure of the analytics dashboard. */
@@ -68,13 +68,6 @@ const SECTIONS: SectionKey[] = [
   "merchants",
   "outliers",
 ];
-
-/** Shifts a "YYYY-MM" key by a whole number of months. */
-function shiftMonthKey(monthKey: string, delta: number): string {
-  const [year, month] = monthKey.split("-").map(Number);
-  const date = new Date(year, month - 1 + delta, 1);
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-}
 
 export interface MonthlyAnalyticsViewProps {
   /** Screen chrome (page header + tabs) scrolled with the dashboard. */

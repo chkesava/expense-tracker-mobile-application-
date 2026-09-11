@@ -70,3 +70,103 @@ export const epfEstablishmentFormSchema = z
 
 export type EpfProfileFormInput = z.infer<typeof epfProfileFormSchema>;
 export type EpfEstablishmentFormInput = z.infer<typeof epfEstablishmentFormSchema>;
+
+/* ---------------------------------------------------------------------------
+ * Contributions — KAN-66
+ * ------------------------------------------------------------------------ */
+
+const monthKeyRegex = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+export const monthKeySchema = z.string().regex(monthKeyRegex, "Invalid month");
+
+/** Monthly EPF wage (basic + DA). Rupees, not paise — see the KAN-65 money decision. */
+export const epfWageSchema = z.coerce
+  .number({ message: "Enter a valid amount" })
+  .refine(Number.isFinite, "Enter a valid amount")
+  .nonnegative("Wage cannot be negative")
+  .max(10_000_000, "Wage is too large");
+
+const nonNegativeAmount = z.coerce
+  .number({ message: "Enter a valid amount" })
+  .refine(Number.isFinite, "Enter a valid amount")
+  .nonnegative("Amounts cannot be negative");
+
+export const epfBackfillSetupSchema = z
+  .object({
+    monthlyWage: epfWageSchema,
+    epsEligible: z.boolean(),
+    startMonth: monthKeySchema,
+    endMonth: monthKeySchema,
+    prorateEdgeMonths: z.boolean(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.endMonth < data.startMonth) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["endMonth"],
+        message: "End month must be on or after the start month",
+      });
+    }
+  });
+
+/**
+ * One month's editable values.
+ *
+ * The month-inside-employment-period rule is deliberately NOT here — it needs
+ * the establishment as context, so it lives in `validateEpfContribution`,
+ * exactly as establishment overlap lives in utils rather than in
+ * `epfEstablishmentFormSchema`.
+ */
+export const epfContributionRowFormSchema = z
+  .object({
+    month: monthKeySchema,
+    wage: epfWageSchema.optional(),
+    employeeShare: nonNegativeAmount,
+    employerShare: nonNegativeAmount,
+    epsShare: nonNegativeAmount,
+    employerEpfShare: nonNegativeAmount,
+    creditDate: z
+      .string()
+      .regex(dateKeyRegex, "Invalid credit date")
+      .optional()
+      .or(z.literal("")),
+    reference: z.string().trim().max(60, "Reference is too long").optional().or(z.literal("")),
+    notes: z.string().trim().max(500, "Notes are too long").optional().or(z.literal("")),
+    zeroReason: z
+      .string()
+      .trim()
+      .max(120, "Reason is too long")
+      .optional()
+      .or(z.literal("")),
+  })
+  .superRefine((data, ctx) => {
+    if (data.epsShare > data.employerShare) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["epsShare"],
+        message: "Pension share cannot exceed the employer contribution",
+      });
+    }
+
+    // Tolerance of ₹1 absorbs whole-rupee rounding of the statutory shares.
+    if (Math.abs(data.employerEpfShare - (data.employerShare - data.epsShare)) > 1) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["employerEpfShare"],
+        message: "Employer EPF share should equal employer contribution minus pension",
+      });
+    }
+
+    const allZero =
+      data.employeeShare === 0 && data.employerShare === 0 && data.epsShare === 0;
+    if (allZero && !data.zeroReason) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["zeroReason"],
+        message: "Add a reason for a zero-contribution month",
+      });
+    }
+  });
+
+export type EpfBackfillSetupInput = z.infer<typeof epfBackfillSetupSchema>;
+export type EpfContributionRowFormInput = z.infer<typeof epfContributionRowFormSchema>;

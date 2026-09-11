@@ -3,6 +3,8 @@
  * Widgets must not invent a second remaining / pace / status story.
  */
 
+import { shiftMonthKey } from "@/shared/utils/dates";
+
 export type SpendlyBudgetStatus = "healthy" | "watch" | "attention";
 
 export type SpendlyBudgetInput = {
@@ -109,14 +111,6 @@ function monthOf(row: { month?: string; date?: string }): string {
   if (row.month && row.month.length >= 7) return row.month.slice(0, 7);
   if (row.date && row.date.length >= 7) return row.date.slice(0, 7);
   return "";
-}
-
-function shiftMonthKey(monthKey: string, delta: number): string {
-  const [yearStr, monthStr] = monthKey.split("-");
-  const date = new Date(Number(yearStr), Number(monthStr) - 1 + delta, 1);
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  return `${y}-${m}`;
 }
 
 /** Last N calendar months of income − spend. Not historical net worth. */

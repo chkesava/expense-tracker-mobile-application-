@@ -7,8 +7,11 @@ import {
   formatDateKey,
   isValidDateKey,
   isValidMonthKey,
+  MAX_MONTH_RANGE,
   monthFromDateKey,
+  monthKeysBetween,
   parseLocalDate,
+  shiftMonthKey,
   toLocalDateKey,
   todayDateKey,
 } from "./dates";
@@ -105,6 +108,46 @@ describe("dates", () => {
     it("rolls monthIndex overflow via Date (Dec + 1 → next Jan)", () => {
       const next = billDateForMonth(2026, 12, 1);
       expect(toLocalDateKey(next)).toBe("2027-01-01");
+    });
+  });
+  describe("month key arithmetic", () => {
+    it("shifts forward and backward within a year", () => {
+      expect(shiftMonthKey("2026-03", 1)).toBe("2026-04");
+      expect(shiftMonthKey("2026-03", -1)).toBe("2026-02");
+      expect(shiftMonthKey("2026-03", 0)).toBe("2026-03");
+    });
+
+    it("rolls across year boundaries in both directions", () => {
+      expect(shiftMonthKey("2026-12", 1)).toBe("2027-01");
+      expect(shiftMonthKey("2026-01", -1)).toBe("2025-12");
+      expect(shiftMonthKey("2026-06", 18)).toBe("2027-12");
+    });
+
+    it("lists an inclusive month range", () => {
+      expect(monthKeysBetween("2026-01", "2026-04")).toEqual([
+        "2026-01",
+        "2026-02",
+        "2026-03",
+        "2026-04",
+      ]);
+    });
+
+    it("returns a single key when start and end match", () => {
+      expect(monthKeysBetween("2026-01", "2026-01")).toEqual(["2026-01"]);
+    });
+
+    it("returns nothing when the range runs backwards", () => {
+      expect(monthKeysBetween("2026-04", "2026-01")).toEqual([]);
+    });
+
+    it("returns nothing for a malformed key rather than looping", () => {
+      expect(monthKeysBetween("2026", "2026-04")).toEqual([]);
+      expect(monthKeysBetween("2026-01", "")).toEqual([]);
+    });
+
+    it("caps a runaway range so a mistyped year cannot freeze the UI", () => {
+      const keys = monthKeysBetween("0021-06", "2026-09");
+      expect(keys).toHaveLength(MAX_MONTH_RANGE);
     });
   });
 });
