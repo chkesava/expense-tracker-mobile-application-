@@ -170,3 +170,27 @@ export const epfContributionRowFormSchema = z
 
 export type EpfBackfillSetupInput = z.infer<typeof epfBackfillSetupSchema>;
 export type EpfContributionRowFormInput = z.infer<typeof epfContributionRowFormSchema>;
+
+/**
+ * Recording what actually landed for a month — KAN-68.
+ *
+ * The credit date cannot precede the contribution month: money for August
+ * cannot arrive in July.
+ */
+export const epfCreditFormSchema = z
+  .object({
+    month: monthKeySchema,
+    amount: nonNegativeAmount,
+    date: z.string().regex(dateKeyRegex, "Invalid credit date"),
+  })
+  .superRefine((data, ctx) => {
+    if (data.date < `${data.month}-01`) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["date"],
+        message: "Credit date cannot precede the contribution month",
+      });
+    }
+  });
+
+export type EpfCreditFormInput = z.infer<typeof epfCreditFormSchema>;

@@ -8,6 +8,7 @@ import { ErrorState } from "@/components/common/ErrorState";
 import { SkeletonCard } from "@/components/common/Skeleton";
 import { EpfEstablishmentCard } from "@/components/epf/EpfEstablishmentCard";
 import { EpfEstablishmentFormModal } from "@/components/epf/EpfEstablishmentFormModal";
+import { EpfCurrentMonthCard } from "@/components/epf/EpfCurrentMonthCard";
 import { EpfProfileCard } from "@/components/epf/EpfProfileCard";
 import { EpfProfileFormModal } from "@/components/epf/EpfProfileFormModal";
 import { Button } from "@/components/ui/Button";
@@ -133,6 +134,11 @@ export function EpfDashboard() {
   return (
     <View style={styles.container}>
       {profile ? <EpfProfileCard profile={profile} onEdit={() => setProfileModalOpen(true)} /> : null}
+
+      <EpfCurrentMonthCard
+        establishment={activeEstablishment}
+        onOpen={openContributions}
+      />
 
       <View style={styles.sectionHeader}>
         <Text style={[styles.sectionTitle, { color: theme.colors.foreground }]}>Establishments</Text>

@@ -26,9 +26,9 @@ service cloud.firestore {
     // Collections currently written by the app:
     //   accountEntries, accountPayments, accounts, accountTransfers,
     //   accountTypes, alerts, borrowingRepayments, borrowings, categories,
-    //   categorizationRules, categoryBudgets, epfContributions,
-    //   epfEstablishments, epfMeta, epfProfile, expenses, financialGoals,
-    //   focus,
+    //   categorizationRules, categoryBudgets, epfContributionEvents,
+    //   epfContributions, epfEstablishments, epfMeta, epfProfile, expenses,
+    //   financialGoals, focus,
     //   holdings, incomes, investments, meta, portfolioOrders,
     //   portfolioSettings, portfolioSnapshots, portfolioTransactions,
     //   receivableRepayments, receivables, spaces,

@@ -525,29 +525,37 @@ export function isEligibleForAutomatedProcessing(
   return row.month >= currentMonth;
 }
 
-/** Single source of truth for row chips, so components never branch on status. */
+/**
+ * Single source of truth for row chips, so components never branch on status.
+ *
+ * `reconciled` distinguishes a month the user confirmed against their passbook
+ * from one the scheduler projected — KAN-68. Spendly cannot see an EPFO
+ * account, so an unconfirmed `credited` row must never read as a plain fact.
+ */
 export function contributionStatusMeta(
   status: EpfContributionStatus,
-  source: EpfContributionSource
+  source: EpfContributionSource,
+  reconciled = false
 ): { label: string; tone: "neutral" | "success" | "warning" | "info"; simulated: boolean } {
-  if (source === "simulated") {
-    return { label: "Projected", tone: "info", simulated: true };
-  }
   switch (status) {
     case "draft":
       return { label: "Draft", tone: "warning", simulated: false };
     case "credited":
-      return { label: "Credited", tone: "success", simulated: false };
+      return reconciled
+        ? { label: "Credited", tone: "success", simulated: false }
+        : { label: "Credited · projected", tone: "info", simulated: true };
+    case "partial":
+      return { label: "Partial", tone: "warning", simulated: !reconciled };
     case "missed":
       return { label: "Missed", tone: "warning", simulated: false };
-    case "partial":
-      return { label: "Partial", tone: "warning", simulated: false };
     case "reversed":
       return { label: "Reversed", tone: "warning", simulated: false };
     case "expected":
       return { label: "Expected", tone: "info", simulated: true };
     default:
-      return { label: "Manual", tone: "neutral", simulated: false };
+      return source === "simulated"
+        ? { label: "Projected", tone: "info", simulated: true }
+        : { label: "Manual", tone: "neutral", simulated: false };
   }
 }
 

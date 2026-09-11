@@ -8,11 +8,12 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { SkeletonCard } from "@/components/common/Skeleton";
 import { EpfBackfillScreen } from "@/components/epf/EpfBackfillScreen";
 import { EpfContributionHistory } from "@/components/epf/EpfContributionHistory";
+import { EpfCurrentContributions } from "@/components/epf/EpfCurrentContributions";
 import { useEpf } from "@/hooks/useEpf";
 import { maskIdentifier } from "@/shared/features/epf/utils";
 import { useTheme } from "@/theme/ThemeProvider";
 
-type Tab = "history" | "backfill";
+type Tab = "current" | "history" | "backfill";
 
 /**
  * Contributions for one establishment — KAN-66.
@@ -28,14 +29,19 @@ export default function EpfEstablishmentContributionsScreen() {
   const { theme } = useTheme();
   const { establishments, establishmentsLoading } = useEpf();
 
-  const [tab, setTab] = useState<Tab>("history");
+  // A live employment opens on Current — that is the month people check.
+  const [tab, setTab] = useState<Tab | null>(null);
 
   const establishment = useMemo(
     () => establishments.find((item) => item.id === establishmentId),
     [establishments, establishmentId]
   );
 
+  const isCurrentEmployment = Boolean(establishment && !establishment.dateLeft);
+  const activeTab: Tab = tab ?? (isCurrentEmployment ? "current" : "history");
+
   const tabs: { id: Tab; label: string }[] = [
+    ...(isCurrentEmployment ? ([{ id: "current", label: "Current" }] as const) : []),
     { id: "history", label: "History" },
     { id: "backfill", label: "Backfill" },
   ];
@@ -86,7 +92,7 @@ export default function EpfEstablishmentContributionsScreen() {
         <>
           <View style={[styles.tabs, { borderBottomColor: theme.colors.border }]}>
             {tabs.map((item) => {
-              const active = tab === item.id;
+              const active = activeTab === item.id;
               return (
                 <Pressable
                   key={item.id}
@@ -115,7 +121,9 @@ export default function EpfEstablishmentContributionsScreen() {
             })}
           </View>
 
-          {tab === "history" ? (
+          {activeTab === "current" ? (
+            <EpfCurrentContributions establishment={establishment} />
+          ) : activeTab === "history" ? (
             <EpfContributionHistory
               establishment={establishment}
               onAddMonths={() => setTab("backfill")}
