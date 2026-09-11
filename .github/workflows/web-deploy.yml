@@ -127,19 +127,22 @@ jobs:
       - name: Build web (expense, nutrition, ganesh, landing)
         run: npm run build:web:all
 
-      - name: Bundle Ganesh summary function
+      - name: Bundle Netlify functions
         run: |
-          npm run build:ganesh-summary-fn
+          npm run build:netlify-fns
           npm install --omit=dev --prefix netlify/functions-dist
           # Reproduce Netlify's CJS runtime: jose@6 is ESM-only and must not be
           # the copy jwks-rsa require()s, or the function crashes before 401.
+          # Every function must be checked -- they share the one bundle.
           node --no-experimental-require-module -e "require('./netlify/functions-dist/ganesh-summary.js'); console.log('ganesh-summary loaded')"
+          node --no-experimental-require-module -e "require('./netlify/functions-dist/epf-cron.js'); console.log('epf-cron loaded')"
 
       - name: Deploy to Netlify
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
           NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          EPF_CRON_SECRET: ${{ secrets.EPF_CRON_SECRET }}
         run: |
           if [ -z "$NETLIFY_AUTH_TOKEN" ] || [ -z "$NETLIFY_SITE_ID" ]; then
             echo "::error::NETLIFY_AUTH_TOKEN and/or NETLIFY_SITE_ID secrets are missing."
@@ -171,6 +174,16 @@ jobs:
             echo "::warning::Could not overwrite FIREBASE_SERVICE_ACCOUNT. Deploying with the value already on the Netlify site."
           fi
           unset FN_JSON
+          # KAN-67: shared secret the epf-cron workflow authenticates with. Not
+          # fatal if absent -- the rest of the site deploys fine; epf-cron just
+          # answers 401 to everything until KAN-78 sets it.
+          if [ -n "$EPF_CRON_SECRET" ]; then
+            if ! netlify env:set EPF_CRON_SECRET "$EPF_CRON_SECRET" --force --secret --context production; then
+              echo "::warning::Could not overwrite EPF_CRON_SECRET. Deploying with the value already on the Netlify site."
+            fi
+          else
+            echo "::warning::EPF_CRON_SECRET is not set. epf-cron will reject every call until it is (KAN-78)."
+          fi
           netlify deploy --prod \
             --dir "$RUNNER_TEMP/publish" \
             --functions "$RUNNER_TEMP/functions" \

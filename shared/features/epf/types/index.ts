@@ -135,6 +135,16 @@ export interface EpfContribution {
   epsEligible: boolean;
   /** `EpfContributionRule.id` used for the computation, for auditability. */
   rulesVersion?: string;
+  /**
+   * Start of the expected credit window, YYYY-MM-DD — KAN-67.
+   *
+   * Always in the month *after* `month`: August wages are remitted during
+   * September. Kept separate from `creditDate`, which is when the money
+   * actually appeared.
+   */
+  expectedCreditFrom?: string;
+  /** End of the expected credit window, YYYY-MM-DD. */
+  expectedCreditTo?: string;
   /** YYYY-MM-DD the money actually appeared, if known. */
   creditDate?: string;
   reference?: string;
