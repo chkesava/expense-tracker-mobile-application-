@@ -12,6 +12,7 @@ import { EpfProfileCard } from "@/components/epf/EpfProfileCard";
 import { EpfProfileFormModal } from "@/components/epf/EpfProfileFormModal";
 import { Button } from "@/components/ui/Button";
 import { useEpf } from "@/hooks/useEpf";
+import { useEpfCatchUp } from "@/hooks/useEpfCatchUp";
 import type { EpfEstablishment } from "@/shared/features/epf/types";
 import { todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -30,6 +31,7 @@ export function EpfDashboard() {
     establishmentsLoading,
     establishmentsError,
     retryEstablishments,
+    activeEstablishment,
     hasProfile,
     saveProfile,
     addEstablishment,
@@ -45,6 +47,13 @@ export function EpfDashboard() {
   const [showArchived, setShowArchived] = useState(false);
 
   const todayKey = useMemo(() => todayDateKey(), []);
+
+  // Fill in any months the monthly cron has not reached yet (KAN-67).
+  useEpfCatchUp({
+    establishment: activeEstablishment,
+    allEstablishments: establishments,
+    enabled: hasProfile,
+  });
   const loading = profileLoading || establishmentsLoading;
   const error = profileError ?? establishmentsError;
 

@@ -98,7 +98,7 @@ describe("KAN-36 summary path source contract", () => {
     expect(netlify).toContain("rebuildFestivalSummary");
     expect(netlify).toContain("seedFestivalSummary");
     expect(read("hooks/useGaneshWrites.ts")).toContain("requestFestivalSummaryRebuild");
-    const bundle = read("scripts/bundle-ganesh-summary-fn.js");
+    const bundle = read("scripts/bundle-netlify-fns.js");
     expect(bundle).toContain("overrides");
     expect(bundle).toContain("jose");
     expect(bundle).toContain("4.15.9");

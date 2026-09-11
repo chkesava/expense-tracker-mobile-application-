@@ -1,0 +1,101 @@
+name: EPF contribution cron
+
+# Monthly generator for EPF "expected" contributions (KAN-67).
+#
+# Why GitHub Actions rather than a Netlify scheduled function: web-deploy.yml
+# deploys with `netlify deploy --functions` from $RUNNER_TEMP, deliberately
+# outside the repo so no netlify.toml is ever picked up. That means Netlify
+# never reads a `[functions."x"] schedule` block, and Netlify's own bundler --
+# which is what detects an in-code `schedule()` wrapper -- is bypassed in favour
+# of scripts/bundle-netlify-fns.js (needed for the firebase-admin/jose CJS fix).
+# So GitHub Actions provides the clock and Netlify still does the work.
+#
+# The function processes one bounded page per call and returns a cursor; this
+# workflow loops until it reports none left, so a growing user base can never
+# exhaust the function timeout.
+#
+# Does nothing until KAN-78 sets EPF_CRON_SECRET and deploys the function.
+
+on:
+  schedule:
+    # 05:30 UTC on the 3rd — a few days into the month so the previous month is
+    # closed, and clear of the top-of-hour surge when Actions queues are busiest.
+    - cron: "30 5 3 * *"
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Establishments per page"
+        required: false
+        default: "25"
+
+concurrency:
+  group: epf-cron
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    name: Generate expected contributions
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Call the generator until every page is processed
+        env:
+          EPF_CRON_SECRET: ${{ secrets.EPF_CRON_SECRET }}
+          FUNCTION_URL: https://spendly-share.netlify.app/.netlify/functions/epf-cron
+          PAGE_LIMIT: ${{ github.event.inputs.limit || '25' }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "$EPF_CRON_SECRET" ]; then
+            echo "::error::EPF_CRON_SECRET is not set. See KAN-78 for the rollout steps."
+            exit 1
+          fi
+
+          cursor=""
+          total_processed=0
+          total_written=0
+          # Hard cap: 200 pages x 25 = 5000 establishments. A run that needs more
+          # than this is a signal to investigate, not to keep looping forever.
+          for page in $(seq 1 200); do
+            if [ -z "$cursor" ]; then
+              payload=$(printf '{"limit":%s}' "$PAGE_LIMIT")
+            else
+              payload=$(printf '{"limit":%s,"cursor":"%s"}' "$PAGE_LIMIT" "$cursor")
+            fi
+
+            response=$(curl -sS -w '\n%{http_code}' -X POST "$FUNCTION_URL" \
+              -H "Content-Type: application/json" \
+              -H "x-epf-cron-secret: $EPF_CRON_SECRET" \
+              -d "$payload")
+            status=$(printf '%s' "$response" | tail -n 1)
+            body=$(printf '%s' "$response" | sed '$d')
+
+            if [ "$status" != "200" ]; then
+              # Never fail silently: a bad month must be visible in the run log.
+              echo "::error::epf-cron returned HTTP $status: $body"
+              exit 1
+            fi
+
+            processed=$(printf '%s' "$body" | jq -r '.processed // 0')
+            written=$(printf '%s' "$body" | jq -r '.written // 0')
+            cursor=$(printf '%s' "$body" | jq -r '.nextCursor // empty')
+            total_processed=$((total_processed + processed))
+            total_written=$((total_written + written))
+
+            echo "page $page: processed=$processed written=$written"
+
+            if [ -z "$cursor" ]; then
+              break
+            fi
+          done
+
+          {
+            echo "## EPF contribution cron"
+            echo ""
+            echo "- Establishments processed: **$total_processed**"
+            echo "- Contribution months written: **$total_written**"
+          } >> "$GITHUB_STEP_SUMMARY"

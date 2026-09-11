@@ -78,6 +78,8 @@ describe("personal tree", () => {
     "epfEstablishments",
     // KAN-66 — monthly contribution records.
     "epfContributions",
+    // KAN-67 — per-user scheduler bookkeeping.
+    "epfMeta",
   ];
 
   it("owner reads their own user doc", async () => {
