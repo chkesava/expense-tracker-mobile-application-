@@ -34,14 +34,28 @@ import { useAuth } from "@/providers/AuthProvider";
 import type {
   EpfBackfillRow,
   EpfContribution,
+  EpfContributionActor,
   EpfContributionStatus,
 } from "@/shared/features/epf/types";
-import { EPF_CONTRIBUTIONS_COLLECTION } from "@/shared/features/epf/types";
+import {
+  EPF_CONTRIBUTION_EVENTS_COLLECTION,
+  EPF_CONTRIBUTIONS_COLLECTION,
+} from "@/shared/features/epf/types";
 import {
   contributionDocId,
   normalizeEpfContribution,
   sortContributionsByMonth,
 } from "@/shared/features/epf/utils/contributions";
+import {
+  applyActualCredit,
+  applyAutoCredit,
+  applyMissed,
+  applyReversed,
+  buildContributionEvent,
+  canTransition,
+  contributionsToAutoCredit,
+} from "@/shared/features/epf/utils/lifecycle";
+import { todayDateKey } from "@/shared/utils/dates";
 
 /** Firestore caps a batch at 500 writes; stay comfortably under it. */
 const BATCH_CHUNK_SIZE = 400;
@@ -243,6 +257,165 @@ export function useEpfContributions(
     return result.failed === 0;
   }, [contributions, saveContributions]);
 
+  /**
+   * Write a status change and its audit event atomically — KAN-68.
+   *
+   * One batch, so a contribution and the event describing it can never
+   * disagree. The transition is validated first: an illegal move is a bug, not
+   * something to persist and reconcile later.
+   */
+  const applyTransition = useCallback(
+    async (
+      month: string,
+      transform: (row: EpfContribution) => EpfContribution,
+      meta: { actor: EpfContributionActor; amount?: number; reason?: string; message: string }
+    ): Promise<boolean> => {
+      const db = getFirestoreDb();
+      if (!uid || !db || !establishmentId) {
+        toast.error("Not authenticated");
+        return false;
+      }
+
+      const current = byMonth.get(month);
+      if (!current) {
+        toast.error("That month is not recorded yet");
+        return false;
+      }
+
+      const next = transform(current);
+      if (next.status !== current.status && !canTransition(current.status, next.status)) {
+        toast.error(`Cannot move a ${current.status} month to ${next.status}.`);
+        return false;
+      }
+
+      try {
+        const batch = writeBatch(db);
+        const ref = doc(
+          db,
+          "users",
+          uid,
+          EPF_CONTRIBUTIONS_COLLECTION,
+          contributionDocId(establishmentId, month)
+        );
+        batch.set(
+          ref,
+          withoutUndefined({
+            status: next.status,
+            creditedAmount: next.creditedAmount,
+            creditDate: next.creditDate,
+            reconciledAt: next.reconciledAt,
+            // An empty reason must clear a stale one, so send null not undefined.
+            statusReason: next.statusReason ?? null,
+            statusUpdatedAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          }),
+          { merge: true }
+        );
+
+        const eventRef = doc(
+          collection(db, "users", uid, EPF_CONTRIBUTION_EVENTS_COLLECTION)
+        );
+        batch.set(eventRef, {
+          ...withoutUndefined(
+            buildContributionEvent(current, current.status, next.status, meta)
+          ),
+          at: serverTimestamp(),
+        });
+
+        const outcome = await commitWrite(() => batch.commit(), {
+          label: "EPF contribution status",
+        });
+        toast.success(writeSavedMessage(outcome, meta.message));
+        return true;
+      } catch (err) {
+        logError("epfcontributions.applytransition", err);
+        toast.error("Couldn't update that month");
+        return false;
+      }
+    },
+    [uid, establishmentId, byMonth]
+  );
+
+  const recordCredit = useCallback(
+    (month: string, input: { amount: number; date: string }) =>
+      applyTransition(
+        month,
+        (row) =>
+          applyActualCredit(row, { ...input, reconciledAt: new Date().toISOString() }),
+        { actor: "user", amount: input.amount, message: "Credit recorded" }
+      ),
+    [applyTransition]
+  );
+
+  const markMissed = useCallback(
+    (month: string, reason: string) =>
+      applyTransition(month, (row) => applyMissed(row, reason, new Date().toISOString()), {
+        actor: "user",
+        reason,
+        message: "Marked as missed",
+      }),
+    [applyTransition]
+  );
+
+  const markReversed = useCallback(
+    (month: string, reason: string) =>
+      applyTransition(month, (row) => applyReversed(row, reason, new Date().toISOString()), {
+        actor: "user",
+        reason,
+        message: "Marked as reversed",
+      }),
+    [applyTransition]
+  );
+
+  /**
+   * Age every `expected` month whose credit window has passed.
+   *
+   * Runs on the client as well as in the cron so someone opening the app sees
+   * the current state rather than waiting for the monthly job. Both call the
+   * same pure selector, so they cannot disagree.
+   */
+  const autoAdvanceCredits = useCallback(async (): Promise<number> => {
+    const db = getFirestoreDb();
+    if (!uid || !db || !establishmentId) return 0;
+
+    const due = contributionsToAutoCredit(contributions, todayDateKey());
+    if (due.length === 0) return 0;
+
+    try {
+      for (const group of chunk(due, BATCH_CHUNK_SIZE)) {
+        const batch = writeBatch(db);
+        for (const row of group) {
+          const next = applyAutoCredit(row);
+          batch.set(
+            doc(
+              db,
+              "users",
+              uid,
+              EPF_CONTRIBUTIONS_COLLECTION,
+              contributionDocId(establishmentId, row.month)
+            ),
+            { status: next.status, statusUpdatedAt: serverTimestamp(), updatedAt: serverTimestamp() },
+            { merge: true }
+          );
+          batch.set(doc(collection(db, "users", uid, EPF_CONTRIBUTION_EVENTS_COLLECTION)), {
+            ...withoutUndefined(
+              buildContributionEvent(row, row.status, next.status, {
+                actor: "system",
+                amount: row.epfCredit,
+              })
+            ),
+            at: serverTimestamp(),
+          });
+        }
+        await commitWrite(() => batch.commit(), { label: "EPF credit advance" });
+      }
+      return due.length;
+    } catch (err) {
+      logError("epfcontributions.autoadvancecredits", err);
+      return 0;
+    }
+  }, [uid, establishmentId, contributions]);
+
   const deleteContribution = useCallback(
     async (month: string): Promise<boolean> => {
       const db = getFirestoreDb();
@@ -326,5 +499,11 @@ export function useEpfContributions(
     confirmDrafts,
     deleteContribution,
     discardDrafts,
+
+    // KAN-68 lifecycle
+    recordCredit,
+    markMissed,
+    markReversed,
+    autoAdvanceCredits,
   };
 }

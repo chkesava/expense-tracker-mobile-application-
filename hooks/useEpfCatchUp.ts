@@ -24,10 +24,10 @@ export function useEpfCatchUp(args: {
   enabled?: boolean;
 }) {
   const { establishment, allEstablishments, enabled = true } = args;
-  const { contributions, contributionsLoading, saveContributions } = useEpfContributions(
-    establishment?.id,
-    { enabled: enabled && Boolean(establishment) }
-  );
+  const { contributions, contributionsLoading, saveContributions, autoAdvanceCredits } =
+    useEpfContributions(establishment?.id, {
+      enabled: enabled && Boolean(establishment),
+    });
 
   // One attempt per establishment per mount. Without this the effect would
   // re-fire on every snapshot the write itself triggers.
@@ -38,6 +38,12 @@ export function useEpfCatchUp(args: {
     if (!isSchedulable(establishment)) return;
     if (attempted.current === establishment.id) return;
     attempted.current = establishment.id;
+
+    // KAN-68: age months whose credit window has passed, then generate any
+    // missing ones. Both use the same pure logic as the Netlify cron.
+    autoAdvanceCredits().catch((err) => {
+      logError("epf.catchup.advance", err);
+    });
 
     const planned = planScheduledContributions({
       establishment,
@@ -59,5 +65,6 @@ export function useEpfCatchUp(args: {
     contributions,
     contributionsLoading,
     saveContributions,
+    autoAdvanceCredits,
   ]);
 }

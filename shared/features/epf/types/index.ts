@@ -147,6 +147,26 @@ export interface EpfContribution {
   expectedCreditTo?: string;
   /** YYYY-MM-DD the money actually appeared, if known. */
   creditDate?: string;
+  /**
+   * What actually landed, when the user has confirmed it — KAN-68.
+   *
+   * Distinct from the projected `epfCredit`: a smaller actual makes the month
+   * `partial` rather than silently rewriting the projection.
+   */
+  creditedAmount?: number;
+  /**
+   * Set only when a *person* confirmed this month against their passbook.
+   *
+   * Spendly cannot see an EPFO account, so a row auto-advanced to `credited` by
+   * the scheduler is a projection, not a fact. Absence of this field is what
+   * makes that visible in the data rather than only in the UI, and lets KAN-70
+   * find every unconfirmed row with a single query.
+   */
+  reconciledAt?: string;
+  /** Why a month was marked missed or reversed. User-supplied. */
+  statusReason?: string;
+  /** When the status last changed. */
+  statusUpdatedAt?: unknown;
   reference?: string;
   notes?: string;
   /** Required when an amount is zero — the ticket forbids silent blanks. */
@@ -212,3 +232,31 @@ export const EPF_ESTABLISHMENTS_COLLECTION = "epfEstablishments";
  * `deleteEstablishment` can refuse to orphan history that already exists.
  */
 export const EPF_CONTRIBUTIONS_COLLECTION = "epfContributions";
+
+/** Append-only audit trail of contribution status changes — KAN-68. */
+export const EPF_CONTRIBUTION_EVENTS_COLLECTION = "epfContributionEvents";
+
+/** Who caused a status change. */
+export type EpfContributionActor = "system" | "user";
+
+/**
+ * One immutable record of a status change.
+ *
+ * Append-only on purpose: an array on the contribution row would be rewritten
+ * wholesale on every update, so a concurrent write could drop entries — exactly
+ * the data loss an audit trail exists to prevent.
+ */
+export interface EpfContributionEvent {
+  id: string;
+  /** `{establishmentId}_{YYYY-MM}` — the contribution this describes. */
+  contributionId: string;
+  establishmentId: string;
+  month: string;
+  from: EpfContributionStatus;
+  to: EpfContributionStatus;
+  /** The amount relevant to this transition, where one applies. */
+  amount?: number;
+  actor: EpfContributionActor;
+  reason?: string;
+  at?: unknown;
+}

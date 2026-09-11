@@ -80,6 +80,8 @@ describe("personal tree", () => {
     "epfContributions",
     // KAN-67 — per-user scheduler bookkeeping.
     "epfMeta",
+    // KAN-68 — append-only contribution status audit trail.
+    "epfContributionEvents",
   ];
 
   it("owner reads their own user doc", async () => {

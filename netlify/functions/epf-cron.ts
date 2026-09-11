@@ -4,12 +4,18 @@ import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 
 import {
+  EPF_CONTRIBUTION_EVENTS_COLLECTION,
   EPF_CONTRIBUTIONS_COLLECTION,
   EPF_ESTABLISHMENTS_COLLECTION,
   type EpfContribution,
   type EpfEstablishment,
 } from "../../shared/features/epf/types";
 import { contributionDocId } from "../../shared/features/epf/utils/contributions";
+import {
+  applyAutoCredit,
+  buildContributionEvent,
+  contributionsToAutoCredit,
+} from "../../shared/features/epf/utils/lifecycle";
 import { planScheduledContributions } from "../../shared/features/epf/utils/schedule";
 
 type NetlifyEvent = {
@@ -82,6 +88,11 @@ function currentMonthUtc(): string {
   return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
+/** YYYY-MM-DD in UTC, for comparing against a credit window. */
+function todayUtc(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
 /**
  * Monthly EPF contribution generator (KAN-67).
  *
@@ -131,6 +142,7 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
 
   const db = getFirestore();
   const throughMonth = currentMonthUtc();
+  const todayKey = todayUtc();
 
   try {
     // Only users with a live employment — not the whole user base.
@@ -145,6 +157,7 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
 
     let processed = 0;
     let written = 0;
+    let credited = 0;
     let lastPath: string | null = null;
 
     for (const docSnap of page.docs) {
@@ -176,6 +189,42 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
         id: row.id,
         ...(row.data() as Omit<EpfContribution, "id">),
       }));
+
+      // KAN-68: age any month whose expected credit window has passed. Same
+      // pure selector the client catch-up uses, so the two cannot disagree.
+      const due = contributionsToAutoCredit(existing, todayKey);
+      if (due.length > 0) {
+        const creditBatch = db.batch();
+        for (const row of due) {
+          const next = applyAutoCredit(row);
+          creditBatch.set(
+            db.doc(
+              `users/${uid}/${EPF_CONTRIBUTIONS_COLLECTION}/${contributionDocId(
+                establishment.id,
+                row.month
+              )}`
+            ),
+            { status: next.status, statusUpdatedAt: new Date(), updatedAt: new Date() },
+            { merge: true }
+          );
+          creditBatch.create(
+            db.collection(`users/${uid}/${EPF_CONTRIBUTION_EVENTS_COLLECTION}`).doc(),
+            {
+              ...buildContributionEvent(row, row.status, next.status, {
+                actor: "system",
+                amount: row.epfCredit,
+              }),
+              at: new Date(),
+            }
+          );
+        }
+        try {
+          await creditBatch.commit();
+          credited += due.length;
+        } catch {
+          // Another writer got there first. Next run reconciles.
+        }
+      }
 
       const planned = planScheduledContributions({
         establishment,
@@ -216,7 +265,7 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
     }
 
     const nextCursor = page.size === limit ? lastPath : null;
-    return json(200, { processed, written, throughMonth, nextCursor });
+    return json(200, { processed, written, credited, throughMonth, nextCursor });
   } catch (error) {
     return json(500, { error: (error as Error).message });
   }
