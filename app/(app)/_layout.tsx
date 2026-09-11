@@ -111,6 +111,12 @@ function AppShellInner() {
             }}
           />
           <Stack.Screen
+            name="epf/[establishmentId]"
+            options={{
+              animation: "slide_from_right",
+            }}
+          />
+          <Stack.Screen
             name="add"
             options={{
               animation: "fade_from_bottom",

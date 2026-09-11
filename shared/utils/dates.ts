@@ -43,6 +43,41 @@ export function monthFromDateKey(dateKey: string): string {
   return dateKey.slice(0, 7);
 }
 
+/** Shift a YYYY-MM key by a number of calendar months. */
+export function shiftMonthKey(monthKey: string, delta: number): string {
+  const [yearStr, monthStr] = monthKey.split("-");
+  const date = new Date(Number(yearStr), Number(monthStr) - 1 + delta, 1);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  return `${year}-${month}`;
+}
+
+/**
+ * Upper bound on {@link monthKeysBetween}. 100 years is far beyond any real
+ * employment or budget span, and the cap stops a mistyped year (`0021-06`)
+ * from generating tens of thousands of rows and freezing the UI.
+ */
+export const MAX_MONTH_RANGE = 1200;
+
+/**
+ * Inclusive list of YYYY-MM keys from `startMonth` to `endMonth`.
+ *
+ * Returns [] when either key is malformed or the range runs backwards, and
+ * never returns more than {@link MAX_MONTH_RANGE} entries.
+ */
+export function monthKeysBetween(startMonth: string, endMonth: string): string[] {
+  if (!isValidMonthKey(startMonth) || !isValidMonthKey(endMonth)) return [];
+  if (endMonth < startMonth) return [];
+
+  const keys: string[] = [];
+  let cursor = startMonth;
+  while (cursor <= endMonth && keys.length < MAX_MONTH_RANGE) {
+    keys.push(cursor);
+    cursor = shiftMonthKey(cursor, 1);
+  }
+  return keys;
+}
+
 /** Shift a YYYY-MM-DD key by a number of calendar days. */
 export function shiftDateKey(dateStr: string, days: number): string {
   const date = parseLocalDate(dateStr);

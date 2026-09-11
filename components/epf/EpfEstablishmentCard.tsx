@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { Building2, Pencil } from "lucide-react-native";
+import { Building2, ListChecks, Pencil } from "lucide-react-native";
 
 import { Card } from "@/components/ui/Card";
 import { haptic } from "@/lib/haptics";
@@ -16,6 +16,8 @@ type Props = {
   establishment: EpfEstablishment;
   todayKey: string;
   onEdit: (establishment: EpfEstablishment) => void;
+  /** Opens the contributions screen. Omitted where contributions do not apply. */
+  onOpenContributions?: (establishment: EpfEstablishment) => void;
 };
 
 const STATE_LABEL: Record<string, string> = {
@@ -35,7 +37,12 @@ function formatDuration(months: number): string {
   return parts.join(" ");
 }
 
-export function EpfEstablishmentCard({ establishment, todayKey, onEdit }: Props) {
+export function EpfEstablishmentCard({
+  establishment,
+  todayKey,
+  onEdit,
+  onOpenContributions,
+}: Props) {
   const { theme } = useTheme();
   const [revealed, setRevealed] = useState(false);
 
@@ -115,6 +122,22 @@ export function EpfEstablishmentCard({ establishment, todayKey, onEdit }: Props)
           {establishment.notes ? ` · ${establishment.notes}` : ""}
         </Text>
       </Pressable>
+
+      {onOpenContributions ? (
+        // Outside the tap-to-reveal Pressable above — nesting pressables makes
+        // both targets unreliable.
+        <Pressable
+          onPress={() => onOpenContributions(establishment)}
+          style={[styles.contributionsRow, { borderTopColor: theme.colors.border }]}
+          accessibilityRole="button"
+          accessibilityLabel={`Contributions for ${establishment.employerName}`}
+        >
+          <ListChecks size={theme.iconSize.sm} color={theme.colors.primary} />
+          <Text style={[styles.contributionsText, { color: theme.colors.primary }]}>
+            Contributions
+          </Text>
+        </Pressable>
+      ) : null}
     </Card>
   );
 }
@@ -179,5 +202,17 @@ const styles = StyleSheet.create({
   duration: {
     marginTop: 10,
     fontSize: 12,
+  },
+  contributionsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  contributionsText: {
+    fontSize: 13,
+    fontWeight: "600",
   },
 });

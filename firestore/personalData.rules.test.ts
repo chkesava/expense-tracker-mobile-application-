@@ -76,6 +76,8 @@ describe("personal tree", () => {
     // KAN-65 — EPF lives on the recursive owner grant like everything else here.
     "epfProfile",
     "epfEstablishments",
+    // KAN-66 — monthly contribution records.
+    "epfContributions",
   ];
 
   it("owner reads their own user doc", async () => {
@@ -134,6 +136,21 @@ describe("personal tree", () => {
     const db = env.authenticatedContext(OTHER).firestore();
     await assertFails(
       getDocs(collection(db, "users", OWNER, "epfEstablishments"))
+    );
+  });
+
+  it("a stranger cannot list the owner's EPF contributions", async () => {
+    const db = env.authenticatedContext(OTHER).firestore();
+    await assertFails(getDocs(collection(db, "users", OWNER, "epfContributions")));
+  });
+
+  it("a stranger cannot write an EPF contribution into the owner's tree", async () => {
+    const db = env.authenticatedContext(OTHER).firestore();
+    await assertFails(
+      setDoc(doc(db, "users", OWNER, "epfContributions", "est-1_2021-06"), {
+        establishmentId: "est-1",
+        month: "2021-06",
+      })
     );
   });
 
