@@ -12,12 +12,15 @@ import {
   deleteDoc,
   deleteField,
   doc,
+  getDocs,
+  limit,
   onSnapshot,
   query,
   runTransaction,
   serverTimestamp,
   setDoc,
   updateDoc,
+  where,
 } from "firebase/firestore";
 
 import { logError } from "@/lib/errors";
@@ -31,6 +34,7 @@ import { useAuth } from "@/providers/AuthProvider";
 import type { EpfProfileFormInput } from "@/shared/features/epf/schemas";
 import type { EpfEstablishment, EpfProfile } from "@/shared/features/epf/types";
 import {
+  EPF_CONTRIBUTIONS_COLLECTION,
   EPF_ESTABLISHMENTS_COLLECTION,
   EPF_PROFILE_COLLECTION,
   EPF_PROFILE_DOC_ID,
@@ -38,9 +42,11 @@ import {
 import {
   deriveEmploymentStatus,
   findActiveEstablishment,
+  isArchived,
   isOpenEnded,
   normalizeEstablishment,
   sortEstablishments,
+  splitArchivedEstablishments,
   validateEstablishmentAgainstExisting,
 } from "@/shared/features/epf/utils";
 
@@ -185,6 +191,11 @@ export function useEpf(options?: { enabled?: boolean }) {
 
   const activeEstablishment = useMemo(
     () => findActiveEstablishment(establishments),
+    [establishments]
+  );
+
+  const { live: liveEstablishments, archived: archivedEstablishments } = useMemo(
+    () => splitArchivedEstablishments(establishments),
     [establishments]
   );
 
@@ -385,6 +396,93 @@ export function useEpf(options?: { enabled?: boolean }) {
     [updateEstablishment]
   );
 
+  /**
+   * Hide an establishment without destroying it.
+   *
+   * The epic forbids destructive deletion of financial history, so archiving is
+   * the normal way to remove a record from view. An archived establishment
+   * releases the current-employment lock — it is history, not a live job.
+   */
+  const setArchived = useCallback(
+    async (id: string, archived: boolean): Promise<boolean> => {
+      const db = getFirestoreDb();
+      if (!uid || !db) {
+        toast.error("Not authenticated");
+        return false;
+      }
+
+      const existing = establishments.find((item) => item.id === id);
+      if (!existing) {
+        toast.error("Establishment not found");
+        return false;
+      }
+
+      // Restoring an open-ended record has to re-check the invariant: another
+      // employment may have become current while this one was archived.
+      if (!archived && isOpenEnded(existing)) {
+        const guard = validateEstablishmentAgainstExisting(establishments, {
+          id,
+          dateJoined: existing.dateJoined,
+          dateLeft: existing.dateLeft,
+        });
+        if (!guard.ok) {
+          toast.error(guard.message);
+          return false;
+        }
+      }
+
+      try {
+        const ref = doc(db, "users", uid, EPF_ESTABLISHMENTS_COLLECTION, id);
+        const claiming = !archived && isOpenEnded(existing);
+        const releasing = archived && isOpenEnded(existing);
+
+        const outcome = await commitWrite(
+          () =>
+            claiming || releasing
+              ? runWithCurrentLock(id, claiming, (transaction) => {
+                  transaction.update(ref, {
+                    archived: archived ? true : deleteField(),
+                    updatedAt: serverTimestamp(),
+                  });
+                })
+              : updateDoc(ref, {
+                  archived: archived ? true : deleteField(),
+                  updatedAt: serverTimestamp(),
+                }),
+          { label: "EPF establishment" }
+        );
+        toast.success(
+          writeSavedMessage(outcome, archived ? "Establishment archived" : "Establishment restored")
+        );
+        return true;
+      } catch (err) {
+        if (err instanceof Error && err.message === "MULTIPLE_CURRENT") {
+          toast.error("Close your current employment before restoring this one.");
+          return false;
+        }
+        logError("epf.setarchived", err);
+        toast.error(archived ? "Failed to archive establishment" : "Failed to restore establishment");
+        return false;
+      }
+    },
+    [uid, establishments, runWithCurrentLock]
+  );
+
+  const archiveEstablishment = useCallback(
+    (id: string) => setArchived(id, true),
+    [setArchived]
+  );
+
+  const restoreEstablishment = useCallback(
+    (id: string) => setArchived(id, false),
+    [setArchived]
+  );
+
+  /**
+   * Permanently delete an establishment — allowed only while nothing references
+   * it, so contribution history (KAN-66) can never be orphaned. Anything with
+   * history must be archived instead.
+   */
   const deleteEstablishment = useCallback(
     async (id: string): Promise<boolean> => {
       const db = getFirestoreDb();
@@ -394,8 +492,29 @@ export function useEpf(options?: { enabled?: boolean }) {
       }
 
       try {
+        const contributions = await getDocs(
+          query(
+            collection(db, "users", uid, EPF_CONTRIBUTIONS_COLLECTION),
+            where("establishmentId", "==", id),
+            limit(1)
+          )
+        );
+        if (!contributions.empty) {
+          toast.error("This establishment has contribution history. Archive it instead.");
+          return false;
+        }
+      } catch (err) {
+        // Never delete on an inconclusive check.
+        logError("epf.deleteestablishment.guard", err);
+        toast.error("Couldn't verify contribution history. Try again.");
+        return false;
+      }
+
+      try {
         const ref = doc(db, "users", uid, EPF_ESTABLISHMENTS_COLLECTION, id);
-        const wasCurrent = establishments.some((item) => item.id === id && isOpenEnded(item));
+        const wasCurrent = establishments.some(
+          (item) => item.id === id && isOpenEnded(item) && !isArchived(item)
+        );
 
         const outcome = await commitWrite(
           () =>
@@ -406,11 +525,11 @@ export function useEpf(options?: { enabled?: boolean }) {
               : deleteDoc(ref),
           { label: "EPF establishment" }
         );
-        toast.success(writeSavedMessage(outcome, "Establishment removed"));
+        toast.success(writeSavedMessage(outcome, "Establishment deleted"));
         return true;
       } catch (err) {
         logError("epf.deleteestablishment", err);
-        toast.error("Failed to remove establishment");
+        toast.error("Failed to delete establishment");
         return false;
       }
     },
@@ -424,6 +543,8 @@ export function useEpf(options?: { enabled?: boolean }) {
     retryProfile,
 
     establishments,
+    liveEstablishments,
+    archivedEstablishments,
     establishmentsLoading,
     establishmentsError,
     retryEstablishments,
@@ -435,6 +556,8 @@ export function useEpf(options?: { enabled?: boolean }) {
     addEstablishment,
     updateEstablishment,
     closeEstablishment,
+    archiveEstablishment,
+    restoreEstablishment,
     deleteEstablishment,
   };
 }

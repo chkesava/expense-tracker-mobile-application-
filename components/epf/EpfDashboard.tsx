@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
-import { IdCard, Plus } from "lucide-react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { ChevronDown, ChevronRight, IdCard, Plus } from "lucide-react-native";
 
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
@@ -23,6 +23,8 @@ export function EpfDashboard() {
     profileError,
     retryProfile,
     establishments,
+    liveEstablishments,
+    archivedEstablishments,
     establishmentsLoading,
     establishmentsError,
     retryEstablishments,
@@ -30,12 +32,15 @@ export function EpfDashboard() {
     saveProfile,
     addEstablishment,
     updateEstablishment,
+    archiveEstablishment,
+    restoreEstablishment,
     deleteEstablishment,
   } = useEpf();
 
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [establishmentModalOpen, setEstablishmentModalOpen] = useState(false);
   const [editing, setEditing] = useState<EpfEstablishment | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
 
   const todayKey = useMemo(() => todayDateKey(), []);
   const loading = profileLoading || establishmentsLoading;
@@ -66,6 +71,8 @@ export function EpfDashboard() {
         existing={establishments}
         onCreate={addEstablishment}
         onUpdate={updateEstablishment}
+        onArchive={archiveEstablishment}
+        onRestore={restoreEstablishment}
         onDelete={deleteEstablishment}
       />
     </>
@@ -121,7 +128,7 @@ export function EpfDashboard() {
         </Button>
       </View>
 
-      {establishments.length === 0 ? (
+      {liveEstablishments.length === 0 ? (
         <EmptyState
           compact
           title="No employers yet"
@@ -129,7 +136,7 @@ export function EpfDashboard() {
           primaryAction={{ label: "Add establishment", onPress: openAdd }}
         />
       ) : (
-        establishments.map((establishment) => (
+        liveEstablishments.map((establishment) => (
           <EpfEstablishmentCard
             key={establishment.id}
             establishment={establishment}
@@ -138,6 +145,39 @@ export function EpfDashboard() {
           />
         ))
       )}
+
+      {archivedEstablishments.length > 0 ? (
+        <>
+          <Pressable
+            onPress={() => setShowArchived((value) => !value)}
+            style={styles.archivedToggle}
+            accessibilityRole="button"
+            accessibilityLabel={
+              showArchived ? "Hide archived establishments" : "Show archived establishments"
+            }
+          >
+            {showArchived ? (
+              <ChevronDown size={theme.iconSize.sm} color={theme.colors.mutedForeground} />
+            ) : (
+              <ChevronRight size={theme.iconSize.sm} color={theme.colors.mutedForeground} />
+            )}
+            <Text style={[styles.archivedLabel, { color: theme.colors.mutedForeground }]}>
+              Archived ({archivedEstablishments.length})
+            </Text>
+          </Pressable>
+
+          {showArchived
+            ? archivedEstablishments.map((establishment) => (
+                <EpfEstablishmentCard
+                  key={establishment.id}
+                  establishment={establishment}
+                  todayKey={todayKey}
+                  onEdit={openEdit}
+                />
+              ))
+            : null}
+        </>
+      ) : null}
 
       {modals}
     </View>
@@ -164,6 +204,17 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   addText: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  archivedToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 8,
+    marginTop: 4,
+  },
+  archivedLabel: {
     fontSize: 13,
     fontWeight: "600",
   },

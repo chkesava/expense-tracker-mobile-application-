@@ -52,7 +52,30 @@ renders correctly. There is no boolean `isActive` anywhere — the lifecycle is
 the date pair plus the derived status, as the ticket requires.
 
 `deriveEmploymentState` adds an `upcoming` presentation state for a joining date
-in the future.
+in the future, and `archived` (below), which takes precedence over all of them.
+
+### Archiving vs deletion
+
+The epic forbids destructive deletion of financial history, so **archiving is
+the normal way to remove an establishment from view**:
+
+* `archived?: boolean` is an **orthogonal flag**, not a third `employmentStatus`
+  value — that keeps the `current` ⟺ no-`dateLeft` invariant exact.
+* Archived records are history, not a live employment: they are excluded from
+  `findActiveEstablishment`, from the current-employment lock, and from overlap
+  checks. So archiving a current job frees the slot for a new one, and an
+  archived period never blocks a new one from overlapping its dates.
+* Restoring an open-ended record re-checks the invariant, because another
+  employment may have become current while it was archived.
+* They sort last and live behind a collapsed "Archived (n)" section.
+
+**Permanent deletion is still available, but only while nothing references the
+establishment.** `deleteEstablishment` queries `epfContributions` for a single
+matching document first and refuses if one exists, telling the user to archive
+instead. The check fails closed: an inconclusive query aborts the delete rather
+than risking an orphan. That collection does not exist until KAN-66, so the
+query returns empty today and the guard starts working the moment contributions
+ship.
 
 ### The single-current invariant
 
@@ -142,23 +165,33 @@ in utils instead.
 
 Full suite: 1855 unit tests and 158 rules tests pass, no regressions.
 
+## Decisions taken
+
+Recorded here so later tickets do not relitigate them.
+
+| Decision | Outcome |
+|---|---|
+| Simultaneous employments | **Not supported.** Exactly one establishment may be open-ended. |
+| Removing an establishment | **Archive by default**; permanent delete only while no contributions reference it. |
+| Money units | **Rupee floats + `roundMoney()`**, consistent with the rest of the app. The epic's "integer minor currency units" wording is to be amended, not followed. Binding on KAN-66. |
+| Duress mode | **EPF is hidden in duress sessions** (hook uses the duress-aware `user.uid`). A UAN ties to a real name and employment history — exactly what duress mode exists to conceal. |
+| UAN check digit | **Not validated.** 12-digit shape only. EPFO does not publish the checksum as a stable contract, and a wrong implementation would reject valid UANs — a far worse failure than accepting a typo. |
+| Sensitive identifiers | Stored plain in the owner-scoped doc, masked in lists with tap-to-reveal. |
+
 ## Open items for the rest of the epic
 
-1. **Minor-units conflict.** KAN-64 mandates integer minor currency units; the
-   codebase is unanimously rupee floats with `roundMoney()`
-   (`shared/utils/money.ts`) across expenses, investments, portfolio, SIP and
-   Ganesh. KAN-65 stores no money, so nothing is blocked — but **KAN-66 must
-   settle this**. Recommendation: keep the existing convention and amend the
-   epic.
-2. **There is no server-side cron.** Firebase Functions in `functions/` are
+1. **There is no server-side cron.** Firebase Functions in `functions/` are
    explicitly not deployed (Spark plan cannot enable
    `cloudfunctions.googleapis.com`), and the only live server code is a
    client-triggered Netlify function. Spendly's recurring work runs client-side
    on app foreground (`shared/utils/subscriptionProcessor.ts`). **KAN-67
    ("Automated Credit Cron") cannot be built as specified** without a billing
    plan change.
-3. **KAN-67 and KAN-68 overlap** heavily — both cover current-employment
+2. **KAN-67 and KAN-68 overlap** heavily — both cover current-employment
    contribution generation and credit lifecycle. Consider merging or re-scoping.
+3. **KAN-66 owns `epfContributions`.** When it lands, add the collection to the
+   `firestore.rules` inventory comment and the composite index
+   `establishmentId ASC + month DESC`. The delete guard here already queries it.
 
 ## Manual testing guide
 
@@ -197,9 +230,20 @@ Device/browser steps (run on Android **and** Web):
 8. Edit B, re-enable "I still work here" after setting a leaving date → the
    leaving date is actually removed (not stale) and the chip returns to
    **Current**.
-9. Force-quit and reopen (and hard-reload the web build) → profile and both
-   establishments persist.
-10. Airplane mode: add an establishment → the toast says it is queued; restore
+9. Open A → **Archive establishment**. It leaves the main list and appears under
+   a collapsed "Archived (1)" section. Expand it → A is there with an
+   **Archived** chip, history intact.
+10. Archive the *current* employer B, then add a new establishment with "I still
+    work here" on → it succeeds, because an archived record no longer holds the
+    current slot.
+11. Open the archived B → **Restore establishment** → it is refused, naming the
+    employment that is now current. Close that one, restore B again → succeeds.
+12. Open any establishment → **Delete permanently** → it is removed outright
+    (no contributions exist yet). Once KAN-66 ships, repeat against one that has
+    contributions and confirm it refuses with "Archive it instead".
+13. Force-quit and reopen (and hard-reload the web build) → profile and both
+    establishments persist.
+14. Airplane mode: add an establishment → the toast says it is queued; restore
     the network → the document appears in Firestore.
-11. Settings → turn Investments off → the whole hub including EPF redirects to
+15. Settings → turn Investments off → the whole hub including EPF redirects to
     Ledger.

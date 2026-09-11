@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Switch, Text, View } from "react-native";
-import { Trash2 } from "lucide-react-native";
+import { Archive, ArchiveRestore, Trash2 } from "lucide-react-native";
 
 import { Modal } from "@/components/common/Modal";
 import { Button } from "@/components/ui/Button";
@@ -20,6 +20,8 @@ type Props = {
   existing: EpfEstablishment[];
   onCreate: (input: EpfEstablishmentInput) => Promise<string | null>;
   onUpdate: (id: string, updates: Partial<EpfEstablishmentInput>) => Promise<boolean>;
+  onArchive: (id: string) => Promise<boolean>;
+  onRestore: (id: string) => Promise<boolean>;
   onDelete: (id: string) => Promise<boolean>;
 };
 
@@ -30,6 +32,8 @@ export function EpfEstablishmentFormModal({
   existing,
   onCreate,
   onUpdate,
+  onArchive,
+  onRestore,
   onDelete,
 }: Props) {
   const { theme } = useTheme();
@@ -107,10 +111,10 @@ export function EpfEstablishmentFormModal({
     if (ok) onClose();
   };
 
-  const handleDelete = async () => {
+  const runAction = async (action: (id: string) => Promise<boolean>) => {
     if (!establishment) return;
     setSaving(true);
-    const ok = await onDelete(establishment.id);
+    const ok = await action(establishment.id);
     setSaving(false);
     if (ok) onClose();
   };
@@ -200,18 +204,44 @@ export function EpfEstablishmentFormModal({
         </Button>
 
         {establishment ? (
-          <Pressable
-            onPress={handleDelete}
-            disabled={saving}
-            style={styles.deleteRow}
-            accessibilityRole="button"
-            accessibilityLabel="Remove establishment"
-          >
-            <Trash2 size={theme.iconSize.sm} color={theme.colors.destructive} />
-            <Text style={[styles.deleteText, { color: theme.colors.destructive }]}>
-              Remove establishment
+          <>
+            <Pressable
+              onPress={() => runAction(establishment.archived ? onRestore : onArchive)}
+              disabled={saving}
+              style={styles.actionRow}
+              accessibilityRole="button"
+              accessibilityLabel={
+                establishment.archived ? "Restore establishment" : "Archive establishment"
+              }
+            >
+              {establishment.archived ? (
+                <ArchiveRestore size={theme.iconSize.sm} color={theme.colors.foreground} />
+              ) : (
+                <Archive size={theme.iconSize.sm} color={theme.colors.foreground} />
+              )}
+              <Text style={[styles.actionText, { color: theme.colors.foreground }]}>
+                {establishment.archived ? "Restore establishment" : "Archive establishment"}
+              </Text>
+            </Pressable>
+
+            <Text style={[styles.actionHint, { color: theme.colors.mutedForeground }]}>
+              Archiving hides this employer without deleting its history. Deleting is only possible
+              while no contributions reference it.
             </Text>
-          </Pressable>
+
+            <Pressable
+              onPress={() => runAction(onDelete)}
+              disabled={saving}
+              style={styles.actionRow}
+              accessibilityRole="button"
+              accessibilityLabel="Delete establishment permanently"
+            >
+              <Trash2 size={theme.iconSize.sm} color={theme.colors.destructive} />
+              <Text style={[styles.actionText, { color: theme.colors.destructive }]}>
+                Delete permanently
+              </Text>
+            </Pressable>
+          </>
         ) : null}
       </View>
     </Modal>
@@ -236,15 +266,20 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
   },
-  deleteRow: {
+  actionRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
     paddingVertical: 8,
   },
-  deleteText: {
+  actionText: {
     fontSize: 14,
     fontWeight: "500",
+  },
+  actionHint: {
+    fontSize: 12,
+    lineHeight: 17,
+    textAlign: "center",
   },
 });

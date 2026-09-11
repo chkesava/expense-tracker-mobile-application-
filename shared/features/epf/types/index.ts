@@ -21,7 +21,7 @@
 export type EpfEmploymentStatus = "current" | "previous";
 
 /** Presentation state derived from the date pair at render time. */
-export type EpfEmploymentState = "upcoming" | "current" | "previous";
+export type EpfEmploymentState = "upcoming" | "current" | "previous" | "archived";
 
 export interface EpfProfile {
   /** Always {@link EPF_PROFILE_DOC_ID}. */
@@ -58,6 +58,15 @@ export interface EpfEstablishment {
   /** YYYY-MM-DD. Absent means the employment is open-ended (current). */
   dateLeft?: string;
   employmentStatus: EpfEmploymentStatus;
+  /**
+   * Hidden from the main list but never destroyed.
+   *
+   * An orthogonal flag rather than a third `employmentStatus` value, so the
+   * `current` <=> no-`dateLeft` invariant stays exact. Archived establishments
+   * are excluded from the current-employment lock and from overlap checks:
+   * they are history, not a live employment.
+   */
+  archived?: boolean;
   notes?: string;
   createdAt?: unknown;
   updatedAt?: unknown;
@@ -80,3 +89,9 @@ export const EPF_PROFILE_DOC_ID = "main";
 /** Firestore collection names under `users/{uid}`. */
 export const EPF_PROFILE_COLLECTION = "epfProfile";
 export const EPF_ESTABLISHMENTS_COLLECTION = "epfEstablishments";
+
+/**
+ * Monthly contribution records — owned by KAN-66, referenced here only so
+ * `deleteEstablishment` can refuse to orphan history that already exists.
+ */
+export const EPF_CONTRIBUTIONS_COLLECTION = "epfContributions";

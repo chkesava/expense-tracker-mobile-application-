@@ -93,6 +93,7 @@ export function normalizeEstablishment(
     dateJoined: typeof raw.dateJoined === "string" ? raw.dateJoined : "",
     dateLeft,
     employmentStatus: deriveEmploymentStatus(dateLeft),
+    archived: raw.archived === true ? true : undefined,
     notes: typeof raw.notes === "string" && raw.notes ? raw.notes : undefined,
     createdAt: raw.createdAt,
     updatedAt: raw.updatedAt,
@@ -101,18 +102,35 @@ export function normalizeEstablishment(
 
 /** Presentation state. A future joining date reads as "upcoming", not "current". */
 export function deriveEmploymentState(
-  establishment: { dateJoined: string; dateLeft?: string | null },
+  establishment: { dateJoined: string; dateLeft?: string | null; archived?: boolean },
   todayKey: string
 ): EpfEmploymentState {
+  if (establishment.archived) return "archived";
   if (establishment.dateLeft) return "previous";
   if (establishment.dateJoined > todayKey) return "upcoming";
   return "current";
 }
 
+export function isArchived(establishment: { archived?: boolean }): boolean {
+  return establishment.archived === true;
+}
+
+/** Live (non-archived) records first, archived last. */
+export function splitArchivedEstablishments(list: EpfEstablishment[]): {
+  live: EpfEstablishment[];
+  archived: EpfEstablishment[];
+} {
+  return {
+    live: list.filter((item) => !isArchived(item)),
+    archived: list.filter((item) => isArchived(item)),
+  };
+}
+
+/** Archived records are history, never the current employment. */
 export function findActiveEstablishment(
   establishments: EpfEstablishment[]
 ): EpfEstablishment | null {
-  return establishments.find((item) => isOpenEnded(item)) ?? null;
+  return establishments.find((item) => isOpenEnded(item) && !isArchived(item)) ?? null;
 }
 
 /**
@@ -149,7 +167,9 @@ export function validateEstablishmentAgainstExisting(
     };
   }
 
-  const others = existing.filter((item) => item.id !== candidate.id);
+  // Archived records are history: they neither hold the current-employment
+  // lock nor block a new period from overlapping their dates.
+  const others = existing.filter((item) => item.id !== candidate.id && !isArchived(item));
 
   if (isOpenEnded(candidate)) {
     const otherCurrent = others.find((item) => isOpenEnded(item));
@@ -176,9 +196,16 @@ export function validateEstablishmentAgainstExisting(
   return { ok: true };
 }
 
-/** Current employment first, then most recently joined, then employer name. */
+/**
+ * Archived last, then current employment, then most recently joined, then
+ * employer name.
+ */
 export function sortEstablishments(list: EpfEstablishment[]): EpfEstablishment[] {
   return [...list].sort((a, b) => {
+    const aArchived = isArchived(a);
+    const bArchived = isArchived(b);
+    if (aArchived !== bArchived) return aArchived ? 1 : -1;
+
     const aOpen = isOpenEnded(a);
     const bOpen = isOpenEnded(b);
     if (aOpen !== bOpen) return aOpen ? -1 : 1;

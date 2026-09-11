@@ -14,6 +14,7 @@ import {
   normalizeUan,
   periodsOverlap,
   sortEstablishments,
+  splitArchivedEstablishments,
   validateEstablishmentAgainstExisting,
 } from "@/shared/features/epf/utils";
 
@@ -316,6 +317,99 @@ describe("sortEstablishments", () => {
     ];
     sortEstablishments(list);
     expect(list.map((item) => item.id)).toEqual(["a", "b"]);
+  });
+});
+
+describe("archiving", () => {
+  it("reports archived ahead of every other state", () => {
+    const archivedCurrent = makeEstablishment({ archived: true });
+    expect(deriveEmploymentState(archivedCurrent, "2026-09-11")).toBe("archived");
+
+    const archivedPrevious = makeEstablishment({
+      archived: true,
+      dateLeft: "2022-01-01",
+      employmentStatus: "previous",
+    });
+    expect(deriveEmploymentState(archivedPrevious, "2026-09-11")).toBe("archived");
+  });
+
+  it("does not treat an archived open-ended record as the active employment", () => {
+    const list = [makeEstablishment({ id: "a", archived: true })];
+    expect(findActiveEstablishment(list)).toBeNull();
+  });
+
+  it("lets a new current employment be added alongside an archived open-ended one", () => {
+    const existing = [makeEstablishment({ id: "a", archived: true })];
+    expect(validateEstablishmentAgainstExisting(existing, { dateJoined: "2024-01-01" })).toEqual({
+      ok: true,
+    });
+  });
+
+  it("does not flag an overlap against an archived period", () => {
+    const existing = [
+      makeEstablishment({
+        id: "a",
+        archived: true,
+        dateJoined: "2020-01-01",
+        dateLeft: "2024-01-01",
+        employmentStatus: "previous",
+      }),
+    ];
+    expect(
+      validateEstablishmentAgainstExisting(existing, {
+        dateJoined: "2021-01-01",
+        dateLeft: "2022-01-01",
+      })
+    ).toEqual({ ok: true });
+  });
+
+  it("still blocks a second live current employment when an archived one exists", () => {
+    const existing = [
+      makeEstablishment({ id: "archived", archived: true }),
+      makeEstablishment({ id: "live", employerName: "Live Co", dateJoined: "2023-01-01" }),
+    ];
+    const result = validateEstablishmentAgainstExisting(existing, { dateJoined: "2024-01-01" });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.conflictingId).toBe("live");
+  });
+
+  it("reads archived only from an explicit true", () => {
+    expect(normalizeEstablishment("x", { dateJoined: "2020-01-01" }).archived).toBeUndefined();
+    expect(
+      normalizeEstablishment("x", { dateJoined: "2020-01-01", archived: false }).archived
+    ).toBeUndefined();
+    expect(
+      normalizeEstablishment("x", { dateJoined: "2020-01-01", archived: true }).archived
+    ).toBe(true);
+  });
+
+  it("sorts archived records last, below even previous employments", () => {
+    const list = [
+      makeEstablishment({ id: "archived", archived: true, dateJoined: "2025-01-01" }),
+      makeEstablishment({
+        id: "previous",
+        dateJoined: "2018-01-01",
+        dateLeft: "2021-01-01",
+        employmentStatus: "previous",
+      }),
+      makeEstablishment({ id: "current", dateJoined: "2021-01-01" }),
+    ];
+    expect(sortEstablishments(list).map((item) => item.id)).toEqual([
+      "current",
+      "previous",
+      "archived",
+    ]);
+  });
+
+  it("splits live from archived while preserving order", () => {
+    const list = [
+      makeEstablishment({ id: "a" }),
+      makeEstablishment({ id: "b", archived: true }),
+      makeEstablishment({ id: "c" }),
+    ];
+    const { live, archived } = splitArchivedEstablishments(list);
+    expect(live.map((item) => item.id)).toEqual(["a", "c"]);
+    expect(archived.map((item) => item.id)).toEqual(["b"]);
   });
 });
 

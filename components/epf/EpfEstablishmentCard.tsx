@@ -22,6 +22,7 @@ const STATE_LABEL: Record<string, string> = {
   current: "Current",
   previous: "Previous",
   upcoming: "Upcoming",
+  archived: "Archived",
 };
 
 function formatDuration(months: number): string {
