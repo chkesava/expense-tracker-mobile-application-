@@ -238,9 +238,11 @@ Device/browser steps (run on Android **and** Web):
     current slot.
 11. Open the archived B → **Restore establishment** → it is refused, naming the
     employment that is now current. Close that one, restore B again → succeeds.
-12. Open any establishment → **Delete permanently** → it is removed outright
-    (no contributions exist yet). Once KAN-66 ships, repeat against one that has
-    contributions and confirm it refuses with "Archive it instead".
+12. Open any establishment → **Delete permanently** → a confirmation dialog
+    appears (KAN-76). Cancel → nothing changes and the form stays open. Confirm
+    → it is removed outright (no contributions exist yet). Once KAN-66 ships,
+    repeat against one that has contributions and confirm it refuses with
+    "Archive it instead". Archive and restore stay single-tap by design.
 13. Force-quit and reopen (and hard-reload the web build) → profile and both
     establishments persist.
 14. Airplane mode: add an establishment → the toast says it is queued; restore

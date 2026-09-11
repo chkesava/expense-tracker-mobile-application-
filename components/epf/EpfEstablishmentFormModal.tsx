@@ -6,6 +6,7 @@ import { Modal } from "@/components/common/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import type { EpfEstablishmentInput } from "@/hooks/useEpf";
+import { appDialog } from "@/lib/appDialog";
 import { epfEstablishmentFormSchema } from "@/shared/features/epf/schemas";
 import type { EpfEstablishment } from "@/shared/features/epf/types";
 import { validateEstablishmentAgainstExisting } from "@/shared/features/epf/utils";
@@ -119,6 +120,30 @@ export function EpfEstablishmentFormModal({
     if (ok) onClose();
   };
 
+  /**
+   * Deleting is irreversible, so it is the one action that asks first. Archive
+   * and restore stay single-tap: both are reversible and already confirmed by a
+   * toast. Points at archiving, which is the intended path for anything with
+   * history to keep.
+   */
+  const confirmDelete = () => {
+    if (!establishment) return;
+    appDialog.alert(
+      "Delete establishment",
+      `Permanently delete "${establishment.employerName}"? This cannot be undone. Archive it instead to keep its history.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            void runAction(onDelete);
+          },
+        },
+      ]
+    );
+  };
+
   return (
     <Modal
       isOpen={isOpen}
@@ -230,7 +255,7 @@ export function EpfEstablishmentFormModal({
             </Text>
 
             <Pressable
-              onPress={() => runAction(onDelete)}
+              onPress={confirmDelete}
               disabled={saving}
               style={styles.actionRow}
               accessibilityRole="button"
