@@ -100,6 +100,7 @@ export const INVESTMENT_HUB_TAB_IDS = [
   "investments",
   "portfolio",
   "sip",
+  "epf",
 ] as const;
 
 /**
