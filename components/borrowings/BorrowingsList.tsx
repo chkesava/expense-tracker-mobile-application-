@@ -1,6 +1,5 @@
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import {
-  Alert,
   Pressable,
   StyleSheet,
   Text,
@@ -26,6 +25,7 @@ import { CreateBorrowingModal } from "@/components/borrowings/CreateBorrowingMod
 import { EmptyState } from "@/components/common/EmptyState";
 import { SkeletonCard } from "@/components/common/Skeleton";
 import { BOTTOM_NAV_FAB_GAP, BOTTOM_NAV_FAB_SIZE } from "@/components/layout/chrome";
+import { appDialog } from "@/lib/appDialog";
 import { haptic } from "@/lib/haptics";
 import { useBorrowings } from "@/hooks/useBorrowings";
 import type { Borrowing } from "@/shared/types/borrowing";
@@ -146,7 +146,7 @@ export function BorrowingsList({ listHeader }: { listHeader?: ReactNode }) {
 
   const confirmDelete = useCallback(
     (id: string) => {
-      Alert.alert(
+      appDialog.alert(
         "Delete borrowing?",
         "This removes the borrowing and all of its repayment records. Expenses and accounts are not affected.",
         [
@@ -171,7 +171,7 @@ export function BorrowingsList({ listHeader }: { listHeader?: ReactNode }) {
       if (!borrowing || !summary) return;
       const settled =
         summary.status === "FULLY_SETTLED" || summary.status === "CLOSED";
-      Alert.alert(borrowing.lenderName, undefined, [
+      appDialog.actionMenu(borrowing.lenderName, [
         {
           text: "View",
           onPress: () => {
@@ -195,7 +195,6 @@ export function BorrowingsList({ listHeader }: { listHeader?: ReactNode }) {
           style: "destructive" as const,
           onPress: () => confirmDelete(id),
         },
-        { text: "Cancel", style: "cancel" as const },
       ]);
     },
     [borrowings, summaries, confirmDelete]

@@ -1,6 +1,6 @@
+import { appDialog } from "@/lib/appDialog";
 import React, { useMemo } from "react";
 import {
-  Alert,
   Modal,
   Pressable,
   ScrollView,
@@ -78,7 +78,7 @@ export function InvestmentDetailModal({
       : "#8B5CF6";
 
   const handleDelete = () => {
-    Alert.alert(
+    appDialog.alert(
       "Delete Investment",
       `Are you sure you want to delete "${investment.name}"? This action cannot be undone.`,
       [
@@ -96,7 +96,7 @@ export function InvestmentDetailModal({
   };
 
   const handleClose = () => {
-    Alert.alert(
+    appDialog.alert(
       "Maturity / Close Investment",
       `Mark "${investment.name}" as closed? It will remain in historical records.`,
       [

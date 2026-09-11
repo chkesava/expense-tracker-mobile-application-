@@ -1,6 +1,7 @@
+import { appDialog } from "@/lib/appDialog";
+import { toast } from "@/lib/toast";
 import { useEffect, useRef, useState } from "react";
 import {
-  Alert,
   Modal,
   Pressable,
   ScrollView,
@@ -139,13 +140,13 @@ export function EditSubscriptionModal({
 
   const handleSave = async () => {
     if (!name.trim()) {
-      Alert.alert("Error", "Please enter a recurring name.");
+      toast.error("Please enter a recurring name.");
       return;
     }
 
     const numAmount = parseFloat(amount);
     if (isNaN(numAmount) || numAmount <= 0) {
-      Alert.alert("Error", "Please enter a valid amount.");
+      toast.error("Please enter a valid amount.");
       return;
     }
 
@@ -155,7 +156,7 @@ export function EditSubscriptionModal({
     if (effectiveFrequency === "monthly") {
       const numDay = parseInt(dayOfMonth, 10);
       if (isNaN(numDay) || numDay < 1 || numDay > 31) {
-        Alert.alert("Error", "Day of month must be between 1 and 31.");
+        toast.error("Day of month must be between 1 and 31.");
         return;
       }
     }
@@ -163,7 +164,7 @@ export function EditSubscriptionModal({
     const numInterval = parseInt(intervalDays, 10);
     if (effectiveFrequency === "every_n_days") {
       if (isNaN(numInterval) || numInterval < 1 || numInterval > 365) {
-        Alert.alert("Error", "Repeat every N days must be between 1 and 365.");
+        toast.error("Repeat every N days must be between 1 and 365.");
         return;
       }
     }
@@ -183,14 +184,14 @@ export function EditSubscriptionModal({
         numStartYear < 2000 ||
         numStartYear > 2100
       ) {
-        Alert.alert("Error", "First debit month must be 1-12 with a valid year.");
+        toast.error("First debit month must be 1-12 with a valid year.");
         return;
       }
     } else if (
       effectiveFrequency === "monthly" &&
       (startMonth.trim() || startYear.trim())
     ) {
-      Alert.alert("Error", "Enter both the first debit month and year.");
+      toast.error("Enter both the first debit month and year.");
       return;
     }
 
@@ -203,13 +204,13 @@ export function EditSubscriptionModal({
     if (type === "emi" && endMonth && endYear && startKey) {
       const endKey = `${numEndYear}-${String(numEndMonth).padStart(2, "0")}`;
       if (endKey < startKey) {
-        Alert.alert("Error", "The final term cannot be before the first debit.");
+        toast.error("The final term cannot be before the first debit.");
         return;
       }
     }
 
     if (type === "transfer" && accountId && toAccountId && accountId === toAccountId) {
-      Alert.alert("Error", "Source and destination accounts must be different.");
+      toast.error("Source and destination accounts must be different.");
       return;
     }
 
@@ -283,7 +284,7 @@ export function EditSubscriptionModal({
 
   const handleDelete = () => {
     if (!subscription?.id) return;
-    Alert.alert(
+    appDialog.alert(
       "Delete Recurring Item",
       `Are you sure you want to delete "${subscription.name}"? This action cannot be undone.`,
       [

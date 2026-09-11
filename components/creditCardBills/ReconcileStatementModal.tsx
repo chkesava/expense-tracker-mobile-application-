@@ -1,6 +1,6 @@
+import { appDialog } from "@/lib/appDialog";
 import { memo, useCallback, useMemo, useState } from "react";
 import {
-  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -240,7 +240,7 @@ export function ReconcileStatementModal({
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
-        Alert.alert(
+        appDialog.alert(
           "Permission required",
           "Photo library access is needed to pick statement screenshots."
         );
@@ -430,7 +430,7 @@ export function ReconcileStatementModal({
 
   const confirmUpdateBill = useCallback(() => {
     if (!openBill) return;
-    Alert.alert(
+    appDialog.alert(
       "Update statement amount?",
       `Replace the open bill with the app total ${formatAmount(appCycleTotal, currency)}? This does not add expenses.`,
       [

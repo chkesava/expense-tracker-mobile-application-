@@ -1,6 +1,6 @@
+import { appDialog } from "@/lib/appDialog";
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -152,7 +152,7 @@ export function BorrowingDetailModal({
 
   const confirmDeleteBorrowing = () => {
     if (!borrowing.id) return;
-    Alert.alert(
+    appDialog.alert(
       "Delete borrowing?",
       "This removes the borrowing and all of its repayment records. Expenses and accounts are not affected.",
       [
@@ -170,7 +170,7 @@ export function BorrowingDetailModal({
 
   const confirmDeleteRepayment = (repaymentId: string) => {
     if (!borrowing.id) return;
-    Alert.alert("Remove repayment?", "The outstanding balance will go back up.", [
+    appDialog.alert("Remove repayment?", "The outstanding balance will go back up.", [
       { text: "Cancel", style: "cancel" },
       {
         text: "Remove",

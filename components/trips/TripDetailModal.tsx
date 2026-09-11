@@ -1,6 +1,6 @@
+import { appDialog } from "@/lib/appDialog";
 import { useMemo } from "react";
 import {
-  Alert,
   Modal,
   Pressable,
   ScrollView,
@@ -75,7 +75,7 @@ export function TripDetailModal({ visible, trip, onClose }: TripDetailModalProps
   const statusColor = statusColors[status] || theme.colors.mutedForeground;
 
   const handleDelete = () => {
-    Alert.alert(
+    appDialog.alert(
       "Delete Trip",
       `Delete "${trip.tripName || trip.destination}"? All linked expenses will be unlinked.`,
       [
@@ -93,7 +93,7 @@ export function TripDetailModal({ visible, trip, onClose }: TripDetailModalProps
   };
 
   const handleComplete = () => {
-    Alert.alert("Complete Trip", "Mark this trip as completed?", [
+    appDialog.alert("Complete Trip", "Mark this trip as completed?", [
       { text: "Cancel", style: "cancel" },
       {
         text: "Complete",
@@ -106,7 +106,7 @@ export function TripDetailModal({ visible, trip, onClose }: TripDetailModalProps
   };
 
   const handleUnlinkExpense = (expenseId: string, amount: number) => {
-    Alert.alert("Unlink Expense", "Remove this expense from the trip?", [
+    appDialog.alert("Unlink Expense", "Remove this expense from the trip?", [
       { text: "Cancel", style: "cancel" },
       {
         text: "Unlink",

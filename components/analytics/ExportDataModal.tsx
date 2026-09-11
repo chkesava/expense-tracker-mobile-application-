@@ -1,6 +1,6 @@
+import { appDialog } from "@/lib/appDialog";
 import React, { useMemo, useState } from "react";
 import {
-  Alert,
   Modal,
   Pressable,
   Share,
@@ -88,7 +88,7 @@ export function ExportDataModal({ visible, onClose }: ExportDataModalProps) {
 
   const handleExport = async () => {
     if (!system.allowDataExport) {
-      Alert.alert(
+      appDialog.alert(
         "Export Disabled",
         "Data export is currently disabled by system policy."
       );

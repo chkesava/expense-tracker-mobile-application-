@@ -1,7 +1,8 @@
 import React, { useState } from "react";
-import { View, Text, StyleSheet, Modal, ScrollView, TouchableOpacity, Alert } from "react-native";
+import { View, Text, StyleSheet, Modal, ScrollView, TouchableOpacity} from "react-native";
 import { X } from "lucide-react-native";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
+import { toast } from "@/lib/toast";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -82,7 +83,7 @@ export function SipPlanFormModal({ visible, onClose, onSubmit }: SipPlanFormModa
       }
     } catch (e: any) {
       logError("sip.create", e);
-      Alert.alert("Couldn't create SIP", friendlyErrorMessage(e, "Please check the details and try again."));
+      toast.error(friendlyErrorMessage(e, "Couldn't create SIP. Please check the details and try again."));
     } finally {
       setLoading(false);
     }

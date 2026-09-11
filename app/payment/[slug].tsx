@@ -1,4 +1,5 @@
-import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { appDialog } from "@/lib/appDialog";
+import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import QRCode from "react-native-qrcode-svg";
 
@@ -54,7 +55,7 @@ export default function PublicPaymentScreen() {
     if (canOpen) {
       await Linking.openURL(upiLink);
     } else {
-      Alert.alert(
+      appDialog.alert(
         "UPI Not Available",
         "No UPI app found. Scan the QR code with GPay, PhonePe, or Paytm."
       );

@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
-  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -23,6 +22,7 @@ import { HoldingDetailModal } from "@/components/portfolio/HoldingDetailModal";
 import { AddHoldingModal } from "@/components/portfolio/AddHoldingModal";
 import { CsvImportModal } from "@/components/portfolio/CsvImportModal";
 import { MockTradeModal } from "@/components/portfolio/MockTradeModal";
+import { appDialog } from "@/lib/appDialog";
 import { haptic } from "@/lib/haptics";
 import { sampleScrollFps } from "@/lib/perf";
 import { usePortfolio } from "@/hooks/usePortfolio";
@@ -212,7 +212,7 @@ export function HoldingsList({ listHeader }: { listHeader?: ReactNode }) {
 
   const confirmDelete = useCallback(
     (id: string, symbol: string) => {
-      Alert.alert(
+      appDialog.alert(
         `Remove ${symbol}?`,
         "This deletes the holding from your portfolio. Past mock trades stay in history.",
         [
@@ -236,7 +236,7 @@ export function HoldingsList({ listHeader }: { listHeader?: ReactNode }) {
     (id: string) => {
       const found = holdingsWithMetrics.find((item) => item.id === id);
       if (!found) return;
-      Alert.alert(found.symbol, undefined, [
+      appDialog.actionMenu(found.symbol, [
         { text: "Buy", onPress: () => openTrade(id, "BUY") },
         { text: "Sell", onPress: () => openTrade(id, "SELL") },
         {
@@ -244,7 +244,6 @@ export function HoldingsList({ listHeader }: { listHeader?: ReactNode }) {
           style: "destructive",
           onPress: () => confirmDelete(id, found.symbol),
         },
-        { text: "Cancel", style: "cancel" },
       ]);
     },
     [confirmDelete, holdingsWithMetrics, openTrade]

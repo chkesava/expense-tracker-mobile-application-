@@ -1,7 +1,7 @@
+import { appDialog } from "@/lib/appDialog";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Image,
   Modal,
   Pressable,
@@ -60,7 +60,7 @@ export function ReceiptScannerModal({
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
-        Alert.alert(
+        appDialog.alert(
           "Permission Required",
           "Photo library access is required to select receipts."
         );
@@ -87,7 +87,7 @@ export function ReceiptScannerModal({
     try {
       const permission = await ImagePicker.requestCameraPermissionsAsync();
       if (!permission.granted) {
-        Alert.alert(
+        appDialog.alert(
           "Permission Required",
           "Camera access is required to photograph receipts."
         );

@@ -1,6 +1,7 @@
+import { appDialog } from "@/lib/appDialog";
+import { toast } from "@/lib/toast";
 import { useEffect, useState } from "react";
 import {
-  Alert,
   Modal,
   Pressable,
   ScrollView,
@@ -61,11 +62,11 @@ export function CreatePaymentRequestModal({
   const handleSave = async () => {
     const numAmount = parseFloat(amount);
     if (!numAmount || numAmount <= 0) {
-      Alert.alert("Error", "Please enter a valid amount.");
+      toast.error("Please enter a valid amount.");
       return;
     }
     if (!upiId) {
-      Alert.alert(
+      appDialog.alert(
         "UPI ID Required",
         "Please set your UPI ID in Settings before creating a payment request."
       );
