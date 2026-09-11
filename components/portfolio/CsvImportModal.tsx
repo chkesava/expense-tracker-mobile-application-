@@ -152,7 +152,7 @@ export function CsvImportModal({ visible, onClose, onImport }: CsvImportModalPro
 
           <ScrollView contentContainerStyle={styles.body}>
             <Text style={[styles.copy, { color: theme.colors.mutedForeground }]}>
-              Supports Groww and Zerodha-style CSVs with Symbol, Quantity, and Avg Price columns. Importing replaces current holdings only; transactions remain untouched.
+              Supports Groww and Zerodha-style CSVs with Symbol, Quantity, and Avg Price columns. Importing replaces current holdings only; transactions remain untouched. Imported holdings are treated as bought outside the app, so your investment cash balance does not change.
             </Text>
             <Button variant="outline" onPress={chooseFile}>
               <Upload size={16} color={theme.colors.foreground} />

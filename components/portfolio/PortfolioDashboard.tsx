@@ -89,6 +89,7 @@ export function PortfolioDashboard({ listHeader }: { listHeader?: ReactNode }) {
     orders,
     snapshots,
     settings: portfolioSettings,
+    cashBalance: investmentCashBalance,
     loading,
     saveSettings,
     saveDailySnapshot,
@@ -181,11 +182,11 @@ export function PortfolioDashboard({ listHeader }: { listHeader?: ReactNode }) {
       overallGainLossPercent,
       totalInvested,
       totalHoldings: holdingsWithMetrics.length,
-      cashBalance: portfolioSettings?.cashBalance ?? 0,
+      cashBalance: investmentCashBalance,
       topGainer,
       topLoser,
     };
-  }, [holdingsWithMetrics, portfolioSettings]);
+  }, [holdingsWithMetrics, investmentCashBalance]);
 
   const allocations: AllocationSlice[] = useMemo(() => {
     const byType = new Map<string, number>();

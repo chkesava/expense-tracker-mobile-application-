@@ -44,9 +44,19 @@ export function OnboardingFlow({
 
     setIsSubmitting(true);
     try {
+      const now = new Date();
       await onComplete({
         initialInvestmentAmount: amount,
         cashBalance: amount,
+        // The opening balance has to be set here as well as on the scalar. The
+        // Investment Cash Balance is the baseline plus every ledger movement, so a
+        // scalar written without a matching baseline would be ignored entirely.
+        cashBaseline: {
+          amount,
+          capturedAt: now.toISOString(),
+          capturedAtMs: now.getTime(),
+          reason: "Opening balance set during portfolio onboarding",
+        },
         hasExistingHoldings: hasExisting,
         onboardingComplete: true,
       });
