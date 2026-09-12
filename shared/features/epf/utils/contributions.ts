@@ -67,6 +67,28 @@ export interface EpfContributionComputation {
 }
 
 /**
+ * The two derived totals, from the three shares — KAN-73.
+ *
+ * `totalContribution` is everything both parties paid; `epfCredit` is only what
+ * reaches the PF balance, because the EPS slice is pension and never lands
+ * there. They are different numbers and conflating them overstates a balance.
+ *
+ * This existed inline in three places, and the copy in
+ * `EpfContributionEditSheet` omitted `roundMoney`, so a hand-edited month could
+ * store 3600.3000000000002 where every generated month stored 3600.3.
+ */
+export function contributionTotals(shares: {
+  employeeShare: number;
+  employerShare: number;
+  employerEpfShare: number;
+}): { totalContribution: number; epfCredit: number } {
+  return {
+    totalContribution: roundMoney(shares.employeeShare + shares.employerShare),
+    epfCredit: roundMoney(shares.employeeShare + shares.employerEpfShare),
+  };
+}
+
+/**
  * The statutory split for a wage in a given month.
  *
  * Employee and employer both contribute 12% of the full wage; only the EPS
@@ -96,8 +118,7 @@ export function computeEpfContribution(input: {
     employerShare,
     epsShare,
     employerEpfShare,
-    totalContribution: roundMoney(employeeShare + employerShare),
-    epfCredit: roundMoney(employeeShare + employerEpfShare),
+    ...contributionTotals({ employeeShare, employerShare, employerEpfShare }),
     epsEligible: input.epsEligible,
     rulesVersion: rule.id,
   };
@@ -194,8 +215,7 @@ export function normalizeEpfContribution(
     employerShare,
     epsShare,
     employerEpfShare,
-    totalContribution: roundMoney(employeeShare + employerShare),
-    epfCredit: roundMoney(employeeShare + employerEpfShare),
+    ...contributionTotals({ employeeShare, employerShare, employerEpfShare }),
     status: (str(raw.status) as EpfContributionStatus) ?? "confirmed",
     source: (str(raw.source) as EpfContributionSource) ?? "manualHistorical",
     overridden: raw.overridden === true ? true : undefined,

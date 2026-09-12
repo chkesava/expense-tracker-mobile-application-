@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/Input";
 import { epfProfileFormSchema, type EpfProfileFormInput } from "@/shared/features/epf/schemas";
 import type { EpfProfile } from "@/shared/features/epf/types";
 import { formatUan } from "@/shared/features/epf/utils";
+import { fieldErrorsFromIssues } from "@/shared/utils/fieldErrors";
 
 type Props = {
   isOpen: boolean;
@@ -34,11 +35,7 @@ export function EpfProfileFormModal({ isOpen, onClose, profile, onSubmit }: Prop
     const parsed = epfProfileFormSchema.safeParse({ employeeName, uan, notes });
 
     if (!parsed.success) {
-      const fieldErrors: Record<string, string> = {};
-      parsed.error.issues.forEach((issue) => {
-        if (issue.path[0]) fieldErrors[issue.path[0].toString()] = issue.message;
-      });
-      setErrors(fieldErrors);
+      setErrors(fieldErrorsFromIssues(parsed.error.issues));
       return;
     }
 

@@ -52,14 +52,7 @@ import {
   type EpfReconciliationInput,
 } from "@/shared/features/epf/utils/reconciliation";
 import { financialYearOfMonth } from "@/shared/utils/financialYear";
-
-function withoutUndefined<T extends Record<string, unknown>>(value: T): T {
-  const out: Record<string, unknown> = {};
-  for (const [key, val] of Object.entries(value)) {
-    if (val !== undefined) out[key] = val;
-  }
-  return out as T;
-}
+import { withoutUndefined } from "@/shared/utils/objects";
 
 export function useEpfInterest(options?: { enabled?: boolean }) {
   const enabled = options?.enabled !== false;
@@ -124,7 +117,13 @@ export function useEpfInterest(options?: { enabled?: boolean }) {
       },
       snapshotErrorHandler(
         "snapshot.epfReconciliations",
-        (failure) => setInterestError(failure),
+        (failure) => {
+          setInterestError(failure);
+          // Clearing loading matters as much as recording the error: without
+          // it, a reconciliations failure left the Balance tab on skeletons
+          // forever, because nothing else ever set this false (KAN-73).
+          setInterestLoading(false);
+        },
         "Couldn't load your EPF reconciliations."
       )
     );

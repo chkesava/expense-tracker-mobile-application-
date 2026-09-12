@@ -23,6 +23,8 @@ import {
 } from "@/shared/features/epf/utils/transfers";
 import { formatAmount } from "@/shared/utils/formatCurrency";
 import { useTheme } from "@/theme/ThemeProvider";
+import { statusToneKey } from "@/shared/features/epf/utils/present";
+import { combineEpfLoad } from "@/shared/features/epf/utils/loadState";
 
 /**
  * Transfers touching one establishment — KAN-69.
@@ -51,8 +53,24 @@ export function EpfTransfersList({
     reverseTransfer,
     reconcileTransfer,
   } = useEpfTransfers();
-  const { contributions, contributionsLoading } = useEpfContributions(establishment.id);
-  const { interestEntries, reconciliations } = useEpfInterest();
+  const { contributions, contributionsLoading, contributionsError, retryContributions } =
+    useEpfContributions(establishment.id);
+  const {
+    interestEntries,
+    reconciliations,
+    interestLoading,
+    interestError,
+    retryInterest,
+  } = useEpfInterest();
+
+  // Transferable balance is computed from all three sources. Interest was
+  // previously read without ever checking whether it had loaded or failed, so
+  // the screen could understate what the user was allowed to move (KAN-73).
+  const load = combineEpfLoad([
+    { loading: transfersLoading, error: transfersError, retry: retryTransfers },
+    { loading: contributionsLoading, error: contributionsError, retry: retryContributions },
+    { loading: interestLoading, error: interestError, retry: retryInterest },
+  ]);
 
   const [formOpen, setFormOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -89,7 +107,7 @@ export function EpfTransfersList({
     [establishments]
   );
 
-  if (transfersLoading || contributionsLoading) {
+  if (load.loading) {
     return (
       <View style={styles.container}>
         <SkeletonCard />
@@ -98,12 +116,12 @@ export function EpfTransfersList({
     );
   }
 
-  if (transfersError) {
+  if (load.error) {
     return (
       <ErrorState
         title="Couldn't load transfers"
-        description={transfersError.message}
-        onRetry={retryTransfers}
+        description={load.error.message}
+        onRetry={load.retryAll}
       />
     );
   }
@@ -189,14 +207,7 @@ export function EpfTransfersList({
         renderItem={({ item }) => {
           const outgoing = item.sourceEstablishmentId === establishment.id;
           const meta = transferStatusMeta(item);
-          const tone =
-            meta.tone === "success"
-              ? theme.colors.success
-              : meta.tone === "warning"
-                ? theme.colors.destructive
-                : meta.tone === "info"
-                  ? theme.colors.primary
-                  : theme.colors.mutedForeground;
+          const tone = theme.colors[statusToneKey(meta.tone)];
 
           return (
             <Pressable

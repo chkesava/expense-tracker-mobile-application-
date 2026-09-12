@@ -15,6 +15,7 @@ import type {
   EpfEmploymentStatus,
   EpfEstablishment,
   EpfEstablishmentConflict,
+  EpfProfile,
 } from "@/shared/features/epf/types";
 import { EPF_PROFILE_DOC_ID } from "@/shared/features/epf/types";
 
@@ -67,6 +68,38 @@ export function isOpenEnded(establishment: {
   dateLeft?: string | null;
 }): boolean {
   return !establishment.dateLeft;
+}
+
+/**
+ * Build an {@link EpfProfile} from a raw Firestore document — KAN-73.
+ *
+ * `useEpf.ts` used to cast the snapshot straight to `EpfProfile`, which asserts
+ * fields a document written by an earlier build may not carry. The profile is
+ * read on every dashboard visit through `useEpfNetWorth`, so a missing field
+ * became `undefined` at runtime while the type claimed otherwise.
+ *
+ * `activeEstablishmentId` is deliberately normalized to `null` rather than
+ * dropped: absent and "explicitly cleared" mean the same thing for a lock hint,
+ * and collapsing them removes a distinction nothing should depend on.
+ */
+export function normalizeEpfProfile(
+  id: string,
+  raw: Record<string, unknown>
+): EpfProfile {
+  const activeEstablishmentId =
+    typeof raw.activeEstablishmentId === "string" && raw.activeEstablishmentId
+      ? raw.activeEstablishmentId
+      : null;
+
+  return {
+    id,
+    employeeName: typeof raw.employeeName === "string" ? raw.employeeName : "",
+    uan: typeof raw.uan === "string" ? raw.uan : "",
+    activeEstablishmentId,
+    notes: typeof raw.notes === "string" && raw.notes ? raw.notes : undefined,
+    createdAt: raw.createdAt,
+    updatedAt: raw.updatedAt,
+  };
 }
 
 /**

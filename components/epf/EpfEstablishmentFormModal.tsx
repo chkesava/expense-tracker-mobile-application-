@@ -11,6 +11,7 @@ import { epfEstablishmentFormSchema } from "@/shared/features/epf/schemas";
 import type { EpfEstablishment } from "@/shared/features/epf/types";
 import { validateEstablishmentAgainstExisting } from "@/shared/features/epf/utils";
 import { useTheme } from "@/theme/ThemeProvider";
+import { fieldErrorsFromIssues } from "@/shared/utils/fieldErrors";
 
 type Props = {
   isOpen: boolean;
@@ -87,11 +88,7 @@ export function EpfEstablishmentFormModal({
     });
 
     if (!parsed.success) {
-      const fieldErrors: Record<string, string> = {};
-      parsed.error.issues.forEach((issue) => {
-        if (issue.path[0]) fieldErrors[issue.path[0].toString()] = issue.message;
-      });
-      setErrors(fieldErrors);
+      setErrors(fieldErrorsFromIssues(parsed.error.issues));
       return;
     }
 

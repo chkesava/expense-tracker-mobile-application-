@@ -56,31 +56,10 @@ import {
   canTransition,
   contributionsToAutoCredit,
 } from "@/shared/features/epf/utils/lifecycle";
+import { withoutUndefined } from "@/shared/utils/objects";
+import { chunk } from "@/shared/utils/chunk";
+import { EPF_BATCH_CHUNK_SIZE } from "@/shared/features/epf/data/epfBatchLimits";
 
-/**
- * Firestore caps a batch at 500 writes.
- *
- * Each saved month now writes **two** documents — the contribution and its
- * audit event (KAN-72) — so the row chunk is half what it would otherwise be.
- * At 400 rows a batch would be 800 writes and fail, and only on a long
- * backfill, which is the worst place to find out.
- */
-const BATCH_CHUNK_SIZE = 200;
-
-function chunk<T>(items: T[], size: number): T[][] {
-  const groups: T[][] = [];
-  for (let i = 0; i < items.length; i += size) groups.push(items.slice(i, i + size));
-  return groups;
-}
-
-/** Firestore rejects undefined; drop those keys. */
-function withoutUndefined<T extends Record<string, unknown>>(value: T): T {
-  const out: Record<string, unknown> = {};
-  for (const [key, val] of Object.entries(value)) {
-    if (val !== undefined) out[key] = val;
-  }
-  return out as T;
-}
 
 export function useEpfContributions(
   establishmentId: string | undefined,
@@ -180,7 +159,7 @@ export function useEpfContributions(
       let failed = 0;
       let lastOutcome: WriteOutcome = "acked";
 
-      for (const group of chunk(rows, BATCH_CHUNK_SIZE)) {
+      for (const group of chunk(rows, EPF_BATCH_CHUNK_SIZE)) {
         try {
           const batch = writeBatch(db);
           for (const row of group) {
@@ -411,7 +390,7 @@ export function useEpfContributions(
     if (due.length === 0) return 0;
 
     try {
-      for (const group of chunk(due, BATCH_CHUNK_SIZE)) {
+      for (const group of chunk(due, EPF_BATCH_CHUNK_SIZE)) {
         const batch = writeBatch(db);
         for (const row of group) {
           const next = applyAutoCredit(row);
@@ -491,7 +470,7 @@ export function useEpfContributions(
     if (!uid || !db || !establishmentId || drafts.length === 0) return true;
 
     try {
-      for (const group of chunk(drafts, BATCH_CHUNK_SIZE)) {
+      for (const group of chunk(drafts, EPF_BATCH_CHUNK_SIZE)) {
         const batch = writeBatch(db);
         for (const row of group) {
           batch.delete(
