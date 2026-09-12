@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { useEpfContributions } from "@/hooks/useEpfContributions";
+import { useEpfInterest } from "@/hooks/useEpfInterest";
 import { useEpfTransfers } from "@/hooks/useEpfTransfers";
 import type { EpfEstablishment } from "@/shared/features/epf/types";
 import {
@@ -51,6 +52,7 @@ export function EpfTransfersList({
     reconcileTransfer,
   } = useEpfTransfers();
   const { contributions, contributionsLoading } = useEpfContributions(establishment.id);
+  const { interestEntries, reconciliations } = useEpfInterest();
 
   const [formOpen, setFormOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -71,8 +73,10 @@ export function EpfTransfersList({
         contributions,
         transfers,
         establishmentId: establishment.id,
+        interestEntries,
+        adjustments: reconciliations,
       }),
-    [contributions, transfers, establishment.id]
+    [contributions, transfers, establishment.id, interestEntries, reconciliations]
   );
 
   const detail = useMemo(
@@ -138,6 +142,8 @@ export function EpfTransfersList({
         establishments={establishments}
         contributions={contributions}
         transfers={transfers}
+        interestEntries={interestEntries}
+        adjustments={reconciliations}
         currency={currency}
         defaultSourceId={establishment.id}
         onSubmit={createTransfer}

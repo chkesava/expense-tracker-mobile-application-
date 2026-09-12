@@ -15,6 +15,8 @@
 
 import type {
   EpfContribution,
+  EpfInterestEntry,
+  EpfReconciliation,
   EpfTransfer,
   EpfTransferDisplayState,
   EpfTransferIssue,
@@ -25,27 +27,51 @@ import { roundMoney } from "@/shared/utils/money";
 /** Contribution statuses that have actually added money to the fund. */
 const BALANCE_BEARING: EpfContribution["status"][] = ["credited", "partial", "confirmed"];
 
-/**
- * What a single establishment holds.
- *
- * **The one definition of EPF balance.** KAN-70 (interest) and KAN-71
- * (dashboard) must consume this rather than re-deriving it, or three tickets
- * end up with three subtly different numbers.
- *
- *   balance = credited contributions
- *           + completed transfers in
- *           − completed transfers out
- *
- * Only `completed` transfers move balance. An `initiated` one has not settled
- * and a `failed` one never will. A reversed pair nets to zero on its own,
- * because the original keeps `completed` and the compensating row counts in the
- * opposite direction — no special-casing needed here.
- */
-export function establishmentBalance(args: {
+export interface EpfBalanceInputs {
   contributions: EpfContribution[];
   transfers: EpfTransfer[];
   establishmentId: string;
-}): number {
+  /**
+   * Credited interest, per financial year — KAN-70.
+   *
+   * Required, not optional: a caller that forgets it would silently
+   * under-report a balance by every rupee of interest ever earned, and nothing
+   * would catch that. Failing to compile is the cheaper failure.
+   */
+  interestEntries: EpfInterestEntry[];
+  /** Reconciliation adjustments against a real EPFO balance — KAN-70. */
+  adjustments: EpfReconciliation[];
+}
+
+export interface EpfBalanceBreakdown {
+  contributions: number;
+  interest: number;
+  transfersIn: number;
+  transfersOut: number;
+  adjustments: number;
+  total: number;
+}
+
+/**
+ * What a single establishment holds — the full ledger.
+ *
+ * **The one definition of EPF balance.** KAN-71 must consume this rather than
+ * re-deriving it, or the dashboard and the EPF screens disagree.
+ *
+ *   balance = credited contributions
+ *           + completed transfers in  −  completed transfers out
+ *           + credited interest
+ *           + reconciliation adjustments
+ *
+ * Only `completed` transfers move balance: an `initiated` one has not settled
+ * and a `failed` one never will. A reversed pair nets to zero on its own,
+ * because the original keeps `completed` while the compensating row counts the
+ * other way — no special-casing needed here.
+ *
+ * A `reversed` month is **excluded**, not subtracted: it never landed, so it was
+ * never added. (Settled in KAN-70 after KAN-68 and KAN-69 both deferred it.)
+ */
+export function establishmentBalanceBreakdown(args: EpfBalanceInputs): EpfBalanceBreakdown {
   const { contributions, transfers, establishmentId } = args;
 
   const contributed = contributions.reduce((total, row) => {
@@ -54,22 +80,42 @@ export function establishmentBalance(args: {
     return total + (row.creditedAmount ?? row.epfCredit);
   }, 0);
 
-  const moved = transfers.reduce((total, transfer) => {
-    if (transfer.status !== "completed") return total;
-    if (transfer.destinationEstablishmentId === establishmentId) return total + transfer.amount;
-    if (transfer.sourceEstablishmentId === establishmentId) return total - transfer.amount;
-    return total;
-  }, 0);
+  let transfersIn = 0;
+  let transfersOut = 0;
+  for (const transfer of transfers) {
+    if (transfer.status !== "completed") continue;
+    if (transfer.destinationEstablishmentId === establishmentId) transfersIn += transfer.amount;
+    else if (transfer.sourceEstablishmentId === establishmentId) transfersOut += transfer.amount;
+  }
 
-  return roundMoney(contributed + moved);
+  const interest = args.interestEntries.reduce(
+    (total, entry) =>
+      entry.establishmentId === establishmentId ? total + entry.interest : total,
+    0
+  );
+
+  const adjustments = args.adjustments.reduce(
+    (total, row) =>
+      row.establishmentId === establishmentId ? total + row.adjustmentAmount : total,
+    0
+  );
+
+  return {
+    contributions: roundMoney(contributed),
+    interest: roundMoney(interest),
+    transfersIn: roundMoney(transfersIn),
+    transfersOut: roundMoney(transfersOut),
+    adjustments: roundMoney(adjustments),
+    total: roundMoney(contributed + transfersIn - transfersOut + interest + adjustments),
+  };
+}
+
+export function establishmentBalance(args: EpfBalanceInputs): number {
+  return establishmentBalanceBreakdown(args).total;
 }
 
 /** What may actually be moved out. A negative balance is never transferable. */
-export function transferableBalance(args: {
-  contributions: EpfContribution[];
-  transfers: EpfTransfer[];
-  establishmentId: string;
-}): number {
+export function transferableBalance(args: EpfBalanceInputs): number {
   return Math.max(0, establishmentBalance(args));
 }
 

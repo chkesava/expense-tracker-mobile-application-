@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ArrowLeft } from "lucide-react-native";
@@ -7,6 +7,7 @@ import { ArrowLeft } from "lucide-react-native";
 import { EmptyState } from "@/components/common/EmptyState";
 import { SkeletonCard } from "@/components/common/Skeleton";
 import { EpfBackfillScreen } from "@/components/epf/EpfBackfillScreen";
+import { EpfBalanceTab } from "@/components/epf/EpfBalanceTab";
 import { EpfContributionHistory } from "@/components/epf/EpfContributionHistory";
 import { EpfCurrentContributions } from "@/components/epf/EpfCurrentContributions";
 import { EpfTransfersList } from "@/components/epf/EpfTransfersList";
@@ -14,7 +15,7 @@ import { useEpf } from "@/hooks/useEpf";
 import { maskIdentifier } from "@/shared/features/epf/utils";
 import { useTheme } from "@/theme/ThemeProvider";
 
-type Tab = "current" | "history" | "backfill" | "transfers";
+type Tab = "balance" | "current" | "history" | "backfill" | "transfers";
 
 /**
  * Contributions for one establishment — KAN-66.
@@ -42,6 +43,7 @@ export default function EpfEstablishmentContributionsScreen() {
   const activeTab: Tab = tab ?? (isCurrentEmployment ? "current" : "history");
 
   const tabs: { id: Tab; label: string }[] = [
+    { id: "balance", label: "Balance" },
     ...(isCurrentEmployment ? ([{ id: "current", label: "Current" }] as const) : []),
     { id: "history", label: "History" },
     { id: "backfill", label: "Backfill" },
@@ -92,7 +94,12 @@ export default function EpfEstablishmentContributionsScreen() {
         </View>
       ) : (
         <>
-          <View style={[styles.tabs, { borderBottomColor: theme.colors.border }]}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={[styles.tabsScroll, { borderBottomColor: theme.colors.border }]}
+            contentContainerStyle={styles.tabs}
+          >
             {tabs.map((item) => {
               const active = activeTab === item.id;
               return (
@@ -121,9 +128,11 @@ export default function EpfEstablishmentContributionsScreen() {
                 </Pressable>
               );
             })}
-          </View>
+          </ScrollView>
 
-          {activeTab === "current" ? (
+          {activeTab === "balance" ? (
+            <EpfBalanceTab establishment={establishment} />
+          ) : activeTab === "current" ? (
             <EpfCurrentContributions establishment={establishment} />
           ) : activeTab === "transfers" ? (
             <EpfTransfersList
@@ -157,9 +166,12 @@ const styles = StyleSheet.create({
   title: { fontSize: 18, fontWeight: "700" },
   subtitle: { fontSize: 12 },
   body: { gap: 12, padding: 16 },
+  tabsScroll: {
+    flexGrow: 0,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
   tabs: {
     flexDirection: "row",
-    borderBottomWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 16,
   },
   tab: {

@@ -236,3 +236,27 @@ export const epfTransferFormSchema = z
   });
 
 export type EpfTransferFormInput = z.infer<typeof epfTransferFormSchema>;
+
+/* ---------------------------------------------------------------------------
+ * Reconciliation — KAN-70
+ * ------------------------------------------------------------------------ */
+
+/**
+ * Recording the balance EPFO actually shows.
+ *
+ * Establishment ownership and the not-in-the-future rule need context the
+ * schema does not have, so they live in `validateReconciliation` — the same
+ * split used since KAN-65.
+ */
+export const epfReconciliationFormSchema = z.object({
+  actualBalance: z.coerce
+    .number({ message: "Enter a valid amount" })
+    .refine(Number.isFinite, "Enter a valid amount")
+    .nonnegative("Balance cannot be negative")
+    .max(100_000_000, "Amount is too large"),
+  date: z.string().regex(dateKeyRegex, "Invalid date"),
+  reference: z.string().trim().max(60, "Reference is too long").optional().or(z.literal("")),
+  notes: z.string().trim().max(500, "Notes are too long").optional().or(z.literal("")),
+});
+
+export type EpfReconciliationFormInput = z.infer<typeof epfReconciliationFormSchema>;
