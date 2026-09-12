@@ -24,7 +24,10 @@ Classification used throughout:
 - **RECOMMENDATION** — architectural; not a defect on its own.
 
 Every finding has a Jira ticket in project KAN (labels `spendly`, `audit-2026-09`,
-area, `sev-*`). The mapping is in Appendix 1.
+area, `sev-*`), and all 42 hang off the tracking epic
+**[KAN-122](https://kesavach.atlassian.net/browse/KAN-122)** — "Spendly — Firebase
+security, realtime and data-integrity remediation (audit 2026-09-12)". The mapping
+is in Appendix 1. JQL for the whole set: `project = KAN AND parent = KAN-122`.
 
 ---
 
@@ -399,6 +402,8 @@ baseline), KAN-84 (App Check, per-collection validation — incremental).
 
 ## Appendix 1 — Finding → Jira mapping
 
+Epic: **KAN-122** (parent of all 42). `project = KAN AND parent = KAN-122`.
+
 | Finding | Ticket | Finding | Ticket | Finding | Ticket |
 |---|---|---|---|---|---|
 | SEC-01 | KAN-79 | DI-05 | KAN-91 | EPF-03 | KAN-102 |
@@ -416,8 +421,10 @@ baseline), KAN-84 (App Check, per-collection validation — incremental).
 | ARCH-02 | KAN-115 | ARCH-03 | KAN-116 | AUTH-06 | KAN-113 |
 | WEB-01 | KAN-117 | OBS-01 | KAN-118 | TEST-01 | KAN-119 |
 
-Existing related tickets: KAN-72 (EPF security/integrity), KAN-75 (EPF index perf),
-KAN-77 (holding does not deduct cash), KAN-23 (rules testing), KAN-64 (EPF epic).
+Existing related tickets, issue-linked but parented elsewhere: KAN-72 (EPF
+security/integrity), KAN-75 (EPF index perf), KAN-77 (holding does not deduct
+cash), KAN-23 (rules testing), KAN-64 (EPF epic), KAN-121 (EPF dashboard balance
+without streaming full history — overlaps RT-02/KAN-106).
 
 ## Appendix 2 — Emulator probe (evidence for Section B/H)
 
