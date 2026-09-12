@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { ChevronRight, Pencil } from "lucide-react-native";
 
 import { useTheme } from "@/theme/ThemeProvider";
+import { statusToneKey } from "@/shared/features/epf/utils/present";
 
 /**
  * One month on the backfill / history list.
@@ -50,14 +51,7 @@ function EpfContributionRowBase({
 }: Props) {
   const { theme } = useTheme();
 
-  const toneColor =
-    statusTone === "success"
-      ? theme.colors.success
-      : statusTone === "warning"
-        ? theme.colors.destructive
-        : statusTone === "info"
-          ? theme.colors.primary
-          : theme.colors.mutedForeground;
+  const toneColor = theme.colors[statusToneKey(statusTone)];
 
   return (
     <Pressable

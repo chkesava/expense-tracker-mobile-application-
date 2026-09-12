@@ -18,6 +18,7 @@ import { useEpfCatchUp } from "@/hooks/useEpfCatchUp";
 import { epfTodayKey } from "@/shared/features/epf/utils/epfClock";
 import type { EpfEstablishment } from "@/shared/features/epf/types";
 import { useTheme } from "@/theme/ThemeProvider";
+import { combineEpfLoad } from "@/shared/features/epf/utils/loadState";
 
 export function EpfDashboard() {
   const { theme } = useTheme();
@@ -56,8 +57,12 @@ export function EpfDashboard() {
     allEstablishments: establishments,
     enabled: hasProfile,
   });
-  const loading = profileLoading || establishmentsLoading;
-  const error = profileError ?? establishmentsError;
+  const load = combineEpfLoad([
+    { loading: profileLoading, error: profileError, retry: retryProfile },
+    { loading: establishmentsLoading, error: establishmentsError, retry: retryEstablishments },
+  ]);
+  const loading = load.loading;
+  const error = load.error;
 
   const openAdd = () => {
     setEditing(null);
@@ -110,10 +115,7 @@ export function EpfDashboard() {
       <ErrorState
         title="Couldn't load EPF"
         description={error.message}
-        onRetry={() => {
-          retryProfile();
-          retryEstablishments();
-        }}
+        onRetry={load.retryAll}
       />
     );
   }

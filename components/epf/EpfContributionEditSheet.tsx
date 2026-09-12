@@ -10,6 +10,7 @@ import { epfContributionRowFormSchema } from "@/shared/features/epf/schemas";
 import type { EpfBackfillRow } from "@/shared/features/epf/types";
 import { computeEpfContribution } from "@/shared/features/epf/utils/contributions";
 import { useTheme } from "@/theme/ThemeProvider";
+import { fieldErrorsFromIssues } from "@/shared/utils/fieldErrors";
 
 type Props = {
   isOpen: boolean;
@@ -97,11 +98,7 @@ export function EpfContributionEditSheet({
     });
 
     if (!parsed.success) {
-      const fieldErrors: Record<string, string> = {};
-      parsed.error.issues.forEach((issue) => {
-        if (issue.path[0]) fieldErrors[issue.path[0].toString()] = issue.message;
-      });
-      setErrors(fieldErrors);
+      setErrors(fieldErrorsFromIssues(parsed.error.issues));
       return;
     }
 

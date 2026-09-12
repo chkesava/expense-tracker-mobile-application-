@@ -49,15 +49,7 @@ import {
   splitArchivedEstablishments,
   validateEstablishmentAgainstExisting,
 } from "@/shared/features/epf/utils";
-
-/** Firestore rejects undefined; drop those keys on create. */
-function withoutUndefined<T extends Record<string, unknown>>(value: T): T {
-  const out: Record<string, unknown> = {};
-  for (const [key, val] of Object.entries(value)) {
-    if (val !== undefined) out[key] = val;
-  }
-  return out as T;
-}
+import { withoutUndefined } from "@/shared/utils/objects";
 
 /**
  * On update, an explicit `undefined` means "remove this field".

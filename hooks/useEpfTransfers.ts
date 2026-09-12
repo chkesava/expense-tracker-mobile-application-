@@ -41,14 +41,7 @@ import {
   normalizeTransfer,
 } from "@/shared/features/epf/utils/transfers";
 import { epfTodayKey } from "@/shared/features/epf/utils/epfClock";
-
-function withoutUndefined<T extends Record<string, unknown>>(value: T): T {
-  const out: Record<string, unknown> = {};
-  for (const [key, val] of Object.entries(value)) {
-    if (val !== undefined) out[key] = val;
-  }
-  return out as T;
-}
+import { withoutUndefined } from "@/shared/utils/objects";
 
 export type EpfTransferInput = Pick<
   EpfTransfer,

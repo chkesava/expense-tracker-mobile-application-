@@ -14,6 +14,7 @@ import {
 } from "@/shared/features/epf/utils/reconciliation";
 import { formatAmount } from "@/shared/utils/formatCurrency";
 import { useTheme } from "@/theme/ThemeProvider";
+import { fieldErrorsFromIssues } from "@/shared/utils/fieldErrors";
 
 type Props = {
   isOpen: boolean;
@@ -73,11 +74,7 @@ export function EpfReconcileSheet({
       notes,
     });
     if (!result.success) {
-      const fieldErrors: Record<string, string> = {};
-      result.error.issues.forEach((issue) => {
-        if (issue.path[0]) fieldErrors[issue.path[0].toString()] = issue.message;
-      });
-      setErrors(fieldErrors);
+      setErrors(fieldErrorsFromIssues(result.error.issues));
       return;
     }
 
@@ -95,11 +92,7 @@ export function EpfReconcileSheet({
       todayKey: epfTodayKey(),
     });
     if (issues.length > 0) {
-      const fieldErrors: Record<string, string> = {};
-      issues.forEach((issue) => {
-        if (issue.field) fieldErrors[issue.field] = issue.message;
-      });
-      setErrors(fieldErrors);
+      setErrors(fieldErrorsFromIssues(issues));
       return;
     }
 

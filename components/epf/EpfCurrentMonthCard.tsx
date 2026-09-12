@@ -12,15 +12,7 @@ import { isReconciled, projectionBlocker } from "@/shared/features/epf/utils/lif
 import { wageForProjection } from "@/shared/features/epf/utils/schedule";
 import { formatAmount } from "@/shared/utils/formatCurrency";
 import { useTheme } from "@/theme/ThemeProvider";
-
-const MONTH_LABELS = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
-
-function monthLabel(month: string): string {
-  return `${MONTH_LABELS[Number(month.slice(5, 7)) - 1] ?? month} ${month.slice(0, 4)}`;
-}
+import { monthLabel } from "@/shared/utils/monthLabel";
 
 /**
  * "This month" on the EPF tab — KAN-68.
@@ -100,7 +92,7 @@ export function EpfCurrentMonthCard({
               This month · {establishment.employerName}
             </Text>
             <Text style={[styles.title, { color: theme.colors.foreground }]}>
-              {monthLabel(month)}
+              {monthLabel(month, "long")}
             </Text>
           </View>
           <ChevronRight size={theme.iconSize.sm} color={theme.colors.mutedForeground} />

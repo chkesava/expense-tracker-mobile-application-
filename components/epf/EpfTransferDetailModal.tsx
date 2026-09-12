@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { appDialog } from "@/lib/appDialog";
 import type { EpfTransfer } from "@/shared/features/epf/types";
 import {
+  canCompleteTransfer,
   canFailTransfer,
   canReverseTransfer,
   isTransferReconciled,
@@ -56,7 +57,9 @@ export function EpfTransferDetailModal({
 
   const meta = transferStatusMeta(transfer);
   const money = (value: number) => formatAmount(value, currency);
-  const canSettle = transfer.status === "initiated";
+  // The shared predicate, not a literal: every sibling check on this screen
+  // already delegates, and this one gates the primary action (KAN-73).
+  const canSettle = canCompleteTransfer(transfer);
 
   const run = async (action: () => Promise<boolean>) => {
     setSaving(true);

@@ -21,29 +21,17 @@ import {
   contributionMonthsFor,
   contributionStatusMeta,
   summarizeContributions,
+  groupContributionsByFinancialYear,
   validateBackfillBatch,
 } from "@/shared/features/epf/utils/contributions";
 import { formatAmount } from "@/shared/utils/formatCurrency";
-import {
-  compareFinancialYears,
-  financialYearLabel,
-  financialYearOfMonth,
-} from "@/shared/utils/financialYear";
+import { financialYearLabel } from "@/shared/utils/financialYear";
 import { useTheme } from "@/theme/ThemeProvider";
+import { monthLabel } from "@/shared/utils/monthLabel";
 
 type ListItem =
   | { type: "header"; id: string; financialYear: string; recorded: number; expected: number; credit: number }
   | { type: "row"; id: string; month: string };
-
-const MONTH_LABELS = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
-
-function monthLabel(month: string): string {
-  const index = Number(month.slice(5, 7)) - 1;
-  return `${MONTH_LABELS[index] ?? month} ${month.slice(0, 4)}`;
-}
 
 export function EpfBackfillScreen({ establishment }: { establishment: EpfEstablishment }) {
   const { theme } = useTheme();
@@ -109,27 +97,21 @@ export function EpfBackfillScreen({ establishment }: { establishment: EpfEstabli
   );
 
   const items = useMemo((): ListItem[] => {
-    const byYear = new Map<string, EpfBackfillRow[]>();
-    for (const row of rows) {
-      const fy = financialYearOfMonth(row.month);
-      const bucket = byYear.get(fy);
-      if (bucket) bucket.push(row);
-      else byYear.set(fy, [row]);
-    }
-
+    // The same grouping EpfContributionHistory uses, rather than a second
+    // hand-rolled copy (KAN-73). Rows arrive month-ascending from
+    // buildBackfillRows, which is the order the grouping produces too.
     const out: ListItem[] = [];
-    for (const fy of [...byYear.keys()].sort((a, b) => compareFinancialYears(b, a))) {
-      const yearRows = byYear.get(fy) ?? [];
-      const filled = yearRows.filter((row) => row.epfCredit > 0);
+    for (const group of groupContributionsByFinancialYear(rows)) {
+      const filled = group.rows.filter((row) => row.epfCredit > 0);
       out.push({
         type: "header",
-        id: `fy-${fy}`,
-        financialYear: fy,
+        id: `fy-${group.financialYear}`,
+        financialYear: group.financialYear,
         recorded: filled.length,
-        expected: yearRows.length,
+        expected: group.rows.length,
         credit: summarizeContributions(filled).epfCredit,
       });
-      for (const row of yearRows) {
+      for (const row of group.rows) {
         out.push({ type: "row", id: row.month, month: row.month });
       }
     }

@@ -13,6 +13,7 @@ import { contributionStatusMeta } from "@/shared/features/epf/utils/contribution
 import { isReconciled } from "@/shared/features/epf/utils/lifecycle";
 import { formatAmount } from "@/shared/utils/formatCurrency";
 import { useTheme } from "@/theme/ThemeProvider";
+import { fieldErrorsFromIssues } from "@/shared/utils/fieldErrors";
 
 type Props = {
   isOpen: boolean;
@@ -76,11 +77,7 @@ export function EpfCreditSheet({
       month: row.month,
     });
     if (!parsed.success) {
-      const fieldErrors: Record<string, string> = {};
-      parsed.error.issues.forEach((issue) => {
-        if (issue.path[0]) fieldErrors[issue.path[0].toString()] = issue.message;
-      });
-      setErrors(fieldErrors);
+      setErrors(fieldErrorsFromIssues(parsed.error.issues));
       return;
     }
     void run(() =>
