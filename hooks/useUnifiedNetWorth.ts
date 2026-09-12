@@ -6,6 +6,7 @@ import { useAccountTransfers } from "@/hooks/useAccountTransfers";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
 import { useBorrowings } from "@/hooks/useBorrowings";
 import { useCreditCardBills } from "@/hooks/useCreditCardBills";
+import { useEpfNetWorth } from "@/hooks/useEpfNetWorth";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useIncomes } from "@/hooks/useIncomes";
 import { useInvestments } from "@/hooks/useInvestments";
@@ -26,6 +27,16 @@ export interface UnifiedNetWorthSummary {
   liquidBankAssets: number;
   /** Valuations of all active Fixed Deposits / Recurring Deposits */
   investmentsValue: number;
+  /**
+   * EPF balance across every establishment under the user's UAN (KAN-71).
+   *
+   * Real money the user owns, so it counts toward assets — but Spendly derives
+   * it from what the user recorded, not from EPFO. `epfUnreconciledCount` says
+   * how much of it is still a projection, and the UI labels it accordingly.
+   */
+  epfValue: number;
+  /** Credited EPF months not yet confirmed against a passbook. */
+  epfUnreconciledCount: number;
   /** Market valuation of stock / ETF holdings */
   stocksHoldingsValue: number;
   /** Uninvested cash balance in the Demat / Stocks portfolio */
@@ -79,6 +90,13 @@ export function useUnifiedNetWorth(): UnifiedNetWorthSummary {
     cashBalance: investmentCashBalance,
     loading: portfolioLoading,
   } = usePortfolio({ includeSecondary: false });
+  // Profile-gated: a user with no EPF profile pays for one small doc listener
+  // and nothing else, so the dashboard is unchanged for them.
+  const {
+    epfValue,
+    epfUnreconciledCount,
+    loading: epfLoading,
+  } = useEpfNetWorth();
 
   const symbolRequests = useMemo(
     () =>
@@ -149,12 +167,18 @@ export function useUnifiedNetWorth(): UnifiedNetWorthSummary {
     const totalLiabilities =
       creditCardLiabilities + bankOverdraftLiabilities + borrowingLiabilities;
     const totalAssets =
-      liquidBankAssets + investmentsValue + totalStocksValue + receivableAssets;
+      liquidBankAssets +
+      investmentsValue +
+      totalStocksValue +
+      receivableAssets +
+      epfValue;
     const totalNetWorth = totalAssets - totalLiabilities;
 
     return {
       liquidBankAssets,
       investmentsValue,
+      epfValue,
+      epfUnreconciledCount,
       stocksHoldingsValue,
       stocksCashBalance,
       totalStocksValue,
@@ -185,6 +209,8 @@ export function useUnifiedNetWorth(): UnifiedNetWorthSummary {
     holdings,
     quotes,
     investmentCashBalance,
+    epfValue,
+    epfUnreconciledCount,
     today,
   ]);
 
@@ -201,7 +227,8 @@ export function useUnifiedNetWorth(): UnifiedNetWorthSummary {
     investmentsLoading ||
     portfolioLoading ||
     quotesLoading ||
-    billsLoading;
+    billsLoading ||
+    epfLoading;
 
   return {
     ...summary,

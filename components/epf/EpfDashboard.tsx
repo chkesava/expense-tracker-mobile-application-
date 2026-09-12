@@ -9,6 +9,7 @@ import { SkeletonCard } from "@/components/common/Skeleton";
 import { EpfEstablishmentCard } from "@/components/epf/EpfEstablishmentCard";
 import { EpfEstablishmentFormModal } from "@/components/epf/EpfEstablishmentFormModal";
 import { EpfCurrentMonthCard } from "@/components/epf/EpfCurrentMonthCard";
+import { EpfPortfolioCard } from "@/components/epf/EpfPortfolioCard";
 import { EpfProfileCard } from "@/components/epf/EpfProfileCard";
 import { EpfProfileFormModal } from "@/components/epf/EpfProfileFormModal";
 import { Button } from "@/components/ui/Button";
@@ -134,6 +135,9 @@ export function EpfDashboard() {
   return (
     <View style={styles.container}>
       {profile ? <EpfProfileCard profile={profile} onEdit={() => setProfileModalOpen(true)} /> : null}
+
+      {/* Total across every employer — the list below is its breakdown. */}
+      <EpfPortfolioCard />
 
       <EpfCurrentMonthCard
         establishment={activeEstablishment}

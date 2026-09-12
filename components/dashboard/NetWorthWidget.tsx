@@ -29,6 +29,14 @@ export function NetWorthWidget({ currency, cashFlow }: NetWorthWidgetProps) {
     { key: "liquid", label: "Liquid", value: netWorth.liquidBankAssets, color: theme.colors.foreground },
     { key: "invest", label: "Investments", value: netWorth.investmentsValue + netWorth.totalStocksValue, color: theme.colors.success },
     {
+      // Real money the user owns, but derived from what they recorded rather
+      // than from EPFO — labelled while any of it is unconfirmed (KAN-71).
+      key: "epf",
+      label: netWorth.epfUnreconciledCount > 0 ? "EPF · simulated" : "EPF",
+      value: netWorth.epfValue,
+      color: theme.colors.success,
+    },
+    {
       key: "liab",
       label: "Liabilities",
       value: netWorth.totalLiabilities,
