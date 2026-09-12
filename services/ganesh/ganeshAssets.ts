@@ -24,6 +24,7 @@ import type {
 import { changedAssetFields, validateAssetDraft } from "@/shared/utils/ganeshAssets";
 import { omitUndefined } from "@/shared/utils/firestorePayload";
 import { pandalAssetAuditsCol, pandalAssetsCol } from "@/shared/utils/ganeshPaths";
+import { appendVaultIndexUpsert } from "@/services/ganesh/ganeshDocuments";
 
 type GaneshActor = {
   uid: string;
@@ -43,6 +44,7 @@ export type CreatePandalAssetInput = {
   location?: string;
   description?: string;
   sourceName?: string;
+  acquiredFestivalId?: string;
   relatedExpenseId?: string;
   relatedExpenseFestivalId?: string;
   relatedContributionId?: string;
@@ -59,6 +61,7 @@ export type UpdatePandalAssetPatch = Partial<{
   location: string;
   description: string;
   sourceName: string;
+  acquiredFestivalId: string;
   relatedExpenseId: string;
   relatedExpenseFestivalId: string;
   relatedContributionId: string;
@@ -139,6 +142,11 @@ export function appendPandalAssetCreate(
     throw new Error("Quantity must be greater than 0.");
   }
   const extras = ownershipExtras(input);
+  const acquiredFestivalId =
+    input.acquiredFestivalId?.trim()
+    || (input.ownershipType === "purchased"
+      ? input.relatedExpenseFestivalId?.trim() || undefined
+      : undefined);
   batch.set(
     pathRef(db, [...pandalAssetsCol(pandalId), id]),
     omitUndefined({
@@ -156,6 +164,7 @@ export function appendPandalAssetCreate(
         input.ownershipType === "purchased"
           ? input.acquisitionCost ?? validated.estimatedValue
           : undefined,
+      acquiredFestivalId,
       ...extras,
       createdBy: actor.uid,
       createdAt: serverTimestamp(),
@@ -172,6 +181,7 @@ export function appendPandalAssetCreate(
       category: input.category,
       quantity: validated.quantity,
       ownershipType: input.ownershipType,
+      acquiredFestivalId: acquiredFestivalId ?? null,
       relatedExpenseId: extras.relatedExpenseId,
       relatedContributionId: extras.relatedContributionId,
     },
@@ -378,6 +388,13 @@ export async function attachAssetPhoto(
     assetId,
     action: "photo",
     newValue: photo.path,
+  });
+  appendVaultIndexUpsert(batch, db, actor, {
+    pandalId,
+    entityType: "asset",
+    entityId: assetId,
+    category: "asset_photo",
+    file: photo,
   });
   // Only report a previous path once the server has actually confirmed the new
   // one replaced it. A merely-"queued" (offline) outcome could still fail to

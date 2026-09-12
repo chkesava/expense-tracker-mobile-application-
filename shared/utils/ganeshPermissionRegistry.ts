@@ -110,6 +110,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     ],
   },
   {
+    id: "documents",
+    label: "Document vault",
+    items: [
+      { key: "documents.read", label: "View" },
+      { key: "documents.create", label: "Add" },
+      { key: "documents.update", label: "Update" },
+      { key: "documents.delete", label: "Archive" },
+    ],
+  },
+  {
     id: "sponsors",
     label: "Sponsors",
     items: [
@@ -208,6 +218,9 @@ export const PERMISSION_DEPENDENCIES: Partial<Record<GaneshPermission, GaneshPer
   "assets.update": ["assets.read"],
   "assets.dispose": ["assets.read"],
   "assets.manage": ["assets.read", "assets.update"],
+  "documents.create": ["documents.read"],
+  "documents.update": ["documents.read"],
+  "documents.delete": ["documents.read"],
   "sponsors.create": ["sponsors.read"],
   "sponsors.update": ["sponsors.read"],
   "sponsors.receive": ["sponsors.read"],
@@ -224,6 +237,7 @@ export const CRITICAL_PERMISSIONS: GaneshPermission[] = [
   "roles.assign",
   "assets.dispose",
   "assets.manage",
+  "documents.delete",
 ];
 
 export function expandPermissions(input: readonly GaneshPermission[]): GaneshPermission[] {

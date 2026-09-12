@@ -44,6 +44,10 @@ export type GaneshPermission =
   | "assets.update"
   | "assets.dispose"
   | "assets.manage"
+  | "documents.read"
+  | "documents.create"
+  | "documents.update"
+  | "documents.delete"
   | "sponsors.read"
   | "sponsors.create"
   | "sponsors.update"
@@ -106,6 +110,10 @@ export const ALL_GANESH_PERMISSIONS: GaneshPermission[] = [
   "assets.update",
   "assets.dispose",
   "assets.manage",
+  "documents.read",
+  "documents.create",
+  "documents.update",
+  "documents.delete",
   "sponsors.read",
   "sponsors.create",
   "sponsors.update",
@@ -131,6 +139,7 @@ const READ_LEDGER: GaneshPermission[] = [
   "permanentFund.read",
   "festival.read",
   "assets.read",
+  "documents.read",
   "sponsors.read",
   "seva.read",
 ];
@@ -144,6 +153,7 @@ const MEMBER_WRITES: GaneshPermission[] = [
   "contributions.create",
   "contributions.update",
   "assets.create",
+  "documents.create",
   "sponsors.create",
   "sponsors.update",
 ];
@@ -159,6 +169,8 @@ const TREASURER_PERMISSIONS: GaneshPermission[] = [
   "openingFunds.create",
   "audit.read",
   "assets.update",
+  "documents.update",
+  "documents.delete",
   "sponsors.receive",
   "sponsors.cancel",
   "seva.write",
@@ -185,6 +197,7 @@ const COLLECTOR_PERMISSIONS: GaneshPermission[] = [
   "permanentFund.read",
   "festival.read",
   "assets.read",
+  "documents.read",
   "sponsors.read",
   "seva.read",
   // Runs their own session and declares the handover (GS-076). Deliberately no
@@ -257,6 +270,23 @@ export const ASSET_ROLE_DEFAULTS: Record<(typeof BUILTIN_ROLE_IDS)[number], read
   member: ["assets.read", "assets.create"],
   collector: ["assets.read"],
   viewer: ["assets.read"],
+};
+
+/** Mirrors `canCreateDocument()` fallback in firestore.rules. */
+export const RULE_DOCUMENT_CREATE_ROLES: GaneshRole[] = ["admin", "treasurer", "member"];
+
+/** Mirrors `canUpdateDocument()` / archive fallback in firestore.rules. */
+export const RULE_DOCUMENT_UPDATE_ROLES: GaneshRole[] = ["admin", "treasurer"];
+
+/** Default `documents.*` keys unioned onto existing builtin role docs. */
+export const DOCUMENT_ROLE_DEFAULTS: Record<
+  (typeof BUILTIN_ROLE_IDS)[number],
+  readonly GaneshPermission[]
+> = {
+  treasurer: ["documents.read", "documents.create", "documents.update", "documents.delete"],
+  member: ["documents.read", "documents.create"],
+  collector: ["documents.read"],
+  viewer: ["documents.read"],
 };
 
 /** Default receive/cancel keys unioned onto existing builtin role docs. */

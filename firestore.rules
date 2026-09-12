@@ -591,6 +591,60 @@ service cloud.firestore {
         || canDisposeAssetOf(pandalId);
     }
 
+    function canReadDocumentOf(pandalId) {
+      return hasPermOf(pandalId, 'documents.read')
+        || (
+          isActivePandalMemberOf(pandalId)
+          && !hasPermissionsField(pandalId)
+        );
+    }
+
+    function canCreateDocumentOf(pandalId) {
+      return hasPermOf(pandalId, 'documents.create')
+        || (
+          isActivePandalMemberOf(pandalId)
+          && !hasPermissionsField(pandalId)
+          && ganeshRoleOf(pandalId) in ['admin', 'treasurer', 'member']
+        );
+    }
+
+    function canUpdateDocumentOf(pandalId) {
+      return hasPermOf(pandalId, 'documents.update')
+        || (
+          isActivePandalMemberOf(pandalId)
+          && !hasPermissionsField(pandalId)
+          && ganeshRoleOf(pandalId) in ['admin', 'treasurer']
+        );
+    }
+
+    function canArchiveDocumentOf(pandalId) {
+      return hasPermOf(pandalId, 'documents.delete')
+        || (
+          isActivePandalMemberOf(pandalId)
+          && !hasPermissionsField(pandalId)
+          && ganeshRoleOf(pandalId) in ['admin', 'treasurer']
+        );
+    }
+
+    function canWriteDocumentOf(pandalId) {
+      return canCreateDocumentOf(pandalId)
+        || canUpdateDocumentOf(pandalId)
+        || canArchiveDocumentOf(pandalId);
+    }
+
+    // Entity attach paths upsert a vault index row in the same batch. Those
+    // writers may only hold expenses.update / assets.create / etc., so vault
+    // index writes must accept the same people who can attach the file.
+    function canIndexVaultAttachmentOf(pandalId) {
+      return canWriteDocumentOf(pandalId)
+        || canWriteAssetOf(pandalId)
+        || canWriteExpenseOrContributionOf(pandalId)
+        || hasPermOf(pandalId, 'expenses.update')
+        || hasPermOf(pandalId, 'contributions.update')
+        || canCreateSponsorOf(pandalId)
+        || canUpdateSponsorOf(pandalId);
+    }
+
     // Approving a join request stamps users/{uid}/pandalMemberships/{pandalId}.
     // The personal users/{uid} tree is owner-only, so this is the explicit
     // exception — still limited to a Pandal the writer actually admins.
@@ -1002,6 +1056,39 @@ service cloud.firestore {
       match /assetAudits/{auditId} {
         allow read: if canReadAssetOf(pandalId) || hasPermOf(pandalId, 'audit.read');
         allow create: if canWriteAssetOf(pandalId) && pandalNotArchived();
+        allow update, delete: if false;
+      }
+
+      match /documents/{documentId} {
+        function isArchiveOnlyUpdate() {
+          return request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['status', 'updatedBy', 'updatedAt']);
+        }
+
+        function isVaultFileUpsert() {
+          return request.resource.data.keys().hasAll([
+            'pandalId', 'entityType', 'entityId', 'category', 'storagePath', 'status'
+          ]);
+        }
+
+        allow read: if canReadDocumentOf(pandalId);
+        allow create: if ganeshIdentityCreate()
+          && pandalNotArchived()
+          && (
+            canCreateDocumentOf(pandalId)
+            || (canIndexVaultAttachmentOf(pandalId) && isVaultFileUpsert())
+          );
+        allow update: if ganeshIdentityUpdate() && pandalNotArchived() && (
+          canUpdateDocumentOf(pandalId)
+          || (canArchiveDocumentOf(pandalId) && isArchiveOnlyUpdate())
+          || (canIndexVaultAttachmentOf(pandalId) && isVaultFileUpsert())
+        );
+        allow delete: if false;
+      }
+
+      match /documentAudits/{auditId} {
+        allow read: if canReadDocumentOf(pandalId) || hasPermOf(pandalId, 'audit.read');
+        allow create: if canIndexVaultAttachmentOf(pandalId) && pandalNotArchived();
         allow update, delete: if false;
       }
 

@@ -48,6 +48,7 @@ export function isTerminalUploadState(state: GaneshUploadJobState): boolean {
 export type GaneshUploadTarget =
   | { kind: "expenseReceipt"; pandalId: string; festivalId: string; recordId: string }
   | { kind: "contributionPhoto"; pandalId: string; festivalId: string; recordId: string }
+  | { kind: "festivalDocument"; pandalId: string; festivalId: string; recordId: string }
   | { kind: "assetPhoto"; pandalId: string; recordId: string }
   | { kind: "sponsorPhoto"; pandalId: string; recordId: string };
 

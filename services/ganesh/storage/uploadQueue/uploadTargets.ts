@@ -14,6 +14,7 @@
 
 import { getFirestoreDb } from "@/lib/firebase";
 import { attachAssetPhoto } from "@/services/ganesh/ganeshAssets";
+import { attachDocumentFile } from "@/services/ganesh/ganeshDocuments";
 import { attachSponsorPhoto } from "@/services/ganesh/ganeshSponsors";
 import { attachContributionPhoto, attachExpenseReceipt } from "@/services/ganesh/ganeshWrites";
 import {
@@ -35,6 +36,7 @@ import type { GaneshFileMeta } from "@/shared/types/ganesh";
 export const UPLOAD_TARGET_LABEL: Record<GaneshUploadTargetKind, string> = {
   expenseReceipt: "receipt",
   contributionPhoto: "contribution photo",
+  festivalDocument: "festival document",
   assetPhoto: "asset photo",
   sponsorPhoto: "sponsor photo",
 };
@@ -79,12 +81,18 @@ export async function uploadJobObject(job: GaneshUploadJob): Promise<GaneshFileM
   switch (target.kind) {
     case "expenseReceipt":
     case "contributionPhoto":
+    case "festivalDocument":
       return uploadFestivalFile({
         ...shared,
         sessionFestivalId: target.festivalId,
         festivalId: target.festivalId,
         recordId: target.recordId,
-        category: target.kind === "expenseReceipt" ? "expenses" : "contributions",
+        category:
+          target.kind === "expenseReceipt"
+            ? "expenses"
+            : target.kind === "contributionPhoto"
+              ? "contributions"
+              : "documents",
         festivalBelongsToPandal: job.auth.festivalBelongsToPandal,
       });
     case "assetPhoto":
@@ -125,6 +133,15 @@ export async function attachJobObject(
         actor,
         target.pandalId,
         target.festivalId,
+        target.recordId,
+        meta,
+        onLateFailure
+      );
+    case "festivalDocument":
+      return attachDocumentFile(
+        db,
+        actor,
+        target.pandalId,
         target.recordId,
         meta,
         onLateFailure

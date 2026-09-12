@@ -19,6 +19,7 @@ import {
   transferPermanentToFestival,
 } from "@/services/ganesh/ganeshPermanentFund";
 import * as assetWrites from "@/services/ganesh/ganeshAssets";
+import * as documentWrites from "@/services/ganesh/ganeshDocuments";
 import * as sevaWrites from "@/services/ganesh/ganeshSeva";
 import * as sessionWrites from "@/services/ganesh/ganeshSessions";
 import * as sponsorWrites from "@/services/ganesh/ganeshSponsors";
@@ -910,6 +911,50 @@ export function useGaneshWrites() {
         assetId,
         photo,
         onLateFailure
+      );
+    },
+    createFestivalDocument: async (
+      input: Parameters<typeof documentWrites.createFestivalDocument>[3]
+    ) => {
+      requirePerm("documents.create");
+      const ctx = requirePandal();
+      return run("Document added", () =>
+        documentWrites.createFestivalDocument(ctx.db, ctx.actor, ctx.pandalId, input)
+      );
+    },
+    attachDocumentFile: async (
+      documentId: string,
+      file: Parameters<typeof documentWrites.attachDocumentFile>[4],
+      onLateFailure?: (error: unknown) => void
+    ) => {
+      if (!hasPerm("documents.create") && !hasPerm("documents.update")) {
+        requirePerm("documents.update");
+      }
+      const ctx = requirePandal();
+      return documentWrites.attachDocumentFile(
+        ctx.db,
+        ctx.actor,
+        ctx.pandalId,
+        documentId,
+        file,
+        onLateFailure
+      );
+    },
+    updatePandalDocument: async (
+      documentId: string,
+      patch: Parameters<typeof documentWrites.updatePandalDocument>[4]
+    ) => {
+      requirePerm("documents.update");
+      const ctx = requirePandal();
+      return run("Document updated", () =>
+        documentWrites.updatePandalDocument(ctx.db, ctx.actor, ctx.pandalId, documentId, patch)
+      );
+    },
+    archivePandalDocument: async (documentId: string, reason?: string) => {
+      requirePerm("documents.delete");
+      const ctx = requirePandal();
+      return run("Document archived", () =>
+        documentWrites.archivePandalDocument(ctx.db, ctx.actor, ctx.pandalId, documentId, reason)
       );
     },
     createSponsor: async (input: Parameters<typeof sponsorWrites.createSponsor>[3]) => {

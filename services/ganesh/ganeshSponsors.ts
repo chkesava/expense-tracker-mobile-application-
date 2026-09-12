@@ -18,6 +18,7 @@ import {
   appendPandalAssetCreate,
   type CreatePandalAssetInput,
 } from "@/services/ganesh/ganeshAssets";
+import { appendVaultIndexUpsert } from "@/services/ganesh/ganeshDocuments";
 import type {
   AuditAction,
   GaneshFileMeta,
@@ -444,6 +445,13 @@ export async function attachSponsorPhoto(
     action: "photo",
     newValue: { path: photo.path },
   });
+  appendVaultIndexUpsert(batch, db, actor, {
+    pandalId,
+    entityType: "sponsor",
+    entityId: sponsorId,
+    category: "sponsor_photo",
+    file: photo,
+  });
   // See attachAssetPhoto for why this waits for a real ack.
   const outcome = await commitWrite(() => batch.commit(), {
     label: "sponsor photo",
@@ -516,6 +524,7 @@ function appendReceiveEffects(
       description: data.pandalAsset.description ?? data.notes,
       sourceName: sponsor.name,
       relatedContributionId: contributionId,
+      acquiredFestivalId: festivalId,
     });
   }
   return { contributionId, assetId };

@@ -112,3 +112,11 @@ export function pandalSponsorsCol(pandalId: string): string[] {
 export function pandalSponsorAuditsCol(pandalId: string): string[] {
   return ["pandals", pandalId, "sponsorAudits"];
 }
+
+export function pandalDocumentsCol(pandalId: string): string[] {
+  return ["pandals", pandalId, "documents"];
+}
+
+export function pandalDocumentAuditsCol(pandalId: string): string[] {
+  return ["pandals", pandalId, "documentAudits"];
+}

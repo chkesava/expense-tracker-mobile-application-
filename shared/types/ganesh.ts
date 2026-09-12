@@ -340,6 +340,8 @@ export interface PandalAsset extends GaneshAuditFields {
   description?: string;
   photo?: GaneshFileMeta;
   sourceName?: string;
+  /** Festival in which this asset was acquired. Survives into later festivals. */
+  acquiredFestivalId?: string;
   relatedExpenseId?: string;
   relatedExpenseFestivalId?: string;
   relatedContributionId?: string;
@@ -353,6 +355,64 @@ export interface PandalAssetAudit {
   actorId: string;
   assetId: string;
   action: PandalAssetAuditAction;
+  oldValue?: unknown;
+  newValue?: unknown;
+  reason?: string;
+  at?: FirestoreTime;
+}
+
+/** What a Document Vault row is attached to. */
+export type GaneshDocumentEntityType =
+  | "expense"
+  | "contribution"
+  | "sponsor"
+  | "asset"
+  | "festival"
+  | "pandal"
+  | "other";
+
+export type GaneshDocumentCategory =
+  | "expense_receipt"
+  | "invoice"
+  | "quotation"
+  | "sponsorship_document"
+  | "asset_photo"
+  | "festival_document"
+  | "contribution_photo"
+  | "sponsor_photo"
+  | "other";
+
+export type GaneshDocumentStatus = "active" | "archived";
+
+export type PandalDocumentAuditAction = "created" | "edited" | "file" | "archived";
+
+/**
+ * Firestore metadata for a vault file. Bytes live in Supabase `ganesh-files`.
+ * Entity attachment slots (receipt/photo) upsert a deterministic vault row that
+ * points at the same storage path — not a second upload.
+ */
+export interface PandalDocument extends GaneshAuditFields {
+  id: string;
+  pandalId: string;
+  festivalId?: string;
+  entityType: GaneshDocumentEntityType;
+  entityId: string;
+  category: GaneshDocumentCategory;
+  fileName: string;
+  mimeType: GaneshFileMeta["mimeType"];
+  fileSize: number;
+  storagePath: string;
+  status: GaneshDocumentStatus;
+  description?: string;
+  clientOpId?: string;
+  pendingWrite?: boolean;
+}
+
+export interface PandalDocumentAudit {
+  id: string;
+  actorId: string;
+  documentId: string;
+  action: PandalDocumentAuditAction;
   oldValue?: unknown;
   newValue?: unknown;
   reason?: string;

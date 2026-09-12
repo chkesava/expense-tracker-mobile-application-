@@ -136,6 +136,9 @@ export default function AssetDetailScreen() {
     asset?.relatedExpenseId ?? null
   );
   const purchaseFestival = festivals.find((item) => item.id === relatedFestivalId);
+  const acquiredFestival = festivals.find(
+    (item) => item.id === (asset?.acquiredFestivalId ?? relatedFestivalId)
+  );
 
   const recentAudits = useMemo(
     () => audits.slice(0, 12),
@@ -297,6 +300,14 @@ export default function AssetDetailScreen() {
           {asset.ownershipType === "purchased" && purchaseFestival ? (
             <Fact label="Bought during" value={purchaseFestival.name} />
           ) : null}
+          {asset.ownershipType !== "purchased" && acquiredFestival ? (
+            <Fact label="Acquired during" value={acquiredFestival.name} />
+          ) : null}
+          {asset.ownershipType === "purchased"
+          && !purchaseFestival
+          && acquiredFestival ? (
+            <Fact label="Bought during" value={acquiredFestival.name} />
+          ) : null}
           <Fact
             label="Added by"
             value={`${memberDisplayName(members, asset.createdBy)}${
@@ -328,8 +339,18 @@ export default function AssetDetailScreen() {
           {asset.relatedContributionId ? (
             <LinkRow
               icon={<Package size={17} color={theme.colors.mutedForeground} strokeWidth={2.2} />}
-              title="Related contribution"
-              meta="This item came in as a contribution"
+              title={
+                asset.ownershipType === "donated" || asset.ownershipType === "sponsored"
+                  ? asset.sourceName
+                    ? `Donor · ${asset.sourceName}`
+                    : "Linked in-kind contribution"
+                  : "Related contribution"
+              }
+              meta={
+                asset.ownershipType === "donated" || asset.ownershipType === "sponsored"
+                  ? "This inventory item came from an in-kind contribution — not a cash expense"
+                  : "This item came in as a contribution"
+              }
               onPress={() =>
                 push(`/(ganesh)/contribution/${asset.relatedContributionId}`)
               }

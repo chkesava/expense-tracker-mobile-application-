@@ -267,6 +267,7 @@ export default function AddAssetScreen() {
               location,
               description,
               sourceName,
+              acquiredFestivalId: festivalId ?? undefined,
               relatedExpenseId: ownership === "purchased" ? relatedExpenseId : undefined,
               relatedExpenseFestivalId:
                 ownership === "purchased" && relatedExpenseId && festivalId
