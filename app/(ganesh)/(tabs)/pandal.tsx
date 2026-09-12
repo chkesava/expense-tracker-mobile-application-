@@ -119,7 +119,8 @@ export default function PandalScreen() {
     });
 
   const showTreasurerTools = !isAdmin && can("festival.update");
-  const showProperty = can("assets.read") || can("sponsors.read") || can("permanentFund.read");
+  const showProperty =
+    can("assets.read") || can("sponsors.read") || can("documents.read") || can("permanentFund.read");
   const assetMeta = "Chairs, speakers, and other items that stay with the Pandal";
 
   const peopleCard = (
@@ -204,7 +205,7 @@ export default function PandalScreen() {
                 meta={assetMeta}
                 icon={<AdminGlyph name="iconAssets" />}
                 chevronColor={g.saffron}
-                divider={can("sponsors.read") || can("permanentFund.read")}
+                divider={can("sponsors.read") || can("documents.read") || can("permanentFund.read")}
                 onPress={() => push("/(ganesh)/assets")}
               />
             ) : null}
@@ -214,8 +215,18 @@ export default function PandalScreen() {
                 meta="Who is supporting this festival. Promised deals are not cash."
                 icon={<AdminGlyph name="iconSponsors" />}
                 chevronColor={g.saffron}
-                divider={can("permanentFund.read")}
+                divider={can("documents.read") || can("permanentFund.read")}
                 onPress={() => push("/(ganesh)/sponsors")}
+              />
+            ) : null}
+            {can("documents.read") ? (
+              <NavRow
+                title="Document vault"
+                meta="Receipts, photos and festival files in one place"
+                icon={<AdminGlyph name="iconReports" />}
+                chevronColor={g.saffron}
+                divider={can("permanentFund.read")}
+                onPress={() => push("/(ganesh)/documents")}
               />
             ) : null}
             {can("permanentFund.read") ? (

@@ -29,6 +29,7 @@ import {
   ASSET_ROLE_DEFAULTS,
   BUILTIN_ROLE_IDS,
   CONTRIBUTION_STATUS_ROLE_DEFAULTS,
+  DOCUMENT_ROLE_DEFAULTS,
   SEVA_ROLE_DEFAULTS,
   SPONSOR_ROLE_DEFAULTS,
   ROLE_PERMISSIONS,
@@ -140,6 +141,10 @@ function hasAssetPermission(permissions: unknown): boolean {
   return Array.isArray(permissions) && permissions.some((item) => String(item).startsWith("assets."));
 }
 
+function hasDocumentPermission(permissions: unknown): boolean {
+  return Array.isArray(permissions) && permissions.some((item) => String(item).startsWith("documents."));
+}
+
 function hasContributionReceivePermission(permissions: unknown): boolean {
   return Array.isArray(permissions) && permissions.includes("contributions.receive");
 }
@@ -158,6 +163,7 @@ function builtinMissingPermissions(
 ): GaneshPermission[] {
   return [
     ...ASSET_ROLE_DEFAULTS[roleId],
+    ...DOCUMENT_ROLE_DEFAULTS[roleId],
     ...CONTRIBUTION_STATUS_ROLE_DEFAULTS[roleId],
     ...SPONSOR_ROLE_DEFAULTS[roleId],
     ...SEVA_ROLE_DEFAULTS[roleId],
@@ -251,6 +257,14 @@ export async function ensurePandalRoles(
       : assignedPatched || (roleIds.some((id) =>
           BUILTIN_ROLE_IDS.includes(id as (typeof BUILTIN_ROLE_IDS)[number])
         ) && !hasAssetPermission(data.permissions));
+    const needsDocumentBackfill = isAdmin
+      ? !hasDocumentPermission(data.permissions)
+      : assignedPatched || roleIds.some((id) => {
+          if (!BUILTIN_ROLE_IDS.includes(id as (typeof BUILTIN_ROLE_IDS)[number])) return false;
+          return DOCUMENT_ROLE_DEFAULTS[id as (typeof BUILTIN_ROLE_IDS)[number]].some(
+            (perm) => !Array.isArray(data.permissions) || !data.permissions.includes(perm)
+          );
+        });
     const needsContributionBackfill = isAdmin
       ? !hasContributionReceivePermission(data.permissions)
       : roleIds.includes("treasurer") && !hasContributionReceivePermission(data.permissions);
@@ -280,6 +294,7 @@ export async function ensurePandalRoles(
       hasRoleIds &&
       hasPermissions &&
       !needsAssetBackfill &&
+      !needsDocumentBackfill &&
       !needsContributionBackfill &&
       !needsSponsorBackfill &&
       !needsSevaBackfill

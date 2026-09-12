@@ -6,7 +6,7 @@ import { can, isGaneshAdmin, type GaneshPermission } from "@/shared/utils/ganesh
 const CATEGORY_PERMISSIONS: Record<GaneshFestivalStorageCategory, GaneshPermission[]> = {
   expenses: ["expenses.create", "expenses.update"],
   contributions: ["contributions.create", "contributions.update"],
-  documents: ["festival.update"],
+  documents: ["documents.create", "documents.update"],
 };
 
 export function uploadPermissionFor(category: GaneshFestivalStorageCategory): GaneshPermission[] {

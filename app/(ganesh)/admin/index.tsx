@@ -555,7 +555,15 @@ export default function AdminDashboardScreen() {
                 meta="Profiles and this festival's deals. Promises are not cash."
                 icon={<AdminGlyph name="iconSponsors" />}
                 chevronColor={g.saffron}
+                divider
                 onPress={() => push("/(ganesh)/sponsors")}
+              />
+              <NavRow
+                title="Document vault"
+                meta="Receipts, photos and festival files"
+                icon={<AdminGlyph name="iconReports" />}
+                chevronColor={g.saffron}
+                onPress={() => push("/(ganesh)/documents")}
               />
             </AdminSection>
 

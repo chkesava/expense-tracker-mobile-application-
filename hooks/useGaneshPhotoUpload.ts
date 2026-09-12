@@ -70,7 +70,8 @@ export function useGaneshPhotoUpload(kind: GaneshUploadTargetKind) {
   const festivalBelongsToPandal = Boolean(
     festivalId && festivals.some((festival) => festival.id === festivalId)
   );
-  const needsFestival = kind === "expenseReceipt" || kind === "contributionPhoto";
+  const needsFestival =
+    kind === "expenseReceipt" || kind === "contributionPhoto" || kind === "festivalDocument";
 
   const targetFor = useCallback(
     (recordId: string): GaneshUploadTarget => {

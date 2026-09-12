@@ -117,6 +117,7 @@ import {
   appendPandalAssetCreate,
   type CreatePandalAssetInput,
 } from "@/services/ganesh/ganeshAssets";
+import { appendVaultIndexUpsert } from "@/services/ganesh/ganeshDocuments";
 import type { GaneshWriter } from "@/services/ganesh/ganeshWriter";
 import {
   festivalMemberSeedPayload,
@@ -2356,6 +2357,7 @@ export async function addContribution(
       description: input.pandalAsset.description ?? input.description,
       sourceName: contributorName,
       relatedContributionId: id,
+      acquiredFestivalId: festivalId,
     });
   }
 
@@ -2429,6 +2431,14 @@ export async function attachContributionPhoto(
       reason: previousPath && previousPath !== photo.path ? "Photo replaced" : "Photo attached",
     }
   );
+  appendVaultIndexUpsert(batch, db, actor, {
+    pandalId,
+    festivalId,
+    entityType: "contribution",
+    entityId: contributionId,
+    category: "contribution_photo",
+    file: photo,
+  });
   // Only report a previous path once the server has actually confirmed the new
   // one replaced it. A merely-"queued" (offline) outcome could still fail to
   // land, and deleting the previous object on that outcome would orphan the
@@ -2598,6 +2608,7 @@ export async function receiveContribution(
         description: input.pandalAsset.description ?? String(prev.description ?? ""),
         sourceName: String(prev.contributorName ?? ""),
         relatedContributionId: contributionId,
+        acquiredFestivalId: festivalId,
       });
     }
     audit(writer, db, pandalId, festivalId, actor.uid, "edited", "contribution", contributionId, {
@@ -3021,6 +3032,7 @@ export async function addAssetPurchase(
     description: input.asset.description,
     relatedExpenseId: expenseId,
     relatedExpenseFestivalId: festivalId,
+    acquiredFestivalId: festivalId,
     acquisitionCost: input.totalAmount,
   });
   if (reimbursementRequired && input.personalAmount > 0) {
@@ -3240,6 +3252,14 @@ export async function attachExpenseReceipt(
     oldValue: { receiptPath: previousPath ?? null },
     newValue: { receiptPath: receipt.path },
     reason: previousPath && previousPath !== receipt.path ? "Receipt replaced" : "Receipt attached",
+  });
+  appendVaultIndexUpsert(batch, db, actor, {
+    pandalId,
+    festivalId,
+    entityType: "expense",
+    entityId: expenseId,
+    category: "expense_receipt",
+    file: receipt,
   });
   // See attachContributionPhoto above for why this waits for a real ack.
   const outcome = await commitWrite(() => batch.commit(), {

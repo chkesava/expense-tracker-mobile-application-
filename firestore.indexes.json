@@ -15,6 +15,20 @@
       ]
     },
     {
+      "collectionGroup": "documentAudits",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "documentId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "at",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "borrowingRepayments",
       "queryScope": "COLLECTION",
       "fields": [

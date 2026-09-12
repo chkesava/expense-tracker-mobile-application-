@@ -67,6 +67,7 @@ import {
   ASSET_ROLE_DEFAULTS,
   BUILTIN_ROLE_IDS,
   CONTRIBUTION_STATUS_ROLE_DEFAULTS,
+  DOCUMENT_ROLE_DEFAULTS,
   ROLE_PERMISSIONS,
   SEVA_ROLE_DEFAULTS,
   SPONSOR_ROLE_DEFAULTS,
@@ -83,6 +84,7 @@ function completeRolePermissions(roleId: (typeof BUILTIN_ROLE_IDS)[number]) {
   return expandPermissions([
     ...ROLE_PERMISSIONS[roleId],
     ...ASSET_ROLE_DEFAULTS[roleId],
+    ...DOCUMENT_ROLE_DEFAULTS[roleId],
     ...CONTRIBUTION_STATUS_ROLE_DEFAULTS[roleId],
     ...SPONSOR_ROLE_DEFAULTS[roleId],
     ...SEVA_ROLE_DEFAULTS[roleId],

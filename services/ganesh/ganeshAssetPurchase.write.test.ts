@@ -137,6 +137,7 @@ describe("addAssetPurchase", () => {
     expect(asset?.data.ownershipType).toBe("purchased");
     expect(asset?.data.relatedExpenseId).toBe(result.expenseId);
     expect(asset?.data.relatedExpenseFestivalId).toBe("festival-1");
+    expect(asset?.data.acquiredFestivalId).toBe("festival-1");
   });
 
   it("writes the expense and the asset in one batch when paid personally", async () => {
@@ -160,5 +161,6 @@ describe("addAssetPurchase", () => {
 
     expect(expense?.data.assetId).toBe(result.assetId);
     expect(asset?.data.relatedExpenseId).toBe(result.expenseId);
+    expect(asset?.data.acquiredFestivalId).toBe("festival-1");
   });
 });
