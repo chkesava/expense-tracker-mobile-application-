@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/Input";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { useEpfContributions } from "@/hooks/useEpfContributions";
 import { appDialog } from "@/lib/appDialog";
+import { epfCurrentMonth, epfTodayKey } from "@/shared/features/epf/utils/epfClock";
 import type { EpfBackfillRow, EpfEstablishment } from "@/shared/features/epf/types";
 import {
   buildBackfillRows,
@@ -23,7 +24,6 @@ import {
   validateBackfillBatch,
 } from "@/shared/features/epf/utils/contributions";
 import { formatAmount } from "@/shared/utils/formatCurrency";
-import { currentMonthKey, todayDateKey } from "@/shared/utils/dates";
 import {
   compareFinancialYears,
   financialYearLabel,
@@ -66,8 +66,8 @@ export function EpfBackfillScreen({ establishment }: { establishment: EpfEstabli
   const [editingMonth, setEditingMonth] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const monthKey = currentMonthKey();
-  const todayKey = todayDateKey();
+  const monthKey = epfCurrentMonth();
+  const todayKey = epfTodayKey();
 
   const money = useCallback(
     (value: number) => formatAmount(value, currency),

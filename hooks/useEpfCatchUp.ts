@@ -15,8 +15,8 @@ import { useEffect, useRef } from "react";
 import { useEpfContributions } from "@/hooks/useEpfContributions";
 import { logError } from "@/lib/errors";
 import type { EpfEstablishment } from "@/shared/features/epf/types";
+import { epfCurrentMonth } from "@/shared/features/epf/utils/epfClock";
 import { isSchedulable, planScheduledContributions } from "@/shared/features/epf/utils/schedule";
-import { currentMonthKey } from "@/shared/utils/dates";
 
 export function useEpfCatchUp(args: {
   establishment: EpfEstablishment | null;
@@ -49,7 +49,8 @@ export function useEpfCatchUp(args: {
       establishment,
       allEstablishments,
       existing: contributions,
-      throughMonth: currentMonthKey(),
+      // Same clock as the cron — EPF months are IST-defined (KAN-72).
+      throughMonth: epfCurrentMonth(),
     });
     if (planned.length === 0) return;
 

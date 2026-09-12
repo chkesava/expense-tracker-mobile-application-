@@ -9,13 +9,14 @@ import { SkeletonCard } from "@/components/common/Skeleton";
 import { EpfEstablishmentCard } from "@/components/epf/EpfEstablishmentCard";
 import { EpfEstablishmentFormModal } from "@/components/epf/EpfEstablishmentFormModal";
 import { EpfCurrentMonthCard } from "@/components/epf/EpfCurrentMonthCard";
+import { EpfPortfolioCard } from "@/components/epf/EpfPortfolioCard";
 import { EpfProfileCard } from "@/components/epf/EpfProfileCard";
 import { EpfProfileFormModal } from "@/components/epf/EpfProfileFormModal";
 import { Button } from "@/components/ui/Button";
 import { useEpf } from "@/hooks/useEpf";
 import { useEpfCatchUp } from "@/hooks/useEpfCatchUp";
+import { epfTodayKey } from "@/shared/features/epf/utils/epfClock";
 import type { EpfEstablishment } from "@/shared/features/epf/types";
-import { todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 
 export function EpfDashboard() {
@@ -47,7 +48,7 @@ export function EpfDashboard() {
   const [editing, setEditing] = useState<EpfEstablishment | null>(null);
   const [showArchived, setShowArchived] = useState(false);
 
-  const todayKey = useMemo(() => todayDateKey(), []);
+  const todayKey = useMemo(() => epfTodayKey(), []);
 
   // Fill in any months the monthly cron has not reached yet (KAN-67).
   useEpfCatchUp({
@@ -134,6 +135,9 @@ export function EpfDashboard() {
   return (
     <View style={styles.container}>
       {profile ? <EpfProfileCard profile={profile} onEdit={() => setProfileModalOpen(true)} /> : null}
+
+      {/* Total across every employer — the list below is its breakdown. */}
+      <EpfPortfolioCard />
 
       <EpfCurrentMonthCard
         establishment={activeEstablishment}

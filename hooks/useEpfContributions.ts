@@ -31,6 +31,7 @@ import { commitWrite, writeSavedMessage, type WriteOutcome } from "@/lib/firesto
 import { toast } from "@/lib/toast";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { useAuth } from "@/providers/AuthProvider";
+import { epfTodayKey } from "@/shared/features/epf/utils/epfClock";
 import type {
   EpfBackfillRow,
   EpfContribution,
@@ -55,10 +56,16 @@ import {
   canTransition,
   contributionsToAutoCredit,
 } from "@/shared/features/epf/utils/lifecycle";
-import { todayDateKey } from "@/shared/utils/dates";
 
-/** Firestore caps a batch at 500 writes; stay comfortably under it. */
-const BATCH_CHUNK_SIZE = 400;
+/**
+ * Firestore caps a batch at 500 writes.
+ *
+ * Each saved month now writes **two** documents — the contribution and its
+ * audit event (KAN-72) — so the row chunk is half what it would otherwise be.
+ * At 400 rows a batch would be 800 writes and fail, and only on a long
+ * backfill, which is the worst place to find out.
+ */
+const BATCH_CHUNK_SIZE = 200;
 
 function chunk<T>(items: T[], size: number): T[][] {
   const groups: T[][] = [];
@@ -211,6 +218,28 @@ export function useEpfContributions(
               }),
               // Deterministic ids + merge: re-saving converges instead of duplicating.
               { merge: true }
+            );
+          }
+
+          // KAN-72: every month that moves money leaves an audit entry, in the
+          // same batch as the write so the two cannot diverge. `from: "none"`
+          // marks a row that did not exist before — scheduled generation.
+          for (const row of group) {
+            const existing = byMonth.get(row.month);
+            batch.set(
+              doc(collection(db, "users", uid, EPF_CONTRIBUTION_EVENTS_COLLECTION)),
+              withoutUndefined({
+                ...buildContributionEvent(
+                  { id: contributionDocId(establishmentId, row.month), establishmentId, month: row.month },
+                  existing?.status ?? "none",
+                  opts.status,
+                  {
+                    actor: row.source === "simulated" ? "system" : "user",
+                    amount: row.epfCredit,
+                  }
+                ),
+                at: serverTimestamp(),
+              })
             );
           }
 
@@ -378,7 +407,7 @@ export function useEpfContributions(
     const db = getFirestoreDb();
     if (!uid || !db || !establishmentId) return 0;
 
-    const due = contributionsToAutoCredit(contributions, todayDateKey());
+    const due = contributionsToAutoCredit(contributions, epfTodayKey());
     if (due.length === 0) return 0;
 
     try {

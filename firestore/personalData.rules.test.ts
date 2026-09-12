@@ -78,8 +78,6 @@ describe("personal tree", () => {
     "epfEstablishments",
     // KAN-66 — monthly contribution records.
     "epfContributions",
-    // KAN-67 — per-user scheduler bookkeeping.
-    "epfMeta",
     // KAN-68 — append-only contribution status audit trail.
     "epfContributionEvents",
     // KAN-69 — balance movements between establishments and their audit trail.

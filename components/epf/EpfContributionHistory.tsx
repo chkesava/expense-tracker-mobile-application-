@@ -10,6 +10,7 @@ import { EpfContributionRow } from "@/components/epf/EpfContributionRow";
 import { Card } from "@/components/ui/Card";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { useEpfContributions } from "@/hooks/useEpfContributions";
+import { epfCurrentMonth } from "@/shared/features/epf/utils/epfClock";
 import type { EpfContribution, EpfEstablishment } from "@/shared/features/epf/types";
 import {
   contributionMonthsFor,
@@ -17,7 +18,6 @@ import {
   groupContributionsByFinancialYear,
   summarizeContributions,
 } from "@/shared/features/epf/utils/contributions";
-import { currentMonthKey } from "@/shared/utils/dates";
 import { financialYearLabel } from "@/shared/utils/financialYear";
 import { formatAmount } from "@/shared/utils/formatCurrency";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -54,7 +54,7 @@ export function EpfContributionHistory({
   const money = useCallback((value: number) => formatAmount(value, currency), [currency]);
 
   const expectedMonths = useMemo(
-    () => contributionMonthsFor(establishment, currentMonthKey()),
+    () => contributionMonthsFor(establishment, epfCurrentMonth()),
     [establishment]
   );
 

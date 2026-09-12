@@ -5,11 +5,11 @@ import { AlertTriangle, ChevronRight, CalendarClock } from "lucide-react-native"
 import { Card } from "@/components/ui/Card";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { useEpfContributions } from "@/hooks/useEpfContributions";
+import { epfCurrentMonth } from "@/shared/features/epf/utils/epfClock";
 import type { EpfEstablishment } from "@/shared/features/epf/types";
 import { contributionStatusMeta } from "@/shared/features/epf/utils/contributions";
 import { isReconciled, projectionBlocker } from "@/shared/features/epf/utils/lifecycle";
 import { wageForProjection } from "@/shared/features/epf/utils/schedule";
-import { currentMonthKey } from "@/shared/utils/dates";
 import { formatAmount } from "@/shared/utils/formatCurrency";
 import { useTheme } from "@/theme/ThemeProvider";
 
@@ -43,7 +43,7 @@ export function EpfCurrentMonthCard({
   });
 
   const money = useCallback((value: number) => formatAmount(value, currency), [currency]);
-  const month = currentMonthKey();
+  const month = epfCurrentMonth();
 
   const latestWage = useMemo(() => wageForProjection(contributions), [contributions]);
   const blocker = projectionBlocker({
