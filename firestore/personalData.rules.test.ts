@@ -85,6 +85,9 @@ describe("personal tree", () => {
     // KAN-69 — balance movements between establishments and their audit trail.
     "epfTransfers",
     "epfTransferEvents",
+    // KAN-70 — interest per financial year and reconciliation observations.
+    "epfInterestEntries",
+    "epfReconciliations",
   ];
 
   it("owner reads their own user doc", async () => {

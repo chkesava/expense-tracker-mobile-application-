@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { EpfContribution, EpfTransfer } from "@/shared/features/epf/types";
 import {
   buildReversal,
+  establishmentBalanceBreakdown,
   canCompleteTransfer,
   canFailTransfer,
   canReverseTransfer,
@@ -55,6 +56,8 @@ describe("establishmentBalance", () => {
       contributions: [contribution(), contribution({ id: "x", month: "2026-09" })],
       transfers: [],
       establishmentId: "est-a",
+    interestEntries: [],
+    adjustments: [],
     });
     expect(balance).toBe(9500);
   });
@@ -64,6 +67,8 @@ describe("establishmentBalance", () => {
       contributions: [contribution({ creditedAmount: 1000, reconciledAt: "x" })],
       transfers: [],
       establishmentId: "est-a",
+    interestEntries: [],
+    adjustments: [],
     });
     expect(balance).toBe(1000);
   });
@@ -78,6 +83,8 @@ describe("establishmentBalance", () => {
       ],
       transfers: [],
       establishmentId: "est-a",
+    interestEntries: [],
+    adjustments: [],
     });
     expect(balance).toBe(0);
   });
@@ -87,6 +94,8 @@ describe("establishmentBalance", () => {
       contributions: [contribution({ establishmentId: "est-b" })],
       transfers: [],
       establishmentId: "est-a",
+    interestEntries: [],
+    adjustments: [],
     });
     expect(balance).toBe(0);
   });
@@ -96,10 +105,10 @@ describe("establishmentBalance", () => {
     const transfers = [transfer()];
 
     expect(
-      establishmentBalance({ contributions, transfers, establishmentId: "est-a" })
+      establishmentBalance({ contributions, transfers, establishmentId: "est-a", interestEntries: [], adjustments: [] })
     ).toBe(-5250); // 4750 earned, 10000 moved out
     expect(
-      establishmentBalance({ contributions, transfers, establishmentId: "est-b" })
+      establishmentBalance({ contributions, transfers, establishmentId: "est-b", interestEntries: [], adjustments: [] })
     ).toBe(10000);
   });
 
@@ -111,6 +120,8 @@ describe("establishmentBalance", () => {
           contributions,
           transfers: [transfer({ status })],
           establishmentId: "est-a",
+        interestEntries: [],
+        adjustments: [],
         })
       ).toBe(4750);
     }
@@ -133,6 +144,8 @@ describe("establishmentBalance", () => {
         contributions,
         transfers: [original, compensating],
         establishmentId: "est-a",
+      interestEntries: [],
+      adjustments: [],
       })
     ).toBe(4750);
     expect(
@@ -140,13 +153,21 @@ describe("establishmentBalance", () => {
         contributions,
         transfers: [original, compensating],
         establishmentId: "est-b",
+      interestEntries: [],
+      adjustments: [],
       })
     ).toBe(0);
   });
 
   it("returns zero for an establishment with nothing at all", () => {
     expect(
-      establishmentBalance({ contributions: [], transfers: [], establishmentId: "est-z" })
+      establishmentBalance({
+        contributions: [],
+        transfers: [],
+        establishmentId: "est-z",
+        interestEntries: [],
+        adjustments: [],
+      })
     ).toBe(0);
   });
 });
@@ -158,6 +179,8 @@ describe("transferableBalance", () => {
         contributions: [contribution()],
         transfers: [transfer({ amount: 99999 })],
         establishmentId: "est-a",
+      interestEntries: [],
+      adjustments: [],
       })
     ).toBe(0);
   });
@@ -168,6 +191,8 @@ describe("transferableBalance", () => {
         contributions: [contribution()],
         transfers: [],
         establishmentId: "est-a",
+      interestEntries: [],
+      adjustments: [],
       })
     ).toBe(4750);
   });
@@ -374,5 +399,148 @@ describe("normalizeTransfer", () => {
     expect(row.amount).toBe(0);
     expect(row.status).toBe("initiated");
     expect(row.sourceEstablishmentId).toBe("");
+  });
+});
+
+describe("balance with interest and adjustments — KAN-70", () => {
+  const contributions = [contribution()]; // 4750 credited
+
+  it("adds credited interest", () => {
+    const balance = establishmentBalance({
+      contributions,
+      transfers: [],
+      establishmentId: "est-a",
+      interestEntries: [
+        {
+          id: "est-a_2023-24",
+          establishmentId: "est-a",
+          financialYear: "2023-24",
+          rate: 0.0825,
+          basis: "monthlyRunningBalance",
+          openingBalance: 0,
+          interest: 825,
+          closingBalance: 5575,
+        },
+      ],
+      adjustments: [],
+    });
+    expect(balance).toBe(5575);
+  });
+
+  it("applies a reconciliation adjustment in both directions", () => {
+    const adjustment = (amount: number) => [
+      {
+        id: "r1",
+        establishmentId: "est-a",
+        date: "2026-09-12",
+        actualBalance: 0,
+        calculatedBalance: 0,
+        adjustmentAmount: amount,
+      },
+    ];
+
+    expect(
+      establishmentBalance({
+        contributions,
+        transfers: [],
+        establishmentId: "est-a",
+        interestEntries: [],
+        adjustments: adjustment(1000),
+      })
+    ).toBe(5750);
+
+    expect(
+      establishmentBalance({
+        contributions,
+        transfers: [],
+        establishmentId: "est-a",
+        interestEntries: [],
+        adjustments: adjustment(-1000),
+      })
+    ).toBe(3750);
+  });
+
+  it("ignores another establishment's interest and adjustments", () => {
+    const balance = establishmentBalance({
+      contributions,
+      transfers: [],
+      establishmentId: "est-a",
+      interestEntries: [
+        {
+          id: "est-b_2023-24",
+          establishmentId: "est-b",
+          financialYear: "2023-24",
+          rate: 0.0825,
+          basis: "monthlyRunningBalance",
+          openingBalance: 0,
+          interest: 9999,
+          closingBalance: 9999,
+        },
+      ],
+      adjustments: [
+        {
+          id: "r1",
+          establishmentId: "est-b",
+          date: "2026-09-12",
+          actualBalance: 0,
+          calculatedBalance: 0,
+          adjustmentAmount: 9999,
+        },
+      ],
+    });
+    expect(balance).toBe(4750);
+  });
+
+  it("breaks the balance into parts that add up to the total", () => {
+    const breakdown = establishmentBalanceBreakdown({
+      contributions,
+      transfers: [transfer({ amount: 1000 })], // out of est-a
+      establishmentId: "est-a",
+      interestEntries: [
+        {
+          id: "est-a_2023-24",
+          establishmentId: "est-a",
+          financialYear: "2023-24",
+          rate: 0.0825,
+          basis: "monthlyRunningBalance",
+          openingBalance: 0,
+          interest: 500,
+          closingBalance: 0,
+        },
+      ],
+      adjustments: [
+        {
+          id: "r1",
+          establishmentId: "est-a",
+          date: "2026-09-12",
+          actualBalance: 0,
+          calculatedBalance: 0,
+          adjustmentAmount: 250,
+        },
+      ],
+    });
+
+    expect(breakdown.contributions).toBe(4750);
+    expect(breakdown.interest).toBe(500);
+    expect(breakdown.transfersOut).toBe(1000);
+    expect(breakdown.adjustments).toBe(250);
+    expect(
+      breakdown.contributions +
+        breakdown.interest +
+        breakdown.transfersIn -
+        breakdown.transfersOut +
+        breakdown.adjustments
+    ).toBe(breakdown.total);
+  });
+
+  it("still excludes a reversed month rather than subtracting it", () => {
+    const balance = establishmentBalance({
+      contributions: [contribution({ status: "reversed" })],
+      transfers: [],
+      establishmentId: "est-a",
+      interestEntries: [],
+      adjustments: [],
+    });
+    expect(balance).toBe(0);
   });
 });

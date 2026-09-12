@@ -242,6 +242,12 @@ export const EPF_TRANSFERS_COLLECTION = "epfTransfers";
 /** Append-only audit trail of transfer status changes — KAN-69. */
 export const EPF_TRANSFER_EVENTS_COLLECTION = "epfTransferEvents";
 
+/** Per-establishment, per-financial-year interest — KAN-70. */
+export const EPF_INTEREST_ENTRIES_COLLECTION = "epfInterestEntries";
+
+/** Append-only actual-vs-simulated balance observations — KAN-70. */
+export const EPF_RECONCILIATIONS_COLLECTION = "epfReconciliations";
+
 /** Who caused a status change. */
 export type EpfContributionActor = "system" | "user";
 
@@ -351,4 +357,81 @@ export interface EpfTransferSummary {
   net: number;
   /** Transfers still awaiting settlement. */
   pending: number;
+}
+
+/* ---------------------------------------------------------------------------
+ * Interest and reconciliation — KAN-70
+ * ------------------------------------------------------------------------ */
+
+/** How an interest figure was arrived at. One value today; named so it stays explainable. */
+export type EpfInterestBasis = "monthlyRunningBalance";
+
+export interface EpfInterestEntry {
+  /** `{establishmentId}_{financialYear}` — see `interestEntryId`. */
+  id: string;
+  establishmentId: string;
+  /** "2023-24". */
+  financialYear: string;
+  /** The rate actually used, stored so a later table correction stays visible. */
+  rate: number;
+  basis: EpfInterestBasis;
+  openingBalance: number;
+  /** Credited at the end of the financial year. */
+  interest: number;
+  closingBalance: number;
+  /** When this entry was last computed — part of the audit trail. */
+  computedAt?: unknown;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+}
+
+/** One year of the interest schedule, before it is persisted. */
+export interface EpfInterestYear {
+  financialYear: string;
+  /** Null when EPFO has not declared a rate for this year. */
+  rate: number | null;
+  openingBalance: number;
+  /** Month key -> closing balance that month. */
+  monthlyBalances: Record<string, number>;
+  interest: number;
+  closingBalance: number;
+  /** True when no rate is declared, so no interest could be computed. */
+  rateMissing: boolean;
+}
+
+/**
+ * One observation of the real EPFO balance — KAN-70.
+ *
+ * Append-only: repeated reconciliations accumulate as history rather than
+ * overwriting each other, and a contribution row is never touched.
+ */
+export interface EpfReconciliation {
+  id: string;
+  /** Which employer this observation is about. */
+  establishmentId: string;
+  /** YYYY-MM-DD the balance was observed. */
+  date: string;
+  /** What EPFO actually showed. */
+  actualBalance: number;
+  /** What Spendly computed at that moment. */
+  calculatedBalance: number;
+  /** Signed: actual − calculated. Applied to the balance as an adjustment. */
+  adjustmentAmount: number;
+  /** Passbook, statement or claim reference. */
+  reference?: string;
+  notes?: string;
+  createdAt?: unknown;
+}
+
+export type EpfReconciliationIssueCode =
+  | "negative_balance"
+  | "future_date"
+  | "invalid_date"
+  | "missing_establishment";
+
+export interface EpfReconciliationIssue {
+  field?: string;
+  code: EpfReconciliationIssueCode;
+  severity: "error" | "warning";
+  message: string;
 }

@@ -7,7 +7,13 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import type { EpfTransferInput } from "@/hooks/useEpfTransfers";
 import { epfTransferFormSchema } from "@/shared/features/epf/schemas";
-import type { EpfContribution, EpfEstablishment, EpfTransfer } from "@/shared/features/epf/types";
+import type {
+  EpfContribution,
+  EpfEstablishment,
+  EpfInterestEntry,
+  EpfReconciliation,
+  EpfTransfer,
+} from "@/shared/features/epf/types";
 import { transferableBalance, validateTransfer } from "@/shared/features/epf/utils/transfers";
 import { todayDateKey } from "@/shared/utils/dates";
 import { formatAmount } from "@/shared/utils/formatCurrency";
@@ -19,6 +25,8 @@ type Props = {
   establishments: EpfEstablishment[];
   contributions: EpfContribution[];
   transfers: EpfTransfer[];
+  interestEntries: EpfInterestEntry[];
+  adjustments: EpfReconciliation[];
   currency: string;
   /** Preselected source, when opened from an establishment. */
   defaultSourceId?: string;
@@ -37,6 +45,8 @@ export function EpfTransferFormModal({
   establishments,
   contributions,
   transfers,
+  interestEntries,
+  adjustments,
   currency,
   defaultSourceId,
   onSubmit,
@@ -67,8 +77,14 @@ export function EpfTransferFormModal({
 
   const sourceBalance = useMemo(() => {
     if (!sourceId) return 0;
-    return transferableBalance({ contributions, transfers, establishmentId: sourceId });
-  }, [sourceId, contributions, transfers]);
+    return transferableBalance({
+      contributions,
+      transfers,
+      establishmentId: sourceId,
+      interestEntries,
+      adjustments,
+    });
+  }, [sourceId, contributions, transfers, interestEntries, adjustments]);
 
   const parsedAmount = Number(amount) || 0;
 

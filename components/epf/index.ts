@@ -13,3 +13,5 @@ export * from "./EpfCreditSheet";
 export * from "./EpfTransfersList";
 export * from "./EpfTransferFormModal";
 export * from "./EpfTransferDetailModal";
+export * from "./EpfBalanceTab";
+export * from "./EpfReconcileSheet";
