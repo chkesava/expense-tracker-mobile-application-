@@ -27,7 +27,7 @@ service cloud.firestore {
     //   accountEntries, accountPayments, accounts, accountTransfers,
     //   accountTypes, alerts, borrowingRepayments, borrowings, categories,
     //   categorizationRules, categoryBudgets, epfContributionEvents,
-    //   epfContributions, epfEstablishments, epfMeta, epfProfile,
+    //   epfContributions, epfEstablishments, epfProfile,
     //   epfInterestEntries, epfReconciliations, epfTransferEvents,
     //   epfTransfers, expenses, financialGoals, focus,
     //   holdings, incomes, investments, meta, portfolioOrders,
