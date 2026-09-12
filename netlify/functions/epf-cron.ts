@@ -16,6 +16,10 @@ import {
   buildContributionEvent,
   contributionsToAutoCredit,
 } from "../../shared/features/epf/utils/lifecycle";
+import {
+  epfCurrentMonth,
+  epfTodayKey,
+} from "../../shared/features/epf/utils/epfClock";
 import { planScheduledContributions } from "../../shared/features/epf/utils/schedule";
 
 type NetlifyEvent = {
@@ -36,11 +40,22 @@ const CORS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+/**
+ * Months per batch. Each generated month writes two documents — the
+ * contribution and its audit event (KAN-72) — so 200 rows is 400 writes,
+ * comfortably inside Firestore's 500-write batch limit. Someone who recorded a
+ * month years ago and nothing since can have hundreds owed at once.
+ */
+const MONTHS_PER_BATCH = 200;
+
 /** Establishments per invocation. Keeps a run well inside the function timeout. */
 const DEFAULT_PAGE_SIZE = 25;
 const MAX_PAGE_SIZE = 100;
 
-function json(statusCode: number, payload: Record<string, unknown>): NetlifyResult {
+function json(
+  statusCode: number,
+  payload: Record<string, unknown>,
+): NetlifyResult {
   return {
     statusCode,
     headers: { ...CORS, "Content-Type": "application/json" },
@@ -50,7 +65,9 @@ function json(statusCode: number, payload: Record<string, unknown>): NetlifyResu
 
 function header(event: NetlifyEvent, name: string): string {
   const headers = event.headers ?? {};
-  const match = Object.keys(headers).find((key) => key.toLowerCase() === name.toLowerCase());
+  const match = Object.keys(headers).find(
+    (key) => key.toLowerCase() === name.toLowerCase(),
+  );
   return match ? String(headers[match] ?? "") : "";
 }
 
@@ -58,7 +75,9 @@ function initAdmin() {
   if (getApps().length > 0) return;
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT ?? "";
   if (!raw) {
-    throw new Error("FIREBASE_SERVICE_ACCOUNT is not set on this Netlify site.");
+    throw new Error(
+      "FIREBASE_SERVICE_ACCOUNT is not set on this Netlify site.",
+    );
   }
   const creds = JSON.parse(raw) as { project_id?: string; projectId?: string };
   initializeApp({
@@ -80,17 +99,6 @@ function secretMatches(provided: string, expected: string): boolean {
 function uidFromEstablishmentPath(path: string): string | null {
   const segments = path.split("/");
   return segments[0] === "users" && segments[1] ? segments[1] : null;
-}
-
-/** YYYY-MM in UTC. Month boundaries are explicit, never locale-dependent. */
-function currentMonthUtc(): string {
-  const now = new Date();
-  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
-}
-
-/** YYYY-MM-DD in UTC, for comparing against a credit window. */
-function todayUtc(): string {
-  return new Date().toISOString().slice(0, 10);
 }
 
 /**
@@ -118,7 +126,12 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
   }
 
   // Checked before anything touches Firestore.
-  if (!secretMatches(header(event, "x-epf-cron-secret"), process.env.EPF_CRON_SECRET ?? "")) {
+  if (
+    !secretMatches(
+      header(event, "x-epf-cron-secret"),
+      process.env.EPF_CRON_SECRET ?? "",
+    )
+  ) {
     return json(401, { error: "Unauthorized" });
   }
 
@@ -131,8 +144,12 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
   let cursor: string | undefined;
   let limit = DEFAULT_PAGE_SIZE;
   try {
-    const body = JSON.parse(event.body || "{}") as { cursor?: string; limit?: number };
-    cursor = typeof body.cursor === "string" && body.cursor ? body.cursor : undefined;
+    const body = JSON.parse(event.body || "{}") as {
+      cursor?: string;
+      limit?: number;
+    };
+    cursor =
+      typeof body.cursor === "string" && body.cursor ? body.cursor : undefined;
     if (typeof body.limit === "number" && Number.isFinite(body.limit)) {
       limit = Math.min(Math.max(Math.trunc(body.limit), 1), MAX_PAGE_SIZE);
     }
@@ -141,8 +158,10 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
   }
 
   const db = getFirestore();
-  const throughMonth = currentMonthUtc();
-  const todayKey = todayUtc();
+  // IST, not UTC: EPF months are defined in India, and the client uses the same
+  // helper so the two cannot disagree about which month it is (KAN-72).
+  const throughMonth = epfCurrentMonth();
+  const todayKey = epfTodayKey();
 
   try {
     // Only users with a live employment — not the whole user base.
@@ -176,10 +195,12 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
       const siblingsSnap = await db
         .collection(`users/${uid}/${EPF_ESTABLISHMENTS_COLLECTION}`)
         .get();
-      const allEstablishments: EpfEstablishment[] = siblingsSnap.docs.map((sibling) => ({
-        id: sibling.id,
-        ...(sibling.data() as Omit<EpfEstablishment, "id">),
-      }));
+      const allEstablishments: EpfEstablishment[] = siblingsSnap.docs.map(
+        (sibling) => ({
+          id: sibling.id,
+          ...(sibling.data() as Omit<EpfEstablishment, "id">),
+        }),
+      );
 
       const existingSnap = await db
         .collection(`users/${uid}/${EPF_CONTRIBUTIONS_COLLECTION}`)
@@ -201,21 +222,27 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
             db.doc(
               `users/${uid}/${EPF_CONTRIBUTIONS_COLLECTION}/${contributionDocId(
                 establishment.id,
-                row.month
-              )}`
+                row.month,
+              )}`,
             ),
-            { status: next.status, statusUpdatedAt: new Date(), updatedAt: new Date() },
-            { merge: true }
+            {
+              status: next.status,
+              statusUpdatedAt: new Date(),
+              updatedAt: new Date(),
+            },
+            { merge: true },
           );
           creditBatch.create(
-            db.collection(`users/${uid}/${EPF_CONTRIBUTION_EVENTS_COLLECTION}`).doc(),
+            db
+              .collection(`users/${uid}/${EPF_CONTRIBUTION_EVENTS_COLLECTION}`)
+              .doc(),
             {
               ...buildContributionEvent(row, row.status, next.status, {
                 actor: "system",
                 amount: row.epfCredit,
               }),
               at: new Date(),
-            }
+            },
           );
         }
         try {
@@ -234,38 +261,69 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
       });
       if (planned.length === 0) continue;
 
-      const batch = db.batch();
-      for (const row of planned) {
-        const ref = db.doc(
-          `users/${uid}/${EPF_CONTRIBUTIONS_COLLECTION}/${contributionDocId(
-            establishment.id,
-            row.month
-          )}`
-        );
-        const { persisted, ...payload } = row;
-        // `create` rather than `set`: if the row appeared since the read — a
-        // concurrent client catch-up, say — this throws instead of clobbering
-        // whatever the user has there.
-        batch.create(ref, {
-          ...payload,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        });
-      }
+      for (
+        let offset = 0;
+        offset < planned.length;
+        offset += MONTHS_PER_BATCH
+      ) {
+        const batch = db.batch();
+        for (const row of planned.slice(offset, offset + MONTHS_PER_BATCH)) {
+          const contributionId = contributionDocId(establishment.id, row.month);
+          const ref = db.doc(
+            `users/${uid}/${EPF_CONTRIBUTIONS_COLLECTION}/${contributionId}`,
+          );
+          const { persisted, ...payload } = row;
 
-      try {
-        await batch.commit();
-        written += planned.length;
-      } catch {
-        // A collision means someone else already wrote the month. Skip this
-        // establishment and let the next run reconcile rather than failing the
-        // whole page.
-        continue;
+          // KAN-72: generation is a money-moving event, so it is audited like
+          // every other one. `from: "none"` — the row did not exist before.
+          batch.create(
+            db
+              .collection(`users/${uid}/${EPF_CONTRIBUTION_EVENTS_COLLECTION}`)
+              .doc(),
+            {
+              ...buildContributionEvent(
+                {
+                  id: contributionId,
+                  establishmentId: establishment.id,
+                  month: row.month,
+                },
+                "none",
+                row.status,
+                { actor: "system", amount: row.epfCredit },
+              ),
+              at: new Date(),
+            },
+          );
+          // `create` rather than `set`: if the row appeared since the read — a
+          // concurrent client catch-up, say — this throws instead of clobbering
+          // whatever the user has there.
+          batch.create(ref, {
+            ...payload,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          });
+        }
+
+        try {
+          await batch.commit();
+          written += Math.min(MONTHS_PER_BATCH, planned.length - offset);
+        } catch {
+          // A collision means someone else already wrote the month. Skip this
+          // establishment and let the next run reconcile rather than failing the
+          // whole page.
+          break;
+        }
       }
     }
 
     const nextCursor = page.size === limit ? lastPath : null;
-    return json(200, { processed, written, credited, throughMonth, nextCursor });
+    return json(200, {
+      processed,
+      written,
+      credited,
+      throughMonth,
+      nextCursor,
+    });
   } catch (error) {
     return json(500, { error: (error as Error).message });
   }

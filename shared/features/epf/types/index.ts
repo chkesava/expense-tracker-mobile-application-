@@ -264,7 +264,8 @@ export interface EpfContributionEvent {
   contributionId: string;
   establishmentId: string;
   month: string;
-  from: EpfContributionStatus;
+  /** `"none"` when the row did not exist before — i.e. scheduled generation. */
+  from: EpfContributionStatus | "none";
   to: EpfContributionStatus;
   /** The amount relevant to this transition, where one applies. */
   amount?: number;

@@ -6,6 +6,7 @@ import { Modal } from "@/components/common/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import type { EpfTransferInput } from "@/hooks/useEpfTransfers";
+import { epfTodayKey } from "@/shared/features/epf/utils/epfClock";
 import { epfTransferFormSchema } from "@/shared/features/epf/schemas";
 import type {
   EpfContribution,
@@ -15,7 +16,6 @@ import type {
   EpfTransfer,
 } from "@/shared/features/epf/types";
 import { transferableBalance, validateTransfer } from "@/shared/features/epf/utils/transfers";
-import { todayDateKey } from "@/shared/utils/dates";
 import { formatAmount } from "@/shared/utils/formatCurrency";
 import { useTheme } from "@/theme/ThemeProvider";
 
@@ -67,7 +67,7 @@ export function EpfTransferFormModal({
     setSourceId(defaultSourceId ?? "");
     setDestinationId("");
     setAmount("");
-    setDate(todayDateKey());
+    setDate(epfTodayKey());
     setReference("");
     setAdjustmentReason("");
     setErrors({});
@@ -102,7 +102,7 @@ export function EpfTransferFormModal({
       {
         knownEstablishmentIds: establishments.map((item) => item.id),
         availableBalance: sourceBalance,
-        todayKey: todayDateKey(),
+        todayKey: epfTodayKey(),
       }
     );
   }, [

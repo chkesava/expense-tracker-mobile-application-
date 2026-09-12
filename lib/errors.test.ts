@@ -185,6 +185,34 @@ describe("logError / logWarning", () => {
     expect(serialized).toContain('"attempt":2');
   });
 
+  it("redacts EPF identifiers (KAN-72)", () => {
+    // A UAN ties to a real name and a full employment history, so it belongs
+    // with the other identity artifacts even though nothing logs it today.
+    const spy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    logError("epf.saveprofile", new Error("nope"), {
+      uan: "100123456789",
+      memberId: "MHBAN00123450000012345",
+      establishmentNumber: "MHBAN0012345000",
+      month: "2026-08",
+    });
+
+    const serialized = JSON.stringify(spy.mock.calls[0]);
+    expect(serialized).not.toContain("100123456789");
+    expect(serialized).not.toContain("MHBAN00123450000012345");
+    expect(serialized).not.toContain("MHBAN0012345000");
+    // Non-sensitive context must survive, or the log stops being useful.
+    expect(serialized).toContain("2026-08");
+  });
+
+  it("does not redact a key that merely contains those letters", () => {
+    // The word boundary on `uan` is what keeps this precise; without it a
+    // literal backspace or a bare substring would over-match.
+    const spy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    logError("ui.render", new Error("nope"), { nuance: "keep-me" });
+
+    expect(JSON.stringify(spy.mock.calls[0])).toContain("keep-me");
+  });
+
   it("collapses nested objects rather than serializing them", () => {
     const spy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     logWarning("sync.push", new Error("nope"), {

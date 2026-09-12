@@ -4,6 +4,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { Modal } from "@/components/common/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { epfTodayKey } from "@/shared/features/epf/utils/epfClock";
 import { epfReconciliationFormSchema } from "@/shared/features/epf/schemas";
 import type { EpfEstablishment } from "@/shared/features/epf/types";
 import {
@@ -11,7 +12,6 @@ import {
   validateReconciliation,
   type EpfReconciliationInput,
 } from "@/shared/features/epf/utils/reconciliation";
-import { todayDateKey } from "@/shared/utils/dates";
 import { formatAmount } from "@/shared/utils/formatCurrency";
 import { useTheme } from "@/theme/ThemeProvider";
 
@@ -51,7 +51,7 @@ export function EpfReconcileSheet({
   useEffect(() => {
     if (!isOpen) return;
     setActualBalance("");
-    setDate(todayDateKey());
+    setDate(epfTodayKey());
     setReference("");
     setNotes("");
     setErrors({});
@@ -92,7 +92,7 @@ export function EpfReconcileSheet({
 
     const issues = validateReconciliation(input, {
       knownEstablishmentIds: [establishment.id],
-      todayKey: todayDateKey(),
+      todayKey: epfTodayKey(),
     });
     if (issues.length > 0) {
       const fieldErrors: Record<string, string> = {};

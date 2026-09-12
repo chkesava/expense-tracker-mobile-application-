@@ -6,11 +6,11 @@ import { Modal } from "@/components/common/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { appDialog } from "@/lib/appDialog";
+import { epfTodayKey } from "@/shared/features/epf/utils/epfClock";
 import { epfCreditFormSchema } from "@/shared/features/epf/schemas";
 import type { EpfContribution } from "@/shared/features/epf/types";
 import { contributionStatusMeta } from "@/shared/features/epf/utils/contributions";
 import { isReconciled } from "@/shared/features/epf/utils/lifecycle";
-import { todayDateKey } from "@/shared/utils/dates";
 import { formatAmount } from "@/shared/utils/formatCurrency";
 import { useTheme } from "@/theme/ThemeProvider";
 
@@ -52,7 +52,7 @@ export function EpfCreditSheet({
   useEffect(() => {
     if (!isOpen || !row) return;
     setAmount(String(row.creditedAmount ?? row.epfCredit ?? ""));
-    setDate(row.creditDate ?? todayDateKey());
+    setDate(row.creditDate ?? epfTodayKey());
     setReason(row.statusReason ?? "");
     setErrors({});
   }, [isOpen, row]);

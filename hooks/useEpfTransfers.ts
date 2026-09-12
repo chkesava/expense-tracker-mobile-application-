@@ -40,7 +40,7 @@ import {
   canReverseTransfer,
   normalizeTransfer,
 } from "@/shared/features/epf/utils/transfers";
-import { todayDateKey } from "@/shared/utils/dates";
+import { epfTodayKey } from "@/shared/features/epf/utils/epfClock";
 
 function withoutUndefined<T extends Record<string, unknown>>(value: T): T {
   const out: Record<string, unknown> = {};
@@ -292,7 +292,7 @@ export function useEpfTransfers(options?: { enabled?: boolean }) {
         batch.set(
           reversalRef,
           withoutUndefined({
-            ...buildReversal(original, todayDateKey(), reason),
+            ...buildReversal(original, epfTodayKey(), reason),
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
             statusUpdatedAt: serverTimestamp(),
