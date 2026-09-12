@@ -384,6 +384,21 @@ export function AccountsList() {
               style={{ fontSize: 12, fontWeight: "700", color: blue }}
             />
           </View>
+          {/* KAN-71: only shown when there is EPF, so this screen is unchanged
+              for the majority who have none. The simulated framing lives on the
+              net-worth widget and the EPF tab, where the label has room. */}
+          {netWorth.epfValue > 0 ? (
+            <View style={styles.breakdownItem}>
+              <Text style={[styles.breakdownLabel, { color: theme.colors.mutedForeground }]}>
+                EPF
+              </Text>
+              <Amount
+                value={netWorth.epfValue}
+                currency={displayCurrency}
+                style={{ fontSize: 12, fontWeight: "700", color: green }}
+              />
+            </View>
+          ) : null}
         </View>
       </View>
 
@@ -908,13 +923,19 @@ const styles = StyleSheet.create({
   },
   breakdownRow: {
     flexDirection: "row",
+    // Wraps to two rows on a narrow phone rather than squashing four labels
+    // into a quarter of the width each (KAN-71).
+    flexWrap: "wrap",
     justifyContent: "space-between",
     paddingTop: 12,
     borderTopWidth: StyleSheet.hairlineWidth,
-    gap: 8,
+    columnGap: 8,
+    rowGap: 12,
   },
   breakdownItem: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: "22%",
+    minWidth: 72,
     alignItems: "center",
     gap: 4,
   },
