@@ -22,6 +22,7 @@ import { establishmentBalanceBreakdown } from "@/shared/features/epf/utils/trans
 import { financialYearLabel, financialYearOfMonth } from "@/shared/utils/financialYear";
 import { formatAmount } from "@/shared/utils/formatCurrency";
 import { useTheme } from "@/theme/ThemeProvider";
+import { combineEpfLoad } from "@/shared/features/epf/utils/loadState";
 
 /**
  * Balance, interest and reconciliation for one establishment — KAN-70.
@@ -36,7 +37,7 @@ export function EpfBalanceTab({ establishment }: { establishment: EpfEstablishme
 
   const { contributions, contributionsLoading, contributionsError, retryContributions } =
     useEpfContributions(establishment.id);
-  const { transfers, transfersLoading } = useEpfTransfers();
+  const { transfers, transfersLoading, transfersError, retryTransfers } = useEpfTransfers();
   const {
     interestEntries,
     reconciliations,
@@ -50,7 +51,15 @@ export function EpfBalanceTab({ establishment }: { establishment: EpfEstablishme
   const [reconcileOpen, setReconcileOpen] = useState(false);
   const money = useCallback((value: number) => formatAmount(value, currency), [currency]);
 
-  const loading = contributionsLoading || transfersLoading || interestLoading;
+  // Every source, not a subset. Transfers were previously omitted from the
+  // error channel, so a failed transfers listener rendered a balance silently
+  // missing every transfer (KAN-73).
+  const load = combineEpfLoad([
+    { loading: contributionsLoading, error: contributionsError, retry: retryContributions },
+    { loading: transfersLoading, error: transfersError, retry: retryTransfers },
+    { loading: interestLoading, error: interestError, retry: retryInterest },
+  ]);
+  const loading = load.loading;
 
   const schedule = useMemo(
     () =>
@@ -105,16 +114,12 @@ export function EpfBalanceTab({ establishment }: { establishment: EpfEstablishme
     );
   }
 
-  if (contributionsError || interestError) {
-    const failure = contributionsError ?? interestError;
+  if (load.error) {
     return (
       <ErrorState
         title="Couldn't load balance"
-        description={failure?.message}
-        onRetry={() => {
-          retryContributions();
-          retryInterest();
-        }}
+        description={load.error.message}
+        onRetry={load.retryAll}
       />
     );
   }

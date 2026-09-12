@@ -21,18 +21,10 @@ import {
 import { wageForProjection } from "@/shared/features/epf/utils/schedule";
 import { formatAmount } from "@/shared/utils/formatCurrency";
 import { useTheme } from "@/theme/ThemeProvider";
+import { monthLabel } from "@/shared/utils/monthLabel";
 
 /** Recent months shown on the Current tab. Older months live under History. */
 const RECENT_MONTHS = 18;
-
-const MONTH_LABELS = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
-
-function monthLabel(month: string): string {
-  return `${MONTH_LABELS[Number(month.slice(5, 7)) - 1] ?? month} ${month.slice(0, 4)}`;
-}
 
 /**
  * Current-employment contribution lifecycle — KAN-68.

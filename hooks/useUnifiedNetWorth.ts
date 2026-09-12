@@ -14,13 +14,8 @@ import { useMarketQuotes } from "@/hooks/useMarketQuotes";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useReceivables } from "@/hooks/useReceivables";
 import { useSettings } from "@/providers/SettingsProvider";
-import {
-  computeBankBalance,
-  computeOutstandingCredit,
-} from "@/shared/utils/accountBalance";
-import { getAccountKind } from "@/shared/utils/accountKind";
 import { todayDateKey } from "@/shared/utils/dates";
-import { totalPortfolioValue } from "@/shared/utils/investmentInterest";
+import { composeNetWorth } from "@/shared/utils/netWorth";
 
 export interface UnifiedNetWorthSummary {
   /** Sum of all positive non-credit bank/cash balances */
@@ -114,105 +109,55 @@ export function useUnifiedNetWorth(): UnifiedNetWorthSummary {
     return map;
   }, [accountTypes]);
 
-  const summary = useMemo(() => {
-    let liquidBankAssets = 0;
-    let bankOverdraftLiabilities = 0;
-    let creditCardLiabilities = 0;
-
-    accounts.forEach((a) => {
-      const typeName = typeMap.get(a.typeId) || "";
-      const kind = getAccountKind(typeName);
-
-      if (kind === "credit") {
-        const usage = computeOutstandingCredit(a, expenses, payments, bills, today);
-        creditCardLiabilities += usage.totalOutstanding;
-      } else {
-        const bal = computeBankBalance(
-          a,
-          expenses,
-          incomes,
-          payments,
-          entries,
-          transfers,
-          borrowings,
-          borrowingRepayments,
-          receivables,
-          receivableRepayments
-        );
-        if (bal > 0) {
-          liquidBankAssets += bal;
-        } else if (bal < 0) {
-          bankOverdraftLiabilities += Math.abs(bal);
-        }
-      }
-    });
-
-    const investmentsValue = totalPortfolioValue(investments);
-
-    let stocksHoldingsValue = 0;
-    holdings.forEach((h) => {
-      const livePrice = quotes.get(h.yahooSymbol)?.currentPrice ?? h.averageBuyPrice;
-      stocksHoldingsValue += h.quantity * livePrice;
-    });
-    // Derived from the cash ledger, not the stored scalar — the scalar could still
-    // be carrying money a holding purchase had already spent (KAN-77).
-    const stocksCashBalance = investmentCashBalance;
-    const totalStocksValue = stocksHoldingsValue + stocksCashBalance;
-
-    // Borrowings are a liability; receivables are a non-cash asset that offsets
-    // cash already debited when the money was lent.
-    const borrowingLiabilities = borrowingPortfolio.totalOutstanding;
-    const receivableAssets = receivablePortfolio.totalOutstanding;
-
-    const totalLiabilities =
-      creditCardLiabilities + bankOverdraftLiabilities + borrowingLiabilities;
-    const totalAssets =
-      liquidBankAssets +
-      investmentsValue +
-      totalStocksValue +
-      receivableAssets +
-      epfValue;
-    const totalNetWorth = totalAssets - totalLiabilities;
-
-    return {
-      liquidBankAssets,
-      investmentsValue,
+  const summary = useMemo(
+    () =>
+      composeNetWorth({
+        accounts,
+        typeMap,
+        expenses,
+        incomes,
+        payments,
+        bills,
+        entries,
+        transfers,
+        borrowings,
+        borrowingRepayments,
+        receivables,
+        receivableRepayments,
+        borrowingOutstanding: borrowingPortfolio.totalOutstanding,
+        receivableOutstanding: receivablePortfolio.totalOutstanding,
+        investments,
+        holdings,
+        quotes,
+        investmentCashBalance,
+        epfValue,
+        epfUnreconciledCount,
+        today,
+      }),
+    [
+      accounts,
+      typeMap,
+      expenses,
+      incomes,
+      payments,
+      bills,
+      entries,
+      transfers,
+      borrowings,
+      borrowingRepayments,
+      borrowingPortfolio,
+      receivables,
+      receivableRepayments,
+      receivablePortfolio,
+      investments,
+      holdings,
+      quotes,
+      investmentCashBalance,
       epfValue,
       epfUnreconciledCount,
-      stocksHoldingsValue,
-      stocksCashBalance,
-      totalStocksValue,
-      totalAssets,
-      creditCardLiabilities,
-      bankOverdraftLiabilities,
-      borrowingLiabilities,
-      receivableAssets,
-      totalLiabilities,
-      totalNetWorth,
-    };
-  }, [
-    accounts,
-    typeMap,
-    expenses,
-    incomes,
-    payments,
-    bills,
-    entries,
-    transfers,
-    borrowings,
-    borrowingRepayments,
-    borrowingPortfolio,
-    receivables,
-    receivableRepayments,
-    receivablePortfolio,
-    investments,
-    holdings,
-    quotes,
-    investmentCashBalance,
-    epfValue,
-    epfUnreconciledCount,
-    today,
-  ]);
+      today,
+    ]
+  );
 
   const loading =
     accountsLoading ||

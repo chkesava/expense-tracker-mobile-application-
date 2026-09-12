@@ -21,19 +21,11 @@ import {
 import { financialYearLabel } from "@/shared/utils/financialYear";
 import { formatAmount } from "@/shared/utils/formatCurrency";
 import { useTheme } from "@/theme/ThemeProvider";
+import { monthLabel } from "@/shared/utils/monthLabel";
 
 type HistoryItem =
   | { type: "header"; id: string; title: string; meta: string }
   | { type: "row"; id: string; row: EpfContribution };
-
-const MONTH_LABELS = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
-
-function monthLabel(month: string): string {
-  return `${MONTH_LABELS[Number(month.slice(5, 7)) - 1] ?? month} ${month.slice(0, 4)}`;
-}
 
 export function EpfContributionHistory({
   establishment,

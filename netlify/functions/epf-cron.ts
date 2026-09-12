@@ -10,7 +10,12 @@ import {
   type EpfContribution,
   type EpfEstablishment,
 } from "../../shared/features/epf/types";
-import { contributionDocId } from "../../shared/features/epf/utils/contributions";
+import {
+  contributionDocId,
+  normalizeEpfContribution,
+} from "../../shared/features/epf/utils/contributions";
+import { normalizeEstablishment } from "../../shared/features/epf/utils";
+import { EPF_CRON_MONTHS_PER_BATCH } from "../../shared/features/epf/data/epfBatchLimits";
 import {
   applyAutoCredit,
   buildContributionEvent,
@@ -40,13 +45,6 @@ const CORS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-/**
- * Months per batch. Each generated month writes two documents — the
- * contribution and its audit event (KAN-72) — so 200 rows is 400 writes,
- * comfortably inside Firestore's 500-write batch limit. Someone who recorded a
- * month years ago and nothing since can have hundreds owed at once.
- */
-const MONTHS_PER_BATCH = 200;
 
 /** Establishments per invocation. Keeps a run well inside the function timeout. */
 const DEFAULT_PAGE_SIZE = 25;
@@ -183,33 +181,32 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
       lastPath = docSnap.ref.path;
       processed += 1;
 
-      const data = docSnap.data() as Omit<EpfEstablishment, "id">;
-      if (data.archived === true) continue;
+      // Normalized rather than cast: a document written by an earlier build
+      // may not carry every field, and the cast asserted otherwise (KAN-73).
+      const establishment = normalizeEstablishment(
+        docSnap.id,
+        docSnap.data() as Record<string, unknown>,
+      );
+      if (establishment.archived === true) continue;
 
       const uid = uidFromEstablishmentPath(docSnap.ref.path);
       if (!uid) continue;
-
-      const establishment: EpfEstablishment = { id: docSnap.id, ...data };
 
       // The job-change rule needs every live employment, not just this one.
       const siblingsSnap = await db
         .collection(`users/${uid}/${EPF_ESTABLISHMENTS_COLLECTION}`)
         .get();
-      const allEstablishments: EpfEstablishment[] = siblingsSnap.docs.map(
-        (sibling) => ({
-          id: sibling.id,
-          ...(sibling.data() as Omit<EpfEstablishment, "id">),
-        }),
+      const allEstablishments: EpfEstablishment[] = siblingsSnap.docs.map((sibling) =>
+        normalizeEstablishment(sibling.id, sibling.data() as Record<string, unknown>),
       );
 
       const existingSnap = await db
         .collection(`users/${uid}/${EPF_CONTRIBUTIONS_COLLECTION}`)
         .where("establishmentId", "==", docSnap.id)
         .get();
-      const existing: EpfContribution[] = existingSnap.docs.map((row) => ({
-        id: row.id,
-        ...(row.data() as Omit<EpfContribution, "id">),
-      }));
+      const existing: EpfContribution[] = existingSnap.docs.map((row) =>
+        normalizeEpfContribution(row.id, row.data() as Record<string, unknown>),
+      );
 
       // KAN-68: age any month whose expected credit window has passed. Same
       // pure selector the client catch-up uses, so the two cannot disagree.
@@ -264,10 +261,10 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
       for (
         let offset = 0;
         offset < planned.length;
-        offset += MONTHS_PER_BATCH
+        offset += EPF_CRON_MONTHS_PER_BATCH
       ) {
         const batch = db.batch();
-        for (const row of planned.slice(offset, offset + MONTHS_PER_BATCH)) {
+        for (const row of planned.slice(offset, offset + EPF_CRON_MONTHS_PER_BATCH)) {
           const contributionId = contributionDocId(establishment.id, row.month);
           const ref = db.doc(
             `users/${uid}/${EPF_CONTRIBUTIONS_COLLECTION}/${contributionId}`,
@@ -306,7 +303,7 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
 
         try {
           await batch.commit();
-          written += Math.min(MONTHS_PER_BATCH, planned.length - offset);
+          written += Math.min(EPF_CRON_MONTHS_PER_BATCH, planned.length - offset);
         } catch {
           // A collision means someone else already wrote the month. Skip this
           // establishment and let the next run reconcile rather than failing the

@@ -12,7 +12,8 @@ import { EpfContributionHistory } from "@/components/epf/EpfContributionHistory"
 import { EpfCurrentContributions } from "@/components/epf/EpfCurrentContributions";
 import { EpfTransfersList } from "@/components/epf/EpfTransfersList";
 import { useEpf } from "@/hooks/useEpf";
-import { maskIdentifier } from "@/shared/features/epf/utils";
+import { deriveEmploymentState, maskIdentifier } from "@/shared/features/epf/utils";
+import { epfTodayKey } from "@/shared/features/epf/utils/epfClock";
 import { useTheme } from "@/theme/ThemeProvider";
 
 type Tab = "balance" | "current" | "history" | "backfill" | "transfers";
@@ -39,7 +40,11 @@ export default function EpfEstablishmentContributionsScreen() {
     [establishments, establishmentId]
   );
 
-  const isCurrentEmployment = Boolean(establishment && !establishment.dateLeft);
+  // `deriveEmploymentState` rather than `!dateLeft`: the raw check also
+  // treated an archived establishment as current employment (KAN-73).
+  const isCurrentEmployment = Boolean(
+    establishment && deriveEmploymentState(establishment, epfTodayKey()) === "current"
+  );
   const activeTab: Tab = tab ?? (isCurrentEmployment ? "current" : "history");
 
   const tabs: { id: Tab; label: string }[] = [

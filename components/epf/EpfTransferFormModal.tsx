@@ -18,6 +18,7 @@ import type {
 import { transferableBalance, validateTransfer } from "@/shared/features/epf/utils/transfers";
 import { formatAmount } from "@/shared/utils/formatCurrency";
 import { useTheme } from "@/theme/ThemeProvider";
+import { fieldErrorsFromIssues } from "@/shared/utils/fieldErrors";
 
 type Props = {
   isOpen: boolean;
@@ -128,20 +129,12 @@ export function EpfTransferFormModal({
     });
 
     if (!parsed.success) {
-      const fieldErrors: Record<string, string> = {};
-      parsed.error.issues.forEach((issue) => {
-        if (issue.path[0]) fieldErrors[issue.path[0].toString()] = issue.message;
-      });
-      setErrors(fieldErrors);
+      setErrors(fieldErrorsFromIssues(parsed.error.issues));
       return;
     }
 
     if (issues.some((issue) => issue.severity === "error")) {
-      const fieldErrors: Record<string, string> = {};
-      issues.forEach((issue) => {
-        if (issue.field) fieldErrors[issue.field] = issue.message;
-      });
-      setErrors(fieldErrors);
+      setErrors(fieldErrorsFromIssues(issues));
       return;
     }
 
