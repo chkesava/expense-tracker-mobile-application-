@@ -7,6 +7,7 @@ import type {
   Expense,
   Income,
 } from "../types/expense";
+import { CASHBACK_SOURCE_ID, isCashbackPayment } from "../types/expense";
 import type { Borrowing, BorrowingRepayment } from "../types/borrowing";
 import type { Receivable, ReceivableRepayment } from "../types/receivable";
 import { postingSortMs, resolveActivityClockTime } from "./activityDisplay";
@@ -23,12 +24,20 @@ import { roundMoney } from "./money";
 export { toLocalDateKey } from "./dates";
 export { roundMoney } from "./money";
 
+/**
+ * A voided record is reversed, not deleted — it stays in Firestore for the
+ * audit trail but must not move money anywhere it is read.
+ */
+function isLivePayment(payment: AccountPayment): boolean {
+  return !payment.voidedAt;
+}
+
 function paymentsFromAccount(accountId: string, payments: AccountPayment[]) {
-  return payments.filter((p) => p.fromAccountId === accountId);
+  return payments.filter((p) => p.fromAccountId === accountId && isLivePayment(p));
 }
 
 function paymentsToAccount(accountId: string, payments: AccountPayment[]) {
-  return payments.filter((p) => p.toAccountId === accountId);
+  return payments.filter((p) => p.toAccountId === accountId && isLivePayment(p));
 }
 
 function getPaymentCounterpartyName(
@@ -36,6 +45,11 @@ function getPaymentCounterpartyName(
   direction: "incoming" | "outgoing",
   accountNameById?: Record<string, string>
 ): string {
+  // Checked before "external": cashback is also account-less, but calling it
+  // "Already paid" would tell the user they settled a bill they never did.
+  if (isCashbackPayment(payment) || payment.fromAccountId === CASHBACK_SOURCE_ID) {
+    return "Cashback";
+  }
   if (payment.sourceType === "external" || payment.fromAccountId === "external") {
     return "Already paid";
   }
@@ -188,7 +202,10 @@ export function computeOutstandingCredit(
   totalOutstanding: number;
   availableCredit: number;
   usedThisCycle: number;
+  /** Money the user actually paid this cycle. Excludes cashback. */
   paidThisCycle: number;
+  /** Provider cashback credited this cycle. Not money the user paid. */
+  cashbackThisCycle: number;
   oldestOpenRemaining: number;
   oldestOpenBillId?: string;
   nextResetDate: Date;
@@ -203,14 +220,23 @@ export function computeOutstandingCredit(
     today,
   });
   const oldest = oldestOpenStatement(ledger);
+  // Cashback settles the card too, but it is not money the user paid — summing
+  // the two together would credit the user for spending they never did.
+  const cycleCredits = payments.filter(
+    (payment) =>
+      payment.toAccountId === account.id &&
+      !payment.voidedAt &&
+      payment.date >= ledger.openCycle.start &&
+      payment.date <= ledger.openCycle.end
+  );
   const paidThisCycle = roundMoney(
-    payments
-      .filter(
-        (payment) =>
-          payment.toAccountId === account.id &&
-          payment.date >= ledger.openCycle.start &&
-          payment.date <= ledger.openCycle.end
-      )
+    cycleCredits
+      .filter((payment) => !isCashbackPayment(payment))
+      .reduce((sum, payment) => sum + payment.amount, 0)
+  );
+  const cashbackThisCycle = roundMoney(
+    cycleCredits
+      .filter((payment) => isCashbackPayment(payment))
       .reduce((sum, payment) => sum + payment.amount, 0)
   );
 
@@ -224,6 +250,7 @@ export function computeOutstandingCredit(
     availableCredit: ledger.availableCredit,
     usedThisCycle: ledger.unbilledSpend,
     paidThisCycle,
+    cashbackThisCycle,
     oldestOpenRemaining: oldest?.remaining ?? 0,
     oldestOpenBillId: oldest?.billId,
     nextResetDate: parseLocalDate(ledger.openCycle.end),
@@ -248,6 +275,12 @@ export interface CreditBillSummary {
   status: CreditBillStatus;
   /** True when a stored statement document backs this cycle. */
   hasStatement: boolean;
+  /**
+   * How much of `paidAmount` came from provider cashback rather than money the
+   * user paid. A statement settled this way is not a bill the user paid, and
+   * the history must not claim it was.
+   */
+  cashbackApplied: number;
 }
 
 /**
@@ -272,6 +305,12 @@ export function getCreditBillHistory(
     cycles,
   });
 
+  const cashbackAmountById = new Map(
+    payments
+      .filter((payment) => isCashbackPayment(payment) && !payment.voidedAt)
+      .map((payment) => [payment.id, payment.amount])
+  );
+
   return ledger.statements
     .filter(
       (statement) =>
@@ -291,6 +330,18 @@ export function getCreditBillHistory(
       outstandingAmount: statement.remaining,
       status: statement.status,
       hasStatement: Boolean(statement.billId),
+      // Allocation can only credit a statement up to what it was billed, so
+      // cap the total here too rather than reporting more cashback than the
+      // statement could absorb.
+      cashbackApplied: roundMoney(
+        Math.min(
+          statement.paid,
+          statement.paymentIds.reduce(
+            (sum, id) => sum + (cashbackAmountById.get(id) ?? 0),
+            0
+          )
+        )
+      ),
     }));
 }
 
@@ -386,17 +437,23 @@ export function buildAccountActivities(
       counterpartyName: getPaymentCounterpartyName(p, "outgoing", accountNameById),
     })),
     ...(kind === "credit"
-      ? incomingPayments.map((p) => ({
-          id: `payment-in-${p.id}`,
-          date: p.date,
-          time: resolveActivityClockTime(undefined, p.createdAt),
-          amount: p.amount,
-          type: "credit" as const,
-          note: p.note || "Bill payment received",
-          isBillPayment: true,
-          linkedPaymentId: p.id,
-          counterpartyName: getPaymentCounterpartyName(p, "incoming", accountNameById),
-        }))
+      ? incomingPayments.map((p) => {
+          // Cashback reduces the card like a payment does, but it is a reward
+          // from the provider — never label it as a bill the user settled.
+          const cashback = isCashbackPayment(p);
+          return {
+            id: `payment-in-${p.id}`,
+            date: p.date,
+            time: resolveActivityClockTime(undefined, p.createdAt),
+            amount: p.amount,
+            type: "credit" as const,
+            note: p.note || (cashback ? "Cashback received" : "Bill payment received"),
+            isBillPayment: !cashback,
+            isCashback: cashback,
+            linkedPaymentId: p.id,
+            counterpartyName: getPaymentCounterpartyName(p, "incoming", accountNameById),
+          };
+        })
       : []),
     ...outgoingTransfers.map((transfer) => ({
       id: `transfer-out-${transfer.id}`,

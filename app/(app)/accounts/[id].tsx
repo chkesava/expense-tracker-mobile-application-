@@ -18,6 +18,7 @@ import { AddAccountEntryModal } from "@/components/accounts/AddAccountEntryModal
 import { EditAccountModal } from "@/components/accounts/EditAccountModal";
 import { PastBillingCycles } from "@/components/accounts/PastBillingCycles";
 import { PayCreditBillModal } from "@/components/accounts/PayCreditBillModal";
+import { RecordCashbackModal } from "@/components/accounts/RecordCashbackModal";
 import { CreditStatementCard } from "@/components/accounts/CreditStatementCard";
 import { SmsMatchingUnconfiguredText } from "@/components/accounts/SmsMatchingUnconfiguredText";
 import { TransferFundsModal } from "@/components/accounts/TransferFundsModal";
@@ -108,6 +109,7 @@ export default function AccountDetailScreen() {
   const [isPayModalOpen, setIsPayModalOpen] = useState(false);
   const [isCreateBillOpen, setIsCreateBillOpen] = useState(false);
   const [isReconcileOpen, setIsReconcileOpen] = useState(false);
+  const [isCashbackOpen, setIsCashbackOpen] = useState(false);
   const [activityFilter, setActivityFilter] = useState<ActivityFilter>("all");
 
   const account = useMemo(() => accounts.find((a) => a.id === id), [accounts, id]);
@@ -303,6 +305,7 @@ export default function AccountDetailScreen() {
         remainingAmount: cycle.outstandingAmount,
         paymentDate: matched?.paymentDate,
         status: cycle.status,
+        cashbackApplied: cycle.cashbackApplied,
         overdue: matched?.status === "OVERDUE" && cycle.outstandingAmount > 0,
         billId: cycle.billId,
       };
@@ -379,6 +382,7 @@ export default function AccountDetailScreen() {
           usedThisCycle={creditUsage.unbilledSpend}
           statementDue={creditUsage.statementDue}
           cancelledSpend={creditUsage.cancelledSpend}
+          cashbackThisCycle={creditUsage.cashbackThisCycle}
           totalOutstanding={creditUsage.totalOutstanding}
           availableCredit={creditUsage.availableCredit}
           creditLimit={account.creditLimit || 0}
@@ -412,28 +416,54 @@ export default function AccountDetailScreen() {
             onAdd={() => setIsCreateBillOpen(true)}
             onOpen={onOpenStatementBill}
           />
-          <Pressable
-            onPress={() => {
-              void haptic.selection();
-              setIsReconcileOpen(true);
-            }}
-            style={({ pressed }) => [
-              styles.reconcileBtn,
-              {
-                backgroundColor: isDark ? "#10141C" : theme.colors.card,
-                borderColor: isDark
-                  ? "rgba(148, 163, 184, 0.12)"
-                  : theme.colors.border,
-              },
-              pressed ? styles.reconcilePressed : null,
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel="Reconcile statement"
-          >
-            <Text style={[styles.reconcileLabel, { color: theme.colors.primary }]}>
-              Reconcile statement
-            </Text>
-          </Pressable>
+          <View style={styles.cardActionRow}>
+            <Pressable
+              onPress={() => {
+                void haptic.selection();
+                setIsReconcileOpen(true);
+              }}
+              style={({ pressed }) => [
+                styles.reconcileBtn,
+                styles.cardActionItem,
+                {
+                  backgroundColor: isDark ? "#10141C" : theme.colors.card,
+                  borderColor: isDark
+                    ? "rgba(148, 163, 184, 0.12)"
+                    : theme.colors.border,
+                },
+                pressed ? styles.reconcilePressed : null,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Reconcile statement"
+            >
+              <Text style={[styles.reconcileLabel, { color: theme.colors.primary }]}>
+                Reconcile statement
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                void haptic.selection();
+                setIsCashbackOpen(true);
+              }}
+              style={({ pressed }) => [
+                styles.reconcileBtn,
+                styles.cardActionItem,
+                {
+                  backgroundColor: isDark ? "#10141C" : theme.colors.card,
+                  borderColor: isDark
+                    ? "rgba(148, 163, 184, 0.12)"
+                    : theme.colors.border,
+                },
+                pressed ? styles.reconcilePressed : null,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Record cashback"
+            >
+              <Text style={[styles.reconcileLabel, { color: theme.colors.primary }]}>
+                Record cashback
+              </Text>
+            </Pressable>
+          </View>
         </>
       ) : null}
 
@@ -557,6 +587,13 @@ export default function AccountDetailScreen() {
         accountTypes={accountTypes}
         defaultAccountId={account.id}
       />
+      <RecordCashbackModal
+        isOpen={isCashbackOpen}
+        onClose={() => setIsCashbackOpen(false)}
+        defaultCreditCardId={account.id}
+        accounts={accounts}
+        accountTypes={accountTypes}
+      />
       <ReconcileStatementModal
         visible={isReconcileOpen}
         onClose={() => setIsReconcileOpen(false)}
@@ -597,6 +634,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderRadius: 16,
     borderWidth: 1,
+  },
+  cardActionRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  cardActionItem: {
+    flex: 1,
   },
   reconcileBtn: {
     borderRadius: 20,

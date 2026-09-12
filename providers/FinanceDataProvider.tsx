@@ -23,7 +23,7 @@ import {
   type ReactNode,
 } from "react";
 
-import { logError } from "@/lib/errors";
+import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
 import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
 import {
@@ -41,9 +41,13 @@ import type {
   AccountPayment,
   AccountTransfer,
   AccountType,
+  CashbackKind,
+  CashbackSource,
   Expense,
   Income,
 } from "@/shared/types/expense";
+import { CASHBACK_SOURCE_ID } from "@/shared/types/expense";
+import { cashbackDocId } from "@/shared/utils/cashbackId";
 import { isAccidentalBalanceBaseline } from "@/shared/utils/accountBaseline";
 import {
   buildAccountWritePayload,
@@ -114,6 +118,19 @@ export type AccountsContextType = {
     note?: string,
     opts?: { appliedCycleStart?: string; appliedCycleEnd?: string }
   ) => Promise<string | null>;
+  addCashback: (input: {
+    cardId: string;
+    amount: number;
+    date: string;
+    kind: CashbackKind;
+    note?: string;
+    linkedExpenseId?: string;
+    providerRef?: string;
+    source?: CashbackSource;
+    /** Set only when the user confirmed a deliberate duplicate. */
+    discriminator?: string;
+  }) => Promise<string | null>;
+  voidCashback: (id: string, reason?: string) => Promise<boolean>;
   deletePayment: (id: string) => Promise<void>;
   addEntry: (
     accountId: string,
@@ -836,6 +853,106 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     []
   );
 
+  /**
+   * Record cashback / a statement credit against a credit card.
+   *
+   * Shares the `accountPayments` collection with bill payments because it does
+   * the same thing to the ledger — reduces what the card owes — but carries its
+   * own `sourceType` so nothing downstream can mistake it for a bill the user
+   * paid, and its own sentinel `fromAccountId` so no bank balance moves.
+   *
+   * The document id is derived from the entry itself, so a double-tap, a retry
+   * after a dropped connection, or the same credit entered on a second device
+   * overwrites one document instead of crediting the card twice.
+   *
+   * Validation lives in `shared/utils/cashbackValidate.ts` and runs at the call
+   * site, which has the ledger context this does not.
+   */
+  const addCashback = useCallback(
+    async (input: {
+      cardId: string;
+      amount: number;
+      date: string;
+      kind: CashbackKind;
+      note?: string;
+      linkedExpenseId?: string;
+      providerRef?: string;
+      source?: CashbackSource;
+      discriminator?: string;
+    }) => {
+      const u = userRef.current;
+      const database = getFirestoreDb();
+      if (!u || !database || !input.cardId || !(input.amount > 0)) return null;
+      if (!isValidDateKey(input.date)) {
+        toast.error("Invalid cashback date");
+        return null;
+      }
+      try {
+        const id = cashbackDocId(input);
+        const ref = doc(database, "users", u.uid, "accountPayments", id);
+        const outcome = await commitWrite(
+          () =>
+            setDoc(ref, {
+              fromAccountId: CASHBACK_SOURCE_ID,
+              toAccountId: input.cardId,
+              amount: input.amount,
+              date: input.date,
+              note: input.note?.trim() || "",
+              sourceType: "cashback",
+              cashbackKind: input.kind,
+              cashbackSource: input.source || "manual",
+              ...(input.linkedExpenseId
+                ? { linkedExpenseId: input.linkedExpenseId }
+                : {}),
+              ...(input.providerRef?.trim()
+                ? { providerRef: input.providerRef.trim() }
+                : {}),
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            }),
+          { label: "cashback" }
+        );
+        toast.success(writeSavedMessage(outcome, "Cashback recorded"));
+        return ref.id;
+      } catch (err) {
+        logError("financeDataProvider.addCashback", err);
+        toast.error(friendlyErrorMessage(err, "Failed to record cashback"));
+        return null;
+      }
+    },
+    []
+  );
+
+  /**
+   * Reverse a cashback record without destroying it.
+   *
+   * A delete would take the money back out of the ledger but leave nothing
+   * behind explaining that it was ever there. The ledger skips voided rows, so
+   * the balance is corrected and the history survives.
+   */
+  const voidCashback = useCallback(async (id: string, reason?: string) => {
+    const u = userRef.current;
+    const database = getFirestoreDb();
+    if (!u || !database || !id) return false;
+    try {
+      const outcome = await commitWrite(
+        () =>
+          updateDoc(doc(database, "users", u.uid, "accountPayments", id), {
+            voidedAt: new Date().toISOString(),
+            ...(reason?.trim() ? { voidReason: reason.trim() } : {}),
+            updatedAt: serverTimestamp(),
+          }),
+        { label: "cashback reversal" }
+      );
+      toast.success(writeSavedMessage(outcome, "Cashback reversed"));
+      return true;
+    } catch (err) {
+      logError("financeDataProvider.voidCashback", err);
+      toast.error(friendlyErrorMessage(err, "Failed to reverse cashback"));
+      return false;
+    }
+  }, []);
+
   const deletePayment = useCallback(async (id: string) => {
     const u = userRef.current;
     const database = getFirestoreDb();
@@ -1051,6 +1168,8 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       deleteAccountType,
       addPayment,
       addExternalPayment,
+      addCashback,
+      voidCashback,
       deletePayment,
       addEntry,
       deleteEntry,
@@ -1077,6 +1196,8 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       deleteAccountType,
       addPayment,
       addExternalPayment,
+      addCashback,
+      voidCashback,
       deletePayment,
       addEntry,
       deleteEntry,

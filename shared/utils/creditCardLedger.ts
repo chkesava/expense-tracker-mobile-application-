@@ -272,8 +272,12 @@ export function buildCreditCardLedger(
   const cardExpenses = input.expenses.filter(
     (expense) => expense.accountId === account.id
   );
+  // A voided credit is kept on file but must not settle anything — corrections
+  // are reversals here, never deletes, so the row outlives the money it moved.
   const cardPayments = sortPayments(
-    input.payments.filter((payment) => payment.toAccountId === account.id)
+    input.payments.filter(
+      (payment) => payment.toAccountId === account.id && !payment.voidedAt
+    )
   );
   const cardBills = (input.bills || []).filter(
     (bill) => bill.accountId === account.id

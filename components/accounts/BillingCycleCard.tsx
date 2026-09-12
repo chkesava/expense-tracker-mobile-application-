@@ -47,6 +47,7 @@ export function BillingCycleCard({
   currency,
   status,
   overdue,
+  cashbackApplied = 0,
   onPress,
 }: {
   rangeLabel: string;
@@ -57,12 +58,19 @@ export function BillingCycleCard({
   currency: string;
   status: CreditBillStatus;
   overdue: boolean;
+  /** Part of `paidAmount` that came from cashback, not from the user. */
+  cashbackApplied?: number;
   onPress?: () => void;
 }) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const presentation = statusPresentation(status, overdue);
   const showRemaining = remainingAmount > 0 && status !== "paid";
+  // A statement cashback cleared outright was never a bill the user paid, so
+  // say what actually settled it instead of stamping it PAID.
+  const settledByCashback =
+    status === "paid" && cashbackApplied > 0 && cashbackApplied >= paidAmount - 0.005;
+  const statusLabel = settledByCashback ? "SETTLED BY CASHBACK" : presentation.label;
 
   return (
     <Pressable
@@ -77,7 +85,7 @@ export function BillingCycleCard({
         pressed && onPress ? styles.pressed : null,
       ]}
       accessibilityRole={onPress ? "button" : undefined}
-      accessibilityLabel={`${rangeLabel}, ${presentation.label}`}
+      accessibilityLabel={`${rangeLabel}, ${statusLabel}`}
     >
       <View style={styles.row}>
         <View style={styles.iconWrap}>
@@ -110,6 +118,19 @@ export function BillingCycleCard({
               style={[styles.metaAmount, { color: theme.colors.mutedForeground }]}
             />
           </View>
+          {cashbackApplied > 0 ? (
+            <View style={styles.amounts}>
+              <Text style={[styles.meta, { color: theme.colors.mutedForeground }]}>
+                Cashback:{" "}
+              </Text>
+              <Amount
+                value={cashbackApplied}
+                currency={currency}
+                ghostable
+                style={[styles.metaAmount, { color: theme.colors.mutedForeground }]}
+              />
+            </View>
+          ) : null}
           {showRemaining ? (
             <View style={styles.amounts}>
               <Text style={[styles.meta, { color: theme.colors.mutedForeground }]}>
@@ -135,8 +156,11 @@ export function BillingCycleCard({
               overdue ? styles.overduePill : null,
             ]}
           >
-            <Text style={[styles.statusLabel, { color: presentation.color }]}>
-              {presentation.label}
+            <Text
+              style={[styles.statusLabel, { color: presentation.color }]}
+              numberOfLines={1}
+            >
+              {statusLabel}
             </Text>
           </View>
         </View>
