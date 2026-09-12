@@ -141,7 +141,8 @@ export function applyReversed<T extends EpfContribution>(
 /** One audit row for a status change. */
 export function buildContributionEvent(
   row: Pick<EpfContribution, "id" | "establishmentId" | "month">,
-  from: EpfContributionStatus,
+  /** `"none"` for a row that did not exist before — scheduled generation. */
+  from: EpfContributionStatus | "none",
   to: EpfContributionStatus,
   meta: { actor: EpfContributionActor; amount?: number; reason?: string }
 ): Omit<EpfContributionEvent, "id" | "at"> {

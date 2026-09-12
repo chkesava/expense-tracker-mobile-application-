@@ -28,6 +28,7 @@ import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
 import { toast } from "@/lib/toast";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { useAuth } from "@/providers/AuthProvider";
+import { epfCurrentMonth } from "@/shared/features/epf/utils/epfClock";
 import type {
   EpfContribution,
   EpfInterestEntry,
@@ -50,7 +51,6 @@ import {
   normalizeReconciliation,
   type EpfReconciliationInput,
 } from "@/shared/features/epf/utils/reconciliation";
-import { currentMonthKey } from "@/shared/utils/dates";
 import { financialYearOfMonth } from "@/shared/utils/financialYear";
 
 function withoutUndefined<T extends Record<string, unknown>>(value: T): T {
@@ -162,7 +162,7 @@ export function useEpfInterest(options?: { enabled?: boolean }) {
         transfers: args.transfers,
         adjustments: reconciliations,
         establishmentId: args.establishmentId,
-        throughFinancialYear: financialYearOfMonth(currentMonthKey()),
+        throughFinancialYear: financialYearOfMonth(epfCurrentMonth()),
       });
       const years = creditableYears(schedule);
       if (years.length === 0) return 0;

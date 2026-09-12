@@ -15,8 +15,8 @@ import { EpfProfileFormModal } from "@/components/epf/EpfProfileFormModal";
 import { Button } from "@/components/ui/Button";
 import { useEpf } from "@/hooks/useEpf";
 import { useEpfCatchUp } from "@/hooks/useEpfCatchUp";
+import { epfTodayKey } from "@/shared/features/epf/utils/epfClock";
 import type { EpfEstablishment } from "@/shared/features/epf/types";
-import { todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 
 export function EpfDashboard() {
@@ -48,7 +48,7 @@ export function EpfDashboard() {
   const [editing, setEditing] = useState<EpfEstablishment | null>(null);
   const [showArchived, setShowArchived] = useState(false);
 
-  const todayKey = useMemo(() => todayDateKey(), []);
+  const todayKey = useMemo(() => epfTodayKey(), []);
 
   // Fill in any months the monthly cron has not reached yet (KAN-67).
   useEpfCatchUp({

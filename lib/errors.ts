@@ -180,8 +180,16 @@ const REDACTED = "[redacted]";
 const isDev = (): boolean =>
   typeof __DEV__ !== "undefined" ? __DEV__ : process.env.NODE_ENV !== "production";
 
-/** Keys whose values must never reach a log sink. */
-const SENSITIVE_KEY = /token|password|secret|credential|apikey|api_key|authorization|cookie|email|phone|otp|pin|body|idtoken/i;
+/**
+ * Keys whose values must never reach a log sink.
+ *
+ * `uan`, `memberId` and `establishmentNumber` are EPF identifiers (KAN-72). A
+ * UAN ties to a real name and full employment history, so it belongs here with
+ * the other identity artifacts. `uan` carries word boundaries so it does not
+ * redact unrelated keys that merely contain those letters.
+ */
+const SENSITIVE_KEY =
+  /token|password|secret|credential|apikey|api_key|authorization|cookie|email|phone|otp|pin|body|idtoken|\buan\b|memberid|establishmentnumber/i;
 
 function redactString(value: string): string {
   return (

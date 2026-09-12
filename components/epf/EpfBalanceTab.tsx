@@ -11,6 +11,7 @@ import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { useEpfContributions } from "@/hooks/useEpfContributions";
 import { useEpfInterest } from "@/hooks/useEpfInterest";
 import { useEpfTransfers } from "@/hooks/useEpfTransfers";
+import { epfCurrentMonth } from "@/shared/features/epf/utils/epfClock";
 import type { EpfEstablishment } from "@/shared/features/epf/types";
 import {
   interestSchedule,
@@ -18,7 +19,6 @@ import {
 } from "@/shared/features/epf/utils/interest";
 import { reconciliationHistory } from "@/shared/features/epf/utils/reconciliation";
 import { establishmentBalanceBreakdown } from "@/shared/features/epf/utils/transfers";
-import { currentMonthKey } from "@/shared/utils/dates";
 import { financialYearLabel, financialYearOfMonth } from "@/shared/utils/financialYear";
 import { formatAmount } from "@/shared/utils/formatCurrency";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -59,7 +59,7 @@ export function EpfBalanceTab({ establishment }: { establishment: EpfEstablishme
         transfers,
         adjustments: reconciliations,
         establishmentId: establishment.id,
-        throughFinancialYear: financialYearOfMonth(currentMonthKey()),
+        throughFinancialYear: financialYearOfMonth(epfCurrentMonth()),
       }),
     [contributions, transfers, reconciliations, establishment.id]
   );
