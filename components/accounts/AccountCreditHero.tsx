@@ -16,6 +16,7 @@ export function AccountCreditHero({
   usedThisCycle,
   statementDue,
   cancelledSpend = 0,
+  cashbackThisCycle = 0,
   totalOutstanding,
   availableCredit,
   creditLimit,
@@ -30,6 +31,8 @@ export function AccountCreditHero({
   statementDue: number;
   /** Owed under a cancelled statement — not this cycle, so it never eats the limit. */
   cancelledSpend?: number;
+  /** Provider cashback credited this cycle. Explains a balance that fell on its own. */
+  cashbackThisCycle?: number;
   totalOutstanding: number;
   availableCredit: number;
   creditLimit: number;
@@ -128,6 +131,19 @@ export function AccountCreditHero({
               currency={currency}
               ghostable
               style={[styles.dueValue, { color: usedColor }]}
+            />
+          </View>
+        ) : null}
+        {cashbackThisCycle > 0 ? (
+          <View style={styles.dueRow}>
+            <Text style={[styles.dueLabel, { color: theme.colors.mutedForeground }]}>
+              Cashback this cycle
+            </Text>
+            <Amount
+              value={cashbackThisCycle}
+              currency={currency}
+              ghostable
+              style={[styles.dueValue, { color: availableColor }]}
             />
           </View>
         ) : null}

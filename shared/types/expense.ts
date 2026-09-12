@@ -115,7 +115,42 @@ export interface Account {
 
 export type AccountKind = "credit" | "bank" | "other";
 
-/** Credit card bill paid from a savings/bank account — not an expense */
+/**
+ * Sentinel `fromAccountId` for a card credit that no account funded.
+ *
+ * Balance math debits an account only when `fromAccountId` equals that
+ * account's id (see `paymentsFromAccount` in shared/utils/accountBalance.ts),
+ * so a sentinel reduces the card's liability without touching any bank
+ * balance. `"external"` already worked this way for "I already paid this";
+ * cashback needs its own id so the two never read as the same thing.
+ */
+export const CASHBACK_SOURCE_ID = "cashback";
+
+/**
+ * What kind of credit the provider gave back.
+ *
+ * `statement_credit` is money applied against the card statement — the common
+ * case, and the one that must never be presented as a bill payment.
+ * `reward` is a general reward/loyalty credit not tied to one purchase.
+ */
+export type CashbackKind = "statement_credit" | "reward";
+
+/** How a cashback record entered the app, for the audit trail. */
+export type CashbackSource = "manual" | "statement";
+
+export type AccountPaymentSourceType = "account" | "external" | "cashback";
+
+/**
+ * Money credited to a credit card. Never an expense, and never income.
+ *
+ * Three shapes share this record because they all do the same thing to the
+ * ledger — reduce what a card owes:
+ *   - `sourceType: "account"`  a bill paid from a bank account (debits it)
+ *   - `sourceType: "external"` a bill already paid outside the app
+ *   - `sourceType: "cashback"` cashback / statement credit from the provider
+ *
+ * The cashback fields below are only meaningful on the third.
+ */
 export interface AccountPayment {
   id: string;
   fromAccountId: string;
@@ -123,10 +158,33 @@ export interface AccountPayment {
   amount: number;
   date: string;
   note?: string;
-  sourceType?: "account" | "external";
+  sourceType?: AccountPaymentSourceType;
   appliedCycleStart?: string;
   appliedCycleEnd?: string;
+  /** Cashback only: statement credit vs general reward. */
+  cashbackKind?: CashbackKind;
+  /** Cashback only: the purchase this credit was given against, when known. */
+  linkedExpenseId?: string;
+  /** Cashback only: provider/statement reference for reconciliation. */
+  providerRef?: string;
+  /** Cashback only: how the record was entered. */
+  cashbackSource?: CashbackSource;
+  /**
+   * Soft reversal. A voided row is ignored by the ledger but kept on file —
+   * financial history is corrected with a reversal, never a delete.
+   */
+  voidedAt?: string;
+  /** Why the row was voided, when the user gave a reason. */
+  voidReason?: string;
   createdAt?: unknown;
+  updatedAt?: unknown;
+}
+
+/** True when this record is cashback rather than a bill payment. */
+export function isCashbackPayment(
+  payment: Pick<AccountPayment, "sourceType">
+): boolean {
+  return payment.sourceType === "cashback";
 }
 
 export type AccountEntrySource = "split_collection" | "split_spend";
@@ -180,6 +238,12 @@ export interface AccountActivity {
   linkedReceivableId?: string;
   linkedReceivableRepaymentId?: string;
   isBillPayment?: boolean;
+  /**
+   * Cashback / statement credit from the card provider. Reduces what the card
+   * owes, but it is not a bill payment and not income — presentation must keep
+   * it distinct from both.
+   */
+  isCashback?: boolean;
   isManualEntry?: boolean;
   isTransfer?: boolean;
   /** Money received from a lender. A liability, never income. */

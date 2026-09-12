@@ -190,6 +190,57 @@ describe("personal tree", () => {
     );
   });
 
+  // KAN-123 -- cashback records are credits against a credit card and live in
+  // accountPayments, so they ride the same owner grant. The boundary is
+  // asserted explicitly because these rows move a real liability.
+  describe("cashback records", () => {
+    const cashback = {
+      fromAccountId: "cashback",
+      toAccountId: "a1",
+      amount: 299,
+      date: "2026-09-08",
+      sourceType: "cashback",
+      cashbackKind: "statement_credit",
+    };
+
+    it("owner writes a cashback record", async () => {
+      const db = env.authenticatedContext(OWNER).firestore();
+      await assertSucceeds(
+        setDoc(doc(db, "users", OWNER, "accountPayments", "cashback_abc"), cashback)
+      );
+    });
+
+    it("owner reverses their own cashback rather than deleting it", async () => {
+      const db = env.authenticatedContext(OWNER).firestore();
+      const ref = doc(db, "users", OWNER, "accountPayments", "cashback_abc");
+      await assertSucceeds(setDoc(ref, cashback));
+      await assertSucceeds(
+        setDoc(ref, { ...cashback, voidedAt: "2026-09-09T00:00:00.000Z" })
+      );
+    });
+
+    it("a stranger cannot create a cashback on the owner's card", async () => {
+      const db = env.authenticatedContext(OTHER).firestore();
+      await assertFails(
+        setDoc(doc(db, "users", OWNER, "accountPayments", "cashback_xyz"), cashback)
+      );
+    });
+
+    it("a stranger cannot read the owner's cashback records", async () => {
+      const db = env.authenticatedContext(OTHER).firestore();
+      await assertFails(
+        getDocs(collection(db, "users", OWNER, "accountPayments"))
+      );
+    });
+
+    it("an unauthenticated client cannot write a cashback record", async () => {
+      const db = env.unauthenticatedContext().firestore();
+      await assertFails(
+        setDoc(doc(db, "users", OWNER, "accountPayments", "cashback_anon"), cashback)
+      );
+    });
+  });
+
   // The recursive owner grant must still not become a write primitive on the
   // membership index -- that exclusion is the whole reason the guard exists.
   it("owner cannot forge a membership index entry", async () => {

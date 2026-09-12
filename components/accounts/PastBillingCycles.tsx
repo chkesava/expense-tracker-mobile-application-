@@ -12,6 +12,8 @@ export type PastBillingCycleItem = {
   remainingAmount: number;
   paymentDate?: string;
   status: CreditBillStatus;
+  /** Part of `paidAmount` that came from cashback rather than the user. */
+  cashbackApplied?: number;
   overdue: boolean;
   billId?: string;
 };
@@ -65,6 +67,7 @@ export function PastBillingCycles({
               paymentDate={cycle.paymentDate}
               currency={currency}
               status={cycle.status}
+              cashbackApplied={cycle.cashbackApplied}
               overdue={cycle.overdue}
               onPress={billId ? () => onOpenCycle(billId) : undefined}
             />

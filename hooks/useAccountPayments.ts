@@ -6,6 +6,8 @@ export function useAccountPayments() {
     paymentsLoading,
     addPayment,
     addExternalPayment,
+    addCashback,
+    voidCashback,
     deletePayment,
   } = useAccountsContext();
 
@@ -14,6 +16,8 @@ export function useAccountPayments() {
     loading: paymentsLoading,
     addPayment,
     addExternalPayment,
+    addCashback,
+    voidCashback,
     deletePayment,
   };
 }

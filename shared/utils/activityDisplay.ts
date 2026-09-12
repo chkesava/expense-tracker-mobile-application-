@@ -136,6 +136,7 @@ export function activitySubtypeLabel(
     AccountActivity,
     | "isTransfer"
     | "isBillPayment"
+    | "isCashback"
     | "isManualEntry"
     | "isBorrowing"
     | "isLoanRepayment"
@@ -148,6 +149,9 @@ export function activitySubtypeLabel(
   >
 ): string {
   if (activity.isTransfer) return "Transfer";
+  // Before the bill-payment check: a cashback row reduces the card the same way
+  // a payment does, and must never be labelled as a bill the user settled.
+  if (activity.isCashback) return "Cashback";
   if (activity.isBillPayment) return "Bill payment";
   if (activity.isManualEntry) return "Adjustment";
   if (activity.isBorrowing) return "Borrowing";

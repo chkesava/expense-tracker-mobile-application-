@@ -10,10 +10,13 @@ import { PayCreditBillModal } from "@/components/accounts/PayCreditBillModal";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { useAccounts } from "@/hooks/useAccounts";
+import { useAccountPayments } from "@/hooks/useAccountPayments";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
 import { useCreditCardBills } from "@/hooks/useCreditCardBills";
 import { toast } from "@/lib/toast";
 import { formatCardLabel } from "@/services/creditCardBills/billNotificationCopy";
+import { isCashbackPayment } from "@/shared/types/expense";
+import { roundMoney } from "@/shared/utils/money";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
@@ -27,6 +30,7 @@ export default function CreditCardBillDetailScreen() {
   const { bills, snoozeBillReminder } = useCreditCardBills();
   const { accounts } = useAccounts();
   const { accountTypes } = useAccountTypes();
+  const { payments } = useAccountPayments();
   const [payOpen, setPayOpen] = useState(false);
   const [markPaidOpen, setMarkPaidOpen] = useState(false);
 
@@ -35,6 +39,30 @@ export default function CreditCardBillDetailScreen() {
     () => accounts.find((a) => a.id === bill?.accountId),
     [accounts, bill]
   );
+
+  /**
+   * How much of this statement's settlement was cashback. A bill cleared by a
+   * provider credit is not a bill the user paid, and "Amount paid" on its own
+   * would say it was.
+   */
+  const cashbackApplied = useMemo(() => {
+    if (!bill) return 0;
+    const linked = new Set((bill.paymentIds || []).filter(Boolean));
+    if (linked.size === 0) return 0;
+    return roundMoney(
+      Math.min(
+        bill.amountPaid || 0,
+        payments
+          .filter(
+            (payment) =>
+              linked.has(payment.id) &&
+              isCashbackPayment(payment) &&
+              !payment.voidedAt
+          )
+          .reduce((sum, payment) => sum + payment.amount, 0)
+      )
+    );
+  }, [bill, payments]);
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
@@ -104,7 +132,13 @@ export default function CreditCardBillDetailScreen() {
               />
               <AmountRow label="Statement" value={bill.statementAmount} />
               <AmountRow label="Minimum due" value={bill.minimumDueAmount} />
-              <AmountRow label="Amount paid" value={bill.amountPaid} />
+              <AmountRow
+                label={cashbackApplied > 0 ? "Amount settled" : "Amount paid"}
+                value={bill.amountPaid}
+              />
+              {cashbackApplied > 0 ? (
+                <AmountRow label="of which cashback" value={cashbackApplied} />
+              ) : null}
               <AmountRow label="Remaining" value={bill.remainingAmount} />
               <Row label="Statement date" value={bill.statementDate} />
               {bill.billingPeriodStart && bill.billingPeriodEnd ? (

@@ -21,8 +21,11 @@ import { TransactionInboxItem } from "@/components/sms/TransactionInboxItem";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useAccountPayments } from "@/hooks/useAccountPayments";
+import { useAccounts } from "@/hooks/useAccounts";
+import { useAccountTypes } from "@/hooks/useAccountTypes";
 import { useCreditCardBills } from "@/hooks/useCreditCardBills";
 import { useExpenses } from "@/hooks/useExpenses";
+import { useSettings } from "@/providers/SettingsProvider";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { haptic } from "@/lib/haptics";
 import { toast } from "@/lib/toast";
@@ -46,6 +49,9 @@ import {
   categoryFromStatementLine,
   expenseDraftFromStatementLine,
 } from "@/shared/utils/statementReview";
+import { computeOutstandingCredit } from "@/shared/utils/accountBalance";
+import { validateCashbackInput } from "@/shared/utils/cashbackValidate";
+import { todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 
 type ReviewRow =
@@ -103,11 +109,16 @@ const ReadOnlyLine = memo(function ReadOnlyLine({
   title,
   subtitle,
   currency,
+  actionLabel,
+  onAction,
 }: {
   amount: number;
   title: string;
   subtitle: string;
   currency: string;
+  /** Optional trailing action, e.g. recording an unlogged credit as cashback. */
+  actionLabel?: string;
+  onAction?: () => void;
 }) {
   const { theme } = useTheme();
   return (
@@ -140,6 +151,18 @@ const ReadOnlyLine = memo(function ReadOnlyLine({
         ghostable
         style={[styles.readOnlyAmount, { color: theme.colors.foreground }]}
       />
+      {actionLabel && onAction ? (
+        <Pressable
+          onPress={onAction}
+          accessibilityRole="button"
+          accessibilityLabel={actionLabel}
+          style={[styles.readOnlyAction, { borderColor: theme.colors.primary }]}
+        >
+          <Text style={[styles.readOnlyActionText, { color: theme.colors.primary }]}>
+            {actionLabel}
+          </Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 });
@@ -165,8 +188,11 @@ export function ReconcileStatementModal({
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const { expenses } = useExpenses();
-  const { payments } = useAccountPayments();
-  const { updateBill } = useCreditCardBills();
+  const { payments, addCashback } = useAccountPayments();
+  const { accounts } = useAccounts();
+  const { accountTypes } = useAccountTypes();
+  const { settings } = useSettings();
+  const { bills, updateBill } = useCreditCardBills();
 
   const [pasteText, setPasteText] = useState("");
   const [lines, setLines] = useState<StatementLine[]>([]);
@@ -174,6 +200,7 @@ export function ReconcileStatementModal({
   const [skippedIds, setSkippedIds] = useState<Set<string>>(() => new Set());
   const [addedIds, setAddedIds] = useState<Set<string>>(() => new Set());
   const [busyId, setBusyId] = useState<string | null>(null);
+
   const [updatingBill, setUpdatingBill] = useState(false);
 
   const reset = useCallback(() => {
@@ -428,6 +455,88 @@ export function ReconcileStatementModal({
     });
   }, []);
 
+  /**
+   * Record a statement credit the app has no record of as cashback.
+   *
+   * Deliberately not a bill payment: a credit line on the statement that the
+   * app never saw is far more often a provider reward than a payment the user
+   * forgot, and recording it as a payment would claim money left an account.
+   * It is entered unlinked — the statement does not say which purchase it came
+   * from — which the ledger handles as an ordinary credit against the card.
+   */
+  /** The ceiling for a cashback entry: what this card actually owes today. */
+  const outstandingForCashback = useMemo(() => {
+    const card = accounts.find((account) => account.id === accountId);
+    if (!card) return 0;
+    return computeOutstandingCredit(
+      card,
+      expenses,
+      payments,
+      bills,
+      todayDateKey(settings.timezone)
+    ).totalOutstanding;
+  }, [accounts, accountId, expenses, payments, bills, settings.timezone]);
+
+  const handleRecordCashback = useCallback(
+    (amount: number, date: string, merchant: string) => {
+      haptic.selection().catch(() => undefined);
+      const validation = validateCashbackInput(
+        { cardId: accountId, amount, date, kind: "statement_credit" },
+        {
+          accounts,
+          accountTypes,
+          expenses,
+          payments,
+          totalOutstanding: outstandingForCashback,
+        }
+      );
+      if (!validation.ok) {
+        toast.error(validation.error);
+        return;
+      }
+      appDialog.alert(
+        "Record as cashback?",
+        `Add ${formatAmount(amount, currency)} as cashback on ${accountName}. This reduces what the card owes. It is not a bill payment and no purchase is changed.`,
+        [
+          { text: "Not now", style: "cancel" },
+          {
+            text: "Record cashback",
+            onPress: () => {
+              void (async () => {
+                try {
+                  await addCashback({
+                    cardId: accountId,
+                    amount,
+                    date,
+                    kind: "statement_credit",
+                    providerRef: merchant,
+                    source: "statement",
+                  });
+                } catch (error) {
+                  logError("reconcileStatement.recordCashback", error);
+                  toast.error(
+                    friendlyErrorMessage(error, "Couldn't record the cashback.")
+                  );
+                }
+              })();
+            },
+          },
+        ]
+      );
+    },
+    [
+      accountId,
+      accountName,
+      accounts,
+      accountTypes,
+      addCashback,
+      currency,
+      expenses,
+      outstandingForCashback,
+      payments,
+    ]
+  );
+
   const confirmUpdateBill = useCallback(() => {
     if (!openBill) return;
     appDialog.alert(
@@ -508,10 +617,16 @@ export function ReconcileStatementModal({
             title={item.merchant}
             subtitle={
               item.logged
-                ? `${item.date} · payment logged`
-                : `${item.date} · not logged as a payment`
+                ? `${item.date} · credit logged`
+                : `${item.date} · not logged yet`
             }
             currency={currency}
+            actionLabel={item.logged ? undefined : "Cashback"}
+            onAction={
+              item.logged
+                ? undefined
+                : () => handleRecordCashback(item.amount, item.date, item.merchant)
+            }
           />
         );
       }
@@ -850,6 +965,18 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "700",
     fontVariant: ["tabular-nums"],
+  },
+  readOnlyAction: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    minHeight: 32,
+    justifyContent: "center",
+  },
+  readOnlyActionText: {
+    fontSize: 12,
+    fontWeight: "700",
   },
   footer: {
     paddingTop: 12,
