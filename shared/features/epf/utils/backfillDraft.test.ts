@@ -5,8 +5,10 @@ import type {
   EpfContributionStatus,
 } from "@/shared/features/epf/types";
 import {
+  backfillSaveRows,
   clearSavedEdits,
   mergeBackfillEdits,
+  persistedAmountsDiffer,
   statusForAppliedEdit,
   unsavedBackfillSummary,
   unsavedChangesPrompt,
@@ -243,5 +245,58 @@ describe("unsavedChangesPrompt", () => {
   it("falls back to wage wording when only the wage is dirty", () => {
     const summary = unsavedBackfillSummary({ edits: new Map(), wage: "25000" });
     expect(unsavedChangesPrompt(summary).message).toContain("wage");
+  });
+});
+
+describe("backfillSaveRows — SPENDLY-68", () => {
+  it("never rewrites a persisted month just because a wage is typed", () => {
+    const rows = [
+      row({ month: "2025-12", persisted: true, employeeShare: 2099 }),
+      row({ month: "2025-11", persisted: false, wage: 17494, employeeShare: 2099 }),
+    ];
+    const payload = backfillSaveRows({
+      rows,
+      edits: new Map(),
+      wage: 17494,
+    });
+
+    expect(payload.map((r) => r.month)).toEqual(["2025-11"]);
+  });
+
+  it("includes edited months even when they are already persisted", () => {
+    const edited = row({ month: "2025-12", persisted: true, employeeShare: 1287 });
+    const payload = backfillSaveRows({
+      rows: [row({ month: "2025-12", persisted: true, employeeShare: 2099 })],
+      edits: new Map([["2025-12", edited]]),
+      wage: 17494,
+    });
+
+    expect(payload).toHaveLength(1);
+    expect(payload[0].employeeShare).toBe(1287);
+  });
+
+  it("skips empty suggestions when no wage is set", () => {
+    expect(
+      backfillSaveRows({
+        rows: [row({ month: "2025-12", persisted: false, wage: 0 })],
+        edits: new Map(),
+        wage: 0,
+      })
+    ).toEqual([]);
+  });
+});
+
+describe("persistedAmountsDiffer — SPENDLY-68", () => {
+  it("is false when wage and shares match", () => {
+    const a = row({ wage: 17494, employeeShare: 2099, employerShare: 2099, epsShare: 0 });
+    expect(persistedAmountsDiffer(a, { ...a })).toBe(false);
+  });
+
+  it("is true when any share or wage changes", () => {
+    const saved = row({ wage: 17494, employeeShare: 2099, employerShare: 2099, epsShare: 0 });
+    expect(
+      persistedAmountsDiffer(saved, { ...saved, employeeShare: 1287 })
+    ).toBe(true);
+    expect(persistedAmountsDiffer(saved, { ...saved, wage: 10000 })).toBe(true);
   });
 });

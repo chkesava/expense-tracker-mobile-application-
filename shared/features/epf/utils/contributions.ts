@@ -296,9 +296,13 @@ export function contributionWritePayload(
  * The rows the backfill screen renders.
  *
  * Months are generated in memory; only rows the user fills are ever written, so
- * a collection never accumulates empty placeholders. Existing documents are
- * merged in by month, and an overridden row keeps its stored amounts rather
- * than being recomputed from the wage.
+ * a collection never accumulates empty placeholders.
+ *
+ * Precedence (SPENDLY-68): any existing Firestore contribution for the month is
+ * authoritative — including full leave-month remittances that do not match a
+ * calendar prorate. Wage + optional join/leave prorating are suggestions only
+ * for months that have no document yet. `overridden` still marks hand-edited
+ * share splits; it is no longer the only protection against regeneration.
  */
 export function buildBackfillRows(args: {
   establishment: Pick<EpfEstablishment, "id" | "dateJoined" | "dateLeft">;
@@ -313,14 +317,14 @@ export function buildBackfillRows(args: {
 
   return months.map((month) => {
     const saved = byMonth.get(month);
-    if (saved && saved.overridden) {
+    if (saved) {
       return { ...saved, persisted: true };
     }
 
     const partial =
       args.prorateEdgeMonths !== false &&
       isPartialMonth(month, args.establishment.dateJoined, args.establishment.dateLeft);
-    const baseWage = saved?.wage || args.wage || 0;
+    const baseWage = args.wage || 0;
     const wage =
       partial && baseWage
         ? proratedWageForMonth(
@@ -334,21 +338,17 @@ export function buildBackfillRows(args: {
     const computed = computeEpfContribution({
       wage,
       month,
-      epsEligible: saved?.epsEligible ?? args.epsEligible,
+      epsEligible: args.epsEligible,
     });
 
     return {
       establishmentId: args.establishment.id,
       month,
       ...computed,
-      status: saved?.status ?? "draft",
-      source: saved?.source ?? "manualHistorical",
+      status: "draft",
+      source: "manualHistorical",
       partialMonth: partial || undefined,
-      creditDate: saved?.creditDate,
-      reference: saved?.reference,
-      notes: saved?.notes,
-      zeroReason: saved?.zeroReason,
-      persisted: Boolean(saved),
+      persisted: false,
     };
   });
 }

@@ -31,7 +31,9 @@ import { useTheme } from "@/theme/ThemeProvider";
 import { monthLabel } from "@/shared/utils/monthLabel";
 import {
   clearSavedEdits,
+  backfillSaveRows,
   mergeBackfillEdits,
+  persistedAmountsDiffer,
   statusForAppliedEdit,
   unsavedBackfillSummary,
   upsertBackfillEdit,
@@ -126,7 +128,17 @@ export function EpfBackfillScreen({
   );
 
   const recordedRows = useMemo(
-    () => rows.filter((row) => row.persisted || edits.has(row.month) || Number(wage) > 0),
+    () =>
+      rows.filter(
+        (row) =>
+          row.persisted || edits.has(row.month) || (Number(wage) > 0 && row.wage > 0)
+      ),
+    [rows, edits, wage]
+  );
+
+  /** What Save draft / Save all may write — never silent rewrite of saved months. */
+  const saveRows = useMemo(
+    () => backfillSaveRows({ rows, edits, wage: Number(wage) || 0 }),
     [rows, edits, wage]
   );
 
@@ -140,11 +152,11 @@ export function EpfBackfillScreen({
 
   const validation = useMemo(
     () =>
-      validateBackfillBatch(recordedRows, {
+      validateBackfillBatch(saveRows, {
         establishment,
         currentDateKey: todayKey,
       }),
-    [recordedRows, establishment, todayKey]
+    [saveRows, establishment, todayKey]
   );
 
   const items = useMemo((): ListItem[] => {
@@ -175,7 +187,7 @@ export function EpfBackfillScreen({
   );
 
   /**
-   * Apply a single month's edit — SPENDLY-1.
+   * Apply a single month's edit — SPENDLY-1 / SPENDLY-68.
    *
    * This used to write only to local state, so the edit was destroyed by the
    * next tab switch with no warning, while the *same* sheet's "Remove this
@@ -185,23 +197,50 @@ export function EpfBackfillScreen({
    * A month the user opened, typed into and applied is a filled row, so
    * persisting it here is consistent with KAN-66's lazy-generation rule: the
    * untouched months are still never written.
+   *
+   * Replacing amounts that already exist in Firestore requires an explicit
+   * confirm so a recalculated/prorated suggestion cannot silently overwrite
+   * an actual remittance (SPENDLY-68).
    */
   const applyEdit = useCallback(
     async (row: EpfBackfillRow) => {
-      // Optimistic first — the snapshot round-trip is not instant.
-      setEdits((prev) => upsertBackfillEdit(prev, row));
+      const commit = async () => {
+        // Optimistic first — the snapshot round-trip is not instant.
+        setEdits((prev) => upsertBackfillEdit(prev, row));
 
-      const ok = await saveContribution(row, statusForAppliedEdit(row));
-      if (!ok) return; // keep it in `edits` so Save draft can still recover it
+        const ok = await saveContribution(row, statusForAppliedEdit(row));
+        if (!ok) return; // keep it in `edits` so Save draft can still recover it
 
-      // Durable now: let the Firestore snapshot own this month again.
-      setEdits((prev) => clearSavedEdits(prev, [row.month]));
+        // Durable now: let the Firestore snapshot own this month again.
+        setEdits((prev) => clearSavedEdits(prev, [row.month]));
+      };
+
+      const existing = contributions.find((item) => item.month === row.month);
+      if (existing && persistedAmountsDiffer(existing, row)) {
+        appDialog.alert(
+          "Replace saved contribution?",
+          `${monthLabel(row.month)} already has saved amounts. Replace them with these values?`,
+          [
+            { text: "Keep saved", style: "cancel" },
+            {
+              text: "Replace",
+              style: "destructive",
+              onPress: () => {
+                void commit();
+              },
+            },
+          ]
+        );
+        return;
+      }
+
+      await commit();
     },
-    [saveContribution, setEdits]
+    [contributions, saveContribution, setEdits]
   );
 
   const handleSave = async (status: "draft" | "confirmed") => {
-    const payload = status === "confirmed" ? validation.valid : recordedRows;
+    const payload = status === "confirmed" ? validation.valid : saveRows;
     if (status === "confirmed" && validation.errorCount > 0) {
       appDialog.alert(
         "Some months need attention",
@@ -285,7 +324,7 @@ export function EpfBackfillScreen({
           onChangeText={setWage}
           keyboardType="numeric"
           placeholder="e.g. 25000"
-          helperText="Fills every month below. Edit any month individually afterwards."
+          helperText="Fills empty months below. Saved months keep their amounts until you edit them."
         />
 
         <View style={styles.switchRow}>
@@ -307,7 +346,8 @@ export function EpfBackfillScreen({
               Pro-rate part months
             </Text>
             <Text style={[styles.switchCaption, { color: theme.colors.mutedForeground }]}>
-              Suggests a reduced wage for the joining and leaving months.
+              Suggests a reduced wage for unfilled joining and leaving months only. Many
+              employers still remit a full month — edit those months to match EPFO.
             </Text>
           </View>
           <Switch value={prorate} onValueChange={setProrate} />

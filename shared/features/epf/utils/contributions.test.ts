@@ -197,6 +197,146 @@ describe("buildBackfillRows", () => {
     expect(rows.find((row) => row.month === "2021-08")?.employeeShare).toBe(9999);
   });
 
+  it("keeps a persisted leave-month full remittance when prorate is on — SPENDLY-68", () => {
+    // Ticket example: dateLeft the 19th must not silently replace EPFO's full
+    // Dec remittance (₹2,099 + ₹2,099) with a 19/31 calendar prorate.
+    const rows = buildBackfillRows({
+      establishment: {
+        id: "est-1",
+        dateJoined: "2025-09-01",
+        dateLeft: "2025-12-19",
+      },
+      currentMonth: "2026-09",
+      existing: [
+        contribution({
+          id: "est-1_2025-12",
+          month: "2025-12",
+          wage: 17494,
+          employeeShare: 2099,
+          employerShare: 2099,
+          epsShare: 0,
+          employerEpfShare: 2099,
+          totalContribution: 4198,
+          epfCredit: 4198,
+          epsEligible: false,
+        }),
+      ],
+      wage: 17494,
+      epsEligible: false,
+      prorateEdgeMonths: true,
+    });
+
+    const dec = rows.find((row) => row.month === "2025-12");
+    expect(dec?.persisted).toBe(true);
+    expect(dec?.employeeShare).toBe(2099);
+    expect(dec?.employerShare).toBe(2099);
+    expect(dec?.epfCredit).toBe(4198);
+    // Calendar prorate of the same wage would be ~₹1,287 — must not appear.
+    expect(dec?.employeeShare).not.toBe(
+      computeEpfContribution({
+        wage: proratedWageForMonth(17494, "2025-12", "2025-09-01", "2025-12-19"),
+        month: "2025-12",
+        epsEligible: false,
+      }).employeeShare
+    );
+  });
+
+  it("still suggests a prorated leave month when no document exists — SPENDLY-68", () => {
+    const rows = buildBackfillRows({
+      establishment: {
+        id: "est-1",
+        dateJoined: "2025-09-01",
+        dateLeft: "2025-12-19",
+      },
+      currentMonth: "2026-09",
+      existing: [],
+      wage: 17494,
+      epsEligible: false,
+      prorateEdgeMonths: true,
+    });
+
+    const dec = rows.find((row) => row.month === "2025-12");
+    expect(dec?.persisted).toBe(false);
+    expect(dec?.partialMonth).toBe(true);
+    expect(dec?.wage).toBe(proratedWageForMonth(17494, "2025-12", "2025-09-01", "2025-12-19"));
+    expect(dec?.employeeShare).toBe(
+      computeEpfContribution({
+        wage: dec!.wage,
+        month: "2025-12",
+        epsEligible: false,
+      }).employeeShare
+    );
+  });
+
+  it("matches History amounts for every persisted month — SPENDLY-68", () => {
+    const existing = [
+      contribution({
+        month: "2025-09",
+        employeeShare: 1763,
+        employerShare: 1763,
+        epsShare: 0,
+        employerEpfShare: 1763,
+        totalContribution: 3526,
+        epfCredit: 3526,
+        epsEligible: false,
+        wage: 14692,
+      }),
+      contribution({
+        month: "2025-10",
+        employeeShare: 2099,
+        employerShare: 2099,
+        epsShare: 0,
+        employerEpfShare: 2099,
+        totalContribution: 4198,
+        epfCredit: 4198,
+        epsEligible: false,
+        wage: 17494,
+      }),
+      contribution({
+        month: "2025-11",
+        employeeShare: 2099,
+        employerShare: 2099,
+        epsShare: 0,
+        employerEpfShare: 2099,
+        totalContribution: 4198,
+        epfCredit: 4198,
+        epsEligible: false,
+        wage: 17494,
+      }),
+      contribution({
+        month: "2025-12",
+        employeeShare: 2099,
+        employerShare: 2099,
+        epsShare: 0,
+        employerEpfShare: 2099,
+        totalContribution: 4198,
+        epfCredit: 4198,
+        epsEligible: false,
+        wage: 17494,
+      }),
+    ];
+
+    const rows = buildBackfillRows({
+      establishment: {
+        id: "est-1",
+        dateJoined: "2025-09-10",
+        dateLeft: "2025-12-19",
+      },
+      currentMonth: "2026-09",
+      existing,
+      wage: 17494,
+      epsEligible: false,
+      prorateEdgeMonths: true,
+    });
+
+    const history = summarizeContributions(existing);
+    const backfill = summarizeContributions(rows.filter((row) => row.persisted));
+    expect(backfill.epfCredit).toBe(history.epfCredit);
+    expect(backfill.employee).toBe(history.employee);
+    expect(backfill.employerEpf).toBe(history.employerEpf);
+    expect(backfill.epfCredit).toBe(16120);
+  });
+
   it("pro-rates the joining month when asked", () => {
     const rows = buildBackfillRows({
       establishment: { id: "e", dateJoined: "2021-06-16", dateLeft: "2021-07-31" },
