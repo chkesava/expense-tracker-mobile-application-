@@ -132,3 +132,47 @@ export function unsavedChangesPrompt(summary: UnsavedBackfillSummary): {
         : "The wage you typed has not been saved. Save these months as drafts first?",
   };
 }
+
+/**
+ * Months Backfill Save may write — SPENDLY-68.
+ *
+ * Bulk wage fills empty months only. Persisted documents are never rewritten
+ * just because a wage is typed; per-month edits (and explicit replace after
+ * confirm) are the only way to change a saved month.
+ */
+export function backfillSaveRows(args: {
+  rows: EpfBackfillRow[];
+  edits: Map<string, EpfBackfillRow>;
+  wage: number;
+}): EpfBackfillRow[] {
+  const out: EpfBackfillRow[] = [];
+  for (const row of args.rows) {
+    const edit = args.edits.get(row.month);
+    if (edit) {
+      out.push(edit);
+      continue;
+    }
+    if (row.persisted) continue;
+    if (args.wage > 0 && row.wage > 0) out.push(row);
+  }
+  return out;
+}
+
+/** True when Apply would change a saved month's wage or contribution shares. */
+export function persistedAmountsDiffer(
+  saved: Pick<
+    EpfBackfillRow,
+    "wage" | "employeeShare" | "employerShare" | "epsShare"
+  >,
+  next: Pick<
+    EpfBackfillRow,
+    "wage" | "employeeShare" | "employerShare" | "epsShare"
+  >
+): boolean {
+  return (
+    saved.wage !== next.wage ||
+    saved.employeeShare !== next.employeeShare ||
+    saved.employerShare !== next.employerShare ||
+    saved.epsShare !== next.epsShare
+  );
+}
