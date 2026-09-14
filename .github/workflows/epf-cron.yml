@@ -58,6 +58,7 @@ jobs:
           cursor=""
           total_processed=0
           total_written=0
+          total_repaired=0
           # Hard cap: 200 pages x 25 = 5000 establishments. A run that needs more
           # than this is a signal to investigate, not to keep looping forever.
           for page in $(seq 1 200); do
@@ -82,11 +83,13 @@ jobs:
 
             processed=$(printf '%s' "$body" | jq -r '.processed // 0')
             written=$(printf '%s' "$body" | jq -r '.written // 0')
+            repaired=$(printf '%s' "$body" | jq -r '.repaired // 0')
             cursor=$(printf '%s' "$body" | jq -r '.nextCursor // empty')
             total_processed=$((total_processed + processed))
             total_written=$((total_written + written))
+            total_repaired=$((total_repaired + repaired))
 
-            echo "page $page: processed=$processed written=$written"
+            echo "page $page: processed=$processed written=$written repaired=$repaired"
 
             if [ -z "$cursor" ]; then
               break
@@ -98,4 +101,7 @@ jobs:
             echo ""
             echo "- Establishments processed: **$total_processed**"
             echo "- Contribution months written: **$total_written**"
+            # SPENDLY-1: months whose missing credit window was backfilled.
+            # Expected to be non-zero once, then settle at zero.
+            echo "- Credit windows repaired: **$total_repaired**"
           } >> "$GITHUB_STEP_SUMMARY"

@@ -46,6 +46,7 @@ export function EpfEstablishmentFormModal({
   const [dateJoined, setDateJoined] = useState("");
   const [dateLeft, setDateLeft] = useState("");
   const [stillWorking, setStillWorking] = useState(true);
+  const [epsMember, setEpsMember] = useState(true);
   const [notes, setNotes] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
@@ -58,6 +59,9 @@ export function EpfEstablishmentFormModal({
     setDateJoined(establishment?.dateJoined ?? "");
     setDateLeft(establishment?.dateLeft ?? "");
     setStillWorking(establishment ? !establishment.dateLeft : true);
+    // Absent means "is a member" — every document written before SPENDLY-1
+    // lacks the field, and both readers test `!== false`.
+    setEpsMember(establishment?.epsMember !== false);
     setNotes(establishment?.notes ?? "");
     setErrors({});
   }, [isOpen, establishment]);
@@ -99,6 +103,9 @@ export function EpfEstablishmentFormModal({
       dateJoined: parsed.data.dateJoined,
       dateLeft: parsed.data.dateLeft || undefined,
       notes: parsed.data.notes || undefined,
+      // Only the non-default is stored, so an untouched establishment keeps the
+      // tolerant-read shape it has always had.
+      epsMember: epsMember ? undefined : false,
     };
 
     setSaving(true);
@@ -197,6 +204,19 @@ export function EpfEstablishmentFormModal({
           />
         </View>
 
+        <View style={styles.switchRow}>
+          <View style={styles.switchText}>
+            <Text style={[styles.switchLabel, { color: theme.colors.foreground }]}>
+              Pension (EPS) member
+            </Text>
+            <Text style={[styles.switchCaption, { color: theme.colors.mutedForeground }]}>
+              Turn off if your first EPF account was opened on or after 1 Sep 2014 while
+              earning above the wage ceiling — then the full employer share goes to EPF.
+            </Text>
+          </View>
+          <Switch value={epsMember} onValueChange={setEpsMember} />
+        </View>
+
         {stillWorking ? null : (
           <Input
             label="Date left (YYYY-MM-DD) *"
@@ -284,6 +304,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "500",
   },
+  // Matches EpfBackfillScreen, where the same EPS caption already lives.
+  switchText: { flex: 1, gap: 2, paddingRight: 12 },
+  switchCaption: { fontSize: 12, lineHeight: 16 },
   conflict: {
     fontSize: 13,
     lineHeight: 18,

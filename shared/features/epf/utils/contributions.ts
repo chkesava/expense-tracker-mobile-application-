@@ -226,8 +226,69 @@ export function normalizeEpfContribution(
     reference: str(raw.reference),
     notes: str(raw.notes),
     zeroReason: str(raw.zeroReason),
+    // KAN-67/68 lifecycle fields. These were absent until SPENDLY-1: the write
+    // path stored them but this reader dropped them, so `isCreditWindowPassed`
+    // never fired and `isReconciled` was permanently false — auto-credit was
+    // inert and every reconciled month rendered as a projection.
+    expectedCreditFrom: str(raw.expectedCreditFrom),
+    expectedCreditTo: str(raw.expectedCreditTo),
+    // Deliberately not `num()`: that coerces absent to 0, and 0 is a meaningful
+    // `creditedAmount` (`applyMissed` sets it). Collapsing the two would make
+    // `epfPortfolioSummary` take its ratio branch with a zero numerator for
+    // every row and zero out the employee/employer split.
+    creditedAmount:
+      typeof raw.creditedAmount === "number" && Number.isFinite(raw.creditedAmount)
+        ? raw.creditedAmount
+        : undefined,
+    reconciledAt: str(raw.reconciledAt),
+    statusReason: str(raw.statusReason),
+    statusUpdatedAt: raw.statusUpdatedAt,
     createdAt: raw.createdAt,
     updatedAt: raw.updatedAt,
+  };
+}
+
+/**
+ * The stored shape of a contribution — SPENDLY-1.
+ *
+ * Lives here rather than inline in `useEpfContributions.saveContributions`
+ * because `vitest.config.ts` never collects `hooks/**`. An inline field list in
+ * a hook is a field list nobody tests, which is precisely how
+ * `expectedCreditFrom`/`expectedCreditTo` came to be computed and then silently
+ * dropped on write.
+ *
+ * Timestamps are the caller's job: this tree must not import Firebase, so
+ * `serverTimestamp()` is merged in by the hook.
+ */
+export function contributionWritePayload(
+  row: EpfBackfillRow,
+  opts: { status: EpfContributionStatus; establishmentId: string }
+): Record<string, unknown> {
+  return {
+    establishmentId: opts.establishmentId,
+    month: row.month,
+    wage: row.wage,
+    employeeShare: row.employeeShare,
+    employerShare: row.employerShare,
+    epsShare: row.epsShare,
+    employerEpfShare: row.employerEpfShare,
+    totalContribution: row.totalContribution,
+    epfCredit: row.epfCredit,
+    status: opts.status,
+    source: row.source,
+    overridden: row.overridden || undefined,
+    partialMonth: row.partialMonth || undefined,
+    epsEligible: row.epsEligible,
+    rulesVersion: row.rulesVersion,
+    expectedCreditFrom: row.expectedCreditFrom || undefined,
+    expectedCreditTo: row.expectedCreditTo || undefined,
+    creditDate: row.creditDate || undefined,
+    creditedAmount: row.creditedAmount,
+    reconciledAt: row.reconciledAt || undefined,
+    statusReason: row.statusReason || undefined,
+    reference: row.reference || undefined,
+    notes: row.notes || undefined,
+    zeroReason: row.zeroReason || undefined,
   };
 }
 

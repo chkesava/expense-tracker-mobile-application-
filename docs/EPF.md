@@ -387,6 +387,56 @@ Consolidated from the nine per-ticket guides. Run on Android **and** Web.
     still agree on the month.
 43. No EPF identifier appears in any log line during normal use.
 
+### Persistence and the credit lifecycle (SPENDLY-1)
+
+Everything here was broken before SPENDLY-1, so treat a failure as a regression
+rather than a new finding.
+
+**Historical — the reported bug**
+
+44. Backfill → open a month → change *Your contribution* → **Apply**. A save
+    toast appears and the row reads **Draft**.
+45. Without touching a footer button, switch to **History** and back. The edited
+    value is still there. *(It used to be silently gone.)*
+46. Force-quit, reopen, return to Backfill. Still there.
+47. Type a wage → switch tabs → the app's own dialog offers **Keep editing /
+    Discard**, never an OS alert. Keep editing → the wage survives.
+48. Repeat and choose **Discard** → the wage clears, but the month applied in
+    step 44 is **still there** — it was persisted, not drafted.
+49. Switching tabs with no wage and no edits prompts nothing.
+50. Edit an already **Confirmed** month → Apply → it stays Confirmed, not Draft.
+    Same for a **Credited** month. *(This is the regression that would matter
+    most: a demotion here silently rewrites asserted history.)*
+51. Footer shows "N unsaved months · not saved yet" while a wage is typed, and
+    it clears after **Save draft**.
+52. History tab → tapping a row does nothing. The empty-state CTA still opens
+    Backfill.
+53. **Save all** twice → no duplicates (item 14 still holds).
+
+**Present**
+
+54. Current employment with a wage → open the establishment → the current month
+    appears as **Expected**, and its Firestore document carries
+    `expectedCreditFrom` / `expectedCreditTo` dated in the **following** month.
+55. Establishment → Edit → **Pension (EPS) member** off → save → reopen. It is
+    still off, and Backfill shows pension 0 with the full employer share into
+    EPF. *(The toggle previously reached no document at all.)*
+
+**Future / lifecycle**
+
+56. Move the device clock past a month's `expectedCreditTo` and reopen → it
+    reads **Credited · projected**, in the `info` tone. *(This never happened
+    before: the window was written nowhere, so nothing ever aged.)*
+57. Reopen again → it does not advance twice, and `epfContributionEvents` holds
+    exactly one `system` event for that month.
+58. **Record credit** at the full amount → **Credited**, with no "· projected"
+    suffix.
+59. Record a **lower** amount → **Partial**, and the Balance total falls by the
+    shortfall. *(It used to stay at the full projection.)*
+60. Trigger `epf-cron.yml` on an account with aged expected rows → the response
+    reports a non-zero `repaired` and/or `credited`; trigger again → both 0.
+61. Restore the clock.
+
 ---
 
 ## Troubleshooting
@@ -395,6 +445,8 @@ Consolidated from the nine per-ticket guides. Run on Android **and** Web.
 |---|---|---|
 | A month shows "Rate not declared yet" | EPFO has not declared that year's rate | Nothing. Add it to `epfInterestRates.ts` when declared. |
 | The cron reports `written: 0` | Everything owed already exists | Nothing — this is the idempotency guarantee working. |
+| A month sits on `expected` forever and never credits | Written by the client catch-up before SPENDLY-1, so it has no `expectedCreditTo` and `isCreditWindowPassed` can never fire | Open the establishment once, or let the cron run: both stamp the window via `contributionsMissingCreditWindow`. The cron reports it as `repaired`. |
+| A backfill edit vanished | Pre-SPENDLY-1 build — **Apply** only touched local state and the tab switch unmounted the screen | Upgrade. Apply now writes immediately; only the bulk wage fill waits for Save. |
 | A new month was not generated | No wage recorded on the establishment | The projector needs the most recent wage; record one. |
 | "Multiple current employments" on save | Another establishment is open-ended | Set a leaving date on the other one first. |
 | An establishment will not delete | It has contributions | Archive it instead. The guard fails closed. |

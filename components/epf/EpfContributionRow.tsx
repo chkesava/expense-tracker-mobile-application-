@@ -30,7 +30,8 @@ type Props = {
   recorded: boolean;
   hasIssue: boolean;
   formatAmount: (value: number) => string;
-  onPress: (month: string) => void;
+  /** Omitted on the read-only history list, where a row is not actionable. */
+  onPress?: (month: string) => void;
 };
 
 function EpfContributionRowBase({
@@ -55,7 +56,8 @@ function EpfContributionRowBase({
 
   return (
     <Pressable
-      onPress={() => onPress(month)}
+      onPress={onPress ? () => onPress(month) : undefined}
+      disabled={!onPress}
       style={[
         styles.row,
         {
@@ -64,7 +66,7 @@ function EpfContributionRowBase({
           opacity: recorded ? 1 : 0.6,
         },
       ]}
-      accessibilityRole="button"
+      accessibilityRole={onPress ? "button" : "text"}
       accessibilityLabel={`${monthLabel}, ${recorded ? statusLabel : "not recorded"}`}
     >
       <View style={styles.left}>

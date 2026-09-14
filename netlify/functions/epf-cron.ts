@@ -26,6 +26,10 @@ import {
   epfTodayKey,
 } from "../../shared/features/epf/utils/epfClock";
 import { planScheduledContributions } from "../../shared/features/epf/utils/schedule";
+import {
+  contributionsMissingCreditWindow,
+  creditWindowRepairFor,
+} from "../../shared/features/epf/utils/creditWindowRepair";
 
 type NetlifyEvent = {
   httpMethod?: string;
@@ -175,6 +179,7 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
     let processed = 0;
     let written = 0;
     let credited = 0;
+    let repaired = 0;
     let lastPath: string | null = null;
 
     for (const docSnap of page.docs) {
@@ -207,6 +212,46 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
       const existing: EpfContribution[] = existingSnap.docs.map((row) =>
         normalizeEpfContribution(row.id, row.data() as Record<string, unknown>),
       );
+
+      // SPENDLY-1: heal rows the client catch-up wrote before the credit
+      // window was persisted. Those months can never auto-credit on their own —
+      // `monthsToGenerate` skips anything already present, so the planner never
+      // revisits them. Doing it here as well as in the app covers users who
+      // never open it. Must run *before* the selector below, which reads the
+      // field this repairs.
+      const stale = contributionsMissingCreditWindow(existing);
+      if (stale.length > 0) {
+        const repairBatch = db.batch();
+        for (const row of stale) {
+          const repair = creditWindowRepairFor(row);
+          repairBatch.set(
+            db.doc(
+              `users/${uid}/${EPF_CONTRIBUTIONS_COLLECTION}/${contributionDocId(
+                establishment.id,
+                row.month,
+              )}`,
+            ),
+            { ...repair, updatedAt: new Date() },
+            { merge: true },
+          );
+          // Mirror it onto the in-memory copy so this run can act on it,
+          // rather than making the fix wait for next month.
+          row.expectedCreditFrom = repair.expectedCreditFrom;
+          row.expectedCreditTo = repair.expectedCreditTo;
+        }
+        try {
+          await repairBatch.commit();
+          repaired += stale.length;
+        } catch (err) {
+          // Non-fatal: the rows stay stale and the next run retries. No audit
+          // event — nothing about the money changed.
+          console.error("epf-cron: credit window repair failed", {
+            month: stale[0]?.month,
+            count: stale.length,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
 
       // KAN-68: age any month whose expected credit window has passed. Same
       // pure selector the client catch-up uses, so the two cannot disagree.
@@ -318,6 +363,7 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
       processed,
       written,
       credited,
+      repaired,
       throughMonth,
       nextCursor,
     });
