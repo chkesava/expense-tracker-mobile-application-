@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -12,6 +12,12 @@ import { EpfContributionHistory } from "@/components/epf/EpfContributionHistory"
 import { EpfCurrentContributions } from "@/components/epf/EpfCurrentContributions";
 import { EpfTransfersList } from "@/components/epf/EpfTransfersList";
 import { useEpf } from "@/hooks/useEpf";
+import { appDialog } from "@/lib/appDialog";
+import type { EpfBackfillRow } from "@/shared/features/epf/types";
+import {
+  unsavedBackfillSummary,
+  unsavedChangesPrompt,
+} from "@/shared/features/epf/utils/backfillDraft";
 import { deriveEmploymentState, maskIdentifier } from "@/shared/features/epf/utils";
 import { epfTodayKey } from "@/shared/features/epf/utils/epfClock";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -35,6 +41,21 @@ export default function EpfEstablishmentContributionsScreen() {
   // A live employment opens on Current — that is the month people check.
   const [tab, setTab] = useState<Tab | null>(null);
 
+  /**
+   * Backfill bulk-fill state lives here, not in the tab — SPENDLY-1.
+   *
+   * Tabs are a ternary below, so `EpfBackfillScreen` unmounts on every switch.
+   * Owning the typed wage at the route means a tab change no longer loses it at
+   * all, which removes the most common way the data-loss bug was triggered
+   * without needing a dialog for it.
+   */
+  const [wage, setWage] = useState("");
+  const [epsEligible, setEpsEligible] = useState(true);
+  const [prorate, setProrate] = useState(true);
+  const [edits, setEdits] = useState<Map<string, EpfBackfillRow>>(new Map());
+  const [savedWage, setSavedWage] = useState("");
+
+
   const establishment = useMemo(
     () => establishments.find((item) => item.id === establishmentId),
     [establishments, establishmentId]
@@ -45,7 +66,51 @@ export default function EpfEstablishmentContributionsScreen() {
   const isCurrentEmployment = Boolean(
     establishment && deriveEmploymentState(establishment, epfTodayKey()) === "current"
   );
+
+  // Seed the EPS toggle once the establishment resolves. `epsMember` is
+  // optional and absent means "is a member", so the default stays true.
+  const epsSeeded = useRef(false);
+  useEffect(() => {
+    if (epsSeeded.current || !establishment) return;
+    epsSeeded.current = true;
+    setEpsEligible(establishment.epsMember !== false);
+  }, [establishment]);
   const activeTab: Tab = tab ?? (isCurrentEmployment ? "current" : "history");
+
+  const unsavedBackfill = useMemo(
+    () => unsavedBackfillSummary({ edits, wage, savedWage }),
+    [edits, wage, savedWage]
+  );
+
+  /**
+   * Leaving Backfill with unsaved bulk work asks first.
+   *
+   * A `beforeRemove` navigation guard cannot cover this: the tab switch is a
+   * ternary inside one route, so no navigation event fires. Applied months are
+   * already durable by this point, so only the in-memory bulk fill is at risk —
+   * which is why "Discard" here is safe.
+   */
+  const changeTab = (next: Tab) => {
+    if (activeTab !== "backfill" || next === "backfill" || !unsavedBackfill.dirty) {
+      setTab(next);
+      return;
+    }
+
+    const prompt = unsavedChangesPrompt(unsavedBackfill);
+    appDialog.alert(prompt.title, prompt.message, [
+      { text: "Keep editing", style: "cancel" },
+      {
+        text: "Discard",
+        style: "destructive",
+        onPress: () => {
+          setWage("");
+          setSavedWage("");
+          setEdits(new Map());
+          setTab(next);
+        },
+      },
+    ]);
+  };
 
   const tabs: { id: Tab; label: string }[] = [
     { id: "balance", label: "Balance" },
@@ -110,7 +175,7 @@ export default function EpfEstablishmentContributionsScreen() {
               return (
                 <Pressable
                   key={item.id}
-                  onPress={() => setTab(item.id)}
+                  onPress={() => changeTab(item.id)}
                   style={[
                     styles.tab,
                     active && { borderBottomColor: theme.colors.primary },
@@ -147,10 +212,24 @@ export default function EpfEstablishmentContributionsScreen() {
           ) : activeTab === "history" ? (
             <EpfContributionHistory
               establishment={establishment}
-              onAddMonths={() => setTab("backfill")}
+              onAddMonths={() => changeTab("backfill")}
             />
           ) : (
-            <EpfBackfillScreen establishment={establishment} />
+            <EpfBackfillScreen
+              establishment={establishment}
+              draft={{
+                wage,
+                setWage,
+                epsEligible,
+                setEpsEligible,
+                prorate,
+                setProrate,
+                edits,
+                setEdits,
+                savedWage,
+                setSavedWage,
+              }}
+            />
           )}
         </>
       )}

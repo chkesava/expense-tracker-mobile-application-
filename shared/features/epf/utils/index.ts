@@ -127,6 +127,12 @@ export function normalizeEstablishment(
     dateLeft,
     employmentStatus: deriveEmploymentStatus(dateLeft),
     archived: raw.archived === true ? true : undefined,
+    // SPENDLY-1. `undefined` must mean "is an EPS member": every document
+    // written before this field existed lacks it, and both readers
+    // (`buildExpectedContribution`, `EpfBackfillScreen`) test `!== false`.
+    // Storing an explicit `true` would work too, but absent-stays-absent is
+    // what `tolerantReads.test.ts` pins.
+    epsMember: raw.epsMember === false ? false : undefined,
     notes: typeof raw.notes === "string" && raw.notes ? raw.notes : undefined,
     createdAt: raw.createdAt,
     updatedAt: raw.updatedAt,

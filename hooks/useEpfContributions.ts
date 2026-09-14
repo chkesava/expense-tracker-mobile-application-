@@ -44,9 +44,14 @@ import {
 } from "@/shared/features/epf/types";
 import {
   contributionDocId,
+  contributionWritePayload,
   normalizeEpfContribution,
   sortContributionsByMonth,
 } from "@/shared/features/epf/utils/contributions";
+import {
+  contributionsMissingCreditWindow,
+  creditWindowRepairFor,
+} from "@/shared/features/epf/utils/creditWindowRepair";
 import {
   applyActualCredit,
   applyAutoCredit,
@@ -173,25 +178,14 @@ export function useEpfContributions(
             batch.set(
               ref,
               withoutUndefined({
-                establishmentId,
-                month: row.month,
-                wage: row.wage,
-                employeeShare: row.employeeShare,
-                employerShare: row.employerShare,
-                epsShare: row.epsShare,
-                employerEpfShare: row.employerEpfShare,
-                totalContribution: row.totalContribution,
-                epfCredit: row.epfCredit,
-                status: opts.status,
-                source: row.source,
-                overridden: row.overridden || undefined,
-                partialMonth: row.partialMonth || undefined,
-                epsEligible: row.epsEligible,
-                rulesVersion: row.rulesVersion,
-                creditDate: row.creditDate || undefined,
-                reference: row.reference || undefined,
-                notes: row.notes || undefined,
-                zeroReason: row.zeroReason || undefined,
+                // The field list lives in `shared/` so it is covered by
+                // `npm test` — an inline literal here is how SPENDLY-1's
+                // missing `expectedCreditFrom`/`expectedCreditTo` went
+                // unnoticed, since vitest never collects `hooks/**`.
+                ...contributionWritePayload(row, {
+                  status: opts.status,
+                  establishmentId,
+                }),
                 updatedAt: serverTimestamp(),
                 createdAt: byMonth.has(row.month) ? undefined : serverTimestamp(),
               }),
@@ -494,6 +488,50 @@ export function useEpfContributions(
     }
   }, [uid, establishmentId, contributions]);
 
+  /**
+   * Stamp the credit window onto rows that were written without it — SPENDLY-1.
+   *
+   * Only the client catch-up path produced these: `epf-cron` has always spread
+   * the whole row. They cannot self-heal, because `monthsToGenerate` skips any
+   * month that already exists, so the planner never revisits them and without
+   * this they stay `expected` forever instead of auto-crediting.
+   *
+   * No audit event: nothing about the money changed, and the auto-credit that
+   * this unblocks writes its own. Safe to re-run — deterministic ids, merge,
+   * and the selector returns nothing on a second pass.
+   */
+  const repairCreditWindows = useCallback(async (): Promise<number> => {
+    const db = getFirestoreDb();
+    const stale = contributionsMissingCreditWindow(contributions);
+    if (!uid || !db || !establishmentId || stale.length === 0) return 0;
+
+    try {
+      for (const group of chunk(stale, EPF_BATCH_CHUNK_SIZE)) {
+        const batch = writeBatch(db);
+        for (const row of group) {
+          batch.set(
+            doc(
+              db,
+              "users",
+              uid,
+              EPF_CONTRIBUTIONS_COLLECTION,
+              contributionDocId(establishmentId, row.month)
+            ),
+            { ...creditWindowRepairFor(row), updatedAt: serverTimestamp() },
+            { merge: true }
+          );
+        }
+        await commitWrite(() => batch.commit(), { label: "EPF credit windows" });
+      }
+      return stale.length;
+    } catch (err) {
+      // Silent by design: this is background healing the user did not ask for.
+      // The next mount retries, so a failure costs nothing but a delay.
+      logError("epfcontributions.repaircreditwindows", err);
+      return 0;
+    }
+  }, [uid, establishmentId, contributions]);
+
   return {
     contributions,
     byMonth,
@@ -513,5 +551,6 @@ export function useEpfContributions(
     markMissed,
     markReversed,
     autoAdvanceCredits,
+    repairCreditWindows,
   };
 }

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { StyleSheet, Switch, Text, View } from "react-native";
 import { FlashList } from "@shopify/flash-list";
 import { AlertTriangle } from "lucide-react-native";
@@ -28,12 +28,46 @@ import { formatAmount } from "@/shared/utils/formatCurrency";
 import { financialYearLabel } from "@/shared/utils/financialYear";
 import { useTheme } from "@/theme/ThemeProvider";
 import { monthLabel } from "@/shared/utils/monthLabel";
+import {
+  clearSavedEdits,
+  mergeBackfillEdits,
+  statusForAppliedEdit,
+  unsavedBackfillSummary,
+  upsertBackfillEdit,
+} from "@/shared/features/epf/utils/backfillDraft";
 
 type ListItem =
   | { type: "header"; id: string; financialYear: string; recorded: number; expected: number; credit: number }
   | { type: "row"; id: string; month: string };
 
-export function EpfBackfillScreen({ establishment }: { establishment: EpfEstablishment }) {
+export interface EpfBackfillDraftState {
+  wage: string;
+  setWage: (value: string) => void;
+  epsEligible: boolean;
+  setEpsEligible: (value: boolean) => void;
+  prorate: boolean;
+  setProrate: (value: boolean) => void;
+  edits: Map<string, EpfBackfillRow>;
+  setEdits: Dispatch<SetStateAction<Map<string, EpfBackfillRow>>>;
+  /** Wage at the last successful bulk save — see `unsavedBackfillSummary`. */
+  savedWage: string;
+  setSavedWage: (value: string) => void;
+}
+
+export function EpfBackfillScreen({
+  establishment,
+  draft,
+}: {
+  establishment: EpfEstablishment;
+  /**
+   * Bulk-fill state, owned by the route — SPENDLY-1.
+   *
+   * The establishment screen swaps tabs with a ternary, so this component
+   * unmounts on every tab change. Holding the typed wage here meant it was
+   * silently destroyed; the route outlives the tab switch.
+   */
+  draft: EpfBackfillDraftState;
+}) {
   const { theme } = useTheme();
   const currency = useDisplayCurrency();
   const {
@@ -42,15 +76,24 @@ export function EpfBackfillScreen({ establishment }: { establishment: EpfEstabli
     contributionsError,
     retryContributions,
     hasDrafts,
+    saveContribution,
     saveContributions,
     deleteContribution,
     discardDrafts,
   } = useEpfContributions(establishment.id);
 
-  const [wage, setWage] = useState("");
-  const [epsEligible, setEpsEligible] = useState(establishment.epsMember !== false);
-  const [prorate, setProrate] = useState(true);
-  const [edits, setEdits] = useState<Map<string, EpfBackfillRow>>(new Map());
+  const {
+    wage,
+    setWage,
+    epsEligible,
+    setEpsEligible,
+    prorate,
+    setProrate,
+    edits,
+    setEdits,
+    savedWage,
+    setSavedWage,
+  } = draft;
   const [editingMonth, setEditingMonth] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -72,7 +115,7 @@ export function EpfBackfillScreen({ establishment }: { establishment: EpfEstabli
       epsEligible,
       prorateEdgeMonths: prorate,
     });
-    return generated.map((row) => edits.get(row.month) ?? row);
+    return mergeBackfillEdits(generated, edits);
   }, [establishment, monthKey, contributions, wage, epsEligible, prorate, edits]);
 
   const expectedMonths = useMemo(
@@ -86,6 +129,12 @@ export function EpfBackfillScreen({ establishment }: { establishment: EpfEstabli
   );
 
   const totals = useMemo(() => summarizeContributions(recordedRows), [recordedRows]);
+
+  /** What the footer chip shows and what the route's leave-guard reads. */
+  const unsaved = useMemo(
+    () => unsavedBackfillSummary({ edits, wage, savedWage }),
+    [edits, wage, savedWage]
+  );
 
   const validation = useMemo(
     () =>
@@ -123,13 +172,31 @@ export function EpfBackfillScreen({ establishment }: { establishment: EpfEstabli
     [rows]
   );
 
-  const applyEdit = useCallback((row: EpfBackfillRow) => {
-    setEdits((prev) => {
-      const next = new Map(prev);
-      next.set(row.month, row);
-      return next;
-    });
-  }, []);
+  /**
+   * Apply a single month's edit — SPENDLY-1.
+   *
+   * This used to write only to local state, so the edit was destroyed by the
+   * next tab switch with no warning, while the *same* sheet's "Remove this
+   * month" committed immediately. One button in the sheet was durable and the
+   * other was not, which is why the flow read as saved.
+   *
+   * A month the user opened, typed into and applied is a filled row, so
+   * persisting it here is consistent with KAN-66's lazy-generation rule: the
+   * untouched months are still never written.
+   */
+  const applyEdit = useCallback(
+    async (row: EpfBackfillRow) => {
+      // Optimistic first — the snapshot round-trip is not instant.
+      setEdits((prev) => upsertBackfillEdit(prev, row));
+
+      const ok = await saveContribution(row, statusForAppliedEdit(row));
+      if (!ok) return; // keep it in `edits` so Save draft can still recover it
+
+      // Durable now: let the Firestore snapshot own this month again.
+      setEdits((prev) => clearSavedEdits(prev, [row.month]));
+    },
+    [saveContribution, setEdits]
+  );
 
   const handleSave = async (status: "draft" | "confirmed") => {
     const payload = status === "confirmed" ? validation.valid : recordedRows;
@@ -156,7 +223,12 @@ export function EpfBackfillScreen({ establishment }: { establishment: EpfEstabli
     setSaving(true);
     const result = await saveContributions(payload, { status });
     setSaving(false);
-    if (result.failed === 0) setEdits(new Map());
+    if (result.failed === 0) {
+      setEdits(new Map());
+      // The bulk fill is durable now, so the leave-guard must stop warning
+      // about it until the wage changes again.
+      setSavedWage(wage);
+    }
   };
 
   const confirmDiscardDrafts = () => {
@@ -319,6 +391,11 @@ export function EpfBackfillScreen({ establishment }: { establishment: EpfEstabli
           <Text style={[styles.footerCredit, { color: theme.colors.foreground }]}>
             {money(totals.epfCredit)} into EPF
           </Text>
+          {unsaved.dirty ? (
+            <Text style={[styles.unsaved, { color: theme.colors.mutedForeground }]}>
+              {unsaved.label} · not saved yet
+            </Text>
+          ) : null}
         </View>
         <View style={styles.footerButtons}>
           <Button variant="secondary" size="sm" onPress={() => handleSave("draft")} loading={saving}>
@@ -355,6 +432,7 @@ export function EpfBackfillScreen({ establishment }: { establishment: EpfEstabli
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   container: { gap: 12, padding: 16 },
+  unsaved: { fontSize: 12, marginTop: 2 },
   listContent: { padding: 16, paddingBottom: 24 },
   header: { gap: 12, marginBottom: 12 },
   switchRow: {

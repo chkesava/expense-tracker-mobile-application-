@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import type { EpfContribution, EpfEstablishment } from "@/shared/features/epf/types";
+import type {
+  EpfBackfillRow,
+  EpfContribution,
+  EpfEstablishment,
+} from "@/shared/features/epf/types";
 import {
   backfillProgress,
   buildBackfillRows,
@@ -8,6 +12,7 @@ import {
   contributionDocId,
   contributionMonthsFor,
   contributionTotals,
+  contributionWritePayload,
   contributionStatusMeta,
   deriveEpsEligibility,
   findDuplicateMonths,
@@ -596,5 +601,180 @@ describe("contributionTotals — KAN-73", () => {
     expect(contributionTotals({ employeeShare: 0, employerShare: 0, employerEpfShare: 0 })).toEqual(
       { totalContribution: 0, epfCredit: 0 }
     );
+  });
+});
+
+describe("contributionWritePayload", () => {
+  function backfillRow(overrides: Partial<EpfBackfillRow> = {}): EpfBackfillRow {
+    return {
+      establishmentId: "est-a",
+      month: "2026-08",
+      wage: 25000,
+      employeeShare: 3000,
+      employerShare: 3000,
+      epsShare: 1250,
+      employerEpfShare: 1750,
+      totalContribution: 6000,
+      epfCredit: 4750,
+      status: "expected",
+      source: "simulated",
+      epsEligible: true,
+      persisted: false,
+      ...overrides,
+    };
+  }
+
+  it("carries the credit window through — the SPENDLY-1 regression", () => {
+    const payload = contributionWritePayload(
+      backfillRow({ expectedCreditFrom: "2026-09-15", expectedCreditTo: "2026-09-25" }),
+      { status: "expected", establishmentId: "est-a" }
+    );
+
+    expect(payload.expectedCreditFrom).toBe("2026-09-15");
+    expect(payload.expectedCreditTo).toBe("2026-09-25");
+  });
+
+  it("writes exactly the agreed field set", () => {
+    // The anti-recurrence test. A field added to EpfContribution that nobody
+    // decided about turns this red instead of vanishing silently on write,
+    // which is exactly how the credit window was lost.
+    const payload = contributionWritePayload(
+      backfillRow({
+        overridden: true,
+        partialMonth: true,
+        rulesVersion: "2014-09",
+        expectedCreditFrom: "2026-09-15",
+        expectedCreditTo: "2026-09-25",
+        creditDate: "2026-09-20",
+        creditedAmount: 4000,
+        reconciledAt: "2026-09-21",
+        statusReason: "short remittance",
+        reference: "ref-1",
+        notes: "note",
+        zeroReason: "unpaid leave",
+      }),
+      { status: "partial", establishmentId: "est-a" }
+    );
+
+    expect(Object.keys(payload).sort()).toEqual(
+      [
+        "creditDate",
+        "creditedAmount",
+        "employeeShare",
+        "employerEpfShare",
+        "employerShare",
+        "epfCredit",
+        "epsEligible",
+        "epsShare",
+        "establishmentId",
+        "expectedCreditFrom",
+        "expectedCreditTo",
+        "month",
+        "notes",
+        "overridden",
+        "partialMonth",
+        "reconciledAt",
+        "reference",
+        "rulesVersion",
+        "source",
+        "status",
+        "statusReason",
+        "totalContribution",
+        "wage",
+        "zeroReason",
+      ].sort()
+    );
+  });
+
+  it("collapses falsy optionals to undefined so withoutUndefined drops them", () => {
+    const payload = contributionWritePayload(
+      backfillRow({ overridden: false, notes: "", reference: "" }),
+      { status: "draft", establishmentId: "est-a" }
+    );
+
+    expect(payload.overridden).toBeUndefined();
+    expect(payload.notes).toBeUndefined();
+    expect(payload.reference).toBeUndefined();
+  });
+
+  it("keeps a creditedAmount of zero", () => {
+    // applyMissed sets 0, and 0 is distinct from "never reconciled".
+    const payload = contributionWritePayload(backfillRow({ creditedAmount: 0 }), {
+      status: "missed",
+      establishmentId: "est-a",
+    });
+
+    expect(payload.creditedAmount).toBe(0);
+  });
+
+  it("takes the status from opts, not the row", () => {
+    const payload = contributionWritePayload(backfillRow({ status: "draft" }), {
+      status: "confirmed",
+      establishmentId: "est-a",
+    });
+
+    expect(payload.status).toBe("confirmed");
+  });
+
+  it("survives a round trip through normalizeEpfContribution", () => {
+    // The single assertion that would have caught SPENDLY-1, SPENDLY-14 and the
+    // cron's copy of the same bug: what we write must be what we read back.
+    const written = contributionWritePayload(
+      backfillRow({
+        expectedCreditFrom: "2026-09-15",
+        expectedCreditTo: "2026-09-25",
+        creditedAmount: 4000,
+        reconciledAt: "2026-09-21",
+        statusReason: "short remittance",
+      }),
+      { status: "partial", establishmentId: "est-a" }
+    );
+
+    const read = normalizeEpfContribution("est-a_2026-08", written);
+
+    expect(read.expectedCreditFrom).toBe("2026-09-15");
+    expect(read.expectedCreditTo).toBe("2026-09-25");
+    expect(read.creditedAmount).toBe(4000);
+    expect(read.reconciledAt).toBe("2026-09-21");
+    expect(read.statusReason).toBe("short remittance");
+    expect(read.status).toBe("partial");
+  });
+});
+
+describe("normalizeEpfContribution — lifecycle fields (SPENDLY-1)", () => {
+  it("distinguishes a creditedAmount of zero from an absent one", () => {
+    // Coercing absent to 0 would make epfPortfolioSummary take its ratio
+    // branch with a zero numerator for every row and zero out the split.
+    expect(
+      normalizeEpfContribution("est-a_2026-08", { month: "2026-08", creditedAmount: 0 })
+        .creditedAmount
+    ).toBe(0);
+    expect(
+      normalizeEpfContribution("est-a_2026-08", { month: "2026-08" }).creditedAmount
+    ).toBeUndefined();
+  });
+
+  it("ignores a non-numeric creditedAmount", () => {
+    expect(
+      normalizeEpfContribution("est-a_2026-08", {
+        month: "2026-08",
+        creditedAmount: "4000",
+      }).creditedAmount
+    ).toBeUndefined();
+  });
+
+  it("leaves the lifecycle fields undefined on a pre-KAN-67 document", () => {
+    const read = normalizeEpfContribution("est-a_2021-06", {
+      establishmentId: "est-a",
+      month: "2021-06",
+      wage: 25000,
+      employeeShare: 3000,
+      employerShare: 3000,
+      epsShare: 1250,
+    });
+
+    expect(read.expectedCreditTo).toBeUndefined();
+    expect(read.reconciledAt).toBeUndefined();
+    expect(read.statusReason).toBeUndefined();
   });
 });

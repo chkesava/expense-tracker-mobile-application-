@@ -153,7 +153,9 @@ export function EpfContributionHistory({
             recorded
             hasIssue={false}
             formatAmount={money}
-            onPress={onAddMonths}
+            // No onPress: tapping a history row used to jump to the Backfill
+            // tab, which was the remount that discarded pending edits
+            // (SPENDLY-1). The empty state keeps the "add months" affordance.
           />
         );
       }}

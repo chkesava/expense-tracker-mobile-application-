@@ -137,7 +137,7 @@ Three independent guarantees:
 | Decision | Outcome |
 |---|---|
 | Entry model | Auto-compute from wage, per-row override. An edited row is flagged `overridden` and is never silently recomputed |
-| Row creation | **Lazy** — months are generated in memory; only filled rows become documents, so the collection never accumulates empty placeholders |
+| Row creation | **Lazy, with one correction (SPENDLY-1)** — generated months stay in memory and only filled rows become documents, so the collection never accumulates empty placeholders. But a month the user opens and **Applies** is a filled row and is written immediately; only the bulk wage fill stays a preview until Save. The original rule, read as "nothing is written until Save", is what made every per-month edit vanish on a tab switch |
 | Drafts | Firestore, `status: "draft"`, promoted on Save All. Survives reinstall and syncs across devices |
 | Scope | Backfill entry + history view. Net-worth and dashboard wiring stay with KAN-71 |
 | EPS membership | Per-establishment `epsMember` toggle, default on, pre-fillable from the earliest joining date. Never decided silently — getting it wrong misstates the balance by the EPS cap every month |

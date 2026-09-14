@@ -24,8 +24,13 @@ export function useEpfCatchUp(args: {
   enabled?: boolean;
 }) {
   const { establishment, allEstablishments, enabled = true } = args;
-  const { contributions, contributionsLoading, saveContributions, autoAdvanceCredits } =
-    useEpfContributions(establishment?.id, {
+  const {
+    contributions,
+    contributionsLoading,
+    saveContributions,
+    autoAdvanceCredits,
+    repairCreditWindows,
+  } = useEpfContributions(establishment?.id, {
       enabled: enabled && Boolean(establishment),
     });
 
@@ -41,9 +46,19 @@ export function useEpfCatchUp(args: {
 
     // KAN-68: age months whose credit window has passed, then generate any
     // missing ones. Both use the same pure logic as the Netlify cron.
-    autoAdvanceCredits().catch((err) => {
-      logError("epf.catchup.advance", err);
-    });
+    //
+    // SPENDLY-1: the repair must finish *before* the advance, not race it.
+    // `attempted` allows one pass per mount, so an unordered pair would need a
+    // second app open to converge — the repair would land after the advance had
+    // already decided there was nothing due.
+    void (async () => {
+      try {
+        await repairCreditWindows();
+        await autoAdvanceCredits();
+      } catch (err) {
+        logError("epf.catchup.advance", err);
+      }
+    })();
 
     const planned = planScheduledContributions({
       establishment,
@@ -67,5 +82,6 @@ export function useEpfCatchUp(args: {
     contributionsLoading,
     saveContributions,
     autoAdvanceCredits,
+    repairCreditWindows,
   ]);
 }
