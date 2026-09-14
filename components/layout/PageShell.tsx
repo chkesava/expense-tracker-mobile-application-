@@ -12,10 +12,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "@/theme/ThemeProvider";
 import { AuraBackground } from "./AuraBackground";
-import {
-  APP_BAR_CONTENT_HEIGHT,
-  BOTTOM_NAV_SCROLL_PADDING_WITH_FAB,
-} from "./chrome";
+import { APP_BAR_CONTENT_HEIGHT } from "./chrome";
+import { useSpendlyBottomClearance } from "./useSpendlyBottomClearance";
 import { haptic } from "@/lib/haptics";
 
 export interface PageShellProps {
@@ -45,6 +43,7 @@ export function PageShell({
 }: PageShellProps) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
+  const bottomClearance = useSpendlyBottomClearance({ withFab: true });
 
   const handleRefresh = () => {
     if (!onRefresh) return;
@@ -67,10 +66,11 @@ export function PageShell({
   const minTop = hideHeaderOffset
     ? insets.top + theme.space.md
     : insets.top + APP_BAR_CONTENT_HEIGHT + theme.space.sm;
-  // Bottom offset: nav bar + clearance + system inset
+  // Bottom offset: shared chrome helper (nav + FAB + inset), or inset-only
+  // when the screen opts out of BottomNav clearance.
   const minBottom = hideBottomOffset
     ? insets.bottom + theme.space.md
-    : insets.bottom + BOTTOM_NAV_SCROLL_PADDING_WITH_FAB;
+    : bottomClearance;
 
   const effectivePaddingTop = Math.max(minTop, customPaddingTop);
   const effectivePaddingBottom = Math.max(minBottom, customPaddingBottom);

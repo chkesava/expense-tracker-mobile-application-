@@ -10,6 +10,7 @@ import { EpfContributionRow } from "@/components/epf/EpfContributionRow";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
+import { useSpendlyBottomClearance } from "@/components/layout/useSpendlyBottomClearance";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { useEpfContributions } from "@/hooks/useEpfContributions";
 import { appDialog } from "@/lib/appDialog";
@@ -70,6 +71,7 @@ export function EpfBackfillScreen({
 }) {
   const { theme } = useTheme();
   const currency = useDisplayCurrency();
+  const bottomClearance = useSpendlyBottomClearance({ withFab: true });
   const {
     contributions,
     contributionsLoading,
@@ -383,7 +385,16 @@ export function EpfBackfillScreen({
         }}
       />
 
-      <View style={[styles.footer, { borderTopColor: theme.colors.border }]}>
+      <View
+        style={[
+          styles.footer,
+          {
+            borderTopColor: theme.colors.border,
+            // Theme padding (16) plus nav/FAB/inset so Save stays tappable.
+            paddingBottom: 16 + bottomClearance,
+          },
+        ]}
+      >
         <View style={styles.footerTotals}>
           <Text style={[styles.footerLabel, { color: theme.colors.mutedForeground }]}>
             {totals.count} of {expectedMonths.length} months · pension {money(totals.eps)}
@@ -464,7 +475,8 @@ const styles = StyleSheet.create({
   fyMeta: { fontSize: 12 },
   footer: {
     borderTopWidth: StyleSheet.hairlineWidth,
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 16,
     gap: 10,
   },
   footerTotals: { gap: 2 },

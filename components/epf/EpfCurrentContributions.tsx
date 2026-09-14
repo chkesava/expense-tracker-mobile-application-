@@ -9,6 +9,7 @@ import { SkeletonCard } from "@/components/common/Skeleton";
 import { EpfContributionRow } from "@/components/epf/EpfContributionRow";
 import { EpfCreditSheet } from "@/components/epf/EpfCreditSheet";
 import { Card } from "@/components/ui/Card";
+import { useSpendlyBottomClearance } from "@/components/layout/useSpendlyBottomClearance";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { useEpfContributions } from "@/hooks/useEpfContributions";
 import type { EpfEstablishment } from "@/shared/features/epf/types";
@@ -38,6 +39,7 @@ export function EpfCurrentContributions({
 }) {
   const { theme } = useTheme();
   const currency = useDisplayCurrency();
+  const bottomClearance = useSpendlyBottomClearance({ withFab: true });
   const {
     contributions,
     contributionsLoading,
@@ -104,7 +106,7 @@ export function EpfCurrentContributions({
       <FlashList
         data={recent}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[styles.listContent, { paddingBottom: bottomClearance }]}
         extraData={`${contributions.length}-${summary.unreconciled}`}
         ListHeaderComponent={
           <View style={styles.header}>
@@ -172,7 +174,7 @@ export function EpfCurrentContributions({
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   container: { gap: 12, padding: 16 },
-  listContent: { padding: 16, paddingBottom: 24 },
+  listContent: { padding: 16 },
   header: { gap: 12, marginBottom: 12 },
   summaryLabel: { fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6 },
   summaryValue: { fontSize: 24, fontWeight: "700", marginTop: 4 },

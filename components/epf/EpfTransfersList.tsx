@@ -10,6 +10,7 @@ import { EpfTransferDetailModal } from "@/components/epf/EpfTransferDetailModal"
 import { EpfTransferFormModal } from "@/components/epf/EpfTransferFormModal";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { useSpendlyBottomClearance } from "@/components/layout/useSpendlyBottomClearance";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { useEpfContributions } from "@/hooks/useEpfContributions";
 import { useEpfInterest } from "@/hooks/useEpfInterest";
@@ -41,6 +42,7 @@ export function EpfTransfersList({
 }) {
   const { theme } = useTheme();
   const currency = useDisplayCurrency();
+  const bottomClearance = useSpendlyBottomClearance({ withFab: true });
 
   const {
     transfers,
@@ -201,7 +203,7 @@ export function EpfTransfersList({
       <FlashList
         data={rows}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[styles.listContent, { paddingBottom: bottomClearance }]}
         ListHeaderComponent={header}
         extraData={`${transfers.length}-${balance}`}
         renderItem={({ item }) => {
@@ -256,7 +258,7 @@ export function EpfTransfersList({
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   container: { gap: 12, padding: 16 },
-  listContent: { padding: 16, paddingBottom: 24 },
+  listContent: { padding: 16 },
   header: { gap: 12, marginBottom: 12 },
   balanceLabel: { fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6 },
   balanceValue: { fontSize: 24, fontWeight: "700", marginTop: 4 },

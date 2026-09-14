@@ -7,6 +7,7 @@ import { SkeletonCard } from "@/components/common/Skeleton";
 import { EpfReconcileSheet } from "@/components/epf/EpfReconcileSheet";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { useSpendlyBottomClearance } from "@/components/layout/useSpendlyBottomClearance";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { useEpfContributions } from "@/hooks/useEpfContributions";
 import { useEpfInterest } from "@/hooks/useEpfInterest";
@@ -34,6 +35,7 @@ import { combineEpfLoad } from "@/shared/features/epf/utils/loadState";
 export function EpfBalanceTab({ establishment }: { establishment: EpfEstablishment }) {
   const { theme } = useTheme();
   const currency = useDisplayCurrency();
+  const bottomClearance = useSpendlyBottomClearance({ withFab: true });
 
   const { contributions, contributionsLoading, contributionsError, retryContributions } =
     useEpfContributions(establishment.id);
@@ -137,7 +139,7 @@ export function EpfBalanceTab({ establishment }: { establishment: EpfEstablishme
   );
 
   return (
-    <ScrollView contentContainerStyle={styles.content}>
+    <ScrollView contentContainerStyle={[styles.content, { paddingBottom: bottomClearance }]}>
       <Card>
         <Text style={[styles.totalLabel, { color: theme.colors.mutedForeground }]}>
           Balance at {establishment.employerName}
@@ -287,7 +289,7 @@ export function EpfBalanceTab({ establishment }: { establishment: EpfEstablishme
 
 const styles = StyleSheet.create({
   container: { gap: 12, padding: 16 },
-  content: { padding: 16, paddingBottom: 32, gap: 12 },
+  content: { padding: 16, gap: 12 },
   totalLabel: { fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6 },
   totalValue: { fontSize: 28, fontWeight: "700", marginTop: 4 },
   breakdown: {
