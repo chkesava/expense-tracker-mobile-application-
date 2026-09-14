@@ -156,6 +156,60 @@ describe("contributionMonthsFor", () => {
       contributionMonthsFor({ dateJoined: "2024-01-01", dateLeft: "2023-01-01" }, "2026-09")
     ).toEqual([]);
   });
+
+  it("counts Sep–Dec inclusive for the SPENDLY-70 ticket dates", () => {
+    // Join 3 Sep / leave 19 Dec is 3 elapsed tenure months, but four EPF
+    // contribution months. The card must use this helper, not tenure.
+    expect(
+      contributionMonthsFor(
+        { dateJoined: "2025-09-03", dateLeft: "2025-12-19" },
+        "2026-09"
+      )
+    ).toEqual(["2025-09", "2025-10", "2025-11", "2025-12"]);
+  });
+
+  it("counts one month when joining and leaving in September", () => {
+    expect(
+      contributionMonthsFor(
+        { dateJoined: "2025-09-03", dateLeft: "2025-09-20" },
+        "2026-09"
+      )
+    ).toEqual(["2025-09"]);
+  });
+
+  it("counts an open current employment through the current month", () => {
+    expect(
+      contributionMonthsFor({ dateJoined: "2026-03-11" }, "2026-09")
+    ).toEqual([
+      "2026-03",
+      "2026-04",
+      "2026-05",
+      "2026-06",
+      "2026-07",
+      "2026-08",
+      "2026-09",
+    ]);
+  });
+
+  it("does not drop a month-end leaving day from the inclusive keys", () => {
+    expect(
+      contributionMonthsFor(
+        { dateJoined: "2025-09-01", dateLeft: "2025-12-31" },
+        "2026-09"
+      )
+    ).toEqual(["2025-09", "2025-10", "2025-11", "2025-12"]);
+  });
+
+  it("keeps December on the first job when the next job starts later that month", () => {
+    const first = contributionMonthsFor(
+      { dateJoined: "2025-09-03", dateLeft: "2025-12-19" },
+      "2026-09"
+    );
+    const next = contributionMonthsFor({ dateJoined: "2025-12-20" }, "2026-09");
+
+    expect(first).toContain("2025-12");
+    expect(next[0]).toBe("2025-12");
+  });
 });
 
 describe("buildBackfillRows", () => {

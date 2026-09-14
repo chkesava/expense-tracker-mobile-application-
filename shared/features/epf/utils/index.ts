@@ -253,7 +253,14 @@ export function sortEstablishments(list: EpfEstablishment[]): EpfEstablishment[]
   });
 }
 
-/** Whole months served between joining and (dateLeft ?? today). Never negative. */
+/**
+ * Whole months served between joining and (dateLeft ?? today). Never negative.
+ *
+ * This is elapsed employment tenure, not EPF contribution months. Join 3 Sep /
+ * leave 19 Dec is 3 elapsed months and 4 contribution months (Sep–Dec
+ * inclusive). Do not show this figure as a contribution count — SPENDLY-70.
+ * Use `contributionMonthsFor` for that.
+ */
 export function establishmentDurationMonths(
   establishment: { dateJoined: string; dateLeft?: string | null },
   todayKey: string
