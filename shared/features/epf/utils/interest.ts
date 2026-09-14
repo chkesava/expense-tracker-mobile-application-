@@ -31,10 +31,8 @@ import {
   financialYearMonths,
   financialYearOfMonth,
 } from "@/shared/utils/financialYear";
+import { isBalanceBearing } from "@/shared/features/epf/utils/contributions";
 import { roundMoney } from "@/shared/utils/money";
-
-/** Contribution statuses that have actually added money. Mirrors `establishmentBalance`. */
-const BALANCE_BEARING: EpfContribution["status"][] = ["credited", "partial", "confirmed"];
 
 /** Deterministic id — recomputing a year overwrites it rather than duplicating. */
 export function interestEntryId(establishmentId: string, financialYear: string): string {
@@ -58,7 +56,7 @@ function movementInMonth(args: {
   const contributed = contributions.reduce((total, row) => {
     if (row.establishmentId !== establishmentId) return total;
     if (row.month !== month) return total;
-    if (!BALANCE_BEARING.includes(row.status)) return total;
+    if (!isBalanceBearing(row.status)) return total;
     return total + contributionAmount(row);
   }, 0);
 
@@ -172,7 +170,7 @@ export function activeFinancialYears(args: {
 
   for (const row of args.contributions) {
     if (row.establishmentId !== args.establishmentId) continue;
-    if (!BALANCE_BEARING.includes(row.status)) continue;
+    if (!isBalanceBearing(row.status)) continue;
     years.add(financialYearOfMonth(row.month));
   }
   for (const transfer of args.transfers) {

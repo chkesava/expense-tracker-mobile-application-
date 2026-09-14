@@ -149,6 +149,7 @@ export function EpfCurrentContributions({
               overridden={item.overridden === true}
               partialMonth={item.partialMonth === true}
               recorded
+              suggested={false}
               hasIssue={item.status === "missed"}
               formatAmount={money}
               onPress={setEditingMonth}

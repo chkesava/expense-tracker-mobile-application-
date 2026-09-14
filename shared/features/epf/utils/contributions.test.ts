@@ -3,9 +3,13 @@ import { describe, expect, it } from "vitest";
 import type {
   EpfBackfillRow,
   EpfContribution,
+  EpfContributionStatus,
   EpfEstablishment,
 } from "@/shared/features/epf/types";
+import { mergeBackfillEdits } from "@/shared/features/epf/utils/backfillDraft";
+import { establishmentBalanceBreakdown } from "@/shared/features/epf/utils/transfers";
 import {
+  BALANCE_BEARING_STATUSES,
   backfillProgress,
   buildBackfillRows,
   computeEpfContribution,
@@ -18,6 +22,7 @@ import {
   findDuplicateMonths,
   findMissingMonths,
   groupContributionsByFinancialYear,
+  isBalanceBearing,
   isEligibleForAutomatedProcessing,
   isPartialMonth,
   normalizeEpfContribution,
@@ -916,5 +921,176 @@ describe("normalizeEpfContribution — lifecycle fields (SPENDLY-1)", () => {
     expect(read.expectedCreditTo).toBeUndefined();
     expect(read.reconciledAt).toBeUndefined();
     expect(read.statusReason).toBeUndefined();
+  });
+});
+
+/**
+ * The ticket's employer: joined 10 Sep, left 19 Dec, ₹17,494 monthly wage, and
+ * four saved months totalling ₹16,120 remitted — Sep prorated, Oct–Dec full
+ * (including the leave month, which EPFO remitted in full).
+ */
+const EST_69: Pick<EpfEstablishment, "id" | "dateJoined" | "dateLeft"> = {
+  id: "est-69",
+  dateJoined: "2025-09-10",
+  dateLeft: "2025-12-19",
+};
+
+function ticketMonth(
+  month: string,
+  overrides: Partial<EpfContribution> = {}
+): EpfContribution {
+  return contribution({
+    id: contributionDocId(EST_69.id, month),
+    establishmentId: EST_69.id,
+    month,
+    wage: 17494,
+    employeeShare: 2099,
+    employerShare: 2099,
+    epsShare: 1250,
+    employerEpfShare: 849,
+    totalContribution: 4198,
+    epfCredit: 2948,
+    status: "credited",
+    ...overrides,
+  });
+}
+
+const TICKET_SAVED: EpfContribution[] = [
+  ticketMonth("2025-09", {
+    wage: 14692,
+    employeeShare: 1763,
+    employerShare: 1763,
+    epsShare: 1224,
+    employerEpfShare: 539,
+    totalContribution: 3526,
+    epfCredit: 2302,
+    partialMonth: true,
+  }),
+  ticketMonth("2025-10"),
+  ticketMonth("2025-11"),
+  ticketMonth("2025-12"),
+];
+
+describe("Backfill, History and Balance agree on totals — SPENDLY-69", () => {
+  it("sums the saved rows to the History figure with a wage typed in", () => {
+    // SPENDLY-68 fixed the per-month amounts; this is the aggregate History
+    // shows, which Backfill quoted differently because it counted suggestions.
+    const rows = buildBackfillRows({
+      establishment: EST_69,
+      currentMonth: "2026-03",
+      existing: TICKET_SAVED,
+      wage: 17494,
+      epsEligible: true,
+      prorateEdgeMonths: true,
+    });
+    const saved = rows.filter((row) => row.persisted);
+
+    expect(summarizeContributions(saved)).toEqual(summarizeContributions(TICKET_SAVED));
+    expect(summarizeContributions(saved).total).toBe(16120);
+  });
+
+  it("gives every financial year the same credit and expected count as History", () => {
+    const expectedMonths = contributionMonthsFor(EST_69, "2026-03");
+    const rows = buildBackfillRows({
+      establishment: EST_69,
+      currentMonth: "2026-03",
+      existing: TICKET_SAVED,
+      wage: 17494,
+      epsEligible: true,
+      prorateEdgeMonths: true,
+    });
+
+    const backfillGroups = groupContributionsByFinancialYear(rows, expectedMonths);
+    const historyGroups = groupContributionsByFinancialYear(TICKET_SAVED, expectedMonths);
+
+    expect(backfillGroups.map((group) => group.financialYear)).toEqual(
+      historyGroups.map((group) => group.financialYear)
+    );
+    backfillGroups.forEach((group, index) => {
+      const saved = group.rows.filter((row) => row.persisted);
+      expect(saved).toHaveLength(historyGroups[index].rows.length);
+      expect(summarizeContributions(saved).epfCredit).toBe(
+        historyGroups[index].totals.epfCredit
+      );
+      expect(group.expectedCount).toBe(historyGroups[index].expectedCount);
+    });
+  });
+
+  it("keeps wage suggestions out of the saved total", () => {
+    // Still-employed employer: Nov onwards has no document, so the bulk fill
+    // generates rows History and Balance know nothing about.
+    const rows = buildBackfillRows({
+      establishment: { id: EST_69.id, dateJoined: EST_69.dateJoined },
+      currentMonth: "2026-02",
+      existing: TICKET_SAVED.slice(0, 2),
+      wage: 17494,
+      epsEligible: true,
+    });
+
+    const saved = rows.filter((row) => row.persisted);
+    const suggested = rows.filter((row) => !row.persisted && row.epfCredit > 0);
+
+    expect(suggested.length).toBeGreaterThan(0);
+    expect(summarizeContributions(saved)).toEqual(
+      summarizeContributions(TICKET_SAVED.slice(0, 2))
+    );
+  });
+
+  it("never generates a duplicate month, before or after an edit", () => {
+    const rows = buildBackfillRows({
+      establishment: EST_69,
+      currentMonth: "2026-03",
+      existing: TICKET_SAVED,
+      wage: 17494,
+      epsEligible: true,
+      prorateEdgeMonths: true,
+    });
+
+    expect(findDuplicateMonths(rows)).toEqual([]);
+
+    const edited = mergeBackfillEdits(
+      rows,
+      new Map([["2025-12", { ...rows[3], wage: 20000 }]])
+    );
+
+    expect(edited).toHaveLength(rows.length);
+    expect(findDuplicateMonths(edited)).toEqual([]);
+  });
+});
+
+describe("isBalanceBearing — SPENDLY-69", () => {
+  it("accepts only the statuses that moved money", () => {
+    const bearing: EpfContributionStatus[] = ["credited", "partial", "confirmed"];
+    const pending: EpfContributionStatus[] = ["draft", "expected", "missed", "reversed"];
+
+    expect(BALANCE_BEARING_STATUSES).toEqual(bearing);
+    expect(bearing.every((status) => isBalanceBearing(status))).toBe(true);
+    expect(pending.some((status) => isBalanceBearing(status))).toBe(false);
+  });
+
+  it("sums a mixed set to the same figure as the balance breakdown", () => {
+    // What the History headline now computes must be what Balance reports, or
+    // a stored draft month reappears as a difference between the two screens.
+    const mixed = [
+      ticketMonth("2025-09", { status: "credited" }),
+      ticketMonth("2025-10", { status: "draft" }),
+      ticketMonth("2025-11", { status: "partial" }),
+      ticketMonth("2025-12", { status: "reversed" }),
+    ];
+
+    const headline = mixed
+      .filter((row) => isBalanceBearing(row.status))
+      .reduce((total, row) => total + (row.creditedAmount ?? row.epfCredit), 0);
+
+    expect(headline).toBe(2948 * 2);
+    expect(headline).toBe(
+      establishmentBalanceBreakdown({
+        contributions: mixed,
+        transfers: [],
+        establishmentId: EST_69.id,
+        interestEntries: [],
+        adjustments: [],
+      }).contributions
+    );
   });
 });

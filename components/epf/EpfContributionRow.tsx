@@ -28,6 +28,14 @@ type Props = {
   overridden: boolean;
   partialMonth: boolean;
   recorded: boolean;
+  /**
+   * Calculated from the bulk wage and not yet saved — SPENDLY-69.
+   *
+   * Amounts still show, because previewing the fill is what the backfill screen
+   * is for, but the row must not read as a persisted contribution: History and
+   * Balance do not count it.
+   */
+  suggested: boolean;
   hasIssue: boolean;
   formatAmount: (value: number) => string;
   /** Omitted on the read-only history list, where a row is not actionable. */
@@ -46,6 +54,7 @@ function EpfContributionRowBase({
   overridden,
   partialMonth,
   recorded,
+  suggested,
   hasIssue,
   formatAmount,
   onPress,
@@ -63,11 +72,13 @@ function EpfContributionRowBase({
         {
           borderColor: hasIssue ? theme.colors.destructive : theme.colors.border,
           backgroundColor: theme.colors.card,
-          opacity: recorded ? 1 : 0.6,
+          opacity: recorded && !suggested ? 1 : 0.6,
         },
       ]}
       accessibilityRole={onPress ? "button" : "text"}
-      accessibilityLabel={`${monthLabel}, ${recorded ? statusLabel : "not recorded"}`}
+      accessibilityLabel={`${monthLabel}, ${
+        suggested ? "suggested, not saved" : recorded ? statusLabel : "not recorded"
+      }`}
     >
       <View style={styles.left}>
         <Text style={[styles.month, { color: theme.colors.foreground }]}>{monthLabel}</Text>
@@ -90,7 +101,11 @@ function EpfContributionRowBase({
           </Text>
         ) : null}
         <View style={styles.chips}>
-          {recorded ? (
+          {suggested ? (
+            <Text style={[styles.chip, { color: theme.colors.mutedForeground }]}>
+              Suggested
+            </Text>
+          ) : recorded ? (
             <Text style={[styles.chip, { color: toneColor }]}>{statusLabel}</Text>
           ) : null}
           {overridden ? (

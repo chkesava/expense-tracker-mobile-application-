@@ -17,6 +17,7 @@ import {
   contributionMonthsFor,
   contributionStatusMeta,
   groupContributionsByFinancialYear,
+  isBalanceBearing,
   summarizeContributions,
 } from "@/shared/features/epf/utils/contributions";
 import { financialYearLabel } from "@/shared/utils/financialYear";
@@ -52,7 +53,27 @@ export function EpfContributionHistory({
     [establishment]
   );
 
-  const totals = useMemo(() => summarizeContributions(contributions), [contributions]);
+  /**
+   * The headline counts only money the fund actually holds — SPENDLY-69.
+   *
+   * It used to sum every stored document, including drafts, so a single draft
+   * month put History above the Balance tab it is meant to reconcile with. The
+   * list below still shows every saved month; the excluded ones are named.
+   */
+  const totals = useMemo(
+    () => summarizeContributions(contributions.filter((row) => isBalanceBearing(row.status))),
+    [contributions]
+  );
+
+  const excludedLabel = useMemo(() => {
+    const months = contributions
+      .filter((row) => !isBalanceBearing(row.status))
+      .map((row) => monthLabel(row.month));
+    if (months.length === 0) return null;
+    const shown = months.slice(0, 3).join(", ");
+    const rest = months.length - 3;
+    return `${shown}${rest > 0 ? ` +${rest} more` : ""} not counted yet`;
+  }, [contributions]);
 
   const items = useMemo((): HistoryItem[] => {
     const groups = groupContributionsByFinancialYear(contributions, expectedMonths);
@@ -123,6 +144,11 @@ export function EpfContributionHistory({
             {money(totals.eps)} across {totals.count} month
             {totals.count === 1 ? "" : "s"}
           </Text>
+          {excludedLabel ? (
+            <Text style={[styles.totalExcluded, { color: theme.colors.mutedForeground }]}>
+              {excludedLabel}
+            </Text>
+          ) : null}
         </Card>
       }
       renderItem={({ item }) => {
@@ -153,6 +179,7 @@ export function EpfContributionHistory({
             overridden={item.row.overridden === true}
             partialMonth={item.row.partialMonth === true}
             recorded
+            suggested={false}
             hasIssue={false}
             formatAmount={money}
             // No onPress: tapping a history row used to jump to the Backfill
@@ -171,6 +198,7 @@ const styles = StyleSheet.create({
   totalLabel: { fontSize: 12, textTransform: "uppercase", letterSpacing: 0.6 },
   totalValue: { fontSize: 24, fontWeight: "700", marginTop: 4 },
   totalBreakdown: { fontSize: 12, marginTop: 6, lineHeight: 18 },
+  totalExcluded: { fontSize: 12, marginTop: 4, lineHeight: 18 },
   fyHeader: {
     flexDirection: "row",
     alignItems: "center",

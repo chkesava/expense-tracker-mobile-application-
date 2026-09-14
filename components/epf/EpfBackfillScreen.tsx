@@ -31,6 +31,7 @@ import { useTheme } from "@/theme/ThemeProvider";
 import { monthLabel } from "@/shared/utils/monthLabel";
 import {
   clearSavedEdits,
+  backfillRowPresentation,
   backfillSaveRows,
   mergeBackfillEdits,
   persistedAmountsDiffer,
@@ -127,22 +128,31 @@ export function EpfBackfillScreen({
     [establishment, monthKey]
   );
 
-  const recordedRows = useMemo(
-    () =>
-      rows.filter(
-        (row) =>
-          row.persisted || edits.has(row.month) || (Number(wage) > 0 && row.wage > 0)
-      ),
-    [rows, edits, wage]
-  );
-
   /** What Save draft / Save all may write — never silent rewrite of saved months. */
   const saveRows = useMemo(
     () => backfillSaveRows({ rows, edits, wage: Number(wage) || 0 }),
     [rows, edits, wage]
   );
 
-  const totals = useMemo(() => summarizeContributions(recordedRows), [recordedRows]);
+  /**
+   * The headline is the saved months only — SPENDLY-69.
+   *
+   * It used to include wage-filled suggestions, so Backfill quoted a figure
+   * History and Balance had never heard of. Suggestions get their own line
+   * below instead of being folded into the total.
+   */
+  const savedTotals = useMemo(
+    () => summarizeContributions(rows.filter((row) => row.persisted)),
+    [rows]
+  );
+
+  const suggestedTotals = useMemo(
+    () =>
+      summarizeContributions(
+        rows.filter((row) => !row.persisted && row.epfCredit > 0)
+      ),
+    [rows]
+  );
 
   /** What the footer chip shows and what the route's leave-guard reads. */
   const unsaved = useMemo(
@@ -164,22 +174,25 @@ export function EpfBackfillScreen({
     // hand-rolled copy (KAN-73). Rows arrive month-ascending from
     // buildBackfillRows, which is the order the grouping produces too.
     const out: ListItem[] = [];
-    for (const group of groupContributionsByFinancialYear(rows)) {
-      const filled = group.rows.filter((row) => row.epfCredit > 0);
+    for (const group of groupContributionsByFinancialYear(rows, expectedMonths)) {
+      // Counted from saved rows against expectedMonths, the same rule History
+      // uses, so the two screens cannot quote different years (SPENDLY-69).
+      const saved = group.rows.filter((row) => row.persisted);
       out.push({
         type: "header",
         id: `fy-${group.financialYear}`,
         financialYear: group.financialYear,
-        recorded: filled.length,
-        expected: group.rows.length,
-        credit: summarizeContributions(filled).epfCredit,
+        recorded: saved.length,
+        expected: group.expectedCount,
+        credit: summarizeContributions(saved).epfCredit,
       });
+      // Every generated month still lists, so the bulk-fill workflow is intact.
       for (const row of group.rows) {
         out.push({ type: "row", id: row.month, month: row.month });
       }
     }
     return out;
-  }, [rows]);
+  }, [rows, expectedMonths]);
 
   const rowsByMonth = useMemo(
     () => new Map(rows.map((row) => [row.month, row])),
@@ -404,6 +417,7 @@ export function EpfBackfillScreen({
           const row = rowsByMonth.get(item.month);
           if (!row) return null;
           const meta = contributionStatusMeta(row.status, row.source);
+          const presentation = backfillRowPresentation(row);
           return (
             <EpfContributionRow
               month={row.month}
@@ -416,7 +430,8 @@ export function EpfBackfillScreen({
               statusTone={meta.tone}
               overridden={row.overridden === true}
               partialMonth={row.partialMonth === true}
-              recorded={row.epfCredit > 0 || row.persisted}
+              recorded={presentation.recorded}
+              suggested={presentation.suggested}
               hasIssue={Boolean(validation.issuesByMonth[row.month])}
               formatAmount={money}
               onPress={setEditingMonth}
@@ -437,12 +452,17 @@ export function EpfBackfillScreen({
       >
         <View style={styles.footerTotals}>
           <Text style={[styles.footerLabel, { color: theme.colors.mutedForeground }]}>
-            {totals.count} of {expectedMonths.length} months · pension {money(totals.eps)}
+            {savedTotals.count} of {expectedMonths.length} months · pension{" "}
+            {money(savedTotals.eps)}
           </Text>
           <Text style={[styles.footerCredit, { color: theme.colors.foreground }]}>
-            {money(totals.epfCredit)} into EPF
+            {money(savedTotals.epfCredit)} into EPF
           </Text>
-          {unsaved.dirty ? (
+          {suggestedTotals.epfCredit > 0 ? (
+            <Text style={[styles.unsaved, { color: theme.colors.mutedForeground }]}>
+              + {money(suggestedTotals.epfCredit)} suggested · not saved yet
+            </Text>
+          ) : unsaved.dirty ? (
             <Text style={[styles.unsaved, { color: theme.colors.mutedForeground }]}>
               {unsaved.label} · not saved yet
             </Text>

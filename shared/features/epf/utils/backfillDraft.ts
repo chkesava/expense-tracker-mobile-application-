@@ -158,6 +158,33 @@ export function backfillSaveRows(args: {
   return out;
 }
 
+export interface BackfillRowPresentation {
+  /** Show amounts rather than the "not recorded" placeholder. */
+  recorded: boolean;
+  /** Calculated from the wage and not yet written — must never read as saved. */
+  suggested: boolean;
+}
+
+/**
+ * How one backfill row should read — SPENDLY-69.
+ *
+ * A wage-filled month used to render exactly like a persisted one, so the
+ * screen showed amounts History and Balance knew nothing about. The amounts
+ * still show (previewing the bulk fill is the point of the screen) but the row
+ * has to say it is only a suggestion.
+ *
+ * Lives here rather than in the component because `vitest.config.ts` never
+ * collects `components/**`.
+ */
+export function backfillRowPresentation(
+  row: Pick<EpfBackfillRow, "persisted" | "epfCredit">
+): BackfillRowPresentation {
+  return {
+    recorded: row.persisted || row.epfCredit > 0,
+    suggested: !row.persisted && row.epfCredit > 0,
+  };
+}
+
 /** True when Apply would change a saved month's wage or contribution shares. */
 export function persistedAmountsDiffer(
   saved: Pick<

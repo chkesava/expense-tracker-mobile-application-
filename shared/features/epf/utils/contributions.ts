@@ -54,6 +54,23 @@ export function contributionDocId(establishmentId: string, month: string): strin
   return `${establishmentId}_${month}`;
 }
 
+/**
+ * Contribution statuses that have actually added money to the fund.
+ *
+ * One definition — SPENDLY-69. Balance, interest and the portfolio each kept a
+ * private copy of this list, and History ignored it entirely, so a stored draft
+ * month inflated the History headline above the balance it was meant to match.
+ */
+export const BALANCE_BEARING_STATUSES: EpfContributionStatus[] = [
+  "credited",
+  "partial",
+  "confirmed",
+];
+
+export function isBalanceBearing(status: EpfContributionStatus): boolean {
+  return BALANCE_BEARING_STATUSES.includes(status);
+}
+
 export interface EpfContributionComputation {
   wage: number;
   employeeShare: number;
