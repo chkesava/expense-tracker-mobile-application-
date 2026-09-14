@@ -15,6 +15,7 @@ import { EpfProfileFormModal } from "@/components/epf/EpfProfileFormModal";
 import { Button } from "@/components/ui/Button";
 import { useEpf } from "@/hooks/useEpf";
 import { useEpfCatchUp } from "@/hooks/useEpfCatchUp";
+import { useEpfInterestCatchUp } from "@/hooks/useEpfInterestCatchUp";
 import { epfTodayKey } from "@/shared/features/epf/utils/epfClock";
 import type { EpfEstablishment } from "@/shared/features/epf/types";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -57,6 +58,9 @@ export function EpfDashboard() {
     allEstablishments: establishments,
     enabled: hasProfile,
   });
+  // Persist FY interest for every employer that has contributions, so Home
+  // does not stay at ₹0 until someone opens the Balance tab (SPENDLY-71).
+  useEpfInterestCatchUp({ enabled: hasProfile });
   const load = combineEpfLoad([
     { loading: profileLoading, error: profileError, retry: retryProfile },
     { loading: establishmentsLoading, error: establishmentsError, retry: retryEstablishments },

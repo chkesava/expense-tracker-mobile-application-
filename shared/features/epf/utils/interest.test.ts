@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { EpfContribution, EpfTransfer } from "@/shared/features/epf/types";
+import { roundMoney } from "@/shared/utils/money";
 import {
   activeFinancialYears,
   buildInterestEntry,
@@ -346,5 +347,122 @@ describe("normalizeInterestEntry", () => {
 
   it("treats a non-numeric amount as zero", () => {
     expect(normalizeInterestEntry("x", { interest: "825" }).interest).toBe(0);
+  });
+});
+
+/**
+ * The ticket's Sep–Dec 2025 employer. Spendly recorded ₹16,120 of EPF credit
+ * (EPS excluded). The passbook's ₹390 is actual interest on different column
+ * totals — reconciliation, not this simulation.
+ */
+describe("FY 2025-26 interest — SPENDLY-71", () => {
+  const EST = "est-69";
+
+  function ticketMonth(
+    month: string,
+    epfCredit: number,
+    overrides: Partial<EpfContribution> = {}
+  ): EpfContribution {
+    const isSep = month === "2025-09";
+    return contribution(month, epfCredit, {
+      establishmentId: EST,
+      wage: isSep ? 14692 : 17494,
+      employeeShare: isSep ? 1763 : 2099,
+      employerShare: isSep ? 1763 : 2099,
+      epsShare: isSep ? 1224 : 1250,
+      employerEpfShare: isSep ? 539 : 849,
+      totalContribution: isSep ? 3526 : 4198,
+      status: "credited",
+      ...overrides,
+    });
+  }
+
+  const SAVED = [
+    ticketMonth("2025-09", 2302),
+    ticketMonth("2025-10", 2948),
+    ticketMonth("2025-11", 2948),
+    ticketMonth("2025-12", 2948),
+  ];
+
+  it("prices the year at the notified 8.25% instead of leaving it undeclared", () => {
+    const year = interestForFinancialYear({
+      financialYear: "2025-26",
+      openingBalance: 0,
+      contributions: SAVED,
+      transfers: [],
+      establishmentId: EST,
+    });
+
+    // Monthly product: Sep 2302, Oct 5250, Nov 8198, Dec–Mar 11146.
+    const expected = roundMoney((2302 + 5250 + 8198 + 11146 * 4) * (0.0825 / 12));
+
+    expect(year.rateMissing).toBe(false);
+    expect(year.rate).toBe(0.0825);
+    expect(year.interest).toBe(expected);
+    expect(year.interest).not.toBe(390);
+  });
+
+  it("accrues on epfCredit, so EPS does not change the figure", () => {
+    const year = interestForFinancialYear({
+      financialYear: "2025-26",
+      openingBalance: 0,
+      contributions: SAVED,
+      transfers: [],
+      establishmentId: EST,
+    });
+    const fatEps = SAVED.map((row) => ({ ...row, epsShare: 9999, employerShare: 9999 }));
+    expect(
+      interestForFinancialYear({
+        financialYear: "2025-26",
+        openingBalance: 0,
+        contributions: fatEps,
+        transfers: [],
+        establishmentId: EST,
+      }).interest
+    ).toBe(year.interest);
+  });
+
+  it("ignores draft and reversed months", () => {
+    const mixed = [
+      ticketMonth("2025-09", 2302, { status: "draft" }),
+      ticketMonth("2025-10", 2948),
+      ticketMonth("2025-11", 2948, { status: "reversed" }),
+      ticketMonth("2025-12", 2948),
+    ];
+    const creditedOnly = [ticketMonth("2025-10", 2948), ticketMonth("2025-12", 2948)];
+
+    expect(
+      interestForFinancialYear({
+        financialYear: "2025-26",
+        openingBalance: 0,
+        contributions: mixed,
+        transfers: [],
+        establishmentId: EST,
+      }).interest
+    ).toBe(
+      interestForFinancialYear({
+        financialYear: "2025-26",
+        openingBalance: 0,
+        contributions: creditedOnly,
+        transfers: [],
+        establishmentId: EST,
+      }).interest
+    );
+  });
+
+  it("is creditable under a stable document id", () => {
+    const schedule = interestSchedule({
+      contributions: SAVED,
+      transfers: [],
+      establishmentId: EST,
+      throughFinancialYear: "2025-26",
+    });
+    const years = creditableYears(schedule);
+    const fy = years.find((year) => year.financialYear === "2025-26");
+
+    expect(fy).toBeDefined();
+    expect(interestEntryId(EST, "2025-26")).toBe(`${EST}_2025-26`);
+    expect(interestEntryId(EST, "2025-26")).toBe(interestEntryId(EST, "2025-26"));
+    expect(buildInterestEntry(EST, fy!).interest).toBe(fy!.interest);
   });
 });

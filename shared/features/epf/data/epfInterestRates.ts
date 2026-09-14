@@ -22,6 +22,9 @@ export interface EpfInterestRate {
 
 /** Newest first. Every entry is a rate EPFO has actually declared. */
 export const EPF_INTEREST_RATES: readonly EpfInterestRate[] = [
+  // Notified by EPFO for FY 2025-26 (CBT 2 Mar 2026, finance-ministry
+  // ratification, credited from July 2026). Not a guess — SPENDLY-71.
+  { financialYear: "2025-26", rate: 0.0825 },
   { financialYear: "2024-25", rate: 0.0825 },
   { financialYear: "2023-24", rate: 0.0825 },
   { financialYear: "2022-23", rate: 0.0815 },

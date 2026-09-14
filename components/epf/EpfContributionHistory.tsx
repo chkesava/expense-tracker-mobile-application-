@@ -11,6 +11,7 @@ import { Card } from "@/components/ui/Card";
 import { useSpendlyBottomClearance } from "@/components/layout/useSpendlyBottomClearance";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { useEpfContributions } from "@/hooks/useEpfContributions";
+import { useEpfInterest } from "@/hooks/useEpfInterest";
 import { epfCurrentMonth } from "@/shared/features/epf/utils/epfClock";
 import type { EpfContribution, EpfEstablishment } from "@/shared/features/epf/types";
 import {
@@ -45,6 +46,7 @@ export function EpfContributionHistory({
     contributionsError,
     retryContributions,
   } = useEpfContributions(establishment.id);
+  const { interestEntries } = useEpfInterest();
 
   const money = useCallback((value: number) => formatAmount(value, currency), [currency]);
 
@@ -75,23 +77,35 @@ export function EpfContributionHistory({
     return `${shown}${rest > 0 ? ` +${rest} more` : ""} not counted yet`;
   }, [contributions]);
 
+  const interestByYear = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const entry of interestEntries) {
+      if (entry.establishmentId !== establishment.id) continue;
+      if (!(entry.interest > 0)) continue;
+      map.set(entry.financialYear, entry.interest);
+    }
+    return map;
+  }, [interestEntries, establishment.id]);
+
   const items = useMemo((): HistoryItem[] => {
     const groups = groupContributionsByFinancialYear(contributions, expectedMonths);
     const out: HistoryItem[] = [];
     for (const group of groups) {
       if (group.rows.length === 0) continue;
+      const interest = interestByYear.get(group.financialYear);
+      const credit = `${group.rows.length} of ${group.expectedCount} · ${money(group.totals.epfCredit)}`;
       out.push({
         type: "header",
         id: `fy-${group.financialYear}`,
         title: financialYearLabel(group.financialYear),
-        meta: `${group.rows.length} of ${group.expectedCount} · ${money(group.totals.epfCredit)}`,
+        meta: interest ? `${credit} · interest ${money(interest)}` : credit,
       });
       for (const row of group.rows) {
         out.push({ type: "row", id: row.id, row });
       }
     }
     return out;
-  }, [contributions, expectedMonths, money]);
+  }, [contributions, expectedMonths, money, interestByYear]);
 
   if (contributionsLoading) {
     return (
