@@ -5,9 +5,9 @@ import { Building2, ListChecks, Pencil } from "lucide-react-native";
 import { Card } from "@/components/ui/Card";
 import { haptic } from "@/lib/haptics";
 import type { EpfEstablishment } from "@/shared/features/epf/types";
+import { contributionMonthsFor } from "@/shared/features/epf/utils/contributions";
 import {
   deriveEmploymentState,
-  establishmentDurationMonths,
   maskIdentifier,
 } from "@/shared/features/epf/utils";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -27,14 +27,8 @@ const STATE_LABEL: Record<string, string> = {
   archived: "Archived",
 };
 
-function formatDuration(months: number): string {
-  if (months < 1) return "Less than a month";
-  const years = Math.floor(months / 12);
-  const rest = months % 12;
-  const parts: string[] = [];
-  if (years > 0) parts.push(`${years} yr${years > 1 ? "s" : ""}`);
-  if (rest > 0) parts.push(`${rest} mo${rest > 1 ? "s" : ""}`);
-  return parts.join(" ");
+function contributionMonthsLabel(count: number): string {
+  return count === 1 ? "1 contribution month" : `${count} contribution months`;
 }
 
 export function EpfEstablishmentCard({
@@ -49,7 +43,9 @@ export function EpfEstablishmentCard({
   const state = deriveEmploymentState(establishment, todayKey);
   const isCurrent = state === "current";
   const chipColor = isCurrent ? theme.colors.success : theme.colors.mutedForeground;
-  const duration = establishmentDurationMonths(establishment, todayKey);
+  const monthsLabel = contributionMonthsLabel(
+    contributionMonthsFor(establishment, todayKey.slice(0, 7)).length
+  );
 
   return (
     <Card>
@@ -61,8 +57,8 @@ export function EpfEstablishmentCard({
         accessibilityRole="button"
         accessibilityLabel={
           revealed
-            ? `Hide identifiers for ${establishment.employerName}`
-            : `Reveal identifiers for ${establishment.employerName}`
+            ? `Hide identifiers for ${establishment.employerName}, ${monthsLabel}`
+            : `Reveal identifiers for ${establishment.employerName}, ${monthsLabel}`
         }
       >
         <View style={styles.header}>
@@ -117,8 +113,11 @@ export function EpfEstablishmentCard({
           </View>
         </View>
 
-        <Text style={[styles.duration, { color: theme.colors.mutedForeground }]}>
-          {formatDuration(duration)}
+        <Text
+          style={[styles.duration, { color: theme.colors.mutedForeground }]}
+          accessibilityLabel={monthsLabel}
+        >
+          {monthsLabel}
           {establishment.notes ? ` · ${establishment.notes}` : ""}
         </Text>
       </Pressable>
