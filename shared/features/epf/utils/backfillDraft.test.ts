@@ -5,6 +5,7 @@ import type {
   EpfContributionStatus,
 } from "@/shared/features/epf/types";
 import {
+  backfillRowPresentation,
   backfillSaveRows,
   clearSavedEdits,
   mergeBackfillEdits,
@@ -298,5 +299,36 @@ describe("persistedAmountsDiffer — SPENDLY-68", () => {
       persistedAmountsDiffer(saved, { ...saved, employeeShare: 1287 })
     ).toBe(true);
     expect(persistedAmountsDiffer(saved, { ...saved, wage: 10000 })).toBe(true);
+  });
+});
+
+describe("backfillRowPresentation — SPENDLY-69", () => {
+  it("marks a saved month as recorded and not suggested", () => {
+    expect(backfillRowPresentation(row({ persisted: true, epfCredit: 2948 }))).toEqual({
+      recorded: true,
+      suggested: false,
+    });
+  });
+
+  it("marks a wage-filled unsaved month as a suggestion", () => {
+    expect(backfillRowPresentation(row({ persisted: false, epfCredit: 2948 }))).toEqual({
+      recorded: true,
+      suggested: true,
+    });
+  });
+
+  it("marks an untouched month as neither", () => {
+    expect(backfillRowPresentation(row({ persisted: false, epfCredit: 0 }))).toEqual({
+      recorded: false,
+      suggested: false,
+    });
+  });
+
+  it("treats a saved non-remitting month as recorded", () => {
+    // A stored zeroReason month is a document History counts, not a suggestion.
+    expect(backfillRowPresentation(row({ persisted: true, epfCredit: 0 }))).toEqual({
+      recorded: true,
+      suggested: false,
+    });
   });
 });

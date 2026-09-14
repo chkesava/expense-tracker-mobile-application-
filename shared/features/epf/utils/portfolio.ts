@@ -18,12 +18,10 @@ import type {
   EpfReconciliation,
   EpfTransfer,
 } from "@/shared/features/epf/types";
+import { isBalanceBearing } from "@/shared/features/epf/utils/contributions";
 import { isReconciled } from "@/shared/features/epf/utils/lifecycle";
 import { establishmentBalanceBreakdown } from "@/shared/features/epf/utils/transfers";
 import { roundMoney } from "@/shared/utils/money";
-
-/** Contribution statuses that actually added money. Mirrors the balance definition. */
-const BALANCE_BEARING: EpfContribution["status"][] = ["credited", "partial", "confirmed"];
 
 export interface EpfPortfolioSummary {
   /** Everything held across every establishment. */
@@ -110,7 +108,7 @@ export function epfPortfolioSummary(args: {
   // The contribution-type split is not part of the balance breakdown, because
   // the balance only cares what landed. The ticket asks for it explicitly.
   for (const row of contributions) {
-    if (!BALANCE_BEARING.includes(row.status)) continue;
+    if (!isBalanceBearing(row.status)) continue;
 
     if (row.creditedAmount !== undefined && row.epfCredit > 0) {
       // A reconciled month may differ from the projection; scale the split so

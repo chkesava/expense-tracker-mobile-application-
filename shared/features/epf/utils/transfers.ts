@@ -22,10 +22,8 @@ import type {
   EpfTransferIssue,
   EpfTransferSummary,
 } from "@/shared/features/epf/types";
+import { isBalanceBearing } from "@/shared/features/epf/utils/contributions";
 import { roundMoney } from "@/shared/utils/money";
-
-/** Contribution statuses that have actually added money to the fund. */
-const BALANCE_BEARING: EpfContribution["status"][] = ["credited", "partial", "confirmed"];
 
 export interface EpfBalanceInputs {
   contributions: EpfContribution[];
@@ -76,7 +74,7 @@ export function establishmentBalanceBreakdown(args: EpfBalanceInputs): EpfBalanc
 
   const contributed = contributions.reduce((total, row) => {
     if (row.establishmentId !== establishmentId) return total;
-    if (!BALANCE_BEARING.includes(row.status)) return total;
+    if (!isBalanceBearing(row.status)) return total;
     return total + (row.creditedAmount ?? row.epfCredit);
   }, 0);
 
