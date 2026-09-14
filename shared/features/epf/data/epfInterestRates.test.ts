@@ -30,6 +30,7 @@ describe("EPF_INTEREST_RATES table", () => {
 
 describe("findEpfInterestRate", () => {
   it("returns the declared rate for a known year", () => {
+    expect(findEpfInterestRate("2025-26")?.rate).toBe(0.0825);
     expect(findEpfInterestRate("2023-24")?.rate).toBe(0.0825);
     expect(findEpfInterestRate("2021-22")?.rate).toBe(0.081);
   });
