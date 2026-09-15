@@ -82,6 +82,12 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # Explicit, because the action defaults to "tools platform-tools" and
+          # Google has retired the obsolete `tools` package — sdkmanager exits 1
+          # on a package that no longer exists, failing the step before any build
+          # work. v4 does not help: it ships the same default.
+          packages: platform-tools
 
       - name: Install dependencies
         run: npm ci
