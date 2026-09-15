@@ -6,6 +6,7 @@ import { usePandals } from "@/hooks/usePandals";
 import { getFirestoreDb } from "@/lib/firebase";
 import { isPermissionError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
+import { useGaneshT } from "@/providers/GaneshI18nProvider";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import { leavePandal as leavePandalWrite } from "@/services/ganesh/ganeshMembership";
 import { useNetwork } from "@/providers/NetworkProvider";
@@ -29,6 +30,7 @@ import {
   assertReimbursementOnline,
   assertVoidOnline,
 } from "@/services/ganesh/ganeshWrites";
+import { type GaneshLanguage } from "@/shared/i18n/ganesh/types";
 import { assertMoneyReceiveOnline } from "@/shared/utils/ganeshContributions";
 import {
   ARCHIVED_PANDAL_WRITE_MESSAGE,
@@ -57,6 +59,7 @@ export function useGaneshWrites() {
   const { actor, pandalId, festivalId, clearSession } = useGaneshSession();
   const { isOnline } = useNetwork();
   const { can: hasPerm, isAdmin, permissions } = useGaneshPermissions();
+  const t = useGaneshT();
   // Shared provider data when this is the session pandal, so reading it here
   // costs no extra listener — see useFestivals / usePandals.
   const { festivals } = useFestivals(pandalId);
@@ -342,6 +345,31 @@ export function useGaneshWrites() {
       requirePerm("festival.update");
       return run("Festival saved", () =>
         writes.updateFestivalDetails(requireDb(), actor, pandalId, targetFestivalId, input)
+      );
+    },
+    /**
+     * A Pandal Admin assigns the language a member sees. `null` clears the
+     * assignment so they follow the Pandal default.
+     *
+     * Gated on `members.update`, which is the layering every other write here
+     * follows. Note the asymmetry the UI has to respect: `firestore.rules`
+     * gates member writes on `canManageMembers()` — literally `role == 'admin'`
+     * — so a custom role granted `members.update` would pass this check and
+     * then be refused by the rules. The pickers therefore gate their
+     * *visibility* on `isAdmin`, not on this permission.
+     */
+    setMemberLanguage: async (targetUserId: string, language: GaneshLanguage | null) => {
+      if (!pandalId || !actor) throw new Error("Select a Pandal first.");
+      requirePerm("members.update");
+      return run(language === null ? t("language.member.cleared") : t("language.member.saved"), () =>
+        writes.setPandalMemberLanguage(requireDb(), actor, pandalId, targetUserId, language)
+      );
+    },
+    setPandalDefaultLanguage: async (language: GaneshLanguage) => {
+      if (!pandalId || !actor) throw new Error("Select a Pandal first.");
+      requirePerm("settings.update");
+      return run(t("language.pandal.saved"), () =>
+        writes.setPandalDefaultLanguage(requireDb(), actor, pandalId, language)
       );
     },
     updatePandalJoinMode: async (joinMode: Parameters<typeof writes.updatePandalJoinMode>[3]) => {

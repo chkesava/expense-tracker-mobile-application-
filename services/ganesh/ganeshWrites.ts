@@ -35,6 +35,10 @@ import {
 import { errorCode, logError } from "@/lib/errors";
 import { newId } from "@/lib/id";
 import { commitWrite } from "@/lib/firestoreWrite";
+import {
+  isGaneshLanguage,
+  type GaneshLanguage,
+} from "@/shared/i18n/ganesh/types";
 import { omitUndefined } from "@/shared/utils/firestorePayload";
 import {
   availableGodFund,
@@ -78,6 +82,7 @@ import {
   membershipDoc,
   pandalAssetsCol,
   pandalMemberAuditsCol,
+  pandalMembersCol,
   summaryDoc,
 } from "@/shared/utils/ganeshPaths";
 import {
@@ -1037,6 +1042,83 @@ export async function transferPandalOwnership(
     reason: `Pandal ownership moved from ${String(pandalSnap.data().ownerId ?? "unknown")}`,
   });
   await commitWrite(() => batch.commit(), { label: "transfer ownership" });
+}
+
+/**
+ * A Pandal Admin sets the display language one member sees.
+ *
+ * Cosmetic by construction: it writes exactly one field plus the timestamp, and
+ * touches no role, status, permission list or admin count, so it cannot move
+ * authority. `updatePandalMember` is deliberately *not* reused — that path
+ * maintains `adminCount`, `memberIds` and the role/permission derivation, and
+ * none of that should run for a language change.
+ *
+ * `firestore.rules` needs no change for this: member update already requires
+ * `canManageMembers()` (literally `role == 'admin'`) with `userId` unchanged and
+ * the admin count held, and there is no field allowlist on the document.
+ *
+ * Pass `null` to clear the assignment so the member falls back to the Pandal's
+ * `defaultLanguage`.
+ */
+export async function setPandalMemberLanguage(
+  db: Firestore,
+  actor: GaneshActor,
+  pandalId: string,
+  targetUserId: string,
+  language: GaneshLanguage | null
+): Promise<void> {
+  if (language !== null && !isGaneshLanguage(language)) {
+    throw new Error("Choose a supported language.");
+  }
+  const memberRef = pathRef(db, [...pandalMembersCol(pandalId), targetUserId]);
+  const memberSnap = await getDoc(memberRef);
+  if (!memberSnap.exists()) throw new Error("Member not found.");
+  const previous = memberSnap.data().language;
+
+  const batch = writeBatch(db);
+  batch.update(memberRef, {
+    language: language === null ? deleteField() : language,
+    updatedAt: serverTimestamp(),
+  });
+  memberAudit(batch, db, pandalId, {
+    actorId: actor.uid,
+    targetUserId,
+    action: "member_language",
+    oldValue: typeof previous === "string" ? previous : null,
+    newValue: language,
+  });
+  await commitWrite(() => batch.commit(), { label: "member language" });
+}
+
+/** The language new members, and members with no assignment, see. */
+export async function setPandalDefaultLanguage(
+  db: Firestore,
+  actor: GaneshActor,
+  pandalId: string,
+  language: GaneshLanguage
+): Promise<void> {
+  if (!isGaneshLanguage(language)) throw new Error("Choose a supported language.");
+  const pandalRef = doc(db, "pandals", pandalId);
+  const pandalSnap = await getDoc(pandalRef);
+  if (!pandalSnap.exists()) throw new Error("Pandal not found.");
+  const previous = pandalSnap.data().defaultLanguage;
+
+  const batch = writeBatch(db);
+  // Leaves ownerId, code and adminCount untouched, so `keepsPandalCore()` and
+  // `adminCountDeltaBounded()` both pass unchanged.
+  batch.update(pandalRef, {
+    defaultLanguage: language,
+    updatedBy: actor.uid,
+    updatedAt: serverTimestamp(),
+  });
+  memberAudit(batch, db, pandalId, {
+    actorId: actor.uid,
+    targetUserId: actor.uid,
+    action: "pandal_language",
+    oldValue: typeof previous === "string" ? previous : null,
+    newValue: language,
+  });
+  await commitWrite(() => batch.commit(), { label: "pandal language" });
 }
 
 export async function updatePandalProfile(

@@ -1,3 +1,4 @@
+import type { GaneshLanguage } from "@/shared/i18n/ganesh/types";
 export type GaneshRole = "admin" | "treasurer" | "member" | "collector" | "viewer";
 export type GaneshMemberStatus = "active" | "suspended" | "removed";
 export type PandalJoinMode = "approval" | "open";
@@ -133,6 +134,15 @@ export interface Pandal extends GaneshAuditFields {
   adminCount?: number;
   contactPhone?: string;
   /**
+   * The display language new members, and anyone without their own assignment,
+   * see the app in. Absent means English.
+   *
+   * Resolved at read time rather than copied onto each new member document, so
+   * raising it later moves everyone who has no explicit override — and so the
+   * join and approval write paths need no changes.
+   */
+  defaultLanguage?: GaneshLanguage;
+  /**
    * A finished or abandoned Pandal. Everything stays readable — the committee
    * keeps its money history, which is the point of the app — but no new
    * collections, expenses, contributions or transfers can be written, and it is
@@ -195,7 +205,9 @@ export type PandalMemberAuditAction =
   | "pandal_archived"
   | "pandal_restored"
   | "ownership_transferred"
-  | "pandal_profile";
+  | "pandal_profile"
+  | "member_language"
+  | "pandal_language";
 
 export interface PandalRole {
   id: string;
@@ -375,6 +387,18 @@ export interface PandalMember {
   roleIdsBeforeAdmin?: string[];
   permissions?: import("@/shared/utils/ganeshPermissions").GaneshPermission[];
   permissionOverrides?: import("@/shared/utils/ganeshPermissions").GaneshPermission[];
+  /**
+   * Display language assigned by a Pandal Admin.
+   *
+   * Per-pandal by design: a committee member can sit on a Telugu committee and
+   * an English one, and each Pandal's admin owns their own members' experience.
+   * It also has to live here rather than on `users/{uid}` — `firestore.rules`
+   * makes that document owner-only, so an admin could not write it.
+   *
+   * Absent means "inherit `Pandal.defaultLanguage`", which means English.
+   * Carries no authority: see `setPandalMemberLanguage`.
+   */
+  language?: GaneshLanguage;
   createdAt?: FirestoreTime;
   updatedAt?: FirestoreTime;
 }

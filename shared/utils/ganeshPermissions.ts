@@ -1,6 +1,7 @@
 import type { GaneshRole, PandalRole } from "@/shared/types/ganesh";
 
 import { expandPermissions, hasPermission } from "@/shared/utils/ganeshPermissionRegistry";
+import type { GaneshMessageKey } from "@/shared/i18n/ganesh/keys";
 
 export type GaneshPermission =
   | "collections.read"
@@ -335,6 +336,45 @@ export function getEffectivePermissions(input: {
   return expandPermissions(collected);
 }
 
+/**
+ * Message keys for the role names, for UI that has a `t()` to hand.
+ *
+ * A key map rather than a translated function because this module is pure
+ * shared TypeScript with no React — the language lives in a context, so the
+ * lookup belongs at the render site. `ganeshRoleLabel` below stays for the
+ * callers that genuinely want English.
+ */
+export const GANESH_ROLE_LABEL_KEYS: Record<GaneshRole, GaneshMessageKey> = {
+  admin: "common.role.admin",
+  treasurer: "common.role.treasurer",
+  member: "common.role.member",
+  collector: "common.role.collector",
+  viewer: "common.role.viewer",
+};
+
+export function ganeshRoleLabelKey(role: GaneshRole | undefined): GaneshMessageKey {
+  return role ? GANESH_ROLE_LABEL_KEYS[role] : "common.role.unknown";
+}
+
+const GANESH_STATUS_LABEL_KEYS: Record<string, GaneshMessageKey> = {
+  active: "common.status.active",
+  suspended: "common.status.suspended",
+  removed: "common.status.removed",
+  pending: "common.status.pending",
+};
+
+export function ganeshStatusLabelKey(status: string | undefined): GaneshMessageKey {
+  return (status && GANESH_STATUS_LABEL_KEYS[status]) || "common.status.unknown";
+}
+
+/**
+ * English role name.
+ *
+ * Kept deliberately: transparency reports and CSV exports leave the app and get
+ * opened by people outside the committee — a bank, an auditor — so they stay
+ * English rather than following whichever reader generated them. UI should use
+ * `ganeshRoleLabelKey` with `t()`.
+ */
 export function ganeshRoleLabel(role: GaneshRole | undefined): string {
   if (role === "admin") return "Pandal Admin";
   if (role === "treasurer") return "Treasurer";
@@ -344,6 +384,7 @@ export function ganeshRoleLabel(role: GaneshRole | undefined): string {
   return "Unknown";
 }
 
+/** English status name. Same reasoning as `ganeshRoleLabel`. */
 export function ganeshStatusLabel(status: string | undefined): string {
   if (status === "active") return "Active";
   if (status === "suspended") return "Suspended";

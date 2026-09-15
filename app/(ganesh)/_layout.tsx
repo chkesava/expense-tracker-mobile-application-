@@ -2,12 +2,14 @@ import { useEffect, useRef } from "react";
 import { Redirect, Stack } from "expo-router";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 
+import { GaneshLanguageSync } from "@/components/ganesh/i18n/GaneshLanguageSync";
 import { GaneshMembershipGate } from "@/components/ganesh/GaneshMembershipGate";
 import { PrivacyLock } from "@/components/PrivacyLock";
 import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
 import { useAuth } from "@/providers/AuthProvider";
 import { GaneshDataProvider } from "@/providers/GaneshDataProvider";
+import { GaneshI18nProvider } from "@/providers/GaneshI18nProvider";
 import { GaneshSessionProvider } from "@/providers/GaneshSessionProvider";
 import { GaneshThemeProvider } from "@/providers/GaneshThemeProvider";
 import { GaneshUploadQueueProvider } from "@/providers/GaneshUploadQueueProvider";
@@ -56,6 +58,10 @@ function GaneshGate({ children }: { children: React.ReactNode }) {
   return (
     <GaneshDataProvider>
       <ClaimApprovedMemberships />
+      {/* Reads the member's assigned language off the slice above and pushes it
+          into GaneshI18nProvider, which is mounted higher up so the gates and
+          spinners are translated too. */}
+      <GaneshLanguageSync />
       {/* Above the screens, so a queued photo keeps uploading after the screen
           that picked it is gone (GS-040). */}
       <GaneshUploadQueueProvider>
@@ -161,13 +167,18 @@ export default function GaneshLayout() {
   // the festival palette on the very first frame.
   return (
     <GaneshThemeProvider>
-      <PrivacyLock>
-        <GaneshSessionProvider>
-          <GaneshGate>
-            <GaneshStack />
-          </GaneshGate>
-        </GaneshSessionProvider>
-      </PrivacyLock>
+      {/* Above PrivacyLock and the auth gate so their copy is translated as
+          well, and so a cached language paints on the very first frame. It
+          holds no Firestore state — GaneshLanguageSync feeds it from below. */}
+      <GaneshI18nProvider>
+        <PrivacyLock>
+          <GaneshSessionProvider>
+            <GaneshGate>
+              <GaneshStack />
+            </GaneshGate>
+          </GaneshSessionProvider>
+        </PrivacyLock>
+      </GaneshI18nProvider>
     </GaneshThemeProvider>
   );
 }

@@ -2,16 +2,19 @@ import { useEffect } from "react";
 import { Redirect, Tabs } from "expo-router";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 
+import { GANESH_TAB_LABEL_KEYS } from "@/components/ganesh/i18n/ganeshTabs";
 import { GaneshTabBar } from "@/components/ganesh/GaneshTabBar";
 import { useFestivals } from "@/hooks/useFestivals";
 import { useGaneshSyncReporter } from "@/hooks/useGaneshSyncReporter";
 import { usePandals } from "@/hooks/usePandals";
+import { useGaneshT } from "@/providers/GaneshI18nProvider";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import { resolveSessionFestival } from "@/shared/utils/ganeshFestivalSession";
 import { useTheme } from "@/theme/ThemeProvider";
 
 export default function GaneshTabsLayout() {
   const { theme } = useTheme();
+  const t = useGaneshT();
   const { ready, pandalId, festivalId, clearSession, setSession } = useGaneshSession();
   const { loading, membershipsReady, sessionMembershipActive } = usePandals();
   const { festivals, loading: festivalsLoading } = useFestivals(pandalId);
@@ -92,16 +95,16 @@ export default function GaneshTabsLayout() {
         `/(ganesh)/(tabs)/contributions?status=promised` — keeps resolving.
         They are reached from the Funds and People hubs instead.
       */}
-      <Tabs.Screen name="index" options={{ title: "Home" }} />
-      <Tabs.Screen name="seva" options={{ title: "Seva" }} />
-      <Tabs.Screen name="funds" options={{ title: "Funds" }} />
-      <Tabs.Screen name="people" options={{ title: "People" }} />
-      <Tabs.Screen name="pandal" options={{ title: "Pandal" }} />
+      <Tabs.Screen name="index" options={{ title: t(GANESH_TAB_LABEL_KEYS.index) }} />
+      <Tabs.Screen name="seva" options={{ title: t(GANESH_TAB_LABEL_KEYS.seva) }} />
+      <Tabs.Screen name="funds" options={{ title: t(GANESH_TAB_LABEL_KEYS.funds) }} />
+      <Tabs.Screen name="people" options={{ title: t(GANESH_TAB_LABEL_KEYS.people) }} />
+      <Tabs.Screen name="pandal" options={{ title: t(GANESH_TAB_LABEL_KEYS.pandal) }} />
 
-      <Tabs.Screen name="collections" options={{ title: "Collections" }} />
-      <Tabs.Screen name="expenses" options={{ title: "Expenses" }} />
-      <Tabs.Screen name="contributions" options={{ title: "Contributions" }} />
-      <Tabs.Screen name="committee" options={{ title: "Committee" }} />
+      <Tabs.Screen name="collections" options={{ title: t(GANESH_TAB_LABEL_KEYS.collections) }} />
+      <Tabs.Screen name="expenses" options={{ title: t(GANESH_TAB_LABEL_KEYS.expenses) }} />
+      <Tabs.Screen name="contributions" options={{ title: t(GANESH_TAB_LABEL_KEYS.contributions) }} />
+      <Tabs.Screen name="committee" options={{ title: t(GANESH_TAB_LABEL_KEYS.committee) }} />
     </Tabs>
       {loading || !hasActivePandal || festivalsLoading || switchingFestival ? (
         <View
