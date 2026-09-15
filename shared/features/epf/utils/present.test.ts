@@ -21,19 +21,23 @@ describe("statusToneKey", () => {
   });
 
   it("has a key for every tone contributionStatusMeta can produce", () => {
-    const statuses = [
+    // Every derived state, not every stored status — SPENDLY-72 split
+    // `expected` into projected/awaiting/overdue at the presentation edge.
+    const states = [
       "draft",
       "confirmed",
-      "expected",
+      "projected",
+      "awaiting",
+      "overdue",
       "credited",
       "partial",
       "missed",
       "reversed",
     ] as const;
-    for (const status of statuses) {
+    for (const state of states) {
       for (const source of ["manualHistorical", "manualCurrent", "simulated", "imported"] as const) {
         for (const reconciled of [true, false]) {
-          const meta = contributionStatusMeta(status, source, reconciled);
+          const meta = contributionStatusMeta(state, source, { reconciled });
           expect(statusToneKey(meta.tone)).toMatch(
             /^(success|destructive|primary|mutedForeground)$/
           );

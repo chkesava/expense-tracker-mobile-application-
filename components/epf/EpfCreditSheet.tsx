@@ -6,11 +6,17 @@ import { Modal } from "@/components/common/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { appDialog } from "@/lib/appDialog";
-import { epfTodayKey } from "@/shared/features/epf/utils/epfClock";
+import { epfCurrentMonth, epfTodayKey } from "@/shared/features/epf/utils/epfClock";
 import { epfCreditFormSchema } from "@/shared/features/epf/schemas";
 import type { EpfContribution } from "@/shared/features/epf/types";
 import { contributionStatusMeta } from "@/shared/features/epf/utils/contributions";
-import { isReconciled } from "@/shared/features/epf/utils/lifecycle";
+import { canTransition, isReconciled } from "@/shared/features/epf/utils/lifecycle";
+import {
+  deriveMonthState,
+  dueDateFor,
+  dueDateLabel,
+  isAwaitingCredit,
+} from "@/shared/features/epf/utils/monthState";
 import { formatAmount } from "@/shared/utils/formatCurrency";
 import { useTheme } from "@/theme/ThemeProvider";
 import { fieldErrorsFromIssues } from "@/shared/utils/fieldErrors";
@@ -31,7 +37,14 @@ type Props = {
  *
  * Everything here is user-asserted. The app cannot see an EPFO account, so
  * marking a month missed or reversed is a claim only a person can make, and
- * both are confirmed before they are written.
+ * both are confirmed before they are written. Since SPENDLY-72 that is the
+ * *only* way a month becomes credited — nothing advances on its own.
+ *
+ * An early credit needs no special case: it is a credit date before the
+ * statutory due date, and the date the user types is what gets stored.
+ *
+ * Actions are hidden where `canTransition` would refuse them, so the sheet
+ * never offers a button that is guaranteed to fail.
  */
 export function EpfCreditSheet({
   isOpen,
@@ -60,8 +73,21 @@ export function EpfCreditSheet({
 
   if (!row) return null;
 
-  const meta = contributionStatusMeta(row.status, row.source, isReconciled(row));
+  const state = deriveMonthState(row, epfTodayKey(), epfCurrentMonth());
+  const dueDate = dueDateFor(row);
+  const meta = contributionStatusMeta(state, row.source, {
+    reconciled: isReconciled(row),
+    dueDate: isAwaitingCredit(state) ? dueDateLabel(dueDate) : undefined,
+  });
   const money = (value: number) => formatAmount(value, currency);
+
+  // A lower amount lands on `partial`, so a month may only record a credit if
+  // both are reachable — otherwise the sheet would accept an amount and then
+  // reject it on the way out.
+  const canRecordCredit =
+    canTransition(row.status, "credited") && canTransition(row.status, "partial");
+  const canMarkMissed = canTransition(row.status, "missed");
+  const canMarkReversed = canTransition(row.status, "reversed");
 
   const run = async (action: () => Promise<boolean>) => {
     setSaving(true);
@@ -131,52 +157,66 @@ export function EpfCreditSheet({
           </Text>
           <Text style={[styles.statusHint, { color: theme.colors.mutedForeground }]}>
             {meta.simulated
-              ? `Projected ${money(row.epfCredit)} into EPF. Record the actual credit to confirm it.`
-              : `Expected ${money(row.epfCredit)} into EPF.`}
-            {row.expectedCreditFrom
-              ? ` Due ${row.expectedCreditFrom} – ${row.expectedCreditTo}.`
-              : ""}
+              ? `Projected ${money(row.epfCredit)} into EPF — Spendly cannot see your EPFO account. Record the actual credit to confirm it.`
+              : `${money(row.creditedAmount ?? row.epfCredit)} into EPF.`}
+            {isAwaitingCredit(state) ? ` Due by ${dueDateLabel(dueDate)}.` : ""}
           </Text>
+          {!canRecordCredit ? (
+            <Text style={[styles.statusHint, { color: theme.colors.mutedForeground }]}>
+              Save this month under Backfill before recording a credit against it.
+            </Text>
+          ) : null}
         </View>
 
-        <Input
-          label="Amount actually credited"
-          value={amount}
-          onChangeText={setAmount}
-          keyboardType="numeric"
-          error={errors.amount}
-          helperText="Less than expected marks the month partial."
-        />
+        {canRecordCredit ? (
+          <>
+            <Input
+              label="Amount actually credited"
+              value={amount}
+              onChangeText={setAmount}
+              keyboardType="numeric"
+              error={errors.amount}
+              helperText="Less than expected marks the month partial."
+            />
 
-        <Input
-          label="Credit date (YYYY-MM-DD)"
-          value={date}
-          onChangeText={setDate}
-          placeholder="YYYY-MM-DD"
-          autoCapitalize="none"
-          error={errors.date}
-        />
+            <Input
+              label="Credit date (YYYY-MM-DD)"
+              value={date}
+              onChangeText={setDate}
+              placeholder="YYYY-MM-DD"
+              autoCapitalize="none"
+              error={errors.date}
+              helperText={`The day it reached your account. Earlier than ${dueDateLabel(dueDate)} is fine — employers often remit early.`}
+            />
+          </>
+        ) : null}
 
-        <Input
-          label="Note"
-          value={reason}
-          onChangeText={setReason}
-          placeholder="Optional — used when marking missed or reversed"
-          error={errors.reason}
-        />
+        {canMarkMissed || canMarkReversed ? (
+          <Input
+            label="Note"
+            value={reason}
+            onChangeText={setReason}
+            placeholder="Optional — used when marking missed or reversed"
+            error={errors.reason}
+          />
+        ) : null}
 
-        <Button onPress={handleRecord} loading={saving}>
-          Record credit
-        </Button>
+        {canRecordCredit ? (
+          <Button onPress={handleRecord} loading={saving}>
+            Record credit
+          </Button>
+        ) : null}
 
-        <Pressable onPress={confirmMissed} disabled={saving} style={styles.actionRow}>
-          <XCircle size={theme.iconSize.sm} color={theme.colors.destructive} />
-          <Text style={[styles.actionText, { color: theme.colors.destructive }]}>
-            Mark as missed
-          </Text>
-        </Pressable>
+        {canMarkMissed ? (
+          <Pressable onPress={confirmMissed} disabled={saving} style={styles.actionRow}>
+            <XCircle size={theme.iconSize.sm} color={theme.colors.destructive} />
+            <Text style={[styles.actionText, { color: theme.colors.destructive }]}>
+              Mark as missed
+            </Text>
+          </Pressable>
+        ) : null}
 
-        {row.status === "credited" || row.status === "partial" ? (
+        {canMarkReversed ? (
           <Pressable onPress={confirmReversed} disabled={saving} style={styles.actionRow}>
             <RotateCcw size={theme.iconSize.sm} color={theme.colors.destructive} />
             <Text style={[styles.actionText, { color: theme.colors.destructive }]}>

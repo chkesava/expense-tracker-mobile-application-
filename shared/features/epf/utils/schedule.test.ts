@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import type { EpfContribution, EpfEstablishment } from "@/shared/features/epf/types";
+import { contributionMonthsFor } from "@/shared/features/epf/utils/contributions";
 import {
+  backfillThroughMonth,
   buildExpectedContribution,
   canOverwriteWithSimulated,
   expectedCreditWindow,
   isSchedulable,
+  statutoryDueDate,
   monthsToGenerate,
   planScheduledContributions,
   selectEstablishmentForMonth,
@@ -361,5 +364,90 @@ describe("isSchedulable", () => {
 
   it("rejects an archived employment", () => {
     expect(isSchedulable(establishment({ archived: true }))).toBe(false);
+  });
+});
+
+describe("statutoryDueDate", () => {
+  it("is the 15th of the month after the wage month", () => {
+    // EPFO: remit within 15 days of the close of the month. September wages
+    // are due 15 October — the date the ticket's acceptance criterion names.
+    expect(statutoryDueDate("2026-09")).toBe("2026-10-15");
+  });
+
+  it("crosses the year boundary", () => {
+    expect(statutoryDueDate("2026-12")).toBe("2027-01-15");
+  });
+
+  it("is the start of the credit window, not a second definition of it", () => {
+    for (const month of ["2024-02", "2025-06", "2026-11"]) {
+      expect(statutoryDueDate(month)).toBe(expectedCreditWindow(month).from);
+    }
+  });
+
+  it("lands on the 15th whatever the length of the credit month", () => {
+    // February is the short month the window clamp exists for; the 15th is
+    // never affected by it, and this pins that it never starts to be.
+    expect(statutoryDueDate("2027-01")).toBe("2027-02-15");
+    expect(statutoryDueDate("2024-01")).toBe("2024-02-15");
+  });
+});
+
+describe("backfillThroughMonth", () => {
+  it("stops before the in-progress month while employment is live", () => {
+    // The reported bug: Backfill reached September, so Save all stamped the
+    // current month `confirmed` and it rendered "Manual" before any credit
+    // could have landed.
+    expect(backfillThroughMonth(establishment(), "2026-09")).toBe("2026-08");
+  });
+
+  it("crosses the year boundary correctly", () => {
+    expect(backfillThroughMonth(establishment(), "2026-01")).toBe("2025-12");
+  });
+
+  it("never falls below the joining month", () => {
+    // Someone who started this month has no closed month. Rendering nothing
+    // would leave no way to enter a wage, so `wageForProjection` would stay at
+    // 0 and the scheduler would never generate anything at all.
+    const joinedThisMonth = establishment({ dateJoined: "2026-09-04" });
+    expect(backfillThroughMonth(joinedThisMonth, "2026-09")).toBe("2026-09");
+  });
+
+  it("gives a new joiner exactly one month to seed a wage from", () => {
+    const joinedThisMonth = establishment({ dateJoined: "2026-09-04" });
+    expect(
+      contributionMonthsFor(joinedThisMonth, backfillThroughMonth(joinedThisMonth, "2026-09"))
+    ).toEqual(["2026-09"]);
+  });
+
+  it("still excludes the current month once one closed month exists", () => {
+    const joinedLastMonth = establishment({ dateJoined: "2026-08-01" });
+    expect(backfillThroughMonth(joinedLastMonth, "2026-09")).toBe("2026-08");
+  });
+
+  it("includes the current month once employment has ended", () => {
+    // A final month is history the moment the person leaves, so it stays
+    // backfillable even though it is the month we are in.
+    const left = establishment({ dateLeft: "2026-09-20", employmentStatus: "previous" });
+    expect(backfillThroughMonth(left, "2026-09")).toBe("2026-09");
+  });
+
+  it("leaves a long-closed employment alone — its range is capped by dateLeft", () => {
+    const old = establishment({ dateLeft: "2024-03-31", employmentStatus: "previous" });
+    expect(backfillThroughMonth(old, "2026-09")).toBe("2026-09");
+    expect(contributionMonthsFor(old, backfillThroughMonth(old, "2026-09")).at(-1)).toBe(
+      "2024-03"
+    );
+  });
+
+  it("does not change what the scheduler generates", () => {
+    // Only Backfill narrows. `monthsToGenerate` must still reach the current
+    // month, or nothing would ever create the row Current is built around.
+    const months = monthsToGenerate({
+      establishment: establishment({ dateJoined: "2026-07-01" }),
+      allEstablishments: [establishment({ dateJoined: "2026-07-01" })],
+      existing: [],
+      throughMonth: "2026-09",
+    });
+    expect(months).toContain("2026-09");
   });
 });

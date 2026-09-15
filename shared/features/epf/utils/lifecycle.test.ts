@@ -2,18 +2,16 @@ import { describe, expect, it } from "vitest";
 
 import type { EpfContribution } from "@/shared/features/epf/types";
 import { contributionStatusMeta } from "@/shared/features/epf/utils/contributions";
+import { deriveMonthState } from "@/shared/features/epf/utils/monthState";
 import {
   applyActualCredit,
-  applyAutoCredit,
   applyMissed,
   applyReversed,
   buildContributionEvent,
   canTransition,
-  contributionsToAutoCredit,
-  isCreditWindowPassed,
   isReconciled,
   projectionBlocker,
-  summariseLifecycle,
+  transitionRejectionMessage,
 } from "@/shared/features/epf/utils/lifecycle";
 
 function contribution(overrides: Partial<EpfContribution> = {}): EpfContribution {
@@ -37,75 +35,6 @@ function contribution(overrides: Partial<EpfContribution> = {}): EpfContribution
   };
 }
 
-describe("isCreditWindowPassed", () => {
-  it("is false the day before the window closes", () => {
-    expect(isCreditWindowPassed(contribution(), "2026-09-24")).toBe(false);
-  });
-
-  it("is false on the closing day itself — the window is inclusive", () => {
-    expect(isCreditWindowPassed(contribution(), "2026-09-25")).toBe(false);
-  });
-
-  it("is true the day after", () => {
-    expect(isCreditWindowPassed(contribution(), "2026-09-26")).toBe(true);
-  });
-
-  it("is false when no window was recorded", () => {
-    expect(isCreditWindowPassed({ expectedCreditTo: undefined }, "2030-01-01")).toBe(false);
-  });
-});
-
-describe("contributionsToAutoCredit", () => {
-  it("advances only expected rows whose window has passed", () => {
-    const rows = [
-      contribution({ id: "a", month: "2026-08" }),
-      contribution({ id: "b", month: "2026-09", expectedCreditTo: "2026-10-25" }),
-    ];
-    const due = contributionsToAutoCredit(rows, "2026-09-26");
-    expect(due.map((row) => row.id)).toEqual(["a"]);
-  });
-
-  it("never touches a status the scheduler does not own", () => {
-    const rows = [
-      contribution({ status: "confirmed", source: "manualHistorical" }),
-      contribution({ status: "credited" }),
-      contribution({ status: "missed" }),
-      contribution({ status: "draft" }),
-      contribution({ status: "reversed" }),
-    ];
-    expect(contributionsToAutoCredit(rows, "2030-01-01")).toEqual([]);
-  });
-
-  it("is a no-op on a second pass — nothing is left expected", () => {
-    const rows = [contribution()];
-    const first = contributionsToAutoCredit(rows, "2026-09-26");
-    expect(first).toHaveLength(1);
-
-    const advanced = first.map((row) => applyAutoCredit(row));
-    expect(contributionsToAutoCredit(advanced, "2026-09-26")).toEqual([]);
-  });
-});
-
-describe("applyAutoCredit", () => {
-  it("credits the month but leaves it unreconciled", () => {
-    const row = applyAutoCredit(contribution());
-    expect(row.status).toBe("credited");
-    expect(row.reconciledAt).toBeUndefined();
-    expect(isReconciled(row)).toBe(false);
-  });
-
-  it("does not invent a credited amount", () => {
-    expect(applyAutoCredit(contribution()).creditedAmount).toBeUndefined();
-  });
-
-  it("reads as projected, not as fact", () => {
-    const row = applyAutoCredit(contribution());
-    const meta = contributionStatusMeta(row.status, row.source, isReconciled(row));
-    expect(meta.label).toBe("Credited · projected");
-    expect(meta.simulated).toBe(true);
-  });
-});
-
 describe("applyActualCredit", () => {
   const reconciledAt = "2026-09-26T00:00:00.000Z";
 
@@ -127,7 +56,12 @@ describe("applyActualCredit", () => {
       date: "2026-09-20",
       reconciledAt,
     });
-    const meta = contributionStatusMeta(row.status, row.source, isReconciled(row));
+    // The row is credited, so the calendar reading is just the stored status.
+    const meta = contributionStatusMeta(
+      deriveMonthState(row, "2026-09-26", "2026-09"),
+      row.source,
+      { reconciled: isReconciled(row) }
+    );
     expect(meta.label).toBe("Credited");
     expect(meta.simulated).toBe(false);
   });
@@ -190,15 +124,16 @@ describe("applyMissed and applyReversed", () => {
     expect(row.epfCredit).toBe(4750);
   });
 
-  it("both are user-asserted — neither is reachable from the auto path", () => {
-    const rows = [contribution(), contribution({ status: "credited" })];
-    const due = contributionsToAutoCredit(rows, "2030-01-01");
-    expect(due.every((row) => row.status === "expected")).toBe(true);
+  it("both are user-asserted — nothing in the module reaches them on its own", () => {
+    // SPENDLY-72 removed the only automatic transition there was. If a future
+    // change adds one back, this is the assertion that should stop it.
+    expect(canTransition("expected", "missed")).toBe(true);
+    expect(canTransition("expected", "reversed")).toBe(false);
   });
 });
 
 describe("canTransition", () => {
-  it("allows the automatic and user paths the lifecycle needs", () => {
+  it("allows the user paths the lifecycle needs", () => {
     expect(canTransition("expected", "credited")).toBe(true);
     expect(canTransition("credited", "partial")).toBe(true);
     expect(canTransition("credited", "reversed")).toBe(true);
@@ -208,6 +143,7 @@ describe("canTransition", () => {
 
   it("refuses to move a draft anywhere — KAN-66 owns that path", () => {
     expect(canTransition("draft", "credited")).toBe(false);
+    expect(canTransition("draft", "partial")).toBe(false);
     expect(canTransition("draft", "reversed")).toBe(false);
   });
 
@@ -215,8 +151,34 @@ describe("canTransition", () => {
     expect(canTransition("expected", "reversed")).toBe(false);
   });
 
-  it("does not let a backfilled month be auto-credited", () => {
-    expect(canTransition("confirmed", "credited")).toBe(false);
+  it("lets a backfilled month take the credit that actually landed — SPENDLY-72", () => {
+    // The reported bug: a current month saved from Backfill read "Manual" and
+    // had no way out, so the real credit could never be recorded against it.
+    expect(canTransition("confirmed", "credited")).toBe(true);
+    expect(canTransition("confirmed", "partial")).toBe(true);
+  });
+
+  it("still lets a backfilled month be marked missed or reversed", () => {
+    expect(canTransition("confirmed", "missed")).toBe(true);
+    expect(canTransition("confirmed", "reversed")).toBe(true);
+  });
+});
+
+describe("transitionRejectionMessage", () => {
+  it("tells a draft what has to happen first, not what the code refused", () => {
+    const message = transitionRejectionMessage("draft", "credited");
+    expect(message).toContain("Backfill");
+    expect(message).not.toContain("draft month to credited");
+  });
+
+  it("explains that only a credited month can be reversed", () => {
+    expect(transitionRejectionMessage("expected", "reversed")).toBe(
+      "Only a credited month can be reversed."
+    );
+  });
+
+  it("falls back to a readable sentence for anything else", () => {
+    expect(transitionRejectionMessage("reversed", "missed")).toContain("reversed");
   });
 });
 
@@ -245,52 +207,6 @@ describe("buildContributionEvent", () => {
     });
     expect(event.actor).toBe("user");
     expect(event.reason).toBe("Reversed by EPFO");
-  });
-});
-
-describe("summariseLifecycle", () => {
-  it("counts each status and totals what landed", () => {
-    const summary = summariseLifecycle([
-      contribution({ status: "expected" }),
-      contribution({ status: "credited" }),
-      contribution({ status: "partial", creditedAmount: 2000, reconciledAt: "x" }),
-      contribution({ status: "missed" }),
-      contribution({ status: "reversed" }),
-    ]);
-    expect(summary.expected).toBe(1);
-    expect(summary.credited).toBe(1);
-    expect(summary.partial).toBe(1);
-    expect(summary.missed).toBe(1);
-    expect(summary.reversed).toBe(1);
-    expect(summary.creditedTotal).toBe(6750); // 4750 projected + 2000 actual
-  });
-
-  it("prefers the actual amount over the projection where known", () => {
-    const summary = summariseLifecycle([
-      contribution({ status: "credited", creditedAmount: 1000, reconciledAt: "x" }),
-    ]);
-    expect(summary.creditedTotal).toBe(1000);
-  });
-
-  it("counts unconfirmed credited months so reconciliation has a target", () => {
-    const summary = summariseLifecycle([
-      contribution({ status: "credited" }),
-      contribution({ status: "credited", reconciledAt: "x" }),
-      contribution({ status: "expected" }),
-    ]);
-    expect(summary.unreconciled).toBe(1);
-  });
-
-  it("excludes missed and reversed months from the total", () => {
-    const summary = summariseLifecycle([
-      contribution({ status: "missed" }),
-      contribution({ status: "reversed" }),
-    ]);
-    expect(summary.creditedTotal).toBe(0);
-  });
-
-  it("returns zeroes for an empty list", () => {
-    expect(summariseLifecycle([]).creditedTotal).toBe(0);
   });
 });
 

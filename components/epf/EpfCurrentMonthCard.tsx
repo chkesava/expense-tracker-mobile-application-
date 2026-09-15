@@ -5,10 +5,16 @@ import { AlertTriangle, ChevronRight, CalendarClock } from "lucide-react-native"
 import { Card } from "@/components/ui/Card";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { useEpfContributions } from "@/hooks/useEpfContributions";
-import { epfCurrentMonth } from "@/shared/features/epf/utils/epfClock";
+import { epfCurrentMonth, epfTodayKey } from "@/shared/features/epf/utils/epfClock";
 import type { EpfEstablishment } from "@/shared/features/epf/types";
 import { contributionStatusMeta } from "@/shared/features/epf/utils/contributions";
 import { isReconciled, projectionBlocker } from "@/shared/features/epf/utils/lifecycle";
+import {
+  deriveMonthState,
+  dueDateFor,
+  dueDateLabel,
+  isAwaitingCredit,
+} from "@/shared/features/epf/utils/monthState";
 import { wageForProjection } from "@/shared/features/epf/utils/schedule";
 import { formatAmount } from "@/shared/utils/formatCurrency";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -76,9 +82,14 @@ export function EpfCurrentMonthCard({
     );
   }
 
-  const meta = row
-    ? contributionStatusMeta(row.status, row.source, isReconciled(row))
-    : null;
+  const state = row ? deriveMonthState(row, epfTodayKey(), month) : null;
+  const meta =
+    row && state
+      ? contributionStatusMeta(state, row.source, {
+          reconciled: isReconciled(row),
+          dueDate: isAwaitingCredit(state) ? dueDateLabel(dueDateFor(row)) : undefined,
+        })
+      : null;
 
   return (
     <Card>

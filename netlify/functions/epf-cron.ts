@@ -16,18 +16,13 @@ import {
 } from "../../shared/features/epf/utils/contributions";
 import { normalizeEstablishment } from "../../shared/features/epf/utils";
 import { EPF_CRON_MONTHS_PER_BATCH } from "../../shared/features/epf/data/epfBatchLimits";
-import {
-  applyAutoCredit,
-  buildContributionEvent,
-  contributionsToAutoCredit,
-} from "../../shared/features/epf/utils/lifecycle";
-import {
-  epfCurrentMonth,
-  epfTodayKey,
-} from "../../shared/features/epf/utils/epfClock";
+import { buildContributionEvent } from "../../shared/features/epf/utils/lifecycle";
+import { epfCurrentMonth } from "../../shared/features/epf/utils/epfClock";
 import { planScheduledContributions } from "../../shared/features/epf/utils/schedule";
 import {
   contributionsMissingCreditWindow,
+  contributionsNeedingLifecycleRepair,
+  contributionsWithFabricatedCredit,
   creditWindowRepairFor,
 } from "../../shared/features/epf/utils/creditWindowRepair";
 
@@ -163,7 +158,6 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
   // IST, not UTC: EPF months are defined in India, and the client uses the same
   // helper so the two cannot disagree about which month it is (KAN-72).
   const throughMonth = epfCurrentMonth();
-  const todayKey = epfTodayKey();
 
   try {
     // Only users with a live employment — not the whole user base.
@@ -178,7 +172,6 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
 
     let processed = 0;
     let written = 0;
-    let credited = 0;
     let repaired = 0;
     let lastPath: string | null = null;
 
@@ -214,11 +207,11 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
       );
 
       // SPENDLY-1: heal rows the client catch-up wrote before the credit
-      // window was persisted. Those months can never auto-credit on their own —
-      // `monthsToGenerate` skips anything already present, so the planner never
-      // revisits them. Doing it here as well as in the app covers users who
-      // never open it. Must run *before* the selector below, which reads the
-      // field this repairs.
+      // window was persisted. Those months can never read as overdue on their
+      // own — `monthsToGenerate` skips anything already present, so the planner
+      // never revisits them. Doing it here as well as in the app covers users
+      // who never open it. Must run *before* the pass below, which stamps the
+      // same field onto rows it releases.
       const stale = contributionsMissingCreditWindow(existing);
       if (stale.length > 0) {
         const repairBatch = db.batch();
@@ -253,43 +246,62 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
         }
       }
 
-      // KAN-68: age any month whose expected credit window has passed. Same
-      // pure selector the client catch-up uses, so the two cannot disagree.
-      const due = contributionsToAutoCredit(existing, todayKey);
-      if (due.length > 0) {
-        const creditBatch = db.batch();
-        for (const row of due) {
-          const next = applyAutoCredit(row);
-          creditBatch.set(
+      // SPENDLY-72: withdraw credits the old auto-advance invented, and
+      // release drafts the old Backfill range stranded in the current month.
+      // Same pure selectors the client catch-up uses, so the two cannot
+      // disagree. Both are status changes, so both write an audit event —
+      // a withdrawal lowers a reported balance and must be traceable.
+      const fabricated = contributionsWithFabricatedCredit(existing);
+      const stranded = contributionsNeedingLifecycleRepair(existing, throughMonth);
+      const releases = [
+        ...fabricated.map((row) => ({
+          row,
+          fields: {} as Record<string, unknown>,
+          reason: "auto-credit withdrawn (SPENDLY-72)",
+        })),
+        ...stranded.map((row) => ({
+          row,
+          fields: creditWindowRepairFor(row) as Record<string, unknown>,
+          reason: "current-month draft released to the scheduler (SPENDLY-72)",
+        })),
+      ];
+      if (releases.length > 0) {
+        const releaseBatch = db.batch();
+        for (const item of releases) {
+          releaseBatch.set(
             db.doc(
               `users/${uid}/${EPF_CONTRIBUTIONS_COLLECTION}/${contributionDocId(
                 establishment.id,
-                row.month,
+                item.row.month,
               )}`,
             ),
             {
-              status: next.status,
+              ...item.fields,
+              status: "expected",
               statusUpdatedAt: new Date(),
               updatedAt: new Date(),
             },
             { merge: true },
           );
-          creditBatch.create(
+          releaseBatch.create(
             db
               .collection(`users/${uid}/${EPF_CONTRIBUTION_EVENTS_COLLECTION}`)
               .doc(),
             {
-              ...buildContributionEvent(row, row.status, next.status, {
+              ...buildContributionEvent(item.row, item.row.status, "expected", {
                 actor: "system",
-                amount: row.epfCredit,
+                reason: item.reason,
               }),
               at: new Date(),
             },
           );
         }
         try {
-          await creditBatch.commit();
-          credited += due.length;
+          await releaseBatch.commit();
+          repaired += releases.length;
+          // Mirror onto the in-memory copies so `planScheduledContributions`
+          // below sees the months as present and does not regenerate them.
+          for (const item of releases) item.row.status = "expected";
         } catch {
           // Another writer got there first. Next run reconciles.
         }
@@ -362,7 +374,9 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
     return json(200, {
       processed,
       written,
-      credited,
+      // Always 0 since SPENDLY-72 removed auto-crediting. Kept in the response
+      // so the workflow summary and any existing log parsing keep working.
+      credited: 0,
       repaired,
       throughMonth,
       nextCursor,

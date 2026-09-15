@@ -14,11 +14,15 @@ import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { useEpfContributions } from "@/hooks/useEpfContributions";
 import type { EpfEstablishment } from "@/shared/features/epf/types";
 import { contributionStatusMeta } from "@/shared/features/epf/utils/contributions";
+import { epfCurrentMonth, epfTodayKey } from "@/shared/features/epf/utils/epfClock";
+import { isReconciled, projectionBlocker } from "@/shared/features/epf/utils/lifecycle";
 import {
-  isReconciled,
-  projectionBlocker,
+  deriveMonthState,
+  dueDateFor,
+  dueDateLabel,
+  isAwaitingCredit,
   summariseLifecycle,
-} from "@/shared/features/epf/utils/lifecycle";
+} from "@/shared/features/epf/utils/monthState";
 import { wageForProjection } from "@/shared/features/epf/utils/schedule";
 import { formatAmount } from "@/shared/utils/formatCurrency";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -28,9 +32,15 @@ import { monthLabel } from "@/shared/utils/monthLabel";
 const RECENT_MONTHS = 18;
 
 /**
- * Current-employment contribution lifecycle — KAN-68.
+ * Current-employment contribution lifecycle — KAN-68, reworked by SPENDLY-72.
  *
  * Recent months newest first, each tappable to record what actually happened.
+ *
+ * Nothing here decides anything: the clock goes in, `deriveMonthState` and
+ * `summariseLifecycle` do the reading, and this renders the answer. That is
+ * load bearing — `vitest.config.ts` never collects `components/**`, so a
+ * branch written here would be a branch nobody tests, which is how the header
+ * came to total a different set of months than the rows beneath it.
  */
 export function EpfCurrentContributions({
   establishment,
@@ -54,11 +64,19 @@ export function EpfCurrentContributions({
 
   const money = useCallback((value: number) => formatAmount(value, currency), [currency]);
 
+  // One clock reading per render, shared by the header and every row, so a
+  // month can never be summarised against a different day than it is drawn on.
+  const todayKey = epfTodayKey();
+  const currentMonth = epfCurrentMonth();
+
   const recent = useMemo(
     () => [...contributions].reverse().slice(0, RECENT_MONTHS),
     [contributions]
   );
-  const summary = useMemo(() => summariseLifecycle(contributions), [contributions]);
+  const summary = useMemo(
+    () => summariseLifecycle(contributions, todayKey, currentMonth),
+    [contributions, todayKey, currentMonth]
+  );
   const latestWage = useMemo(() => wageForProjection(contributions), [contributions]);
   const blocker = projectionBlocker({ hasCurrentEmployment: true, latestWage });
 
@@ -118,24 +136,45 @@ export function EpfCurrentContributions({
                 {money(summary.creditedTotal)}
               </Text>
               <Text style={[styles.summaryHint, { color: theme.colors.mutedForeground }]}>
-                {summary.expected} expected · {summary.credited} credited ·{" "}
-                {summary.partial} partial · {summary.missed} missed
+                {summary.credited + summary.confirmed} credited · {summary.partial} partial
+                · {summary.awaiting} awaiting · {summary.overdue} overdue ·{" "}
+                {summary.missed} missed
               </Text>
+              {summary.awaitedTotal > 0 ? (
+                <Text style={[styles.summaryHint, { color: theme.colors.mutedForeground }]}>
+                  {money(summary.awaitedTotal)} still expected — not counted above until it
+                  lands.
+                </Text>
+              ) : null}
             </Card>
+
+            {summary.overdue > 0 ? (
+              <View style={[styles.notice, { borderColor: theme.colors.border }]}>
+                <AlertTriangle size={theme.iconSize.sm} color={theme.colors.mutedForeground} />
+                <Text style={[styles.noticeText, { color: theme.colors.mutedForeground }]}>
+                  {summary.overdue} month{summary.overdue === 1 ? "" : "s"} past the due date
+                  with nothing recorded. Tap one to record the credit, or mark it missed.
+                </Text>
+              </View>
+            ) : null}
 
             {summary.unreconciled > 0 ? (
               <View style={[styles.notice, { borderColor: theme.colors.border }]}>
                 <AlertTriangle size={theme.iconSize.sm} color={theme.colors.mutedForeground} />
                 <Text style={[styles.noticeText, { color: theme.colors.mutedForeground }]}>
                   {summary.unreconciled} month{summary.unreconciled === 1 ? "" : "s"} credited
-                  from projection only. Tap one to confirm it against your passbook.
+                  without a confirmed amount. Tap one to check it against your passbook.
                 </Text>
               </View>
             ) : null}
           </View>
         }
         renderItem={({ item }) => {
-          const meta = contributionStatusMeta(item.status, item.source, isReconciled(item));
+          const state = deriveMonthState(item, todayKey, currentMonth);
+          const meta = contributionStatusMeta(state, item.source, {
+            reconciled: isReconciled(item),
+            dueDate: isAwaitingCredit(state) ? dueDateLabel(dueDateFor(item)) : undefined,
+          });
           return (
             <EpfContributionRow
               month={item.month}
@@ -150,7 +189,7 @@ export function EpfCurrentContributions({
               partialMonth={item.partialMonth === true}
               recorded
               suggested={false}
-              hasIssue={item.status === "missed"}
+              hasIssue={state === "missed" || state === "overdue"}
               formatAmount={money}
               onPress={setEditingMonth}
             />

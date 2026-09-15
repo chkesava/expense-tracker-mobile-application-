@@ -12,7 +12,8 @@ import { useSpendlyBottomClearance } from "@/components/layout/useSpendlyBottomC
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { useEpfContributions } from "@/hooks/useEpfContributions";
 import { useEpfInterest } from "@/hooks/useEpfInterest";
-import { epfCurrentMonth } from "@/shared/features/epf/utils/epfClock";
+import { epfCurrentMonth, epfTodayKey } from "@/shared/features/epf/utils/epfClock";
+import { deriveMonthState } from "@/shared/features/epf/utils/monthState";
 import type { EpfContribution, EpfEstablishment } from "@/shared/features/epf/types";
 import {
   contributionMonthsFor,
@@ -179,7 +180,10 @@ export function EpfContributionHistory({
           );
         }
 
-        const meta = contributionStatusMeta(item.row.status, item.row.source);
+        const meta = contributionStatusMeta(
+          deriveMonthState(item.row, epfTodayKey(), epfCurrentMonth()),
+          item.row.source
+        );
         return (
           <EpfContributionRow
             month={item.row.month}
