@@ -1,17 +1,24 @@
 /**
- * Contribution credit lifecycle — KAN-68.
+ * Contribution credit lifecycle — KAN-68, reworked by SPENDLY-72.
  *
  * KAN-67 generates a month as `expected` and stops. This is what happens next:
- * the month ages into `credited`, the user confirms what actually landed, or
- * they record that it did not.
+ * a person records what actually landed, or records that it did not.
  *
  * The honesty constraint shapes the whole module. Spendly cannot see anyone's
- * EPFO account, so:
- *   - auto-advancing to `credited` is a *projection*, marked by the absence of
- *     `reconciledAt`;
- *   - `missed` and `reversed` are never automatic, because the app cannot
- *     observe either and a wrong guess writes a false negative into someone's
- *     financial history.
+ * EPFO account, so **nothing here is automatic**. `credited`, `partial`,
+ * `missed` and `reversed` are all assertions about money, and the app cannot
+ * observe any of them.
+ *
+ * KAN-68 made one exception: a month whose credit window had elapsed was
+ * auto-advanced to `credited` and labelled a projection. SPENDLY-72 removed it.
+ * The label never reached the balance — `isBalanceBearing` counted the row —
+ * so a contribution nobody had seen was reported as money in the fund. A month
+ * past its deadline with nothing recorded now simply *reads* as overdue, via
+ * `deriveMonthState` in `monthState.ts`, and the document stays `expected`.
+ *
+ * This file owns the transitions. `monthState.ts` owns how a row reads against
+ * the calendar. Keeping them apart is what stops a calendar reading from ever
+ * becoming a stored fact.
  *
  * Pure by necessity: `hooks/**` and `components/**` are never executed by
  * `npm test`, so anything that branches has to live here.
@@ -25,19 +32,24 @@ import type {
 } from "@/shared/features/epf/types";
 import { roundMoney } from "@/shared/utils/money";
 
-/** Statuses the automated processor is allowed to move out of. */
-const AUTO_ADVANCEABLE: EpfContributionStatus[] = ["expected"];
-
 /**
  * Legal transitions.
  *
- * Deliberately narrow: a backfilled `confirmed` month is user-asserted history
- * and has no business being reversed by this lifecycle, and nothing may leave
- * `draft` except through KAN-66's own save path.
+ * `confirmed` gained `credited`/`partial` in SPENDLY-72. A backfilled month is
+ * user-asserted history and still may not be *rewritten* by the lifecycle, but
+ * attaching the credit that actually landed to a month someone typed is adding
+ * a fact, not reversing one — and `applyActualCredit` demands an amount and a
+ * date before it will. Without this a current month saved from Backfill was a
+ * dead end: "Manual" forever, with no way to record the real credit.
+ *
+ * `draft` stays empty. A draft is not yet a claim about anything; it reaches
+ * `confirmed` through KAN-66's own save path, and a draft sitting in the
+ * current or a future month is healed to `expected` by the repair pass rather
+ * than credited in place.
  */
 const ALLOWED: Record<EpfContributionStatus, EpfContributionStatus[]> = {
   draft: [],
-  confirmed: ["missed", "reversed"],
+  confirmed: ["missed", "reversed", "credited", "partial"],
   expected: ["credited", "partial", "missed"],
   credited: ["partial", "missed", "reversed", "credited"],
   partial: ["credited", "missed", "reversed", "partial"],
@@ -52,37 +64,29 @@ export function canTransition(
   return (ALLOWED[from] ?? []).includes(to);
 }
 
-/** True once the whole expected credit window has elapsed. */
-export function isCreditWindowPassed(
-  row: Pick<EpfContribution, "expectedCreditTo">,
-  todayKey: string
-): boolean {
-  if (!row.expectedCreditTo) return false;
-  return todayKey > row.expectedCreditTo;
-}
-
 /**
- * The rows the scheduler may advance to `credited`.
+ * Why a rejected transition was rejected, in words a person can act on.
  *
- * Filtering on `status === "expected"` is what makes a repeated run a no-op: a
- * second pass finds nothing left to advance, so no duplicate audit events.
+ * The old message named raw statuses — "Cannot move a draft month to
+ * credited." — which told the user what the code refused to do and nothing
+ * about what to do instead. The ticket asks for a useful explanation; the
+ * entered data is already safe, because `applyTransition` returns `false` and
+ * the sheet only closes on `true`.
  */
-export function contributionsToAutoCredit<
-  T extends Pick<EpfContribution, "status" | "expectedCreditTo">,
->(rows: T[], todayKey: string): T[] {
-  return rows.filter(
-    (row) => AUTO_ADVANCEABLE.includes(row.status) && isCreditWindowPassed(row, todayKey)
-  );
-}
-
-/**
- * Advance a month to `credited` as a projection.
- *
- * Leaves `reconciledAt` unset — that field is the record of a human having
- * checked, and the scheduler is not one.
- */
-export function applyAutoCredit<T extends EpfContribution>(row: T): T {
-  return { ...row, status: "credited" };
+export function transitionRejectionMessage(
+  from: EpfContributionStatus,
+  to: EpfContributionStatus
+): string {
+  if (from === "draft") {
+    return "Save this month under Backfill first — a draft can't take a credit yet.";
+  }
+  if (from === "reversed" && to !== "credited") {
+    return "This month was reversed. Record the credit again if it came back.";
+  }
+  if (to === "reversed") {
+    return "Only a credited month can be reversed.";
+  }
+  return `A ${from} month can't be marked ${to}.`;
 }
 
 /**
@@ -161,48 +165,6 @@ export function buildContributionEvent(
 /** Whether a row's credited amount is the user's word or the app's projection. */
 export function isReconciled(row: Pick<EpfContribution, "reconciledAt">): boolean {
   return Boolean(row.reconciledAt);
-}
-
-export interface EpfLifecycleSummary {
-  expected: number;
-  credited: number;
-  partial: number;
-  missed: number;
-  reversed: number;
-  /** Credited or partial rows the user has not confirmed. */
-  unreconciled: number;
-  /** Sum of what actually landed where known, else the projection. */
-  creditedTotal: number;
-}
-
-/** Counts and totals for the current-employment card. */
-export function summariseLifecycle(rows: EpfContribution[]): EpfLifecycleSummary {
-  const summary: EpfLifecycleSummary = {
-    expected: 0,
-    credited: 0,
-    partial: 0,
-    missed: 0,
-    reversed: 0,
-    unreconciled: 0,
-    creditedTotal: 0,
-  };
-
-  for (const row of rows) {
-    if (row.status === "expected") summary.expected += 1;
-    else if (row.status === "credited") summary.credited += 1;
-    else if (row.status === "partial") summary.partial += 1;
-    else if (row.status === "missed") summary.missed += 1;
-    else if (row.status === "reversed") summary.reversed += 1;
-
-    const counts = row.status === "credited" || row.status === "partial";
-    if (counts) {
-      if (!isReconciled(row)) summary.unreconciled += 1;
-      summary.creditedTotal += row.creditedAmount ?? row.epfCredit;
-    }
-  }
-
-  summary.creditedTotal = roundMoney(summary.creditedTotal);
-  return summary;
 }
 
 /** Why a projection cannot be shown, if it cannot. */

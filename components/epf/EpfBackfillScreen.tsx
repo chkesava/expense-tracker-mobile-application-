@@ -16,6 +16,8 @@ import { useEpfContributions } from "@/hooks/useEpfContributions";
 import { appDialog } from "@/lib/appDialog";
 import { epfCurrentMonth, epfTodayKey } from "@/shared/features/epf/utils/epfClock";
 import type { EpfBackfillRow, EpfEstablishment } from "@/shared/features/epf/types";
+import { deriveMonthState } from "@/shared/features/epf/utils/monthState";
+import { backfillThroughMonth } from "@/shared/features/epf/utils/schedule";
 import {
   buildBackfillRows,
   computeEpfContribution,
@@ -104,6 +106,13 @@ export function EpfBackfillScreen({
 
   const monthKey = epfCurrentMonth();
   const todayKey = epfTodayKey();
+  /**
+   * SPENDLY-72: Backfill is for history, so a live employment's in-progress
+   * month is out of range — it belongs to Current, as an `expected` row the
+   * scheduler owns. Reaching it is what let **Save all** stamp the current
+   * month `confirmed` ("Manual") before any credit could have landed.
+   */
+  const backfillMonth = backfillThroughMonth(establishment, monthKey);
 
   const money = useCallback(
     (value: number) => formatAmount(value, currency),
@@ -114,18 +123,18 @@ export function EpfBackfillScreen({
   const rows = useMemo(() => {
     const generated = buildBackfillRows({
       establishment,
-      currentMonth: monthKey,
+      currentMonth: backfillMonth,
       existing: contributions,
       wage: Number(wage) || 0,
       epsEligible,
       prorateEdgeMonths: prorate,
     });
     return mergeBackfillEdits(generated, edits);
-  }, [establishment, monthKey, contributions, wage, epsEligible, prorate, edits]);
+  }, [establishment, backfillMonth, contributions, wage, epsEligible, prorate, edits]);
 
   const expectedMonths = useMemo(
-    () => contributionMonthsFor(establishment, monthKey),
-    [establishment, monthKey]
+    () => contributionMonthsFor(establishment, backfillMonth),
+    [establishment, backfillMonth]
   );
 
   /** What Save draft / Save all may write — never silent rewrite of saved months. */
@@ -330,6 +339,12 @@ export function EpfBackfillScreen({
 
   const listHeader = (
     <View style={styles.header}>
+      {backfillMonth < monthKey ? (
+        <Text style={[styles.rangeHint, { color: theme.colors.mutedForeground }]}>
+          Closed months only, up to {monthLabel(backfillMonth)}. {monthLabel(monthKey)} is
+          still in progress — it is tracked on Current.
+        </Text>
+      ) : null}
       <Card>
         <Input
           label="Monthly EPF wage (basic + DA)"
@@ -416,7 +431,10 @@ export function EpfBackfillScreen({
 
           const row = rowsByMonth.get(item.month);
           if (!row) return null;
-          const meta = contributionStatusMeta(row.status, row.source);
+          const meta = contributionStatusMeta(
+            deriveMonthState(row, todayKey, monthKey),
+            row.source
+          );
           const presentation = backfillRowPresentation(row);
           return (
             <EpfContributionRow
@@ -501,6 +519,7 @@ export function EpfBackfillScreen({
 }
 
 const styles = StyleSheet.create({
+  rangeHint: { fontSize: 12, lineHeight: 18, paddingHorizontal: 4 },
   flex: { flex: 1 },
   container: { gap: 12, padding: 16 },
   unsaved: { fontSize: 12, marginTop: 2 },

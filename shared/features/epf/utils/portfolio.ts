@@ -18,7 +18,7 @@ import type {
   EpfReconciliation,
   EpfTransfer,
 } from "@/shared/features/epf/types";
-import { isBalanceBearing } from "@/shared/features/epf/utils/contributions";
+import { creditedSplit, isBalanceBearing } from "@/shared/features/epf/utils/contributions";
 import { isReconciled } from "@/shared/features/epf/utils/lifecycle";
 import { establishmentBalanceBreakdown } from "@/shared/features/epf/utils/transfers";
 import { roundMoney } from "@/shared/utils/money";
@@ -110,16 +110,10 @@ export function epfPortfolioSummary(args: {
   for (const row of contributions) {
     if (!isBalanceBearing(row.status)) continue;
 
-    if (row.creditedAmount !== undefined && row.epfCredit > 0) {
-      // A reconciled month may differ from the projection; scale the split so
-      // the parts still sum to what actually landed.
-      const ratio = row.creditedAmount / row.epfCredit;
-      summary.employeeShare += row.employeeShare * ratio;
-      summary.employerEpfShare += row.employerEpfShare * ratio;
-    } else {
-      summary.employeeShare += row.employeeShare;
-      summary.employerEpfShare += row.employerEpfShare;
-    }
+    // Same scaling as every other total — SPENDLY-72 moved it to one place.
+    const split = creditedSplit(row);
+    summary.employeeShare += split.employee;
+    summary.employerEpfShare += split.employerEpf;
     summary.epsShare += row.epsShare;
 
     if (!isReconciled(row)) summary.unreconciledCount += 1;

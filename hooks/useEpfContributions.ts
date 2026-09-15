@@ -31,7 +31,7 @@ import { commitWrite, writeSavedMessage, type WriteOutcome } from "@/lib/firesto
 import { toast } from "@/lib/toast";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { useAuth } from "@/providers/AuthProvider";
-import { epfTodayKey } from "@/shared/features/epf/utils/epfClock";
+import { epfCurrentMonth } from "@/shared/features/epf/utils/epfClock";
 import type {
   EpfBackfillRow,
   EpfContribution,
@@ -50,16 +50,17 @@ import {
 } from "@/shared/features/epf/utils/contributions";
 import {
   contributionsMissingCreditWindow,
+  contributionsNeedingLifecycleRepair,
+  contributionsWithFabricatedCredit,
   creditWindowRepairFor,
 } from "@/shared/features/epf/utils/creditWindowRepair";
 import {
   applyActualCredit,
-  applyAutoCredit,
   applyMissed,
   applyReversed,
   buildContributionEvent,
   canTransition,
-  contributionsToAutoCredit,
+  transitionRejectionMessage,
 } from "@/shared/features/epf/utils/lifecycle";
 import { withoutUndefined } from "@/shared/utils/objects";
 import { chunk } from "@/shared/utils/chunk";
@@ -286,7 +287,7 @@ export function useEpfContributions(
 
       const next = transform(current);
       if (next.status !== current.status && !canTransition(current.status, next.status)) {
-        toast.error(`Cannot move a ${current.status} month to ${next.status}.`);
+        toast.error(transitionRejectionMessage(current.status, next.status));
         return false;
       }
 
@@ -369,55 +370,6 @@ export function useEpfContributions(
     [applyTransition]
   );
 
-  /**
-   * Age every `expected` month whose credit window has passed.
-   *
-   * Runs on the client as well as in the cron so someone opening the app sees
-   * the current state rather than waiting for the monthly job. Both call the
-   * same pure selector, so they cannot disagree.
-   */
-  const autoAdvanceCredits = useCallback(async (): Promise<number> => {
-    const db = getFirestoreDb();
-    if (!uid || !db || !establishmentId) return 0;
-
-    const due = contributionsToAutoCredit(contributions, epfTodayKey());
-    if (due.length === 0) return 0;
-
-    try {
-      for (const group of chunk(due, EPF_BATCH_CHUNK_SIZE)) {
-        const batch = writeBatch(db);
-        for (const row of group) {
-          const next = applyAutoCredit(row);
-          batch.set(
-            doc(
-              db,
-              "users",
-              uid,
-              EPF_CONTRIBUTIONS_COLLECTION,
-              contributionDocId(establishmentId, row.month)
-            ),
-            { status: next.status, statusUpdatedAt: serverTimestamp(), updatedAt: serverTimestamp() },
-            { merge: true }
-          );
-          batch.set(doc(collection(db, "users", uid, EPF_CONTRIBUTION_EVENTS_COLLECTION)), {
-            ...withoutUndefined(
-              buildContributionEvent(row, row.status, next.status, {
-                actor: "system",
-                amount: row.epfCredit,
-              })
-            ),
-            at: serverTimestamp(),
-          });
-        }
-        await commitWrite(() => batch.commit(), { label: "EPF credit advance" });
-      }
-      return due.length;
-    } catch (err) {
-      logError("epfcontributions.autoadvancecredits", err);
-      return 0;
-    }
-  }, [uid, establishmentId, contributions]);
-
   const deleteContribution = useCallback(
     async (month: string): Promise<boolean> => {
       const db = getFirestoreDb();
@@ -493,12 +445,13 @@ export function useEpfContributions(
    *
    * Only the client catch-up path produced these: `epf-cron` has always spread
    * the whole row. They cannot self-heal, because `monthsToGenerate` skips any
-   * month that already exists, so the planner never revisits them and without
-   * this they stay `expected` forever instead of auto-crediting.
+   * month that already exists, so the planner never revisits them; without
+   * this they can never read as overdue, because `isCreditWindowPassed` has
+   * nothing to compare against.
    *
-   * No audit event: nothing about the money changed, and the auto-credit that
-   * this unblocks writes its own. Safe to re-run — deterministic ids, merge,
-   * and the selector returns nothing on a second pass.
+   * No audit event: nothing about the money changed. Safe to re-run —
+   * deterministic ids, merge, and the selector returns nothing on a second
+   * pass.
    */
   const repairCreditWindows = useCallback(async (): Promise<number> => {
     const db = getFirestoreDb();
@@ -532,6 +485,78 @@ export function useEpfContributions(
     }
   }, [uid, establishmentId, contributions]);
 
+  /**
+   * Undo credits the pre-SPENDLY-72 scheduler invented, and free drafts the old
+   * Backfill range stranded in the current month — SPENDLY-72.
+   *
+   * Both are status changes, so unlike the window repair each writes an audit
+   * event: an `epfContributionEvent` is the only record that a balance moved
+   * without the user touching anything, and a withdrawn credit lowers what the
+   * app reports. Actor is `system`, with the ticket in the reason.
+   *
+   * Runs in the same background pass as `repairCreditWindows` and is silent
+   * for the same reason. Idempotent — both selectors return nothing once their
+   * rows have been rewritten.
+   */
+  const repairLifecycleStates = useCallback(async (): Promise<number> => {
+    const db = getFirestoreDb();
+    if (!uid || !db || !establishmentId) return 0;
+
+    const withdrawn = contributionsWithFabricatedCredit(contributions);
+    const stranded = contributionsNeedingLifecycleRepair(contributions, epfCurrentMonth());
+    const work: { row: EpfContribution; fields: Record<string, unknown>; reason: string }[] = [
+      ...withdrawn.map((row) => ({
+        row,
+        fields: {},
+        reason: "auto-credit withdrawn (SPENDLY-72)",
+      })),
+      ...stranded.map((row) => ({
+        row,
+        fields: creditWindowRepairFor(row),
+        reason: "current-month draft released to the scheduler (SPENDLY-72)",
+      })),
+    ];
+    if (work.length === 0) return 0;
+
+    try {
+      for (const group of chunk(work, EPF_BATCH_CHUNK_SIZE)) {
+        const batch = writeBatch(db);
+        for (const item of group) {
+          batch.set(
+            doc(
+              db,
+              "users",
+              uid,
+              EPF_CONTRIBUTIONS_COLLECTION,
+              contributionDocId(establishmentId, item.row.month)
+            ),
+            {
+              ...item.fields,
+              status: "expected",
+              statusUpdatedAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            },
+            { merge: true }
+          );
+          batch.set(doc(collection(db, "users", uid, EPF_CONTRIBUTION_EVENTS_COLLECTION)), {
+            ...withoutUndefined(
+              buildContributionEvent(item.row, item.row.status, "expected", {
+                actor: "system",
+                reason: item.reason,
+              })
+            ),
+            at: serverTimestamp(),
+          });
+        }
+        await commitWrite(() => batch.commit(), { label: "EPF lifecycle repair" });
+      }
+      return work.length;
+    } catch (err) {
+      logError("epfcontributions.repairlifecyclestates", err);
+      return 0;
+    }
+  }, [uid, establishmentId, contributions]);
+
   return {
     contributions,
     byMonth,
@@ -550,7 +575,7 @@ export function useEpfContributions(
     recordCredit,
     markMissed,
     markReversed,
-    autoAdvanceCredits,
     repairCreditWindows,
+    repairLifecycleStates,
   };
 }

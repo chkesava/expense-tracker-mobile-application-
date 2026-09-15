@@ -12,6 +12,7 @@
 
 import type { EpfContributionRule } from "@/shared/features/epf/data/epfRules";
 import { findEpfContributionRule } from "@/shared/features/epf/data/epfRules";
+import type { EpfMonthState } from "@/shared/features/epf/utils/monthState";
 import type {
   EpfBackfillRow,
   EpfContribution,
@@ -507,14 +508,55 @@ type ContributionLike = Pick<
   "employeeShare" | "employerShare" | "epsShare" | "employerEpfShare"
 >;
 
+/**
+ * The employee/employer split of what actually reached EPF for one month.
+ *
+ * A reconciled month can differ from the projection, and the parts have to
+ * keep summing to the whole, so the split is scaled by the same ratio — the
+ * convention `epfPortfolioSummary` established in KAN-71, extracted here in
+ * SPENDLY-72 so the two cannot drift.
+ *
+ * EPS is never scaled: the pension slice went where it went regardless of what
+ * reached the PF balance, and it is not part of `epfCredit` either way.
+ */
+export function creditedSplit(
+  row: Pick<ContributionLike, "employeeShare" | "employerEpfShare"> & {
+    epfCredit?: number;
+    creditedAmount?: number;
+  }
+): { employee: number; employerEpf: number } {
+  if (row.creditedAmount === undefined || !row.epfCredit || row.epfCredit <= 0) {
+    return { employee: row.employeeShare, employerEpf: row.employerEpfShare };
+  }
+  const ratio = row.creditedAmount / row.epfCredit;
+  return {
+    employee: row.employeeShare * ratio,
+    employerEpf: row.employerEpfShare * ratio,
+  };
+}
+
+/**
+ * Totals for a set of rows.
+ *
+ * `epfCredit` is what actually landed where that is known — SPENDLY-72. It
+ * used to sum the projections, so a `partial` month headlined its full
+ * expected amount on History and Backfill while Balance, interest and the
+ * portfolio all counted the shortfall. Four screens, two answers.
+ *
+ * `total` stays unscaled: that is the payslip view — what employee and
+ * employer were billed — and it is true whatever later reached the fund.
+ */
 export function summarizeContributions(rows: ContributionLike[]): EpfContributionTotals {
   const totals = rows.reduce(
-    (acc, row) => ({
-      employee: acc.employee + row.employeeShare,
-      employer: acc.employer + row.employerShare,
-      eps: acc.eps + row.epsShare,
-      employerEpf: acc.employerEpf + row.employerEpfShare,
-    }),
+    (acc, row) => {
+      const split = creditedSplit(row);
+      return {
+        employee: acc.employee + split.employee,
+        employer: acc.employer + row.employerShare,
+        eps: acc.eps + row.epsShare,
+        employerEpf: acc.employerEpf + split.employerEpf,
+      };
+    },
     { employee: 0, employer: 0, eps: 0, employerEpf: 0 }
   );
 
@@ -523,7 +565,9 @@ export function summarizeContributions(rows: ContributionLike[]): EpfContributio
     employer: roundMoney(totals.employer),
     eps: roundMoney(totals.eps),
     employerEpf: roundMoney(totals.employerEpf),
-    total: roundMoney(totals.employee + totals.employer),
+    total: roundMoney(
+      rows.reduce((acc, row) => acc + row.employeeShare + row.employerShare, 0)
+    ),
     epfCredit: roundMoney(totals.employee + totals.employerEpf),
     count: rows.length,
   };
@@ -626,34 +670,63 @@ export function isEligibleForAutomatedProcessing(
 /**
  * Single source of truth for row chips, so components never branch on status.
  *
+ * Takes an {@link EpfMonthState}, not a raw status — SPENDLY-72. The stored
+ * `expected` reads three ways depending on the calendar, and leaving that to
+ * the caller is how the Current tab came to show "Expected" for a month that
+ * was months overdue and for one that had not happened yet.
+ *
  * `reconciled` distinguishes a month the user confirmed against their passbook
- * from one the scheduler projected — KAN-68. Spendly cannot see an EPFO
+ * from one an older build projected — KAN-68. Spendly cannot see an EPFO
  * account, so an unconfirmed `credited` row must never read as a plain fact.
+ * Nothing writes those any more, but data from before SPENDLY-72 can still
+ * hold them.
+ *
+ * `simulated` means "this number is Spendly's arithmetic, not observed money".
  */
 export function contributionStatusMeta(
-  status: EpfContributionStatus,
+  state: EpfMonthState,
   source: EpfContributionSource,
-  reconciled = false
+  opts: { reconciled?: boolean; dueDate?: string } = {}
 ): { label: string; tone: "neutral" | "success" | "warning" | "info"; simulated: boolean } {
-  switch (status) {
+  const due = opts.dueDate;
+
+  switch (state) {
     case "draft":
       return { label: "Draft", tone: "warning", simulated: false };
+    case "confirmed":
+      // A month the user typed under Backfill. `simulated` source here means a
+      // generated row that was saved as history rather than hand-entered.
+      return source === "simulated"
+        ? { label: "Projected", tone: "info", simulated: true }
+        : { label: "Manual", tone: "neutral", simulated: false };
+    case "projected":
+      return {
+        label: due ? `Projected · due ${due}` : "Projected",
+        tone: "info",
+        simulated: true,
+      };
+    case "awaiting":
+      return {
+        label: due ? `Awaiting credit · due ${due}` : "Awaiting credit",
+        tone: "info",
+        simulated: true,
+      };
+    case "overdue":
+      return {
+        label: due ? `Overdue · was due ${due}` : "Overdue",
+        tone: "warning",
+        simulated: true,
+      };
     case "credited":
-      return reconciled
+      return opts.reconciled
         ? { label: "Credited", tone: "success", simulated: false }
-        : { label: "Credited · projected", tone: "info", simulated: true };
+        : { label: "Credited · unconfirmed", tone: "info", simulated: true };
     case "partial":
-      return { label: "Partial", tone: "warning", simulated: !reconciled };
+      return { label: "Partial", tone: "warning", simulated: !opts.reconciled };
     case "missed":
       return { label: "Missed", tone: "warning", simulated: false };
     case "reversed":
       return { label: "Reversed", tone: "warning", simulated: false };
-    case "expected":
-      return { label: "Expected", tone: "info", simulated: true };
-    default:
-      return source === "simulated"
-        ? { label: "Projected", tone: "info", simulated: true }
-        : { label: "Manual", tone: "neutral", simulated: false };
   }
 }
 

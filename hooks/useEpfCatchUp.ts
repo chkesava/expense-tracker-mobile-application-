@@ -28,8 +28,8 @@ export function useEpfCatchUp(args: {
     contributions,
     contributionsLoading,
     saveContributions,
-    autoAdvanceCredits,
     repairCreditWindows,
+    repairLifecycleStates,
   } = useEpfContributions(establishment?.id, {
       enabled: enabled && Boolean(establishment),
     });
@@ -44,19 +44,21 @@ export function useEpfCatchUp(args: {
     if (attempted.current === establishment.id) return;
     attempted.current = establishment.id;
 
-    // KAN-68: age months whose credit window has passed, then generate any
-    // missing ones. Both use the same pure logic as the Netlify cron.
+    // Heal what older builds left behind, then generate any missing months.
+    // Both use the same pure logic as the Netlify cron.
     //
-    // SPENDLY-1: the repair must finish *before* the advance, not race it.
-    // `attempted` allows one pass per mount, so an unordered pair would need a
-    // second app open to converge — the repair would land after the advance had
-    // already decided there was nothing due.
+    // SPENDLY-1: these must run in order, not race. `attempted` allows one pass
+    // per mount, so an unordered pair would need a second app open to converge.
+    // SPENDLY-72 replaced the auto-credit advance with a lifecycle repair that
+    // withdraws the credits that advance used to invent; the window repair
+    // still goes first, because a row healed to `expected` needs its window in
+    // the same pass to read correctly.
     void (async () => {
       try {
         await repairCreditWindows();
-        await autoAdvanceCredits();
+        await repairLifecycleStates();
       } catch (err) {
-        logError("epf.catchup.advance", err);
+        logError("epf.catchup.repair", err);
       }
     })();
 
@@ -81,7 +83,7 @@ export function useEpfCatchUp(args: {
     contributions,
     contributionsLoading,
     saveContributions,
-    autoAdvanceCredits,
     repairCreditWindows,
+    repairLifecycleStates,
   ]);
 }

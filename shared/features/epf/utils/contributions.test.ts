@@ -594,6 +594,36 @@ describe("summarizeContributions", () => {
   it("returns zeroes for an empty list", () => {
     expect(summarizeContributions([]).epfCredit).toBe(0);
   });
+
+  it("credits what actually landed, not the projection — SPENDLY-72", () => {
+    // A partial month used to headline its full expected amount here while
+    // Balance, interest and the portfolio all counted the shortfall.
+    const totals = summarizeContributions([
+      contribution({ creditedAmount: 2375, status: "partial" }),
+    ]);
+    expect(totals.epfCredit).toBe(2375);
+  });
+
+  it("keeps the parts summing to the whole when an actual is known", () => {
+    const totals = summarizeContributions([
+      contribution({ creditedAmount: 2375, status: "partial" }),
+    ]);
+    expect(totals.employee + totals.employerEpf).toBeCloseTo(totals.epfCredit, 2);
+  });
+
+  it("leaves the payslip total unscaled — that is what was billed", () => {
+    // `total` is employee + employer as it appeared on the payslip. Whatever
+    // later reached the fund does not change what was deducted.
+    const totals = summarizeContributions([
+      contribution({ creditedAmount: 0, status: "missed" }),
+    ]);
+    expect(totals.total).toBe(6000);
+    expect(totals.epfCredit).toBe(0);
+  });
+
+  it("is unchanged for rows with no recorded actual", () => {
+    expect(summarizeContributions([contribution(), contribution()]).epfCredit).toBe(9500);
+  });
 });
 
 describe("groupContributionsByFinancialYear", () => {
@@ -743,6 +773,39 @@ describe("contributionStatusMeta", () => {
 
   it("marks a simulated row as projected whatever its status", () => {
     expect(contributionStatusMeta("confirmed", "simulated").simulated).toBe(true);
+  });
+
+  it("never reads a month that has not happened as anything but projected", () => {
+    const meta = contributionStatusMeta("projected", "simulated");
+    expect(meta.label).toBe("Projected");
+    expect(meta.simulated).toBe(true);
+  });
+
+  it("says when a credit is due rather than implying it arrived — SPENDLY-72", () => {
+    const meta = contributionStatusMeta("awaiting", "simulated", { dueDate: "15 Oct 2026" });
+    expect(meta.label).toBe("Awaiting credit · due 15 Oct 2026");
+    expect(meta.label).not.toContain("Credited");
+    expect(meta.simulated).toBe(true);
+  });
+
+  it("flags a month past its deadline in the warning tone", () => {
+    const meta = contributionStatusMeta("overdue", "simulated", { dueDate: "15 Oct 2026" });
+    expect(meta.label).toBe("Overdue · was due 15 Oct 2026");
+    expect(meta.tone).toBe("warning");
+  });
+
+  it("drops the due date rather than printing an undefined date", () => {
+    expect(contributionStatusMeta("awaiting", "simulated").label).toBe("Awaiting credit");
+    expect(contributionStatusMeta("overdue", "simulated").label).toBe("Overdue");
+  });
+
+  it("distinguishes a confirmed credit from an unconfirmed one", () => {
+    expect(
+      contributionStatusMeta("credited", "simulated", { reconciled: true }).label
+    ).toBe("Credited");
+    const unconfirmed = contributionStatusMeta("credited", "simulated", { reconciled: false });
+    expect(unconfirmed.label).toBe("Credited · unconfirmed");
+    expect(unconfirmed.simulated).toBe(true);
   });
 });
 
