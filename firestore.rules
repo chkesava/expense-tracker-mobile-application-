@@ -335,7 +335,11 @@ service cloud.firestore {
         'seva.read',
         // KAN-125: read only. A self-joining member may see the token list,
         // and nothing about selling, configuring or drawing.
-        'tokens.read'
+        'tokens.read',
+        // KAN-126: a member records prasadam. Counter-side data entry is
+        // the whole point of the feature, so write is included here - but
+        // not `prasadam.cancel`, which is the audited reversal.
+        'prasadam.read', 'prasadam.write'
       ];
     }
 
@@ -537,6 +541,30 @@ service cloud.firestore {
     }
     function canRunDrawOf(pandalId) {
       return hasPermOf(pandalId, 'draw.run');
+    }
+
+    // KAN-126 - the prasadam register.
+    //
+    // No legacy role fallback on any of these, for the same reason KAN-125
+    // has none: these keys did not exist when the old member documents were
+    // written, so `ensurePandalRoles` grants them rather than a role string
+    // implying them.
+    //
+    // Reads are gated rather than left to `isActivePandalMember()`: an entry
+    // names the devotee who fed the pandal and carries their mobile, which
+    // is the same donor PII GS-073 keeps from viewers.
+    //
+    // Write is wider than seva's (member and collector hold it) because the
+    // people recording are volunteers at the counter. Cancel is narrower,
+    // because reversing a recorded offering is the audited correction.
+    function canReadPrasadamOf(pandalId) {
+      return hasPermOf(pandalId, 'prasadam.read');
+    }
+    function canWritePrasadamOf(pandalId) {
+      return hasPermOf(pandalId, 'prasadam.write');
+    }
+    function canCancelPrasadamOf(pandalId) {
+      return hasPermOf(pandalId, 'prasadam.cancel');
     }
 
     function canWriteLedgerSideEffectOf(pandalId) {
@@ -1478,7 +1506,8 @@ service cloud.firestore {
               || subcol == 'collectionSessions'
               || subcol == 'reconciliations'
               || subcol == 'cashAdjustments'
-              || isTokenLadduSubcol();
+              || isTokenLadduSubcol()
+              || subcol == 'prasadamEntries';
           }
 
           // KAN-125. Five new subcollections, all short-circuited away from the
@@ -1545,6 +1574,53 @@ service cloud.firestore {
 
           function tokenWriteAllowed() {
             return pandalNotArchived() && canWriteTokensOf(pandalId);
+          }
+
+          /**
+           * KAN-126. A prasadam entry must never carry money.
+           *
+           * This is the guarantee behind the feature's accounting position.
+           * The register deliberately holds no amount, so it can never be
+           * double-counted against a ledger row recording the same rupees -
+           * and that is enforced here rather than trusted to a comment in
+           * the type file, because a client holding `prasadam.write` could
+           * otherwise park an `estimatedValue` on an entry that a later
+           * report would happily add up.
+           */
+          function prasadamCarriesNoMoney() {
+            return !request.resource.data.keys().hasAny([
+              'amount', 'totalAmount', 'godFundAmount', 'personalAmount',
+              'sponsoredAmount', 'estimatedValue', 'ledgerType',
+              'purposeType', 'purposeCategory'
+            ]);
+          }
+
+          function prasadamWellFormed() {
+            let d = request.resource.data;
+            return d.session in ['morning', 'evening']
+              && d.status in ['recorded', 'cancelled']
+              && d.date is string
+              && d.date.matches('^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$')
+              && d.providerName is string
+              && d.providerName.size() > 0
+              && d.providerName.size() <= 80
+              && d.quantity is number
+              && d.quantity > 0
+              && d.quantity <= 100000
+              && d.unit in ['kg','grams','litres','pieces','packets','plates','boxes','other']
+              && d.prasadamType in ['sweet','savoury','fruit','meal','drink','laddu','other']
+              && prasadamCarriesNoMoney();
+          }
+
+          // An entry cannot be born cancelled: a reversal must be a
+          // transition out of a recorded state, so the audit trail always
+          // shows what was reversed. Same lesson as
+          // contributionNotBornCancelled().
+          function prasadamCreateAllowed() {
+            return pandalNotArchived()
+              && canWritePrasadamOf(pandalId)
+              && prasadamWellFormed()
+              && request.resource.data.status == 'recorded';
           }
 
           function drawSessionWriteAllowed() {
@@ -1717,6 +1793,10 @@ service cloud.firestore {
               isTokenLadduSubcol()
                 ? canReadTokensOf(pandalId)
                 :
+              // KAN-126: an entry names a devotee and carries their mobile.
+              subcol == 'prasadamEntries'
+                ? canReadPrasadamOf(pandalId)
+                :
               subcol == 'collectionSessions'
                 || subcol == 'reconciliations'
                 || subcol == 'cashAdjustments'
@@ -1814,6 +1894,9 @@ service cloud.firestore {
               ? drawSessionWriteAllowed()
               : subcol == 'tokenDrawResults'
               ? false
+              // KAN-126.
+              : subcol == 'prasadamEntries'
+              ? prasadamCreateAllowed()
               : (
                 canWriteFestivalSubcol()
                 && payloadWellFormed()
@@ -1918,6 +2001,61 @@ service cloud.firestore {
                  .hasOnly([
                    'status', 'completedAt', 'completedBy', 'cancelReason',
                    'updatedBy', 'updatedAt'
+                 ]);
+
+          /**
+           * KAN-126, editing an entry.
+           *
+           * `date` and `session` are deliberately outside the allowlist. An
+           * entry that could move between sessions would make a day's
+           * counts irreconcilable against its own history - so relocating
+           * one is a cancel and a fresh record, which leaves both halves
+           * visible.
+           *
+           * `status` is outside it too, and that is what keeps the two
+           * update paths honest: an edit can never become a cancellation
+           * that skipped the narrower permission.
+           */
+          allow update: if subcol == 'prasadamEntries'
+            && resource != null
+            && isActivePandalMember()
+            && festivalOpen()
+            && pandalNotArchived()
+            && scopeIdsMatch()
+            && canWritePrasadamOf(pandalId)
+            && resource.data.status == 'recorded'
+            && prasadamWellFormed()
+            && ganeshIdentityUpdate()
+            && request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly([
+                   'providerName', 'providerId', 'providerSource', 'mobile',
+                   'prasadamType', 'prasadamLabel', 'quantity', 'unit',
+                   'unitLabel', 'notes', 'sevaId', 'updatedBy', 'updatedAt'
+                 ]);
+
+          /**
+           * KAN-126, cancelling one.
+           *
+           * Requires `recorded` on the way in, so cancellation is terminal:
+           * a cancelled entry can be neither re-cancelled nor edited back
+           * to life. Correcting a mistaken cancellation means recording a
+           * fresh entry, which keeps the correction in the audit trail
+           * instead of rewriting history.
+           */
+          allow update: if subcol == 'prasadamEntries'
+            && resource != null
+            && isActivePandalMember()
+            && festivalOpen()
+            && pandalNotArchived()
+            && scopeIdsMatch()
+            && canCancelPrasadamOf(pandalId)
+            && resource.data.status == 'recorded'
+            && request.resource.data.status == 'cancelled'
+            && ganeshIdentityUpdate()
+            && request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly([
+                   'status', 'cancelReason', 'voided', 'voidReason',
+                   'voidedBy', 'voidedAt', 'updatedBy', 'updatedAt'
                  ]);
 
           allow update: if !hasDedicatedRule()

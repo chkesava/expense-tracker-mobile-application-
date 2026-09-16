@@ -52,6 +52,14 @@ export type GaneshPermission =
   | "seva.read"
   | "seva.write"
   | "seva.assign"
+  // KAN-126. `prasadam.write` is deliberately wider than `seva.write`: the
+  // people recording who brought the morning prasadam are counter volunteers,
+  // not the committee members who plan the programme. `prasadam.cancel` is
+  // narrow for the opposite reason — reversing a recorded offering is the
+  // audited correction, and it is terminal.
+  | "prasadam.read"
+  | "prasadam.write"
+  | "prasadam.cancel"
   // GS-076 / GS-075. `sessions.write` is a collector's own accountability
   // trail; `reconciliation.count` is entering a physical count; and
   // `reconciliation.approve` is the financial-approval authority that
@@ -123,6 +131,9 @@ export const ALL_GANESH_PERMISSIONS: GaneshPermission[] = [
   "seva.read",
   "seva.write",
   "seva.assign",
+  "prasadam.read",
+  "prasadam.write",
+  "prasadam.cancel",
   "sessions.read",
   "sessions.write",
   "reconciliation.read",
@@ -147,6 +158,7 @@ const READ_LEDGER: GaneshPermission[] = [
   "sponsors.read",
   "seva.read",
   "tokens.read",
+  "prasadam.read",
 ];
 
 const MEMBER_WRITES: GaneshPermission[] = [
@@ -160,6 +172,8 @@ const MEMBER_WRITES: GaneshPermission[] = [
   "assets.create",
   "sponsors.create",
   "sponsors.update",
+  // Counter-side data entry: the volunteer at the prasadam table is a member.
+  "prasadam.write",
 ];
 
 const TREASURER_PERMISSIONS: GaneshPermission[] = [
@@ -191,6 +205,8 @@ const TREASURER_PERMISSIONS: GaneshPermission[] = [
   "tokens.write",
   "tokens.config",
   "draw.run",
+  // KAN-126. Reversing a recorded offering is the audited correction.
+  "prasadam.cancel",
 ];
 
 const ADMIN_PERMISSIONS: GaneshPermission[] = [...ALL_GANESH_PERMISSIONS];
@@ -208,6 +224,9 @@ const COLLECTOR_PERMISSIONS: GaneshPermission[] = [
   "sponsors.read",
   "seva.read",
   "tokens.read",
+  // At the pandal all day, so the same data-entry role as a member (KAN-126).
+  "prasadam.read",
+  "prasadam.write",
   // Runs their own session and declares the handover (GS-076). Deliberately no
   // `reconciliation.count` or `.approve`: the person who collected the cash is
   // not the person who signs off that it is all there (GS-075 point 9).
@@ -230,13 +249,16 @@ const COLLECTOR_PERMISSIONS: GaneshPermission[] = [
  *
  * `tokens.read` is withheld for the same reason (KAN-125): a token row carries
  * the participant's name and mobile, so the token list is donor data wearing a
- * different hat.
+ * different hat. `prasadam.read` is withheld for the same reason again
+ * (KAN-126) — the register names every devotee who fed the pandal, with their
+ * mobile number.
  */
 const VIEWER_PERMISSIONS: GaneshPermission[] = READ_LEDGER.filter(
   (permission) =>
     permission !== "collections.read" &&
     permission !== "contributions.read" &&
-    permission !== "tokens.read"
+    permission !== "tokens.read" &&
+    permission !== "prasadam.read"
 );
 
 export const ROLE_PERMISSIONS: Record<GaneshRole, readonly GaneshPermission[]> = {
@@ -355,6 +377,34 @@ export const TOKEN_LADDU_ROLE_DEFAULTS: Record<
   treasurer: ["tokens.read", "tokens.write", "tokens.config", "draw.run"],
   member: ["tokens.read"],
   collector: ["tokens.read"],
+  viewer: [],
+};
+
+/** Mirrors `canWritePrasadamOf()` fallback in firestore.rules. */
+export const RULE_PRASADAM_WRITE_ROLES: GaneshRole[] = [
+  "admin",
+  "treasurer",
+  "member",
+  "collector",
+];
+
+/** Mirrors `canCancelPrasadamOf()` fallback in firestore.rules. */
+export const RULE_PRASADAM_CANCEL_ROLES: GaneshRole[] = ["admin", "treasurer"];
+
+/**
+ * Default `prasadam.*` keys unioned onto existing builtin role docs (KAN-126).
+ *
+ * Wider on write than seva and narrower on reversal: anyone standing at the
+ * pandal records who brought what, but only the committee cancels an entry.
+ * Viewer gets nothing — the register is donor PII, exactly as the token list is.
+ */
+export const PRASADAM_ROLE_DEFAULTS: Record<
+  (typeof BUILTIN_ROLE_IDS)[number],
+  readonly GaneshPermission[]
+> = {
+  treasurer: ["prasadam.read", "prasadam.write", "prasadam.cancel"],
+  member: ["prasadam.read", "prasadam.write"],
+  collector: ["prasadam.read", "prasadam.write"],
   viewer: [],
 };
 

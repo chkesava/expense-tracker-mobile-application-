@@ -48,6 +48,12 @@ export function festivalCol(
     | "tokenLadduTokens"
     | "tokenDrawSessions"
     | "tokenDrawResults"
+    // KAN-126. The daily prasadam register: one document per offering, filed
+    // under a festival day and a morning/evening session. It holds no amount
+    // field at all — `firestore.rules` enforces that — so it must stay out of
+    // `LEDGER_SUBCOLLECTIONS`. Not to be confused with `SevaKind = "prasadam"`,
+    // which is a slot on the programme rather than a register of providers.
+    | "prasadamEntries"
 ): string[] {
   return ["pandals", pandalId, "festivals", festivalId, name];
 }
