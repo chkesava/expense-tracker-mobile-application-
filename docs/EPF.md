@@ -496,6 +496,33 @@ rather than a new finding.
     `system` event per month with reason `auto-credit withdrawn (SPENDLY-72)`.
 68. Open the establishment twice → the withdrawal does not repeat.
 
+### Multi-month save and offline honesty (SPENDLY-1, second pass)
+
+Items 69-76 cover the 15 Sep re-report. See
+[`SPENDLY-1-epf-backfill-persistence.md`](SPENDLY-1-epf-backfill-persistence.md).
+
+69. Edit **four or more** months via Apply, so each is persisted as **Draft**.
+    Then **Save all** → the toast counts **every** month, not one, and each row
+    leaves Draft for **Manual**. *(This is the reported bug: Save all used to
+    skip persisted rows and report "Saved 1 month".)*
+70. A row that is saved but still Draft reads **Draft · saved**, distinct from
+    an unsaved wage-filled row.
+71. Force-quit and reopen → every month from item 69 is still there with its
+    values, and History / Balance / Current now count them.
+72. Current → **Record credit** on one of those months → succeeds. *(It was
+    refused while the month was stuck in Draft.)*
+73. **Save all** with a **Credited** or **Partial** month present → that month
+    is not rewritten and its credited amount is unchanged (SPENDLY-68 still
+    holds).
+74. Airplane mode → **Save all** → a dialog warns the months are held on this
+    device only, and the toast does **not** say "will sync". Restore
+    connectivity and confirm they reach Firestore. *(Native has no durable
+    write queue — KAN-112.)*
+75. On **web**, airplane mode → Save all → the toast may still say "offline,
+    will sync", because IndexedDB genuinely is durable there.
+76. Force a write failure (revoke access mid-save) → the banner names exactly
+    the failed months and **Retry** re-saves only those, with no duplicates.
+
 ---
 
 ## Troubleshooting
@@ -509,6 +536,8 @@ rather than a new finding.
 | The EPF balance dropped after upgrading to SPENDLY-72 | Credits the old auto-advance invented have been withdrawn — they were projections counted as money | Expected. Record the real credits on Current; the months are waiting as Awaiting/Overdue. |
 | The current month is missing from Backfill | Correct since SPENDLY-72 — a live employment's in-progress month belongs to Current | Use the Current tab. Backfill covers closed months. |
 | "Save this month under Backfill first" when recording a credit | The month is still a `draft`; `ALLOWED.draft` is empty | Save it under Backfill, or let the repair release it if it is the current or a future month. |
+| Saved months stay **Draft** and Record credit is refused | Pre-SPENDLY-1-second-pass build: **Save all** skipped rows that were already persisted, so a month applied from the edit sheet could never leave `draft` | Upgrade. Save all now promotes a persisted draft to `confirmed`, which is what makes `confirmed → credited` reachable. |
+| The toast said "offline, will sync" and the write was lost | Native has no durable Firestore write queue — the JS SDK falls back to memory (KAN-112) | Expected before this fix; the copy no longer makes that promise. A real outbox is KAN-112. |
 | A backfill edit vanished | Pre-SPENDLY-1 build — **Apply** only touched local state and the tab switch unmounted the screen | Upgrade. Apply now writes immediately; only the bulk wage fill waits for Save. |
 | A new month was not generated | No wage recorded on the establishment | The projector needs the most recent wage; record one. |
 | "Multiple current employments" on save | Another establishment is open-ended | Set a leaving date on the other one first. |

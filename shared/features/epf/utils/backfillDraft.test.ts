@@ -7,6 +7,7 @@ import type {
 import {
   backfillRowPresentation,
   backfillSaveRows,
+  backfillStatusLabel,
   clearSavedEdits,
   mergeBackfillEdits,
   persistedAmountsDiffer,
@@ -252,13 +253,14 @@ describe("unsavedChangesPrompt", () => {
 describe("backfillSaveRows — SPENDLY-68", () => {
   it("never rewrites a persisted month just because a wage is typed", () => {
     const rows = [
-      row({ month: "2025-12", persisted: true, employeeShare: 2099 }),
+      row({ month: "2025-12", persisted: true, status: "confirmed", employeeShare: 2099 }),
       row({ month: "2025-11", persisted: false, wage: 17494, employeeShare: 2099 }),
     ];
     const payload = backfillSaveRows({
       rows,
       edits: new Map(),
       wage: 17494,
+      status: "confirmed",
     });
 
     expect(payload.map((r) => r.month)).toEqual(["2025-11"]);
@@ -270,6 +272,7 @@ describe("backfillSaveRows — SPENDLY-68", () => {
       rows: [row({ month: "2025-12", persisted: true, employeeShare: 2099 })],
       edits: new Map([["2025-12", edited]]),
       wage: 17494,
+      status: "confirmed",
     });
 
     expect(payload).toHaveLength(1);
@@ -282,8 +285,78 @@ describe("backfillSaveRows — SPENDLY-68", () => {
         rows: [row({ month: "2025-12", persisted: false, wage: 0 })],
         edits: new Map(),
         wage: 0,
+        status: "draft",
       })
     ).toEqual([]);
+  });
+
+  /**
+   * The reported bug. `applyEdit` persists each edited month as a `draft`, so
+   * after a few edits every month is `persisted`; skipping all persisted rows
+   * left Save all writing only the leftover wage-filled one.
+   */
+  it("promotes a persisted draft when saving as confirmed", () => {
+    const payload = backfillSaveRows({
+      rows: [
+        row({ month: "2026-06", persisted: true, status: "draft" }),
+        row({ month: "2026-07", persisted: true, status: "draft" }),
+        row({ month: "2026-08", persisted: false, wage: 25000 }),
+      ],
+      edits: new Map(),
+      wage: 25000,
+      status: "confirmed",
+    });
+
+    expect(payload.map((r) => r.month)).toEqual(["2026-06", "2026-07", "2026-08"]);
+  });
+
+  it("does not rewrite a persisted draft when saving as draft", () => {
+    expect(
+      backfillSaveRows({
+        rows: [row({ month: "2026-06", persisted: true, status: "draft" })],
+        edits: new Map(),
+        wage: 0,
+        status: "draft",
+      })
+    ).toEqual([]);
+  });
+
+  it("never promotes a persisted month that is not a draft — SPENDLY-68 holds", () => {
+    const protectedStatuses = ALL_STATUSES.filter((status) => status !== "draft");
+    for (const status of protectedStatuses) {
+      const payload = backfillSaveRows({
+        rows: [row({ month: "2026-06", persisted: true, status })],
+        edits: new Map(),
+        wage: 25000,
+        status: "confirmed",
+      });
+      expect(payload, `status ${status} must not be rewritten`).toEqual([]);
+    }
+  });
+});
+
+describe("backfillStatusLabel — SPENDLY-1", () => {
+  it("marks a persisted draft as saved", () => {
+    const presentation = backfillRowPresentation(
+      row({ persisted: true, status: "draft" })
+    );
+    expect(presentation.savedDraft).toBe(true);
+    expect(backfillStatusLabel("Draft", presentation)).toBe("Draft · saved");
+  });
+
+  it("leaves an unsaved generated month alone", () => {
+    const presentation = backfillRowPresentation(
+      row({ persisted: false, status: "draft" })
+    );
+    expect(presentation.savedDraft).toBe(false);
+    expect(backfillStatusLabel("Draft", presentation)).toBe("Draft");
+  });
+
+  it("does not label a persisted confirmed month as a draft", () => {
+    const presentation = backfillRowPresentation(
+      row({ persisted: true, status: "confirmed" })
+    );
+    expect(backfillStatusLabel("Manual", presentation)).toBe("Manual");
   });
 });
 
@@ -307,6 +380,7 @@ describe("backfillRowPresentation — SPENDLY-69", () => {
     expect(backfillRowPresentation(row({ persisted: true, epfCredit: 2948 }))).toEqual({
       recorded: true,
       suggested: false,
+      savedDraft: true,
     });
   });
 
@@ -314,6 +388,7 @@ describe("backfillRowPresentation — SPENDLY-69", () => {
     expect(backfillRowPresentation(row({ persisted: false, epfCredit: 2948 }))).toEqual({
       recorded: true,
       suggested: true,
+      savedDraft: false,
     });
   });
 
@@ -321,6 +396,7 @@ describe("backfillRowPresentation — SPENDLY-69", () => {
     expect(backfillRowPresentation(row({ persisted: false, epfCredit: 0 }))).toEqual({
       recorded: false,
       suggested: false,
+      savedDraft: false,
     });
   });
 
@@ -329,6 +405,7 @@ describe("backfillRowPresentation — SPENDLY-69", () => {
     expect(backfillRowPresentation(row({ persisted: true, epfCredit: 0 }))).toEqual({
       recorded: true,
       suggested: false,
+      savedDraft: true,
     });
   });
 });

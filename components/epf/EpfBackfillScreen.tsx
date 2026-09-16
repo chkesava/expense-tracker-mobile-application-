@@ -14,6 +14,9 @@ import { useSpendlyBottomClearance } from "@/components/layout/useSpendlyBottomC
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { useEpfContributions } from "@/hooks/useEpfContributions";
 import { appDialog } from "@/lib/appDialog";
+import { isWriteQueueDurable } from "@/lib/firestoreWrite";
+import { toast } from "@/lib/toast";
+import { useNetwork } from "@/providers/NetworkProvider";
 import { epfCurrentMonth, epfTodayKey } from "@/shared/features/epf/utils/epfClock";
 import type { EpfBackfillRow, EpfEstablishment } from "@/shared/features/epf/types";
 import { deriveMonthState } from "@/shared/features/epf/utils/monthState";
@@ -35,12 +38,17 @@ import {
   clearSavedEdits,
   backfillRowPresentation,
   backfillSaveRows,
+  backfillStatusLabel,
   mergeBackfillEdits,
   persistedAmountsDiffer,
   statusForAppliedEdit,
   unsavedBackfillSummary,
   upsertBackfillEdit,
 } from "@/shared/features/epf/utils/backfillDraft";
+import {
+  persistedMonths,
+  summarizeSaveResults,
+} from "@/shared/features/epf/utils/saveOutcome";
 
 type ListItem =
   | { type: "header"; id: string; financialYear: string; recorded: number; expected: number; credit: number }
@@ -88,6 +96,7 @@ export function EpfBackfillScreen({
     deleteContribution,
     discardDrafts,
   } = useEpfContributions(establishment.id);
+  const { isOnline } = useNetwork();
 
   const {
     wage,
@@ -103,6 +112,17 @@ export function EpfBackfillScreen({
   } = draft;
   const [editingMonth, setEditingMonth] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  /**
+   * What the last save could not write, for the retry banner — SPENDLY-1.
+   *
+   * The status is carried along so Retry re-runs the save the user actually
+   * asked for; retrying a **Save draft** as `confirmed` would quietly promote
+   * months they had deliberately left as drafts.
+   */
+  const [failed, setFailed] = useState<{
+    months: string[];
+    status: "draft" | "confirmed";
+  }>({ months: [], status: "confirmed" });
 
   const monthKey = epfCurrentMonth();
   const todayKey = epfTodayKey();
@@ -137,9 +157,20 @@ export function EpfBackfillScreen({
     [establishment, backfillMonth]
   );
 
-  /** What Save draft / Save all may write — never silent rewrite of saved months. */
-  const saveRows = useMemo(
-    () => backfillSaveRows({ rows, edits, wage: Number(wage) || 0 }),
+  /**
+   * What each button may write — never a silent rewrite of saved months.
+   *
+   * Two sets, because the answer now depends on the status being written:
+   * **Save all** additionally promotes months that are already persisted as
+   * `draft`, which is what makes a saved draft reachable at all (SPENDLY-1).
+   */
+  const draftSaveRows = useMemo(
+    () => backfillSaveRows({ rows, edits, wage: Number(wage) || 0, status: "draft" }),
+    [rows, edits, wage]
+  );
+
+  const confirmSaveRows = useMemo(
+    () => backfillSaveRows({ rows, edits, wage: Number(wage) || 0, status: "confirmed" }),
     [rows, edits, wage]
   );
 
@@ -169,13 +200,15 @@ export function EpfBackfillScreen({
     [edits, wage, savedWage]
   );
 
+  // Validated against the confirm set — the superset, and the only save that
+  // gates on validation.
   const validation = useMemo(
     () =>
-      validateBackfillBatch(saveRows, {
+      validateBackfillBatch(confirmSaveRows, {
         establishment,
         currentDateKey: todayKey,
       }),
-    [saveRows, establishment, todayKey]
+    [confirmSaveRows, establishment, todayKey]
   );
 
   const items = useMemo((): ListItem[] => {
@@ -262,7 +295,7 @@ export function EpfBackfillScreen({
   );
 
   const handleSave = async (status: "draft" | "confirmed") => {
-    const payload = status === "confirmed" ? validation.valid : saveRows;
+    const payload = status === "confirmed" ? validation.valid : draftSaveRows;
     if (status === "confirmed" && validation.errorCount > 0) {
       appDialog.alert(
         "Some months need attention",
@@ -272,26 +305,75 @@ export function EpfBackfillScreen({
           {
             text: "Save the rest",
             onPress: () => {
-              void runSave(payload, status);
+              void confirmOfflineThenSave(payload, status);
             },
           },
         ]
       );
       return;
     }
-    await runSave(payload, status);
+    await confirmOfflineThenSave(payload, status);
+  };
+
+  /**
+   * Warn before a save that cannot be durably queued — SPENDLY-1 / KAN-112.
+   *
+   * On native the Firestore write queue is memory-only, so an offline save
+   * survives exactly as long as the process does. The write is still worth
+   * making — it lands if the app stays open — so this warns rather than
+   * blocking, but it must not happen silently on a screen full of financial
+   * records the user believes are filed.
+   */
+  const confirmOfflineThenSave = async (
+    payload: EpfBackfillRow[],
+    status: "draft" | "confirmed"
+  ) => {
+    if (payload.length === 0) {
+      toast.info("Nothing new to save");
+      return;
+    }
+    if (isOnline || isWriteQueueDurable()) {
+      await runSave(payload, status);
+      return;
+    }
+
+    appDialog.alert(
+      "You're offline",
+      `${payload.length} month${payload.length === 1 ? "" : "s"} will be held on this device only. Keep the app open until it reconnects, or they will be lost.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Save anyway",
+          onPress: () => {
+            void runSave(payload, status);
+          },
+        },
+      ]
+    );
   };
 
   const runSave = async (payload: EpfBackfillRow[], status: "draft" | "confirmed") => {
     setSaving(true);
-    const result = await saveContributions(payload, { status });
+    const results = await saveContributions(payload, { status });
     setSaving(false);
-    if (result.failed === 0) {
-      setEdits(new Map());
+
+    const summary = summarizeSaveResults(results);
+    setFailed({ months: summary.failedMonths, status });
+
+    // Months that landed are owned by the Firestore snapshot again; the ones
+    // that failed stay in `edits` so this button can retry them.
+    setEdits((prev) => clearSavedEdits(prev, persistedMonths(results)));
+
+    if (!summary.hasFailures) {
       // The bulk fill is durable now, so the leave-guard must stop warning
       // about it until the wage changes again.
       setSavedWage(wage);
     }
+  };
+
+  const retryFailedMonths = () => {
+    const retry = rows.filter((row) => failed.months.includes(row.month));
+    void confirmOfflineThenSave(retry, failed.status);
   };
 
   const confirmDiscardDrafts = () => {
@@ -401,6 +483,23 @@ export function EpfBackfillScreen({
           </Text>
         </View>
       ) : null}
+
+      {failed.months.length > 0 ? (
+        <View style={[styles.issueBanner, { borderColor: theme.colors.destructive }]}>
+          <AlertTriangle size={theme.iconSize.sm} color={theme.colors.destructive} />
+          <View style={styles.issueBody}>
+            <Text style={[styles.issueText, { color: theme.colors.destructive }]}>
+              Couldn't save {failed.months.map((month) => monthLabel(month)).join(", ")}.
+            </Text>
+            <Text
+              onPress={retryFailedMonths}
+              style={[styles.retry, { color: theme.colors.destructive }]}
+            >
+              Retry
+            </Text>
+          </View>
+        </View>
+      ) : null}
     </View>
   );
 
@@ -436,6 +535,9 @@ export function EpfBackfillScreen({
             row.source
           );
           const presentation = backfillRowPresentation(row);
+          // "Draft" alone read identically before and after saving, which is
+          // what made the ticket look like data loss (SPENDLY-1).
+          const statusLabel = backfillStatusLabel(meta.label, presentation);
           return (
             <EpfContributionRow
               month={row.month}
@@ -444,7 +546,7 @@ export function EpfBackfillScreen({
               employerShare={row.employerShare}
               epsShare={row.epsShare}
               epfCredit={row.epfCredit}
-              statusLabel={meta.label}
+              statusLabel={statusLabel}
               statusTone={meta.tone}
               overridden={row.overridden === true}
               partialMonth={row.partialMonth === true}
@@ -544,6 +646,8 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   issueText: { fontSize: 13, flex: 1 },
+  issueBody: { flex: 1, gap: 2 },
+  retry: { fontSize: 13, fontWeight: "700" },
   fyHeader: {
     flexDirection: "row",
     alignItems: "center",

@@ -28,7 +28,16 @@ export type WriteOutcome =
   /** The server confirmed the write before the grace window elapsed. */
   | "acked"
   /** The write is durably queued locally and will sync when back online. */
-  | "queued";
+  | "queued"
+  /**
+   * Applied to an in-memory cache only — SPENDLY-1 / KAN-112.
+   *
+   * Same observable situation as `queued` (no server ack inside the grace
+   * window) but there is no durable queue behind it, so a force-stop discards
+   * the write. Split out because the two need different words: `queued` may
+   * promise a later sync and this may not.
+   */
+  | "unsafe";
 
 export type CommitWriteOptions = {
   /** Override the ack grace window (ms). */
@@ -40,6 +49,29 @@ export type CommitWriteOptions = {
 };
 
 const QUEUED = Symbol("queued");
+
+/**
+ * Whether an unacked write is durably stored — SPENDLY-1 / KAN-112.
+ *
+ * Registered by `lib/firebase.ts` when the Firestore instance is created,
+ * rather than imported from it: this module is unit-tested under plain Node,
+ * and reaching into `lib/firebase` would pull `react-native` and the whole
+ * Firebase SDK into that test. Registration happens in `createDb`, which every
+ * write path must go through to get a `db` at all, so it cannot be missed.
+ *
+ * Starts `false` so an unregistered environment understates durability rather
+ * than overstating it — the direction of error this ticket exists to fix.
+ */
+let writeQueueDurable = false;
+
+export function setWriteQueueDurable(durable: boolean): void {
+  writeQueueDurable = durable;
+}
+
+/** Test seam. */
+export function isWriteQueueDurable(): boolean {
+  return writeQueueDurable;
+}
 
 /**
  * A write that failed *after* it was reported as queued (GS-030).
@@ -103,7 +135,8 @@ export async function commitWrite(
 
   try {
     const result = await Promise.race([tracked, grace]);
-    return result === QUEUED ? "queued" : "acked";
+    if (result !== QUEUED) return "acked";
+    return writeQueueDurable ? "queued" : "unsafe";
   } finally {
     if (timer) clearTimeout(timer);
   }
@@ -112,7 +145,14 @@ export async function commitWrite(
 /**
  * Success copy for a write, telling the user when it is only saved locally.
  * `toast.success(writeSavedMessage(outcome, "Expense logged"))`
+ *
+ * `unsafe` deliberately does not say "will sync". On native there is no durable
+ * queue to make that true (KAN-112), and SPENDLY-1 was reported precisely
+ * because the app said "offline, will sync" over a write that a force-stop
+ * would have thrown away.
  */
 export function writeSavedMessage(outcome: WriteOutcome, message: string): string {
-  return outcome === "acked" ? message : `${message} — offline, will sync`;
+  if (outcome === "acked") return message;
+  if (outcome === "queued") return `${message} — offline, will sync`;
+  return `${message} on this device — keep the app open until it syncs`;
 }
