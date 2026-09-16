@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
 
@@ -19,8 +19,14 @@ import {
   useTokenLadduConfig,
   useTokenLadduTokens,
 } from "@/hooks/useTokenLaddu";
+import { usePandals } from "@/hooks/usePandals";
+import { friendlyErrorMessage, logError } from "@/lib/errors";
+import { toast } from "@/lib/toast";
+import { useAuth } from "@/providers/AuthProvider";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
+import { exportTokenLadduPdf } from "@/services/ganesh/ganeshReportDelivery";
 import { money } from "@/shared/utils/ganeshMath";
+import { buildTokenLadduExport } from "@/shared/utils/ganeshTokenLadduExport";
 
 type TokenTab = "overview" | "register" | "tokens";
 
@@ -47,6 +53,8 @@ export default function TokenLadduScreen() {
   const { back } = useRouter();
   const { pandalId, festivalId } = useGaneshSession();
   const { festivals } = useFestivals(pandalId);
+  const { pandals } = usePandals();
+  const { realUser } = useAuth();
   const { can } = useGaneshPermissions();
   const { closed, lockMessage } = useFestivalWriteLock();
   const writes = useGaneshWrites();
@@ -59,8 +67,10 @@ export default function TokenLadduScreen() {
   const { results } = useTokenDrawResults(pandalId, festivalId);
 
   const [tab, setTab] = useState<TokenTab>("overview");
+  const [exporting, setExporting] = useState(false);
 
   const festival = festivals.find((item) => item.id === festivalId);
+  const pandal = pandals.find((item) => item.id === pandalId);
 
   const canRead = can("tokens.read");
   const canConfigure = can("tokens.config");
@@ -94,6 +104,32 @@ export default function TokenLadduScreen() {
     () => tokens.filter((token) => token.status === "winner").length,
     [tokens]
   );
+
+  /**
+   * The register, exported at whatever the data says right now.
+   *
+   * Built from the tokens already on screen rather than a fresh read, so the
+   * PDF matches what the committee is looking at — KAN-125 asks for the export
+   * to reflect the data available at the time of export, not a later snapshot.
+   */
+  const onExport = useCallback(() => {
+    setExporting(true);
+    const model = buildTokenLadduExport({
+      pandalName: pandal?.name ?? "Pandal",
+      festivalName: festival?.name ?? "Festival",
+      festivalYear: festival?.year ?? undefined,
+      generatedAt: new Date().toISOString(),
+      generatedBy: realUser?.displayName || realUser?.phoneNumber || "A committee member",
+      tokens,
+      capacity,
+    });
+    exportTokenLadduPdf(model)
+      .catch((error) => {
+        logError("ganesh.tokenLadduExport", error, { rows: model.rows.length });
+        toast.error(friendlyErrorMessage(error, "Could not export the Token Laddu register."));
+      })
+      .finally(() => setExporting(false));
+  }, [pandal?.name, festival?.name, festival?.year, realUser, tokens, capacity]);
 
   const tabs = useMemo(() => {
     const options: Array<ChipOption<TokenTab>> = [{ id: "overview", label: "Overview" }];
@@ -130,10 +166,9 @@ export default function TokenLadduScreen() {
             loading={loading || configLoading}
             error={error}
             onRetry={retry}
-            // Wired up with the PDF builder in the next phase.
-            canExport={false}
-            exporting={false}
-            onExport={() => undefined}
+            canExport={canRead}
+            exporting={exporting}
+            onExport={onExport}
             prefix={prefix}
           />
         ) : (
