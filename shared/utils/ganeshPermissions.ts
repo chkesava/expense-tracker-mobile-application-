@@ -62,7 +62,16 @@ export type GaneshPermission =
   | "reconciliation.read"
   | "reconciliation.count"
   | "reconciliation.approve"
-  | "reconciliation.resolve";
+  | "reconciliation.resolve"
+  // KAN-125. `tokens.config` is separate from `tokens.write` because setting
+  // capacity is what authorizes exceeding it — whoever can raise the limit can
+  // let registration past the number of laddus that physically exist. And
+  // `draw.run` is separate again: running the draw is the public, irreversible
+  // act, and selling a token should not carry the authority to pick the winner.
+  | "tokens.read"
+  | "tokens.write"
+  | "tokens.config"
+  | "draw.run";
 
 export const ALL_GANESH_PERMISSIONS: GaneshPermission[] = [
   "collections.read",
@@ -120,6 +129,10 @@ export const ALL_GANESH_PERMISSIONS: GaneshPermission[] = [
   "reconciliation.count",
   "reconciliation.approve",
   "reconciliation.resolve",
+  "tokens.read",
+  "tokens.write",
+  "tokens.config",
+  "draw.run",
 ];
 
 const READ_LEDGER: GaneshPermission[] = [
@@ -133,6 +146,7 @@ const READ_LEDGER: GaneshPermission[] = [
   "assets.read",
   "sponsors.read",
   "seva.read",
+  "tokens.read",
 ];
 
 const MEMBER_WRITES: GaneshPermission[] = [
@@ -171,6 +185,12 @@ const TREASURER_PERMISSIONS: GaneshPermission[] = [
   "reconciliation.count",
   "reconciliation.approve",
   "reconciliation.resolve",
+  // KAN-125 names admin and treasurer as the roles that run the whole Token
+  // Laddu lifecycle, draw included.
+  "tokens.read",
+  "tokens.write",
+  "tokens.config",
+  "draw.run",
 ];
 
 const ADMIN_PERMISSIONS: GaneshPermission[] = [...ALL_GANESH_PERMISSIONS];
@@ -187,6 +207,7 @@ const COLLECTOR_PERMISSIONS: GaneshPermission[] = [
   "assets.read",
   "sponsors.read",
   "seva.read",
+  "tokens.read",
   // Runs their own session and declares the handover (GS-076). Deliberately no
   // `reconciliation.count` or `.approve`: the person who collected the cash is
   // not the person who signs off that it is all there (GS-075 point 9).
@@ -206,9 +227,16 @@ const COLLECTOR_PERMISSIONS: GaneshPermission[] = [
  *
  * Every other role keeps both, so nothing an existing build does starts
  * failing except the case being closed deliberately.
+ *
+ * `tokens.read` is withheld for the same reason (KAN-125): a token row carries
+ * the participant's name and mobile, so the token list is donor data wearing a
+ * different hat.
  */
 const VIEWER_PERMISSIONS: GaneshPermission[] = READ_LEDGER.filter(
-  (permission) => permission !== "collections.read" && permission !== "contributions.read"
+  (permission) =>
+    permission !== "collections.read" &&
+    permission !== "contributions.read" &&
+    permission !== "tokens.read"
 );
 
 export const ROLE_PERMISSIONS: Record<GaneshRole, readonly GaneshPermission[]> = {
@@ -305,6 +333,29 @@ export const SEVA_ROLE_DEFAULTS: Record<
   member: ["seva.read"],
   collector: ["seva.read"],
   viewer: ["seva.read"],
+};
+
+/** Mirrors `canWriteTokensOf()` fallback in firestore.rules. */
+export const RULE_TOKEN_WRITE_ROLES: GaneshRole[] = ["admin", "treasurer"];
+
+/** Mirrors `canRunDrawOf()` fallback in firestore.rules. */
+export const RULE_DRAW_RUN_ROLES: GaneshRole[] = ["admin", "treasurer"];
+
+/**
+ * Default `tokens.*` / `draw.*` keys unioned onto existing builtin role docs
+ * (KAN-125).
+ *
+ * Viewer gets nothing: a token row carries the participant's name and mobile,
+ * which is the data GS-073 deliberately keeps from viewers.
+ */
+export const TOKEN_LADDU_ROLE_DEFAULTS: Record<
+  (typeof BUILTIN_ROLE_IDS)[number],
+  readonly GaneshPermission[]
+> = {
+  treasurer: ["tokens.read", "tokens.write", "tokens.config", "draw.run"],
+  member: ["tokens.read"],
+  collector: ["tokens.read"],
+  viewer: [],
 };
 
 export function isGaneshAdmin(role: GaneshRole | undefined): boolean {

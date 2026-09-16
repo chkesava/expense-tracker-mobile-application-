@@ -135,6 +135,7 @@ jobs:
           # the copy jwks-rsa require()s, or the function crashes before 401.
           # Every function must be checked -- they share the one bundle.
           node --no-experimental-require-module -e "require('./netlify/functions-dist/ganesh-summary.js'); console.log('ganesh-summary loaded')"
+          node --no-experimental-require-module -e "require('./netlify/functions-dist/ganesh-draw.js'); console.log('ganesh-draw loaded')"
           node --no-experimental-require-module -e "require('./netlify/functions-dist/epf-cron.js'); console.log('epf-cron loaded')"
 
       - name: Deploy to Netlify
@@ -149,7 +150,7 @@ jobs:
             exit 1
           fi
           if [ -z "$FIREBASE_SERVICE_ACCOUNT" ]; then
-            echo "::error::FIREBASE_SERVICE_ACCOUNT is empty. The ganesh-summary function cannot write totals without it."
+            echo "::error::FIREBASE_SERVICE_ACCOUNT is empty. ganesh-summary cannot write totals and ganesh-draw cannot run the Token Laddu draw without it."
             exit 1
           fi
           npm install -g netlify-cli@17
@@ -207,4 +208,5 @@ jobs:
             echo "- https://spendly-share.netlify.app/split/<slug> (unchanged)"
             echo "- https://spendly-share.netlify.app/payment/<slug> (unchanged)"
             echo "- https://spendly-share.netlify.app/.netlify/functions/ganesh-summary"
+            echo "- https://spendly-share.netlify.app/.netlify/functions/ganesh-draw"
           } >> "$GITHUB_STEP_SUMMARY"

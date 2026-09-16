@@ -9,6 +9,11 @@ import {
   reportToCsv,
   reportToHtml,
 } from "@/shared/utils/ganeshReportExport";
+import type { TokenLadduExport } from "@/shared/utils/ganeshTokenLadduExport";
+import {
+  tokenLadduFileName,
+  tokenLadduToHtml,
+} from "@/shared/utils/ganeshTokenLadduExport";
 
 /**
  * Turning a report into a file the committee can keep (GS-079).
@@ -57,23 +62,47 @@ export async function exportReportCsv(report: GaneshReport): Promise<string> {
 
 /** Render the PDF and open the share sheet. Returns the file's uri. */
 export async function exportReportPdf(report: GaneshReport): Promise<string> {
-  const { uri } = await Print.printToFileAsync({ html: reportToHtml(report) });
+  return deliverPdf(reportToHtml(report), reportFileName(report, "pdf"), "Share the report");
+}
+
+/**
+ * Render a PDF and hand it over. Shared by the report and the Token Laddu
+ * register so both get the same rename-then-share behaviour.
+ */
+async function deliverPdf(html: string, fileName: string, title: string): Promise<string> {
+  const { uri } = await Print.printToFileAsync({ html });
 
   // printToFileAsync names the file with a random id, which is useless in a
   // WhatsApp thread six months later. Rename to something self-describing.
   try {
     const source = new File(uri);
-    const target = new File(reportsDirectory(), reportFileName(report, "pdf"));
+    const target = new File(reportsDirectory(), fileName);
     if (target.exists) target.delete();
     source.move(target);
-    await shareFile(target.uri, "application/pdf", "Share the report");
+    await shareFile(target.uri, "application/pdf", title);
     return target.uri;
   } catch {
-    // A failed rename is not worth losing the report over — share the
+    // A failed rename is not worth losing the document over — share the
     // original rather than making the user generate it again.
-    await shareFile(uri, "application/pdf", "Share the report");
+    await shareFile(uri, "application/pdf", title);
     return uri;
   }
+}
+
+/**
+ * The Token Laddu register (KAN-125).
+ *
+ * Exportable at any time, before or after the draw — the committee needs the
+ * list of numbers in hand while selling, not only once winners exist. On web
+ * the print dialog is the honest route, same as the financial report.
+ */
+export async function exportTokenLadduPdf(model: TokenLadduExport): Promise<void> {
+  const html = tokenLadduToHtml(model);
+  if (Platform.OS === "web") {
+    await Print.printAsync({ html });
+    return;
+  }
+  await deliverPdf(html, tokenLadduFileName(model), "Share the Token Laddu register");
 }
 
 /**

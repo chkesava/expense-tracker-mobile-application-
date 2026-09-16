@@ -332,7 +332,10 @@ service cloud.firestore {
         'expenses.create', 'expenses.update',
         'contributions.create', 'contributions.update',
         'assets.create', 'sponsors.create', 'sponsors.update',
-        'seva.read'
+        'seva.read',
+        // KAN-125: read only. A self-joining member may see the token list,
+        // and nothing about selling, configuring or drawing.
+        'tokens.read'
       ];
     }
 
@@ -510,6 +513,30 @@ service cloud.firestore {
     }
     function canResolveReconciliationOf(pandalId) {
       return hasPermOf(pandalId, 'reconciliation.resolve');
+    }
+
+    // KAN-125 — Token Laddu.
+    //
+    // Three separate authorities on purpose. `tokens.config` sets how many
+    // laddus exist, and raising that number is the only legitimate way past the
+    // capacity check — so whoever holds it can authorize exceeding what was
+    // originally configured. `draw.run` is the public, irreversible act, and
+    // selling a token should not carry the authority to pick the winner.
+    //
+    // Reads are gated too, not left to `isActivePandalMember()`: a token row
+    // carries the participant's name and mobile, which is exactly the donor PII
+    // GS-073 keeps from viewers.
+    function canReadTokensOf(pandalId) {
+      return hasPermOf(pandalId, 'tokens.read');
+    }
+    function canWriteTokensOf(pandalId) {
+      return hasPermOf(pandalId, 'tokens.write');
+    }
+    function canConfigureTokensOf(pandalId) {
+      return hasPermOf(pandalId, 'tokens.config');
+    }
+    function canRunDrawOf(pandalId) {
+      return hasPermOf(pandalId, 'draw.run');
     }
 
     function canWriteLedgerSideEffectOf(pandalId) {
@@ -1450,7 +1477,78 @@ service cloud.firestore {
             return subcol == 'summary'
               || subcol == 'collectionSessions'
               || subcol == 'reconciliations'
-              || subcol == 'cashAdjustments';
+              || subcol == 'cashAdjustments'
+              || isTokenLadduSubcol();
+          }
+
+          // KAN-125. Five new subcollections, all short-circuited away from the
+          // wildcard for the reason documented above `summaryWriteAllowed()`:
+          // the wildcard walks every branch of canWriteFestivalSubcol() and all
+          // nine sub-predicates of payloadWellFormed(), none of which can apply
+          // to a token, and the evaluation budget is already tight enough that
+          // a legacy member's role-document fallback pushed it over once.
+          function isTokenLadduSubcol() {
+            return subcol == 'tokenLadduConfig'
+              || subcol == 'tokenLadduRegistrations'
+              || subcol == 'tokenLadduTokens'
+              || subcol == 'tokenDrawSessions'
+              || subcol == 'tokenDrawResults';
+          }
+
+          /**
+           * Capacity is the integrity boundary of this feature, so the rules
+           * hold the parts of it that do not need a second read.
+           *
+           * `nextTokenNumber` and `registeredCount` may only advance — a client
+           * that could wind either backwards could re-issue a token code that
+           * has already been announced, or make room past a full pot. The
+           * capacity-versus-registered comparison itself lives in the service
+           * transaction, which is the only place that can read both under a
+           * lock; this is the floor beneath it, not a replacement.
+           */
+          function tokenConfigAllocatorsOnlyAdvance() {
+            let d = request.resource.data;
+            return (
+                !d.keys().hasAny(['nextTokenNumber'])
+                || resource == null
+                || d.nextTokenNumber >= (
+                     resource.data.keys().hasAny(['nextTokenNumber'])
+                       ? resource.data.nextTokenNumber
+                       : 0
+                   )
+              ) && (
+                !d.keys().hasAny(['registeredCount'])
+                || resource == null
+                || d.registeredCount >= (
+                     resource.data.keys().hasAny(['registeredCount'])
+                       ? resource.data.registeredCount
+                       : 0
+                   )
+              );
+          }
+
+          /**
+           * Setting capacity and registering are different authorities, but a
+           * registration has to bump the allocator on this same document — so
+           * either permission may write it, and the allocator guard above is
+           * what stops a token writer editing capacity downward into an
+           * inconsistent state.
+           */
+          function tokenConfigWriteAllowed() {
+            return pandalNotArchived()
+              && (canConfigureTokensOf(pandalId) || canWriteTokensOf(pandalId))
+              && tokenConfigAllocatorsOnlyAdvance()
+              && request.resource.data.totalTokens is int
+              && request.resource.data.totalTokens >= 0
+              && request.resource.data.totalTokens <= 1000000;
+          }
+
+          function tokenWriteAllowed() {
+            return pandalNotArchived() && canWriteTokensOf(pandalId);
+          }
+
+          function drawSessionWriteAllowed() {
+            return pandalNotArchived() && canRunDrawOf(pandalId);
           }
 
           /** GS-076: a collector runs their own session. */
@@ -1613,6 +1711,12 @@ service cloud.firestore {
           // aggregate or operational rather than personal.
           function canReadSubcol() {
             return subcol != 'auditLogs' && (
+              // KAN-125: a token carries the participant's name and mobile, so
+              // it is gated like the rest of the donor PII (GS-073) rather than
+              // left open to every active member.
+              isTokenLadduSubcol()
+                ? canReadTokensOf(pandalId)
+                :
               subcol == 'collectionSessions'
                 || subcol == 'reconciliations'
                 || subcol == 'cashAdjustments'
@@ -1698,6 +1802,18 @@ service cloud.firestore {
               ? reconciliationCreateAllowed()
               : subcol == 'cashAdjustments'
               ? cashAdjustmentCreateAllowed()
+              // KAN-125. `tokenDrawResults` is absent from this list on
+              // purpose: the trusted draw endpoint is its only writer, so it
+              // falls through to the explicit denial below. A client that could
+              // create one could announce a winner the draw never picked.
+              : subcol == 'tokenLadduConfig'
+              ? tokenConfigWriteAllowed()
+              : subcol == 'tokenLadduRegistrations' || subcol == 'tokenLadduTokens'
+              ? tokenWriteAllowed()
+              : subcol == 'tokenDrawSessions'
+              ? drawSessionWriteAllowed()
+              : subcol == 'tokenDrawResults'
+              ? false
               : (
                 canWriteFestivalSubcol()
                 && payloadWellFormed()
@@ -1740,6 +1856,69 @@ service cloud.firestore {
 
           // cashAdjustments: create only. No update rule at all, so there is
           // nothing to get wrong.
+
+          // KAN-125. The config document is written on every registration (the
+          // allocator lives on it), so it needs an update rule; the allocator
+          // guard inside keeps that write honest.
+          allow update: if subcol == 'tokenLadduConfig'
+            && isActivePandalMember()
+            && festivalOpen()
+            && scopeIdsMatch()
+            && tokenConfigWriteAllowed();
+
+          /**
+           * A token may be cancelled, and nothing else.
+           *
+           * The winner fields are deliberately outside the allowlist: only the
+           * trusted draw endpoint may declare a winner, and it uses the admin
+           * SDK, which bypasses rules entirely. So a client cannot crown itself
+           * even holding `tokens.write` — and cannot un-crown a token either,
+           * which is what stops a committed result being quietly rewritten.
+           */
+          allow update: if subcol == 'tokenLadduTokens'
+            && resource != null
+            && isActivePandalMember()
+            && festivalOpen()
+            && scopeIdsMatch()
+            && tokenWriteAllowed()
+            && resource.data.status == 'eligible'
+            && request.resource.data.status == 'cancelled'
+            && request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly([
+                   'status', 'cancelReason', 'cancelledBy', 'cancelledAt',
+                   'updatedBy', 'updatedAt'
+                 ]);
+
+          // A registration is cancelled the same way, and its identity fields
+          // never move — the token codes it allocated stay attached to it.
+          allow update: if subcol == 'tokenLadduRegistrations'
+            && resource != null
+            && isActivePandalMember()
+            && festivalOpen()
+            && scopeIdsMatch()
+            && tokenWriteAllowed()
+            && request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly([
+                   'voided', 'voidReason', 'voidedBy', 'voidedAt',
+                   'cancelReason', 'notes', 'updatedBy', 'updatedAt'
+                 ]);
+
+          // A draw session is opened, then completed or cancelled. `plannedDraws`
+          // and `configuredTokens` are the snapshot KAN-125 asks for, so they are
+          // not in the allowlist — the terms of a public draw cannot be edited
+          // after it starts. `completedDraws` advances only through the trusted
+          // endpoint, which bypasses these rules.
+          allow update: if subcol == 'tokenDrawSessions'
+            && resource != null
+            && isActivePandalMember()
+            && festivalOpen()
+            && scopeIdsMatch()
+            && drawSessionWriteAllowed()
+            && request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly([
+                   'status', 'completedAt', 'completedBy', 'cancelReason',
+                   'updatedBy', 'updatedAt'
+                 ]);
 
           allow update: if !hasDedicatedRule()
             && isActivePandalMember()

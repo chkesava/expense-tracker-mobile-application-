@@ -13,7 +13,8 @@ export type PermissionGroupId =
   | "audit"
   | "assets"
   | "sponsors"
-  | "seva";
+  | "seva"
+  | "tokenLaddu";
 
 export type PermissionGroup = {
   id: PermissionGroupId;
@@ -129,6 +130,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: "seva.assign", label: "Assign volunteers" },
     ],
   },
+  {
+    id: "tokenLaddu",
+    label: "Token Laddu",
+    items: [
+      { key: "tokens.read", label: "View tokens" },
+      { key: "tokens.write", label: "Register and cancel" },
+      { key: "tokens.config", label: "Set the number of laddus" },
+      { key: "draw.run", label: "Run the draw" },
+    ],
+  },
 ];
 
 /**
@@ -214,6 +225,9 @@ export const PERMISSION_DEPENDENCIES: Partial<Record<GaneshPermission, GaneshPer
   "sponsors.cancel": ["sponsors.read"],
   "seva.write": ["seva.read"],
   "seva.assign": ["seva.read"],
+  "tokens.write": ["tokens.read"],
+  "tokens.config": ["tokens.read"],
+  "draw.run": ["tokens.read"],
 };
 
 export const CRITICAL_PERMISSIONS: GaneshPermission[] = [
@@ -224,6 +238,10 @@ export const CRITICAL_PERMISSIONS: GaneshPermission[] = [
   "roles.assign",
   "assets.dispose",
   "assets.manage",
+  // KAN-125: the draw is public and irreversible, and raising capacity is how
+  // registration legitimately exceeds the laddus that physically exist.
+  "draw.run",
+  "tokens.config",
 ];
 
 export function expandPermissions(input: readonly GaneshPermission[]): GaneshPermission[] {

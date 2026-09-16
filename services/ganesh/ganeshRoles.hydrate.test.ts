@@ -32,6 +32,7 @@ import {
   ROLE_PERMISSIONS,
   SEVA_ROLE_DEFAULTS,
   SPONSOR_ROLE_DEFAULTS,
+  TOKEN_LADDU_ROLE_DEFAULTS,
 } from "@/shared/utils/ganeshPermissions";
 import type { PandalRole } from "@/shared/types/ganesh";
 
@@ -47,6 +48,7 @@ function completeRole(roleId: (typeof BUILTIN_ROLE_IDS)[number]): PandalRole {
       ...CONTRIBUTION_STATUS_ROLE_DEFAULTS[roleId],
       ...SPONSOR_ROLE_DEFAULTS[roleId],
       ...SEVA_ROLE_DEFAULTS[roleId],
+      ...TOKEN_LADDU_ROLE_DEFAULTS[roleId],
     ]),
     createdBy: "u1",
     updatedBy: "u1",

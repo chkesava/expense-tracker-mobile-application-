@@ -278,6 +278,16 @@ export default function PandalScreen() {
         ) : null}
 
         <PandalSectionCard title="This Festival">
+          {can("tokens.read") ? (
+            <NavRow
+              title="Token Laddu"
+              meta="Register Token Laddus and run the Nimarjanam draw"
+              icon={<AdminGlyph name="iconFund" />}
+              chevronColor={g.saffron}
+              divider
+              onPress={() => push("/(ganesh)/token-laddu")}
+            />
+          ) : null}
           <NavRow
             title="Festival report"
             meta="Full money summary for this Ganesh Utsav"

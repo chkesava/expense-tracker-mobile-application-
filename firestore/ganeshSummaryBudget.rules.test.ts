@@ -191,3 +191,96 @@ describe("summary writes on the legacy member shape (no permissions field)", () 
     await assertFails(setDoc(summaryRef("u-1"), { chanda: 1000 }, { merge: true }));
   });
 });
+
+/**
+ * KAN-125 added five subcollections to this same wildcard. Each one is
+ * short-circuited ahead of `canWriteFestivalSubcol()` and `payloadWellFormed()`
+ * for the reason this file documents — but a short-circuit only helps if it is
+ * actually reached, so these pin that a real Token Laddu write still evaluates
+ * inside the ceiling.
+ *
+ * A budget overrun and an authorization refusal are both `PERMISSION_DENIED`
+ * and indistinguishable to a client, so the assertion that carries the weight
+ * is the one that *succeeds*: if the branch blew the budget, it would fail.
+ */
+describe("KAN-125 token laddu writes stay inside the evaluation budget", () => {
+  function tokenRef(uid: string, code: string) {
+    return doc(
+      env.authenticatedContext(uid).firestore(),
+      "pandals",
+      PANDAL,
+      "festivals",
+      FESTIVAL,
+      "tokenLadduTokens",
+      code
+    );
+  }
+
+  function configRef(uid: string) {
+    return doc(
+      env.authenticatedContext(uid).firestore(),
+      "pandals",
+      PANDAL,
+      "festivals",
+      FESTIVAL,
+      "tokenLadduConfig",
+      "current"
+    );
+  }
+
+  const TOKEN = {
+    tokenNumber: 1,
+    status: "eligible",
+    registrationId: "reg-1",
+    participantName: "Anjali",
+    receiptNumberPhysical: "A-101",
+    date: "2026-09-05",
+    amount: 100,
+    paymentMethod: "cash",
+    createdBy: "u-1",
+    updatedBy: "u-1",
+  };
+
+  it("a treasurer carrying the full permission set can write a token", async () => {
+    // The widest realistic array, because a longer `permissions` list is the
+    // expensive direction for `hasPermOf`.
+    await seed("u-1", "treasurer", [
+      "collections.create",
+      "expenses.create",
+      "contributions.create",
+      "contributions.receive",
+      "sessions.write",
+      "reconciliation.approve",
+      "tokens.read",
+      "tokens.write",
+      "tokens.config",
+      "draw.run",
+    ]);
+    await assertSucceeds(setDoc(tokenRef("u-1", "TKN26-000001"), TOKEN));
+  });
+
+  it("and can write the config document that carries the allocator", async () => {
+    await seed("u-1", "treasurer", ["tokens.read", "tokens.write", "tokens.config"]);
+    await assertSucceeds(
+      setDoc(configRef("u-1"), {
+        totalTokens: 500,
+        amountPerToken: 100,
+        nextTokenNumber: 0,
+        registeredCount: 0,
+        cancelledCount: 0,
+        createdBy: "u-1",
+        updatedBy: "u-1",
+      })
+    );
+  });
+
+  it("refuses a legacy member, and by authorization rather than by accident", async () => {
+    // The token rules have no legacy role fallback on purpose: these keys did
+    // not exist when the old member documents were written, so the hydration in
+    // `ensurePandalRoles` is what grants them. The point of this case is that a
+    // legacy treasurer is refused while a permissioned one above succeeds —
+    // which is only meaningful because that success proves the budget holds.
+    await seed("u-1", "treasurer");
+    await assertFails(setDoc(tokenRef("u-1", "TKN26-000002"), TOKEN));
+  });
+});
