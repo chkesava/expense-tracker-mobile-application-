@@ -147,6 +147,7 @@ function GaneshStack() {
       <Stack.Screen name="add-asset" options={{ headerShown: false }} />
       <Stack.Screen name="asset/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="sponsors" options={{ headerShown: false }} />
+      <Stack.Screen name="token-laddu" options={{ headerShown: false }} />
       <Stack.Screen name="add-sponsor" options={{ headerShown: false }} />
       <Stack.Screen name="sponsor/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="create-festival" options={{ headerShown: false }} />
