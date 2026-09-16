@@ -53,8 +53,23 @@ jobs:
       # Pinned rather than floating: firebase-tools controls both the emulator
       # and the rules engine version this gate tests against, and a silent
       # major bump would change what "passing" means.
+      #
+      # Retried because this is a ~400-package global install straight from the
+      # registry with no lockfile and no cache behind it, so a single
+      # ECONNRESET failed the whole rules gate on an unrelated commit. Retrying
+      # the install is safe: the version is pinned, so every attempt resolves
+      # to exactly the same tree.
       - name: Install Firebase CLI
-        run: npm install --global firebase-tools@15.29.0
+        run: |
+          for attempt in 1 2 3; do
+            if npm install --global firebase-tools@15.29.0; then
+              exit 0
+            fi
+            echo "::warning::firebase-tools install failed (attempt $attempt of 3)"
+            sleep $((attempt * 15))
+          done
+          echo "::error::firebase-tools install failed after 3 attempts"
+          exit 1
 
       - name: Cache emulator binaries
         uses: actions/cache@v4
