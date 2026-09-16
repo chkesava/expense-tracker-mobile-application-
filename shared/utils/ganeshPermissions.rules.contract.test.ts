@@ -13,6 +13,7 @@ import type { GaneshMemberStatus, GaneshRole } from "@/shared/types/ganesh";
 import {
   ADMIN_ONLY_PERMISSION_GROUPS,
   ALL_PERMISSION_GROUPS,
+  CRITICAL_PERMISSIONS,
   PERMISSION_GROUPS,
   expandPermissions,
 } from "@/shared/utils/ganeshPermissionRegistry";
@@ -25,7 +26,10 @@ import {
   RULE_SEVA_WRITE_ROLES,
   RULE_SPONSOR_CREATE_ROLES,
   RULE_SPONSOR_UPDATE_ROLES,
+  RULE_DRAW_RUN_ROLES,
+  RULE_TOKEN_WRITE_ROLES,
   RULE_TREASURER_WRITE_ROLES,
+  TOKEN_LADDU_ROLE_DEFAULTS,
   can,
 } from "./ganeshPermissions";
 
@@ -635,6 +639,7 @@ export const RULE_BUILTIN_MEMBER_PERMISSIONS: string[] = [
   "sponsors.create",
   "sponsors.update",
   "seva.read",
+  "tokens.read",
 ];
 
 /** Mirrors `selfJoinClaimsNoExtraPower()` in firestore.rules. */
@@ -1792,5 +1797,149 @@ describe("ganesh firestore rules - Group A access control (2026-09-04)", () => {
     // Firestore does not cascade: this would leave every collection, expense
     // and contribution alive but unreachable (GS-083, same as GS-017).
     expect(canDeleteFestival()).toBe(false);
+  });
+});
+
+/* ------------------------------------------------------------- Token Laddu */
+
+/**
+ * KAN-125. These mirror `canReadTokensOf()`, `canWriteTokensOf()`,
+ * `canConfigureTokensOf()` and `canRunDrawOf()` in firestore.rules.
+ *
+ * Note the absence of a legacy role fallback, which every older helper in this
+ * file has. That is deliberate and worth pinning: these permission keys did not
+ * exist when the old member documents were written, so there is no legacy shape
+ * that could have carried them, and `ensurePandalRoles` is what grants them.
+ * Adding a fallback here would hand `draw.run` to every legacy treasurer
+ * silently.
+ */
+function canReadTokens(ctx: Ctx): boolean {
+  return hasPerm(ctx, "tokens.read");
+}
+
+function canWriteTokens(ctx: Ctx): boolean {
+  return hasPerm(ctx, "tokens.write");
+}
+
+function canConfigureTokens(ctx: Ctx): boolean {
+  return hasPerm(ctx, "tokens.config");
+}
+
+function canRunDraw(ctx: Ctx): boolean {
+  return hasPerm(ctx, "draw.run");
+}
+
+describe("ganesh firestore rules — KAN-125 token laddu", () => {
+  const admin: Ctx = { signedIn: true, member: { role: "admin", status: "active" }, festivalOpen: true };
+  const treasurer: Ctx = {
+    signedIn: true,
+    member: {
+      role: "treasurer",
+      status: "active",
+      permissions: ["tokens.read", "tokens.write", "tokens.config", "draw.run"],
+    },
+    festivalOpen: true,
+  };
+  const seller: Ctx = {
+    signedIn: true,
+    member: { role: "member", status: "active", permissions: ["tokens.read", "tokens.write"] },
+    festivalOpen: true,
+  };
+  const reader: Ctx = {
+    signedIn: true,
+    member: { role: "member", status: "active", permissions: ["tokens.read"] },
+    festivalOpen: true,
+  };
+  const viewer: Ctx = {
+    signedIn: true,
+    member: { role: "viewer", status: "active", permissions: ["festival.read"] },
+    festivalOpen: true,
+  };
+
+  it("gives admin and treasurer the whole lifecycle", () => {
+    for (const ctx of [admin, treasurer]) {
+      expect(canReadTokens(ctx)).toBe(true);
+      expect(canWriteTokens(ctx)).toBe(true);
+      expect(canConfigureTokens(ctx)).toBe(true);
+      expect(canRunDraw(ctx)).toBe(true);
+    }
+  });
+
+  it("separates selling a token from setting capacity and running the draw", () => {
+    // Whoever can raise capacity can authorize registering past the number of
+    // laddus that physically exist, and whoever can draw picks the winner.
+    // Selling tokens must carry neither.
+    expect(canWriteTokens(seller)).toBe(true);
+    expect(canConfigureTokens(seller)).toBe(false);
+    expect(canRunDraw(seller)).toBe(false);
+  });
+
+  it("keeps a read-only member out of every write", () => {
+    expect(canReadTokens(reader)).toBe(true);
+    expect(canWriteTokens(reader)).toBe(false);
+    expect(canConfigureTokens(reader)).toBe(false);
+    expect(canRunDraw(reader)).toBe(false);
+  });
+
+  it("withholds token reads from a viewer, who is kept from donor PII", () => {
+    expect(canReadTokens(viewer)).toBe(false);
+  });
+
+  it("grants nothing on the legacy member shape, which predates these keys", () => {
+    const legacyTreasurer: Ctx = {
+      signedIn: true,
+      member: { role: "treasurer", status: "active" },
+      festivalOpen: true,
+    };
+    expect(canWriteTokens(legacyTreasurer)).toBe(false);
+    expect(canRunDraw(legacyTreasurer)).toBe(false);
+    // An admin still short-circuits, as everywhere else in the rules.
+    expect(canRunDraw({ ...admin, member: { role: "admin", status: "active" } })).toBe(true);
+  });
+
+  it("revokes everything when membership is not active", () => {
+    const suspended: Ctx = {
+      ...treasurer,
+      member: {
+        role: "treasurer",
+        status: "suspended",
+        permissions: ["tokens.read", "tokens.write", "tokens.config", "draw.run"],
+      },
+    };
+    expect(canReadTokens(suspended)).toBe(false);
+    expect(canWriteTokens(suspended)).toBe(false);
+    expect(canRunDraw(suspended)).toBe(false);
+  });
+});
+
+describe("ganesh permissions — KAN-125 role defaults line up with the rules", () => {
+  it("matches the roles the rules fall back to", () => {
+    expect(RULE_TOKEN_WRITE_ROLES).toEqual(["admin", "treasurer"]);
+    expect(RULE_DRAW_RUN_ROLES).toEqual(["admin", "treasurer"]);
+  });
+
+  it("hands the draw to treasurer only, and nothing at all to viewer", () => {
+    expect(TOKEN_LADDU_ROLE_DEFAULTS.treasurer).toContain("draw.run");
+    expect(TOKEN_LADDU_ROLE_DEFAULTS.member).not.toContain("draw.run");
+    expect(TOKEN_LADDU_ROLE_DEFAULTS.collector).not.toContain("draw.run");
+    expect(TOKEN_LADDU_ROLE_DEFAULTS.viewer).toEqual([]);
+  });
+
+  it("expands a write or a draw grant into the read it needs", () => {
+    expect(expandPermissions(["tokens.write"])).toContain("tokens.read");
+    expect(expandPermissions(["draw.run"])).toContain("tokens.read");
+    expect(expandPermissions(["tokens.config"])).toContain("tokens.read");
+  });
+
+  it("treats the draw and capacity as critical grants", () => {
+    // Granting these prompts a confirmation in the role editor.
+    expect(CRITICAL_PERMISSIONS).toContain("draw.run");
+    expect(CRITICAL_PERMISSIONS).toContain("tokens.config");
+  });
+
+  it("keeps tokens.read out of the viewer role", () => {
+    expect(ROLE_PERMISSIONS.viewer).not.toContain("tokens.read");
+    expect(ROLE_PERMISSIONS.member).toContain("tokens.read");
+    expect(ROLE_PERMISSIONS.treasurer).toContain("draw.run");
   });
 });

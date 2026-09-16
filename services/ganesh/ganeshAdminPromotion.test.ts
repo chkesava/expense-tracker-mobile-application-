@@ -70,6 +70,7 @@ import {
   ROLE_PERMISSIONS,
   SEVA_ROLE_DEFAULTS,
   SPONSOR_ROLE_DEFAULTS,
+  TOKEN_LADDU_ROLE_DEFAULTS,
 } from "@/shared/utils/ganeshPermissions";
 import { expandPermissions } from "@/shared/utils/ganeshPermissionRegistry";
 
@@ -86,6 +87,7 @@ function completeRolePermissions(roleId: (typeof BUILTIN_ROLE_IDS)[number]) {
     ...CONTRIBUTION_STATUS_ROLE_DEFAULTS[roleId],
     ...SPONSOR_ROLE_DEFAULTS[roleId],
     ...SEVA_ROLE_DEFAULTS[roleId],
+    ...TOKEN_LADDU_ROLE_DEFAULTS[roleId],
   ]);
 }
 

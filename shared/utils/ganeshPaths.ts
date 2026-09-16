@@ -40,8 +40,38 @@ export function festivalCol(
     | "collectionSessions"
     | "reconciliations"
     | "cashAdjustments"
+    // KAN-125. These carry no money of their own: a registration writes an
+    // ordinary `collections` row and points at it, so they must stay out of
+    // `LEDGER_SUBCOLLECTIONS` or the same rupees get counted twice.
+    | "tokenLadduConfig"
+    | "tokenLadduRegistrations"
+    | "tokenLadduTokens"
+    | "tokenDrawSessions"
+    | "tokenDrawResults"
 ): string[] {
   return ["pandals", pandalId, "festivals", festivalId, name];
+}
+
+/**
+ * The Token Laddu config singleton (KAN-125). One per festival, so its id is a
+ * constant — the same shape as `permanentFund/current` and `summary/totals`.
+ *
+ * It also holds the `nextTokenNumber` allocator. That is deliberate: the
+ * summary document's rule is already against Firestore's 1000-expression
+ * evaluation ceiling, and putting a fourth allocator there would spend budget
+ * on the rule that can least afford it.
+ */
+export function tokenLadduConfigDoc(pandalId: string, festivalId: string): string[] {
+  return [...festivalCol(pandalId, festivalId, "tokenLadduConfig"), "current"];
+}
+
+/**
+ * A draw result's id encodes its sequence, so two admins racing the same draw
+ * cannot both commit — the second write is a create against a document that
+ * already exists.
+ */
+export function tokenDrawResultId(drawSessionId: string, sequence: number): string {
+  return `${drawSessionId}__${sequence}`;
 }
 
 /**
