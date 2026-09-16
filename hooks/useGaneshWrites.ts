@@ -22,6 +22,7 @@ import * as assetWrites from "@/services/ganesh/ganeshAssets";
 import * as sevaWrites from "@/services/ganesh/ganeshSeva";
 import * as sessionWrites from "@/services/ganesh/ganeshSessions";
 import * as sponsorWrites from "@/services/ganesh/ganeshSponsors";
+import * as tokenLadduWrites from "@/services/ganesh/ganeshTokenLaddu";
 import * as writes from "@/services/ganesh/ganeshWrites";
 import {
   assertGodFundSpendOnline,
@@ -30,6 +31,7 @@ import {
   assertVoidOnline,
 } from "@/services/ganesh/ganeshWrites";
 import { assertMoneyReceiveOnline } from "@/shared/utils/ganeshContributions";
+import { TOKEN_LADDU_OFFLINE_ERROR } from "@/shared/utils/ganeshTokenLaddu";
 import {
   ARCHIVED_PANDAL_WRITE_MESSAGE,
   CLOSED_FESTIVAL_WRITE_MESSAGE,
@@ -1083,6 +1085,62 @@ export function useGaneshWrites() {
       const ctx = requireFestival();
       return run("Volunteer removed", () =>
         sevaWrites.removeDuty(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, sevaId, dutyId)
+      );
+    },
+    /**
+     * Token Laddu (KAN-125).
+     *
+     * All three are online-only, and refuse with a reason rather than queueing.
+     * Each allocates or checks against a count read in the same transaction —
+     * token numbers, capacity, the cancelled tally — and a transaction cannot
+     * commit offline. Letting these queue would mean two phones handing out the
+     * same token number, which is the one thing the draw cannot survive.
+     */
+    setTokenLadduCapacity: async (
+      input: Parameters<typeof tokenLadduWrites.setTokenLadduCapacity>[4]
+    ) => {
+      requirePerm("tokens.config");
+      if (!isOnline) throw new Error(TOKEN_LADDU_OFFLINE_ERROR);
+      const ctx = requireFestival();
+      return run("Token Laddus updated", () =>
+        tokenLadduWrites.setTokenLadduCapacity(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, input)
+      );
+    },
+    registerTokenLaddu: async (
+      input: Parameters<typeof tokenLadduWrites.registerTokenLaddu>[4]
+    ) => {
+      requirePerm("tokens.write");
+      // The registration writes an ordinary collection row and bumps the
+      // receipt allocator, and the rules gate both on `collections.create`.
+      // Checked here so a role holding only `tokens.write` is refused up front
+      // with a message naming the missing permission, rather than failing
+      // half-way through the transaction as a bare permission-denied.
+      // Deliberately not expressed as an implied permission: registering a
+      // Token Laddu should not silently confer general collection-writing
+      // authority on whoever holds it.
+      requirePerm("collections.create");
+      if (!isOnline) throw new Error(TOKEN_LADDU_OFFLINE_ERROR);
+      const ctx = requireFestival();
+      // runLedger, not run: the registration writes a collection row, so the
+      // festival totals need rebuilding the same way any other money write does.
+      return runLedger("Token Laddu registered", () =>
+        tokenLadduWrites.registerTokenLaddu(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, input)
+      );
+    },
+    cancelTokenLadduRegistration: async (
+      input: Parameters<typeof tokenLadduWrites.cancelTokenLadduRegistration>[4]
+    ) => {
+      requirePerm("tokens.write");
+      if (!isOnline) throw new Error(TOKEN_LADDU_OFFLINE_ERROR);
+      const ctx = requireFestival();
+      return run("Registration cancelled", () =>
+        tokenLadduWrites.cancelTokenLadduRegistration(
+          ctx.db,
+          ctx.actor,
+          ctx.pandalId,
+          ctx.festivalId,
+          input
+        )
       );
     },
     setSevaDutyStatus: async (sevaId: string, dutyId: string, next: DutyStatus, isOwnDuty = false) => {

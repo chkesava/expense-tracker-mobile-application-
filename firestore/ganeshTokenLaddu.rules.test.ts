@@ -372,6 +372,61 @@ describe("KAN-125 token laddu rules - draw sessions", () => {
   });
 });
 
+describe("KAN-125 token laddu rules - the registration's ledger row", () => {
+  // The shape `registerTokenLaddu` actually writes, GS-078 purpose fields
+  // included — an incomplete payload would fail for the wrong reason.
+  function collectionPayload(uid: string) {
+    return {
+      donorName: "Anjali",
+      amount: 500,
+      paymentMethod: "cash",
+      collectorId: uid,
+      receiptNumber: "GNS26-000182",
+      date: "2026-09-05",
+      ledgerType: "COLLECTION",
+      purposeType: "collection",
+      purposeCategory: "other",
+      direction: "in",
+      voided: false,
+      createdBy: uid,
+      updatedBy: uid,
+    };
+  }
+
+  function collectionDoc(uid: string, id: string) {
+    return doc(as(uid), "pandals", PANDAL, "festivals", FESTIVAL, "collections", id);
+  }
+
+  it("refuses the money row to a seller who cannot write collections", async () => {
+    // SELLER holds tokens.read/write and nothing else. The registration
+    // transaction also writes a collections row, so `tokens.write` alone is not
+    // enough — which is why the hook demands `collections.create` up front
+    // rather than letting the transaction fail half-way.
+    await assertFails(setDoc(collectionDoc(SELLER, "tkn-op-1"), collectionPayload(SELLER)));
+  });
+
+  it("allows it for a treasurer, who holds both", async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), "pandals", PANDAL, "members", TREASURER), {
+        userId: TREASURER,
+        displayName: "Treasurer",
+        role: "treasurer",
+        status: "active",
+        permissions: [
+          "tokens.read",
+          "tokens.write",
+          "tokens.config",
+          "draw.run",
+          "collections.create",
+        ],
+      });
+    });
+    await assertSucceeds(
+      setDoc(collectionDoc(TREASURER, "tkn-op-2"), collectionPayload(TREASURER))
+    );
+  });
+});
+
 describe("KAN-125 token laddu rules - a closed festival is closed", () => {
   it("refuses registration and draw writes once the festival closes", async () => {
     await env.withSecurityRulesDisabled(async (context) => {
