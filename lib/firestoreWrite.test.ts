@@ -12,7 +12,11 @@ vi.mock("@/lib/toast", () => ({
 }));
 
 import { toast } from "@/lib/toast";
-import { commitWrite, writeSavedMessage } from "./firestoreWrite";
+import {
+  commitWrite,
+  setWriteQueueDurable,
+  writeSavedMessage,
+} from "./firestoreWrite";
 
 const toastError = vi.mocked(toast.error);
 
@@ -20,10 +24,15 @@ describe("commitWrite", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     toastError.mockClear();
+    // These cases are about the grace window, not durability. The durable
+    // branch is what they have always asserted, so state it explicitly now
+    // that it is no longer the default (SPENDLY-1).
+    setWriteQueueDurable(true);
   });
 
   afterEach(() => {
     vi.useRealTimers();
+    setWriteQueueDurable(false);
   });
 
   it("reports 'acked' when the server confirms before the grace window", async () => {
@@ -109,6 +118,60 @@ describe("writeSavedMessage", () => {
   });
 
   it("flags a queued write as pending sync", () => {
+    expect(writeSavedMessage("queued", "Expense logged")).toBe(
+      "Expense logged — offline, will sync"
+    );
+  });
+});
+
+describe("commitWrite durability — SPENDLY-1 / KAN-112", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    setWriteQueueDurable(false);
+  });
+
+  it("reports 'unsafe' when nothing durable is backing the queue", async () => {
+    setWriteQueueDurable(false);
+    const pending = commitWrite(() => new Promise(() => undefined), {
+      graceMs: 1000,
+    });
+    await vi.advanceTimersByTimeAsync(1000);
+    await expect(pending).resolves.toBe("unsafe");
+  });
+
+  it("still reports 'acked' without a durable queue when the server answers", async () => {
+    setWriteQueueDurable(false);
+    const outcome = await commitWrite(() => Promise.resolve("ref"), {
+      graceMs: 1000,
+    });
+    expect(outcome).toBe("acked");
+  });
+
+  it("defaults to pessimistic before anything registers durability", async () => {
+    const pending = commitWrite(() => new Promise(() => undefined), {
+      graceMs: 1000,
+    });
+    await vi.advanceTimersByTimeAsync(1000);
+    await expect(pending).resolves.toBe("unsafe");
+  });
+});
+
+describe("writeSavedMessage — SPENDLY-1", () => {
+  it("never promises a sync for an unsafe write", () => {
+    const message = writeSavedMessage("unsafe", "Expense logged");
+    expect(message).not.toContain("will sync");
+    expect(message).toBe(
+      "Expense logged on this device — keep the app open until it syncs"
+    );
+  });
+
+  it("leaves the acked and queued wording untouched", () => {
+    setWriteQueueDurable(true);
+    expect(writeSavedMessage("acked", "Expense logged")).toBe("Expense logged");
     expect(writeSavedMessage("queued", "Expense logged")).toBe(
       "Expense logged — offline, will sync"
     );

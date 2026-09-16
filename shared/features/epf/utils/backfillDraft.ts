@@ -134,16 +134,33 @@ export function unsavedChangesPrompt(summary: UnsavedBackfillSummary): {
 }
 
 /**
- * Months Backfill Save may write — SPENDLY-68.
+ * Months Backfill Save may write — SPENDLY-68, reopened by SPENDLY-1.
  *
  * Bulk wage fills empty months only. Persisted documents are never rewritten
  * just because a wage is typed; per-month edits (and explicit replace after
  * confirm) are the only way to change a saved month.
+ *
+ * The one exception is the **promotion path**. `applyEdit` persists every
+ * edited month immediately as a `draft`, so after a few edits the screen is
+ * full of rows that are `persisted` *and* `draft`. Skipping all persisted rows
+ * meant **Save all** silently passed over exactly the months the user had just
+ * typed and wrote only the leftover wage-filled one — the reported
+ * "Saved 1 month" — and left the drafts unable to leave `draft` by any route,
+ * because `ALLOWED.draft` is `[]` and nothing else promotes them.
+ *
+ * So a persisted `draft` is included when saving as `confirmed`, and only then.
+ * Its amounts come from the stored document, so the write is identical-value
+ * and idempotent (deterministic id + `merge`). Every other persisted status —
+ * `confirmed`, `credited`, `partial`, `missed`, `reversed` — is still skipped,
+ * which is the part SPENDLY-68 cares about: a recalculated suggestion must
+ * never overwrite an actual remittance.
  */
 export function backfillSaveRows(args: {
   rows: EpfBackfillRow[];
   edits: Map<string, EpfBackfillRow>;
   wage: number;
+  /** The status the save is writing. Promotion only happens for `confirmed`. */
+  status: EpfContributionStatus;
 }): EpfBackfillRow[] {
   const out: EpfBackfillRow[] = [];
   for (const row of args.rows) {
@@ -152,7 +169,10 @@ export function backfillSaveRows(args: {
       out.push(edit);
       continue;
     }
-    if (row.persisted) continue;
+    if (row.persisted) {
+      if (args.status === "confirmed" && row.status === "draft") out.push(row);
+      continue;
+    }
     if (args.wage > 0 && row.wage > 0) out.push(row);
   }
   return out;
@@ -163,6 +183,15 @@ export interface BackfillRowPresentation {
   recorded: boolean;
   /** Calculated from the wage and not yet written — must never read as saved. */
   suggested: boolean;
+  /**
+   * A durable `draft` document — SPENDLY-1.
+   *
+   * Distinct from `suggested`, and the distinction is the whole confusion in
+   * the ticket: a generated row and a saved-but-unconfirmed row both rendered
+   * the bare chip "Draft", so a user who had saved eight months saw the same
+   * word as before saving and concluded nothing had been written.
+   */
+  savedDraft: boolean;
 }
 
 /**
@@ -177,12 +206,27 @@ export interface BackfillRowPresentation {
  * collects `components/**`.
  */
 export function backfillRowPresentation(
-  row: Pick<EpfBackfillRow, "persisted" | "epfCredit">
+  row: Pick<EpfBackfillRow, "persisted" | "epfCredit" | "status">
 ): BackfillRowPresentation {
   return {
     recorded: row.persisted || row.epfCredit > 0,
     suggested: !row.persisted && row.epfCredit > 0,
+    savedDraft: row.persisted && row.status === "draft",
   };
+}
+
+/**
+ * The chip a backfill row shows — SPENDLY-1.
+ *
+ * Says "saved" out loud for a durable draft, so the screen stops reading as
+ * though Save did nothing. Lives here, not in the row component, because
+ * `vitest.config.ts` never collects `components/**`.
+ */
+export function backfillStatusLabel(
+  statusLabel: string,
+  presentation: Pick<BackfillRowPresentation, "savedDraft">
+): string {
+  return presentation.savedDraft ? `${statusLabel} · saved` : statusLabel;
 }
 
 /** True when Apply would change a saved month's wage or contribution shares. */

@@ -23,11 +23,11 @@ import {
   writeBatch,
 } from "firebase/firestore";
 
-import { logError } from "@/lib/errors";
+import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
 import { snapshotErrorHandler } from "@/lib/firestoreErrors";
 import { forgetSnapshotPath, logQuerySnapshot } from "@/lib/firestoreReadDebug";
-import { commitWrite, writeSavedMessage, type WriteOutcome } from "@/lib/firestoreWrite";
+import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
 import { toast } from "@/lib/toast";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { useAuth } from "@/providers/AuthProvider";
@@ -62,6 +62,10 @@ import {
   canTransition,
   transitionRejectionMessage,
 } from "@/shared/features/epf/utils/lifecycle";
+import {
+  summarizeSaveResults,
+  type EpfMonthSaveResult,
+} from "@/shared/features/epf/utils/saveOutcome";
 import { withoutUndefined } from "@/shared/utils/objects";
 import { chunk } from "@/shared/utils/chunk";
 import { EPF_BATCH_CHUNK_SIZE } from "@/shared/features/epf/data/epfBatchLimits";
@@ -146,24 +150,32 @@ export function useEpfContributions(
    * Write many months at once.
    *
    * Chunked batches rather than one unbounded commit, each wrapped in
-   * `commitWrite` so an offline save reports "queued" instead of hanging.
-   * Partial success is reported, never swallowed.
+   * `commitWrite` so an offline save reports its state instead of hanging.
+   *
+   * Returns **one result per month** — SPENDLY-1. It used to return
+   * `{ saved, failed }` where `saved` was incremented by `group.length` the
+   * moment `commitWrite` resolved and the toast described the whole operation
+   * using only the last chunk's outcome. Since a Firestore batch is atomic, a
+   * chunk's outcome is genuinely every month in it, so attributing per month
+   * costs nothing and lets the caller name the months that failed.
    */
   const saveContributions = useCallback(
     async (
       rows: EpfBackfillRow[],
       opts: { status: EpfContributionStatus }
-    ): Promise<{ saved: number; failed: number }> => {
+    ): Promise<EpfMonthSaveResult[]> => {
       const db = getFirestoreDb();
       if (!uid || !db || !establishmentId) {
         toast.error("Not authenticated");
-        return { saved: 0, failed: rows.length };
+        return rows.map((row) => ({
+          month: row.month,
+          outcome: "failed" as const,
+          reason: "Not authenticated",
+        }));
       }
-      if (rows.length === 0) return { saved: 0, failed: 0 };
+      if (rows.length === 0) return [];
 
-      let saved = 0;
-      let failed = 0;
-      let lastOutcome: WriteOutcome = "acked";
+      const results: EpfMonthSaveResult[] = [];
 
       for (const group of chunk(rows, EPF_BATCH_CHUNK_SIZE)) {
         try {
@@ -220,45 +232,35 @@ export function useEpfContributions(
           const outcome = await commitWrite(() => batch.commit(), {
             label: "EPF contributions",
           });
-          saved += group.length;
-          lastOutcome = outcome;
+          for (const row of group) results.push({ month: row.month, outcome });
         } catch (err) {
-          failed += group.length;
           logError("epfcontributions.savecontributions", err);
+          const reason = friendlyErrorMessage(err, "It couldn't be saved.");
+          for (const row of group) {
+            results.push({ month: row.month, outcome: "failed", reason });
+          }
         }
       }
 
-      // One toast for the whole save, not one per chunk.
-      if (failed > 0) {
-        toast.error(`Saved ${saved} of ${rows.length} months. Try again for the rest.`);
-      } else {
-        toast.success(
-          writeSavedMessage(lastOutcome, `Saved ${saved} month${saved === 1 ? "" : "s"}`)
-        );
+      // One toast for the whole save, not one per chunk. The copy is a pure
+      // fold of the per-month results so it is covered by `npm test`.
+      const summary = summarizeSaveResults(results);
+      if (summary.message) {
+        if (summary.tone === "error") toast.error(summary.message);
+        else toast.success(summary.message);
       }
-      return { saved, failed };
+      return results;
     },
     [uid, establishmentId, byMonth]
   );
 
   const saveContribution = useCallback(
     async (row: EpfBackfillRow, status: EpfContributionStatus): Promise<boolean> => {
-      const result = await saveContributions([row], { status });
-      return result.saved === 1;
+      const results = await saveContributions([row], { status });
+      return results.every((result) => result.outcome !== "failed");
     },
     [saveContributions]
   );
-
-  /** Promote every draft to confirmed without re-sending the amounts. */
-  const confirmDrafts = useCallback(async (): Promise<boolean> => {
-    const drafts = contributions.filter((row) => row.status === "draft");
-    if (drafts.length === 0) return true;
-    const result = await saveContributions(
-      drafts.map((row) => ({ ...row, persisted: true })),
-      { status: "confirmed" }
-    );
-    return result.failed === 0;
-  }, [contributions, saveContributions]);
 
   /**
    * Write a status change and its audit event atomically — KAN-68.
@@ -567,7 +569,6 @@ export function useEpfContributions(
 
     saveContribution,
     saveContributions,
-    confirmDrafts,
     deleteContribution,
     discardDrafts,
 

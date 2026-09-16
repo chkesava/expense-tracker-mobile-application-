@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * The late-failure hook is the only notice a caller gets (GS-069, GS-030).
@@ -26,7 +26,12 @@ vi.mock("@/lib/errors", () => ({
   friendlyErrorMessage: (_error: unknown, fallback: string) => fallback,
 }));
 
-import { commitWrite, reportLateWriteFailure, SERVER_ACK_GRACE_MS } from "./firestoreWrite";
+import {
+  commitWrite,
+  reportLateWriteFailure,
+  setWriteQueueDurable,
+  SERVER_ACK_GRACE_MS,
+} from "./firestoreWrite";
 
 beforeEach(() => {
   toastError.mockClear();
@@ -34,6 +39,16 @@ beforeEach(() => {
 });
 
 describe("commitWrite late failures", () => {
+  beforeEach(() => {
+    // The late-failure contract is independent of durability; pin the durable
+    // branch so this keeps asserting "queued" (SPENDLY-1).
+    setWriteQueueDurable(true);
+  });
+
+  afterEach(() => {
+    setWriteQueueDurable(false);
+  });
+
   it("routes a post-grace failure to onLateFailure instead of rejecting", async () => {
     const late = vi.fn();
     let reject: (error: unknown) => void = () => undefined;

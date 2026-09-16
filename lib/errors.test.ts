@@ -96,6 +96,14 @@ describe("friendlyErrorMessage", () => {
     );
   });
 
+  // SPENDLY-1 / KAN-112: there is no durable write queue on native, so this
+  // copy may not tell the user their change will sync on its own.
+  it("does not promise an automatic sync while unreachable", () => {
+    const message = friendlyErrorMessage(firebaseError("unavailable"));
+    expect(message).not.toMatch(/will sync/i);
+    expect(message).not.toMatch(/saved on this device/i);
+  });
+
   it("keeps messages we wrote ourselves", () => {
     expect(
       friendlyErrorMessage(new Error("Please enter your name"), "fallback")

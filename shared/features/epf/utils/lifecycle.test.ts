@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import type { EpfContribution } from "@/shared/features/epf/types";
+import type {
+  EpfContribution,
+  EpfContributionStatus,
+} from "@/shared/features/epf/types";
 import { contributionStatusMeta } from "@/shared/features/epf/utils/contributions";
 import { deriveMonthState } from "@/shared/features/epf/utils/monthState";
 import {
@@ -223,5 +226,42 @@ describe("projectionBlocker", () => {
 
   it("is clear when everything needed is present", () => {
     expect(projectionBlocker({ hasCurrentEmployment: true, latestWage: 25000 })).toBeNull();
+  });
+});
+
+/**
+ * The route SPENDLY-1 reopened.
+ *
+ * `draft` keeps no legal transitions — a draft is not yet a claim about
+ * anything (SPENDLY-72). It escapes through KAN-66's save path, which writes
+ * `confirmed` directly, and only then may take a credit. This pins both halves
+ * so neither can be removed without the other being reconsidered.
+ */
+describe("draft escape route — SPENDLY-1", () => {
+  const ALL_STATUSES: EpfContributionStatus[] = [
+    "draft",
+    "confirmed",
+    "expected",
+    "credited",
+    "partial",
+    "missed",
+    "reversed",
+  ];
+
+  it("still refuses every direct transition out of draft", () => {
+    for (const to of ALL_STATUSES) {
+      expect(canTransition("draft", to), `draft -> ${to}`).toBe(false);
+    }
+  });
+
+  it("allows a confirmed month to take the credit that landed", () => {
+    expect(canTransition("confirmed", "credited")).toBe(true);
+    expect(canTransition("confirmed", "partial")).toBe(true);
+  });
+
+  it("explains how to get a draft unstuck rather than naming the statuses", () => {
+    const message = transitionRejectionMessage("draft", "credited");
+    expect(message).toContain("Backfill");
+    expect(message).not.toContain("Cannot move");
   });
 });
