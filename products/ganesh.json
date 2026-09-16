@@ -1,7 +1,7 @@
 {
   "product": "ganesh",
-  "version": "0.0.11",
-  "versionCode": 14,
+  "version": "0.0.12",
+  "versionCode": 15,
   "name": "Ganesh Seva",
   "slug": "ganesh-seva",
   "scheme": "ganeshseva",
