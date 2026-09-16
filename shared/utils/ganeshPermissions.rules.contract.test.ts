@@ -640,6 +640,8 @@ export const RULE_BUILTIN_MEMBER_PERMISSIONS: string[] = [
   "sponsors.update",
   "seva.read",
   "tokens.read",
+  "prasadam.read",
+  "prasadam.write",
 ];
 
 /** Mirrors `selfJoinClaimsNoExtraPower()` in firestore.rules. */

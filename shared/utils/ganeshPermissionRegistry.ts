@@ -14,6 +14,7 @@ export type PermissionGroupId =
   | "assets"
   | "sponsors"
   | "seva"
+  | "prasadam"
   | "tokenLaddu";
 
 export type PermissionGroup = {
@@ -131,6 +132,15 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     ],
   },
   {
+    id: "prasadam",
+    label: "Prasadam register",
+    items: [
+      { key: "prasadam.read", label: "View" },
+      { key: "prasadam.write", label: "Record and edit" },
+      { key: "prasadam.cancel", label: "Cancel an entry" },
+    ],
+  },
+  {
     id: "tokenLaddu",
     label: "Token Laddu",
     items: [
@@ -225,6 +235,8 @@ export const PERMISSION_DEPENDENCIES: Partial<Record<GaneshPermission, GaneshPer
   "sponsors.cancel": ["sponsors.read"],
   "seva.write": ["seva.read"],
   "seva.assign": ["seva.read"],
+  "prasadam.write": ["prasadam.read"],
+  "prasadam.cancel": ["prasadam.read"],
   "tokens.write": ["tokens.read"],
   "tokens.config": ["tokens.read"],
   "draw.run": ["tokens.read"],

@@ -61,6 +61,7 @@ import {
   type PermanentFundSummary,
   type PermanentFundTransaction,
 } from "@/shared/types/ganesh";
+import type { PrasadamEntry } from "@/shared/types/ganeshPrasadam";
 import {
   isActiveMembershipIndexStatus,
   sessionPandalIsActive,
@@ -126,6 +127,7 @@ export type GaneshData = {
   collections: Slice<GaneshCollection>;
   activity: Slice<GaneshActivity>;
   seva: Slice<FestivalSeva>;
+  prasadam: Slice<PrasadamEntry>;
   households: Slice<Household>;
   categories: Slice<GaneshCategory>;
   joinRequests: Slice<PandalJoinRequest>;
@@ -389,6 +391,18 @@ export function GaneshDataProvider({ children }: { children: ReactNode }) {
     mapDoc,
     { orderByField: "date", orderDirection: "asc", limitTo: 400 }
   );
+  // KAN-126. One listener, one orderBy, everything else filtered in memory:
+  // `where('session','==',x) + orderBy('date')` would need a composite index,
+  // and firestore.indexes.json is a strict subset of the live project.
+  //
+  // The cap is a runaway guard, not pagination -- 11 days x 2 sessions x 30
+  // providers is well inside it. The export reads this same list, so a report
+  // can never claim more completeness than the listener has.
+  const prasadam = useGaneshCollection<PrasadamEntry>(
+    festivalReady ? festivalCol(pandalId!, festivalId!, "prasadamEntries") : null,
+    mapDoc,
+    { orderByField: "date", orderDirection: "desc", limitTo: 1000 }
+  );
   const households = useGaneshCollection<Household>(
     festivalReady ? festivalCol(pandalId!, festivalId!, "households") : null,
     mapDoc
@@ -651,6 +665,13 @@ export function GaneshDataProvider({ children }: { children: ReactNode }) {
         activity.retry
       ),
       seva: toSlice(seva.items, seva.loading, seva.error, seva.pendingCount, seva.retry),
+      prasadam: toSlice(
+        prasadam.items,
+        prasadam.loading,
+        prasadam.error,
+        prasadam.pendingCount,
+        prasadam.retry
+      ),
       households: toSlice(
         households.items,
         households.loading,
@@ -781,6 +802,7 @@ export function GaneshDataProvider({ children }: { children: ReactNode }) {
       collections,
       activity,
       seva,
+      prasadam,
       households,
       categories,
       joinRequests,

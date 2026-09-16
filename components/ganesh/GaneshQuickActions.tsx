@@ -9,6 +9,7 @@ import {
   ExpenseIcon,
   MemberPaymentIcon,
   OpeningFundIcon,
+  PrasadamIcon,
   SevaIcon,
   VolunteerIcon,
 } from "@/components/ganesh/art/icons";
@@ -29,6 +30,7 @@ type QuickAction = {
 
 const ACTIONS: QuickAction[] = [
   { href: "/(ganesh)/add-seva", label: "Seva", Icon: SevaIcon, permission: "seva.write" },
+  { href: "/(ganesh)/prasadam", label: "Prasadam", Icon: PrasadamIcon, permission: "prasadam.write" },
   { href: "/(ganesh)/add-collection", label: "Collection", Icon: CollectionIcon, permission: "collections.create" },
   { href: "/(ganesh)/add-expense", label: "Expense", Icon: ExpenseIcon, permission: "expenses.create" },
   {

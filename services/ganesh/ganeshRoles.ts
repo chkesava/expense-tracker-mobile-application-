@@ -29,6 +29,7 @@ import {
   ASSET_ROLE_DEFAULTS,
   BUILTIN_ROLE_IDS,
   CONTRIBUTION_STATUS_ROLE_DEFAULTS,
+  PRASADAM_ROLE_DEFAULTS,
   SEVA_ROLE_DEFAULTS,
   SPONSOR_ROLE_DEFAULTS,
   TOKEN_LADDU_ROLE_DEFAULTS,
@@ -153,6 +154,13 @@ function hasSevaPermission(permissions: unknown): boolean {
   return Array.isArray(permissions) && permissions.some((item) => String(item).startsWith("seva."));
 }
 
+function hasPrasadamPermission(permissions: unknown): boolean {
+  return (
+    Array.isArray(permissions) &&
+    permissions.some((item) => String(item).startsWith("prasadam."))
+  );
+}
+
 function hasTokenPermission(permissions: unknown): boolean {
   return (
     Array.isArray(permissions) &&
@@ -170,6 +178,7 @@ function builtinMissingPermissions(
     ...SPONSOR_ROLE_DEFAULTS[roleId],
     ...SEVA_ROLE_DEFAULTS[roleId],
     ...TOKEN_LADDU_ROLE_DEFAULTS[roleId],
+    ...PRASADAM_ROLE_DEFAULTS[roleId],
   ].filter((perm) => !currentPerms.includes(perm));
 }
 
@@ -297,6 +306,18 @@ export async function ensurePandalRoles(
             (perm) => !Array.isArray(data.permissions) || !data.permissions.includes(perm)
           );
         });
+    // KAN-126, same shape and the same reason: the prasadam rules have no
+    // legacy role fallback either, so an existing member without the new keys
+    // would open the register and get a bare permission-denied on the first
+    // provider they try to record.
+    const needsPrasadamBackfill = isAdmin
+      ? !hasPrasadamPermission(data.permissions)
+      : assignedPatched || roleIds.some((id) => {
+          if (!BUILTIN_ROLE_IDS.includes(id as (typeof BUILTIN_ROLE_IDS)[number])) return false;
+          return PRASADAM_ROLE_DEFAULTS[id as (typeof BUILTIN_ROLE_IDS)[number]].some(
+            (perm) => !Array.isArray(data.permissions) || !data.permissions.includes(perm)
+          );
+        });
     if (
       hasRoleIds &&
       hasPermissions &&
@@ -304,7 +325,8 @@ export async function ensurePandalRoles(
       !needsContributionBackfill &&
       !needsSponsorBackfill &&
       !needsSevaBackfill &&
-      !needsTokenBackfill
+      !needsTokenBackfill &&
+      !needsPrasadamBackfill
     ) {
       return;
     }

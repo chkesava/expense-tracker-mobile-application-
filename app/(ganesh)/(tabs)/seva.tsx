@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import { Bell, CalendarDays, CalendarPlus, ClipboardList, Clock, Flame, Plus } from "lucide-react-native";
+import { Bell, CalendarDays, CalendarPlus, ClipboardList, Clock, Flame, Plus, UtensilsCrossed } from "lucide-react-native";
 
 import { GaneshArt } from "@/components/ganesh/art/GaneshArt";
 import { VolunteerIcon } from "@/components/ganesh/art/icons";
@@ -12,6 +12,7 @@ import { SevaRow } from "@/components/ganesh/SevaRow";
 import {
   GaneshEmptyState,
   GANESH_RADIUS,
+  NavRow,
   Section,
   SectionAction,
   StatTile,
@@ -21,11 +22,16 @@ import {
 import { SkeletonList } from "@/components/common/Skeleton";
 import { ErrorState } from "@/components/common/ErrorState";
 import { useFestivals } from "@/hooks/useFestivals";
+import { useFestivalPrasadam } from "@/hooks/useFestivalPrasadam";
 import { useFestivalSeva } from "@/hooks/useFestivalSeva";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { haptic } from "@/lib/haptics";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import { todayDateInput } from "@/shared/utils/ganeshIdentity";
+import {
+  entriesForSession,
+  isPrasadamActive,
+} from "@/shared/utils/ganeshPrasadam";
 import {
   currentTimeInput,
   festivalDates,
@@ -60,9 +66,27 @@ export default function SevaScreen() {
   const festival = festivals.find((item) => item.id === festivalId);
   const closed = festival?.status === "closed";
   const canPlan = can("seva.write") && !closed;
+  // KAN-126. The register lives on its own screen; the Seva tab is where a
+  // committee already looks for "what happens today", so the entry point sits
+  // here rather than becoming a sixth bottom tab.
+  const canReadPrasadam = can("prasadam.read");
+  const canWritePrasadam = can("prasadam.write") && !closed;
+  const { entries: prasadamEntries } = useFestivalPrasadam(pandalId, festivalId);
+
   const canReadPeople = can("members.read");
 
   const today = todayDateInput();
+  /** Live, from the register itself — never a placeholder count. */
+  const prasadamMeta = useMemo(() => {
+    const morning = entriesForSession(prasadamEntries, today, "morning").filter(
+      isPrasadamActive
+    ).length;
+    const evening = entriesForSession(prasadamEntries, today, "evening").filter(
+      isPrasadamActive
+    ).length;
+    if (morning === 0 && evening === 0) return "Nobody recorded for today yet";
+    return `Morning ${morning} · Evening ${evening}`;
+  }, [prasadamEntries, today]);
   const nowTime = currentTimeInput();
 
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -215,6 +239,31 @@ export default function SevaScreen() {
               </View>
             </View>
 
+            {canReadPrasadam ? (
+              <Section
+                title="Prasadam"
+                action={
+                  <SectionAction
+                    label="Open"
+                    onPress={() => push("/(ganesh)/prasadam")}
+                  />
+                }
+              >
+                <NavRow
+                  icon={
+                    <UtensilsCrossed
+                      size={18}
+                      color={g.sevaColor("prasadam")}
+                      strokeWidth={2.2}
+                    />
+                  }
+                  title="Morning & Evening Prasadam"
+                  meta={prasadamMeta}
+                  onPress={() => push("/(ganesh)/prasadam")}
+                />
+              </Section>
+            ) : null}
+
             {canPlan || canReadPeople || isAdmin ? (
               <Section title="Quick Seva Actions" plain>
                 <View style={styles.actionRow}>
@@ -250,6 +299,53 @@ export default function SevaScreen() {
                         ]}
                       >
                         Add new seva or programme
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                  {canWritePrasadam ? (
+                    <Pressable
+                      onPress={() => {
+                        void haptic.selection();
+                        push("/(ganesh)/prasadam");
+                      }}
+                      accessibilityRole="button"
+                      accessibilityLabel="Prasadam"
+                      style={({ pressed }) => [
+                        styles.actionTile,
+                        {
+                          backgroundColor: g.wash(g.sevaColor("prasadam")),
+                          borderColor: g.divider,
+                        },
+                        pressed ? { opacity: 0.85 } : null,
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.actionGlyph,
+                          { backgroundColor: g.wash(g.sevaColor("prasadam")) },
+                        ]}
+                      >
+                        <UtensilsCrossed
+                          size={18}
+                          color={g.sevaColor("prasadam")}
+                          strokeWidth={2.2}
+                        />
+                      </View>
+                      <Text
+                        style={[
+                          styles.actionTitle,
+                          { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold },
+                        ]}
+                      >
+                        Prasadam
+                      </Text>
+                      <Text
+                        style={[
+                          styles.actionMeta,
+                          { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular },
+                        ]}
+                      >
+                        Morning and evening providers
                       </Text>
                     </Pressable>
                   ) : null}
