@@ -10,7 +10,12 @@ import { epfCurrentMonth, epfTodayKey } from "@/shared/features/epf/utils/epfClo
 import { epfCreditFormSchema } from "@/shared/features/epf/schemas";
 import type { EpfContribution } from "@/shared/features/epf/types";
 import { contributionStatusMeta } from "@/shared/features/epf/utils/contributions";
-import { canTransition, isReconciled } from "@/shared/features/epf/utils/lifecycle";
+import {
+  canRecordCredit,
+  canTransition,
+  isReconciled,
+  transitionRejectionMessage,
+} from "@/shared/features/epf/utils/lifecycle";
 import {
   deriveMonthState,
   dueDateFor,
@@ -81,11 +86,10 @@ export function EpfCreditSheet({
   });
   const money = (value: number) => formatAmount(value, currency);
 
-  // A lower amount lands on `partial`, so a month may only record a credit if
-  // both are reachable — otherwise the sheet would accept an amount and then
-  // reject it on the way out.
-  const canRecordCredit =
-    canTransition(row.status, "credited") && canTransition(row.status, "partial");
+  // A lower amount lands on `partial`, so both landings must be legal —
+  // otherwise the sheet would accept an amount and then reject it on the way
+  // out. The rule lives in `canRecordCredit` so the tests can pin it.
+  const recordCreditAllowed = canRecordCredit(row.status);
   const canMarkMissed = canTransition(row.status, "missed");
   const canMarkReversed = canTransition(row.status, "reversed");
 
@@ -161,14 +165,14 @@ export function EpfCreditSheet({
               : `${money(row.creditedAmount ?? row.epfCredit)} into EPF.`}
             {isAwaitingCredit(state) ? ` Due by ${dueDateLabel(dueDate)}.` : ""}
           </Text>
-          {!canRecordCredit ? (
+          {recordCreditAllowed ? null : (
             <Text style={[styles.statusHint, { color: theme.colors.mutedForeground }]}>
-              Save this month under Backfill before recording a credit against it.
+              {transitionRejectionMessage(row.status, "credited")}
             </Text>
-          ) : null}
+          )}
         </View>
 
-        {canRecordCredit ? (
+        {recordCreditAllowed ? (
           <>
             <Input
               label="Amount actually credited"
@@ -201,7 +205,7 @@ export function EpfCreditSheet({
           />
         ) : null}
 
-        {canRecordCredit ? (
+        {recordCreditAllowed ? (
           <Button onPress={handleRecord} loading={saving}>
             Record credit
           </Button>

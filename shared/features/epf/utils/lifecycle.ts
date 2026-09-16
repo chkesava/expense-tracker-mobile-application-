@@ -46,6 +46,11 @@ import { roundMoney } from "@/shared/utils/money";
  * `confirmed` through KAN-66's own save path, and a draft sitting in the
  * current or a future month is healed to `expected` by the repair pass rather
  * than credited in place.
+ *
+ * `reversed` gained `partial` in SPENDLY-77. Record credit can land on either
+ * `credited` or `partial` depending on the amount, and the sheet only offers
+ * that button when both are legal. Listing only `credited` hid the action and
+ * left a reversed month with no way to record the money when it came back.
  */
 const ALLOWED: Record<EpfContributionStatus, EpfContributionStatus[]> = {
   draft: [],
@@ -54,7 +59,7 @@ const ALLOWED: Record<EpfContributionStatus, EpfContributionStatus[]> = {
   credited: ["partial", "missed", "reversed", "credited"],
   partial: ["credited", "missed", "reversed", "partial"],
   missed: ["credited", "partial"],
-  reversed: ["credited"],
+  reversed: ["credited", "partial"],
 };
 
 export function canTransition(
@@ -62,6 +67,17 @@ export function canTransition(
   to: EpfContributionStatus
 ): boolean {
   return (ALLOWED[from] ?? []).includes(to);
+}
+
+/**
+ * Whether the credit sheet may offer Record credit.
+ *
+ * `applyActualCredit` writes `partial` on a shortfall, so both landings must
+ * be legal or the sheet would accept an amount and then reject it on the way
+ * out. Lives here because `components/**` is never collected by `npm test`.
+ */
+export function canRecordCredit(status: EpfContributionStatus): boolean {
+  return canTransition(status, "credited") && canTransition(status, "partial");
 }
 
 /**
@@ -80,7 +96,7 @@ export function transitionRejectionMessage(
   if (from === "draft") {
     return "Save this month under Backfill first — a draft can't take a credit yet.";
   }
-  if (from === "reversed" && to !== "credited") {
+  if (from === "reversed" && to !== "credited" && to !== "partial") {
     return "This month was reversed. Record the credit again if it came back.";
   }
   if (to === "reversed") {

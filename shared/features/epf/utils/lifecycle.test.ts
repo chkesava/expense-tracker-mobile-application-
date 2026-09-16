@@ -11,6 +11,7 @@ import {
   applyMissed,
   applyReversed,
   buildContributionEvent,
+  canRecordCredit,
   canTransition,
   isReconciled,
   projectionBlocker,
@@ -101,11 +102,18 @@ describe("applyActualCredit", () => {
   });
 
   it("clears a stale reason from an earlier missed or reversed state", () => {
-    const row = applyActualCredit(
+    const missed = applyActualCredit(
       contribution({ status: "missed", statusReason: "not paid" }),
       { amount: 4750, date: "2026-09-20", reconciledAt }
     );
-    expect(row.statusReason).toBeUndefined();
+    expect(missed.statusReason).toBeUndefined();
+
+    const reversed = applyActualCredit(
+      contribution({ status: "reversed", statusReason: "Reversed by EPFO" }),
+      { amount: 4750, date: "2026-09-20", reconciledAt }
+    );
+    expect(reversed.statusReason).toBeUndefined();
+    expect(reversed.status).toBe("credited");
   });
 });
 
@@ -165,6 +173,52 @@ describe("canTransition", () => {
     expect(canTransition("confirmed", "missed")).toBe(true);
     expect(canTransition("confirmed", "reversed")).toBe(true);
   });
+
+  it("lets a reversed month take the credit that came back — SPENDLY-77", () => {
+    expect(canTransition("reversed", "credited")).toBe(true);
+    expect(canTransition("reversed", "partial")).toBe(true);
+  });
+
+  it("still refuses every other way out of reversed", () => {
+    expect(canTransition("reversed", "missed")).toBe(false);
+    expect(canTransition("reversed", "expected")).toBe(false);
+    expect(canTransition("reversed", "draft")).toBe(false);
+    expect(canTransition("reversed", "confirmed")).toBe(false);
+    expect(canTransition("reversed", "reversed")).toBe(false);
+  });
+});
+
+describe("canRecordCredit — SPENDLY-77", () => {
+  const ALL_STATUSES: EpfContributionStatus[] = [
+    "draft",
+    "confirmed",
+    "expected",
+    "credited",
+    "partial",
+    "missed",
+    "reversed",
+  ];
+
+  it("matches the sheet rule: both credited and partial must be legal", () => {
+    for (const status of ALL_STATUSES) {
+      expect(canRecordCredit(status), status).toBe(
+        canTransition(status, "credited") && canTransition(status, "partial")
+      );
+    }
+  });
+
+  it("is available for a reversed month, and for every other credit path", () => {
+    expect(canRecordCredit("reversed")).toBe(true);
+    expect(canRecordCredit("expected")).toBe(true);
+    expect(canRecordCredit("confirmed")).toBe(true);
+    expect(canRecordCredit("missed")).toBe(true);
+    expect(canRecordCredit("credited")).toBe(true);
+    expect(canRecordCredit("partial")).toBe(true);
+  });
+
+  it("stays closed on a draft — Backfill has to save it first", () => {
+    expect(canRecordCredit("draft")).toBe(false);
+  });
 });
 
 describe("transitionRejectionMessage", () => {
@@ -180,8 +234,15 @@ describe("transitionRejectionMessage", () => {
     );
   });
 
+  it("tells a reversed month to record the credit again, not to mark missed", () => {
+    expect(transitionRejectionMessage("reversed", "missed")).toBe(
+      "This month was reversed. Record the credit again if it came back."
+    );
+    expect(transitionRejectionMessage("reversed", "expected")).toContain("reversed");
+  });
+
   it("falls back to a readable sentence for anything else", () => {
-    expect(transitionRejectionMessage("reversed", "missed")).toContain("reversed");
+    expect(transitionRejectionMessage("credited", "draft")).toContain("credited");
   });
 });
 
@@ -210,6 +271,73 @@ describe("buildContributionEvent", () => {
     });
     expect(event.actor).toBe("user");
     expect(event.reason).toBe("Reversed by EPFO");
+  });
+
+  it("keeps credited → reversed → credited as three distinct events — SPENDLY-77", () => {
+    const row = contribution();
+    const credited = buildContributionEvent(row, "expected", "credited", {
+      actor: "user",
+      amount: 4750,
+    });
+    const reversed = buildContributionEvent(row, "credited", "reversed", {
+      actor: "user",
+      reason: "Reversed by EPFO",
+    });
+    const reccredited = buildContributionEvent(row, "reversed", "credited", {
+      actor: "user",
+      amount: 4750,
+    });
+    expect([credited.from, credited.to]).toEqual(["expected", "credited"]);
+    expect([reversed.from, reversed.to]).toEqual(["credited", "reversed"]);
+    expect([reccredited.from, reccredited.to]).toEqual(["reversed", "credited"]);
+    expect(reccredited.amount).toBe(4750);
+  });
+});
+
+describe("reversed → credited again — SPENDLY-77", () => {
+  const at = "2026-09-26T00:00:00.000Z";
+  const later = "2026-10-02T00:00:00.000Z";
+
+  function reversedMonth() {
+    const credited = applyActualCredit(contribution(), {
+      amount: 4750,
+      date: "2026-09-20",
+      reconciledAt: at,
+    });
+    return applyReversed(credited, "Reversed by EPFO", at);
+  }
+
+  it("records a full re-credit as credited, with the new amount and date", () => {
+    const row = applyActualCredit(reversedMonth(), {
+      amount: 4750,
+      date: "2026-10-01",
+      reconciledAt: later,
+    });
+    expect(row.status).toBe("credited");
+    expect(row.creditedAmount).toBe(4750);
+    expect(row.creditDate).toBe("2026-10-01");
+    expect(row.reconciledAt).toBe(later);
+    expect(row.statusReason).toBeUndefined();
+    expect(isReconciled(row)).toBe(true);
+  });
+
+  it("records a shortfall re-credit as partial without rewriting the projection", () => {
+    const row = applyActualCredit(reversedMonth(), {
+      amount: 3000,
+      date: "2026-10-01",
+      reconciledAt: later,
+    });
+    expect(row.status).toBe("partial");
+    expect(row.creditedAmount).toBe(3000);
+    expect(row.epfCredit).toBe(4750);
+    expect(canTransition("reversed", row.status)).toBe(true);
+  });
+
+  it("does not invent an automatic path to credited", () => {
+    // SPENDLY-72: nothing in this module writes credited on its own. The
+    // user path above is the only way a reversed month moves.
+    expect(canTransition("expected", "reversed")).toBe(false);
+    expect(canTransition("reversed", "credited")).toBe(true);
   });
 });
 
