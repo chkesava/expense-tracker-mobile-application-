@@ -1,14 +1,4 @@
-import {
-  Flame,
-  Gift,
-  HandCoins,
-  Landmark,
-  Package,
-  Receipt,
-  Users,
-  Wallet,
-  type LucideIcon,
-} from "lucide-react-native";
+import { Flame, Gift, HandCoins, Landmark, Package, Receipt, Users, UtensilsCrossed, Wallet, type LucideIcon } from "lucide-react-native";
 
 import { GaneshIconTile } from "@/components/ganesh/ui/GaneshIconTile";
 import { useGaneshTokens } from "@/components/ganesh/ui/tokens";
@@ -39,6 +29,10 @@ function ActionIcon({
 
 export function SevaIcon(props: GaneshActionIconProps) {
   return <ActionIcon Icon={Flame} {...props} />;
+}
+
+export function PrasadamIcon(props: GaneshActionIconProps) {
+  return <ActionIcon Icon={UtensilsCrossed} {...props} />;
 }
 
 export function CollectionIcon(props: GaneshActionIconProps) {

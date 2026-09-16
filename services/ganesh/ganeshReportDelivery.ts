@@ -11,6 +11,12 @@ import {
 } from "@/shared/utils/ganeshReportExport";
 import type { TokenLadduExport } from "@/shared/utils/ganeshTokenLadduExport";
 import {
+  prasadamFileName,
+  prasadamToCsv,
+  prasadamToHtml,
+  type PrasadamExport,
+} from "@/shared/utils/ganeshPrasadamExport";
+import {
   tokenLadduFileName,
   tokenLadduToHtml,
 } from "@/shared/utils/ganeshTokenLadduExport";
@@ -103,6 +109,33 @@ export async function exportTokenLadduPdf(model: TokenLadduExport): Promise<void
     return;
   }
   await deliverPdf(html, tokenLadduFileName(model), "Share the Token Laddu register");
+}
+
+/**
+ * The prasadam register (KAN-126).
+ *
+ * Every provider on their own line, grouped by day and session. Same web
+ * treatment as the others: the print dialog is the honest route there.
+ */
+export async function exportPrasadamPdf(model: PrasadamExport): Promise<void> {
+  const html = prasadamToHtml(model);
+  if (Platform.OS === "web") {
+    await Print.printAsync({ html });
+    return;
+  }
+  await deliverPdf(html, prasadamFileName(model), "Share the prasadam register");
+}
+
+export async function exportPrasadamCsv(model: PrasadamExport): Promise<string> {
+  const file = new File(reportsDirectory(), prasadamFileName(model, "csv"));
+  if (file.exists) file.delete();
+  file.create();
+  // UTF-8 with a BOM, for the same reason the financial report uses one: without
+  // it Excel on Windows turns Devanagari provider names into mojibake, and the
+  // names are exactly what a committee checks line by line.
+  file.write(`﻿${prasadamToCsv(model)}`);
+  await shareFile(file.uri, "text/csv", "Share the prasadam register");
+  return file.uri;
 }
 
 /**
