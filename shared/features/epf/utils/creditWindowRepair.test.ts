@@ -137,6 +137,25 @@ describe("contributionsWithFabricatedCredit", () => {
     expect(contributionsWithFabricatedCredit(rows)).toEqual([]);
   });
 
+  it("never selects a user-reconciled reversed or re-credited month — SPENDLY-77", () => {
+    const reversed = contribution({
+      status: "reversed",
+      source: "simulated",
+      reconciledAt: "2026-09-26T00:00:00.000Z",
+      creditedAmount: 4750,
+      statusReason: "Reversed by EPFO",
+    });
+    const reccredited = contribution({
+      status: "credited",
+      source: "simulated",
+      reconciledAt: "2026-10-02T00:00:00.000Z",
+      creditedAmount: 4750,
+      creditDate: "2026-10-01",
+    });
+    expect(contributionsWithFabricatedCredit([reversed, reccredited])).toEqual([]);
+    expect(contributionsNeedingLifecycleRepair([reversed, reccredited], "2026-09")).toEqual([]);
+  });
+
   it("is idempotent — a withdrawn row is not selected again", () => {
     const first = contributionsWithFabricatedCredit([autoCredited()]);
     expect(first).toHaveLength(1);

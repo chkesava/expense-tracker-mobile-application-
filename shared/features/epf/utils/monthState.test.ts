@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { EpfContribution, EpfContributionStatus } from "@/shared/features/epf/types";
 import { summarizeContributions } from "@/shared/features/epf/utils/contributions";
+import { applyActualCredit, applyReversed } from "@/shared/features/epf/utils/lifecycle";
 import {
   deriveMonthState,
   dueDateFor,
@@ -236,6 +237,33 @@ describe("summariseLifecycle", () => {
     );
     expect(summary.creditedTotal).toBe(0);
     expect(summary.awaitedTotal).toBe(0);
+  });
+
+  it("counts a re-credited month once after a reversal — SPENDLY-77", () => {
+    const at = "2026-09-26T00:00:00.000Z";
+    const credited = applyActualCredit(contribution(), {
+      amount: 4750,
+      date: "2026-09-20",
+      reconciledAt: at,
+    });
+    expect(summariseLifecycle([credited], today, month).creditedTotal).toBe(4750);
+
+    const reversed = applyReversed(credited, "Reversed by EPFO", at);
+    expect(summariseLifecycle([reversed], today, month).creditedTotal).toBe(0);
+
+    const reccredited = applyActualCredit(reversed, {
+      amount: 4750,
+      date: "2026-10-01",
+      reconciledAt: "2026-10-02T00:00:00.000Z",
+    });
+    expect(summariseLifecycle([reccredited], today, month).creditedTotal).toBe(4750);
+
+    const partial = applyActualCredit(reversed, {
+      amount: 3000,
+      date: "2026-10-01",
+      reconciledAt: "2026-10-02T00:00:00.000Z",
+    });
+    expect(summariseLifecycle([partial], today, month).creditedTotal).toBe(3000);
   });
 
   it("does not count a draft as money, nor as money owed", () => {
