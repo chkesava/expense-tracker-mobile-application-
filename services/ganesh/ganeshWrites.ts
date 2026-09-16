@@ -179,7 +179,12 @@ function colRef(db: Firestore, segments: string[]) {
   return collection(db, first, ...rest);
 }
 
-function audit(
+/**
+ * Exported for KAN-126: the prasadam writers append the same audit and activity
+ * rows as every other Ganesh record, and a third private copy of these helpers
+ * would be one too many.
+ */
+export function audit(
   batch: GaneshWriter,
   db: Firestore,
   pandalId: string,
@@ -206,7 +211,7 @@ function audit(
   );
 }
 
-function activity(
+export function activity(
   batch: GaneshWriter,
   db: Firestore,
   pandalId: string,

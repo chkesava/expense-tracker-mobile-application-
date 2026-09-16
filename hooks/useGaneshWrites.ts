@@ -20,6 +20,7 @@ import {
 } from "@/services/ganesh/ganeshPermanentFund";
 import * as assetWrites from "@/services/ganesh/ganeshAssets";
 import * as sevaWrites from "@/services/ganesh/ganeshSeva";
+import * as prasadamWrites from "@/services/ganesh/ganeshPrasadam";
 import * as sessionWrites from "@/services/ganesh/ganeshSessions";
 import * as sponsorWrites from "@/services/ganesh/ganeshSponsors";
 import * as tokenLadduWrites from "@/services/ganesh/ganeshTokenLaddu";
@@ -99,7 +100,15 @@ export function useGaneshWrites() {
   );
 
   const run = useCallback(
-    async <T,>(label: string, work: () => Promise<T>): Promise<T> => {
+    async <T,>(
+      label: string,
+      work: () => Promise<T>,
+      // KAN-126: the prasadam form records provider after provider without
+      // leaving the session, and a toast per provider is noise rather than
+      // feedback. That path shows an inline confirmation and a running count
+      // instead, so it asks for the toast to be suppressed.
+      options?: { silent?: boolean }
+    ): Promise<T> => {
       if (!actor) throw new Error("You must be signed in.");
       let result: T;
       try {
@@ -110,7 +119,7 @@ export function useGaneshWrites() {
         // own text rather than the permission-denied mapping.
         throw explainRefusal(error);
       }
-      toast.success(label);
+      if (!options?.silent) toast.success(label);
       return result;
     },
     [actor, explainRefusal]
@@ -1089,6 +1098,64 @@ export function useGaneshWrites() {
       const ctx = requireFestival();
       return run("Volunteer removed", () =>
         sevaWrites.removeDuty(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, sevaId, dutyId)
+      );
+    },
+    /* --------------------------------------------------- Prasadam (KAN-126) */
+    // Like seva, these take no online gate: none reads a counter or a balance,
+    // so they stay plain batches and keep working with no signal at the pandal
+    // -- which is exactly where and when prasadam gets recorded.
+    //
+    // `run`, never `runLedger`: nothing here can move a total, and scheduling a
+    // summary rebuild per offering would be pure waste.
+    createPrasadamEntry: async (
+      input: Parameters<typeof prasadamWrites.createPrasadamEntry>[4],
+      options?: { silent?: boolean }
+    ) => {
+      requirePerm("prasadam.write");
+      const ctx = requireFestival();
+      return run(
+        "Prasadam recorded",
+        () =>
+          prasadamWrites.createPrasadamEntry(
+            ctx.db,
+            ctx.actor,
+            ctx.pandalId,
+            ctx.festivalId,
+            input
+          ),
+        options
+      );
+    },
+    updatePrasadamEntry: async (
+      entryId: string,
+      input: Parameters<typeof prasadamWrites.updatePrasadamEntry>[5]
+    ) => {
+      requirePerm("prasadam.write");
+      const ctx = requireFestival();
+      return run("Prasadam entry updated", () =>
+        prasadamWrites.updatePrasadamEntry(
+          ctx.db,
+          ctx.actor,
+          ctx.pandalId,
+          ctx.festivalId,
+          entryId,
+          input
+        )
+      );
+    },
+    cancelPrasadamEntry: async (
+      input: Parameters<typeof prasadamWrites.cancelPrasadamEntry>[4]
+    ) => {
+      requirePerm("prasadam.cancel");
+      const ctx = requireFestival();
+      return run("Prasadam entry cancelled", () =>
+        prasadamWrites.cancelPrasadamEntry(
+          ctx.db,
+          ctx.actor,
+          ctx.pandalId,
+          ctx.festivalId,
+          input
+        )
       );
     },
     /**
