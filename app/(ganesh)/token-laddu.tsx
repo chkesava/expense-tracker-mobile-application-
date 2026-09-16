@@ -5,10 +5,12 @@ import { useRouter } from "expo-router";
 import { GaneshScreen } from "@/components/ganesh/GaneshScreen";
 import { GaneshSyncChip } from "@/components/ganesh/GaneshSyncChip";
 import { GaneshWriteLock } from "@/components/ganesh/GaneshWriteLock";
+import { TokenLadduDraw } from "@/components/ganesh/tokenLaddu/TokenLadduDraw";
 import { TokenLadduHero } from "@/components/ganesh/tokenLaddu/TokenLadduHero";
 import { TokenLadduList } from "@/components/ganesh/tokenLaddu/TokenLadduList";
 import { TokenLadduOverview } from "@/components/ganesh/tokenLaddu/TokenLadduOverview";
 import { TokenLadduRegisterForm } from "@/components/ganesh/tokenLaddu/TokenLadduRegisterForm";
+import { TokenLadduWinners } from "@/components/ganesh/tokenLaddu/TokenLadduWinners";
 import { FilterChips, StatusStrip, type ChipOption } from "@/components/ganesh/ui";
 import { useFestivals } from "@/hooks/useFestivals";
 import { useFestivalWriteLock } from "@/hooks/useFestivalWriteLock";
@@ -16,9 +18,11 @@ import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { useGaneshWrites } from "@/hooks/useGaneshWrites";
 import {
   useTokenDrawResults,
+  useTokenDrawSessions,
   useTokenLadduConfig,
   useTokenLadduTokens,
 } from "@/hooks/useTokenLaddu";
+import { useNetwork } from "@/providers/NetworkProvider";
 import { usePandals } from "@/hooks/usePandals";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
@@ -28,7 +32,7 @@ import { exportTokenLadduPdf } from "@/services/ganesh/ganeshReportDelivery";
 import { money } from "@/shared/utils/ganeshMath";
 import { buildTokenLadduExport } from "@/shared/utils/ganeshTokenLadduExport";
 
-type TokenTab = "overview" | "register" | "tokens";
+type TokenTab = "overview" | "register" | "tokens" | "draw" | "winners";
 
 const METHOD_LABEL: Record<string, string> = {
   cash: "Cash",
@@ -64,7 +68,14 @@ export default function TokenLadduScreen() {
     festivalId
   );
   const { tokens, loading, error, retry } = useTokenLadduTokens(pandalId, festivalId);
-  const { results } = useTokenDrawResults(pandalId, festivalId);
+  const {
+    results,
+    loading: resultsLoading,
+    error: resultsError,
+    retry: retryResults,
+  } = useTokenDrawResults(pandalId, festivalId);
+  const { sessions, openSession } = useTokenDrawSessions(pandalId, festivalId);
+  const { isOnline } = useNetwork();
 
   const [tab, setTab] = useState<TokenTab>("overview");
   const [exporting, setExporting] = useState(false);
@@ -78,6 +89,7 @@ export default function TokenLadduScreen() {
   // genuinely required — the hook refuses without them, and hiding the tab
   // keeps that refusal from being a surprise at the end of a form.
   const canRegister = can("tokens.write") && can("collections.create") && !closed;
+  const canDraw = can("draw.run") && !closed;
 
   const collected = useMemo(
     () => money(tokens.reduce((sum, token) => sum + Number(token.amount ?? 0), 0)),
@@ -104,6 +116,15 @@ export default function TokenLadduScreen() {
     () => tokens.filter((token) => token.status === "winner").length,
     [tokens]
   );
+
+  const eligibleCount = useMemo(
+    () => tokens.filter((token) => token.status === "eligible").length,
+    [tokens]
+  );
+
+  // The session that matters is the open one; failing that, the most recent, so
+  // a finished draw still shows its final state rather than offering a new one.
+  const drawSession = openSession ?? sessions[0] ?? null;
 
   /**
    * The register, exported at whatever the data says right now.
@@ -135,8 +156,10 @@ export default function TokenLadduScreen() {
     const options: Array<ChipOption<TokenTab>> = [{ id: "overview", label: "Overview" }];
     if (canRegister) options.push({ id: "register", label: "Register" });
     options.push({ id: "tokens", label: "Token Laddus", badge: tokens.length });
+    if (canDraw) options.push({ id: "draw", label: "Draw" });
+    options.push({ id: "winners", label: "Winners", badge: results.length });
     return options;
-  }, [canRegister, tokens.length]);
+  }, [canRegister, canDraw, tokens.length, results.length]);
 
   if (!canRead) {
     return <GaneshWriteLock message="Your role cannot see Token Laddus." />;
@@ -160,6 +183,16 @@ export default function TokenLadduScreen() {
       />
 
       <View style={styles.body}>
+        {selected === "winners" ? (
+          <TokenLadduWinners
+            results={results}
+            session={drawSession}
+            loading={resultsLoading}
+            error={resultsError}
+            onRetry={retryResults}
+            prefix={prefix}
+          />
+        ) : null}
         {selected === "tokens" ? (
           <TokenLadduList
             tokens={tokens}
@@ -171,7 +204,7 @@ export default function TokenLadduScreen() {
             onExport={onExport}
             prefix={prefix}
           />
-        ) : (
+        ) : selected === "winners" ? null : (
           <ScrollView
             style={styles.scrollArea}
             contentContainerStyle={styles.scrollContent}
@@ -199,6 +232,19 @@ export default function TokenLadduScreen() {
                 capacity={capacity}
                 amountPerToken={config.amountPerToken}
                 onRegister={(input) => writes.registerTokenLaddu(input)}
+              />
+            ) : null}
+            {selected === "draw" ? (
+              <TokenLadduDraw
+                session={drawSession}
+                configuredTokens={capacity.total}
+                eligibleCount={eligibleCount}
+                completedDraws={drawSession?.completedDraws ?? 0}
+                canRun={canDraw}
+                isOnline={isOnline}
+                onOpenSession={(input) => writes.openTokenDrawSession(input)}
+                onDraw={(sessionId) => writes.runTokenDraw(sessionId)}
+                onCloseSession={(input) => writes.closeTokenDrawSession(input)}
               />
             ) : null}
           </ScrollView>

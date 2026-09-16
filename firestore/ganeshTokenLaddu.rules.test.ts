@@ -370,6 +370,40 @@ describe("KAN-125 token laddu rules - draw sessions", () => {
       })
     );
   });
+
+  it("accepts exactly the field set closeTokenDrawSession writes", async () => {
+    // The service and the rules allowlist are written apart and can drift. This
+    // pins the whole payload rather than a convenient subset of it.
+    await seed("tokenDrawSessions", "draw-1", DRAW_SESSION);
+    await assertSucceeds(
+      updateDoc(drawSessionDoc(TREASURER, "draw-1"), {
+        status: "cancelled",
+        cancelReason: "Rain stopped the event",
+        completedAt: new Date(),
+        completedBy: TREASURER,
+        updatedBy: TREASURER,
+        updatedAt: new Date(),
+      })
+    );
+  });
+
+  it("accepts the payload openTokenDrawSession creates", async () => {
+    await assertSucceeds(
+      setDoc(drawSessionDoc(TREASURER, "draw-2"), {
+        status: "open",
+        startedAt: new Date(),
+        startedBy: TREASURER,
+        startedByName: "Treasurer",
+        configuredTokens: 500,
+        plannedDraws: 500,
+        completedDraws: 0,
+        createdBy: TREASURER,
+        createdAt: new Date(),
+        updatedBy: TREASURER,
+        updatedAt: new Date(),
+      })
+    );
+  });
 });
 
 describe("KAN-125 token laddu rules - the registration's ledger row", () => {

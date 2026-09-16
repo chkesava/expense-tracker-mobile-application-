@@ -78,6 +78,8 @@ vi.mock("@/lib/id", () => ({ newId: () => `generated-${++idCounter}` }));
 
 import {
   cancelTokenLadduRegistration,
+  closeTokenDrawSession,
+  openTokenDrawSession,
   registerTokenLaddu,
   setTokenLadduCapacity,
 } from "./ganeshTokenLaddu";
@@ -432,5 +434,87 @@ describe("cancelTokenLadduRegistration", () => {
         reason: "   ",
       })
     ).rejects.toThrow(/reason/i);
+  });
+});
+
+describe("openTokenDrawSession", () => {
+  it("freezes the draw count from the configuration", async () => {
+    docs[CONFIG_PATH] = configured({ totalTokens: 500 });
+    const result = await openTokenDrawSession({} as never, ACTOR, PANDAL, FESTIVAL, {
+      clientOpId: "draw-1",
+    });
+
+    expect(result.alreadyOpen).toBe(false);
+    const session = writes.find((write) => write.path.includes("tokenDrawSessions"));
+    expect(session?.data.status).toBe("open");
+    expect(session?.data.plannedDraws).toBe(500);
+    // The snapshot KAN-125 asks for: what the committee announced, kept.
+    expect(session?.data.configuredTokens).toBe(500);
+    expect(session?.data.completedDraws).toBe(0);
+  });
+
+  it("is a no-op when the same session is opened twice", async () => {
+    docs[CONFIG_PATH] = configured();
+    docs[`${FESTIVAL_PATH}/tokenDrawSessions/draw-1`] = { status: "open", plannedDraws: 500 };
+    const result = await openTokenDrawSession({} as never, ACTOR, PANDAL, FESTIVAL, {
+      clientOpId: "draw-1",
+    });
+    expect(result.alreadyOpen).toBe(true);
+    expect(writes).toHaveLength(0);
+  });
+
+  it("refuses to start before any Token Laddus are configured", async () => {
+    await expect(
+      openTokenDrawSession({} as never, ACTOR, PANDAL, FESTIVAL, { clientOpId: "draw-1" })
+    ).rejects.toThrow(/Set the number of Token Laddus/);
+    expect(writes).toHaveLength(0);
+  });
+
+  it("audits the start", async () => {
+    docs[CONFIG_PATH] = configured({ totalTokens: 12 });
+    await openTokenDrawSession({} as never, ACTOR, PANDAL, FESTIVAL, { clientOpId: "draw-1" });
+    const audit = pathsUnder("auditLogs")[0];
+    expect(audit.data.entityType).toBe("tokenDrawSession");
+    expect((audit.data.newValue as { plannedDraws: number }).plannedDraws).toBe(12);
+  });
+});
+
+describe("closeTokenDrawSession", () => {
+  it("cancels an open session with a reason, keeping the winners", async () => {
+    docs[`${FESTIVAL_PATH}/tokenDrawSessions/draw-1`] = {
+      status: "open",
+      plannedDraws: 10,
+      completedDraws: 3,
+    };
+    await closeTokenDrawSession({} as never, ACTOR, PANDAL, FESTIVAL, {
+      sessionId: "draw-1",
+      reason: "Rain stopped the event",
+    });
+
+    const session = writes.find((write) => write.path.includes("tokenDrawSessions"));
+    expect(session?.data.status).toBe("cancelled");
+    expect(session?.data.cancelReason).toBe("Rain stopped the event");
+    // Nothing touches the results that were already committed.
+    expect(pathsUnder("tokenDrawResults")).toHaveLength(0);
+    expect(pathsUnder("auditLogs")[0].data.reason).toBe("Rain stopped the event");
+  });
+
+  it("requires a reason", async () => {
+    docs[`${FESTIVAL_PATH}/tokenDrawSessions/draw-1`] = { status: "open" };
+    await expect(
+      closeTokenDrawSession({} as never, ACTOR, PANDAL, FESTIVAL, {
+        sessionId: "draw-1",
+        reason: "  ",
+      })
+    ).rejects.toThrow(/reason/i);
+  });
+
+  it("leaves an already-finished session alone", async () => {
+    docs[`${FESTIVAL_PATH}/tokenDrawSessions/draw-1`] = { status: "completed" };
+    await closeTokenDrawSession({} as never, ACTOR, PANDAL, FESTIVAL, {
+      sessionId: "draw-1",
+      reason: "again",
+    });
+    expect(writes).toHaveLength(0);
   });
 });

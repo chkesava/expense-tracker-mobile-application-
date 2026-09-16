@@ -31,7 +31,11 @@ import {
   assertVoidOnline,
 } from "@/services/ganesh/ganeshWrites";
 import { assertMoneyReceiveOnline } from "@/shared/utils/ganeshContributions";
-import { TOKEN_LADDU_OFFLINE_ERROR } from "@/shared/utils/ganeshTokenLaddu";
+import {
+  TOKEN_DRAW_OFFLINE_ERROR,
+  TOKEN_LADDU_OFFLINE_ERROR,
+} from "@/shared/utils/ganeshTokenLaddu";
+import { requestTokenDraw } from "@/services/ganesh/ganeshDrawClient";
 import {
   ARCHIVED_PANDAL_WRITE_MESSAGE,
   CLOSED_FESTIVAL_WRITE_MESSAGE,
@@ -1142,6 +1146,46 @@ export function useGaneshWrites() {
           input
         )
       );
+    },
+    openTokenDrawSession: async (
+      input: Parameters<typeof tokenLadduWrites.openTokenDrawSession>[4]
+    ) => {
+      requirePerm("draw.run");
+      if (!isOnline) throw new Error(TOKEN_DRAW_OFFLINE_ERROR);
+      const ctx = requireFestival();
+      return run("Draw started", () =>
+        tokenLadduWrites.openTokenDrawSession(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, input)
+      );
+    },
+    closeTokenDrawSession: async (
+      input: Parameters<typeof tokenLadduWrites.closeTokenDrawSession>[4]
+    ) => {
+      requirePerm("draw.run");
+      if (!isOnline) throw new Error(TOKEN_DRAW_OFFLINE_ERROR);
+      const ctx = requireFestival();
+      return run("Draw ended", () =>
+        tokenLadduWrites.closeTokenDrawSession(ctx.db, ctx.actor, ctx.pandalId, ctx.festivalId, input)
+      );
+    },
+    /**
+     * Runs one draw on the server (KAN-125).
+     *
+     * No local write and no optimistic winner: the client asks, the server
+     * decides and records. Offline it refuses outright rather than queueing —
+     * a winner fabricated on a phone and synced later is exactly the outcome
+     * the whole design exists to prevent.
+     */
+    runTokenDraw: async (sessionId: string) => {
+      requirePerm("draw.run");
+      if (!isOnline) throw new Error(TOKEN_DRAW_OFFLINE_ERROR);
+      const ctx = requireFestival();
+      // Not wrapped in `run`: a refusal (pot empty, draws complete) is a
+      // legitimate outcome the Draw tab renders itself, not a success toast.
+      return requestTokenDraw({
+        pandalId: ctx.pandalId,
+        festivalId: ctx.festivalId,
+        sessionId,
+      });
     },
     setSevaDutyStatus: async (sevaId: string, dutyId: string, next: DutyStatus, isOwnDuty = false) => {
       // A volunteer reporting on their own duty needs no permission - the rules

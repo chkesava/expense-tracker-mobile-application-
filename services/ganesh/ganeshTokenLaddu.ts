@@ -406,6 +406,122 @@ export async function registerTokenLaddu(
   });
 }
 
+export type OpenDrawSessionInput = {
+  /** Idempotency key, so a double tap cannot open two sessions. */
+  clientOpId: string;
+};
+
+/**
+ * Opens the draw session.
+ *
+ * The number of draws is frozen here from the configuration, and the rules
+ * refuse to let it change afterwards: a public draw's terms cannot be edited
+ * once it has started. Committing results is the trusted endpoint's job — this
+ * only sets the stage.
+ */
+export async function openTokenDrawSession(
+  db: Firestore,
+  actor: GaneshActor,
+  pandalId: string,
+  festivalId: string,
+  input: OpenDrawSessionInput
+): Promise<{ sessionId: string; alreadyOpen: boolean }> {
+  await requireOpenFestival(db, pandalId, festivalId);
+  const sessionId = input.clientOpId.trim();
+  if (!sessionId) throw new Error("Could not identify this draw. Try again.");
+
+  return runTransaction(db, async (txn) => {
+    const sessionRef = pathRef(db, [
+      ...festivalCol(pandalId, festivalId, "tokenDrawSessions"),
+      sessionId,
+    ]);
+    const existing = await txn.get(sessionRef);
+    if (existing.exists()) return { sessionId, alreadyOpen: true };
+
+    const configSnap = await txn.get(pathRef(db, tokenLadduConfigDoc(pandalId, festivalId)));
+    const config = readConfig(configSnap.data());
+    const plannedDraws = Number(config?.totalTokens ?? 0);
+    if (plannedDraws <= 0) {
+      throw new Error("Set the number of Token Laddus before starting the draw.");
+    }
+
+    txn.set(
+      sessionRef,
+      omitUndefined({
+        status: "open",
+        startedAt: serverTimestamp(),
+        startedBy: actor.uid,
+        startedByName: actor.displayName,
+        // The snapshot KAN-125 asks for. Rules keep both out of the update
+        // allowlist, so what the committee announced stays what happened.
+        configuredTokens: plannedDraws,
+        plannedDraws,
+        completedDraws: 0,
+        createdBy: actor.uid,
+        createdAt: serverTimestamp(),
+        updatedBy: actor.uid,
+        updatedAt: serverTimestamp(),
+      })
+    );
+
+    writeTokenAudit(txn, db, pandalId, festivalId, actor.uid, "created", "tokenDrawSession", sessionId, {
+      newValue: { plannedDraws },
+    });
+
+    return { sessionId, alreadyOpen: false };
+  });
+}
+
+/**
+ * Closes a draw session early.
+ *
+ * Results already committed stay committed and visible — KAN-125 forbids
+ * deleting history, and a winner announced to a crowd cannot be withdrawn by
+ * closing the session they were drawn in.
+ */
+export async function closeTokenDrawSession(
+  db: Firestore,
+  actor: GaneshActor,
+  pandalId: string,
+  festivalId: string,
+  input: { sessionId: string; reason: string }
+): Promise<void> {
+  await requireOpenFestival(db, pandalId, festivalId);
+  const reason = input.reason.trim();
+  if (!reason) throw new Error("Give a reason for ending the draw.");
+
+  await runTransaction(db, async (txn) => {
+    const sessionRef = pathRef(db, [
+      ...festivalCol(pandalId, festivalId, "tokenDrawSessions"),
+      input.sessionId,
+    ]);
+    const snap = await txn.get(sessionRef);
+    if (!snap.exists()) throw new Error("That draw session no longer exists.");
+    if (snap.data().status !== "open") return;
+
+    txn.update(sessionRef, {
+      status: "cancelled",
+      cancelReason: reason,
+      completedAt: serverTimestamp(),
+      completedBy: actor.uid,
+      updatedBy: actor.uid,
+      updatedAt: serverTimestamp(),
+    });
+
+    writeTokenAudit(
+      txn,
+      db,
+      pandalId,
+      festivalId,
+      actor.uid,
+      "cancelled",
+      "tokenDrawSession",
+      input.sessionId,
+      { oldValue: { status: "open" }, newValue: { status: "cancelled" }, reason }
+    );
+  });
+}
+
 export type CancelTokenLadduInput = {
   registrationId: string;
   reason: string;
