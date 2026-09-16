@@ -1,0 +1,10 @@
+{
+  "name": "Spendly / Ganesh Seva (Expo)",
+  "install": "bash .cursor/install.sh",
+  "terminals": [
+    {
+      "name": "expo-web",
+      "command": "npx expo start --web --port 8081"
+    }
+  ]
+}
