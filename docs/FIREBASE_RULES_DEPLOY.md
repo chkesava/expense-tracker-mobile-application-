@@ -5,9 +5,13 @@ checklist is [AFTER_MERGE_CHECKLIST.md](./AFTER_MERGE_CHECKLIST.md).
 
 `firestore.rules` and `firestore.indexes.json` live at the repo root as the
 reference source of truth. `storage.rules` covers the signed APK objects used
-by in-app updates. None of these files are deployed automatically: CI only runs
-the type checks and the test suite, and the Android release workflow never
-touches Firebase rules. Deploying is a deliberate manual step.
+by in-app updates. Merging to `main` never uploads them: leftover order is
+still "new app first, then tighten rules". Uploading rules is a deliberate
+`workflow_dispatch` of
+[Deploy Firestore rules](https://github.com/chkesava/expense-tracker-mobile-application-/actions/workflows/firestore-rules-deploy.yml)
+(or a local `firebase deploy`). That workflow is **not** a `pull_request`
+job — it holds `FIREBASE_SERVICE_ACCOUNT`, which must not be given to fork
+PRs. The Android release workflow never touches Firebase rules.
 
 ## Why these files exist
 
@@ -126,7 +130,25 @@ users; clients cannot write them.
 
 ## Deploying
 
-Requires the Firebase CLI and access to the project.
+Preferred: GitHub → Actions →
+[Deploy Firestore rules](https://github.com/chkesava/expense-tracker-mobile-application-/actions/workflows/firestore-rules-deploy.yml)
+→ Run workflow on `main`.
+
+- Leave **dry_run** on for a compiler preview. Uncheck it to upload. A
+  compiler warning (`[W]`) fails the job; the workflow dry-runs first so a
+  warning cannot reach production.
+- Leave **deploy_indexes** off unless live indexes have been dumped and
+  copied into `firestore.indexes.json`. `firebase deploy --only firestore:indexes`
+  **deletes live indexes that are not in the file**. The job dumps live
+  indexes and aborts if that would happen.
+- A nightly schedule on the same workflow diffs live rules/indexes against
+  the repo and probes production (owner read allowed, stranger denied). It
+  never uploads. The first nights may fail until the six live indexes that
+  are missing from `firestore.indexes.json` are copied into the file — that
+  failure is the signal; do not "fix" it by deploying indexes blindly.
+
+Local CLI still works. Requires the Firebase CLI, project access, and
+**JDK 21** (`firebase.json` runs `npm run test:rules` as a predeploy hook).
 
 ```bash
 npm install -g firebase-tools
@@ -161,19 +183,20 @@ npm run test:rules
 Runs `firestore/*.rules.test.ts` against the real rules engine in a Firestore
 emulator. These are **not** part of `npm test`, which has no emulator.
 
-You do not have to remember to run it. It is enforced in three places, and all
-three run the same command:
+You do not have to remember to run it. It is enforced in four places, and all
+four run the same command:
 
 | Where | What it stops |
 | --- | --- |
 | `pr-checks.yml` -> `rules` job | A PR merging with failing rules |
 | `web-deploy.yml` -> `needs: rules` | A web deploy starting at all |
+| `firestore-rules-deploy.yml` | A production upload of rules that fail the suite or print `[W]` |
 | `firebase.json` -> `firestore.predeploy` | `firebase deploy --only firestore:*` proceeding |
 
-The third one is the important one, because **rules ship by a manual
-`firebase deploy`, not from CI**. Gating only the pipelines would have left the
-path rules actually travel completely ungated. The hook runs before the upload
-and a non-zero exit aborts the deploy:
+The predeploy hook is the important one for a laptop deploy, because **merging
+does not ship rules**. Gating only PR checks would leave the path rules
+actually travel ungated. The hook runs before the upload and a non-zero exit
+aborts the deploy:
 
 ```
 Error: firestore predeploy error: Command terminated with non-zero exit code 1
@@ -181,10 +204,11 @@ Error: firestore predeploy error: Command terminated with non-zero exit code 1
 
 No `Deploy complete`, nothing uploaded.
 
-All three call `npm run test:rules` rather than each spelling out their own
+All four call `npm run test:rules` rather than each spelling out their own
 invocation. A gate that runs something different from the local command is one
 people learn to distrust, and one that can drift between "what the PR checked"
-and "what the deploy checked".
+and "what the deploy checked". The deploy workflow adds one extra check on top:
+it fails if the CLI prints a rules compiler warning (`[W]`).
 
 ### Why this gate exists
 

@@ -2,9 +2,10 @@ name: Firestore rules tests
 
 # The security-rule gate (GS-074).
 #
-# Defined once as a reusable workflow and called by both pr-checks.yml and
-# web-deploy.yml, so the gate cannot drift between "what a PR checks" and "what
-# a deploy checks" — which is exactly how a gate quietly stops gating.
+# Defined once as a reusable workflow and called by pr-checks.yml,
+# web-deploy.yml, and firestore-rules-deploy.yml, so the gate cannot drift
+# between "what a PR checks" and "what a deploy checks" — which is exactly how
+# a gate quietly stops gating.
 #
 # Why this exists at all: every other rules test in the repo is a hand-written
 # TypeScript mirror of firestore.rules, and a mirror proves the mirror. Two real
@@ -15,7 +16,8 @@ name: Firestore rules tests
 # running the real rules engine.
 #
 # Quality gate only. No Firebase service account, no signing keystore — this
-# runs on fork PRs, so it must never be given release credentials.
+# runs on fork PRs, so it must never be given release credentials. Uploading
+# live rules is a separate workflow_dispatch job (firestore-rules-deploy.yml).
 
 on:
   workflow_call:

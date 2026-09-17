@@ -18,6 +18,7 @@ export default defineConfig({
       // Deno, but handler.ts is deliberately plain TypeScript so its rules are
       // provable here rather than only against a deployed function.
       "supabase/functions/**/*.test.ts",
+      "scripts/**/*.test.ts",
     ],
     environment: "node",
   },

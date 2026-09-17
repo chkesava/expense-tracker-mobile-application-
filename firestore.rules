@@ -1,7 +1,8 @@
 rules_version = '2';
 
-// Reference source of truth for Firestore security. This file is NOT deployed
-// by CI — see docs/FIREBASE_RULES_DEPLOY.md for the manual deploy step.
+// Reference source of truth for Firestore security. Production is updated by
+// the workflow_dispatch job in .github/workflows/firestore-rules-deploy.yml
+// — never on pull_request, never on merge. See docs/FIREBASE_RULES_DEPLOY.md.
 //
 // Ownership model: every personal record lives under `users/{uid}/...`, where
 // `uid` is the uid the app writes with. Duress mode swaps the app-level uid to
