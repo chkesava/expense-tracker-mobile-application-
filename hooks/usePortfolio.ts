@@ -26,6 +26,7 @@ import {
   ensureCashBaseline,
   recordInvestmentCashEntry,
   reverseInvestmentCashEntry,
+  transferInvestmentCashWithBank,
 } from "@/services/portfolio/investmentCash";
 import { scheduleIdleWork } from "@/shared/utils/scheduleIdle";
 import {
@@ -634,25 +635,43 @@ export function usePortfolio(options?: {
   const depositCash = useCallback(async (
     amount: number,
     note?: string,
-    options?: { date?: string; entryId?: string; accountId?: string; accountEntryId?: string }
+    options?: {
+      date?: string;
+      entryId?: string;
+      accountId?: string;
+      accountEntryId?: string;
+      /** Caller shows its own success toast (Transfer Funds / Manage Stock Cash). */
+      quiet?: boolean;
+    }
   ) => {
     if (!user || !db || !(amount > 0)) return false;
     try {
       await ensureCashBaseline(user.uid, settings?.cashBalance ?? 0);
-      const result = await recordInvestmentCashEntry(
-        user.uid,
-        {
-          type: "TOP_UP",
-          amount,
-          direction: "credit",
-          date: options?.date ?? todayKey(),
-          note: note || "Cash deposit to Stocks Demat",
-          accountId: options?.accountId,
-          accountEntryId: options?.accountEntryId,
-        },
-        options?.entryId
-      );
-      toast.success(writeSavedMessage(result.outcome, "Cash deposited to Stocks Demat"));
+      const date = options?.date ?? todayKey();
+      const result = options?.accountId
+        ? await transferInvestmentCashWithBank(user.uid, {
+            type: "TOP_UP",
+            amount,
+            date,
+            note: note || "Cash deposit to Stocks Demat",
+            accountId: options.accountId,
+            entryId: options.entryId,
+            accountEntryId: options.accountEntryId,
+          })
+        : await recordInvestmentCashEntry(
+            user.uid,
+            {
+              type: "TOP_UP",
+              amount,
+              direction: "credit",
+              date,
+              note: note || "Cash deposit to Stocks Demat",
+            },
+            options?.entryId
+          );
+      if (!options?.quiet) {
+        toast.success(writeSavedMessage(result.outcome, "Cash deposited to Stocks Demat"));
+      }
       return true;
     } catch (error) {
       logError("portfolio.depositCash", error);
@@ -665,7 +684,13 @@ export function usePortfolio(options?: {
   const withdrawCash = useCallback(async (
     amount: number,
     note?: string,
-    options?: { date?: string; entryId?: string; accountId?: string; accountEntryId?: string }
+    options?: {
+      date?: string;
+      entryId?: string;
+      accountId?: string;
+      accountEntryId?: string;
+      quiet?: boolean;
+    }
   ) => {
     if (!user || !db || !(amount > 0)) return false;
     if (amount > availableCash) {
@@ -674,20 +699,31 @@ export function usePortfolio(options?: {
     }
     try {
       await ensureCashBaseline(user.uid, settings?.cashBalance ?? 0);
-      const result = await recordInvestmentCashEntry(
-        user.uid,
-        {
-          type: "WITHDRAWAL",
-          amount,
-          direction: "debit",
-          date: options?.date ?? todayKey(),
-          note: note || "Cash withdrawal from Stocks Demat",
-          accountId: options?.accountId,
-          accountEntryId: options?.accountEntryId,
-        },
-        options?.entryId
-      );
-      toast.success(writeSavedMessage(result.outcome, "Cash withdrawn from Stocks Demat"));
+      const date = options?.date ?? todayKey();
+      const result = options?.accountId
+        ? await transferInvestmentCashWithBank(user.uid, {
+            type: "WITHDRAWAL",
+            amount,
+            date,
+            note: note || "Cash withdrawal from Stocks Demat",
+            accountId: options.accountId,
+            entryId: options.entryId,
+            accountEntryId: options.accountEntryId,
+          })
+        : await recordInvestmentCashEntry(
+            user.uid,
+            {
+              type: "WITHDRAWAL",
+              amount,
+              direction: "debit",
+              date,
+              note: note || "Cash withdrawal from Stocks Demat",
+            },
+            options?.entryId
+          );
+      if (!options?.quiet) {
+        toast.success(writeSavedMessage(result.outcome, "Cash withdrawn from Stocks Demat"));
+      }
       return true;
     } catch (error) {
       logError("portfolio.withdrawCash", error);

@@ -1,14 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { ArrowRight, TrendingUp, Wallet } from "lucide-react-native";
 
 import { Modal } from "@/components/common/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { useAccountEntries } from "@/hooks/useAccountEntries";
 import { useAccountTransfers } from "@/hooks/useAccountTransfers";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { logError } from "@/lib/errors";
+import { newId } from "@/lib/id";
 import { toast } from "@/lib/toast";
 import type { Account } from "@/shared/types/expense";
 import { formatDateKey } from "@/shared/utils/dates";
@@ -36,8 +36,8 @@ export function TransferFundsModal({
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const { addTransfer } = useAccountTransfers();
-  const { addEntry } = useAccountEntries();
   const { depositCash, withdrawCash } = usePortfolio();
+  const transferIds = useRef({ entryId: newId(), accountEntryId: newId() });
 
   const selectableOptions = useMemo(() => {
     return [
@@ -71,7 +71,13 @@ export function TransferFundsModal({
     }
   }, [defaultFromAccountId, defaultToAccountId, isOpen]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    transferIds.current = { entryId: newId(), accountEntryId: newId() };
+  }, [isOpen]);
+
   const handleSubmit = async () => {
+    if (saving) return;
     if (!fromAccountId) {
       toast.error("Please select a source account");
       return;
@@ -97,49 +103,45 @@ export function TransferFundsModal({
     setSaving(true);
     try {
       if (fromAccountId === DEMAT_ACCOUNT_ID) {
-        // Stocks Demat -> Bank Account
+        // Stocks Demat -> Bank Account (one batch: cash debit + bank credit)
         const withdrawOk = await withdrawCash(
           parsedAmount,
           note.trim() || `Transfer from Stocks Demat`,
-          { date: date.trim(), accountId: toAccountId }
+          {
+            date: date.trim(),
+            accountId: toAccountId,
+            entryId: transferIds.current.entryId,
+            accountEntryId: transferIds.current.accountEntryId,
+            quiet: true,
+          }
         );
         if (!withdrawOk) {
           setSaving(false);
           return;
         }
 
-        await addEntry(
-          toAccountId,
-          parsedAmount,
-          "credit",
-          date.trim(),
-          note.trim() || `Transfer from Stocks Demat`
-        );
-
         toast.success("Transferred funds from Stocks Demat to Account");
         setAmount("");
         onClose();
       } else if (toAccountId === DEMAT_ACCOUNT_ID) {
-        // Bank Account -> Stocks Demat
+        // Bank Account -> Stocks Demat (one batch: bank debit + cash credit)
         const fromAccount = accounts.find((a) => a.id === fromAccountId);
-        const entryOk = await addEntry(
-          fromAccountId,
+        const depositOk = await depositCash(
           parsedAmount,
-          "debit",
-          date.trim(),
-          note.trim() || `Transfer to Stocks Demat (${fromAccount?.name ?? "Bank"})`
+          note.trim() || `Transfer from ${fromAccount?.name ?? "Bank Account"}`,
+          {
+            date: date.trim(),
+            accountId: fromAccountId,
+            entryId: transferIds.current.entryId,
+            accountEntryId: transferIds.current.accountEntryId,
+            quiet: true,
+          }
         );
 
-        if (!entryOk) {
+        if (!depositOk) {
           setSaving(false);
           return;
         }
-
-        await depositCash(
-          parsedAmount,
-          note.trim() || `Transfer from ${fromAccount?.name ?? "Bank Account"}`,
-          { date: date.trim(), accountId: fromAccountId }
-        );
 
         toast.success("Transferred funds to Stocks Demat");
         setAmount("");

@@ -215,6 +215,11 @@ export interface InvestmentCashEntry {
   /** Bank side of a transfer. */
   accountId?: string;
   accountEntryId?: string;
+  /**
+   * Shared with the bank `accountEntries` row for a Demat ↔ bank transfer
+   * (SPENDLY-29). Defaults to this cash doc id.
+   */
+  transferId?: string;
   /** The PURCHASE/TOP_UP entry a REVERSAL undoes. Never mutates the original. */
   reversesId?: string;
   correlationId: string;

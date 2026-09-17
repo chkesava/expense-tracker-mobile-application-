@@ -30,6 +30,7 @@ import {
 import { getFirestoreDb } from "@/lib/firebase";
 import { commitWrite, type WriteOutcome } from "@/lib/firestoreWrite";
 import { newId } from "@/lib/id";
+import { isValidDateKey } from "@/shared/utils/dates";
 import { roundMoney } from "@/shared/utils/money";
 import type {
   Holding,
@@ -189,6 +190,106 @@ export async function recordInvestmentCashEntry(
   }, { label: "investment cash entry" });
 
   return { id: entryId, outcome };
+}
+
+export type InvestmentCashBankTransferInput = {
+  /** TOP_UP: bank → Demat. WITHDRAWAL: Demat → bank. */
+  type: "TOP_UP" | "WITHDRAWAL";
+  amount: number;
+  date: string;
+  note?: string;
+  accountId: string;
+  /** Cash ledger doc id. Reused across retries so a second submit cannot double-move. */
+  entryId?: string;
+  /** Bank `accountEntries` doc id. Same retry contract as `entryId`. */
+  accountEntryId?: string;
+  /**
+   * Shared link on both ledgers. Defaults to the cash doc id so a reconciler can
+   * find the pair without a third identifier.
+   */
+  transferId?: string;
+  source?: InvestmentCashSource;
+};
+
+export type InvestmentCashBankTransferResult = {
+  entryId: string;
+  accountEntryId: string;
+  transferId: string;
+  outcome: WriteOutcome;
+};
+
+/**
+ * Moves money between a bank account and Investment Cash in one batch (SPENDLY-29).
+ *
+ * The previous UI wrote the cash ledger, awaited it, then wrote `accountEntries`.
+ * If the second commit failed, cash vanished (or appeared) with no bank mirror.
+ * Both docs share `transferId` so a later reconciler can detect a half-applied
+ * transfer from an old client and write a compensating entry — never delete.
+ */
+export async function transferInvestmentCashWithBank(
+  uid: string,
+  input: InvestmentCashBankTransferInput
+): Promise<InvestmentCashBankTransferResult> {
+  if (!input.accountId.trim()) throw new Error("A bank account is required");
+  if (!(Number(input.amount) > 0)) throw new Error("A transfer needs a positive amount");
+  if (!isValidDateKey(input.date)) throw new Error("Invalid transfer date");
+
+  const db = requireDb();
+  const owner = requireUid(uid);
+  const amount = roundMoney(Math.abs(Number(input.amount) || 0));
+  const entryId = input.entryId ?? newId();
+  const accountEntryId = input.accountEntryId ?? newId();
+  const transferId = input.transferId ?? entryId;
+  const cashDirection = input.type === "TOP_UP" ? "credit" : "debit";
+  const bankDirection = cashDirection === "credit" ? "debit" : "credit";
+  const note = input.note?.trim() || undefined;
+
+  const outcome = await commitWrite(() => {
+    const batch = writeBatch(db);
+    batch.set(
+      doc(db, "users", owner, INVESTMENT_CASH_COLLECTION, entryId),
+      stripUndefined({
+        ...buildEntryDoc(
+          {
+            type: input.type,
+            amount,
+            direction: cashDirection,
+            date: input.date,
+            note,
+            accountId: input.accountId,
+            accountEntryId,
+            source: input.source ?? "app",
+          },
+          entryId
+        ),
+        transferId,
+      })
+    );
+    batch.set(
+      doc(db, "users", owner, "accountEntries", accountEntryId),
+      stripUndefined({
+        accountId: input.accountId,
+        amount,
+        direction: bankDirection,
+        date: input.date,
+        note: note ?? "",
+        transferId,
+        correlationId: transferId,
+        createdAt: serverTimestamp(),
+      })
+    );
+    batch.set(
+      doc(db, "users", owner, "portfolioSettings", SETTINGS_DOC_ID),
+      {
+        cashBalance: increment(signedDelta({ amount, direction: cashDirection })),
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
+    return batch.commit();
+  }, { label: "investment cash bank transfer" });
+
+  return { entryId, accountEntryId, transferId, outcome };
 }
 
 export type CreateHoldingWithCashInput = {
