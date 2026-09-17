@@ -159,6 +159,9 @@ async function writePwaIcons(outDir, target, product) {
 }
 
 function writeRedirectsAndHeaders() {
+  // Catch-all is intentional: this host now serves the full multi-product
+  // app (/expense, /nutrition, /ganesh, landing). Narrow share-only
+  // redirects in netlify.toml are historical and not what is deployed.
   const redirects = [
     '/expense           /expense/index.html     200',
     '/expense/*         /expense/index.html     200',
@@ -177,6 +180,20 @@ function writeRedirectsAndHeaders() {
   ].join('\n');
   fs.writeFileSync(path.join(OUT_ROOT, '_redirects'), redirects);
 
+  const csp = [
+    "default-src 'self'",
+    "base-uri 'self'",
+    "object-src 'none'",
+    "frame-ancestors 'none'",
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://apis.google.com https://accounts.google.com https://www.gstatic.com https://www.google.com",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob: https:",
+    "font-src 'self' data:",
+    "connect-src 'self' https://*.googleapis.com https://*.gstatic.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebaseapp.com https://*.google.com https://*.supabase.co wss://*.supabase.co",
+    "frame-src https://accounts.google.com https://*.firebaseapp.com https://*.google.com",
+    "form-action 'self' https://accounts.google.com",
+  ].join('; ');
+
   const headers = [
     '/_expo/*',
     '  Cache-Control: public, max-age=31536000, immutable',
@@ -189,6 +206,10 @@ function writeRedirectsAndHeaders() {
     '/*',
     '  X-Frame-Options: DENY',
     '  Referrer-Policy: strict-origin-when-cross-origin',
+    '  X-Content-Type-Options: nosniff',
+    '  Strict-Transport-Security: max-age=31536000; includeSubDomains',
+    '  X-Robots-Tag: noindex, nofollow',
+    `  Content-Security-Policy: ${csp}`,
     '',
   ].join('\n');
   fs.writeFileSync(path.join(OUT_ROOT, '_headers'), headers);
