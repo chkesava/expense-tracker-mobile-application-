@@ -66,10 +66,10 @@ service cloud.firestore {
       // statements, ...) down while single-document gets and writes kept
       // working.
       //
-      // SPENDLY-10: expenses/incomes are matched below with amount/date
+      // SPENDLY-10: money collections below are matched with amount/date
       // checks. They must stay out of this wildcard or the OR would still
-      // allow amount: -1e12. Other personal collections stay on this grant
-      // until later slices. App Check is a leftover, not this slice.
+      // allow amount: -1e12. Remaining personal collections stay on this
+      // grant until later slices. App Check is a leftover, not this slice.
       function personalMoneyWellFormed() {
         let d = request.resource.data;
         return d.amount is number
@@ -90,11 +90,29 @@ service cloud.firestore {
         allow create, update: if isOwner(uid) && personalMoneyWellFormed();
       }
 
+      match /accountEntries/{entryId} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && personalMoneyWellFormed();
+      }
+
+      match /accountPayments/{paymentId} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && personalMoneyWellFormed();
+      }
+
+      match /accountTransfers/{transferId} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && personalMoneyWellFormed();
+      }
+
       match /{collection}/{document=**} {
         allow read, write: if isOwner(uid)
           && collection != 'pandalMemberships'
           && collection != 'expenses'
-          && collection != 'incomes';
+          && collection != 'incomes'
+          && collection != 'accountEntries'
+          && collection != 'accountPayments'
+          && collection != 'accountTransfers';
       }
     }
 
