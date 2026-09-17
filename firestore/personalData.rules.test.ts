@@ -86,6 +86,7 @@ describe("personal tree", () => {
     // KAN-70 — interest per financial year and reconciliation observations.
     "epfInterestEntries",
     "epfReconciliations",
+    "investmentCashTransactions",
   ];
   const moneyCollections = [
     "expenses",
@@ -93,6 +94,7 @@ describe("personal tree", () => {
     "accountEntries",
     "accountPayments",
     "accountTransfers",
+    "investmentCashTransactions",
   ];
   const schemalessCollections = collections.filter(
     (name) => !moneyCollections.includes(name)
