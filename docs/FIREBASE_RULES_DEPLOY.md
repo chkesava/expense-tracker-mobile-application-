@@ -1,5 +1,8 @@
 # Firestore rules and indexes — manual deploy
 
+After a merge, rules / Netlify / Android still need a human. The leftover
+checklist is [AFTER_MERGE_CHECKLIST.md](./AFTER_MERGE_CHECKLIST.md).
+
 `firestore.rules` and `firestore.indexes.json` live at the repo root as the
 reference source of truth. `storage.rules` covers the signed APK objects used
 by in-app updates. None of these files are deployed automatically: CI only runs
