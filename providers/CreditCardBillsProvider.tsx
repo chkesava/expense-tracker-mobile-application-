@@ -34,6 +34,7 @@ import { useAccountTypes } from "@/hooks/useAccountTypes";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useSettings } from "@/providers/SettingsProvider";
 import {
+  AUTO_CREDIT_CARD_BILL_REMINDER_FREQUENCY,
   DEFAULT_BILL_REMINDER_FREQUENCY,
   DEFAULT_CREDIT_CARD_BILL_REMINDERS,
   type CreateCreditCardBillInput,
@@ -54,6 +55,7 @@ import {
   collectAutoCreditCardBillRefreshPatches,
 } from "@/shared/utils/autoCreditCardBills";
 import { collectCreditBillAllocationPatches } from "@/shared/utils/creditCardLedger";
+import { createAutoCreditCardBill } from "@/services/creditCardBills/autoBill";
 import { todayDateKey } from "@/shared/utils/dates";
 import {
   cancelBillReminders,
@@ -160,6 +162,7 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
   const autoGenerateInFlight = useRef(false);
   const autoGenerateToastShown = useRef(false);
   const lastAutoBillFingerprintRef = useRef("");
+  const didInitialAutoGenerate = useRef(false);
 
   const globalPrefs = settings.creditCardBillReminders;
   const timezone = settings.timezone;
@@ -167,6 +170,7 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     autoGenerateToastShown.current = false;
     lastAutoBillFingerprintRef.current = "";
+    didInitialAutoGenerate.current = false;
   }, [user?.uid]);
 
   useEffect(() => {
@@ -184,9 +188,30 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
       (snap) => {
         logQuerySnapshot(path, snap);
         setBills(
-          snap.docs.map(
-            (d) => ({ id: d.id, ...(d.data() as object) }) as CreditCardBill
-          )
+          snap.docs.map((d) => {
+            const data = d.data() as Partial<CreditCardBill>;
+            const statementAmount = Number(data.statementAmount) || 0;
+            const amountPaid = Number(data.amountPaid) || 0;
+            return {
+              ...data,
+              id: d.id,
+              statementAmount,
+              amountPaid,
+              remainingAmount:
+                data.remainingAmount == null
+                  ? computeRemainingAmount(statementAmount, amountPaid)
+                  : Number(data.remainingAmount),
+              paymentIds: data.paymentIds ?? [],
+              status:
+                data.status ??
+                computeCreditCardBillStatus({
+                  today: todayDateKey(timezone),
+                  dueDate: data.dueDate || "",
+                  amountPaid,
+                  statementAmount,
+                }),
+            } as CreditCardBill;
+          })
         );
         setBillsLoading(false);
       },
@@ -196,7 +221,7 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
       forgetSnapshotPath(path);
       unsub();
     };
-  }, [user?.uid]);
+  }, [user?.uid, timezone]);
 
   const writeReminderLog = useCallback(
     async (entry: Omit<CreditCardBillReminderLog, "id" | "sentAt" | "channel">) => {
@@ -303,8 +328,9 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
         globalPrefs.enabled
       );
 
-      // Client-generated id: the caller needs it immediately, and offline the
-      // server round-trip that `addDoc` waits on never happens.
+      // Manual bills keep a random id. Auto statements use
+      // `createAutoCreditCardBill` (`accountId_statementDate`) so two devices
+      // cannot mint duplicates for the same cycle.
       const ref = doc(collection(db, "users", user.uid, "creditCardBills"));
       await commitWrite(
         () =>
@@ -418,8 +444,21 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
       let created = 0;
       for (const draft of drafts) {
         try {
-          const id = await createBill(draft);
-          if (id) created += 1;
+          await createAutoCreditCardBill(user.uid, {
+            accountId: draft.accountId,
+            statementAmount: draft.statementAmount,
+            minimumDueAmount: draft.minimumDueAmount,
+            statementDate: draft.statementDate,
+            dueDate: draft.dueDate,
+            billingPeriodStart: draft.billingPeriodStart ?? null,
+            billingPeriodEnd: draft.billingPeriodEnd ?? null,
+            note: draft.note ?? null,
+            currency: draft.currency || settings.currency || "INR",
+            reminderEnabled: draft.reminderEnabled ?? true,
+            reminderFrequency:
+              draft.reminderFrequency ?? AUTO_CREDIT_CARD_BILL_REMINDER_FREQUENCY,
+          });
+          created += 1;
         } catch (err) {
           logError("creditCardBills.autoCreate", err);
         }
@@ -552,7 +591,7 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
     bills,
     timezone,
     globalPrefs.enabled,
-    createBill,
+    settings.currency,
   ]);
 
   const scheduleAutoGenerate = useCallback(() => {
@@ -562,19 +601,15 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
     }, 400);
   }, [generateAutoBills]);
 
+  // SPENDLY-45: do not run on every bills/expenses/payments snapshot — that
+  // is a write triggered by a read and races across devices. First load plus
+  // app focus is enough; deterministic ids make a replay a merge.
   useEffect(() => {
-    if (billsLoading || expensesLoading || paymentsLoading) return;
+    if (!user || billsLoading || expensesLoading || paymentsLoading) return;
+    if (didInitialAutoGenerate.current) return;
+    didInitialAutoGenerate.current = true;
     scheduleAutoGenerate();
-  }, [
-    billsLoading,
-    expensesLoading,
-    paymentsLoading,
-    accounts,
-    bills,
-    expenses,
-    payments,
-    scheduleAutoGenerate,
-  ]);
+  }, [user, billsLoading, expensesLoading, paymentsLoading, scheduleAutoGenerate]);
 
   useEffect(() => {
     const sub = AppState.addEventListener("change", (state) => {
