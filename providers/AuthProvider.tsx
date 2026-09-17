@@ -27,22 +27,54 @@ import {
 } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { Platform } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import NetInfo from "@react-native-community/netinfo";
 import { GoogleSignin } from "@react-native-google-signin/google-signin";
 
 import { clearSavedRoute } from "@/hooks/useNavigationStateRestoration";
+import { appDialog, hasAppDialogHost } from "@/lib/appDialog";
 import { classifyError, logError } from "@/lib/errors";
 import { ensureCategoryHierarchy } from "@/lib/ensureCategoryHierarchy";
 import { env } from "@/lib/env";
-import { getFirebaseAuth, getFirestoreDb } from "@/lib/firebase";
+import {
+  getFirebaseAuth,
+  getFirestoreDb,
+  recycleFirestoreAfterLogout,
+  waitForPendingWritesOrTimeout,
+} from "@/lib/firebase";
 import { enforceGoogleSignupGate } from "@/lib/googleSignupGate";
 import { perfMark } from "@/lib/perf";
 import { privacySession } from "@/lib/privacySession";
+import { getGlobalPendingSyncCount } from "@/lib/syncStatusStore";
+import { ganeshSessionStorageKey } from "@/shared/utils/ganeshSessionStorage";
 import {
   authErrorMessage,
   createDuressUser,
   shouldIgnoreAuthUidChange,
 } from "@/lib/authHelpers";
 import { scheduleIdleWork } from "@/shared/utils/scheduleIdle";
+
+function confirmSignOutDespitePending(count: number): Promise<boolean> {
+  if (!hasAppDialogHost()) return Promise.resolve(true);
+  const noun = count === 1 ? "change has" : "changes have";
+  return new Promise((resolve) => {
+    appDialog.show({
+      title: "Unsynced changes",
+      message: `${count} ${noun} not reached the server yet. Signing out may drop them.`,
+      dismissible: false,
+      buttons: [
+        { text: "Stay signed in", style: "cancel", onPress: () => resolve(false) },
+        { text: "Sign out", style: "destructive", onPress: () => resolve(true) },
+      ],
+    });
+  });
+}
+
+function reloadWebAfterLogout() {
+  if (Platform.OS !== "web") return;
+  const location = (globalThis as { location?: { reload?: () => void } }).location;
+  location?.reload?.();
+}
 
 const GOOGLE_WEB_CLIENT_ID =
   env.googleWebClientId ||
@@ -62,7 +94,7 @@ type AuthContextType = {
   resetPassword: (email: string) => Promise<void>;
   loginWithGoogleIdToken: (idToken: string) => Promise<void>;
   loginWithPhoneCredential: (credential: AuthCredential, displayName?: string) => Promise<void>;
-  logout: () => Promise<void>;
+  logout: () => Promise<boolean>;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -239,15 +271,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     const auth = getFirebaseAuth();
-    if (!auth) return;
+    if (!auth) return false;
+
+    const pending = getGlobalPendingSyncCount();
+    if (pending > 0) {
+      const proceed = await confirmSignOutDespitePending(pending);
+      if (!proceed) return false;
+    }
+
     const signedOutUid = auth.currentUser?.uid;
+    const db = getFirestoreDb();
     try {
+      const net = await NetInfo.fetch().catch(() => null);
+      const online =
+        net?.isConnected === true && net.isInternetReachable !== false;
+      if (online && db) {
+        await waitForPendingWritesOrTimeout(db);
+      }
+
       privacySession.clearAll();
       // Otherwise the next account signing in on this device resumes into the
       // previous user's last screen — including their account detail routes.
-      if (signedOutUid) await clearSavedRoute(signedOutUid);
+      if (signedOutUid) {
+        await clearSavedRoute(signedOutUid);
+        await AsyncStorage.removeItem(ganeshSessionStorageKey(signedOutUid)).catch(
+          () => undefined
+        );
+      }
       await GoogleSignin.signOut().catch(() => {});
       await signOut(auth);
+      await recycleFirestoreAfterLogout();
+      reloadWebAfterLogout();
+      return true;
     } catch (error) {
       logError("authProvider.logout", error);
       throw new Error(authErrorMessage(error, "Logout failed"));
