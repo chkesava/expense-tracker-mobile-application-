@@ -135,7 +135,7 @@ jobs:
           fi
 
       - name: Deploy Firestore rules
-        if: ${{ inputs.dry_run == false }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run == false }}
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/service-account.json
         run: |
@@ -152,7 +152,7 @@ jobs:
           fi
 
       - name: Optionally deploy indexes
-        if: ${{ inputs.deploy_indexes }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_indexes }}
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/service-account.json
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
