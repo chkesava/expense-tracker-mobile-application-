@@ -49,8 +49,8 @@ export function ProfileSection() {
 
   const onLogout = async () => {
     try {
-      await logout();
-      toast.success("Signed out");
+      const signedOut = await logout();
+      if (signedOut) toast.success("Signed out");
     } catch (error) {
       logError("settings.logout", error);
       toast.error(friendlyErrorMessage(error, "Couldn't sign you out. Please try again."));

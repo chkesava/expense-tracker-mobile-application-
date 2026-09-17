@@ -23,11 +23,14 @@
 import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
 import type { Auth } from "firebase/auth";
 import {
+  clearIndexedDbPersistence,
   initializeFirestore,
   memoryLocalCache,
   persistentLocalCache,
   persistentMultipleTabManager,
   persistentSingleTabManager,
+  terminate,
+  waitForPendingWrites,
   type Firestore,
 } from "firebase/firestore";
 import { getStorage, type FirebaseStorage } from "firebase/storage";
@@ -36,6 +39,7 @@ import { Platform } from "react-native";
 
 import { createAuth } from "./createAuth";
 import { env, isFirebaseEnvConfigured } from "./env";
+import { logWarning } from "./errors";
 import { setWriteQueueDurable } from "./firestoreWrite";
 
 export type FirebaseClients = {
@@ -143,6 +147,15 @@ export function getFirebaseClients(): FirebaseClients {
       storage = null;
       functions = null;
     }
+  } else if (!db) {
+    // Recreate after logout terminated the previous instance (AUTH-03).
+    try {
+      db = createDb(app);
+      initError = null;
+    } catch (e) {
+      initError = e instanceof Error ? e.message : String(e);
+      db = null;
+    }
   }
 
   const reportedCacheMode: FirebaseClients["firestoreCacheMode"] = !db
@@ -187,4 +200,52 @@ export function getFirebaseStorage(): FirebaseStorage | null {
 export function getFirebaseFunctions(): Functions | null {
   getFirebaseClients();
   return functions;
+}
+
+const PENDING_WRITES_TIMEOUT_MS = 8000;
+
+/**
+ * Stop listeners and drop the local cache so the next account cannot read
+ * the previous user's ledger from IndexedDB (web) or the in-memory cache
+ * (native, same JS session).
+ *
+ * The terminated instance cannot be reused; `getFirestoreDb()` creates a
+ * new one. On web, a reload after this is the surest way to drop React
+ * state that still holds snapshot data.
+ */
+export async function recycleFirestoreAfterLogout(): Promise<void> {
+  if (!db) return;
+  const instance = db;
+  db = null;
+  cacheMode = "uninitialized";
+  setWriteQueueDurable(false);
+  try {
+    await terminate(instance);
+  } catch (error) {
+    logWarning("firebase.terminate", error);
+  }
+  if (Platform.OS === "web") {
+    try {
+      await clearIndexedDbPersistence(instance);
+    } catch (error) {
+      // failed-precondition when another tab still holds the database.
+      logWarning("firebase.clearIndexedDbPersistence", error);
+    }
+  }
+}
+
+export async function waitForPendingWritesOrTimeout(database: Firestore): Promise<void> {
+  try {
+    await Promise.race([
+      waitForPendingWrites(database),
+      new Promise<void>((_, reject) => {
+        setTimeout(
+          () => reject(new Error("waitForPendingWrites timed out")),
+          PENDING_WRITES_TIMEOUT_MS
+        );
+      }),
+    ]);
+  } catch (error) {
+    logWarning("firebase.waitForPendingWrites", error);
+  }
 }

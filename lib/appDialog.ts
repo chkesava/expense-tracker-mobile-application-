@@ -38,6 +38,10 @@ export function registerAppDialogHost(next: AppDialogHost | null) {
   host = next;
 }
 
+export function hasAppDialogHost(): boolean {
+  return host !== null;
+}
+
 function defer(fn: () => void) {
   if (typeof requestAnimationFrame === "function") {
     requestAnimationFrame(fn);
