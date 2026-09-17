@@ -75,6 +75,82 @@ export function statusForAppliedEdit(row: EpfBackfillRow): EpfContributionStatus
   return row.persisted ? row.status : "draft";
 }
 
+export const BACKFILL_REFUSED_REASON =
+  "Only draft or confirmed months can be changed from Backfill.";
+
+export const BACKFILL_DEMOTE_REASON =
+  "A confirmed month cannot be saved as a draft.";
+
+export const BACKFILL_ARCHIVED_REASON =
+  "That month was removed. It cannot be rewritten from Backfill.";
+
+/**
+ * Whether Backfill Save / Apply may touch this stored status (SPENDLY-15).
+ *
+ * Lifecycle rows (`expected` / `credited` / …) move through `applyTransition`,
+ * not through a blanket `status: "confirmed"` merge.
+ */
+export function isBackfillMutableStatus(
+  status: EpfContributionStatus | undefined,
+  archived?: boolean
+): boolean {
+  if (archived) return false;
+  if (!status) return true;
+  return status === "draft" || status === "confirmed";
+}
+
+export type BackfillSaveDecision =
+  | { ok: true; status: EpfContributionStatus }
+  | { ok: false; reason: string };
+
+/**
+ * The status Backfill is allowed to write.
+ *
+ * New and `draft` rows may become `draft` or `confirmed`. `confirmed` may be
+ * rewritten as `confirmed` (amount edits) but not demoted. Everything else is
+ * refused so a Save draft cannot clobber a cron-credited month.
+ */
+export function resolveBackfillSaveStatus(args: {
+  existingStatus?: EpfContributionStatus;
+  archived?: boolean;
+  requested: EpfContributionStatus;
+}): BackfillSaveDecision {
+  if (args.archived) return { ok: false, reason: BACKFILL_ARCHIVED_REASON };
+  if (!args.existingStatus) {
+    if (args.requested === "draft" || args.requested === "confirmed") {
+      return { ok: true, status: args.requested };
+    }
+    return { ok: false, reason: BACKFILL_REFUSED_REASON };
+  }
+  if (args.existingStatus === "draft") {
+    if (args.requested === "draft" || args.requested === "confirmed") {
+      return { ok: true, status: args.requested };
+    }
+    return { ok: false, reason: BACKFILL_REFUSED_REASON };
+  }
+  if (args.existingStatus === "confirmed") {
+    if (args.requested === "draft") return { ok: false, reason: BACKFILL_DEMOTE_REASON };
+    if (args.requested === "confirmed") return { ok: true, status: "confirmed" };
+    return { ok: false, reason: BACKFILL_REFUSED_REASON };
+  }
+  return { ok: false, reason: BACKFILL_REFUSED_REASON };
+}
+
+export type ContributionRemovalKind = "delete" | "archive" | "missing";
+
+/**
+ * Drafts are not history yet — `deleteDoc` is fine. Anything else is archived
+ * in place so the scheduler cannot resurrect a blank month (SPENDLY-19 leftover
+ * still has to skip `archived`).
+ */
+export function contributionRemovalKind(
+  row: { status: EpfContributionStatus; archived?: boolean } | undefined
+): ContributionRemovalKind {
+  if (!row || row.archived) return "missing";
+  if (row.status === "draft") return "delete";
+  return "archive";
+}
+
 export interface UnsavedBackfillSummary {
   /** Months edited but not yet durable. */
   count: number;
@@ -166,6 +242,9 @@ export function backfillSaveRows(args: {
   for (const row of args.rows) {
     const edit = args.edits.get(row.month);
     if (edit) {
+      if (row.persisted && !isBackfillMutableStatus(row.status, row.archived)) {
+        continue;
+      }
       out.push(edit);
       continue;
     }

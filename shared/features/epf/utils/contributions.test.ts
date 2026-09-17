@@ -920,6 +920,7 @@ describe("contributionWritePayload", () => {
 
     expect(Object.keys(payload).sort()).toEqual(
       [
+        "archived",
         "creditDate",
         "creditedAmount",
         "employeeShare",
@@ -988,6 +989,7 @@ describe("contributionWritePayload", () => {
         creditedAmount: 4000,
         reconciledAt: "2026-09-21",
         statusReason: "short remittance",
+        archived: true,
       }),
       { status: "partial", establishmentId: "est-a" }
     );
@@ -1000,6 +1002,7 @@ describe("contributionWritePayload", () => {
     expect(read.reconciledAt).toBe("2026-09-21");
     expect(read.statusReason).toBe("short remittance");
     expect(read.status).toBe("partial");
+    expect(read.archived).toBe(true);
   });
 });
 
@@ -1038,6 +1041,16 @@ describe("normalizeEpfContribution — lifecycle fields (SPENDLY-1)", () => {
     expect(read.expectedCreditTo).toBeUndefined();
     expect(read.reconciledAt).toBeUndefined();
     expect(read.statusReason).toBeUndefined();
+    expect(read.archived).toBeUndefined();
+  });
+
+  it("carries archived through a tolerant read — SPENDLY-15", () => {
+    expect(
+      normalizeEpfContribution("est-a_2026-08", { month: "2026-08", archived: true }).archived
+    ).toBe(true);
+    expect(
+      normalizeEpfContribution("est-a_2026-08", { month: "2026-08", archived: false }).archived
+    ).toBeUndefined();
   });
 });
 

@@ -5,12 +5,17 @@ import type {
   EpfContributionStatus,
 } from "@/shared/features/epf/types";
 import {
+  BACKFILL_ARCHIVED_REASON,
+  BACKFILL_DEMOTE_REASON,
+  BACKFILL_REFUSED_REASON,
   backfillRowPresentation,
   backfillSaveRows,
   backfillStatusLabel,
   clearSavedEdits,
+  contributionRemovalKind,
   mergeBackfillEdits,
   persistedAmountsDiffer,
+  resolveBackfillSaveStatus,
   statusForAppliedEdit,
   unsavedBackfillSummary,
   unsavedChangesPrompt,
@@ -157,6 +162,72 @@ describe("statusForAppliedEdit", () => {
   });
 });
 
+describe("resolveBackfillSaveStatus — SPENDLY-15", () => {
+  it("lets a new month become draft or confirmed", () => {
+    expect(resolveBackfillSaveStatus({ requested: "draft" })).toEqual({
+      ok: true,
+      status: "draft",
+    });
+    expect(resolveBackfillSaveStatus({ requested: "confirmed" })).toEqual({
+      ok: true,
+      status: "confirmed",
+    });
+  });
+
+  it("promotes a draft to confirmed and refuses any other landing", () => {
+    expect(
+      resolveBackfillSaveStatus({ existingStatus: "draft", requested: "confirmed" })
+    ).toEqual({ ok: true, status: "confirmed" });
+    expect(
+      resolveBackfillSaveStatus({ existingStatus: "draft", requested: "credited" })
+    ).toEqual({ ok: false, reason: BACKFILL_REFUSED_REASON });
+  });
+
+  it("refuses to demote a confirmed month to draft", () => {
+    expect(
+      resolveBackfillSaveStatus({ existingStatus: "confirmed", requested: "draft" })
+    ).toEqual({ ok: false, reason: BACKFILL_DEMOTE_REASON });
+  });
+
+  it("lets amount edits rewrite a confirmed month as confirmed", () => {
+    expect(
+      resolveBackfillSaveStatus({ existingStatus: "confirmed", requested: "confirmed" })
+    ).toEqual({ ok: true, status: "confirmed" });
+  });
+
+  it("refuses credited, expected, and other lifecycle rows", () => {
+    for (const status of ["expected", "credited", "partial", "missed", "reversed"] as const) {
+      expect(
+        resolveBackfillSaveStatus({ existingStatus: status, requested: "confirmed" })
+      ).toEqual({ ok: false, reason: BACKFILL_REFUSED_REASON });
+    }
+  });
+
+  it("refuses an archived month", () => {
+    expect(
+      resolveBackfillSaveStatus({
+        existingStatus: "confirmed",
+        archived: true,
+        requested: "confirmed",
+      })
+    ).toEqual({ ok: false, reason: BACKFILL_ARCHIVED_REASON });
+  });
+});
+
+describe("contributionRemovalKind — SPENDLY-15", () => {
+  it("hard-deletes drafts and archives everything else", () => {
+    expect(contributionRemovalKind({ status: "draft" })).toBe("delete");
+    expect(contributionRemovalKind({ status: "confirmed" })).toBe("archive");
+    expect(contributionRemovalKind({ status: "credited" })).toBe("archive");
+    expect(contributionRemovalKind({ status: "expected" })).toBe("archive");
+  });
+
+  it("does not touch a missing or already-archived row", () => {
+    expect(contributionRemovalKind(undefined)).toBe("missing");
+    expect(contributionRemovalKind({ status: "confirmed", archived: true })).toBe("missing");
+  });
+});
+
 describe("unsavedBackfillSummary", () => {
   it("is clean on a pristine screen", () => {
     const summary = unsavedBackfillSummary({ edits: new Map(), wage: "" });
@@ -277,6 +348,18 @@ describe("backfillSaveRows — SPENDLY-68", () => {
 
     expect(payload).toHaveLength(1);
     expect(payload[0].employeeShare).toBe(1287);
+  });
+
+  it("does not include an edit of a credited month — SPENDLY-15", () => {
+    const payload = backfillSaveRows({
+      rows: [row({ month: "2025-12", persisted: true, status: "credited" })],
+      edits: new Map([
+        ["2025-12", row({ month: "2025-12", persisted: true, status: "credited", wage: 1 })],
+      ]),
+      wage: 17494,
+      status: "confirmed",
+    });
+    expect(payload).toEqual([]);
   });
 
   it("skips empty suggestions when no wage is set", () => {

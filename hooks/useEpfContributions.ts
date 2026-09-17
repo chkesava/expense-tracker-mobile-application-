@@ -69,6 +69,10 @@ import {
 import { withoutUndefined } from "@/shared/utils/objects";
 import { chunk } from "@/shared/utils/chunk";
 import { EPF_BATCH_CHUNK_SIZE } from "@/shared/features/epf/data/epfBatchLimits";
+import {
+  contributionRemovalKind,
+  resolveBackfillSaveStatus,
+} from "@/shared/features/epf/utils/backfillDraft";
 
 
 export function useEpfContributions(
@@ -178,15 +182,35 @@ export function useEpfContributions(
       const results: EpfMonthSaveResult[] = [];
 
       for (const group of chunk(rows, EPF_BATCH_CHUNK_SIZE)) {
+        const accepted: Array<{
+          row: EpfBackfillRow;
+          status: EpfContributionStatus;
+          existing?: EpfContribution;
+        }> = [];
+        for (const row of group) {
+          const existing = byMonth.get(row.month);
+          const decision = resolveBackfillSaveStatus({
+            existingStatus: existing?.status,
+            archived: existing?.archived,
+            requested: opts.status,
+          });
+          if (!decision.ok) {
+            results.push({ month: row.month, outcome: "failed", reason: decision.reason });
+            continue;
+          }
+          accepted.push({ row, status: decision.status, existing });
+        }
+        if (accepted.length === 0) continue;
+
         try {
           const batch = writeBatch(db);
-          for (const row of group) {
+          for (const item of accepted) {
             const ref = doc(
               db,
               "users",
               uid,
               EPF_CONTRIBUTIONS_COLLECTION,
-              contributionDocId(establishmentId, row.month)
+              contributionDocId(establishmentId, item.row.month)
             );
             batch.set(
               ref,
@@ -195,12 +219,12 @@ export function useEpfContributions(
                 // `npm test` — an inline literal here is how SPENDLY-1's
                 // missing `expectedCreditFrom`/`expectedCreditTo` went
                 // unnoticed, since vitest never collects `hooks/**`.
-                ...contributionWritePayload(row, {
-                  status: opts.status,
+                ...contributionWritePayload(item.row, {
+                  status: item.status,
                   establishmentId,
                 }),
                 updatedAt: serverTimestamp(),
-                createdAt: byMonth.has(row.month) ? undefined : serverTimestamp(),
+                createdAt: item.existing ? undefined : serverTimestamp(),
               }),
               // Deterministic ids + merge: re-saving converges instead of duplicating.
               { merge: true }
@@ -210,18 +234,21 @@ export function useEpfContributions(
           // KAN-72: every month that moves money leaves an audit entry, in the
           // same batch as the write so the two cannot diverge. `from: "none"`
           // marks a row that did not exist before — scheduled generation.
-          for (const row of group) {
-            const existing = byMonth.get(row.month);
+          for (const item of accepted) {
             batch.set(
               doc(collection(db, "users", uid, EPF_CONTRIBUTION_EVENTS_COLLECTION)),
               withoutUndefined({
                 ...buildContributionEvent(
-                  { id: contributionDocId(establishmentId, row.month), establishmentId, month: row.month },
-                  existing?.status ?? "none",
-                  opts.status,
                   {
-                    actor: row.source === "simulated" ? "system" : "user",
-                    amount: row.epfCredit,
+                    id: contributionDocId(establishmentId, item.row.month),
+                    establishmentId,
+                    month: item.row.month,
+                  },
+                  item.existing?.status ?? "none",
+                  item.status,
+                  {
+                    actor: item.row.source === "simulated" ? "system" : "user",
+                    amount: item.row.epfCredit,
                   }
                 ),
                 at: serverTimestamp(),
@@ -232,12 +259,14 @@ export function useEpfContributions(
           const outcome = await commitWrite(() => batch.commit(), {
             label: "EPF contributions",
           });
-          for (const row of group) results.push({ month: row.month, outcome });
+          for (const item of accepted) {
+            results.push({ month: item.row.month, outcome });
+          }
         } catch (err) {
           logError("epfcontributions.savecontributions", err);
           const reason = friendlyErrorMessage(err, "It couldn't be saved.");
-          for (const row of group) {
-            results.push({ month: row.month, outcome: "failed", reason });
+          for (const item of accepted) {
+            results.push({ month: item.row.month, outcome: "failed", reason });
           }
         }
       }
@@ -380,20 +409,60 @@ export function useEpfContributions(
         return false;
       }
 
+      const current = byMonth.get(month);
+      const kind = contributionRemovalKind(current);
+      if (kind === "missing") {
+        toast.error("That month is not recorded yet");
+        return false;
+      }
+
+      const ref = doc(
+        db,
+        "users",
+        uid,
+        EPF_CONTRIBUTIONS_COLLECTION,
+        contributionDocId(establishmentId, month)
+      );
+
       try {
-        const outcome = await commitWrite(
-          () =>
-            deleteDoc(
-              doc(
-                db,
-                "users",
-                uid,
-                EPF_CONTRIBUTIONS_COLLECTION,
-                contributionDocId(establishmentId, month)
-              )
-            ),
-          { label: "EPF contribution" }
+        if (kind === "delete") {
+          const outcome = await commitWrite(() => deleteDoc(ref), {
+            label: "EPF contribution",
+          });
+          toast.success(writeSavedMessage(outcome, "Month removed"));
+          return true;
+        }
+
+        const batch = writeBatch(db);
+        batch.set(
+          ref,
+          {
+            archived: true,
+            statusReason: current?.statusReason ?? "Removed from backfill",
+            statusUpdatedAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
         );
+        batch.set(
+          doc(collection(db, "users", uid, EPF_CONTRIBUTION_EVENTS_COLLECTION)),
+          withoutUndefined({
+            ...buildContributionEvent(
+              current!,
+              current!.status,
+              current!.status,
+              {
+                actor: "user",
+                reason: "archived",
+                amount: current!.epfCredit,
+              }
+            ),
+            at: serverTimestamp(),
+          })
+        );
+        const outcome = await commitWrite(() => batch.commit(), {
+          label: "EPF contribution archive",
+        });
         toast.success(writeSavedMessage(outcome, "Month removed"));
         return true;
       } catch (err) {
@@ -402,7 +471,7 @@ export function useEpfContributions(
         return false;
       }
     },
-    [uid, establishmentId]
+    [uid, establishmentId, byMonth]
   );
 
   /**

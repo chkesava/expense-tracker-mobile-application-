@@ -167,6 +167,12 @@ export interface EpfContribution {
   statusReason?: string;
   /** When the status last changed. */
   statusUpdatedAt?: unknown;
+  /**
+   * Soft-delete from Backfill (SPENDLY-15). History stays on the document so
+   * balances and interest do not lose the month; the scheduler must not
+   * regenerate it (SPENDLY-19 leftover).
+   */
+  archived?: boolean;
   reference?: string;
   notes?: string;
   /** Required when an amount is zero — the ticket forbids silent blanks. */
