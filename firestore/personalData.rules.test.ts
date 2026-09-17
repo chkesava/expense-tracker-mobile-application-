@@ -12,6 +12,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  increment,
   orderBy,
   query,
   setDoc,
@@ -263,6 +264,22 @@ describe("personal tree", () => {
         cashBalance: -1,
       })
     );
+  });
+
+  it("owner can increment cashBalance without going negative", async () => {
+    const db = env.authenticatedContext(OWNER).firestore();
+    const ref = doc(db, "users", OWNER, "portfolioSettings", "config");
+    await assertSucceeds(setDoc(ref, { cashBalance: 5000, initialInvestmentAmount: 5000 }));
+    await assertSucceeds(
+      setDoc(ref, { cashBalance: increment(-310) }, { merge: true })
+    );
+  });
+
+  it("owner cannot increment cashBalance below zero", async () => {
+    const db = env.authenticatedContext(OWNER).firestore();
+    const ref = doc(db, "users", OWNER, "portfolioSettings", "config");
+    await assertSucceeds(setDoc(ref, { cashBalance: 50 }));
+    await assertFails(setDoc(ref, { cashBalance: increment(-100) }, { merge: true }));
   });
 
   it("owner writes a well-formed credit-card bill", async () => {

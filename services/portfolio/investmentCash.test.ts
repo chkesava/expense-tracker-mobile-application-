@@ -27,6 +27,7 @@ vi.mock("firebase/firestore", () => ({
     exists: () => settingsData !== null,
     data: () => settingsData ?? undefined,
   })),
+  getDocs: vi.fn(async () => ({ docs: [] })),
   increment: (n: number) => ({ __increment: n }),
   serverTimestamp: () => ({ __serverTimestamp: true }),
   setDoc: vi.fn(),

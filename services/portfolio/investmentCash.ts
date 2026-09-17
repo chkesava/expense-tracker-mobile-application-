@@ -21,6 +21,7 @@ import {
   collection,
   doc,
   getDoc,
+  getDocs,
   increment,
   serverTimestamp,
   setDoc,
@@ -32,8 +33,13 @@ import { commitWrite, type WriteOutcome } from "@/lib/firestoreWrite";
 import { newId } from "@/lib/id";
 import { isValidDateKey } from "@/shared/utils/dates";
 import { roundMoney } from "@/shared/utils/money";
+import {
+  canAfford,
+  computeInvestmentCashBalance,
+} from "@/shared/features/portfolio/utils/investmentCash";
 import type {
   Holding,
+  InvestmentCashBaseline,
   InvestmentCashEntry,
   InvestmentCashEntryType,
   InvestmentCashSource,
@@ -94,6 +100,15 @@ function signedDelta(input: Pick<InvestmentCashEntryInput, "amount" | "direction
   return input.direction === "credit" ? amount : -amount;
 }
 
+function cashBaselineFields(amount: number, now: Date): InvestmentCashBaseline {
+  return {
+    amount,
+    capturedAt: now.toISOString(),
+    capturedAtMs: now.getTime(),
+    reason: "Opening balance carried over when cash history started",
+  };
+}
+
 function buildEntryDoc(
   input: InvestmentCashEntryInput,
   correlationId: string
@@ -148,12 +163,7 @@ export async function ensureCashBaseline(
         ref,
         {
           cashBalance: amount,
-          cashBaseline: {
-            amount,
-            capturedAt: now.toISOString(),
-            capturedAtMs: now.getTime(),
-            reason: "Opening balance carried over when cash history started",
-          },
+          cashBaseline: cashBaselineFields(amount, now),
           updatedAt: serverTimestamp(),
         },
         { merge: true }
@@ -437,4 +447,271 @@ export async function reverseInvestmentCashEntry(
     },
     options.entryId ?? newId()
   );
+}
+
+export type MockTradeInput = {
+  holdingId: string;
+  quantity: number;
+  price: number;
+  fees?: number;
+  date: string;
+  /** Reused across retries so a double-submit cannot deduct twice. */
+  cashEntryId?: string;
+  transactionId?: string;
+};
+
+export type MockTradeResult = {
+  cashEntryId: string;
+  transactionId: string;
+  outcome: WriteOutcome;
+};
+
+function mockTradeCost(quantity: number, price: number, fees: number): number {
+  return roundMoney(quantity * price + fees);
+}
+
+function mockTradeProceeds(quantity: number, price: number, fees: number): number {
+  return roundMoney(quantity * price - fees);
+}
+
+function asCashEntry(
+  id: string,
+  data: Record<string, unknown>
+): InvestmentCashEntry {
+  return { id, ...data } as InvestmentCashEntry;
+}
+
+/**
+ * Authoritative cash for a mock trade: baseline + ledger, matching `usePortfolio`.
+ * Before the baseline exists the ledger is empty by construction, so the scalar
+ * is the only figure that is not double-counting.
+ */
+function ledgerCashForTrade(
+  settings: Record<string, unknown> | undefined,
+  entries: InvestmentCashEntry[]
+): number {
+  const baseline = settings?.cashBaseline as InvestmentCashBaseline | undefined;
+  if (!baseline) return roundMoney(Number(settings?.cashBalance ?? 0) || 0);
+  return computeInvestmentCashBalance(baseline, entries);
+}
+
+async function loadCashEntries(uid: string): Promise<InvestmentCashEntry[]> {
+  const db = requireDb();
+  const snapshot = await getDocs(
+    collection(db, "users", uid, INVESTMENT_CASH_COLLECTION)
+  );
+  return snapshot.docs.map((item) => asCashEntry(item.id, item.data()));
+}
+
+function settingsCacheWrite(
+  settings: Record<string, unknown> | undefined,
+  settingsExist: boolean,
+  delta: number,
+  now: Date
+): Record<string, unknown> {
+  const capturing = !settings?.cashBaseline;
+  const payload: Record<string, unknown> = {
+    updatedAt: serverTimestamp(),
+  };
+  if (capturing) {
+    const opening = roundMoney(Number(settings?.cashBalance ?? 0) || 0);
+    payload.cashBaseline = cashBaselineFields(opening, now);
+    if (!settingsExist) {
+      payload.cashBalance = roundMoney(opening + delta);
+      return payload;
+    }
+  }
+  payload.cashBalance = increment(delta);
+  return payload;
+}
+
+/**
+ * Mock market buy. One batch: holding qty/avg, PURCHASE ledger row,
+ * `portfolioTransactions`, and `cashBalance` as `increment(-cost)` (or an
+ * absolute write only when the settings doc does not exist yet).
+ *
+ * Gates on the ledger fold, not the scalar — a concurrent deposit that already
+ * committed its ledger row is visible here, and a concurrent deposit that only
+ * updated the cache cannot be clobbered because we never overwrite the scalar.
+ */
+export async function executeMockBuy(
+  uid: string,
+  input: MockTradeInput
+): Promise<MockTradeResult> {
+  const quantity = Number(input.quantity);
+  const price = Number(input.price);
+  const fees = Number(input.fees ?? 0);
+  if (!(quantity > 0) || !(price > 0) || fees < 0) {
+    throw new Error("Buy needs a positive quantity and price");
+  }
+  if (!isValidDateKey(input.date)) throw new Error("Invalid trade date");
+
+  const db = requireDb();
+  const owner = requireUid(uid);
+  const cost = mockTradeCost(quantity, price, fees);
+  const holdingRef = doc(db, "users", owner, "holdings", input.holdingId);
+  const settingsRef = doc(db, "users", owner, "portfolioSettings", SETTINGS_DOC_ID);
+  const cashEntryId = input.cashEntryId ?? newId();
+  const transactionId = input.transactionId ?? newId();
+
+  const [holdingSnap, settingsSnap, cashEntries] = await Promise.all([
+    getDoc(holdingRef),
+    getDoc(settingsRef),
+    loadCashEntries(owner),
+  ]);
+  if (!holdingSnap.exists()) throw new Error("Holding not found");
+
+  const holding = holdingSnap.data() as Omit<Holding, "id">;
+  const settings = settingsSnap.data();
+  const available = ledgerCashForTrade(settings, cashEntries);
+  if (!canAfford(available, cost).ok) {
+    throw new Error("Insufficient cash balance");
+  }
+
+  const existingQuantity = Number(holding.quantity) || 0;
+  const nextQuantity = roundMoney(existingQuantity + quantity);
+  const averageBuyPrice = roundMoney(
+    (Number(holding.averageBuyPrice) * existingQuantity + cost) / nextQuantity
+  );
+
+  const outcome = await commitWrite(() => {
+    const batch = writeBatch(db);
+    batch.update(holdingRef, {
+      quantity: nextQuantity,
+      averageBuyPrice,
+      updatedAt: serverTimestamp(),
+    });
+    batch.set(
+      doc(db, "users", owner, INVESTMENT_CASH_COLLECTION, cashEntryId),
+      buildEntryDoc(
+        {
+          type: "PURCHASE",
+          amount: cost,
+          direction: "debit",
+          date: input.date,
+          holdingId: input.holdingId,
+          symbol: holding.symbol,
+          quantity,
+          price,
+          note: `Bought ${quantity} ${holding.symbol}`,
+          source: "app",
+        },
+        cashEntryId
+      )
+    );
+    batch.set(
+      doc(db, "users", owner, "portfolioTransactions", transactionId),
+      stripUndefined({
+        holdingId: input.holdingId,
+        symbol: holding.symbol,
+        type: "BUY",
+        quantity,
+        price,
+        fees,
+        date: input.date,
+        orderStatus: "executed",
+        createdAt: serverTimestamp(),
+      })
+    );
+    batch.set(
+      settingsRef,
+      settingsCacheWrite(settings, settingsSnap.exists(), -cost, new Date()),
+      { merge: true }
+    );
+    return batch.commit();
+  }, { label: "mock buy" });
+
+  return { cashEntryId, transactionId, outcome };
+}
+
+/**
+ * Mock market sell. Same batch shape as the buy: ledger is the cash authority,
+ * scalar is `increment(+proceeds)`, split-to-zero deletes the holding.
+ */
+export async function executeMockSell(
+  uid: string,
+  input: MockTradeInput
+): Promise<MockTradeResult> {
+  const quantity = Number(input.quantity);
+  const price = Number(input.price);
+  const fees = Number(input.fees ?? 0);
+  if (!(quantity > 0) || !(price > 0) || fees < 0) {
+    throw new Error("Sell needs a positive quantity and price");
+  }
+  const proceeds = mockTradeProceeds(quantity, price, fees);
+  if (proceeds < 0) throw new Error("Fees cannot exceed sale proceeds");
+  if (!isValidDateKey(input.date)) throw new Error("Invalid trade date");
+
+  const db = requireDb();
+  const owner = requireUid(uid);
+  const holdingRef = doc(db, "users", owner, "holdings", input.holdingId);
+  const settingsRef = doc(db, "users", owner, "portfolioSettings", SETTINGS_DOC_ID);
+  const cashEntryId = input.cashEntryId ?? newId();
+  const transactionId = input.transactionId ?? newId();
+
+  const holdingSnap = await getDoc(holdingRef);
+  if (!holdingSnap.exists()) throw new Error("Holding not found");
+  const holding = holdingSnap.data() as Omit<Holding, "id">;
+  const existingQuantity = Number(holding.quantity) || 0;
+  if (existingQuantity < quantity) throw new Error("Insufficient holdings quantity");
+
+  const settingsSnap = await getDoc(settingsRef);
+  const nextQuantity = roundMoney(existingQuantity - quantity);
+
+  const outcome = await commitWrite(() => {
+    const batch = writeBatch(db);
+    if (nextQuantity === 0) {
+      batch.delete(holdingRef);
+    } else {
+      batch.update(holdingRef, {
+        quantity: nextQuantity,
+        updatedAt: serverTimestamp(),
+      });
+    }
+    batch.set(
+      doc(db, "users", owner, INVESTMENT_CASH_COLLECTION, cashEntryId),
+      buildEntryDoc(
+        {
+          type: "SALE",
+          amount: proceeds,
+          direction: "credit",
+          date: input.date,
+          holdingId: input.holdingId,
+          symbol: holding.symbol,
+          quantity,
+          price,
+          note: `Sold ${quantity} ${holding.symbol}`,
+          source: "app",
+        },
+        cashEntryId
+      )
+    );
+    batch.set(
+      doc(db, "users", owner, "portfolioTransactions", transactionId),
+      stripUndefined({
+        holdingId: input.holdingId,
+        symbol: holding.symbol,
+        type: "SELL",
+        quantity,
+        price,
+        fees,
+        date: input.date,
+        orderStatus: "executed",
+        createdAt: serverTimestamp(),
+      })
+    );
+    batch.set(
+      settingsRef,
+      settingsCacheWrite(
+        settingsSnap.data(),
+        settingsSnap.exists(),
+        proceeds,
+        new Date()
+      ),
+      { merge: true }
+    );
+    return batch.commit();
+  }, { label: "mock sell" });
+
+  return { cashEntryId, transactionId, outcome };
 }
