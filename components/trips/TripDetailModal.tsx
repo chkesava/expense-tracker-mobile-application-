@@ -26,6 +26,7 @@ import { useTrips } from "@/hooks/useTrips";
 import type { Trip } from "@/shared/types/trip";
 import {
   computeTripCategoryBreakdown,
+  computeTripSpend,
   getTripDaysInfo,
   getTripStatus,
   isTripOverBudget,
@@ -62,9 +63,12 @@ export function TripDetailModal({ visible, trip, onClose }: TripDetailModalProps
   const today = new Date().toISOString().split("T")[0];
   const status = getTripStatus(trip, today);
   const daysInfo = getTripDaysInfo(trip, today);
-  const overBudget = isTripOverBudget(trip);
+  const spent = trip.id
+    ? computeTripSpend(expenses, trip.id)
+    : trip.spentAmount || 0;
+  const overBudget = isTripOverBudget(trip, expenses);
   const spentPercent = trip.totalBudget > 0
-    ? Math.min(100, Math.round(((trip.spentAmount || 0) / trip.totalBudget) * 100))
+    ? Math.min(100, Math.round((spent / trip.totalBudget) * 100))
     : 0;
 
   const statusColors: Record<string, string> = {
@@ -231,7 +235,7 @@ export function TripDetailModal({ visible, trip, onClose }: TripDetailModalProps
                     SPENT
                   </Text>
                   <Amount
-                    value={trip.spentAmount || 0}
+                    value={spent}
                     currency={displayCurrency}
                     ghostable
                     style={{
@@ -288,7 +292,7 @@ export function TripDetailModal({ visible, trip, onClose }: TripDetailModalProps
                 }}
               >
                 {spentPercent}% used · {displayCurrency}{" "}
-                {Math.max(0, trip.totalBudget - (trip.spentAmount || 0)).toLocaleString()} remaining
+                {Math.max(0, trip.totalBudget - spent).toLocaleString()} remaining
               </Text>
             </View>
 

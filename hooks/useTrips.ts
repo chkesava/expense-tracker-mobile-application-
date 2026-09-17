@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   collection,
-  deleteDoc,
   doc,
+  increment,
   onSnapshot,
   orderBy,
   query,
@@ -186,7 +186,7 @@ export function useTrips(options?: { enabled?: boolean }) {
       const batch = writeBatch(db);
       batch.update(doc(db, "users", uid, "expenses", expenseId), { tripId });
       batch.update(doc(db, "users", uid, "trips", tripId), {
-        spentAmount: (trip.spentAmount || 0) + expenseAmount,
+        spentAmount: increment(expenseAmount),
       });
 
       await commitWrite(() => batch.commit(), { label: "trip link" });
@@ -217,7 +217,7 @@ export function useTrips(options?: { enabled?: boolean }) {
         tripId: null,
       });
       batch.update(doc(db, "users", uid, "trips", tripId), {
-        spentAmount: Math.max(0, (trip.spentAmount || 0) - expenseAmount),
+        spentAmount: increment(-expenseAmount),
       });
 
       await commitWrite(() => batch.commit(), { label: "trip unlink" });

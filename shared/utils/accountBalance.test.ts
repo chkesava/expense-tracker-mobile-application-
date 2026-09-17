@@ -492,6 +492,12 @@ describe("floating-point safety in money math", () => {
     // After deletion the app simply stops passing the deleted row in.
     const balanceAfterDelete = computeBankBalance(withOpening, [kept], []);
     expect(balanceAfterDelete).toBe(80);
+
+    const stillPresent = computeBankBalance(withOpening, [
+      kept,
+      { ...deleted, deletedAt: "2026-09-17T00:00:00.000Z" },
+    ], []);
+    expect(stillPresent).toBe(80);
   });
 
   it("keeps a credit card cycle marked paid when float noise would otherwise leave a residue", () => {

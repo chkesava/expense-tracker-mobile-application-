@@ -318,6 +318,15 @@ export interface Expense {
   /** Present when this expense was imported from SMS (SPENDLY-41). */
   smsFingerprint?: string;
   smsExternalRef?: string;
+  /**
+   * Soft-delete (SPENDLY-38). A set value means the row is ignored by
+   * balances, lists, trips, and auto-bills but kept for the audit trail.
+   * ISO string, same shape as `AccountPayment.voidedAt`.
+   */
+  deletedAt?: string;
+  deletedBy?: string;
+  deletedReason?: string;
+  updatedAt?: unknown;
   createdAt: unknown;
 }
 
@@ -332,5 +341,10 @@ export interface Income {
   time?: string;
   smsFingerprint?: string;
   smsExternalRef?: string;
+  /** Soft-delete (SPENDLY-38). Same meaning as `Expense.deletedAt`. */
+  deletedAt?: string;
+  deletedBy?: string;
+  deletedReason?: string;
+  updatedAt?: unknown;
   createdAt: unknown;
 }

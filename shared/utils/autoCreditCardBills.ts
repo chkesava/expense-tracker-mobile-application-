@@ -16,6 +16,7 @@ import {
 } from "./billingCycle";
 import { daysBetweenDateKeys } from "./creditCardBillStatus";
 import { parseLocalDate, shiftDateKey, toLocalDateKey } from "./dates";
+import { isActiveLedgerRow } from "./ledgerRow";
 
 const AUTO_BILL_MIN_DUE_RATE = 0.05;
 export const AUTO_CREDIT_CARD_BILL_NOTE = "Auto-created from cycle spend";
@@ -124,6 +125,7 @@ export function previewClosedCycleCreditCardBill(
   const statementAmount = roundMoney(
     expenses
       .filter((expense) => {
+        if (!isActiveLedgerRow(expense)) return false;
         if (expense.accountId !== account.id) return false;
         return isDateKeyInInclusiveRange(expense.date, cycleStart, cycleEnd);
       })

@@ -230,6 +230,12 @@ service cloud.firestore {
         allow read, delete: if isOwner(uid);
         allow create, update: if isOwner(uid) && personalMoneyWellFormed();
       }
+      // SPENDLY-38: append-only audit of journal edits/soft-deletes.
+      // Nested expenseRevisions are denied by the personal wildcard.
+      match /ledgerEvents/{id} {
+        allow read, create: if isOwner(uid);
+        allow update, delete: if false;
+      }
       match /accountEntries/{id} {
         allow read, delete: if isOwner(uid);
         allow create, update: if isOwner(uid) && personalMoneyWellFormed();

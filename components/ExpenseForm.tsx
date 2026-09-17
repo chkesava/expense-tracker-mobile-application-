@@ -8,11 +8,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import {
-  doc,
-  updateDoc,
-} from "firebase/firestore";
-import { logError } from "@/lib/errors";
+import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { haptic } from "@/lib/haptics";
 import {
   ArrowDownLeft,
@@ -50,9 +46,13 @@ import { useIncomes } from "@/hooks/useIncomes";
 import { useReceivables } from "@/hooks/useReceivables";
 import { useSpaces } from "@/hooks/useSpaces";
 import { getFirestoreDb } from "@/lib/firebase";
-import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
+import { writeSavedMessage } from "@/lib/firestoreWrite";
 import { toast } from "@/lib/toast";
 import { createExpense, createIncome } from "@/services/ledger/createLedgerTransaction";
+import {
+  updateExpense,
+  updateIncome,
+} from "@/services/ledger/mutateLedgerTransaction";
 import { useAuth } from "@/providers/AuthProvider";
 import { useCelebration } from "@/providers/CelebrationProvider";
 import { useSettings } from "@/providers/SettingsProvider";
@@ -407,15 +407,12 @@ export function ExpenseForm({
         };
 
         if (editingExpense) {
-          const outcome = await commitWrite(
-            () =>
-              updateDoc(
-                doc(db, "users", uid, "expenses", editingExpense.id!.trim()),
-                // An edit must be able to clear the space, which needs an explicit null.
-                { ...payload, spaceId: spaceId || null }
-              ),
-            { label: "expense" }
-          );
+          const outcome = (
+            await updateExpense(uid, editingExpense.id!.trim(), payload, {
+              lockPastMonths: settings.lockPastMonths,
+              timezone: settings.timezone,
+            })
+          ).outcome;
           toast.success(writeSavedMessage(outcome, "Expense updated"));
         } else {
           const { outcome } = await createExpense(uid, payload);
@@ -444,14 +441,12 @@ export function ExpenseForm({
         };
 
         if (editingIncome) {
-          const outcome = await commitWrite(
-            () =>
-              updateDoc(
-                doc(db, "users", uid, "incomes", editingIncome.id!.trim()),
-                payload
-              ),
-            { label: "income" }
-          );
+          const outcome = (
+            await updateIncome(uid, editingIncome.id!.trim(), payload, {
+              lockPastMonths: settings.lockPastMonths,
+              timezone: settings.timezone,
+            })
+          ).outcome;
           toast.success(writeSavedMessage(outcome, "Income updated"));
         } else {
           const { outcome } = await createIncome(uid, payload);
@@ -462,7 +457,7 @@ export function ExpenseForm({
       onSuccess?.();
     } catch (err) {
       logError("expenseForm.expenseformSubmission", err);
-      toast.error("Failed to save transaction");
+      toast.error(friendlyErrorMessage(err, "Failed to save transaction"));
     } finally {
       isSubmittingRef.current = false;
       setIsSubmitting(false);

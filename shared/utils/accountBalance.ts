@@ -19,6 +19,7 @@ import {
   type LedgerBillSlice,
 } from "./creditCardLedger";
 import { parseLocalDate, todayDateKey } from "./dates";
+import { isActiveLedgerRow } from "./ledgerRow";
 import { roundMoney } from "./money";
 
 export { toLocalDateKey } from "./dates";
@@ -127,10 +128,20 @@ export function computeBankBalance(
     todayDateKey()
   );
   const totalExpenses = expenses
-    .filter((e) => e.accountId === account.id && isOnOrAfter(e.date, baseline))
+    .filter(
+      (e) =>
+        isActiveLedgerRow(e) &&
+        e.accountId === account.id &&
+        isOnOrAfter(e.date, baseline)
+    )
     .reduce((sum, e) => sum + e.amount, 0);
   const totalIncomes = incomes
-    .filter((i) => i.accountId === account.id && isOnOrAfter(i.date, baseline))
+    .filter(
+      (i) =>
+        isActiveLedgerRow(i) &&
+        i.accountId === account.id &&
+        isOnOrAfter(i.date, baseline)
+    )
     .reduce((sum, i) => sum + i.amount, 0);
   const billPaymentsOut = paymentsFromAccount(account.id, payments)
     .filter((p) => isOnOrAfter(p.date, baseline))
@@ -367,8 +378,12 @@ export function buildAccountActivities(
   // header balance (via computeBankBalance), not whether history is listed.
   const kind = getAccountKind(typeName);
 
-  const accountExpenses = expenses.filter((e) => e.accountId === account.id);
-  const accountIncomes = incomes.filter((i) => i.accountId === account.id);
+  const accountExpenses = expenses.filter(
+    (e) => isActiveLedgerRow(e) && e.accountId === account.id
+  );
+  const accountIncomes = incomes.filter(
+    (i) => isActiveLedgerRow(i) && i.accountId === account.id
+  );
   const accountEntries = entriesForAccount(account.id, entries);
 
   const outgoingPayments = paymentsFromAccount(account.id, payments);

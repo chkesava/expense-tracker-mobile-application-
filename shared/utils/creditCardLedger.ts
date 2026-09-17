@@ -5,6 +5,7 @@ import {
   OPEN_BILL_STATUSES,
 } from "../types/creditCardBill";
 import { AUTO_CREDIT_CARD_BILL_NOTE } from "./autoCreditCardBills";
+import { isActiveLedgerRow } from "./ledgerRow";
 import { roundMoney } from "./money";
 import {
   billingCycleEndingOn,
@@ -270,7 +271,7 @@ export function buildCreditCardLedger(
   const limit = Math.max(0, account.creditLimit ?? 0);
 
   const cardExpenses = input.expenses.filter(
-    (expense) => expense.accountId === account.id
+    (expense) => isActiveLedgerRow(expense) && expense.accountId === account.id
   );
   // A voided credit is kept on file but must not settle anything — corrections
   // are reversals here, never deletes, so the row outlives the money it moved.

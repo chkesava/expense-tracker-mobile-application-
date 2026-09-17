@@ -82,6 +82,19 @@ describe("tripCalculations utilities", () => {
       const total = computeTripSpend(mockExpenses, "non-existent-trip");
       expect(total).toBe(0);
     });
+
+    it("ignores soft-deleted expenses", () => {
+      const withDeleted: Expense[] = [
+        ...mockExpenses,
+        {
+          ...mockExpenses[0],
+          id: "e-deleted",
+          amount: 9000,
+          deletedAt: "2026-09-17T00:00:00.000Z",
+        },
+      ];
+      expect(computeTripSpend(withDeleted, "trip-1")).toBe(9500);
+    });
   });
 
   describe("computeTripCategoryBreakdown", () => {

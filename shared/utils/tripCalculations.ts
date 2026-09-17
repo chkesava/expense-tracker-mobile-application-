@@ -1,11 +1,13 @@
 import type { Expense } from "@/shared/types/expense";
-import type { Trip, TripCategoryBudget } from "@/shared/types/trip";
+import type { Trip } from "@/shared/types/trip";
+import { isActiveLedgerRow } from "./ledgerRow";
 
 /**
  * Sums all expenses linked to a specific trip.
  */
 export function computeTripSpend(expenses: Expense[], tripId: string): number {
   return expenses.reduce((sum, e) => {
+    if (!isActiveLedgerRow(e)) return sum;
     if (e.tripId === tripId) return sum + (Number(e.amount) || 0);
     return sum;
   }, 0);
@@ -26,7 +28,9 @@ export function computeTripCategoryBreakdown(
   expenses: Expense[],
   trip: Trip
 ): TripCategoryBreakdown[] {
-  const tripExpenses = expenses.filter((e) => e.tripId === trip.id);
+  const tripExpenses = expenses.filter(
+    (e) => isActiveLedgerRow(e) && e.tripId === trip.id
+  );
 
   const spendByCategory = new Map<string, number>();
   for (const expense of tripExpenses) {
@@ -81,8 +85,12 @@ export function getTripStatus(trip: Trip, todayStr?: string): TripDynamicStatus 
 /**
  * Checks if a trip has exceeded its total budget.
  */
-export function isTripOverBudget(trip: Trip): boolean {
-  return (trip.spentAmount || 0) > (trip.totalBudget || 0);
+export function isTripOverBudget(trip: Trip, expenses?: Expense[]): boolean {
+  const spent =
+    expenses && trip.id
+      ? computeTripSpend(expenses, trip.id)
+      : trip.spentAmount || 0;
+  return spent > (trip.totalBudget || 0);
 }
 
 /**
@@ -120,7 +128,11 @@ export interface TripAggregateSummary {
 /**
  * Aggregates trip counts and total active spend across all trips.
  */
-export function computeTripSummary(trips: Trip[], todayStr?: string): TripAggregateSummary {
+export function computeTripSummary(
+  trips: Trip[],
+  todayStr?: string,
+  expenses?: Expense[]
+): TripAggregateSummary {
   let activeCount = 0;
   let upcomingCount = 0;
   let completedCount = 0;
@@ -128,9 +140,13 @@ export function computeTripSummary(trips: Trip[], todayStr?: string): TripAggreg
 
   for (const trip of trips) {
     const status = getTripStatus(trip, todayStr);
+    const spent =
+      expenses && trip.id
+        ? computeTripSpend(expenses, trip.id)
+        : trip.spentAmount || 0;
     if (status === "active") {
       activeCount++;
-      totalActiveSpend += trip.spentAmount || 0;
+      totalActiveSpend += spent;
     } else if (status === "upcoming") {
       upcomingCount++;
     } else {

@@ -27,6 +27,7 @@ import { ErrorState } from "@/components/common/ErrorState";
 import { SearchBar } from "@/components/common/SearchBar";
 import { Skeleton } from "@/components/common/Skeleton";
 import { ExpenseList } from "@/components/ExpenseList";
+import { LedgerAuditList } from "@/components/ledger/LedgerAuditList";
 import { PageHeader, type PageHeaderTab } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { useAccounts } from "@/hooks/useAccounts";
@@ -174,7 +175,8 @@ export default function LedgerScreen() {
   ];
 
   const isExpenseListTab =
-    ledgerTab === "expenses" && (expensesTab === "history" || expensesTab === "income");
+    ledgerTab === "expenses" &&
+    (expensesTab === "history" || expensesTab === "income" || expensesTab === "audit");
   const isBorrowingsTab = ledgerTab === "borrowings";
 
   const pageHeader = (
@@ -337,18 +339,11 @@ export default function LedgerScreen() {
             </View>
           )}
 
-          {expensesTab === "audit" && (
-            <EmptyState
-              illustration="search"
-              title="Audit Trail Clean"
-              description="Realtime audit trail and transaction history logs will appear here as entries are modified."
-              primaryAction={{
-                label: "View Journal",
-                onPress: () => setExpensesTab("history"),
-              }}
-              tip="All modifications, deletions, and balance adjustments are logged with timestamps for security."
-            />
-          )}
+          {expensesTab === "audit" ? (
+            <View style={{ flex: 1 }}>
+              <LedgerAuditList />
+            </View>
+          ) : null}
 
           {expensesTab === "data" && (
             <EmptyState
