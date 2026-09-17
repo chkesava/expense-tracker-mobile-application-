@@ -114,14 +114,25 @@ jobs:
 
       # Dry-run first so a compiler `[W]` fails the job before anything is
       # uploaded. `firebase deploy` itself treats warnings as non-fatal.
+      # The GitHub SA is App Distribution + Datastore, not Firebase Rules
+      # Admin, so `:test` 403s. On dry-run that is a leftover, not a fail:
+      # the emulator job already compiled the rules. A real upload still
+      # fails with the IAM message until those roles are granted.
       - name: Compile rules (dry-run)
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/service-account.json
         run: |
           set -euo pipefail
+          set +e
           firebase deploy --only firestore:rules --project "$FIREBASE_PROJECT" --non-interactive --dry-run \
             2>&1 | tee "${{ runner.temp }}/rules-dry-run.log"
-          node scripts/firestoreRulesCi.js warn --log-file "${{ runner.temp }}/rules-dry-run.log"
+          status=${PIPESTATUS[0]}
+          set -e
+          if [ "$status" -eq 0 ]; then
+            node scripts/firestoreRulesCi.js warn --log-file "${{ runner.temp }}/rules-dry-run.log"
+          else
+            node scripts/firestoreRulesCi.js explain-iam --allow-dry-run-iam --log-file "${{ runner.temp }}/rules-dry-run.log"
+          fi
 
       - name: Deploy Firestore rules
         if: ${{ inputs.dry_run == false }}
@@ -129,9 +140,16 @@ jobs:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/service-account.json
         run: |
           set -euo pipefail
+          set +e
           firebase deploy --only firestore:rules --project "$FIREBASE_PROJECT" --non-interactive \
             2>&1 | tee "${{ runner.temp }}/rules-deploy.log"
-          node scripts/firestoreRulesCi.js warn --log-file "${{ runner.temp }}/rules-deploy.log"
+          status=${PIPESTATUS[0]}
+          set -e
+          if [ "$status" -eq 0 ]; then
+            node scripts/firestoreRulesCi.js warn --log-file "${{ runner.temp }}/rules-deploy.log"
+          else
+            node scripts/firestoreRulesCi.js explain-iam --log-file "${{ runner.temp }}/rules-deploy.log"
+          fi
 
       - name: Optionally deploy indexes
         if: ${{ inputs.deploy_indexes }}
@@ -162,8 +180,9 @@ jobs:
             echo "- Dry-run: **${{ inputs.dry_run }}**"
             echo "- Indexes: **${{ inputs.deploy_indexes }}**"
             echo "- Project: \`$FIREBASE_PROJECT\`"
-            echo "- Compiler warnings: treated as failure (\`[W]\`)."
+            echo "- Compiler warnings: treated as failure (\`[W]\`) when remote compile is allowed."
             echo "- Service Usage probe: skipped (API already enabled; GitHub SA lacks serviceusage.services.get)."
+            echo "- Remote :test 403 on dry-run: leftover IAM (\`roles/firebaserules.admin\`), emulator suite still gates compile."
             echo "- Secrets used: FIREBASE_SERVICE_ACCOUNT (not available to pull_request)."
           } >> "$GITHUB_STEP_SUMMARY"
 

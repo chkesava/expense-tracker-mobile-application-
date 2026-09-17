@@ -135,11 +135,13 @@ Preferred: GitHub → Actions →
 → Run workflow on `main`.
 
 - Leave **dry_run** on for a compiler preview. Uncheck it to upload. A
-  compiler warning (`[W]`) fails the job; the workflow dry-runs first so a
-  warning cannot reach production. The Action seeds the Firebase CLI's local
-  "API already enabled" cache before `firebase deploy`, because the GitHub
-  service account is denied `serviceusage.services.get` and that probe 403s
-  even though Firestore is already on.
+  compiler warning (`[W]`) fails the job when remote compile is allowed. The
+  Action seeds the Firebase CLI's local "API already enabled" cache before
+  `firebase deploy`, because the GitHub service account is denied
+  `serviceusage.services.get`. The same account is App Distribution +
+  Datastore, not **Firebase Rules Admin**, so `:test` 403s: dry-run still
+  passes (emulator suite compiled the rules); a real upload fails until that
+  role is granted.
 - Leave **deploy_indexes** off unless live indexes have been dumped and
   copied into `firestore.indexes.json`. `firebase deploy --only firestore:indexes`
   **deletes live indexes that are not in the file**. The job dumps live

@@ -238,6 +238,8 @@ Google Cloud Console → IAM & Admin → Service Accounts → create one for CI,
 
 - `Firebase App Distribution Admin` (upload builds)
 - `Cloud Datastore User` (write the release doc)
+- `Firebase Rules Admin` *(Deploy Firestore rules Action)* — compile (`:test`) and upload `firestore.rules`
+- `Service Usage Viewer` *(optional)* — `firebase deploy` probes this; the rules workflow seeds the CLI cache instead
 - `Storage Admin` *(optional)* — only if you later enable Firebase Storage
 
 Create a JSON key and paste the whole file into `FIREBASE_SERVICE_ACCOUNT`. Do not reuse an Owner-level key.

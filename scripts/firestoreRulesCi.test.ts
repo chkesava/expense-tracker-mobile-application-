@@ -8,6 +8,7 @@ const require = createRequire(import.meta.url);
 const {
   assertIndexDeploySafe,
   assertNoRulesCompilerWarnings,
+  classifyFirebaseDeployFailure,
   diffIndexes,
   diffRulesSource,
   extractJsonObject,
@@ -58,6 +59,28 @@ describe("seedFirebaseToolsApiEnablementCache", () => {
     const written = seedFirebaseToolsApiEnablementCache("expenseapp-27f94", file);
     const parsed = JSON.parse(fs.readFileSync(written, "utf8"));
     expect(parsed.apiEnablementCache["expenseapp-27f94"]["firestore.googleapis.com"]).toBe(true);
+  });
+});
+
+describe("classifyFirebaseDeployFailure", () => {
+  it("recognizes the Service Usage get-service 403", () => {
+    expect(
+      classifyFirebaseDeployFailure(
+        "Error: Request to https://serviceusage.googleapis.com/v1/projects/expenseapp-27f94/services/firestore.googleapis.com had HTTP Error: 403, Permission denied to get service [firestore.googleapis.com]"
+      )
+    ).toBe("serviceusage");
+  });
+
+  it("recognizes the Rules :test 403", () => {
+    expect(
+      classifyFirebaseDeployFailure(
+        "Error: Request to https://firebaserules.googleapis.com/v1/projects/expenseapp-27f94:test had HTTP Error: 403, The caller does not have permission"
+      )
+    ).toBe("rules-iam");
+  });
+
+  it("returns null for a compiler warning that is not IAM", () => {
+    expect(classifyFirebaseDeployFailure("[W] 44:5 - Unused function isSuperAdmin.")).toBeNull();
   });
 });
 
