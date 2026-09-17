@@ -86,7 +86,6 @@ export function useVaults(options?: { enabled?: boolean }) {
       description?: string;
       budget: number;
       currency?: string;
-      memberIds?: string[];
       themeColor?: string;
     }) => {
       const db = getFirestoreDb();
@@ -101,7 +100,7 @@ export function useVaults(options?: { enabled?: boolean }) {
           description: params.description?.trim() || "",
           budget: params.budget,
           currency: params.currency || "INR",
-          memberIds: Array.from(new Set([uid, ...(params.memberIds || [])])),
+          memberIds: [uid],
           ownerId: uid,
           themeColor: params.themeColor || "#6366F1",
           createdAt: serverTimestamp(),

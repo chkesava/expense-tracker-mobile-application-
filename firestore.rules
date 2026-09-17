@@ -80,29 +80,64 @@ service cloud.firestore {
               || request.auth.uid in resource.data.memberIds);
       }
 
-      // Membership/ownership are only ever set by the owner. Without this, any
-      // member could rewrite ownerId/memberIds on a plain update and hijack or
-      // lock others out of the vault — the app UI never does this, but nothing
-      // stopped a direct Firestore write from doing it.
-      function keepsOwnershipStable() {
-        return request.resource.data.ownerId == resource.data.ownerId
-          && (request.resource.data.memberIds == resource.data.memberIds
-              || request.auth.uid == resource.data.ownerId);
+      function isVaultOwner() {
+        return signedIn() && resource.data.ownerId == request.auth.uid;
       }
 
-      allow read, delete: if isVaultMember();
-      allow update: if isVaultMember() && keepsOwnershipStable();
-      allow create: if signedIn()
-        && request.resource.data.ownerId == request.auth.uid;
+      // Membership/ownership are not client-writable after create. Without
+      // this, a member could rewrite ownerId/memberIds, and an owner could
+      // push an unsolicited vault into anyone's list. Adding people later
+      // needs an invite/accept flow (SPENDLY-31 leftover).
+      function keepsOwnershipStable() {
+        return request.resource.data.ownerId == resource.data.ownerId
+          && request.resource.data.memberIds == resource.data.memberIds;
+      }
+
+      function createMembershipSelfOnly() {
+        return request.resource.data.ownerId == request.auth.uid
+          && request.resource.data.memberIds is list
+          && request.resource.data.memberIds.size() == 1
+          && request.resource.data.memberIds[0] == request.auth.uid;
+      }
+
+      allow read: if isVaultMember();
+      allow delete: if isVaultOwner();
+      allow update: if isVaultOwner() && keepsOwnershipStable();
+      allow create: if signedIn() && createMembershipSelfOnly();
 
       match /expenses/{expenseId} {
         function parentVault() {
           return get(/databases/$(database)/documents/vaults/$(vaultId)).data;
         }
 
-        allow read, write: if signedIn()
-          && (parentVault().ownerId == request.auth.uid
-              || request.auth.uid in parentVault().memberIds);
+        function isParentMember() {
+          return signedIn()
+            && (parentVault().ownerId == request.auth.uid
+                || request.auth.uid in parentVault().memberIds);
+        }
+
+        // The app stores the payer on `createdBy` (not `paidBy`). Amounts are
+        // always positive; deposit vs withdrawal is `type`.
+        function expenseWellFormed() {
+          return request.resource.data.amount is number
+            && request.resource.data.amount > 0
+            && request.resource.data.createdBy == request.auth.uid
+            && request.resource.data.type in ['deposit', 'withdrawal'];
+        }
+
+        function canMutateExpense() {
+          return resource.data.createdBy == request.auth.uid
+            || parentVault().ownerId == request.auth.uid;
+        }
+
+        allow read: if isParentMember();
+        allow create: if isParentMember() && expenseWellFormed();
+        allow update: if isParentMember()
+          && canMutateExpense()
+          && request.resource.data.amount is number
+          && request.resource.data.amount > 0
+          && request.resource.data.createdBy == resource.data.createdBy;
+        allow delete: if isParentMember() && canMutateExpense();
       }
     }
 

@@ -323,7 +323,7 @@ export function VaultDetailModal({
                                   : theme.colors.destructive,
                             }}
                           />
-                          {e.id && (
+                          {e.id && (isOwner || e.createdBy === user?.uid) ? (
                             <Pressable
                               onPress={() => deleteVaultExpense(e.id!)}
                               style={({ pressed }) => [pressed && { opacity: 0.5 }]}
@@ -332,7 +332,7 @@ export function VaultDetailModal({
                                 Delete
                               </Text>
                             </Pressable>
-                          )}
+                          ) : null}
                         </View>
                       </View>
                     </Card>
