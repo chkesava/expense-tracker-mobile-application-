@@ -71,6 +71,43 @@ describe("auto-add routing", () => {
     expect(routed.toCommit[0]?.record.parsed?.merchant).toBe("Swiggy");
   });
 
+  it("sends a weak txn: collision to review even when confidence is high", () => {
+    const routed = routeWriteReady(
+      [
+        {
+          record: {
+            smsId: "2",
+            fingerprint: "fp-2",
+            parsed: {
+              kind: "expense",
+              amount: 450,
+              date: "2026-08-12",
+              merchant: "Swiggy",
+              confidence: 0.95,
+            },
+          },
+          write: {
+            collection: "expenses",
+            payload: {
+              amount: 450,
+              category: "Food",
+              subcategory: "Other",
+              date: "2026-08-12",
+              month: "2026-08",
+              accountId: null,
+              note: "Swiggy",
+              tags: ["sms"],
+            },
+          },
+          forceReview: true,
+        },
+      ],
+      "auto"
+    );
+    expect(routed.toCommit).toHaveLength(0);
+    expect(routed.toReview).toHaveLength(1);
+  });
+
   it("review mode parks every candidate", () => {
     const result = processRawSmsMessages([swiggy, vagueDebit]);
     const routed = routeWriteReady(result.writeReady, "review");

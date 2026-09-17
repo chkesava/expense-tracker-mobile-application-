@@ -18,7 +18,7 @@ import type { SmsPermissionStatus } from "@/services/sms/smsPermissions";
 import { filterRelevantSms } from "@/services/sms/smsRelevanceFilter";
 import {
   loadSmsDedupeKeys,
-  mergeSmsDedupeKeys,
+  persistSmsDedupeKeysForRecords,
 } from "@/services/sms/smsDedupeStore";
 import { processRawSmsMessages } from "@/services/sms/smsPipeline";
 import type { RawSmsMessage } from "@/shared/types/smsTransaction";
@@ -231,11 +231,15 @@ export function SmsAutomationSettings() {
         knownDedupeKeys: known,
         accounts,
       });
-      await mergeSmsDedupeKeys(known);
       const dispatched = await dispatchWriteReady(pipeline.writeReady, {
         mode: prefs.handlingMode === "auto" ? "auto" : "review",
         uid: user?.uid,
       });
+      await persistSmsDedupeKeysForRecords([
+        ...pipeline.records.filter((record) => record.status === "skipped"),
+        ...dispatched.committedEntries.map((entry) => entry.record),
+        ...dispatched.queuedEntries.map((entry) => entry.record),
+      ]);
       const duplicates = pipeline.records.filter(
         (r) => r.skipReason === "duplicate"
       ).length;

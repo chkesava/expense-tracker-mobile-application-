@@ -31,6 +31,26 @@ describe("adaptParsedSmsToWritePayload", () => {
     });
   });
 
+  it("copies fingerprint and bank ref onto the expense payload", () => {
+    const write = adaptParsedSmsToWritePayload(
+      {
+        kind: "expense",
+        amount: 249.5,
+        date: "2026-08-10",
+        merchant: "Swiggy",
+        category: "Food",
+        subcategory: "Delivery",
+        externalRef: "987654321012",
+        confidence: 0.9,
+      },
+      { fingerprint: "fp-1" }
+    );
+    expect(write?.payload).toMatchObject({
+      smsFingerprint: "fp-1",
+      smsExternalRef: "987654321012",
+    });
+  });
+
   it("returns null when amount/date missing", () => {
     expect(
       adaptParsedSmsToWritePayload({

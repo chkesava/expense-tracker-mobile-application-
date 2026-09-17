@@ -46,6 +46,18 @@ export async function mergeSmsDedupeKeys(extra: Iterable<string>): Promise<Set<s
   return current;
 }
 
+export async function persistSmsDedupeKeysForRecords(
+  records: Array<{ dedupeKeys?: string[] }>
+): Promise<Set<string> | void> {
+  const extra: string[] = [];
+  for (const record of records) {
+    if (!record.dedupeKeys) continue;
+    extra.push(...record.dedupeKeys);
+  }
+  if (!extra.length) return;
+  return mergeSmsDedupeKeys(extra);
+}
+
 /** Test helper — does not touch disk if memory was never loaded. */
 export function resetSmsDedupeKeysForTests(): void {
   memoryKeys = null;

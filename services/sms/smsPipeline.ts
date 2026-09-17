@@ -12,6 +12,7 @@ import {
   buildSmsDedupeKeys,
   buildSmsFingerprint,
   findDuplicateSmsKey,
+  isWeakTxnDedupeKey,
   rememberSmsDedupeKeys,
 } from "./smsDedupe";
 import { isExpenseOrIncomeKind } from "./smsDetector";
@@ -38,6 +39,8 @@ export interface SmsPipelineResult {
     record: SmsProcessingRecord;
     /** ExpenseForm-compatible payload; Firestore write is a later phase */
     write: NonNullable<ReturnType<typeof adaptParsedSmsToWritePayload>>;
+    /** Weak txn: collision — do not auto-add; send to review (SPENDLY-41). */
+    forceReview?: boolean;
   }>;
   cursor: SmsSyncCursor;
 }
@@ -107,7 +110,10 @@ export async function processSmsInbox(
     parseContext: deps.parseContext,
     accounts: deps.accounts,
   });
-  await mergeSmsDedupeKeys(known);
+  const skipKeys = result.records
+    .filter((record) => record.status === "skipped")
+    .flatMap((record) => record.dedupeKeys ?? []);
+  if (skipKeys.length) await mergeSmsDedupeKeys(skipKeys);
   return result;
 }
 
@@ -136,17 +142,20 @@ export function processRawSmsMessages(
     lastId = message.id;
     lastAt = message.receivedAtMs;
 
-    if (findDuplicateSmsKey(dedupeKeys, known)) {
+    const dupKey = findDuplicateSmsKey(dedupeKeys, known);
+    if (dupKey && !isWeakTxnDedupeKey(dupKey)) {
       records.push({
         smsId: message.id,
         fingerprint,
         status: "skipped",
         skipReason: "duplicate",
         parsed,
+        dedupeKeys,
         updatedAtMs,
       });
       continue;
     }
+    const forceReview = isWeakTxnDedupeKey(dupKey);
 
     const kindSkip = skipReasonForKind(parsed.kind);
     if (kindSkip) {
@@ -156,6 +165,7 @@ export function processRawSmsMessages(
         status: "skipped",
         skipReason: kindSkip,
         parsed,
+        dedupeKeys: [`sms:${message.id}`, `fp:${fingerprint}`],
         updatedAtMs,
       });
       rememberSmsDedupeKeys(known, [`sms:${message.id}`, `fp:${fingerprint}`]);
@@ -169,6 +179,7 @@ export function processRawSmsMessages(
         status: "skipped",
         skipReason: "not_transaction",
         parsed,
+        dedupeKeys: [`sms:${message.id}`, `fp:${fingerprint}`],
         updatedAtMs,
       });
       rememberSmsDedupeKeys(known, [`sms:${message.id}`, `fp:${fingerprint}`]);
@@ -187,14 +198,16 @@ export function processRawSmsMessages(
     const write = adaptParsedSmsToWritePayload(parsed, {
       accountId:
         resolution.status === "AUTO_MATCHED" ? resolution.accountId : null,
+      fingerprint,
     });
     if (!write) {
       records.push({
         smsId: message.id,
         fingerprint,
         status: "skipped",
-        skipReason: "low_confidence",
+        skipReason: forceReview ? "duplicate" : "low_confidence",
         parsed,
+        dedupeKeys,
         updatedAtMs,
       });
       rememberSmsDedupeKeys(known, [`sms:${message.id}`, `fp:${fingerprint}`]);
@@ -206,10 +219,11 @@ export function processRawSmsMessages(
       fingerprint,
       status: "parsed",
       parsed,
+      dedupeKeys,
       updatedAtMs,
     };
     records.push(record);
-    writeReady.push({ record, write });
+    writeReady.push({ record, write, forceReview: forceReview || undefined });
     rememberSmsDedupeKeys(known, dedupeKeys);
   }
 

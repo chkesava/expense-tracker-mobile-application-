@@ -14,8 +14,10 @@ export type SmsWriteReadyEntry = {
     smsId: string;
     fingerprint: string;
     parsed?: SmsParsedTransaction;
+    dedupeKeys?: string[];
   };
   write: SmsWritePayload;
+  forceReview?: boolean;
 };
 
 export function isHighConfidenceForAutoAdd(
@@ -48,10 +50,10 @@ export function routeWriteReady(
   const toCommit: SmsWriteReadyEntry[] = [];
   const toReview: SmsWriteReadyEntry[] = [];
   for (const entry of writeReady) {
-    if (isHighConfidenceForAutoAdd(entry.record.parsed)) {
-      toCommit.push(entry);
-    } else {
+    if (entry.forceReview || !isHighConfidenceForAutoAdd(entry.record.parsed)) {
       toReview.push(entry);
+    } else {
+      toCommit.push(entry);
     }
   }
   return { toCommit, toReview };
@@ -86,7 +88,9 @@ export async function dispatchWriteReady(
       const failed: SmsWriteReadyEntry[] = [];
       for (const entry of routed.toCommit) {
         try {
-          await commit(options.uid, entry.write);
+          await commit(options.uid, entry.write, {
+            fingerprint: entry.record.fingerprint,
+          });
           committedEntries.push(entry);
         } catch {
           failed.push(entry);

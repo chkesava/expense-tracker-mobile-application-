@@ -17,7 +17,8 @@ export type SmsCommitResult = {
 
 export type SmsExpenseWriter = (
   uid: string,
-  write: SmsWritePayload
+  write: SmsWritePayload,
+  meta?: { fingerprint?: string }
 ) => Promise<SmsCommitResult>;
 
 export function writeReadyToInboxItems(
@@ -79,7 +80,7 @@ export async function addSmsReviewItem(
   }
   const commit =
     writer ?? (await import("./smsExpenseWriter")).commitSmsWritePayload;
-  const result = await commit(uid, item.write);
+  const result = await commit(uid, item.write, { fingerprint: item.fingerprint });
   await dismissSmsReviewItem(id);
   if (result.collection === "expenses") {
     void import("./smsRecurringSync")

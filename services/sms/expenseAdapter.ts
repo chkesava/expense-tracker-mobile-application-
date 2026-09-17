@@ -5,6 +5,7 @@ import type {
   SmsParsedTransaction,
   SmsWritePayload,
 } from "@/shared/types/smsTransaction";
+import { normalizeSmsReferenceId } from "./smsDedupe";
 
 export interface AdaptSmsOptions {
   /** Default when parser left category empty */
@@ -14,6 +15,7 @@ export interface AdaptSmsOptions {
   accountId?: string | null;
   /** Extra tags always applied (e.g. ["sms"]) */
   tags?: string[];
+  fingerprint?: string;
 }
 
 function requireAmountAndDate(
@@ -68,6 +70,8 @@ export function adaptParsedSmsToWritePayload(
 
   const accountId = options.accountId ?? null;
   const note = buildNote(parsed);
+  const smsFingerprint = options.fingerprint || undefined;
+  const smsExternalRef = normalizeSmsReferenceId(parsed.externalRef);
 
   if (parsed.kind === "income" || parsed.kind === "refund") {
     const payload: SmsIncomeWritePayload = {
@@ -82,6 +86,8 @@ export function adaptParsedSmsToWritePayload(
       month: core.month,
       accountId,
       note,
+      ...(smsFingerprint ? { smsFingerprint } : {}),
+      ...(smsExternalRef ? { smsExternalRef } : {}),
     };
     return { collection: "incomes", payload };
   }
@@ -103,6 +109,8 @@ export function adaptParsedSmsToWritePayload(
     accountId,
     note,
     tags: buildTags(parsed, options.tags),
+    ...(smsFingerprint ? { smsFingerprint } : {}),
+    ...(smsExternalRef ? { smsExternalRef } : {}),
   };
   return { collection: "expenses", payload };
 }

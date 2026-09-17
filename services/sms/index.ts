@@ -88,11 +88,13 @@ export {
   buildSmsDedupeKeys,
   normalizeSmsReferenceId,
   findDuplicateSmsKey,
+  smsLedgerDocId,
 } from "./smsDedupe";
 
 export {
   loadSmsDedupeKeys,
   mergeSmsDedupeKeys,
+  persistSmsDedupeKeysForRecords,
 } from "./smsDedupeStore";
 
 export {

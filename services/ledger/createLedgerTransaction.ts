@@ -21,6 +21,8 @@ export type CreateExpenseInput = {
   spaceId?: string | null;
   /** HH:mm posting clock when known. */
   time?: string;
+  smsFingerprint?: string;
+  smsExternalRef?: string;
 };
 
 export type CreateIncomeInput = {
@@ -32,12 +34,19 @@ export type CreateIncomeInput = {
   note: string;
   /** HH:mm posting clock when known. */
   time?: string;
+  smsFingerprint?: string;
+  smsExternalRef?: string;
 };
 
 export type LedgerWriteResult = {
   /** Firestore document id — generated client-side, so it exists offline too. */
   id: string;
   outcome: WriteOutcome;
+};
+
+export type CreateLedgerOptions = {
+  /** Deterministic id (SMS import). Random id when omitted. */
+  id?: string;
 };
 
 function requireUidAndDb(uid: string) {
@@ -60,27 +69,37 @@ function requireUidAndDb(uid: string) {
  */
 export async function createExpense(
   uid: string,
-  payload: CreateExpenseInput
+  payload: CreateExpenseInput,
+  options?: CreateLedgerOptions
 ): Promise<LedgerWriteResult> {
   const db = requireUidAndDb(uid);
-  const ref = doc(collection(db, "users", uid, "expenses"));
+  const ref = options?.id
+    ? doc(db, "users", uid, "expenses", options.id)
+    : doc(collection(db, "users", uid, "expenses"));
+  const data = {
+    amount: payload.amount,
+    category: payload.category,
+    subcategory: payload.subcategory,
+    date: payload.date,
+    month: payload.month,
+    accountId: payload.accountId,
+    note: payload.note,
+    tags: payload.tags.length > 0 ? payload.tags : [],
+    // Firestore rejects undefined, so an unassigned expense stays
+    // byte-identical to what this function wrote before Spaces existed.
+    ...(payload.spaceId ? { spaceId: payload.spaceId } : {}),
+    ...(payload.time ? { time: payload.time } : {}),
+    ...(payload.smsFingerprint
+      ? { smsFingerprint: payload.smsFingerprint }
+      : {}),
+    ...(payload.smsExternalRef
+      ? { smsExternalRef: payload.smsExternalRef }
+      : {}),
+    createdAt: serverTimestamp(),
+  };
   const outcome = await commitWrite(
     () =>
-      setDoc(ref, {
-        amount: payload.amount,
-        category: payload.category,
-        subcategory: payload.subcategory,
-        date: payload.date,
-        month: payload.month,
-        accountId: payload.accountId,
-        note: payload.note,
-        tags: payload.tags.length > 0 ? payload.tags : [],
-        // Firestore rejects undefined, so an unassigned expense stays
-        // byte-identical to what this function wrote before Spaces existed.
-        ...(payload.spaceId ? { spaceId: payload.spaceId } : {}),
-        ...(payload.time ? { time: payload.time } : {}),
-        createdAt: serverTimestamp(),
-      }),
+      options?.id ? setDoc(ref, data, { merge: true }) : setDoc(ref, data),
     { label: "expense" }
   );
   return { id: ref.id, outcome };
@@ -89,22 +108,32 @@ export async function createExpense(
 /** Same payload ExpenseForm writes to users/{uid}/incomes. */
 export async function createIncome(
   uid: string,
-  payload: CreateIncomeInput
+  payload: CreateIncomeInput,
+  options?: CreateLedgerOptions
 ): Promise<LedgerWriteResult> {
   const db = requireUidAndDb(uid);
-  const ref = doc(collection(db, "users", uid, "incomes"));
+  const ref = options?.id
+    ? doc(db, "users", uid, "incomes", options.id)
+    : doc(collection(db, "users", uid, "incomes"));
+  const data = {
+    amount: payload.amount,
+    source: payload.source,
+    date: payload.date,
+    month: payload.month,
+    accountId: payload.accountId,
+    note: payload.note,
+    ...(payload.time ? { time: payload.time } : {}),
+    ...(payload.smsFingerprint
+      ? { smsFingerprint: payload.smsFingerprint }
+      : {}),
+    ...(payload.smsExternalRef
+      ? { smsExternalRef: payload.smsExternalRef }
+      : {}),
+    createdAt: serverTimestamp(),
+  };
   const outcome = await commitWrite(
     () =>
-      setDoc(ref, {
-        amount: payload.amount,
-        source: payload.source,
-        date: payload.date,
-        month: payload.month,
-        accountId: payload.accountId,
-        note: payload.note,
-        ...(payload.time ? { time: payload.time } : {}),
-        createdAt: serverTimestamp(),
-      }),
+      options?.id ? setDoc(ref, data, { merge: true }) : setDoc(ref, data),
     { label: "income" }
   );
   return { id: ref.id, outcome };

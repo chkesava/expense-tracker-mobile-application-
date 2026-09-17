@@ -63,6 +63,26 @@ export function buildSmsDedupeKeys(
   return [...new Set(keys)];
 }
 
+/** Firestore id for an SMS-imported expense/income (SPENDLY-41). */
+export function smsLedgerDocId(fingerprint: string): string {
+  return `sms_${fnv1a64Hex(fingerprint)}`;
+}
+
+function fnv1a64Hex(input: string): string {
+  let hash = 0xcbf29ce484222325n;
+  const prime = 0x100000001b3n;
+  for (let i = 0; i < input.length; i += 1) {
+    hash ^= BigInt(input.charCodeAt(i));
+    hash = (hash * prime) & 0xffffffffffffffffn;
+  }
+  return hash.toString(16).padStart(16, "0");
+}
+
+/** `txn:` is a weak same-day merchant signature — collisions go to review, not skip. */
+export function isWeakTxnDedupeKey(key: string | undefined): boolean {
+  return Boolean(key?.startsWith("txn:"));
+}
+
 export function findDuplicateSmsKey(
   keys: string[],
   known: Set<string>
