@@ -87,7 +87,13 @@ describe("personal tree", () => {
     "epfInterestEntries",
     "epfReconciliations",
   ];
-  const moneyCollections = ["expenses", "incomes"];
+  const moneyCollections = [
+    "expenses",
+    "incomes",
+    "accountEntries",
+    "accountPayments",
+    "accountTransfers",
+  ];
   const schemalessCollections = collections.filter(
     (name) => !moneyCollections.includes(name)
   );
