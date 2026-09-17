@@ -315,6 +315,9 @@ export interface Expense {
   subscriptionId?: string; // ID of the subscription that generated this expense
   isRecurring?: boolean;
   isAudited?: boolean;
+  /** Present when this expense was imported from SMS (SPENDLY-41). */
+  smsFingerprint?: string;
+  smsExternalRef?: string;
   createdAt: unknown;
 }
 
@@ -327,5 +330,7 @@ export interface Income {
   month: string;
   accountId?: string;
   time?: string;
+  smsFingerprint?: string;
+  smsExternalRef?: string;
   createdAt: unknown;
 }

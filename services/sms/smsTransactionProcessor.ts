@@ -10,7 +10,7 @@ import { dispatchWriteReady } from "./smsAutoAdd";
 import { detectSmsTransaction } from "./smsDetector";
 import {
   loadSmsDedupeKeys,
-  mergeSmsDedupeKeys,
+  persistSmsDedupeKeysForRecords,
 } from "./smsDedupeStore";
 import {
   loadSmsInboundStatus,
@@ -107,12 +107,16 @@ export async function processIncomingSmsMessages(
     (r) => r.skipReason === "duplicate"
   ).length;
   const writeReadyCount = pipeline.writeReady.length;
-  await mergeSmsDedupeKeys(known);
+  // Persist skip keys after classify; persist write keys only after
+  // commitWrite/enqueue so a crash cannot mark an SMS known without a doc.
 
   let inboxQueuedCount = 0;
   let autoAddedCount = 0;
   if (prefs.handlingMode === "manual") {
     // Live SMS is not queued; the user scans when they want to review.
+    await persistSmsDedupeKeysForRecords(
+      pipeline.records.filter((record) => record.status === "skipped")
+    );
   } else {
     const dispatched = await dispatchWriteReady(pipeline.writeReady, {
       mode: prefs.handlingMode,
@@ -120,6 +124,11 @@ export async function processIncomingSmsMessages(
     });
     inboxQueuedCount = dispatched.queued;
     autoAddedCount = dispatched.committed;
+    await persistSmsDedupeKeysForRecords([
+      ...pipeline.records.filter((record) => record.status === "skipped"),
+      ...dispatched.committedEntries.map((entry) => entry.record),
+      ...dispatched.queuedEntries.map((entry) => entry.record),
+    ]);
     try {
       const { notifySmsDispatch } = await import("./smsNotifications");
       await notifySmsDispatch({

@@ -113,6 +113,8 @@ export interface SmsProcessingRecord {
   status: SmsProcessingStatus;
   skipReason?: SmsSkipReason;
   parsed?: SmsParsedTransaction;
+  /** Keys used for local + Firestore idempotency. */
+  dedupeKeys?: string[];
   /** Firestore expense/income id after commit */
   committedDocId?: string;
   committedCollection?: "expenses" | "incomes";
@@ -140,6 +142,8 @@ export interface SmsExpenseWritePayload {
   accountId: string | null;
   note: string;
   tags: string[];
+  smsFingerprint?: string;
+  smsExternalRef?: string;
 }
 
 /** Income payload identical to ExpenseForm income create shape. */
@@ -150,6 +154,8 @@ export interface SmsIncomeWritePayload {
   month: string;
   accountId: string | null;
   note: string;
+  smsFingerprint?: string;
+  smsExternalRef?: string;
 }
 
 export type SmsWritePayload =

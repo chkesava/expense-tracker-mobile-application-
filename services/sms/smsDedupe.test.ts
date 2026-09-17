@@ -4,6 +4,7 @@ import {
   buildSmsDedupeKeys,
   findDuplicateSmsKey,
   normalizeSmsReferenceId,
+  smsLedgerDocId,
 } from "@/services/sms/smsDedupe";
 import { parseBankSms } from "@/services/sms/smsParser";
 import { processRawSmsMessages } from "@/services/sms/smsPipeline";
@@ -57,7 +58,7 @@ describe("duplicate detection", () => {
     expect(result.writeReady).toHaveLength(2);
   });
 
-  it("falls back to amount+date+merchant when no reference ID exists", () => {
+  it("routes a ref-less same-day merchant collision to review instead of dropping it", () => {
     const noRef = (id: string, receivedAtMs: number): RawSmsMessage => ({
       id,
       address: "VK-SBIINB",
@@ -69,7 +70,17 @@ describe("duplicate detection", () => {
       noRef("1", Date.parse("2026-08-12T10:00:00+05:30")),
       noRef("2", Date.parse("2026-08-12T10:05:00+05:30")),
     ]);
-    expect(result.writeReady).toHaveLength(1);
-    expect(result.records[1]?.skipReason).toBe("duplicate");
+    expect(result.writeReady).toHaveLength(2);
+    expect(result.writeReady[1]?.forceReview).toBe(true);
+    expect(result.records[1]?.skipReason).toBeUndefined();
+  });
+});
+
+describe("smsLedgerDocId", () => {
+  it("is stable for the same fingerprint", () => {
+    const fp = "vk-sbiinb|1000|450|987654321012|2026-08-12|80|Your A/c XX4521 has";
+    expect(smsLedgerDocId(fp)).toBe(smsLedgerDocId(fp));
+    expect(smsLedgerDocId(fp)).toMatch(/^sms_[0-9a-f]{16}$/);
+    expect(smsLedgerDocId(fp)).not.toBe(smsLedgerDocId(`${fp}|other`));
   });
 });
