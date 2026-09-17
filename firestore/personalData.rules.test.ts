@@ -8,12 +8,14 @@ import {
 import {
   addDoc,
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
   orderBy,
   query,
   setDoc,
+  updateDoc,
 } from "firebase/firestore";
 import { afterAll, beforeAll, beforeEach, describe, it } from "vitest";
 
@@ -467,6 +469,62 @@ describe("personal tree", () => {
         setDoc(doc(db, "users", OWNER, "accountPayments", "cashback_anon"), cashback)
       );
     });
+  });
+
+  // SPENDLY-38 — journal audit events are owner-only and append-only.
+  describe("ledgerEvents", () => {
+    const event = {
+      kind: "expense",
+      docId: "e1",
+      action: "update",
+      before: { amount: 10, date: "2026-09-01", month: "2026-09" },
+      after: { amount: 8, date: "2026-09-01", month: "2026-09" },
+      actorUid: OWNER,
+    };
+
+    it("owner creates and reads a ledger event", async () => {
+      const db = env.authenticatedContext(OWNER).firestore();
+      const ref = doc(db, "users", OWNER, "ledgerEvents", "ev1");
+      await assertSucceeds(setDoc(ref, event));
+      await assertSucceeds(getDoc(ref));
+      await assertSucceeds(
+        getDocs(
+          query(
+            collection(db, "users", OWNER, "ledgerEvents"),
+            orderBy("createdAt", "desc")
+          )
+        )
+      );
+    });
+
+    it("owner cannot update or delete a ledger event", async () => {
+      const db = env.authenticatedContext(OWNER).firestore();
+      const ref = doc(db, "users", OWNER, "ledgerEvents", "ev1");
+      await assertSucceeds(setDoc(ref, event));
+      await assertFails(updateDoc(ref, { reason: "rewrite" }));
+      await assertFails(deleteDoc(ref));
+    });
+
+    it("a stranger cannot create or read the owner's ledger events", async () => {
+      const db = env.authenticatedContext(OTHER).firestore();
+      await assertFails(
+        setDoc(doc(db, "users", OWNER, "ledgerEvents", "ev-x"), event)
+      );
+      await assertFails(
+        getDocs(collection(db, "users", OWNER, "ledgerEvents"))
+      );
+    });
+  });
+
+  it("owner can soft-delete an expense without sending a new amount", async () => {
+    const db = env.authenticatedContext(OWNER).firestore();
+    await assertSucceeds(
+      setDoc(
+        doc(db, "users", OWNER, "expenses", "e1"),
+        { deletedAt: "2026-09-17T00:00:00.000Z", deletedBy: OWNER },
+        { merge: true }
+      )
+    );
   });
 
   // The recursive owner grant must still not become a write primitive on the

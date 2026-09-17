@@ -9,8 +9,7 @@ import {
 } from "react-native";
 import { FlashList } from "@shopify/flash-list";
 import { useRouter } from "expo-router";
-import { deleteDoc, doc } from "firebase/firestore";
-import { logError } from "@/lib/errors";
+import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { haptic } from "@/lib/haptics";
 import { sampleScrollFps } from "@/lib/perf";
 import {
@@ -35,11 +34,14 @@ import {
 import { AssignToSpaceModal } from "@/components/spaces/AssignToSpaceModal";
 import { Button } from "@/components/ui/Button";
 import { useSpaces } from "@/hooks/useSpaces";
-import { getFirestoreDb } from "@/lib/firebase";
-import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
 import { toast } from "@/lib/toast";
+import { writeSavedMessage } from "@/lib/firestoreWrite";
 import { useAuth } from "@/providers/AuthProvider";
 import { useSettings } from "@/providers/SettingsProvider";
+import {
+  softDeleteExpense,
+  softDeleteIncome,
+} from "@/services/ledger/mutateLedgerTransaction";
 import { getCategoryIcon } from "@/shared/data/categoryTaxonomy";
 import type { Account, Expense, Income } from "@/shared/types/expense";
 import { postingSortMs } from "@/shared/utils/activityDisplay";
@@ -191,9 +193,8 @@ export function ExpenseList({
 
   const handleDelete = useCallback(
     async (target: CombinedTransaction) => {
-      const db = getFirestoreDb();
       const docId = target.id?.trim();
-      if (!uid || !db) {
+      if (!uid) {
         toast.error("Not authenticated");
         return;
       }
@@ -205,12 +206,14 @@ export function ExpenseList({
       deletingIdsRef.current.add(docId);
 
       try {
-        const collectionName = target.kind === "expense" ? "expenses" : "incomes";
-        const docRef = doc(db, "users", uid, collectionName, docId);
-
-        const outcome = await commitWrite(() => deleteDoc(docRef), {
-          label: "transaction deletion",
-        });
+        const options = {
+          lockPastMonths: settings.lockPastMonths,
+          timezone: settings.timezone,
+        };
+        const { outcome } =
+          target.kind === "expense"
+            ? await softDeleteExpense(uid, docId, options)
+            : await softDeleteIncome(uid, docId, options);
         setSelectedTx(null);
         void haptic.delete();
 
@@ -222,12 +225,12 @@ export function ExpenseList({
         );
       } catch (err) {
         logError("expenseList.deleteTransaction", err);
-        toast.error("Failed to delete transaction");
+        toast.error(friendlyErrorMessage(err, "Failed to delete transaction"));
       } finally {
         deletingIdsRef.current.delete(docId);
       }
     },
-    [uid]
+    [uid, settings.lockPastMonths, settings.timezone]
   );
 
   const openEditFromRow = useCallback(

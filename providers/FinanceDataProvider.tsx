@@ -55,6 +55,7 @@ import {
   hydrateAccountIdentity,
 } from "@/shared/utils/accountIdentity";
 import { isValidDateKey, todayDateKey } from "@/shared/utils/dates";
+import { isActiveLedgerRow } from "@/shared/utils/ledgerRow";
 import { snapshotErrorHandler, type LoadFailure } from "@/lib/firestoreErrors";
 import {
   forgetSnapshotPath,
@@ -332,7 +333,9 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
           logQuerySnapshot(expensePath, snap);
           setExpenses(
             // Firestore doc id must win over any `id` field stored on the document.
-            snap.docs.map((d) => ({ ...(d.data() as object), id: d.id } as Expense))
+            snap.docs
+              .map((d) => ({ ...(d.data() as object), id: d.id } as Expense))
+              .filter(isActiveLedgerRow)
           );
           pendingExpensesCountRef.current = snap.docs.filter(
             (d) => d.metadata.hasPendingWrites
@@ -357,7 +360,9 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         (snap) => {
           logQuerySnapshot(incomePath, snap);
           setIncomes(
-            snap.docs.map((d) => ({ ...(d.data() as object), id: d.id } as Income))
+            snap.docs
+              .map((d) => ({ ...(d.data() as object), id: d.id } as Income))
+              .filter(isActiveLedgerRow)
           );
           pendingIncomesCountRef.current = snap.docs.filter(
             (d) => d.metadata.hasPendingWrites
@@ -690,8 +695,8 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       }
 
       const linkedCount = countLinkedAccountRecords([
-        linkedExpensesSnap.size,
-        linkedIncomesSnap.size,
+        linkedExpensesSnap.docs.filter((d) => isActiveLedgerRow(d.data())).length,
+        linkedIncomesSnap.docs.filter((d) => isActiveLedgerRow(d.data())).length,
         linkedEntriesSnap.size,
         linkedPaymentsFromSnap.size,
         linkedPaymentsToSnap.size,

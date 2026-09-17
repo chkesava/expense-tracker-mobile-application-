@@ -12,9 +12,11 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { SkeletonHero, SkeletonList } from "@/components/common/Skeleton";
 import { CreateTripModal } from "@/components/trips/CreateTripModal";
 import { TripDetailModal } from "@/components/trips/TripDetailModal";
+import { useExpenses } from "@/hooks/useExpenses";
 import { useTrips } from "@/hooks/useTrips";
 import type { Trip } from "@/shared/types/trip";
 import {
+  computeTripSpend,
   computeTripSummary,
   getTripDaysInfo,
   getTripStatus,
@@ -32,6 +34,7 @@ export function TripsList() {
   const isDark = themeUsesDarkPalette(themeName);
   const displayCurrency = useDisplayCurrency();
   const { trips, loading } = useTrips();
+  const { expenses } = useExpenses();
 
   const [activeTab, setActiveTab] = useState<TripTab>("active");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -39,7 +42,10 @@ export function TripsList() {
 
   const today = new Date().toISOString().split("T")[0];
 
-  const summary = useMemo(() => computeTripSummary(trips, today), [trips, today]);
+  const summary = useMemo(
+    () => computeTripSummary(trips, today, expenses),
+    [trips, today, expenses]
+  );
 
   const filteredTrips = useMemo(() => {
     return trips.filter((t) => getTripStatus(t, today) === activeTab);
@@ -239,14 +245,15 @@ export function TripsList() {
           {filteredTrips.map((trip) => {
             const status = getTripStatus(trip, today);
             const daysInfo = getTripDaysInfo(trip, today);
-            const over = isTripOverBudget(trip);
+            const spent = trip.id
+              ? computeTripSpend(expenses, trip.id)
+              : trip.spentAmount || 0;
+            const over = isTripOverBudget(trip, expenses);
             const spentPercent =
               trip.totalBudget > 0
                 ? Math.min(
                     100,
-                    Math.round(
-                      ((trip.spentAmount || 0) / trip.totalBudget) * 100
-                    )
+                    Math.round((spent / trip.totalBudget) * 100)
                   )
                 : 0;
 
@@ -360,7 +367,7 @@ export function TripsList() {
 
                   <View style={{ alignItems: "flex-end", gap: 4 }}>
                     <Amount
-                      value={trip.spentAmount || 0}
+                      value={spent}
                       currency={displayCurrency}
                       ghostable
                       style={{

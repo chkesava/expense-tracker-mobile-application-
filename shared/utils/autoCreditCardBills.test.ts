@@ -63,6 +63,20 @@ describe("buildAutoCreditCardBillDraft", () => {
     expect(draft?.note).toContain("Auto-created");
   });
 
+  it("ignores a soft-deleted cycle expense in the statement amount", () => {
+    const draft = buildAutoCreditCardBillDraft({
+      ...baseInput,
+      expenses: [
+        expense("2026-08-01", 400),
+        {
+          ...expense("2026-08-01", 9999),
+          deletedAt: "2026-09-17T00:00:00.000Z",
+        },
+      ],
+    });
+    expect(draft?.statementAmount).toBe(400);
+  });
+
   it("uses the previous month statement when today is after generation day", () => {
     const draft = buildAutoCreditCardBillDraft({
       ...baseInput,
@@ -366,6 +380,27 @@ describe("collectAutoCreditCardBillRefreshPatches", () => {
       ],
     });
 
+    expect(patches).toEqual([]);
+  });
+
+  it("does not rewrite a PAID auto statement when spend changes", () => {
+    const patches = collectAutoCreditCardBillRefreshPatches({
+      ...refreshInput,
+      expenses: [expense("2026-07-21", 1)],
+      existingBills: [
+        {
+          id: "bill-paid",
+          accountId: creditCard.id,
+          statementDate: "2026-08-21",
+          statementAmount: 1200,
+          billingPeriodStart: "2026-07-22",
+          billingPeriodEnd: "2026-08-21",
+          note: AUTO_CREDIT_CARD_BILL_NOTE,
+          amountPaid: 1200,
+          status: "PAID",
+        },
+      ],
+    });
     expect(patches).toEqual([]);
   });
 });
