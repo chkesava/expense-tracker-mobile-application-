@@ -7,7 +7,6 @@ import {
   getDoc,
   onSnapshot,
   query,
-  runTransaction,
   serverTimestamp,
   setDoc,
   updateDoc,
@@ -16,7 +15,6 @@ import {
 
 import { getFirestoreDb } from "@/lib/firebase";
 import { writeSavedMessage } from "@/lib/firestoreWrite";
-import { newId } from "@/lib/id";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
@@ -24,6 +22,8 @@ import {
   INVESTMENT_CASH_COLLECTION,
   createHoldingWithCash,
   ensureCashBaseline,
+  executeMockBuy as commitMockBuy,
+  executeMockSell as commitMockSell,
   recordInvestmentCashEntry,
   reverseInvestmentCashEntry,
   transferInvestmentCashWithBank,
@@ -463,128 +463,41 @@ export function usePortfolio(options?: {
 
   const executeMockBuy = useCallback(async (holdingId: string, quantity: number, price: number, fees = 0) => {
     if (!user || !db) return false;
-    if (!(quantity > 0) || !(price > 0) || fees < 0) return false;
-    const holdingRef = doc(db, "users", user.uid, "holdings", holdingId);
-    const settingsRef = doc(db, "users", user.uid, "portfolioSettings", SETTINGS_DOC_ID);
-    const transactionRef = doc(collection(db, "users", user.uid, "portfolioTransactions"));
-    const cashEntryId = newId();
-    const cashEntryRef = doc(db, "users", user.uid, INVESTMENT_CASH_COLLECTION, cashEntryId);
     try {
-      await ensureCashBaseline(user.uid, settings?.cashBalance ?? 0);
-      await runTransaction(db, async (firestoreTransaction) => {
-        const [holdingSnapshot, settingsSnapshot] = await Promise.all([
-          firestoreTransaction.get(holdingRef),
-          firestoreTransaction.get(settingsRef),
-        ]);
-        if (!holdingSnapshot.exists()) throw new Error("Holding not found");
-        const holding = holdingSnapshot.data() as Omit<Holding, "id">;
-        const cashBalance = Number(settingsSnapshot.data()?.cashBalance ?? 0);
-        const cost = quantity * price + fees;
-        if (cashBalance < cost) throw new Error("Insufficient cash balance");
-        const existingQuantity = Number(holding.quantity);
-        const nextQuantity = existingQuantity + quantity;
-        const averageBuyPrice = ((Number(holding.averageBuyPrice) * existingQuantity) + (quantity * price + fees)) / nextQuantity;
-
-        firestoreTransaction.update(holdingRef, { quantity: nextQuantity, averageBuyPrice, updatedAt: serverTimestamp() });
-        firestoreTransaction.set(settingsRef, { cashBalance: cashBalance - cost, updatedAt: serverTimestamp() }, { merge: true });
-        firestoreTransaction.set(transactionRef, {
-          holdingId,
-          symbol: holding.symbol,
-          type: "BUY",
-          quantity,
-          price,
-          fees,
-          date: todayKey(),
-          orderStatus: "executed",
-          createdAt: serverTimestamp(),
-        });
-        // Written inside the same transaction as the scalar it mirrors, so a mock
-        // trade can never move one without the other.
-        firestoreTransaction.set(cashEntryRef, {
-          type: "PURCHASE",
-          amount: cost,
-          direction: "debit",
-          date: todayKey(),
-          holdingId,
-          symbol: holding.symbol,
-          quantity,
-          price,
-          note: `Bought ${quantity} ${holding.symbol}`,
-          correlationId: cashEntryId,
-          source: "app",
-          createdAt: serverTimestamp(),
-          createdAtMs: Date.now(),
-        });
+      const result = await commitMockBuy(user.uid, {
+        holdingId,
+        quantity,
+        price,
+        fees,
+        date: todayKey(),
       });
-      toast.success("Mock buy executed");
+      toast.success(writeSavedMessage(result.outcome, "Mock buy executed"));
       return true;
     } catch (error) {
       logError("portfolio.executeMockBuy", error);
-      logError("portfolio.buy", error);
       toast.error(friendlyErrorMessage(error, "Couldn't complete the buy order."));
       return false;
     }
-  }, [db, user, settings]);
+  }, [db, user]);
 
   const executeMockSell = useCallback(async (holdingId: string, quantity: number, price: number, fees = 0) => {
     if (!user || !db) return false;
-    if (!(quantity > 0) || !(price > 0) || fees < 0 || quantity * price < fees) return false;
-    const holdingRef = doc(db, "users", user.uid, "holdings", holdingId);
-    const settingsRef = doc(db, "users", user.uid, "portfolioSettings", SETTINGS_DOC_ID);
-    const transactionRef = doc(collection(db, "users", user.uid, "portfolioTransactions"));
-    const cashEntryId = newId();
-    const cashEntryRef = doc(db, "users", user.uid, INVESTMENT_CASH_COLLECTION, cashEntryId);
     try {
-      await ensureCashBaseline(user.uid, settings?.cashBalance ?? 0);
-      await runTransaction(db, async (firestoreTransaction) => {
-        const [holdingSnapshot, settingsSnapshot] = await Promise.all([
-          firestoreTransaction.get(holdingRef),
-          firestoreTransaction.get(settingsRef),
-        ]);
-        if (!holdingSnapshot.exists()) throw new Error("Holding not found");
-        const holding = holdingSnapshot.data() as Omit<Holding, "id">;
-        if (Number(holding.quantity) < quantity) throw new Error("Insufficient holdings quantity");
-        const cashBalance = Number(settingsSnapshot.data()?.cashBalance ?? 0);
-        const nextQuantity = Number(holding.quantity) - quantity;
-        if (nextQuantity === 0) firestoreTransaction.delete(holdingRef);
-        else firestoreTransaction.update(holdingRef, { quantity: nextQuantity, updatedAt: serverTimestamp() });
-        firestoreTransaction.set(settingsRef, { cashBalance: cashBalance + (quantity * price - fees), updatedAt: serverTimestamp() }, { merge: true });
-        firestoreTransaction.set(transactionRef, {
-          holdingId,
-          symbol: holding.symbol,
-          type: "SELL",
-          quantity,
-          price,
-          fees,
-          date: todayKey(),
-          orderStatus: "executed",
-          createdAt: serverTimestamp(),
-        });
-        firestoreTransaction.set(cashEntryRef, {
-          type: "SALE",
-          amount: quantity * price - fees,
-          direction: "credit",
-          date: todayKey(),
-          holdingId,
-          symbol: holding.symbol,
-          quantity,
-          price,
-          note: `Sold ${quantity} ${holding.symbol}`,
-          correlationId: cashEntryId,
-          source: "app",
-          createdAt: serverTimestamp(),
-          createdAtMs: Date.now(),
-        });
+      const result = await commitMockSell(user.uid, {
+        holdingId,
+        quantity,
+        price,
+        fees,
+        date: todayKey(),
       });
-      toast.success("Mock sell executed");
+      toast.success(writeSavedMessage(result.outcome, "Mock sell executed"));
       return true;
     } catch (error) {
       logError("portfolio.executeMockSell", error);
-      logError("portfolio.sell", error);
       toast.error(friendlyErrorMessage(error, "Couldn't complete the sell order."));
       return false;
     }
-  }, [db, user, settings]);
+  }, [db, user]);
 
   const placeLimitBuyOrder = useCallback(async (holding: Holding, quantity: number, targetPrice: number) => {
     if (!user || !db || !(quantity > 0) || !(targetPrice > 0)) return false;

@@ -7,6 +7,7 @@ import { useTheme } from '@/theme/ThemeProvider';
 import { themeUsesDarkPalette } from '@/theme/tokens';
 import { X } from 'lucide-react-native';
 import type { Holding, HoldingWithMetrics } from '@/shared/features/portfolio/types';
+import { canAfford } from '@/shared/features/portfolio/utils/investmentCash';
 
 interface MockTradeModalProps {
   visible: boolean;
@@ -73,7 +74,7 @@ export function MockTradeModal({ visible, holding, onClose, onBuy, onSell, onPla
       setLoading(true);
       let success = false;
       if (tradeType === 'BUY') {
-        if (orderType === 'MARKET' && totalAmount > cashBalance) {
+        if (orderType === 'MARKET' && !canAfford(cashBalance, totalAmount).ok) {
           setError('Insufficient cash balance');
           setLoading(false);
           return;
