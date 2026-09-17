@@ -26,10 +26,10 @@ export type OnboardingState = {
   setupStartedAt: string;
   visitedScreens: string[];
   /**
-   * True once the user has explicitly confirmed a currency. `defaultCurrency`
-   * lives on the shared `system_settings/global` doc and always carries a
-   * fallback, so it cannot distinguish "chosen" from "defaulted" — this flag
-   * keeps the setup step from ticking itself on first launch.
+   * True once the user has explicitly confirmed a currency. New accounts seed
+   * `currency` from `system_settings/global.defaultCurrency`, which is always
+   * present, so that value cannot distinguish "chosen" from "defaulted" —
+   * this flag keeps the setup step from ticking itself on first launch.
    * Optional so settings docs written before this flag existed still parse.
    */
   currencyChosen?: boolean;

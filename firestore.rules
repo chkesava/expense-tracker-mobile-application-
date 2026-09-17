@@ -236,8 +236,9 @@ service cloud.firestore {
     // App-wide flags (`global`) and the sideloaded APK pointer (`latest_release`).
     // Release docs are public GitHub APK URLs — readable without auth so the
     // update prompt can attach before sign-in finishes (Ganesh login especially).
-    // Only `global` is writable from the app (onboarding currency).
-    // Product docs are written by the Admin SDK in CI.
+    // Clients cannot write any doc here: `global` is a project-wide kill switch
+    // (maintenance, signup gate, banner, feature flags). Onboarding currency
+    // lives on `users/{uid}`. Product docs are written by the Admin SDK in CI.
     match /system_settings/{docId} {
       // Must live INSIDE the match: `docId` is bound by the match, so a
       // top-level function referencing it compiles with "Invalid variable
@@ -252,7 +253,7 @@ service cloud.firestore {
       }
 
       allow read: if isReleasePointer() || signedIn();
-      allow write: if signedIn() && docId == "global";
+      allow write: if false;
     }
 
     // -----------------------------------------------------------------------

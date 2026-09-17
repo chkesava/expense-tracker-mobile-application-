@@ -67,13 +67,36 @@ describe("system_settings release pointer", () => {
     await assertFails(getDoc(doc(db, "system_settings", "global")));
   });
 
-  it("signed-in can write global", async () => {
+  it("signed-in cannot write global", async () => {
     const db = env.authenticatedContext("u1").firestore();
-    await assertSucceeds(setDoc(doc(db, "system_settings", "global"), { currency: "INR" }));
+    await assertFails(setDoc(doc(db, "system_settings", "global"), { currency: "INR" }));
   });
 
-  // Public read must not become a public write, and only `global` is
-  // app-writable -- release pointers are the Admin SDK's in CI.
+  it("signed-out cannot write global", async () => {
+    const db = env.unauthenticatedContext().firestore();
+    await assertFails(setDoc(doc(db, "system_settings", "global"), { defaultCurrency: "ZWL" }));
+  });
+
+  const killSwitchFields = [
+    { maintenanceMode: true },
+    { disableSignups: true },
+    { announcementBanner: "Verify your UPI at http://evil" },
+    { enableInvestments: false },
+    { defaultCurrency: "ZWL" },
+  ] as const;
+
+  for (const payload of killSwitchFields) {
+    const field = Object.keys(payload)[0];
+    it(`signed-in cannot merge ${field} onto global`, async () => {
+      const db = env.authenticatedContext("u1").firestore();
+      await assertFails(
+        setDoc(doc(db, "system_settings", "global"), payload, { merge: true })
+      );
+    });
+  }
+
+  // Public read must not become a public write. No system_settings doc is
+  // client-writable -- release pointers are the Admin SDK's in CI.
   it("signed-out cannot write a release pointer", async () => {
     const db = env.unauthenticatedContext().firestore();
     await assertFails(setDoc(doc(db, "system_settings", "latest_release"), { url: "evil" }));

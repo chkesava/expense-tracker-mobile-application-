@@ -108,8 +108,10 @@ export function SetupWizardModal() {
   const [username, setUsername] = useState("");
   const [selectedEmoji, setSelectedEmoji] = useState("💰");
 
-  // Step 1: Currency
-  const [selectedCurrency, setSelectedCurrency] = useState(systemSettings.defaultCurrency || "INR");
+  // Step 1: Currency — seed from the user's own pref, then the project default.
+  const [selectedCurrency, setSelectedCurrency] = useState(
+    settings.currency || systemSettings.defaultCurrency || "INR"
+  );
 
   // Step 2: Budget
   const [budgetAmount, setBudgetAmount] = useState(settings.monthlyBudget ? String(settings.monthlyBudget) : "30000");
@@ -131,7 +133,7 @@ export function SetupWizardModal() {
     if (isSetupWizardOpen) {
       setCurrentStep(setupWizardInitialStep || 0);
       setUsername(userDoc?.username || user?.displayName || "");
-      setSelectedCurrency(systemSettings.defaultCurrency || "INR");
+      setSelectedCurrency(settings.currency || systemSettings.defaultCurrency || "INR");
       if (settings.monthlyBudget > 0) {
         setBudgetAmount(String(settings.monthlyBudget));
       }
@@ -139,14 +141,6 @@ export function SetupWizardModal() {
   }, [isSetupWizardOpen, setupWizardInitialStep, userDoc, user, systemSettings, settings]);
 
   if (!isSetupWizardOpen) return null;
-
-  /** Flags the currency setup step as genuinely chosen rather than defaulted. */
-  const markCurrencyChosen = async () => {
-    if (settings.onboarding?.currencyChosen) return;
-    await updateSettings({
-      onboarding: { ...settings.onboarding, currencyChosen: true },
-    });
-  };
 
   const handleClose = () => {
     haptic.light().catch(() => undefined);
@@ -171,19 +165,12 @@ export function SetupWizardModal() {
           await updateProfile(user, { displayName: username.trim() }).catch(() => undefined);
         }
       } else if (currentStep === 1) {
-        // Save Currency
-        if (db) {
-          await setDoc(
-            doc(db, "system_settings", "global"),
-            {
-              defaultCurrency: selectedCurrency,
-            },
-            { merge: true }
-          );
-        }
-        // `defaultCurrency` is global and always defaulted, so record the
-        // explicit choice separately or the setup step self-completes.
-        await markCurrencyChosen();
+        // Persist on the user doc. `system_settings/global` is a project-wide
+        // flag document and is not client-writable.
+        await updateSettings({
+          currency: selectedCurrency,
+          onboarding: { ...settings.onboarding, currencyChosen: true },
+        });
       } else if (currentStep === 2) {
         // Save Monthly Budget
         const num = parseFloat(budgetAmount);

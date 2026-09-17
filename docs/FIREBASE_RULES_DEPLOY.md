@@ -25,9 +25,9 @@ paths mint auto-ids while the Vite file requires `resource.data.slug == <docId>`
 on `paymentRequests`, which would deny every payment request the app creates.
 
 Do not deploy the Vite repo's rules over these. It defines an `isSuperAdmin()`
-model this repo does not have, and this file's `system_settings/global` clause is
-wider than that repo's — deploying either wholesale over the other changes who
-can write what. Reconcile them deliberately if the web app is ever revived.
+model this repo does not have, and the two files disagree on who may write
+`system_settings/global` — deploying either wholesale over the other changes
+who can write what. Reconcile them deliberately if the web app is ever revived.
 
 ## What they cover
 
@@ -116,7 +116,8 @@ after pulling that change; index builds are asynchronous (see below).
 Signed-in users may read `system_settings/global`. Release pointer docs
 (`latest_release` and `latest_release_{expense|nutrition|ganesh}`) are
 readable without auth so the in-app update prompt can attach before sign-in.
-Only `global` is writable from the client.
+Clients cannot write any `system_settings` document; `global` and release
+pointers are Admin SDK / console only.
 Release APKs live under Storage `releases/**` and are readable by signed-in
 users; clients cannot write them.
 
