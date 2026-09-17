@@ -14,6 +14,7 @@ import { doc, onSnapshot } from "firebase/firestore";
 
 import { logWarning } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
+import { useAuth } from "@/providers/AuthProvider";
 
 export type SystemSettings = {
   maintenanceMode: boolean;
@@ -45,16 +46,24 @@ const SystemSettingsContext = createContext<SystemSettingsContextType | undefine
 );
 
 export function SystemSettingsProvider({ children }: { children: ReactNode }) {
+  const { user, loading: authLoading } = useAuth();
   const [settings, setSettings] = useState<SystemSettings>(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
+  const uid = user?.uid ?? null;
 
   useEffect(() => {
+    // Auth restore races the first snapshot. A permission-denied error is
+    // terminal, so wait until we know whether anyone is signed in, then
+    // subscribe again after login (same shape as useAppUpdate).
+    if (authLoading) return;
+
     const db = getFirestoreDb();
     if (!db) {
       setLoading(false);
       return;
     }
 
+    setLoading(true);
     const unsubscribe = onSnapshot(
       doc(db, "system_settings", "global"),
       (docSnap) => {
@@ -73,7 +82,7 @@ export function SystemSettingsProvider({ children }: { children: ReactNode }) {
     );
 
     return unsubscribe;
-  }, []);
+  }, [authLoading, uid]);
 
   const value = useMemo(() => ({ settings, loading }), [settings, loading]);
 

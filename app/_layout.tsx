@@ -255,8 +255,8 @@ export default function RootLayout() {
         <SafeAreaProvider>
           <QueryClientProvider client={queryClient}>
           <NetworkProvider>
-            <SystemSettingsProvider>
-              <AuthProvider>
+            <AuthProvider>
+              <SystemSettingsProvider>
                 <UserDocProvider>
                   <WorkspaceProvider>
                     <AppThemeProvider>
@@ -281,8 +281,8 @@ export default function RootLayout() {
                     </AppThemeProvider>
                   </WorkspaceProvider>
                 </UserDocProvider>
-              </AuthProvider>
-            </SystemSettingsProvider>
+              </SystemSettingsProvider>
+            </AuthProvider>
           </NetworkProvider>
           </QueryClientProvider>
         </SafeAreaProvider>

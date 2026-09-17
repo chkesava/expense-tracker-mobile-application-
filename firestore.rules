@@ -355,7 +355,11 @@ service cloud.firestore {
           || docId == "latest_release_ganesh";
       }
 
-      allow read: if isReleasePointer() || signedIn();
+      // `global` is flags only (maintenance, signups, currency). Writes are
+      // locked, so signed-out get is safe: login can honour disableSignups
+      // without a live listener dying on permission-denied (SEC-08).
+      allow get: if isReleasePointer() || docId == "global" || signedIn();
+      allow list: if signedIn();
       allow write: if false;
     }
 
