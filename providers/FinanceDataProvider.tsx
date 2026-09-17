@@ -4,6 +4,7 @@ import {
   deleteDoc,
   doc,
   getDocs,
+  limit,
   onSnapshot,
   orderBy,
   query,
@@ -11,6 +12,7 @@ import {
   setDoc,
   updateDoc,
   where,
+  type QuerySnapshot,
 } from "firebase/firestore";
 import {
   createContext,
@@ -56,6 +58,11 @@ import {
 } from "@/shared/utils/accountIdentity";
 import { isValidDateKey, todayDateKey } from "@/shared/utils/dates";
 import { isActiveLedgerRow } from "@/shared/utils/ledgerRow";
+import {
+  foldLedgerSnapshot,
+  LEDGER_STAGED_LIMIT,
+  sortLedgerByDateDesc,
+} from "@/shared/utils/ledgerSnapshot";
 import { snapshotErrorHandler, type LoadFailure } from "@/lib/firestoreErrors";
 import {
   forgetSnapshotPath,
@@ -161,14 +168,6 @@ export type FinanceDataContextType = ExpensesContextType &
 const ExpensesContext = createContext<ExpensesContextType | undefined>(undefined);
 const IncomesContext = createContext<IncomesContextType | undefined>(undefined);
 const AccountsContext = createContext<AccountsContextType | undefined>(undefined);
-
-// ─── Helper ───────────────────────────────────────────────────────────────────
-
-function sortByDateDesc<T extends { date: string }>(items: T[]) {
-  return [...items].sort(
-    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-  );
-}
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
 
@@ -325,62 +324,97 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     const incomePath = `users/${uid}/incomes`;
     const accountPath = `users/${uid}/accounts`;
     const accountTypePath = `users/${uid}/accountTypes`;
+    const expensesCol = collection(db, ...base, "expenses");
+    const incomesCol = collection(db, ...base, "incomes");
 
-    const unsubscribers = [
-      onSnapshot(
-        query(collection(db, ...base, "expenses"), orderBy("createdAt", "desc")),
-        (snap) => {
-          logQuerySnapshot(expensePath, snap);
-          setExpenses(
-            // Firestore doc id must win over any `id` field stored on the document.
-            snap.docs
-              .map((d) => ({ ...(d.data() as object), id: d.id } as Expense))
-              .filter(isActiveLedgerRow)
-          );
-          pendingExpensesCountRef.current = snap.docs.filter(
-            (d) => d.metadata.hasPendingWrites
-          ).length;
-          updatePendingSyncCount();
-          setIsFromCache(snap.metadata.fromCache);
-          expensesHydratedRef.current = true;
-          setFinanceError(null);
+    const applyExpensesSnap = (snap: QuerySnapshot) => {
+      logQuerySnapshot(expensePath, snap);
+      const { items, pendingWrites } = foldLedgerSnapshot<Expense>(snap.docs, {
+        activeOnly: true,
+      });
+      setExpenses(items);
+      pendingExpensesCountRef.current = pendingWrites;
+      updatePendingSyncCount();
+      setIsFromCache(snap.metadata.fromCache);
+      expensesHydratedRef.current = true;
+      setFinanceError(null);
+      setExpensesLoading(false);
+    };
+
+    const applyIncomesSnap = (snap: QuerySnapshot) => {
+      logQuerySnapshot(incomePath, snap);
+      const { items, pendingWrites } = foldLedgerSnapshot<Income>(snap.docs, {
+        activeOnly: true,
+      });
+      setIncomes(items);
+      pendingIncomesCountRef.current = pendingWrites;
+      updatePendingSyncCount();
+      incomesHydratedRef.current = true;
+      setFinanceError(null);
+      setIncomesLoading(false);
+    };
+
+    // SPENDLY-12: first paint is a page, not the lifetime ledger. The idle
+    // upgrade below is the same pattern docs/PERF_BASELINE.md described and
+    // commit 007f649 removed. Do not set loading on the upgrade.
+    let expensesUnsub = onSnapshot(
+      query(expensesCol, orderBy("createdAt", "desc"), limit(LEDGER_STAGED_LIMIT)),
+      applyExpensesSnap,
+      snapshotErrorHandler(
+        "snapshot.expenses",
+        (failure) => {
+          setFinanceError(failure);
           setExpensesLoading(false);
         },
-        snapshotErrorHandler(
-          "snapshot.expenses",
-          (failure) => {
-            setFinanceError(failure);
-            setExpensesLoading(false);
-          },
-          "Couldn't load your expenses."
-        )
-      ),
-      onSnapshot(
-        query(collection(db, ...base, "incomes"), orderBy("createdAt", "desc")),
-        (snap) => {
-          logQuerySnapshot(incomePath, snap);
-          setIncomes(
-            snap.docs
-              .map((d) => ({ ...(d.data() as object), id: d.id } as Income))
-              .filter(isActiveLedgerRow)
-          );
-          pendingIncomesCountRef.current = snap.docs.filter(
-            (d) => d.metadata.hasPendingWrites
-          ).length;
-          updatePendingSyncCount();
-          incomesHydratedRef.current = true;
-          setFinanceError(null);
+        "Couldn't load your expenses."
+      )
+    );
+    let incomesUnsub = onSnapshot(
+      query(incomesCol, orderBy("createdAt", "desc"), limit(LEDGER_STAGED_LIMIT)),
+      applyIncomesSnap,
+      snapshotErrorHandler(
+        "snapshot.incomes",
+        (failure) => {
+          setFinanceError(failure);
           setIncomesLoading(false);
         },
-        snapshotErrorHandler(
-          "snapshot.incomes",
-          (failure) => {
-            setFinanceError(failure);
-            setIncomesLoading(false);
-          },
-          "Couldn't load your income."
-        )
-      ),
+        "Couldn't load your income."
+      )
+    );
+
+    const cancelLedgerUpgrade = scheduleIdleWork(
+      () => {
+        expensesUnsub();
+        expensesUnsub = onSnapshot(
+          query(expensesCol, orderBy("createdAt", "desc")),
+          applyExpensesSnap,
+          snapshotErrorHandler(
+            "snapshot.expenses",
+            (failure) => {
+              setFinanceError(failure);
+              setExpensesLoading(false);
+            },
+            "Couldn't load your expenses."
+          )
+        );
+        incomesUnsub();
+        incomesUnsub = onSnapshot(
+          query(incomesCol, orderBy("createdAt", "desc")),
+          applyIncomesSnap,
+          snapshotErrorHandler(
+            "snapshot.incomes",
+            (failure) => {
+              setFinanceError(failure);
+              setIncomesLoading(false);
+            },
+            "Couldn't load your income."
+          )
+        );
+      },
+      { timeoutMs: 2800, fallbackDelayMs: 1200 }
+    );
+
+    const unsubscribers = [
       onSnapshot(
         query(collection(db, ...base, "accounts")),
         (snap) => {
@@ -432,6 +466,9 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     ];
 
     return () => {
+      cancelLedgerUpgrade();
+      expensesUnsub();
+      incomesUnsub();
       forgetSnapshotPath(expensePath);
       forgetSnapshotPath(incomePath);
       forgetSnapshotPath(accountPath);
@@ -459,16 +496,9 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
             query(collection(db, ...base, "accountPayments")),
             (snap) => {
               logQuerySnapshot(paymentPath, snap);
-              setPayments(
-                sortByDateDesc(
-                  snap.docs.map(
-                    (d) => ({ id: d.id, ...(d.data() as object) } as AccountPayment)
-                  )
-                )
-              );
-              pendingPaymentsCountRef.current = snap.docs.filter(
-                (d) => d.metadata.hasPendingWrites
-              ).length;
+              const { items, pendingWrites } = foldLedgerSnapshot<AccountPayment>(snap.docs);
+              setPayments(sortLedgerByDateDesc(items));
+              pendingPaymentsCountRef.current = pendingWrites;
               updatePendingSyncCount();
               setFinanceError(null);
               setPaymentsLoading(false);
@@ -486,16 +516,9 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
             query(collection(db, ...base, "accountEntries")),
             (snap) => {
               logQuerySnapshot(entryPath, snap);
-              setEntries(
-                sortByDateDesc(
-                  snap.docs.map(
-                    (d) => ({ id: d.id, ...(d.data() as object) } as AccountEntry)
-                  )
-                )
-              );
-              pendingEntriesCountRef.current = snap.docs.filter(
-                (d) => d.metadata.hasPendingWrites
-              ).length;
+              const { items, pendingWrites } = foldLedgerSnapshot<AccountEntry>(snap.docs);
+              setEntries(sortLedgerByDateDesc(items));
+              pendingEntriesCountRef.current = pendingWrites;
               updatePendingSyncCount();
               setFinanceError(null);
               setEntriesLoading(false);
@@ -513,16 +536,9 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
             query(collection(db, ...base, "accountTransfers")),
             (snap) => {
               logQuerySnapshot(transferPath, snap);
-              setTransfers(
-                sortByDateDesc(
-                  snap.docs.map(
-                    (d) => ({ id: d.id, ...(d.data() as object) } as AccountTransfer)
-                  )
-                )
-              );
-              pendingTransfersCountRef.current = snap.docs.filter(
-                (d) => d.metadata.hasPendingWrites
-              ).length;
+              const { items, pendingWrites } = foldLedgerSnapshot<AccountTransfer>(snap.docs);
+              setTransfers(sortLedgerByDateDesc(items));
+              pendingTransfersCountRef.current = pendingWrites;
               updatePendingSyncCount();
               setFinanceError(null);
               setTransfersLoading(false);
