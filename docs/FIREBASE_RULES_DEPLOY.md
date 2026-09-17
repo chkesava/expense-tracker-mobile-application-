@@ -135,8 +135,11 @@ Preferred: GitHub → Actions →
 → Run workflow on `main`.
 
 - Leave **dry_run** on for a compiler preview. Uncheck it to upload. A
-  compiler warning (`[W]`) fails the job; the workflow dry-runs first so a
-  warning cannot reach production.
+  compiler warning (`[W]`) fails the job; the workflow compiles via the
+  Firebase Rules API first so a warning cannot reach production. CI does
+  **not** call `firebase deploy --only firestore:rules`: that command probes
+  `serviceusage.googleapis.com` before compiling, and the GitHub service
+  account is not granted that permission. Local CLI deploys are unchanged.
 - Leave **deploy_indexes** off unless live indexes have been dumped and
   copied into `firestore.indexes.json`. `firebase deploy --only firestore:indexes`
   **deletes live indexes that are not in the file**. The job dumps live
@@ -208,7 +211,10 @@ All four call `npm run test:rules` rather than each spelling out their own
 invocation. A gate that runs something different from the local command is one
 people learn to distrust, and one that can drift between "what the PR checked"
 and "what the deploy checked". The deploy workflow adds one extra check on top:
-it fails if the CLI prints a rules compiler warning (`[W]`).
+it compiles `firestore.rules` with the Firebase Rules API `:test` endpoint
+and fails on compiler warnings (`[W]`) or errors (`[E]`). That is the same
+compiler `firebase deploy` uses, without the Service Usage enablement probe
+that 403s the GitHub Actions service account.
 
 ### Why this gate exists
 

@@ -51,7 +51,9 @@ tightens writes):
 1. Open [Deploy Firestore rules](https://github.com/chkesava/expense-tracker-mobile-application-/actions/workflows/firestore-rules-deploy.yml).
 2. **Run workflow** on `main`.
 3. Leave **dry_run** checked for a preview; uncheck it to upload. A compiler
-   `[W]` fails the job before anything is uploaded.
+   `[W]` fails the job before anything is uploaded. The Action compiles and
+   uploads through the Firebase Rules API (not `firebase deploy`), because
+   the CLI’s Service Usage probe 403s the GitHub service account.
 4. Leave **deploy_indexes** off unless live indexes are already in
    `firestore.indexes.json` (a naive index deploy deletes live indexes that
    are missing from the file).

@@ -8,13 +8,23 @@
  *
  * Commands:
  *   warn --log-file <path>     Fail if firebase deploy printed `[W]`
+ *   compile --project <id> [--repo-rules <f>]
+ *   deploy-rules --project <id> [--repo-rules <f>]
+ *   seed-cli-api-cache --project <id> [--config-file <f>]
  *   diff-indexes --repo <f> --live <f> [--fail-on-drift]
  *   assert-index-deploy --repo <f> --live <f>
  *   drift --project <id> --repo-rules <f> --repo-indexes <f> --live-indexes <f>
  *   smoke --project <id>
+ *
+ * Rules compile/upload talk to firebaserules.googleapis.com directly. The
+ * Firebase CLI's `firebase deploy --only firestore:rules` first probes
+ * serviceusage.googleapis.com (ensure firestore.googleapis.com is enabled),
+ * and the GitHub Actions service account is not granted that permission.
  */
 
 const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const { cert, applicationDefault } = require('firebase-admin/app');
 const { getApps, initializeApp } = require('firebase-admin/app');
 const { getAuth } = require('firebase-admin/auth');
@@ -52,6 +62,60 @@ function assertNoRulesCompilerWarnings(logText) {
     throw error;
   }
   return { ok: true, warnings: [] };
+}
+
+function rulesSourcePayload(content, fileName = 'firestore.rules') {
+  return { source: { files: [{ name: fileName, content: String(content) }] } };
+}
+
+function formatRulesIssue(issue) {
+  const severity = String((issue && issue.severity) || 'ERROR').toUpperCase();
+  const tag = `[${severity.charAt(0)}]`;
+  const position = (issue && issue.sourcePosition) || {};
+  const line = position.line != null ? position.line : '?';
+  const column = position.column != null ? position.column : '?';
+  const description = (issue && issue.description) || 'unknown compiler issue';
+  return `${tag} ${line}:${column} - ${description}`;
+}
+
+function assertNoRulesCompilerIssues(issues) {
+  const list = Array.isArray(issues) ? issues : [];
+  if (list.length === 0) return { ok: true, formatted: [] };
+  const formatted = list.map(formatRulesIssue);
+  const error = new Error(
+    `Firestore rules compiler warnings are fatal in CI:\n${formatted.join('\n')}`
+  );
+  error.warnings = formatted;
+  throw error;
+}
+
+function defaultFirebaseToolsConfigPath() {
+  return path.join(os.homedir(), '.config', 'configstore', 'firebase-tools.json');
+}
+
+function seedFirebaseToolsApiEnablementCache(projectId, filePath) {
+  if (!projectId) {
+    throw new Error('projectId is required to seed the firebase-tools API cache.');
+  }
+  const resolved = filePath || defaultFirebaseToolsConfigPath();
+  fs.mkdirSync(path.dirname(resolved), { recursive: true });
+  let existing = {};
+  if (fs.existsSync(resolved)) {
+    try {
+      existing = JSON.parse(fs.readFileSync(resolved, 'utf8'));
+    } catch {
+      existing = {};
+    }
+  }
+  if (!existing.apiEnablementCache || typeof existing.apiEnablementCache !== 'object') {
+    existing.apiEnablementCache = {};
+  }
+  existing.apiEnablementCache[projectId] = {
+    ...(existing.apiEnablementCache[projectId] || {}),
+    'firestore.googleapis.com': true,
+  };
+  fs.writeFileSync(resolved, `${JSON.stringify(existing, null, 2)}\n`);
+  return resolved;
 }
 
 function stripNameField(fields) {
@@ -267,6 +331,68 @@ async function fetchLiveRulesSource(projectId) {
   return rulesFile.content;
 }
 
+async function compileRulesSource(projectId, rulesPath) {
+  const content = readRequiredFile(rulesPath, 'Repo rules');
+  const accessToken = await getAccessToken();
+  const url = `https://firebaserules.googleapis.com/v1/projects/${encodeURIComponent(projectId)}:test`;
+  const result = await fetchJson(url, {
+    accessToken,
+    method: 'POST',
+    body: rulesSourcePayload(content),
+  });
+  if (!result.ok) {
+    throw new Error(
+      `Rules compile failed: HTTP ${result.status} ${String(result.text).slice(0, 400)}`
+    );
+  }
+  const issues = (result.body && result.body.issues) || [];
+  return { content, issues };
+}
+
+async function createAndReleaseRuleset(projectId, content) {
+  const accessToken = await getAccessToken();
+  const created = await fetchJson(
+    `https://firebaserules.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/rulesets`,
+    {
+      accessToken,
+      method: 'POST',
+      body: rulesSourcePayload(content),
+    }
+  );
+  if (!created.ok || !created.body || !created.body.name) {
+    throw new Error(
+      `Failed to create Firestore ruleset: HTTP ${created.status} ${String(created.text).slice(0, 400)}`
+    );
+  }
+  const rulesetName = created.body.name;
+  const releaseName = `projects/${projectId}/releases/cloud.firestore`;
+  const patched = await fetchJson(
+    `https://firebaserules.googleapis.com/v1/${releaseName}?updateMask=rulesetName`,
+    {
+      accessToken,
+      method: 'PATCH',
+      body: { name: releaseName, rulesetName },
+    }
+  );
+  if (patched.ok) {
+    return { rulesetName, releaseName, createdRelease: false };
+  }
+  const createdRelease = await fetchJson(
+    `https://firebaserules.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/releases`,
+    {
+      accessToken,
+      method: 'POST',
+      body: { name: releaseName, rulesetName },
+    }
+  );
+  if (!createdRelease.ok) {
+    throw new Error(
+      `Failed to publish Firestore ruleset ${rulesetName}: HTTP ${patched.status}/${createdRelease.status} ${String(createdRelease.text).slice(0, 400)}`
+    );
+  }
+  return { rulesetName, releaseName, createdRelease: true };
+}
+
 function readRequiredFile(filePath, label) {
   if (!fs.existsSync(filePath)) {
     throw new Error(`${label} not found: ${filePath}`);
@@ -358,7 +484,9 @@ async function main(argv) {
   const args = parseArgs(argv);
   const command = args._[0];
   if (!command) {
-    throw new Error('Usage: node scripts/firestoreRulesCi.js <warn|diff-indexes|assert-index-deploy|drift|smoke> ...');
+    throw new Error(
+      'Usage: node scripts/firestoreRulesCi.js <warn|compile|deploy-rules|seed-cli-api-cache|diff-indexes|assert-index-deploy|drift|smoke> ...'
+    );
   }
 
   if (command === 'warn') {
@@ -368,6 +496,45 @@ async function main(argv) {
       : fs.readFileSync(0, 'utf8');
     assertNoRulesCompilerWarnings(logText);
     print('No Firestore rules compiler warnings.');
+    return;
+  }
+
+  if (command === 'compile') {
+    const projectId = args.project || DEFAULT_PROJECT;
+    const rulesPath = args['repo-rules'] || 'firestore.rules';
+    const compiled = await compileRulesSource(projectId, rulesPath);
+    assertNoRulesCompilerIssues(compiled.issues);
+    print(`Firestore rules compiled successfully (${rulesPath}, ${compiled.content.length} chars).`);
+    print('No Firestore rules compiler warnings.');
+    return;
+  }
+
+  if (command === 'deploy-rules') {
+    const projectId = args.project || DEFAULT_PROJECT;
+    const rulesPath = args['repo-rules'] || 'firestore.rules';
+    const compiled = await compileRulesSource(projectId, rulesPath);
+    assertNoRulesCompilerIssues(compiled.issues);
+    print(`Firestore rules compiled successfully (${rulesPath}, ${compiled.content.length} chars).`);
+
+    const liveRules = await fetchLiveRulesSource(projectId);
+    const rulesDiff = diffRulesSource(compiled.content, liveRules);
+    if (rulesDiff.identical) {
+      print(`Live Firestore rules already match ${rulesPath}; skipping upload.`);
+      print('Deploy complete');
+      return;
+    }
+
+    const released = await createAndReleaseRuleset(projectId, compiled.content);
+    print(`Uploaded ruleset ${released.rulesetName}`);
+    print(`Released ${released.rulesetName} as ${released.releaseName}`);
+    print('Deploy complete');
+    return;
+  }
+
+  if (command === 'seed-cli-api-cache') {
+    const projectId = args.project || DEFAULT_PROJECT;
+    const written = seedFirebaseToolsApiEnablementCache(projectId, args['config-file']);
+    print(`Seeded firebase-tools API enablement cache for ${projectId} at ${written}.`);
     return;
   }
 
@@ -436,16 +603,23 @@ module.exports = {
   DEFAULT_PROJECT,
   SMOKE_UID,
   STRANGER_UID,
+  assertNoRulesCompilerIssues,
   assertNoRulesCompilerWarnings,
   assertIndexDeploySafe,
+  compileRulesSource,
+  createAndReleaseRuleset,
+  defaultFirebaseToolsConfigPath,
   describeIndex,
   diffIndexes,
   diffRulesSource,
   extractJsonObject,
   fetchLiveRulesSource,
   formatIndexDiff,
+  formatRulesIssue,
   fingerprintIndex,
   normalizeRulesSource,
   parseIndexesDoc,
+  rulesSourcePayload,
   runSmokeProbe,
+  seedFirebaseToolsApiEnablementCache,
 };
