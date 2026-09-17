@@ -37,7 +37,8 @@ import {
   type CommitteePayStatus,
 } from "@/shared/utils/ganeshMath";
 import { formatInr } from "@/shared/utils/ganeshMoney";
-import { ganeshRoleLabel } from "@/shared/utils/ganeshPermissions";
+import { useGaneshT, type GaneshTranslate } from "@/providers/GaneshI18nProvider";
+import { ganeshRoleLabelKey } from "@/shared/utils/ganeshPermissions";
 import { useTheme } from "@/theme/ThemeProvider";
 
 type Filter = "all" | "paid" | "partial" | "pending" | "waived";
@@ -74,7 +75,8 @@ type CommitteeRow = {
 function buildRow(
   member: PandalMember,
   festivalMember: FestivalMember | undefined,
-  defaultTarget: number
+  defaultTarget: number,
+  t: GaneshTranslate
 ): CommitteeRow {
   const paid = festivalMember?.contributionPaid ?? 0;
   const target = effectiveCommitteeTarget(festivalMember, defaultTarget);
@@ -83,7 +85,7 @@ function buildRow(
   return {
     userId: member.userId,
     name: member.displayName,
-    roleLabel: ganeshRoleLabel(member.role),
+    roleLabel: t(ganeshRoleLabelKey(member.role)),
     paid,
     target,
     due: waived ? 0 : memberRemainingContribution({ contributionPaid: paid, contributionTarget: target }),
@@ -100,6 +102,7 @@ function buildRow(
 export default function CommitteeScreen() {
   const { theme } = useTheme();
   const g = useGaneshTokens();
+  const t = useGaneshT();
   const { push } = useRouter();
   const listPadding = useGaneshListPadding();
 
@@ -127,7 +130,8 @@ export default function CommitteeScreen() {
           buildRow(
             member,
             festivalMembers.find((item) => item.userId === member.userId),
-            defaultTarget
+            defaultTarget,
+            t
           )
         )
         .sort((a, b) => {

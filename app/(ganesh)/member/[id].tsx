@@ -33,7 +33,13 @@ import { useAuth } from "@/providers/AuthProvider";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { haptic } from "@/lib/haptics";
 import { toast } from "@/lib/toast";
+import { useGaneshT } from "@/providers/GaneshI18nProvider";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
+import {
+  GaneshLanguagePicker,
+  INHERIT_LANGUAGE,
+  type LanguageChoice,
+} from "@/components/ganesh/i18n/GaneshLanguagePicker";
 import { useGaneshPermissions } from "@/hooks/useGaneshPermissions";
 import { formatGaneshWhen } from "@/shared/utils/ganeshIdentity";
 import { lastAdminSafetyMessage } from "@/shared/utils/ganeshMemberCopy";
@@ -51,7 +57,7 @@ import {
 } from "@/shared/utils/ganeshPermissionRegistry";
 import {
   ALL_GANESH_PERMISSIONS,
-  ganeshRoleLabel,
+  ganeshRoleLabelKey,
   ganeshStatusLabel,
   getEffectivePermissions,
 } from "@/shared/utils/ganeshPermissions";
@@ -72,6 +78,7 @@ export default function MemberDetailScreen() {
   const { contributions } = useContributions(pandalId, festivalId);
   const writes = useGaneshWrites();
   const { can, isAdmin } = useGaneshPermissions();
+  const t = useGaneshT();
   const { realUser } = useAuth();
   const { pandals } = usePandals();
   const { roles } = usePandalRoles(pandalId);
@@ -102,6 +109,7 @@ export default function MemberDetailScreen() {
   const [_customTarget, setCustomTarget] = useState<string | undefined>(undefined);
   const customTarget = _customTarget ?? String(target);
   const [busy, setBusy] = useState(false);
+  const [languageBusy, setLanguageBusy] = useState(false);
   const [waiveReason, setWaiveReason] = useState("");
   const [assigning, setAssigning] = useState(false);
   const [draftRoleIds, setDraftRoleIds] = useState<string[] | undefined>(undefined);
@@ -166,6 +174,22 @@ export default function MemberDetailScreen() {
   const pct = target > 0 ? Math.min(100, Math.round((paid / target) * 100)) : 0;
   const trackColor =
     status === "paid" ? g.godFund : status === "partial" ? theme.colors.warning : g.divider;
+
+  /**
+   * `inherit` clears the field so the member follows the Pandal default, rather
+   * than pinning them to whatever the default happens to be today.
+   */
+  const onPickLanguage = (choice: LanguageChoice) => {
+    if (!id) return;
+    setLanguageBusy(true);
+    writes
+      .setMemberLanguage(id, choice === INHERIT_LANGUAGE ? null : choice)
+      .catch((caught) => {
+        logError("ganesh.member.language", caught);
+        toast.error(friendlyErrorMessage(caught, t("language.member.error")));
+      })
+      .finally(() => setLanguageBusy(false));
+  };
 
   const saveWaiver = (waived: boolean) => {
     if (!id) return;
@@ -306,7 +330,7 @@ export default function MemberDetailScreen() {
               { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular },
             ]}
           >
-            {roleNames.length > 0 ? roleNames.join(" · ") : ganeshRoleLabel(role)}
+            {roleNames.length > 0 ? roleNames.join(" · ") : t(ganeshRoleLabelKey(role))}
             {pandalMember?.status ? ` · ${ganeshStatusLabel(pandalMember.status)}` : ""}
           </Text>
           <View style={styles.heroBadges}>
@@ -689,6 +713,29 @@ export default function MemberDetailScreen() {
               />
             ) : null}
           </View>
+        </Section>
+      ) : null}
+
+      {/* Its own section rather than inside "Access": that card holds Make
+          Admin / Suspend / Remove, and a display preference does not belong
+          among destructive authority controls.
+
+          Gated on `isAdmin`, not `can("members.update")` — firestore.rules
+          gates member writes on a literal `role == 'admin'`, so a custom role
+          holding the permission would be shown a control the rules refuse.
+          Self-assignment is allowed: it is harmless, and it is the only way an
+          admin can preview what a member will see. */}
+      {isAdmin && pandalMember && pandalMember.status !== "removed" ? (
+        <Section
+          title={t("language.member.title")}
+          subtitle={t("language.member.subtitle")}
+        >
+          <GaneshLanguagePicker
+            value={pandalMember.language ?? INHERIT_LANGUAGE}
+            inheritedDefault={pandal?.defaultLanguage ?? "en"}
+            disabled={languageBusy}
+            onChange={onPickLanguage}
+          />
         </Section>
       ) : null}
 

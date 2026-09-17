@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { AdminGlyph } from "@/components/ganesh/admin/adminArt";
+import { GaneshLanguagePicker } from "@/components/ganesh/i18n/GaneshLanguagePicker";
 import { AdminQueryState } from "@/components/ganesh/AdminQueryState";
 import { FestivalStackHero } from "@/components/ganesh/chrome/FestivalStackHero";
 import { ganeshStackLayout } from "@/components/ganesh/chrome/stackLayout";
@@ -14,9 +15,11 @@ import { usePandals } from "@/hooks/usePandals";
 import { usePandalMembers } from "@/hooks/usePandalMembers";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
+import { useGaneshT } from "@/providers/GaneshI18nProvider";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import { formatGaneshWhen, formatPandalCode } from "@/shared/utils/ganeshIdentity";
-import { ganeshRoleLabel } from "@/shared/utils/ganeshPermissions";
+import { type GaneshLanguage } from "@/shared/i18n/ganesh/types";
+import { ganeshRoleLabelKey } from "@/shared/utils/ganeshPermissions";
 import { useTheme } from "@/theme/ThemeProvider";
 
 export default function AdminPandalSettingsScreen() {
@@ -27,6 +30,7 @@ export default function AdminPandalSettingsScreen() {
   const { members } = usePandalMembers(pandalId);
   const writes = useGaneshWrites();
   const { can } = useGaneshPermissions();
+  const t = useGaneshT();
   const canUpdate = can("settings.update");
   const pandal = pandals.find((item) => item.id === pandalId);
   const admins = members.filter((member) => member.role === "admin" && member.status === "active");
@@ -40,6 +44,13 @@ export default function AdminPandalSettingsScreen() {
   const area = _area ?? pandal?.area ?? "";
   const description = _description ?? pandal?.description ?? "";
   const contactPhone = _contactPhone ?? pandal?.contactPhone ?? "";
+
+  const setDefaultLanguage = (choice: string) => {
+    writes.setPandalDefaultLanguage(choice as GaneshLanguage).catch((caught) => {
+      logError("ganesh.admin.defaultLanguage", caught);
+      toast.error(friendlyErrorMessage(caught, t("language.member.error")));
+    });
+  };
 
   const setJoinMode = (mode: "approval" | "open") => {
     writes.updatePandalJoinMode(mode).catch((caught) => {
@@ -75,7 +86,7 @@ export default function AdminPandalSettingsScreen() {
             {admins.length > 0 ? (
               <Text style={{ color: theme.colors.mutedForeground, lineHeight: 20 }}>
                 Current admin{admins.length === 1 ? "" : "s"}:{" "}
-                {admins.map((admin) => `${admin.displayName} (${ganeshRoleLabel(admin.role)})`).join(", ")}
+                {admins.map((admin) => `${admin.displayName} (${t(ganeshRoleLabelKey(admin.role))})`).join(", ")}
               </Text>
             ) : null}
             <Input label="Pandal name" value={name} onChangeText={setName} editable={canUpdate} />
@@ -127,6 +138,21 @@ export default function AdminPandalSettingsScreen() {
                 Open
               </Button>
             </View>
+            {/* Matches the "Membership approval" block above: bold heading,
+                muted explanation, then the control. No `inheritedDefault` — this
+                screen *is* where the default is set, so a "Pandal default" chip
+                would point at itself. */}
+            <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>
+              {t("language.pandal.title")}
+            </Text>
+            <Text style={{ color: theme.colors.mutedForeground, lineHeight: 20 }}>
+              {t("language.pandal.subtitle")}
+            </Text>
+            <GaneshLanguagePicker
+              value={pandal.defaultLanguage ?? "en"}
+              onChange={setDefaultLanguage}
+              disabled={!canUpdate}
+            />
             <Text style={{ color: theme.colors.mutedForeground, lineHeight: 20 }}>
               Contribution targets, festival defaults, and expense categories are on their own
               Admin screens.
