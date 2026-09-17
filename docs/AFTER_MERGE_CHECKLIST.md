@@ -137,7 +137,17 @@ rules, if native users are still on the old write path.
 
 ---
 
-## 5. Smoke after leftovers
+## 5. App Check (only if the PR added `lib/appCheck`)
+
+Web tokens need a reCAPTCHA Enterprise site key in
+`EXPO_PUBLIC_FIREBASE_APPCHECK_RECAPTCHA_KEY` (Netlify env + local `.env`).
+Android Play Integrity is **not** in this JS-SDK app — do **not** turn on
+Enforce in Firebase console → App Check until native clients send tokens, or
+Android users get `app-check-token` failures.
+
+---
+
+## 6. Smoke after leftovers
 
 - Web: sign in on `/expense` (and `/ganesh` if shared). Hit the changed flow.
 - Android: same flow on the new APK. Confirm the in-app update prompt if you
@@ -160,4 +170,9 @@ Leftovers (see docs/AFTER_MERGE_CHECKLIST.md):
 - [ ] firebase deploy --only firestore:rules --project expenseapp-27f94
       (after the new app is out, if this ticket tightens writes)
 - [ ] Indexes / Storage / Functions only if those files changed
+- [ ] App Check (only if this ticket added client init):
+      Firebase console → App Check → register Web (reCAPTCHA Enterprise)
+      and put the site key in Netlify `EXPO_PUBLIC_FIREBASE_APPCHECK_RECAPTCHA_KEY`.
+      Play Integrity for Android needs `@react-native-firebase/app-check` (not
+      this JS SDK). Do **not** enforce until Android tokens exist.
 ```

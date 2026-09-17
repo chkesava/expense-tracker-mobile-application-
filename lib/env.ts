@@ -34,6 +34,14 @@ export const env = {
     storageBucket: trimEnv(process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET),
     messagingSenderId: trimEnv(process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER),
     appId: trimEnv(process.env.EXPO_PUBLIC_FIREBASE_APP_ID),
+    /** reCAPTCHA Enterprise site key. Empty = App Check stays off (web). */
+    appCheckRecaptchaKey: trimEnv(
+      process.env.EXPO_PUBLIC_FIREBASE_APPCHECK_RECAPTCHA_KEY
+    ),
+    /** `__DEV__` only. `true` mints a debug token; otherwise a console token. */
+    appCheckDebugToken: trimEnv(
+      process.env.EXPO_PUBLIC_FIREBASE_APPCHECK_DEBUG_TOKEN
+    ),
   },
 
   supabase: {
