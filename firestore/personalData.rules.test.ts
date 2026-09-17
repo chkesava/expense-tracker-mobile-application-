@@ -93,6 +93,53 @@ describe("personal tree", () => {
     await assertSucceeds(getDoc(doc(db, "users", OWNER)));
   });
 
+  it("owner can merge a non-role field onto their user doc", async () => {
+    const db = env.authenticatedContext(OWNER).firestore();
+    await assertSucceeds(
+      setDoc(doc(db, "users", OWNER), { username: "owner", currency: "USD" }, { merge: true })
+    );
+  });
+
+  it("owner cannot merge SUPER_ADMIN onto their user doc", async () => {
+    const db = env.authenticatedContext(OWNER).firestore();
+    await assertFails(
+      setDoc(doc(db, "users", OWNER), { role: "SUPER_ADMIN" }, { merge: true })
+    );
+  });
+
+  it("owner can create a user doc without role", async () => {
+    const db = env.authenticatedContext("u-new").firestore();
+    await assertSucceeds(
+      setDoc(doc(db, "users", "u-new"), { email: "new@example.com" })
+    );
+  });
+
+  it("owner can create a user doc with role USER", async () => {
+    const db = env.authenticatedContext("u-user").firestore();
+    await assertSucceeds(
+      setDoc(doc(db, "users", "u-user"), { role: "USER" })
+    );
+  });
+
+  it("owner cannot create a user doc as SUPER_ADMIN", async () => {
+    const db = env.authenticatedContext("u-admin").firestore();
+    await assertFails(
+      setDoc(doc(db, "users", "u-admin"), { role: "SUPER_ADMIN" })
+    );
+  });
+
+  it("a stranger cannot read the owner's user doc", async () => {
+    const db = env.authenticatedContext(OTHER).firestore();
+    await assertFails(getDoc(doc(db, "users", OWNER)));
+  });
+
+  it("a stranger cannot write the owner's user doc", async () => {
+    const db = env.authenticatedContext(OTHER).firestore();
+    await assertFails(
+      setDoc(doc(db, "users", OWNER), { username: "hijack" }, { merge: true })
+    );
+  });
+
   for (const name of collections) {
     it(`owner lists ${name}`, async () => {
       const db = env.authenticatedContext(OWNER).firestore();
