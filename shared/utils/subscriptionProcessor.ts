@@ -298,6 +298,7 @@ export type DuePostAction =
   | {
       kind: "expense";
       subscriptionId: string;
+      docId: string;
       monthKey: string;
       lastProcessedDate?: string;
       expense: Omit<Expense, "id">;
@@ -306,11 +307,33 @@ export type DuePostAction =
   | {
       kind: "transfer";
       subscriptionId: string;
+      docId: string;
       monthKey: string;
       lastProcessedDate?: string;
       transfer: Omit<AccountTransfer, "id">;
       markCompleted: boolean;
     };
+
+/**
+ * Idempotency key for an auto-posted charge (SPENDLY-40).
+ * Monthly: `{subscriptionId}_{YYYY-MM}`. Every-N-days: `{subscriptionId}_{YYYY-MM-DD}`.
+ */
+export function subscriptionChargeDocId(input: {
+  subscriptionId: string;
+  monthKey: string;
+  targetDateStr: string;
+  frequency: ReturnType<typeof subscriptionFrequency>;
+}): string {
+  const suffix =
+    input.frequency === "every_n_days" ? input.targetDateStr : input.monthKey;
+  return `${input.subscriptionId}_${suffix}`;
+}
+
+/** True when posting would create a charge with no bank/card to debit. */
+export function duePostNeedsAccount(action: DuePostAction): boolean {
+  if (action.kind === "expense") return !action.expense.accountId;
+  return !action.transfer.fromAccountId || !action.transfer.toAccountId;
+}
 
 /**
  * Pure planner for idle auto-post: which due subscriptions become expenses/transfers.
@@ -331,10 +354,18 @@ export function planDueSubscriptionPosts(
     const subscriptionId = sub.id;
     const { monthKey, targetDateStr, isCompleted, lastProcessedDate } = evaluation;
 
+    const docId = subscriptionChargeDocId({
+      subscriptionId,
+      monthKey,
+      targetDateStr,
+      frequency: subscriptionFrequency(sub),
+    });
+
     if (sub.type === "transfer") {
       actions.push({
         kind: "transfer",
         subscriptionId,
+        docId,
         monthKey,
         lastProcessedDate,
         transfer: buildTransferFromSubscription(sub, targetDateStr),
@@ -346,6 +377,7 @@ export function planDueSubscriptionPosts(
     actions.push({
       kind: "expense",
       subscriptionId,
+      docId,
       monthKey,
       lastProcessedDate,
       expense: buildExpenseFromSubscription(sub, targetDateStr, monthKey),
