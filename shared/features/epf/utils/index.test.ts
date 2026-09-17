@@ -373,6 +373,16 @@ describe("archiving", () => {
     if (!result.ok) expect(result.conflictingId).toBe("live");
   });
 
+  it("reads a valid scheduleFrom and drops a malformed one", () => {
+    expect(
+      normalizeEstablishment("x", { dateJoined: "2020-01-01", scheduleFrom: "2026-09" }).scheduleFrom
+    ).toBe("2026-09");
+    expect(
+      normalizeEstablishment("x", { dateJoined: "2020-01-01", scheduleFrom: "Sept 2026" })
+        .scheduleFrom
+    ).toBeUndefined();
+  });
+
   it("reads archived only from an explicit true", () => {
     expect(normalizeEstablishment("x", { dateJoined: "2020-01-01" }).archived).toBeUndefined();
     expect(

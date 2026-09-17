@@ -313,6 +313,8 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
         existing,
         throughMonth,
       });
+      // SPENDLY-19: the planner calls isEligibleForAutomatedProcessing, so a
+      // 2019 dateJoined cannot mint ~80 simulated months for this batch.
       if (planned.length === 0) continue;
 
       for (

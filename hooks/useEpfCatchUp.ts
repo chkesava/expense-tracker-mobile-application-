@@ -67,6 +67,8 @@ export function useEpfCatchUp(args: {
       allEstablishments,
       existing: contributions,
       // Same clock as the cron — EPF months are IST-defined (KAN-72).
+      // SPENDLY-19: eligibility lives inside the planner, so catch-up and
+      // cron cannot mint historical simulated months even if this list is long.
       throughMonth: epfCurrentMonth(),
     });
     if (planned.length === 0) return;

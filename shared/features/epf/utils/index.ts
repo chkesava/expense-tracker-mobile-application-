@@ -134,6 +134,10 @@ export function normalizeEstablishment(
     // what `tolerantReads.test.ts` pins.
     epsMember: raw.epsMember === false ? false : undefined,
     notes: typeof raw.notes === "string" && raw.notes ? raw.notes : undefined,
+    scheduleFrom:
+      typeof raw.scheduleFrom === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(raw.scheduleFrom)
+        ? raw.scheduleFrom
+        : undefined,
     createdAt: raw.createdAt,
     updatedAt: raw.updatedAt,
   };
