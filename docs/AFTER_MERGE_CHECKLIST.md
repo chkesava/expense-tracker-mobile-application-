@@ -43,19 +43,30 @@ Tick only the rows that match the diff.
 
 ---
 
-## 2. Firestore rules (manual)
+## 2. Firestore rules (manual GitHub Action)
 
-Needs Firebase CLI + **JDK 21** on your machine (`firebase.json` runs
-`npm run test:rules` as a predeploy hook; JDK 17 will abort the deploy).
+Merges do **not** deploy rules. After the new app is out (if this ticket
+tightens writes):
+
+1. Open [Deploy Firestore rules](https://github.com/chkesava/expense-tracker-mobile-application-/actions/workflows/firestore-rules-deploy.yml).
+2. **Run workflow** on `main`.
+3. Leave **dry_run** checked for a preview; uncheck it to upload. A compiler
+   `[W]` fails the job before anything is uploaded.
+4. Leave **deploy_indexes** off unless live indexes are already in
+   `firestore.indexes.json` (a naive index deploy deletes live indexes that
+   are missing from the file).
+
+Done when the Action prints `Deploy complete` and Firebase console → Firestore
+→ Rules shows the new file.
+
+Local CLI still works (Firebase CLI + **JDK 21**; `firebase.json` runs
+`npm run test:rules` as a predeploy hook; JDK 17 will abort the deploy):
 
 ```bash
 firebase login
 firebase deploy --only firestore:rules --project expenseapp-27f94 --dry-run
 firebase deploy --only firestore:rules --project expenseapp-27f94
 ```
-
-Done when the CLI prints `Deploy complete` and the Firebase console → Firestore
-→ Rules shows the new file.
 
 **Do not** deploy the sibling Vite repo’s `firestore.rules` over this project.
 
@@ -64,13 +75,17 @@ commit so repo and live stay in sync.
 
 ### Indexes (only if `firestore.indexes.json` changed)
 
+Dump live indexes and diff them against the file before deploying. The
+GitHub Action does this and refuses the upload when live indexes are missing
+from the file.
+
 ```bash
+firebase firestore:indexes --project expenseapp-27f94
 firebase deploy --only firestore:indexes --project expenseapp-27f94
 ```
 
-This **deletes live indexes that are not in the file**. Diff the console against
-the file first. Index builds are async; queries fail with `failed-precondition`
-until they finish.
+This **deletes live indexes that are not in the file**. Index builds are async;
+queries fail with `failed-precondition` until they finish.
 
 ### Storage (only if `storage.rules` changed)
 
@@ -167,9 +182,11 @@ Leftovers (see docs/AFTER_MERGE_CHECKLIST.md):
 - [ ] GitHub → Actions → Deploy Web (Netlify) → Run workflow on main
 - [ ] GitHub → Actions → Release — Expense → Run workflow on main
       (also Nutrition / Ganesh if the change is shared Firebase)
-- [ ] firebase deploy --only firestore:rules --project expenseapp-27f94
-      (after the new app is out, if this ticket tightens writes)
-- [ ] Indexes / Storage / Functions only if those files changed
+- [ ] GitHub → Actions → Deploy Firestore rules → Run workflow on main
+      (uncheck dry_run to upload; after the new app is out if this ticket
+      tightens writes). Do not deploy indexes unless live indexes are in
+      firestore.indexes.json.
+- [ ] Storage / Functions only if those files changed
 - [ ] App Check (only if this ticket added client init):
       Firebase console → App Check → register Web (reCAPTCHA Enterprise)
       and put the site key in Netlify `EXPO_PUBLIC_FIREBASE_APPCHECK_RECAPTCHA_KEY`.

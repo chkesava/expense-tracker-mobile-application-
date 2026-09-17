@@ -1,0 +1,235 @@
+name: Deploy Firestore rules
+
+# SPENDLY-8 / SEC-07.
+#
+# Uploads `firestore.rules` (optional indexes) after the emulator suite passes.
+# Manual `workflow_dispatch` only for the upload — merging to main never ships
+# rules, because leftover order is still "new app first, then tighten rules".
+#
+# Never `pull_request`. This workflow reads FIREBASE_SERVICE_ACCOUNT, which
+# must not be given to fork PRs. PR quality stays in rules-tests.yml (no secrets).
+#
+# The nightly schedule never deploys. It diffs live rules/indexes against the
+# repo and runs a production read probe (own doc allowed, stranger denied) so
+# drift is visible instead of assumed.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Preview the upload (firebase --dry-run). Leave on unless you intend to ship."
+        type: boolean
+        default: true
+      deploy_indexes:
+        description: "Also deploy firestore.indexes.json. Blocked if live indexes are missing from the file."
+        type: boolean
+        default: false
+  schedule:
+    # 03:17 UTC — off the hour, daily drift, no upload.
+    - cron: "17 3 * * *"
+
+concurrency:
+  group: firestore-rules-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name == 'schedule' }}
+
+permissions:
+  contents: read
+
+env:
+  FIREBASE_PROJECT: expenseapp-27f94
+
+jobs:
+  rules:
+    name: Firestore rules
+    uses: ./.github/workflows/rules-tests.yml
+
+  deploy:
+    name: Deploy rules
+    if: github.event_name == 'workflow_dispatch'
+    needs: rules
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Set up Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Firebase CLI
+        run: |
+          for attempt in 1 2 3; do
+            if npm install --global firebase-tools@15.29.0; then
+              exit 0
+            fi
+            echo "::warning::firebase-tools install failed (attempt $attempt of 3)"
+            sleep $((attempt * 15))
+          done
+          echo "::error::firebase-tools install failed after 3 attempts"
+          exit 1
+
+      - name: Cache emulator binaries
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ runner.os }}
+
+      - name: Write service account credentials
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "::error::FIREBASE_SERVICE_ACCOUNT secret is empty."
+            exit 1
+          fi
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "${{ runner.temp }}/service-account.json"
+          chmod 600 "${{ runner.temp }}/service-account.json"
+
+      # Dry-run first so a compiler `[W]` fails the job before anything is
+      # uploaded. `firebase deploy` itself treats warnings as non-fatal.
+      - name: Compile rules (dry-run)
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/service-account.json
+        run: |
+          set -euo pipefail
+          firebase deploy --only firestore:rules --project "$FIREBASE_PROJECT" --non-interactive --dry-run \
+            2>&1 | tee "${{ runner.temp }}/rules-dry-run.log"
+          node scripts/firestoreRulesCi.js warn --log-file "${{ runner.temp }}/rules-dry-run.log"
+
+      - name: Deploy Firestore rules
+        if: ${{ inputs.dry_run == false }}
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/service-account.json
+        run: |
+          set -euo pipefail
+          firebase deploy --only firestore:rules --project "$FIREBASE_PROJECT" --non-interactive \
+            2>&1 | tee "${{ runner.temp }}/rules-deploy.log"
+          node scripts/firestoreRulesCi.js warn --log-file "${{ runner.temp }}/rules-deploy.log"
+
+      - name: Optionally deploy indexes
+        if: ${{ inputs.deploy_indexes }}
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/service-account.json
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          firebase firestore:indexes --project "$FIREBASE_PROJECT" --non-interactive \
+            > "${{ runner.temp }}/live-indexes.json"
+          node scripts/firestoreRulesCi.js assert-index-deploy \
+            --repo firestore.indexes.json \
+            --live "${{ runner.temp }}/live-indexes.json"
+          EXTRA=()
+          if [ "$DRY_RUN" != "false" ]; then
+            EXTRA+=(--dry-run)
+          fi
+          firebase deploy --only firestore:indexes --project "$FIREBASE_PROJECT" --non-interactive "${EXTRA[@]}"
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "## Firestore rules deploy"
+            echo ""
+            echo "- Event: \`workflow_dispatch\`"
+            echo "- Dry-run: **${{ inputs.dry_run }}**"
+            echo "- Indexes: **${{ inputs.deploy_indexes }}**"
+            echo "- Project: \`$FIREBASE_PROJECT\`"
+            echo "- Compiler warnings: treated as failure (\`[W]\`)."
+            echo "- Secrets used: FIREBASE_SERVICE_ACCOUNT (not available to pull_request)."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  drift:
+    name: Live vs repo drift
+    if: github.event_name == 'schedule'
+    needs: rules
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Firebase CLI
+        run: |
+          for attempt in 1 2 3; do
+            if npm install --global firebase-tools@15.29.0; then
+              exit 0
+            fi
+            echo "::warning::firebase-tools install failed (attempt $attempt of 3)"
+            sleep $((attempt * 15))
+          done
+          echo "::error::firebase-tools install failed after 3 attempts"
+          exit 1
+
+      - name: Write service account credentials
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "::error::FIREBASE_SERVICE_ACCOUNT secret is empty."
+            exit 1
+          fi
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "${{ runner.temp }}/service-account.json"
+          chmod 600 "${{ runner.temp }}/service-account.json"
+
+      - name: Diff live rules and indexes
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/service-account.json
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          set -euo pipefail
+          firebase firestore:indexes --project "$FIREBASE_PROJECT" --non-interactive \
+            > "${{ runner.temp }}/live-indexes.json"
+          node scripts/firestoreRulesCi.js drift \
+            --project "$FIREBASE_PROJECT" \
+            --repo-rules firestore.rules \
+            --repo-indexes firestore.indexes.json \
+            --live-indexes "${{ runner.temp }}/live-indexes.json"
+
+      - name: Production read probe
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/service-account.json
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          EXPO_PUBLIC_FIREBASE_API_KEY: ${{ secrets.EXPO_PUBLIC_FIREBASE_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$EXPO_PUBLIC_FIREBASE_API_KEY" ]; then
+            echo "::error::EXPO_PUBLIC_FIREBASE_API_KEY is empty; cannot run the production smoke probe."
+            exit 1
+          fi
+          node scripts/firestoreRulesCi.js smoke --project "$FIREBASE_PROJECT"
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "## Firestore drift"
+            echo ""
+            echo "- Event: nightly schedule (no deploy)"
+            echo "- Live rules/indexes vs repo: fail on mismatch"
+            echo "- Smoke: owner read of \`users/spendly-sec07-smoke\`; stranger denied"
+            echo "- Secrets used: FIREBASE_SERVICE_ACCOUNT, EXPO_PUBLIC_FIREBASE_API_KEY"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -22,7 +22,7 @@ export type SnapshotDocLike = {
  * Map a QuerySnapshot in one walk: pending-write count plus hydrated rows.
  * Firestore doc id always wins over a stored `id` field.
  */
-export function foldLedgerSnapshot<T extends { id: string }>(
+export function foldLedgerSnapshot<T extends { id?: string }>(
   docs: SnapshotDocLike[],
   options?: { activeOnly?: boolean }
 ): { items: T[]; pendingWrites: number } {
@@ -31,7 +31,12 @@ export function foldLedgerSnapshot<T extends { id: string }>(
   for (const docSnap of docs) {
     if (docSnap.metadata.hasPendingWrites) pendingWrites += 1;
     const item = { ...(docSnap.data() as object), id: docSnap.id } as T;
-    if (options?.activeOnly === true && !isActiveLedgerRow(item)) continue;
+    if (
+      options?.activeOnly === true &&
+      !isActiveLedgerRow(item as { deletedAt?: unknown })
+    ) {
+      continue;
+    }
     items.push(item);
   }
   return { items, pendingWrites };
