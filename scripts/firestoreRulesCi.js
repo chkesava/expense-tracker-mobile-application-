@@ -8,13 +8,21 @@
  *
  * Commands:
  *   warn --log-file <path>     Fail if firebase deploy printed `[W]`
+ *   seed-cli-api-cache --project <id> [--config-file <f>]
+ *   explain-iam --log-file <path> [--allow-dry-run-iam]
  *   diff-indexes --repo <f> --live <f> [--fail-on-drift]
  *   assert-index-deploy --repo <f> --live <f>
  *   drift --project <id> --repo-rules <f> --repo-indexes <f> --live-indexes <f>
  *   smoke --project <id>
+ *
+ * firebase-tools probes serviceusage.googleapis.com before a Firestore
+ * deploy. The GitHub Actions service account is not granted that call, so
+ * CI seeds the CLI's local "API already enabled" cache instead.
  */
 
 const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const { cert, applicationDefault } = require('firebase-admin/app');
 const { getApps, initializeApp } = require('firebase-admin/app');
 const { getAuth } = require('firebase-admin/auth');
@@ -52,6 +60,58 @@ function assertNoRulesCompilerWarnings(logText) {
     throw error;
   }
   return { ok: true, warnings: [] };
+}
+
+function defaultFirebaseToolsConfigPath() {
+  return path.join(os.homedir(), '.config', 'configstore', 'firebase-tools.json');
+}
+
+function seedFirebaseToolsApiEnablementCache(projectId, filePath) {
+  if (!projectId) {
+    throw new Error('projectId is required to seed the firebase-tools API cache.');
+  }
+  const resolved = filePath || defaultFirebaseToolsConfigPath();
+  fs.mkdirSync(path.dirname(resolved), { recursive: true });
+  let existing = {};
+  if (fs.existsSync(resolved)) {
+    try {
+      existing = JSON.parse(fs.readFileSync(resolved, 'utf8'));
+    } catch {
+      existing = {};
+    }
+  }
+  if (!existing.apiEnablementCache || typeof existing.apiEnablementCache !== 'object') {
+    existing.apiEnablementCache = {};
+  }
+  existing.apiEnablementCache[projectId] = {
+    ...(existing.apiEnablementCache[projectId] || {}),
+    'firestore.googleapis.com': true,
+  };
+  fs.writeFileSync(resolved, `${JSON.stringify(existing, null, 2)}\n`);
+  return resolved;
+}
+
+function classifyFirebaseDeployFailure(logText) {
+  const text = String(logText);
+  if (/Permission denied to get service/.test(text) || /serviceusage\.googleapis\.com[\s\S]*\b403\b/.test(text)) {
+    return 'serviceusage';
+  }
+  if (/:test had HTTP Error: 403/.test(text) || /firebaserules\.googleapis\.com[\s\S]*\b403\b/.test(text)) {
+    return 'rules-iam';
+  }
+  return null;
+}
+
+function firebaseRulesIamMessage() {
+  return [
+    'The GitHub Actions service account cannot compile or upload Firestore rules.',
+    '',
+    'Grant these IAM roles on expenseapp-27f94 to the account in FIREBASE_SERVICE_ACCOUNT:',
+    '  - roles/firebaserules.admin              (compile :test, create rulesets, update releases)',
+    '  - roles/serviceusage.serviceUsageViewer  (optional here; CI seeds the CLI API cache)',
+    '',
+    'README.md currently grants this secret Firebase App Distribution Admin and Cloud Datastore User, which is enough for Android releases but not for this workflow.',
+  ].join('\n');
 }
 
 function stripNameField(fields) {
@@ -358,7 +418,9 @@ async function main(argv) {
   const args = parseArgs(argv);
   const command = args._[0];
   if (!command) {
-    throw new Error('Usage: node scripts/firestoreRulesCi.js <warn|diff-indexes|assert-index-deploy|drift|smoke> ...');
+    throw new Error(
+      'Usage: node scripts/firestoreRulesCi.js <warn|seed-cli-api-cache|explain-iam|diff-indexes|assert-index-deploy|drift|smoke> ...'
+    );
   }
 
   if (command === 'warn') {
@@ -369,6 +431,31 @@ async function main(argv) {
     assertNoRulesCompilerWarnings(logText);
     print('No Firestore rules compiler warnings.');
     return;
+  }
+
+  if (command === 'seed-cli-api-cache') {
+    const projectId = args.project || DEFAULT_PROJECT;
+    const written = seedFirebaseToolsApiEnablementCache(projectId, args['config-file']);
+    print(`Seeded firebase-tools API enablement cache for ${projectId} at ${written}.`);
+    return;
+  }
+
+  if (command === 'explain-iam') {
+    const logText = readRequiredFile(args['log-file'], 'Deploy log');
+    const kind = classifyFirebaseDeployFailure(logText);
+    if (!kind) {
+      throw new Error(
+        'firebase deploy failed for a reason other than Rules/Service Usage IAM. See the log above.'
+      );
+    }
+    print(firebaseRulesIamMessage());
+    if (args['allow-dry-run-iam']) {
+      print(
+        'Dry-run: missing Rules IAM is a leftover, not a compiler failure. The emulator suite already compiled firestore.rules.'
+      );
+      return;
+    }
+    throw new Error(firebaseRulesIamMessage());
   }
 
   if (command === 'diff-indexes' || command === 'assert-index-deploy') {
@@ -438,14 +525,18 @@ module.exports = {
   STRANGER_UID,
   assertNoRulesCompilerWarnings,
   assertIndexDeploySafe,
+  classifyFirebaseDeployFailure,
+  defaultFirebaseToolsConfigPath,
   describeIndex,
   diffIndexes,
   diffRulesSource,
   extractJsonObject,
   fetchLiveRulesSource,
+  firebaseRulesIamMessage,
   formatIndexDiff,
   fingerprintIndex,
   normalizeRulesSource,
   parseIndexesDoc,
   runSmokeProbe,
+  seedFirebaseToolsApiEnablementCache,
 };

@@ -98,29 +98,55 @@ jobs:
           printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "${{ runner.temp }}/service-account.json"
           chmod 600 "${{ runner.temp }}/service-account.json"
 
+      # firebase-tools calls serviceusage.googleapis.com to check that
+      # firestore.googleapis.com is enabled. The GitHub Actions service
+      # account is not granted that permission (run 35255866160 403'd
+      # there after the emulator suite passed). Firestore is already
+      # enabled on this project; skip the probe via the CLI's local cache.
+      - name: Skip Service Usage API probe
+        run: node scripts/firestoreRulesCi.js seed-cli-api-cache --project "$FIREBASE_PROJECT"
+
       # Dry-run first so a compiler `[W]` fails the job before anything is
       # uploaded. `firebase deploy` itself treats warnings as non-fatal.
+      # The GitHub SA is App Distribution + Datastore, not Firebase Rules
+      # Admin, so `:test` 403s. On dry-run that is a leftover, not a fail:
+      # the emulator job already compiled the rules. A real upload still
+      # fails with the IAM message until those roles are granted.
       - name: Compile rules (dry-run)
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/service-account.json
         run: |
           set -euo pipefail
+          set +e
           firebase deploy --only firestore:rules --project "$FIREBASE_PROJECT" --non-interactive --dry-run \
             2>&1 | tee "${{ runner.temp }}/rules-dry-run.log"
-          node scripts/firestoreRulesCi.js warn --log-file "${{ runner.temp }}/rules-dry-run.log"
+          status=${PIPESTATUS[0]}
+          set -e
+          if [ "$status" -eq 0 ]; then
+            node scripts/firestoreRulesCi.js warn --log-file "${{ runner.temp }}/rules-dry-run.log"
+          else
+            node scripts/firestoreRulesCi.js explain-iam --allow-dry-run-iam --log-file "${{ runner.temp }}/rules-dry-run.log"
+          fi
 
       - name: Deploy Firestore rules
-        if: ${{ inputs.dry_run == false }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run == false }}
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/service-account.json
         run: |
           set -euo pipefail
+          set +e
           firebase deploy --only firestore:rules --project "$FIREBASE_PROJECT" --non-interactive \
             2>&1 | tee "${{ runner.temp }}/rules-deploy.log"
-          node scripts/firestoreRulesCi.js warn --log-file "${{ runner.temp }}/rules-deploy.log"
+          status=${PIPESTATUS[0]}
+          set -e
+          if [ "$status" -eq 0 ]; then
+            node scripts/firestoreRulesCi.js warn --log-file "${{ runner.temp }}/rules-deploy.log"
+          else
+            node scripts/firestoreRulesCi.js explain-iam --log-file "${{ runner.temp }}/rules-deploy.log"
+          fi
 
       - name: Optionally deploy indexes
-        if: ${{ inputs.deploy_indexes }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_indexes }}
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/service-account.json
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
@@ -144,11 +170,13 @@ jobs:
           {
             echo "## Firestore rules deploy"
             echo ""
-            echo "- Event: \`workflow_dispatch\`"
+            echo "- Event: \`${{ github.event_name }}\`"
             echo "- Dry-run: **${{ inputs.dry_run }}**"
             echo "- Indexes: **${{ inputs.deploy_indexes }}**"
             echo "- Project: \`$FIREBASE_PROJECT\`"
-            echo "- Compiler warnings: treated as failure (\`[W]\`)."
+            echo "- Compiler warnings: treated as failure (\`[W]\`) when remote compile is allowed."
+            echo "- Service Usage probe: skipped (API already enabled; GitHub SA lacks serviceusage.services.get)."
+            echo "- Remote :test 403 on dry-run: leftover IAM (\`roles/firebaserules.admin\`), emulator suite still gates compile."
             echo "- Secrets used: FIREBASE_SERVICE_ACCOUNT (not available to pull_request)."
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -201,6 +229,7 @@ jobs:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: |
           set -euo pipefail
+          node scripts/firestoreRulesCi.js seed-cli-api-cache --project "$FIREBASE_PROJECT"
           firebase firestore:indexes --project "$FIREBASE_PROJECT" --non-interactive \
             > "${{ runner.temp }}/live-indexes.json"
           node scripts/firestoreRulesCi.js drift \
