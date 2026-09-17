@@ -8,12 +8,16 @@ import { useModals } from "@/providers/ModalProvider";
 
 /**
  * Mounts existing add flows for the global FAB sheet.
- * Does not rewrite ExpenseForm or the account/investment screens.
+ *
+ * Transfer Funds and Create Investment are mounted only while open so the
+ * portfolio/investments snapshot listeners are not held from the app shell
+ * (SPENDLY-18). `useInvestments({ enabled: false })` supplies `addInvestment`
+ * without subscribing to `users/{uid}/investments`.
  */
 export function GlobalAddModals() {
   const { accounts } = useAccounts();
   const { accountTypes } = useAccountTypes();
-  const { addInvestment } = useInvestments();
+  const { addInvestment } = useInvestments({ enabled: false });
   const {
     isTransferOpen,
     setIsTransferOpen,
@@ -25,22 +29,28 @@ export function GlobalAddModals() {
 
   return (
     <>
-      <TransferFundsModal
-        isOpen={isTransferOpen}
-        onClose={() => setIsTransferOpen(false)}
-        accounts={accounts}
-      />
-      <CreateInvestmentModal
-        visible={isCreateInvestmentOpen}
-        onClose={() => setIsCreateInvestmentOpen(false)}
-        onSubmit={addInvestment}
-      />
-      <PayCreditBillModal
-        isOpen={isDebtPaymentOpen}
-        onClose={() => setIsDebtPaymentOpen(false)}
-        accounts={accounts}
-        accountTypes={accountTypes}
-      />
+      {isTransferOpen ? (
+        <TransferFundsModal
+          isOpen
+          onClose={() => setIsTransferOpen(false)}
+          accounts={accounts}
+        />
+      ) : null}
+      {isCreateInvestmentOpen ? (
+        <CreateInvestmentModal
+          visible
+          onClose={() => setIsCreateInvestmentOpen(false)}
+          onSubmit={addInvestment}
+        />
+      ) : null}
+      {isDebtPaymentOpen ? (
+        <PayCreditBillModal
+          isOpen
+          onClose={() => setIsDebtPaymentOpen(false)}
+          accounts={accounts}
+          accountTypes={accountTypes}
+        />
+      ) : null}
     </>
   );
 }

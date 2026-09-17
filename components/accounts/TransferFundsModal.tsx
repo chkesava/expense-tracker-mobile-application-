@@ -6,7 +6,7 @@ import { Modal } from "@/components/common/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useAccountTransfers } from "@/hooks/useAccountTransfers";
-import { usePortfolio } from "@/hooks/usePortfolio";
+import { usePortfolioMutations } from "@/hooks/usePortfolioMutations";
 import { logError } from "@/lib/errors";
 import { newId } from "@/lib/id";
 import { toast } from "@/lib/toast";
@@ -36,7 +36,7 @@ export function TransferFundsModal({
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const { addTransfer } = useAccountTransfers();
-  const { depositCash, withdrawCash } = usePortfolio();
+  const { depositCash, withdrawCash } = usePortfolioMutations();
   const transferIds = useRef({ entryId: newId(), accountEntryId: newId() });
 
   const selectableOptions = useMemo(() => {

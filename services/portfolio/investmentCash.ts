@@ -35,6 +35,7 @@ import { isValidDateKey } from "@/shared/utils/dates";
 import { roundMoney } from "@/shared/utils/money";
 import {
   canAfford,
+  availableInvestmentCash,
   computeInvestmentCashBalance,
 } from "@/shared/features/portfolio/utils/investmentCash";
 import type {
@@ -501,6 +502,24 @@ async function loadCashEntries(uid: string): Promise<InvestmentCashEntry[]> {
     collection(db, "users", uid, INVESTMENT_CASH_COLLECTION)
   );
   return snapshot.docs.map((item) => asCashEntry(item.id, item.data()));
+}
+
+/**
+ * Spendable Investment Cash without a snapshot listener — SPENDLY-18.
+ *
+ * Transfer Funds in the app shell must not subscribe to the portfolio tree.
+ * The same fold `usePortfolio` uses: baseline + ledger, clamped at zero.
+ */
+export async function readAvailableInvestmentCash(uid: string): Promise<number> {
+  const owner = requireUid(uid);
+  const db = requireDb();
+  const settingsSnap = await getDoc(
+    doc(db, "users", owner, "portfolioSettings", SETTINGS_DOC_ID)
+  );
+  const entries = await loadCashEntries(owner);
+  return availableInvestmentCash(
+    ledgerCashForTrade(settingsSnap.data(), entries)
+  );
 }
 
 function settingsCacheWrite(

@@ -21,6 +21,13 @@ import { useAuth } from "@/providers/AuthProvider";
 import type { Investment } from "@/shared/types/investment";
 import { todayDateKey } from "@/shared/utils/dates";
 
+/**
+ * Investments list + mutations for one user.
+ *
+ * Pass `{ enabled: false }` when you only need a writer (`addInvestment`) and
+ * must not open the `users/{uid}/investments` listener — SPENDLY-18, the global
+ * FAB Create Investment path.
+ */
 export function useInvestments(options?: { enabled?: boolean }) {
   const enabled = options?.enabled !== false;
   const { user } = useAuth();
