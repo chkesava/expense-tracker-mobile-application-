@@ -432,6 +432,51 @@ describe("collectCreditBillAllocationPatches", () => {
     expect(patches).toEqual([]);
   });
 
+  it("does not re-raise amountPaid after a linked payment is voided", () => {
+    const patches = collectCreditBillAllocationPatches({
+      accounts: [slice],
+      isCreditAccount: () => true,
+      expenses: [expense("2026-08-05", 6000)],
+      payments: [],
+      bills: [
+        statement("2026-08-20", "2026-07-21", 6000, {
+          amountPaid: 0,
+          paymentIds: [],
+          status: "OVERDUE",
+        }),
+      ],
+      today: "2026-08-25",
+    });
+
+    expect(patches).toEqual([]);
+  });
+
+  it("keeps both payment ids when two stamps land on the same statement", () => {
+    const patches = collectCreditBillAllocationPatches({
+      accounts: [slice],
+      isCreditAccount: () => true,
+      expenses: [expense("2026-08-05", 10000)],
+      payments: [
+        payment("pay-a", "2026-08-22", 4000),
+        payment("pay-b", "2026-08-22", 4000),
+      ],
+      bills: [
+        statement("2026-08-20", "2026-07-21", 10000, {
+          amountPaid: 4000,
+          paymentIds: ["pay-a"],
+          status: "PARTIALLY_PAID",
+        }),
+      ],
+      today: "2026-08-25",
+    });
+
+    expect(patches[0]).toMatchObject({
+      billId: "bill-2026-08-20",
+      paymentIds: expect.arrayContaining(["pay-a", "pay-b"]),
+    });
+    expect(patches[0]?.amountPaid).toBeGreaterThanOrEqual(8000);
+  });
+
   it("never walks a settlement backwards", () => {
     const patches = collectCreditBillAllocationPatches({
       accounts: [slice],
@@ -570,13 +615,12 @@ describe("buildCreditCardLedger — stored amountPaid floor", () => {
     expect(ledger.statementDue).toBe(0);
   });
 
-  it("adds an out-of-band top-up on top of the allocated payment", () => {
+  it("does not use stored amountPaid as a floor when the bill is linked to payments", () => {
     const ledger = buildCreditCardLedger({
       account: slice,
       expenses: [expense("2026-08-05", 10000)],
       payments: [payment("pay-aug-21", "2026-08-21", 4000)],
       bills: [
-        // 4,000 came through the ledger; the other 6,000 was settled off-app.
         statement("2026-08-20", "2026-07-21", 10000, {
           amountPaid: 10000,
           paymentIds: ["pay-aug-21"],
@@ -586,7 +630,39 @@ describe("buildCreditCardLedger — stored amountPaid floor", () => {
       today: "2026-08-22",
     });
 
-    expect(ledger.statementDue).toBe(0);
+    // The extra 6,000 was a stamp, not a second ledger row. Linked bills follow
+    // the payment, not the leftover amountPaid (SPENDLY-30). Stored PAID still
+    // keeps `statementDue` from counting it; the derived remaining is what
+    // proves the floor did not re-credit.
+    const august = ledger.statements.find((s) => s.statementDate === "2026-08-20");
+    expect(august).toMatchObject({
+      paid: 4000,
+      remaining: 6000,
+      status: "partiallyPaid",
+    });
+  });
+
+  it("unsettles a statement after its linked payment is voided", () => {
+    const ledger = buildCreditCardLedger({
+      account: slice,
+      expenses: [expense("2026-08-05", 10000)],
+      payments: [],
+      bills: [
+        statement("2026-08-20", "2026-07-21", 10000, {
+          amountPaid: 10000,
+          paymentIds: ["pay-deleted"],
+          status: "PAID",
+        }),
+      ],
+      today: "2026-08-22",
+    });
+
+    const august = ledger.statements.find((s) => s.statementDate === "2026-08-20");
+    expect(august).toMatchObject({
+      paid: 0,
+      remaining: 10000,
+      status: "unpaid",
+    });
   });
 
   it("never settles a statement that has not closed yet", () => {

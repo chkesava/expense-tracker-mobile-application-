@@ -10,6 +10,7 @@ export function useCreditCardBills() {
     createBill: ctx.createBill,
     updateBill: ctx.updateBill,
     applyPaymentToBill: ctx.applyPaymentToBill,
+    recordBillPayment: ctx.recordBillPayment,
     markBillPaid: ctx.markBillPaid,
     cancelBill: ctx.cancelBill,
     snoozeBillReminder: ctx.snoozeBillReminder,

@@ -1,7 +1,9 @@
 import {
   addDoc,
+  arrayUnion,
   collection,
   doc,
+  increment,
   onSnapshot,
   query,
   serverTimestamp,
@@ -22,8 +24,8 @@ import { AppState } from "react-native";
 
 import { getFirestoreDb } from "@/lib/firebase";
 import { forgetSnapshotPath, logQuerySnapshot } from "@/lib/firestoreReadDebug";
-import { commitWrite } from "@/lib/firestoreWrite";
-import { logError } from "@/lib/errors";
+import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
+import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import { useAccounts } from "@/hooks/useAccounts";
@@ -57,6 +59,10 @@ import {
   cancelBillReminders,
   reconcileBillReminders,
 } from "@/services/creditCardBills/billReminderScheduler";
+import {
+  recordCreditBillPayment,
+  type RecordCreditBillPaymentInput,
+} from "@/services/creditCardBills/billPayment";
 
 type CreditCardBillsContextType = {
   bills: CreditCardBill[];
@@ -72,6 +78,9 @@ type CreditCardBillsContextType = {
     paymentDate: string,
     paymentId?: string
   ) => Promise<boolean>;
+  recordBillPayment: (
+    input: RecordCreditBillPaymentInput
+  ) => Promise<string | null>;
   markBillPaid: (
     billId: string,
     opts: {
@@ -627,20 +636,59 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
       paymentDate: string,
       paymentId?: string
     ): Promise<boolean> => {
+      const db = getFirestoreDb();
+      if (!user || !db) return false;
       const existing = bills.find((b) => b.id === billId);
       if (!existing) return false;
-      const amountPaid = existing.amountPaid + Math.max(0, amount);
-      const paymentIds = paymentId
-        ? [...(existing.paymentIds || []), paymentId]
-        : existing.paymentIds;
-
-      return updateBill(billId, {
-        amountPaid,
-        paymentDate,
-        paymentIds,
-      });
+      const settleable = Math.max(0, amount);
+      const derived = refreshDerivedFields(
+        { ...existing, amountPaid: existing.amountPaid + settleable },
+        timezone,
+        globalPrefs.enabled
+      );
+      await commitWrite(
+        () =>
+          updateDoc(doc(db, "users", user.uid, "creditCardBills", billId), {
+            amountPaid: increment(settleable),
+            ...(paymentId ? { paymentIds: arrayUnion(paymentId) } : {}),
+            paymentDate,
+            remainingAmount: derived.remainingAmount,
+            status: derived.status,
+            nextReminderAt: derived.nextReminderAt ?? null,
+            updatedAt: serverTimestamp(),
+          }),
+        { label: "credit card bill payment stamp" }
+      );
+      if (derived.status === "PAID") {
+        await cancelBillReminders(billId);
+      }
+      return true;
     },
-    [bills, updateBill]
+    [user, bills, timezone, globalPrefs.enabled]
+  );
+
+  const recordBillPayment = useCallback(
+    async (input: RecordCreditBillPaymentInput): Promise<string | null> => {
+      if (!user) return null;
+      try {
+        const result = await recordCreditBillPayment(user.uid, {
+          ...input,
+          bill: input.bill
+            ? { ...input.bill, timezone: input.bill.timezone || timezone }
+            : undefined,
+        });
+        if (result.billStatus === "PAID" && input.bill?.id) {
+          await cancelBillReminders(input.bill.id);
+        }
+        toast.success(writeSavedMessage(result.outcome, "Bill payment recorded"));
+        return result.paymentId;
+      } catch (err) {
+        logError("creditCardBills.recordBillPayment", err);
+        toast.error(friendlyErrorMessage(err, "Failed to record payment"));
+        return null;
+      }
+    },
+    [user, timezone]
   );
 
   const markBillPaid = useCallback(
@@ -702,6 +750,7 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
       createBill,
       updateBill,
       applyPaymentToBill,
+      recordBillPayment,
       markBillPaid,
       cancelBill,
       snoozeBillReminder,
@@ -713,6 +762,7 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
       createBill,
       updateBill,
       applyPaymentToBill,
+      recordBillPayment,
       markBillPaid,
       cancelBill,
       snoozeBillReminder,

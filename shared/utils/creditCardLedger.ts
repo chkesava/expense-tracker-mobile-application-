@@ -473,6 +473,10 @@ export function buildCreditCardLedger(
     if (statement.cancelled) continue;
     if (statement.isAuto && statement.storedStatus !== "PAID") continue;
     if (statement.statementDate > today) continue;
+    // Linked stamps came from a ledger payment. If that payment is later voided
+    // or deleted, crediting the leftover `amountPaid` would keep the bill PAID
+    // (SPENDLY-30). Keep the floor only for mark-as-paid with no paymentIds.
+    if (statement.linkedIds.length > 0) continue;
     const explainedByPayments = roundMoney(
       statement.linkedIds.reduce(
         (sum, id) => sum + (paymentAmountById.get(id) ?? 0),

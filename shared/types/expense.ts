@@ -176,6 +176,8 @@ export interface AccountPayment {
   voidedAt?: string;
   /** Why the row was voided, when the user gave a reason. */
   voidReason?: string;
+  /** Statement this payment stamped (SPENDLY-30). */
+  creditCardBillId?: string;
   createdAt?: unknown;
   updatedAt?: unknown;
 }
