@@ -21,7 +21,7 @@ Watch Metro / `adb logcat` for lines prefixed `[perf]`.
 | Portfolio holdings | ScrollView `.map` | FlashList + focus-gated listeners |
 | SIP history / positions | `.map` | FlashList + focus-gated / staged SIP listeners |
 | Dashboard | All widgets mount | Above-fold immediate; below-fold `LazyMount` |
-| Finance expenses | 200 → full on idle 800ms | Idle ~1.2s; upgrade does not flip loading |
+| Finance expenses | 200 → full on idle 800ms | `limit(300)` first paint, unbounded after idle (~1.2–2.8s); upgrade does not flip loading (SPENDLY-12) |
 
 Record your device numbers here after testing:
 
