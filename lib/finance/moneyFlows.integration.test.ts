@@ -44,6 +44,7 @@ describe("Phase 6 cross-module money flows", () => {
     const evalDate = new Date(2026, 7, 12, 12, 0, 0);
     const plan = planDueSubscriptionPosts(subs, evalDate);
     expect(plan).toHaveLength(1);
+    expect(plan[0]?.docId).toBe("sub-netflix_2026-08");
 
     for (const action of plan) {
       if (action.kind === "expense") {

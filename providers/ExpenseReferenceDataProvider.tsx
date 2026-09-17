@@ -9,9 +9,7 @@ import {
   onSnapshot,
   orderBy,
   query,
-  serverTimestamp,
   updateDoc,
-  writeBatch,
 } from "firebase/firestore";
 import {
   createContext,
@@ -32,9 +30,12 @@ import {
   logQuerySnapshot,
 } from "@/lib/firestoreReadDebug";
 import { commitWrite } from "@/lib/firestoreWrite";
+import { toast } from "@/lib/toast";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { useAuth } from "@/providers/AuthProvider";
+import { useSettings } from "@/providers/SettingsProvider";
 import { rememberHydratedSubscriptions } from "@/services/sms/smsRecurringSync";
+import { postDueSubscriptionCharge } from "@/services/subscriptions/duePost";
 import type {
   CategorizationRule,
   Category,
@@ -43,6 +44,7 @@ import type {
 } from "@/shared/types/expense";
 import type { Space } from "@/shared/types/space";
 import type { Subscription } from "@/shared/types/subscription";
+import { parseLocalDate, todayDateKey } from "@/shared/utils/dates";
 import { scheduleIdleWork } from "@/shared/utils/scheduleIdle";
 import {
   evaluateSubscriptionDue,
@@ -88,6 +90,8 @@ export function ExpenseReferenceDataProvider({
   const { user } = useAuth();
   const uid = user?.uid;
   const db = getFirestoreDb();
+  const { settings } = useSettings();
+  const timezone = settings.timezone;
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
@@ -141,8 +145,13 @@ export function ExpenseReferenceDataProvider({
   } = useLoadFailure();
 
   const isProcessingDueRef = useRef(false);
+  const skippedAccountToastShown = useRef(false);
   const subscriptionsRef = useRef(subscriptions);
   subscriptionsRef.current = subscriptions;
+
+  useEffect(() => {
+    skippedAccountToastShown.current = false;
+  }, [uid]);
 
   useEffect(() => {
     if (!uid || !db) {
@@ -368,48 +377,29 @@ export function ExpenseReferenceDataProvider({
 
     isProcessingDueRef.current = true;
     try {
-      const now = new Date();
+      const now = parseLocalDate(todayDateKey(timezone));
       const plan = planDueSubscriptionPosts(list, now);
+      let skippedNoAccount = 0;
 
       for (const action of plan) {
         if (!action.subscriptionId) continue;
-        const batch = writeBatch(database);
-
-        if (action.kind === "transfer") {
-          const newTransferRef = doc(
-            collection(database, "users", uid, "accountTransfers")
-          );
-          batch.set(newTransferRef, {
-            ...action.transfer,
-            createdAt: serverTimestamp(),
-          });
-        } else {
-          const newExpenseRef = doc(collection(database, "users", uid, "expenses"));
-          batch.set(newExpenseRef, {
-            ...action.expense,
-            createdAt: serverTimestamp(),
-          });
+        try {
+          const result = await postDueSubscriptionCharge(uid, action);
+          if (result.status === "skipped_no_account") {
+            skippedNoAccount += 1;
+          }
+        } catch (err) {
+          logError("subscriptions.processingDueSubscriptions", err);
         }
+      }
 
-        const subRef = doc(
-          database,
-          "users",
-          uid,
-          "subscriptions",
-          action.subscriptionId
+      if (skippedNoAccount > 0 && !skippedAccountToastShown.current) {
+        skippedAccountToastShown.current = true;
+        toast.warning(
+          skippedNoAccount === 1
+            ? "A subscription needs an account before it can auto-post"
+            : "Some subscriptions need an account before they can auto-post"
         );
-        const subUpdates: Record<string, unknown> = {
-          lastProcessed: action.monthKey,
-        };
-        if (action.lastProcessedDate) {
-          subUpdates.lastProcessedDate = action.lastProcessedDate;
-        }
-        if (action.markCompleted) {
-          subUpdates.isCompleted = true;
-          subUpdates.isActive = false;
-        }
-        batch.update(subRef, subUpdates);
-        await commitWrite(() => batch.commit(), { label: "subscription charge" });
       }
 
       for (const sub of list) {
@@ -419,14 +409,18 @@ export function ExpenseReferenceDataProvider({
         const evaluation = evaluateSubscriptionDue(sub, now);
         if (evaluation.isCompleted && !sub.isCompleted) {
           const subRef = doc(database, "users", uid, "subscriptions", sub.id);
-          await commitWrite(
-            () =>
-              updateDoc(subRef, {
-                isCompleted: true,
-                isActive: false,
-              }),
-            { label: "subscription" }
-          );
+          try {
+            await commitWrite(
+              () =>
+                updateDoc(subRef, {
+                  isCompleted: true,
+                  isActive: false,
+                }),
+              { label: "subscription" }
+            );
+          } catch (err) {
+            logError("subscriptions.processingDueSubscriptions", err);
+          }
         }
       }
     } catch (err) {
@@ -434,7 +428,7 @@ export function ExpenseReferenceDataProvider({
     } finally {
       isProcessingDueRef.current = false;
     }
-  }, [uid]);
+  }, [uid, timezone]);
 
   useEffect(() => {
     if (subscriptionsLoading || subscriptions.length === 0) return;

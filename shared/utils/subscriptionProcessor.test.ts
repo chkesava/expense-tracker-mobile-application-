@@ -4,10 +4,12 @@ import {
   buildExpenseFromSubscription,
   buildTransferFromSubscription,
   computeMonthlyCommitments,
+  duePostNeedsAccount,
   evaluateSubscriptionDue,
   getNextRenewalDate,
   planDueSubscriptionPosts,
   applyPostPlanToSubscriptions,
+  subscriptionChargeDocId,
 } from "./subscriptionProcessor";
 
 describe("subscriptionProcessor utilities", () => {
@@ -209,6 +211,26 @@ describe("subscriptionProcessor utilities", () => {
       expect(updated[0]?.isActive).toBe(false);
       expect(planDueSubscriptionPosts(updated, evalDate)).toHaveLength(0);
     });
+
+    it("uses a stable expense id so two devices post the same document", () => {
+      const evalDate = new Date(2026, 7, 12, 12, 0, 0);
+      const plan = planDueSubscriptionPosts(
+        [{ ...mockSub, lastProcessed: "2026-07" }],
+        evalDate
+      );
+      expect(plan[0]).toMatchObject({
+        kind: "expense",
+        docId: "sub-1_2026-08",
+      });
+      expect(
+        subscriptionChargeDocId({
+          subscriptionId: "sub-1",
+          monthKey: "2026-08",
+          targetDateStr: "2026-08-10",
+          frequency: "monthly",
+        })
+      ).toBe("sub-1_2026-08");
+    });
   });
 
   describe("every_n_days cadence", () => {
@@ -249,6 +271,7 @@ describe("subscriptionProcessor utilities", () => {
       const firstPlan = planDueSubscriptionPosts([chicken], evalDate);
       expect(firstPlan).toHaveLength(1);
       expect(firstPlan[0]?.kind).toBe("expense");
+      expect(firstPlan[0]?.docId).toBe("sub-chicken_2026-08-12");
       expect(firstPlan[0]?.lastProcessedDate).toBe("2026-08-12");
 
       const afterPost = applyPostPlanToSubscriptions([chicken], firstPlan);
@@ -303,6 +326,24 @@ describe("subscriptionProcessor utilities", () => {
       const result = evaluateSubscriptionDue(noStart, new Date(2026, 8, 5, 12, 0, 0));
       expect(result.isDue).toBe(true);
       expect(result.targetDateStr).toBe("2026-09-03");
+    });
+  });
+
+  describe("duePostNeedsAccount", () => {
+    it("flags an expense with no account so the writer can skip it", () => {
+      const plan = planDueSubscriptionPosts(
+        [{ ...mockSub, lastProcessed: "2026-07" }],
+        new Date(2026, 7, 12, 12, 0, 0)
+      );
+      expect(plan[0] && duePostNeedsAccount(plan[0])).toBe(true);
+    });
+
+    it("lets an expense with an account post", () => {
+      const plan = planDueSubscriptionPosts(
+        [{ ...mockSub, lastProcessed: "2026-07", accountId: "bank-1" }],
+        new Date(2026, 7, 12, 12, 0, 0)
+      );
+      expect(plan[0] && duePostNeedsAccount(plan[0])).toBe(false);
     });
   });
 });
