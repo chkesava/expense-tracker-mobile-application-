@@ -65,8 +65,36 @@ service cloud.firestore {
       // which took every personal collection list (expenses, accounts,
       // statements, ...) down while single-document gets and writes kept
       // working.
+      //
+      // SPENDLY-10: expenses/incomes are matched below with amount/date
+      // checks. They must stay out of this wildcard or the OR would still
+      // allow amount: -1e12. Other personal collections stay on this grant
+      // until later slices. App Check is a leftover, not this slice.
+      function personalMoneyWellFormed() {
+        let d = request.resource.data;
+        return d.amount is number
+          && d.amount >= 0
+          && d.amount < 1000000000
+          && (!d.keys().hasAny(['date'])
+              || (d.date is string
+                  && d.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')));
+      }
+
+      match /expenses/{expenseId} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && personalMoneyWellFormed();
+      }
+
+      match /incomes/{incomeId} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && personalMoneyWellFormed();
+      }
+
       match /{collection}/{document=**} {
-        allow read, write: if isOwner(uid) && collection != 'pandalMemberships';
+        allow read, write: if isOwner(uid)
+          && collection != 'pandalMemberships'
+          && collection != 'expenses'
+          && collection != 'incomes';
       }
     }
 

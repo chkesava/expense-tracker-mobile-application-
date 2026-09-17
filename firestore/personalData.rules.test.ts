@@ -87,6 +87,10 @@ describe("personal tree", () => {
     "epfInterestEntries",
     "epfReconciliations",
   ];
+  const moneyCollections = ["expenses", "incomes"];
+  const schemalessCollections = collections.filter(
+    (name) => !moneyCollections.includes(name)
+  );
 
   it("owner reads their own user doc", async () => {
     const db = env.authenticatedContext(OWNER).firestore();
@@ -145,7 +149,9 @@ describe("personal tree", () => {
       const db = env.authenticatedContext(OWNER).firestore();
       await assertSucceeds(getDocs(collection(db, "users", OWNER, name)));
     });
+  }
 
+  for (const name of schemalessCollections) {
     it(`owner writes ${name}`, async () => {
       const db = env.authenticatedContext(OWNER).firestore();
       await assertSucceeds(
@@ -153,6 +159,49 @@ describe("personal tree", () => {
       );
     });
   }
+
+  for (const name of moneyCollections) {
+    it(`owner writes a well-formed ${name} row`, async () => {
+      const db = env.authenticatedContext(OWNER).firestore();
+      await assertSucceeds(
+        addDoc(collection(db, "users", OWNER, name), {
+          amount: 10,
+          date: "2026-09-17",
+        })
+      );
+    });
+
+    it(`owner cannot write a negative ${name} amount`, async () => {
+      const db = env.authenticatedContext(OWNER).firestore();
+      await assertFails(
+        addDoc(collection(db, "users", OWNER, name), {
+          amount: -1e12,
+          date: "2026-09-17",
+        })
+      );
+    });
+
+    it(`owner cannot write a ${name} row with a non-date`, async () => {
+      const db = env.authenticatedContext(OWNER).firestore();
+      await assertFails(
+        addDoc(collection(db, "users", OWNER, name), {
+          amount: 10,
+          date: "not-a-date",
+        })
+      );
+    });
+  }
+
+  it("owner can patch an existing expense without sending amount", async () => {
+    const db = env.authenticatedContext(OWNER).firestore();
+    await assertSucceeds(
+      setDoc(
+        doc(db, "users", OWNER, "expenses", "e1"),
+        { tripId: "trip-1" },
+        { merge: true }
+      )
+    );
+  });
 
   it("owner reads an ordered expenses query", async () => {
     const db = env.authenticatedContext(OWNER).firestore();
