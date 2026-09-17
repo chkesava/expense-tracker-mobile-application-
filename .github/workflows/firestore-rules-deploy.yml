@@ -24,12 +24,6 @@ on:
         description: "Also deploy firestore.indexes.json. Blocked if live indexes are missing from the file."
         type: boolean
         default: false
-  # Same-repo push re-runs the compile job so we can verify the Service Usage
-  # 403 fix without workflow_dispatch permission. `inputs.dry_run == false`
-  # is only true on a manual dispatch, so a push cannot upload.
-  push:
-    branches:
-      - cursor/fix-firestore-rules-deploy-403-4a0c
   schedule:
     # 03:17 UTC — off the hour, daily drift, no upload.
     - cron: "17 3 * * *"
@@ -51,7 +45,7 @@ jobs:
 
   deploy:
     name: Deploy rules
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
+    if: github.event_name == 'workflow_dispatch'
     needs: rules
     runs-on: ubuntu-latest
     timeout-minutes: 20
