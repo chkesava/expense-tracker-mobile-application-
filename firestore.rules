@@ -66,59 +66,277 @@ service cloud.firestore {
       // statements, ...) down while single-document gets and writes kept
       // working.
       //
-      // SPENDLY-10: money collections below are matched with amount/date
-      // checks. They must stay out of this wildcard or the OR would still
-      // allow amount: -1e12. Remaining personal collections stay on this
-      // grant until later slices. App Check is a leftover, not this slice.
+      // SPENDLY-10: money collections below are matched with numeric/date
+      // checks. They must stay out of the wildcard or the OR would still
+      // allow amount: -1e12. Nested matches OR together.
+      //
+      // createdAt == request.time and keys().hasOnly are intentionally
+      // omitted: the app mixes serverTimestamp() with Date.now() and writes
+      // optional fields. App Check is initialized in the client; enforce
+      // in the Firebase console is a leftover (after Android tokens exist).
+      function boundedNonNeg(value) {
+        return value is number && value >= 0 && value < 1000000000;
+      }
+
+      function optionalBoundedNonNeg(d, key) {
+        return !d.keys().hasAny([key]) || boundedNonNeg(d.get(key, -1));
+      }
+
+      function optionalYmd(d, key) {
+        return !d.keys().hasAny([key])
+          || d.get(key, '') == null
+          || (d.get(key, '') is string
+              && d.get(key, '').matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$'));
+      }
+
+      function optionalYm(d, key) {
+        return !d.keys().hasAny([key])
+          || (d.get(key, '') is string
+              && d.get(key, '').matches('^[0-9]{4}-[0-9]{2}$'));
+      }
+
       function personalMoneyWellFormed() {
         let d = request.resource.data;
-        return d.amount is number
-          && d.amount >= 0
-          && d.amount < 1000000000
-          && (!d.keys().hasAny(['date'])
-              || (d.date is string
-                  && d.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')));
+        return boundedNonNeg(d.amount) && optionalYmd(d, 'date');
       }
 
-      match /expenses/{expenseId} {
+      function holdingWellFormed() {
+        let d = request.resource.data;
+        return optionalBoundedNonNeg(d, 'quantity')
+          && optionalBoundedNonNeg(d, 'averageBuyPrice')
+          && optionalYmd(d, 'datePurchased');
+      }
+
+      function portfolioSettingsWellFormed() {
+        let d = request.resource.data;
+        return optionalBoundedNonNeg(d, 'cashBalance')
+          && optionalBoundedNonNeg(d, 'initialInvestmentAmount');
+      }
+
+      function billWellFormed() {
+        let d = request.resource.data;
+        return optionalBoundedNonNeg(d, 'statementAmount')
+          && optionalBoundedNonNeg(d, 'amountPaid')
+          && optionalBoundedNonNeg(d, 'remainingAmount')
+          && optionalBoundedNonNeg(d, 'minimumDueAmount')
+          && optionalYmd(d, 'dueDate')
+          && optionalYmd(d, 'statementDate');
+      }
+
+      function epfContributionWellFormed() {
+        let d = request.resource.data;
+        return optionalBoundedNonNeg(d, 'wage')
+          && optionalBoundedNonNeg(d, 'employeeShare')
+          && optionalBoundedNonNeg(d, 'employerShare')
+          && optionalBoundedNonNeg(d, 'epsShare')
+          && optionalBoundedNonNeg(d, 'epfCredit')
+          && optionalBoundedNonNeg(d, 'employerEpfShare')
+          && optionalBoundedNonNeg(d, 'totalContribution')
+          && optionalBoundedNonNeg(d, 'creditedAmount')
+          && optionalYm(d, 'month')
+          && optionalYmd(d, 'expectedCreditFrom')
+          && optionalYmd(d, 'expectedCreditTo')
+          && optionalYmd(d, 'creditDate')
+          && (!d.keys().hasAny(['status'])
+              || d.status in ['draft', 'confirmed', 'expected', 'credited', 'partial', 'missed', 'reversed'])
+          && (!d.keys().hasAny(['source'])
+              || d.source in ['manualHistorical', 'manualCurrent', 'simulated', 'imported', 'transferIn']);
+      }
+
+      function epfEstablishmentWellFormed() {
+        let d = request.resource.data;
+        return optionalYmd(d, 'dateJoined')
+          && optionalYmd(d, 'dateLeft')
+          && optionalBoundedNonNeg(d, 'wage')
+          && (!d.keys().hasAny(['employmentStatus'])
+              || d.employmentStatus in ['current', 'previous']);
+      }
+
+      function borrowingWellFormed() {
+        let d = request.resource.data;
+        return optionalBoundedNonNeg(d, 'principalAmount')
+          && optionalBoundedNonNeg(d, 'outstandingPrincipal')
+          && optionalBoundedNonNeg(d, 'accruedInterest')
+          && optionalBoundedNonNeg(d, 'totalOutstanding')
+          && optionalYmd(d, 'borrowedDate');
+      }
+
+      function receivableWellFormed() {
+        let d = request.resource.data;
+        return optionalBoundedNonNeg(d, 'originalAmount')
+          && optionalBoundedNonNeg(d, 'outstandingAmount')
+          && optionalBoundedNonNeg(d, 'totalReceived')
+          && optionalYmd(d, 'lentDate');
+      }
+
+      function goalWellFormed() {
+        let d = request.resource.data;
+        return optionalBoundedNonNeg(d, 'targetAmount')
+          && optionalBoundedNonNeg(d, 'currentAmount');
+      }
+
+      function investmentWellFormed() {
+        let d = request.resource.data;
+        return optionalBoundedNonNeg(d, 'principal')
+          && optionalYmd(d, 'startDate');
+      }
+
+      function tripWellFormed() {
+        let d = request.resource.data;
+        return optionalBoundedNonNeg(d, 'spentAmount');
+      }
+
+      function sipPlanWellFormed() {
+        let d = request.resource.data;
+        return optionalBoundedNonNeg(d, 'investmentAmount')
+          && optionalBoundedNonNeg(d, 'totalInvested')
+          && optionalBoundedNonNeg(d, 'totalUnits');
+      }
+
+      function sipTxWellFormed() {
+        let d = request.resource.data;
+        return optionalBoundedNonNeg(d, 'investmentAmount')
+          && optionalBoundedNonNeg(d, 'marketPrice')
+          && optionalBoundedNonNeg(d, 'unitsPurchased')
+          && optionalYmd(d, 'date');
+      }
+
+      function virtualPositionWellFormed() {
+        let d = request.resource.data;
+        return optionalBoundedNonNeg(d, 'totalUnits')
+          && optionalBoundedNonNeg(d, 'averageBuyPrice')
+          && optionalBoundedNonNeg(d, 'totalInvested');
+      }
+
+      function portfolioTxWellFormed() {
+        let d = request.resource.data;
+        return optionalBoundedNonNeg(d, 'quantity')
+          && optionalBoundedNonNeg(d, 'price')
+          && optionalBoundedNonNeg(d, 'fees')
+          && optionalYmd(d, 'date');
+      }
+
+      function portfolioOrderWellFormed() {
+        let d = request.resource.data;
+        return optionalBoundedNonNeg(d, 'quantity')
+          && optionalBoundedNonNeg(d, 'targetPrice');
+      }
+
+      match /expenses/{id} {
         allow read, delete: if isOwner(uid);
         allow create, update: if isOwner(uid) && personalMoneyWellFormed();
       }
-
-      match /incomes/{incomeId} {
+      match /incomes/{id} {
         allow read, delete: if isOwner(uid);
         allow create, update: if isOwner(uid) && personalMoneyWellFormed();
       }
-
-      match /accountEntries/{entryId} {
+      match /accountEntries/{id} {
         allow read, delete: if isOwner(uid);
         allow create, update: if isOwner(uid) && personalMoneyWellFormed();
       }
-
-      match /accountPayments/{paymentId} {
+      match /accountPayments/{id} {
         allow read, delete: if isOwner(uid);
         allow create, update: if isOwner(uid) && personalMoneyWellFormed();
       }
-
-      match /accountTransfers/{transferId} {
+      match /accountTransfers/{id} {
         allow read, delete: if isOwner(uid);
         allow create, update: if isOwner(uid) && personalMoneyWellFormed();
       }
-
-      match /investmentCashTransactions/{entryId} {
+      match /investmentCashTransactions/{id} {
         allow read, delete: if isOwner(uid);
         allow create, update: if isOwner(uid) && personalMoneyWellFormed();
       }
+      match /borrowingRepayments/{id} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && personalMoneyWellFormed();
+      }
+      match /receivableRepayments/{id} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && personalMoneyWellFormed();
+      }
+      match /categoryBudgets/{id} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && personalMoneyWellFormed();
+      }
+      match /subscriptions/{id} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && personalMoneyWellFormed();
+      }
+      match /holdings/{id} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && holdingWellFormed();
+      }
+      match /portfolioSettings/{id} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && portfolioSettingsWellFormed();
+      }
+      match /creditCardBills/{id} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && billWellFormed();
+      }
+      match /epfContributions/{id} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && epfContributionWellFormed();
+      }
+      match /epfEstablishments/{id} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && epfEstablishmentWellFormed();
+      }
+      match /borrowings/{id} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && borrowingWellFormed();
+      }
+      match /receivables/{id} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && receivableWellFormed();
+      }
+      match /financialGoals/{id} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && goalWellFormed();
+      }
+      match /investments/{id} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && investmentWellFormed();
+      }
+      match /trips/{id} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && tripWellFormed();
+      }
+      match /sipPlans/{id} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && sipPlanWellFormed();
+      }
+      match /sipTransactions/{id} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && sipTxWellFormed();
+      }
+      match /virtualPositions/{id} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && virtualPositionWellFormed();
+      }
+      match /portfolioTransactions/{id} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && portfolioTxWellFormed();
+      }
+      match /portfolioOrders/{id} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && portfolioOrderWellFormed();
+      }
 
+      // `collection` is only bound inside this match. Helpers declared on
+      // `users/{uid}` cannot read it (null → list/create denied). Validated
+      // names above must stay off this list: nested matches OR together.
       match /{collection}/{document=**} {
         allow read, write: if isOwner(uid)
-          && collection != 'pandalMemberships'
-          && collection != 'expenses'
-          && collection != 'incomes'
-          && collection != 'accountEntries'
-          && collection != 'accountPayments'
-          && collection != 'accountTransfers'
-          && collection != 'investmentCashTransactions';
+          && collection in [
+            'accounts', 'accountTypes', 'alerts', 'categories',
+            'categorizationRules', 'creditCardBillReminderLogs', 'daily_logs',
+            'epfContributionEvents', 'epfProfile', 'epfInterestEntries',
+            'epfReconciliations', 'epfTransferEvents', 'epfTransfers',
+            'focus', 'goals', 'meta', 'notifications', 'portfolioSnapshots',
+            'profile', 'recurringDismissals', 'spaces', 'stats', 'watchlist',
+            'weight_history'
+          ];
       }
     }
 

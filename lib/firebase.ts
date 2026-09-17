@@ -37,6 +37,7 @@ import { getStorage, type FirebaseStorage } from "firebase/storage";
 import { getFunctions, type Functions } from "firebase/functions";
 import { Platform } from "react-native";
 
+import { initializeFirebaseAppCheck } from "./appCheck";
 import { createAuth } from "./createAuth";
 import { env, isFirebaseEnvConfigured } from "./env";
 import { logWarning } from "./errors";
@@ -133,6 +134,7 @@ export function getFirebaseClients(): FirebaseClients {
   if (!app) {
     try {
       app = createApp();
+      initializeFirebaseAppCheck(app);
       auth = createAuth(app);
       db = createDb(app);
       storage = getStorage(app);

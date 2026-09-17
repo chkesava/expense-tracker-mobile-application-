@@ -73,20 +73,19 @@ describe("personal tree", () => {
     "accountTransfers",
     "categories",
     "subscriptions",
-    // KAN-65 — EPF lives on the recursive owner grant like everything else here.
     "epfProfile",
     "epfEstablishments",
-    // KAN-66 — monthly contribution records.
     "epfContributions",
-    // KAN-68 — append-only contribution status audit trail.
     "epfContributionEvents",
-    // KAN-69 — balance movements between establishments and their audit trail.
     "epfTransfers",
     "epfTransferEvents",
-    // KAN-70 — interest per financial year and reconciliation observations.
     "epfInterestEntries",
     "epfReconciliations",
     "investmentCashTransactions",
+    "holdings",
+    "creditCardBills",
+    "borrowings",
+    "sipPlans",
   ];
   const moneyCollections = [
     "expenses",
@@ -95,9 +94,22 @@ describe("personal tree", () => {
     "accountPayments",
     "accountTransfers",
     "investmentCashTransactions",
+    "borrowingRepayments",
+    "receivableRepayments",
+    "categoryBudgets",
+    "subscriptions",
+  ];
+  const validatedWithoutAmount = [
+    "epfEstablishments",
+    "epfContributions",
+    "holdings",
+    "creditCardBills",
+    "borrowings",
+    "sipPlans",
   ];
   const schemalessCollections = collections.filter(
-    (name) => !moneyCollections.includes(name)
+    (name) =>
+      !moneyCollections.includes(name) && !validatedWithoutAmount.includes(name)
   );
 
   it("owner reads their own user doc", async () => {
@@ -208,6 +220,118 @@ describe("personal tree", () => {
         { tripId: "trip-1" },
         { merge: true }
       )
+    );
+  });
+
+  it("owner writes a well-formed holding", async () => {
+    const db = env.authenticatedContext(OWNER).firestore();
+    await assertSucceeds(
+      addDoc(collection(db, "users", OWNER, "holdings"), {
+        quantity: 10,
+        averageBuyPrice: 100,
+        datePurchased: "2026-09-17",
+      })
+    );
+  });
+
+  it("owner cannot write a negative holding quantity", async () => {
+    const db = env.authenticatedContext(OWNER).firestore();
+    await assertFails(
+      addDoc(collection(db, "users", OWNER, "holdings"), {
+        quantity: -1,
+        averageBuyPrice: 100,
+      })
+    );
+  });
+
+  it("owner writes portfolio settings with a non-negative cashBalance", async () => {
+    const db = env.authenticatedContext(OWNER).firestore();
+    await assertSucceeds(
+      setDoc(doc(db, "users", OWNER, "portfolioSettings", "main"), {
+        cashBalance: 5000,
+        initialInvestmentAmount: 5000,
+      })
+    );
+  });
+
+  it("owner cannot write a negative cashBalance", async () => {
+    const db = env.authenticatedContext(OWNER).firestore();
+    await assertFails(
+      setDoc(doc(db, "users", OWNER, "portfolioSettings", "main"), {
+        cashBalance: -1,
+      })
+    );
+  });
+
+  it("owner writes a well-formed credit-card bill", async () => {
+    const db = env.authenticatedContext(OWNER).firestore();
+    await assertSucceeds(
+      addDoc(collection(db, "users", OWNER, "creditCardBills"), {
+        statementAmount: 12000,
+        amountPaid: 0,
+        remainingAmount: 12000,
+        dueDate: "2026-10-05",
+        statementDate: "2026-09-20",
+      })
+    );
+  });
+
+  it("owner cannot write a negative amountPaid on a bill", async () => {
+    const db = env.authenticatedContext(OWNER).firestore();
+    await assertFails(
+      addDoc(collection(db, "users", OWNER, "creditCardBills"), {
+        statementAmount: 12000,
+        amountPaid: -1,
+        remainingAmount: 12000,
+        dueDate: "2026-10-05",
+      })
+    );
+  });
+
+  it("owner writes a well-formed EPF contribution", async () => {
+    const db = env.authenticatedContext(OWNER).firestore();
+    await assertSucceeds(
+      setDoc(doc(db, "users", OWNER, "epfContributions", "est-1_2026-09"), {
+        establishmentId: "est-1",
+        month: "2026-09",
+        wage: 15000,
+        employeeShare: 1800,
+        employerShare: 1800,
+        epsShare: 1250,
+        epfCredit: 2350,
+        status: "expected",
+        source: "simulated",
+      })
+    );
+  });
+
+  it("owner cannot write an unknown EPF contribution status", async () => {
+    const db = env.authenticatedContext(OWNER).firestore();
+    await assertFails(
+      setDoc(doc(db, "users", OWNER, "epfContributions", "est-1_2026-08"), {
+        month: "2026-08",
+        wage: 15000,
+        status: "bogus",
+        source: "simulated",
+      })
+    );
+  });
+
+  it("owner writes a well-formed EPF establishment", async () => {
+    const db = env.authenticatedContext(OWNER).firestore();
+    await assertSucceeds(
+      addDoc(collection(db, "users", OWNER, "epfEstablishments"), {
+        dateJoined: "2020-01-15",
+        wage: 25000,
+        employmentStatus: "current",
+      })
+    );
+  });
+
+  it("owner cannot mint an unknown personal collection", async () => {
+    const db = env.authenticatedContext(OWNER).firestore();
+    await assertFails(
+      setDoc(doc(db, "users", OWNER, "zzzAnything", "x"), { blob: "nope" })
     );
   });
 
