@@ -105,6 +105,11 @@ service cloud.firestore {
         allow create, update: if isOwner(uid) && personalMoneyWellFormed();
       }
 
+      match /investmentCashTransactions/{entryId} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && personalMoneyWellFormed();
+      }
+
       match /{collection}/{document=**} {
         allow read, write: if isOwner(uid)
           && collection != 'pandalMemberships'
@@ -112,7 +117,8 @@ service cloud.firestore {
           && collection != 'incomes'
           && collection != 'accountEntries'
           && collection != 'accountPayments'
-          && collection != 'accountTransfers';
+          && collection != 'accountTransfers'
+          && collection != 'investmentCashTransactions';
       }
     }
 
