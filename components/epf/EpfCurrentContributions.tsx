@@ -23,7 +23,7 @@ import {
   isAwaitingCredit,
   summariseLifecycle,
 } from "@/shared/features/epf/utils/monthState";
-import { wageForProjection } from "@/shared/features/epf/utils/schedule";
+import { wageForProjection, simulatedMonthsNeedingReview } from "@/shared/features/epf/utils/schedule";
 import { formatAmount } from "@/shared/utils/formatCurrency";
 import { useTheme } from "@/theme/ThemeProvider";
 import { monthLabel } from "@/shared/utils/monthLabel";
@@ -79,6 +79,10 @@ export function EpfCurrentContributions({
   );
   const latestWage = useMemo(() => wageForProjection(contributions), [contributions]);
   const blocker = projectionBlocker({ hasCurrentEmployment: true, latestWage });
+  const reviewMonths = useMemo(
+    () => simulatedMonthsNeedingReview(contributions, currentMonth),
+    [contributions, currentMonth]
+  );
 
   const editingRow = useMemo(
     () => contributions.find((row) => row.month === editingMonth) ?? null,
@@ -147,6 +151,18 @@ export function EpfCurrentContributions({
                 </Text>
               ) : null}
             </Card>
+
+            {reviewMonths.length > 0 ? (
+              <View style={[styles.notice, { borderColor: theme.colors.border }]}>
+                <AlertTriangle size={theme.iconSize.sm} color={theme.colors.mutedForeground} />
+                <Text style={[styles.noticeText, { color: theme.colors.mutedForeground }]}>
+                  {reviewMonths.length} simulated month
+                  {reviewMonths.length === 1 ? "" : "s"} were generated before your first
+                  recorded month. Open Backfill to replace them with passbook figures.
+                  Spendly will not delete them.
+                </Text>
+              </View>
+            ) : null}
 
             {summary.overdue > 0 ? (
               <View style={[styles.notice, { borderColor: theme.colors.border }]}>

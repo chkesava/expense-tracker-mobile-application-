@@ -8,10 +8,13 @@ import {
   canOverwriteWithSimulated,
   expectedCreditWindow,
   isSchedulable,
+  monthKeyFromTimestamp,
   statutoryDueDate,
   monthsToGenerate,
   planScheduledContributions,
+  scheduleStartMonth,
   selectEstablishmentForMonth,
+  simulatedMonthsNeedingReview,
   wageForProjection,
 } from "@/shared/features/epf/utils/schedule";
 
@@ -110,11 +113,57 @@ describe("selectEstablishmentForMonth — the job-change rule", () => {
 describe("monthsToGenerate", () => {
   const current = establishment({ id: "A", dateJoined: "2026-06-01" });
 
-  it("generates every month from joining through the cut-off", () => {
+  it("without a recorded month or schedule marker, only generates the cut-off month", () => {
+    // SPENDLY-19: dateJoined is not the floor. A 2019 joining date must not
+    // mint every month through today at the current wage.
     expect(
       monthsToGenerate({
         establishment: current,
         allEstablishments: [current],
+        existing: [],
+        throughMonth: "2026-09",
+      })
+    ).toEqual(["2026-09"]);
+  });
+
+  it("starts at the first recorded month rather than dateJoined", () => {
+    const longEmployment = establishment({ id: "A", dateJoined: "2019-01-01" });
+    expect(
+      monthsToGenerate({
+        establishment: longEmployment,
+        allEstablishments: [longEmployment],
+        existing: [{ month: "2026-08" }],
+        throughMonth: "2026-09",
+      })
+    ).toEqual(["2026-09"]);
+  });
+
+  it("honours an explicit scheduleFrom marker", () => {
+    const marked = establishment({
+      id: "A",
+      dateJoined: "2019-01-01",
+      scheduleFrom: "2026-08",
+    });
+    expect(
+      monthsToGenerate({
+        establishment: marked,
+        allEstablishments: [marked],
+        existing: [],
+        throughMonth: "2026-09",
+      })
+    ).toEqual(["2026-08", "2026-09"]);
+  });
+
+  it("uses the establishment created month when nothing has been recorded", () => {
+    const added = establishment({
+      id: "A",
+      dateJoined: "2019-01-01",
+      createdAt: new Date("2026-06-15T12:00:00+05:30"),
+    });
+    expect(
+      monthsToGenerate({
+        establishment: added,
+        allEstablishments: [added],
         existing: [],
         throughMonth: "2026-09",
       })
@@ -138,12 +187,25 @@ describe("monthsToGenerate", () => {
     ).toEqual([]);
   });
 
+  it("does not regenerate an archived contribution month", () => {
+    const existing = [{ month: "2026-09" }];
+    expect(
+      monthsToGenerate({
+        establishment: current,
+        allEstablishments: [current],
+        existing,
+        throughMonth: "2026-09",
+      })
+    ).toEqual([]);
+  });
+
   it("never generates past the last working month", () => {
     const left = establishment({
       id: "A",
       dateJoined: "2026-06-01",
       dateLeft: "2026-08-31",
       employmentStatus: "previous",
+      scheduleFrom: "2026-06",
     });
     const months = monthsToGenerate({
       establishment: left,
@@ -202,7 +264,7 @@ describe("monthsToGenerate", () => {
       existing: [],
       throughMonth: "2026-07",
     });
-    expect(months).toEqual(["2026-06", "2026-07"]);
+    expect(months).toEqual(["2026-07"]);
   });
 });
 
@@ -289,15 +351,84 @@ describe("buildExpectedContribution", () => {
 describe("planScheduledContributions", () => {
   const current = establishment({ id: "A", dateJoined: "2026-06-01" });
 
-  it("plans only the missing months, projected from the latest wage", () => {
+  it("plans only the current missing month, projected from the latest wage", () => {
     const rows = planScheduledContributions({
       establishment: current,
       allEstablishments: [current],
       existing: [contribution({ month: "2026-06", establishmentId: "A", wage: 25000 })],
       throughMonth: "2026-08",
     });
-    expect(rows.map((row) => row.month)).toEqual(["2026-07", "2026-08"]);
+    expect(rows.map((row) => row.month)).toEqual(["2026-08"]);
     expect(rows[0].employeeShare).toBe(3000);
+  });
+
+  it("does not simulate the years between dateJoined and the first recorded month", () => {
+    const longEmployment = establishment({ id: "A", dateJoined: "2019-01-01" });
+    const rows = planScheduledContributions({
+      establishment: longEmployment,
+      allEstablishments: [longEmployment],
+      existing: [
+        contribution({
+          month: "2026-08",
+          establishmentId: "A",
+          wage: 25000,
+          source: "manualHistorical",
+        }),
+      ],
+      throughMonth: "2026-09",
+    });
+    expect(rows.map((row) => row.month)).toEqual(["2026-09"]);
+    expect(rows[0].source).toBe("simulated");
+    expect(rows[0].status).toBe("expected");
+  });
+
+  it("refuses historical months even when createdAt is years ago", () => {
+    const oldAdd = establishment({
+      id: "A",
+      dateJoined: "2019-01-01",
+      createdAt: new Date("2019-03-01T12:00:00+05:30"),
+    });
+    const rows = planScheduledContributions({
+      establishment: oldAdd,
+      allEstablishments: [oldAdd],
+      existing: [
+        contribution({
+          month: "2026-08",
+          establishmentId: "A",
+          wage: 25000,
+          source: "manualHistorical",
+        }),
+      ],
+      throughMonth: "2026-09",
+    });
+    expect(rows.map((row) => row.month)).toEqual(["2026-09"]);
+  });
+
+  it("leaves already-generated simulated history in place", () => {
+    const existing = [
+      contribution({
+        id: "A_2020-01",
+        month: "2020-01",
+        establishmentId: "A",
+        source: "simulated",
+        status: "expected",
+        wage: 25000,
+      }),
+      contribution({
+        month: "2026-08",
+        establishmentId: "A",
+        wage: 25000,
+        source: "manualHistorical",
+      }),
+    ];
+    const rows = planScheduledContributions({
+      establishment: establishment({ id: "A", dateJoined: "2019-01-01" }),
+      allEstablishments: [establishment({ id: "A", dateJoined: "2019-01-01" })],
+      existing,
+      throughMonth: "2026-09",
+    });
+    expect(rows.map((row) => row.month)).toEqual(["2026-09"]);
+    expect(existing.filter((row) => row.month === "2020-01")).toHaveLength(1);
   });
 
   it("writes nothing when there is no wage to project from", () => {
@@ -449,5 +580,91 @@ describe("backfillThroughMonth", () => {
       throughMonth: "2026-09",
     });
     expect(months).toContain("2026-09");
+  });
+});
+
+describe("scheduleStartMonth", () => {
+  it("falls back to the cut-off when the establishment has no app-side bound", () => {
+    expect(
+      scheduleStartMonth({
+        establishment: establishment({ dateJoined: "2019-01-01" }),
+        existing: [],
+        throughMonth: "2026-09",
+      })
+    ).toBe("2026-09");
+  });
+
+  it("takes the later of first recorded, scheduleFrom, and created month", () => {
+    expect(
+      scheduleStartMonth({
+        establishment: establishment({
+          dateJoined: "2019-01-01",
+          scheduleFrom: "2026-06",
+          createdAt: new Date("2026-01-15T12:00:00+05:30"),
+        }),
+        existing: [{ month: "2026-08" }],
+        throughMonth: "2026-09",
+      })
+    ).toBe("2026-08");
+  });
+
+  it("never starts before dateJoined", () => {
+    expect(
+      scheduleStartMonth({
+        establishment: establishment({
+          dateJoined: "2026-09-01",
+          scheduleFrom: "2026-01",
+        }),
+        existing: [],
+        throughMonth: "2026-09",
+      })
+    ).toBe("2026-09");
+  });
+});
+
+describe("monthKeyFromTimestamp", () => {
+  it("reads a Date in IST", () => {
+    expect(monthKeyFromTimestamp(new Date("2026-06-15T12:00:00+05:30"))).toBe("2026-06");
+  });
+
+  it("reads a Firestore-style seconds payload", () => {
+    const seconds = Math.floor(new Date("2026-06-15T12:00:00+05:30").getTime() / 1000);
+    expect(monthKeyFromTimestamp({ seconds, nanoseconds: 0 })).toBe("2026-06");
+  });
+
+  it("returns undefined for unusable values", () => {
+    expect(monthKeyFromTimestamp(undefined)).toBeUndefined();
+    expect(monthKeyFromTimestamp("not-a-date")).toBeUndefined();
+  });
+});
+
+describe("simulatedMonthsNeedingReview", () => {
+  it("flags simulated months before the first manual month", () => {
+    const flagged = simulatedMonthsNeedingReview(
+      [
+        { month: "2020-01", source: "simulated" },
+        { month: "2026-08", source: "manualHistorical" },
+        { month: "2026-09", source: "simulated" },
+      ],
+      "2026-09"
+    );
+    expect(flagged.map((row) => row.month)).toEqual(["2020-01"]);
+  });
+
+  it("flags past simulated months when nothing has been recorded by hand", () => {
+    const flagged = simulatedMonthsNeedingReview(
+      [
+        { month: "2020-01", source: "simulated" },
+        { month: "2026-09", source: "simulated" },
+      ],
+      "2026-09"
+    );
+    expect(flagged.map((row) => row.month)).toEqual(["2020-01"]);
+  });
+
+  it("does not invent a delete — the helper only lists", () => {
+    const existing = [{ month: "2020-01", source: "simulated" as const }];
+    simulatedMonthsNeedingReview(existing, "2026-09");
+    expect(existing).toEqual([{ month: "2020-01", source: "simulated" }]);
   });
 });

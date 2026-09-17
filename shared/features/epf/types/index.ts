@@ -78,6 +78,16 @@ export interface EpfEstablishment {
    */
   epsMember?: boolean;
   notes?: string;
+  /**
+   * YYYY-MM the automated scheduler may start from — SPENDLY-19.
+   *
+   * Stamped to the EPF month when the establishment is added, so a 2019
+   * `dateJoined` cannot simulate seven years of contributions at today's wage.
+   * Historical months stay on Backfill (`manualHistorical`). Optional so
+   * documents written before this field existed still read; `monthsToGenerate`
+   * then falls back to `createdAt` or the current month.
+   */
+  scheduleFrom?: string;
   createdAt?: unknown;
   updatedAt?: unknown;
 }

@@ -19,9 +19,11 @@ import type {
 import {
   computeEpfContribution,
   contributionMonthsFor,
+  isEligibleForAutomatedProcessing,
 } from "@/shared/features/epf/utils/contributions";
+import { epfCurrentMonth } from "@/shared/features/epf/utils/epfClock";
 import { isArchived, isOpenEnded } from "@/shared/features/epf/utils";
-import { daysInMonth, shiftMonthKey } from "@/shared/utils/dates";
+import { daysInMonth, isValidMonthKey, shiftMonthKey } from "@/shared/utils/dates";
 
 /** Sources the automated processor must never overwrite. */
 const PROTECTED_SOURCES = new Set(["manualHistorical", "imported"]);
@@ -136,7 +138,14 @@ export function selectEstablishmentForMonth(
  * Bounded at both ends by the employment period and at the top by
  * `throughMonth` (normally the current month, so a future month is never
  * invented). A month is skipped when a record already exists for it — which is
- * what makes a repeated run a no-op.
+ * what makes a repeated run a no-op. Archived contribution months stay present
+ * (SPENDLY-15): the scheduler must not regenerate a soft-deleted month.
+ *
+ * The start is *not* `dateJoined`. SPENDLY-19: walking from a 2019 joining date
+ * at the 2026 wage produced ~80 `expected/simulated` rows the cron then
+ * credited. Historical months are Backfill's job. The floor is the later of
+ * the first recorded month, `scheduleFrom`, the month the establishment was
+ * created in the app, or `throughMonth` when none of those exist.
  *
  * `establishments` is the full live set, so the job-change rule can be applied:
  * a month this establishment covers but a later one owns is not generated here.
@@ -150,13 +159,92 @@ export function monthsToGenerate(args: {
   const { establishment, allEstablishments, existing, throughMonth } = args;
   if (isArchived(establishment)) return [];
 
+  const start = scheduleStartMonth({
+    establishment,
+    existing,
+    throughMonth,
+  });
   const present = new Set(existing.map((row) => row.month));
 
   return contributionMonthsFor(establishment, throughMonth).filter((month) => {
+    if (month < start) return false;
     if (present.has(month)) return false;
     const owner = selectEstablishmentForMonth(allEstablishments, month);
     return owner?.id === establishment.id;
   });
+}
+
+/**
+ * First month the automated scheduler may invent — SPENDLY-19.
+ *
+ * Later of the recorded/app-side bounds, never earlier than `dateJoined`
+ * (employment cannot contribute before it exists). When the establishment was
+ * added without `scheduleFrom`/`createdAt` and has no rows yet, the floor is
+ * `throughMonth` so a forged 2019 joining date still only generates today.
+ */
+export function scheduleStartMonth(args: {
+  establishment: Pick<EpfEstablishment, "dateJoined" | "scheduleFrom" | "createdAt">;
+  existing: Pick<EpfContribution, "month">[];
+  throughMonth: string;
+}): string {
+  const floors: string[] = [];
+  if (isValidMonthKey(args.establishment.scheduleFrom ?? "")) {
+    floors.push(args.establishment.scheduleFrom as string);
+  }
+  const created = monthKeyFromTimestamp(args.establishment.createdAt);
+  if (created) floors.push(created);
+  const firstRecorded = args.existing
+    .map((row) => row.month)
+    .filter(isValidMonthKey)
+    .sort()[0];
+  if (firstRecorded) floors.push(firstRecorded);
+  if (floors.length === 0 && isValidMonthKey(args.throughMonth)) {
+    floors.push(args.throughMonth);
+  }
+
+  const floor = floors.reduce((latest, month) => (month > latest ? month : latest), floors[0] ?? args.throughMonth);
+  const joined = args.establishment.dateJoined.slice(0, 7);
+  if (isValidMonthKey(joined) && joined > floor) return joined;
+  return floor;
+}
+
+/** IST YYYY-MM from a Firestore Timestamp, Date, epoch, or ISO string. */
+export function monthKeyFromTimestamp(value: unknown): string | undefined {
+  const date = dateFromUnknown(value);
+  if (!date) return undefined;
+  return epfCurrentMonth(date);
+}
+
+function dateFromUnknown(value: unknown): Date | undefined {
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? undefined : value;
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const ms = value < 1e12 ? value * 1000 : value;
+    const date = new Date(ms);
+    return Number.isNaN(date.getTime()) ? undefined : date;
+  }
+  if (typeof value === "string" && value) {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? undefined : date;
+  }
+  if (typeof value === "object" && value) {
+    const obj = value as { toDate?: () => Date; seconds?: number; _seconds?: number };
+    if (typeof obj.toDate === "function") {
+      try {
+        const date = obj.toDate();
+        return date instanceof Date && !Number.isNaN(date.getTime()) ? date : undefined;
+      } catch {
+        return undefined;
+      }
+    }
+    const seconds = obj.seconds ?? obj._seconds;
+    if (typeof seconds === "number" && Number.isFinite(seconds)) {
+      const date = new Date(seconds * 1000);
+      return Number.isNaN(date.getTime()) ? undefined : date;
+    }
+  }
+  return undefined;
 }
 
 /**
@@ -217,6 +305,11 @@ export function canOverwriteWithSimulated(
  *
  * The single entry point for both the Netlify function and the client catch-up.
  * Returns [] when there is no wage to project from.
+ *
+ * SPENDLY-19: `isEligibleForAutomatedProcessing` is the write gate. A missing
+ * 2019 month is still listed by a loose `monthsToGenerate` floor (old
+ * `createdAt`), but it is history — Backfill owns it. Only the current month
+ * may be minted as `expected/simulated`. Existing rows are never deleted here.
  */
 export function planScheduledContributions(args: {
   establishment: EpfEstablishment;
@@ -235,7 +328,19 @@ export function planScheduledContributions(args: {
     existing: args.existing,
     throughMonth: args.throughMonth,
   })
-    .filter((month) => canOverwriteWithSimulated(byMonth.get(month)))
+    .filter((month) => {
+      const existing = byMonth.get(month);
+      if (existing) {
+        return (
+          canOverwriteWithSimulated(existing) &&
+          isEligibleForAutomatedProcessing(existing, args.throughMonth)
+        );
+      }
+      return isEligibleForAutomatedProcessing(
+        { source: "simulated", status: "expected", month },
+        args.throughMonth
+      );
+    })
     .map((month) =>
       buildExpectedContribution({
         establishment: args.establishment,
@@ -243,6 +348,28 @@ export function planScheduledContributions(args: {
         wage,
       })
     );
+}
+
+/**
+ * Simulated rows a user should review against the passbook — SPENDLY-19.
+ *
+ * Flag only. The scheduler must not auto-delete already-generated history;
+ * replacing those months is a Backfill action the user chooses.
+ *
+ * `source: "simulated" && month < firstManualMonth`, or every past simulated
+ * month when the user has not recorded a manual/imported row yet.
+ */
+export function simulatedMonthsNeedingReview(
+  existing: Pick<EpfContribution, "month" | "source">[],
+  currentMonth: string
+): Pick<EpfContribution, "month" | "source">[] {
+  const firstManual = existing
+    .filter((row) => row.source === "manualHistorical" || row.source === "imported")
+    .map((row) => row.month)
+    .filter(isValidMonthKey)
+    .sort()[0];
+  const cutoff = firstManual ?? currentMonth;
+  return existing.filter((row) => row.source === "simulated" && row.month < cutoff);
 }
 
 /** Establishments the scheduled job should consider at all. */

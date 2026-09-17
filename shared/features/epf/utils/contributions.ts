@@ -654,11 +654,11 @@ export function backfillProgress(
 }
 
 /**
- * Whether a row may be touched by the future automated processor (KAN-67/68).
+ * Whether a row may be touched by the automated processor (KAN-67/68, SPENDLY-19).
  *
- * Shipped and tested here, before the processor exists, so the ticket's
- * "historical records never enter the future cron queue" criterion is provable
- * today: the tests assert this returns false for every row KAN-66 can write.
+ * Historical records never enter the cron queue: KAN-66 rows are
+ * `manualHistorical`/`imported`/`draft`, and any month before `currentMonth` is
+ * Backfill's even when the source is `simulated`.
  */
 export function isEligibleForAutomatedProcessing(
   row: Pick<EpfContribution, "source" | "status" | "month">,

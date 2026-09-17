@@ -49,6 +49,7 @@ import {
   splitArchivedEstablishments,
   validateEstablishmentAgainstExisting,
 } from "@/shared/features/epf/utils";
+import { epfCurrentMonth } from "@/shared/features/epf/utils/epfClock";
 import { withoutUndefined } from "@/shared/utils/objects";
 
 /**
@@ -69,7 +70,7 @@ function withFieldDeletes<T extends Record<string, unknown>>(
 
 export type EpfEstablishmentInput = Omit<
   EpfEstablishment,
-  "id" | "profileId" | "employmentStatus" | "createdAt" | "updatedAt"
+  "id" | "profileId" | "employmentStatus" | "createdAt" | "updatedAt" | "scheduleFrom"
 >;
 
 export function useEpf(options?: { enabled?: boolean }) {
@@ -297,6 +298,9 @@ export function useEpf(options?: { enabled?: boolean }) {
           notes: input.notes || undefined,
           profileId: EPF_PROFILE_DOC_ID,
           employmentStatus: deriveEmploymentStatus(input.dateLeft),
+          // SPENDLY-19: pin the scheduler to this EPF month so a 2019 joining
+          // date cannot simulate the whole employment at today's wage.
+          scheduleFrom: epfCurrentMonth(),
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         });
