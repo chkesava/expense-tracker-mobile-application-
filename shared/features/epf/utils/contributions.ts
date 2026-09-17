@@ -261,6 +261,7 @@ export function normalizeEpfContribution(
     reconciledAt: str(raw.reconciledAt),
     statusReason: str(raw.statusReason),
     statusUpdatedAt: raw.statusUpdatedAt,
+    archived: raw.archived === true ? true : undefined,
     createdAt: raw.createdAt,
     updatedAt: raw.updatedAt,
   };
@@ -304,6 +305,7 @@ export function contributionWritePayload(
     creditedAmount: row.creditedAmount,
     reconciledAt: row.reconciledAt || undefined,
     statusReason: row.statusReason || undefined,
+    archived: row.archived || undefined,
     reference: row.reference || undefined,
     notes: row.notes || undefined,
     zeroReason: row.zeroReason || undefined,
