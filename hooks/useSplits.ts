@@ -85,7 +85,7 @@ function applyShareSideEffects(
   const publicSlug = split.publicSlug || generatePaymentSlug(10);
   const shareRef = split.publicShareId
     ? doc(db, "splitPublicShares", split.publicShareId)
-    : doc(collection(db, "splitPublicShares"));
+    : doc(db, "splitPublicShares", publicSlug);
   const settled = Boolean(extraSplitFields.settled ?? split.settled);
   const totalAmount =
     typeof extraSplitFields.totalAmount === "number"
@@ -265,8 +265,8 @@ export function useSplits(options?: { enabled?: boolean }) {
     try {
       const keyedParticipants = withParticipantKeys(splitData.participants);
       const docRef = doc(collection(db, "splits"));
-      const publicShareRef = doc(collection(db, "splitPublicShares"));
       const publicSlug = generatePaymentSlug(10);
+      const publicShareRef = doc(db, "splitPublicShares", publicSlug);
       const createdAt = Date.now();
       const createdByName =
         user?.displayName || user?.email?.split("@")[0] || "Me";
@@ -290,7 +290,7 @@ export function useSplits(options?: { enabled?: boolean }) {
         });
 
         const applied = shares.map((share) => {
-          const requestRef = doc(collection(db, "paymentRequests"));
+          const requestRef = doc(db, "paymentRequests", share.slug);
           batch.set(requestRef, {
             ...share.payload,
             createdAt,
@@ -445,7 +445,7 @@ export function useSplits(options?: { enabled?: boolean }) {
         });
 
         const applied = shares.map((share) => {
-          const requestRef = doc(collection(db, "paymentRequests"));
+          const requestRef = doc(db, "paymentRequests", share.slug);
           batch.set(requestRef, share.payload);
           newRequestIds.push(requestRef.id);
           return {
@@ -952,7 +952,7 @@ export function useSplits(options?: { enabled?: boolean }) {
         });
         const newRequestIds: string[] = [];
         const applied = shares.map((share) => {
-          const requestRef = doc(collection(db, "paymentRequests"));
+          const requestRef = doc(db, "paymentRequests", share.slug);
           batch.set(requestRef, share.payload);
           newRequestIds.push(requestRef.id);
           return {

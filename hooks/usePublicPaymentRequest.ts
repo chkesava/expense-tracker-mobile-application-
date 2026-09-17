@@ -5,13 +5,16 @@
  * is open: the organizer marking the share collected drops the remaining due to
  * zero, and the payer should see that rather than a QR for money they no longer
  * owe. `attempt` is in the deps so `retry()` re-attaches the listener.
+ *
+ * Prefers get-by-slug (document id). Falls back to a slug query for auto-id
+ * docs minted before SPENDLY-36, until those are backfilled.
  */
 
 import { useEffect, useState } from "react";
-import { collection, limit, onSnapshot, query, where } from "firebase/firestore";
 
 import { getFirestoreDb } from "@/lib/firebase";
 import { snapshotErrorHandler, toLoadFailure, type LoadFailure } from "@/lib/firestoreErrors";
+import { listenBySlugWithQueryFallback } from "@/lib/listenBySlug";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
 import type { PaymentRequest } from "@/shared/types/paymentRequest";
 
@@ -53,33 +56,25 @@ export function usePublicPaymentRequest(
     setLoading(true);
     setError(null);
 
-    const q = query(
-      collection(db, "paymentRequests"),
-      where("slug", "==", slug),
-      limit(1)
-    );
-
-    return onSnapshot(
-      q,
-      (snap) => {
+    return listenBySlugWithQueryFallback(db, "paymentRequests", slug, {
+      onDoc: (id, data) => {
         setLoading(false);
-        if (snap.empty) {
-          setRequest(null);
-          setError({
-            message: "This payment link is invalid or has expired.",
-            kind: "notFound",
-            retryable: false,
-          });
-          return;
-        }
-        const docSnap = snap.docs[0];
         setError(null);
         setRequest({
-          id: docSnap.id,
-          ...(docSnap.data() as Omit<PaymentRequest, "id">),
+          id,
+          ...(data as Omit<PaymentRequest, "id">),
         });
       },
-      snapshotErrorHandler(
+      onMissing: () => {
+        setLoading(false);
+        setRequest(null);
+        setError({
+          message: "This payment link is invalid or has expired.",
+          kind: "notFound",
+          retryable: false,
+        });
+      },
+      onError: snapshotErrorHandler(
         "snapshot.publicPaymentRequest",
         (failure) => {
           setRequest(null);
@@ -87,8 +82,8 @@ export function usePublicPaymentRequest(
           setLoading(false);
         },
         "Couldn't load this payment request."
-      )
-    );
+      ),
+    });
   }, [slug, attempt, setError]);
 
   return { request, loading, error, retry };

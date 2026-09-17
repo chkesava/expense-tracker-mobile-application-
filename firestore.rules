@@ -178,26 +178,40 @@ service cloud.firestore {
         && splitAmountsWellFormed();
     }
 
-    // A payment request is deliberately world-readable: it backs the public
-    // /payment/:slug link handed to whoever is being asked to pay, and that
-    // person is not signed in. Only the creator can write one.
+    // Public /payment/:slug and /split/:slug pages. SPENDLY-36: `read: if true`
+    // included `list`, so anyone could dump names + UPI + amounts. Public
+    // access is get-by-slug (the slug is the document id). Organizers still
+    // query `paymentRequests` by createdBy; splitPublicShares are never listed.
+    // createdBy is pinned so a request cannot be planted in someone else's
+    // Collect list. New creates must use slug as the document id.
     match /paymentRequests/{requestId} {
-      allow read: if true;
-      allow update, delete: if signedIn()
-        && resource.data.createdBy == request.auth.uid;
+      function isRequestCreator() {
+        return signedIn() && resource.data.createdBy == request.auth.uid;
+      }
+
+      allow get: if true;
+      allow list: if signedIn() && resource.data.createdBy == request.auth.uid;
+      allow delete: if isRequestCreator();
+      allow update: if isRequestCreator()
+        && request.resource.data.createdBy == resource.data.createdBy;
       allow create: if signedIn()
-        && request.resource.data.createdBy == request.auth.uid;
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.slug == requestId;
     }
 
-    // Public split summary for /split/:slug. Same write pattern as payment
-    // requests. Splits themselves stay private — this snapshot has no account
-    // ids, user ids, or UPI.
     match /splitPublicShares/{shareId} {
-      allow read: if true;
-      allow update, delete: if signedIn()
-        && resource.data.createdBy == request.auth.uid;
+      function isShareCreator() {
+        return signedIn() && resource.data.createdBy == request.auth.uid;
+      }
+
+      allow get: if true;
+      allow list: if false;
+      allow delete: if isShareCreator();
+      allow update: if isShareCreator()
+        && request.resource.data.createdBy == resource.data.createdBy;
       allow create: if signedIn()
-        && request.resource.data.createdBy == request.auth.uid;
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.slug == shareId;
     }
 
     // Self-service updates filed from the public /split/:slug page by people who

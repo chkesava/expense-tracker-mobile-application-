@@ -104,7 +104,7 @@ export function usePaymentRequests(options?: { enabled?: boolean }) {
       };
 
       const outcome = await commitWrite(
-        () => setDoc(doc(collection(db, "paymentRequests")), newRequest),
+        () => setDoc(doc(db, "paymentRequests", slug), newRequest),
         { label: "payment request" }
       );
       toast.success(writeSavedMessage(outcome, "Payment request created!"));
