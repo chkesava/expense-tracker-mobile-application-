@@ -235,6 +235,17 @@ export function useSplits(options?: { enabled?: boolean }) {
     };
   }, [uid, enabled, attempt]);
 
+  const requireOrganizer = (
+    split: Split | undefined,
+    message: string
+  ): split is Split => {
+    if (!split || split.createdBy !== uid) {
+      toast.error(message);
+      return false;
+    }
+    return true;
+  };
+
   const createSplit = async (
     splitData: CreateSplitInput,
     createOptions?: {
@@ -391,6 +402,9 @@ export function useSplits(options?: { enabled?: boolean }) {
     // Read from the live snapshot, not a caller-held prop, which can be stale.
     const split = splits.find((s) => s.id === splitId);
     if (!split) return { ok: false, message: "This split is no longer available." };
+    if (split.createdBy !== uid) {
+      return { ok: false, message: "Only the organizer can create the share link." };
+    }
 
     const origin = getPublicAppOrigin();
     if (!origin) {
@@ -489,6 +503,11 @@ export function useSplits(options?: { enabled?: boolean }) {
     const db = getFirestoreDb();
     if (!uid || !db || !id) return false;
 
+    const split = splits.find((s) => s.id === id);
+    if (!requireOrganizer(split, "Only the organizer can update this split.")) {
+      return false;
+    }
+
     try {
       const outcome = await commitWrite(
         () => updateDoc(doc(db, "splits", id), omitUndefined(updates)),
@@ -512,7 +531,9 @@ export function useSplits(options?: { enabled?: boolean }) {
     if (!uid || !db || !splitId) return false;
 
     const split = splits.find((s) => s.id === splitId);
-    if (!split) return false;
+    if (!requireOrganizer(split, "Only the organizer can update settlement status.")) {
+      return false;
+    }
 
     const target = split.participants[participantIndex];
     if (!target) return false;
@@ -569,7 +590,9 @@ export function useSplits(options?: { enabled?: boolean }) {
     if (!uid || !db || !splitId) return false;
 
     const split = splits.find((s) => s.id === splitId);
-    if (!split) return false;
+    if (!requireOrganizer(split, "Only the organizer can record a collection.")) {
+      return false;
+    }
 
     const entryRef = doc(collection(db, "users", uid, "accountEntries"));
     const built = buildMarkCollectedWrites({
@@ -616,7 +639,9 @@ export function useSplits(options?: { enabled?: boolean }) {
     if (!uid || !db || !splitId) return false;
 
     const split = splits.find((s) => s.id === splitId);
-    if (!split) return false;
+    if (!requireOrganizer(split, "Only the organizer can undo a collection.")) {
+      return false;
+    }
 
     const built = buildUnmarkCollectedWrites({ split, participantKey });
     if ("error" in built) {
@@ -655,7 +680,9 @@ export function useSplits(options?: { enabled?: boolean }) {
     if (!uid || !db || !splitId) return false;
 
     const split = splits.find((s) => s.id === splitId);
-    if (!split) return false;
+    if (!requireOrganizer(split, "Only the organizer can record a gift purchase.")) {
+      return false;
+    }
 
     const expenseRef = doc(collection(db, "users", uid, "expenses"));
     const passRef = doc(collection(db, "users", uid, "accountEntries"));
@@ -712,7 +739,9 @@ export function useSplits(options?: { enabled?: boolean }) {
     if (!uid || !db || !splitId) return false;
 
     const split = splits.find((s) => s.id === splitId);
-    if (!split) return false;
+    if (!requireOrganizer(split, "Only the organizer can settle this split.")) {
+      return false;
+    }
 
     if (isCollectSplit(split)) {
       toast.error("Use “Use money for gift” after collecting — Settle All is for bill splits.");
@@ -1119,28 +1148,29 @@ export function useSplits(options?: { enabled?: boolean }) {
     if (!uid || !db || !id) return false;
 
     const split = splits.find((s) => s.id === id);
+    if (!requireOrganizer(split, "Only the organizer can delete this split.")) {
+      return false;
+    }
 
     try {
       const batch = writeBatch(db);
-      if (split) {
-        const linked = linkedLedgerIds(split);
-        for (const entryId of linked.entryIds) {
-          batch.delete(doc(db, "users", uid, "accountEntries", entryId));
-        }
-        for (const expenseId of linked.expenseIds) {
-          batch.delete(doc(db, "users", uid, "expenses", expenseId));
-        }
-        for (const requestId of linked.paymentRequestIds) {
-          batch.delete(doc(db, "paymentRequests", requestId));
-        }
-        if (linked.publicShareId) {
-          batch.delete(doc(db, "splitPublicShares", linked.publicShareId));
-        }
-        // Rules evaluate the whole batch against pre-batch state, so the share
-        // still exists for the ownership check even though this batch drops it.
-        for (const claimDocId of splitClaimDocIdsForSplit(split)) {
-          batch.delete(doc(db, "splitShareClaims", claimDocId));
-        }
+      const linked = linkedLedgerIds(split);
+      for (const entryId of linked.entryIds) {
+        batch.delete(doc(db, "users", uid, "accountEntries", entryId));
+      }
+      for (const expenseId of linked.expenseIds) {
+        batch.delete(doc(db, "users", uid, "expenses", expenseId));
+      }
+      for (const requestId of linked.paymentRequestIds) {
+        batch.delete(doc(db, "paymentRequests", requestId));
+      }
+      if (linked.publicShareId) {
+        batch.delete(doc(db, "splitPublicShares", linked.publicShareId));
+      }
+      // Rules evaluate the whole batch against pre-batch state, so the share
+      // still exists for the ownership check even though this batch drops it.
+      for (const claimDocId of splitClaimDocIdsForSplit(split)) {
+        batch.delete(doc(db, "splitShareClaims", claimDocId));
       }
       batch.delete(doc(db, "splits", id));
       const outcome = await commitWrite(() => batch.commit(), {

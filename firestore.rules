@@ -148,19 +148,34 @@ service cloud.firestore {
               || request.auth.uid in resource.data.participantIds);
       }
 
-      // Same rationale as vaults above: createdBy/participantIds must stay
-      // stable on a plain update so a participant can't add/remove other
-      // participants or reassign the split to themselves.
-      function keepsParticipantsStable() {
-        return request.resource.data.createdBy == resource.data.createdBy
-          && (request.resource.data.participantIds == resource.data.participantIds
-              || request.auth.uid == resource.data.createdBy);
+      function isSplitCreator() {
+        return signedIn() && resource.data.createdBy == request.auth.uid;
       }
 
-      allow read, delete: if isSplitParticipant();
-      allow update: if isSplitParticipant() && keepsParticipantsStable();
+      // SPENDLY-32: a debtor used to settle, zero, rewrite participants[],
+      // or delete the split. Money and membership live on this doc, so only
+      // the organizer may write it. Friends file via splitShareClaims; the
+      // organizer applies. createdBy is never client-rewritable.
+      // participantIds stay creator-writable so Add person still works.
+      function keepsCreatorStable() {
+        return request.resource.data.createdBy == resource.data.createdBy;
+      }
+
+      function splitAmountsWellFormed() {
+        return request.resource.data.totalAmount is number
+          && request.resource.data.totalAmount >= 0
+          && (!request.resource.data.keys().hasAny(['settled'])
+              || request.resource.data.settled is bool);
+      }
+
+      allow read: if isSplitParticipant();
+      allow delete: if isSplitCreator();
+      allow update: if isSplitCreator()
+        && keepsCreatorStable()
+        && splitAmountsWellFormed();
       allow create: if signedIn()
-        && request.resource.data.createdBy == request.auth.uid;
+        && request.resource.data.createdBy == request.auth.uid
+        && splitAmountsWellFormed();
     }
 
     // A payment request is deliberately world-readable: it backs the public

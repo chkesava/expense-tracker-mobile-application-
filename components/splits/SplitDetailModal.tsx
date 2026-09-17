@@ -158,7 +158,7 @@ export function SplitDetailModal({
     );
 
   const handleTogglePaid = async (participant: Participant, index: number) => {
-    if (!split.id) return;
+    if (!split.id || !isCreator) return;
     haptic.selection().catch(() => undefined);
 
     if (collect) {
@@ -582,28 +582,30 @@ export function SplitDetailModal({
             </View>
 
             <View style={styles.headerActions}>
-              <Pressable
-                onPress={handleShareSplit}
-                hitSlop={12}
-                disabled={sharing !== null}
-                accessibilityRole="button"
-                accessibilityLabel="Share split"
-                accessibilityState={{
-                  busy: sharing === "split",
-                  disabled: sharing !== null,
-                }}
-                style={({ pressed }) => [
-                  styles.closeButton,
-                  sharing !== null && { opacity: 0.5 },
-                  pressed && { opacity: 0.6 },
-                ]}
-              >
-                {sharing === "split" ? (
-                  <ActivityIndicator size="small" color={theme.colors.foreground} />
-                ) : (
-                  <Share2 size={20} color={theme.colors.foreground} />
-                )}
-              </Pressable>
+              {isCreator ? (
+                <Pressable
+                  onPress={handleShareSplit}
+                  hitSlop={12}
+                  disabled={sharing !== null}
+                  accessibilityRole="button"
+                  accessibilityLabel="Share split"
+                  accessibilityState={{
+                    busy: sharing === "split",
+                    disabled: sharing !== null,
+                  }}
+                  style={({ pressed }) => [
+                    styles.closeButton,
+                    sharing !== null && { opacity: 0.5 },
+                    pressed && { opacity: 0.6 },
+                  ]}
+                >
+                  {sharing === "split" ? (
+                    <ActivityIndicator size="small" color={theme.colors.foreground} />
+                  ) : (
+                    <Share2 size={20} color={theme.colors.foreground} />
+                  )}
+                </Pressable>
+              ) : null}
               <Pressable
                 onPress={onClose}
                 hitSlop={12}
@@ -813,6 +815,7 @@ export function SplitDetailModal({
                 const paidSoFar = participantPaidAmount(p);
                 const showTopUp = contributing && paidSoFar > 0.009 && remainingDue > 0.009;
                 const canSharePerson =
+                  isCreator &&
                   !p.isCurrentUser &&
                   contributing &&
                   remainingDue > 0.009 &&
@@ -841,6 +844,7 @@ export function SplitDetailModal({
                         onPress={() => handleTogglePaid(p, index)}
                         style={styles.participantLeft}
                         disabled={
+                          !isCreator ||
                           (collect && ((p.isCurrentUser && remainingDue <= 0.009) || spent)) ||
                           !contributing
                         }
@@ -1087,13 +1091,15 @@ export function SplitDetailModal({
           </ScrollView>
 
           <View style={styles.actionFooter}>
-            <Button
-              variant="destructive"
-              onPress={handleDelete}
-              style={{ flex: 1 }}
-            >
-              Delete
-            </Button>
+            {isCreator ? (
+              <Button
+                variant="destructive"
+                onPress={handleDelete}
+                style={{ flex: 1 }}
+              >
+                Delete
+              </Button>
+            ) : null}
 
             {collect && isCreator && !spent ? (
               <Button
@@ -1103,7 +1109,10 @@ export function SplitDetailModal({
               >
                 Use money for gift
               </Button>
-            ) : !collect && !split.settled && !progress.isFullySettled ? (
+            ) : !collect &&
+              isCreator &&
+              !split.settled &&
+              !progress.isFullySettled ? (
               <Button
                 variant="primary"
                 onPress={handleSettleAll}
