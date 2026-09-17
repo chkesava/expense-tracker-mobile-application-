@@ -21,6 +21,46 @@ const AUTO_BILL_MIN_DUE_RATE = 0.05;
 export const AUTO_CREDIT_CARD_BILL_NOTE = "Auto-created from cycle spend";
 
 /**
+ * Idempotency key for auto-created statements (SPENDLY-45).
+ * Two devices that close the same cycle write the same document instead of
+ * minting two random ids. Manual bills keep Firestore auto-ids.
+ */
+export function autoCreditCardBillDocId(
+  accountId: string,
+  statementDate: string
+): string {
+  return `${accountId}_${statementDate}`;
+}
+
+export type DuplicateCreditCardBillGroup = {
+  accountId: string;
+  statementDate: string;
+  ids: string[];
+};
+
+/** Groups that already have more than one doc for the same cycle. Never auto-delete. */
+export function findDuplicateCreditCardBills(
+  bills: Pick<CreditCardBill, "id" | "accountId" | "statementDate">[]
+): DuplicateCreditCardBillGroup[] {
+  const groups = new Map<string, DuplicateCreditCardBillGroup>();
+  for (const bill of bills) {
+    if (!bill.id || !bill.accountId || !bill.statementDate) continue;
+    const key = `${bill.accountId}:${bill.statementDate}`;
+    const existing = groups.get(key);
+    if (existing) {
+      existing.ids.push(bill.id);
+    } else {
+      groups.set(key, {
+        accountId: bill.accountId,
+        statementDate: bill.statementDate,
+        ids: [bill.id],
+      });
+    }
+  }
+  return [...groups.values()].filter((group) => group.ids.length > 1);
+}
+
+/**
  * How many closed cycles get a statement document. Statements only generate
  * while the app is open, so a user who skips a few months would otherwise never
  * get documents (or reminders) for the cycles they missed — the ledger already

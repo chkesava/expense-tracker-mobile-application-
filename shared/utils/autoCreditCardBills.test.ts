@@ -4,9 +4,11 @@ import type { Account, Expense } from "../types/expense";
 import { AUTO_CREDIT_CARD_BILL_REMINDER_FREQUENCY } from "../types/creditCardBill";
 import {
   AUTO_CREDIT_CARD_BILL_NOTE,
+  autoCreditCardBillDocId,
   buildAutoCreditCardBillDraft,
   collectAutoCreditCardBillDrafts,
   collectAutoCreditCardBillRefreshPatches,
+  findDuplicateCreditCardBills,
   previewClosedCycleCreditCardBill,
 } from "./autoCreditCardBills";
 
@@ -531,5 +533,40 @@ describe("collectAutoCreditCardBillDrafts — backfill", () => {
       statementDate: "2026-07-15",
       statementAmount: 2000,
     });
+  });
+});
+
+describe("autoCreditCardBillDocId", () => {
+  it("is accountId_statementDate so two devices share one document", () => {
+    expect(autoCreditCardBillDocId("cc-slice", "2026-08-15")).toBe(
+      "cc-slice_2026-08-15"
+    );
+  });
+});
+
+describe("findDuplicateCreditCardBills", () => {
+  it("flags more than one doc for the same account and statement date", () => {
+    expect(
+      findDuplicateCreditCardBills([
+        { id: "random-a", accountId: "cc-slice", statementDate: "2026-08-15" },
+        { id: "random-b", accountId: "cc-slice", statementDate: "2026-08-15" },
+        { id: "other", accountId: "cc-slice", statementDate: "2026-07-15" },
+      ])
+    ).toEqual([
+      {
+        accountId: "cc-slice",
+        statementDate: "2026-08-15",
+        ids: ["random-a", "random-b"],
+      },
+    ]);
+  });
+
+  it("returns nothing when each cycle has a single document", () => {
+    expect(
+      findDuplicateCreditCardBills([
+        { id: "a", accountId: "cc-slice", statementDate: "2026-08-15" },
+        { id: "b", accountId: "cc-hdfc", statementDate: "2026-08-15" },
+      ])
+    ).toEqual([]);
   });
 });
