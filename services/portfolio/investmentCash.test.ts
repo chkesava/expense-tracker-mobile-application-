@@ -50,11 +50,12 @@ vi.mock("@/lib/id", () => ({
   newId: () => `id-${++idCounter}`,
 }));
 
-import { setDoc, writeBatch } from "firebase/firestore";
+import { getDocs, setDoc, writeBatch } from "firebase/firestore";
 
 import {
   createHoldingWithCash,
   ensureCashBaseline,
+  readAvailableInvestmentCash,
   recordInvestmentCashAdjustment,
   recordInvestmentCashEntry,
   reverseInvestmentCashEntry,
@@ -523,5 +524,34 @@ describe("ensureCashBaseline", () => {
 
     const [, payload] = vi.mocked(setDoc).mock.calls[0] as unknown as [unknown, Record<string, any>];
     expect(payload.cashBaseline.amount).toBe(2500);
+  });
+});
+
+describe("readAvailableInvestmentCash", () => {
+  it("uses the legacy scalar when no baseline exists yet", async () => {
+    settingsData = { cashBalance: 5000 };
+    await expect(readAvailableInvestmentCash("u1")).resolves.toBe(5000);
+  });
+
+  it("folds the ledger onto the baseline and never goes below zero", async () => {
+    settingsData = {
+      cashBalance: 1000,
+      cashBaseline: {
+        amount: 4000,
+        capturedAt: "2026-09-01T00:00:00.000Z",
+        capturedAtMs: 0,
+        reason: "x",
+      },
+    };
+    vi.mocked(getDocs).mockResolvedValueOnce({
+      docs: [
+        {
+          id: "e1",
+          data: () => ({ type: "PURCHASE", amount: 6000, direction: "debit" }),
+        },
+      ],
+    } as never);
+
+    await expect(readAvailableInvestmentCash("u1")).resolves.toBe(0);
   });
 });

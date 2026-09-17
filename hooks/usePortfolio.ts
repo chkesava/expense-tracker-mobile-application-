@@ -24,10 +24,9 @@ import {
   ensureCashBaseline,
   executeMockBuy as commitMockBuy,
   executeMockSell as commitMockSell,
-  recordInvestmentCashEntry,
   reverseInvestmentCashEntry,
-  transferInvestmentCashWithBank,
 } from "@/services/portfolio/investmentCash";
+import { usePortfolioMutations } from "@/hooks/usePortfolioMutations";
 import { scheduleIdleWork } from "@/shared/utils/scheduleIdle";
 import {
   availableInvestmentCash,
@@ -84,6 +83,7 @@ export function usePortfolio(options?: {
   const db = getFirestoreDb();
   const enabled = options?.enabled ?? true;
   const includeSecondary = options?.includeSecondary !== false;
+  const { depositCash, withdrawCash } = usePortfolioMutations();
 
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [transactions, setTransactions] = useState<PortfolioTransaction[]>([]);
@@ -537,113 +537,6 @@ export function usePortfolio(options?: {
       return false;
     }
   }, [db, user]);
-
-  /**
-   * Money arriving from a bank account.
-   *
-   * Now a ledger entry rather than a read-modify-write of the scalar, and it keeps
-   * the date the user picked — the old path overwrote it with today's, so a
-   * back-dated transfer landed on the wrong day.
-   */
-  const depositCash = useCallback(async (
-    amount: number,
-    note?: string,
-    options?: {
-      date?: string;
-      entryId?: string;
-      accountId?: string;
-      accountEntryId?: string;
-      /** Caller shows its own success toast (Transfer Funds / Manage Stock Cash). */
-      quiet?: boolean;
-    }
-  ) => {
-    if (!user || !db || !(amount > 0)) return false;
-    try {
-      await ensureCashBaseline(user.uid, settings?.cashBalance ?? 0);
-      const date = options?.date ?? todayKey();
-      const result = options?.accountId
-        ? await transferInvestmentCashWithBank(user.uid, {
-            type: "TOP_UP",
-            amount,
-            date,
-            note: note || "Cash deposit to Stocks Demat",
-            accountId: options.accountId,
-            entryId: options.entryId,
-            accountEntryId: options.accountEntryId,
-          })
-        : await recordInvestmentCashEntry(
-            user.uid,
-            {
-              type: "TOP_UP",
-              amount,
-              direction: "credit",
-              date,
-              note: note || "Cash deposit to Stocks Demat",
-            },
-            options?.entryId
-          );
-      if (!options?.quiet) {
-        toast.success(writeSavedMessage(result.outcome, "Cash deposited to Stocks Demat"));
-      }
-      return true;
-    } catch (error) {
-      logError("portfolio.depositCash", error);
-      toast.error(friendlyErrorMessage(error, "Failed to deposit cash"));
-      return false;
-    }
-  }, [db, user, settings]);
-
-  /** Money returning to a bank account. Guarded against overdrawing the wallet. */
-  const withdrawCash = useCallback(async (
-    amount: number,
-    note?: string,
-    options?: {
-      date?: string;
-      entryId?: string;
-      accountId?: string;
-      accountEntryId?: string;
-      quiet?: boolean;
-    }
-  ) => {
-    if (!user || !db || !(amount > 0)) return false;
-    if (amount > availableCash) {
-      toast.error("Insufficient cash balance");
-      return false;
-    }
-    try {
-      await ensureCashBaseline(user.uid, settings?.cashBalance ?? 0);
-      const date = options?.date ?? todayKey();
-      const result = options?.accountId
-        ? await transferInvestmentCashWithBank(user.uid, {
-            type: "WITHDRAWAL",
-            amount,
-            date,
-            note: note || "Cash withdrawal from Stocks Demat",
-            accountId: options.accountId,
-            entryId: options.entryId,
-            accountEntryId: options.accountEntryId,
-          })
-        : await recordInvestmentCashEntry(
-            user.uid,
-            {
-              type: "WITHDRAWAL",
-              amount,
-              direction: "debit",
-              date,
-              note: note || "Cash withdrawal from Stocks Demat",
-            },
-            options?.entryId
-          );
-      if (!options?.quiet) {
-        toast.success(writeSavedMessage(result.outcome, "Cash withdrawn from Stocks Demat"));
-      }
-      return true;
-    } catch (error) {
-      logError("portfolio.withdrawCash", error);
-      toast.error(friendlyErrorMessage(error, "Couldn't withdraw the cash."));
-      return false;
-    }
-  }, [db, user, settings, availableCash]);
 
   return {
     holdings,
