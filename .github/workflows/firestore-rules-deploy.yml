@@ -25,8 +25,8 @@ on:
         type: boolean
         default: false
   # Same-repo push re-runs the compile job so we can verify the Service Usage
-  # 403 fix without workflow_dispatch permission. `deploy-rules` still requires
-  # dry_run=false from workflow_dispatch, so a push cannot upload.
+  # 403 fix without workflow_dispatch permission. `inputs.dry_run == false`
+  # is only true on a manual dispatch, so a push cannot upload.
   push:
     branches:
       - cursor/fix-firestore-rules-deploy-403-4a0c
@@ -66,14 +66,16 @@ jobs:
           node-version: 22
           cache: npm
 
+      - name: Set up Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+
       - name: Install dependencies
         run: npm ci
 
-      # Index deploys still go through firebase-tools. Rules compile/upload
-      # do not: the CLI probes serviceusage.googleapis.com first, and the
-      # GitHub service account is not granted that permission.
       - name: Install Firebase CLI
-        if: ${{ inputs.deploy_indexes }}
         run: |
           for attempt in 1 2 3; do
             if npm install --global firebase-tools@15.29.0; then
@@ -84,6 +86,12 @@ jobs:
           done
           echo "::error::firebase-tools install failed after 3 attempts"
           exit 1
+
+      - name: Cache emulator binaries
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ runner.os }}
 
       - name: Write service account credentials
         env:
@@ -96,29 +104,34 @@ jobs:
           printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "${{ runner.temp }}/service-account.json"
           chmod 600 "${{ runner.temp }}/service-account.json"
 
-      # Compile via the Rules API `:test` endpoint (same compiler `firebase
-      # deploy` uses after its Service Usage probe). A `[W]` or `[E]` fails
-      # the job before anything is uploaded.
+      # firebase-tools calls serviceusage.googleapis.com to check that
+      # firestore.googleapis.com is enabled. The GitHub Actions service
+      # account is not granted that permission (run 35255866160 403'd
+      # there after the emulator suite passed). Firestore is already
+      # enabled on this project; skip the probe via the CLI's local cache.
+      - name: Skip Service Usage API probe
+        run: node scripts/firestoreRulesCi.js seed-cli-api-cache --project "$FIREBASE_PROJECT"
+
+      # Dry-run first so a compiler `[W]` fails the job before anything is
+      # uploaded. `firebase deploy` itself treats warnings as non-fatal.
       - name: Compile rules (dry-run)
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/service-account.json
-          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: |
           set -euo pipefail
-          node scripts/firestoreRulesCi.js compile \
-            --project "$FIREBASE_PROJECT" \
-            --repo-rules firestore.rules
+          firebase deploy --only firestore:rules --project "$FIREBASE_PROJECT" --non-interactive --dry-run \
+            2>&1 | tee "${{ runner.temp }}/rules-dry-run.log"
+          node scripts/firestoreRulesCi.js warn --log-file "${{ runner.temp }}/rules-dry-run.log"
 
       - name: Deploy Firestore rules
         if: ${{ inputs.dry_run == false }}
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/service-account.json
-          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: |
           set -euo pipefail
-          node scripts/firestoreRulesCi.js deploy-rules \
-            --project "$FIREBASE_PROJECT" \
-            --repo-rules firestore.rules
+          firebase deploy --only firestore:rules --project "$FIREBASE_PROJECT" --non-interactive \
+            2>&1 | tee "${{ runner.temp }}/rules-deploy.log"
+          node scripts/firestoreRulesCi.js warn --log-file "${{ runner.temp }}/rules-deploy.log"
 
       - name: Optionally deploy indexes
         if: ${{ inputs.deploy_indexes }}
@@ -128,7 +141,6 @@ jobs:
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
           set -euo pipefail
-          node scripts/firestoreRulesCi.js seed-cli-api-cache --project "$FIREBASE_PROJECT"
           firebase firestore:indexes --project "$FIREBASE_PROJECT" --non-interactive \
             > "${{ runner.temp }}/live-indexes.json"
           node scripts/firestoreRulesCi.js assert-index-deploy \
@@ -146,12 +158,12 @@ jobs:
           {
             echo "## Firestore rules deploy"
             echo ""
-            echo "- Event: \`workflow_dispatch\`"
+            echo "- Event: \`${{ github.event_name }}\`"
             echo "- Dry-run: **${{ inputs.dry_run }}**"
             echo "- Indexes: **${{ inputs.deploy_indexes }}**"
             echo "- Project: \`$FIREBASE_PROJECT\`"
-            echo "- Compiler warnings: treated as failure (\`[W]\` / \`[E]\` via the Rules API :test endpoint)."
-            echo "- Rules upload: firebaserules.googleapis.com (not \`firebase deploy\`, which probes Service Usage)."
+            echo "- Compiler warnings: treated as failure (\`[W]\`)."
+            echo "- Service Usage probe: skipped (API already enabled; GitHub SA lacks serviceusage.services.get)."
             echo "- Secrets used: FIREBASE_SERVICE_ACCOUNT (not available to pull_request)."
           } >> "$GITHUB_STEP_SUMMARY"
 

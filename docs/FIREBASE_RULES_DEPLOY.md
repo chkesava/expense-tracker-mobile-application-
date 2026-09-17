@@ -135,11 +135,11 @@ Preferred: GitHub → Actions →
 → Run workflow on `main`.
 
 - Leave **dry_run** on for a compiler preview. Uncheck it to upload. A
-  compiler warning (`[W]`) fails the job; the workflow compiles via the
-  Firebase Rules API first so a warning cannot reach production. CI does
-  **not** call `firebase deploy --only firestore:rules`: that command probes
-  `serviceusage.googleapis.com` before compiling, and the GitHub service
-  account is not granted that permission. Local CLI deploys are unchanged.
+  compiler warning (`[W]`) fails the job; the workflow dry-runs first so a
+  warning cannot reach production. The Action seeds the Firebase CLI's local
+  "API already enabled" cache before `firebase deploy`, because the GitHub
+  service account is denied `serviceusage.services.get` and that probe 403s
+  even though Firestore is already on.
 - Leave **deploy_indexes** off unless live indexes have been dumped and
   copied into `firestore.indexes.json`. `firebase deploy --only firestore:indexes`
   **deletes live indexes that are not in the file**. The job dumps live
@@ -210,11 +210,11 @@ No `Deploy complete`, nothing uploaded.
 All four call `npm run test:rules` rather than each spelling out their own
 invocation. A gate that runs something different from the local command is one
 people learn to distrust, and one that can drift between "what the PR checked"
-and "what the deploy checked". The deploy workflow adds one extra check on top:
-it compiles `firestore.rules` with the Firebase Rules API `:test` endpoint
-and fails on compiler warnings (`[W]`) or errors (`[E]`). That is the same
-compiler `firebase deploy` uses, without the Service Usage enablement probe
-that 403s the GitHub Actions service account.
+and "what the deploy checked". The deploy workflow adds one extra check on top: it fails if the CLI prints
+a rules compiler warning (`[W]`). Before `firebase deploy` it also seeds the
+CLI's local API-enablement cache so the Service Usage "is Firestore
+enabled?" probe is skipped — the GitHub Actions service account is not
+granted that call, and the API is already enabled on this project.
 
 ### Why this gate exists
 
