@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import {
   assertFails, assertSucceeds, initializeTestEnvironment, type RulesTestEnvironment,
 } from "@firebase/rules-unit-testing";
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, setDoc } from "firebase/firestore";
 import { afterAll, beforeAll, beforeEach, describe, it } from "vitest";
 
 /**
@@ -62,9 +62,14 @@ describe("system_settings release pointer", () => {
     await assertSucceeds(getDoc(doc(db, "system_settings", "global")));
   });
 
-  it("signed-out CANNOT read global", async () => {
+  it("signed-out can get global (login needs disableSignups)", async () => {
     const db = env.unauthenticatedContext().firestore();
-    await assertFails(getDoc(doc(db, "system_settings", "global")));
+    await assertSucceeds(getDoc(doc(db, "system_settings", "global")));
+  });
+
+  it("signed-out cannot list system_settings", async () => {
+    const db = env.unauthenticatedContext().firestore();
+    await assertFails(getDocs(collection(db, "system_settings")));
   });
 
   it("signed-in cannot write global", async () => {
