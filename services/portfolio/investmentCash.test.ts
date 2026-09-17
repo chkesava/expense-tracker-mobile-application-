@@ -57,6 +57,7 @@ import {
   recordInvestmentCashAdjustment,
   recordInvestmentCashEntry,
   reverseInvestmentCashEntry,
+  transferInvestmentCashWithBank,
 } from "./investmentCash";
 
 let writes: Write[] = [];
@@ -274,6 +275,143 @@ describe("recordInvestmentCashEntry", () => {
     expect("note" in data).toBe(false);
     expect("reason" in data).toBe(false);
     expect("holdingId" in data).toBe(false);
+  });
+});
+
+describe("transferInvestmentCashWithBank", () => {
+  it("writes cash, bank entry and cache in one batch for a bank → Demat transfer", async () => {
+    const result = await transferInvestmentCashWithBank("u1", {
+      type: "TOP_UP",
+      amount: 2500,
+      date: "2026-09-17",
+      note: "From savings",
+      accountId: "bank-1",
+      entryId: "cash-1",
+      accountEntryId: "bank-entry-1",
+    });
+
+    expect(commits).toBe(1);
+    expect(result).toMatchObject({
+      entryId: "cash-1",
+      accountEntryId: "bank-entry-1",
+      transferId: "cash-1",
+    });
+
+    const cash = pathsUnder("investmentCashTransactions")[0];
+    expect(cash.path).toBe("users/u1/investmentCashTransactions/cash-1");
+    expect(cash.data).toMatchObject({
+      type: "TOP_UP",
+      direction: "credit",
+      amount: 2500,
+      accountId: "bank-1",
+      accountEntryId: "bank-entry-1",
+      correlationId: "cash-1",
+      transferId: "cash-1",
+    });
+
+    const bank = pathsUnder("accountEntries")[0];
+    expect(bank.path).toBe("users/u1/accountEntries/bank-entry-1");
+    expect(bank.data).toMatchObject({
+      accountId: "bank-1",
+      amount: 2500,
+      direction: "debit",
+      date: "2026-09-17",
+      transferId: "cash-1",
+      correlationId: "cash-1",
+    });
+
+    const settings = writes.find((w) => w.path.includes("/portfolioSettings/"));
+    expect(settings?.data.cashBalance).toEqual({ __increment: 2500 });
+  });
+
+  it("credits the bank and debits Demat for a Demat → bank withdrawal", async () => {
+    await transferInvestmentCashWithBank("u1", {
+      type: "WITHDRAWAL",
+      amount: 800,
+      date: "2026-09-17",
+      accountId: "bank-1",
+      entryId: "cash-2",
+      accountEntryId: "bank-entry-2",
+    });
+
+    expect(pathsUnder("investmentCashTransactions")[0].data).toMatchObject({
+      type: "WITHDRAWAL",
+      direction: "debit",
+      amount: 800,
+    });
+    expect(pathsUnder("accountEntries")[0].data.direction).toBe("credit");
+    const settings = writes.find((w) => w.path.includes("/portfolioSettings/"));
+    expect(settings?.data.cashBalance).toEqual({ __increment: -800 });
+  });
+
+  it("targets the same doc paths when retried with the same ids", async () => {
+    const ids = { entryId: "cash-1", accountEntryId: "bank-entry-1" };
+    await transferInvestmentCashWithBank("u1", {
+      type: "TOP_UP",
+      amount: 100,
+      date: "2026-09-17",
+      accountId: "bank-1",
+      ...ids,
+    });
+    const firstPaths = writes.map((w) => w.path);
+
+    writes = [];
+    await transferInvestmentCashWithBank("u1", {
+      type: "TOP_UP",
+      amount: 100,
+      date: "2026-09-17",
+      accountId: "bank-1",
+      ...ids,
+    });
+
+    expect(writes.map((w) => w.path)).toEqual(firstPaths);
+    expect(commits).toBe(2);
+  });
+
+  it("rejects without committing when the batch fails — neither ledger can land alone", async () => {
+    vi.mocked(writeBatch).mockImplementation(
+      () =>
+        ({
+          set: (ref: FakeRef, data: Record<string, unknown>, options?: { merge?: boolean }) => {
+            writes.push({ path: ref.path, data, merge: options?.merge === true });
+          },
+          commit: async () => {
+            throw new Error("leg 2");
+          },
+        }) as never
+    );
+
+    await expect(
+      transferInvestmentCashWithBank("u1", {
+        type: "TOP_UP",
+        amount: 100,
+        date: "2026-09-17",
+        accountId: "bank-1",
+        entryId: "cash-1",
+        accountEntryId: "bank-entry-1",
+      })
+    ).rejects.toThrow("leg 2");
+    expect(commits).toBe(0);
+  });
+
+  it("refuses a missing bank account or invalid date without writing", async () => {
+    await expect(
+      transferInvestmentCashWithBank("u1", {
+        type: "TOP_UP",
+        amount: 100,
+        date: "2026-09-17",
+        accountId: "  ",
+      })
+    ).rejects.toThrow("bank account");
+    await expect(
+      transferInvestmentCashWithBank("u1", {
+        type: "TOP_UP",
+        amount: 100,
+        date: "17-09-2026",
+        accountId: "bank-1",
+      })
+    ).rejects.toThrow("Invalid transfer date");
+    expect(commits).toBe(0);
   });
 });
 

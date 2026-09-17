@@ -23,7 +23,6 @@ import { Amount } from "@/components/common/Amount";
 import { InvestmentCashHistoryModal } from "@/components/portfolio/InvestmentCashHistoryModal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { useAccountEntries } from "@/hooks/useAccountEntries";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
 import { usePortfolio } from "@/hooks/usePortfolio";
@@ -94,7 +93,6 @@ export function ManageStockCashModal({
   const { user } = useAuth();
   const { accounts } = useAccounts();
   const { accountTypes } = useAccountTypes();
-  const { addEntry } = useAccountEntries();
 
   const [mode, setMode] = useState<Mode>("deposit");
   const [selectedAccountId, setSelectedAccountId] = useState<string>("");
@@ -111,6 +109,8 @@ export function ManageStockCashModal({
 
   /** Minted once per open so a retried save rewrites the same adjustment. */
   const adjustmentId = React.useRef(newId());
+  /** Same contract for Demat ↔ bank: retry cannot post a second pair of docs. */
+  const transferIds = React.useRef({ entryId: newId(), accountEntryId: newId() });
 
   const currentCash = cashBalance;
 
@@ -148,6 +148,7 @@ export function ManageStockCashModal({
     setReason("");
     setAdjustDirection("debit");
     adjustmentId.current = newId();
+    transferIds.current = { entryId: newId(), accountEntryId: newId() };
   }, [visible]);
 
   React.useEffect(() => {
@@ -158,6 +159,7 @@ export function ManageStockCashModal({
   }, [visible, bankAccounts, selectedAccountId]);
 
   const handleSubmit = async () => {
+    if (loading) return;
     const numAmount = parseFloat(amount);
     if (!numAmount || numAmount <= 0) {
       toast.error("Please enter a valid amount");
@@ -167,7 +169,7 @@ export function ManageStockCashModal({
     setLoading(true);
     try {
       if (mode === "deposit") {
-        // Transfer from Bank Account to Demat Stocks Cash
+        // Transfer from Bank Account to Demat Stocks Cash (one batch)
         if (!selectedAccountId) {
           toast.error("Please select a source bank account");
           setLoading(false);
@@ -179,32 +181,19 @@ export function ManageStockCashModal({
           note.trim() ||
           `Transfer to Stocks Demat (${bankAcc?.name ?? "Bank"})`;
 
-        // 1. Debit Bank Account
-        const entryOk = await addEntry(
-          selectedAccountId,
-          numAmount,
-          "debit",
-          date,
-          transferNote
-        );
-
-        if (!entryOk) {
-          toast.error("Failed to debit bank account");
-          setLoading(false);
-          return;
-        }
-
-        // 2. Credit Stocks Demat
         const depositOk = await depositCash(numAmount, transferNote, {
           date,
           accountId: selectedAccountId,
+          entryId: transferIds.current.entryId,
+          accountEntryId: transferIds.current.accountEntryId,
+          quiet: true,
         });
         if (depositOk) {
           toast.success(`Transferred ${currency} ${numAmount} to Stocks Demat`);
           onClose();
         }
       } else if (mode === "withdraw") {
-        // Transfer from Demat Stocks Cash to Bank Account
+        // Transfer from Demat Stocks Cash to Bank Account (one batch)
         if (numAmount > availableCash) {
           toast.error("Insufficient Demat cash balance");
           setLoading(false);
@@ -221,24 +210,17 @@ export function ManageStockCashModal({
           note.trim() ||
           `Withdrawal from Stocks Demat to ${bankAcc?.name ?? "Bank"}`;
 
-        // 1. Debit Stocks Demat Cash
         const withdrawOk = await withdrawCash(numAmount, transferNote, {
           date,
           accountId: selectedAccountId,
+          entryId: transferIds.current.entryId,
+          accountEntryId: transferIds.current.accountEntryId,
+          quiet: true,
         });
         if (!withdrawOk) {
           setLoading(false);
           return;
         }
-
-        // 2. Credit Bank Account
-        await addEntry(
-          selectedAccountId,
-          numAmount,
-          "credit",
-          date,
-          transferNote
-        );
 
         toast.success(
           `Transferred ${currency} ${numAmount} to ${bankAcc?.name ?? "Bank"}`

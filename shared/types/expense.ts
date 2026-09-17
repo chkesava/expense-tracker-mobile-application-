@@ -201,6 +201,12 @@ export interface AccountEntry {
   /** Present when this entry was posted by a collect-mode split. */
   linkedSplitId?: string;
   source?: AccountEntrySource;
+  /**
+   * Shared with the Investment Cash row for a Demat ↔ bank transfer (SPENDLY-29).
+   * Lets a reconciler pair both ledgers without deleting an orphan side.
+   */
+  transferId?: string;
+  correlationId?: string;
 }
 
 /** A movement of money between two non-credit accounts. It is never income or an expense. */
