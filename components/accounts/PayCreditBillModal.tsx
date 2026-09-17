@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { CreditCard, Landmark, Wallet } from "lucide-react-native";
 
@@ -11,6 +11,7 @@ import { useAccountPayments } from "@/hooks/useAccountPayments";
 import { useCreditCardBills } from "@/hooks/useCreditCardBills";
 import { useExpenses } from "@/hooks/useExpenses";
 import { logError } from "@/lib/errors";
+import { newId } from "@/lib/id";
 import { toast } from "@/lib/toast";
 import { useSettings } from "@/providers/SettingsProvider";
 import { OPEN_BILL_STATUSES } from "@/shared/types/creditCardBill";
@@ -56,9 +57,10 @@ export function PayCreditBillModal({
   const isDark = themeUsesDarkPalette(themeName);
   const displayCurrency = useDisplayCurrency();
   const { settings } = useSettings();
-  const { addPayment, addExternalPayment, payments } = useAccountPayments();
+  const { payments } = useAccountPayments();
   const { expenses } = useExpenses();
-  const { bills, applyPaymentToBill } = useCreditCardBills();
+  const { bills, recordBillPayment } = useCreditCardBills();
+  const paymentIdRef = useRef(newId());
 
   const typeMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -119,6 +121,7 @@ export function PayCreditBillModal({
 
   useEffect(() => {
     if (!isOpen) return;
+    paymentIdRef.current = newId();
     if (defaultAmount != null && defaultAmount > 0) {
       setAmount(String(defaultAmount));
       return;
@@ -151,6 +154,7 @@ export function PayCreditBillModal({
   };
 
   const handleSubmit = async () => {
+    if (saving) return;
     if (!toCardId) {
       toast.error("Please select a credit card");
       return;
@@ -187,57 +191,50 @@ export function PayCreditBillModal({
 
     setSaving(true);
     try {
-      let paymentId: string | null = null;
-      if (isExternal || fromAccountId === "external") {
-        paymentId = await addExternalPayment(
-          toCardId,
-          parsedAmount,
-          date.trim(),
-          note.trim() || undefined
-        );
-      } else {
-        paymentId = await addPayment(
-          fromAccountId,
-          toCardId,
-          parsedAmount,
-          date.trim(),
-          note.trim() || undefined
-        );
-      }
+      const paymentDate = date.trim();
+      const targetBillId =
+        (openBill && openBill.remainingAmount > 0 ? openBill.id : undefined) ||
+        (usageInfo && usageInfo.oldestOpenRemaining > 0
+          ? usageInfo.oldestOpenBillId
+          : undefined);
+      const targetBill = targetBillId
+        ? bills.find((bill) => bill.id === targetBillId)
+        : undefined;
+      const settleable = targetBill
+        ? Math.min(parsedAmount, Math.max(0, targetBill.remainingAmount))
+        : 0;
+      const canStamp = Boolean(
+        targetBill && targetBill.statementDate <= paymentDate && settleable > 0
+      );
+      const external = isExternal || fromAccountId === "external";
+      const paymentId = await recordBillPayment({
+        fromAccountId: external ? "external" : fromAccountId,
+        toAccountId: toCardId,
+        amount: parsedAmount,
+        date: paymentDate,
+        note: note.trim() || undefined,
+        sourceType: external ? "external" : "account",
+        paymentId: paymentIdRef.current,
+        bill:
+          canStamp && targetBill
+            ? {
+                id: targetBill.id,
+                statementAmount: targetBill.statementAmount,
+                amountPaid: targetBill.amountPaid,
+                dueDate: targetBill.dueDate,
+                status: targetBill.status,
+                settleable,
+                timezone: settings.timezone,
+              }
+            : undefined,
+      });
 
       if (paymentId) {
-        const paymentDate = date.trim();
-        const targetBillId =
-          (openBill && openBill.remainingAmount > 0 ? openBill.id : undefined) ||
-          (usageInfo && usageInfo.oldestOpenRemaining > 0
-            ? usageInfo.oldestOpenBillId
-            : undefined);
-        // A payment can only settle a statement that had already closed on the
-        // payment date, and only up to what that statement still owes. Stamping
-        // a not-yet-closed statement (or the overpaid remainder) would show it
-        // as PARTIALLY PAID for money the ledger holds as cycle credit.
-        const targetBill = targetBillId
-          ? bills.find((bill) => bill.id === targetBillId)
-          : undefined;
-        const settleable = targetBill
-          ? Math.min(parsedAmount, Math.max(0, targetBill.remainingAmount))
-          : 0;
-        if (targetBill && targetBill.statementDate <= paymentDate && settleable > 0) {
-          await applyPaymentToBill(
-            targetBill.id,
-            settleable,
-            paymentDate,
-            paymentId
-          );
-        }
         if (onPaid) {
           await onPaid(parsedAmount, paymentDate, paymentId);
         }
-        toast.success("Bill payment recorded");
         setAmount("");
         onClose();
-      } else {
-        toast.error("Failed to record payment");
       }
     } catch (err) {
       logError("payCreditBillModal.saveBillPayment", err);

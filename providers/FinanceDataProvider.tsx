@@ -47,6 +47,7 @@ import type {
   Income,
 } from "@/shared/types/expense";
 import { CASHBACK_SOURCE_ID } from "@/shared/types/expense";
+import { voidCreditBillPayment } from "@/services/creditCardBills/billPayment";
 import { cashbackDocId } from "@/shared/utils/cashbackId";
 import { isAccidentalBalanceBaseline } from "@/shared/utils/accountBaseline";
 import {
@@ -958,11 +959,10 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     const database = getFirestoreDb();
     if (!u || !database) return;
     try {
-      const outcome = await commitWrite(
-        () => deleteDoc(doc(database, "users", u.uid, "accountPayments", id)),
-        { label: "payment deletion" }
-      );
-      toast.success(writeSavedMessage(outcome, "Payment removed"));
+      const result = await voidCreditBillPayment(u.uid, id, {
+        reason: "Payment removed",
+      });
+      toast.success(writeSavedMessage(result.outcome, "Payment removed"));
     } catch (err) {
       logError("financeDataProvider.removePayment", err);
       toast.error("Failed to remove payment");

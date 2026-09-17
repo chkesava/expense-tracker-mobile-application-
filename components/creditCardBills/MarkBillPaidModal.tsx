@@ -1,13 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 
 import { Modal } from "@/components/common/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { useAccountPayments } from "@/hooks/useAccountPayments";
 import { useCreditCardBills } from "@/hooks/useCreditCardBills";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
+import { newId } from "@/lib/id";
 import { toast } from "@/lib/toast";
+import { useSettings } from "@/providers/SettingsProvider";
 import type { CreditCardBill } from "@/shared/types/creditCardBill";
 import { formatDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -32,18 +33,20 @@ export function MarkBillPaidModal({
   createExternalPayment = false,
 }: MarkBillPaidModalProps) {
   const { theme } = useTheme();
-  const { markBillPaid } = useCreditCardBills();
-  const { addExternalPayment } = useAccountPayments();
+  const { settings } = useSettings();
+  const { markBillPaid, recordBillPayment } = useCreditCardBills();
   const [amount, setAmount] = useState("");
   const [paymentDate, setPaymentDate] = useState(formatDateKey(new Date()));
   const [recordExternal, setRecordExternal] = useState(createExternalPayment);
   const [saving, setSaving] = useState(false);
+  const paymentIdRef = useRef(newId());
 
   useEffect(() => {
     if (!isOpen || !bill) return;
     setAmount(String(bill.remainingAmount || bill.statementAmount));
     setPaymentDate(formatDateKey(new Date()));
     setRecordExternal(createExternalPayment);
+    paymentIdRef.current = newId();
   }, [isOpen, bill, createExternalPayment]);
 
   const explanation = useMemo(() => {
@@ -54,6 +57,7 @@ export function MarkBillPaidModal({
   }, [recordExternal]);
 
   const handleSubmit = async () => {
+    if (saving) return;
     if (!bill) return;
     const parsed = parseFloat(amount);
     if (!parsed || parsed <= 0) {
@@ -62,25 +66,38 @@ export function MarkBillPaidModal({
     }
     setSaving(true);
     try {
-      let paymentId: string | undefined;
       if (recordExternal) {
-        const createdId = await addExternalPayment(
-          bill.accountId,
-          parsed,
-          paymentDate.trim(),
-          `Bill ${bill.id} marked paid`
+        const settleable = Math.max(
+          0,
+          Math.max(parsed, bill.statementAmount) - bill.amountPaid
         );
-        if (!createdId) {
-          toast.error("Failed to record external payment");
-          return;
+        const paymentId = await recordBillPayment({
+          fromAccountId: "external",
+          toAccountId: bill.accountId,
+          amount: parsed,
+          date: paymentDate.trim(),
+          note: `Bill ${bill.id} marked paid`,
+          sourceType: "external",
+          paymentId: paymentIdRef.current,
+          bill: {
+            id: bill.id,
+            statementAmount: bill.statementAmount,
+            amountPaid: bill.amountPaid,
+            dueDate: bill.dueDate,
+            status: bill.status,
+            settleable,
+            timezone: settings.timezone,
+          },
+        });
+        if (paymentId) {
+          onClose();
         }
-        paymentId = createdId;
+        return;
       }
       const ok = await markBillPaid(bill.id, {
         amount: Math.max(parsed, bill.statementAmount),
         paymentDate: paymentDate.trim(),
-        paymentId,
-        recordPaymentOnlyOnBill: !recordExternal,
+        recordPaymentOnlyOnBill: true,
       });
       if (ok) {
         toast.success("Bill marked as paid");
