@@ -10,7 +10,12 @@ import {
   buildPaymentRequestSyncPatches,
   buildSpendGiftWrites,
   buildUnmarkCollectedWrites,
+  collectedEntryDocId,
+  entriesNeedingReversal,
   linkedLedgerIds,
+  nextCollectedEntryDocId,
+  reversalEntryDocId,
+  buildSplitReversalEntry,
   toFirestoreParticipant,
   withParticipantKeys,
 } from "./splitLedger";
@@ -402,10 +407,10 @@ describe("mark / unmark collected", () => {
     });
     expect("error" in unmarked).toBe(false);
     if ("error" in unmarked) return;
-    expect(unmarked.entryIdToDelete).toBe("entry-1");
-    expect(unmarked.entryIdsToDelete).toEqual(["entry-1"]);
+    expect(unmarked.entryIdsToReverse).toEqual(["entry-1"]);
     expect(unmarked.participants[1].paid).toBe(false);
     expect(unmarked.participants[1].collectedEntryId).toBeUndefined();
+    expect(unmarked.participants[1].collectedEntryIds).toEqual(["entry-1"]);
   });
 });
 
@@ -779,5 +784,77 @@ describe("bill share requests and public snapshot", () => {
       expect(slugs).toHaveLength(5);
       expect(new Set(slugs).size).toBe(5);
     });
+  });
+});
+
+describe("SPENDLY-39 split reversals", () => {
+  it("assigns the same collect-credit id when two devices mark the same friend", () => {
+    const split = collectPot();
+    const first = nextCollectedEntryDocId(split, "alice");
+    const second = nextCollectedEntryDocId(split, "alice");
+    expect(first).toBe(collectedEntryDocId("split-1", "alice", 0));
+    expect(second).toBe(first);
+  });
+
+  it("uses the next slot after an unmark so the original credit is not overwritten", () => {
+    const split = collectPot();
+    const entryId = nextCollectedEntryDocId(split, "alice");
+    const marked = buildMarkCollectedWrites({
+      split,
+      participantKey: "alice",
+      accountId: "hdfc",
+      entryId,
+      dateKey: "2026-08-19",
+    });
+    if ("error" in marked) throw new Error(marked.error);
+    const unmarked = buildUnmarkCollectedWrites({
+      split: { ...split, participants: marked.participants },
+      participantKey: "alice",
+    });
+    if ("error" in unmarked) throw new Error(unmarked.error);
+    expect(
+      nextCollectedEntryDocId(
+        { ...split, participants: unmarked.participants },
+        "alice"
+      )
+    ).toBe(collectedEntryDocId("split-1", "alice", 1));
+  });
+
+  it("posts an opposite-direction reversal and skips originals that already have one", () => {
+    const original = {
+      id: "e1",
+      accountId: "hdfc",
+      amount: 1000,
+      direction: "credit" as const,
+      source: "split_collection",
+    };
+    const reversal = buildSplitReversalEntry({
+      original,
+      dateKey: "2026-08-20",
+    });
+    expect(reversal.id).toBe(reversalEntryDocId("e1"));
+    expect(reversal.entry).toMatchObject({
+      direction: "debit",
+      source: "split_reversal",
+      reversalOf: "e1",
+      amount: 1000,
+    });
+    expect(entriesNeedingReversal([original], [original])).toEqual([original]);
+    expect(
+      entriesNeedingReversal(
+        [original],
+        [
+          original,
+          {
+            id: reversal.id,
+            accountId: "hdfc",
+            amount: 1000,
+            direction: "debit",
+            source: "split_reversal",
+            reversalOf: "e1",
+          },
+        ]
+      )
+    ).toEqual([]);
   });
 });

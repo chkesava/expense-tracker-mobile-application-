@@ -236,7 +236,7 @@ export function buildPaymentRequestSyncPatches(
     });
 }
 
-function collectedEntryIdList(p: Participant): string[] {
+export function collectedEntryIdList(p: Participant): string[] {
   const ids = [...(p.collectedEntryIds || [])];
   if (p.collectedEntryId && !ids.includes(p.collectedEntryId)) {
     ids.push(p.collectedEntryId);
@@ -317,8 +317,7 @@ export function buildUnmarkCollectedWrites(params: {
   | {
       participants: Participant[];
       settled: boolean;
-      entryIdsToDelete: string[];
-      entryIdToDelete?: string;
+      entryIdsToReverse: string[];
     }
   | { error: string } {
   if (isCollectSpent(params.split)) {
@@ -332,7 +331,7 @@ export function buildUnmarkCollectedWrites(params: {
     return { error: "Your pledged share cannot be unmarked." };
   }
 
-  const entryIdsToDelete = collectedEntryIdList(target);
+  const entryIdsToReverse = collectedEntryIdList(target);
 
   const participants = params.split.participants.map((p, idx) => {
     if (idx !== index) return p;
@@ -340,18 +339,19 @@ export function buildUnmarkCollectedWrites(params: {
       ...p,
       paid: false,
       paidAmount: 0,
+      collectedEntryIds: entryIdsToReverse.length
+        ? entryIdsToReverse
+        : undefined,
     };
     delete next.receivedAccountId;
     delete next.collectedEntryId;
-    delete next.collectedEntryIds;
     return next;
   });
 
   return {
     participants,
     settled: participants.every((p) => isParticipantShareSettled(p)),
-    entryIdsToDelete,
-    entryIdToDelete: target.collectedEntryId,
+    entryIdsToReverse,
   };
 }
 
@@ -422,6 +422,82 @@ export function buildSpendGiftWrites(params: {
       : null;
 
   return { splitUpdates, expense, passThroughEntry };
+}
+
+/** Deterministic collect-credit id so two devices cannot mint two credits. */
+export function collectedEntryDocId(
+  splitId: string,
+  participantKey: string,
+  index: number
+): string {
+  const key = participantKey.replace(/[/\\]/g, "_");
+  return `sc_${splitId}_${key}_${index}`;
+}
+
+export function nextCollectedEntryDocId(
+  split: Split,
+  participantKey: string
+): string {
+  const index = findParticipantIndex(split, participantKey);
+  const prior =
+    index >= 0 ? collectedEntryIdList(split.participants[index]) : [];
+  return collectedEntryDocId(split.id || "", participantKey, prior.length);
+}
+
+export function reversalEntryDocId(entryId: string): string {
+  return `sr_${entryId}`;
+}
+
+export type SplitLedgerEntry = {
+  id: string;
+  accountId: string;
+  amount: number;
+  direction: "credit" | "debit";
+  linkedSplitId?: string;
+  source?: string;
+  reversalOf?: string;
+};
+
+export function buildSplitReversalEntry(params: {
+  original: SplitLedgerEntry;
+  dateKey: string;
+  note?: string;
+}): { id: string; entry: Record<string, unknown> } {
+  return {
+    id: reversalEntryDocId(params.original.id),
+    entry: omitUndefined({
+      accountId: params.original.accountId,
+      amount: params.original.amount,
+      direction:
+        params.original.direction === "credit"
+          ? ("debit" as const)
+          : ("credit" as const),
+      date: params.dateKey,
+      note: params.note || `Reversal of ${params.original.id}`,
+      linkedSplitId: params.original.linkedSplitId,
+      source: "split_reversal" as const,
+      reversalOf: params.original.id,
+    }),
+  };
+}
+
+export function entriesNeedingReversal(
+  originals: SplitLedgerEntry[],
+  existing: SplitLedgerEntry[]
+): SplitLedgerEntry[] {
+  const alreadyReversed = new Set(
+    existing
+      .map((row) => row.reversalOf)
+      .filter((id): id is string => Boolean(id))
+  );
+  return originals.filter(
+    (row) =>
+      Boolean(row.id) &&
+      row.amount > 0 &&
+      row.source !== "split_reversal" &&
+      !row.reversalOf &&
+      !alreadyReversed.has(row.id)
+  );
 }
 
 export function linkedLedgerIds(split: Split): {
