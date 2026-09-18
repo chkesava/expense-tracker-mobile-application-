@@ -2,6 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import {
   EPF_BATCH_CHUNK_SIZE,
+  EPF_BATCH_SAFE_WRITES,
+  EPF_CRON_RELEASE_CHUNK_SIZE,
+  EPF_CRON_REPAIR_CHUNK_SIZE,
+  WRITES_PER_RELEASE_ROW,
+  WRITES_PER_REPAIR_ROW,
   EPF_CRON_MONTHS_PER_BATCH,
   FIRESTORE_BATCH_LIMIT,
   WRITES_PER_CONTRIBUTION_ROW,
@@ -39,5 +44,35 @@ describe("EPF batch limits", () => {
 
   it("pins Firestore's documented cap", () => {
     expect(FIRESTORE_BATCH_LIMIT).toBe(500);
+  });
+
+  /**
+   * SPENDLY-20. The cron's repair and release passes ran unchunked over every
+   * contribution row an establishment had, so a long history breached the cap
+   * silently — the commit threw and the bare `catch {}` dropped it.
+   */
+  describe("SPENDLY-20 cron repair and release chunks", () => {
+    it("keeps a full credit-window repair batch under the safe ceiling", () => {
+      expect(
+        EPF_CRON_REPAIR_CHUNK_SIZE * WRITES_PER_REPAIR_ROW
+      ).toBeLessThanOrEqual(EPF_BATCH_SAFE_WRITES);
+    });
+
+    it("keeps a full lifecycle-release batch under the safe ceiling", () => {
+      expect(
+        EPF_CRON_RELEASE_CHUNK_SIZE * WRITES_PER_RELEASE_ROW
+      ).toBeLessThanOrEqual(EPF_BATCH_SAFE_WRITES);
+    });
+
+    it("leaves the safe ceiling below Firestore's hard cap", () => {
+      expect(EPF_BATCH_SAFE_WRITES).toBeLessThan(FIRESTORE_BATCH_LIMIT);
+    });
+
+    it("would have caught the unchunked passes", () => {
+      // A user with 1000 contribution rows: the repair pass sent 1000 writes
+      // and the release pass 2000, against a cap of 500.
+      expect(1000 * WRITES_PER_REPAIR_ROW).toBeGreaterThan(FIRESTORE_BATCH_LIMIT);
+      expect(1000 * WRITES_PER_RELEASE_ROW).toBeGreaterThan(FIRESTORE_BATCH_LIMIT);
+    });
   });
 });

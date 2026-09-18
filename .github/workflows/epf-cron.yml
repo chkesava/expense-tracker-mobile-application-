@@ -59,6 +59,15 @@ jobs:
           total_processed=0
           total_written=0
           total_repaired=0
+          # SPENDLY-20: the function answers 200 with a `failed` count rather
+          # than a 5xx, so one broken establishment cannot make us abandon the
+          # remaining pages and cost every later user their month. We total the
+          # failures across every page and fail the run at the end instead.
+          total_released=0
+          total_skipped=0
+          total_failed=0
+          total_duress=0
+          max_page_ms=0
           # Hard cap: 200 pages x 25 = 5000 establishments. A run that needs more
           # than this is a signal to investigate, not to keep looping forever.
           for page in $(seq 1 200); do
@@ -84,12 +93,31 @@ jobs:
             processed=$(printf '%s' "$body" | jq -r '.processed // 0')
             written=$(printf '%s' "$body" | jq -r '.written // 0')
             repaired=$(printf '%s' "$body" | jq -r '.repaired // 0')
+            released=$(printf '%s' "$body" | jq -r '.released // 0')
+            skipped=$(printf '%s' "$body" | jq -r '.skipped // 0')
+            failed=$(printf '%s' "$body" | jq -r '.failed // 0')
+            duress=$(printf '%s' "$body" | jq -r '.duressSkipped // 0')
+            page_ms=$(printf '%s' "$body" | jq -r '.elapsedMs // 0')
+            est_ms=$(printf '%s' "$body" | jq -r '.maxEstablishmentMs // 0')
             cursor=$(printf '%s' "$body" | jq -r '.nextCursor // empty')
             total_processed=$((total_processed + processed))
             total_written=$((total_written + written))
             total_repaired=$((total_repaired + repaired))
+            total_released=$((total_released + released))
+            total_skipped=$((total_skipped + skipped))
+            total_failed=$((total_failed + failed))
+            total_duress=$((total_duress + duress))
+            if [ "$page_ms" -gt "$max_page_ms" ]; then
+              max_page_ms=$page_ms
+            fi
 
-            echo "page $page: processed=$processed written=$written repaired=$repaired"
+            echo "page $page: processed=$processed written=$written repaired=$repaired released=$released skipped=$skipped failed=$failed duress=$duress ${page_ms}ms (slowest establishment ${est_ms}ms)"
+
+            if [ "$failed" -gt 0 ]; then
+              # Annotate the page, but keep going: the remaining pages are other
+              # users' months. The run is failed after the loop.
+              echo "::error::epf-cron page $page reported $failed failed rows"
+            fi
 
             if [ -z "$cursor" ]; then
               break
@@ -104,4 +132,19 @@ jobs:
             # SPENDLY-1: months whose missing credit window was backfilled.
             # Expected to be non-zero once, then settle at zero.
             echo "- Credit windows repaired: **$total_repaired**"
+            # SPENDLY-72 heal, un-conflated from the line above by SPENDLY-20.
+            echo "- Lifecycle releases: **$total_released**"
+            # Another writer got there first, or a precondition correctly
+            # refused to overwrite a user edit. Not a problem.
+            echo "- Skipped (already written or contested): **$total_skipped**"
+            echo "- Failed rows: **$total_failed**"
+            echo "- Duress trees skipped: **$total_duress**"
+            # Headroom for PAGE_LIMIT. Raise 25 only after two consecutive runs
+            # well inside the function timeout -- and be ready to lower it.
+            echo "- Slowest page: **${max_page_ms} ms**"
           } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$total_failed" -gt 0 ]; then
+            echo "::error::epf-cron finished with $total_failed failed rows across $total_processed establishments."
+            exit 1
+          fi

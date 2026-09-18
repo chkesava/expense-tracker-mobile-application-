@@ -1,5 +1,7 @@
 import type { User } from "firebase/auth";
 
+import { duressUid } from "@/shared/utils/duress";
+
 import { friendlyErrorMessage } from "./errors";
 
 /**
@@ -28,7 +30,7 @@ export function shouldIgnoreAuthUidChange(
 export function createDuressUser(real: User): User {
   const duressUser = Object.create(real) as User;
   Object.defineProperty(duressUser, "uid", {
-    get: () => `${real.uid}_duress`,
+    get: () => duressUid(real.uid),
     enumerable: true,
   });
   return duressUser;
