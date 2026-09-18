@@ -37,7 +37,7 @@ export function CreateTripModal({ visible, onClose }: CreateTripModalProps) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const displayCurrency = useDisplayCurrency();
-  const { createTrip } = useTrips();
+  const { createTrip } = useTrips({ enabled: false });
 
   const [step, setStep] = useState<WizardStep>(1);
 

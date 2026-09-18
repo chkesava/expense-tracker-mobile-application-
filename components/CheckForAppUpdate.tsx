@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/Button";
 import {
   fetchLatestRelease,
   getInstalledVersionCode,
-  useAppUpdate,
 } from "@/hooks/useAppUpdate";
 import {
   installAppRelease,
@@ -22,7 +21,6 @@ import { toast } from "@/lib/toast";
  * the install if the auto sheet missed the first snapshot.
  */
 export function CheckForAppUpdate() {
-  const { resetDismissal } = useAppUpdate();
   const [checking, setChecking] = useState(false);
   const [progress, setProgress] = useState<InstallProgress>({ phase: "idle" });
   const busy = checking || progress.phase !== "idle";
@@ -42,7 +40,6 @@ export function CheckForAppUpdate() {
       }
 
       if (versionCode !== null && release.versionCode > versionCode) {
-        resetDismissal();
         toast.success(`Version ${release.versionName} is available`);
         const outcome = await installAppRelease(release, setProgress);
         if (outcome === "needs-permission") {

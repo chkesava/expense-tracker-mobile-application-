@@ -46,7 +46,7 @@ export function TripDetailModal({ visible, trip, onClose }: TripDetailModalProps
   const isDark = themeUsesDarkPalette(themeName);
   const displayCurrency = useDisplayCurrency();
   const { expenses } = useExpenses();
-  const { deleteTrip, completeTrip, unlinkExpense } = useTrips();
+  const { deleteTrip, completeTrip, unlinkExpense } = useTrips({ enabled: false });
 
   const categoryBreakdown = useMemo(() => {
     if (!trip) return [];

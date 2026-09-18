@@ -85,7 +85,7 @@ export function SplitDetailModal({
     dismissClaim,
     setSplitClaimsEnabled,
     planClaim,
-  } = useSplits();
+  } = useSplits({ enabled: false });
 
   const [collectingKey, setCollectingKey] = useState<string | null>(null);
   const [spendOpen, setSpendOpen] = useState(false);

@@ -21,7 +21,7 @@ import { AlertsTab } from "@/components/portfolio/AlertsTab";
 import { OrdersTab } from "@/components/portfolio/OrdersTab";
 import { haptic } from "@/lib/haptics";
 import { useMarketQuotes } from "@/hooks/useMarketQuotes";
-import { usePortfolio } from "@/hooks/usePortfolio";
+import { PortfolioDataProvider, usePortfolio } from "@/hooks/usePortfolio";
 import { computePositionMetrics } from "@/shared/types/market";
 import type {
   AllocationSlice,
@@ -78,6 +78,14 @@ function PortfolioDashboardSkeleton({ isDark }: { isDark: boolean }) {
 }
 
 export function PortfolioDashboard({ listHeader }: { listHeader?: ReactNode }) {
+  return (
+    <PortfolioDataProvider>
+      <PortfolioDashboardInner listHeader={listHeader} />
+    </PortfolioDataProvider>
+  );
+}
+
+function PortfolioDashboardInner({ listHeader }: { listHeader?: ReactNode }) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const displayCurrency = useDisplayCurrency();

@@ -11,7 +11,7 @@ import { EpfBalanceTab } from "@/components/epf/EpfBalanceTab";
 import { EpfContributionHistory } from "@/components/epf/EpfContributionHistory";
 import { EpfCurrentContributions } from "@/components/epf/EpfCurrentContributions";
 import { EpfTransfersList } from "@/components/epf/EpfTransfersList";
-import { useEpf } from "@/hooks/useEpf";
+import { useEpf, useEpfEstablishment } from "@/hooks/useEpf";
 import { appDialog } from "@/lib/appDialog";
 import type { EpfBackfillRow } from "@/shared/features/epf/types";
 import {
@@ -36,7 +36,11 @@ export default function EpfEstablishmentContributionsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
-  const { establishments, establishmentsLoading } = useEpf();
+  const establishmentKey = Array.isArray(establishmentId)
+    ? establishmentId[0]
+    : establishmentId;
+  const { establishment, loading: establishmentsLoading } =
+    useEpfEstablishment(establishmentKey);
 
   // A live employment opens on Current — that is the month people check.
   const [tab, setTab] = useState<Tab | null>(null);
@@ -56,11 +60,6 @@ export default function EpfEstablishmentContributionsScreen() {
   const [savedWage, setSavedWage] = useState("");
 
 
-  const establishment = useMemo(
-    () => establishments.find((item) => item.id === establishmentId),
-    [establishments, establishmentId]
-  );
-
   // `deriveEmploymentState` rather than `!dateLeft`: the raw check also
   // treated an archived establishment as current employment (KAN-73).
   const isCurrentEmployment = Boolean(
@@ -76,6 +75,9 @@ export default function EpfEstablishmentContributionsScreen() {
     setEpsEligible(establishment.epsMember !== false);
   }, [establishment]);
   const activeTab: Tab = tab ?? (isCurrentEmployment ? "current" : "history");
+  // Destination picker on Transfers needs the full list; keep it off otherwise
+  // so this route does not duplicate the dashboard's EPF listeners (SPENDLY-13).
+  const { establishments } = useEpf({ enabled: activeTab === "transfers" });
 
   const unsavedBackfill = useMemo(
     () => unsavedBackfillSummary({ edits, wage, savedWage }),

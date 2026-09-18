@@ -5,7 +5,6 @@ import { Ban, Copy, Share2, Trash2 } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
 import { Card } from "@/components/ui/Card";
-import { usePaymentRequests } from "@/hooks/usePaymentRequests";
 import type { PaymentRequest } from "@/shared/types/paymentRequest";
 import { getPaymentRequestShareUrl } from "@/shared/utils/paymentRequestUrl";
 import { generateUpiLink } from "@/shared/utils/upi";
@@ -18,13 +17,18 @@ import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
 export interface PaymentRequestCardProps {
   request: PaymentRequest;
+  onCancel: (id: string) => void;
+  onDelete: (id: string) => void;
 }
 
-export function PaymentRequestCard({ request }: PaymentRequestCardProps) {
+export function PaymentRequestCard({
+  request,
+  onCancel,
+  onDelete,
+}: PaymentRequestCardProps) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const displayCurrency = useDisplayCurrency();
-  const { cancelPaymentRequest, deletePaymentRequest } = usePaymentRequests();
 
   const qrStyle = getQrStyle(request.qrStyleId);
   const isCancelled = request.status === "cancelled";
@@ -75,7 +79,7 @@ export function PaymentRequestCard({ request }: PaymentRequestCardProps) {
       { text: "No", style: "cancel" },
       {
         text: "Yes, Cancel",
-        onPress: () => cancelPaymentRequest(request.id),
+        onPress: () => onCancel(request.id),
       },
     ]);
   };
@@ -87,7 +91,7 @@ export function PaymentRequestCard({ request }: PaymentRequestCardProps) {
       {
         text: "Delete",
         style: "destructive",
-        onPress: () => deletePaymentRequest(request.id),
+        onPress: () => onDelete(request.id),
       },
     ]);
   };

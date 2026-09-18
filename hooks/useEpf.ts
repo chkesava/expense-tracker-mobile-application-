@@ -557,3 +557,66 @@ export function useEpf(options?: { enabled?: boolean }) {
     deleteEstablishment,
   };
 }
+
+/**
+ * One establishment document — used by the contributions route so it does not
+ * reopen the full EPF profile + establishments listeners while the dashboard
+ * underneath the stack is still mounted (SPENDLY-13).
+ */
+export function useEpfEstablishment(establishmentId: string | undefined) {
+  const { user } = useAuth();
+  const uid = user?.uid;
+  const [establishment, setEstablishment] = useState<EpfEstablishment | null>(
+    null
+  );
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const db = getFirestoreDb();
+    if (!uid || !establishmentId || !db) {
+      setEstablishment(null);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    const path = `users/${uid}/${EPF_ESTABLISHMENTS_COLLECTION}/${establishmentId}`;
+    const ref = doc(
+      db,
+      "users",
+      uid,
+      EPF_ESTABLISHMENTS_COLLECTION,
+      establishmentId
+    );
+
+    const unsubscribe = onSnapshot(
+      ref,
+      (snap) => {
+        setEstablishment(
+          snap.exists()
+            ? normalizeEstablishment(
+                snap.id,
+                snap.data() as Record<string, unknown>
+              )
+            : null
+        );
+        setLoading(false);
+      },
+      snapshotErrorHandler(
+        "snapshot.epfEstablishment",
+        () => {
+          setEstablishment(null);
+          setLoading(false);
+        },
+        "Couldn't load this EPF establishment."
+      )
+    );
+
+    return () => {
+      forgetSnapshotPath(path);
+      unsubscribe();
+    };
+  }, [uid, establishmentId]);
+
+  return { establishment, loading };
+}
