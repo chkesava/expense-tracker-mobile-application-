@@ -15,7 +15,18 @@ import {
   normalizeEpfContribution,
 } from "../../shared/features/epf/utils/contributions";
 import { normalizeEstablishment } from "../../shared/features/epf/utils";
-import { EPF_CRON_MONTHS_PER_BATCH } from "../../shared/features/epf/data/epfBatchLimits";
+import {
+  EPF_CRON_MONTHS_PER_BATCH,
+  EPF_CRON_RELEASE_CHUNK_SIZE,
+  EPF_CRON_REPAIR_CHUNK_SIZE,
+} from "../../shared/features/epf/data/epfBatchLimits";
+import {
+  classifyFirestoreError,
+  cronFailureLog,
+  type CronStage,
+} from "../../shared/features/epf/utils/cronOutcome";
+import { chunk } from "../../shared/utils/chunk";
+import { isDuressUid } from "../../shared/utils/duress";
 import { buildContributionEvent } from "../../shared/features/epf/utils/lifecycle";
 import { epfCurrentMonth } from "../../shared/features/epf/utils/epfClock";
 import { planScheduledContributions } from "../../shared/features/epf/utils/schedule";
@@ -154,6 +165,7 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
     return json(400, { error: "Invalid JSON body" });
   }
 
+  const pageStartedAt = Date.now();
   const db = getFirestore();
   // IST, not UTC: EPF months are defined in India, and the client uses the same
   // helper so the two cannot disagree about which month it is (KAN-72).
@@ -173,11 +185,44 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
     let processed = 0;
     let written = 0;
     let repaired = 0;
+    let released = 0;
+    let skipped = 0;
+    let failed = 0;
+    let duressSkipped = 0;
+    let maxEstablishmentMs = 0;
     let lastPath: string | null = null;
+
+    /**
+     * SPENDLY-20: every swallowed commit error is now counted and logged.
+     * Benign means another writer got there first — the idempotency design, or
+     * a precondition that correctly refused to overwrite a user edit. Fatal is
+     * the job being broken, and the workflow fails the run on it.
+     */
+    const recordFailure = (
+      stage: CronStage,
+      args: {
+        uid: string;
+        establishmentId: string;
+        month: string | null;
+        rows: number;
+        error: unknown;
+      },
+    ) => {
+      const classified = classifyFirestoreError(args.error);
+      const line = JSON.stringify(cronFailureLog({ stage, ...args }));
+      if (classified.kind === "benign") {
+        skipped += args.rows;
+        console.warn(line);
+      } else {
+        failed += args.rows;
+        console.error(line);
+      }
+    };
 
     for (const docSnap of page.docs) {
       lastPath = docSnap.ref.path;
       processed += 1;
+      const establishmentStartedAt = Date.now();
 
       // Normalized rather than cast: a document written by an earlier build
       // may not carry every field, and the cast asserted otherwise (KAN-73).
@@ -189,6 +234,15 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
 
       const uid = uidFromEstablishmentPath(docSnap.ref.path);
       if (!uid) continue;
+
+      // SPENDLY-20: the collection group sweeps `users/{uid}_duress/...` decoy
+      // trees too. Skip before the two unbounded reads below, not after — the
+      // wasted work is the point. A uid predicate is not expressible in the
+      // query, so the slot is still consumed; `duressSkipped` makes that visible.
+      if (isDuressUid(uid)) {
+        duressSkipped += 1;
+        continue;
+      }
 
       // The job-change rule needs every live employment, not just this one.
       const siblingsSnap = await db
@@ -205,6 +259,13 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
       const existing: EpfContribution[] = existingSnap.docs.map((row) =>
         normalizeEpfContribution(row.id, row.data() as Record<string, unknown>),
       );
+      // SPENDLY-20: the precondition for the release pass below. "Nothing has
+      // touched this document since I read it" is strictly stronger than
+      // re-checking the selector, which would miss an edit to a field the
+      // selector ignores.
+      const updateTimes = new Map(
+        existingSnap.docs.map((row) => [row.id, row.updateTime] as const),
+      );
 
       // SPENDLY-1: heal rows the client catch-up wrote before the credit
       // window was persisted. Those months can never read as overdue on their
@@ -213,10 +274,22 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
       // who never open it. Must run *before* the pass below, which stamps the
       // same field onto rows it releases.
       const stale = contributionsMissingCreditWindow(existing);
-      if (stale.length > 0) {
+      // SPENDLY-20: chunked. `stale` is drawn from every contribution row the
+      // establishment has, so a long history sent one batch past Firestore's
+      // 500-write cap and the old bare catch dropped the INVALID_ARGUMENT.
+      //
+      // This pass keeps `set(..., { merge: true })` deliberately, with no
+      // precondition: it writes `expectedCreditFrom`/`expectedCreditTo`, both a
+      // pure function of `row.month` via `creditWindowRepairFor`, and no
+      // status. Neither field is user-editable anywhere in the app, so a merge
+      // here cannot clobber a user edit the way the release pass could.
+      for (const group of chunk(stale, EPF_CRON_REPAIR_CHUNK_SIZE)) {
         const repairBatch = db.batch();
-        for (const row of stale) {
-          const repair = creditWindowRepairFor(row);
+        const repairs = group.map((row) => ({
+          row,
+          repair: creditWindowRepairFor(row),
+        }));
+        for (const { row, repair } of repairs) {
           repairBatch.set(
             db.doc(
               `users/${uid}/${EPF_CONTRIBUTIONS_COLLECTION}/${contributionDocId(
@@ -227,21 +300,38 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
             { ...repair, updatedAt: new Date() },
             { merge: true },
           );
-          // Mirror it onto the in-memory copy so this run can act on it,
-          // rather than making the fix wait for next month.
-          row.expectedCreditFrom = repair.expectedCreditFrom;
-          row.expectedCreditTo = repair.expectedCreditTo;
         }
         try {
-          await repairBatch.commit();
-          repaired += stale.length;
-        } catch (err) {
-          // Non-fatal: the rows stay stale and the next run retries. No audit
-          // event — nothing about the money changed.
-          console.error("epf-cron: credit window repair failed", {
-            month: stale[0]?.month,
-            count: stale.length,
-            error: err instanceof Error ? err.message : String(err),
+          const results = await repairBatch.commit();
+          repaired += group.length;
+          // Mirror onto the in-memory copies so this run can act on the fix
+          // rather than making it wait for next month — but only now the write
+          // has landed. Mirroring before the commit left the rest of the run
+          // reasoning about state that was never persisted.
+          repairs.forEach(({ row, repair }, index) => {
+            row.expectedCreditFrom = repair.expectedCreditFrom;
+            row.expectedCreditTo = repair.expectedCreditTo;
+            // This write just invalidated the row's precondition for the
+            // release pass below. `WriteResult` comes back in the order the
+            // writes were added, so carry the new time forward rather than
+            // letting the release fail on a precondition we ourselves broke.
+            const writeTime = results[index]?.writeTime;
+            if (writeTime) {
+              updateTimes.set(
+                contributionDocId(establishment.id, row.month),
+                writeTime,
+              );
+            }
+          });
+        } catch (error) {
+          // The rows stay stale and the next run retries. No audit event —
+          // nothing about the money changed.
+          recordFailure("credit-window-repair", {
+            uid,
+            establishmentId: establishment.id,
+            month: group[0]?.month ?? null,
+            rows: group.length,
+            error,
           });
         }
       }
@@ -265,15 +355,37 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
           reason: "current-month draft released to the scheduler (SPENDLY-72)",
         })),
       ];
-      if (releases.length > 0) {
+      // SPENDLY-20: chunked, and written with a `lastUpdateTime` precondition
+      // rather than an unconditional merge. This pass demotes a row to
+      // `expected`, so an unconditional write based on a read taken earlier in
+      // this request could undo a credit the user recorded in between — the
+      // clobber the audit found on the old auto-credit path, which SPENDLY-72
+      // moved here rather than removed.
+      //
+      // A precondition, not a transaction: `updateTime` is already in hand from
+      // the read above, so this costs no extra reads inside Netlify's
+      // synchronous window, and a WriteBatch is atomic — a rejected
+      // precondition rejects the misleading audit event along with the row.
+      // The trade-off is that one contested row fails its whole chunk; nothing
+      // is written, nothing is corrupted, and the next run retries.
+      for (const group of chunk(releases, EPF_CRON_RELEASE_CHUNK_SIZE)) {
         const releaseBatch = db.batch();
-        for (const item of releases) {
-          releaseBatch.set(
+        const applied: typeof group = [];
+        for (const item of group) {
+          const contributionId = contributionDocId(
+            establishment.id,
+            item.row.month,
+          );
+          const lastUpdateTime = updateTimes.get(contributionId);
+          if (!lastUpdateTime) {
+            // The row this release targets did not come from the read above, so
+            // there is no safe precondition to write under. Leave it.
+            skipped += 1;
+            continue;
+          }
+          releaseBatch.update(
             db.doc(
-              `users/${uid}/${EPF_CONTRIBUTIONS_COLLECTION}/${contributionDocId(
-                establishment.id,
-                item.row.month,
-              )}`,
+              `users/${uid}/${EPF_CONTRIBUTIONS_COLLECTION}/${contributionId}`,
             ),
             {
               ...item.fields,
@@ -281,7 +393,9 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
               statusUpdatedAt: new Date(),
               updatedAt: new Date(),
             },
-            { merge: true },
+            // `update`, not `set`: it also fails if the row was deleted, which
+            // is correct — there is nothing left to release.
+            { lastUpdateTime },
           );
           releaseBatch.create(
             db
@@ -295,15 +409,24 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
               at: new Date(),
             },
           );
+          applied.push(item);
         }
+        if (applied.length === 0) continue;
         try {
           await releaseBatch.commit();
-          repaired += releases.length;
+          released += applied.length;
           // Mirror onto the in-memory copies so `planScheduledContributions`
-          // below sees the months as present and does not regenerate them.
-          for (const item of releases) item.row.status = "expected";
-        } catch {
-          // Another writer got there first. Next run reconciles.
+          // below sees the months as present and does not regenerate them —
+          // after the commit, and only for what actually landed.
+          for (const item of applied) item.row.status = "expected";
+        } catch (error) {
+          recordFailure("lifecycle-release", {
+            uid,
+            establishmentId: establishment.id,
+            month: applied[0]?.row.month ?? null,
+            rows: applied.length,
+            error,
+          });
         }
       }
 
@@ -317,13 +440,9 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
       // 2019 dateJoined cannot mint ~80 simulated months for this batch.
       if (planned.length === 0) continue;
 
-      for (
-        let offset = 0;
-        offset < planned.length;
-        offset += EPF_CRON_MONTHS_PER_BATCH
-      ) {
+      for (const group of chunk(planned, EPF_CRON_MONTHS_PER_BATCH)) {
         const batch = db.batch();
-        for (const row of planned.slice(offset, offset + EPF_CRON_MONTHS_PER_BATCH)) {
+        for (const row of group) {
           const contributionId = contributionDocId(establishment.id, row.month);
           const ref = db.doc(
             `users/${uid}/${EPF_CONTRIBUTIONS_COLLECTION}/${contributionId}`,
@@ -362,24 +481,48 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
 
         try {
           await batch.commit();
-          written += Math.min(EPF_CRON_MONTHS_PER_BATCH, planned.length - offset);
-        } catch {
-          // A collision means someone else already wrote the month. Skip this
-          // establishment and let the next run reconcile rather than failing the
-          // whole page.
-          break;
+          written += group.length;
+        } catch (error) {
+          // SPENDLY-20: a collision means someone else already wrote the month
+          // and is counted as skipped; anything else is a real failure and reds
+          // the run. Either way keep going — the old `break` abandoned every
+          // remaining month for this establishment until the next monthly run.
+          recordFailure("generation", {
+            uid,
+            establishmentId: establishment.id,
+            month: group[0]?.month ?? null,
+            rows: group.length,
+            error,
+          });
         }
       }
+
+      maxEstablishmentMs = Math.max(
+        maxEstablishmentMs,
+        Date.now() - establishmentStartedAt,
+      );
     }
 
     const nextCursor = page.size === limit ? lastPath : null;
+    // SPENDLY-20: 200 even when `failed > 0`. A 5xx would make the workflow
+    // abandon every remaining page, so one broken establishment would cost
+    // every later user their month. The workflow totals `failed` across pages
+    // and fails the run at the end instead.
     return json(200, {
       processed,
       written,
       // Always 0 since SPENDLY-72 removed auto-crediting. Kept in the response
       // so the workflow summary and any existing log parsing keep working.
       credited: 0,
+      // Credit-window repairs only. Lifecycle releases are `released`; the two
+      // shared this counter before SPENDLY-20, under the repair label.
       repaired,
+      released,
+      skipped,
+      failed,
+      duressSkipped,
+      elapsedMs: Date.now() - pageStartedAt,
+      maxEstablishmentMs,
       throughMonth,
       nextCursor,
     });

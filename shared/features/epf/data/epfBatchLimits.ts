@@ -25,3 +25,24 @@ export const WRITES_PER_CRON_MONTH = 2;
 
 /** Months the cron generates per batch (`MONTHS_PER_BATCH` in `epf-cron.ts`). */
 export const EPF_CRON_MONTHS_PER_BATCH = 200;
+
+/**
+ * The ceiling SPENDLY-20 works to: 80% of Firestore's cap.
+ *
+ * The cron's repair and release passes size themselves against this rather
+ * than {@link FIRESTORE_BATCH_LIMIT}, so adding a third document per row is a
+ * failing test here rather than an `INVALID_ARGUMENT` on a user's data.
+ */
+export const EPF_BATCH_SAFE_WRITES = 400;
+
+/** Documents written per row by the credit-window repair: the row, no event. */
+export const WRITES_PER_REPAIR_ROW = 1;
+
+/** Rows per credit-window repair batch (`epf-cron.ts`, SPENDLY-20). */
+export const EPF_CRON_REPAIR_CHUNK_SIZE = 400;
+
+/** Documents written per row by a lifecycle release: the row plus its event. */
+export const WRITES_PER_RELEASE_ROW = 2;
+
+/** Rows per lifecycle-release batch (`epf-cron.ts`, SPENDLY-20). */
+export const EPF_CRON_RELEASE_CHUNK_SIZE = 200;
