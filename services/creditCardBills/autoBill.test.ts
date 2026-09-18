@@ -22,14 +22,28 @@ vi.mock("@/lib/firebase", () => ({
   getFirestoreDb: () => ({ __db: true }),
 }));
 
-vi.mock("@/lib/firestoreWrite", () => ({
-  commitWrite: async (fn: () => Promise<unknown>) => {
-    await fn();
+const writes: Write[] = [];
+
+vi.mock("@/lib/commitMutations", () => ({
+  commitMutations: async (
+    _uid: string,
+    ops: Array<{
+      op: "set" | "update" | "delete";
+      ref: FakeRef;
+      data?: Record<string, unknown>;
+      merge?: boolean;
+    }>
+  ) => {
+    for (const op of ops) {
+      writes.push({
+        path: op.ref.path,
+        data: op.data ?? {},
+        merge: op.merge === true,
+      });
+    }
     return "acked";
   },
 }));
-
-import { setDoc } from "firebase/firestore";
 
 import { createAutoCreditCardBill } from "./autoBill";
 import { AUTO_CREDIT_CARD_BILL_REMINDER_FREQUENCY } from "@/shared/types/creditCardBill";
@@ -48,23 +62,8 @@ const DRAFT = {
   reminderFrequency: AUTO_CREDIT_CARD_BILL_REMINDER_FREQUENCY,
 };
 
-let writes: Write[] = [];
-
 beforeEach(() => {
-  writes = [];
-  vi.mocked(setDoc).mockImplementation(
-    (async (
-      ref: FakeRef,
-      data: Record<string, unknown>,
-      options?: { merge?: boolean }
-    ) => {
-      writes.push({
-        path: ref.path,
-        data,
-        merge: options?.merge === true,
-      });
-    }) as typeof setDoc
-  );
+  writes.length = 0;
 });
 
 describe("createAutoCreditCardBill", () => {

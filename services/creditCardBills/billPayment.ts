@@ -19,11 +19,11 @@ import {
   getDoc,
   increment,
   serverTimestamp,
-  writeBatch,
 } from "firebase/firestore";
 
+import { commitMutations, type MutationOp } from "@/lib/commitMutations";
 import { getFirestoreDb } from "@/lib/firebase";
-import { commitWrite, type WriteOutcome } from "@/lib/firestoreWrite";
+import type { WriteOutcome } from "@/lib/firestoreWrite";
 import { newId } from "@/lib/id";
 import { validateAccountMoneyMove } from "@/lib/finance/ledgerGuards";
 import type { CreditCardBillStatus } from "@/shared/types/creditCardBill";
@@ -141,11 +141,11 @@ export async function recordCreditBillPayment(
       })
     : undefined;
 
-  const outcome = await commitWrite(() => {
-    const batch = writeBatch(db);
-    batch.set(
-      doc(db, "users", owner, "accountPayments", paymentId),
-      stripUndefined({
+  const ops: MutationOp[] = [
+    {
+      op: "set",
+      ref: doc(db, "users", owner, "accountPayments", paymentId),
+      data: stripUndefined({
         fromAccountId:
           input.sourceType === "external" ? "external" : input.fromAccountId,
         toAccountId: input.toAccountId,
@@ -157,20 +157,26 @@ export async function recordCreditBillPayment(
         appliedCycleStart: input.appliedCycleStart,
         appliedCycleEnd: input.appliedCycleEnd,
         createdAt: serverTimestamp(),
-      })
-    );
-    if (input.bill && settleable > 0) {
-      batch.update(doc(db, "users", owner, "creditCardBills", input.bill.id), {
+      }),
+    },
+  ];
+  if (input.bill && settleable > 0) {
+    ops.push({
+      op: "update",
+      ref: doc(db, "users", owner, "creditCardBills", input.bill.id),
+      data: {
         amountPaid: increment(settleable),
         paymentIds: arrayUnion(paymentId),
         paymentDate: input.date,
         remainingAmount: derived!.remainingAmount,
         status: derived!.status,
         updatedAt: serverTimestamp(),
-      });
-    }
-    return batch.commit();
-  }, { label: "credit card bill payment" });
+      },
+    });
+  }
+  const outcome = await commitMutations(owner, ops, {
+    label: "credit card bill payment",
+  });
 
   return { paymentId, billStatus: derived?.status, outcome };
 }
@@ -226,27 +232,33 @@ export async function voidCreditBillPayment(
     }
   }
 
-  const outcome = await commitWrite(() => {
-    const batch = writeBatch(db);
-    batch.update(
-      paymentRef,
-      stripUndefined({
+  const ops: MutationOp[] = [
+    {
+      op: "update",
+      ref: paymentRef,
+      data: stripUndefined({
         voidedAt: new Date().toISOString(),
         voidReason: options?.reason?.trim() || "Payment removed",
         updatedAt: serverTimestamp(),
-      })
-    );
-    if (billId && derived) {
-      batch.update(doc(db, "users", owner, "creditCardBills", billId), {
+      }),
+    },
+  ];
+  if (billId && derived) {
+    ops.push({
+      op: "update",
+      ref: doc(db, "users", owner, "creditCardBills", billId),
+      data: {
         amountPaid: nextPaid,
         paymentIds: arrayRemove(paymentId),
         remainingAmount: derived.remainingAmount,
         status: derived.status,
         updatedAt: serverTimestamp(),
-      });
-    }
-    return batch.commit();
-  }, { label: "credit card bill payment reversal" });
+      },
+    });
+  }
+  const outcome = await commitMutations(owner, ops, {
+    label: "credit card bill payment reversal",
+  });
 
   return { outcome, billStatus: derived?.status };
 }

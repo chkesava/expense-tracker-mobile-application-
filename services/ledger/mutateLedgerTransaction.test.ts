@@ -37,14 +37,32 @@ vi.mock("@/lib/firebase", () => ({
   getFirestoreDb: () => ({ __db: true }),
 }));
 
-vi.mock("@/lib/firestoreWrite", () => ({
-  commitWrite: async (fn: () => Promise<unknown>) => {
-    await fn();
+vi.mock("@/lib/commitMutations", () => ({
+  commitMutations: async (
+    _uid: string,
+    ops: Array<{
+      op: "set" | "update" | "delete";
+      ref: { path: string };
+      data?: Record<string, unknown>;
+    }>
+  ) => {
+    for (const op of ops) {
+      writes.push({
+        path: op.ref.path,
+        data: op.op === "delete" ? {} : (op.data ?? {}),
+        kind: op.op === "set" ? "set" : "update",
+      });
+      if (op.op !== "delete") {
+        docs.set(op.ref.path, {
+          ...(docs.get(op.ref.path) ?? {}),
+          ...(op.data ?? {}),
+        });
+      }
+    }
+    commits += 1;
     return "acked";
   },
 }));
-
-import { writeBatch } from "firebase/firestore";
 
 import {
   ALREADY_REMOVED_LEDGER_MESSAGE,
@@ -58,25 +76,6 @@ import {
 
 let writes: Write[] = [];
 let commits = 0;
-
-function installBatchRecorder() {
-  vi.mocked(writeBatch).mockImplementation(
-    () =>
-      ({
-        set: (ref: FakeRef, data: Record<string, unknown>) => {
-          writes.push({ path: ref.path, data, kind: "set" });
-          docs.set(ref.path, { ...(docs.get(ref.path) ?? {}), ...data });
-        },
-        update: (ref: FakeRef, data: Record<string, unknown>) => {
-          writes.push({ path: ref.path, data, kind: "update" });
-          docs.set(ref.path, { ...(docs.get(ref.path) ?? {}), ...data });
-        },
-        commit: async () => {
-          commits += 1;
-        },
-      }) as never
-  );
-}
 
 const EXPENSE = {
   amount: 5000,
@@ -104,7 +103,6 @@ beforeEach(() => {
   docs.clear();
   writes = [];
   commits = 0;
-  installBatchRecorder();
   docs.set("users/u1/expenses/exp-1", { ...EXPENSE });
   docs.set("users/u1/incomes/inc-1", { ...INCOME });
   docs.set("users/u1/trips/trip-1", { spentAmount: 5000 });

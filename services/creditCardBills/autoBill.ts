@@ -16,10 +16,11 @@
  * needs the server, and this path must still queue offline.
  */
 
-import { doc, increment, serverTimestamp, setDoc } from "firebase/firestore";
+import { doc, increment, serverTimestamp } from "firebase/firestore";
 
+import { commitMutations } from "@/lib/commitMutations";
 import { getFirestoreDb } from "@/lib/firebase";
-import { commitWrite, type WriteOutcome } from "@/lib/firestoreWrite";
+import type { WriteOutcome } from "@/lib/firestoreWrite";
 import type { CreditCardBillReminderFrequency } from "@/shared/types/creditCardBill";
 import { autoCreditCardBillDocId } from "@/shared/utils/autoCreditCardBills";
 import { isValidDateKey } from "@/shared/utils/dates";
@@ -71,11 +72,14 @@ export async function createAutoCreditCardBill(
 
   const id = autoCreditCardBillDocId(accountId, input.statementDate);
   const ref = doc(db, "users", owner, "creditCardBills", id);
-  const outcome = await commitWrite(
-    () =>
-      setDoc(
+  const outcome = await commitMutations(
+    owner,
+    [
+      {
+        op: "set",
         ref,
-        {
+        merge: true,
+        data: {
           accountId,
           billingPeriodStart: input.billingPeriodStart ?? null,
           billingPeriodEnd: input.billingPeriodEnd ?? null,
@@ -91,8 +95,8 @@ export async function createAutoCreditCardBill(
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         },
-        { merge: true }
-      ),
+      },
+    ],
     { label: "credit card bill" }
   );
   return { id, outcome };

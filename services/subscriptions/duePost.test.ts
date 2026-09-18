@@ -22,14 +22,31 @@ vi.mock("@/lib/firebase", () => ({
   getFirestoreDb: () => ({ __db: true }),
 }));
 
-vi.mock("@/lib/firestoreWrite", () => ({
-  commitWrite: async (fn: () => Promise<unknown>) => {
-    await fn();
+const writes: Write[] = [];
+let commits = 0;
+
+vi.mock("@/lib/commitMutations", () => ({
+  commitMutations: async (
+    _uid: string,
+    ops: Array<{
+      op: "set" | "update" | "delete";
+      ref: FakeRef;
+      data?: Record<string, unknown>;
+      merge?: boolean;
+    }>
+  ) => {
+    for (const op of ops) {
+      writes.push({
+        path: op.ref.path,
+        data: op.data ?? {},
+        merge: op.merge === true,
+        kind: op.op === "set" ? "set" : "update",
+      });
+    }
+    commits += 1;
     return "acked";
   },
 }));
-
-import { writeBatch } from "firebase/firestore";
 
 import { postDueSubscriptionCharge } from "./duePost";
 import type { DuePostAction } from "@/shared/utils/subscriptionProcessor";
@@ -54,45 +71,9 @@ const EXPENSE_ACTION: DuePostAction = {
   markCompleted: false,
 };
 
-let writes: Write[] = [];
-let commits = 0;
-
-function installBatchRecorder() {
-  vi.mocked(writeBatch).mockImplementation(
-    () =>
-      ({
-        set: (
-          ref: FakeRef,
-          data: Record<string, unknown>,
-          options?: { merge?: boolean }
-        ) => {
-          writes.push({
-            path: ref.path,
-            data,
-            merge: options?.merge === true,
-            kind: "set",
-          });
-        },
-        update: (ref: FakeRef, data: Record<string, unknown>) => {
-          writes.push({
-            path: ref.path,
-            data,
-            merge: false,
-            kind: "update",
-          });
-        },
-        commit: async () => {
-          commits += 1;
-        },
-      }) as never
-  );
-}
-
 beforeEach(() => {
-  writes = [];
+  writes.length = 0;
   commits = 0;
-  vi.clearAllMocks();
-  installBatchRecorder();
 });
 
 describe("postDueSubscriptionCharge", () => {

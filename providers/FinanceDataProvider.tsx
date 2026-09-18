@@ -1,7 +1,5 @@
 import {
-  addDoc,
   collection,
-  deleteDoc,
   doc,
   getDocs,
   limit,
@@ -9,8 +7,6 @@ import {
   orderBy,
   query,
   serverTimestamp,
-  setDoc,
-  updateDoc,
   where,
   type QuerySnapshot,
 } from "firebase/firestore";
@@ -25,9 +21,10 @@ import {
   type ReactNode,
 } from "react";
 
+import { commitMutations } from "@/lib/commitMutations";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
-import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
+import { writeSavedMessage } from "@/lib/firestoreWrite";
 import {
   canDeleteAccount,
   countLinkedAccountRecords,
@@ -256,11 +253,15 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       if (repairedTodayBaselinesRef.current.has(account.id)) continue;
       repairedTodayBaselinesRef.current.add(account.id);
       const accountId = account.id;
-      void commitWrite(
-        () =>
-          updateDoc(doc(db, "users", uid, "accounts", accountId), {
-            balanceAsOfDate: null,
-          }),
+      void commitMutations(
+        uid,
+        [
+          {
+            op: "update",
+            ref: doc(db, "users", uid, "accounts", accountId),
+            data: { balanceAsOfDate: null },
+          },
+        ],
         {
           label: "account baseline",
           onLateFailure: (error) => {
@@ -587,8 +588,10 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
           createdAt: serverTimestamp(),
         });
 
-        const outcome = await commitWrite(
-          () => addDoc(collection(database, "users", u.uid, "accounts"), payload),
+        const ref = doc(collection(database, "users", u.uid, "accounts"));
+        const outcome = await commitMutations(
+          u.uid,
+          [{ op: "set", ref, data: payload as Record<string, unknown> }],
           { label: "account" }
         );
         toast.success(writeSavedMessage(outcome, "Account added"));
@@ -624,8 +627,15 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
           typeName,
           extras: hydrated,
         });
-        const outcome = await commitWrite(
-          () => updateDoc(doc(database, "users", u.uid, "accounts", id), payload),
+        const outcome = await commitMutations(
+          u.uid,
+          [
+            {
+              op: "update",
+              ref: doc(database, "users", u.uid, "accounts", id),
+              data: payload as Record<string, unknown>,
+            },
+          ],
           { label: "account" }
         );
         toast.success(writeSavedMessage(outcome, "Account updated"));
@@ -727,8 +737,9 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      const outcome = await commitWrite(
-        () => deleteDoc(doc(database, "users", u.uid, "accounts", id)),
+      const outcome = await commitMutations(
+        u.uid,
+        [{ op: "delete", ref: doc(database, "users", u.uid, "accounts", id) }],
         { label: "account deletion" }
       );
       toast.success(writeSavedMessage(outcome, "Account deleted"));
@@ -743,12 +754,16 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     const database = getFirestoreDb();
     if (!u || !database || !name.trim()) return;
     try {
-      const outcome = await commitWrite(
-        () =>
-          addDoc(collection(database, "users", u.uid, "accountTypes"), {
-            name: name.trim(),
-            createdAt: serverTimestamp(),
-          }),
+      const ref = doc(collection(database, "users", u.uid, "accountTypes"));
+      const outcome = await commitMutations(
+        u.uid,
+        [
+          {
+            op: "set",
+            ref,
+            data: { name: name.trim(), createdAt: serverTimestamp() },
+          },
+        ],
         { label: "account type" }
       );
       toast.success(writeSavedMessage(outcome, "Account type added"));
@@ -763,8 +778,9 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     const database = getFirestoreDb();
     if (!u || !database) return;
     try {
-      const outcome = await commitWrite(
-        () => deleteDoc(doc(database, "users", u.uid, "accountTypes", id)),
+      const outcome = await commitMutations(
+        u.uid,
+        [{ op: "delete", ref: doc(database, "users", u.uid, "accountTypes", id) }],
         { label: "account type deletion" }
       );
       toast.success(writeSavedMessage(outcome, "Account type deleted"));
@@ -798,23 +814,29 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       }
       try {
         const ref = doc(collection(database, "users", u.uid, "accountPayments"));
-        const outcome = await commitWrite(
-          () =>
-            setDoc(ref, {
-              fromAccountId,
-              toAccountId,
-              amount,
-              date,
-              note: note?.trim() || "",
-              sourceType: "account",
-              ...(opts?.appliedCycleStart
-                ? { appliedCycleStart: opts.appliedCycleStart }
-                : {}),
-              ...(opts?.appliedCycleEnd
-                ? { appliedCycleEnd: opts.appliedCycleEnd }
-                : {}),
-              createdAt: serverTimestamp(),
-            }),
+        const outcome = await commitMutations(
+          u.uid,
+          [
+            {
+              op: "set",
+              ref,
+              data: {
+                fromAccountId,
+                toAccountId,
+                amount,
+                date,
+                note: note?.trim() || "",
+                sourceType: "account",
+                ...(opts?.appliedCycleStart
+                  ? { appliedCycleStart: opts.appliedCycleStart }
+                  : {}),
+                ...(opts?.appliedCycleEnd
+                  ? { appliedCycleEnd: opts.appliedCycleEnd }
+                  : {}),
+                createdAt: serverTimestamp(),
+              },
+            },
+          ],
           { label: "payment" }
         );
         toast.success(writeSavedMessage(outcome, "Bill payment recorded"));
@@ -845,23 +867,29 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       }
       try {
         const ref = doc(collection(database, "users", u.uid, "accountPayments"));
-        const outcome = await commitWrite(
-          () =>
-            setDoc(ref, {
-              fromAccountId: "external",
-              toAccountId,
-              amount,
-              date,
-              note: note?.trim() || "",
-              sourceType: "external",
-              ...(opts?.appliedCycleStart
-                ? { appliedCycleStart: opts.appliedCycleStart }
-                : {}),
-              ...(opts?.appliedCycleEnd
-                ? { appliedCycleEnd: opts.appliedCycleEnd }
-                : {}),
-              createdAt: serverTimestamp(),
-            }),
+        const outcome = await commitMutations(
+          u.uid,
+          [
+            {
+              op: "set",
+              ref,
+              data: {
+                fromAccountId: "external",
+                toAccountId,
+                amount,
+                date,
+                note: note?.trim() || "",
+                sourceType: "external",
+                ...(opts?.appliedCycleStart
+                  ? { appliedCycleStart: opts.appliedCycleStart }
+                  : {}),
+                ...(opts?.appliedCycleEnd
+                  ? { appliedCycleEnd: opts.appliedCycleEnd }
+                  : {}),
+                createdAt: serverTimestamp(),
+              },
+            },
+          ],
           { label: "payment" }
         );
         toast.success(writeSavedMessage(outcome, "Marked as already paid"));
@@ -912,26 +940,32 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       try {
         const id = cashbackDocId(input);
         const ref = doc(database, "users", u.uid, "accountPayments", id);
-        const outcome = await commitWrite(
-          () =>
-            setDoc(ref, {
-              fromAccountId: CASHBACK_SOURCE_ID,
-              toAccountId: input.cardId,
-              amount: input.amount,
-              date: input.date,
-              note: input.note?.trim() || "",
-              sourceType: "cashback",
-              cashbackKind: input.kind,
-              cashbackSource: input.source || "manual",
-              ...(input.linkedExpenseId
-                ? { linkedExpenseId: input.linkedExpenseId }
-                : {}),
-              ...(input.providerRef?.trim()
-                ? { providerRef: input.providerRef.trim() }
-                : {}),
-              createdAt: serverTimestamp(),
-              updatedAt: serverTimestamp(),
-            }),
+        const outcome = await commitMutations(
+          u.uid,
+          [
+            {
+              op: "set",
+              ref,
+              data: {
+                fromAccountId: CASHBACK_SOURCE_ID,
+                toAccountId: input.cardId,
+                amount: input.amount,
+                date: input.date,
+                note: input.note?.trim() || "",
+                sourceType: "cashback",
+                cashbackKind: input.kind,
+                cashbackSource: input.source || "manual",
+                ...(input.linkedExpenseId
+                  ? { linkedExpenseId: input.linkedExpenseId }
+                  : {}),
+                ...(input.providerRef?.trim()
+                  ? { providerRef: input.providerRef.trim() }
+                  : {}),
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp(),
+              },
+            },
+          ],
           { label: "cashback" }
         );
         toast.success(writeSavedMessage(outcome, "Cashback recorded"));
@@ -957,13 +991,19 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     const database = getFirestoreDb();
     if (!u || !database || !id) return false;
     try {
-      const outcome = await commitWrite(
-        () =>
-          updateDoc(doc(database, "users", u.uid, "accountPayments", id), {
-            voidedAt: new Date().toISOString(),
-            ...(reason?.trim() ? { voidReason: reason.trim() } : {}),
-            updatedAt: serverTimestamp(),
-          }),
+      const outcome = await commitMutations(
+        u.uid,
+        [
+          {
+            op: "update",
+            ref: doc(database, "users", u.uid, "accountPayments", id),
+            data: {
+              voidedAt: new Date().toISOString(),
+              ...(reason?.trim() ? { voidReason: reason.trim() } : {}),
+              updatedAt: serverTimestamp(),
+            },
+          },
+        ],
         { label: "cashback reversal" }
       );
       toast.success(writeSavedMessage(outcome, "Cashback reversed"));
@@ -1009,16 +1049,23 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         return false;
       }
       try {
-        const outcome = await commitWrite(
-          () =>
-            addDoc(collection(database, "users", u.uid, "accountEntries"), {
-              accountId,
-              amount,
-              direction,
-              date,
-              note: note?.trim() || "",
-              createdAt: serverTimestamp(),
-            }),
+        const ref = doc(collection(database, "users", u.uid, "accountEntries"));
+        const outcome = await commitMutations(
+          u.uid,
+          [
+            {
+              op: "set",
+              ref,
+              data: {
+                accountId,
+                amount,
+                direction,
+                date,
+                note: note?.trim() || "",
+                createdAt: serverTimestamp(),
+              },
+            },
+          ],
           { label: "account entry" }
         );
         toast.success(
@@ -1044,8 +1091,9 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     const database = getFirestoreDb();
     if (!u || !database) return;
     try {
-      const outcome = await commitWrite(
-        () => deleteDoc(doc(database, "users", u.uid, "accountEntries", id)),
+      const outcome = await commitMutations(
+        u.uid,
+        [{ op: "delete", ref: doc(database, "users", u.uid, "accountEntries", id) }],
         { label: "account entry deletion" }
       );
       toast.success(writeSavedMessage(outcome, "Account entry removed"));
@@ -1086,16 +1134,23 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         return false;
       }
       try {
-        const outcome = await commitWrite(
-          () =>
-            addDoc(collection(database, "users", u.uid, "accountTransfers"), {
-              fromAccountId,
-              toAccountId,
-              amount,
-              date,
-              note: note?.trim() || "",
-              createdAt: serverTimestamp(),
-            }),
+        const ref = doc(collection(database, "users", u.uid, "accountTransfers"));
+        const outcome = await commitMutations(
+          u.uid,
+          [
+            {
+              op: "set",
+              ref,
+              data: {
+                fromAccountId,
+                toAccountId,
+                amount,
+                date,
+                note: note?.trim() || "",
+                createdAt: serverTimestamp(),
+              },
+            },
+          ],
           { label: "transfer" }
         );
         toast.success(writeSavedMessage(outcome, "Transfer recorded"));
@@ -1114,8 +1169,9 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     const database = getFirestoreDb();
     if (!u || !database) return;
     try {
-      const outcome = await commitWrite(
-        () => deleteDoc(doc(database, "users", u.uid, "accountTransfers", id)),
+      const outcome = await commitMutations(
+        u.uid,
+        [{ op: "delete", ref: doc(database, "users", u.uid, "accountTransfers", id) }],
         { label: "transfer deletion" }
       );
       toast.success(writeSavedMessage(outcome, "Transfer removed"));

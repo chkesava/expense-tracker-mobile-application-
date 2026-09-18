@@ -10,10 +10,11 @@
  * `writeBatch` + `commitWrite`, not `runTransaction`: this must queue offline.
  */
 
-import { doc, serverTimestamp, writeBatch } from "firebase/firestore";
+import { doc, serverTimestamp } from "firebase/firestore";
 
+import { commitMutations, type MutationOp } from "@/lib/commitMutations";
 import { getFirestoreDb } from "@/lib/firebase";
-import { commitWrite, type WriteOutcome } from "@/lib/firestoreWrite";
+import type { WriteOutcome } from "@/lib/firestoreWrite";
 import { omitUndefined } from "@/shared/utils/firestorePayload";
 import {
   duePostNeedsAccount,
@@ -48,26 +49,28 @@ export async function postDueSubscriptionCharge(
   }
 
   const db = requireDb();
-  const batch = writeBatch(db);
+  const ops: MutationOp[] = [];
 
   if (action.kind === "transfer") {
-    batch.set(
-      doc(db, "users", owner, "accountTransfers", action.docId),
-      omitUndefined({
+    ops.push({
+      op: "set",
+      ref: doc(db, "users", owner, "accountTransfers", action.docId),
+      merge: true,
+      data: omitUndefined({
         ...action.transfer,
         createdAt: serverTimestamp(),
       }),
-      { merge: true }
-    );
+    });
   } else {
-    batch.set(
-      doc(db, "users", owner, "expenses", action.docId),
-      omitUndefined({
+    ops.push({
+      op: "set",
+      ref: doc(db, "users", owner, "expenses", action.docId),
+      merge: true,
+      data: omitUndefined({
         ...action.expense,
         createdAt: serverTimestamp(),
       }),
-      { merge: true }
-    );
+    });
   }
 
   const subUpdates: Record<string, unknown> = {
@@ -80,12 +83,13 @@ export async function postDueSubscriptionCharge(
     subUpdates.isCompleted = true;
     subUpdates.isActive = false;
   }
-  batch.update(
-    doc(db, "users", owner, "subscriptions", action.subscriptionId),
-    subUpdates
-  );
+  ops.push({
+    op: "update",
+    ref: doc(db, "users", owner, "subscriptions", action.subscriptionId),
+    data: subUpdates,
+  });
 
-  const outcome = await commitWrite(() => batch.commit(), {
+  const outcome = await commitMutations(owner, ops, {
     label: "subscription charge",
   });
   return { status: "posted", docId: action.docId, outcome };
