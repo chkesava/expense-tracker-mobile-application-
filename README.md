@@ -213,9 +213,9 @@ Actions → Run workflow  ->  GitHub Actions  ->  signed APK
 | `EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER` | Same as local `.env` |
 | `EXPO_PUBLIC_FIREBASE_APP_ID` | Same as local `.env` |
 | `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` | Google OAuth **Web** client ID |
-| `EXPO_PUBLIC_GEMINI_API_KEY` | Same as web `VITE_GEMINI_API_KEY` (nutrition AI food parsing) |
+| `GEMINI_API_KEY` (Netlify site env only) | Nutrition AI proxy (SPENDLY-24). Never `EXPO_PUBLIC_`. |
 
-Use either **`MOBILE_ENV_FILE`** or the individual `EXPO_PUBLIC_*` secrets (both work). If you use individual secrets, also add `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` and `EXPO_PUBLIC_GEMINI_API_KEY` so Google Sign-In and nutrition AI work in release builds.
+Use either **`MOBILE_ENV_FILE`** or the individual `EXPO_PUBLIC_*` secrets (both work). If you use individual secrets, also add `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` so Google Sign-In works in release builds. Nutrition AI uses the Netlify `nutrition-ai` function and `GEMINI_API_KEY` on that site — not a client env var.
 
 Generate the keystore secret on Windows:
 

@@ -89,7 +89,6 @@ jobs:
           EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
           EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
           EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: ${{ secrets.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID }}
-          EXPO_PUBLIC_GEMINI_API_KEY: ${{ secrets.EXPO_PUBLIC_GEMINI_API_KEY }}
         run: |
           if [ -n "$MOBILE_ENV_FILE" ]; then
             printf '%s\n' "$MOBILE_ENV_FILE" > .env
@@ -114,9 +113,10 @@ jobs:
             write_kv EXPO_PUBLIC_SUPABASE_URL "$EXPO_PUBLIC_SUPABASE_URL"
             write_kv EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY "$EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY"
             write_kv EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID "$EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID"
-            write_kv EXPO_PUBLIC_GEMINI_API_KEY "$EXPO_PUBLIC_GEMINI_API_KEY"
             echo "Wrote .env from individual EXPO_PUBLIC_* secrets."
           fi
+          # SPENDLY-24: Gemini is a spendable secret. Never leave it in a client .env.
+          sed -i '/^EXPO_PUBLIC_GEMINI_API_KEY=/d' .env
           KEY_COUNT=$(grep -c '^EXPO_PUBLIC_' .env || true)
           if [ "$KEY_COUNT" -lt 7 ]; then
             echo "::error::Need the Firebase EXPO_PUBLIC_* secrets (or one MOBILE_ENV_FILE). Found $KEY_COUNT EXPO_PUBLIC_* lines."
@@ -137,6 +137,7 @@ jobs:
           node --no-experimental-require-module -e "require('./netlify/functions-dist/ganesh-summary.js'); console.log('ganesh-summary loaded')"
           node --no-experimental-require-module -e "require('./netlify/functions-dist/ganesh-draw.js'); console.log('ganesh-draw loaded')"
           node --no-experimental-require-module -e "require('./netlify/functions-dist/epf-cron.js'); console.log('epf-cron loaded')"
+          node --no-experimental-require-module -e "require('./netlify/functions-dist/nutrition-ai.js'); console.log('nutrition-ai loaded')"
 
       - name: Deploy to Netlify
         env:
@@ -144,6 +145,8 @@ jobs:
           NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           EPF_CRON_SECRET: ${{ secrets.EPF_CRON_SECRET }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          EXPO_PUBLIC_GEMINI_API_KEY: ${{ secrets.EXPO_PUBLIC_GEMINI_API_KEY }}
         run: |
           if [ -z "$NETLIFY_AUTH_TOKEN" ] || [ -z "$NETLIFY_SITE_ID" ]; then
             echo "::error::NETLIFY_AUTH_TOKEN and/or NETLIFY_SITE_ID secrets are missing."
@@ -185,6 +188,17 @@ jobs:
           else
             echo "::warning::EPF_CRON_SECRET is not set. epf-cron will reject every call until it is (KAN-78)."
           fi
+          # SPENDLY-24: server-only Gemini key for nutrition-ai. Prefer GEMINI_API_KEY;
+          # fall back to the old client secret name until it is rotated off GitHub.
+          GEMINI_VALUE="${GEMINI_API_KEY:-$EXPO_PUBLIC_GEMINI_API_KEY}"
+          if [ -n "$GEMINI_VALUE" ]; then
+            if ! netlify env:set GEMINI_API_KEY "$GEMINI_VALUE" --force --secret --context production; then
+              echo "::warning::Could not overwrite GEMINI_API_KEY. Deploying with the value already on the Netlify site."
+            fi
+          else
+            echo "::warning::GEMINI_API_KEY is not set. nutrition-ai will return 500 until it is (SPENDLY-24)."
+          fi
+          unset GEMINI_VALUE
           netlify deploy --prod \
             --dir "$RUNNER_TEMP/publish" \
             --functions "$RUNNER_TEMP/functions" \
@@ -209,4 +223,5 @@ jobs:
             echo "- https://spendly-share.netlify.app/payment/<slug> (unchanged)"
             echo "- https://spendly-share.netlify.app/.netlify/functions/ganesh-summary"
             echo "- https://spendly-share.netlify.app/.netlify/functions/ganesh-draw"
+            echo "- https://spendly-share.netlify.app/.netlify/functions/nutrition-ai"
           } >> "$GITHUB_STEP_SUMMARY"

@@ -116,7 +116,6 @@ jobs:
           EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
           EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
           EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: ${{ secrets.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID }}
-          EXPO_PUBLIC_GEMINI_API_KEY: ${{ secrets.EXPO_PUBLIC_GEMINI_API_KEY }}
           MYAPP_RELEASE_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           MYAPP_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           PRODUCT: ${{ inputs.product }}
@@ -145,11 +144,13 @@ jobs:
             write_kv EXPO_PUBLIC_SUPABASE_URL "$EXPO_PUBLIC_SUPABASE_URL"
             write_kv EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY "$EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY"
             write_kv EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID "$EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID"
-            write_kv EXPO_PUBLIC_GEMINI_API_KEY "$EXPO_PUBLIC_GEMINI_API_KEY"
             write_kv MYAPP_RELEASE_STORE_PASSWORD "$MYAPP_RELEASE_STORE_PASSWORD"
             write_kv MYAPP_RELEASE_KEY_PASSWORD "$MYAPP_RELEASE_KEY_PASSWORD"
             echo "Wrote .env from individual EXPO_PUBLIC_* secrets."
           fi
+
+          # SPENDLY-24: Gemini is a spendable secret. Never leave it in a client .env.
+          sed -i '/^EXPO_PUBLIC_GEMINI_API_KEY=/d' .env
 
           # Gradle's bundleRelease task only inherits EXPO_PUBLIC_* vars that
           # scripts/common.js's getExpoPublicEnv() finds in .env (not the raw
