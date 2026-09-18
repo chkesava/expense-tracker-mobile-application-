@@ -1,4 +1,5 @@
 import type { Expense } from "../types/expense";
+import { isInMonth } from "./dates";
 import { currentMonthKey } from "./dates";
 
 export type WeeklySummary = {
@@ -15,7 +16,7 @@ export function getWeeklySummary(
   currentWeek?: number;
   currentWeekDaysSoFar?: number;
 } {
-  const filtered = expenses.filter((e) => e.month === month);
+  const filtered = expenses.filter((e) => isInMonth(e, month));
 
   const weeksMap: Record<number, number> = {};
 

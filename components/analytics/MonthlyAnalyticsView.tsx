@@ -44,7 +44,7 @@ import {
 } from "@/shared/utils/rangeAnalytics";
 import { groupByCategory } from "@/shared/utils/analytics";
 import { formatMonthLabel } from "@/shared/utils/dateDisplay";
-import { currentMonthKey, shiftMonthKey } from "@/shared/utils/dates";
+import { currentMonthKey, isInMonth, shiftMonthKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 
 /** Ordered vertical structure of the analytics dashboard. */
@@ -112,11 +112,11 @@ export function MonthlyAnalyticsView({ listHeader }: MonthlyAnalyticsViewProps) 
 
   // Filtered transactions for selected month
   const monthExpenses = useMemo(
-    () => expenses.filter((e) => e.month === selectedMonth),
+    () => expenses.filter((e) => isInMonth(e, selectedMonth)),
     [expenses, selectedMonth]
   );
   const monthIncomes = useMemo(
-    () => incomes.filter((inc) => inc.date.slice(0, 7) === selectedMonth),
+    () => incomes.filter((inc) => isInMonth(inc, selectedMonth)),
     [incomes, selectedMonth]
   );
 

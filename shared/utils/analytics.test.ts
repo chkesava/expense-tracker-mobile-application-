@@ -62,4 +62,18 @@ describe("analytics grouping helpers", () => {
       ])
     );
   });
+
+  it("groups a wizard-shaped expense that has a date but no month", () => {
+    expect(
+      groupByMonth([
+        expense({ amount: 250, category: "Food", month: "2026-08" }),
+        expense({
+          amount: 250,
+          category: "Food",
+          month: "",
+          date: "2026-08-18",
+        }),
+      ])
+    ).toEqual([{ month: "2026-08", value: 500 }]);
+  });
 });
