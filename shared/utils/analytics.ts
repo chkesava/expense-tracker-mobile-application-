@@ -1,4 +1,5 @@
 import type { Expense } from "../types/expense";
+import { monthKeyOf } from "./dates";
 
 export const groupByCategory = (expenses: Expense[]) => {
   const map: Record<string, number> = {};
@@ -37,8 +38,10 @@ export const groupSubcategoriesFor = (expenses: Expense[], parentCategory: strin
 
 export const groupByMonth = (expenses: Expense[]) => {
   const map: Record<string, number> = {};
-  expenses.forEach(e => {
-    map[e.month] = (map[e.month] || 0) + e.amount;
+  expenses.forEach((e) => {
+    const month = monthKeyOf(e);
+    if (!month) return;
+    map[month] = (map[month] || 0) + e.amount;
   });
   return Object.entries(map).map(([month, value]) => ({ month, value }));
 };

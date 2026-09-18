@@ -1,4 +1,5 @@
 import type { Expense } from "../types/expense";
+import { monthKeyOf } from "./dates";
 
 function getPreviousMonth(month: string): string {
   const [yearStr, monthStr] = month.split("-");
@@ -15,7 +16,9 @@ export function getMonthlyTotals(expenses: Expense[]) {
   const totals: Record<string, number> = {};
 
   expenses.forEach((e) => {
-    totals[e.month] = (totals[e.month] || 0) + e.amount;
+    const month = monthKeyOf(e);
+    if (!month) return;
+    totals[month] = (totals[month] || 0) + e.amount;
   });
 
   return totals;

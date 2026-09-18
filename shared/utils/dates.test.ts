@@ -9,6 +9,8 @@ import {
   isValidMonthKey,
   MAX_MONTH_RANGE,
   monthFromDateKey,
+  monthKeyOf,
+  isInMonth,
   monthKeysBetween,
   parseLocalDate,
   shiftMonthKey,
@@ -56,6 +58,18 @@ describe("dates", () => {
   describe("monthFromDateKey", () => {
     it("derives YYYY-MM from a date key", () => {
       expect(monthFromDateKey("2026-08-11")).toBe("2026-08");
+    });
+  });
+
+  describe("monthKeyOf / isInMonth", () => {
+    it("prefers month when present and falls back to the date prefix", () => {
+      expect(monthKeyOf({ month: "2026-08", date: "2026-07-31" })).toBe("2026-08");
+      expect(monthKeyOf({ date: "2026-08-11" })).toBe("2026-08");
+      expect(monthKeyOf({ date: "2026-08-11T18:30:00.000Z" })).toBe("2026-08");
+      expect(isInMonth({ date: "2026-08-11" }, "2026-08")).toBe(true);
+      expect(isInMonth({ month: "2026-07", date: "2026-08-01" }, "2026-08")).toBe(
+        false
+      );
     });
   });
 

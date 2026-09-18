@@ -1,6 +1,7 @@
 import type { Expense } from "../types/expense";
 import type { CategoryBudget } from "../types/expense";
 import { groupByCategory, groupBySubcategory, groupSubcategoriesFor } from "./analytics";
+import { isInMonth } from "./dates";
 
 type FocusLens = {
   id: string;
@@ -69,7 +70,7 @@ export function getBudgetVsActual(
   month: string
 ): BudgetActualRow[] {
   const monthBudgets = budgets.filter((b) => b.month === month);
-  const monthExpenses = expenses.filter((e) => e.month === month);
+  const monthExpenses = expenses.filter((e) => isInMonth(e, month));
 
   return monthBudgets.map((b) => {
     const actual = monthExpenses

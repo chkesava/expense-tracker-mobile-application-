@@ -43,6 +43,28 @@ export function monthFromDateKey(dateKey: string): string {
   return dateKey.slice(0, 7);
 }
 
+/** YYYY-MM for a ledger row: prefer `month`, else the date prefix. */
+export function monthKeyOf(row: {
+  month?: string;
+  date?: string;
+}): string | undefined {
+  if (typeof row.month === "string" && /^\d{4}-\d{2}/.test(row.month)) {
+    return row.month.slice(0, 7);
+  }
+  if (typeof row.date === "string" && row.date.length >= 7) {
+    return row.date.slice(0, 7);
+  }
+  return undefined;
+}
+
+/** True when the row belongs to `monthKey` (YYYY-MM), even if `month` is missing. */
+export function isInMonth(
+  row: { month?: string; date?: string },
+  monthKey: string
+): boolean {
+  return monthKeyOf(row) === monthKey;
+}
+
 /** Shift a YYYY-MM key by a number of calendar months. */
 export function shiftMonthKey(monthKey: string, delta: number): string {
   const [yearStr, monthStr] = monthKey.split("-");

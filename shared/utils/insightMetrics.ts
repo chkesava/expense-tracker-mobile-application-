@@ -1,5 +1,5 @@
 import type { Expense, Income } from "../types/expense";
-import { currentMonthKey } from "./dates";
+import { currentMonthKey, isInMonth, monthKeyOf } from "./dates";
 
 const FIXED_CATEGORIES = [
   "Home",
@@ -44,7 +44,7 @@ export function getPacingMetrics(expenses: Expense[], selectedMonth: string) {
   const { dayOfMonth, totalDays } = getMonthDayProgress(selectedMonth);
 
   // Current month MTD spending
-  const currentMonthExpenses = expenses.filter((e) => e.month === selectedMonth);
+  const currentMonthExpenses = expenses.filter((e) => isInMonth(e, selectedMonth));
   const currentMonthTotal = currentMonthExpenses.reduce((sum, e) => sum + e.amount, 0);
   
   const currentMonthMtdTotal = currentMonthExpenses
@@ -55,15 +55,18 @@ export function getPacingMetrics(expenses: Expense[], selectedMonth: string) {
     .reduce((sum, e) => sum + e.amount, 0);
 
   // Group historic expenses by month (excluding current selectedMonth)
-  const otherMonths = Array.from(new Set(expenses.map((e) => e.month)))
-    .filter((m) => m !== selectedMonth);
+  const otherMonths = Array.from(
+    new Set(
+      expenses.map((e) => monthKeyOf(e)).filter((m): m is string => Boolean(m))
+    )
+  ).filter((m) => m !== selectedMonth);
 
   let totalHistoricMtd = 0;
   let totalHistoricMonth = 0;
   let historicMonthCount = 0;
 
   otherMonths.forEach((m) => {
-    const monthExps = expenses.filter((e) => e.month === m);
+    const monthExps = expenses.filter((e) => isInMonth(e, m));
     const monthTotal = monthExps.reduce((sum, e) => sum + e.amount, 0);
     const monthMtdTotal = monthExps
       .filter((e) => {
@@ -104,11 +107,11 @@ export function getPacingMetrics(expenses: Expense[], selectedMonth: string) {
  */
 export function getCashFlowMetrics(incomes: Income[], expenses: Expense[], selectedMonth: string) {
   const totalIncome = incomes
-    .filter((i) => i.month === selectedMonth)
+    .filter((i) => isInMonth(i, selectedMonth))
     .reduce((sum, i) => sum + i.amount, 0);
 
   const totalExpense = expenses
-    .filter((e) => e.month === selectedMonth)
+    .filter((e) => isInMonth(e, selectedMonth))
     .reduce((sum, e) => sum + e.amount, 0);
 
   const netCashFlow = totalIncome - totalExpense;
@@ -127,7 +130,7 @@ export function getCashFlowMetrics(incomes: Income[], expenses: Expense[], selec
  * vs Discretionary/Variable expenses.
  */
 export function getFixedVsVariableMetrics(expenses: Expense[], selectedMonth: string) {
-  const currentMonthExpenses = expenses.filter((e) => e.month === selectedMonth);
+  const currentMonthExpenses = expenses.filter((e) => isInMonth(e, selectedMonth));
 
   let fixedTotal = 0;
   let variableTotal = 0;
@@ -160,20 +163,29 @@ export function getFixedVsVariableMetrics(expenses: Expense[], selectedMonth: st
  * Also returns the single largest transaction of the month.
  */
 export function getAnomalyMetrics(expenses: Expense[], selectedMonth: string) {
-  const currentMonthExpenses = expenses.filter((e) => e.month === selectedMonth);
+  const currentMonthExpenses = expenses.filter((e) => isInMonth(e, selectedMonth));
 
   // Group historic expenses by category and month
-  const otherMonths = Array.from(new Set(expenses.map((e) => e.month)))
-    .filter((m) => m !== selectedMonth);
+  const otherMonths = Array.from(
+    new Set(
+      expenses.map((e) => monthKeyOf(e)).filter((m): m is string => Boolean(m))
+    )
+  ).filter((m) => m !== selectedMonth);
 
   const categoryHistoricTotals: Record<string, Record<string, number>> = {};
   expenses
-    .filter((e) => otherMonths.includes(e.month))
+    .filter((e) => {
+      const key = monthKeyOf(e);
+      return key != null && otherMonths.includes(key);
+    })
     .forEach((e) => {
+      const key = monthKeyOf(e);
+      if (!key) return;
       if (!categoryHistoricTotals[e.category]) {
         categoryHistoricTotals[e.category] = {};
       }
-      categoryHistoricTotals[e.category][e.month] = (categoryHistoricTotals[e.category][e.month] || 0) + e.amount;
+      categoryHistoricTotals[e.category][key] =
+        (categoryHistoricTotals[e.category][key] || 0) + e.amount;
     });
 
   // Calculate historic category averages

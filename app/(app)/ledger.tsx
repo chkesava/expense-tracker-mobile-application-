@@ -40,7 +40,7 @@ import {
   LEDGER_HUB_TAB_IDS,
   resolveLegacyLedgerTabRoute,
 } from "@/shared/config/navigation";
-import { currentMonthKey } from "@/shared/utils/dates";
+import { currentMonthKey, isInMonth } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
@@ -101,10 +101,7 @@ export default function LedgerScreen() {
   const filteredExpenses = useMemo(() => {
     const q = query.trim().toLowerCase();
     return expenses.filter((e) => {
-      const matchMonth =
-        !activeMonth ||
-        e.month === activeMonth ||
-        (e.date && e.date.startsWith(activeMonth));
+      const matchMonth = !activeMonth || isInMonth(e, activeMonth);
       if (!matchMonth) return false;
       if (!q) return true;
       return (
@@ -120,10 +117,7 @@ export default function LedgerScreen() {
   const filteredIncomes = useMemo(() => {
     const q = query.trim().toLowerCase();
     return incomes.filter((i) => {
-      const matchMonth =
-        !activeMonth ||
-        i.month === activeMonth ||
-        (i.date && i.date.startsWith(activeMonth));
+      const matchMonth = !activeMonth || isInMonth(i, activeMonth);
       if (!matchMonth) return false;
       if (!q) return true;
       return (

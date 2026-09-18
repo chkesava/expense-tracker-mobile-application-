@@ -19,7 +19,7 @@ import {
   generateTransactionsCsv,
   generateTransactionsJson,
 } from "@/shared/utils/csvExport";
-import { currentMonthKey, todayDateKey } from "@/shared/utils/dates";
+import { currentMonthKey, isInMonth, todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { logWarning } from "@/lib/errors";
@@ -79,8 +79,8 @@ export function ExportDataModal({ visible, onClose }: ExportDataModalProps) {
     }
     if (scope === "month") {
       return {
-        expenses: expenses.filter((e) => e.month === currentMonth || e.date?.startsWith(currentMonth)),
-        incomes: incomes.filter((inc) => inc.date?.startsWith(currentMonth)),
+        expenses: expenses.filter((e) => isInMonth(e, currentMonth)),
+        incomes: incomes.filter((inc) => isInMonth(inc, currentMonth)),
       };
     }
     return { expenses, incomes };

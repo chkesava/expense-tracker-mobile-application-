@@ -48,6 +48,7 @@ import { useModals } from "@/providers/ModalProvider";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { groupByCategory } from "@/shared/utils/analytics";
 import { COLORS } from "@/shared/utils/chartColors";
+import { isInMonth } from "@/shared/utils/dates";
 import type { BarChartItem } from "@/components/charts/BarChart";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
@@ -164,10 +165,10 @@ export function YearlyAnalyticsView({ listHeader }: YearlyAnalyticsViewProps) {
     return MONTH_NAMES.map((name, idx) => {
       const monthStr = `${selectedYear}-${String(idx + 1).padStart(2, "0")}`;
       const expSum = yearExpenses
-        .filter((e) => e.month === monthStr || e.date?.startsWith(monthStr))
+        .filter((e) => isInMonth(e, monthStr))
         .reduce((sum, e) => sum + e.amount, 0);
       const incSum = yearIncomes
-        .filter((inc) => inc.date?.startsWith(monthStr))
+        .filter((inc) => isInMonth(inc, monthStr))
         .reduce((sum, inc) => sum + inc.amount, 0);
 
       return {

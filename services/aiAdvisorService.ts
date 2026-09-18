@@ -1,7 +1,7 @@
 import type { Expense, Income } from "@/shared/types/expense";
 import { groupByCategory } from "@/shared/utils/analytics";
 import { answerAdvisorQuery } from "@/shared/utils/advisorQueries";
-import { currentMonthKey } from "@/shared/utils/dates";
+import { currentMonthKey, isInMonth } from "@/shared/utils/dates";
 import { getSmartInsight } from "@/shared/utils/insights";
 import {
   getAnomalies,
@@ -55,10 +55,8 @@ export function buildAdvisorContext(
 ): AdvisorContext {
   const currentMonth = currentMonthKey();
 
-  const monthExpenses = expenses.filter(
-    (e) => e.month === currentMonth || e.date?.startsWith(currentMonth)
-  );
-  const monthIncomes = incomes.filter((inc) => inc.date?.startsWith(currentMonth));
+  const monthExpenses = expenses.filter((e) => isInMonth(e, currentMonth));
+  const monthIncomes = incomes.filter((inc) => isInMonth(inc, currentMonth));
 
   const totalExpenses = monthExpenses.reduce((sum, e) => sum + e.amount, 0);
   const totalIncome = monthIncomes.reduce((sum, inc) => sum + inc.amount, 0);

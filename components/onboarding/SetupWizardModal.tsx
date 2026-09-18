@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { updateProfile } from "firebase/auth";
-import { addDoc, collection, doc, serverTimestamp, setDoc } from "firebase/firestore";
+import { doc, setDoc } from "firebase/firestore";
 import {
   ArrowLeft,
   ArrowRight,
@@ -50,6 +50,12 @@ import { useUserDoc } from "@/providers/UserDocProvider";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
+import { createExpense } from "@/services/ledger/createLedgerTransaction";
+import {
+  currentMonthKey,
+  nowTimeHm,
+  todayDateKey,
+} from "@/shared/utils/dates";
 
 const CURRENCIES = [
   { code: "INR", symbol: "₹", label: "Indian Rupee" },
@@ -98,7 +104,7 @@ export function SetupWizardModal() {
   const { data: userDoc } = useUserDoc();
   const { settings, updateSettings } = useSettings();
   const { settings: systemSettings } = useSystemSettings();
-  const { addAccount, accountTypes } = useAccountsContext();
+  const { addAccount, accountTypes, accounts } = useAccountsContext();
   const { celebrate, celebrateMilestone } = useCelebration();
 
   const [currentStep, setCurrentStep] = useState(0);
@@ -217,15 +223,19 @@ export function SetupWizardModal() {
           accountTypeId,
         });
       } else if (currentStep === 4) {
-        // Save First Expense
         const exp = parseFloat(expenseAmount);
-        if (!isNaN(exp) && exp > 0 && user && db) {
-          await addDoc(collection(db, "users", user.uid, "expenses"), {
+        if (!isNaN(exp) && exp > 0 && user) {
+          const date = todayDateKey(settings.timezone);
+          await createExpense(user.uid, {
             amount: exp,
             category: expenseCategory,
-            description: expenseNote || "First expense",
-            date: new Date().toISOString().split("T")[0],
-            createdAt: serverTimestamp(),
+            subcategory: "Other",
+            date,
+            month: currentMonthKey(settings.timezone),
+            accountId: accounts[0]?.id ?? null,
+            note: expenseNote.trim() || "First expense",
+            tags: [],
+            time: nowTimeHm(settings.timezone),
           });
           celebrateMilestone("milestone_first_expense", {
             title: "First Expense Logged!",

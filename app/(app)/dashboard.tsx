@@ -53,7 +53,7 @@ import {
   type DashboardWidgetId,
 } from "@/shared/utils/dashboardWidgets";
 import { formatDetectedCount } from "@/services/sms/smsReviewInbox";
-import { currentMonthKey, formatDateKey } from "@/shared/utils/dates";
+import { currentMonthKey, formatDateKey, isInMonth } from "@/shared/utils/dates";
 import {
   cashFlowByMonth,
   computeSpendlyBudget,
@@ -140,33 +140,19 @@ export default function DashboardScreen() {
   };
 
   const monthlyExpenses = useMemo(() => {
-    return expenses.filter(
-      (e) =>
-        e.month === activeMonth || (e.date && e.date.startsWith(activeMonth))
-    );
+    return expenses.filter((e) => isInMonth(e, activeMonth));
   }, [expenses, activeMonth]);
 
   const monthlyIncomes = useMemo(() => {
-    return incomes.filter(
-      (i) =>
-        i.month === activeMonth || (i.date && i.date.startsWith(activeMonth))
-    );
+    return incomes.filter((i) => isInMonth(i, activeMonth));
   }, [incomes, activeMonth]);
 
   const previousExpenses = useMemo(() => {
-    return expenses.filter(
-      (e) =>
-        e.month === previousMonth ||
-        (e.date && e.date.startsWith(previousMonth))
-    );
+    return expenses.filter((e) => isInMonth(e, previousMonth));
   }, [expenses, previousMonth]);
 
   const previousIncomes = useMemo(() => {
-    return incomes.filter(
-      (i) =>
-        i.month === previousMonth ||
-        (i.date && i.date.startsWith(previousMonth))
-    );
+    return incomes.filter((i) => isInMonth(i, previousMonth));
   }, [incomes, previousMonth]);
 
   const monthlySpent = useMemo(() => {
