@@ -72,4 +72,6 @@ export interface Split {
    * Firestore rules read it). Absent means on.
    */
   claimsEnabled?: boolean;
+  /** Soft-delete (SPENDLY-39). Live splits omit this; bank credits stay posted. */
+  deletedAt?: string;
 }

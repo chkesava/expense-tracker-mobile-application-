@@ -2,9 +2,11 @@ import { useEffect, useState } from "react";
 import {
   collection,
   doc,
+  getDoc,
   onSnapshot,
   query,
   deleteDoc,
+  deleteField,
   serverTimestamp,
   updateDoc,
   where,
@@ -51,11 +53,16 @@ import {
   buildParticipantShareRequests,
   buildPaymentRequestSyncPatches,
   buildSpendGiftWrites,
+  buildSplitReversalEntry,
   buildUnmarkCollectedWrites,
+  entriesNeedingReversal,
   linkedLedgerIds,
+  nextCollectedEntryDocId,
+  reversalEntryDocId,
   toFirestoreParticipant,
   withParticipantKeys,
   type CreateSplitInput,
+  type SplitLedgerEntry,
 } from "@/shared/utils/splitLedger";
 import { buildSplitPublicSharePayloadFromSplit } from "@/shared/utils/splitPublicShare";
 import {
@@ -69,6 +76,56 @@ import {
   recalibrateSplitAfterOptOut,
 } from "@/shared/utils/splitMath";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
+import { isActiveLedgerRow } from "@/shared/utils/ledgerRow";
+
+async function loadSplitLedgerEntries(
+  db: Firestore,
+  uid: string,
+  ids: string[]
+): Promise<SplitLedgerEntry[]> {
+  const unique = [...new Set(ids.filter(Boolean))];
+  if (unique.length === 0) return [];
+  const snaps = await Promise.all(
+    unique.map((id) => getDoc(doc(db, "users", uid, "accountEntries", id)))
+  );
+  const rows: SplitLedgerEntry[] = [];
+  for (const snap of snaps) {
+    if (!snap.exists()) continue;
+    const data = snap.data();
+    rows.push({
+      id: snap.id,
+      accountId: String(data.accountId || ""),
+      amount: Number(data.amount) || 0,
+      direction: data.direction === "debit" ? "debit" : "credit",
+      linkedSplitId:
+        typeof data.linkedSplitId === "string" ? data.linkedSplitId : undefined,
+      source: typeof data.source === "string" ? data.source : undefined,
+      reversalOf:
+        typeof data.reversalOf === "string" ? data.reversalOf : undefined,
+    });
+  }
+  return rows;
+}
+
+async function queueSplitReversals(
+  batch: WriteBatch,
+  db: Firestore,
+  uid: string,
+  originalIds: string[],
+  dateKey: string,
+  note: string
+): Promise<void> {
+  const lookupIds = originalIds.flatMap((id) => [id, reversalEntryDocId(id)]);
+  const existing = await loadSplitLedgerEntries(db, uid, lookupIds);
+  const originals = existing.filter((row) => originalIds.includes(row.id));
+  for (const original of entriesNeedingReversal(originals, existing)) {
+    const reversal = buildSplitReversalEntry({ original, dateKey, note });
+    batch.set(doc(db, "users", uid, "accountEntries", reversal.id), {
+      ...reversal.entry,
+      createdAt: serverTimestamp(),
+    });
+  }
+}
 
 function applyShareSideEffects(
   batch: WriteBatch,
@@ -192,7 +249,8 @@ export function useSplits(options?: { enabled?: boolean }) {
       if (!creatorReady || !participantReady) return;
       const byId = new Map<string, Split>();
       for (const split of [...creatorRows, ...participantRows]) {
-        if (split.id) byId.set(split.id, split);
+        if (!split.id || !isActiveLedgerRow(split)) continue;
+        byId.set(split.id, split);
       }
       const list = [...byId.values()];
       list.sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
@@ -594,12 +652,13 @@ export function useSplits(options?: { enabled?: boolean }) {
       return false;
     }
 
-    const entryRef = doc(collection(db, "users", uid, "accountEntries"));
+    const entryId = nextCollectedEntryDocId(split, participantKey);
+    const entryRef = doc(db, "users", uid, "accountEntries", entryId);
     const built = buildMarkCollectedWrites({
       split,
       participantKey,
       accountId,
-      entryId: entryRef.id,
+      entryId,
       dateKey: todayDateKey(),
     });
     if ("error" in built) {
@@ -651,9 +710,14 @@ export function useSplits(options?: { enabled?: boolean }) {
 
     try {
       const batch = writeBatch(db);
-      for (const entryId of built.entryIdsToDelete) {
-        batch.delete(doc(db, "users", uid, "accountEntries", entryId));
-      }
+      await queueSplitReversals(
+        batch,
+        db,
+        uid,
+        built.entryIdsToReverse,
+        todayDateKey(),
+        `Undo collection — ${split.title}`
+      );
       applyShareSideEffects(
         batch,
         db,
@@ -1155,14 +1219,24 @@ export function useSplits(options?: { enabled?: boolean }) {
     try {
       const batch = writeBatch(db);
       const linked = linkedLedgerIds(split);
-      for (const entryId of linked.entryIds) {
-        batch.delete(doc(db, "users", uid, "accountEntries", entryId));
-      }
+      await queueSplitReversals(
+        batch,
+        db,
+        uid,
+        linked.entryIds,
+        todayDateKey(),
+        `Split deleted — ${split.title}`
+      );
+      const deletedAt = new Date().toISOString();
       for (const expenseId of linked.expenseIds) {
-        batch.delete(doc(db, "users", uid, "expenses", expenseId));
+        batch.update(doc(db, "users", uid, "expenses", expenseId), {
+          deletedAt,
+        });
       }
       for (const requestId of linked.paymentRequestIds) {
-        batch.delete(doc(db, "paymentRequests", requestId));
+        batch.update(doc(db, "paymentRequests", requestId), {
+          status: "cancelled",
+        });
       }
       if (linked.publicShareId) {
         batch.delete(doc(db, "splitPublicShares", linked.publicShareId));
@@ -1172,7 +1246,11 @@ export function useSplits(options?: { enabled?: boolean }) {
       for (const claimDocId of splitClaimDocIdsForSplit(split)) {
         batch.delete(doc(db, "splitShareClaims", claimDocId));
       }
-      batch.delete(doc(db, "splits", id));
+      batch.update(doc(db, "splits", id), {
+        deletedAt,
+        publicShareId: deleteField(),
+        publicSlug: deleteField(),
+      });
       const outcome = await commitWrite(() => batch.commit(), {
         label: "split deletion",
       });

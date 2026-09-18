@@ -189,7 +189,10 @@ export function isCashbackPayment(
   return payment.sourceType === "cashback";
 }
 
-export type AccountEntrySource = "split_collection" | "split_spend";
+export type AccountEntrySource =
+  | "split_collection"
+  | "split_spend"
+  | "split_reversal";
 
 /** Manual account adjustment entry for non-credit account tracking */
 export interface AccountEntry {
@@ -203,6 +206,8 @@ export interface AccountEntry {
   /** Present when this entry was posted by a collect-mode split. */
   linkedSplitId?: string;
   source?: AccountEntrySource;
+  /** Set on `split_reversal` rows that undo a collection or gift pass-through. */
+  reversalOf?: string;
   /**
    * Shared with the Investment Cash row for a Demat ↔ bank transfer (SPENDLY-29).
    * Lets a reconciler pair both ledgers without deleting an orphan side.

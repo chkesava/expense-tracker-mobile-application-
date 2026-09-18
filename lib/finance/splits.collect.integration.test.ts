@@ -6,6 +6,7 @@ import {
   buildCreateSplitPayload,
   buildMarkCollectedWrites,
   buildSpendGiftWrites,
+  buildSplitReversalEntry,
 } from "@/shared/utils/splitLedger";
 import { computeCollectSpendBreakdown } from "@/shared/utils/splitMath";
 
@@ -137,5 +138,51 @@ describe("collect-then-spend ledger vs bank balance", () => {
     expect(expenses).toHaveLength(1);
     expect(expenses[0].amount).toBe(1000);
     expect(computeBankBalance(hdfc, expenses, [], [], entries)).toBe(9000);
+  });
+
+  it("nets a collection reversal so deleting a settled pot does not drop the bank balance", () => {
+    const marked = buildMarkCollectedWrites({
+      split: {
+        id: "s1",
+        title: "Wedding gift",
+        totalAmount: 2000,
+        splitType: "equal",
+        createdBy: "user-me",
+        createdAt: 1,
+        settled: false,
+        participantIds: ["user-me"],
+        kind: "collect",
+        status: "collecting",
+        participants: [
+          { key: "you", name: "You", amount: 1000, paid: true, isCurrentUser: true },
+          { key: "a", name: "A", amount: 1000, paid: false, isCurrentUser: false },
+        ],
+      },
+      participantKey: "a",
+      accountId: "hdfc",
+      entryId: "e-a",
+      dateKey: "2026-08-10",
+    });
+    if ("error" in marked) throw new Error(marked.error);
+    const credit = asEntry(marked.entry, "e-a");
+    expect(computeBankBalance(hdfc, [], [], [], [credit])).toBe(11000);
+
+    const reversal = buildSplitReversalEntry({
+      original: {
+        id: "e-a",
+        accountId: "hdfc",
+        amount: 1000,
+        direction: "credit",
+        linkedSplitId: "s1",
+        source: "split_collection",
+      },
+      dateKey: "2026-08-21",
+    });
+    expect(
+      computeBankBalance(hdfc, [], [], [], [
+        credit,
+        asEntry(reversal.entry, reversal.id),
+      ])
+    ).toBe(10000);
   });
 });
