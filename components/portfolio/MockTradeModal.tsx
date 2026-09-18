@@ -6,7 +6,7 @@ import { Amount } from '@/components/common/Amount';
 import { useTheme } from '@/theme/ThemeProvider';
 import { themeUsesDarkPalette } from '@/theme/tokens';
 import { X } from 'lucide-react-native';
-import type { Holding, HoldingWithMetrics } from '@/shared/features/portfolio/types';
+import type { HoldingWithMetrics } from '@/shared/features/portfolio/types';
 import { canAfford } from '@/shared/features/portfolio/utils/investmentCash';
 
 interface MockTradeModalProps {
@@ -15,13 +15,12 @@ interface MockTradeModalProps {
   onClose: () => void;
   onBuy: (holdingId: string, qty: number, price: number, fees: number) => Promise<boolean>;
   onSell: (holdingId: string, qty: number, price: number, fees: number) => Promise<boolean>;
-  onPlaceLimitBuy: (holding: Holding, qty: number, targetPrice: number) => Promise<boolean>;
   cashBalance: number;
   currency: string;
   initialTradeType?: "BUY" | "SELL";
 }
 
-export function MockTradeModal({ visible, holding, onClose, onBuy, onSell, onPlaceLimitBuy, cashBalance, currency, initialTradeType = "BUY" }: MockTradeModalProps) {
+export function MockTradeModal({ visible, holding, onClose, onBuy, onSell, cashBalance, currency, initialTradeType = "BUY" }: MockTradeModalProps) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
 
@@ -29,7 +28,6 @@ export function MockTradeModal({ visible, holding, onClose, onBuy, onSell, onPla
   const [quantity, setQuantity] = useState('');
   const [price, setPrice] = useState('');
   const [fees, setFees] = useState('0');
-  const [orderType, setOrderType] = useState<'MARKET' | 'LIMIT'>('MARKET');
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -40,7 +38,6 @@ export function MockTradeModal({ visible, holding, onClose, onBuy, onSell, onPla
       setPrice(holding.currentPrice.toString());
       setQuantity('');
       setFees('0');
-      setOrderType('MARKET');
       setError('');
     }
   }, [holding, visible, initialTradeType]);
@@ -74,14 +71,12 @@ export function MockTradeModal({ visible, holding, onClose, onBuy, onSell, onPla
       setLoading(true);
       let success = false;
       if (tradeType === 'BUY') {
-        if (orderType === 'MARKET' && !canAfford(cashBalance, totalAmount).ok) {
+        if (!canAfford(cashBalance, totalAmount).ok) {
           setError('Insufficient cash balance');
           setLoading(false);
           return;
         }
-        success = orderType === 'LIMIT'
-          ? await onPlaceLimitBuy(holding, numQty, numPrice)
-          : await onBuy(holding.id, numQty, numPrice, numFees);
+        success = await onBuy(holding.id, numQty, numPrice, numFees);
       } else {
         if (numQty > holding.quantity) {
           setError('Insufficient holdings quantity');
@@ -179,27 +174,9 @@ export function MockTradeModal({ visible, holding, onClose, onBuy, onSell, onPla
               </View>
 
               <View style={styles.row}>
-                <View style={{ flex: 1, marginRight: 8 }}>
-                  <Text style={[styles.fieldLabel, subTextStyle]}>Order Type</Text>
-                  <View style={styles.orderTypeRow}>
-                    {(['MARKET', 'LIMIT'] as const).map((type) => {
-                      const active = orderType === type;
-                      return (
-                        <TouchableOpacity
-                          key={type}
-                          disabled={tradeType === 'SELL'}
-                          onPress={() => setOrderType(type)}
-                          style={[styles.orderTypeButton, active ? activeBg : unselectedBg, tradeType === 'SELL' && { opacity: 0.5 }]}
-                        >
-                          <Text style={[styles.orderTypeText, active ? { color: '#fff' } : textStyle]}>{type}</Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                </View>
-                <View style={{ flex: 1, marginLeft: 8 }}>
+                <View style={{ flex: 1 }}>
                   <Input
-                    label={orderType === 'LIMIT' && tradeType === 'BUY' ? "Fees (on execution)" : "Fees (Optional)"}
+                    label="Fees (Optional)"
                     placeholder="0.00"
                     value={fees}
                     onChangeText={setFees}
@@ -233,7 +210,7 @@ export function MockTradeModal({ visible, holding, onClose, onBuy, onSell, onPla
                 style={[styles.submitBtn, activeBg]}
               >
                 <Text style={{ color: '#fff', fontWeight: '700' }}>
-                  {tradeType === 'BUY' ? (orderType === 'LIMIT' ? `Place limit buy` : `Buy ${holding.symbol}`) : `Sell ${holding.symbol}`}
+                  {tradeType === 'BUY' ? `Buy ${holding.symbol}` : `Sell ${holding.symbol}`}
                 </Text>
               </Button>
 
@@ -315,26 +292,6 @@ const styles = StyleSheet.create({
   infoValue: {
     fontSize: 14,
     fontWeight: '600',
-  },
-  fieldLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    marginBottom: 6,
-  },
-  orderTypeRow: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  orderTypeButton: {
-    flex: 1,
-    alignItems: 'center',
-    borderRadius: 10,
-    minHeight: 48,
-    justifyContent: 'center',
-  },
-  orderTypeText: {
-    fontSize: 11,
-    fontWeight: '700',
   },
   row: {
     flexDirection: 'row',

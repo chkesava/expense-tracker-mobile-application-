@@ -19,7 +19,6 @@ import {
   serverTimestamp,
   setDoc,
   updateDoc,
-  writeBatch,
 } from "firebase/firestore";
 
 import { getFirestoreDb } from "@/lib/firebase";
@@ -30,10 +29,11 @@ import { useAuth } from "@/providers/AuthProvider";
 import {
   INVESTMENT_CASH_COLLECTION,
   createHoldingWithCash,
+  deleteHoldingWithOptionalRefund,
   ensureCashBaseline,
   executeMockBuy as commitMockBuy,
   executeMockSell as commitMockSell,
-  reverseInvestmentCashEntry,
+  overwriteHoldingsPreservingIds,
 } from "@/services/portfolio/investmentCash";
 import { usePortfolioMutations } from "@/hooks/usePortfolioMutations";
 import { scheduleIdleWork } from "@/shared/utils/scheduleIdle";
@@ -41,6 +41,7 @@ import {
   availableInvestmentCash,
   computeInvestmentCashBalance,
   holdingPurchaseAmount,
+  netHoldingCashOutlay,
 } from "@/shared/features/portfolio/utils/investmentCash";
 import type { HoldingFundingSource } from "@/shared/features/portfolio/schemas";
 import type {
@@ -286,10 +287,15 @@ function usePortfolioState(options?: {
 
   const updateHolding = useCallback(async (id: string, updates: Partial<CreateHoldingInput>) => {
     if (!user || !db) return false;
+    const { quantity: _quantity, averageBuyPrice: _averageBuyPrice, ...safe } = updates;
+    if (Object.keys(safe).length === 0) {
+      toast.error("Quantity and average price can only change through a trade");
+      return false;
+    }
     try {
       await updateDoc(
         doc(db, "users", user.uid, "holdings", id),
-        stripUndefined({ ...updates, updatedAt: serverTimestamp() })
+        stripUndefined({ ...safe, updatedAt: serverTimestamp() })
       );
       return true;
     } catch (error) {
@@ -300,12 +306,11 @@ function usePortfolioState(options?: {
   }, [db, user]);
 
   /**
-   * Removes a holding, optionally returning the cash its purchase consumed.
+   * Removes a holding, optionally returning the cash still tied to it.
    *
-   * The refund is opt-in and writes a new REVERSAL entry rather than deleting the
-   * original PURCHASE, so history keeps showing that the money was spent and then
-   * came back. Deleting a holding must never silently restore cash — that is the
-   * behaviour KAN-77 exists to prevent.
+   * Refund + delete are one batch. The refund is net purchases minus sales
+   * minus reversals, and opt-in: removing a holding must never silently put
+   * spent money back on the balance (KAN-77 / SPENDLY-37).
    */
   const deleteHolding = useCallback(async (
     id: string,
@@ -313,20 +318,19 @@ function usePortfolioState(options?: {
   ) => {
     if (!user || !db) return false;
     try {
-      if (options?.refundCash) {
-        const purchase = cashEntries.find(
-          (entry) => entry.type === "PURCHASE" && entry.holdingId === id
-        );
-        if (purchase) {
-          await reverseInvestmentCashEntry(user.uid, purchase, {
-            date: todayKey(),
-            reason: `Refund for removing ${purchase.symbol ?? "a holding"}`,
-          });
-        }
-      }
-      await deleteDoc(doc(db, "users", user.uid, "holdings", id));
+      const holding = holdings.find((item) => item.id === id);
+      const result = await deleteHoldingWithOptionalRefund(user.uid, {
+        holdingId: id,
+        refundCash: options?.refundCash,
+        date: todayKey(),
+        symbol: holding?.symbol,
+        cashEntries,
+      });
       toast.success(
-        options?.refundCash ? "Holding removed and cash returned" : "Holding removed"
+        writeSavedMessage(
+          result.outcome,
+          result.refunded > 0 ? "Holding removed and cash returned" : "Holding removed"
+        )
       );
       return true;
     } catch (error) {
@@ -334,36 +338,44 @@ function usePortfolioState(options?: {
       toast.error(friendlyErrorMessage(error, "Failed to remove holding"));
       return false;
     }
-  }, [db, user, cashEntries]);
+  }, [cashEntries, db, holdings, user]);
 
-  /** The purchase entry a holding's cash came from, if it was funded in-app. */
+  /** Outstanding cash still tied to a holding, if it was funded in-app. */
   const findHoldingPurchase = useCallback(
-    (holdingId: string) =>
-      cashEntries.find(
+    (holdingId: string) => {
+      const amount = netHoldingCashOutlay(cashEntries, holdingId);
+      if (!(amount > 0)) return null;
+      const purchase = cashEntries.find(
         (entry) => entry.type === "PURCHASE" && entry.holdingId === holdingId
-      ) ?? null,
+      );
+      return {
+        id: purchase?.id ?? holdingId,
+        amount,
+        symbol: purchase?.symbol,
+        type: "PURCHASE" as const,
+        holdingId,
+      };
+    },
     [cashEntries]
   );
 
   const overwriteHoldings = useCallback(async (nextHoldings: CreateHoldingInput[]) => {
     if (!user || !db) return false;
     try {
-      const batch = writeBatch(db);
-      holdings.forEach((holding) => batch.delete(doc(db, "users", user.uid, "holdings", holding.id)));
-      nextHoldings.forEach((holding) => {
-        batch.set(
-          doc(collection(db, "users", user.uid, "holdings")),
-          stripUndefined({ ...holding, createdAt: serverTimestamp(), updatedAt: serverTimestamp() })
-        );
+      await overwriteHoldingsPreservingIds(user.uid, {
+        existing: holdings,
+        nextHoldings,
+        cashEntries,
+        date: todayKey(),
       });
-      await batch.commit();
+      toast.success("Holdings imported");
       return true;
     } catch (error) {
       logError("portfolio.importHoldings", error);
       toast.error("Failed to import CSV");
       return false;
     }
-  }, [db, holdings, user]);
+  }, [cashEntries, db, holdings, user]);
 
   const addToWatchlist = useCallback(async (item: Omit<WatchlistItem, "id" | "createdAt">) => {
     if (!user || !db) return false;
@@ -508,32 +520,6 @@ function usePortfolioState(options?: {
     }
   }, [db, user]);
 
-  const placeLimitBuyOrder = useCallback(async (holding: Holding, quantity: number, targetPrice: number) => {
-    if (!user || !db || !(quantity > 0) || !(targetPrice > 0)) return false;
-    try {
-      await setDoc(doc(collection(db, "users", user.uid, "portfolioOrders")), {
-        holdingId: holding.id,
-        symbol: holding.symbol,
-        yahooSymbol: holding.yahooSymbol,
-        name: holding.name,
-        exchange: holding.exchange,
-        instrumentType: holding.instrumentType,
-        type: "BUY",
-        orderType: "LIMIT",
-        quantity,
-        targetPrice,
-        status: "pending",
-        createdAt: serverTimestamp(),
-      });
-      toast.success("Limit buy order placed");
-      return true;
-    } catch (error) {
-      logError("portfolio.placeLimitOrder", error);
-      toast.error("Failed to place limit order");
-      return false;
-    }
-  }, [db, user]);
-
   const cancelOrder = useCallback(async (id: string) => {
     if (!user || !db) return false;
     try {
@@ -576,7 +562,6 @@ function usePortfolioState(options?: {
     saveDailySnapshot,
     executeMockBuy,
     executeMockSell,
-    placeLimitBuyOrder,
     cancelOrder,
     depositCash,
     withdrawCash,

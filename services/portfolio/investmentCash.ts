@@ -37,7 +37,9 @@ import {
   canAfford,
   availableInvestmentCash,
   computeInvestmentCashBalance,
+  netHoldingCashOutlay,
 } from "@/shared/features/portfolio/utils/investmentCash";
+import { planHoldingOverwrite } from "@/shared/features/portfolio/utils/holdingsOverwrite";
 import type {
   Holding,
   InvestmentCashBaseline,
@@ -432,7 +434,9 @@ export async function recordInvestmentCashAdjustment(
  */
 export async function reverseInvestmentCashEntry(
   uid: string,
-  original: Pick<InvestmentCashEntry, "id" | "amount" | "direction" | "symbol">,
+  original: Pick<InvestmentCashEntry, "id" | "amount" | "direction" | "symbol"> & {
+    holdingId?: string;
+  },
   options: { date: string; reason?: string; entryId?: string }
 ): Promise<InvestmentCashWriteResult> {
   return recordInvestmentCashEntry(
@@ -442,12 +446,169 @@ export async function reverseInvestmentCashEntry(
       amount: original.amount,
       direction: original.direction === "debit" ? "credit" : "debit",
       date: options.date,
+      holdingId: original.holdingId,
       symbol: original.symbol,
       reversesId: original.id,
       note: options.reason ?? "Reversal of an earlier cash movement",
     },
     options.entryId ?? newId()
   );
+}
+
+export type DeleteHoldingInput = {
+  holdingId: string;
+  refundCash?: boolean;
+  date: string;
+  symbol?: string;
+  cashEntries: InvestmentCashEntry[];
+  /** Reused across retries so a second submit cannot credit twice. */
+  entryId?: string;
+};
+
+/**
+ * Removes a holding and, when asked, the outstanding cash it still holds — in
+ * one batch (SPENDLY-37). A refund that commits without the delete used to
+ * leave both the cash and the position. The amount is net purchases minus sales
+ * minus reversals, not the first PURCHASE in snapshot order.
+ */
+export async function deleteHoldingWithOptionalRefund(
+  uid: string,
+  input: DeleteHoldingInput
+): Promise<{ outcome: WriteOutcome; refunded: number; entryId: string | null }> {
+  const db = requireDb();
+  const owner = requireUid(uid);
+  const holdingId = input.holdingId.trim();
+  if (!holdingId) throw new Error("A holding is required");
+
+  const refunded = input.refundCash
+    ? netHoldingCashOutlay(input.cashEntries, holdingId)
+    : 0;
+  const firstPurchase = input.cashEntries.find(
+    (entry) => entry.type === "PURCHASE" && entry.holdingId === holdingId
+  );
+  const entryId = refunded > 0 ? input.entryId ?? `rev_hold_${holdingId}` : null;
+  const singleLot =
+    firstPurchase && roundMoney(Math.abs(Number(firstPurchase.amount) || 0)) === refunded;
+
+  const outcome = await commitWrite(() => {
+    const batch = writeBatch(db);
+    if (entryId) {
+      batch.set(
+        doc(db, "users", owner, INVESTMENT_CASH_COLLECTION, entryId),
+        buildEntryDoc(
+          {
+            type: "REVERSAL",
+            amount: refunded,
+            direction: "credit",
+            date: input.date,
+            holdingId,
+            symbol: input.symbol ?? firstPurchase?.symbol,
+            reversesId: singleLot ? firstPurchase?.id : undefined,
+            note: `Refund for removing ${input.symbol ?? firstPurchase?.symbol ?? "a holding"}`,
+            source: "app",
+          },
+          entryId
+        )
+      );
+      batch.set(
+        doc(db, "users", owner, "portfolioSettings", SETTINGS_DOC_ID),
+        { cashBalance: increment(refunded), updatedAt: serverTimestamp() },
+        { merge: true }
+      );
+    }
+    batch.delete(doc(db, "users", owner, "holdings", holdingId));
+    return batch.commit();
+  }, { label: "holding delete" });
+
+  return { outcome, refunded, entryId };
+}
+
+export type OverwriteHoldingsInput = {
+  existing: Holding[];
+  nextHoldings: CreateHoldingInput[];
+  cashEntries: InvestmentCashEntry[];
+  date: string;
+};
+
+/**
+ * Replaces the holdings list while keeping ids when the symbol already exists.
+ *
+ * CSV import used to delete every doc and recreate them with new auto-ids,
+ * which orphaned PURCHASE rows. Matched symbols update in place. Cost-basis
+ * ADJUSTMENT rows fire only for holdings that already have in-app cash.
+ */
+export async function overwriteHoldingsPreservingIds(
+  uid: string,
+  input: OverwriteHoldingsInput
+): Promise<{ outcome: WriteOutcome }> {
+  const db = requireDb();
+  const owner = requireUid(uid);
+  const plan = planHoldingOverwrite(input.existing, input.nextHoldings, input.cashEntries);
+
+  const outcome = await commitWrite(() => {
+    const batch = writeBatch(db);
+    let cacheDelta = 0;
+
+    for (const id of plan.deleteIds) {
+      batch.delete(doc(db, "users", owner, "holdings", id));
+    }
+
+    for (const row of plan.update) {
+      batch.set(
+        doc(db, "users", owner, "holdings", row.id),
+        stripUndefined({
+          ...row.holding,
+          updatedAt: serverTimestamp(),
+        }),
+        { merge: true }
+      );
+      if (!row.adjustCash || !(Math.abs(row.costDelta) > 0)) continue;
+      const amount = roundMoney(Math.abs(row.costDelta));
+      const direction = row.costDelta > 0 ? "debit" : "credit";
+      const adjId = `csv_adj_${row.id}`;
+      batch.set(
+        doc(db, "users", owner, INVESTMENT_CASH_COLLECTION, adjId),
+        buildEntryDoc(
+          {
+            type: "ADJUSTMENT",
+            amount,
+            direction,
+            date: input.date,
+            holdingId: row.id,
+            symbol: row.holding.symbol,
+            reason: `CSV import updated ${row.holding.symbol} position`,
+            source: "csv_import",
+          },
+          adjId
+        )
+      );
+      cacheDelta += direction === "credit" ? amount : -amount;
+    }
+
+    for (const holding of plan.create) {
+      const holdingId = newId();
+      batch.set(
+        doc(db, "users", owner, "holdings", holdingId),
+        stripUndefined({
+          ...holding,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        })
+      );
+    }
+
+    if (cacheDelta !== 0) {
+      batch.set(
+        doc(db, "users", owner, "portfolioSettings", SETTINGS_DOC_ID),
+        { cashBalance: increment(cacheDelta), updatedAt: serverTimestamp() },
+        { merge: true }
+      );
+    }
+
+    return batch.commit();
+  }, { label: "holdings import" });
+
+  return { outcome };
 }
 
 export type MockTradeInput = {

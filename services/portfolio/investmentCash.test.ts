@@ -54,7 +54,9 @@ import { getDocs, setDoc, writeBatch } from "firebase/firestore";
 
 import {
   createHoldingWithCash,
+  deleteHoldingWithOptionalRefund,
   ensureCashBaseline,
+  overwriteHoldingsPreservingIds,
   readAvailableInvestmentCash,
   recordInvestmentCashAdjustment,
   recordInvestmentCashEntry,
@@ -63,6 +65,7 @@ import {
 } from "./investmentCash";
 
 let writes: Write[] = [];
+let deletes: string[] = [];
 let commits = 0;
 
 function installBatchRecorder() {
@@ -71,6 +74,9 @@ function installBatchRecorder() {
       ({
         set: (ref: FakeRef, data: Record<string, unknown>, options?: { merge?: boolean }) => {
           writes.push({ path: ref.path, data, merge: options?.merge === true });
+        },
+        delete: (ref: FakeRef) => {
+          deletes.push(ref.path);
         },
         commit: async () => {
           commits += 1;
@@ -95,6 +101,7 @@ function pathsUnder(collectionName: string) {
 
 beforeEach(() => {
   writes = [];
+  deletes = [];
   commits = 0;
   idCounter = 0;
   settingsData = null;
@@ -491,6 +498,134 @@ describe("reverseInvestmentCashEntry", () => {
       reversesId: "purchase-1",
     });
     expect(writes.some((w) => w.path.endsWith("/purchase-1"))).toBe(false);
+  });
+});
+
+describe("deleteHoldingWithOptionalRefund", () => {
+  const purchase = {
+    id: "p1",
+    type: "PURCHASE" as const,
+    amount: 10000,
+    direction: "debit" as const,
+    date: "2026-09-01",
+    holdingId: "h1",
+    symbol: "INFY",
+    correlationId: "p1",
+    source: "app" as const,
+    createdAtMs: 1,
+  };
+  const secondBuy = { ...purchase, id: "p2", correlationId: "p2", amount: 5000, createdAtMs: 2 };
+  const sale = {
+    ...purchase,
+    id: "s1",
+    correlationId: "s1",
+    type: "SALE" as const,
+    amount: 4000,
+    direction: "credit" as const,
+    createdAtMs: 3,
+  };
+
+  it("refunds and deletes in the same batch using net outstanding cash", async () => {
+    const result = await deleteHoldingWithOptionalRefund("u1", {
+      holdingId: "h1",
+      refundCash: true,
+      date: "2026-09-18",
+      symbol: "INFY",
+      cashEntries: [purchase, secondBuy, sale],
+    });
+
+    expect(commits).toBe(1);
+    expect(result.refunded).toBe(11000);
+    expect(result.entryId).toBe("rev_hold_h1");
+    expect(deletes).toEqual(["users/u1/holdings/h1"]);
+
+    const reversal = pathsUnder("investmentCashTransactions")[0];
+    expect(reversal.data).toMatchObject({
+      type: "REVERSAL",
+      direction: "credit",
+      amount: 11000,
+      holdingId: "h1",
+    });
+    const settingsWrite = writes.find((w) => w.path.includes("/portfolioSettings/"));
+    expect(settingsWrite?.data.cashBalance).toEqual({ __increment: 11000 });
+  });
+
+  it("deletes without touching cash when refund is off", async () => {
+    const result = await deleteHoldingWithOptionalRefund("u1", {
+      holdingId: "h1",
+      refundCash: false,
+      date: "2026-09-18",
+      cashEntries: [purchase],
+    });
+
+    expect(result.refunded).toBe(0);
+    expect(result.entryId).toBeNull();
+    expect(pathsUnder("investmentCashTransactions")).toHaveLength(0);
+    expect(deletes).toEqual(["users/u1/holdings/h1"]);
+  });
+});
+
+describe("overwriteHoldingsPreservingIds", () => {
+  const existing = {
+    id: "h1",
+    symbol: "INFY",
+    yahooSymbol: "INFY.NS",
+    name: "Infosys",
+    exchange: "NSE" as const,
+    instrumentType: "stock" as const,
+    quantity: 12,
+    averageBuyPrice: 500,
+  };
+
+  it("updates the existing id instead of deleting and recreating it", async () => {
+    const { id: _id, ...fields } = existing;
+    await overwriteHoldingsPreservingIds("u1", {
+      existing: [existing],
+      nextHoldings: [{ ...fields, quantity: 12 }],
+      cashEntries: [],
+      date: "2026-09-18",
+    });
+
+    expect(deletes).toEqual([]);
+    const holdingWrite = writes.find((w) => w.path === "users/u1/holdings/h1");
+    expect(holdingWrite?.merge).toBe(true);
+    expect(holdingWrite?.data).toMatchObject({ quantity: 12, symbol: "INFY" });
+    expect(pathsUnder("investmentCashTransactions")).toHaveLength(0);
+  });
+
+  it("writes one ADJUSTMENT when a funded holding's cost basis changes", async () => {
+    const { id: _id, ...fields } = existing;
+    await overwriteHoldingsPreservingIds("u1", {
+      existing: [existing],
+      nextHoldings: [{ ...fields, quantity: 14 }],
+      cashEntries: [
+        {
+          id: "p1",
+          type: "PURCHASE",
+          amount: 6000,
+          direction: "debit",
+          date: "2026-09-01",
+          holdingId: "h1",
+          symbol: "INFY",
+          correlationId: "p1",
+          source: "app",
+          createdAtMs: 1,
+        },
+      ],
+      date: "2026-09-18",
+    });
+
+    const adj = pathsUnder("investmentCashTransactions")[0];
+    expect(adj.path).toBe("users/u1/investmentCashTransactions/csv_adj_h1");
+    expect(adj.data).toMatchObject({
+      type: "ADJUSTMENT",
+      amount: 1000,
+      direction: "debit",
+      holdingId: "h1",
+      source: "csv_import",
+    });
+    const settingsWrite = writes.find((w) => w.path.includes("/portfolioSettings/"));
+    expect(settingsWrite?.data.cashBalance).toEqual({ __increment: -1000 });
   });
 });
 
