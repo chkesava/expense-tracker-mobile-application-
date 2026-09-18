@@ -184,6 +184,12 @@ Paste this on the ticket when code is on `main`. Delete rows that do not apply.
 Leftovers (see docs/AFTER_MERGE_CHECKLIST.md):
 
 - [ ] GitHub → Actions → Deploy Web (Netlify) → Run workflow on main
+      (nutrition-ai needs GEMINI_API_KEY on the Netlify site; the workflow
+      copies GitHub GEMINI_API_KEY or the old EXPO_PUBLIC_GEMINI_API_KEY)
+- [ ] GitHub → Actions → Release — Nutrition → Run workflow on main
+      (Spendly/Ganesh APKs no longer need the Gemini key)
+- [ ] Rotate the Gemini key in Google Cloud once the proxy is live, then
+      delete EXPO_PUBLIC_GEMINI_API_KEY from GitHub secrets / MOBILE_ENV_FILE
 - [ ] GitHub → Actions → Release — Expense → Run workflow on main
       (also Nutrition / Ganesh if the change is shared Firebase)
 - [ ] GitHub → Actions → Deploy Firestore rules → Run workflow on main
