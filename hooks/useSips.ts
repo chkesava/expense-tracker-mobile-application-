@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   collection,
   doc,
@@ -10,56 +10,20 @@ import {
   getDocs,
   writeBatch,
 } from "firebase/firestore";
-import { logError } from "@/lib/errors";
+import { logError, friendlyErrorMessage } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
 import { useAuth } from "@/providers/AuthProvider";
 import { toast } from "@/lib/toast";
 import { scheduleIdleWork } from "@/shared/utils/scheduleIdle";
-import { fetchMarketQuote } from "@/services/marketDataService";
+import { executeDueSips } from "@/services/sip/executeSips";
+import { calculateNextExecutionDate } from "@/shared/features/sip/utils/sipExecution";
 import {
   SipPlan,
   SipTransaction,
   VirtualPosition,
   AppNotification,
   SipStatus,
-  SipFrequency,
-  SipAssetType,
 } from "@/shared/features/sip/types";
-import { InstrumentType } from "@/shared/features/portfolio/types";
-
-function calculateNextExecutionDate(
-  frequency: SipFrequency,
-  executionDay: number,
-  fromDate: Date = new Date()
-): Date {
-  const nextDate = new Date(fromDate);
-  
-  if (frequency === "daily") {
-    nextDate.setDate(nextDate.getDate() + 1);
-  } else if (frequency === "weekly") {
-    const currentDay = nextDate.getDay();
-    let diff = executionDay - currentDay;
-    if (diff <= 0) diff += 7;
-    nextDate.setDate(nextDate.getDate() + diff);
-  } else if (frequency === "monthly") {
-    if (nextDate.getDate() >= executionDay) {
-      nextDate.setMonth(nextDate.getMonth() + 1);
-    }
-    const lastDayOfMonth = new Date(nextDate.getFullYear(), nextDate.getMonth() + 1, 0).getDate();
-    nextDate.setDate(Math.min(executionDay, lastDayOfMonth));
-  } else if (frequency === "quarterly") {
-    nextDate.setMonth(nextDate.getMonth() + 3);
-    const lastDayOfMonth = new Date(nextDate.getFullYear(), nextDate.getMonth() + 1, 0).getDate();
-    nextDate.setDate(Math.min(executionDay, lastDayOfMonth));
-  } else if (frequency === "yearly") {
-    nextDate.setFullYear(nextDate.getFullYear() + 1);
-    const lastDayOfMonth = new Date(nextDate.getFullYear(), nextDate.getMonth() + 1, 0).getDate();
-    nextDate.setDate(Math.min(executionDay, lastDayOfMonth));
-  }
-  
-  nextDate.setHours(0, 0, 0, 0);
-  return nextDate;
-}
 
 export function useSips(options?: { enabled?: boolean }) {
   const { user } = useAuth();
@@ -71,6 +35,7 @@ export function useSips(options?: { enabled?: boolean }) {
   const [virtualPositions, setVirtualPositions] = useState<VirtualPosition[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(true);
+  const executingRef = useRef(false);
 
   useEffect(() => {
     const db = getFirestoreDb();
@@ -242,148 +207,22 @@ export function useSips(options?: { enabled?: boolean }) {
 
   const triggerManualExecute = useCallback(async () => {
     const db = getFirestoreDb();
-    if (!uid || !db) return;
-
+    if (!uid || !db || executingRef.current) return;
+    executingRef.current = true;
     try {
-      const snapshot = await getDocs(collection(db, `users/${uid}/sipPlans`));
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-
-      const batch = writeBatch(db);
-      let executedCount = 0;
-      const vpSnapshot = await getDocs(
-        collection(db, `users/${uid}/virtualPositions`)
-      );
-      const virtualPositions = new Map<string, VirtualPosition>(
-        vpSnapshot.docs.map((item) => [
-          item.id,
-          item.data() as VirtualPosition,
-        ])
-      );
-
-      for (const d of snapshot.docs) {
-        const plan = d.data() as SipPlan;
-        if (plan.status !== "active") continue;
-
-        const nextDate = new Date(plan.nextExecutionDate);
-        nextDate.setHours(0, 0, 0, 0);
-
-        if (nextDate <= today) {
-          if (plan.skipNextExecution) {
-            // Just advance date
-            const newNextDate = calculateNextExecutionDate(plan.frequency, plan.executionDay, nextDate);
-            batch.update(d.ref, {
-              skipNextExecution: false,
-              nextExecutionDate: newNextDate.toISOString(),
-              updatedAt: serverTimestamp(),
-            });
-            
-            // Add skipped notification
-            const notifRef = doc(collection(db, `users/${uid}/notifications`));
-            batch.set(notifRef, {
-              id: notifRef.id,
-              type: "sip_skipped",
-              title: "SIP Skipped",
-              body: `Skipped execution for ${plan.assetName}`,
-              read: false,
-              createdAt: serverTimestamp(),
-              meta: { sipId: plan.id, symbol: plan.symbol }
-            });
-            
-            continue;
-          }
-
-          // Execute
-          const quote = await fetchMarketQuote(plan.symbol, plan.assetType as InstrumentType);
-          const price = quote?.currentPrice || 100;
-
-          const units = plan.investmentAmount / price;
-          const newTotalInvested = (plan.totalInvested || 0) + plan.investmentAmount;
-          const newTotalUnits = (plan.totalUnits || 0) + units;
-          
-          // Transaction
-          const txRef = doc(collection(db, `users/${uid}/sipTransactions`));
-          const tx: SipTransaction = {
-            id: txRef.id,
-            sipId: plan.id,
-            date: new Date().toISOString(),
-            assetType: plan.assetType,
-            symbol: plan.symbol,
-            quoteKey: plan.quoteKey,
-            assetName: plan.assetName,
-            marketPrice: price,
-            investmentAmount: plan.investmentAmount,
-            unitsPurchased: units,
-            totalUnitsAfterPurchase: newTotalUnits,
-            averageBuyPriceAfter: newTotalInvested / newTotalUnits,
-            status: "executed",
-            message: "Manual execution",
-            createdAt: serverTimestamp()
-          };
-          batch.set(txRef, tx);
-
-          // Position
-          const vpId = plan.quoteKey; // Grouping by quoteKey
-          const vpRef = doc(db, `users/${uid}/virtualPositions`, vpId);
-          
-          const existingVp = virtualPositions.get(vpId);
-          
-          const newVpTotalUnits = (existingVp?.totalUnits || 0) + units;
-          const newVpTotalInvested = (existingVp?.totalInvested || 0) + plan.investmentAmount;
-          const newVpAvgPrice = newVpTotalInvested / newVpTotalUnits;
-          
-          const sipIds = existingVp?.sipIds || [];
-          if (!sipIds.includes(plan.id)) sipIds.push(plan.id);
-
-          const newVp: VirtualPosition = {
-            id: vpId,
-            assetType: plan.assetType,
-            symbol: plan.symbol,
-            quoteKey: plan.quoteKey,
-            assetName: plan.assetName,
-            totalUnits: newVpTotalUnits,
-            averageBuyPrice: newVpAvgPrice,
-            totalInvested: newVpTotalInvested,
-            sipIds,
-            updatedAt: serverTimestamp(),
-          };
-          batch.set(vpRef, newVp, { merge: true });
-          virtualPositions.set(vpId, newVp);
-
-          // Update Plan
-          const newNextDate = calculateNextExecutionDate(plan.frequency, plan.executionDay, nextDate);
-          batch.update(d.ref, {
-            totalInvested: newTotalInvested,
-            totalUnits: newTotalUnits,
-            executionCount: (plan.executionCount || 0) + 1,
-            lastExecutionDate: new Date().toISOString(),
-            nextExecutionDate: newNextDate.toISOString(),
-            updatedAt: serverTimestamp(),
-          });
-          
-          // Notification
-          const notifRef = doc(collection(db, `users/${uid}/notifications`));
-          batch.set(notifRef, {
-            id: notifRef.id,
-            type: "sip_executed",
-            title: "SIP Executed",
-            body: `Successfully invested ${plan.currency} ${plan.investmentAmount} in ${plan.assetName}`,
-            read: false,
-            createdAt: serverTimestamp(),
-            meta: { sipId: plan.id, amount: plan.investmentAmount, units, price, symbol: plan.symbol }
-          });
-
-          executedCount++;
-        }
-      }
-
-      await batch.commit();
-      if (executedCount > 0) {
-        toast.success(`Executed ${executedCount} pending SIP(s)`);
+      const result = await executeDueSips(uid);
+      if (result.executed > 0) {
+        toast.success(`Executed ${result.executed} pending SIP(s)`);
+      } else if (result.failed > 0) {
+        toast.error("Quote unavailable — no units were recorded at a made-up price");
+      } else if (result.completed > 0) {
+        toast.success("Due SIP(s) marked completed");
       }
     } catch (err) {
       logError("sips.manualExecute", err);
-      toast.error("Failed to run manual execution");
+      toast.error(friendlyErrorMessage(err, "Failed to run manual execution"));
+    } finally {
+      executingRef.current = false;
     }
   }, [uid]);
 
