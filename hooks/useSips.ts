@@ -3,7 +3,6 @@ import {
   collection,
   doc,
   onSnapshot,
-  query,
   setDoc,
   deleteDoc,
   updateDoc,
@@ -252,6 +251,15 @@ export function useSips(options?: { enabled?: boolean }) {
 
       const batch = writeBatch(db);
       let executedCount = 0;
+      const vpSnapshot = await getDocs(
+        collection(db, `users/${uid}/virtualPositions`)
+      );
+      const virtualPositions = new Map<string, VirtualPosition>(
+        vpSnapshot.docs.map((item) => [
+          item.id,
+          item.data() as VirtualPosition,
+        ])
+      );
 
       for (const d of snapshot.docs) {
         const plan = d.data() as SipPlan;
@@ -318,13 +326,7 @@ export function useSips(options?: { enabled?: boolean }) {
           const vpId = plan.quoteKey; // Grouping by quoteKey
           const vpRef = doc(db, `users/${uid}/virtualPositions`, vpId);
           
-          // Try to get existing VP to merge, or we can just upsert.
-          // In a real app we might fetch it to merge. But for simplicity and robustness in a loop:
-          // We will update it. It's better to calculate position aggregates server-side or separately, 
-          // but we can increment totalUnits and totalInvested here using set with merge.
-          // A proper way is fetching existing:
-          const vpSnapshot = await getDocs(query(collection(db, `users/${uid}/virtualPositions`)));
-          const existingVp = vpSnapshot.docs.find(v => v.id === vpId)?.data() as VirtualPosition | undefined;
+          const existingVp = virtualPositions.get(vpId);
           
           const newVpTotalUnits = (existingVp?.totalUnits || 0) + units;
           const newVpTotalInvested = (existingVp?.totalInvested || 0) + plan.investmentAmount;
@@ -346,6 +348,7 @@ export function useSips(options?: { enabled?: boolean }) {
             updatedAt: serverTimestamp(),
           };
           batch.set(vpRef, newVp, { merge: true });
+          virtualPositions.set(vpId, newVp);
 
           // Update Plan
           const newNextDate = calculateNextExecutionDate(plan.frequency, plan.executionDay, nextDate);

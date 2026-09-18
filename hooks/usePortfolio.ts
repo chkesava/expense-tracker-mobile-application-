@@ -1,4 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  createContext,
+  createElement,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   addDoc,
   collection,
@@ -74,7 +83,7 @@ function todayKey() {
  * @param options.enabled When false, skips snapshot listeners (ledger tabs already unmount portfolio/SIP when inactive).
  * @param options.includeSecondary When false, only settings + holdings (enough for net worth).
  */
-export function usePortfolio(options?: {
+function usePortfolioState(options?: {
   enabled?: boolean;
   includeSecondary?: boolean;
 }) {
@@ -572,4 +581,28 @@ export function usePortfolio(options?: {
     depositCash,
     withdrawCash,
   };
+}
+
+type PortfolioApi = ReturnType<typeof usePortfolioState>;
+
+const PortfolioContext = createContext<PortfolioApi | null>(null);
+
+/** One 8-listener set for the Investments tab. Nested holdings/cash UI reads this. */
+export function PortfolioDataProvider({ children }: { children: ReactNode }) {
+  const value = usePortfolioState();
+  return createElement(PortfolioContext.Provider, { value }, children);
+}
+
+export function usePortfolio(options?: {
+  enabled?: boolean;
+  includeSecondary?: boolean;
+}) {
+  const ctx = useContext(PortfolioContext);
+  const enabled = options?.enabled ?? true;
+  const includeSecondary = options?.includeSecondary !== false;
+  const shareParent = Boolean(ctx && enabled && includeSecondary);
+  const local = usePortfolioState(
+    shareParent ? { enabled: false, includeSecondary: false } : options
+  );
+  return shareParent && ctx ? ctx : local;
 }

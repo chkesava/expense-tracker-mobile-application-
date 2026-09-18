@@ -4,7 +4,6 @@
  */
 
 export * from "./types/expense";
-export * from "./types/focus";
 export * from "./types/investment";
 export * from "./types/market";
 export * from "./types/nutrition";

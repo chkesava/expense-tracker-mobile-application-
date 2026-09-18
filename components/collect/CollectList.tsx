@@ -19,7 +19,8 @@ export function CollectList() {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const displayCurrency = useDisplayCurrency();
-  const { requests, loading } = usePaymentRequests();
+  const { requests, loading, cancelPaymentRequest, deletePaymentRequest } =
+    usePaymentRequests();
 
   const [activeTab, setActiveTab] = useState<CollectTab>("active");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -181,7 +182,12 @@ export function CollectList() {
       ) : (
         <View style={styles.listContainer}>
           {displayList.map((req) => (
-            <PaymentRequestCard key={req.id} request={req} />
+            <PaymentRequestCard
+              key={req.id}
+              request={req}
+              onCancel={cancelPaymentRequest}
+              onDelete={deletePaymentRequest}
+            />
           ))}
         </View>
       )}

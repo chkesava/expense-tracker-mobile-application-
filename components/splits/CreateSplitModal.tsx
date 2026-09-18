@@ -59,7 +59,7 @@ export function CreateSplitModal({ visible, onClose }: CreateSplitModalProps) {
   const { settings: userSettings } = useSettings();
   const { accounts } = useAccounts();
   const { categories } = useCategories();
-  const { createSplit } = useSplits();
+  const { createSplit } = useSplits({ enabled: false });
 
   const [kind, setKind] = useState<SplitKind>("bill");
   const [title, setTitle] = useState("");

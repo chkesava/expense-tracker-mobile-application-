@@ -39,7 +39,7 @@ export function CreatePaymentRequestModal({
   const { user } = useAuth();
   const { settings: userSettings } = useSettings();
   const displayCurrency = useDisplayCurrency();
-  const { createPaymentRequest } = usePaymentRequests();
+  const { createPaymentRequest } = usePaymentRequests({ enabled: false });
 
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
