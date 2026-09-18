@@ -16,13 +16,13 @@ import {
   getDoc,
   increment,
   serverTimestamp,
-  writeBatch,
   type DocumentReference,
   type Firestore,
 } from "firebase/firestore";
 
+import { commitMutations, type MutationOp } from "@/lib/commitMutations";
 import { getFirestoreDb } from "@/lib/firebase";
-import { commitWrite, type WriteOutcome } from "@/lib/firestoreWrite";
+import type { WriteOutcome } from "@/lib/firestoreWrite";
 import { roundMoney } from "@/shared/utils/money";
 import { currentMonthKey, isValidDateKey } from "@/shared/utils/dates";
 import {
@@ -153,7 +153,7 @@ function tripIdOf(data: Record<string, unknown>): string | null {
 }
 
 function applyTripIncrement(
-  batch: ReturnType<typeof writeBatch>,
+  ops: MutationOp[],
   db: Firestore,
   owner: string,
   data: Record<string, unknown>,
@@ -163,13 +163,15 @@ function applyTripIncrement(
   if (!tripId) return;
   const rounded = roundMoney(delta);
   if (rounded === 0) return;
-  batch.update(doc(db, "users", owner, "trips", tripId), {
-    spentAmount: increment(rounded),
+  ops.push({
+    op: "update",
+    ref: doc(db, "users", owner, "trips", tripId),
+    data: { spentAmount: increment(rounded) },
   });
 }
 
 function writeEvent(
-  batch: ReturnType<typeof writeBatch>,
+  ops: MutationOp[],
   db: Firestore,
   owner: string,
   input: {
@@ -182,9 +184,10 @@ function writeEvent(
   }
 ) {
   const eventRef = doc(collection(db, "users", owner, "ledgerEvents"));
-  batch.set(
-    eventRef,
-    stripUndefined({
+  ops.push({
+    op: "set",
+    ref: eventRef,
+    data: stripUndefined({
       kind: input.kind,
       docId: input.docId,
       action: input.action,
@@ -193,8 +196,8 @@ function writeEvent(
       actorUid: owner,
       reason: input.reason,
       createdAt: serverTimestamp(),
-    })
-  );
+    }),
+  });
   return eventRef.id;
 }
 
@@ -231,25 +234,28 @@ export async function updateExpense(
   const after = ledgerEventSnapshot(afterRow);
   const delta = roundMoney(amount - before.amount);
 
-  const outcome = await commitWrite(
-    () => {
-      const batch = writeBatch(db);
-      batch.update(
-        ref,
-        stripUndefined({
-          amount,
-          category: afterRow.category,
-          subcategory: afterRow.subcategory,
-          date: afterRow.date,
-          month: afterRow.month,
-          accountId: afterRow.accountId,
-          note: afterRow.note,
-          tags: afterRow.tags,
-          spaceId: afterRow.spaceId,
-          updatedAt: serverTimestamp(),
-        })
-      );
-      writeEvent(batch, db, owner, {
+  const outcome = await commitMutations(
+    owner,
+    (() => {
+      const ops: MutationOp[] = [
+        {
+          op: "update",
+          ref,
+          data: stripUndefined({
+            amount,
+            category: afterRow.category,
+            subcategory: afterRow.subcategory,
+            date: afterRow.date,
+            month: afterRow.month,
+            accountId: afterRow.accountId,
+            note: afterRow.note,
+            tags: afterRow.tags,
+            spaceId: afterRow.spaceId,
+            updatedAt: serverTimestamp(),
+          }),
+        },
+      ];
+      writeEvent(ops, db, owner, {
         kind: "expense",
         docId,
         action: "update",
@@ -257,9 +263,9 @@ export async function updateExpense(
         after,
         reason: options?.reason,
       });
-      applyTripIncrement(batch, db, owner, data, delta);
-      return batch.commit();
-    },
+      applyTripIncrement(ops, db, owner, data, delta);
+      return ops;
+    })(),
     { label: "expense" }
   );
   return { id: docId, outcome };
@@ -294,22 +300,25 @@ export async function updateIncome(
   const before = ledgerEventSnapshot(data);
   const after = ledgerEventSnapshot(afterRow);
 
-  const outcome = await commitWrite(
-    () => {
-      const batch = writeBatch(db);
-      batch.update(
-        ref,
-        stripUndefined({
-          amount,
-          source: afterRow.source,
-          date: afterRow.date,
-          month: afterRow.month,
-          accountId: afterRow.accountId,
-          note: afterRow.note,
-          updatedAt: serverTimestamp(),
-        })
-      );
-      writeEvent(batch, db, owner, {
+  const outcome = await commitMutations(
+    owner,
+    (() => {
+      const ops: MutationOp[] = [
+        {
+          op: "update",
+          ref,
+          data: stripUndefined({
+            amount,
+            source: afterRow.source,
+            date: afterRow.date,
+            month: afterRow.month,
+            accountId: afterRow.accountId,
+            note: afterRow.note,
+            updatedAt: serverTimestamp(),
+          }),
+        },
+      ];
+      writeEvent(ops, db, owner, {
         kind: "income",
         docId,
         action: "update",
@@ -317,8 +326,8 @@ export async function updateIncome(
         after,
         reason: options?.reason,
       });
-      return batch.commit();
-    },
+      return ops;
+    })(),
     { label: "income" }
   );
   return { id: docId, outcome };
@@ -342,19 +351,22 @@ async function softDeleteRow(
   const before = ledgerEventSnapshot(data);
   const deletedAt = new Date().toISOString();
 
-  const outcome = await commitWrite(
-    () => {
-      const batch = writeBatch(db);
-      batch.update(
-        ref,
-        stripUndefined({
-          deletedAt,
-          deletedBy: owner,
-          deletedReason: options?.reason,
-          updatedAt: serverTimestamp(),
-        })
-      );
-      writeEvent(batch, db, owner, {
+  const outcome = await commitMutations(
+    owner,
+    (() => {
+      const ops: MutationOp[] = [
+        {
+          op: "update",
+          ref,
+          data: stripUndefined({
+            deletedAt,
+            deletedBy: owner,
+            deletedReason: options?.reason,
+            updatedAt: serverTimestamp(),
+          }),
+        },
+      ];
+      writeEvent(ops, db, owner, {
         kind,
         docId,
         action: "delete",
@@ -363,10 +375,10 @@ async function softDeleteRow(
         reason: options?.reason,
       });
       if (kind === "expense") {
-        applyTripIncrement(batch, db, owner, data, -before.amount);
+        applyTripIncrement(ops, db, owner, data, -before.amount);
       }
-      return batch.commit();
-    },
+      return ops;
+    })(),
     { label: "transaction deletion" }
   );
   return { id: docId, outcome };

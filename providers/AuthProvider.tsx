@@ -33,6 +33,7 @@ import { GoogleSignin } from "@react-native-google-signin/google-signin";
 
 import { clearSavedRoute } from "@/hooks/useNavigationStateRestoration";
 import { appDialog, hasAppDialogHost } from "@/lib/appDialog";
+import { replayWriteOutbox } from "@/lib/commitMutations";
 import { classifyError, logError } from "@/lib/errors";
 import { ensureCategoryHierarchy } from "@/lib/ensureCategoryHierarchy";
 import { env } from "@/lib/env";
@@ -103,6 +104,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [realUser, setRealUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [isDuress, setIsDuress] = useState(() => privacySession.isDuress());
+
+  useEffect(() => {
+    if (!realUser) return;
+    const writeUid = isDuress ? `${realUser.uid}_duress` : realUser.uid;
+    void replayWriteOutbox(writeUid).catch((error) => {
+      logError("authProvider.replayWriteOutbox", error);
+    });
+  }, [realUser, isDuress]);
 
   useEffect(() => {
     // Native sign-in only. On web every GoogleSignin method is a stub that

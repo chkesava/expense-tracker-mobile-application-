@@ -46,6 +46,12 @@ export type CommitWriteOptions = {
   label?: string;
   /** Called when the write fails after it was already reported as queued. */
   onLateFailure?: (error: unknown) => void;
+  /**
+   * Per-write durability (SPENDLY-23). The native outbox sets this after it
+   * has persisted the mutation, so `queued` is truthful even though the SDK
+   * cache is still memory-only.
+   */
+  durable?: boolean;
 };
 
 const QUEUED = Symbol("queued");
@@ -136,7 +142,7 @@ export async function commitWrite(
   try {
     const result = await Promise.race([tracked, grace]);
     if (result !== QUEUED) return "acked";
-    return writeQueueDurable ? "queued" : "unsafe";
+    return options.durable || writeQueueDurable ? "queued" : "unsafe";
   } finally {
     if (timer) clearTimeout(timer);
   }

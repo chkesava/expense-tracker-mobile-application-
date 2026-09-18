@@ -74,9 +74,8 @@ const FIRESTORE_MESSAGES: Record<string, string> = {
   "permission-denied": "You don't have access to this. Sign in again or ask the owner for access.",
   unauthenticated: "Your session expired. Sign in again to continue.",
   // SPENDLY-1: this used to promise "saved on this device and will sync
-  // automatically". On native there is no durable write queue behind that
-  // claim (KAN-112), so a force-stop discarded a change the user had been told
-  // was safe. Revisit when the outbox lands.
+  // automatically". Native ledger/money writes now journal through the
+  // SPENDLY-23 outbox; remaining `commitWrite` callers are still memory-only.
   unavailable: "Can't reach the server right now. Keep the app open and try again in a moment.",
   "deadline-exceeded": "The server took too long to respond. Please try again.",
   cancelled: "The request was cancelled.",

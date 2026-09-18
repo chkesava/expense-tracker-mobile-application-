@@ -15,9 +15,12 @@
  * use**, not inside `initializeFirestore`, so the `try/catch` below never fires
  * and the mode we record here was reported as durable while being memory-only.
  *
- * Until KAN-112 lands a real outbox, `createDb` reports the truth to
- * `setWriteQueueDurable`, and `lib/firestoreWrite.ts` uses it so the UI stops
- * promising a sync that a force-stop would discard.
+ * Until SPENDLY-23 / AUTH-05 the native line claimed SQLite persistence
+ * while the JS SDK silently fell back to memory. Native writes now go
+ * through `commitMutations` (AsyncStorage outbox) before they may report
+ * `queued`. Web IndexedDB is still genuinely durable.
+ * `createDb` reports the truth to `setWriteQueueDurable` for any remaining
+ * `commitWrite` callers that have not been moved onto the outbox.
  */
 
 import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";

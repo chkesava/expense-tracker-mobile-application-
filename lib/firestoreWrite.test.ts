@@ -158,6 +158,16 @@ describe("commitWrite durability — SPENDLY-1 / KAN-112", () => {
     await vi.advanceTimersByTimeAsync(1000);
     await expect(pending).resolves.toBe("unsafe");
   });
+
+  it("reports 'queued' for an undurable SDK cache when this write was journaled", async () => {
+    setWriteQueueDurable(false);
+    const pending = commitWrite(() => new Promise(() => undefined), {
+      graceMs: 1000,
+      durable: true,
+    });
+    await vi.advanceTimersByTimeAsync(1000);
+    await expect(pending).resolves.toBe("queued");
+  });
 });
 
 describe("writeSavedMessage — SPENDLY-1", () => {

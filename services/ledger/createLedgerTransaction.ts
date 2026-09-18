@@ -3,10 +3,11 @@
  * Used by ExpenseForm and SMS import — one write shape, one collection path.
  */
 
-import { collection, doc, serverTimestamp, setDoc } from "firebase/firestore";
+import { collection, doc, serverTimestamp } from "firebase/firestore";
 
+import { commitMutations } from "@/lib/commitMutations";
 import { getFirestoreDb } from "@/lib/firebase";
-import { commitWrite, type WriteOutcome } from "@/lib/firestoreWrite";
+import type { WriteOutcome } from "@/lib/firestoreWrite";
 
 export type CreateExpenseInput = {
   amount: number;
@@ -97,9 +98,9 @@ export async function createExpense(
       : {}),
     createdAt: serverTimestamp(),
   };
-  const outcome = await commitWrite(
-    () =>
-      options?.id ? setDoc(ref, data, { merge: true }) : setDoc(ref, data),
+  const outcome = await commitMutations(
+    uid,
+    [{ op: "set", ref, data, merge: Boolean(options?.id) }],
     { label: "expense" }
   );
   return { id: ref.id, outcome };
@@ -131,9 +132,9 @@ export async function createIncome(
       : {}),
     createdAt: serverTimestamp(),
   };
-  const outcome = await commitWrite(
-    () =>
-      options?.id ? setDoc(ref, data, { merge: true }) : setDoc(ref, data),
+  const outcome = await commitMutations(
+    uid,
+    [{ op: "set", ref, data, merge: Boolean(options?.id) }],
     { label: "income" }
   );
   return { id: ref.id, outcome };

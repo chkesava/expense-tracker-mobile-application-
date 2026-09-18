@@ -33,11 +33,27 @@ vi.mock("@/lib/firebase", () => ({
   getFirestoreDb: () => ({ __db: true }),
 }));
 
-vi.mock("@/lib/firestoreWrite", () => ({
-  commitWrite: async (fn: () => Promise<unknown>) => {
-    await fn();
+vi.mock("@/lib/commitMutations", () => ({
+  commitMutations: vi.fn(async (_uid: string, ops: Array<{
+    op: "set" | "update" | "delete";
+    ref: FakeRef;
+    data?: Record<string, unknown>;
+    merge?: boolean;
+  }>) => {
+    for (const op of ops) {
+      writes.push({
+        path: op.ref.path,
+        data: op.data ?? {},
+        merge: op.merge === true,
+        kind: op.op === "set" ? "set" : "update",
+      });
+      if (op.op !== "delete" && op.data) {
+        docs.set(op.ref.path, { ...(docs.get(op.ref.path) ?? {}), ...op.data });
+      }
+    }
+    commits += 1;
     return "acked";
-  },
+  }),
 }));
 
 let idCounter = 0;
@@ -45,34 +61,11 @@ vi.mock("@/lib/id", () => ({
   newId: () => `pay-${++idCounter}`,
 }));
 
-import { writeBatch } from "firebase/firestore";
-
-import {
-  recordCreditBillPayment,
-  voidCreditBillPayment,
-} from "./billPayment";
+import { commitMutations } from "@/lib/commitMutations";
+import { recordCreditBillPayment, voidCreditBillPayment } from "./billPayment";
 
 let writes: Write[] = [];
 let commits = 0;
-
-function installBatchRecorder() {
-  vi.mocked(writeBatch).mockImplementation(
-    () =>
-      ({
-        set: (ref: FakeRef, data: Record<string, unknown>, options?: { merge?: boolean }) => {
-          writes.push({ path: ref.path, data, merge: options?.merge === true, kind: "set" });
-          docs.set(ref.path, { ...(docs.get(ref.path) ?? {}), ...data });
-        },
-        update: (ref: FakeRef, data: Record<string, unknown>) => {
-          writes.push({ path: ref.path, data, merge: false, kind: "update" });
-          docs.set(ref.path, { ...(docs.get(ref.path) ?? {}), ...data });
-        },
-        commit: async () => {
-          commits += 1;
-        },
-      }) as never
-  );
-}
 
 const BILL = {
   id: "bill-1",
@@ -89,8 +82,23 @@ beforeEach(() => {
   commits = 0;
   idCounter = 0;
   docs.clear();
-  vi.clearAllMocks();
-  installBatchRecorder();
+  vi.mocked(commitMutations).mockReset();
+  vi.mocked(commitMutations).mockImplementation(async (_uid, ops) => {
+    for (const op of ops) {
+      const data = op.op === "delete" ? {} : (op.data as Record<string, unknown>);
+      writes.push({
+        path: op.ref.path,
+        data,
+        merge: op.op === "set" && op.merge === true,
+        kind: op.op === "set" ? "set" : "update",
+      });
+      if (op.op !== "delete") {
+        docs.set(op.ref.path, { ...(docs.get(op.ref.path) ?? {}), ...data });
+      }
+    }
+    commits += 1;
+    return "acked";
+  });
 });
 
 describe("recordCreditBillPayment", () => {
@@ -168,16 +176,7 @@ describe("recordCreditBillPayment", () => {
   });
 
   it("rejects without committing when the batch fails", async () => {
-    vi.mocked(writeBatch).mockImplementation(
-      () =>
-        ({
-          set: () => undefined,
-          update: () => undefined,
-          commit: async () => {
-            throw new Error("bill stamp failed");
-          },
-        }) as never
-    );
+    vi.mocked(commitMutations).mockRejectedValueOnce(new Error("bill stamp failed"));
 
     await expect(
       recordCreditBillPayment("u1", {
