@@ -11,6 +11,7 @@ import {
   holdingPurchaseAmount,
   investmentCashEntryDetail,
   investmentCashEntryLabel,
+  netHoldingCashOutlay,
   signedAmount,
 } from "./investmentCash";
 import type {
@@ -282,5 +283,71 @@ describe("dedupeEntries", () => {
     const first = entry({ id: "a", amount: 100, direction: "credit" });
     const replay = entry({ id: "a", amount: 999, direction: "credit" });
     expect(dedupeEntries([first, replay])).toEqual([first]);
+  });
+});
+
+describe("netHoldingCashOutlay", () => {
+  it("nets later buys and sales instead of returning the first purchase", () => {
+    expect(
+      netHoldingCashOutlay(
+        [
+          entry({
+            id: "p1",
+            type: "PURCHASE",
+            holdingId: "h1",
+            amount: 10000,
+            direction: "debit",
+          }),
+          entry({
+            id: "p2",
+            type: "PURCHASE",
+            holdingId: "h1",
+            amount: 5000,
+            direction: "debit",
+          }),
+          entry({
+            id: "s1",
+            type: "SALE",
+            holdingId: "h1",
+            amount: 4000,
+            direction: "credit",
+          }),
+        ],
+        "h1"
+      )
+    ).toBe(11000);
+  });
+
+  it("subtracts a reversal that predates holdingId on the reversal doc", () => {
+    expect(
+      netHoldingCashOutlay(
+        [
+          entry({
+            id: "p1",
+            type: "PURCHASE",
+            holdingId: "h1",
+            amount: 10000,
+            direction: "debit",
+          }),
+          entry({
+            id: "r1",
+            type: "REVERSAL",
+            amount: 10000,
+            direction: "credit",
+            reversesId: "p1",
+          }),
+        ],
+        "h1"
+      )
+    ).toBe(0);
+  });
+
+  it("is zero for a holding with no cash rows", () => {
+    expect(
+      netHoldingCashOutlay(
+        [entry({ id: "p1", type: "PURCHASE", holdingId: "other", amount: 1, direction: "debit" })],
+        "h1"
+      )
+    ).toBe(0);
   });
 });

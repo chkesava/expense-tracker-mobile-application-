@@ -76,7 +76,6 @@ export function HoldingsList({ listHeader }: { listHeader?: ReactNode }) {
     findHoldingPurchase,
     executeMockBuy,
     executeMockSell,
-    placeLimitBuyOrder,
   } = usePortfolio();
 
   const symbols = useMemo(
@@ -591,7 +590,6 @@ export function HoldingsList({ listHeader }: { listHeader?: ReactNode }) {
         onClose={() => setTrade(null)}
         onBuy={executeMockBuy}
         onSell={executeMockSell}
-        onPlaceLimitBuy={placeLimitBuyOrder}
         cashBalance={cashBalance}
         currency={displayCurrency}
       />

@@ -107,6 +107,37 @@ export function holdingPurchaseAmount(
   return roundMoney(qty * price);
 }
 
+/**
+ * Cash still tied up in a holding: purchases minus sales minus reversals.
+ *
+ * Used when deleting with a refund so we return the outstanding outlay, not the
+ * first PURCHASE row in snapshot order (SPENDLY-37). Reversals that predate
+ * `holdingId` on the reversal doc still count when they point at a purchase of
+ * this holding.
+ */
+export function netHoldingCashOutlay(
+  entries: InvestmentCashEntry[],
+  holdingId: string
+): number {
+  if (!holdingId) return 0;
+  const deduped = dedupeEntries(entries);
+  const purchaseIds = new Set(
+    deduped.filter((entry) => entry.holdingId === holdingId).map((entry) => entry.id)
+  );
+  const net = deduped.reduce((sum, entry) => {
+    if (entry.holdingId === holdingId) return sum + signedAmount(entry);
+    if (
+      entry.type === "REVERSAL" &&
+      entry.reversesId &&
+      purchaseIds.has(entry.reversesId)
+    ) {
+      return sum + signedAmount(entry);
+    }
+    return sum;
+  }, 0);
+  return roundMoney(Math.max(0, -net));
+}
+
 export type InvestmentCashActivity = {
   entry: InvestmentCashEntry;
   /** Signed, so the row can render +/- without re-deriving the direction. */

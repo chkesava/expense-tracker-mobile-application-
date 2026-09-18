@@ -24,7 +24,7 @@ export function OrdersTab({ orders, currency, onCancel }: OrdersTabProps) {
         <View style={[styles.empty, { borderColor: theme.colors.border }]}>
           <Clock3 size={32} color={theme.colors.mutedForeground} />
           <Text style={{ color: theme.colors.foreground, fontWeight: "800" }}>No orders</Text>
-          <Text style={{ color: theme.colors.mutedForeground, textAlign: "center" }}>Limit buy orders placed from a holding appear here.</Text>
+          <Text style={{ color: theme.colors.mutedForeground, textAlign: "center" }}>Market buys and sells execute immediately. Limit orders are not available.</Text>
         </View>
       ) : orders.map((order) => (
         <View key={order.id} style={[styles.item, { borderColor: theme.colors.border, backgroundColor: theme.colors.card }]}>
