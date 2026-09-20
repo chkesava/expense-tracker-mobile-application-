@@ -60,7 +60,14 @@ export type UserSettings = {
   navigationStyle: NavigationStyle;
   ghostMode: boolean;
   hapticFeedback: boolean;
+  /**
+   * @deprecated SPENDLY-22 — the privacy PIN is device-local now
+   * (`lib/pinVault.ts`). Kept so the one-time migration can still read legacy
+   * documents; nothing writes these. Removed, with the `firestore.rules`
+   * field deny, once the migration has rolled out.
+   */
   privacyPin: string;
+  /** @deprecated SPENDLY-22 — see {@link UserSettings.privacyPin}. */
   fakePin: string;
   lockOnInactivity: boolean;
   inactivityTimeout: number;

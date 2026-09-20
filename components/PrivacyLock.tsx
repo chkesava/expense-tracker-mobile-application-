@@ -18,9 +18,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { haptic } from "@/lib/haptics";
 
 import { useBiometrics } from "@/hooks/useBiometrics";
-import { pinMatches } from "@/lib/pinSecurity";
 import { privacySession } from "@/lib/privacySession";
 import { useAuth } from "@/providers/AuthProvider";
+import { usePrivacyPin } from "@/providers/PrivacyPinProvider";
 import { useSettings } from "@/providers/SettingsProvider";
 import { useTheme } from "@/theme/ThemeProvider";
 
@@ -30,10 +30,11 @@ export function PrivacyLock({ children }: { children: ReactNode }) {
   const { settings } = useSettings();
   const { logout } = useAuth();
   const { isRegistered, authenticate } = useBiometrics();
+  // SPENDLY-22: the PIN is device-local now, so whether one exists is an
+  // async answer rather than a settings field.
+  const { ready, hasRealPin, verifyPin } = usePrivacyPin();
 
-  const [isLocked, setIsLocked] = useState(() =>
-    Boolean(settings.privacyPin && !privacySession.isUnlocked())
-  );
+  const [isLocked, setIsLocked] = useState(false);
   const [pinInput, setPinInput] = useState("");
   const [error, setError] = useState(false);
   const [failedAttempts, setFailedAttempts] = useState(() =>
@@ -51,12 +52,16 @@ export function PrivacyLock({ children }: { children: ReactNode }) {
   }, [isLocked]);
 
   useEffect(() => {
-    if (settings.privacyPin && !privacySession.isUnlocked()) {
+    // Until the vault has been read, "is there a PIN?" is unknown — which is
+    // not the same as "no". The overlay below covers that window; unlocking
+    // here on a not-yet-known answer would flash the app's contents.
+    if (!ready) return;
+    if (hasRealPin && !privacySession.isUnlocked()) {
       setIsLocked(true);
-    } else if (!settings.privacyPin) {
+    } else if (!hasRealPin) {
       setIsLocked(false);
     }
-  }, [settings.privacyPin]);
+  }, [ready, hasRealPin]);
 
   useEffect(() => {
     const until = privacySession.getLockoutUntil();
@@ -65,10 +70,12 @@ export function PrivacyLock({ children }: { children: ReactNode }) {
     if (remaining > 0) {
       setLockoutTimeLeft(remaining);
     } else {
+      // Retires the expired window only. The attempt count survives so the
+      // next failure escalates (SPENDLY-22).
       privacySession.clearLockout();
-      setFailedAttempts(0);
+      setFailedAttempts(privacySession.getFailedAttempts());
     }
-  }, []);
+  }, [ready]);
 
   useEffect(() => {
     if (lockoutTimeLeft <= 0) return;
@@ -76,7 +83,7 @@ export function PrivacyLock({ children }: { children: ReactNode }) {
       setLockoutTimeLeft((prev) => {
         if (prev <= 1) {
           privacySession.clearLockout();
-          setFailedAttempts(0);
+          setFailedAttempts(privacySession.getFailedAttempts());
           return 0;
         }
         return prev - 1;
@@ -118,7 +125,7 @@ export function PrivacyLock({ children }: { children: ReactNode }) {
 
   // Inactivity + AppState (app switch)
   useEffect(() => {
-    if (!settings.privacyPin) return;
+    if (!hasRealPin) return;
 
     const clearInactivity = () => {
       if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
@@ -154,7 +161,7 @@ export function PrivacyLock({ children }: { children: ReactNode }) {
       sub.remove();
     };
   }, [
-    settings.privacyPin,
+    hasRealPin,
     settings.lockOnInactivity,
     settings.inactivityTimeout,
     settings.lockOnAppSwitch,
@@ -178,14 +185,14 @@ export function PrivacyLock({ children }: { children: ReactNode }) {
 
   // Re-bind activity via capturing touch on root when unlocked
   const onRootTouch = useCallback(() => {
-    if (isLockedRef.current || !settings.privacyPin || !settings.lockOnInactivity) {
+    if (isLockedRef.current || !hasRealPin || !settings.lockOnInactivity) {
       return;
     }
     if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
     inactivityTimer.current = setTimeout(() => {
       lockApp();
     }, (settings.inactivityTimeout || 60) * 1000);
-  }, [settings.privacyPin, settings.lockOnInactivity, settings.inactivityTimeout, lockApp]);
+  }, [hasRealPin, settings.lockOnInactivity, settings.inactivityTimeout, lockApp]);
 
   const triggerErrorHaptic = async () => {
     await haptic.error();
@@ -196,20 +203,24 @@ export function PrivacyLock({ children }: { children: ReactNode }) {
   };
 
   const handleUnlock = useCallback(async () => {
-    if (await pinMatches(pinInput, settings.privacyPin)) {
-      completeUnlock(false);
-    } else if (settings.fakePin && (await pinMatches(pinInput, settings.fakePin))) {
-      completeUnlock(true);
-    } else {
-      setError(true);
-      void triggerErrorHaptic();
-      setTimeout(() => setError(false), 500);
-      setPinInput("");
-      const { attempts, lockedOut } = privacySession.recordFailedAttempt();
-      setFailedAttempts(attempts);
-      if (lockedOut) setLockoutTimeLeft(30);
+    // One call decides between the real PIN, the duress PIN and neither; it
+    // deliberately costs the same either way.
+    const verdict = await verifyPin(pinInput);
+    if (verdict === "real" || verdict === "duress") {
+      completeUnlock(verdict === "duress");
+      return;
     }
-  }, [pinInput, settings.privacyPin, settings.fakePin, completeUnlock]);
+    setError(true);
+    void triggerErrorHaptic();
+    setTimeout(() => setError(false), 500);
+    setPinInput("");
+    const { attempts, lockedOut, lockoutUntil } =
+      privacySession.recordFailedAttempt();
+    setFailedAttempts(attempts);
+    if (lockedOut && lockoutUntil) {
+      setLockoutTimeLeft(Math.ceil((lockoutUntil - Date.now()) / 1000));
+    }
+  }, [pinInput, verifyPin, completeUnlock]);
 
   useEffect(() => {
     if (pinInput.length === 4) void handleUnlock();
@@ -242,18 +253,28 @@ export function PrivacyLock({ children }: { children: ReactNode }) {
   };
 
   const keypadDisabled = lockoutTimeLeft > 0;
+  /**
+   * SPENDLY-22: cover the app while the vault is still being read.
+   *
+   * `hasRealPin` starts false because it has to start as something, and the
+   * answer arrives a tick later from SecureStore. Rendering children during
+   * that window would show the app to someone who is about to be asked for a
+   * PIN. The same overlay covers it, minus the keypad, so it reads as part of
+   * the existing splash rather than a flash.
+   */
+  const showOverlay = !ready || isLocked;
 
   return (
     <View style={{ flex: 1 }} onTouchStart={onRootTouch} {...panResponder.panHandlers}>
       <View
         style={{ flex: 1 }}
-        pointerEvents={isLocked ? "none" : "auto"}
-        accessibilityElementsHidden={isLocked}
-        importantForAccessibility={isLocked ? "no-hide-descendants" : "auto"}
+        pointerEvents={showOverlay ? "none" : "auto"}
+        accessibilityElementsHidden={showOverlay}
+        importantForAccessibility={showOverlay ? "no-hide-descendants" : "auto"}
       >
         {children}
       </View>
-      {isLocked ? (
+      {showOverlay ? (
     <View
       style={[
         styles.overlay,
@@ -288,6 +309,8 @@ export function PrivacyLock({ children }: { children: ReactNode }) {
           Privacy Lock
         </Text>
 
+        {!ready ? null : (
+        <>
         {lockoutTimeLeft > 0 ? (
           <Text
             style={{
@@ -444,6 +467,8 @@ export function PrivacyLock({ children }: { children: ReactNode }) {
             Forgot PIN? Sign Out
           </Text>
         </Pressable>
+        </>
+        )}
       </View>
     </View>
       ) : null}
