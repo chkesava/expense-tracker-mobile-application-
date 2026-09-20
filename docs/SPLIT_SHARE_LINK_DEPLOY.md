@@ -75,7 +75,7 @@ Two origins, cleanly separated. Nothing about sharing crosses between them.
 | Origin | Serves | Set by |
 |---|---|---|
 | `spendly-share.netlify.app` | `/split/:slug`, `/payment/:slug` — the login-free share pages, built from this repo | `EXPO_PUBLIC_SHARE_URL` |
-| `kesavaexpensetracker.netlify.app` | `/api/*` market functions and `/mobile-google-auth`, from the legacy Vite repo | `EXPO_PUBLIC_APP_URL` |
+| `kesavaexpensetracker.netlify.app` | `/api/*` market functions, from the legacy Vite repo | `EXPO_PUBLIC_APP_URL` |
 
 `EXPO_PUBLIC_SHARE_URL` exists precisely so those can move independently. It used
 to be one variable doing both jobs, which is why share links pointed at the legacy
@@ -284,7 +284,6 @@ curl.exe -s -o NUL -X HEAD -w "HEAD / -> %{http_code}  (must be 200)`n" "$share/
 
 ```powershell
 & curl.exe -s -o NUL -w "  api:    %{http_code}`n" "$legacy/api/stock?symbol=RELIANCE"
-& curl.exe -s -o NUL -w "  bridge: %{http_code}`n" "$legacy/mobile-google-auth"
 ```
 
 Finally, open the real share link in a **fresh incognito window** and confirm the
