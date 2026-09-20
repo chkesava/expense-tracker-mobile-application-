@@ -51,28 +51,36 @@ describe("privacySession", () => {
     vi.setSystemTime(new Date("2026-08-11T12:00:00.000Z"));
 
     for (let i = 1; i <= 4; i += 1) {
-      expect(privacySession.recordFailedAttempt()).toEqual({
-        attempts: i,
-        lockedOut: false,
-      });
+      const state = privacySession.recordFailedAttempt();
+      expect(state.attempts).toBe(i);
+      expect(state.lockedOut).toBe(false);
     }
 
     const locked = privacySession.recordFailedAttempt();
-    expect(locked).toEqual({ attempts: 5, lockedOut: true });
+    expect(locked.attempts).toBe(5);
+    expect(locked.lockedOut).toBe(true);
     expect(privacySession.getLockoutUntil()).toBe(Date.now() + 30_000);
 
+    // SPENDLY-22: retiring an expired lockout keeps the count, so the next
+    // failure escalates. Only a working PIN forgives it — see
+    // `lib/privacyLockout.test.ts`.
     privacySession.clearLockout();
-    expect(privacySession.getFailedAttempts()).toBe(0);
+    expect(privacySession.getFailedAttempts()).toBe(5);
     expect(privacySession.getLockoutUntil()).toBeNull();
+
+    privacySession.markUnlocked({ duress: false });
+    expect(privacySession.getFailedAttempts()).toBe(0);
   });
 
-  it("clearAll resets unlocked/duress/attempts (logout path)", () => {
+  it("clearAll resets unlocked/duress but not the lockout (logout path)", () => {
+    // SPENDLY-22: the lock screen's own "Forgot PIN? Sign Out" reaches this,
+    // so clearing the counter here would be a one-tap lockout reset.
     privacySession.markUnlocked({ duress: true });
     privacySession.recordFailedAttempt();
     privacySession.clearAll();
     expect(privacySession.isUnlocked()).toBe(false);
     expect(privacySession.isDuress()).toBe(false);
-    expect(privacySession.getFailedAttempts()).toBe(0);
+    expect(privacySession.getFailedAttempts()).toBe(1);
   });
 
   it("notifies subscribers on state changes and supports unsubscribe", () => {

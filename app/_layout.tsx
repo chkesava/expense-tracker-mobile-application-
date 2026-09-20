@@ -35,6 +35,7 @@ import { AuthProvider, useAuth } from "@/providers/AuthProvider";
 import { CelebrationProvider } from "@/providers/CelebrationProvider";
 import { LocalizationProvider } from "@/providers/LocalizationProvider";
 import { NetworkProvider } from "@/providers/NetworkProvider";
+import { PrivacyPinProvider } from "@/providers/PrivacyPinProvider";
 import { SettingsProvider, useSettings } from "@/providers/SettingsProvider";
 import { SystemSettingsProvider } from "@/providers/SystemSettingsProvider";
 import { UserDocProvider, useUserDoc } from "@/providers/UserDocProvider";
@@ -261,6 +262,10 @@ export default function RootLayout() {
                   <WorkspaceProvider>
                     <AppThemeProvider>
                       <SettingsProvider>
+                        {/* SPENDLY-22: owns the device-local PIN and the
+                            one-time migration off Firestore. One mount covers
+                            Spendly, Ganesh Seva and Nutrition. */}
+                        <PrivacyPinProvider>
                         <LocalizationProvider>
                           <CelebrationProvider>
                             <ToastProvider>
@@ -277,6 +282,7 @@ export default function RootLayout() {
                             </ToastProvider>
                           </CelebrationProvider>
                         </LocalizationProvider>
+                        </PrivacyPinProvider>
                       </SettingsProvider>
                     </AppThemeProvider>
                   </WorkspaceProvider>

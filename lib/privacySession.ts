@@ -1,17 +1,28 @@
 /**
  * Session-scoped privacy lock state (mirrors web sessionStorage).
  * Cleared when the JS process dies — app starts locked if PIN is set.
+ *
+ * SPENDLY-22 moved the failed-attempt count and the lockout timestamp out to
+ * `lib/privacyLockout.ts`, which persists them. Starting locked after a
+ * restart is intended; forgetting how many times someone just guessed wrong
+ * was not. The accessors below stay here, and stay synchronous, because
+ * `AuthProvider` and `PrivacyLock` read them during render.
  */
 
 import { logError } from "./errors";
+import {
+  clearActiveLockout,
+  clearLockoutAfterSuccess,
+  getFailedAttempts as lockoutFailedAttempts,
+  getLockoutUntil as lockoutUntil,
+  recordFailedAttempt as recordLockoutFailure,
+} from "./privacyLockout";
 
 type Listener = () => void;
 
 const KEYS = {
   unlocked: "app_unlocked",
   duress: "app_duress",
-  failedAttempts: "lock_failed_attempts",
-  lockoutUntil: "lock_lockout_until",
 } as const;
 
 const store = new Map<string, string>();
@@ -54,12 +65,11 @@ export const privacySession = {
   },
 
   getFailedAttempts(): number {
-    return Number(get(KEYS.failedAttempts) || "0");
+    return lockoutFailedAttempts();
   },
 
   getLockoutUntil(): number | null {
-    const raw = get(KEYS.lockoutUntil);
-    return raw ? Number(raw) : null;
+    return lockoutUntil();
   },
 
   markUnlocked(options: { duress: boolean }) {
@@ -69,8 +79,10 @@ export const privacySession = {
     } else {
       remove(KEYS.duress);
     }
-    set(KEYS.failedAttempts, "0");
-    remove(KEYS.lockoutUntil);
+    // A PIN that works — real or duress — is the only thing that forgives
+    // previous failures.
+    clearLockoutAfterSuccess();
+    emit();
   },
 
   lock() {
@@ -79,27 +91,39 @@ export const privacySession = {
     // matching web: lock only removes app_unlocked.
   },
 
-  recordFailedAttempt(): { attempts: number; lockedOut: boolean } {
-    const attempts = privacySession.getFailedAttempts() + 1;
-    set(KEYS.failedAttempts, String(attempts));
-    if (attempts >= 5) {
-      set(KEYS.lockoutUntil, String(Date.now() + 30_000));
-      return { attempts, lockedOut: true };
-    }
-    return { attempts, lockedOut: false };
+  recordFailedAttempt(): {
+    attempts: number;
+    lockedOut: boolean;
+    lockoutUntil: number | null;
+  } {
+    const state = recordLockoutFailure();
+    emit();
+    return {
+      attempts: state.attempts,
+      lockedOut: state.lockoutUntil !== null && state.lockoutUntil > Date.now(),
+      lockoutUntil: state.lockoutUntil,
+    };
   },
 
+  /**
+   * Retire an expired lockout. Keeps the attempt count, so the next failure
+   * escalates — zeroing it here is what made backoff impossible before.
+   */
   clearLockout() {
-    remove(KEYS.lockoutUntil);
-    set(KEYS.failedAttempts, "0");
+    clearActiveLockout();
+    emit();
   },
 
-  /** Full reset on Firebase logout. */
+  /**
+   * Full reset on Firebase logout.
+   *
+   * Deliberately does **not** touch the lockout. This is reachable from the
+   * lock screen's own "Forgot PIN? Sign Out" button, so clearing the counter
+   * here would turn five failed guesses into a one-tap reset.
+   */
   clearAll() {
     remove(KEYS.unlocked);
     remove(KEYS.duress);
-    remove(KEYS.failedAttempts);
-    remove(KEYS.lockoutUntil);
   },
 
   subscribe(listener: Listener): () => void {
