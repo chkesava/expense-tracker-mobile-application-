@@ -148,7 +148,6 @@ npm run android
 
 | Client | How auth works |
 |--------|----------------|
-| **Expo Go** | Web bridge via `EXPO_PUBLIC_APP_URL` → `/mobile-google-auth` (see `docs/GOOGLE_AUTH_BRIDGE.md`) |
 | **Dev / release APK** | Native `@react-native-google-signin/google-signin` + `google-services.json` + SHA-1 registered in Firebase |
 
 If Google Sign-In fails with `DEVELOPER_ERROR` on Android, register your **debug** or **release** SHA-1 in Firebase:

@@ -381,7 +381,6 @@ function RootNavigator() {
             }}
           />
         )}
-        <Stack.Screen name="google-auth" options={{ animation: "none" }} />
         <Stack.Screen name="payment/[slug]" options={{ animation: "fade" }} />
         <Stack.Screen name="split/[slug]" options={{ animation: "fade" }} />
         <Stack.Screen name="+not-found" options={{ animation: "fade" }} />

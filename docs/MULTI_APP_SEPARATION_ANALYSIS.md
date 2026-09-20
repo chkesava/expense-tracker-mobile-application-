@@ -101,7 +101,7 @@ No native-module-count or bundle-analyzer output was captured in this analysis p
 
 Single shared Firebase Auth identity/pool for all three products (`providers/AuthProvider.tsx`). Four sign-in mechanisms, all terminating in the same Firebase Auth call surface:
 1. Email/password (`signInWithEmailAndPassword`/`createUserWithEmailAndPassword`) — general/all products.
-2. Google OAuth ID token via a web bridge (`lib/googleAuthBridge.ts`, `app/google-auth.tsx`) — all products.
+2. Google OAuth ID token — native `@react-native-google-signin/google-signin` (`lib/googleSignIn.native.ts`) or `signInWithPopup` on web (`lib/googleSignIn.web.ts`) — all products. (A hosted web bridge used to be a third path; removed in SPENDLY-7.)
 3. Phone/OTP (`lib/ganeshPhoneAuth.ts`, `app/ganesh-phone-auth.tsx`) — named/routed for Ganesh, but the resulting credential passes through the same generic `loginWithPhoneCredential`, so it is not enforced as Ganesh-only at the auth layer.
 4. Biometric/PIN "duress" proxy user — a cross-product privacy feature, not a real sign-in method.
 

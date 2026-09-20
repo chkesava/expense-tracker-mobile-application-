@@ -98,7 +98,7 @@ Criticality: **Critical** | **High** | **Medium** | **Low**
 | Screens       | `/(auth)/login`, `google-auth`, `PrivacyLock`                                                                                  |
 | Components    | Login UI, PrivacyLock, biometric prompts                                                                                       |
 | Hooks         | `useBiometrics`, `useFirstLaunch`, `useUserRole`                                                                               |
-| Services/lib  | `AuthProvider`, `lib/firebase`, `lib/createAuth*`, `lib/googleAuthBridge`, `lib/privacySession`, `lib/ensureCategoryHierarchy` |
+| Services/lib  | `AuthProvider`, `lib/firebase`, `lib/createAuth*`, `lib/privacySession`, `lib/ensureCategoryHierarchy` |
 | Data          | Firebase Auth users; `users/{uid}`; duress path `users/{uid}_duress`                                                           |
 | External      | Firebase Auth, Google Sign-In                                                                                                  |
 | Rules / edges | Duress must never write real collections; unlock lockout counters; Google web client id required for release                   |

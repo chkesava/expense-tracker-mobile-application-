@@ -50,6 +50,9 @@ export function isRestorableRoute(route: string): boolean {
 export function isPersistableRoute(route: string): boolean {
   if (!route || route === "/") return false;
   if (route.includes("login") || route.startsWith("/onboarding")) return false;
+  // SPENDLY-7 deleted the `/google-auth` route, but this guard outlives it: a
+  // device upgrading from an older build can still have that route saved, and
+  // restoring to one that no longer exists would land the user nowhere.
   if (route.startsWith("/google-auth")) return false;
   return true;
 }

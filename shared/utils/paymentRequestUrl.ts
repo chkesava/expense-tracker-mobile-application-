@@ -2,10 +2,10 @@
  * Origin that hosts the login-free share pages (`/split/:slug`, `/payment/:slug`).
  *
  * Deliberately its own variable rather than reusing `EXPO_PUBLIC_APP_URL`, which
- * also addresses the `/api/*` market functions and the `/mobile-google-auth`
- * bridge. Those live on the legacy web app's origin and are unrelated to
- * sharing, so conflating them meant the share pages could not be hosted
- * independently.
+ * also addresses the `/api/*` market functions. Those live on the legacy web
+ * app's origin and are unrelated to sharing, so conflating them meant the share
+ * pages could not be hosted independently. (It used to address the
+ * `/mobile-google-auth` bridge too; that was removed in SPENDLY-7.)
  *
  * Falls back to `EXPO_PUBLIC_APP_URL` so a build that has not set the new
  * variable keeps behaving as it did before.
