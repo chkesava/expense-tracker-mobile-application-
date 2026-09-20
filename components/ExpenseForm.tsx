@@ -57,7 +57,11 @@ import { useAuth } from "@/providers/AuthProvider";
 import { useCelebration } from "@/providers/CelebrationProvider";
 import { useSettings } from "@/providers/SettingsProvider";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
-import { suggestCategoryFromNote } from "@/shared/data/categoryTaxonomy";
+import {
+  DEFAULT_EXPENSE_CATEGORY,
+  DEFAULT_EXPENSE_SUBCATEGORY,
+  suggestCategoryFromNote,
+} from "@/shared/data/categoryTaxonomy";
 import {
   INCOME_SOURCES,
   type Expense,
@@ -133,9 +137,9 @@ export function ExpenseForm({
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState("");
   const [category, setCategory] = useState<string>(
-    settings.defaultCategory || "Food"
+    settings.defaultCategory || DEFAULT_EXPENSE_CATEGORY
   );
-  const [subcategory, setSubcategory] = useState<string>("Groceries");
+  const [subcategory, setSubcategory] = useState<string>(DEFAULT_EXPENSE_SUBCATEGORY);
   const [source, setSource] = useState<string>("Salary");
   const [accountId, setAccountId] = useState<string>("");
   const [note, setNote] = useState("");
@@ -177,7 +181,7 @@ export function ExpenseForm({
       setType("expense");
       setAmount(String(editingExpense.amount || ""));
       setDate(editingExpense.date || todayDateKey(settings.timezone));
-      setCategory(editingExpense.category || "Food");
+      setCategory(editingExpense.category || DEFAULT_EXPENSE_CATEGORY);
       setSubcategory(editingExpense.subcategory || "Other");
       setAccountId(editingExpense.accountId || "");
       setNote(editingExpense.note || "");
@@ -198,8 +202,8 @@ export function ExpenseForm({
       setType(initialType);
       setAmount("");
       setDate(todayDateKey(settings.timezone));
-      setCategory(settings.defaultCategory || "Food");
-      setSubcategory("Groceries");
+      setCategory(settings.defaultCategory || DEFAULT_EXPENSE_CATEGORY);
+      setSubcategory(DEFAULT_EXPENSE_SUBCATEGORY);
       setSource("Salary");
       setAccountId(accounts.length > 0 ? accounts[0].id : "");
       setNote("");

@@ -29,7 +29,7 @@ describe("SMS notification copy", () => {
     expect(entry).toBeDefined();
     const copy = buildDetectedNotification(entry!);
     expect(copy.title).toBe("💰 Transaction detected");
-    expect(copy.body).toBe("₹450 • Swiggy\nFood");
+    expect(copy.body).toBe("₹450 • Swiggy\nFood & Groceries");
     expect(copy.data).toEqual({
       source: "sms",
       kind: "detected",
@@ -41,7 +41,7 @@ describe("SMS notification copy", () => {
     const entry = processRawSmsMessages([swiggy]).writeReady[0];
     const copy = buildAutoAddedNotification(entry!);
     expect(copy.title).toBe("✅ ₹450 Swiggy expense added");
-    expect(copy.body).toBe("Food");
+    expect(copy.body).toBe("Food & Groceries");
     expect(copy.data.kind).toBe("auto_added");
     expect(copy.data.url).toBe("/dashboard");
   });

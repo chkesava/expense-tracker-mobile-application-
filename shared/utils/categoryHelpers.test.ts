@@ -18,67 +18,67 @@ describe("Category Preferences & Taxonomy Tests", () => {
 
   describe("Recent Category Pairs", () => {
     it("should store and retrieve recently used category and subcategory pairs", () => {
-      pushRecentCategoryPair("Food", "Groceries");
-      pushRecentCategoryPair("Travel", "Petrol / Diesel");
+      pushRecentCategoryPair("Food & Groceries", "Groceries / Kirana");
+      pushRecentCategoryPair("Transport & Vehicles", "Petrol");
 
       const recents = getRecentCategoryPairs();
       expect(recents.length).toBe(2);
       expect(recents[0]).toMatchObject({
-        category: "Travel",
-        subcategory: "Petrol / Diesel",
+        category: "Transport & Vehicles",
+        subcategory: "Petrol",
       });
       expect(recents[1]).toMatchObject({
-        category: "Food",
-        subcategory: "Groceries",
+        category: "Food & Groceries",
+        subcategory: "Groceries / Kirana",
       });
     });
 
     it("should deduplicate and move existing pair to top", () => {
-      pushRecentCategoryPair("Food", "Groceries");
-      pushRecentCategoryPair("Home", "Rent");
-      pushRecentCategoryPair("Food", "Groceries");
+      pushRecentCategoryPair("Food & Groceries", "Groceries / Kirana");
+      pushRecentCategoryPair("Home & Household", "Rent");
+      pushRecentCategoryPair("Food & Groceries", "Groceries / Kirana");
 
       const recents = getRecentCategoryPairs();
       expect(recents.length).toBe(2);
-      expect(recents[0].category).toBe("Food");
-      expect(recents[0].subcategory).toBe("Groceries");
-      expect(recents[1].category).toBe("Home");
+      expect(recents[0].category).toBe("Food & Groceries");
+      expect(recents[0].subcategory).toBe("Groceries / Kirana");
+      expect(recents[1].category).toBe("Home & Household");
     });
 
-    it("should cap recent pairs at max limit (8)", () => {
-      for (let i = 0; i < 12; i++) {
+    it("should cap recent pairs at max limit (12)", () => {
+      for (let i = 0; i < 16; i++) {
         pushRecentCategoryPair(`Cat-${i}`, `Sub-${i}`);
       }
       const recents = getRecentCategoryPairs();
-      expect(recents.length).toBe(8);
-      expect(recents[0].category).toBe("Cat-11");
+      expect(recents.length).toBe(12);
+      expect(recents[0].category).toBe("Cat-15");
     });
   });
 
   describe("Taxonomy & Legacy Remapping", () => {
     it("returns correct emoji icons for top-level categories", () => {
-      expect(getCategoryIcon("Food")).toBe("🍽");
-      expect(getCategoryIcon("Home")).toBe("🏠");
-      expect(getCategoryIcon("Travel")).toBe("🚗");
+      expect(getCategoryIcon("Food & Groceries")).toBe("🍽");
+      expect(getCategoryIcon("Home & Household")).toBe("🏠");
+      expect(getCategoryIcon("Transport & Vehicles")).toBe("🚗");
       expect(getCategoryIcon("Unknown Category")).toBe("📦");
     });
 
     it("remaps legacy flat categories properly", () => {
       const mappedGrocery = mapLegacyExpense("Groceries", "bought apples");
-      expect(mappedGrocery.category).toBe("Food");
-      expect(mappedGrocery.subcategory).toBe("Groceries");
+      expect(mappedGrocery.category).toBe("Food & Groceries");
+      expect(mappedGrocery.subcategory).toBe("Groceries / Kirana");
 
       const mappedRent = mapLegacyExpense("Rent", "apartment rent");
-      expect(mappedRent.category).toBe("Home");
+      expect(mappedRent.category).toBe("Home & Household");
       expect(mappedRent.subcategory).toBe("Rent");
     });
 
     it("contains complete taxonomy structure", () => {
       expect(CATEGORY_TAXONOMY.length).toBeGreaterThan(5);
-      const foodNode = CATEGORY_TAXONOMY.find((t) => t.name === "Food");
+      const foodNode = CATEGORY_TAXONOMY.find((t) => t.name === "Food & Groceries");
       expect(foodNode).toBeDefined();
-      expect(foodNode?.subcategories).toContain("Groceries");
-      expect(foodNode?.subcategories).toContain("Eating Out");
+      expect(foodNode?.subcategories.map((s) => s.name)).toContain("Groceries / Kirana");
+      expect(foodNode?.subcategories.map((s) => s.name)).toContain("Restaurants & Dining");
     });
   });
 });

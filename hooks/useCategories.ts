@@ -46,9 +46,12 @@ export const useCategories = () => {
     [categories]
   );
 
-  /** Parents shown in expense pickers (excludes hidden). */
+  /** Parents shown in expense pickers (excludes hidden and income sink). */
   const visibleParents = useMemo(
-    () => parentCategories.filter((c) => !c.isHidden),
+    () =>
+      parentCategories.filter(
+        (c) => !c.isHidden && c.name !== "Income"
+      ),
     [parentCategories]
   );
 

@@ -243,7 +243,7 @@ describe("expenseDraftFromStatementLine", () => {
     const draft = expenseDraftFromStatementLine(lines[0], "cc-1");
     expect(draft).toEqual({
       amount: 450,
-      category: "Food",
+      category: "Food & Groceries",
       subcategory: "Food Delivery",
       date: "2026-08-13",
       month: "2026-08",
@@ -253,10 +253,10 @@ describe("expenseDraftFromStatementLine", () => {
     });
   });
 
-  it("falls back to Shopping when the merchant is unknown", () => {
-    const { lines } = parseStatementLines("13/08/2026  INTEREST CHARGES  226.00");
+  it("falls back to Shopping & Clothing when the merchant is unknown", () => {
+    const { lines } = parseStatementLines("13/08/2026  XYZCORP POS  226.00");
     const draft = expenseDraftFromStatementLine(lines[0], "cc-1");
     expect(draft.category).toBe(STATEMENT_REVIEW_FALLBACK_CATEGORY);
-    expect(draft.note).toBe("INTEREST CHARGES");
+    expect(draft.note).toBe("XYZCORP POS");
   });
 });

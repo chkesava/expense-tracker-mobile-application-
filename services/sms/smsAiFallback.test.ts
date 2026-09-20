@@ -42,7 +42,7 @@ describe("SMS AI fallback", () => {
     expect(parsed.kind).toBe("expense");
     expect(parsed.merchant).toBe("Netflix");
     expect(parsed.amount).toBe(649);
-    expect(parsed.category).toBe("Entertainment");
+    expect(parsed.category).toBe("Entertainment & Hobbies");
     expect(parsed.parseReasons).toContain("ai_fallback");
     expect(isHighConfidenceForAutoAdd(parsed)).toBe(true);
 

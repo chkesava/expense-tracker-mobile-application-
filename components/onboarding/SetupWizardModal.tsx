@@ -132,7 +132,7 @@ export function SetupWizardModal() {
 
   // Step 4: Expense
   const [expenseAmount, setExpenseAmount] = useState("250");
-  const [expenseCategory] = useState("Food");
+  const [expenseCategory] = useState("Food & Groceries");
   const [expenseNote, setExpenseNote] = useState("Coffee & snacks");
 
   useEffect(() => {

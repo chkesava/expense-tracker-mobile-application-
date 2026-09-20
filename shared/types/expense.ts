@@ -24,17 +24,20 @@ export const LEGACY_FLAT_CATEGORIES = [
 
 export const INCOME_SOURCES = [
   "Salary",
+  "Bonus",
   "Freelance",
-  "Business",
-  "Rental",
-  "Bank Credit",
-  "UPI Received",
-  "Refund",
-  "Cashback",
+  "Business Income",
+  "Rental Income",
   "Interest",
-  "Investment",
-  "Gift",
-  "Other",
+  "Dividend",
+  "Cashback",
+  "Refund",
+  "Reimbursement",
+  "Gift Received",
+  "Pension",
+  "Government Benefit",
+  "Investment Proceeds",
+  "Other Income",
 ] as const;
 
 export type CategoryKind = "category" | "subcategory";
@@ -54,6 +57,8 @@ export interface Category {
   isHidden?: boolean;
   isFavorite?: boolean;
   sortOrder?: number;
+  /** Stable taxonomy identity for default docs; expenses still store display names. */
+  semanticKey?: string;
   createdAt?: unknown;
 }
 

@@ -28,8 +28,8 @@ describe("parseNaturalLanguageTransaction", () => {
     });
     expect(res.type).toBe("expense");
     expect(res.amount).toBe(450);
-    expect(res.category).toBe("Food");
-    expect(res.subcategory).toBe("Groceries");
+    expect(res.category).toBe("Food & Groceries");
+    expect(res.subcategory).toBe("Groceries / Kirana");
   });
 
   it("parses account name and relative date", () => {
