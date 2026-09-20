@@ -58,7 +58,7 @@ const DEFAULT_FORM: NutritionProfile = {
 export default function NutritionProfileScreen() {
   const { theme } = useTheme();
   const router = useRouter();
-  const { user, logout } = useAuth();
+  const { user, logout, isDuress } = useAuth();
   const { settings, setGhostMode } = useSettings();
   const { setActiveWorkspace } = useWorkspace();
   const { profile, loading, updateProfileAndGoals } = useNutritionProfile();
@@ -236,6 +236,26 @@ export default function NutritionProfileScreen() {
               </Text>
             </Pressable>
           </View>
+          {/* SPENDLY-7: Play requires an in-app deletion path in every
+              listing, and Nutrition ships as its own. */}
+          {isDuress ? null : (
+            <Pressable
+              onPress={() => router.push("/delete-account")}
+              accessibilityRole="button"
+              accessibilityLabel="Delete account"
+              style={({ pressed }) => [{ paddingTop: 12 }, pressed && { opacity: 0.85 }]}
+            >
+              <Text
+                style={{
+                  color: theme.colors.mutedForeground,
+                  fontWeight: "700",
+                  textAlign: "center",
+                }}
+              >
+                Delete account
+              </Text>
+            </Pressable>
+          )}
         </Card>
       </View>
     </PageShell>

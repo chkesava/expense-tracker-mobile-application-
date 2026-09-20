@@ -372,6 +372,13 @@ function RootNavigator() {
             }}
           />
         )}
+        {/* SPENDLY-7: root level on purpose. Entering it unmounts the product
+            stacks and every listener they hold, so deletion does not run
+            underneath live snapshots. Registered for all three products —
+            Play requires an in-app deletion path in each listing. */}
+        {!IS_LANDING_BUILD && (
+          <Stack.Screen name="delete-account" options={{ animation: "fade" }} />
+        )}
         {!IS_LANDING_BUILD && (ACTIVE_PRODUCT === null || ACTIVE_PRODUCT === "ganesh") && (
           <Stack.Screen
             name="ganesh-phone-auth"

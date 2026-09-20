@@ -22,9 +22,17 @@ import { useTheme } from "@/theme/ThemeProvider";
 export function PandalAccountBar({
   onSwitchApp,
   onLogout,
+  onDeleteAccount,
 }: {
   onSwitchApp: () => void;
   onLogout: () => void;
+  /**
+   * SPENDLY-7. Optional so `setup.tsx`, where there is no account to delete
+   * yet, is unaffected. Deliberately a quiet text link rather than a tile
+   * beside "Log out" — it is a rare, irreversible action, not a peer of
+   * switching apps.
+   */
+  onDeleteAccount?: () => void;
 }) {
   const { theme } = useTheme();
   const g = useGaneshTokens();
@@ -89,6 +97,27 @@ export function PandalAccountBar({
       <MetaLabel>
         Switching apps keeps you signed in. Ganesh Seva and Expense Tracker never share data.
       </MetaLabel>
+      {onDeleteAccount ? (
+        <Pressable
+          onPress={onDeleteAccount}
+          accessibilityRole="button"
+          accessibilityLabel="Delete account"
+          style={({ pressed }) => [{ paddingVertical: 8 }, pressed ? { opacity: 0.85 } : null]}
+        >
+          <Text
+            style={[
+              styles.label,
+              {
+                color: theme.colors.mutedForeground,
+                fontFamily: theme.fontFamily.semibold,
+                fontSize: 13,
+              },
+            ]}
+          >
+            Delete account
+          </Text>
+        </Pressable>
+      ) : null}
       <GaneshAppVersion showUpdateCheck />
     </View>
   );

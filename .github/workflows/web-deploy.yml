@@ -138,6 +138,7 @@ jobs:
           node --no-experimental-require-module -e "require('./netlify/functions-dist/ganesh-draw.js'); console.log('ganesh-draw loaded')"
           node --no-experimental-require-module -e "require('./netlify/functions-dist/epf-cron.js'); console.log('epf-cron loaded')"
           node --no-experimental-require-module -e "require('./netlify/functions-dist/nutrition-ai.js'); console.log('nutrition-ai loaded')"
+          node --no-experimental-require-module -e "require('./netlify/functions-dist/delete-account.js'); console.log('delete-account loaded')"
 
       - name: Deploy to Netlify
         env:

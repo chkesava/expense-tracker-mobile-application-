@@ -43,7 +43,7 @@ const ROLE_ORDER: Record<string, number> = {
 export default function PandalScreen() {
   const g = useGaneshTokens();
   const { push } = useRouter();
-  const { logout } = useAuth();
+  const { logout, isDuress } = useAuth();
   const { setActiveWorkspace } = useWorkspace();
   const { pandalId, festivalId } = useGaneshSession();
   const { pandals } = usePandals();
@@ -338,6 +338,7 @@ export default function PandalScreen() {
           onLogout={() => {
             void logout();
           }}
+          onDeleteAccount={isDuress ? undefined : () => push("/delete-account")}
         />
       </View>
     </GaneshScreen>
