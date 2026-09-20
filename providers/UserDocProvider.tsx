@@ -25,6 +25,16 @@ type UserDocContextType = {
    * `error` is set — a failed read tells us nothing about existence.
    */
   exists: boolean;
+  /**
+   * `data` with the account's identity removed while duress mode is active —
+   * SPENDLY-22.
+   *
+   * The listener itself deliberately stays on the **real** uid: settings,
+   * theme, currency and budget all read from it in Spendly, Ganesh Seva and
+   * Nutrition, and re-keying it is how those break. Screens that display the
+   * account rather than use it read this instead.
+   */
+  maskedData: DocumentData | null;
   /** Non-null when the listener failed. */
   error: LoadFailure | null;
   loading: boolean;
@@ -99,16 +109,23 @@ export function UserDocProvider({ children }: { children: ReactNode }) {
     return data?.role === "SUPER_ADMIN" ? "SUPER_ADMIN" : "USER";
   }, [data?.role, isDuress]);
 
+  const maskedData = useMemo<DocumentData | null>(() => {
+    if (!isDuress || !data) return data;
+    const { username, email, displayName, photoURL, ...rest } = data;
+    return rest;
+  }, [data, isDuress]);
+
   const value = useMemo<UserDocContextType>(
     () => ({
       data,
+      maskedData,
       exists,
       error,
       loading,
       role,
       isAdmin: role === "SUPER_ADMIN",
     }),
-    [data, exists, error, loading, role]
+    [data, maskedData, exists, error, loading, role]
   );
 
   return (

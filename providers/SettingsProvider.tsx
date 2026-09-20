@@ -22,7 +22,6 @@ import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
 import { commitWrite } from "@/lib/firestoreWrite";
 import { haptic } from "@/lib/haptics";
-import { hashPin } from "@/lib/pinSecurity";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
@@ -61,8 +60,6 @@ type SettingsContextType = {
   setNavigationStyle: (val: NavigationStyle) => void;
   setGhostMode: (val: boolean) => void;
   setHapticFeedback: (val: boolean) => void;
-  setPrivacyPin: (val: string) => void;
-  setFakePin: (val: string) => void;
   setLockOnInactivity: (val: boolean) => void;
   setInactivityTimeout: (val: number) => void;
   setLockOnAppSwitch: (val: boolean) => void;
@@ -194,18 +191,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     [drainPendingWrites, realUser]
   );
 
-  /**
-   * PINs are synced/cached like the rest of settings (Firestore + local
-   * persistence), so they're hashed before storage rather than kept in
-   * plaintext. Empty string (removing a PIN) is stored as-is.
-   */
-  const setPin = useCallback(
-    async (field: "privacyPin" | "fakePin", val: string) => {
-      const stored = val ? await hashPin(val) : "";
-      await updateSettings({ [field]: stored });
-    },
-    [updateSettings]
-  );
+  // SPENDLY-22: the privacy PIN is no longer a setting. It lives in
+  // `lib/pinVault.ts` behind SecureStore and is reached through
+  // `PrivacyPinProvider` — keeping a setter here would put it back in
+  // Firestore, which is the defect AUTH-04 is about.
 
   const value = useMemo<SettingsContextType>(
     () => ({
@@ -231,8 +220,6 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       setNavigationStyle: (val) => void updateSettings({ navigationStyle: val }),
       setGhostMode: (val) => void updateSettings({ ghostMode: val }),
       setHapticFeedback: (val) => void updateSettings({ hapticFeedback: val }),
-      setPrivacyPin: (val) => void setPin("privacyPin", val),
-      setFakePin: (val) => void setPin("fakePin", val),
       setLockOnInactivity: (val) => void updateSettings({ lockOnInactivity: val }),
       setInactivityTimeout: (val) =>
         void updateSettings({ inactivityTimeout: val }),
@@ -259,7 +246,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         });
       },
     }),
-    [settings, loading, updateSettings, setPin]
+    [settings, loading, updateSettings]
   );
 
   return (

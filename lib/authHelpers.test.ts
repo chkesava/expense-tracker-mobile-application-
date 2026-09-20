@@ -11,7 +11,13 @@ function mockUser(uid: string): User {
     uid,
     email: "user@example.com",
     displayName: "Test User",
-  } as User;
+    photoURL: "https://example.com/a.png",
+    emailVerified: true,
+    providerData: [{ providerId: "google.com" }],
+    // The real Firebase User carries this; the duress proxy must keep it
+    // reachable (SPENDLY-22).
+    getIdToken: async () => "token",
+  } as unknown as User;
 }
 
 describe("authHelpers", () => {
@@ -41,14 +47,38 @@ describe("authHelpers", () => {
   });
 
   describe("createDuressUser", () => {
-    it("proxies uid with _duress suffix while preserving other fields", () => {
+    it("proxies uid with _duress suffix", () => {
       const real = mockUser("abc123");
       const duress = createDuressUser(real);
 
       expect(duress.uid).toBe("abc123_duress");
       expect(real.uid).toBe("abc123");
-      expect(duress.email).toBe("user@example.com");
-      expect(duress.displayName).toBe("Test User");
+    });
+
+    // SPENDLY-22 (AUTH-04). These used to pass through from the real user and
+    // were rendered on the profile screen, the side drawer and Nutrition's
+    // profile — and stamped onto documents created in the duress tree.
+    it("does not leak the real identity", () => {
+      const real = mockUser("abc123");
+      const duress = createDuressUser(real);
+
+      expect(duress.email).toBeNull();
+      expect(duress.displayName).toBeNull();
+      expect(duress.photoURL).toBeNull();
+      expect(duress.emailVerified).toBe(false);
+      expect(duress.providerData).toEqual([]);
+
+      // The real user is untouched.
+      expect(real.email).toBe("user@example.com");
+      expect(real.displayName).toBe("Test User");
+    });
+
+    it("keeps User prototype methods reachable", () => {
+      // The masking must not tempt anyone into returning a plain object:
+      // consumers call getIdToken() on this.
+      const real = mockUser("abc123");
+      const duress = createDuressUser(real);
+      expect(typeof duress.getIdToken).toBe("function");
     });
 
     it("does not mutate the real user uid", () => {

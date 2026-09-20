@@ -14,8 +14,10 @@ import { useTheme } from "@/theme/ThemeProvider";
 
 export function ProfileSection() {
   const { theme } = useTheme();
-  const { user, realUser, logout } = useAuth();
-  const { data, role, isAdmin } = useUserDoc();
+  const { user, realUser, logout, isDuress } = useAuth();
+  // SPENDLY-22: the identity fields are stripped while duress mode is active,
+  // so the username field cannot show the real one.
+  const { maskedData: data, role, isAdmin } = useUserDoc();
   const [username, setUsername] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
 
@@ -24,6 +26,9 @@ export function ProfileSection() {
   }, [data?.username]);
 
   const onSaveProfile = async () => {
+    // The control is hidden under duress; this is the guard that matters,
+    // because the write targets the *real* account (SPENDLY-22).
+    if (isDuress) return;
     const db = getFirestoreDb();
     if (!realUser || !db) return;
     setSavingProfile(true);
@@ -62,16 +67,23 @@ export function ProfileSection() {
       <Text style={{ color: theme.colors.mutedForeground, fontSize: theme.typography.sm }}>
         {user?.displayName || "—"} · {user?.email || "—"}
       </Text>
-      <Input
-        label="Username"
-        value={username}
-        onChangeText={setUsername}
-        autoCapitalize="none"
-        placeholder="yourname"
-      />
-      <Button loading={savingProfile} onPress={onSaveProfile}>
-        Save profile
-      </Button>
+      {/* SPENDLY-22: editing writes to the real account, so duress mode gets
+          the panel without the controls rather than a form that quietly
+          rewrites the victim's profile. */}
+      {isDuress ? null : (
+        <>
+          <Input
+            label="Username"
+            value={username}
+            onChangeText={setUsername}
+            autoCapitalize="none"
+            placeholder="yourname"
+          />
+          <Button loading={savingProfile} onPress={onSaveProfile}>
+            Save profile
+          </Button>
+        </>
+      )}
       <Button variant="destructive" onPress={onLogout}>
         Sign out
       </Button>

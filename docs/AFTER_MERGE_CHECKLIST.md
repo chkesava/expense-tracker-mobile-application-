@@ -26,6 +26,21 @@ workflow; Android lags until testers install the new APK.
 When a ticket only **adds** a client write that new rules already allow, deploy
 rules first (or together) so the new app is not denied.
 
+### SPENDLY-22 — the privacy PIN stops syncing
+
+This one has a user-visible consequence that belongs in the release note, not
+just the changelog. The PIN moved from `users/{uid}` to device-local storage
+([`SPENDLY-22-privacy-lock-boundary.md`](./SPENDLY-22-privacy-lock-boundary.md)),
+and the first upgraded device clears the Firestore fields.
+
+So **a second device still on the old build loses its lock** until it updates —
+nobody is locked out and nothing is deleted, but the lock is simply absent
+there. Same for a brand-new device: the PIN no longer follows the account, so
+it must be set again per device.
+
+Ship web and Android reasonably close together to keep that window short, and
+say so in the release note.
+
 ---
 
 ## 1. Pick what this ticket actually changed

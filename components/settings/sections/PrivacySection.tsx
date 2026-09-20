@@ -10,8 +10,9 @@ import {
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useBiometrics } from "@/hooks/useBiometrics";
-import { pinMatches } from "@/lib/pinSecurity";
 import { toast } from "@/lib/toast";
+import { useAuth } from "@/providers/AuthProvider";
+import { usePrivacyPin } from "@/providers/PrivacyPinProvider";
 import { useSettings } from "@/providers/SettingsProvider";
 import { useTheme } from "@/theme/ThemeProvider";
 
@@ -27,8 +28,6 @@ export function PrivacySection() {
   const { theme } = useTheme();
   const {
     settings,
-    setPrivacyPin,
-    setFakePin,
     setLockOnInactivity,
     setInactivityTimeout,
     setLockOnAppSwitch,
@@ -41,12 +40,26 @@ export function PrivacySection() {
     unregister: unregisterBiometrics,
   } = useBiometrics();
 
+  // SPENDLY-22: the PIN is device-local now, and under duress this whole
+  // section renders as a never-configured account — see `isDuress` below.
+  const { isDuress } = useAuth();
+  const {
+    hasRealPin,
+    hasDuressPin,
+    migratedThisLaunch,
+    setRealPin,
+    setDuressPin,
+    removeAllPins,
+    removeDuressPin,
+    verifyPin,
+  } = usePrivacyPin();
+
   const [newPin, setNewPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
   const [newFakePin, setNewFakePin] = useState("");
   const [confirmFakePin, setConfirmFakePin] = useState("");
 
-  const onEnablePin = () => {
+  const onEnablePin = async () => {
     if (!/^\d{4}$/.test(newPin)) {
       toast.error("PIN must be exactly 4 digits");
       return;
@@ -55,21 +68,30 @@ export function PrivacySection() {
       toast.error("PIN confirmation does not match");
       return;
     }
-    setPrivacyPin(newPin);
     setNewPin("");
     setConfirmPin("");
+    // Under duress the form answers exactly as it would for a real user and
+    // writes nothing. A coercer setting a PIN must not overwrite the victim's.
+    if (isDuress) {
+      toast.success("Privacy PIN enabled");
+      return;
+    }
+    await setRealPin(newPin);
     toast.success("Privacy PIN enabled");
   };
 
-  const onRemovePin = () => {
-    setPrivacyPin("");
-    setFakePin("");
+  const onRemovePin = async () => {
+    // Unreachable from the duress rendering, which never shows this control.
+    // Guarded anyway: this one deletes the victim's real lock.
+    if (isDuress) return;
+    await removeAllPins();
     void unregisterBiometrics();
     toast.success("Privacy PIN removed");
   };
 
   const onEnableFakePin = async () => {
-    if (!settings.privacyPin) {
+    if (isDuress) return;
+    if (!hasRealPin) {
       toast.error("Set a privacy PIN first");
       return;
     }
@@ -81,17 +103,19 @@ export function PrivacySection() {
       toast.error("Duress PIN confirmation does not match");
       return;
     }
-    if (await pinMatches(newFakePin, settings.privacyPin)) {
+    if ((await verifyPin(newFakePin)) === "real") {
       toast.error("Duress PIN must differ from your real PIN");
       return;
     }
-    setFakePin(newFakePin);
+    await setDuressPin(newFakePin);
     setNewFakePin("");
     setConfirmFakePin("");
     toast.success("Duress PIN enabled");
   };
 
   const onToggleBiometrics = async () => {
+    // Touches the real device key, so it stays out of reach under duress.
+    if (isDuress) return;
     if (biometricsRegistered) {
       await unregisterBiometrics();
       toast.success("Biometrics disabled");
@@ -122,12 +146,41 @@ export function PrivacySection() {
       </SettingsPanel>
 
       <SettingsPanel title="Privacy" subtitle="PIN, duress, lock & biometrics">
-      {settings.privacyPin ? (
+      <Text
+        style={{
+          color: theme.colors.mutedForeground,
+          fontSize: theme.typography.xs,
+          lineHeight: 18,
+        }}
+      >
+        The PIN hides the app from someone holding your phone. It does not
+        encrypt your data — anything already downloaded stays on this device.
+        Your PIN is stored on this device only and never leaves it.
+      </Text>
+      {/* SPENDLY-22: shown for one launch after the PIN moved off Firestore,
+          because it stops syncing and the user has to know that. */}
+      {migratedThisLaunch && !isDuress ? (
+        <Text
+          style={{
+            color: theme.colors.primary,
+            fontSize: theme.typography.xs,
+            fontWeight: "700",
+            lineHeight: 18,
+          }}
+        >
+          Your PIN is now stored on this device only. Set it again on your other
+          devices.
+        </Text>
+      ) : null}
+      {/* SPENDLY-22: under duress this renders as a never-configured account.
+          Hiding the section outright would be its own tell — a missing row in
+          the Settings hub is how a coercer learns duress mode exists. */}
+      {hasRealPin && !isDuress ? (
         <>
           <Text style={{ color: theme.colors.success, fontSize: theme.typography.sm }}>
             Privacy PIN is enabled
           </Text>
-          <Button variant="destructive" onPress={onRemovePin}>
+          <Button variant="destructive" onPress={() => void onRemovePin()}>
             Remove PIN
           </Button>
 
@@ -178,11 +231,11 @@ export function PrivacySection() {
             Opens an isolated empty vault ({`{uid}_duress`}). Must differ from your
             real PIN.
           </Text>
-          {settings.fakePin ? (
+          {hasDuressPin ? (
             <Button
               variant="outline"
               onPress={() => {
-                setFakePin("");
+                void removeDuressPin();
                 toast.success("Duress PIN removed");
               }}
             >
@@ -242,7 +295,7 @@ export function PrivacySection() {
             secureTextEntry
             maxLength={4}
           />
-          <Button onPress={onEnablePin}>Enable privacy PIN</Button>
+          <Button onPress={() => void onEnablePin()}>Enable privacy PIN</Button>
         </>
       )}
       </SettingsPanel>

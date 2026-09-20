@@ -46,6 +46,7 @@ import {
 import { enforceGoogleSignupGate } from "@/lib/googleSignupGate";
 import { perfMark } from "@/lib/perf";
 import { privacySession } from "@/lib/privacySession";
+import { duressUid } from "@/shared/utils/duress";
 import { getGlobalPendingSyncCount } from "@/lib/syncStatusStore";
 import { ganeshSessionStorageKey } from "@/shared/utils/ganeshSessionStorage";
 import {
@@ -107,7 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!realUser) return;
-    const writeUid = isDuress ? `${realUser.uid}_duress` : realUser.uid;
+    const writeUid = isDuress ? duressUid(realUser.uid) : realUser.uid;
     void replayWriteOutbox(writeUid).catch((error) => {
       logError("authProvider.replayWriteOutbox", error);
     });
