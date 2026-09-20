@@ -1,7 +1,4 @@
-import {
-  CATEGORY_TAXONOMY,
-  suggestCategoryFromNote,
-} from "@/shared/data/categoryTaxonomy";
+import { suggestCategoryFromNote } from "@/shared/data/categoryTaxonomy";
 import type { CategorizationRule } from "@/shared/types/expense";
 
 export interface ParsedTransaction {
@@ -227,8 +224,8 @@ export function parseNaturalLanguageTransaction(
 
     // Default fallback
     if (!category) {
-      category = "Other";
-      subcategory = "Miscellaneous";
+      category = "Miscellaneous";
+      subcategory = "Uncategorized";
     }
   }
 

@@ -3,10 +3,14 @@ import { currentMonthKey, isInMonth, monthKeyOf } from "./dates";
 
 const FIXED_CATEGORIES = [
   "Home",
+  "Home & Household",
   "Housing",
   "Bills",
+  "Bills & Communication",
   "Savings & EMI",
   "Finance",
+  "Finance, Loans & Insurance",
+  "Investments & Savings",
   "Rent",
   "Utilities",
   "Subscriptions",

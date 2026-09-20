@@ -12,18 +12,20 @@ type FocusLens = {
 };
 
 export const FOCUS_LENSES: FocusLens[] = [
-  { id: "food", label: "Food", category: "Food" },
-  { id: "transport", label: "Travel", category: "Travel" },
-  { id: "health", label: "Health", category: "Health" },
-  { id: "family", label: "Family", category: "Family" },
-  { id: "investments", label: "Savings & EMI", category: "Savings & EMI" },
+  { id: "food", label: "Food", category: "Food & Groceries" },
+  { id: "transport", label: "Travel", category: "Transport & Vehicles" },
+  { id: "health", label: "Health", category: "Health & Medical" },
+  { id: "family", label: "Family", category: "Family & Children" },
+  { id: "investments", label: "Investments", category: "Investments & Savings" },
   {
     id: "subscriptions",
     label: "Subscriptions",
     match: (e: Expense) =>
+      e.subcategory === "OTT" ||
       e.subcategory === "OTT / Music" ||
       e.subcategory === "Subscriptions" ||
-      (e.category === "Entertainment" && e.subcategory === "OTT / Music"),
+      e.subcategory === "Streaming" ||
+      (e.category === "Entertainment & Hobbies" && e.subcategory === "OTT"),
   },
 ];
 

@@ -18,7 +18,11 @@ import {
 } from "lucide-react-native";
 
 import { useCategories } from "@/hooks/useCategories";
-import { getCategoryIcon } from "@/shared/data/categoryTaxonomy";
+import {
+  categoryParentMatchesSearch,
+  getCategoryIcon,
+  isHiddenTaxonomyParent,
+} from "@/shared/data/categoryTaxonomy";
 import {
   getRecentCategoryPairs,
   pushRecentCategoryPair,
@@ -99,11 +103,14 @@ export function CategoryPicker({
 
   const filteredParents = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return visibleParents;
-    return visibleParents.filter(
-      (c) =>
-        c.name.toLowerCase().includes(q) ||
-        getSubcategories(c.id).some((s) => s.name.toLowerCase().includes(q))
+    const parents = visibleParents.filter((c) => !isHiddenTaxonomyParent(c.name));
+    if (!q) return parents;
+    return parents.filter((c) =>
+      categoryParentMatchesSearch(
+        c.name,
+        getSubcategories(c.id).map((s) => s.name),
+        q
+      )
     );
   }, [visibleParents, search, getSubcategories]);
 

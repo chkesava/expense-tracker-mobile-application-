@@ -3,7 +3,7 @@ import { monthFromDateKey } from "./dates";
 import type { StatementLine } from "./statementParse";
 
 export const STATEMENT_REVIEW_TAG = "statement-review";
-export const STATEMENT_REVIEW_FALLBACK_CATEGORY = "Shopping";
+export const STATEMENT_REVIEW_FALLBACK_CATEGORY = "Shopping & Clothing";
 export const STATEMENT_REVIEW_FALLBACK_SUBCATEGORY = "Other Shopping";
 
 export type StatementExpenseDraft = {

@@ -22,12 +22,12 @@ describe("classifySmsIncomeSource", () => {
     ).toBe("Interest");
     expect(
       classifySmsIncomeSource("Rs.800 received via UPI from AMIT", 800)
-    ).toBe("UPI Received");
+    ).toBe("Other Income");
   });
 
-  it("uses Bank Credit for smaller unnamed deposits", () => {
+  it("uses Other Income for smaller unnamed deposits", () => {
     expect(classifySmsIncomeSource("Rs.2,000 has been credited to your A/c", 2000)).toBe(
-      "Bank Credit"
+      "Other Income"
     );
   });
 });

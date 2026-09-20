@@ -40,6 +40,10 @@ import { useFinancialGoals } from "@/hooks/useFinancialGoals";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
 import { useAccounts } from "@/hooks/useAccounts";
 import { CategoryPicker } from "@/components/categories/CategoryPicker";
+import {
+  DEFAULT_EXPENSE_CATEGORY,
+  DEFAULT_EXPENSE_SUBCATEGORY,
+} from "@/shared/data/categoryTaxonomy";
 import { EditAccountModal } from "@/components/accounts/EditAccountModal";
 import { SmsMatchingUnconfiguredText } from "@/components/accounts/SmsMatchingUnconfiguredText";
 import { Input } from "@/components/ui/Input";
@@ -348,8 +352,8 @@ export function AutoCategorizationRulesManager() {
   const isDark = themeUsesDarkPalette(themeName);
   const { rules, addRule, deleteRule } = useCategorizationRules();
   const [keyword, setKeyword] = useState("");
-  const [category, setCategory] = useState("Food");
-  const [subcategory, setSubcategory] = useState("Groceries");
+  const [category, setCategory] = useState(DEFAULT_EXPENSE_CATEGORY);
+  const [subcategory, setSubcategory] = useState(DEFAULT_EXPENSE_SUBCATEGORY);
 
   const handleAdd = () => {
     if (!keyword.trim() || !category) return;
@@ -465,8 +469,8 @@ export function CategoryBudgetsManager() {
   const { budgets, addBudget, deleteBudget } = useCategoryBudgets();
   const { celebrateMilestone } = useCelebration();
   const [amount, setAmount] = useState("");
-  const [category, setCategory] = useState("Food");
-  const [subcategory, setSubcategory] = useState("Groceries");
+  const [category, setCategory] = useState(DEFAULT_EXPENSE_CATEGORY);
+  const [subcategory, setSubcategory] = useState(DEFAULT_EXPENSE_SUBCATEGORY);
 
   const [month, setMonth] = useState(() => {
     const d = new Date();

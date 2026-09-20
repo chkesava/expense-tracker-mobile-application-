@@ -1,7 +1,7 @@
 import { getSharedStorage } from "../storage/memoryStorage";
 
 const RECENT_KEY = "recentCategoryPairs";
-const MAX_RECENT = 8;
+const MAX_RECENT = 12;
 
 export type RecentCategoryPair = {
   category: string;

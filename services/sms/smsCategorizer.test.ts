@@ -5,12 +5,12 @@ import { parseBankSms } from "@/services/sms/smsParser";
 
 describe("categorizeSmsMerchant", () => {
   it.each([
-    ["Swiggy", "Food", "Food Delivery"],
-    ["Zomato", "Food", "Food Delivery"],
-    ["Uber", "Travel", "Auto / Cab"],
-    ["Amazon", "Shopping", "Online Shopping"],
-    ["Netflix", "Entertainment", "OTT / Music"],
-    ["Airtel", "Bills", "Mobile Recharge"],
+    ["Swiggy", "Food & Groceries", "Food Delivery"],
+    ["Zomato", "Food & Groceries", "Food Delivery"],
+    ["Uber", "Transport & Vehicles", "Cab / Taxi"],
+    ["Amazon", "Shopping & Clothing", "Online Shopping"],
+    ["Netflix", "Entertainment & Hobbies", "OTT"],
+    ["Airtel", "Bills & Communication", "Mobile Recharge"],
   ])("maps %s → %s / %s", (merchant, category, subcategory) => {
     expect(categorizeSmsMerchant(merchant)).toEqual({
       category,
@@ -45,7 +45,7 @@ describe("parseBankSms categorization", () => {
       receivedAtMs: Date.parse("2026-08-12T10:00:00+05:30"),
     });
     expect(parsed.merchant).toBe("Swiggy");
-    expect(parsed.category).toBe("Food");
+    expect(parsed.category).toBe("Food & Groceries");
     expect(parsed.subcategory).toBe("Food Delivery");
     expect(parsed.templateId).toBe("phase7-parser");
   });

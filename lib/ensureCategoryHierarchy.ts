@@ -11,56 +11,20 @@ import {
 } from "firebase/firestore";
 import {
   CATEGORY_TAXONOMY,
-  collapseToCurrentTaxonomy,
-  mapLegacyExpense,
-  mapToV2Category,
   V1_PARENT_MAP,
+  mapToV4Category,
 } from "@/shared/data/categoryTaxonomy";
+import {
+  FIRESTORE_WRITE_BATCH_LIMIT,
+  planDefaultTaxonomyUpsert,
+  shouldFlushBatch,
+  type PlannedCategoryDoc,
+} from "@/shared/data/categoryHierarchyPlan";
 
 const HIERARCHY_FLAG = "categoryHierarchyVersion";
-export const CATEGORY_HIERARCHY_VERSION = 3;
+export const CATEGORY_HIERARCHY_VERSION = 4;
 
-const LEGACY_FLAT = new Set([
-  "Food",
-  "Rent",
-  "Travel",
-  "Transport",
-  "Accommodation",
-  "Shopping",
-  "Utilities",
-  "Entertainment",
-  "Electrical",
-  "Health",
-  "Education",
-  "Gifts",
-  "Subscriptions",
-  "Insurance",
-  "Brother Related",
-  "Mother Related",
-  "EMIS",
-  "Other",
-  "Uncategorized",
-  "Grocery",
-  "Groceries",
-  "Petrol",
-  "Cool Drinks",
-]);
-
-type CategoryDoc = {
-  id: string;
-  name?: string;
-  kind?: string;
-  parentId?: string | null;
-  isDefault?: boolean;
-};
-
-function needsLegacyRemap(category: unknown): boolean {
-  return typeof category === "string" && LEGACY_FLAT.has(category);
-}
-
-function isCustomDoc(c: CategoryDoc): boolean {
-  return c.isDefault === false;
-}
+type CategoryDoc = PlannedCategoryDoc;
 
 function mappedEquals(
   currentCategory: unknown,
@@ -89,74 +53,44 @@ export async function ensureCategoryHierarchy(
     return;
   }
 
-  if (version < 2) {
-    const categoriesSnap = await getDocs(collection(db, "users", uid, "categories"));
-    const existing: CategoryDoc[] = categoriesSnap.docs.map((d) => ({
-      id: d.id,
-      ...(d.data() as Omit<CategoryDoc, "id">),
-    }));
+  const categoriesSnap = await getDocs(collection(db, "users", uid, "categories"));
+  const existing: CategoryDoc[] = categoriesSnap.docs.map((d) => ({
+    id: d.id,
+    ...(d.data() as Omit<CategoryDoc, "id">),
+  }));
 
-    const hasHierarchy = existing.some(
-      (c) => c.kind === "subcategory" || (c.parentId != null && c.parentId !== "")
-    );
+  const hasHierarchy = existing.some(
+    (c) => c.kind === "subcategory" || (c.parentId != null && c.parentId !== "")
+  );
 
+  if (version === 0 && existing.length === 0) {
+    await upsertDefaultTaxonomy(db, uid, []);
+    await stampVersion(db, uid);
+    return;
+  }
+
+  if (version < 2 && !hasHierarchy) {
     const writer = createBatchWriter(db);
-
-    if (!hasHierarchy) {
-      await seedDefaultTaxonomy(writer, db, uid);
-      for (const old of existing) {
-        writer.delete(doc(db, "users", uid, "categories", old.id));
-      }
-      await writer.flush();
-    } else {
-      const customDocs = existing.filter(isCustomDoc);
-      const defaultDocs = existing.filter((c) => !isCustomDoc(c));
-      const deletedParentIdToName = new Map<string, string>();
-      for (const old of defaultDocs) {
-        if (old.kind !== "subcategory" && (old.parentId == null || old.parentId === "")) {
-          if (old.name) deletedParentIdToName.set(old.id, old.name);
-        }
-      }
-
-      const newParentIds = await seedDefaultTaxonomy(writer, db, uid);
-
-      for (const custom of customDocs) {
-        if (custom.kind !== "subcategory" || !custom.parentId) continue;
-        const oldParentName = deletedParentIdToName.get(custom.parentId);
-        if (!oldParentName) continue;
-        const mappedParent =
-          V1_PARENT_MAP[oldParentName]?.category ??
-          (CATEGORY_TAXONOMY.some((t) => t.name === oldParentName) ? oldParentName : null);
-        if (!mappedParent) continue;
-        const newParentId = newParentIds.get(mappedParent);
-        if (!newParentId || newParentId === custom.parentId) continue;
-        writer.set(
-          doc(db, "users", uid, "categories", custom.id),
-          { parentId: newParentId },
-          true
-        );
-      }
-
-      for (const old of defaultDocs) {
-        writer.delete(doc(db, "users", uid, "categories", old.id));
-      }
-      await writer.flush();
+    for (const old of existing) {
+      writer.delete(doc(db, "users", uid, "categories", old.id));
+      await writer.maybeFlush();
     }
-
-    await remapExpenses(db, uid);
-    await remapNamedPairs(db, uid, "categoryBudgets");
-    await remapNamedPairs(db, uid, "categorizationRules");
-    await remapSubscriptions(db, uid);
-    await remapTripCategoryBudgets(db, uid);
-    await remapDefaultCategorySetting(db, uid);
+    await writer.flush();
+    await upsertDefaultTaxonomy(db, uid, []);
+    await remapAllNamedPairsToV4(db, uid);
+    await stampVersion(db, uid);
+    return;
   }
 
-  if (version < 3) {
-    await collapseCustomCategories(db, uid);
-  }
+  await upsertDefaultTaxonomy(db, uid, existing);
+  await reparentCustomSubsOntoMappedParents(db, uid);
+  await remapAllNamedPairsToV4(db, uid);
+  await stampVersion(db, uid);
+}
 
+async function stampVersion(db: Firestore, uid: string) {
   await setDoc(
-    metaRef,
+    doc(db, "users", uid, "meta", "categories"),
     { [HIERARCHY_FLAG]: CATEGORY_HIERARCHY_VERSION, migratedAt: serverTimestamp() },
     { merge: true }
   );
@@ -192,7 +126,7 @@ function createBatchWriter(db: Firestore) {
       ops++;
     },
     async maybeFlush() {
-      if (ops >= 400) await flush();
+      if (shouldFlushBatch(ops, FIRESTORE_WRITE_BATCH_LIMIT)) await flush();
     },
     flush,
   };
@@ -200,177 +134,117 @@ function createBatchWriter(db: Firestore) {
 
 type BatchWriter = ReturnType<typeof createBatchWriter>;
 
-async function seedDefaultTaxonomy(
-  writer: BatchWriter,
-  db: Firestore,
-  uid: string
-): Promise<Map<string, string>> {
-  const parentIds = new Map<string, string>();
-
-  for (let i = 0; i < CATEGORY_TAXONOMY.length; i++) {
-    const node = CATEGORY_TAXONOMY[i];
-    const parentRef = doc(collection(db, "users", uid, "categories"));
-    parentIds.set(node.name, parentRef.id);
-    writer.set(parentRef, {
-      name: node.name,
-      kind: "category",
-      parentId: null,
-      icon: node.icon,
-      isDefault: true,
-      isArchived: false,
-      sortOrder: i,
-      createdAt: serverTimestamp(),
-    });
-    await writer.maybeFlush();
-
-    for (let j = 0; j < node.subcategories.length; j++) {
-      const subRef = doc(collection(db, "users", uid, "categories"));
-      writer.set(subRef, {
-        name: node.subcategories[j],
-        kind: "subcategory",
-        parentId: parentRef.id,
-        isDefault: true,
-        isArchived: false,
-        sortOrder: j,
-        createdAt: serverTimestamp(),
-      });
-      await writer.maybeFlush();
-    }
-  }
-
-  return parentIds;
-}
-
-async function collapseCustomCategories(db: Firestore, uid: string) {
-  await remapCollapsedExpenses(db, uid);
-  await remapCollapsedPairs(db, uid, "categoryBudgets");
-  await remapCollapsedPairs(db, uid, "categorizationRules");
-  await remapCollapsedSubscriptions(db, uid);
-  await remapCollapsedTripBudgets(db, uid);
-  await remapCollapsedDefaultCategory(db, uid);
-  await deleteCustomCategoryDocs(db, uid);
-}
-
-async function remapCollapsedExpenses(db: Firestore, uid: string) {
-  const expensesSnap = await getDocs(collection(db, "users", uid, "expenses"));
-  const writer = createBatchWriter(db);
-
-  for (const expenseDoc of expensesSnap.docs) {
-    const data = expenseDoc.data();
-    const mapped = collapseToCurrentTaxonomy(
-      (data.category as string) || "Other",
-      typeof data.subcategory === "string" ? data.subcategory : "",
-      (data.note as string) || ""
-    );
-    if (mappedEquals(data.category, data.subcategory, mapped)) continue;
-
-    writer.update(expenseDoc.ref, {
-      category: mapped.category,
-      subcategory: mapped.subcategory,
-      tags: Array.isArray(data.tags) ? data.tags : [],
-    });
-    await writer.maybeFlush();
-  }
-
-  await writer.flush();
-}
-
-async function remapCollapsedPairs(
+async function upsertDefaultTaxonomy(
   db: Firestore,
   uid: string,
-  subcollection: "categoryBudgets" | "categorizationRules"
-) {
-  const snap = await getDocs(collection(db, "users", uid, subcollection));
+  existing: CategoryDoc[]
+): Promise<void> {
+  const plan = planDefaultTaxonomyUpsert(existing, CATEGORY_TAXONOMY);
+  const allocated = new Map<string, string>();
   const writer = createBatchWriter(db);
 
-  for (const row of snap.docs) {
-    const data = row.data();
-    const category = typeof data.category === "string" ? data.category : "";
-    if (!category) continue;
-    const subcategory =
-      typeof data.subcategory === "string" ? data.subcategory : undefined;
-    const mapped = collapseToCurrentTaxonomy(category, subcategory);
-    if (mappedEquals(data.category, data.subcategory ?? "", mapped)) continue;
+  const resolveId = (id: string) => {
+    if (!id.startsWith("new:")) return id;
+    const already = allocated.get(id);
+    if (already) return already;
+    const next = doc(collection(db, "users", uid, "categories")).id;
+    allocated.set(id, next);
+    return next;
+  };
 
-    writer.update(row.ref, {
-      category: mapped.category,
-      subcategory: mapped.subcategory,
-    });
+  for (const write of plan.writes) {
+    if (write.op === "create") {
+      const id = resolveId(write.id);
+      const parentId =
+        write.data.parentId == null ? null : resolveId(write.data.parentId);
+      writer.set(doc(db, "users", uid, "categories", id), {
+        name: write.data.name,
+        kind: write.data.kind,
+        parentId,
+        icon: write.data.icon ?? null,
+        semanticKey: write.data.semanticKey,
+        isDefault: true,
+        isArchived: false,
+        isHidden: write.data.isHidden,
+        sortOrder: write.data.sortOrder,
+        createdAt: serverTimestamp(),
+      });
+    } else if (write.op === "update") {
+      const parentId =
+        write.data.parentId == null || write.data.parentId === undefined
+          ? undefined
+          : resolveId(write.data.parentId);
+      writer.set(
+        doc(db, "users", uid, "categories", write.id),
+        {
+          name: write.data.name,
+          icon: write.data.icon,
+          semanticKey: write.data.semanticKey,
+          isHidden: write.data.isHidden,
+          isArchived: false,
+          sortOrder: write.data.sortOrder,
+          ...(parentId !== undefined ? { parentId } : {}),
+        },
+        true
+      );
+    } else {
+      writer.set(
+        doc(db, "users", uid, "categories", write.id),
+        { isArchived: true },
+        true
+      );
+    }
     await writer.maybeFlush();
   }
 
   await writer.flush();
 }
 
-async function remapCollapsedSubscriptions(db: Firestore, uid: string) {
-  const snap = await getDocs(collection(db, "users", uid, "subscriptions"));
-  const writer = createBatchWriter(db);
-
-  for (const row of snap.docs) {
-    const data = row.data();
-    const category = typeof data.category === "string" ? data.category : "";
-    if (!category) continue;
-    const mapped = collapseToCurrentTaxonomy(category);
-    if (mapped.category === category) continue;
-    writer.update(row.ref, { category: mapped.category });
-    await writer.maybeFlush();
-  }
-
-  await writer.flush();
-}
-
-async function remapCollapsedTripBudgets(db: Firestore, uid: string) {
-  const snap = await getDocs(collection(db, "users", uid, "trips"));
-  const writer = createBatchWriter(db);
-
-  for (const row of snap.docs) {
-    const data = row.data();
-    const budgets = data.categoryBudgets;
-    if (!Array.isArray(budgets) || budgets.length === 0) continue;
-
-    let changed = false;
-    const next = budgets.map((item: { category?: string; limit?: number }) => {
-      if (typeof item?.category !== "string") return item;
-      const mapped = collapseToCurrentTaxonomy(item.category);
-      if (mapped.category === item.category) return item;
-      changed = true;
-      return { ...item, category: mapped.category };
-    });
-
-    if (!changed) continue;
-    writer.update(row.ref, { categoryBudgets: next });
-    await writer.maybeFlush();
-  }
-
-  await writer.flush();
-}
-
-async function remapCollapsedDefaultCategory(db: Firestore, uid: string) {
-  const userRef = doc(db, "users", uid);
-  const userSnap = await getDoc(userRef);
-  if (!userSnap.exists()) return;
-
-  const current = userSnap.data()?.defaultCategory;
-  if (typeof current !== "string" || !current.trim()) return;
-
-  const mapped = collapseToCurrentTaxonomy(current);
-  if (mapped.category === current) return;
-
-  await setDoc(userRef, { defaultCategory: mapped.category }, { merge: true });
-}
-
-async function deleteCustomCategoryDocs(db: Firestore, uid: string) {
+async function reparentCustomSubsOntoMappedParents(db: Firestore, uid: string) {
   const snap = await getDocs(collection(db, "users", uid, "categories"));
-  const writer = createBatchWriter(db);
-
-  for (const row of snap.docs) {
-    const data = row.data() as { isDefault?: boolean };
-    if (data.isDefault !== false) continue;
-    writer.delete(row.ref);
-    await writer.maybeFlush();
+  const docs: CategoryDoc[] = snap.docs.map((d) => ({
+    id: d.id,
+    ...(d.data() as Omit<CategoryDoc, "id">),
+  }));
+  const byId = new Map(docs.map((d) => [d.id, d]));
+  const defaultParentsByName = new Map<string, string>();
+  for (const item of docs) {
+    if (item.isDefault === false) continue;
+    if (item.kind === "subcategory") continue;
+    if (item.parentId) continue;
+    if (item.isArchived) continue;
+    if (item.name) defaultParentsByName.set(item.name, item.id);
   }
 
+  const writer = createBatchWriter(db);
+  for (const item of docs) {
+    if (item.isDefault !== false || item.kind !== "subcategory" || !item.parentId) continue;
+    const parent = byId.get(item.parentId);
+    if (parent && !parent.isArchived) continue;
+    const oldName = parent?.name ?? "";
+    const mappedParent =
+      mapToV4Category(oldName, undefined)?.category ??
+      V1_PARENT_MAP[oldName]?.category ??
+      oldName;
+    const newParentId = defaultParentsByName.get(mappedParent);
+    if (!newParentId || newParentId === item.parentId) continue;
+    writer.set(
+      doc(db, "users", uid, "categories", item.id),
+      { parentId: newParentId },
+      true
+    );
+    await writer.maybeFlush();
+  }
   await writer.flush();
+}
+
+async function remapAllNamedPairsToV4(db: Firestore, uid: string) {
+  await remapExpenses(db, uid);
+  await remapNamedPairs(db, uid, "categoryBudgets");
+  await remapNamedPairs(db, uid, "categorizationRules");
+  await remapSubscriptions(db, uid);
+  await remapTripCategoryBudgets(db, uid);
+  await remapDefaultCategorySetting(db, uid);
 }
 
 async function remapExpenses(db: Firestore, uid: string) {
@@ -379,19 +253,12 @@ async function remapExpenses(db: Firestore, uid: string) {
 
   for (const expenseDoc of expensesSnap.docs) {
     const data = expenseDoc.data();
-    const category = (data.category as string) || "Other";
-    const subcategory =
-      typeof data.subcategory === "string" ? data.subcategory : "";
-    const hasSub = subcategory.length > 0;
-
-    let mapped = hasSub ? mapToV2Category(category, subcategory) : null;
-    if (!mapped) {
-      if (hasSub && !needsLegacyRemap(category) && mapToV2Category(category, undefined) == null) {
-        continue;
-      }
-      mapped = mapLegacyExpense(category, (data.note as string) || "");
-    }
-
+    const mapped = mapToV4Category(
+      (data.category as string) || "Miscellaneous",
+      typeof data.subcategory === "string" ? data.subcategory : "",
+      (data.note as string) || ""
+    );
+    if (!mapped) continue;
     if (mappedEquals(data.category, data.subcategory, mapped)) continue;
 
     writer.update(expenseDoc.ref, {
@@ -419,13 +286,13 @@ async function remapNamedPairs(
     if (!category) continue;
     const subcategory =
       typeof data.subcategory === "string" ? data.subcategory : undefined;
-    const mapped = mapToV2Category(category, subcategory);
+    const mapped = mapToV4Category(category, subcategory);
     if (!mapped) continue;
     if (mappedEquals(data.category, data.subcategory ?? "", mapped)) continue;
 
     writer.update(row.ref, {
       category: mapped.category,
-      ...(mapped.subcategory ? { subcategory: mapped.subcategory } : {}),
+      subcategory: mapped.subcategory,
     });
     await writer.maybeFlush();
   }
@@ -441,7 +308,7 @@ async function remapSubscriptions(db: Firestore, uid: string) {
     const data = row.data();
     const category = typeof data.category === "string" ? data.category : "";
     if (!category) continue;
-    const mapped = mapToV2Category(category, undefined);
+    const mapped = mapToV4Category(category, undefined);
     if (!mapped) continue;
     if (mapped.category === category) continue;
     writer.update(row.ref, { category: mapped.category });
@@ -463,7 +330,7 @@ async function remapTripCategoryBudgets(db: Firestore, uid: string) {
     let changed = false;
     const next = budgets.map((item: { category?: string; limit?: number }) => {
       if (typeof item?.category !== "string") return item;
-      const mapped = mapToV2Category(item.category, undefined);
+      const mapped = mapToV4Category(item.category, undefined);
       if (!mapped || mapped.category === item.category) return item;
       changed = true;
       return { ...item, category: mapped.category };
@@ -485,7 +352,7 @@ async function remapDefaultCategorySetting(db: Firestore, uid: string) {
   const current = userSnap.data()?.defaultCategory;
   if (typeof current !== "string" || !current.trim()) return;
 
-  const mapped = mapToV2Category(current, undefined);
+  const mapped = mapToV4Category(current, undefined);
   if (!mapped || mapped.category === current) return;
 
   await setDoc(userRef, { defaultCategory: mapped.category }, { merge: true });
