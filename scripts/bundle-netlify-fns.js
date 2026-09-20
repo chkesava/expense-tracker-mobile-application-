@@ -20,7 +20,13 @@ const root = path.resolve(__dirname, "..");
 const outDir = path.join(root, "netlify", "functions-dist");
 
 /** Every function deployed to Netlify. Add new entrypoints here. */
-const FUNCTIONS = ["ganesh-summary", "ganesh-draw", "epf-cron", "nutrition-ai"];
+const FUNCTIONS = [
+  "ganesh-summary",
+  "ganesh-draw",
+  "epf-cron",
+  "nutrition-ai",
+  "delete-account",
+];
 
 fs.mkdirSync(outDir, { recursive: true });
 

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
+import { router } from "expo-router";
 import { doc, setDoc } from "firebase/firestore";
 
 import { SettingsPanel } from "@/components/settings/SettingsControls";
@@ -87,6 +88,14 @@ export function ProfileSection() {
       <Button variant="destructive" onPress={onLogout}>
         Sign out
       </Button>
+      {/* SPENDLY-7: inside the duress guard above is not enough on its own —
+          the screen itself redirects under duress. This just keeps it out of
+          sight. */}
+      {isDuress ? null : (
+        <Button variant="ghost" onPress={() => router.push("/delete-account")}>
+          Delete account
+        </Button>
+      )}
     </SettingsPanel>
   );
 }

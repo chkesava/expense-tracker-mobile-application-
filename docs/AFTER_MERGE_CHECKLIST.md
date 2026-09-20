@@ -26,6 +26,21 @@ workflow; Android lags until testers install the new APK.
 When a ticket only **adds** a client write that new rules already allow, deploy
 rules first (or together) so the new app is not denied.
 
+### SPENDLY-7 — the account-deletion index must go first
+
+`netlify/functions/delete-account.ts` finds Ganesh membership with
+`collectionGroup("members").where("userId", "==", uid)`. Without the
+`members.userId` field override in `firestore.indexes.json`, that query throws
+`FAILED_PRECONDITION` **at runtime and only at runtime** — the function deploys
+fine and then fails on its second phase, mid-deletion.
+
+So: deploy the index **before** running the deploy-web workflow. And per the
+usual warning, the repo's `firestore.indexes.json` is a *subset* of what is
+live — diff before deploying or the deploy removes the extras.
+
+The function is also inert until it is deployed and the app that calls it ships,
+so web and Android should go out together.
+
 ### SPENDLY-22 — the privacy PIN stops syncing
 
 This one has a user-visible consequence that belongs in the release note, not
