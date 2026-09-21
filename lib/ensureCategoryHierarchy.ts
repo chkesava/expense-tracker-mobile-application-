@@ -18,6 +18,7 @@ import {
   FIRESTORE_WRITE_BATCH_LIMIT,
   planDefaultTaxonomyUpsert,
   shouldFlushBatch,
+  taxonomyDocsNeedUpsert,
   type PlannedCategoryDoc,
 } from "@/shared/data/categoryHierarchyPlan";
 
@@ -25,6 +26,7 @@ const HIERARCHY_FLAG = "categoryHierarchyVersion";
 export const CATEGORY_HIERARCHY_VERSION = 4;
 
 type CategoryDoc = PlannedCategoryDoc;
+const inFlightByUid = new Map<string, Promise<void>>();
 
 function mappedEquals(
   currentCategory: unknown,
@@ -36,9 +38,23 @@ function mappedEquals(
 
 /**
  * Seeds Category → Subcategory docs and migrates expenses onto the current taxonomy.
- * Safe to call on every login; no-ops when already at current version.
+ * Safe to call on every login. Re-runs if stored defaults still drift from the
+ * current tree, even when the version stamp is already current.
  */
 export async function ensureCategoryHierarchy(
+  db: Firestore,
+  uid: string
+): Promise<void> {
+  const pending = inFlightByUid.get(uid);
+  if (pending) return pending;
+  const work = ensureCategoryHierarchyOnce(db, uid).finally(() => {
+    inFlightByUid.delete(uid);
+  });
+  inFlightByUid.set(uid, work);
+  return work;
+}
+
+async function ensureCategoryHierarchyOnce(
   db: Firestore,
   uid: string
 ): Promise<void> {
@@ -49,19 +65,20 @@ export async function ensureCategoryHierarchy(
     : undefined;
   const version = currentVersion ?? 0;
 
-  if (version >= CATEGORY_HIERARCHY_VERSION) {
-    return;
-  }
-
   const categoriesSnap = await getDocs(collection(db, "users", uid, "categories"));
   const existing: CategoryDoc[] = categoriesSnap.docs.map((d) => ({
     id: d.id,
     ...(d.data() as Omit<CategoryDoc, "id">),
   }));
+  const needsDocs = taxonomyDocsNeedUpsert(existing);
 
   const hasHierarchy = existing.some(
     (c) => c.kind === "subcategory" || (c.parentId != null && c.parentId !== "")
   );
+
+  if (version >= CATEGORY_HIERARCHY_VERSION && !needsDocs) {
+    return;
+  }
 
   if (version === 0 && existing.length === 0) {
     await upsertDefaultTaxonomy(db, uid, []);
@@ -107,14 +124,20 @@ function createBatchWriter(db: Firestore) {
     ops = 0;
   };
 
+  const withoutUndefined = (data: Record<string, unknown>) =>
+    Object.fromEntries(
+      Object.entries(data).filter(([, value]) => value !== undefined)
+    );
+
   return {
     set(
       ref: ReturnType<typeof doc>,
       data: Record<string, unknown>,
       merge = false
     ) {
-      if (merge) batch.set(ref, data, { merge: true });
-      else batch.set(ref, data);
+      const payload = withoutUndefined(data);
+      if (merge) batch.set(ref, payload, { merge: true });
+      else batch.set(ref, payload);
       ops++;
     },
     update(ref: ReturnType<typeof doc>, data: Record<string, unknown>) {
@@ -178,11 +201,11 @@ async function upsertDefaultTaxonomy(
         doc(db, "users", uid, "categories", write.id),
         {
           name: write.data.name,
-          icon: write.data.icon,
           semanticKey: write.data.semanticKey,
           isHidden: write.data.isHidden,
           isArchived: false,
           sortOrder: write.data.sortOrder,
+          ...(write.data.icon !== undefined ? { icon: write.data.icon } : {}),
           ...(parentId !== undefined ? { parentId } : {}),
         },
         true
