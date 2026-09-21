@@ -23,6 +23,7 @@ import { snapshotErrorHandler } from "@/lib/firestoreErrors";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
+import { useSettings } from "@/providers/SettingsProvider";
 import type { Participant, Split } from "@/shared/types/split";
 import type { QrStyleId } from "@/shared/utils/qrStyles";
 import { getStoredQrStyleId } from "@/shared/utils/qrStyles";
@@ -203,6 +204,8 @@ function applyShareSideEffects(
 export function useSplits(options?: { enabled?: boolean }) {
   const enabled = options?.enabled !== false;
   const { user } = useAuth();
+  const { settings } = useSettings();
+  const timezone = settings.timezone;
   const displayCurrency = useDisplayCurrency();
   const uid = user?.uid;
   // The currency the organizer entered these amounts in. Mirrored onto every
@@ -378,8 +381,8 @@ export function useSplits(options?: { enabled?: boolean }) {
           publicShareId: publicShareRef.id,
         },
         options: createOptions,
-        dateKey: todayDateKey(),
-        monthKey: currentMonthKey(),
+        dateKey: todayDateKey(timezone),
+        monthKey: currentMonthKey(timezone),
         splitId: docRef.id,
       });
 
@@ -659,7 +662,7 @@ export function useSplits(options?: { enabled?: boolean }) {
       participantKey,
       accountId,
       entryId,
-      dateKey: todayDateKey(),
+      dateKey: todayDateKey(timezone),
     });
     if ("error" in built) {
       toast.error(built.error);
@@ -715,7 +718,7 @@ export function useSplits(options?: { enabled?: boolean }) {
         db,
         uid,
         built.entryIdsToReverse,
-        todayDateKey(),
+        todayDateKey(timezone),
         `Undo collection — ${split.title}`
       );
       applyShareSideEffects(
@@ -754,8 +757,8 @@ export function useSplits(options?: { enabled?: boolean }) {
       split,
       spendAmount,
       payingAccountId,
-      dateKey: todayDateKey(),
-      monthKey: currentMonthKey(),
+      dateKey: todayDateKey(timezone),
+      monthKey: currentMonthKey(timezone),
       expenseId: expenseRef.id,
       passThroughEntryId: passRef.id,
     });
@@ -1224,7 +1227,7 @@ export function useSplits(options?: { enabled?: boolean }) {
         db,
         uid,
         linked.entryIds,
-        todayDateKey(),
+        todayDateKey(timezone),
         `Split deleted — ${split.title}`
       );
       const deletedAt = new Date().toISOString();

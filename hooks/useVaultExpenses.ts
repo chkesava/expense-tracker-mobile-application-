@@ -17,6 +17,7 @@ import { snapshotErrorHandler } from "@/lib/firestoreErrors";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
+import { useSettings } from "@/providers/SettingsProvider";
 import type { VaultExpense } from "@/shared/types/vaultExpense";
 import { todayDateKey } from "@/shared/utils/dates";
 
@@ -24,6 +25,8 @@ export function useVaultExpenses(vaultId?: string) {
   const { user } = useAuth();
   const uid = user?.uid;
   const userName = user?.displayName || user?.email?.split("@")[0] || "User";
+  const { settings } = useSettings();
+  const timezone = settings.timezone;
 
   const [expenses, setExpenses] = useState<VaultExpense[]>([]);
   const [loading, setLoading] = useState(true);
@@ -88,7 +91,7 @@ export function useVaultExpenses(vaultId?: string) {
           type: params.type,
           category: params.category || (params.type === "deposit" ? "Funding" : "General"),
           note: params.note?.trim() || "",
-          date: params.date || todayDateKey(),
+          date: params.date || todayDateKey(timezone),
           createdBy: uid,
           createdByName: userName,
           createdAt: serverTimestamp(),
@@ -111,7 +114,7 @@ export function useVaultExpenses(vaultId?: string) {
         return null;
       }
     },
-    [vaultId, uid, userName]
+    [vaultId, uid, userName, timezone]
   );
 
   const deleteVaultExpense = useCallback(

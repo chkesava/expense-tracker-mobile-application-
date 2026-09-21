@@ -98,12 +98,27 @@ describe("computeCreditCardBillStatus", () => {
       })
     ).toBe("CANCELLED");
   });
+
+  it("treats float-noise full payment as PAID", () => {
+    expect(
+      computeCreditCardBillStatus({
+        today: "2026-08-10",
+        dueDate: "2026-08-21",
+        amountPaid: 0.1 + 0.2,
+        statementAmount: 0.3,
+      })
+    ).toBe("PAID");
+  });
 });
 
 describe("computeRemainingAmount", () => {
   it("clamps at zero", () => {
     expect(computeRemainingAmount(100, 150)).toBe(0);
     expect(computeRemainingAmount(100, 40)).toBe(60);
+  });
+
+  it("rounds float residue to zero paise", () => {
+    expect(computeRemainingAmount(0.1 + 0.2, 0.3)).toBe(0);
   });
 });
 

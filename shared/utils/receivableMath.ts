@@ -9,10 +9,9 @@ import type {
   ReceivableRepayment,
   ReceivableStatus,
 } from "../types/receivable";
+import { roundMoney } from "./money";
+export { roundMoney };
 
-export function roundMoney(value: number): number {
-  return Math.round((value + Number.EPSILON) * 100) / 100;
-}
 
 function repaymentsFor(
   receivableId: string | undefined,

@@ -81,4 +81,36 @@ describe("vaultMath utilities", () => {
     expect(bob?.totalWithdrawn).toBe(5000);
     expect(bob?.netContribution).toBe(5000);
   });
+
+  it("rounds vault totals so float residue is not stored as balance", () => {
+    const vault: SharedVault = { ...mockVault, budget: 1 };
+    const stats = calculateVaultStats(vault, [
+      {
+        id: "a",
+        vaultId: "vault_1",
+        amount: 0.1,
+        type: "deposit",
+        date: "2026-08-01",
+        createdBy: "user_alice",
+      },
+      {
+        id: "b",
+        vaultId: "vault_1",
+        amount: 0.2,
+        type: "deposit",
+        date: "2026-08-01",
+        createdBy: "user_alice",
+      },
+      {
+        id: "c",
+        vaultId: "vault_1",
+        amount: 0.3,
+        type: "withdrawal",
+        date: "2026-08-01",
+        createdBy: "user_alice",
+      },
+    ]);
+    expect(stats.totalDeposits).toBe(0.3);
+    expect(stats.currentBalance).toBe(0);
+  });
 });

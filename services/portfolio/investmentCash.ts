@@ -51,6 +51,8 @@ import type { HoldingFundingSource } from "@/shared/features/portfolio/schemas";
 
 const SETTINGS_DOC_ID = "config";
 export const INVESTMENT_CASH_COLLECTION = "investmentCashTransactions";
+/** Units below this are treated as a closed holding (not rupee rounding). */
+const HOLDING_QUANTITY_EPS = 1e-9;
 
 type CreateHoldingInput = Omit<Holding, "id" | "createdAt" | "updatedAt">;
 
@@ -836,11 +838,11 @@ export async function executeMockSell(
   if (existingQuantity < quantity) throw new Error("Insufficient holdings quantity");
 
   const settingsSnap = await getDoc(settingsRef);
-  const nextQuantity = roundMoney(existingQuantity - quantity);
+  const nextQuantity = existingQuantity - quantity;
 
   const outcome = await commitWrite(() => {
     const batch = writeBatch(db);
-    if (nextQuantity === 0) {
+    if (Math.abs(nextQuantity) < HOLDING_QUANTITY_EPS) {
       batch.delete(holdingRef);
     } else {
       batch.update(holdingRef, {

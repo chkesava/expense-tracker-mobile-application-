@@ -20,6 +20,7 @@ import { computeOutstandingCredit } from "@/shared/utils/accountBalance";
 import { getAccountKind } from "@/shared/utils/accountKind";
 import { earliestOpenCreditCardBill } from "@/shared/utils/creditCardBillStatus";
 import { formatDateKey, todayDateKey } from "@/shared/utils/dates";
+import { roundMoney } from "@/shared/utils/money";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
@@ -163,7 +164,7 @@ export function PayCreditBillModal({
       toast.error("Please select a payment source bank account");
       return;
     }
-    const parsedAmount = parseFloat(amount);
+    const parsedAmount = roundMoney(parseFloat(amount));
     if (!parsedAmount || parsedAmount <= 0) {
       toast.error("Please enter a valid amount");
       return;

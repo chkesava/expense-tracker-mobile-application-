@@ -11,13 +11,11 @@ import type {
   BorrowingStatus,
 } from "../types/borrowing";
 import { daysInMonth, parseLocalDate } from "./dates";
+import { roundMoney } from "./money";
+export { roundMoney };
 
 /** Guards against runaway loops on absurd date ranges (200 years). */
 const MAX_MONTH_STEPS = 2400;
-
-export function roundMoney(value: number): number {
-  return Math.round((value + Number.EPSILON) * 100) / 100;
-}
 
 function addMonthsClamped(date: Date, months: number): Date {
   const target = new Date(date.getFullYear(), date.getMonth() + months, 1);

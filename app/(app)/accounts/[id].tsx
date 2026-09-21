@@ -150,7 +150,8 @@ export default function AccountDetailScreen() {
       borrowings,
       borrowingRepayments,
       receivables,
-      receivableRepayments
+      receivableRepayments,
+      today
     );
   }, [
     account,
@@ -164,6 +165,7 @@ export default function AccountDetailScreen() {
     borrowingRepayments,
     receivables,
     receivableRepayments,
+    today,
   ]);
 
   const creditUsage = useMemo(() => {
@@ -408,7 +410,7 @@ export default function AccountDetailScreen() {
             effectiveBalanceAsOfDate(
               account.balanceAsOfDate,
               [],
-              todayDateKey()
+              today
             ) || "Creation"
           }
           onTransfer={() => setIsTransferModalOpen(true)}

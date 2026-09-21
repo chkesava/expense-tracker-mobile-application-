@@ -34,6 +34,7 @@ import { snapshotErrorHandler, type LoadFailure } from "@/lib/firestoreErrors";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
+import { useSettings } from "@/providers/SettingsProvider";
 import type { Borrowing, BorrowingRepayment } from "@/shared/types/borrowing";
 import type { Receivable, ReceivableRepayment } from "@/shared/types/receivable";
 import {
@@ -153,6 +154,8 @@ export function BorrowingsReceivablesProvider({
 }) {
   const { user } = useAuth();
   const uid = user?.uid;
+  const { settings } = useSettings();
+  const today = todayDateKey(settings.timezone);
 
   const [borrowings, setBorrowings] = useState<Borrowing[]>([]);
   const [borrowingRepayments, setBorrowingRepayments] = useState<
@@ -291,8 +294,6 @@ export function BorrowingsReceivablesProvider({
       unsubReceivableRepayments();
     };
   }, [uid, receivablesAttempt, setReceivablesError]);
-
-  const today = todayDateKey();
 
   // ─── Borrowings ─────────────────────────────────────────────────────────
 
@@ -461,7 +462,7 @@ export function BorrowingsReceivablesProvider({
               date: input.date,
             },
           ],
-          todayDateKey()
+          today
         );
 
         // Repayment + recomputed parent totals commit atomically. Two separate
@@ -502,7 +503,7 @@ export function BorrowingsReceivablesProvider({
         return null;
       }
     },
-    [uid, borrowings, borrowingRepayments]
+    [uid, borrowings, borrowingRepayments, today]
   );
 
   const deleteBorrowingRepayment = useCallback(
@@ -518,7 +519,7 @@ export function BorrowingsReceivablesProvider({
           const nextSummary = summarizeBorrowing(
             borrowing,
             borrowingRepayments.filter((r) => r.id !== repaymentId),
-            todayDateKey()
+            today
           );
           batch.update(
             doc(db, "users", uid, "borrowings", borrowingId),
@@ -538,7 +539,7 @@ export function BorrowingsReceivablesProvider({
         return false;
       }
     },
-    [uid, borrowings, borrowingRepayments]
+    [uid, borrowings, borrowingRepayments, today]
   );
 
   // ─── Receivables ────────────────────────────────────────────────────────
@@ -622,7 +623,7 @@ export function BorrowingsReceivablesProvider({
         const summary = summarizeReceivable(
           existing,
           receivableRepayments,
-          todayDateKey()
+          today
         );
         if (updates.originalAmount < summary.totalReceived) {
           toast.error(
@@ -648,7 +649,7 @@ export function BorrowingsReceivablesProvider({
           const next = summarizeReceivable(
             { ...existing, ...updates, originalAmount: updates.originalAmount },
             receivableRepayments,
-            todayDateKey()
+            today
           );
           Object.assign(payload, denormalizedReceivableFields(next));
         }
@@ -666,7 +667,7 @@ export function BorrowingsReceivablesProvider({
         return false;
       }
     },
-    [uid, receivables, receivableRepayments]
+    [uid, receivables, receivableRepayments, today]
   );
 
   const deleteReceivable = useCallback(
@@ -754,7 +755,7 @@ export function BorrowingsReceivablesProvider({
               date: input.date,
             },
           ],
-          todayDateKey()
+          today
         );
 
         // Repayment + recomputed parent totals commit atomically. Two separate
@@ -793,7 +794,7 @@ export function BorrowingsReceivablesProvider({
         return null;
       }
     },
-    [uid, receivables, receivableRepayments]
+    [uid, receivables, receivableRepayments, today]
   );
 
   const deleteReceivableRepayment = useCallback(
@@ -809,7 +810,7 @@ export function BorrowingsReceivablesProvider({
           const nextSummary = summarizeReceivable(
             receivable,
             receivableRepayments.filter((r) => r.id !== repaymentId),
-            todayDateKey()
+            today
           );
           batch.update(
             doc(db, "users", uid, "receivables", receivableId),
@@ -829,7 +830,7 @@ export function BorrowingsReceivablesProvider({
         return false;
       }
     },
-    [uid, receivables, receivableRepayments]
+    [uid, receivables, receivableRepayments, today]
   );
 
   const markReceivableSettled = useCallback(
@@ -839,7 +840,7 @@ export function BorrowingsReceivablesProvider({
       const summary = summarizeReceivable(
         receivable,
         receivableRepayments,
-        todayDateKey()
+        today
       );
       if (summary.outstandingAmount > 0) {
         toast.error(
@@ -849,10 +850,10 @@ export function BorrowingsReceivablesProvider({
       }
       return updateReceivable(id, {
         status: "FULLY_SETTLED",
-        settledDate: summary.settledDate ?? todayDateKey(),
+        settledDate: summary.settledDate ?? today,
       });
     },
-    [receivables, receivableRepayments, updateReceivable]
+    [receivables, receivableRepayments, updateReceivable, today]
   );
 
   const cancelReceivable = useCallback(
