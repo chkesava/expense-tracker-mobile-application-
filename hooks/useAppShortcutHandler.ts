@@ -31,6 +31,32 @@ import {
 
 let capturedInitial = false;
 
+type QuickActionsModule = typeof import("expo-quick-actions");
+
+/**
+ * The only place this file loads the native module.
+ *
+ * SPENDLY-96: `import("expo-quick-actions")` is NOT safe behind `.catch()`.
+ * When Metro cannot resolve the package it emits a module that throws
+ * `Error: Cannot find module` synchronously, so `import()` never returns a
+ * promise and the rejection handler is never attached — the throw escaped
+ * the listener effect and took down the whole app shell through
+ * AppErrorBoundary. A synchronous `require` inside a `try` is the only form
+ * that actually contains it.
+ *
+ * Returns null instead of throwing: shortcuts are an accelerator, and losing
+ * them must never cost the user the app.
+ */
+function loadQuickActions(scope: string): QuickActionsModule | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return require("expo-quick-actions") as QuickActionsModule;
+  } catch (error) {
+    logWarning(scope, error);
+    return null;
+  }
+}
+
 function shortcutPlatform(): ShortcutPlatform {
   if (Platform.OS === "ios" || Platform.OS === "android") return Platform.OS;
   return "web";
@@ -47,10 +73,10 @@ function captureInitialShortcutOnce() {
   capturedInitial = true;
   if (Platform.OS === "web") return;
   if (!shouldRegisterSpendlyShortcuts(ACTIVE_PRODUCT)) return;
+  // Sync read so route restoration (async) sees the pending action.
+  const QuickActions = loadQuickActions("appShortcuts.captureInitial");
+  if (!QuickActions) return;
   try {
-    // Sync read so route restoration (async) sees the pending action.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const QuickActions = require("expo-quick-actions") as typeof import("expo-quick-actions");
     const initial = QuickActions.initial;
     if (initial?.id) {
       setPendingAppShortcut({
@@ -67,8 +93,9 @@ function captureInitialShortcutOnce() {
 async function registerSpendlyQuickActions(enableAIFeatures: boolean) {
   if (Platform.OS === "web") return;
   if (!shouldRegisterSpendlyShortcuts(ACTIVE_PRODUCT)) return;
+  const QuickActions = loadQuickActions("appShortcuts.setItems");
+  if (!QuickActions) return;
   try {
-    const QuickActions = await import("expo-quick-actions");
     const items = listSpendlyShortcuts({ enableAIFeatures }).map((shortcut) => ({
       id: shortcut.id,
       title: shortcut.title,
@@ -110,11 +137,10 @@ export function useAppShortcutHandler() {
     if (!shouldRegisterSpendlyShortcuts(ACTIVE_PRODUCT)) return;
 
     let subscription: { remove: () => void } | undefined;
-    let cancelled = false;
 
-    void import("expo-quick-actions")
-      .then((QuickActions) => {
-        if (cancelled) return;
+    const QuickActions = loadQuickActions("appShortcuts.listen");
+    if (QuickActions) {
+      try {
         subscription = QuickActions.addListener((action) => {
           if (!action?.id) return;
           setPendingAppShortcut({
@@ -123,14 +149,17 @@ export function useAppShortcutHandler() {
             launch: "warm",
           });
         });
-      })
-      .catch((error) => {
+      } catch (error) {
         logWarning("appShortcuts.listen", error);
-      });
+      }
+    }
 
     return () => {
-      cancelled = true;
-      subscription?.remove();
+      try {
+        subscription?.remove();
+      } catch (error) {
+        logWarning("appShortcuts.unlisten", error);
+      }
     };
   }, []);
 
