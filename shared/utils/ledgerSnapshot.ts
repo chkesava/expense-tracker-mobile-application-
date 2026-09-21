@@ -12,6 +12,31 @@ import { isActiveLedgerRow } from "@/shared/utils/ledgerRow";
 /** First-paint page size for expenses/incomes. Full history loads after idle. */
 export const LEDGER_STAGED_LIMIT = 300;
 
+/** SPENDLY-4: emit snapshots when pending writes ack or cache catches up. */
+export const FINANCE_SNAPSHOT_LISTEN_OPTIONS = {
+  includeMetadataChanges: true,
+} as const;
+
+export type SnapshotChangeLike = {
+  docChanges: (options?: { includeMetadataChanges?: boolean }) => unknown[];
+};
+
+/**
+ * Default `docChanges()` omits metadata-only transitions. Empty means the
+ * snapshot fired only because pending-writes / fromCache flipped.
+ */
+export function isMetadataOnlySnapshot(snap: SnapshotChangeLike): boolean {
+  return snap.docChanges().length === 0;
+}
+
+/** Apply document arrays on first hydrate and on real data changes. */
+export function shouldApplySnapshotDocs(
+  snap: SnapshotChangeLike,
+  alreadyHydrated: boolean
+): boolean {
+  return !alreadyHydrated || !isMetadataOnlySnapshot(snap);
+}
+
 export type SnapshotDocLike = {
   id: string;
   data: () => unknown;

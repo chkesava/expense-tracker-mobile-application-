@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   foldLedgerSnapshot,
+  FINANCE_SNAPSHOT_LISTEN_OPTIONS,
+  isMetadataOnlySnapshot,
   LEDGER_STAGED_LIMIT,
+  shouldApplySnapshotDocs,
   sortLedgerByDateDesc,
 } from "./ledgerSnapshot";
 
@@ -25,6 +28,29 @@ function doc(
 describe("LEDGER_STAGED_LIMIT", () => {
   it("is the restored first-paint page, not the whole history", () => {
     expect(LEDGER_STAGED_LIMIT).toBe(300);
+  });
+});
+
+describe("FINANCE_SNAPSHOT_LISTEN_OPTIONS", () => {
+  it("asks Firestore for metadata-only snapshots", () => {
+    expect(FINANCE_SNAPSHOT_LISTEN_OPTIONS).toEqual({
+      includeMetadataChanges: true,
+    });
+  });
+});
+
+describe("isMetadataOnlySnapshot / shouldApplySnapshotDocs", () => {
+  it("treats empty default docChanges as metadata-only", () => {
+    const snap = { docChanges: () => [] };
+    expect(isMetadataOnlySnapshot(snap)).toBe(true);
+    expect(shouldApplySnapshotDocs(snap, false)).toBe(true);
+    expect(shouldApplySnapshotDocs(snap, true)).toBe(false);
+  });
+
+  it("applies document arrays when data actually changed", () => {
+    const snap = { docChanges: () => [{ type: "modified" }] };
+    expect(isMetadataOnlySnapshot(snap)).toBe(false);
+    expect(shouldApplySnapshotDocs(snap, true)).toBe(true);
   });
 });
 

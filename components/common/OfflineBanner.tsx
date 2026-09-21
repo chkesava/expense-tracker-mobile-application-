@@ -19,7 +19,11 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WifiOff, RefreshCw, CheckCircle } from "lucide-react-native";
 
 import { haptic } from "@/lib/haptics";
-import { useGlobalPendingSyncCount } from "@/lib/syncStatusStore";
+import { getBannerLabel } from "@/lib/offlineBannerLabel";
+import {
+  useGlobalLastServerSyncAt,
+  useGlobalPendingSyncCount,
+} from "@/lib/syncStatusStore";
 import { useNetwork } from "@/providers/NetworkProvider";
 import { useTheme } from "@/theme/ThemeProvider";
 
@@ -32,6 +36,7 @@ const HIDDEN_Y = -80;
 export function OfflineBanner() {
   const { isOnline, wasOffline, retryNow, clearWasOffline } = useNetwork();
   const pendingSyncCount = useGlobalPendingSyncCount();
+  const lastServerSyncAt = useGlobalLastServerSyncAt();
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
 
@@ -61,7 +66,7 @@ export function OfflineBanner() {
   }));
 
   const colors = getBannerColors(visibleState, theme);
-  const label = getBannerLabel(visibleState, pendingSyncCount);
+  const label = getBannerLabel(visibleState, pendingSyncCount, lastServerSyncAt);
   const isInteractive = visibleState === "offline";
 
   return (
@@ -203,21 +208,6 @@ function getBannerColors(
         badgeBg: theme.colors.muted,
         badgeText: theme.colors.mutedForeground,
       };
-  }
-}
-
-function getBannerLabel(state: BannerState, pendingSyncCount: number): string {
-  switch (state) {
-    case "offline":
-      return "No Internet Connection";
-    case "syncing":
-      return pendingSyncCount === 1
-        ? "Syncing 1 change…"
-        : `Syncing ${pendingSyncCount} changes…`;
-    case "synced":
-      return "Back Online — All Synced!";
-    default:
-      return "";
   }
 }
 

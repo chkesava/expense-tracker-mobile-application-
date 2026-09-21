@@ -31,7 +31,10 @@ import {
   totalPendingSyncCount,
   validateAccountMoneyMove,
 } from "@/lib/finance/ledgerGuards";
-import { setGlobalPendingSyncCount } from "@/lib/syncStatusStore";
+import {
+  setGlobalLastServerSyncAt,
+  setGlobalPendingSyncCount,
+} from "@/lib/syncStatusStore";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import type {
@@ -56,8 +59,10 @@ import {
 import { isValidDateKey, todayDateKey } from "@/shared/utils/dates";
 import { isActiveLedgerRow } from "@/shared/utils/ledgerRow";
 import {
+  FINANCE_SNAPSHOT_LISTEN_OPTIONS,
   foldLedgerSnapshot,
   LEDGER_STAGED_LIMIT,
+  shouldApplySnapshotDocs,
   sortLedgerByDateDesc,
 } from "@/shared/utils/ledgerSnapshot";
 import { snapshotErrorHandler, type LoadFailure } from "@/lib/firestoreErrors";
@@ -67,6 +72,10 @@ import {
 } from "@/lib/firestoreReadDebug";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { scheduleIdleWork } from "@/shared/utils/scheduleIdle";
+
+function noteServerSync(fromCache: boolean): void {
+  if (!fromCache) setGlobalLastServerSyncAt(Date.now());
+}
 
 // ─── Granular Context Types ───────────────────────────────────────────────────
 
@@ -306,6 +315,8 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       pendingTransfersCountRef.current = 0;
       setPendingSyncCount(0);
       setGlobalPendingSyncCount(0);
+      setGlobalLastServerSyncAt(null);
+      setIsFromCache(false);
       expensesHydratedRef.current = false;
       incomesHydratedRef.current = false;
       accountsHydratedRef.current = false;
@@ -335,10 +346,13 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       const { items, pendingWrites } = foldLedgerSnapshot<Expense>(snap.docs, {
         activeOnly: true,
       });
-      setExpenses(items);
+      if (shouldApplySnapshotDocs(snap, expensesHydratedRef.current)) {
+        setExpenses(items);
+      }
       pendingExpensesCountRef.current = pendingWrites;
       updatePendingSyncCount();
       setIsFromCache(snap.metadata.fromCache);
+      noteServerSync(snap.metadata.fromCache);
       expensesHydratedRef.current = true;
       setFinanceError(null);
       setExpensesLoading(false);
@@ -349,9 +363,12 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       const { items, pendingWrites } = foldLedgerSnapshot<Income>(snap.docs, {
         activeOnly: true,
       });
-      setIncomes(items);
+      if (shouldApplySnapshotDocs(snap, incomesHydratedRef.current)) {
+        setIncomes(items);
+      }
       pendingIncomesCountRef.current = pendingWrites;
       updatePendingSyncCount();
+      noteServerSync(snap.metadata.fromCache);
       incomesHydratedRef.current = true;
       setFinanceError(null);
       setIncomesLoading(false);
@@ -362,6 +379,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     // commit 007f649 removed. Do not set loading on the upgrade.
     let expensesUnsub = onSnapshot(
       query(expensesCol, orderBy("createdAt", "desc"), limit(LEDGER_STAGED_LIMIT)),
+      FINANCE_SNAPSHOT_LISTEN_OPTIONS,
       applyExpensesSnap,
       snapshotErrorHandler(
         "snapshot.expenses",
@@ -374,6 +392,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     );
     let incomesUnsub = onSnapshot(
       query(incomesCol, orderBy("createdAt", "desc"), limit(LEDGER_STAGED_LIMIT)),
+      FINANCE_SNAPSHOT_LISTEN_OPTIONS,
       applyIncomesSnap,
       snapshotErrorHandler(
         "snapshot.incomes",
@@ -390,6 +409,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         expensesUnsub();
         expensesUnsub = onSnapshot(
           query(expensesCol, orderBy("createdAt", "desc")),
+          FINANCE_SNAPSHOT_LISTEN_OPTIONS,
           applyExpensesSnap,
           snapshotErrorHandler(
             "snapshot.expenses",
@@ -403,6 +423,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         incomesUnsub();
         incomesUnsub = onSnapshot(
           query(incomesCol, orderBy("createdAt", "desc")),
+          FINANCE_SNAPSHOT_LISTEN_OPTIONS,
           applyIncomesSnap,
           snapshotErrorHandler(
             "snapshot.incomes",
@@ -420,15 +441,19 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     const unsubscribers = [
       onSnapshot(
         query(collection(db, ...base, "accounts")),
+        FINANCE_SNAPSHOT_LISTEN_OPTIONS,
         (snap) => {
           logQuerySnapshot(accountPath, snap);
-          setAccounts(
-            snap.docs.map((d) => ({ id: d.id, ...(d.data() as object) } as Account))
-          );
+          if (shouldApplySnapshotDocs(snap, accountsHydratedRef.current)) {
+            setAccounts(
+              snap.docs.map((d) => ({ id: d.id, ...(d.data() as object) } as Account))
+            );
+          }
           pendingAccountsCountRef.current = snap.docs.filter(
             (d) => d.metadata.hasPendingWrites
           ).length;
           updatePendingSyncCount();
+          noteServerSync(snap.metadata.fromCache);
           accountsHydratedRef.current = true;
           setFinanceError(null);
           setAccountsLoading(false);
@@ -444,15 +469,19 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       ),
       onSnapshot(
         query(collection(db, ...base, "accountTypes")),
+        FINANCE_SNAPSHOT_LISTEN_OPTIONS,
         (snap) => {
           logQuerySnapshot(accountTypePath, snap);
-          setAccountTypes(
-            snap.docs.map((d) => ({ id: d.id, ...(d.data() as object) } as AccountType))
-          );
+          if (shouldApplySnapshotDocs(snap, accountTypesHydratedRef.current)) {
+            setAccountTypes(
+              snap.docs.map((d) => ({ id: d.id, ...(d.data() as object) } as AccountType))
+            );
+          }
           pendingAccountTypesCountRef.current = snap.docs.filter(
             (d) => d.metadata.hasPendingWrites
           ).length;
           updatePendingSyncCount();
+          noteServerSync(snap.metadata.fromCache);
           accountTypesHydratedRef.current = true;
           setFinanceError(null);
           setAccountTypesLoading(false);
@@ -493,16 +522,24 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     const cancelIdle = scheduleIdleWork(
       () => {
         const base = ["users", uid] as const;
+        let paymentsHydrated = false;
+        let entriesHydrated = false;
+        let transfersHydrated = false;
 
         secondaryUnsubs = [
           onSnapshot(
             query(collection(db, ...base, "accountPayments")),
+            FINANCE_SNAPSHOT_LISTEN_OPTIONS,
             (snap) => {
               logQuerySnapshot(paymentPath, snap);
               const { items, pendingWrites } = foldLedgerSnapshot<AccountPayment>(snap.docs);
-              setPayments(sortLedgerByDateDesc(items));
+              if (shouldApplySnapshotDocs(snap, paymentsHydrated)) {
+                setPayments(sortLedgerByDateDesc(items));
+              }
               pendingPaymentsCountRef.current = pendingWrites;
               updatePendingSyncCount();
+              noteServerSync(snap.metadata.fromCache);
+              paymentsHydrated = true;
               setFinanceError(null);
               setPaymentsLoading(false);
             },
@@ -517,12 +554,17 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
           ),
           onSnapshot(
             query(collection(db, ...base, "accountEntries")),
+            FINANCE_SNAPSHOT_LISTEN_OPTIONS,
             (snap) => {
               logQuerySnapshot(entryPath, snap);
               const { items, pendingWrites } = foldLedgerSnapshot<AccountEntry>(snap.docs);
-              setEntries(sortLedgerByDateDesc(items));
+              if (shouldApplySnapshotDocs(snap, entriesHydrated)) {
+                setEntries(sortLedgerByDateDesc(items));
+              }
               pendingEntriesCountRef.current = pendingWrites;
               updatePendingSyncCount();
+              noteServerSync(snap.metadata.fromCache);
+              entriesHydrated = true;
               setFinanceError(null);
               setEntriesLoading(false);
             },
@@ -537,12 +579,17 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
           ),
           onSnapshot(
             query(collection(db, ...base, "accountTransfers")),
+            FINANCE_SNAPSHOT_LISTEN_OPTIONS,
             (snap) => {
               logQuerySnapshot(transferPath, snap);
               const { items, pendingWrites } = foldLedgerSnapshot<AccountTransfer>(snap.docs);
-              setTransfers(sortLedgerByDateDesc(items));
+              if (shouldApplySnapshotDocs(snap, transfersHydrated)) {
+                setTransfers(sortLedgerByDateDesc(items));
+              }
               pendingTransfersCountRef.current = pendingWrites;
               updatePendingSyncCount();
+              noteServerSync(snap.metadata.fromCache);
+              transfersHydrated = true;
               setFinanceError(null);
               setTransfersLoading(false);
             },
