@@ -139,6 +139,8 @@ describe("account activity ledger", () => {
         month: "2026-02",
         category: "Food",
         accountId: account.id,
+        note: "Lunch",
+        createdAt: "2026-02-02T00:00:00.000Z",
       },
       {
         id: "expense-deleted",
@@ -147,6 +149,8 @@ describe("account activity ledger", () => {
         month: "2026-02",
         category: "Food",
         accountId: account.id,
+        note: "Deleted",
+        createdAt: "2026-02-03T00:00:00.000Z",
         deletedAt: "2026-02-04T00:00:00.000Z",
       },
     ];
@@ -157,6 +161,8 @@ describe("account activity ledger", () => {
       month: "2026-02",
       source: "Salary",
       accountId: account.id,
+      note: "Salary",
+      createdAt: "2026-02-01T00:00:00.000Z",
     }];
     const payments: AccountPayment[] = [
       {

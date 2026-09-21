@@ -183,6 +183,7 @@ describe("accountActivities and balance utilities", () => {
         month: "2026-08",
         category: "Food",
         accountId: rebased.id,
+        note: "Before snapshot",
         createdAt: "2026-08-14T09:00:00.000Z",
       },
       {
@@ -192,6 +193,7 @@ describe("accountActivities and balance utilities", () => {
         month: "2026-08",
         category: "Food",
         accountId: rebased.id,
+        note: "After snapshot",
         createdAt: "2026-08-16T09:00:00.000Z",
       },
     ];
@@ -203,6 +205,7 @@ describe("accountActivities and balance utilities", () => {
         month: "2026-08",
         source: "Interest",
         accountId: rebased.id,
+        note: "Interest",
         createdAt: "2026-08-15T09:00:00.000Z",
       },
     ];
