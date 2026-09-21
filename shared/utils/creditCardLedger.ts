@@ -1,4 +1,5 @@
 import type { Account, AccountPayment, Expense } from "../types/expense";
+import { isCashbackPayment } from "../types/expense";
 import type { CreditCardBill } from "../types/creditCardBill";
 import {
   CREDIT_CARD_PAYMENT_WINDOW_DAYS,
@@ -420,11 +421,26 @@ export function buildCreditCardLedger(
   let carriedCredit = 0;
   for (const payment of cardPayments) {
     let left = payment.amount;
+    const isCashback = isCashbackPayment(payment);
+    // A bill payment may only settle a statement that had already closed on
+    // the payment date — money paid mid-cycle must not pre-pay a statement the
+    // user has not seen yet. Cashback is not a prepayment: it reverses spend
+    // the card has already charged, so it belongs to the statement whose
+    // window contains it, whether or not that window had closed on the day the
+    // provider credited it (SPENDLY-95). Without this a credit posted between
+    // the purchase and the close matched no statement once the cycle closed,
+    // became carried credit, and was dropped — the generated bill silently
+    // went back to gross spend.
+    const settles = (statement: WorkingStatement) =>
+      statement.statementDate <= payment.date ||
+      (isCashback &&
+        payment.date >= statement.periodStart &&
+        payment.date <= statement.periodEnd);
     if (payment.id && linkedPaymentIds.has(payment.id)) {
       for (const statement of working) {
         if (left <= 0) break;
         if (statement.cancelled) continue;
-        if (statement.statementDate > payment.date) continue;
+        if (!settles(statement)) continue;
         if (!statement.linkedIds.includes(payment.id)) continue;
         const room = roundMoney(statement.billed - statement.credit);
         if (room <= 0) continue;
@@ -440,7 +456,10 @@ export function buildCreditCardLedger(
     for (const statement of working) {
       if (left <= 0) break;
       if (statement.cancelled) continue;
-      if (statement.statementDate > payment.date) break;
+      // `continue`, not `break`: eligibility is no longer monotonic in
+      // statement order once cashback can settle an open window. Oldest-first
+      // settlement still comes from the iteration order of `working`.
+      if (!settles(statement)) continue;
       const room = roundMoney(statement.billed - statement.credit);
       if (room <= 0) continue;
       const applied = Math.min(room, left);

@@ -49,10 +49,25 @@ no second ledger**.
    not carried as a balance). An oversized cashback would therefore be accepted
    and then silently vanish, so entry caps at the current outstanding and says
    what that is.
-2. **A statement credit settles the statement it lands on**, stamping the
-   cashback id into the bill's `paymentIds` / `amountPaid`. That is the intended
-   "₹299 purchase + ₹299 cashback = ₹0, no bill payment" outcome; only the
-   wording changes, never the maths.
+2. **Cashback settles the statement whose billing window contains it**,
+   stamping the cashback id into the bill's `paymentIds` / `amountPaid`. That is
+   the intended "₹299 purchase + ₹299 cashback = ₹0, no bill payment" outcome;
+   only the wording changes, never the maths.
+
+   Note the window, not the close date (SPENDLY-95). Every other credit may only
+   settle a statement that had *already closed* on its date, so that money paid
+   mid-cycle cannot pre-pay a statement the user has not seen. Cashback is
+   exempt because it is not a prepayment — it reverses spend the card has
+   already charged, and that spend sits on the cycle the credit fell in. Before
+   that exception existed, a credit posted between the purchase and the close
+   (the ordinary case) matched no statement once the cycle closed, became
+   carried credit, and was dropped: the generated bill silently reverted to
+   gross spend. Cashback dated in the still-open cycle has no statement to
+   settle and keeps reducing unbilled spend as before.
+
+   The statement amount itself stays **gross** throughout — the bill reads
+   ₹299 billed, ₹299 of which cashback, ₹0 payable, PAID. Nothing nets the
+   cashback into `statementAmount`, so it can never be counted twice.
 
 ### Safety
 
