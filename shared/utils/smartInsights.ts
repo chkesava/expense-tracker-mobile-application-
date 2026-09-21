@@ -49,6 +49,32 @@ function shiftDateKey(dateKey: string, days: number): string {
   return toLocalDateKey(date);
 }
 
+/**
+ * Oldest date `buildSmartInsights` can use: the prior comparable week start
+ * or the first of the current month, whichever is earlier.
+ */
+export function insightWindowStart(
+  today: string,
+  firstDayOfWeek: FirstDayOfWeek = "monday"
+): string {
+  const weekStart = startOfWeekDateKey(today, firstDayOfWeek);
+  const prevStart = shiftDateKey(weekStart, -7);
+  const monthStart = `${today.slice(0, 7)}-01`;
+  return prevStart < monthStart ? prevStart : monthStart;
+}
+
+/** Drop ledger rows outside the week/month window Smart Insights actually reads. */
+export function expensesInInsightWindow<T extends { date: string }>(
+  expenses: T[],
+  today: string,
+  firstDayOfWeek: FirstDayOfWeek = "monday"
+): T[] {
+  const start = insightWindowStart(today, firstDayOfWeek);
+  return expenses.filter(
+    (item) => item.date >= start && item.date <= today
+  );
+}
+
 function inInclusiveRange(date: string, start: string, end: string): boolean {
   return date >= start && date <= end;
 }

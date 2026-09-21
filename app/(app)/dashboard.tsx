@@ -38,7 +38,7 @@ import { useIncomes } from "@/hooks/useIncomes";
 import { useSubscriptions } from "@/hooks/useSubscriptions";
 import { useSmsReviewInbox } from "@/hooks/useSmsReviewInbox";
 import { useAuth } from "@/providers/AuthProvider";
-import { useModals } from "@/providers/ModalProvider";
+import { useGlobalMonth, useModalActions } from "@/providers/ModalProvider";
 import { useInvestmentsEnabled } from "@/hooks/useInvestmentsEnabled";
 import { useSettings } from "@/providers/SettingsProvider";
 import {
@@ -104,13 +104,9 @@ export default function DashboardScreen() {
   const displayCurrency = useDisplayCurrency();
   const { settings } = useSettings();
   const investmentsEnabled = useInvestmentsEnabled();
-  const {
-    globalMonth,
-    setIsAddExpenseOpen,
-    setIsAddSheetOpen,
-    setIsMonthDrawerOpen,
-    setEditingExpense,
-  } = useModals();
+  const { globalMonth, setIsMonthDrawerOpen } = useGlobalMonth();
+  const { setIsAddExpenseOpen, setIsAddSheetOpen, setEditingExpense } =
+    useModalActions();
 
   const { expenses, loading: expensesLoading, error: financeError, retry } = useExpenses();
   const { incomes, loading: incomesLoading } = useIncomes();

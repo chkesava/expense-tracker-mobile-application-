@@ -384,22 +384,37 @@ export function SetupProgressProvider({ children }: { children: ReactNode }) {
     [onboarding, visitedScreens, updateSettings]
   );
 
+  const value = useMemo(
+    () => ({
+      steps,
+      completedCount,
+      totalCount,
+      progress,
+      isOnboarding,
+      isFirstLaunch,
+      launchSetupWizard,
+      completeWelcome,
+      dismissOnboarding,
+      resetOnboarding,
+      markScreenVisited,
+    }),
+    [
+      steps,
+      completedCount,
+      totalCount,
+      progress,
+      isOnboarding,
+      isFirstLaunch,
+      launchSetupWizard,
+      completeWelcome,
+      dismissOnboarding,
+      resetOnboarding,
+      markScreenVisited,
+    ]
+  );
+
   return (
-    <SetupProgressContext.Provider
-      value={{
-        steps,
-        completedCount,
-        totalCount,
-        progress,
-        isOnboarding,
-        isFirstLaunch,
-        launchSetupWizard,
-        completeWelcome,
-        dismissOnboarding,
-        resetOnboarding,
-        markScreenVisited,
-      }}
-    >
+    <SetupProgressContext.Provider value={value}>
       {children}
     </SetupProgressContext.Provider>
   );

@@ -1,49 +1,63 @@
-import React, { createContext, useContext, useState, type ReactNode } from "react";
+import React, {
+  createContext,
+  useContext,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import type { Account, Expense, Income } from "@/shared/types/expense";
 import { currentMonthKey } from "@/shared/utils/dates";
 
 export type TransactionKind = "expense" | "income";
 
-export interface ModalContextType {
-  isAddExpenseOpen: boolean;
-  setIsAddExpenseOpen: (open: boolean) => void;
-  /**
-   * Which tab the shared Add Transaction sheet opens on. Callers that mean
-   * "log an income" set this to "income"; it resets to "expense" whenever the
-   * sheet closes so the common case is unaffected.
-   */
-  addTransactionKind: TransactionKind;
-  setAddTransactionKind: (kind: TransactionKind) => void;
-  isMagicChatOpen: boolean;
-  setIsMagicChatOpen: (open: boolean) => void;
-  isReceiptScannerOpen: boolean;
-  setIsReceiptScannerOpen: (open: boolean) => void;
-  editingExpense: Expense | null;
-  setEditingExpense: (expense: Expense | null) => void;
-  editingIncome: Income | null;
-  setEditingIncome: (income: Income | null) => void;
-  accountEntryAccount: Account | null;
-  setAccountEntryAccount: (account: Account | null) => void;
-  isMonthDrawerOpen: boolean;
-  setIsMonthDrawerOpen: (open: boolean) => void;
+export interface MonthContextType {
   globalMonth: string | null;
   setGlobalMonth: (month: string | null) => void;
-  isSetupWizardOpen: boolean;
+  isMonthDrawerOpen: boolean;
+  setIsMonthDrawerOpen: (open: boolean) => void;
+}
+
+export interface ModalActionsType {
+  setIsAddExpenseOpen: (open: boolean) => void;
+  setAddTransactionKind: (kind: TransactionKind) => void;
+  setIsMagicChatOpen: (open: boolean) => void;
+  setIsReceiptScannerOpen: (open: boolean) => void;
+  setEditingExpense: (expense: Expense | null) => void;
+  setEditingIncome: (income: Income | null) => void;
+  setAccountEntryAccount: (account: Account | null) => void;
   setIsSetupWizardOpen: (open: boolean) => void;
-  setupWizardInitialStep: number;
   setSetupWizardInitialStep: (step: number) => void;
-  /** Global FAB Add chooser (expense / income / transfer / investment / debt). */
-  isAddSheetOpen: boolean;
   setIsAddSheetOpen: (open: boolean) => void;
-  isTransferOpen: boolean;
   setIsTransferOpen: (open: boolean) => void;
-  isCreateInvestmentOpen: boolean;
   setIsCreateInvestmentOpen: (open: boolean) => void;
-  isDebtPaymentOpen: boolean;
   setIsDebtPaymentOpen: (open: boolean) => void;
 }
 
-const ModalContext = createContext<ModalContextType | undefined>(undefined);
+export interface ModalUiContextType {
+  isAddExpenseOpen: boolean;
+  addTransactionKind: TransactionKind;
+  isMagicChatOpen: boolean;
+  isReceiptScannerOpen: boolean;
+  editingExpense: Expense | null;
+  editingIncome: Income | null;
+  accountEntryAccount: Account | null;
+  isSetupWizardOpen: boolean;
+  setupWizardInitialStep: number;
+  isAddSheetOpen: boolean;
+  isTransferOpen: boolean;
+  isCreateInvestmentOpen: boolean;
+  isDebtPaymentOpen: boolean;
+}
+
+export type ModalContextType = MonthContextType &
+  ModalUiContextType &
+  ModalActionsType;
+
+const MonthContext = createContext<MonthContextType | undefined>(undefined);
+const ModalUiContext = createContext<ModalUiContextType | undefined>(undefined);
+const ModalActionsContext = createContext<ModalActionsType | undefined>(
+  undefined
+);
 
 export function ModalProvider({ children }: { children: ReactNode }) {
   const [isAddExpenseOpen, setIsAddExpenseOpen] = useState(false);
@@ -63,50 +77,105 @@ export function ModalProvider({ children }: { children: ReactNode }) {
   const [isCreateInvestmentOpen, setIsCreateInvestmentOpen] = useState(false);
   const [isDebtPaymentOpen, setIsDebtPaymentOpen] = useState(false);
 
+  const monthValue = useMemo(
+    () => ({
+      globalMonth,
+      setGlobalMonth,
+      isMonthDrawerOpen,
+      setIsMonthDrawerOpen,
+    }),
+    [globalMonth, isMonthDrawerOpen]
+  );
+
+  const uiValue = useMemo(
+    () => ({
+      isAddExpenseOpen,
+      addTransactionKind,
+      isMagicChatOpen,
+      isReceiptScannerOpen,
+      editingExpense,
+      editingIncome,
+      accountEntryAccount,
+      isSetupWizardOpen,
+      setupWizardInitialStep,
+      isAddSheetOpen,
+      isTransferOpen,
+      isCreateInvestmentOpen,
+      isDebtPaymentOpen,
+    }),
+    [
+      isAddExpenseOpen,
+      addTransactionKind,
+      isMagicChatOpen,
+      isReceiptScannerOpen,
+      editingExpense,
+      editingIncome,
+      accountEntryAccount,
+      isSetupWizardOpen,
+      setupWizardInitialStep,
+      isAddSheetOpen,
+      isTransferOpen,
+      isCreateInvestmentOpen,
+      isDebtPaymentOpen,
+    ]
+  );
+
+  const actionsValue = useMemo(
+    () => ({
+      setIsAddExpenseOpen,
+      setAddTransactionKind,
+      setIsMagicChatOpen,
+      setIsReceiptScannerOpen,
+      setEditingExpense,
+      setEditingIncome,
+      setAccountEntryAccount,
+      setIsSetupWizardOpen,
+      setSetupWizardInitialStep,
+      setIsAddSheetOpen,
+      setIsTransferOpen,
+      setIsCreateInvestmentOpen,
+      setIsDebtPaymentOpen,
+    }),
+    []
+  );
+
   return (
-    <ModalContext.Provider
-      value={{
-        isAddExpenseOpen,
-        setIsAddExpenseOpen,
-        addTransactionKind,
-        setAddTransactionKind,
-        isMagicChatOpen,
-        setIsMagicChatOpen,
-        isReceiptScannerOpen,
-        setIsReceiptScannerOpen,
-        editingExpense,
-        setEditingExpense,
-        editingIncome,
-        setEditingIncome,
-        accountEntryAccount,
-        setAccountEntryAccount,
-        isMonthDrawerOpen,
-        setIsMonthDrawerOpen,
-        globalMonth,
-        setGlobalMonth,
-        isSetupWizardOpen,
-        setIsSetupWizardOpen,
-        setupWizardInitialStep,
-        setSetupWizardInitialStep,
-        isAddSheetOpen,
-        setIsAddSheetOpen,
-        isTransferOpen,
-        setIsTransferOpen,
-        isCreateInvestmentOpen,
-        setIsCreateInvestmentOpen,
-        isDebtPaymentOpen,
-        setIsDebtPaymentOpen,
-      }}
-    >
-      {children}
-    </ModalContext.Provider>
+    <ModalActionsContext.Provider value={actionsValue}>
+      <MonthContext.Provider value={monthValue}>
+        <ModalUiContext.Provider value={uiValue}>
+          {children}
+        </ModalUiContext.Provider>
+      </MonthContext.Provider>
+    </ModalActionsContext.Provider>
   );
 }
 
-export function useModals() {
-  const context = useContext(ModalContext);
-  if (context === undefined) {
-    throw new Error("useModals must be used within a ModalProvider");
+function requireModalContext<T>(
+  value: T | undefined,
+  hookName: string
+): T {
+  if (value === undefined) {
+    throw new Error(`${hookName} must be used within a ModalProvider`);
   }
-  return context;
+  return value;
+}
+
+export function useGlobalMonth(): MonthContextType {
+  return requireModalContext(useContext(MonthContext), "useGlobalMonth");
+}
+
+export function useModalActions(): ModalActionsType {
+  return requireModalContext(useContext(ModalActionsContext), "useModalActions");
+}
+
+export function useModalUi(): ModalUiContextType {
+  return requireModalContext(useContext(ModalUiContext), "useModalUi");
+}
+
+/** Compatibility merge of month + UI + actions. Prefer the split hooks on hot screens. */
+export function useModals(): ModalContextType {
+  const month = useGlobalMonth();
+  const ui = useModalUi();
+  const actions = useModalActions();
+  return { ...month, ...ui, ...actions };
 }

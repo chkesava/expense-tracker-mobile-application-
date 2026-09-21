@@ -1,4 +1,11 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { logError } from "@/lib/errors";
@@ -47,20 +54,26 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({
     loadWorkspace();
   }, []);
 
-  const setActiveWorkspace = async (workspace: WorkspaceType) => {
-    try {
-      setActiveWorkspaceState(workspace);
-      await AsyncStorage.setItem("@active_workspace", workspace);
-      router.replace(resolveWorkspaceRoute(workspace) as never);
-    } catch (error) {
-      logError("workspaceProvider.saveWorkspace", error);
-    }
-  };
+  const setActiveWorkspace = useCallback(
+    async (workspace: WorkspaceType) => {
+      try {
+        setActiveWorkspaceState(workspace);
+        await AsyncStorage.setItem("@active_workspace", workspace);
+        router.replace(resolveWorkspaceRoute(workspace) as never);
+      } catch (error) {
+        logError("workspaceProvider.saveWorkspace", error);
+      }
+    },
+    [router]
+  );
+
+  const value = useMemo(
+    () => ({ activeWorkspace, setActiveWorkspace, isLoading }),
+    [activeWorkspace, setActiveWorkspace, isLoading]
+  );
 
   return (
-    <WorkspaceContext.Provider
-      value={{ activeWorkspace, setActiveWorkspace, isLoading }}
-    >
+    <WorkspaceContext.Provider value={value}>
       {children}
     </WorkspaceContext.Provider>
   );

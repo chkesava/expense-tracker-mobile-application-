@@ -16,6 +16,7 @@ import {
 import type { Expense } from "@/shared/types/expense";
 import {
   buildSmartInsights,
+  expensesInInsightWindow,
   selectSmartInsights,
   type SmartInsight,
 } from "@/shared/utils/smartInsights";
@@ -62,25 +63,28 @@ export function SmartInsightsWidget({
   const surfaces = useSurfaces();
   const { settings } = useSettings();
 
-  const insights = useMemo(
-    () =>
-      buildSmartInsights({
-        expenses,
-        monthlyBudget,
-        currency,
-        numberFormat: settings.numberFormat,
-        firstDayOfWeek: settings.firstDayOfWeek,
-        today: todayKey,
-      }),
-    [
+  const insights = useMemo(() => {
+    const windowed = expensesInInsightWindow(
       expenses,
+      todayKey,
+      settings.firstDayOfWeek
+    );
+    return buildSmartInsights({
+      expenses: windowed,
       monthlyBudget,
       currency,
-      settings.numberFormat,
-      settings.firstDayOfWeek,
-      todayKey,
-    ]
-  );
+      numberFormat: settings.numberFormat,
+      firstDayOfWeek: settings.firstDayOfWeek,
+      today: todayKey,
+    });
+  }, [
+    expenses,
+    monthlyBudget,
+    currency,
+    settings.numberFormat,
+    settings.firstDayOfWeek,
+    todayKey,
+  ]);
 
   const ordered = useMemo(() => {
     return selectSmartInsights(insights).map((insight) => ({
