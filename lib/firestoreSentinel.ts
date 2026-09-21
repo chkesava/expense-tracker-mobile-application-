@@ -1,6 +1,19 @@
 /**
  * JSON stand-ins for Firestore sentinels so an outbox can replay a write
  * after the process that created it is gone (SPENDLY-23).
+ *
+ * Detection hazard (SPENDLY-94). A `FieldValue` carries its payload on
+ * instance properties that the Firebase release build mangles: in
+ * `firebase@12` the `increment` operand ships as `ar` and the array
+ * transform elements as `_r`. Only `_methodName` survives, because the
+ * public `FieldValue` base constructor assigns it. So this module keys off
+ * `_methodName` alone and recovers the payload by shape, never by name.
+ *
+ * Vitest hides this class of bug: `environment: "node"` resolves
+ * `firebase/firestore` to the unminified `index.node.mjs`, where the
+ * original names do exist, while Metro and the browser get the mangled
+ * bundles. The mangled-shape cases in the sibling test are what actually
+ * guard the device path — keep them if this file is revisited.
  */
 
 import {
@@ -14,6 +27,8 @@ import {
 
 export const FIRESTORE_SENTINEL_KEY = "__spendlyFv";
 
+const METHOD_NAME_KEY = "_methodName";
+
 type EncodedSentinel =
   | { [FIRESTORE_SENTINEL_KEY]: "serverTimestamp" }
   | { [FIRESTORE_SENTINEL_KEY]: "deleteField" }
@@ -26,7 +41,7 @@ type EncodedSentinel =
       nanoseconds: number;
     };
 
-type MethodNamed = { _methodName?: string; _operand?: number; _elements?: unknown[] };
+type MethodNamed = { _methodName?: string };
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (value === null || typeof value !== "object") return false;
@@ -44,28 +59,72 @@ function isTimestampLike(value: object): value is { seconds: number; nanoseconds
   );
 }
 
+/**
+ * The first own data property matching `predicate`, ignoring `_methodName`.
+ *
+ * A sentinel holds exactly one payload property, so its shape identifies it
+ * whatever the minifier called it. Only data descriptors are read: probing
+ * an accessor on an unknown object could run code this module does not own.
+ */
+function ownDataValue<T>(
+  value: object,
+  predicate: (candidate: unknown) => candidate is T
+): T | undefined {
+  for (const key of Object.getOwnPropertyNames(value)) {
+    if (key === METHOD_NAME_KEY) continue;
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (!descriptor || !("value" in descriptor)) continue;
+    if (predicate(descriptor.value)) return descriptor.value;
+  }
+  return undefined;
+}
+
+const isNumber = (candidate: unknown): candidate is number => typeof candidate === "number";
+const isArray = (candidate: unknown): candidate is unknown[] => Array.isArray(candidate);
+
+/**
+ * `null` means "not a sentinel after all" — an ordinary payload that merely
+ * carries a `_methodName` field still encodes as a plain object.
+ */
+function encodeFieldValue(value: object, methodName: string): EncodedSentinel | null {
+  switch (methodName) {
+    case "serverTimestamp":
+      return { [FIRESTORE_SENTINEL_KEY]: "serverTimestamp" };
+    case "deleteField":
+      return { [FIRESTORE_SENTINEL_KEY]: "deleteField" };
+    case "increment": {
+      const operand = ownDataValue(value, isNumber);
+      if (operand === undefined) {
+        throw new Error("Write outbox cannot serialise increment");
+      }
+      return { [FIRESTORE_SENTINEL_KEY]: "increment", n: operand };
+    }
+    case "arrayUnion":
+    case "arrayRemove": {
+      const elements = ownDataValue(value, isArray);
+      if (!elements) {
+        throw new Error(`Write outbox cannot serialise ${methodName}`);
+      }
+      return {
+        [FIRESTORE_SENTINEL_KEY]: methodName,
+        values: elements.map(encodeFirestoreData),
+      };
+    }
+    // Real sentinels the outbox has no stand-in for. Naming them beats the
+    // generic message, which reads like a corrupt payload.
+    case "minimum":
+    case "maximum":
+      throw new Error(`Write outbox cannot serialise ${methodName}`);
+    default:
+      return null;
+  }
+}
+
 function encodeSentinel(value: object): EncodedSentinel | null {
-  const named = value as MethodNamed;
-  if (named._methodName === "serverTimestamp") {
-    return { [FIRESTORE_SENTINEL_KEY]: "serverTimestamp" };
-  }
-  if (named._methodName === "deleteField") {
-    return { [FIRESTORE_SENTINEL_KEY]: "deleteField" };
-  }
-  if (named._methodName === "increment" && typeof named._operand === "number") {
-    return { [FIRESTORE_SENTINEL_KEY]: "increment", n: named._operand };
-  }
-  if (named._methodName === "arrayUnion" && Array.isArray(named._elements)) {
-    return {
-      [FIRESTORE_SENTINEL_KEY]: "arrayUnion",
-      values: named._elements.map(encodeFirestoreData),
-    };
-  }
-  if (named._methodName === "arrayRemove" && Array.isArray(named._elements)) {
-    return {
-      [FIRESTORE_SENTINEL_KEY]: "arrayRemove",
-      values: named._elements.map(encodeFirestoreData),
-    };
+  const methodName = (value as MethodNamed)[METHOD_NAME_KEY];
+  if (typeof methodName === "string") {
+    const encoded = encodeFieldValue(value, methodName);
+    if (encoded) return encoded;
   }
 
   const fake = value as {

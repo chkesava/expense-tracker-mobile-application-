@@ -198,3 +198,113 @@ describe("commitMutations", () => {
     expect(await listWriteOutbox("u1")).toEqual([]);
   });
 });
+
+/**
+ * The Pay Bill batch as the shipped bundles hand it over (SPENDLY-94).
+ *
+ * `_operand` / `_elements` above are the names only the unminified node
+ * build uses. On Metro and in the browser the minifier renamed them, which
+ * is what made `serializeOp` throw before the batch was ever journalled.
+ */
+class MangledFieldValue {
+  constructor(public _methodName: string) {}
+}
+
+const mangled = (methodName: string, payload?: Record<string, unknown>): object =>
+  Object.assign(new MangledFieldValue(methodName), payload ?? {});
+
+const billStampOps = () => [
+  {
+    op: "set" as const,
+    ref: { path: "users/u1/accountPayments/pay-1" },
+    data: { amount: 4000, date: "2026-09-21", createdAt: mangled("serverTimestamp") },
+  },
+  {
+    op: "update" as const,
+    ref: { path: "users/u1/creditCardBills/bill-1" },
+    data: {
+      amountPaid: mangled("increment", { ar: 4000 }),
+      paymentIds: mangled("arrayUnion", { _r: ["pay-1"] }),
+      remainingAmount: 6000,
+      status: "PARTIALLY_PAID",
+    },
+  },
+];
+
+describe("commitMutations with minified sentinels", () => {
+  it("journals a credit card bill payment as replayable JSON", async () => {
+    commitOutcome = "queued";
+
+    const outcome = await commitMutations("u1", billStampOps(), {
+      label: "credit card bill payment",
+    });
+
+    expect(outcome).toBe("queued");
+    expect(commits).toBe(1);
+
+    const [entry] = await listWriteOutbox("u1");
+    expect(entry.nonIdempotent).toBe(true);
+    // Whatever the minifier called the payload properties, what lands on
+    // disk has to be plain JSON the next process can read back.
+    const raw = disk.get(WRITE_OUTBOX_STORAGE_KEY) ?? "";
+    expect(raw).toContain("__spendlyFv");
+    expect(JSON.parse(raw)).toEqual([entry]);
+
+    const stamp = writes.find((write) => write.path === "users/u1/creditCardBills/bill-1");
+    expect(stamp?.data.amountPaid).toEqual({ _methodName: "increment", _operand: 4000 });
+    expect(stamp?.data.paymentIds).toEqual({
+      _methodName: "arrayUnion",
+      _elements: ["pay-1"],
+    });
+  });
+
+  it("replays a queued bill payment exactly once", async () => {
+    commitOutcome = "queued";
+    await commitMutations("u1", billStampOps(), { label: "credit card bill payment" });
+    resetWriteOutboxForTests({
+      getItem: async (key: string) => disk.get(key) ?? null,
+      setItem: async (key: string, value: string) => {
+        disk.set(key, value);
+      },
+    });
+    // Queued means the batch never reached the server, so no ack doc exists
+    // for the replay to find.
+    docs.clear();
+    writes.length = 0;
+    commits = 0;
+    commitOutcome = "acked";
+
+    await replayWriteOutbox("u1");
+
+    expect(commits).toBe(1);
+    expect(
+      writes.filter((write) => write.path === "users/u1/creditCardBills/bill-1")
+    ).toHaveLength(1);
+    expect(await listWriteOutbox("u1")).toEqual([]);
+
+    // A second pass has nothing left to apply, so the statement balance
+    // cannot be incremented twice.
+    await replayWriteOutbox("u1");
+    expect(commits).toBe(1);
+  });
+
+  it("does not re-increment a bill payment whose batch already landed", async () => {
+    commitOutcome = "queued";
+    await commitMutations("u1", billStampOps(), { label: "credit card bill payment" });
+    docs.set("users/u1/meta/outboxAck_outbox-1", { createdAt: 1 });
+    resetWriteOutboxForTests({
+      getItem: async (key: string) => disk.get(key) ?? null,
+      setItem: async (key: string, value: string) => {
+        disk.set(key, value);
+      },
+    });
+    writes.length = 0;
+    commits = 0;
+
+    await replayWriteOutbox("u1");
+
+    expect(commits).toBe(0);
+    expect(writes).toEqual([]);
+    expect(await listWriteOutbox("u1")).toEqual([]);
+  });
+});
