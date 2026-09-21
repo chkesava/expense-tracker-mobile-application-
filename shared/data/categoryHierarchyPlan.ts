@@ -137,6 +137,16 @@ function matchDefaultSub(
 }
 
 /**
+ * True when stored defaults still need creates/renames/archives vs the current taxonomy.
+ */
+export function taxonomyDocsNeedUpsert(
+  existing: PlannedCategoryDoc[],
+  taxonomy: TaxonomyNode[] = CATEGORY_TAXONOMY
+): boolean {
+  return planDefaultTaxonomyUpsert(existing, taxonomy).writes.length > 0;
+}
+
+/**
  * Pure v4 upsert planner. Does not touch custom (`isDefault === false`) docs.
  * Create ids are deterministic placeholders (`new:parent:key` / `new:sub:parent:sub`).
  */

@@ -6,6 +6,7 @@ import {
   countExpenseRemaps,
   planDefaultTaxonomyUpsert,
   shouldFlushBatch,
+  taxonomyDocsNeedUpsert,
   type PlannedCategoryDoc,
 } from "./categoryHierarchyPlan";
 
@@ -74,6 +75,30 @@ describe("planDefaultTaxonomyUpsert", () => {
     const plan = planDefaultTaxonomyUpsert(existing);
     expect(plan.skippedCustomParentKeys).toContain("pets");
     expect(plan.writes.some((w) => w.op === "create" && w.data?.name === "Pets")).toBe(false);
+  });
+
+  it("still needs an upsert when the version stamp is current but parents are v3 names", () => {
+    const existing: PlannedCategoryDoc[] = [
+      {
+        id: "p-food",
+        name: "Food",
+        kind: "category",
+        parentId: null,
+        isDefault: true,
+      },
+      {
+        id: "p-travel",
+        name: "Travel",
+        kind: "category",
+        parentId: null,
+        isDefault: true,
+      },
+    ];
+    expect(taxonomyDocsNeedUpsert(existing)).toBe(true);
+    const upgraded = applyTaxonomyWrites(existing, planDefaultTaxonomyUpsert(existing));
+    expect(taxonomyDocsNeedUpsert(upgraded)).toBe(false);
+    expect(upgraded.find((d) => d.id === "p-food")?.name).toBe("Food & Groceries");
+    expect(upgraded.find((d) => d.id === "p-travel")?.name).toBe("Transport & Vehicles");
   });
 
   it("counts no expense remaps when pairs are already v4", () => {
