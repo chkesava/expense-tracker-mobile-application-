@@ -81,6 +81,7 @@ import {
   nowTimeHm,
   todayDateKey,
 } from "@/shared/utils/dates";
+import { roundMoney } from "@/shared/utils/money";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
@@ -377,7 +378,7 @@ export function ExpenseForm({
       return;
     }
 
-    const numAmount = Number(amount);
+    const numAmount = roundMoney(Number(amount));
     if (!Number.isFinite(numAmount) || numAmount <= 0) {
       toast.error("Please enter a valid amount");
       return;

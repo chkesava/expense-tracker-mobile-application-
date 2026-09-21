@@ -26,6 +26,7 @@ import { writeSavedMessage } from "@/lib/firestoreWrite";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
+import { useSettings } from "@/providers/SettingsProvider";
 import {
   INVESTMENT_CASH_COLLECTION,
   createHoldingWithCash,
@@ -37,6 +38,7 @@ import {
 } from "@/services/portfolio/investmentCash";
 import { usePortfolioMutations } from "@/hooks/usePortfolioMutations";
 import { scheduleIdleWork } from "@/shared/utils/scheduleIdle";
+import { todayDateKey } from "@/shared/utils/dates";
 import {
   availableInvestmentCash,
   computeInvestmentCashBalance,
@@ -70,13 +72,6 @@ function stripUndefined<T extends Record<string, unknown>>(value: T): T {
   return result;
 }
 
-function todayKey() {
-  const now = new Date();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  return `${now.getFullYear()}-${month}-${day}`;
-}
-
 /**
  * Portfolio data repository. Every path intentionally matches the existing web
  * app, so a signed-in user sees the same portfolio on web and mobile.
@@ -91,6 +86,8 @@ function usePortfolioState(options?: {
   const { user } = useAuth();
   const uid = user?.uid;
   const db = getFirestoreDb();
+  const { settings: appSettings } = useSettings();
+  const today = todayDateKey(appSettings.timezone);
   const enabled = options?.enabled ?? true;
   const includeSecondary = options?.includeSecondary !== false;
   const { depositCash, withdrawCash } = usePortfolioMutations();
@@ -268,7 +265,7 @@ function usePortfolioState(options?: {
         purchaseAmount,
         entryId: options?.entryId,
         holdingId: options?.holdingId,
-        date: options?.date ?? (holding.datePurchased || todayKey()),
+        date: options?.date ?? (holding.datePurchased || today),
         source: options?.source,
       });
       toast.success(
@@ -283,7 +280,7 @@ function usePortfolioState(options?: {
       toast.error(friendlyErrorMessage(error, "Failed to add holding"));
       return null;
     }
-  }, [db, user, settings]);
+  }, [db, user, settings, today]);
 
   const updateHolding = useCallback(async (id: string, updates: Partial<CreateHoldingInput>) => {
     if (!user || !db) return false;
@@ -303,7 +300,7 @@ function usePortfolioState(options?: {
       toast.error("Failed to update holding");
       return false;
     }
-  }, [db, user]);
+  }, [db, user, today]);
 
   /**
    * Removes a holding, optionally returning the cash still tied to it.
@@ -322,7 +319,7 @@ function usePortfolioState(options?: {
       const result = await deleteHoldingWithOptionalRefund(user.uid, {
         holdingId: id,
         refundCash: options?.refundCash,
-        date: todayKey(),
+        date: today,
         symbol: holding?.symbol,
         cashEntries,
       });
@@ -338,7 +335,7 @@ function usePortfolioState(options?: {
       toast.error(friendlyErrorMessage(error, "Failed to remove holding"));
       return false;
     }
-  }, [cashEntries, db, holdings, user]);
+  }, [cashEntries, db, holdings, user, today]);
 
   /** Outstanding cash still tied to a holding, if it was funded in-app. */
   const findHoldingPurchase = useCallback(
@@ -366,7 +363,7 @@ function usePortfolioState(options?: {
         existing: holdings,
         nextHoldings,
         cashEntries,
-        date: todayKey(),
+        date: today,
       });
       toast.success("Holdings imported");
       return true;
@@ -375,7 +372,7 @@ function usePortfolioState(options?: {
       toast.error("Failed to import CSV");
       return false;
     }
-  }, [cashEntries, db, holdings, user]);
+  }, [cashEntries, db, holdings, user, today]);
 
   const addToWatchlist = useCallback(async (item: Omit<WatchlistItem, "id" | "createdAt">) => {
     if (!user || !db) return false;
@@ -408,7 +405,7 @@ function usePortfolioState(options?: {
       toast.error("Failed to remove from watchlist");
       return false;
     }
-  }, [db, user]);
+  }, [db, user, today]);
 
   const addAlert = useCallback(async (alert: CreateAlertInput) => {
     if (!user || !db) return false;
@@ -425,7 +422,7 @@ function usePortfolioState(options?: {
       toast.error("Failed to create alert");
       return false;
     }
-  }, [db, user]);
+  }, [db, user, today]);
 
   const toggleAlert = useCallback(async (id: string, isActive: boolean) => {
     if (!user || !db) return false;
@@ -437,7 +434,7 @@ function usePortfolioState(options?: {
       toast.error("Failed to update alert");
       return false;
     }
-  }, [db, user]);
+  }, [db, user, today]);
 
   const deleteAlert = useCallback(async (id: string) => {
     if (!user || !db) return false;
@@ -450,7 +447,7 @@ function usePortfolioState(options?: {
       toast.error("Failed to remove alert");
       return false;
     }
-  }, [db, user]);
+  }, [db, user, today]);
 
   const saveSettings = useCallback(async (updates: Partial<PortfolioSettings>) => {
     if (!user || !db) return false;
@@ -470,7 +467,7 @@ function usePortfolioState(options?: {
 
   const saveDailySnapshot = useCallback(async (snapshot: CreateSnapshotInput) => {
     if (!user || !db) return false;
-    const date = todayKey();
+    const date = today;
     const ref = doc(db, "users", user.uid, "portfolioSnapshots", date);
     try {
       if ((await getDoc(ref)).exists()) return true;
@@ -480,7 +477,7 @@ function usePortfolioState(options?: {
       logError("portfolio.savePortfolioSnapshot", error);
       return false;
     }
-  }, [db, user]);
+  }, [db, user, today]);
 
   const executeMockBuy = useCallback(async (holdingId: string, quantity: number, price: number, fees = 0) => {
     if (!user || !db) return false;
@@ -490,7 +487,7 @@ function usePortfolioState(options?: {
         quantity,
         price,
         fees,
-        date: todayKey(),
+        date: today,
       });
       toast.success(writeSavedMessage(result.outcome, "Mock buy executed"));
       return true;
@@ -499,7 +496,7 @@ function usePortfolioState(options?: {
       toast.error(friendlyErrorMessage(error, "Couldn't complete the buy order."));
       return false;
     }
-  }, [db, user]);
+  }, [db, user, today]);
 
   const executeMockSell = useCallback(async (holdingId: string, quantity: number, price: number, fees = 0) => {
     if (!user || !db) return false;
@@ -509,7 +506,7 @@ function usePortfolioState(options?: {
         quantity,
         price,
         fees,
-        date: todayKey(),
+        date: today,
       });
       toast.success(writeSavedMessage(result.outcome, "Mock sell executed"));
       return true;
@@ -518,7 +515,7 @@ function usePortfolioState(options?: {
       toast.error(friendlyErrorMessage(error, "Couldn't complete the sell order."));
       return false;
     }
-  }, [db, user]);
+  }, [db, user, today]);
 
   const cancelOrder = useCallback(async (id: string) => {
     if (!user || !db) return false;
@@ -531,7 +528,7 @@ function usePortfolioState(options?: {
       toast.error("Failed to cancel order");
       return false;
     }
-  }, [db, user]);
+  }, [db, user, today]);
 
   return {
     holdings,

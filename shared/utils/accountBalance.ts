@@ -119,13 +119,14 @@ export function computeBankBalance(
   borrowings: Borrowing[] = [],
   borrowingRepayments: BorrowingRepayment[] = [],
   receivables: Receivable[] = [],
-  receivableRepayments: ReceivableRepayment[] = []
+  receivableRepayments: ReceivableRepayment[] = [],
+  today: string = todayDateKey()
 ): number {
   const opening = account.openingBalance ?? 0;
   const baseline = effectiveBalanceAsOfDate(
     account.balanceAsOfDate,
     [],
-    todayDateKey()
+    today
   );
   const totalExpenses = expenses
     .filter(
@@ -590,7 +591,8 @@ export function previewBalanceAfterTransaction(
       borrowings,
       borrowingRepayments,
       receivables,
-      receivableRepayments
+      receivableRepayments,
+      today
     );
     if (transactionType === "expense") balance -= amount;
     else balance += amount;

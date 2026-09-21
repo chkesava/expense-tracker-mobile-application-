@@ -1,4 +1,5 @@
 import type { Participant, Split, SplitKind } from "@/shared/types/split";
+import { roundMoney } from "./money";
 import { generatePaymentSlug } from "./paymentSlug";
 import { generateUpiLink } from "./upi";
 
@@ -23,10 +24,6 @@ export function isCollectSplit(split: Pick<Split, "kind">): boolean {
 
 export function isCollectSpent(split: Split): boolean {
   return isCollectSplit(split) && split.status === "spent";
-}
-
-function roundMoney(value: number): number {
-  return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
 export function isParticipantContributing(p: Participant): boolean {

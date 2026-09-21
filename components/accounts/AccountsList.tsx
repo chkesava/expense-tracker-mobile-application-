@@ -188,7 +188,8 @@ export function AccountsList() {
           borrowings,
           borrowingRepayments,
           receivables,
-          receivableRepayments
+          receivableRepayments,
+          today
         );
         map.set(a.id, bal);
       }

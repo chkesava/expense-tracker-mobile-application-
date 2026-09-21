@@ -8,16 +8,14 @@
 
 import type { Expense } from "../types/expense";
 import type { Space } from "../types/space";
+import { roundMoney } from "./money";
+export { roundMoney };
 
 /** Informational only. Nothing in the app blocks spending over budget. */
 export type BudgetProgressTier = "none" | "safe" | "warning" | "danger" | "over";
 
 export const BUDGET_WARNING_PERCENT = 75;
 export const BUDGET_DANGER_PERCENT = 90;
-
-export function roundMoney(value: number): number {
-  return Math.round((value + Number.EPSILON) * 100) / 100;
-}
 
 /** Expenses assigned to a Space. Unassigned expenses are always excluded. */
 export function expensesInSpace(

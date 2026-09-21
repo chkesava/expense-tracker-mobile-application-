@@ -1,6 +1,7 @@
 import type { CreditCardBill, CreditCardBillStatus } from "../types/creditCardBill";
 import { OPEN_BILL_STATUSES } from "../types/creditCardBill";
 import { toLocalDateKey } from "./dates";
+import { roundMoney } from "./money";
 
 export type ComputeBillStatusInput = {
   today: string;
@@ -21,8 +22,8 @@ export function computeCreditCardBillStatus(
 ): CreditCardBillStatus {
   if (input.cancelled) return "CANCELLED";
 
-  const statement = Math.max(0, Number(input.statementAmount) || 0);
-  const paid = Math.max(0, Number(input.amountPaid) || 0);
+  const statement = roundMoney(Math.max(0, Number(input.statementAmount) || 0));
+  const paid = roundMoney(Math.max(0, Number(input.amountPaid) || 0));
   const dueSoonDays = Math.max(0, input.dueSoonDays ?? 3);
 
   if (statement > 0 && paid >= statement) return "PAID";
@@ -56,7 +57,9 @@ export function computeRemainingAmount(
   statementAmount: number,
   amountPaid: number
 ): number {
-  return Math.max(0, (Number(statementAmount) || 0) - (Number(amountPaid) || 0));
+  return roundMoney(
+    Math.max(0, (Number(statementAmount) || 0) - (Number(amountPaid) || 0))
+  );
 }
 
 export function earliestOpenCreditCardBill<
