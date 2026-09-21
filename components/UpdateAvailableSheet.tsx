@@ -21,7 +21,7 @@ import { haptic } from "@/lib/haptics";
  */
 export function UpdateAvailableSheet() {
   const { theme } = useTheme();
-  const { release, visible, dismiss, installedVersionName, installedVersionCode } =
+  const { release, visible, dismiss, installedVersionName, installedVersionCode, mandatory } =
     useAppUpdate();
   const [progress, setProgress] = useState<InstallProgress>({ phase: "idle" });
 
@@ -94,7 +94,7 @@ export function UpdateAvailableSheet() {
               textAlign: "center",
             }}
           >
-            {release.mandatory ? "Update required" : "New version launched"}
+            {mandatory ? "Update required" : "New version launched"}
           </Text>
 
           <Text
@@ -164,7 +164,7 @@ export function UpdateAvailableSheet() {
             {busy ? installProgressLabel(progress) : "Install latest"}
           </Button>
 
-          {release.mandatory ? (
+          {mandatory ? (
             <Text
               style={{
                 color: theme.colors.mutedForeground,

@@ -79,7 +79,8 @@ export function parseRelease(
     apkFileName: typeof data.apkFileName === "string" ? data.apkFileName : undefined,
     publishedAt: typeof data.publishedAt === "string" ? data.publishedAt : undefined,
     contentLength: Number.isFinite(contentLength) && contentLength > 0 ? contentLength : undefined,
-    sha256: typeof data.sha256 === "string" ? data.sha256 : undefined,
+    sha256:
+      typeof data.sha256 === "string" && data.sha256.trim() ? data.sha256.trim() : undefined,
     product:
       data.product === "expense" || data.product === "nutrition" || data.product === "ganesh"
         ? data.product

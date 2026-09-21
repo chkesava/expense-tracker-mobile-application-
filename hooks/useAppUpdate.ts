@@ -17,6 +17,7 @@ import {
   releaseDocPath,
   type AppRelease,
 } from "@/lib/appRelease";
+import { isMandatoryRelease } from "@/lib/apkUpdateSecurity";
 import { logWarning } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
 import { ACTIVE_PRODUCT } from "@/lib/activeProduct";
@@ -135,13 +136,13 @@ export function useAppUpdate() {
       release.versionCode > installedVersionCode
   );
 
+  const mandatory = Boolean(release && isMandatoryRelease(release));
+
   const visible =
-    updateAvailable && release
-      ? release.mandatory || !dismissedThisSession
-      : false;
+    updateAvailable && release ? mandatory || !dismissedThisSession : false;
 
   const dismiss = useCallback(() => {
-    if (!release || release.mandatory) return;
+    if (!release || isMandatoryRelease(release)) return;
     setDismissedThisSession(true);
   }, [release]);
 
@@ -155,6 +156,7 @@ export function useAppUpdate() {
     visible,
     dismiss,
     resetDismissal,
+    mandatory,
     installedVersionCode,
     installedVersionName,
   };
