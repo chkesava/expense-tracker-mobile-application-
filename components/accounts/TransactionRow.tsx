@@ -111,18 +111,22 @@ export const TransactionRow = memo(function TransactionRow({
               {dateLabel}
               {timeLabel ? ` · ${timeLabel}` : ""}
             </Text>
-            {showRunningBalance && runningBalance != null ? (
+            {showRunningBalance ? (
               <View style={styles.compactBalance}>
                 <Text style={[styles.balanceLabel, { color: theme.colors.mutedForeground }]}>
                   Balance after
                 </Text>
-                <Amount
-                  value={runningBalance}
-                  currency={currency}
-                  ghostable
-                  fractionDigits={2}
-                  style={[styles.balance, { color: theme.colors.foreground }]}
-                />
+                {runningBalance != null ? (
+                  <Amount
+                    value={runningBalance}
+                    currency={currency}
+                    ghostable
+                    fractionDigits={2}
+                    style={[styles.balance, { color: theme.colors.foreground }]}
+                  />
+                ) : (
+                  <Text style={[styles.balance, { color: theme.colors.mutedForeground }]}>—</Text>
+                )}
               </View>
             ) : null}
           </View>

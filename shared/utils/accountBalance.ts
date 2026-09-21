@@ -542,9 +542,19 @@ export function buildAccountActivities(
   const chronological = [...activities].sort(compareActivitiesChronologically);
 
   if (kind !== "credit") {
+    // A saved balance snapshot is the new opening point for the account
+    // balance. Keep older rows in the history for auditability, but do not
+    // assign them a "Balance after" value: deriving one from the current
+    // snapshot would be misleading and would not reconcile with the header.
+    const baseline = effectiveBalanceAsOfDate(
+      account.balanceAsOfDate,
+      [],
+      todayDateKey()
+    );
     const opening = account.openingBalance ?? 0;
     let running = opening;
     for (const act of chronological) {
+      if (!isOnOrAfter(act.date, baseline)) continue;
       if (act.type === "debit") running -= act.amount;
       else running += act.amount;
       running = roundMoney(running);
