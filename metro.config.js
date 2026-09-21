@@ -98,10 +98,34 @@ config.resolver.extraNodeModules = {
   "product-splash-overlay": splashOverlayFile,
 };
 
+/**
+ * SPENDLY-96. `expo-quick-actions` is an exports-only package: no `main`,
+ * no `module`, no `react-native` field and no root `index.js`. Package
+ * exports are disabled above (Firebase Auth needs the legacy `react-native`
+ * field), so Metro has no entry point to resolve and emits a module that
+ * throws `Error: Cannot find module` the moment anything requires it.
+ *
+ * That shipped in v2.0.8/build 93 as a startup crash: the throw escaped
+ * `useAppShortcutHandler`'s listener effect and hit AppErrorBoundary.
+ * The handler is fail-safe now, but without this alias Quick Actions would
+ * merely be silently dead — Android registered no shortcuts at all.
+ *
+ * Point at the `react-native` condition's entry directly. Re-enabling
+ * package exports globally is not an option here; see line 13.
+ */
+const quickActionsEntry = path.resolve(
+  __dirname,
+  "node_modules/expo-quick-actions/build/index.js"
+);
+
 const previousResolveRequest = config.resolver.resolveRequest;
 config.resolver.resolveRequest = (context, moduleName, platform) => {
   if (moduleName === "product-splash-overlay") {
     return { type: "sourceFile", filePath: splashOverlayFile };
+  }
+  // Web has its own implementation and resolves through the same gap.
+  if (moduleName === "expo-quick-actions" && platform !== "web") {
+    return { type: "sourceFile", filePath: quickActionsEntry };
   }
   if (previousResolveRequest) {
     return previousResolveRequest(context, moduleName, platform);
