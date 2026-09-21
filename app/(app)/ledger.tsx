@@ -72,7 +72,12 @@ export default function LedgerScreen() {
     error: expensesError,
     retry: retryExpenses,
   } = useExpenses();
-  const { incomes, loading: incomesLoading } = useIncomes();
+  const {
+    incomes,
+    loading: incomesLoading,
+    error: incomesError,
+    retry: retryIncomes,
+  } = useIncomes();
   const { accounts } = useAccounts();
 
   useEffect(() => {
@@ -92,8 +97,14 @@ export default function LedgerScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const handleRefresh = () => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 600);
+    retryExpenses();
   };
+
+  useEffect(() => {
+    if (!expensesLoading && !incomesLoading) {
+      setRefreshing(false);
+    }
+  }, [expensesLoading, incomesLoading]);
 
   const activeMonth = globalMonth || currentMonthKey(settings.timezone);
 
@@ -317,6 +328,12 @@ export default function LedgerScreen() {
                     <Skeleton key={i} height={64} borderRadius={theme.radius.lg} />
                   ))}
                 </View>
+              ) : incomesError && incomes.length === 0 ? (
+                <ErrorState
+                  title="Couldn't load your transactions"
+                  description={incomesError.message}
+                  onRetry={incomesError.retryable ? retryIncomes : undefined}
+                />
               ) : (
                 <ExpenseList
                   expenses={[]}

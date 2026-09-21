@@ -35,7 +35,7 @@ import { useVaults } from "@/hooks/useVaults";
 import {
   VAULT_HUB_TAB_IDS,
 } from "@/shared/config/navigation";
-import type { SharedVault, VaultStats } from "@/shared/types/vault";
+import type { SharedVault } from "@/shared/types/vault";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
@@ -244,22 +244,10 @@ function SharedVaultsPanel() {
       ) : (
         <View style={{ gap: 12 }}>
           {filteredVaults.map((vault) => {
-            const initialStats: VaultStats = {
-              totalDeposits: 0,
-              totalWithdrawals: 0,
-              currentBalance: 0,
-              budget: vault.budget || 0,
-              budgetUsagePercent: 0,
-              remainingBudget: vault.budget || 0,
-              transactionCount: 0,
-              status: "healthy",
-            };
-
             return (
               <VaultCard
                 key={vault.id}
                 vault={vault}
-                stats={initialStats}
                 onPress={() => setSelectedVault(vault)}
               />
             );

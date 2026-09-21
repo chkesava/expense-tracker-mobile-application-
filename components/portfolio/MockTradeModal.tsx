@@ -8,6 +8,7 @@ import { themeUsesDarkPalette } from '@/theme/tokens';
 import { X } from 'lucide-react-native';
 import type { HoldingWithMetrics } from '@/shared/features/portfolio/types';
 import { canAfford } from '@/shared/features/portfolio/utils/investmentCash';
+import { logError } from '@/lib/errors';
 
 interface MockTradeModalProps {
   visible: boolean;
@@ -92,6 +93,7 @@ export function MockTradeModal({ visible, holding, onClose, onBuy, onSell, cashB
         setError('Trade failed');
       }
     } catch (err: any) {
+      logError("mockTrade", err);
       setError(err.message || 'Trade failed');
     } finally {
       setLoading(false);

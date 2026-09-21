@@ -12,7 +12,7 @@ import {
   type InstallProgress,
 } from "@/lib/apkUpdate";
 import { productAppName } from "@/lib/activeProduct";
-import { friendlyErrorMessage } from "@/lib/errors";
+import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
 
 /**
@@ -56,6 +56,7 @@ export function CheckForAppUpdate() {
 
       toast.success("You are on the latest version");
     } catch (error) {
+      logError("checkForAppUpdate", error);
       toast.error(friendlyErrorMessage(error, "Could not check for updates"));
     } finally {
       setChecking(false);

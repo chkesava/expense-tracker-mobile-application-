@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { ShieldAlert, Sparkles, Inbox, ChevronRight } from "lucide-react-native";
@@ -22,6 +22,7 @@ import {
   withAlpha,
 } from "@/components/dashboard/primitives";
 import { LazyMount } from "@/components/common/LazyMount";
+import { ErrorState } from "@/components/common/ErrorState";
 import { WelcomeScreen } from "@/components/onboarding/WelcomeScreen";
 import { PageShell } from "@/components/layout/PageShell";
 import { DashboardSkeleton } from "@/components/ui/DashboardSkeleton";
@@ -111,7 +112,7 @@ export default function DashboardScreen() {
     setEditingExpense,
   } = useModals();
 
-  const { expenses, loading: expensesLoading } = useExpenses();
+  const { expenses, loading: expensesLoading, error: financeError, retry } = useExpenses();
   const { incomes, loading: incomesLoading } = useIncomes();
   const { count: inboxCount } = useSmsReviewInbox();
   const { accounts, loading: accountsLoading } = useAccounts();
@@ -127,17 +128,20 @@ export default function DashboardScreen() {
   }, [markScreenVisited]);
 
   const [refreshing, setRefreshing] = useState(false);
-
   const activeMonth = globalMonth || currentMonthKey(settings.timezone);
   const previousMonth = getPreviousMonthKey(activeMonth);
   const todayKey = formatDateKey(new Date(), settings.timezone);
 
-  const handleRefresh = () => {
+  const handleRefresh = useCallback(() => {
     setRefreshing(true);
-    setTimeout(() => {
+    retry();
+  }, [retry]);
+
+  useEffect(() => {
+    if (!expensesLoading && !incomesLoading && !accountsLoading) {
       setRefreshing(false);
-    }, 600);
-  };
+    }
+  }, [expensesLoading, incomesLoading, accountsLoading]);
 
   const monthlyExpenses = useMemo(() => {
     return expenses.filter((e) => isInMonth(e, activeMonth));
@@ -540,6 +544,12 @@ export default function DashboardScreen() {
 
       {isLoading && expenses.length === 0 && accounts.length === 0 ? (
         <DashboardSkeleton />
+      ) : financeError && expenses.length === 0 && accounts.length === 0 ? (
+        <ErrorState
+          title="Couldn't load your transactions"
+          description={financeError.message}
+          onRetry={financeError.retryable ? retry : undefined}
+        />
       ) : (
         <View style={styles.widgetsGrid}>
           <QuickInsightsWidget
