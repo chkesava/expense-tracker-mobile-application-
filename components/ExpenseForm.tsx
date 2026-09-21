@@ -55,6 +55,7 @@ import {
 } from "@/services/ledger/mutateLedgerTransaction";
 import { useAuth } from "@/providers/AuthProvider";
 import { useCelebration } from "@/providers/CelebrationProvider";
+import { useModals } from "@/providers/ModalProvider";
 import { useSettings } from "@/providers/SettingsProvider";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import {
@@ -115,6 +116,7 @@ export function ExpenseForm({
   const uid = user?.uid;
   const { settings } = useSettings();
   const { settings: system } = useSystemSettings();
+  const { isReceiptScannerOpen, setIsReceiptScannerOpen } = useModals();
   const displayCurrency = useDisplayCurrency();
   const { celebrateMilestone } = useCelebration();
 
@@ -153,6 +155,17 @@ export function ExpenseForm({
   const [showCategoryPickerModal, setShowCategoryPickerModal] = useState(false);
   const [isMagicModalOpen, setIsMagicModalOpen] = useState(false);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (isReceiptScannerOpen) {
+      setIsReceiptModalOpen(true);
+    }
+  }, [isReceiptScannerOpen]);
+
+  const closeReceiptScanner = () => {
+    setIsReceiptModalOpen(false);
+    setIsReceiptScannerOpen(false);
+  };
 
   const handleApplyMagicParsed = (parsed: ParsedTransaction) => {
     setType(parsed.type);
@@ -1209,7 +1222,7 @@ export function ExpenseForm({
 
       <ReceiptScannerModal
         visible={isReceiptModalOpen}
-        onClose={() => setIsReceiptModalOpen(false)}
+        onClose={closeReceiptScanner}
         onApplyReceipt={handleApplyReceiptParsed}
       />
     </>
