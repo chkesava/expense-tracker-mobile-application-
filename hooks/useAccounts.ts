@@ -5,6 +5,8 @@ export function useAccounts() {
   const {
     accounts,
     accountsLoading,
+    financeError,
+    retryFinanceData,
     addAccount,
     updateAccount,
     deleteAccount,
@@ -13,6 +15,8 @@ export function useAccounts() {
   return {
     accounts,
     loading: accountsLoading,
+    error: financeError,
+    retry: retryFinanceData,
     addAccount,
     updateAccount: (id: string, updates: Partial<Account>) =>
       updateAccount(id, updates),

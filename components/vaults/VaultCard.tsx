@@ -1,6 +1,6 @@
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { ArrowDownLeft, ArrowUpRight, Users } from "lucide-react-native";
+import { Users } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
 import { Card } from "@/components/ui/Card";
@@ -10,7 +10,7 @@ import { themeUsesDarkPalette } from "@/theme/tokens";
 
 export interface VaultCardProps {
   vault: SharedVault;
-  stats: VaultStats;
+  stats?: VaultStats | null;
   onPress: () => void;
 }
 
@@ -19,7 +19,10 @@ export function VaultCard({ vault, stats, onPress }: VaultCardProps) {
   const isDark = themeUsesDarkPalette(themeName);
 
   const themeColor = vault.themeColor || "#6366F1";
-  const progressRatio = Math.min(1, stats.budget > 0 ? stats.totalWithdrawals / stats.budget : 0);
+  const progressRatio = Math.min(
+    1,
+    stats && stats.budget > 0 ? stats.totalWithdrawals / stats.budget : 0
+  );
 
   return (
     <Card
@@ -42,35 +45,37 @@ export function VaultCard({ vault, stats, onPress }: VaultCardProps) {
               >
                 {vault.name}
               </Text>
-              <View
-                style={[
-                  styles.badge,
-                  {
-                    backgroundColor:
-                      stats.status === "healthy"
-                        ? "rgba(34,197,94,0.15)"
-                        : stats.status === "warning"
-                        ? "rgba(245,158,11,0.15)"
-                        : "rgba(239,68,68,0.15)",
-                  },
-                ]}
-              >
-                <Text
-                  style={{
-                    fontSize: 10,
-                    fontWeight: "800",
-                    color:
-                      stats.status === "healthy"
-                        ? "#22C55E"
-                        : stats.status === "warning"
-                        ? "#F59E0B"
-                        : "#EF4444",
-                    textTransform: "uppercase",
-                  }}
+              {stats ? (
+                <View
+                  style={[
+                    styles.badge,
+                    {
+                      backgroundColor:
+                        stats.status === "healthy"
+                          ? "rgba(34,197,94,0.15)"
+                          : stats.status === "warning"
+                          ? "rgba(245,158,11,0.15)"
+                          : "rgba(239,68,68,0.15)",
+                    },
+                  ]}
                 >
-                  {stats.status}
-                </Text>
-              </View>
+                  <Text
+                    style={{
+                      fontSize: 10,
+                      fontWeight: "800",
+                      color:
+                        stats.status === "healthy"
+                          ? "#22C55E"
+                          : stats.status === "warning"
+                          ? "#F59E0B"
+                          : "#EF4444",
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    {stats.status}
+                  </Text>
+                </View>
+              ) : null}
             </View>
 
             {vault.description ? (
@@ -85,80 +90,82 @@ export function VaultCard({ vault, stats, onPress }: VaultCardProps) {
 
         </View>
 
-        {/* Balance & Budget Details */}
-        <View style={styles.metricsRow}>
-          <View style={styles.metricBlock}>
-            <Text style={[styles.metricLabel, { color: theme.colors.mutedForeground }]}>
-              VAULT BALANCE
-            </Text>
-            <Amount
-              value={stats.currentBalance}
-              currency={vault.currency}
-              style={{
-                fontSize: 18,
-                fontWeight: "900",
-                color:
-                  stats.currentBalance >= 0
-                    ? theme.colors.foreground
-                    : theme.colors.destructive,
-              }}
-            />
-          </View>
+        {stats ? (
+          <>
+            <View style={styles.metricsRow}>
+              <View style={styles.metricBlock}>
+                <Text style={[styles.metricLabel, { color: theme.colors.mutedForeground }]}>
+                  VAULT BALANCE
+                </Text>
+                <Amount
+                  value={stats.currentBalance}
+                  currency={vault.currency}
+                  style={{
+                    fontSize: 18,
+                    fontWeight: "900",
+                    color:
+                      stats.currentBalance >= 0
+                        ? theme.colors.foreground
+                        : theme.colors.destructive,
+                  }}
+                />
+              </View>
 
-          <View style={[styles.metricBlock, { alignItems: "flex-end" }]}>
-            <Text style={[styles.metricLabel, { color: theme.colors.mutedForeground }]}>
-              BUDGET
-            </Text>
-            <Amount
-              value={vault.budget}
-              currency={vault.currency}
-              style={{
-                fontSize: 15,
-                fontWeight: "700",
-                color: theme.colors.mutedForeground,
-              }}
-            />
-          </View>
-        </View>
+              <View style={[styles.metricBlock, { alignItems: "flex-end" }]}>
+                <Text style={[styles.metricLabel, { color: theme.colors.mutedForeground }]}>
+                  BUDGET
+                </Text>
+                <Amount
+                  value={vault.budget}
+                  currency={vault.currency}
+                  style={{
+                    fontSize: 15,
+                    fontWeight: "700",
+                    color: theme.colors.mutedForeground,
+                  }}
+                />
+              </View>
+            </View>
 
-        {/* Progress Bar */}
-        {vault.budget > 0 && (
-          <View style={styles.progressContainer}>
-            <View
-              style={[
-                styles.progressBarBg,
-                {
-                  backgroundColor: isDark
-                    ? "rgba(255,255,255,0.1)"
-                    : "rgba(0,0,0,0.06)",
-                },
-              ]}
-            >
-              <View
-                style={[
-                  styles.progressBarFill,
-                  {
-                    width: `${Math.round(progressRatio * 100)}%`,
-                    backgroundColor:
-                      stats.status === "healthy"
-                        ? themeColor
-                        : stats.status === "warning"
-                        ? "#F59E0B"
-                        : "#EF4444",
-                  },
-                ]}
-              />
-            </View>
-            <View style={styles.progressInfo}>
-              <Text style={{ fontSize: 11, color: theme.colors.mutedForeground }}>
-                {stats.budgetUsagePercent}% spent
-              </Text>
-              <Text style={{ fontSize: 11, color: theme.colors.mutedForeground }}>
-                Remaining: {vault.currency} {stats.remainingBudget.toLocaleString()}
-              </Text>
-            </View>
-          </View>
-        )}
+            {vault.budget > 0 ? (
+              <View style={styles.progressContainer}>
+                <View
+                  style={[
+                    styles.progressBarBg,
+                    {
+                      backgroundColor: isDark
+                        ? "rgba(255,255,255,0.1)"
+                        : "rgba(0,0,0,0.06)",
+                    },
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.progressBarFill,
+                      {
+                        width: `${Math.round(progressRatio * 100)}%`,
+                        backgroundColor:
+                          stats.status === "healthy"
+                            ? themeColor
+                            : stats.status === "warning"
+                            ? "#F59E0B"
+                            : "#EF4444",
+                      },
+                    ]}
+                  />
+                </View>
+                <View style={styles.progressInfo}>
+                  <Text style={{ fontSize: 11, color: theme.colors.mutedForeground }}>
+                    {stats.budgetUsagePercent}% spent
+                  </Text>
+                  <Text style={{ fontSize: 11, color: theme.colors.mutedForeground }}>
+                    Remaining: {vault.currency} {stats.remainingBudget.toLocaleString()}
+                  </Text>
+                </View>
+              </View>
+            ) : null}
+          </>
+        ) : null}
 
         {/* Footer info: Members & Transaction Count */}
         <View style={[styles.cardFooter, { borderTopColor: theme.colors.border }]}>
@@ -169,9 +176,11 @@ export function VaultCard({ vault, stats, onPress }: VaultCardProps) {
             </Text>
           </View>
 
-          <Text style={{ fontSize: 12, color: theme.colors.mutedForeground }}>
-            {stats.transactionCount} Activity
-          </Text>
+          {stats ? (
+            <Text style={{ fontSize: 12, color: theme.colors.mutedForeground }}>
+              {stats.transactionCount} Activity
+            </Text>
+          ) : null}
         </View>
       </View>
     </Card>

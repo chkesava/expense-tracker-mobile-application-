@@ -1,5 +1,6 @@
 import type { DialogAction } from "@/components/common/Dialog";
 import type { ActionMenuItem } from "@/components/common/ActionMenuSheet";
+import { logWarning } from "@/lib/errors";
 
 export type AppDialogButtonStyle = "default" | "cancel" | "destructive";
 
@@ -110,7 +111,7 @@ export const appDialog = {
   alert(title: string, message?: string, buttons?: AppDialogButton[]): void {
     if (!host) {
       if (__DEV__) {
-        console.warn("[appDialog] Provider not mounted; dropping alert:", title);
+        logWarning("appDialog.alert", new Error("Provider not mounted"), { title });
       }
       return;
     }
@@ -120,7 +121,9 @@ export const appDialog = {
   show(options: AppDialogAlertOptions): void {
     if (!host) {
       if (__DEV__) {
-        console.warn("[appDialog] Provider not mounted; dropping alert:", options.title);
+        logWarning("appDialog.show", new Error("Provider not mounted"), {
+          title: options.title,
+        });
       }
       return;
     }
@@ -130,7 +133,9 @@ export const appDialog = {
   actionMenu(title: string, actions: AppDialogActionMenuOptions["actions"]): void {
     if (!host) {
       if (__DEV__) {
-        console.warn("[appDialog] Provider not mounted; dropping action menu:", title);
+        logWarning("appDialog.actionMenu", new Error("Provider not mounted"), {
+          title,
+        });
       }
       return;
     }

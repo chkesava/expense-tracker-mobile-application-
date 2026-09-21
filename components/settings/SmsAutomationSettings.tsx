@@ -11,6 +11,7 @@ import { useSmsReviewInbox } from "@/hooks/useSmsReviewInbox";
 import { useAuth } from "@/providers/AuthProvider";
 import { useSmsReceiver } from "@/providers/SmsReceiverProvider";
 import { toast } from "@/lib/toast";
+import { logError } from "@/lib/errors";
 import type { SmsHandlingMode } from "@/services/sms/smsAutomationPrefs";
 import { dispatchWriteReady } from "@/services/sms/smsAutoAdd";
 import { defaultSmsReader } from "@/services/sms/smsReader";
@@ -275,6 +276,7 @@ export function SmsAutomationSettings() {
         );
       }
     } catch (err) {
+      logError("smsAutomation.scanInbox", err);
       const message =
         err instanceof Error ? err.message : "Could not read SMS inbox";
       toast.error(message);

@@ -7,6 +7,7 @@ import { themeUsesDarkPalette } from '@/theme/tokens';
 import { X } from 'lucide-react-native';
 import { Amount } from '@/components/common/Amount';
 import { newId } from '@/lib/id';
+import { logError } from '@/lib/errors';
 import { addHoldingSchema } from '@/shared/features/portfolio/schemas';
 import type { HoldingFundingSource } from '@/shared/features/portfolio/schemas';
 import {
@@ -193,6 +194,7 @@ export function AddHoldingModal({
 
       handleClose();
     } catch (err: any) {
+      logError("addHolding", err);
       setError(err.message || 'Failed to add holding');
     } finally {
       setLoading(false);

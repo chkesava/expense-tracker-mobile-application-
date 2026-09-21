@@ -6,6 +6,7 @@ import { FileSpreadsheet, Upload, X } from "lucide-react-native";
 
 import { Button } from "@/components/ui/Button";
 import { toast } from "@/lib/toast";
+import { logError } from "@/lib/errors";
 import { addHoldingSchema } from "@/shared/features/portfolio/schemas";
 import type { Holding } from "@/shared/features/portfolio/types";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -121,6 +122,7 @@ export function CsvImportModal({ visible, onClose, onImport }: CsvImportModalPro
       setFileName(asset.name);
       setHoldings(parsedHoldings);
     } catch (caught) {
+      logError("csvImport.pick", caught);
       setHoldings([]);
       setFileName(null);
       setError(caught instanceof Error ? caught.message : "Unable to read that CSV file.");

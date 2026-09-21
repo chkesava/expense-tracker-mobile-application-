@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ArrowLeft } from "lucide-react-native";
@@ -27,7 +27,7 @@ export default function CreditCardBillDetailScreen() {
   const insets = useSafeAreaInsets();
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
-  const { bills, snoozeBillReminder } = useCreditCardBills();
+  const { bills, loading: billsLoading, snoozeBillReminder } = useCreditCardBills();
   const { accounts } = useAccounts();
   const { accountTypes } = useAccountTypes();
   const { payments } = useAccountPayments();
@@ -107,7 +107,11 @@ export default function CreditCardBillDetailScreen() {
         </Text>
       </View>
 
-      {!bill ? (
+      {billsLoading && !bill ? (
+        <View style={{ padding: 32, alignItems: "center" }}>
+          <ActivityIndicator color={theme.colors.primary} />
+        </View>
+      ) : !bill ? (
         <View style={{ padding: 16, gap: 12 }}>
           <Text style={{ color: theme.colors.mutedForeground }}>
             Bill not found.

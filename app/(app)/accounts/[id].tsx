@@ -28,6 +28,7 @@ import {
   type ActivityFilter,
 } from "@/components/accounts/TransactionFilters";
 import { TransactionRow } from "@/components/accounts/TransactionRow";
+import { ErrorState } from "@/components/common/ErrorState";
 import { CreateCreditCardBillModal } from "@/components/creditCardBills/CreateCreditCardBillModal";
 import { ReconcileStatementModal } from "@/components/creditCardBills/ReconcileStatementModal";
 import {
@@ -92,7 +93,8 @@ export default function AccountDetailScreen() {
   const today = todayDateKey(settings.timezone);
   const { setEditingExpense, setEditingIncome } = useModals();
 
-  const { accounts, loading: accountsLoading } = useAccounts();
+  const { accounts, loading: accountsLoading, error: accountsError, retry: retryAccounts } =
+    useAccounts();
   const { accountTypes } = useAccountTypes();
   const { expenses } = useExpenses();
   const { incomes } = useIncomes();
@@ -345,7 +347,13 @@ export default function AccountDetailScreen() {
           onBack={() => router.back()}
         />
         <View style={styles.missing}>
-          {accountsLoading ? (
+          {accountsError ? (
+            <ErrorState
+              title="Couldn't load this account"
+              description={accountsError.message}
+              onRetry={accountsError.retryable ? retryAccounts : undefined}
+            />
+          ) : accountsLoading ? (
             <ActivityIndicator color={theme.colors.primary} />
           ) : (
             <>

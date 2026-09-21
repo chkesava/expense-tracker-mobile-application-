@@ -85,6 +85,8 @@ export type ExpensesContextType = {
 export type IncomesContextType = {
   incomes: Income[];
   incomesLoading: boolean;
+  financeError: LoadFailure | null;
+  retryFinanceData: () => void;
 };
 
 export type AccountsContextType = {
@@ -1206,8 +1208,10 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     () => ({
       incomes,
       incomesLoading,
+      financeError,
+      retryFinanceData,
     }),
-    [incomes, incomesLoading]
+    [incomes, incomesLoading, financeError, retryFinanceData]
   );
 
   const typeNameById = useMemo(() => {

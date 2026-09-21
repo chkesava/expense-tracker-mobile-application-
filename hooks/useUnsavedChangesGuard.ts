@@ -1,6 +1,7 @@
 import { useCallback, useEffect } from "react";
-import { Alert } from "react-native";
 import { useNavigation } from "expo-router";
+
+import { appDialog } from "@/lib/appDialog";
 
 /**
  * Confirm before abandoning a part-filled form (GS-101).
@@ -26,7 +27,7 @@ export function useUnsavedChangesGuard(dirty: boolean) {
   const navigation = useNavigation();
 
   const prompt = useCallback((proceed: () => void) => {
-    Alert.alert(
+    appDialog.alert(
       "Discard this entry?",
       "You have filled part of this form. Leaving now loses what you entered.",
       [
