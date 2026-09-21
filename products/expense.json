@@ -1,7 +1,7 @@
 {
   "product": "expense",
-  "version": "2.0.7",
-  "versionCode": 92,
+  "version": "2.0.8",
+  "versionCode": 93,
   "name": "Spendly",
   "slug": "spendly",
   "scheme": "spendly",
@@ -42,28 +42,36 @@
             "title": "Add Expense",
             "subtitle": "Log a new expense",
             "icon": "add",
-            "params": { "shortcutId": "expense.add" }
+            "params": {
+              "shortcutId": "expense.add"
+            }
           },
           {
             "id": "income.add",
             "title": "Add Income",
             "subtitle": "Log a new income",
             "icon": "compose",
-            "params": { "shortcutId": "income.add" }
+            "params": {
+              "shortcutId": "income.add"
+            }
           },
           {
             "id": "receipt.add",
             "title": "Scan Receipt",
             "subtitle": "Capture a receipt",
             "icon": "capturePhoto",
-            "params": { "shortcutId": "receipt.add" }
+            "params": {
+              "shortcutId": "receipt.add"
+            }
           },
           {
             "id": "accounts.open",
             "title": "Accounts",
             "subtitle": "Open accounts",
             "icon": "home",
-            "params": { "shortcutId": "accounts.open" }
+            "params": {
+              "shortcutId": "accounts.open"
+            }
           }
         ]
       }
