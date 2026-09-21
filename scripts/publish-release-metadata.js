@@ -348,6 +348,15 @@ async function publishReleaseMetadata(cliOptions = null) {
     payload.sha256 = await sha256File(localApk);
   }
 
+  if (!/^[a-f0-9]{64}$/i.test(String(payload.sha256 || '').trim())) {
+    failFast({
+      step: 'Publish Release Metadata',
+      error: 'Release metadata is missing a sha256 checksum.',
+      why: 'Installed apps refuse to install an APK without a hash (SPENDLY-28).',
+      fix: 'Pass --apk-path to the signed APK so this script can hash it before publishing.'
+    });
+  }
+
   console.log(`   Version:     v${payload.versionName} (build ${payload.versionCode})`);
   console.log(`   Mandatory:   ${payload.mandatory}`);
   console.log(`   APK:         ${localApk || payload.apkFileName || 'n/a'}`);

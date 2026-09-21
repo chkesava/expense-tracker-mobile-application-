@@ -10,6 +10,12 @@ import { AppState, Linking, Platform } from "react-native";
 import ApkInstaller from "@/lib/apkInstaller";
 import { productAppName } from "@/lib/activeProduct";
 import { isTesterWebpageUrl, type AppRelease } from "@/lib/appRelease";
+import {
+  assertApkIntegrity,
+  hashApkBytes,
+  isAllowedApkDownloadUrl,
+  normalizeSha256,
+} from "@/lib/apkUpdateSecurity";
 import { logWarning } from "@/lib/errors";
 import { getFirebaseStorage } from "@/lib/firebase";
 import { fetchLatestRelease, getInstalledVersionCode } from "@/hooks/useAppUpdate";
@@ -66,12 +72,39 @@ async function resolveApkUrl(release: AppRelease): Promise<string | null> {
 }
 
 async function openFallback(release: AppRelease): Promise<InstallOutcome> {
-  const url = release.testerUrl || release.downloadUrl;
-  if (!url) {
-    throw new Error("No download page is available for this release.");
+  if (release.testerUrl && isTesterWebpageUrl(release.testerUrl)) {
+    await Linking.openURL(release.testerUrl);
+    return "fallback";
   }
-  await Linking.openURL(url);
-  return "fallback";
+  if (release.downloadUrl && isAllowedApkDownloadUrl(release.downloadUrl)) {
+    await Linking.openURL(release.downloadUrl);
+    return "fallback";
+  }
+  throw new Error(
+    "The update could not be verified, and no trusted download page is available."
+  );
+}
+
+function deleteCachedApk(file: File): void {
+  try {
+    if (file.exists) file.delete();
+  } catch {
+    // Cache cleanup is best-effort.
+  }
+}
+
+async function verifyDownloadedApk(file: File, release: AppRelease): Promise<void> {
+  try {
+    const size = file.size;
+    if (typeof size !== "number" || size <= 0) {
+      throw new Error("The downloaded update is empty.");
+    }
+    const bytes = await file.bytes();
+    assertApkIntegrity({ size, sha256: hashApkBytes(bytes) }, release);
+  } catch (error) {
+    deleteCachedApk(file);
+    throw error;
+  }
 }
 
 function waitForInstallPermission(timeoutMs = 120_000): Promise<boolean> {
@@ -162,8 +195,12 @@ export async function installAppRelease(
   }
 
   try {
+    if (!normalizeSha256(target.sha256)) {
+      throw new Error("This update is missing a checksum and cannot be installed in-app.");
+    }
+
     const apkUrl = await resolveApkUrl(target);
-    if (!apkUrl) {
+    if (!apkUrl || !isAllowedApkDownloadUrl(apkUrl)) {
       return openFallback(target);
     }
 
@@ -180,6 +217,8 @@ export async function installAppRelease(
       report({ phase: "downloading", percent });
     });
 
+    await verifyDownloadedApk(file, target);
+
     report({ phase: "waiting" });
     try {
       const status = await ApkInstaller.installApk(file.uri);
@@ -187,11 +226,7 @@ export async function installAppRelease(
       report({ phase: "installing" });
       return "installed";
     } finally {
-      try {
-        if (file.exists) file.delete();
-      } catch {
-        // Cache cleanup is best-effort.
-      }
+      deleteCachedApk(file);
     }
   } catch (error) {
     logWarning("apkUpdate.installAppRelease", error, {

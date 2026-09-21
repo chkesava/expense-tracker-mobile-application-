@@ -13,6 +13,7 @@ describe("parseRelease", () => {
       notes: "In-app updates",
       mandatory: false,
       contentLength: 50000000,
+      sha256: "BA7816BF8F01CFEA414140DE5DAE2223B00361A396177A9CB410FF61F20015AD",
     });
 
     expect(release).toMatchObject({
@@ -22,6 +23,7 @@ describe("parseRelease", () => {
       testerUrl: "https://appdistribution.firebase.dev/i/abc",
       notes: "In-app updates",
       contentLength: 50000000,
+      sha256: "BA7816BF8F01CFEA414140DE5DAE2223B00361A396177A9CB410FF61F20015AD",
     });
   });
 
@@ -63,6 +65,15 @@ describe("parseRelease", () => {
     });
     expect(release?.product).toBe("ganesh");
     expect(release?.applicationId).toBe("com.example.ganeshseva");
+  });
+
+  it("drops a blank sha256 rather than storing an empty string", () => {
+    const release = parseRelease({
+      versionCode: 41,
+      downloadUrl: "https://example.com/a.apk",
+      sha256: "   ",
+    });
+    expect(release?.sha256).toBeUndefined();
   });
 
   it("ignores an unrecognized product value", () => {
