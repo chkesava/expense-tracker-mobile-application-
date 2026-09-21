@@ -107,10 +107,16 @@ export default function LedgerScreen() {
   }, [expensesLoading, incomesLoading]);
 
   const activeMonth = globalMonth || currentMonthKey(settings.timezone);
+  const [debouncedQuery, setDebouncedQuery] = useState(query);
+
+  useEffect(() => {
+    const timeoutId = setTimeout(() => setDebouncedQuery(query), 150);
+    return () => clearTimeout(timeoutId);
+  }, [query]);
 
   // Filtered expenses for active month + search query
   const filteredExpenses = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = debouncedQuery.trim().toLowerCase();
     return expenses.filter((e) => {
       const matchMonth = !activeMonth || isInMonth(e, activeMonth);
       if (!matchMonth) return false;
@@ -122,11 +128,11 @@ export default function LedgerScreen() {
         (e.tags && e.tags.some((t) => t.toLowerCase().includes(q)))
       );
     });
-  }, [expenses, activeMonth, query]);
+  }, [expenses, activeMonth, debouncedQuery]);
 
   // Filtered incomes for active month + search query
   const filteredIncomes = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = debouncedQuery.trim().toLowerCase();
     return incomes.filter((i) => {
       const matchMonth = !activeMonth || isInMonth(i, activeMonth);
       if (!matchMonth) return false;
@@ -136,7 +142,7 @@ export default function LedgerScreen() {
         (i.note && i.note.toLowerCase().includes(q))
       );
     });
-  }, [incomes, activeMonth, query]);
+  }, [incomes, activeMonth, debouncedQuery]);
 
   const tabIconColor = (id: string) =>
     ledgerTab === id ? theme.colors.success : theme.colors.mutedForeground;

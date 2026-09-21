@@ -82,6 +82,14 @@ type LedgerListItem =
       isLast: boolean;
     };
 
+function extractListItemKey(item: LedgerListItem) {
+  return item.id;
+}
+
+function getListItemType(item: LedgerListItem) {
+  return item.type;
+}
+
 export function ExpenseList({
   expenses,
   incomes = [],
@@ -125,6 +133,12 @@ export function ExpenseList({
 
   const clearSelection = useCallback(() => {
     setSelectedExpenseIds(new Set());
+  }, []);
+
+  const handleScrollBeginDrag = useCallback(() => {
+    closeOpenSwipeableRow();
+    setSwipeCloseSignal((n) => n + 1);
+    sampleScrollFps("ledger");
   }, []);
 
   // Account map by ID
@@ -621,15 +635,11 @@ export function ExpenseList({
       <FlashList
         style={styles.list}
         data={listData}
-        keyExtractor={(item) => item.id}
-        getItemType={(item) => item.type}
+        keyExtractor={extractListItemKey}
+        getItemType={getListItemType}
         stickyHeaderIndices={stickyHeaderIndices}
         showsVerticalScrollIndicator={false}
-        onScrollBeginDrag={() => {
-          closeOpenSwipeableRow();
-          setSwipeCloseSignal((n) => n + 1);
-          sampleScrollFps("ledger");
-        }}
+        onScrollBeginDrag={handleScrollBeginDrag}
         refreshControl={
           onRefresh ? (
             <RefreshControl

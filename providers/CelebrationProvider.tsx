@@ -2,6 +2,7 @@ import React, {
   createContext,
   useCallback,
   useContext,
+  useMemo,
   useState,
   type ReactNode,
 } from "react";
@@ -73,16 +74,25 @@ export function CelebrationProvider({ children }: { children: ReactNode }) {
     setCurrentCelebration(null);
   }, []);
 
+  const value = useMemo(
+    () => ({
+      celebrate,
+      celebrateMilestone,
+      isMilestoneCelebrated,
+      currentCelebration,
+      dismissCelebration,
+    }),
+    [
+      celebrate,
+      celebrateMilestone,
+      isMilestoneCelebrated,
+      currentCelebration,
+      dismissCelebration,
+    ]
+  );
+
   return (
-    <CelebrationContext.Provider
-      value={{
-        celebrate,
-        celebrateMilestone,
-        isMilestoneCelebrated,
-        currentCelebration,
-        dismissCelebration,
-      }}
-    >
+    <CelebrationContext.Provider value={value}>
       {children}
     </CelebrationContext.Provider>
   );

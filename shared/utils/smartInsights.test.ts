@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { buildSmartInsights, selectSmartInsights } from "./smartInsights";
+import {
+  buildSmartInsights,
+  expensesInInsightWindow,
+  insightWindowStart,
+  selectSmartInsights,
+} from "./smartInsights";
 
 const today = "2026-08-12";
 
@@ -199,5 +204,33 @@ describe("selectSmartInsights", () => {
       { id: "d", kind: "week_total", text: "extra", tone: "info" },
     ]);
     expect(selected.map((item) => item.id)).toEqual(["b", "c", "a"]);
+  });
+});
+
+describe("expensesInInsightWindow", () => {
+  it("starts at the first of the month when that is older than last week", () => {
+    expect(insightWindowStart("2026-08-12", "monday")).toBe("2026-08-01");
+  });
+
+  it("starts at the prior week when the month began after that", () => {
+    // Monday 2026-08-03 → prior week starts 2026-07-27.
+    expect(insightWindowStart("2026-08-03", "monday")).toBe("2026-07-27");
+  });
+
+  it("drops rows before the window and after today", () => {
+    const sliced = expensesInInsightWindow(
+      [
+        { amount: 1, date: "2026-07-26" },
+        { amount: 2, date: "2026-07-27" },
+        { amount: 3, date: "2026-08-03" },
+        { amount: 4, date: "2026-08-04" },
+      ],
+      "2026-08-03",
+      "monday"
+    );
+    expect(sliced.map((item) => item.date)).toEqual([
+      "2026-07-27",
+      "2026-08-03",
+    ]);
   });
 });

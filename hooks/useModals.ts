@@ -1,1 +1,8 @@
-export { useModals, ModalProvider, type ModalContextType } from "@/providers/ModalProvider";
+export {
+  useModals,
+  useGlobalMonth,
+  useModalActions,
+  useModalUi,
+  ModalProvider,
+  type ModalContextType,
+} from "@/providers/ModalProvider";
