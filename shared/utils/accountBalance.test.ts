@@ -121,6 +121,146 @@ describe("account activity ledger", () => {
     expect(cashActivity).toMatchObject({ type: "debit", isTransfer: true, counterpartyName: "Bank" });
     expect(bankActivity).toMatchObject({ type: "credit", isTransfer: true, counterpartyName: "Hand cash" });
   });
+
+  it("keeps every live bank flow aligned with the final running balance", () => {
+    const account: Account = {
+      id: "bank-1",
+      name: "Bank",
+      typeId: "bank-type",
+      openingBalance: 1000,
+      balanceInitialized: true,
+      balanceAsOfDate: "2026-01-01",
+    };
+    const expenses: Expense[] = [
+      {
+        id: "expense-live",
+        amount: 100,
+        date: "2026-02-02",
+        month: "2026-02",
+        category: "Food",
+        accountId: account.id,
+      },
+      {
+        id: "expense-deleted",
+        amount: 400,
+        date: "2026-02-03",
+        month: "2026-02",
+        category: "Food",
+        accountId: account.id,
+        deletedAt: "2026-02-04T00:00:00.000Z",
+      },
+    ];
+    const incomes: Income[] = [{
+      id: "income",
+      amount: 500,
+      date: "2026-02-01",
+      month: "2026-02",
+      source: "Salary",
+      accountId: account.id,
+    }];
+    const payments: AccountPayment[] = [
+      {
+        id: "payment-live",
+        fromAccountId: account.id,
+        toAccountId: "card-1",
+        amount: 150,
+        date: "2026-02-05",
+      },
+      {
+        id: "payment-voided",
+        fromAccountId: account.id,
+        toAccountId: "card-1",
+        amount: 600,
+        date: "2026-02-06",
+        voidedAt: "2026-02-06T00:00:00.000Z",
+      },
+    ];
+    const entries = [{
+      id: "entry",
+      accountId: account.id,
+      amount: 50,
+      direction: "credit" as const,
+      date: "2026-02-04",
+    }];
+    const transfers: AccountTransfer[] = [{
+      id: "transfer",
+      fromAccountId: account.id,
+      toAccountId: "savings-1",
+      amount: 200,
+      date: "2026-02-06",
+    }];
+    const borrowings: Borrowing[] = [{
+      id: "borrowing",
+      userId: "user-1",
+      lenderType: "BANK",
+      lenderName: "Lender",
+      principalAmount: 300,
+      interestRate: 0,
+      interestType: "NONE",
+      interestFrequency: "NONE",
+      interestBasis: "OUTSTANDING_PRINCIPAL",
+      borrowedDate: "2026-02-07",
+      creditedAccountId: account.id,
+      status: "ACTIVE",
+    }];
+    const repayments: BorrowingRepayment[] = [{
+      id: "repayment",
+      borrowingId: "borrowing",
+      amount: 50,
+      paymentAccountId: account.id,
+      date: "2026-02-08",
+    }];
+    const receivables: Receivable[] = [{
+      id: "receivable",
+      userId: "user-1",
+      personType: "FRIEND",
+      personName: "Friend",
+      originalAmount: 75,
+      lentDate: "2026-02-09",
+      sourceAccountId: account.id,
+      status: "ACTIVE",
+    }];
+    const collections: ReceivableRepayment[] = [{
+      id: "collection",
+      receivableId: "receivable",
+      amount: 25,
+      receivedAccountId: account.id,
+      date: "2026-02-10",
+    }];
+
+    const activities = buildAccountActivities(
+      account,
+      "Bank",
+      expenses,
+      incomes,
+      payments,
+      entries,
+      transfers,
+      undefined,
+      { borrowings, borrowingRepayments: repayments },
+      { receivables, receivableRepayments: collections }
+    );
+    const balance = computeBankBalance(
+      account,
+      expenses,
+      incomes,
+      payments,
+      entries,
+      transfers,
+      borrowings,
+      repayments,
+      receivables,
+      collections
+    );
+
+    expect(activities.map((activity) => activity.id)).not.toContain("expense-deleted");
+    expect(activities.map((activity) => activity.id)).not.toContain("payment-voided");
+    expect(activities[0]).toMatchObject({
+      id: "receivable-repay-in-collection",
+      runningBalance: 1300,
+    });
+    expect(activities[0]?.runningBalance).toBe(balance);
+  });
 });
 
 describe("borrowing effect on account balances", () => {

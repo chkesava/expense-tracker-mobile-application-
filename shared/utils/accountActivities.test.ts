@@ -166,6 +166,56 @@ describe("accountActivities and balance utilities", () => {
     expect(activities.map((row) => row.id).sort()).toEqual(["today", "yesterday"].sort());
   });
 
+  it("keeps pre-snapshot history without a misleading running balance", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 8, 21, 12, 0, 0));
+
+    const rebased: Account = {
+      ...mockBank,
+      openingBalance: 1000,
+      balanceAsOfDate: "2026-08-15",
+    };
+    const expenses: Expense[] = [
+      {
+        id: "before-snapshot",
+        amount: 400,
+        date: "2026-08-14",
+        month: "2026-08",
+        category: "Food",
+        accountId: rebased.id,
+        createdAt: "2026-08-14T09:00:00.000Z",
+      },
+      {
+        id: "after-snapshot",
+        amount: 250,
+        date: "2026-08-16",
+        month: "2026-08",
+        category: "Food",
+        accountId: rebased.id,
+        createdAt: "2026-08-16T09:00:00.000Z",
+      },
+    ];
+    const incomes: Income[] = [
+      {
+        id: "snapshot-income",
+        amount: 100,
+        date: "2026-08-15",
+        month: "2026-08",
+        source: "Interest",
+        accountId: rebased.id,
+        createdAt: "2026-08-15T09:00:00.000Z",
+      },
+    ];
+
+    const activities = buildAccountActivities(rebased, "Bank Account", expenses, incomes);
+    const beforeSnapshot = activities.find((activity) => activity.id === "before-snapshot");
+    const newest = activities[0];
+
+    expect(beforeSnapshot?.runningBalance).toBeUndefined();
+    expect(newest).toMatchObject({ id: "after-snapshot", runningBalance: 850 });
+    expect(newest?.runningBalance).toBe(computeBankBalance(rebased, expenses, incomes));
+  });
+
   it("builds account activities with correct credit/debit types and counterparty names", () => {
     const expenses: Expense[] = [
       {
