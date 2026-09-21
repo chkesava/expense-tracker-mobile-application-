@@ -12,6 +12,7 @@ import { PrivacyLock } from "@/components/PrivacyLock";
 import { TabSwipeArea } from "@/components/navigation/TabSwipeArea";
 import { SetupWizardModal } from "@/components/onboarding/SetupWizardModal";
 import { useAndroidBackHandler } from "@/hooks/useAndroidBackHandler";
+import { useAppShortcutHandler } from "@/hooks/useAppShortcutHandler";
 import { useNavigationStateRestoration } from "@/hooks/useNavigationStateRestoration";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAuth } from "@/providers/AuthProvider";
@@ -34,6 +35,10 @@ function AppShellInner() {
 
   // Android hardware / gesture Back button behavior
   useAndroidBackHandler();
+
+  // Capture a home-screen shortcut before restoration so the saved route
+  // cannot override Add Expense / Accounts / etc.
+  useAppShortcutHandler();
 
   // Route state restoration across sessions, scoped to the signed-in user.
   useNavigationStateRestoration(user?.uid);

@@ -62,9 +62,11 @@ export function shouldRestoreRoute(input: {
   currentRoute: string;
   /** True when a deep link or notification supplied the launch destination. */
   openedFromLink: boolean;
+  /** True when a home-screen Quick Action already decided where to go. */
+  openedFromShortcut?: boolean;
 }): boolean {
-  const { savedRoute, currentRoute, openedFromLink } = input;
-  if (openedFromLink) return false;
+  const { savedRoute, currentRoute, openedFromLink, openedFromShortcut } = input;
+  if (openedFromLink || openedFromShortcut) return false;
   if (!savedRoute || !isRestorableRoute(savedRoute)) return false;
   if (savedRoute === currentRoute) return false;
   return LANDING_ROUTES.includes(currentRoute);

@@ -3,6 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Linking from "expo-linking";
 import { usePathname, useRouter } from "expo-router";
 
+import { hasPendingAppShortcut } from "@/lib/pendingAppShortcut";
 import {
   isPersistableRoute,
   isRestorableRoute,
@@ -16,8 +17,8 @@ import {
  *
  * Two rules keep this from fighting the rest of navigation: the key is scoped
  * to the signed-in uid (a saved route must never survive into another account),
- * and restoration is skipped whenever a deep link or notification already
- * decided where the app should open.
+ * and restoration is skipped whenever a deep link, notification, or
+ * home-screen Quick Action already decided where the app should open.
  */
 export function useNavigationStateRestoration(uid: string | undefined) {
   const pathname = usePathname();
@@ -58,6 +59,7 @@ export function useNavigationStateRestoration(uid: string | undefined) {
           savedRoute,
           currentRoute: normalizeStoredRoute(pathnameRef.current),
           openedFromLink,
+          openedFromShortcut: hasPendingAppShortcut(),
         })
       ) {
         router.replace(savedRoute as never);

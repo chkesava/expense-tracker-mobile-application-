@@ -89,6 +89,17 @@ describe("shouldRestoreRoute", () => {
     ).toBe(false);
   });
 
+  it("never overrides a home-screen Quick Action destination", () => {
+    expect(
+      shouldRestoreRoute({
+        savedRoute: "/ledger",
+        currentRoute: "/dashboard",
+        openedFromLink: false,
+        openedFromShortcut: true,
+      })
+    ).toBe(false);
+  });
+
   it("stands down once the user is already somewhere specific", () => {
     // The launch redirect only lands on a landing route; anything else means
     // navigation already happened and that intent wins.
