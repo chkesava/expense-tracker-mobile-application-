@@ -7,7 +7,10 @@ import type {
   Expense,
 } from "../types/expense";
 import { CASHBACK_SOURCE_ID, isCashbackPayment } from "../types/expense";
-import { buildCreditCardLedger } from "./creditCardLedger";
+import {
+  buildCreditCardLedger,
+  collectCreditBillAllocationPatches,
+} from "./creditCardLedger";
 import {
   buildAccountActivities,
   computeOutstandingCredit,
@@ -16,6 +19,7 @@ import {
 import { activitySubtypeLabel } from "./activityDisplay";
 import { cashbackAppliedToExpense, validateCashbackInput } from "./cashbackValidate";
 import { cashbackDocId } from "./cashbackId";
+import { AUTO_CREDIT_CARD_BILL_NOTE } from "./autoCreditCardBills";
 
 /**
  * The ticket's acceptance scenario, with its numbers: an Axis card with a
@@ -475,5 +479,173 @@ describe("activitySubtypeLabel", () => {
     expect(activitySubtypeLabel({ isBillPayment: true, type: "credit" })).toBe(
       "Bill payment"
     );
+  });
+});
+
+/**
+ * SPENDLY-95. Cashback is credited days after the purchase but well before the
+ * cycle closes — the ordinary real-world case. Before the fix the ledger
+ * allocated a credit only to a statement that had *already closed* on the
+ * credit's date, so this cashback matched nothing once the cycle closed, fell
+ * into carried credit, and was dropped. The generated statement went back to
+ * gross spend and the user's 299 of cashback vanished.
+ *
+ * The statement stays gross throughout: 299 billed, 299 credited, 0 payable.
+ */
+describe("cashback across a cycle close (SPENDLY-95)", () => {
+  /** After the 20 Sep close, so the September cycle is a closed statement. */
+  const AFTER_CLOSE = "2026-09-25";
+
+  function septemberStatement(
+    expenses: Expense[],
+    payments: AccountPayment[],
+    today = AFTER_CLOSE
+  ) {
+    const ledger = buildCreditCardLedger({
+      account: axis,
+      expenses,
+      payments,
+      today,
+    });
+    return {
+      ledger,
+      statement: ledger.statements.find(
+        (s) => s.statementDate === "2026-09-20"
+      ),
+    };
+  }
+
+  it("settles the statement its cycle closed over, for a full credit", () => {
+    const { ledger, statement } = septemberStatement(
+      [expense("e1", "2026-09-05", 299)],
+      [cashback("cb1", "2026-09-08", 299)]
+    );
+
+    expect(statement?.billed).toBe(299);
+    expect(statement?.paid).toBe(299);
+    expect(statement?.remaining).toBe(0);
+    expect(statement?.status).toBe("paid");
+    expect(ledger.statementDue).toBe(0);
+    expect(ledger.totalOutstanding).toBe(0);
+  });
+
+  it("reduces the statement by the credit only, for a partial one", () => {
+    const { ledger, statement } = septemberStatement(
+      [expense("e1", "2026-09-05", 299)],
+      [cashback("cb1", "2026-09-08", 100)]
+    );
+
+    expect(statement?.billed).toBe(299);
+    expect(statement?.paid).toBe(100);
+    expect(statement?.remaining).toBe(199);
+    expect(statement?.status).toBe("partiallyPaid");
+    expect(ledger.totalOutstanding).toBe(199);
+  });
+
+  it("aggregates several credits in one cycle without counting any twice", () => {
+    const { ledger, statement } = septemberStatement(
+      [expense("e1", "2026-09-05", 299)],
+      [cashback("cb1", "2026-09-08", 100), cashback("cb2", "2026-09-12", 150)]
+    );
+
+    expect(statement?.paid).toBe(250);
+    expect(statement?.remaining).toBe(49);
+    expect(statement?.paymentIds).toEqual(["cb1", "cb2"]);
+    expect(ledger.totalOutstanding).toBe(49);
+  });
+
+  it("keeps a credit on its own cycle and off the next one", () => {
+    const { ledger, statement } = septemberStatement(
+      [expense("e-aug", "2026-08-10", 299), expense("e-sep", "2026-09-05", 299)],
+      [cashback("cb1", "2026-08-12", 299)]
+    );
+
+    const august = ledger.statements.find(
+      (s) => s.statementDate === "2026-08-20"
+    );
+    expect(august?.paid).toBe(299);
+    expect(august?.remaining).toBe(0);
+    // The September spend is untouched by an August credit.
+    expect(statement?.paid).toBe(0);
+    expect(statement?.remaining).toBe(299);
+    expect(ledger.totalOutstanding).toBe(299);
+  });
+
+  it("still ignores a voided credit once the cycle has closed", () => {
+    const { ledger, statement } = septemberStatement(
+      [expense("e1", "2026-09-05", 299)],
+      [cashback("cb1", "2026-09-08", 299, { voidedAt: "2026-09-09" })]
+    );
+
+    expect(statement?.paid).toBe(0);
+    expect(statement?.remaining).toBe(299);
+    expect(ledger.totalOutstanding).toBe(299);
+  });
+
+  it("leaves the open cycle behaving exactly as before", () => {
+    // Same rows, read before the close: no statement exists yet, so the credit
+    // is still this cycle's credit against unbilled spend.
+    const purchase = expense("e1", "2026-09-05", 299);
+    const credit = cashback("cb1", "2026-09-08", 299);
+
+    const after = computeOutstandingCredit(axis, [purchase], [credit], [], TODAY);
+    expect(after.totalOutstanding).toBe(0);
+    expect(after.availableCredit).toBe(15000);
+    expect(
+      buildCreditCardLedger({
+        account: axis,
+        expenses: [purchase],
+        payments: [credit],
+        today: TODAY,
+      }).statements.find((s) => s.statementDate === "2026-09-20")
+    ).toBeUndefined();
+  });
+
+  it("does not let a mid-cycle bank payment settle the statement", () => {
+    // The guard on the fix: only cashback is cycle-scoped. A bank payment made
+    // before the close must not pre-pay a statement the user has not seen.
+    const { statement } = septemberStatement(
+      [expense("e1", "2026-09-05", 299)],
+      [bankPayment("p1", "2026-09-08", 299)]
+    );
+
+    expect(statement?.paid).toBe(0);
+    expect(statement?.remaining).toBe(299);
+    expect(statement?.status).toBe("unpaid");
+  });
+
+  it("writes the credit back onto the stored statement", () => {
+    const bill = {
+      id: "bill-sep",
+      accountId: axis.id,
+      statementDate: "2026-09-20",
+      billingPeriodStart: "2026-08-21",
+      billingPeriodEnd: "2026-09-20",
+      dueDate: "2026-09-25",
+      statementAmount: 299,
+      minimumDueAmount: 15,
+      amountPaid: 0,
+      status: "OVERDUE" as const,
+      note: AUTO_CREDIT_CARD_BILL_NOTE,
+      paymentIds: [],
+    };
+
+    const patches = collectCreditBillAllocationPatches({
+      accounts: [axis],
+      isCreditAccount: () => true,
+      expenses: [expense("e1", "2026-09-05", 299)],
+      payments: [cashback("cb1", "2026-09-08", 299)],
+      bills: [bill],
+      today: AFTER_CLOSE,
+    });
+
+    expect(patches).toEqual([
+      {
+        billId: "bill-sep",
+        amountPaid: 299,
+        paymentIds: ["cb1"],
+        paymentDate: "2026-09-08",
+      },
+    ]);
   });
 });
