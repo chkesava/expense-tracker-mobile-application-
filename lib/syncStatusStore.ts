@@ -6,7 +6,10 @@
 import { useSyncExternalStore } from "react";
 
 let pendingSyncCount = 0;
-const listeners = new Set<() => void>();
+const pendingListeners = new Set<() => void>();
+
+let lastServerSyncAt: number | null = null;
+const lastServerSyncListeners = new Set<() => void>();
 
 export function getGlobalPendingSyncCount(): number {
   return pendingSyncCount;
@@ -15,20 +18,49 @@ export function getGlobalPendingSyncCount(): number {
 export function setGlobalPendingSyncCount(count: number): void {
   if (pendingSyncCount === count) return;
   pendingSyncCount = count;
-  listeners.forEach((listener) => listener());
+  pendingListeners.forEach((listener) => listener());
 }
 
-function subscribe(listener: () => void): () => void {
-  listeners.add(listener);
+function subscribePending(listener: () => void): () => void {
+  pendingListeners.add(listener);
   return () => {
-    listeners.delete(listener);
+    pendingListeners.delete(listener);
   };
 }
 
-function getSnapshot(): number {
+function getPendingSnapshot(): number {
   return pendingSyncCount;
 }
 
 export function useGlobalPendingSyncCount(): number {
-  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  return useSyncExternalStore(subscribePending, getPendingSnapshot, getPendingSnapshot);
+}
+
+export function getGlobalLastServerSyncAt(): number | null {
+  return lastServerSyncAt;
+}
+
+export function setGlobalLastServerSyncAt(at: number | null): void {
+  if (lastServerSyncAt === at) return;
+  lastServerSyncAt = at;
+  lastServerSyncListeners.forEach((listener) => listener());
+}
+
+function subscribeLastServerSync(listener: () => void): () => void {
+  lastServerSyncListeners.add(listener);
+  return () => {
+    lastServerSyncListeners.delete(listener);
+  };
+}
+
+function getLastServerSyncSnapshot(): number | null {
+  return lastServerSyncAt;
+}
+
+export function useGlobalLastServerSyncAt(): number | null {
+  return useSyncExternalStore(
+    subscribeLastServerSync,
+    getLastServerSyncSnapshot,
+    getLastServerSyncSnapshot
+  );
 }
