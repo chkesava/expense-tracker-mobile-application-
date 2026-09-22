@@ -2,10 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import type { Account, Expense } from "../types/expense";
 import { AUTO_CREDIT_CARD_BILL_REMINDER_FREQUENCY } from "../types/creditCardBill";
+import { LEDGER_STAGED_LIMIT } from "./ledgerSnapshot";
 import {
+  AUTO_CREDIT_CARD_BILL_BACKFILL_CYCLES,
   AUTO_CREDIT_CARD_BILL_NOTE,
   autoCreditCardBillDocId,
   buildAutoCreditCardBillDraft,
+  canRunAutoCreditCardBillGeneration,
   collectAutoCreditCardBillDrafts,
   collectAutoCreditCardBillRefreshPatches,
   findDuplicateCreditCardBills,
@@ -603,5 +606,108 @@ describe("findDuplicateCreditCardBills", () => {
         { id: "b", accountId: "cc-hdfc", statementDate: "2026-08-15" },
       ])
     ).toEqual([]);
+  });
+});
+
+describe("canRunAutoCreditCardBillGeneration (SPENDLY-97)", () => {
+  const ready = {
+    billsLoading: false,
+    expensesLoading: false,
+    paymentsLoading: false,
+    expensesComplete: true,
+  };
+
+  it("allows generation once the ledger is complete", () => {
+    expect(canRunAutoCreditCardBillGeneration(ready)).toBe(true);
+  });
+
+  it("blocks the staged-page race: every loading flag false, ledger truncated", () => {
+    // This is the exact production shape. `expensesLoading` flips false on the
+    // staged snapshot, so the old guard let generation run against 300 rows.
+    expect(
+      canRunAutoCreditCardBillGeneration({ ...ready, expensesComplete: false })
+    ).toBe(false);
+  });
+
+  it("still blocks while any collection is loading", () => {
+    expect(
+      canRunAutoCreditCardBillGeneration({ ...ready, billsLoading: true })
+    ).toBe(false);
+    expect(
+      canRunAutoCreditCardBillGeneration({ ...ready, expensesLoading: true })
+    ).toBe(false);
+    expect(
+      canRunAutoCreditCardBillGeneration({ ...ready, paymentsLoading: true })
+    ).toBe(false);
+  });
+});
+
+describe("collectAutoCreditCardBillDrafts — staged-page race (SPENDLY-97)", () => {
+  // 14 closed cycles, 28 expenses of 100 each, all dated safely inside the
+  // cycle that ends on the 15th of that month. `createdAt` equals `date`, so
+  // the staged query's `orderBy("createdAt","desc") limit(300)` keeps the ten
+  // newest cycles whole, 20 of the 28 rows in the eleventh, and none below it.
+  const CYCLE_MONTHS = [
+    "2026-08", "2026-07", "2026-06", "2026-05", "2026-04", "2026-03",
+    "2026-02", "2026-01", "2025-12", "2025-11", "2025-10", "2025-09",
+    "2025-08", "2025-07",
+  ];
+  const PER_CYCLE = 28;
+  const AMOUNT = 100;
+  const FULL_CYCLE_TOTAL = PER_CYCLE * AMOUNT;
+
+  const fullHistory: Expense[] = CYCLE_MONTHS.flatMap((month) =>
+    Array.from({ length: PER_CYCLE }, () => expense(`${month}-10`, AMOUNT))
+  );
+
+  /** What the first-paint listener actually holds. */
+  const stagedPage = [...fullHistory]
+    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+    .slice(0, LEDGER_STAGED_LIMIT);
+
+  const collect = (expenses: Expense[]) =>
+    collectAutoCreditCardBillDrafts({
+      accounts: [creditCard],
+      typeNameById: new Map([[creditCard.typeId, "Credit Card"]]),
+      expenses,
+      existingBills: [],
+      today: "2026-08-15",
+    });
+
+  const amountFor = (
+    drafts: ReturnType<typeof collect>,
+    statementDate: string
+  ) => drafts.find((draft) => draft.statementDate === statementDate)?.statementAmount;
+
+  it("the fixture really is bigger than one staged page", () => {
+    expect(fullHistory.length).toBeGreaterThan(LEDGER_STAGED_LIMIT);
+    expect(stagedPage.length).toBe(LEDGER_STAGED_LIMIT);
+  });
+
+  it("bills every backfilled cycle at its full-history amount", () => {
+    const drafts = collect(fullHistory);
+    expect(drafts).toHaveLength(AUTO_CREDIT_CARD_BILL_BACKFILL_CYCLES);
+    for (const draft of drafts) {
+      expect(draft.statementAmount).toBe(FULL_CYCLE_TOTAL);
+    }
+  });
+
+  it("understates a partially truncated cycle — the bug being gated out", () => {
+    const staged = collect(stagedPage);
+    const full = collect(fullHistory);
+    expect(amountFor(staged, "2025-10-15")).toBe(20 * AMOUNT);
+    expect(amountFor(full, "2025-10-15")).toBe(FULL_CYCLE_TOTAL);
+    expect(amountFor(staged, "2025-10-15")).not.toBe(
+      amountFor(full, "2025-10-15")
+    );
+  });
+
+  it("drops a cycle whose spend fell off the page entirely, and keeps it on full history", () => {
+    expect(amountFor(collect(stagedPage), "2025-09-15")).toBeUndefined();
+    expect(amountFor(collect(fullHistory), "2025-09-15")).toBe(FULL_CYCLE_TOTAL);
+  });
+
+  it("writes fewer statements from a staged page than from full history", () => {
+    expect(collect(stagedPage).length).toBeLessThan(collect(fullHistory).length);
   });
 });

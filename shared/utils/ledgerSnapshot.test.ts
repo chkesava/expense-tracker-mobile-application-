@@ -4,6 +4,7 @@ import {
   foldLedgerSnapshot,
   FINANCE_SNAPSHOT_LISTEN_OPTIONS,
   isMetadataOnlySnapshot,
+  isStagedPageComplete,
   LEDGER_STAGED_LIMIT,
   shouldApplySnapshotDocs,
   sortLedgerByDateDesc,
@@ -28,6 +29,31 @@ function doc(
 describe("LEDGER_STAGED_LIMIT", () => {
   it("is the restored first-paint page, not the whole history", () => {
     expect(LEDGER_STAGED_LIMIT).toBe(300);
+  });
+});
+
+describe("isStagedPageComplete (SPENDLY-97)", () => {
+  function page(length: number, fromCache: boolean) {
+    return { docs: { length }, metadata: { fromCache } };
+  }
+
+  it("treats a short server page as the whole ledger", () => {
+    expect(isStagedPageComplete(page(10, false))).toBe(true);
+  });
+
+  it("does not treat a full page as complete — the tail is still unread", () => {
+    expect(isStagedPageComplete(page(LEDGER_STAGED_LIMIT, false))).toBe(false);
+  });
+
+  it("does not trust a short cache page", () => {
+    // A cold cache answers a limited query with whatever it holds. Calling
+    // that complete would let statement amounts recompute against nothing.
+    expect(isStagedPageComplete(page(10, true))).toBe(false);
+    expect(isStagedPageComplete(page(0, true))).toBe(false);
+  });
+
+  it("does not treat a full cache page as complete either", () => {
+    expect(isStagedPageComplete(page(LEDGER_STAGED_LIMIT, true))).toBe(false);
   });
 });
 

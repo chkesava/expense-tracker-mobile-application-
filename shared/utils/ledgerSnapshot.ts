@@ -12,6 +12,29 @@ import { isActiveLedgerRow } from "@/shared/utils/ledgerRow";
 /** First-paint page size for expenses/incomes. Full history loads after idle. */
 export const LEDGER_STAGED_LIMIT = 300;
 
+/**
+ * SPENDLY-97: is a staged snapshot already the whole ledger?
+ *
+ * A page shorter than the cap means the query never hit the limit, so small
+ * ledgers do not have to wait for the idle upgrade before anything that needs
+ * complete history (auto credit-card statements) may run.
+ *
+ * A cache-served snapshot is never trusted: a cold cache answers a limited
+ * query with whatever it happens to hold — possibly zero docs — which is short
+ * without being complete. Treating that as the full ledger would let statement
+ * amounts be recomputed to nothing.
+ *
+ * Callers must pass the raw `snap.docs`, not folded rows: `foldLedgerSnapshot`
+ * with `activeOnly` drops soft-deleted docs, so its count under-reports the
+ * page size and would call a full page short.
+ */
+export function isStagedPageComplete(snap: {
+  docs: { length: number };
+  metadata: { fromCache: boolean };
+}): boolean {
+  return snap.docs.length < LEDGER_STAGED_LIMIT && !snap.metadata.fromCache;
+}
+
 /** SPENDLY-4: emit snapshots when pending writes ack or cache catches up. */
 export const FINANCE_SNAPSHOT_LISTEN_OPTIONS = {
   includeMetadataChanges: true,

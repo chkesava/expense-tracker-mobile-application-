@@ -61,6 +61,7 @@ import { isActiveLedgerRow } from "@/shared/utils/ledgerRow";
 import {
   FINANCE_SNAPSHOT_LISTEN_OPTIONS,
   foldLedgerSnapshot,
+  isStagedPageComplete,
   LEDGER_STAGED_LIMIT,
   shouldApplySnapshotDocs,
   sortLedgerByDateDesc,
@@ -82,6 +83,13 @@ function noteServerSync(fromCache: boolean): void {
 export type ExpensesContextType = {
   expenses: Expense[];
   expensesLoading: boolean;
+  /**
+   * SPENDLY-97: true once `expenses` holds the full history rather than the
+   * staged first-paint page. `expensesLoading` goes false on the staged
+   * snapshot, so anything that writes derived money (auto credit-card
+   * statements) must gate on this instead.
+   */
+  expensesComplete: boolean;
   /** Non-null when a listener failed. Distinguishes "load failed" from "no rows". */
   financeError: LoadFailure | null;
   /** Re-establishes every finance listener. */
@@ -197,6 +205,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
   } = useLoadFailure();
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [expensesLoading, setExpensesLoading] = useState(true);
+  const [expensesComplete, setExpensesComplete] = useState(false);
   const [incomes, setIncomes] = useState<Income[]>([]);
   const [incomesLoading, setIncomesLoading] = useState(true);
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -299,6 +308,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       setEntries([]);
       setTransfers([]);
       setExpensesLoading(false);
+      setExpensesComplete(false);
       setIncomesLoading(false);
       setAccountsLoading(false);
       setAccountTypesLoading(false);
@@ -326,6 +336,9 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
 
     // Don't flip to skeleton if we already have data (listener resubscribe after Google Sign-In).
     setExpensesLoading(!expensesHydratedRef.current);
+    // SPENDLY-97: a resubscribe restarts at the staged page, so completeness
+    // has to be re-earned even when the rows already on screen stay put.
+    setExpensesComplete(false);
     setIncomesLoading(!incomesHydratedRef.current);
     setAccountsLoading(!accountsHydratedRef.current);
     setAccountTypesLoading(!accountTypesHydratedRef.current);
@@ -341,22 +354,34 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     const expensesCol = collection(db, ...base, "expenses");
     const incomesCol = collection(db, ...base, "incomes");
 
-    const applyExpensesSnap = (snap: QuerySnapshot) => {
-      logQuerySnapshot(expensePath, snap);
-      const { items, pendingWrites } = foldLedgerSnapshot<Expense>(snap.docs, {
-        activeOnly: true,
-      });
-      if (shouldApplySnapshotDocs(snap, expensesHydratedRef.current)) {
-        setExpenses(items);
-      }
-      pendingExpensesCountRef.current = pendingWrites;
-      updatePendingSyncCount();
-      setIsFromCache(snap.metadata.fromCache);
-      noteServerSync(snap.metadata.fromCache);
-      expensesHydratedRef.current = true;
-      setFinanceError(null);
-      setExpensesLoading(false);
-    };
+    // SPENDLY-97: the staged and upgraded listeners shared one handler, so
+    // nothing could tell a 300-row page from the whole ledger. `fromFullQuery`
+    // is the only difference — it marks the unlimited listener.
+    const makeApplyExpensesSnap =
+      (fromFullQuery: boolean) => (snap: QuerySnapshot) => {
+        logQuerySnapshot(expensePath, snap);
+        const { items, pendingWrites } = foldLedgerSnapshot<Expense>(snap.docs, {
+          activeOnly: true,
+        });
+        if (shouldApplySnapshotDocs(snap, expensesHydratedRef.current)) {
+          setExpenses(items);
+        }
+        pendingExpensesCountRef.current = pendingWrites;
+        updatePendingSyncCount();
+        setIsFromCache(snap.metadata.fromCache);
+        noteServerSync(snap.metadata.fromCache);
+        expensesHydratedRef.current = true;
+        setFinanceError(null);
+        setExpensesLoading(false);
+        // A cache-served *unlimited* snapshot is still the entire local
+        // ledger — the same rows every screen renders — so it counts as
+        // complete. Only the short-page shortcut demands a server snapshot.
+        if (fromFullQuery || isStagedPageComplete(snap)) {
+          setExpensesComplete(true);
+        }
+      };
+
+    const applyExpensesSnap = makeApplyExpensesSnap(false);
 
     const applyIncomesSnap = (snap: QuerySnapshot) => {
       logQuerySnapshot(incomePath, snap);
@@ -410,7 +435,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         expensesUnsub = onSnapshot(
           query(expensesCol, orderBy("createdAt", "desc")),
           FINANCE_SNAPSHOT_LISTEN_OPTIONS,
-          applyExpensesSnap,
+          makeApplyExpensesSnap(true),
           snapshotErrorHandler(
             "snapshot.expenses",
             (failure) => {
@@ -1236,6 +1261,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     () => ({
       expenses,
       expensesLoading,
+      expensesComplete,
       financeError,
       retryFinanceData,
       pendingSyncCount,
@@ -1244,6 +1270,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     [
       expenses,
       expensesLoading,
+      expensesComplete,
       financeError,
       retryFinanceData,
       pendingSyncCount,
