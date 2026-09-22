@@ -1,0 +1,19 @@
+---
+description: Integration workflow for the SPENDLY-78 Accounts V2 epic
+alwaysApply: true
+---
+
+# SPENDLY-78 Accounts V2 Integration
+
+- Use `accounts-v2` as the integration branch for every remaining SPENDLY-78
+  ticket.
+- Pull the latest `accounts-v2`, then create the Jira-keyed ticket branch from
+  it. Do not base these tickets on `main`.
+- Target each ticket PR at `accounts-v2`; merge it there after required checks
+  pass.
+- Keep the Jira key in branch names, commits, and PR titles.
+- Do not merge `accounts-v2` into `main` until all epic tickets are complete
+  and the user explicitly requests the final epic merge.
+- Changes on `accounts-v2` are not shipped. Keep tickets out of Done until the
+  final integration reaches `main`.
+- SPENDLY-81 and SPENDLY-82 are complete. Continue with SPENDLY-83.

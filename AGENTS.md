@@ -2,6 +2,23 @@
 
 Read the exact versioned docs at https://docs.expo.dev/versions/v57.0.0/ before writing any code.
 
+# SPENDLY-78 Accounts V2 Integration Flow
+
+The Accounts Intelligence & Statement Suite epic (`SPENDLY-78`) uses
+`accounts-v2` as its integration branch.
+
+- For each remaining epic ticket, pull the latest `accounts-v2` and create the
+  ticket branch from it, not from `main`.
+- Keep the Jira key in the branch, commit, and PR title.
+- Open each ticket PR against `accounts-v2`.
+- After checks pass, merge the ticket PR into `accounts-v2`.
+- Do not merge `accounts-v2` into `main` until every SPENDLY-78 ticket is
+  complete and the user explicitly requests the final epic merge.
+- A ticket merged only into `accounts-v2` is not shipped to `main`; keep Jira
+  out of Done until the final integration reaches `main`.
+- Current sequence after completed SPENDLY-81 and SPENDLY-82 starts with
+  SPENDLY-83.
+
 # Phase Delivery Protocol
 After completing every phase:
 1. Provide a step-by-step **Manual Testing Guide** describing how to test/verify that phase on device/simulator.

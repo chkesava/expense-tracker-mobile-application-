@@ -1,5 +1,20 @@
 # Ganesh Seva UI/UX Design Instructions
 
+## SPENDLY-78 Accounts V2 Integration Flow
+
+For the Spendly Accounts Intelligence & Statement Suite epic (`SPENDLY-78`):
+
+- Use `accounts-v2` as the integration branch.
+- Start every remaining ticket branch from the latest `accounts-v2`, not
+  `main`.
+- Target every ticket PR at `accounts-v2` and merge it there after checks pass.
+- Keep the Jira key in the branch, commit, and PR title.
+- Do not merge `accounts-v2` into `main` until all epic tickets are complete
+  and the user explicitly requests the final merge.
+- Do not mark tickets Done while their changes exist only on `accounts-v2`;
+  they are shipped only after the final merge reaches `main`.
+- SPENDLY-81 and SPENDLY-82 are complete; continue with SPENDLY-83.
+
 ## Scope
 
 These instructions apply to **Ganesh Seva UI/UX work only**.
