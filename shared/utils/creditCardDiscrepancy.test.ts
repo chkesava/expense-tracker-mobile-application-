@@ -8,9 +8,9 @@ describe("buildSettledStatementDiscrepancyReport", () => {
   const account = {
     id: "card_1",
     name: "Test Card",
+    typeId: "credit_type",
     currency: "INR",
     createdAt: Date.now(),
-    updatedAt: Date.now(),
     creditLimit: 50000,
     billGenerationDay: 5,
   } as Account;

@@ -96,14 +96,16 @@ export default function AccountDetailScreen() {
   const { accounts, loading: accountsLoading, error: accountsError, retry: retryAccounts } =
     useAccounts();
   const { accountTypes } = useAccountTypes();
-  const { expenses } = useExpenses();
+  const { expenses, loading: expensesLoading } = useExpenses();
   const { incomes } = useIncomes();
   const { entries } = useAccountEntries();
   const { payments } = useAccountPayments();
   const { transfers } = useAccountTransfers();
   const { borrowings, repayments: borrowingRepayments } = useBorrowings();
-  const { bills } = useCreditCardBills();
+  const { bills, loading: billsLoading } = useCreditCardBills();
   const { receivables, repayments: receivableRepayments } = useReceivables();
+  
+  const isDataLoading = expensesLoading || billsLoading || accountsLoading;
 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
@@ -397,9 +399,27 @@ export default function AccountDetailScreen() {
           availableCredit={creditUsage.availableCredit}
           creditLimit={account.creditLimit || 0}
           daysRemaining={creditUsage.daysRemaining}
+          openCycleStart={creditUsage.openCycleStart}
+          nextResetDate={creditUsage.nextResetDate.toISOString()}
           currency={currency}
           payLabel="Record Bill Payment"
           onPay={onRecordBillPayment}
+          onSetLimit={() => setIsEditModalOpen(true)}
+          isLoading={isDataLoading}
+        />
+      ) : isCreditCard ? (
+        <AccountCreditHero
+          usedThisCycle={0}
+          statementDue={0}
+          totalOutstanding={0}
+          availableCredit={account.creditLimit || 0}
+          creditLimit={account.creditLimit || 0}
+          daysRemaining={0}
+          currency={currency}
+          payLabel="Record Bill Payment"
+          onPay={onRecordBillPayment}
+          onSetLimit={() => setIsEditModalOpen(true)}
+          isLoading={true}
         />
       ) : (
         <AccountBalanceCard
@@ -425,6 +445,7 @@ export default function AccountDetailScreen() {
             currency={currency}
             onAdd={() => setIsCreateBillOpen(true)}
             onOpen={onOpenStatementBill}
+            isLoading={isDataLoading}
           />
           <View style={styles.cardActionRow}>
             <Pressable
