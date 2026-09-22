@@ -1,5 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
+import { MAX_UNBILLED_PERCENT } from "@/shared/utils/creditCardLedger";
 import { Calendar, CheckCircle2 } from "lucide-react-native";
 
 import {
@@ -93,6 +94,11 @@ export function AccountCreditHero({
           >
             UNBILLED (THIS CYCLE)
           </Text>
+          {!isLoading && usedThisCycle > creditLimit * MAX_UNBILLED_PERCENT && (
+            <View style={styles.warningBadge}>
+              <Text style={styles.warningText}>⚠️ Near limit</Text>
+            </View>
+          )}
           {!isLoading && (
             <View
               style={[
@@ -348,6 +354,18 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "800",
     fontVariant: ["tabular-nums"],
+  },
+  warningBadge: {
+    backgroundColor: 'rgba(255,165,0,0.2)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginTop: 4,
+  },
+  warningText: {
+    color: 'rgba(255,69,0,0.9)',
+    fontSize: 10,
+    fontWeight: '600',
   },
   divider: {
     width: StyleSheet.hairlineWidth,
