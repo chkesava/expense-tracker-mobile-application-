@@ -156,6 +156,45 @@ service cloud.firestore {
           && (resource == null || d.accountId == resource.data.accountId);
       }
 
+      // SPENDLY-88. Metadata for a file stored in the private `spendly-files`
+      // bucket. Metadata only -- no bytes ever reach Firestore.
+      //
+      // `storagePath` is pinned to this user's own prefix, and pinned again on
+      // update. That is the rule doing real work: the Edge Function derives
+      // ownership from the path, so a client able to point a metadata row at
+      // `users/<someone-else>/...` would be able to ask for a signed URL for
+      // another person's bank statement using a document it legitimately owns.
+      // The path must also not be a URL -- the signed URLs for these objects
+      // expire, and storing one would rot.
+      //
+      // Like a note, a document is context rather than money, so `amount` and
+      // `date` are refused here too.
+      function accountDocumentWellFormed() {
+        let d = request.resource.data;
+        return d.accountId is string
+          && d.accountId.size() > 0
+          && d.name is string
+          && d.name.size() > 0
+          && d.name.size() <= 120
+          && d.note is string
+          && d.note.size() <= 500
+          && d.storagePath is string
+          && d.storagePath.matches('^users/' + request.auth.uid + '/accounts/[A-Za-z0-9_-]{1,64}/[A-Za-z0-9_-]{1,64}/[A-Za-z0-9._-]{1,80}$')
+          && d.fileName is string
+          && d.fileName.size() <= 200
+          && d.mimeType in ['application/pdf', 'image/jpeg', 'image/png', 'image/webp']
+          && d.sizeBytes is number
+          && d.sizeBytes >= 0
+          && d.sizeBytes <= 10485760
+          && d.status in ['pending', 'ready']
+          && !d.keys().hasAny(['amount', 'date'])
+          && (!d.keys().hasAny(['uploadedAtMs']) || d.uploadedAtMs is number)
+          && (!d.keys().hasAny(['updatedAtMs']) || d.updatedAtMs is number)
+          && (resource == null
+              || (d.accountId == resource.data.accountId
+                  && d.storagePath == resource.data.storagePath));
+      }
+
       function holdingWellFormed() {
         let d = request.resource.data;
         return optionalBoundedNonNeg(d, 'quantity')
@@ -303,6 +342,10 @@ service cloud.firestore {
       match /accountReconciliations/{id} {
         allow read, delete: if isOwner(uid);
         allow create, update: if isOwner(uid) && accountReconciliationWellFormed();
+      }
+      match /accountDocuments/{id} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && accountDocumentWellFormed();
       }
       match /accountNotes/{id} {
         allow read, delete: if isOwner(uid);

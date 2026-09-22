@@ -255,6 +255,40 @@ export interface AccountReconciliation {
 }
 
 /**
+ * A file stored against an account (SPENDLY-88).
+ *
+ * This is metadata only. The bytes live in the private `spendly-files` Supabase
+ * bucket at `storagePath`, reachable only through a short-lived signed URL
+ * minted by the `spendly-files` Edge Function. Nothing binary is ever written
+ * to Firestore.
+ *
+ * Like a note, a document is non-financial: it carries no amount, and no
+ * balance, statement or analytics figure is derived from one.
+ */
+export interface AccountDocument {
+  id: string;
+  accountId: string;
+  /** The user's name for it, which need not match the uploaded file name. */
+  name: string;
+  note: string;
+  /** Object key in the bucket. Never a URL -- URLs here expire. */
+  storagePath: string;
+  /** The picked file's own name, kept for display and for re-download. */
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  /**
+   * `pending` until the bytes land. Metadata is written first so a failed
+   * upload leaves a visible row rather than an unreferenced object.
+   */
+  status: "pending" | "ready";
+  uploadedAtMs?: number;
+  uploadedAt?: unknown;
+  updatedAtMs?: number;
+  updatedAt?: unknown;
+}
+
+/**
  * A free-text note a user keeps against an account (SPENDLY-89).
  *
  * Non-financial by construction: it carries no amount, no date key and no
