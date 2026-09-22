@@ -7,8 +7,9 @@
  * saw and moves the balance to match **without touching a single contribution
  * row**, which the ticket forbids outright.
  *
- * Observations are append-only, so repeated reconciliations accumulate as a
- * history by construction rather than by a rule someone has to remember.
+ * One observation per establishment per date. Re-recording the same passbook
+ * date overwrites (`${establishmentId}_${date}`) so two devices cannot apply
+ * the same variance twice. Different dates still accumulate as history.
  */
 
 import type {
@@ -20,6 +21,11 @@ import { roundMoney } from "@/shared/utils/money";
 /** Signed difference. Positive means EPFO holds more than Spendly computed. */
 export function calculateVariance(actualBalance: number, calculatedBalance: number): number {
   return roundMoney(actualBalance - calculatedBalance);
+}
+
+/** Deterministic id — the same passbook date overwrites rather than doubling. */
+export function reconciliationDocId(establishmentId: string, date: string): string {
+  return `${establishmentId}_${date}`;
 }
 
 export interface EpfReconciliationInput {

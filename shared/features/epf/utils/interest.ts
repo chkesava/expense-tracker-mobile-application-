@@ -256,6 +256,80 @@ export function creditableYears(schedule: EpfInterestYear[]): EpfInterestYear[] 
   return schedule.filter((year) => !year.rateMissing && year.interest > 0);
 }
 
+/**
+ * Stored FY docs that are no longer creditable for this establishment.
+ * A year that later drops to zero (months reversed, transfer out) must be
+ * removed — leaving it overstates Home/Balance, which read stored entries.
+ */
+export function staleInterestEntryIds(
+  entries: Array<Pick<EpfInterestEntry, "id" | "establishmentId" | "financialYear">>,
+  establishmentId: string,
+  creditableFinancialYears: readonly string[]
+): string[] {
+  const keep = new Set(creditableFinancialYears);
+  return entries
+    .filter(
+      (entry) =>
+        entry.establishmentId === establishmentId &&
+        entry.financialYear !== "" &&
+        !keep.has(entry.financialYear)
+    )
+    .map((entry) => entry.id);
+}
+
+/**
+ * Compact fingerprint of the ledger inputs that feed `interestSchedule`.
+ * Catch-up uses this to recompute only when an establishment's data changed.
+ */
+export function interestInputSignature(args: {
+  establishmentId: string;
+  contributions: Array<
+    Pick<
+      EpfContribution,
+      "id" | "establishmentId" | "status" | "epfCredit" | "month" | "creditedAmount"
+    >
+  >;
+  transfers: Array<
+    Pick<
+      EpfTransfer,
+      | "id"
+      | "sourceEstablishmentId"
+      | "destinationEstablishmentId"
+      | "status"
+      | "amount"
+      | "reversedBy"
+    >
+  >;
+  reconciliations: Array<
+    Pick<EpfReconciliation, "id" | "establishmentId" | "date" | "adjustmentAmount">
+  >;
+}): string {
+  const { establishmentId } = args;
+  const contrib = args.contributions
+    .filter((row) => row.establishmentId === establishmentId)
+    .map(
+      (row) =>
+        `${row.id}:${row.status}:${row.creditedAmount ?? row.epfCredit}:${row.month}`
+    )
+    .sort()
+    .join(",");
+  const xfer = args.transfers
+    .filter(
+      (row) =>
+        row.sourceEstablishmentId === establishmentId ||
+        row.destinationEstablishmentId === establishmentId
+    )
+    .map((row) => `${row.id}:${row.status}:${row.amount}:${row.reversedBy ?? ""}`)
+    .sort()
+    .join(",");
+  const recon = args.reconciliations
+    .filter((row) => row.establishmentId === establishmentId)
+    .map((row) => `${row.id}:${row.date}:${row.adjustmentAmount}`)
+    .sort()
+    .join(",");
+  return `${contrib}|${xfer}|${recon}`;
+}
+
 export interface EpfInterestSummary {
   totalInterest: number;
   yearCount: number;

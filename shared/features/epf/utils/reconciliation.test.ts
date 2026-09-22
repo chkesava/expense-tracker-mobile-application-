@@ -4,6 +4,7 @@ import type { EpfReconciliation } from "@/shared/features/epf/types";
 import {
   buildReconciliation,
   calculateVariance,
+  reconciliationDocId,
   latestReconciliation,
   normalizeReconciliation,
   reconciliationHasErrors,
@@ -90,6 +91,24 @@ describe("validateReconciliation", () => {
     );
     expect(issues.length).toBeGreaterThanOrEqual(3);
     expect(reconciliationHasErrors(issues)).toBe(true);
+  });
+});
+
+describe("reconciliationDocId", () => {
+  it("is stable for the same establishment and date", () => {
+    expect(reconciliationDocId("est-a", "2026-09-12")).toBe("est-a_2026-09-12");
+    expect(reconciliationDocId("est-a", "2026-09-12")).toBe(
+      reconciliationDocId("est-a", "2026-09-12")
+    );
+  });
+
+  it("does not collide across establishments or dates", () => {
+    expect(reconciliationDocId("est-a", "2026-09-12")).not.toBe(
+      reconciliationDocId("est-b", "2026-09-12")
+    );
+    expect(reconciliationDocId("est-a", "2026-09-12")).not.toBe(
+      reconciliationDocId("est-a", "2026-09-13")
+    );
   });
 });
 

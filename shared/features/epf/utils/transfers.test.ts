@@ -290,6 +290,12 @@ describe("status guards", () => {
     expect(canReverseTransfer(transfer({ reversedBy: "t2" }))).toBe(false);
     expect(canReverseTransfer(transfer({ reversalOf: "t1" }))).toBe(false);
   });
+
+  it("denies a second reverse of the same transfer", () => {
+    const first = transfer({ status: "completed" });
+    expect(canReverseTransfer(first)).toBe(true);
+    expect(canReverseTransfer({ ...first, reversedBy: "t-rev" })).toBe(false);
+  });
 });
 
 describe("buildReversal", () => {

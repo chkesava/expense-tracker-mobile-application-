@@ -256,9 +256,10 @@ export function useEpfTransfers(options?: { enabled?: boolean }) {
   /**
    * Reverse a settled transfer with a compensating row.
    *
-   * The original is never deleted or flipped — it did happen. One batch writes
-   * the compensating transfer, the back-pointer and the audit event, so a
-   * reversal can never half-apply and leave the ledger unbalanced.
+   * The original is never deleted or flipped — it did happen. A transaction
+   * re-reads the original and refuses if another device already reversed it,
+   * then writes the compensating transfer, the back-pointer and the audit
+   * event together so a reversal can never half-apply.
    */
   const reverseTransfer = useCallback(
     async (transferId: string, reason: string): Promise<boolean> => {
@@ -268,54 +269,66 @@ export function useEpfTransfers(options?: { enabled?: boolean }) {
         return false;
       }
 
-      const original = byId.get(transferId);
-      if (!original) {
-        toast.error("Transfer not found");
-        return false;
-      }
-      if (!canReverseTransfer(original)) {
-        toast.error("Only a completed transfer that has not been reversed can be reversed.");
-        return false;
-      }
+      const ref = doc(db, "users", uid, EPF_TRANSFERS_COLLECTION, transferId);
+      const reversalRef = doc(collection(db, "users", uid, EPF_TRANSFERS_COLLECTION));
+      const eventRef = doc(collection(db, "users", uid, EPF_TRANSFER_EVENTS_COLLECTION));
 
       try {
-        const batch = writeBatch(db);
-        const reversalRef = doc(collection(db, "users", uid, EPF_TRANSFERS_COLLECTION));
+        const outcome = await commitWrite(
+          () =>
+            runTransaction(db, async (tx) => {
+              const snap = await tx.get(ref);
+              if (!snap.exists()) throw new Error("MISSING");
 
-        batch.set(
-          reversalRef,
-          withoutUndefined({
-            ...buildReversal(original, epfTodayKey(), reason),
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-            statusUpdatedAt: serverTimestamp(),
-          })
-        );
-        batch.update(doc(db, "users", uid, EPF_TRANSFERS_COLLECTION, transferId), {
-          reversedBy: reversalRef.id,
-          updatedAt: serverTimestamp(),
-        });
-        batch.set(
-          doc(collection(db, "users", uid, EPF_TRANSFER_EVENTS_COLLECTION)),
-          eventPayload(transferId, original.status, "completed", {
-            actor: "user",
-            amount: original.amount,
-            reason: `Reversed: ${reason}`,
-          })
-        );
+              const current = normalizeTransfer(
+                snap.id,
+                snap.data() as Record<string, unknown>
+              );
+              if (!canReverseTransfer(current)) throw new Error("ALREADY_REVERSED");
 
-        const outcome = await commitWrite(() => batch.commit(), {
-          label: "EPF transfer reversal",
-        });
+              tx.set(
+                reversalRef,
+                withoutUndefined({
+                  ...buildReversal(current, epfTodayKey(), reason),
+                  createdAt: serverTimestamp(),
+                  updatedAt: serverTimestamp(),
+                  statusUpdatedAt: serverTimestamp(),
+                })
+              );
+              tx.update(ref, {
+                reversedBy: reversalRef.id,
+                updatedAt: serverTimestamp(),
+              });
+              tx.set(
+                eventRef,
+                eventPayload(transferId, current.status, "completed", {
+                  actor: "user",
+                  amount: current.amount,
+                  reason: `Reversed: ${reason}`,
+                })
+              );
+            }),
+          { label: "EPF transfer reversal" }
+        );
         toast.success(writeSavedMessage(outcome, "Transfer reversed"));
         return true;
       } catch (err) {
+        if (err instanceof Error && err.message === "MISSING") {
+          toast.error("Transfer not found");
+          return false;
+        }
+        if (err instanceof Error && err.message === "ALREADY_REVERSED") {
+          toast.error(
+            "Only a completed transfer that has not been reversed can be reversed."
+          );
+          return false;
+        }
         logError("epftransfers.reversetransfer", err);
         toast.error("Couldn't reverse that transfer");
         return false;
       }
     },
-    [uid, byId]
+    [uid]
   );
 
   /** Confirm a simulated transfer against a real EPFO one. */
