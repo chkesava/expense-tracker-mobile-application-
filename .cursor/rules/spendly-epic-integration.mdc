@@ -1,0 +1,53 @@
+---
+description: Gated integration workflows for Spendly financial epics
+alwaysApply: true
+---
+
+# Spendly Epic Integration Branches
+
+These epics use long-lived integration branches. Agents must follow the start
+gate and ticket order for each epic.
+
+## Shared rules
+
+- Branch from the epic integration branch, not `main`, once the epic is started.
+- Keep the Jira key in branch, commit, and PR title.
+- Target ticket PRs at the epic integration branch; merge there after checks.
+- Do not merge the integration branch to `main` until all epic tickets are done
+  and the user explicitly requests the final merge.
+- Keep tickets out of Done while changes exist only on the integration branch.
+- Full playbooks: `docs/SPENDLY-101-credit-cards-v2.md`,
+  `docs/SPENDLY-102-ledger-v2.md`.
+
+## Start gate
+
+- **SPENDLY-101 / `credit-cards-v2`**: do not start coding until the epic is
+  In Progress or the user explicitly starts it.
+- **SPENDLY-102 / `ledger-v2`**: do not start coding until the epic is
+  In Progress or the user explicitly starts it.
+- **SPENDLY-78 / `accounts-v2`**: already started; continue remaining tickets
+  on `accounts-v2` in the recorded order.
+
+## Ticket order
+
+### SPENDLY-78 Accounts (`accounts-v2`)
+
+1. Foundation: 81 (done), 82 (done), 83, 84
+2. Intelligence: 80, 85, 86, 90
+3. Statements: 79, 87
+4. Context: 88, 89, 91
+
+### SPENDLY-101 Credit Cards (`credit-cards-v2`) — start only when epic starts
+
+1. Discovery/health: 100, 103
+2. Statement/rewards: 105, 107
+3. Ingestion/analytics: 108, 104
+4. Portability: 106  
+   (95, 97, 99 already Done)
+
+### SPENDLY-102 Ledger (`ledger-v2`) — start only when epic starts
+
+1. Foundation: 109, 111
+2. Detail/integrity: 110, 112
+3. Export: 113
+4. Confirm whether 114 is a duplicate of 110 before implementing

@@ -2,6 +2,56 @@
 
 Read the exact versioned docs at https://docs.expo.dev/versions/v57.0.0/ before writing any code.
 
+# Spendly Epic Integration Strategy
+
+Long-running financial epics use an integration branch. Ticket PRs merge into
+that branch; the branch merges to `main` only when the epic is finished and the
+user explicitly requests it.
+
+## Start gate
+
+- **SPENDLY-101** (`credit-cards-v2`) and **SPENDLY-102** (`ledger-v2`): do
+  **not** create branches, code, or PRs until the epic is **In Progress** or
+  the user explicitly says to start that epic.
+- **SPENDLY-78** (`accounts-v2`): already started; continue remaining tickets
+  there in the recorded order.
+- Full playbooks:
+  - [docs/SPENDLY-101-credit-cards-v2.md](docs/SPENDLY-101-credit-cards-v2.md)
+  - [docs/SPENDLY-102-ledger-v2.md](docs/SPENDLY-102-ledger-v2.md)
+
+## Shared ticket workflow
+
+1. Confirm the epic start gate allows work.
+2. Create the integration branch from latest `main` if missing.
+3. Pull the integration branch; create `feat/SPENDLY-XXX-short-slug` from it.
+4. Open the PR against the integration branch; merge there after checks pass.
+5. Keep Jira out of Done until the final integration merge reaches `main`.
+
+## Ticket order
+
+### SPENDLY-78 Accounts Intelligence (`accounts-v2`) — in progress
+
+1. Foundation: SPENDLY-81 (done), SPENDLY-82 (done), SPENDLY-83, SPENDLY-84
+2. Intelligence: SPENDLY-80, SPENDLY-85, SPENDLY-86, SPENDLY-90
+3. Statements: SPENDLY-79, SPENDLY-87
+4. Context: SPENDLY-88, SPENDLY-89, SPENDLY-91
+
+### SPENDLY-101 Credit Card Intelligence (`credit-cards-v2`) — wait until epic starts
+
+Foundation done: SPENDLY-95, SPENDLY-97, SPENDLY-99
+
+1. Discovery/health: SPENDLY-100, SPENDLY-103
+2. Statement/rewards: SPENDLY-105, SPENDLY-107
+3. Ingestion/analytics: SPENDLY-108, SPENDLY-104
+4. Portability: SPENDLY-106
+
+### SPENDLY-102 Ledger Intelligence (`ledger-v2`) — wait until epic starts
+
+1. Foundation: SPENDLY-109, SPENDLY-111
+2. Detail/integrity: SPENDLY-110, SPENDLY-112
+3. Export: SPENDLY-113
+4. Confirm whether SPENDLY-114 is a duplicate of SPENDLY-110 before implementing
+
 # Phase Delivery Protocol
 After completing every phase:
 1. Provide a step-by-step **Manual Testing Guide** describing how to test/verify that phase on device/simulator.
