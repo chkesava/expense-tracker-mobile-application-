@@ -73,6 +73,7 @@ describe("personal tree", () => {
     "accountTypes",
     "accountEntries",
     "accountPayments",
+    "accountNotes",
     "accountReconciliations",
     "accountTransfers",
     "categories",
@@ -111,6 +112,7 @@ describe("personal tree", () => {
     "subscriptions",
   ];
   const validatedWithoutAmount = [
+    "accountNotes",
     "accountReconciliations",
     "epfEstablishments",
     "epfContributions",
@@ -678,5 +680,187 @@ describe("personal tree", () => {
         status: "active",
       })
     );
+  });
+});
+
+/**
+ * Account notes (SPENDLY-89).
+ *
+ * The rule carries one guarantee the client cannot be trusted to keep on its
+ * own: a note is context, never money. So the cases that matter most here are
+ * the rejections -- a note with an amount on it, and a note being moved to an
+ * account it was not written against.
+ */
+describe("account notes", () => {
+  const notes = (uid: string) =>
+    collection(env.authenticatedContext(uid).firestore(), "users", uid, "accountNotes");
+
+  it("owner writes a well-formed note", async () => {
+    await assertSucceeds(
+      addDoc(notes(OWNER), {
+        accountId: "a1",
+        title: "Branch",
+        body: "Indiranagar, opened 2019",
+        pinned: false,
+        createdAtMs: 1_700_000_000_000,
+        updatedAtMs: 1_700_000_000_000,
+      })
+    );
+  });
+
+  it("owner writes a note with a body and no title", async () => {
+    await assertSucceeds(
+      addDoc(notes(OWNER), { accountId: "a1", title: "", body: "Kept open for the locker", pinned: true })
+    );
+  });
+
+  it("owner cannot write a note that is entirely empty", async () => {
+    await assertFails(
+      addDoc(notes(OWNER), { accountId: "a1", title: "", body: "", pinned: false })
+    );
+  });
+
+  it("owner cannot write a note without an account", async () => {
+    await assertFails(
+      addDoc(notes(OWNER), { accountId: "", title: "Orphan", body: "", pinned: false })
+    );
+  });
+
+  // The point of the collection: no note may carry a figure, so no balance,
+  // statement or analytic can ever be derived from one.
+  it("owner cannot put an amount on a note", async () => {
+    await assertFails(
+      addDoc(notes(OWNER), {
+        accountId: "a1",
+        title: "Sneaky",
+        body: "",
+        pinned: false,
+        amount: 5000,
+      })
+    );
+  });
+
+  it("owner cannot put a date key on a note", async () => {
+    await assertFails(
+      addDoc(notes(OWNER), {
+        accountId: "a1",
+        title: "Sneaky",
+        body: "",
+        pinned: false,
+        date: "2026-09-17",
+      })
+    );
+  });
+
+  it("owner cannot exceed the title limit", async () => {
+    await assertFails(
+      addDoc(notes(OWNER), {
+        accountId: "a1",
+        title: "t".repeat(81),
+        body: "",
+        pinned: false,
+      })
+    );
+  });
+
+  it("owner cannot exceed the body limit", async () => {
+    await assertFails(
+      addDoc(notes(OWNER), {
+        accountId: "a1",
+        title: "",
+        body: "b".repeat(2001),
+        pinned: false,
+      })
+    );
+  });
+
+  it("owner cannot write a non-boolean pinned flag", async () => {
+    await assertFails(
+      addDoc(notes(OWNER), {
+        accountId: "a1",
+        title: "Branch",
+        body: "",
+        pinned: "yes",
+      })
+    );
+  });
+
+  it("owner edits their own note", async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), "users", OWNER, "accountNotes", "n1"), {
+        accountId: "a1",
+        title: "Branch",
+        body: "Indiranagar",
+        pinned: false,
+      });
+    });
+    const db = env.authenticatedContext(OWNER).firestore();
+    await assertSucceeds(
+      updateDoc(doc(db, "users", OWNER, "accountNotes", "n1"), {
+        body: "Koramangala",
+        pinned: true,
+        updatedAtMs: 1_700_000_000_001,
+      })
+    );
+  });
+
+  // Account scoping has to be a property of the document, not of whoever wrote
+  // to it last -- otherwise a note could be reparented onto another account
+  // after the fact and show up under a name it was never written against.
+  it("owner cannot move a note to another account", async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), "users", OWNER, "accountNotes", "n2"), {
+        accountId: "a1",
+        title: "Branch",
+        body: "Indiranagar",
+        pinned: false,
+      });
+    });
+    const db = env.authenticatedContext(OWNER).firestore();
+    await assertFails(
+      updateDoc(doc(db, "users", OWNER, "accountNotes", "n2"), {
+        accountId: "a2",
+      })
+    );
+  });
+
+  it("owner deletes their own note", async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), "users", OWNER, "accountNotes", "n3"), {
+        accountId: "a1",
+        title: "Branch",
+        body: "",
+        pinned: false,
+      });
+    });
+    const db = env.authenticatedContext(OWNER).firestore();
+    await assertSucceeds(
+      deleteDoc(doc(db, "users", OWNER, "accountNotes", "n3"))
+    );
+  });
+
+  it("a stranger cannot write a note into the owner's tree", async () => {
+    const db = env.authenticatedContext(OTHER).firestore();
+    await assertFails(
+      addDoc(collection(db, "users", OWNER, "accountNotes"), {
+        accountId: "a1",
+        title: "Hijack",
+        body: "",
+        pinned: false,
+      })
+    );
+  });
+
+  it("a stranger cannot read the owner's notes", async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), "users", OWNER, "accountNotes", "n4"), {
+        accountId: "a1",
+        title: "Private",
+        body: "",
+        pinned: false,
+      });
+    });
+    const db = env.authenticatedContext(OTHER).firestore();
+    await assertFails(getDoc(doc(db, "users", OWNER, "accountNotes", "n4")));
   });
 });
