@@ -51,6 +51,7 @@ import {
 import { validateCreateCreditCardBillInput } from "@/shared/utils/creditCardBillValidate";
 import { getAccountKind } from "@/shared/utils/accountKind";
 import {
+  canRunAutoCreditCardBillGeneration,
   collectAutoCreditCardBillDrafts,
   collectAutoCreditCardBillRefreshPatches,
 } from "@/shared/utils/autoCreditCardBills";
@@ -152,7 +153,11 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const { accounts } = useAccounts();
   const { accountTypes } = useAccountTypes();
-  const { expenses, loading: expensesLoading } = useExpenses();
+  const {
+    expenses,
+    loading: expensesLoading,
+    complete: expensesComplete,
+  } = useExpenses();
   const { payments, loading: paymentsLoading } = useAccountPayments();
   const { settings } = useSettings();
   const [bills, setBills] = useState<CreditCardBill[]>([]);
@@ -371,7 +376,20 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
   );
 
   const generateAutoBills = useCallback(async () => {
-    if (!user || billsLoading || expensesLoading || paymentsLoading) return;
+    // SPENDLY-97: the AppState listener below calls this directly, so the gate
+    // cannot live only in the trigger effect — a foreground during a listener
+    // resubscribe would otherwise generate from the staged page.
+    if (!user) return;
+    if (
+      !canRunAutoCreditCardBillGeneration({
+        billsLoading,
+        expensesLoading,
+        paymentsLoading,
+        expensesComplete,
+      })
+    ) {
+      return;
+    }
     const db = getFirestoreDb();
     if (!db) return;
     if (autoGenerateInFlight.current) return;
@@ -584,6 +602,7 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
     billsLoading,
     expensesLoading,
     paymentsLoading,
+    expensesComplete,
     accountTypes,
     accounts,
     expenses,
@@ -604,12 +623,32 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
   // SPENDLY-45: do not run on every bills/expenses/payments snapshot — that
   // is a write triggered by a read and races across devices. First load plus
   // app focus is enough; deterministic ids make a replay a merge.
+  // SPENDLY-97: `expensesComplete`, not `expensesLoading` — the latter goes
+  // false on the staged first-paint page, and this pass backfills 12 cycles.
+  // Still one-shot: the ref is only claimed once the ledger is whole.
   useEffect(() => {
-    if (!user || billsLoading || expensesLoading || paymentsLoading) return;
+    if (!user) return;
+    if (
+      !canRunAutoCreditCardBillGeneration({
+        billsLoading,
+        expensesLoading,
+        paymentsLoading,
+        expensesComplete,
+      })
+    ) {
+      return;
+    }
     if (didInitialAutoGenerate.current) return;
     didInitialAutoGenerate.current = true;
     scheduleAutoGenerate();
-  }, [user, billsLoading, expensesLoading, paymentsLoading, scheduleAutoGenerate]);
+  }, [
+    user,
+    billsLoading,
+    expensesLoading,
+    paymentsLoading,
+    expensesComplete,
+    scheduleAutoGenerate,
+  ]);
 
   useEffect(() => {
     const sub = AppState.addEventListener("change", (state) => {

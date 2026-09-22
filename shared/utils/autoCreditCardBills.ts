@@ -70,6 +70,35 @@ export function findDuplicateCreditCardBills(
  */
 export const AUTO_CREDIT_CARD_BILL_BACKFILL_CYCLES = 12;
 
+export type AutoCreditCardBillGenerationState = {
+  billsLoading: boolean;
+  expensesLoading: boolean;
+  paymentsLoading: boolean;
+  /**
+   * False while the expense ledger is still the staged first-paint page.
+   * See `isStagedPageComplete` in `ledgerSnapshot.ts`.
+   */
+  expensesComplete: boolean;
+};
+
+/**
+ * SPENDLY-97: may auto-generation write statements right now?
+ *
+ * `expensesLoading` goes false on the *staged* snapshot, so it is not enough
+ * on its own — generation backfills {@link AUTO_CREDIT_CARD_BILL_BACKFILL_CYCLES}
+ * cycles, which reaches far outside any first-paint page, and a truncated
+ * ledger yields understated statement amounts (or none at all for a cycle
+ * whose spend fell off the page entirely).
+ */
+export function canRunAutoCreditCardBillGeneration(
+  state: AutoCreditCardBillGenerationState
+): boolean {
+  if (state.billsLoading || state.expensesLoading || state.paymentsLoading) {
+    return false;
+  }
+  return state.expensesComplete;
+}
+
 export type BuildAutoCreditCardBillDraftInput = {
   account: Account;
   typeName?: string;
