@@ -79,7 +79,7 @@ describe("creditHealth / computeOutstandingCredit", () => {
     expect(result.statementDue).toBe(20000);
     expect(result.unbilledSpend).toBe(5000);
     expect(result.totalOutstanding).toBe(25000);
-    expect(result.availableCredit).toBe(25000); // 50000 - 25000
+    expect(result.availableCredit).toBe(45000); // 50000 - 5000 (unbilled spend only)
   });
 
   it("does not double-count partial payments", () => {
@@ -119,6 +119,6 @@ describe("creditHealth / computeOutstandingCredit", () => {
     expect(result.statementDue).toBe(15000);
     expect(result.unbilledSpend).toBe(0);
     expect(result.totalOutstanding).toBe(15000);
-    expect(result.availableCredit).toBe(35000); // 50000 - 15000
+    expect(result.availableCredit).toBe(50000); // 50000 - 0
   });
 });

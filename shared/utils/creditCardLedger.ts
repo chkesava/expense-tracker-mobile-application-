@@ -628,7 +628,7 @@ export function buildCreditCardLedger(
     unbilledSpend,
     cancelledSpend,
     totalOutstanding,
-    availableCredit: roundMoney(Math.max(0, limit - totalOutstanding)),
+    availableCredit: roundMoney(Math.max(0, limit - unbilledSpend)),
     creditLimit: limit,
     openCycle: {
       start: openStart,
