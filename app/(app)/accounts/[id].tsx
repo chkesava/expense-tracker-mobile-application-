@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -12,6 +12,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AccountBalanceCard } from "@/components/accounts/AccountBalanceCard";
+import { AccountActivityFilterModal } from "@/components/accounts/AccountActivityFilterModal";
 import { AccountCreditHero } from "@/components/accounts/AccountCreditHero";
 import { AccountHeader } from "@/components/accounts/AccountHeader";
 import { AddAccountEntryModal } from "@/components/accounts/AddAccountEntryModal";
@@ -25,6 +26,7 @@ import { TransferFundsModal } from "@/components/accounts/TransferFundsModal";
 import {
   TransactionColumnHeaders,
   TransactionFilters,
+  type AccountActivityFilterField,
   type ActivityFilter,
 } from "@/components/accounts/TransactionFilters";
 import { TransactionRow } from "@/components/accounts/TransactionRow";
@@ -61,6 +63,14 @@ import {
   formatCreditCardHeaderLine,
   smsMatchingUnconfiguredLabel,
 } from "@/shared/utils/accountIdentity";
+import {
+  applyAccountActivityFilters,
+  countActiveAccountActivityFilters,
+  createEmptyAccountActivityFilters,
+  enrichAccountActivities,
+  getAccountActivityFilterOptions,
+  type AccountActivityFilters,
+} from "@/shared/utils/accountActivityFilters";
 import { effectiveBalanceAsOfDate } from "@/shared/utils/accountBaseline";
 import { getAccountKind } from "@/shared/utils/accountKind";
 import {
@@ -112,7 +122,15 @@ export default function AccountDetailScreen() {
   const [isCreateBillOpen, setIsCreateBillOpen] = useState(false);
   const [isReconcileOpen, setIsReconcileOpen] = useState(false);
   const [isCashbackOpen, setIsCashbackOpen] = useState(false);
-  const [activityFilter, setActivityFilter] = useState<ActivityFilter>("all");
+  const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
+  const [activityFilters, setActivityFilters] = useState<AccountActivityFilters>(
+    createEmptyAccountActivityFilters
+  );
+
+  useEffect(() => {
+    setActivityFilters(createEmptyAccountActivityFilters());
+    setIsFilterModalOpen(false);
+  }, [id]);
 
   const account = useMemo(() => accounts.find((a) => a.id === id), [accounts, id]);
 
@@ -230,16 +248,107 @@ export default function AccountDetailScreen() {
     return allActivities;
   }, [allActivities, isCreditCard, creditUsage]);
 
-  const debitCount = useMemo(
-    () => activities.reduce((sum, act) => sum + (act.type === "debit" ? 1 : 0), 0),
-    [activities]
+  const filterableActivities = useMemo(
+    () => enrichAccountActivities(activities, expenses, incomes, entries),
+    [activities, entries, expenses, incomes]
   );
-  const creditCount = activities.length - debitCount;
 
-  const filteredActivities = useMemo(() => {
-    if (activityFilter === "all") return activities;
-    return activities.filter((a) => a.type === activityFilter);
-  }, [activities, activityFilter]);
+  const filterOptions = useMemo(
+    () => getAccountActivityFilterOptions(filterableActivities),
+    [filterableActivities]
+  );
+
+  const kindScopedActivities = useMemo(
+    () =>
+      applyAccountActivityFilters(filterableActivities, {
+        ...activityFilters,
+        kind: "all",
+      }),
+    [activityFilters, filterableActivities]
+  );
+
+  const activityKindCounts = useMemo(
+    () =>
+      kindScopedActivities.reduce(
+        (counts, record) => {
+          if (record.kind !== "other") counts[record.kind] += 1;
+          return counts;
+        },
+        { income: 0, expense: 0, transfers: 0 }
+      ),
+    [kindScopedActivities]
+  );
+
+  const filteredActivities = useMemo(
+    () =>
+      applyAccountActivityFilters(filterableActivities, activityFilters).map(
+        (record) => record.activity
+      ),
+    [activityFilters, filterableActivities]
+  );
+
+  const activeFilterCount = countActiveAccountActivityFilters(activityFilters);
+
+  const getFilterResultCount = useCallback(
+    (filters: AccountActivityFilters) =>
+      applyAccountActivityFilters(filterableActivities, filters).length,
+    [filterableActivities]
+  );
+
+  const onKindChange = useCallback((kind: ActivityFilter) => {
+    setActivityFilters((previous) => ({ ...previous, kind }));
+  }, []);
+
+  const onRemoveFilter = useCallback(
+    (field: AccountActivityFilterField, value?: string) => {
+      setActivityFilters((previous) => {
+        if (field === "kind") return { ...previous, kind: "all" };
+        if (
+          field === "fromDate" ||
+          field === "toDate" ||
+          field === "minAmount" ||
+          field === "maxAmount"
+        ) {
+          return { ...previous, [field]: "" };
+        }
+        if (field === "specialKinds") {
+          return {
+            ...previous,
+            specialKinds: previous.specialKinds.filter((item) => item !== value),
+          };
+        }
+        if (field === "categories") {
+          return {
+            ...previous,
+            categories: previous.categories.filter((item) => item !== value),
+          };
+        }
+        if (field === "counterparties") {
+          return {
+            ...previous,
+            counterparties: previous.counterparties.filter(
+              (item) => item !== value
+            ),
+          };
+        }
+        if (field === "tags") {
+          return {
+            ...previous,
+            tags: previous.tags.filter((item) => item !== value),
+          };
+        }
+        return {
+          ...previous,
+          statuses: previous.statuses.filter((item) => item !== value),
+        };
+      });
+    },
+    []
+  );
+
+  const clearActivityFilters = useCallback(() => {
+    setActivityFilters(createEmptyAccountActivityFilters());
+  }, []);
 
   const expenseById = useMemo(() => {
     const map = new Map<string, Expense>();
@@ -486,12 +595,19 @@ export default function AccountDetailScreen() {
       ) : null}
 
       <TransactionFilters
-        filter={activityFilter}
-        allCount={activities.length}
-        debitCount={debitCount}
-        creditCount={creditCount}
+        filters={activityFilters}
+        totalCount={activities.length}
+        allCount={kindScopedActivities.length}
+        incomeCount={activityKindCounts.income}
+        expenseCount={activityKindCounts.expense}
+        transferCount={activityKindCounts.transfers}
+        filteredCount={filteredActivities.length}
+        activeFilterCount={activeFilterCount}
         compact={compact}
-        onChange={setActivityFilter}
+        onKindChange={onKindChange}
+        onOpenAdvanced={() => setIsFilterModalOpen(true)}
+        onRemoveFilter={onRemoveFilter}
+        onClearAll={clearActivityFilters}
         scopeLabel={isCreditCard ? "this cycle" : undefined}
       />
       {compact ? null : (
@@ -545,7 +661,9 @@ export default function AccountDetailScreen() {
                 fontSize: theme.typography.sm,
               }}
             >
-              No activities found for this account.
+              {activeFilterCount > 0
+                ? "No activities match these filters."
+                : "No activities found for this account."}
             </Text>
           </View>
         }
@@ -555,7 +673,7 @@ export default function AccountDetailScreen() {
           paddingHorizontal: 16,
           paddingBottom: listPaddingBottom,
         }}
-        extraData={`${activityFilter}-${compact}-${isDark}-${openStatementBill?.id ?? ""}-${pastCycleItems.length}`}
+        extraData={`${JSON.stringify(activityFilters)}-${compact}-${isDark}-${openStatementBill?.id ?? ""}-${pastCycleItems.length}`}
       />
 
       <EditAccountModal
@@ -612,6 +730,14 @@ export default function AccountDetailScreen() {
         currency={currency}
         openBill={openStatementBill}
         usedThisCycle={creditUsage?.usedThisCycle ?? 0}
+      />
+      <AccountActivityFilterModal
+        visible={isFilterModalOpen}
+        filters={activityFilters}
+        options={filterOptions}
+        onClose={() => setIsFilterModalOpen(false)}
+        onApply={setActivityFilters}
+        getResultCount={getFilterResultCount}
       />
     </View>
   );
