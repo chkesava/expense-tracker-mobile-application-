@@ -6,6 +6,7 @@ import { haptic } from "@/lib/haptics";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
+import { SearchBar } from "@/components/common/SearchBar";
 import type {
   AccountActivityFilters,
   AccountActivityKind,
@@ -30,6 +31,8 @@ export type AccountActivityFilterField =
 
 export function TransactionFilters({
   filters,
+  searchQuery,
+  onSearchChange,
   totalCount,
   allCount,
   incomeCount,
@@ -45,6 +48,8 @@ export function TransactionFilters({
   scopeLabel,
 }: {
   filters: AccountActivityFilters;
+  searchQuery: string;
+  onSearchChange: (text: string) => void;
   totalCount: number;
   allCount: number;
   incomeCount: number;
@@ -180,7 +185,9 @@ export function TransactionFilters({
             Transactions
           </Text>
           <Text style={[styles.subtitle, { color: theme.colors.mutedForeground }]}>
-            {activeFilterCount > 0 ? `${filteredCount} of ` : ""}
+            {activeFilterCount > 0 || searchQuery.trim()
+              ? `${filteredCount} of `
+              : ""}
             {totalCount} {totalCount === 1 ? "activity" : "activities"}
             {scopeLabel ? ` · ${scopeLabel}` : ""}
           </Text>
@@ -211,6 +218,17 @@ export function TransactionFilters({
             </View>
           ) : null}
         </Pressable>
+      </View>
+
+      <View style={styles.search}>
+        <SearchBar
+          value={searchQuery}
+          onChangeText={onSearchChange}
+          placeholder="Search transactions"
+          returnKeyType="search"
+          autoCorrect={false}
+          autoCapitalize="none"
+        />
       </View>
 
       <HorizontalSwipeBoundary>
@@ -397,6 +415,9 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "800",
     fontVariant: ["tabular-nums"],
+  },
+  search: {
+    marginBottom: 12,
   },
   chips: {
     flexDirection: "row",

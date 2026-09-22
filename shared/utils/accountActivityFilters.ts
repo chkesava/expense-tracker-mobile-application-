@@ -66,7 +66,7 @@ export function createEmptyAccountActivityFilters(): AccountActivityFilters {
   };
 }
 
-function normalized(value?: string): string {
+export function normalized(value?: string): string {
   return value?.trim().toLocaleLowerCase() ?? "";
 }
 

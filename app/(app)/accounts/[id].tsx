@@ -71,6 +71,7 @@ import {
   getAccountActivityFilterOptions,
   type AccountActivityFilters,
 } from "@/shared/utils/accountActivityFilters";
+import { searchAccountActivities } from "@/shared/utils/accountActivitySearch";
 import { effectiveBalanceAsOfDate } from "@/shared/utils/accountBaseline";
 import { getAccountKind } from "@/shared/utils/accountKind";
 import {
@@ -126,11 +127,21 @@ export default function AccountDetailScreen() {
   const [activityFilters, setActivityFilters] = useState<AccountActivityFilters>(
     createEmptyAccountActivityFilters
   );
+  const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
 
   useEffect(() => {
     setActivityFilters(createEmptyAccountActivityFilters());
     setIsFilterModalOpen(false);
+    setSearchQuery("");
   }, [id]);
+
+  // Same debounce the ledger screen uses: keep typing responsive without
+  // re-filtering the whole activity list on every keystroke.
+  useEffect(() => {
+    const timeoutId = setTimeout(() => setDebouncedSearchQuery(searchQuery), 150);
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery]);
 
   const account = useMemo(() => accounts.find((a) => a.id === id), [accounts, id]);
 
@@ -258,13 +269,22 @@ export default function AccountDetailScreen() {
     [filterableActivities]
   );
 
+  // Search runs before the filters so the chip counts and the filter modal's
+  // live result count describe the rows actually on screen. Filter *options*
+  // still come from the full set above, so a search can never leave the modal
+  // with empty pickers.
+  const searchedActivities = useMemo(
+    () => searchAccountActivities(filterableActivities, debouncedSearchQuery),
+    [debouncedSearchQuery, filterableActivities]
+  );
+
   const kindScopedActivities = useMemo(
     () =>
-      applyAccountActivityFilters(filterableActivities, {
+      applyAccountActivityFilters(searchedActivities, {
         ...activityFilters,
         kind: "all",
       }),
-    [activityFilters, filterableActivities]
+    [activityFilters, searchedActivities]
   );
 
   const activityKindCounts = useMemo(
@@ -281,18 +301,18 @@ export default function AccountDetailScreen() {
 
   const filteredActivities = useMemo(
     () =>
-      applyAccountActivityFilters(filterableActivities, activityFilters).map(
+      applyAccountActivityFilters(searchedActivities, activityFilters).map(
         (record) => record.activity
       ),
-    [activityFilters, filterableActivities]
+    [activityFilters, searchedActivities]
   );
 
   const activeFilterCount = countActiveAccountActivityFilters(activityFilters);
 
   const getFilterResultCount = useCallback(
     (filters: AccountActivityFilters) =>
-      applyAccountActivityFilters(filterableActivities, filters).length,
-    [filterableActivities]
+      applyAccountActivityFilters(searchedActivities, filters).length,
+    [searchedActivities]
   );
 
   const onKindChange = useCallback((kind: ActivityFilter) => {
@@ -596,6 +616,8 @@ export default function AccountDetailScreen() {
 
       <TransactionFilters
         filters={activityFilters}
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
         totalCount={activities.length}
         allCount={kindScopedActivities.length}
         incomeCount={activityKindCounts.income}
@@ -661,10 +683,36 @@ export default function AccountDetailScreen() {
                 fontSize: theme.typography.sm,
               }}
             >
-              {activeFilterCount > 0
-                ? "No activities match these filters."
-                : "No activities found for this account."}
+              {debouncedSearchQuery.trim()
+                ? activeFilterCount > 0
+                  ? "No activities match this search and these filters."
+                  : "No activities match this search."
+                : activeFilterCount > 0
+                  ? "No activities match these filters."
+                  : "No activities found for this account."}
             </Text>
+            {debouncedSearchQuery.trim() ? (
+              <Pressable
+                onPress={() => {
+                  haptic.selection();
+                  setSearchQuery("");
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Clear search"
+                hitSlop={8}
+                style={{ marginTop: 10 }}
+              >
+                <Text
+                  style={{
+                    color: theme.colors.primary,
+                    fontSize: theme.typography.sm,
+                    fontFamily: theme.fontFamily.medium,
+                  }}
+                >
+                  Clear search
+                </Text>
+              </Pressable>
+            ) : null}
           </View>
         }
         ItemSeparatorComponent={ActivitySeparator}
@@ -673,7 +721,7 @@ export default function AccountDetailScreen() {
           paddingHorizontal: 16,
           paddingBottom: listPaddingBottom,
         }}
-        extraData={`${JSON.stringify(activityFilters)}-${compact}-${isDark}-${openStatementBill?.id ?? ""}-${pastCycleItems.length}`}
+        extraData={`${JSON.stringify(activityFilters)}-${debouncedSearchQuery}-${compact}-${isDark}-${openStatementBill?.id ?? ""}-${pastCycleItems.length}`}
       />
 
       <EditAccountModal
