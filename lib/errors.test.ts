@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { setErrorReporter, type ErrorReport } from "./errorReporting";
 import {
   classifyError,
   errorCode,
@@ -176,7 +177,49 @@ describe("safeErrorDetails", () => {
 });
 
 describe("logError / logWarning", () => {
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => {
+    vi.restoreAllMocks();
+    setErrorReporter(null);
+  });
+
+  it("forwards a redacted report to the error sink", () => {
+    const sink = vi.fn();
+    setErrorReporter(sink);
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    logError("auth.login", firebaseError("auth/invalid-credential"), {
+      email: "user@example.com",
+      idToken: "ya29.secret",
+      attempt: 2,
+    });
+
+    expect(sink).toHaveBeenCalledTimes(1);
+    const report = sink.mock.calls[0][0] as ErrorReport;
+    expect(report.scope).toBe("auth.login");
+    expect(report.level).toBe("error");
+    expect(report.kind).toBe("auth");
+    expect(report.code).toBe("auth/invalid-credential");
+    expect(JSON.stringify(report)).not.toContain("user@example.com");
+    expect(JSON.stringify(report)).not.toContain("ya29.secret");
+    expect(report.context?.attempt).toBe(2);
+  });
+
+  it("forwards warnings and redacts EPF identifiers on the sink", () => {
+    const sink = vi.fn();
+    setErrorReporter(sink);
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    logWarning("epf.saveprofile", new Error("nope"), {
+      uan: "100123456789",
+      month: "2026-08",
+    });
+
+    expect(sink).toHaveBeenCalledTimes(1);
+    const report = sink.mock.calls[0][0] as ErrorReport;
+    expect(report.level).toBe("warning");
+    expect(JSON.stringify(report)).not.toContain("100123456789");
+    expect(report.context?.month).toBe("2026-08");
+  });
 
   it("redacts sensitive context keys", () => {
     const spy = vi.spyOn(console, "error").mockImplementation(() => undefined);

@@ -12,6 +12,8 @@
  * render a failure state. This only controls what a human sees.
  */
 
+import { reportError } from "./errorReporting";
+
 export type ErrorKind =
   | "network"
   | "permission"
@@ -260,7 +262,18 @@ function redactContext(context?: ErrorContext): ErrorContext | undefined {
  */
 export function logError(scope: string, error: unknown, context?: ErrorContext): void {
   const details = safeErrorDetails(error);
-  const payload = { scope, ...details, ...redactContext(context) };
+  const redacted = redactContext(context);
+  const payload = { scope, ...details, ...redacted };
+
+  reportError({
+    scope,
+    message: details.message,
+    kind: details.kind,
+    level: "error",
+    code: details.code,
+    name: details.name,
+    context: redacted,
+  });
 
   if (isDev()) {
     console.error(`[${scope}]`, payload, error);
@@ -271,7 +284,20 @@ export function logError(scope: string, error: unknown, context?: ErrorContext):
 
 /** Non-fatal counterpart of `logError` — same redaction, lower severity. */
 export function logWarning(scope: string, error: unknown, context?: ErrorContext): void {
-  const payload = { scope, ...safeErrorDetails(error), ...redactContext(context) };
+  const details = safeErrorDetails(error);
+  const redacted = redactContext(context);
+  const payload = { scope, ...details, ...redacted };
+
+  reportError({
+    scope,
+    message: details.message,
+    kind: details.kind,
+    level: "warning",
+    code: details.code,
+    name: details.name,
+    context: redacted,
+  });
+
   if (isDev()) {
     console.warn(`[${scope}]`, payload, error);
     return;
