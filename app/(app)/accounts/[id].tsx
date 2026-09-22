@@ -19,6 +19,7 @@ import { EditAccountModal } from "@/components/accounts/EditAccountModal";
 import { PastBillingCycles } from "@/components/accounts/PastBillingCycles";
 import { PayCreditBillModal } from "@/components/accounts/PayCreditBillModal";
 import { RecordCashbackModal } from "@/components/accounts/RecordCashbackModal";
+import { CashbackHistoryCard } from "@/components/accounts/CashbackHistoryCard";
 import { CreditStatementCard } from "@/components/accounts/CreditStatementCard";
 import { SmsMatchingUnconfiguredText } from "@/components/accounts/SmsMatchingUnconfiguredText";
 import { TransferFundsModal } from "@/components/accounts/TransferFundsModal";
@@ -57,6 +58,7 @@ import {
   computeOutstandingCredit,
   getCreditBillHistory,
 } from "@/shared/utils/accountBalance";
+import { buildCashbackHistory } from "@/shared/utils/cashbackHistory";
 import {
   formatCreditCardHeaderLine,
   smsMatchingUnconfiguredLabel,
@@ -318,6 +320,11 @@ export default function AccountDetailScreen() {
     });
   }, [account, isCreditCard, creditBillHistory, bills]);
 
+  const cashbackSummary = useMemo(() => {
+    if (!account || !isCreditCard) return null;
+    return buildCashbackHistory(account.id, payments, expenses);
+  }, [account, isCreditCard, payments, expenses]);
+
   const onRecordBillPayment = useCallback(() => {
     if (openStatementBill) {
       router.push(`/credit-card-bills/${openStatementBill.id}` as never);
@@ -496,6 +503,10 @@ export default function AccountDetailScreen() {
             </Pressable>
           </View>
         </>
+      ) : null}
+
+      {isCreditCard && cashbackSummary ? (
+        <CashbackHistoryCard summary={cashbackSummary} currency={currency} />
       ) : null}
 
       {isCreditCard ? (
