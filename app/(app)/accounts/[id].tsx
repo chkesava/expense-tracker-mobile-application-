@@ -18,6 +18,7 @@ import { AccountHeader } from "@/components/accounts/AccountHeader";
 import { AddAccountEntryModal } from "@/components/accounts/AddAccountEntryModal";
 import { EditAccountModal } from "@/components/accounts/EditAccountModal";
 import { PastBillingCycles } from "@/components/accounts/PastBillingCycles";
+import { MonthlyStatementSummary } from "@/components/accounts/MonthlyStatementSummary";
 import { PayCreditBillModal } from "@/components/accounts/PayCreditBillModal";
 import { RecordCashbackModal } from "@/components/accounts/RecordCashbackModal";
 import { CreditStatementCard } from "@/components/accounts/CreditStatementCard";
@@ -72,6 +73,11 @@ import {
   type AccountActivityFilters,
 } from "@/shared/utils/accountActivityFilters";
 import { searchAccountActivities } from "@/shared/utils/accountActivitySearch";
+import {
+  accountMonthDateRange,
+  listAccountActivityMonths,
+  summarizeAccountMonth,
+} from "@/shared/utils/accountMonthSummary";
 import { effectiveBalanceAsOfDate } from "@/shared/utils/accountBaseline";
 import { getAccountKind } from "@/shared/utils/accountKind";
 import {
@@ -80,7 +86,7 @@ import {
   activityTitle,
   formatActivityDateLabel,
 } from "@/shared/utils/activityDisplay";
-import { todayDateKey, toLocalDateKey } from "@/shared/utils/dates";
+import { currentMonthKey, todayDateKey, toLocalDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
@@ -128,12 +134,14 @@ export default function AccountDetailScreen() {
     createEmptyAccountActivityFilters
   );
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
 
   useEffect(() => {
     setActivityFilters(createEmptyAccountActivityFilters());
     setIsFilterModalOpen(false);
     setSearchQuery("");
+    setSelectedMonth(null);
   }, [id]);
 
   // Same debounce the ledger screen uses: keep typing responsive without
@@ -306,6 +314,62 @@ export default function AccountDetailScreen() {
       ),
     [activityFilters, searchedActivities]
   );
+
+  // Built from the same (cycle-scoped, for cards) list the transactions below
+  // come from, so the statement and the list always reconcile and every month
+  // offered here can actually be drilled into.
+  const statementMonths = useMemo(
+    () => listAccountActivityMonths(filterableActivities),
+    [filterableActivities]
+  );
+
+  const activeMonth = useMemo(() => {
+    if (selectedMonth && statementMonths.includes(selectedMonth)) {
+      return selectedMonth;
+    }
+    return statementMonths[0] ?? currentMonthKey();
+  }, [selectedMonth, statementMonths]);
+
+  const monthSummary = useMemo(
+    () =>
+      summarizeAccountMonth(filterableActivities, activeMonth, {
+        // A card's outstanding is a liability, never a bank balance.
+        supportsRunningBalance: !isCreditCard,
+      }),
+    [activeMonth, filterableActivities, isCreditCard]
+  );
+
+  const monthIndex = statementMonths.indexOf(activeMonth);
+  const monthRange = useMemo(
+    () => accountMonthDateRange(activeMonth),
+    [activeMonth]
+  );
+  const isMonthDrilledDown =
+    activityFilters.fromDate === monthRange.fromDate &&
+    activityFilters.toDate === monthRange.toDate;
+
+  const onSelectAdjacentMonth = useCallback(
+    (delta: number) => {
+      setSelectedMonth((previous) => {
+        const current = previous ?? statementMonths[0];
+        const index = statementMonths.indexOf(current ?? "");
+        const next = statementMonths[index + delta];
+        return next ?? previous ?? null;
+      });
+    },
+    [statementMonths]
+  );
+
+  // Drill-down reuses the SPENDLY-82 date filters rather than adding a second
+  // way to scope the list, so the active-filter chips stay truthful.
+  const onToggleMonthDrillDown = useCallback(() => {
+    setActivityFilters((previous) =>
+      previous.fromDate === monthRange.fromDate &&
+      previous.toDate === monthRange.toDate
+        ? { ...previous, fromDate: "", toDate: "" }
+        : { ...previous, fromDate: monthRange.fromDate, toDate: monthRange.toDate }
+    );
+  }, [monthRange]);
 
   const activeFilterCount = countActiveAccountActivityFilters(activityFilters);
 
@@ -611,6 +675,19 @@ export default function AccountDetailScreen() {
           cycles={pastCycleItems}
           currency={currency}
           onOpenCycle={onOpenBillingCycle}
+        />
+      ) : null}
+
+      {statementMonths.length > 0 ? (
+        <MonthlyStatementSummary
+          summary={monthSummary}
+          currency={currency}
+          canGoOlder={monthIndex >= 0 && monthIndex < statementMonths.length - 1}
+          canGoNewer={monthIndex > 0}
+          onOlder={() => onSelectAdjacentMonth(1)}
+          onNewer={() => onSelectAdjacentMonth(-1)}
+          onDrillDown={onToggleMonthDrillDown}
+          isDrilledDown={isMonthDrilledDown}
         />
       ) : null}
 
