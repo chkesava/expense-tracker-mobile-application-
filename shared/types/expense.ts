@@ -254,6 +254,28 @@ export interface AccountReconciliation {
   createdAt?: unknown;
 }
 
+/**
+ * A free-text note a user keeps against an account (SPENDLY-89).
+ *
+ * Non-financial by construction: it carries no amount, no date key and no
+ * account entry reference, and lives outside the activity pipeline, so it can
+ * never reach a balance, a statement or an analytics figure.
+ */
+export interface AccountNote {
+  id: string;
+  accountId: string;
+  /** Either title or body may be empty, but never both. */
+  title: string;
+  body: string;
+  pinned: boolean;
+  /** Client clock, written for ordering a list the user is looking at now. */
+  createdAtMs?: number;
+  updatedAtMs?: number;
+  /** Server clock, the authority for when this actually happened. */
+  createdAt?: unknown;
+  updatedAt?: unknown;
+}
+
 /** A movement of money between two non-credit accounts. It is never income or an expense. */
 export interface AccountTransfer {
   id: string;

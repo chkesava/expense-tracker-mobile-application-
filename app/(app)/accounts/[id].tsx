@@ -20,6 +20,8 @@ import { AddAccountEntryModal } from "@/components/accounts/AddAccountEntryModal
 import { EditAccountModal } from "@/components/accounts/EditAccountModal";
 import { PastBillingCycles } from "@/components/accounts/PastBillingCycles";
 import { MonthlyStatementSummary } from "@/components/accounts/MonthlyStatementSummary";
+import { AccountNotesCard } from "@/components/accounts/AccountNotesCard";
+import { AccountNoteModal } from "@/components/accounts/AccountNoteModal";
 import { AccountHealthCard } from "@/components/accounts/AccountHealthCard";
 import { SpendingInsightsCard } from "@/components/accounts/SpendingInsightsCard";
 import { BalanceTrendCard } from "@/components/accounts/BalanceTrendCard";
@@ -65,7 +67,12 @@ import { useReceivables } from "@/hooks/useReceivables";
 import { useModals } from "@/providers/ModalProvider";
 import { useSettings } from "@/providers/SettingsProvider";
 import { OPEN_BILL_STATUSES } from "@/shared/types/creditCardBill";
-import type { AccountActivity, Expense, Income } from "@/shared/types/expense";
+import type {
+  AccountActivity,
+  AccountNote,
+  Expense,
+  Income,
+} from "@/shared/types/expense";
 import {
   buildAccountActivities,
   computeBankBalance,
@@ -85,6 +92,17 @@ import {
   type AccountActivityFilters,
 } from "@/shared/utils/accountActivityFilters";
 import { searchAccountActivities } from "@/shared/utils/accountActivitySearch";
+import {
+  createAccountNote,
+  deleteAccountNote,
+  listAccountNotes,
+  setAccountNotePinned,
+  updateAccountNote,
+} from "@/services/accounts/accountNotesStore";
+import {
+  selectAccountNotes,
+  type AccountNoteDraft,
+} from "@/shared/utils/accountNotes";
 import { computeAccountSpendingInsights } from "@/shared/utils/accountSpendingInsights";
 import { computeAccountActivityStats } from "@/shared/utils/accountActivityStats";
 import {
@@ -445,6 +463,124 @@ export default function AccountDetailScreen() {
       }
     },
     []
+  );
+
+  // --- Account notes (SPENDLY-89) -----------------------------------------
+  //
+  // Loaded on demand for the account being viewed rather than subscribed to in
+  // the finance provider: notes are read on this one screen, so a session-long
+  // listener would cost every user for a feature most never open.
+  //
+  // Notes are context, never money. Nothing below feeds `activities`,
+  // `monthSummary`, `healthMetrics` or any other derived figure -- the notes
+  // state is read by exactly one card.
+  const [notes, setNotes] = useState<AccountNote[]>([]);
+  const [notesLoading, setNotesLoading] = useState(false);
+  const [isNoteModalOpen, setIsNoteModalOpen] = useState(false);
+  const [editingNote, setEditingNote] = useState<AccountNote | undefined>();
+
+  const refreshNotes = useCallback(async () => {
+    if (!user?.uid || !id) {
+      setNotes([]);
+      return;
+    }
+    setNotesLoading(true);
+    try {
+      setNotes(await listAccountNotes(user.uid, id));
+    } catch (error) {
+      logWarning("accountDetail.listNotes", error, { accountId: id });
+      setNotes([]);
+    } finally {
+      setNotesLoading(false);
+    }
+  }, [id, user?.uid]);
+
+  // Clearing first means switching accounts never shows the previous
+  // account's notes under the new account's name while the read is in flight.
+  useEffect(() => {
+    setNotes([]);
+    setEditingNote(undefined);
+    setIsNoteModalOpen(false);
+    void refreshNotes();
+  }, [refreshNotes]);
+
+  // Belt and braces over the account-scoped query: the list rendered is
+  // filtered to this account again on the way to the card.
+  const accountNotes = useMemo(
+    () => selectAccountNotes(notes, id ?? ""),
+    [notes, id]
+  );
+
+  const onSaveNote = useCallback(
+    async (draft: AccountNoteDraft) => {
+      if (!user?.uid || !id) return;
+      try {
+        if (editingNote) {
+          await updateAccountNote(user.uid, editingNote.id, draft);
+          toast.success("Note updated");
+        } else {
+          await createAccountNote(user.uid, id, draft);
+          toast.success("Note added");
+        }
+        setIsNoteModalOpen(false);
+        setEditingNote(undefined);
+        await refreshNotes();
+      } catch (error) {
+        logWarning("accountDetail.saveNote", error, { accountId: id });
+        appDialog.alert("Couldn't save the note", friendlyErrorMessage(error));
+      }
+    },
+    [editingNote, id, refreshNotes, user?.uid]
+  );
+
+  const onToggleNotePin = useCallback(
+    async (note: AccountNote) => {
+      if (!user?.uid) return;
+      try {
+        await setAccountNotePinned(user.uid, note.id, !note.pinned);
+        await refreshNotes();
+      } catch (error) {
+        logWarning("accountDetail.pinNote", error, { accountId: id });
+        appDialog.alert("Couldn't update the note", friendlyErrorMessage(error));
+      }
+    },
+    [id, refreshNotes, user?.uid]
+  );
+
+  // Deleting is permanent and the text is the user's own, so it asks first.
+  const onDeleteNote = useCallback(
+    (note: AccountNote) => {
+      if (!user?.uid) return;
+      appDialog.alert(
+        "Delete this note?",
+        note.title || note.body
+          ? `"${(note.title || note.body).slice(0, 80)}" will be removed. This cannot be undone.`
+          : "This note will be removed. This cannot be undone.",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Delete",
+            style: "destructive",
+            onPress: () => {
+              void (async () => {
+                try {
+                  await deleteAccountNote(user.uid, note.id);
+                  toast.success("Note deleted");
+                  await refreshNotes();
+                } catch (error) {
+                  logWarning("accountDetail.deleteNote", error, { accountId: id });
+                  appDialog.alert(
+                    "Couldn't delete the note",
+                    friendlyErrorMessage(error)
+                  );
+                }
+              })();
+            },
+          },
+        ]
+      );
+    },
+    [id, refreshNotes, user?.uid]
   );
 
   // Saving a reconciliation records what was found. It writes one audit
@@ -976,6 +1112,23 @@ export default function AccountDetailScreen() {
         />
       ) : null}
 
+      <AccountNotesCard
+        notes={accountNotes}
+        loading={notesLoading}
+        onAdd={() => {
+          setEditingNote(undefined);
+          setIsNoteModalOpen(true);
+        }}
+        onEdit={(note) => {
+          setEditingNote(note);
+          setIsNoteModalOpen(true);
+        }}
+        onTogglePin={(note) => {
+          void onToggleNotePin(note);
+        }}
+        onDelete={onDeleteNote}
+      />
+
       <TransactionFilters
         filters={activityFilters}
         searchQuery={searchQuery}
@@ -1169,6 +1322,16 @@ export default function AccountDetailScreen() {
         buildStatement={buildStatementForPeriod}
         onSave={onSaveReconciliation}
         onRecordAdjustment={onRecordReconciliationAdjustment}
+      />
+
+      <AccountNoteModal
+        isOpen={isNoteModalOpen}
+        note={editingNote}
+        onClose={() => {
+          setIsNoteModalOpen(false);
+          setEditingNote(undefined);
+        }}
+        onSave={onSaveNote}
       />
     </View>
   );

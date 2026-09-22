@@ -130,6 +130,32 @@ service cloud.firestore {
               || d.get('status', '') in ['balanced', 'variance']);
       }
 
+      // SPENDLY-89. A note is context, not money.
+      //
+      // The `amount` ban is the point of this rule rather than a detail: it is
+      // what keeps "notes never affect balances" a property of the data and
+      // not just of the current client. Nothing derives a figure from this
+      // collection today, and a document here cannot start looking like one.
+      //
+      // `accountId` is pinned on update so a note cannot be moved to another
+      // account after the fact, which keeps account scoping a property of the
+      // document rather than of whoever wrote to it last.
+      function accountNoteWellFormed() {
+        let d = request.resource.data;
+        return d.accountId is string
+          && d.accountId.size() > 0
+          && d.title is string
+          && d.title.size() <= 80
+          && d.body is string
+          && d.body.size() <= 2000
+          && (d.title.size() > 0 || d.body.size() > 0)
+          && d.pinned is bool
+          && !d.keys().hasAny(['amount', 'date'])
+          && (!d.keys().hasAny(['createdAtMs']) || d.createdAtMs is number)
+          && (!d.keys().hasAny(['updatedAtMs']) || d.updatedAtMs is number)
+          && (resource == null || d.accountId == resource.data.accountId);
+      }
+
       function holdingWellFormed() {
         let d = request.resource.data;
         return optionalBoundedNonNeg(d, 'quantity')
@@ -277,6 +303,10 @@ service cloud.firestore {
       match /accountReconciliations/{id} {
         allow read, delete: if isOwner(uid);
         allow create, update: if isOwner(uid) && accountReconciliationWellFormed();
+      }
+      match /accountNotes/{id} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && accountNoteWellFormed();
       }
       match /accountTransfers/{id} {
         allow read, delete: if isOwner(uid);
