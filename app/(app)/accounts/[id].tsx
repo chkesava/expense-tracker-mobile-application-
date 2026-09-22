@@ -8,7 +8,6 @@ import {
   View,
 } from "react-native";
 import { FlashList } from "@shopify/flash-list";
-import { Download, Scale as ScaleIcon } from "lucide-react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import * as DocumentPicker from "expo-document-picker";
@@ -26,6 +25,8 @@ import { AccountNotesCard } from "@/components/accounts/AccountNotesCard";
 import { AccountNoteModal } from "@/components/accounts/AccountNoteModal";
 import { AccountDocumentsCard } from "@/components/accounts/AccountDocumentsCard";
 import { AccountDocumentModal } from "@/components/accounts/AccountDocumentModal";
+import { AccountSectionTabs } from "@/components/accounts/AccountSectionTabs";
+import { ActionMenuSheet, type ActionMenuItem } from "@/components/common/ActionMenuSheet";
 import { AccountHealthCard } from "@/components/accounts/AccountHealthCard";
 import { SpendingInsightsCard } from "@/components/accounts/SpendingInsightsCard";
 import { BalanceTrendCard } from "@/components/accounts/BalanceTrendCard";
@@ -121,6 +122,13 @@ import {
   ALLOWED_DOCUMENT_TYPES,
   selectAccountDocuments,
 } from "@/shared/utils/accountDocuments";
+import {
+  DEFAULT_ACCOUNT_SECTION,
+  buildAccountActions,
+  sectionShowsActivityList,
+  type AccountActionId,
+  type AccountSectionId,
+} from "@/shared/utils/accountActions";
 import { computeAccountSpendingInsights } from "@/shared/utils/accountSpendingInsights";
 import { computeAccountActivityStats } from "@/shared/utils/accountActivityStats";
 import {
@@ -168,6 +176,14 @@ const WIDE_ROW_BREAKPOINT = 420;
 function ActivitySeparator() {
   return <View style={styles.separator} />;
 }
+
+/**
+ * Stable identity for the sections that render no rows (SPENDLY-91).
+ *
+ * Module scope on purpose: a fresh `[]` each render would tell FlashList the
+ * data changed on every pass through Overview and Insights.
+ */
+const EMPTY_ACTIVITIES: AccountActivity[] = [];
 
 export default function AccountDetailScreen() {
   const router = useRouter();
@@ -219,15 +235,44 @@ export default function AccountDetailScreen() {
   );
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
 
+  // Which section of the screen is showing, and the action center (SPENDLY-91).
+  const [section, setSection] = useState<AccountSectionId>(DEFAULT_ACCOUNT_SECTION);
+  const [isActionsOpen, setIsActionsOpen] = useState(false);
+  // Which export the statement sheet leads with, so "Export CSV" and "Download
+  // statement" open the same period picker but arrive at different answers.
+  const [statementEmphasis, setStatementEmphasis] = useState<"pdf" | "csv">("pdf");
+
+  // Everything account-scoped resets when the account does (SPENDLY-91).
+  //
+  // Expo Router reuses this component when only the `id` param changes, so
+  // without this every piece of state below would carry over to the next
+  // account: its filters, its selected month, and -- the one that actually
+  // does damage -- an open modal. A "Record cashback" sheet left open across a
+  // switch would submit against whichever account arrived second.
+  //
+  // Listed exhaustively rather than by a key remount, because the cards below
+  // each hold their own fetches and a remount would re-run all of them on
+  // every navigation, not just the ones that changed.
   useEffect(() => {
     setActivityFilters(createEmptyAccountActivityFilters());
-    setIsFilterModalOpen(false);
-    setIsStatementOpen(false);
-    setIsReconcileAccountOpen(false);
     setSearchQuery("");
     setSelectedMonth(null);
     setHistoryWindow(DEFAULT_ACCOUNT_HISTORY_WINDOW);
     setTrendPeriod(DEFAULT_BALANCE_TREND_PERIOD);
+    setSection(DEFAULT_ACCOUNT_SECTION);
+    setStatementEmphasis("pdf");
+
+    setIsFilterModalOpen(false);
+    setIsStatementOpen(false);
+    setIsReconcileAccountOpen(false);
+    setIsActionsOpen(false);
+    setIsEditModalOpen(false);
+    setIsTransferModalOpen(false);
+    setIsEntryModalOpen(false);
+    setIsPayModalOpen(false);
+    setIsCreateBillOpen(false);
+    setIsReconcileOpen(false);
+    setIsCashbackOpen(false);
   }, [id]);
 
   // Same debounce the ledger screen uses: keep typing responsive without
@@ -853,13 +898,23 @@ export default function AccountDetailScreen() {
 
   // Tapping a category drives the SPENDLY-82 category filter rather than a
   // second scoping mechanism, so the active-filter chips stay truthful.
-  const onSelectInsightCategory = useCallback((category: string) => {
-    setActivityFilters((previous) =>
-      previous.categories.length === 1 && previous.categories[0] === category
-        ? { ...previous, categories: [] }
-        : { ...previous, categories: [category] }
-    );
-  }, []);
+  //
+  // Applying one also moves to Transactions (SPENDLY-91): the insight lives on
+  // a different section from the list it filters, so staying put would look
+  // like the tap did nothing. Clearing stays where it is -- there is nothing
+  // new to look at.
+  const onSelectInsightCategory = useCallback(
+    (category: string) => {
+      const clearing = selectedInsightCategory === category;
+      setActivityFilters((previous) =>
+        previous.categories.length === 1 && previous.categories[0] === category
+          ? { ...previous, categories: [] }
+          : { ...previous, categories: [category] }
+      );
+      if (!clearing) setSection("transactions");
+    },
+    [selectedInsightCategory]
+  );
 
   // Built from the same (cycle-scoped, for cards) list the transactions below
   // come from, so the statement and the list always reconcile and every month
@@ -908,14 +963,20 @@ export default function AccountDetailScreen() {
 
   // Drill-down reuses the SPENDLY-82 date filters rather than adding a second
   // way to scope the list, so the active-filter chips stay truthful.
+  //
+  // Drilling in also moves to Transactions, for the same reason the insight
+  // categories do: the month summary sits on Overview and the rows it scopes
+  // are a section away.
   const onToggleMonthDrillDown = useCallback(() => {
+    const drillingIn = !isMonthDrilledDown;
     setActivityFilters((previous) =>
       previous.fromDate === monthRange.fromDate &&
       previous.toDate === monthRange.toDate
         ? { ...previous, fromDate: "", toDate: "" }
         : { ...previous, fromDate: monthRange.fromDate, toDate: monthRange.toDate }
     );
-  }, [monthRange]);
+    if (drillingIn) setSection("transactions");
+  }, [isMonthDrilledDown, monthRange]);
 
   const activeFilterCount = countActiveAccountActivityFilters(activityFilters);
 
@@ -1124,258 +1185,287 @@ export default function AccountDetailScreen() {
     );
   }
 
+  // --- Action center (SPENDLY-91) ------------------------------------------
+  //
+  // One ordered answer to "what can I do with this account", replacing buttons
+  // that had accumulated in three different places. Availability comes from
+  // the pure model in `accountActions.ts`; only the behaviour is wired here.
+  const onRunAccountAction = useCallback(
+    (action: AccountActionId) => {
+      switch (action) {
+        case "downloadStatement":
+          setStatementEmphasis("pdf");
+          setIsStatementOpen(true);
+          return;
+        case "exportCsv":
+          setStatementEmphasis("csv");
+          setIsStatementOpen(true);
+          return;
+        case "reconcile":
+          // A card is reconciled against its statement, a bank account against
+          // its own ledger -- two different sheets behind one menu entry.
+          if (isCreditCard) setIsReconcileOpen(true);
+          else setIsReconcileAccountOpen(true);
+          return;
+        case "settings":
+          setIsEditModalOpen(true);
+          return;
+        case "balanceHistory":
+          setSection("insights");
+          return;
+        case "documents":
+        case "notes":
+          setSection("overview");
+          return;
+      }
+    },
+    [isCreditCard]
+  );
+
+  const accountActionItems = useMemo<ActionMenuItem[]>(
+    () =>
+      buildAccountActions({
+        isCreditCard,
+        exportAllowed: systemSettings.allowDataExport,
+      }).map((action) => ({
+        label: action.label,
+        disabled: action.disabledReason !== undefined,
+        disabledReason: action.disabledReason,
+        onPress: () => onRunAccountAction(action.id),
+      })),
+    [isCreditCard, onRunAccountAction, systemSettings.allowDataExport]
+  );
+
+  // An unfinished upload is the one thing on this screen that needs the user
+  // and can be hidden behind a section they are not looking at, so it is
+  // surfaced on the trigger itself.
+  const documentsNeedingAttention = useMemo(
+    () => accountDocuments.filter((entry) => entry.status === "pending").length,
+    [accountDocuments]
+  );
+
+  const showsActivityList = sectionShowsActivityList(section);
+
   const listHeader = (
     <View style={styles.headerBlock}>
-      {isCreditCard && creditUsage ? (
-        <AccountCreditHero
-          usedThisCycle={creditUsage.unbilledSpend}
-          statementDue={creditUsage.statementDue}
-          cancelledSpend={creditUsage.cancelledSpend}
-          cashbackThisCycle={creditUsage.cashbackThisCycle}
-          totalOutstanding={creditUsage.totalOutstanding}
-          availableCredit={creditUsage.availableCredit}
-          creditLimit={account.creditLimit || 0}
-          daysRemaining={creditUsage.daysRemaining}
-          currency={currency}
-          payLabel="Record Bill Payment"
-          onPay={onRecordBillPayment}
-        />
-      ) : (
-        <AccountBalanceCard
-          availableBalance={bankBalance}
-          currency={currency}
-          openingBalance={account.openingBalance || 0}
-          baselineLabel={
-            effectiveBalanceAsOfDate(
-              account.balanceAsOfDate,
-              [],
-              today
-            ) || "Creation"
-          }
-          onTransfer={() => setIsTransferModalOpen(true)}
-          onAdjust={() => setIsEntryModalOpen(true)}
-        />
-      )}
+      <AccountSectionTabs
+        section={section}
+        onSelect={setSection}
+        onOpenActions={() => setIsActionsOpen(true)}
+        attentionCount={documentsNeedingAttention}
+      />
 
-      {isCreditCard ? (
+      {section === "overview" ? (
         <>
-          <CreditStatementCard
-            bill={openStatementBill}
+        {isCreditCard && creditUsage ? (
+          <AccountCreditHero
+            usedThisCycle={creditUsage.unbilledSpend}
+            statementDue={creditUsage.statementDue}
+            cancelledSpend={creditUsage.cancelledSpend}
+            cashbackThisCycle={creditUsage.cashbackThisCycle}
+            totalOutstanding={creditUsage.totalOutstanding}
+            availableCredit={creditUsage.availableCredit}
+            creditLimit={account.creditLimit || 0}
+            daysRemaining={creditUsage.daysRemaining}
             currency={currency}
-            onAdd={() => setIsCreateBillOpen(true)}
-            onOpen={onOpenStatementBill}
+            payLabel="Record Bill Payment"
+            onPay={onRecordBillPayment}
           />
-          <View style={styles.cardActionRow}>
-            <Pressable
-              onPress={() => {
-                void haptic.selection();
-                setIsReconcileOpen(true);
-              }}
-              style={({ pressed }) => [
-                styles.reconcileBtn,
-                styles.cardActionItem,
-                {
-                  backgroundColor: isDark ? "#10141C" : theme.colors.card,
-                  borderColor: isDark
-                    ? "rgba(148, 163, 184, 0.12)"
-                    : theme.colors.border,
-                },
-                pressed ? styles.reconcilePressed : null,
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel="Reconcile statement"
-            >
-              <Text style={[styles.reconcileLabel, { color: theme.colors.primary }]}>
-                Reconcile statement
-              </Text>
-            </Pressable>
-            <Pressable
-              onPress={() => {
-                void haptic.selection();
-                setIsCashbackOpen(true);
-              }}
-              style={({ pressed }) => [
-                styles.reconcileBtn,
-                styles.cardActionItem,
-                {
-                  backgroundColor: isDark ? "#10141C" : theme.colors.card,
-                  borderColor: isDark
-                    ? "rgba(148, 163, 184, 0.12)"
-                    : theme.colors.border,
-                },
-                pressed ? styles.reconcilePressed : null,
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel="Record cashback"
-            >
-              <Text style={[styles.reconcileLabel, { color: theme.colors.primary }]}>
-                Record cashback
-              </Text>
-            </Pressable>
-          </View>
+        ) : (
+          <AccountBalanceCard
+            availableBalance={bankBalance}
+            currency={currency}
+            openingBalance={account.openingBalance || 0}
+            baselineLabel={
+              effectiveBalanceAsOfDate(
+                account.balanceAsOfDate,
+                [],
+                today
+              ) || "Creation"
+            }
+            onTransfer={() => setIsTransferModalOpen(true)}
+            onAdjust={() => setIsEntryModalOpen(true)}
+          />
+        )}
+
+        {isCreditCard ? (
+          <>
+            <CreditStatementCard
+              bill={openStatementBill}
+              currency={currency}
+              onAdd={() => setIsCreateBillOpen(true)}
+              onOpen={onOpenStatementBill}
+            />
+            <View style={styles.cardActionRow}>
+              <Pressable
+                onPress={() => {
+                  void haptic.selection();
+                  setIsReconcileOpen(true);
+                }}
+                style={({ pressed }) => [
+                  styles.reconcileBtn,
+                  styles.cardActionItem,
+                  {
+                    backgroundColor: isDark ? "#10141C" : theme.colors.card,
+                    borderColor: isDark
+                      ? "rgba(148, 163, 184, 0.12)"
+                      : theme.colors.border,
+                  },
+                  pressed ? styles.reconcilePressed : null,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Reconcile statement"
+              >
+                <Text style={[styles.reconcileLabel, { color: theme.colors.primary }]}>
+                  Reconcile statement
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  void haptic.selection();
+                  setIsCashbackOpen(true);
+                }}
+                style={({ pressed }) => [
+                  styles.reconcileBtn,
+                  styles.cardActionItem,
+                  {
+                    backgroundColor: isDark ? "#10141C" : theme.colors.card,
+                    borderColor: isDark
+                      ? "rgba(148, 163, 184, 0.12)"
+                      : theme.colors.border,
+                  },
+                  pressed ? styles.reconcilePressed : null,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Record cashback"
+              >
+                <Text style={[styles.reconcileLabel, { color: theme.colors.primary }]}>
+                  Record cashback
+                </Text>
+              </Pressable>
+            </View>
+          </>
+        ) : null}
+
+        {isCreditCard ? (
+          <PastBillingCycles
+            cycles={pastCycleItems}
+            currency={currency}
+            onOpenCycle={onOpenBillingCycle}
+          />
+        ) : null}
+
+        <AccountHealthCard
+          metrics={healthMetrics}
+          currency={currency}
+          currentBalance={isCreditCard ? undefined : bankBalance}
+          currentBalanceLabel={isCreditCard ? "Outstanding" : "Current balance"}
+          window={historyWindow}
+          onWindowChange={setHistoryWindow}
+        />
+
+        {statementMonths.length > 0 ? (
+          <MonthlyStatementSummary
+            summary={monthSummary}
+            currency={currency}
+            canGoOlder={monthIndex >= 0 && monthIndex < statementMonths.length - 1}
+            canGoNewer={monthIndex > 0}
+            onOlder={() => onSelectAdjacentMonth(1)}
+            onNewer={() => onSelectAdjacentMonth(-1)}
+            onDrillDown={onToggleMonthDrillDown}
+            isDrilledDown={isMonthDrilledDown}
+          />
+        ) : null}
+
+        <AccountDocumentsCard
+          documents={accountDocuments}
+          loading={documentsLoading}
+          busyId={busyDocumentId}
+          onAdd={() => {
+            setEditingDocument(undefined);
+            setIsDocumentModalOpen(true);
+          }}
+          onOpen={(document) => {
+            void onOpenDocument(document);
+          }}
+          onEdit={(document) => {
+            setEditingDocument(document);
+            setIsDocumentModalOpen(true);
+          }}
+          onRetry={onRetryDocument}
+          onDelete={onDeleteDocument}
+        />
+
+        <AccountNotesCard
+          notes={accountNotes}
+          loading={notesLoading}
+          onAdd={() => {
+            setEditingNote(undefined);
+            setIsNoteModalOpen(true);
+          }}
+          onEdit={(note) => {
+            setEditingNote(note);
+            setIsNoteModalOpen(true);
+          }}
+          onTogglePin={(note) => {
+            void onToggleNotePin(note);
+          }}
+          onDelete={onDeleteNote}
+        />
         </>
       ) : null}
 
-      {isCreditCard ? (
-        <PastBillingCycles
-          cycles={pastCycleItems}
+      {section === "insights" ? (
+        <>
+        <BalanceTrendCard
+          trend={balanceTrend}
           currency={currency}
-          onOpenCycle={onOpenBillingCycle}
+          period={trendPeriod}
+          onPeriodChange={setTrendPeriod}
+          unavailableReason={
+            isCreditCard
+              ? "A card's outstanding is a liability, not a running balance, so there is no balance to chart."
+              : "No balance history is available for this period yet."
+          }
         />
+
+        <SpendingInsightsCard
+          insights={spendingInsights}
+          currency={currency}
+          selectedCategory={selectedInsightCategory}
+          onSelectCategory={onSelectInsightCategory}
+        />
+
+        <ActivityStatisticsCard stats={activityStats} />
+        </>
       ) : null}
 
-      <AccountHealthCard
-        metrics={healthMetrics}
-        currency={currency}
-        currentBalance={isCreditCard ? undefined : bankBalance}
-        currentBalanceLabel={isCreditCard ? "Outstanding" : "Current balance"}
-        window={historyWindow}
-        onWindowChange={setHistoryWindow}
-      />
-
-      <BalanceTrendCard
-        trend={balanceTrend}
-        currency={currency}
-        period={trendPeriod}
-        onPeriodChange={setTrendPeriod}
-        unavailableReason={
-          isCreditCard
-            ? "A card's outstanding is a liability, not a running balance, so there is no balance to chart."
-            : "No balance history is available for this period yet."
-        }
-      />
-
-      <SpendingInsightsCard
-        insights={spendingInsights}
-        currency={currency}
-        selectedCategory={selectedInsightCategory}
-        onSelectCategory={onSelectInsightCategory}
-      />
-
-      <ActivityStatisticsCard stats={activityStats} />
-
-      <View style={styles.cardActionRow}>
-      <Pressable
-        onPress={() => {
-          void haptic.selection();
-          setIsStatementOpen(true);
-        }}
-        accessibilityRole="button"
-        accessibilityLabel="Download statement"
-        style={({ pressed }) => [
-          styles.statementBtn,
-          {
-            backgroundColor: isDark ? "#10141C" : theme.colors.card,
-            borderColor: isDark
-              ? "rgba(148, 163, 184, 0.12)"
-              : theme.colors.border,
-          },
-          pressed ? styles.reconcilePressed : null,
-        ]}
-      >
-        <Download size={17} color={theme.colors.primary} />
-        <Text style={[styles.reconcileLabel, { color: theme.colors.primary }]}>
-          Download statement
-        </Text>
-      </Pressable>
-
-      {isCreditCard ? null : (
-        <Pressable
-          onPress={() => {
-            void haptic.selection();
-            setIsReconcileAccountOpen(true);
-          }}
-          accessibilityRole="button"
-          accessibilityLabel="Reconcile account"
-          style={({ pressed }) => [
-            styles.statementBtn,
-            {
-              backgroundColor: isDark ? "#10141C" : theme.colors.card,
-              borderColor: isDark
-                ? "rgba(148, 163, 184, 0.12)"
-                : theme.colors.border,
-            },
-            pressed ? styles.reconcilePressed : null,
-          ]}
-        >
-          <ScaleIcon size={17} color={theme.colors.primary} />
-          <Text style={[styles.reconcileLabel, { color: theme.colors.primary }]}>
-            Reconcile account
-          </Text>
-        </Pressable>
-      )}
-      </View>
-
-      {statementMonths.length > 0 ? (
-        <MonthlyStatementSummary
-          summary={monthSummary}
-          currency={currency}
-          canGoOlder={monthIndex >= 0 && monthIndex < statementMonths.length - 1}
-          canGoNewer={monthIndex > 0}
-          onOlder={() => onSelectAdjacentMonth(1)}
-          onNewer={() => onSelectAdjacentMonth(-1)}
-          onDrillDown={onToggleMonthDrillDown}
-          isDrilledDown={isMonthDrilledDown}
+      {section === "transactions" ? (
+        <>
+        <TransactionFilters
+          filters={activityFilters}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          totalCount={activities.length}
+          allCount={kindScopedActivities.length}
+          incomeCount={activityKindCounts.income}
+          expenseCount={activityKindCounts.expense}
+          transferCount={activityKindCounts.transfers}
+          filteredCount={filteredActivities.length}
+          activeFilterCount={activeFilterCount}
+          compact={compact}
+          onKindChange={onKindChange}
+          onOpenAdvanced={() => setIsFilterModalOpen(true)}
+          onRemoveFilter={onRemoveFilter}
+          onClearAll={clearActivityFilters}
+          scopeLabel={isCreditCard ? "this cycle" : undefined}
         />
+
+        {compact ? null : (
+          <TransactionColumnHeaders showBalanceAfter={!isCreditCard} />
+        )}
+        </>
       ) : null}
-
-      <AccountDocumentsCard
-        documents={accountDocuments}
-        loading={documentsLoading}
-        busyId={busyDocumentId}
-        onAdd={() => {
-          setEditingDocument(undefined);
-          setIsDocumentModalOpen(true);
-        }}
-        onOpen={(document) => {
-          void onOpenDocument(document);
-        }}
-        onEdit={(document) => {
-          setEditingDocument(document);
-          setIsDocumentModalOpen(true);
-        }}
-        onRetry={onRetryDocument}
-        onDelete={onDeleteDocument}
-      />
-
-      <AccountNotesCard
-        notes={accountNotes}
-        loading={notesLoading}
-        onAdd={() => {
-          setEditingNote(undefined);
-          setIsNoteModalOpen(true);
-        }}
-        onEdit={(note) => {
-          setEditingNote(note);
-          setIsNoteModalOpen(true);
-        }}
-        onTogglePin={(note) => {
-          void onToggleNotePin(note);
-        }}
-        onDelete={onDeleteNote}
-      />
-
-      <TransactionFilters
-        filters={activityFilters}
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
-        totalCount={activities.length}
-        allCount={kindScopedActivities.length}
-        incomeCount={activityKindCounts.income}
-        expenseCount={activityKindCounts.expense}
-        transferCount={activityKindCounts.transfers}
-        filteredCount={filteredActivities.length}
-        activeFilterCount={activeFilterCount}
-        compact={compact}
-        onKindChange={onKindChange}
-        onOpenAdvanced={() => setIsFilterModalOpen(true)}
-        onRemoveFilter={onRemoveFilter}
-        onClearAll={clearActivityFilters}
-        scopeLabel={isCreditCard ? "this cycle" : undefined}
-      />
-      {compact ? null : (
-        <TransactionColumnHeaders showBalanceAfter={!isCreditCard} />
-      )}
     </View>
   );
 
@@ -1404,11 +1494,15 @@ export default function AccountDetailScreen() {
 
       <FlashList
         style={styles.list}
-        data={filteredActivities}
+        // Only Transactions renders rows. An account with years of history
+        // has thousands, and virtualizing them behind a section nobody is
+        // looking at costs the same as showing them (SPENDLY-91).
+        data={showsActivityList ? filteredActivities : EMPTY_ACTIVITIES}
         renderItem={renderItem}
         keyExtractor={keyExtractor}
         ListHeaderComponent={listHeader}
         ListEmptyComponent={
+          !showsActivityList ? null : (
           <View
             style={[
               styles.emptyCard,
@@ -1455,6 +1549,7 @@ export default function AccountDetailScreen() {
               </Pressable>
             ) : null}
           </View>
+          )
         }
         ItemSeparatorComponent={ActivitySeparator}
         showsVerticalScrollIndicator={false}
@@ -1462,7 +1557,7 @@ export default function AccountDetailScreen() {
           paddingHorizontal: 16,
           paddingBottom: listPaddingBottom,
         }}
-        extraData={`${JSON.stringify(activityFilters)}-${debouncedSearchQuery}-${compact}-${isDark}-${openStatementBill?.id ?? ""}-${pastCycleItems.length}`}
+        extraData={`${section}-${JSON.stringify(activityFilters)}-${debouncedSearchQuery}-${compact}-${isDark}-${openStatementBill?.id ?? ""}-${pastCycleItems.length}-${documentsNeedingAttention}`}
       />
 
       <EditAccountModal
@@ -1531,6 +1626,7 @@ export default function AccountDetailScreen() {
 
       <DownloadStatementModal
         visible={isStatementOpen}
+        emphasis={statementEmphasis}
         onClose={() => setIsStatementOpen(false)}
         today={today}
         currency={currency}
@@ -1548,6 +1644,13 @@ export default function AccountDetailScreen() {
         buildStatement={buildStatementForPeriod}
         onSave={onSaveReconciliation}
         onRecordAdjustment={onRecordReconciliationAdjustment}
+      />
+
+      <ActionMenuSheet
+        isOpen={isActionsOpen}
+        onClose={() => setIsActionsOpen(false)}
+        title="Account actions"
+        actions={accountActionItems}
       />
 
       <AccountDocumentModal
@@ -1617,19 +1720,6 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     minHeight: 48,
     justifyContent: "center",
-  },
-  statementBtn: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    borderRadius: 20,
-    borderCurve: "continuous",
-    borderWidth: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    minHeight: 48,
   },
   reconcileLabel: {
     fontSize: 14,
