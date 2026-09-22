@@ -10,13 +10,17 @@ import { useAuth } from "@/providers/AuthProvider";
 
 export function useSmsRecurringSync() {
   const { user, isDuress } = useAuth();
-  const { expenses, loading: expensesLoading } = useExpenses();
+  const { expenses, complete: expensesComplete } = useExpenses();
   const { subscriptions, loading: subsLoading } = useSubscriptions();
   const lastKey = useRef("");
 
   useEffect(() => {
     const uid = user?.uid;
-    if (!uid || isDuress || expensesLoading || subsLoading) return;
+    // SPENDLY-98: `complete`, not `!loading` — the latter goes true on the
+    // staged 300-row page. Detection needs at least three occurrences of a
+    // merchant, so a truncated ledger drops real subscriptions below the
+    // threshold and can classify cadence from a partial series.
+    if (!uid || isDuress || !expensesComplete || subsLoading) return;
     if (expenses.length < 3) return;
 
     const tail = expenses[expenses.length - 1];
@@ -31,7 +35,7 @@ export function useSmsRecurringSync() {
     user?.uid,
     isDuress,
     expenses,
-    expensesLoading,
+    expensesComplete,
     subscriptions,
     subsLoading,
   ]);

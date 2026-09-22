@@ -29,7 +29,7 @@ export const useCategories = () => {
     budgets,
     budgetsLoading,
   } = useExpenseReferenceData();
-  const { expenses, loading: expensesLoading } = useExpenses();
+  const { expenses, complete: expensesComplete } = useExpenses();
 
   const parentCategories = useMemo(
     () =>
@@ -199,7 +199,11 @@ export const useCategories = () => {
       });
 
       if (rewriteExpenses) {
-        const rows = !expensesLoading
+        // SPENDLY-98: only skip the read when the in-memory ledger is the
+        // whole history. On the staged page this rewrote 300 rows and left
+        // every older expense on the old category name — silently, and with
+        // no later pass to repair it.
+        const rows = expensesComplete
           ? expenses.map((expense) => ({
               id: expense.id,
               data: expense,
@@ -365,7 +369,8 @@ export const useCategories = () => {
         if (ops >= 400) await flush();
       }
 
-      const expenseRows = !expensesLoading
+      // SPENDLY-98: same completeness rule as the rename path above.
+      const expenseRows = expensesComplete
         ? expenses.map((expense) => ({
             id: expense.id,
             data: expense,

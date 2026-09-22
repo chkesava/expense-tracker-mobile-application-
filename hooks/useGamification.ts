@@ -61,6 +61,12 @@ export function useGamification() {
     return () => unsubscribe();
   }, [uid, attempt, setError]);
 
+  // SPENDLY-98: deliberately still `!expensesLoading`. This does write derived
+  // values from a possibly-staged ledger, but neither can stick: `longestStreak`
+  // is a Math.max over the stored value so a short page can never lower it, and
+  // `currentStreak` recomputes and rewrites when the idle upgrade changes
+  // `expenses`. Badges are only ever added. Waiting for completeness here would
+  // delay the streak on first paint for no integrity gain.
   const expensesReady = !expensesLoading || expenses.length > 0;
   const defaults = useMemo(() => createDefaultUserStats(todayKey), [todayKey]);
 
