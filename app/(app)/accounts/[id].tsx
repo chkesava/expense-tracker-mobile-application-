@@ -8,6 +8,7 @@ import {
   View,
 } from "react-native";
 import { FlashList } from "@shopify/flash-list";
+import { Download } from "lucide-react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -23,6 +24,10 @@ import { AccountHealthCard } from "@/components/accounts/AccountHealthCard";
 import { SpendingInsightsCard } from "@/components/accounts/SpendingInsightsCard";
 import { BalanceTrendCard } from "@/components/accounts/BalanceTrendCard";
 import { ActivityStatisticsCard } from "@/components/accounts/ActivityStatisticsCard";
+import { DownloadStatementModal } from "@/components/accounts/DownloadStatementModal";
+import { appDialog } from "@/lib/appDialog";
+import { friendlyErrorMessage, logWarning } from "@/lib/errors";
+import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import { PayCreditBillModal } from "@/components/accounts/PayCreditBillModal";
 import { RecordCashbackModal } from "@/components/accounts/RecordCashbackModal";
 import { CreditStatementCard } from "@/components/accounts/CreditStatementCard";
@@ -80,6 +85,16 @@ import { searchAccountActivities } from "@/shared/utils/accountActivitySearch";
 import { computeAccountSpendingInsights } from "@/shared/utils/accountSpendingInsights";
 import { computeAccountActivityStats } from "@/shared/utils/accountActivityStats";
 import {
+  buildAccountStatement,
+  type AccountStatement,
+  type AccountStatementMeta,
+  type StatementPeriod,
+} from "@/shared/utils/accountStatement";
+import {
+  exportStatementCsv,
+  exportStatementPdf,
+} from "@/services/accounts/accountStatementDelivery";
+import {
   buildAccountBalanceTrend,
   DEFAULT_BALANCE_TREND_PERIOD,
   type BalanceTrendPeriod,
@@ -123,6 +138,7 @@ export default function AccountDetailScreen() {
   const isDark = themeUsesDarkPalette(themeName);
   const displayCurrency = useDisplayCurrency();
   const { settings } = useSettings();
+  const { settings: systemSettings } = useSystemSettings();
   const today = todayDateKey(settings.timezone);
   const { setEditingExpense, setEditingIncome } = useModals();
 
@@ -145,6 +161,7 @@ export default function AccountDetailScreen() {
   const [isCreateBillOpen, setIsCreateBillOpen] = useState(false);
   const [isReconcileOpen, setIsReconcileOpen] = useState(false);
   const [isCashbackOpen, setIsCashbackOpen] = useState(false);
+  const [isStatementOpen, setIsStatementOpen] = useState(false);
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
   const [activityFilters, setActivityFilters] = useState<AccountActivityFilters>(
     createEmptyAccountActivityFilters
@@ -162,6 +179,7 @@ export default function AccountDetailScreen() {
   useEffect(() => {
     setActivityFilters(createEmptyAccountActivityFilters());
     setIsFilterModalOpen(false);
+    setIsStatementOpen(false);
     setSearchQuery("");
     setSelectedMonth(null);
     setHistoryWindow(DEFAULT_ACCOUNT_HISTORY_WINDOW);
@@ -379,6 +397,46 @@ export default function AccountDetailScreen() {
   const activityStats = useMemo(
     () => computeAccountActivityStats(healthRecords, historyWindow),
     [healthRecords, historyWindow]
+  );
+
+  const statementAccount = useMemo<AccountStatementMeta>(
+    () => ({
+      name: account?.displayName?.trim() || account?.name || "Account",
+      institution: account?.institutionName?.trim() || undefined,
+      last4: account?.last4?.trim() || undefined,
+      typeLabel: accountKindSubtitle(isCreditCard, typeName),
+      currency,
+      timezone: settings.timezone || undefined,
+    }),
+    [account, currency, isCreditCard, settings.timezone, typeName]
+  );
+
+  // The statement covers the account's whole history, not the card's
+  // cycle-scoped list: a statement for "last 3 months" over one billing cycle
+  // would be missing most of what it claims to cover.
+  const buildStatementForPeriod = useCallback(
+    (period: StatementPeriod) =>
+      buildAccountStatement(healthRecords, statementAccount, period, {
+        supportsRunningBalance: !isCreditCard,
+        generatedAt: today,
+      }),
+    [healthRecords, isCreditCard, statementAccount, today]
+  );
+
+  const onExportStatement = useCallback(
+    async (statement: AccountStatement, format: "pdf" | "csv") => {
+      try {
+        if (format === "csv") await exportStatementCsv(statement);
+        else await exportStatementPdf(statement);
+      } catch (error) {
+        logWarning("accountDetail.exportStatement", error, { format });
+        appDialog.alert(
+          "Couldn't create the statement",
+          friendlyErrorMessage(error)
+        );
+      }
+    },
+    []
   );
 
   const selectedInsightCategory =
@@ -789,6 +847,30 @@ export default function AccountDetailScreen() {
 
       <ActivityStatisticsCard stats={activityStats} />
 
+      <Pressable
+        onPress={() => {
+          void haptic.selection();
+          setIsStatementOpen(true);
+        }}
+        accessibilityRole="button"
+        accessibilityLabel="Download statement"
+        style={({ pressed }) => [
+          styles.statementBtn,
+          {
+            backgroundColor: isDark ? "#10141C" : theme.colors.card,
+            borderColor: isDark
+              ? "rgba(148, 163, 184, 0.12)"
+              : theme.colors.border,
+          },
+          pressed ? styles.reconcilePressed : null,
+        ]}
+      >
+        <Download size={17} color={theme.colors.primary} />
+        <Text style={[styles.reconcileLabel, { color: theme.colors.primary }]}>
+          Download statement
+        </Text>
+      </Pressable>
+
       {statementMonths.length > 0 ? (
         <MonthlyStatementSummary
           summary={monthSummary}
@@ -975,6 +1057,16 @@ export default function AccountDetailScreen() {
         onApply={setActivityFilters}
         getResultCount={getFilterResultCount}
       />
+
+      <DownloadStatementModal
+        visible={isStatementOpen}
+        onClose={() => setIsStatementOpen(false)}
+        today={today}
+        currency={currency}
+        buildStatement={buildStatementForPeriod}
+        onExport={onExportStatement}
+        exportAllowed={systemSettings.allowDataExport}
+      />
     </View>
   );
 }
@@ -1022,6 +1114,18 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     minHeight: 48,
     justifyContent: "center",
+  },
+  statementBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    borderRadius: 20,
+    borderCurve: "continuous",
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    minHeight: 48,
   },
   reconcileLabel: {
     fontSize: 14,
