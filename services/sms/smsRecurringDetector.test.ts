@@ -245,3 +245,73 @@ describe("filterPatternsForReview", () => {
     ).toEqual([]);
   });
 });
+
+describe("truncated ledger degrades detection (SPENDLY-98)", () => {
+  // The staged first-paint page is 300 expenses ordered by `createdAt desc`.
+  // Detection needs SMS_RECURRING_MIN_OCCURRENCES (3) sightings of one
+  // merchant+amount, so whatever falls off the page is invisible to it.
+  const STAGED_LIMIT = 300;
+  const MONTHS = [
+    "2026-03", "2026-04", "2026-05", "2026-06", "2026-07", "2026-08",
+  ];
+
+  function noise(date: string, index: number): RecurringExpenseInput {
+    return {
+      amount: 100 + (index % 7),
+      date,
+      note: `Shop ${index % 40}`,
+      category: "Food",
+    };
+  }
+
+  /** Netflix on the 5th of six consecutive months, buried in everyday spend. */
+  function buildLedger(noisePerMonth: number): RecurringExpenseInput[] {
+    const rows: RecurringExpenseInput[] = [];
+    MONTHS.forEach((month, monthIndex) => {
+      rows.push(netflix(`${month}-05`));
+      for (let i = 1; i <= noisePerMonth; i += 1) {
+        const dayKey = String((i % 28) + 1).padStart(2, "0");
+        rows.push(noise(`${month}-${dayKey}`, monthIndex * noisePerMonth + i));
+      }
+    });
+    return rows;
+  }
+
+  /** `createdAt` tracks `date` here, so the page keeps the newest rows. */
+  function stage(rows: RecurringExpenseInput[]): RecurringExpenseInput[] {
+    return [...rows]
+      .sort((a, b) => b.date.localeCompare(a.date))
+      .slice(0, STAGED_LIMIT);
+  }
+
+  const netflixPattern = (rows: RecurringExpenseInput[]) =>
+    detectRecurringPatterns(rows).find((p) =>
+      p.merchant.toLowerCase().includes("netflix")
+    );
+
+  it("detects all six charges from full history", () => {
+    const pattern = netflixPattern(buildLedger(60));
+    expect(pattern?.frequency).toBe("monthly");
+    expect(pattern?.amount).toBe(649);
+    expect(pattern?.occurrences).toBe(6);
+  });
+
+  it("understates occurrences for a moderate ledger", () => {
+    // ~60 expenses/month: the page reaches back about five months, so the
+    // pattern survives but its history is short by a charge.
+    const full = netflixPattern(buildLedger(60));
+    const staged = netflixPattern(stage(buildLedger(60)));
+    expect(staged).toBeDefined();
+    expect(staged!.occurrences).toBeLessThan(full!.occurrences);
+    expect(staged!.dates).not.toEqual(full!.dates);
+  });
+
+  it("loses the subscription outright for a heavy ledger", () => {
+    // ~150 expenses/month: 300 rows is barely two months, which is below the
+    // minimum occurrence count — nothing is ever queued for review.
+    const heavy = buildLedger(150);
+    expect(heavy.length).toBeGreaterThan(STAGED_LIMIT * 2);
+    expect(netflixPattern(heavy)?.occurrences).toBe(6);
+    expect(netflixPattern(stage(heavy))).toBeUndefined();
+  });
+});
