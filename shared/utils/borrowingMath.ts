@@ -244,6 +244,86 @@ export function summarizeBorrowing(
   };
 }
 
+/**
+ * Stored parent fields that exist only so lists can filter/sort without
+ * joining repayments. `summarizeBorrowing` remains authoritative for display.
+ */
+export function denormalizedBorrowingCacheFields(summary: BorrowingSummary) {
+  return {
+    outstandingPrincipal: summary.outstandingPrincipal,
+    accruedInterest: summary.interestAccrued,
+    totalOutstanding: summary.totalOutstanding,
+    status: summary.status,
+    settledDate: summary.settledDate,
+  };
+}
+
+const SUMMARY_AFFECTING_KEYS = [
+  "principalAmount",
+  "interestRate",
+  "interestType",
+  "interestFrequency",
+  "interestBasis",
+  "borrowedDate",
+  "dueDate",
+  "status",
+] as const satisfies readonly (keyof Borrowing)[];
+
+export type BorrowingUpdatePayloadResult =
+  | { ok: false; error: string }
+  | {
+      ok: true;
+      fields: Partial<Borrowing>;
+      recomputed: boolean;
+    };
+
+function borrowingUpdateAffectsSummary(updates: Partial<Borrowing>): boolean {
+  return SUMMARY_AFFECTING_KEYS.some((key) => key in updates);
+}
+
+/**
+ * Builds the single `updateDoc` payload for a borrowing edit.
+ *
+ * Principal cannot drop below already-repaid principal. Edits that change
+ * interest, dates, status, or principal also stamp the denormalized cache
+ * fields from `summarizeBorrowing` so they cannot drift from the derived view.
+ */
+export function buildBorrowingUpdatePayload(
+  existing: Borrowing,
+  updates: Partial<Borrowing>,
+  repayments: BorrowingRepayment[],
+  asOfDate: string
+): BorrowingUpdatePayloadResult {
+  const current = summarizeBorrowing(existing, repayments, asOfDate);
+  if (
+    updates.principalAmount != null &&
+    updates.principalAmount < current.principalPaid
+  ) {
+    return {
+      ok: false,
+      error: `Principal cannot be less than ${current.principalPaid} already repaid.`,
+    };
+  }
+
+  if (!borrowingUpdateAffectsSummary(updates)) {
+    return { ok: true, fields: { ...updates }, recomputed: false };
+  }
+
+  const next = summarizeBorrowing(
+    { ...existing, ...updates },
+    repayments,
+    asOfDate
+  );
+  return {
+    ok: true,
+    fields: {
+      ...updates,
+      ...denormalizedBorrowingCacheFields(next),
+    },
+    recomputed: true,
+  };
+}
+
 export interface RepaymentAllocation {
   interestComponent: number;
   principalComponent: number;
