@@ -45,6 +45,12 @@ export const env = {
     url: trimEnv(process.env.EXPO_PUBLIC_SUPABASE_URL),
     publishableKey: trimEnv(process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY),
   },
+
+  /**
+   * Optional Sentry DSN. Empty = crash reporting stays off.
+   * Unused until an SDK is wired; keep the key static so Metro can inline it.
+   */
+  sentryDsn: trimEnv(process.env.EXPO_PUBLIC_SENTRY_DSN),
 } as const;
 
 export function isSupabaseEnvConfigured(): boolean {
