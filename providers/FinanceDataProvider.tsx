@@ -175,10 +175,6 @@ export type AccountsContextType = {
   deleteTransfer: (id: string) => Promise<void>;
 };
 
-export type FinanceDataContextType = ExpensesContextType &
-  IncomesContextType &
-  AccountsContextType;
-
 // ─── Contexts ─────────────────────────────────────────────────────────────────
 
 const ExpensesContext = createContext<ExpensesContextType | undefined>(undefined);
@@ -1396,11 +1392,4 @@ export function useAccountsContext() {
     throw new Error("useAccountsContext must be used within a FinanceDataProvider");
   }
   return context;
-}
-
-export function useFinanceDataContext(): FinanceDataContextType {
-  const exp = useExpensesContext();
-  const inc = useIncomesContext();
-  const acc = useAccountsContext();
-  return useMemo(() => ({ ...exp, ...inc, ...acc }), [exp, inc, acc]);
 }
