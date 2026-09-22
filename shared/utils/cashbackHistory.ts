@@ -42,7 +42,7 @@ export function buildCashbackHistory(
   const expenseNoteById = new Map<string, string>();
   for (const expense of expenses) {
     if (expense.id && expense.accountId === cardId && expense.note) {
-      expenseNoteById.set(expense.id, expense.note);
+      expenseNoteById.set(expense.id as string, expense.note);
     }
   }
 
