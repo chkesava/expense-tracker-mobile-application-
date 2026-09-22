@@ -41,7 +41,7 @@ export function buildCashbackHistory(
 ): CashbackSummary {
   const expenseNoteById = new Map<string, string>();
   for (const expense of expenses) {
-    if (expense.accountId === cardId && expense.note) {
+    if (expense.id && expense.accountId === cardId && expense.note) {
       expenseNoteById.set(expense.id, expense.note);
     }
   }
