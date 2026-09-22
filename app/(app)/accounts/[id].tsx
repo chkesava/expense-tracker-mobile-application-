@@ -8,7 +8,7 @@ import {
   View,
 } from "react-native";
 import { FlashList } from "@shopify/flash-list";
-import { Download } from "lucide-react-native";
+import { Download, Scale as ScaleIcon } from "lucide-react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -25,8 +25,10 @@ import { SpendingInsightsCard } from "@/components/accounts/SpendingInsightsCard
 import { BalanceTrendCard } from "@/components/accounts/BalanceTrendCard";
 import { ActivityStatisticsCard } from "@/components/accounts/ActivityStatisticsCard";
 import { DownloadStatementModal } from "@/components/accounts/DownloadStatementModal";
+import { ReconcileAccountModal } from "@/components/accounts/ReconcileAccountModal";
 import { appDialog } from "@/lib/appDialog";
 import { friendlyErrorMessage, logWarning } from "@/lib/errors";
+import { toast } from "@/lib/toast";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import { PayCreditBillModal } from "@/components/accounts/PayCreditBillModal";
 import { RecordCashbackModal } from "@/components/accounts/RecordCashbackModal";
@@ -50,6 +52,7 @@ import {
 } from "@/components/layout/chrome";
 import { haptic } from "@/lib/haptics";
 import { useAccountEntries } from "@/hooks/useAccountEntries";
+import { useAuth } from "@/providers/AuthProvider";
 import { useAccountPayments } from "@/hooks/useAccountPayments";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useAccountTransfers } from "@/hooks/useAccountTransfers";
@@ -94,6 +97,8 @@ import {
   exportStatementCsv,
   exportStatementPdf,
 } from "@/services/accounts/accountStatementDelivery";
+import { saveAccountReconciliation } from "@/services/accounts/accountReconciliationStore";
+import type { AccountReconciliationResult } from "@/shared/utils/accountReconciliation";
 import {
   buildAccountBalanceTrend,
   DEFAULT_BALANCE_TREND_PERIOD,
@@ -139,6 +144,7 @@ export default function AccountDetailScreen() {
   const displayCurrency = useDisplayCurrency();
   const { settings } = useSettings();
   const { settings: systemSettings } = useSystemSettings();
+  const { user } = useAuth();
   const today = todayDateKey(settings.timezone);
   const { setEditingExpense, setEditingIncome } = useModals();
 
@@ -147,7 +153,7 @@ export default function AccountDetailScreen() {
   const { accountTypes } = useAccountTypes();
   const { expenses } = useExpenses();
   const { incomes } = useIncomes();
-  const { entries } = useAccountEntries();
+  const { entries, addEntry } = useAccountEntries();
   const { payments } = useAccountPayments();
   const { transfers } = useAccountTransfers();
   const { borrowings, repayments: borrowingRepayments } = useBorrowings();
@@ -162,6 +168,7 @@ export default function AccountDetailScreen() {
   const [isReconcileOpen, setIsReconcileOpen] = useState(false);
   const [isCashbackOpen, setIsCashbackOpen] = useState(false);
   const [isStatementOpen, setIsStatementOpen] = useState(false);
+  const [isReconcileAccountOpen, setIsReconcileAccountOpen] = useState(false);
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
   const [activityFilters, setActivityFilters] = useState<AccountActivityFilters>(
     createEmptyAccountActivityFilters
@@ -180,6 +187,7 @@ export default function AccountDetailScreen() {
     setActivityFilters(createEmptyAccountActivityFilters());
     setIsFilterModalOpen(false);
     setIsStatementOpen(false);
+    setIsReconcileAccountOpen(false);
     setSearchQuery("");
     setSelectedMonth(null);
     setHistoryWindow(DEFAULT_ACCOUNT_HISTORY_WINDOW);
@@ -437,6 +445,62 @@ export default function AccountDetailScreen() {
       }
     },
     []
+  );
+
+  // Saving a reconciliation records what was found. It writes one audit
+  // document and nothing else -- no balance moves, because reconciling is an
+  // act of checking, not of correcting.
+  const onSaveReconciliation = useCallback(
+    async (result: AccountReconciliationResult, note: string) => {
+      if (!account || !user?.uid || result.variance === undefined) return false;
+      if (
+        result.ledgerClosingBalance === undefined ||
+        result.statementClosingBalance === undefined
+      ) {
+        return false;
+      }
+      try {
+        await saveAccountReconciliation(user.uid, {
+          accountId: account.id,
+          fromDate: result.period.fromDate,
+          toDate: result.period.toDate,
+          statementClosingBalance: result.statementClosingBalance,
+          ledgerClosingBalance: result.ledgerClosingBalance,
+          variance: result.variance,
+          status: result.status,
+          matchedCount: result.matched.length,
+          missingCount: result.missingInApp.length,
+          extraCount: result.extraInApp.length,
+          note,
+        });
+        toast.success("Reconciliation saved");
+        return true;
+      } catch (error) {
+        logWarning("accountDetail.saveReconciliation", error);
+        appDialog.alert(
+          "Couldn't save the reconciliation",
+          friendlyErrorMessage(error)
+        );
+        return false;
+      }
+    },
+    [account, user?.uid]
+  );
+
+  // The correction is an ordinary account entry with the user's own reason on
+  // it, recorded through the same path as any manual adjustment -- so it shows
+  // up in the ledger as something a person did, and can be undone like one.
+  const onRecordReconciliationAdjustment = useCallback(
+    async (
+      direction: "credit" | "debit",
+      amount: number,
+      date: string,
+      note: string
+    ) => {
+      if (!account) return false;
+      return addEntry(account.id, amount, direction, date, note);
+    },
+    [account, addEntry]
   );
 
   const selectedInsightCategory =
@@ -847,6 +911,7 @@ export default function AccountDetailScreen() {
 
       <ActivityStatisticsCard stats={activityStats} />
 
+      <View style={styles.cardActionRow}>
       <Pressable
         onPress={() => {
           void haptic.selection();
@@ -870,6 +935,33 @@ export default function AccountDetailScreen() {
           Download statement
         </Text>
       </Pressable>
+
+      {isCreditCard ? null : (
+        <Pressable
+          onPress={() => {
+            void haptic.selection();
+            setIsReconcileAccountOpen(true);
+          }}
+          accessibilityRole="button"
+          accessibilityLabel="Reconcile account"
+          style={({ pressed }) => [
+            styles.statementBtn,
+            {
+              backgroundColor: isDark ? "#10141C" : theme.colors.card,
+              borderColor: isDark
+                ? "rgba(148, 163, 184, 0.12)"
+                : theme.colors.border,
+            },
+            pressed ? styles.reconcilePressed : null,
+          ]}
+        >
+          <ScaleIcon size={17} color={theme.colors.primary} />
+          <Text style={[styles.reconcileLabel, { color: theme.colors.primary }]}>
+            Reconcile account
+          </Text>
+        </Pressable>
+      )}
+      </View>
 
       {statementMonths.length > 0 ? (
         <MonthlyStatementSummary
@@ -1067,6 +1159,17 @@ export default function AccountDetailScreen() {
         onExport={onExportStatement}
         exportAllowed={systemSettings.allowDataExport}
       />
+
+      <ReconcileAccountModal
+        visible={isReconcileAccountOpen}
+        onClose={() => setIsReconcileAccountOpen(false)}
+        today={today}
+        currency={currency}
+        records={healthRecords}
+        buildStatement={buildStatementForPeriod}
+        onSave={onSaveReconciliation}
+        onRecordAdjustment={onRecordReconciliationAdjustment}
+      />
     </View>
   );
 }
@@ -1116,6 +1219,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   statementBtn: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",

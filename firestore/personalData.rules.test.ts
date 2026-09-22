@@ -73,6 +73,7 @@ describe("personal tree", () => {
     "accountTypes",
     "accountEntries",
     "accountPayments",
+    "accountReconciliations",
     "accountTransfers",
     "categories",
     "subscriptions",
@@ -110,6 +111,7 @@ describe("personal tree", () => {
     "subscriptions",
   ];
   const validatedWithoutAmount = [
+    "accountReconciliations",
     "epfEstablishments",
     "epfContributions",
     "holdings",
@@ -229,6 +231,70 @@ describe("personal tree", () => {
       );
     });
   }
+
+  it("owner writes a well-formed account reconciliation", async () => {
+    const db = env.authenticatedContext(OWNER).firestore();
+    await assertSucceeds(
+      addDoc(collection(db, "users", OWNER, "accountReconciliations"), {
+        accountId: "a1",
+        fromDate: "2026-09-01",
+        toDate: "2026-09-30",
+        statementClosingBalance: 4500,
+        ledgerClosingBalance: 4500,
+        variance: 0,
+        status: "balanced",
+      })
+    );
+  });
+
+  it("owner can reconcile an overdrawn account to a negative balance", async () => {
+    const db = env.authenticatedContext(OWNER).firestore();
+    await assertSucceeds(
+      addDoc(collection(db, "users", OWNER, "accountReconciliations"), {
+        accountId: "a1",
+        fromDate: "2026-09-01",
+        toDate: "2026-09-30",
+        statementClosingBalance: -1200,
+        ledgerClosingBalance: -900,
+        variance: -300,
+        status: "variance",
+      })
+    );
+  });
+
+  it("owner cannot write a reconciliation with no account", async () => {
+    const db = env.authenticatedContext(OWNER).firestore();
+    await assertFails(
+      addDoc(collection(db, "users", OWNER, "accountReconciliations"), {
+        accountId: "",
+        variance: 0,
+        status: "balanced",
+      })
+    );
+  });
+
+  it("owner cannot invent a third reconciliation status", async () => {
+    const db = env.authenticatedContext(OWNER).firestore();
+    await assertFails(
+      addDoc(collection(db, "users", OWNER, "accountReconciliations"), {
+        accountId: "a1",
+        variance: 0,
+        status: "approved",
+      })
+    );
+  });
+
+  it("owner cannot write a reconciliation with a non-date period", async () => {
+    const db = env.authenticatedContext(OWNER).firestore();
+    await assertFails(
+      addDoc(collection(db, "users", OWNER, "accountReconciliations"), {
+        accountId: "a1",
+        fromDate: "not-a-date",
+        variance: 0,
+        status: "balanced",
+      })
+    );
+  });
 
   it("owner can patch an existing expense without sending amount", async () => {
     const db = env.authenticatedContext(OWNER).firestore();
