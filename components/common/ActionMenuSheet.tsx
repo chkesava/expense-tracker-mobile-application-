@@ -9,6 +9,11 @@ export type ActionMenuItem = {
   onPress: () => void;
   destructive?: boolean;
   disabled?: boolean;
+  /**
+   * Why a disabled action is disabled (SPENDLY-91). Shown under the label, so
+   * an unavailable row explains itself instead of reading as a broken button.
+   */
+  disabledReason?: string;
 };
 
 export type ActionMenuSheetProps = {
@@ -58,7 +63,11 @@ export function ActionMenuSheet({ isOpen, onClose, title, actions }: ActionMenuS
               },
             ]}
             accessibilityRole="button"
-            accessibilityLabel={action.label}
+            accessibilityLabel={
+              action.disabled && action.disabledReason
+                ? `${action.label}. ${action.disabledReason}`
+                : action.label
+            }
             accessibilityState={{ disabled: !!action.disabled }}
           >
             <Text
@@ -70,6 +79,18 @@ export function ActionMenuSheet({ isOpen, onClose, title, actions }: ActionMenuS
             >
               {action.label}
             </Text>
+            {action.disabled && action.disabledReason ? (
+              <Text
+                style={{
+                  color: theme.colors.mutedForeground,
+                  fontSize: 12,
+                  marginTop: 4,
+                  textAlign: "center",
+                }}
+              >
+                {action.disabledReason}
+              </Text>
+            ) : null}
           </Pressable>
         ))}
       </View>

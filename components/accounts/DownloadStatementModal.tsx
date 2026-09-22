@@ -51,6 +51,13 @@ export interface DownloadStatementModalProps {
   ) => Promise<void>;
   /** False when system policy has data export switched off. */
   exportAllowed: boolean;
+  /**
+   * Which format this sheet leads with (SPENDLY-91). The action center offers
+   * "Download statement" and "Export CSV" as separate entries; both land on
+   * this one period picker, and this is what makes them arrive somewhere
+   * different once they do.
+   */
+  emphasis?: "pdf" | "csv";
 }
 
 /**
@@ -68,6 +75,7 @@ export function DownloadStatementModal({
   buildStatement,
   onExport,
   exportAllowed,
+  emphasis = "pdf",
 }: DownloadStatementModalProps) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
@@ -357,19 +365,38 @@ export function DownloadStatementModal({
               style={({ pressed }) => [
                 styles.footerButton,
                 {
-                  backgroundColor: inset,
-                  borderColor: insetBorder,
+                  backgroundColor:
+                    emphasis === "csv"
+                      ? isDark
+                        ? "rgba(74,222,128,0.16)"
+                        : "rgba(22,163,74,0.12)"
+                      : inset,
+                  borderColor: emphasis === "csv" ? accentBorder : insetBorder,
                   opacity: canExport ? 1 : 0.5,
                 },
                 pressed ? styles.pressed : null,
               ]}
             >
               {busy === "csv" ? (
-                <ActivityIndicator size="small" color={theme.colors.foreground} />
+                <ActivityIndicator
+                  size="small"
+                  color={emphasis === "csv" ? accent : theme.colors.foreground}
+                />
               ) : (
-                <FileSpreadsheet size={17} color={theme.colors.foreground} />
+                <FileSpreadsheet
+                  size={17}
+                  color={emphasis === "csv" ? accent : theme.colors.foreground}
+                />
               )}
-              <Text style={[styles.footerText, { color: theme.colors.foreground }]}>
+              <Text
+                style={[
+                  styles.footerText,
+                  {
+                    color:
+                      emphasis === "csv" ? accent : theme.colors.foreground,
+                  },
+                ]}
+              >
                 CSV
               </Text>
             </Pressable>
@@ -382,21 +409,37 @@ export function DownloadStatementModal({
               style={({ pressed }) => [
                 styles.footerButton,
                 {
-                  backgroundColor: isDark
-                    ? "rgba(74,222,128,0.16)"
-                    : "rgba(22,163,74,0.12)",
-                  borderColor: accentBorder,
+                  backgroundColor:
+                    emphasis === "pdf"
+                      ? isDark
+                        ? "rgba(74,222,128,0.16)"
+                        : "rgba(22,163,74,0.12)"
+                      : inset,
+                  borderColor: emphasis === "pdf" ? accentBorder : insetBorder,
                   opacity: canExport ? 1 : 0.5,
                 },
                 pressed ? styles.pressed : null,
               ]}
             >
               {busy === "pdf" ? (
-                <ActivityIndicator size="small" color={accent} />
+                <ActivityIndicator
+                  size="small"
+                  color={emphasis === "pdf" ? accent : theme.colors.foreground}
+                />
               ) : (
-                <FileText size={17} color={accent} />
+                <FileText
+                  size={17}
+                  color={emphasis === "pdf" ? accent : theme.colors.foreground}
+                />
               )}
-              <Text style={[styles.footerText, { color: accent }]}>PDF</Text>
+              <Text
+                style={[
+                  styles.footerText,
+                  { color: emphasis === "pdf" ? accent : theme.colors.foreground },
+                ]}
+              >
+                PDF
+              </Text>
             </Pressable>
           </View>
         </View>
