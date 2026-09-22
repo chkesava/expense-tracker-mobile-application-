@@ -20,6 +20,7 @@ import { EditAccountModal } from "@/components/accounts/EditAccountModal";
 import { PastBillingCycles } from "@/components/accounts/PastBillingCycles";
 import { MonthlyStatementSummary } from "@/components/accounts/MonthlyStatementSummary";
 import { AccountHealthCard } from "@/components/accounts/AccountHealthCard";
+import { SpendingInsightsCard } from "@/components/accounts/SpendingInsightsCard";
 import { PayCreditBillModal } from "@/components/accounts/PayCreditBillModal";
 import { RecordCashbackModal } from "@/components/accounts/RecordCashbackModal";
 import { CreditStatementCard } from "@/components/accounts/CreditStatementCard";
@@ -74,6 +75,7 @@ import {
   type AccountActivityFilters,
 } from "@/shared/utils/accountActivityFilters";
 import { searchAccountActivities } from "@/shared/utils/accountActivitySearch";
+import { computeAccountSpendingInsights } from "@/shared/utils/accountSpendingInsights";
 import {
   computeAccountHealthMetrics,
   DEFAULT_ACCOUNT_HISTORY_WINDOW,
@@ -343,6 +345,28 @@ export default function AccountDetailScreen() {
       }),
     [healthRecords, historyWindow, isCreditCard]
   );
+
+  // Shares the health window and the same full-history records: the
+  // previous-period comparison needs real months behind it.
+  const spendingInsights = useMemo(
+    () => computeAccountSpendingInsights(healthRecords, historyWindow),
+    [healthRecords, historyWindow]
+  );
+
+  const selectedInsightCategory =
+    activityFilters.categories.length === 1
+      ? activityFilters.categories[0]
+      : undefined;
+
+  // Tapping a category drives the SPENDLY-82 category filter rather than a
+  // second scoping mechanism, so the active-filter chips stay truthful.
+  const onSelectInsightCategory = useCallback((category: string) => {
+    setActivityFilters((previous) =>
+      previous.categories.length === 1 && previous.categories[0] === category
+        ? { ...previous, categories: [] }
+        : { ...previous, categories: [category] }
+    );
+  }, []);
 
   // Built from the same (cycle-scoped, for cards) list the transactions below
   // come from, so the statement and the list always reconcile and every month
@@ -714,6 +738,13 @@ export default function AccountDetailScreen() {
         currentBalanceLabel={isCreditCard ? "Outstanding" : "Current balance"}
         window={historyWindow}
         onWindowChange={setHistoryWindow}
+      />
+
+      <SpendingInsightsCard
+        insights={spendingInsights}
+        currency={currency}
+        selectedCategory={selectedInsightCategory}
+        onSelectCategory={onSelectInsightCategory}
       />
 
       {statementMonths.length > 0 ? (
