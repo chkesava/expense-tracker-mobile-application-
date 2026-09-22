@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { Borrowing, BorrowingRepayment } from "../types/borrowing";
 import {
   allocateRepayment,
+  buildBorrowingUpdatePayload,
   computeAccruedInterest,
   describeInterest,
   elapsedMonths,
@@ -460,6 +461,173 @@ describe("describeInterest", () => {
       )
     ).toBe("No interest");
     expect(describeInterest(makeBorrowing({ interestRate: 0 }))).toBe("No interest");
+  });
+});
+
+describe("buildBorrowingUpdatePayload", () => {
+  const asOf = "2026-03-01";
+
+  it("recomputes outstanding and status after a principal edit with a partial repayment", () => {
+    const borrowing = makeBorrowing({
+      interestType: "NONE",
+      interestFrequency: "NONE",
+      interestRate: 0,
+      outstandingPrincipal: 20000,
+      totalOutstanding: 20000,
+      status: "ACTIVE",
+    });
+    const repayments = [
+      makeRepayment({ amount: 8000, principalComponent: 8000 }),
+    ];
+
+    const result = buildBorrowingUpdatePayload(
+      borrowing,
+      { principalAmount: 15000 },
+      repayments,
+      asOf
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.recomputed).toBe(true);
+    expect(result.fields.principalAmount).toBe(15000);
+    expect(result.fields.outstandingPrincipal).toBe(7000);
+    expect(result.fields.totalOutstanding).toBe(7000);
+    expect(result.fields.status).toBe("PARTIALLY_SETTLED");
+    expect(result.fields.settledDate).toBeNull();
+  });
+
+  it("settles the cache when a principal edit leaves nothing outstanding", () => {
+    const borrowing = makeBorrowing({
+      interestType: "NONE",
+      interestFrequency: "NONE",
+      interestRate: 0,
+    });
+    const repayments = [
+      makeRepayment({
+        amount: 10000,
+        principalComponent: 10000,
+        date: "2026-02-01",
+      }),
+    ];
+
+    const result = buildBorrowingUpdatePayload(
+      borrowing,
+      { principalAmount: 10000 },
+      repayments,
+      asOf
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.fields.outstandingPrincipal).toBe(0);
+    expect(result.fields.totalOutstanding).toBe(0);
+    expect(result.fields.status).toBe("FULLY_SETTLED");
+    expect(result.fields.settledDate).toBe("2026-02-01");
+  });
+
+  it("rejects a principal below already-repaid principal", () => {
+    const borrowing = makeBorrowing({
+      interestType: "NONE",
+      interestFrequency: "NONE",
+      interestRate: 0,
+    });
+    const repayments = [
+      makeRepayment({ amount: 8000, principalComponent: 8000 }),
+    ];
+
+    const result = buildBorrowingUpdatePayload(
+      borrowing,
+      { principalAmount: 5000 },
+      repayments,
+      asOf
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toContain("8000");
+    expect(result.error).toContain("already repaid");
+  });
+
+  it("refreshes denormalized fields when a due-date edit makes the borrowing overdue", () => {
+    const borrowing = makeBorrowing({
+      interestType: "NONE",
+      interestFrequency: "NONE",
+      interestRate: 0,
+      dueDate: "2026-06-01",
+      status: "ACTIVE",
+    });
+
+    const result = buildBorrowingUpdatePayload(
+      borrowing,
+      { dueDate: "2026-02-01" },
+      [],
+      asOf
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.recomputed).toBe(true);
+    expect(result.fields.status).toBe("OVERDUE");
+    expect(result.fields.outstandingPrincipal).toBe(20000);
+  });
+
+  it("refreshes accrued interest when the rate changes", () => {
+    const borrowing = makeBorrowing({
+      interestRate: 12,
+      interestFrequency: "ANNUAL",
+      interestBasis: "ORIGINAL_PRINCIPAL",
+      accruedInterest: 0,
+    });
+
+    const result = buildBorrowingUpdatePayload(
+      borrowing,
+      { interestRate: 24 },
+      [],
+      asOf
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.recomputed).toBe(true);
+    expect(result.fields.accruedInterest).toBe(800);
+    expect(result.fields.totalOutstanding).toBe(20800);
+  });
+
+  it("leaves cache fields off a note-only edit", () => {
+    const borrowing = makeBorrowing({
+      outstandingPrincipal: 20000,
+      totalOutstanding: 20000,
+      status: "ACTIVE",
+    });
+
+    const result = buildBorrowingUpdatePayload(
+      borrowing,
+      { note: "Refinance discussion" },
+      [],
+      asOf
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.recomputed).toBe(false);
+    expect(result.fields).toEqual({ note: "Refinance discussion" });
+    expect(result.fields.outstandingPrincipal).toBeUndefined();
+    expect(result.fields.status).toBeUndefined();
+  });
+
+  it("leaves cache fields off a lender-name edit", () => {
+    const result = buildBorrowingUpdatePayload(
+      makeBorrowing(),
+      { lenderName: "HDFC Bank" },
+      [],
+      asOf
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.recomputed).toBe(false);
+    expect(result.fields).toEqual({ lenderName: "HDFC Bank" });
   });
 });
 

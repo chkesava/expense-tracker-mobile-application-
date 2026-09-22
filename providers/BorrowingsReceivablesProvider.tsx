@@ -39,6 +39,8 @@ import type { Borrowing, BorrowingRepayment } from "@/shared/types/borrowing";
 import type { Receivable, ReceivableRepayment } from "@/shared/types/receivable";
 import {
   allocateRepayment,
+  buildBorrowingUpdatePayload,
+  denormalizedBorrowingCacheFields,
   summarizeBorrowing,
   summarizeBorrowings,
   validateRepayment,
@@ -82,11 +84,7 @@ export type AddReceivableRepaymentInput = {
 
 function denormalizedBorrowingFields(summary: BorrowingSummary) {
   return {
-    outstandingPrincipal: summary.outstandingPrincipal,
-    accruedInterest: summary.interestAccrued,
-    totalOutstanding: summary.totalOutstanding,
-    status: summary.status,
-    settledDate: summary.settledDate,
+    ...denormalizedBorrowingCacheFields(summary),
     updatedAt: serverTimestamp(),
   };
 }
@@ -366,11 +364,32 @@ export function BorrowingsReceivablesProvider({
     async (id: string, updates: Partial<Borrowing>): Promise<boolean> => {
       const db = getFirestoreDb();
       if (!uid || !db || !id) return false;
+
+      const existing = borrowings.find((b) => b.id === id);
+      if (!existing) {
+        toast.error("Borrowing not found");
+        return false;
+      }
+
+      const result = buildBorrowingUpdatePayload(
+        existing,
+        updates,
+        borrowingRepayments,
+        today
+      );
+      if (!result.ok) {
+        toast.error(result.error);
+        return false;
+      }
+
       try {
+        // The edit and its recomputed totals go up as one write: a connection
+        // dropping between two separate updates would leave the borrowing
+        // showing a new principal against stale outstanding/status fields.
         const outcome = await commitWrite(
           () =>
             updateDoc(doc(db, "users", uid, "borrowings", id), {
-              ...updates,
+              ...result.fields,
               updatedAt: serverTimestamp(),
             }),
           { label: "borrowing" }
@@ -383,7 +402,7 @@ export function BorrowingsReceivablesProvider({
         return false;
       }
     },
-    [uid]
+    [uid, borrowings, borrowingRepayments, today]
   );
 
   const deleteBorrowing = useCallback(
