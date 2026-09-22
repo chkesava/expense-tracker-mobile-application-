@@ -221,6 +221,39 @@ export interface AccountEntry {
   correlationId?: string;
 }
 
+/**
+ * A record that an account was checked against its real statement (SPENDLY-87).
+ *
+ * Audit metadata, never money. Reconciling changes no balance: a disagreement
+ * is corrected by an explicit `AccountEntry` the user chooses to record, and
+ * `adjustmentEntryId` points at it when they did. Keeping the two separate is
+ * the point — the reconciliation says what was found, the entry says what
+ * somebody decided to do about it.
+ */
+export interface AccountReconciliation {
+  id: string;
+  accountId: string;
+  /** Inclusive period the statement covered. */
+  fromDate: string;
+  toDate: string;
+  /** What the user read off their real statement. */
+  statementClosingBalance: number;
+  /** Spendly's own closing balance for the same period, at the time of check. */
+  ledgerClosingBalance: number;
+  /** Statement minus ledger. Zero when the two agreed. */
+  variance: number;
+  status: "balanced" | "variance";
+  matchedCount: number;
+  /** On the statement, absent from Spendly. */
+  missingCount: number;
+  /** In Spendly, absent from the statement. */
+  extraCount: number;
+  note?: string;
+  /** The account entry recorded to close the variance, when one was. */
+  adjustmentEntryId?: string;
+  createdAt?: unknown;
+}
+
 /** A movement of money between two non-credit accounts. It is never income or an expense. */
 export interface AccountTransfer {
   id: string;

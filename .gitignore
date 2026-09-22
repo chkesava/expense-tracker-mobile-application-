@@ -79,3 +79,6 @@ firestore-debug.log
 
 # Bundled Netlify function output (scripts/bundle-ganesh-summary-fn.js)
 netlify/functions-dist/
+
+# Local agent/plugin scratch config (not part of the app)
+.agents/

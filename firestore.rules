@@ -25,7 +25,8 @@ service cloud.firestore {
     // Personal data — users/{uid}/...
     //
     // Collections currently written by the app:
-    //   accountEntries, accountPayments, accounts, accountTransfers,
+    //   accountEntries, accountPayments, accountReconciliations, accounts,
+    //   accountTransfers,
     //   accountTypes, alerts, borrowingRepayments, borrowings, categories,
     //   categorizationRules, categoryBudgets, epfContributionEvents,
     //   epfContributions, epfEstablishments, epfProfile,
@@ -83,6 +84,17 @@ service cloud.firestore {
         return !d.keys().hasAny([key]) || boundedNonNeg(d.get(key, -1));
       }
 
+      // Signed twin of boundedNonNeg: a balance can legitimately be negative
+      // (an overdrawn account), and a variance is negative whenever Spendly
+      // thinks there is more money than the bank does.
+      function boundedNumber(value) {
+        return value is number && value > -1000000000 && value < 1000000000;
+      }
+
+      function optionalBoundedNumber(d, key) {
+        return !d.keys().hasAny([key]) || boundedNumber(d.get(key, 0));
+      }
+
       function optionalYmd(d, key) {
         return !d.keys().hasAny([key])
           || d.get(key, '') == null
@@ -99,6 +111,23 @@ service cloud.firestore {
       function personalMoneyWellFormed() {
         let d = request.resource.data;
         return boundedNonNeg(d.amount) && optionalYmd(d, 'date');
+      }
+
+      // SPENDLY-87. Audit metadata, not money: no `amount`, so
+      // personalMoneyWellFormed() does not apply. The balances and the
+      // variance are signed, and `status` is a closed set — a client must not
+      // invent a third state that the app would then have to interpret.
+      function accountReconciliationWellFormed() {
+        let d = request.resource.data;
+        return d.accountId is string
+          && d.accountId.size() > 0
+          && optionalYmd(d, 'fromDate')
+          && optionalYmd(d, 'toDate')
+          && optionalBoundedNumber(d, 'statementClosingBalance')
+          && optionalBoundedNumber(d, 'ledgerClosingBalance')
+          && optionalBoundedNumber(d, 'variance')
+          && (!d.keys().hasAny(['status'])
+              || d.get('status', '') in ['balanced', 'variance']);
       }
 
       function holdingWellFormed() {
@@ -244,6 +273,10 @@ service cloud.firestore {
       match /accountPayments/{id} {
         allow read, delete: if isOwner(uid);
         allow create, update: if isOwner(uid) && personalMoneyWellFormed();
+      }
+      match /accountReconciliations/{id} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && accountReconciliationWellFormed();
       }
       match /accountTransfers/{id} {
         allow read, delete: if isOwner(uid);
