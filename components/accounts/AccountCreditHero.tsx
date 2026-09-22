@@ -21,9 +21,13 @@ export function AccountCreditHero({
   availableCredit,
   creditLimit,
   daysRemaining,
+  openCycleStart,
+  nextResetDate,
   currency,
   payLabel,
   onPay,
+  onSetLimit,
+  isLoading,
 }: {
   /** Unbilled spend in the open cycle — resets when a statement is cut. */
   usedThisCycle: number;
@@ -37,9 +41,13 @@ export function AccountCreditHero({
   availableCredit: number;
   creditLimit: number;
   daysRemaining: number;
+  openCycleStart?: string;
+  nextResetDate?: string;
   currency: string;
   payLabel: string;
   onPay: () => void;
+  onSetLimit?: () => void;
+  isLoading?: boolean;
 }) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
@@ -85,27 +93,33 @@ export function AccountCreditHero({
           >
             UNBILLED (THIS CYCLE)
           </Text>
-          <View
-            style={[
-              styles.resetPill,
-              {
-                backgroundColor: isDark ? "rgba(15,23,42,0.55)" : "rgba(255,255,255,0.86)",
-              },
-            ]}
-          >
-            <Calendar size={12} color={theme.colors.mutedForeground} />
-            <Text style={[styles.resetText, { color: theme.colors.mutedForeground }]}>
-              Resets in {daysRemaining}d
-            </Text>
-          </View>
+          {!isLoading && (
+            <View
+              style={[
+                styles.resetPill,
+                {
+                  backgroundColor: isDark ? "rgba(15,23,42,0.55)" : "rgba(255,255,255,0.86)",
+                },
+              ]}
+            >
+              <Calendar size={12} color={theme.colors.mutedForeground} />
+              <Text style={[styles.resetText, { color: theme.colors.mutedForeground }]}>
+                Resets in {daysRemaining}d
+              </Text>
+            </View>
+          )}
         </View>
 
-        <Amount
-          value={usedThisCycle}
-          currency={currency}
-          ghostable
-          style={[styles.heroAmount, { color: usedColor }]}
-        />
+        {isLoading ? (
+          <View style={{ height: 40, width: 140, backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)", borderRadius: 8, marginVertical: 4 }} />
+        ) : (
+          <Amount
+            value={usedThisCycle}
+            currency={currency}
+            ghostable
+            style={[styles.heroAmount, { color: usedColor }]}
+          />
+        )}
 
         <View style={styles.dueRow}>
           <Text style={[styles.dueLabel, { color: theme.colors.mutedForeground }]}>
@@ -159,23 +173,42 @@ export function AccountCreditHero({
           />
         </View>
 
-        <View
-          style={[
-            styles.track,
-            { backgroundColor: isDark ? "rgba(15, 12, 28, 0.85)" : "rgba(15, 23, 42, 0.08)" },
-          ]}
-          accessibilityLabel={`${Math.round(utilizationRate)} percent of credit limit used`}
-        >
+        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8, marginTop: 4 }}>
+          <Text style={{ fontSize: 12, fontWeight: "600", color: theme.colors.mutedForeground }}>
+            {openCycleStart && nextResetDate ? `Cycle: ${openCycleStart.slice(5, 10).replace("-", "/")} — ${nextResetDate.slice(5, 10).replace("-", "/")}` : "Current cycle"}
+          </Text>
+          {creditLimit > 0 && (
+            <Text style={{ fontSize: 12, fontWeight: "800", color: theme.colors.foreground, fontVariant: ["tabular-nums"] }}>
+              {Math.round(utilizationRate)}% used
+            </Text>
+          )}
+        </View>
+
+        {creditLimit > 0 ? (
           <View
             style={[
-              styles.fill,
-              {
-                width: `${utilizationRate}%`,
-                backgroundColor: usedColor,
-              },
+              styles.track,
+              { backgroundColor: isDark ? "rgba(15, 12, 28, 0.85)" : "rgba(15, 23, 42, 0.08)" },
             ]}
-          />
-        </View>
+            accessibilityLabel={`${Math.round(utilizationRate)} percent of credit limit used`}
+          >
+            <View
+              style={[
+                styles.fill,
+                {
+                  width: `${utilizationRate}%`,
+                  backgroundColor: usedColor,
+                },
+              ]}
+            />
+          </View>
+        ) : (
+          <Pressable onPress={() => onSetLimit?.()} style={{ paddingVertical: 4 }}>
+            <Text style={{ fontSize: 13, color: theme.colors.primary, fontWeight: "600" }}>
+              + Set credit limit to track utilization
+            </Text>
+          </Pressable>
+        )}
 
         <View style={styles.metrics}>
           <View style={styles.metricCol}>

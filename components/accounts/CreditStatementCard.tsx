@@ -24,11 +24,13 @@ export function CreditStatementCard({
   currency,
   onAdd,
   onOpen,
+  isLoading,
 }: {
   bill: CreditCardBill | null;
   currency: string;
   onAdd: () => void;
   onOpen: () => void;
+  isLoading?: boolean;
 }) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
@@ -58,7 +60,20 @@ export function CreditStatementCard({
         STATEMENT BILL
       </Text>
 
-      {bill ? (
+      {isLoading ? (
+        <View style={styles.body}>
+          <View style={styles.details}>
+            <View style={styles.row}>
+              <View style={{ height: 16, width: 80, backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)", borderRadius: 4 }} />
+              <View style={{ height: 16, width: 60, backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)", borderRadius: 4 }} />
+            </View>
+            <View style={styles.row}>
+              <View style={{ height: 16, width: 100, backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)", borderRadius: 4 }} />
+              <View style={{ height: 16, width: 70, backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)", borderRadius: 4 }} />
+            </View>
+          </View>
+        </View>
+      ) : bill ? (
         <View style={styles.body}>
           <View style={styles.details}>
             <View style={styles.row}>
@@ -74,15 +89,28 @@ export function CreditStatementCard({
             </View>
             <View style={styles.row}>
               <Text style={[styles.label, { color: theme.colors.mutedForeground }]}>
-                Minimum due
+                Amount paid
               </Text>
               <Amount
-                value={bill.minimumDueAmount}
+                value={bill.amountPaid}
                 currency={currency}
                 ghostable
-                style={styles.value}
+                style={[styles.value, { color: ACCOUNT_GREEN }]}
               />
             </View>
+            {bill.minimumDueAmount > 0 ? (
+              <View style={styles.row}>
+                <Text style={[styles.label, { color: theme.colors.mutedForeground }]}>
+                  Minimum due
+                </Text>
+                <Amount
+                  value={bill.minimumDueAmount}
+                  currency={currency}
+                  ghostable
+                  style={styles.value}
+                />
+              </View>
+            ) : null}
             <View style={styles.row}>
               <Text style={[styles.label, { color: theme.colors.mutedForeground }]}>
                 Due
@@ -116,7 +144,12 @@ export function CreditStatementCard({
         </View>
       ) : (
         <View style={styles.addRow}>
-          <Text style={styles.add}>+ Add statement bill for reminders</Text>
+          <View style={{ flex: 1, paddingRight: 12 }}>
+            <Text style={styles.add}>No active statement</Text>
+            <Text style={{ fontSize: 13, color: theme.colors.mutedForeground, marginTop: 4 }}>
+              Statements will appear here when generated. Tap to add manually.
+            </Text>
+          </View>
           <ChevronRight size={18} color={theme.colors.mutedForeground} />
         </View>
       )}
