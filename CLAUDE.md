@@ -13,7 +13,14 @@ For the Spendly Accounts Intelligence & Statement Suite epic (`SPENDLY-78`):
   and the user explicitly requests the final merge.
 - Do not mark tickets Done while their changes exist only on `accounts-v2`;
   they are shipped only after the final merge reaches `main`.
-- SPENDLY-81 and SPENDLY-82 are complete; continue with SPENDLY-83.
+
+Required ticket order unless the user explicitly changes it:
+
+1. Foundation: SPENDLY-81 (complete), SPENDLY-82 (complete), SPENDLY-83,
+   SPENDLY-84.
+2. Account intelligence: SPENDLY-80, SPENDLY-85, SPENDLY-86, SPENDLY-90.
+3. Statements and reconciliation: SPENDLY-79, SPENDLY-87.
+4. Context and organization: SPENDLY-88, SPENDLY-89, SPENDLY-91.
 
 ## Scope
 

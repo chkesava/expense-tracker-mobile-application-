@@ -16,8 +16,26 @@ The Accounts Intelligence & Statement Suite epic (`SPENDLY-78`) uses
   complete and the user explicitly requests the final epic merge.
 - A ticket merged only into `accounts-v2` is not shipped to `main`; keep Jira
   out of Done until the final integration reaches `main`.
-- Current sequence after completed SPENDLY-81 and SPENDLY-82 starts with
-  SPENDLY-83.
+
+Follow this ticket order unless the user explicitly changes it:
+
+1. Foundation and transaction experience:
+   - SPENDLY-81 Running balance (complete)
+   - SPENDLY-82 Advanced filters (complete)
+   - SPENDLY-83 Search
+   - SPENDLY-84 Monthly statement summary
+2. Derived account intelligence:
+   - SPENDLY-80 Health and overview metrics
+   - SPENDLY-85 Spending insights
+   - SPENDLY-86 Balance trend/history
+   - SPENDLY-90 Activity statistics
+3. Statement and reconciliation workflows:
+   - SPENDLY-79 PDF/CSV statement export
+   - SPENDLY-87 Bank-account reconciliation
+4. Supporting account context and final organization:
+   - SPENDLY-88 Documents and attachments
+   - SPENDLY-89 Notes
+   - SPENDLY-91 Action center
 
 # Phase Delivery Protocol
 After completing every phase:
