@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { AlertTriangle, BadgeCheck, Percent } from "lucide-react-native";
 
@@ -94,12 +94,11 @@ export function EpfBalanceTab({ establishment }: { establishment: EpfEstablishme
     [reconciliations, establishment.id]
   );
 
-  // Recompute once per mount, after the data has loaded. The deterministic id
-  // makes a redundant run a no-op write, so this cannot accumulate entries.
-  const recomputed = useRef(false);
+  // Recompute after load and whenever this establishment's ledger changes.
+  // Catch-up on the dashboard does the same; this covers a reversal that
+  // happens while Balance is already open. Writes are idempotent.
   useEffect(() => {
-    if (loading || recomputed.current || contributions.length === 0) return;
-    recomputed.current = true;
+    if (loading) return;
     void recomputeInterest({
       establishmentId: establishment.id,
       contributions,

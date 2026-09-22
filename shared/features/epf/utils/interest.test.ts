@@ -7,6 +7,8 @@ import {
   buildInterestEntry,
   creditableYears,
   interestEntryId,
+  interestInputSignature,
+  staleInterestEntryIds,
   interestForFinancialYear,
   interestSchedule,
   monthlyClosingBalances,
@@ -322,6 +324,86 @@ describe("creditableYears and buildInterestEntry", () => {
     expect(entry.rate).toBe(0.0825);
     expect(entry.basis).toBe("monthlyRunningBalance");
     expect(entry.establishmentId).toBe("est-a");
+  });
+});
+
+describe("staleInterestEntryIds", () => {
+  it("returns stored years that are no longer creditable", () => {
+    const ids = staleInterestEntryIds(
+      [
+        { id: "est-a_2023-24", establishmentId: "est-a", financialYear: "2023-24" },
+        { id: "est-a_2024-25", establishmentId: "est-a", financialYear: "2024-25" },
+        { id: "est-b_2023-24", establishmentId: "est-b", financialYear: "2023-24" },
+      ],
+      "est-a",
+      ["2023-24"]
+    );
+    expect(ids).toEqual(["est-a_2024-25"]);
+  });
+
+  it("returns every year for the establishment when none are creditable", () => {
+    expect(
+      staleInterestEntryIds(
+        [{ id: "est-a_2023-24", establishmentId: "est-a", financialYear: "2023-24" }],
+        "est-a",
+        []
+      )
+    ).toEqual(["est-a_2023-24"]);
+  });
+});
+
+describe("interestInputSignature", () => {
+  it("changes when a contribution, transfer, or reconciliation for that establishment changes", () => {
+    const base = {
+      establishmentId: "est-a",
+      contributions: [contribution("2023-04", 500)],
+      transfers: [transfer()],
+      reconciliations: [
+        { id: "r1", establishmentId: "est-a", date: "2026-09-12", adjustmentAmount: 100 },
+      ],
+    };
+    const original = interestInputSignature(base);
+    expect(
+      interestInputSignature({
+        ...base,
+        contributions: [contribution("2023-04", 500, { status: "reversed" })],
+      })
+    ).not.toBe(original);
+    expect(
+      interestInputSignature({
+        ...base,
+        transfers: [transfer({ reversedBy: "t2" })],
+      })
+    ).not.toBe(original);
+    expect(
+      interestInputSignature({
+        ...base,
+        reconciliations: [
+          { id: "r1", establishmentId: "est-a", date: "2026-09-12", adjustmentAmount: 200 },
+        ],
+      })
+    ).not.toBe(original);
+  });
+
+  it("ignores another establishment's rows", () => {
+    const left = interestInputSignature({
+      establishmentId: "est-a",
+      contributions: [contribution("2023-04", 500)],
+      transfers: [],
+      reconciliations: [],
+    });
+    const right = interestInputSignature({
+      establishmentId: "est-a",
+      contributions: [
+        contribution("2023-04", 500),
+        contribution("2023-04", 999, { id: "est-b_2023-04", establishmentId: "est-b" }),
+      ],
+      transfers: [],
+      reconciliations: [
+        { id: "r-b", establishmentId: "est-b", date: "2026-09-12", adjustmentAmount: 50 },
+      ],
+    });
+    expect(left).toBe(right);
   });
 });
 

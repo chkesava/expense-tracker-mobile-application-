@@ -11,12 +11,13 @@
  * dependency.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   collection,
   doc,
   onSnapshot,
   serverTimestamp,
+  setDoc,
   writeBatch,
 } from "firebase/firestore";
 
@@ -45,10 +46,12 @@ import {
   interestEntryId,
   interestSchedule,
   normalizeInterestEntry,
+  staleInterestEntryIds,
 } from "@/shared/features/epf/utils/interest";
 import {
   buildReconciliation,
   normalizeReconciliation,
+  reconciliationDocId,
   type EpfReconciliationInput,
 } from "@/shared/features/epf/utils/reconciliation";
 import { financialYearOfMonth } from "@/shared/utils/financialYear";
@@ -63,6 +66,8 @@ export function useEpfInterest(options?: { enabled?: boolean }) {
   const [interestEntries, setInterestEntries] = useState<EpfInterestEntry[]>([]);
   const [reconciliations, setReconciliations] = useState<EpfReconciliation[]>([]);
   const [interestLoading, setInterestLoading] = useState(true);
+  const interestEntriesRef = useRef(interestEntries);
+  interestEntriesRef.current = interestEntries;
   const {
     error: interestError,
     setError: setInterestError,
@@ -164,7 +169,12 @@ export function useEpfInterest(options?: { enabled?: boolean }) {
         throughFinancialYear: financialYearOfMonth(epfCurrentMonth()),
       });
       const years = creditableYears(schedule);
-      if (years.length === 0) return 0;
+      const staleIds = staleInterestEntryIds(
+        interestEntriesRef.current,
+        args.establishmentId,
+        years.map((year) => year.financialYear)
+      );
+      if (years.length === 0 && staleIds.length === 0) return 0;
 
       try {
         const batch = writeBatch(db);
@@ -185,6 +195,11 @@ export function useEpfInterest(options?: { enabled?: boolean }) {
             { merge: true }
           );
         }
+        for (const staleId of staleIds) {
+          batch.delete(
+            doc(db, "users", uid, EPF_INTEREST_ENTRIES_COLLECTION, staleId)
+          );
+        }
         await commitWrite(() => batch.commit(), { label: "EPF interest" });
         return years.length;
       } catch (err) {
@@ -198,9 +213,9 @@ export function useEpfInterest(options?: { enabled?: boolean }) {
   /**
    * Record what EPFO actually showed.
    *
-   * Append-only: a new document every time, so repeated reconciliations build a
-   * history rather than overwriting each other. The adjustment moves the
-   * balance; no contribution row is touched.
+   * One document per establishment per date. Re-recording the same passbook
+   * date overwrites the variance instead of applying it twice. The adjustment
+   * moves the balance; no contribution row is touched.
    */
   const recordReconciliation = useCallback(
     async (input: EpfReconciliationInput): Promise<boolean> => {
@@ -211,18 +226,24 @@ export function useEpfInterest(options?: { enabled?: boolean }) {
       }
 
       try {
-        const ref = doc(collection(db, "users", uid, EPF_RECONCILIATIONS_COLLECTION));
+        const ref = doc(
+          db,
+          "users",
+          uid,
+          EPF_RECONCILIATIONS_COLLECTION,
+          reconciliationDocId(input.establishmentId, input.date)
+        );
         const outcome = await commitWrite(
           () =>
-            writeBatch(db)
-              .set(
-                ref,
-                withoutUndefined({
-                  ...buildReconciliation(input),
-                  createdAt: serverTimestamp(),
-                })
-              )
-              .commit(),
+            setDoc(
+              ref,
+              withoutUndefined({
+                ...buildReconciliation(input),
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp(),
+              }),
+              { merge: true }
+            ),
           { label: "EPF reconciliation" }
         );
         toast.success(writeSavedMessage(outcome, "Balance reconciled"));
