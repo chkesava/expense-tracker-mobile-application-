@@ -88,6 +88,13 @@ describe("personal tree", () => {
     "holdings",
     "creditCardBills",
     "borrowings",
+    "borrowingRepayments",
+    "receivables",
+    "receivableRepayments",
+    "categoryBudgets",
+    "financialGoals",
+    "spaces",
+    "portfolioSettings",
     "sipPlans",
   ];
   const moneyCollections = [
@@ -108,6 +115,9 @@ describe("personal tree", () => {
     "holdings",
     "creditCardBills",
     "borrowings",
+    "receivables",
+    "financialGoals",
+    "portfolioSettings",
     "sipPlans",
   ];
   const schemalessCollections = collections.filter(
@@ -171,6 +181,11 @@ describe("personal tree", () => {
     it(`owner lists ${name}`, async () => {
       const db = env.authenticatedContext(OWNER).firestore();
       await assertSucceeds(getDocs(collection(db, "users", OWNER, name)));
+    });
+
+    it(`a stranger cannot list the owner's ${name}`, async () => {
+      const db = env.authenticatedContext(OTHER).firestore();
+      await assertFails(getDocs(collection(db, "users", OWNER, name)));
     });
   }
 
@@ -291,6 +306,48 @@ describe("personal tree", () => {
         remainingAmount: 12000,
         dueDate: "2026-10-05",
         statementDate: "2026-09-20",
+      })
+    );
+  });
+
+  it("owner writes a well-formed receivable", async () => {
+    const db = env.authenticatedContext(OWNER).firestore();
+    await assertSucceeds(
+      addDoc(collection(db, "users", OWNER, "receivables"), {
+        originalAmount: 5000,
+        outstandingAmount: 5000,
+        totalReceived: 0,
+        lentDate: "2026-09-17",
+      })
+    );
+  });
+
+  it("owner cannot write a negative receivable originalAmount", async () => {
+    const db = env.authenticatedContext(OWNER).firestore();
+    await assertFails(
+      addDoc(collection(db, "users", OWNER, "receivables"), {
+        originalAmount: -1,
+        lentDate: "2026-09-17",
+      })
+    );
+  });
+
+  it("owner writes a well-formed financial goal", async () => {
+    const db = env.authenticatedContext(OWNER).firestore();
+    await assertSucceeds(
+      addDoc(collection(db, "users", OWNER, "financialGoals"), {
+        targetAmount: 100000,
+        currentAmount: 0,
+      })
+    );
+  });
+
+  it("owner cannot write a negative financial-goal target", async () => {
+    const db = env.authenticatedContext(OWNER).firestore();
+    await assertFails(
+      addDoc(collection(db, "users", OWNER, "financialGoals"), {
+        targetAmount: -1,
+        currentAmount: 0,
       })
     );
   });
