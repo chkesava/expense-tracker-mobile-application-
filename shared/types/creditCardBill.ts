@@ -40,6 +40,15 @@ export type CreditCardBill = {
   nextReminderAt?: string;
   /** Linked AccountPayment ids applied to this bill (optional audit). */
   paymentIds?: string[];
+  /**
+   * SPENDLY-99: set when the user confirmed a recalculation of a settled
+   * statement. The automatic refresh pass never touches PAID/CANCELLED bills,
+   * so a correction here is always deliberate and is stamped rather than
+   * applied silently.
+   */
+  recalculatedAt?: string;
+  /** Statement amount this bill carried before the last recalculation. */
+  previousStatementAmount?: number;
   createdAt?: unknown;
   updatedAt?: unknown;
 };

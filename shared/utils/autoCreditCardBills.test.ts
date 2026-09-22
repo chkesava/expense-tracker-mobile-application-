@@ -13,6 +13,7 @@ import {
   collectAutoCreditCardBillRefreshPatches,
   findDuplicateCreditCardBills,
   previewClosedCycleCreditCardBill,
+  previewSettledAutoBillRecalculation,
 } from "./autoCreditCardBills";
 
 const creditCard: Account = {
@@ -709,5 +710,84 @@ describe("collectAutoCreditCardBillDrafts — staged-page race (SPENDLY-97)", ()
 
   it("writes fewer statements from a staged page than from full history", () => {
     expect(collect(stagedPage).length).toBeLessThan(collect(fullHistory).length);
+  });
+});
+
+describe("previewSettledAutoBillRecalculation (SPENDLY-99)", () => {
+  // The cycle closing 2026-08-15 runs 2026-07-16 → 2026-08-15.
+  const CYCLE_EXPENSES = [
+    expense("2026-07-20", 1000),
+    expense("2026-08-01", 500),
+  ];
+
+  const settledBill = {
+    id: "cc-slice_2026-08-15",
+    accountId: creditCard.id,
+    statementDate: "2026-08-15",
+    statementAmount: 1000, // understated — 500 was never counted
+    note: AUTO_CREDIT_CARD_BILL_NOTE,
+    status: "PAID" as const,
+  };
+
+  const preview = (bill: typeof settledBill, expenses = CYCLE_EXPENSES) =>
+    previewSettledAutoBillRecalculation({
+      bill,
+      account: creditCard,
+      typeName: "Credit Card",
+      expenses,
+      today: "2026-08-15",
+    });
+
+  it("reports the corrected amount and the delta for a settled auto bill", () => {
+    const result = preview(settledBill);
+    expect(result).not.toBeNull();
+    expect(result!.storedAmount).toBe(1000);
+    expect(result!.recomputedAmount).toBe(1500);
+    expect(result!.delta).toBe(500);
+    expect(result!.billingPeriodStart).toBe("2026-07-16");
+    expect(result!.billingPeriodEnd).toBe("2026-08-15");
+  });
+
+  it("returns null when the stored amount is already correct", () => {
+    expect(preview({ ...settledBill, statementAmount: 1500 })).toBeNull();
+  });
+
+  it("returns null for a manual statement", () => {
+    expect(preview({ ...settledBill, note: "Typed by hand" })).toBeNull();
+  });
+
+  it("returns null for an open bill — the automatic pass already repairs those", () => {
+    expect(preview({ ...settledBill, status: "OVERDUE" as never })).toBeNull();
+  });
+
+  it("covers a CANCELLED statement, which the automatic pass also skips", () => {
+    const result = preview({ ...settledBill, status: "CANCELLED" as never });
+    expect(result?.recomputedAmount).toBe(1500);
+  });
+
+  it("reports a negative delta when the cycle shrank", () => {
+    const result = preview({ ...settledBill, statementAmount: 2000 });
+    expect(result!.delta).toBe(-500);
+  });
+
+  it("matches a statement whose close date drifted within tolerance", () => {
+    const result = preview({ ...settledBill, statementDate: "2026-08-13" });
+    expect(result?.recomputedAmount).toBe(1500);
+  });
+
+  it("does not match a statement from an unrelated close date", () => {
+    expect(preview({ ...settledBill, statementDate: "2026-08-02" })).toBeNull();
+  });
+
+  it("ignores a bill belonging to another card", () => {
+    expect(preview({ ...settledBill, accountId: "other-card" })).toBeNull();
+  });
+
+  it("never mutates its inputs", () => {
+    const expenses = [...CYCLE_EXPENSES];
+    const bill = { ...settledBill };
+    preview(bill, expenses);
+    expect(bill).toEqual(settledBill);
+    expect(expenses).toEqual(CYCLE_EXPENSES);
   });
 });

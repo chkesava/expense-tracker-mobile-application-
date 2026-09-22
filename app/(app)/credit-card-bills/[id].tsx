@@ -13,7 +13,11 @@ import { useAccounts } from "@/hooks/useAccounts";
 import { useAccountPayments } from "@/hooks/useAccountPayments";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
 import { useCreditCardBills } from "@/hooks/useCreditCardBills";
+import { appDialog } from "@/lib/appDialog";
+import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
+import { formatAmount } from "@/shared/utils/formatCurrency";
+import { useSettings } from "@/providers/SettingsProvider";
 import { formatCardLabel } from "@/services/creditCardBills/billNotificationCopy";
 import { isCashbackPayment } from "@/shared/types/expense";
 import { roundMoney } from "@/shared/utils/money";
@@ -27,12 +31,20 @@ export default function CreditCardBillDetailScreen() {
   const insets = useSafeAreaInsets();
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
-  const { bills, loading: billsLoading, snoozeBillReminder } = useCreditCardBills();
+  const {
+    bills,
+    loading: billsLoading,
+    snoozeBillReminder,
+    previewBillRecalculation,
+    recalculateBill,
+  } = useCreditCardBills();
   const { accounts } = useAccounts();
   const { accountTypes } = useAccountTypes();
   const { payments } = useAccountPayments();
+  const { settings } = useSettings();
   const [payOpen, setPayOpen] = useState(false);
   const [markPaidOpen, setMarkPaidOpen] = useState(false);
+  const [recalculating, setRecalculating] = useState(false);
 
   const bill = useMemo(() => bills.find((b) => b.id === id), [bills, id]);
   const account = useMemo(
@@ -63,6 +75,54 @@ export default function CreditCardBillDetailScreen() {
       )
     );
   }, [bill, payments]);
+
+  /**
+   * SPENDLY-99: null unless this is a settled auto statement whose cycle now
+   * sums to something else. Pure — the preview never writes, and it returns
+   * null while the expense ledger is still the staged first-paint page, so a
+   * truncated read can never be offered as a "correction" (SPENDLY-97).
+   */
+  const recalculation = useMemo(
+    () => (bill ? previewBillRecalculation(bill.id) : null),
+    [bill, previewBillRecalculation]
+  );
+
+  const confirmRecalculate = () => {
+    if (!bill || !recalculation) return;
+    const owesMore = recalculation.delta > 0;
+    const currency = bill.currency || settings.currency || "INR";
+    appDialog.show({
+      title: "Recalculate this statement?",
+      message:
+        `Recorded ${formatAmount(recalculation.storedAmount, currency)}\n` +
+        `Recalculated ${formatAmount(recalculation.recomputedAmount, currency)}\n\n` +
+        (owesMore
+          ? "The corrected amount is higher than what was paid, so this bill " +
+            "will no longer show as settled and may remind you again."
+          : "The corrected amount is covered by what was already paid, so " +
+            "this bill stays settled."),
+      buttons: [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Recalculate",
+          onPress: () => {
+            setRecalculating(true);
+            void recalculateBill(bill.id)
+              .then((ok) => {
+                toast[ok ? "success" : "error"](
+                  ok ? "Statement recalculated" : "Could not recalculate"
+                );
+              })
+              .catch((err) => {
+                logError("creditCardBills.recalculate", err);
+                toast.error(friendlyErrorMessage(err));
+              })
+              .finally(() => setRecalculating(false));
+          },
+        },
+      ],
+    });
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
@@ -183,6 +243,45 @@ export default function CreditCardBillDetailScreen() {
                 Remind Me Later
               </Button>
             </View>
+          ) : null}
+
+          {recalculation ? (
+            <Card>
+              <View style={{ gap: 10 }}>
+                <Text
+                  style={{
+                    color: theme.colors.foreground,
+                    fontWeight: "700",
+                    fontSize: theme.typography.md,
+                  }}
+                >
+                  This statement looks out of date
+                </Text>
+                <Text
+                  style={{
+                    color: theme.colors.mutedForeground,
+                    fontSize: theme.typography.sm,
+                  }}
+                >
+                  Spend for this cycle now adds up to a different total. Settled
+                  statements are never corrected automatically, so this is only
+                  applied if you confirm it.
+                </Text>
+                <AmountRow label="Recorded" value={recalculation.storedAmount} />
+                <AmountRow
+                  label="Recalculated"
+                  value={recalculation.recomputedAmount}
+                />
+                <Button
+                  variant="outline"
+                  size="lg"
+                  disabled={recalculating}
+                  onPress={() => confirmRecalculate()}
+                >
+                  {recalculating ? "Recalculating…" : "Recalculate statement"}
+                </Button>
+              </View>
+            </Card>
           ) : null}
         </ScrollView>
       )}
