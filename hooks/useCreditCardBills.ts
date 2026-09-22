@@ -13,6 +13,9 @@ export function useCreditCardBills() {
     recordBillPayment: ctx.recordBillPayment,
     markBillPaid: ctx.markBillPaid,
     cancelBill: ctx.cancelBill,
+    /** SPENDLY-99: settled-statement correction. Preview is pure. */
+    previewBillRecalculation: ctx.previewBillRecalculation,
+    recalculateBill: ctx.recalculateBill,
     snoozeBillReminder: ctx.snoozeBillReminder,
     refreshReminderSchedules: ctx.refreshReminderSchedules,
   };

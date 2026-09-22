@@ -266,7 +266,7 @@ type RefreshableBill = Pick<
 >;
 
 /** How far a stored close date may drift and still be re-dated in place. */
-const REDATE_TOLERANCE_DAYS = 3;
+export const REDATE_TOLERANCE_DAYS = 3;
 
 function isAutoCreated(bill: Pick<CreditCardBill, "note">): boolean {
   return (bill.note || "") === AUTO_CREDIT_CARD_BILL_NOTE;
@@ -350,4 +350,103 @@ export function collectAutoCreditCardBillRefreshPatches(input: {
   }
 
   return patches;
+}
+
+export type SettledBillRecalculation = {
+  billId: string;
+  /** What the statement says today. */
+  storedAmount: number;
+  /** What the cycle sums to against the full expense history. */
+  recomputedAmount: number;
+  /** recomputed − stored. Positive means the user owes more than recorded. */
+  delta: number;
+  minimumDueAmount: number;
+  statementDate: string;
+  billingPeriodStart: string;
+  billingPeriodEnd: string;
+  dueDate: string;
+};
+
+type RecalculableBill = Pick<
+  CreditCardBill,
+  | "id"
+  | "accountId"
+  | "statementDate"
+  | "statementAmount"
+  | "note"
+  | "status"
+>;
+
+/** A statement the automatic refresh pass will never repair on its own. */
+export function isSettledAutoCreditCardBill(bill: RecalculableBill): boolean {
+  if (!bill.id) return false;
+  if (!isAutoCreated(bill)) return false;
+  return bill.status === "PAID" || bill.status === "CANCELLED";
+}
+
+/**
+ * SPENDLY-99: recompute one settled auto statement against full history.
+ *
+ * `collectAutoCreditCardBillRefreshPatches` deliberately skips PAID and
+ * CANCELLED bills — rewriting a settled amount behind the user's back desyncs
+ * `amountPaid`/`status` and can resurrect reminders (SPENDLY-38 §6.4). This is
+ * the side-effect-free half of the user-confirmed correction: it says what the
+ * amount *would* become and never writes.
+ *
+ * Returns null when the bill is not a settled auto statement, when no closed
+ * cycle within `cycles` matches it, or when the stored amount is already right.
+ *
+ * The caller must pass the complete expense history. A staged first-paint page
+ * would understate the recomputation — the very bug that created most of these
+ * wrong statements (SPENDLY-97).
+ */
+export function previewSettledAutoBillRecalculation(input: {
+  bill: RecalculableBill;
+  account: Account;
+  typeName?: string;
+  expenses: Expense[];
+  today: string;
+  /** How many closed cycles back to search for this bill's window. */
+  cycles?: number;
+}): SettledBillRecalculation | null {
+  const { bill, account } = input;
+  if (bill.accountId !== account.id) return null;
+  if (!isSettledAutoCreditCardBill(bill)) return null;
+
+  const depth = Math.max(1, input.cycles ?? AUTO_CREDIT_CARD_BILL_BACKFILL_CYCLES);
+
+  for (let cyclesAgo = 0; cyclesAgo < depth; cyclesAgo += 1) {
+    const draft = previewClosedCycleCreditCardBill({
+      account,
+      typeName: input.typeName,
+      expenses: input.expenses,
+      today: input.today,
+      cyclesAgo,
+    });
+    if (!draft?.billingPeriodStart || !draft.billingPeriodEnd) continue;
+
+    // Same match rule as the automatic pass: exact close date, else a close
+    // date that drifted within tolerance (the bill day was edited).
+    const exact = draft.statementDate === bill.statementDate;
+    const nearby =
+      Math.abs(daysBetweenDateKeys(bill.statementDate, draft.statementDate)) <=
+      REDATE_TOLERANCE_DAYS;
+    if (!exact && !nearby) continue;
+
+    if (draft.statementAmount === bill.statementAmount) return null;
+
+    return {
+      billId: bill.id,
+      storedAmount: bill.statementAmount,
+      recomputedAmount: draft.statementAmount,
+      delta: roundMoney(draft.statementAmount - bill.statementAmount),
+      minimumDueAmount: draft.minimumDueAmount,
+      statementDate: draft.statementDate,
+      billingPeriodStart: draft.billingPeriodStart,
+      billingPeriodEnd: draft.billingPeriodEnd,
+      dueDate: draft.dueDate,
+    };
+  }
+
+  return null;
 }

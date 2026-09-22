@@ -54,6 +54,8 @@ import {
   canRunAutoCreditCardBillGeneration,
   collectAutoCreditCardBillDrafts,
   collectAutoCreditCardBillRefreshPatches,
+  previewSettledAutoBillRecalculation,
+  type SettledBillRecalculation,
 } from "@/shared/utils/autoCreditCardBills";
 import { collectCreditBillAllocationPatches } from "@/shared/utils/creditCardLedger";
 import { createAutoCreditCardBill } from "@/services/creditCardBills/autoBill";
@@ -95,6 +97,14 @@ type CreditCardBillsContextType = {
     }
   ) => Promise<boolean>;
   cancelBill: (billId: string) => Promise<boolean>;
+  /**
+   * SPENDLY-99: what a settled auto statement would become if recomputed
+   * against full history, or null when there is nothing to correct. Pure —
+   * writes nothing, so the UI can show the before/after before asking.
+   */
+  previewBillRecalculation: (billId: string) => SettledBillRecalculation | null;
+  /** Apply a previewed recalculation. Only ever called on user confirmation. */
+  recalculateBill: (billId: string) => Promise<boolean>;
   snoozeBillReminder: (billId: string, days?: number) => Promise<boolean>;
   refreshReminderSchedules: () => Promise<void>;
 };
@@ -703,6 +713,81 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
     [user, bills, accounts, accountTypes, timezone, globalPrefs.enabled]
   );
 
+  // SPENDLY-99: the automatic refresh pass never repairs a PAID or CANCELLED
+  // statement — rewriting a settled amount silently desyncs amountPaid/status
+  // (SPENDLY-38 §6.4). This is the user-confirmed path instead. Preview is
+  // pure; only `recalculateBill` writes, and only when the user says so.
+  const previewBillRecalculation = useCallback(
+    (billId: string): SettledBillRecalculation | null => {
+      // A staged first-paint page would understate the recomputation — the
+      // very bug that produced most of these wrong statements (SPENDLY-97).
+      if (!expensesComplete) return null;
+      const bill = bills.find((b) => b.id === billId);
+      if (!bill) return null;
+      const account = accounts.find((a) => a.id === bill.accountId);
+      if (!account) return null;
+      return previewSettledAutoBillRecalculation({
+        bill,
+        account,
+        typeName: accountTypes.find((t) => t.id === account.typeId)?.name,
+        expenses,
+        today: todayDateKey(timezone),
+      });
+    },
+    [expensesComplete, bills, accounts, accountTypes, expenses, timezone]
+  );
+
+  const recalculateBill = useCallback(
+    async (billId: string): Promise<boolean> => {
+      const db = getFirestoreDb();
+      if (!user || !db) return false;
+      const existing = bills.find((b) => b.id === billId);
+      const patch = previewBillRecalculation(billId);
+      if (!existing || !patch) return false;
+
+      // Full re-derive: if the corrected statement exceeds what was paid the
+      // bill stops being PAID and reminders follow the normal rules. Slots
+      // only run 30 days past the due date, so an old cycle schedules nothing.
+      const derived = refreshDerivedFields(
+        { ...existing, statementAmount: patch.recomputedAmount },
+        timezone,
+        globalPrefs.enabled
+      );
+
+      // Dates are deliberately left alone. The user is correcting an amount;
+      // re-dating a settled statement is a different operation.
+      await commitWrite(
+        () =>
+          updateDoc(doc(db, "users", user.uid, "creditCardBills", billId), {
+            statementAmount: patch.recomputedAmount,
+            minimumDueAmount: patch.minimumDueAmount,
+            status: derived.status,
+            remainingAmount: derived.remainingAmount,
+            nextReminderAt: derived.nextReminderAt ?? null,
+            recalculatedAt: new Date().toISOString(),
+            previousStatementAmount: patch.storedAmount,
+            updatedAt: serverTimestamp(),
+          }),
+        { label: "credit card bill" }
+      );
+
+      if (derived.status === "PAID" || derived.status === "CANCELLED") {
+        await cancelBillReminders(billId);
+      } else {
+        void refreshReminderSchedules();
+      }
+      return true;
+    },
+    [
+      user,
+      bills,
+      previewBillRecalculation,
+      timezone,
+      globalPrefs.enabled,
+      refreshReminderSchedules,
+    ]
+  );
+
   const applyPaymentToBill = useCallback(
     async (
       billId: string,
@@ -827,6 +912,8 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
       recordBillPayment,
       markBillPaid,
       cancelBill,
+      previewBillRecalculation,
+      recalculateBill,
       snoozeBillReminder,
       refreshReminderSchedules,
     }),
@@ -839,6 +926,8 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
       recordBillPayment,
       markBillPaid,
       cancelBill,
+      previewBillRecalculation,
+      recalculateBill,
       snoozeBillReminder,
       refreshReminderSchedules,
     ]
