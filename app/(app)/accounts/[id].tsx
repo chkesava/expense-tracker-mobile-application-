@@ -10,6 +10,8 @@ import {
 import { FlashList } from "@shopify/flash-list";
 import { Download, Scale as ScaleIcon } from "lucide-react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import * as WebBrowser from "expo-web-browser";
+import * as DocumentPicker from "expo-document-picker";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AccountBalanceCard } from "@/components/accounts/AccountBalanceCard";
@@ -22,6 +24,8 @@ import { PastBillingCycles } from "@/components/accounts/PastBillingCycles";
 import { MonthlyStatementSummary } from "@/components/accounts/MonthlyStatementSummary";
 import { AccountNotesCard } from "@/components/accounts/AccountNotesCard";
 import { AccountNoteModal } from "@/components/accounts/AccountNoteModal";
+import { AccountDocumentsCard } from "@/components/accounts/AccountDocumentsCard";
+import { AccountDocumentModal } from "@/components/accounts/AccountDocumentModal";
 import { AccountHealthCard } from "@/components/accounts/AccountHealthCard";
 import { SpendingInsightsCard } from "@/components/accounts/SpendingInsightsCard";
 import { BalanceTrendCard } from "@/components/accounts/BalanceTrendCard";
@@ -69,6 +73,7 @@ import { useSettings } from "@/providers/SettingsProvider";
 import { OPEN_BILL_STATUSES } from "@/shared/types/creditCardBill";
 import type {
   AccountActivity,
+  AccountDocument,
   AccountNote,
   Expense,
   Income,
@@ -103,6 +108,19 @@ import {
   selectAccountNotes,
   type AccountNoteDraft,
 } from "@/shared/utils/accountNotes";
+import {
+  addAccountDocument,
+  deleteAccountDocument,
+  listAccountDocuments,
+  retryAccountDocumentUpload,
+  updateAccountDocumentMeta,
+  type PickedDocumentFile,
+} from "@/services/accounts/accountDocumentsStore";
+import { createDocumentSignedUrl } from "@/services/accounts/spendlyFilesClient";
+import {
+  ALLOWED_DOCUMENT_TYPES,
+  selectAccountDocuments,
+} from "@/shared/utils/accountDocuments";
 import { computeAccountSpendingInsights } from "@/shared/utils/accountSpendingInsights";
 import { computeAccountActivityStats } from "@/shared/utils/accountActivityStats";
 import {
@@ -581,6 +599,195 @@ export default function AccountDetailScreen() {
       );
     },
     [id, refreshNotes, user?.uid]
+  );
+
+  // --- Account documents (SPENDLY-88) -------------------------------------
+  //
+  // Metadata lives in Firestore; the bytes live in the private `spendly-files`
+  // bucket, reachable only through a signed URL minted by the Edge Function
+  // after it verifies ownership. Nothing here holds a URL: they expire in
+  // minutes, so one is fetched at the moment a document is opened.
+  //
+  // Like notes, documents are non-financial. Nothing below feeds `activities`,
+  // `monthSummary` or any derived figure, and the statement export in
+  // SPENDLY-79 builds from activities and never reads this collection -- which
+  // is what "do not embed documents in statement PDFs" comes to in practice.
+  const [documents, setDocuments] = useState<AccountDocument[]>([]);
+  const [documentsLoading, setDocumentsLoading] = useState(false);
+  const [busyDocumentId, setBusyDocumentId] = useState<string | undefined>();
+  const [isDocumentModalOpen, setIsDocumentModalOpen] = useState(false);
+  const [editingDocument, setEditingDocument] = useState<AccountDocument | undefined>();
+
+  const refreshDocuments = useCallback(async () => {
+    if (!user?.uid || !id) {
+      setDocuments([]);
+      return;
+    }
+    setDocumentsLoading(true);
+    try {
+      setDocuments(await listAccountDocuments(user.uid, id));
+    } catch (error) {
+      logWarning("accountDetail.listDocuments", error, { accountId: id });
+      setDocuments([]);
+    } finally {
+      setDocumentsLoading(false);
+    }
+  }, [id, user?.uid]);
+
+  useEffect(() => {
+    setDocuments([]);
+    setEditingDocument(undefined);
+    setIsDocumentModalOpen(false);
+    setBusyDocumentId(undefined);
+    void refreshDocuments();
+  }, [refreshDocuments]);
+
+  const accountDocuments = useMemo(
+    () => selectAccountDocuments(documents, id ?? ""),
+    [documents, id]
+  );
+
+  const onAddDocument = useCallback(
+    async (file: PickedDocumentFile, meta: { name: string; note: string }) => {
+      if (!user?.uid || !id) return;
+      setIsDocumentModalOpen(false);
+      setEditingDocument(undefined);
+      const result = await addAccountDocument(user.uid, id, file, meta);
+      // The metadata row exists either way, so the list is refreshed before the
+      // error is shown: a failed upload should appear as a retryable row, not
+      // vanish behind an alert.
+      await refreshDocuments();
+      if (result.ok) {
+        toast.success("Document uploaded");
+      } else if (result.error) {
+        appDialog.alert("Couldn't upload the document", result.error);
+      }
+    },
+    [id, refreshDocuments, user?.uid]
+  );
+
+  const onSaveDocumentMeta = useCallback(
+    async (meta: { name: string; note: string }) => {
+      if (!user?.uid || !editingDocument) return;
+      try {
+        await updateAccountDocumentMeta(user.uid, editingDocument.id, meta);
+        toast.success("Document updated");
+        setIsDocumentModalOpen(false);
+        setEditingDocument(undefined);
+        await refreshDocuments();
+      } catch (error) {
+        logWarning("accountDetail.updateDocument", error, { accountId: id });
+        appDialog.alert("Couldn't update the document", friendlyErrorMessage(error));
+      }
+    },
+    [editingDocument, id, refreshDocuments, user?.uid]
+  );
+
+  // Signed URLs are fetched per open rather than cached. They are bearer tokens
+  // for a bank statement, so holding one past the view that needs it only
+  // widens the window in which a leaked link still works.
+  const onOpenDocument = useCallback(
+    async (document: AccountDocument) => {
+      setBusyDocumentId(document.id);
+      try {
+        const signedUrl = await createDocumentSignedUrl(document.storagePath);
+        await WebBrowser.openBrowserAsync(signedUrl);
+      } catch (error) {
+        logWarning("accountDetail.openDocument", error, { accountId: id });
+        appDialog.alert("Couldn't open the document", friendlyErrorMessage(error));
+      } finally {
+        setBusyDocumentId(undefined);
+      }
+    },
+    [id]
+  );
+
+  // Retrying re-picks the file: the original pick's local URI may well be gone
+  // by now, and asking for it again is honest about what is being uploaded.
+  const onRetryDocument = useCallback(
+    (document: AccountDocument) => {
+      if (!user?.uid) return;
+      appDialog.alert(
+        "Retry this upload?",
+        "Choose the file again to finish storing it.",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Choose file",
+            onPress: () => {
+              void (async () => {
+                setBusyDocumentId(document.id);
+                try {
+                  const picked = await DocumentPicker.getDocumentAsync({
+                    type: [...ALLOWED_DOCUMENT_TYPES],
+                    copyToCacheDirectory: true,
+                    multiple: false,
+                  });
+                  if (picked.canceled || !picked.assets?.[0]) return;
+                  const asset = picked.assets[0];
+                  const result = await retryAccountDocumentUpload(user.uid, document, {
+                    uri: asset.uri,
+                    fileName: asset.name || document.fileName,
+                    mimeType: asset.mimeType || document.mimeType,
+                    size: asset.size ?? 0,
+                  });
+                  if (result.ok) {
+                    toast.success("Document uploaded");
+                  } else if (result.error) {
+                    appDialog.alert("Couldn't upload the document", result.error);
+                  }
+                  await refreshDocuments();
+                } catch (error) {
+                  logWarning("accountDetail.retryDocument", error, { accountId: id });
+                  appDialog.alert(
+                    "Couldn't upload the document",
+                    friendlyErrorMessage(error)
+                  );
+                } finally {
+                  setBusyDocumentId(undefined);
+                }
+              })();
+            },
+          },
+        ]
+      );
+    },
+    [id, refreshDocuments, user?.uid]
+  );
+
+  // Deleting removes the stored file as well as the record, so it asks first.
+  const onDeleteDocument = useCallback(
+    (document: AccountDocument) => {
+      if (!user?.uid) return;
+      appDialog.alert(
+        "Delete this document?",
+        `"${document.name}" and the stored file will be removed. This cannot be undone.`,
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Delete",
+            style: "destructive",
+            onPress: () => {
+              void (async () => {
+                setBusyDocumentId(document.id);
+                try {
+                  const result = await deleteAccountDocument(user.uid, document);
+                  if (result.ok) {
+                    toast.success("Document deleted");
+                  } else if (result.error) {
+                    appDialog.alert("Couldn't delete the document", result.error);
+                  }
+                  await refreshDocuments();
+                } finally {
+                  setBusyDocumentId(undefined);
+                }
+              })();
+            },
+          },
+        ]
+      );
+    },
+    [refreshDocuments, user?.uid]
   );
 
   // Saving a reconciliation records what was found. It writes one audit
@@ -1112,6 +1319,25 @@ export default function AccountDetailScreen() {
         />
       ) : null}
 
+      <AccountDocumentsCard
+        documents={accountDocuments}
+        loading={documentsLoading}
+        busyId={busyDocumentId}
+        onAdd={() => {
+          setEditingDocument(undefined);
+          setIsDocumentModalOpen(true);
+        }}
+        onOpen={(document) => {
+          void onOpenDocument(document);
+        }}
+        onEdit={(document) => {
+          setEditingDocument(document);
+          setIsDocumentModalOpen(true);
+        }}
+        onRetry={onRetryDocument}
+        onDelete={onDeleteDocument}
+      />
+
       <AccountNotesCard
         notes={accountNotes}
         loading={notesLoading}
@@ -1322,6 +1548,17 @@ export default function AccountDetailScreen() {
         buildStatement={buildStatementForPeriod}
         onSave={onSaveReconciliation}
         onRecordAdjustment={onRecordReconciliationAdjustment}
+      />
+
+      <AccountDocumentModal
+        isOpen={isDocumentModalOpen}
+        document={editingDocument}
+        onClose={() => {
+          setIsDocumentModalOpen(false);
+          setEditingDocument(undefined);
+        }}
+        onAdd={onAddDocument}
+        onSaveMeta={onSaveDocumentMeta}
       />
 
       <AccountNoteModal
