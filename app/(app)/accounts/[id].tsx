@@ -19,6 +19,7 @@ import { AddAccountEntryModal } from "@/components/accounts/AddAccountEntryModal
 import { EditAccountModal } from "@/components/accounts/EditAccountModal";
 import { PastBillingCycles } from "@/components/accounts/PastBillingCycles";
 import { MonthlyStatementSummary } from "@/components/accounts/MonthlyStatementSummary";
+import { AccountHealthCard } from "@/components/accounts/AccountHealthCard";
 import { PayCreditBillModal } from "@/components/accounts/PayCreditBillModal";
 import { RecordCashbackModal } from "@/components/accounts/RecordCashbackModal";
 import { CreditStatementCard } from "@/components/accounts/CreditStatementCard";
@@ -73,6 +74,11 @@ import {
   type AccountActivityFilters,
 } from "@/shared/utils/accountActivityFilters";
 import { searchAccountActivities } from "@/shared/utils/accountActivitySearch";
+import {
+  computeAccountHealthMetrics,
+  DEFAULT_ACCOUNT_HISTORY_WINDOW,
+  type AccountHistoryWindow,
+} from "@/shared/utils/accountHealth";
 import {
   accountMonthDateRange,
   listAccountActivityMonths,
@@ -135,6 +141,9 @@ export default function AccountDetailScreen() {
   );
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
+  const [historyWindow, setHistoryWindow] = useState<AccountHistoryWindow>(
+    DEFAULT_ACCOUNT_HISTORY_WINDOW
+  );
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
 
   useEffect(() => {
@@ -142,6 +151,7 @@ export default function AccountDetailScreen() {
     setIsFilterModalOpen(false);
     setSearchQuery("");
     setSelectedMonth(null);
+    setHistoryWindow(DEFAULT_ACCOUNT_HISTORY_WINDOW);
   }, [id]);
 
   // Same debounce the ledger screen uses: keep typing responsive without
@@ -313,6 +323,25 @@ export default function AccountDetailScreen() {
         (record) => record.activity
       ),
     [activityFilters, searchedActivities]
+  );
+
+  // Health looks across the account's whole history, so unlike the statement
+  // it must not use the card's cycle-scoped list — a 6-month window over one
+  // billing cycle would be meaningless.
+  const healthRecords = useMemo(
+    () =>
+      isCreditCard
+        ? enrichAccountActivities(allActivities, expenses, incomes, entries)
+        : filterableActivities,
+    [allActivities, entries, expenses, filterableActivities, incomes, isCreditCard]
+  );
+
+  const healthMetrics = useMemo(
+    () =>
+      computeAccountHealthMetrics(healthRecords, historyWindow, {
+        supportsRunningBalance: !isCreditCard,
+      }),
+    [healthRecords, historyWindow, isCreditCard]
   );
 
   // Built from the same (cycle-scoped, for cards) list the transactions below
@@ -677,6 +706,15 @@ export default function AccountDetailScreen() {
           onOpenCycle={onOpenBillingCycle}
         />
       ) : null}
+
+      <AccountHealthCard
+        metrics={healthMetrics}
+        currency={currency}
+        currentBalance={isCreditCard ? undefined : bankBalance}
+        currentBalanceLabel={isCreditCard ? "Outstanding" : "Current balance"}
+        window={historyWindow}
+        onWindowChange={setHistoryWindow}
+      />
 
       {statementMonths.length > 0 ? (
         <MonthlyStatementSummary
