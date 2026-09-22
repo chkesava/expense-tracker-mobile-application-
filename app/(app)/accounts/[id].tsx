@@ -22,6 +22,7 @@ import { MonthlyStatementSummary } from "@/components/accounts/MonthlyStatementS
 import { AccountHealthCard } from "@/components/accounts/AccountHealthCard";
 import { SpendingInsightsCard } from "@/components/accounts/SpendingInsightsCard";
 import { BalanceTrendCard } from "@/components/accounts/BalanceTrendCard";
+import { ActivityStatisticsCard } from "@/components/accounts/ActivityStatisticsCard";
 import { PayCreditBillModal } from "@/components/accounts/PayCreditBillModal";
 import { RecordCashbackModal } from "@/components/accounts/RecordCashbackModal";
 import { CreditStatementCard } from "@/components/accounts/CreditStatementCard";
@@ -77,6 +78,7 @@ import {
 } from "@/shared/utils/accountActivityFilters";
 import { searchAccountActivities } from "@/shared/utils/accountActivitySearch";
 import { computeAccountSpendingInsights } from "@/shared/utils/accountSpendingInsights";
+import { computeAccountActivityStats } from "@/shared/utils/accountActivityStats";
 import {
   buildAccountBalanceTrend,
   DEFAULT_BALANCE_TREND_PERIOD,
@@ -369,6 +371,13 @@ export default function AccountDetailScreen() {
   // previous-period comparison needs real months behind it.
   const spendingInsights = useMemo(
     () => computeAccountSpendingInsights(healthRecords, historyWindow),
+    [healthRecords, historyWindow]
+  );
+
+  // Shares the health window and the same full-history records, so the counts
+  // describe the same period as the metrics above them.
+  const activityStats = useMemo(
+    () => computeAccountActivityStats(healthRecords, historyWindow),
     [healthRecords, historyWindow]
   );
 
@@ -777,6 +786,8 @@ export default function AccountDetailScreen() {
         selectedCategory={selectedInsightCategory}
         onSelectCategory={onSelectInsightCategory}
       />
+
+      <ActivityStatisticsCard stats={activityStats} />
 
       {statementMonths.length > 0 ? (
         <MonthlyStatementSummary
