@@ -1,5 +1,30 @@
 # Ganesh Seva UI/UX Design Instructions
 
+## Spendly Epic Integration Strategy
+
+Use the same integration-branch strategy for financial epics:
+
+- SPENDLY-78 → `accounts-v2` (already started)
+- SPENDLY-101 → `credit-cards-v2` (**start only when epic is In Progress / user starts it**)
+- SPENDLY-102 → `ledger-v2` (**start only when epic is In Progress / user starts it**)
+
+Until the start gate is met for 101/102: do not create the integration branch,
+ticket branches, commits, or PRs for that epic.
+
+Ticket order and full rules:
+
+- [docs/SPENDLY-101-credit-cards-v2.md](docs/SPENDLY-101-credit-cards-v2.md)
+- [docs/SPENDLY-102-ledger-v2.md](docs/SPENDLY-102-ledger-v2.md)
+- Also summarized in `AGENTS.md`
+
+### Quick order (unless user changes it)
+
+**101 Credit Cards:** 100 → 103 → 105 → 107 → 108 → 104 → 106  
+(95/97/99 already Done)
+
+**102 Ledger:** 109 → 111 → 110 → 112 → 113  
+(confirm whether 114 duplicates 110 before implementing)
+
 ## Scope
 
 These instructions apply to **Ganesh Seva UI/UX work only**.
