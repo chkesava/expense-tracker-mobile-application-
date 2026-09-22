@@ -21,6 +21,7 @@ import { PastBillingCycles } from "@/components/accounts/PastBillingCycles";
 import { MonthlyStatementSummary } from "@/components/accounts/MonthlyStatementSummary";
 import { AccountHealthCard } from "@/components/accounts/AccountHealthCard";
 import { SpendingInsightsCard } from "@/components/accounts/SpendingInsightsCard";
+import { BalanceTrendCard } from "@/components/accounts/BalanceTrendCard";
 import { PayCreditBillModal } from "@/components/accounts/PayCreditBillModal";
 import { RecordCashbackModal } from "@/components/accounts/RecordCashbackModal";
 import { CreditStatementCard } from "@/components/accounts/CreditStatementCard";
@@ -76,6 +77,11 @@ import {
 } from "@/shared/utils/accountActivityFilters";
 import { searchAccountActivities } from "@/shared/utils/accountActivitySearch";
 import { computeAccountSpendingInsights } from "@/shared/utils/accountSpendingInsights";
+import {
+  buildAccountBalanceTrend,
+  DEFAULT_BALANCE_TREND_PERIOD,
+  type BalanceTrendPeriod,
+} from "@/shared/utils/accountBalanceTrend";
 import {
   computeAccountHealthMetrics,
   DEFAULT_ACCOUNT_HISTORY_WINDOW,
@@ -146,6 +152,9 @@ export default function AccountDetailScreen() {
   const [historyWindow, setHistoryWindow] = useState<AccountHistoryWindow>(
     DEFAULT_ACCOUNT_HISTORY_WINDOW
   );
+  const [trendPeriod, setTrendPeriod] = useState<BalanceTrendPeriod>(
+    DEFAULT_BALANCE_TREND_PERIOD
+  );
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
 
   useEffect(() => {
@@ -154,6 +163,7 @@ export default function AccountDetailScreen() {
     setSearchQuery("");
     setSelectedMonth(null);
     setHistoryWindow(DEFAULT_ACCOUNT_HISTORY_WINDOW);
+    setTrendPeriod(DEFAULT_BALANCE_TREND_PERIOD);
   }, [id]);
 
   // Same debounce the ledger screen uses: keep typing responsive without
@@ -344,6 +354,15 @@ export default function AccountDetailScreen() {
         supportsRunningBalance: !isCreditCard,
       }),
     [healthRecords, historyWindow, isCreditCard]
+  );
+
+  const balanceTrend = useMemo(
+    () =>
+      buildAccountBalanceTrend(healthRecords, trendPeriod, {
+        supportsRunningBalance: !isCreditCard,
+        today,
+      }),
+    [healthRecords, isCreditCard, today, trendPeriod]
   );
 
   // Shares the health window and the same full-history records: the
@@ -738,6 +757,18 @@ export default function AccountDetailScreen() {
         currentBalanceLabel={isCreditCard ? "Outstanding" : "Current balance"}
         window={historyWindow}
         onWindowChange={setHistoryWindow}
+      />
+
+      <BalanceTrendCard
+        trend={balanceTrend}
+        currency={currency}
+        period={trendPeriod}
+        onPeriodChange={setTrendPeriod}
+        unavailableReason={
+          isCreditCard
+            ? "A card's outstanding is a liability, not a running balance, so there is no balance to chart."
+            : "No balance history is available for this period yet."
+        }
       />
 
       <SpendingInsightsCard
