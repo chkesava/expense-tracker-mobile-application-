@@ -269,6 +269,72 @@ describe("account activity ledger", () => {
   });
 });
 
+describe("editing a transaction from the details screen", () => {
+  const bank: Account = {
+    id: "bank-1",
+    name: "Bank",
+    typeId: "bank-type",
+    openingBalance: 1000,
+    balanceInitialized: true,
+    balanceAsOfDate: "2026-06-01",
+  };
+  const wallet: Account = {
+    id: "wallet-1",
+    name: "Wallet",
+    typeId: "cash-type",
+    openingBalance: 500,
+    balanceInitialized: true,
+    balanceAsOfDate: "2026-06-01",
+  };
+  const groceries: Expense = {
+    id: "exp-1",
+    amount: 200,
+    date: "2026-06-05",
+    month: "2026-06",
+    category: "Food",
+    accountId: bank.id,
+    note: "Groceries",
+    createdAt: "2026-06-05T09:00:00.000Z",
+  };
+  const salary: Income = {
+    id: "inc-1",
+    amount: 300,
+    date: "2026-06-03",
+    month: "2026-06",
+    source: "Salary",
+    accountId: bank.id,
+    note: "June salary",
+    createdAt: "2026-06-03T09:00:00.000Z",
+  };
+
+  it("recomputes balance and running balance after an amount edit", () => {
+    const before = buildAccountActivities(bank, "Bank", [groceries], [salary]);
+    expect(before.map((row) => row.runningBalance)).toEqual([1100, 1300]);
+
+    const edited = { ...groceries, amount: 450 };
+    const after = buildAccountActivities(bank, "Bank", [edited], [salary]);
+    expect(after.map((row) => row.runningBalance)).toEqual([850, 1300]);
+    expect(computeBankBalance(bank, [edited], [salary])).toBe(850);
+  });
+
+  it("moves the effect to the new account when the account is changed", () => {
+    const moved = { ...groceries, accountId: wallet.id };
+
+    expect(computeBankBalance(bank, [moved], [salary])).toBe(1300);
+    expect(computeBankBalance(wallet, [moved], [])).toBe(300);
+    expect(
+      buildAccountActivities(bank, "Bank", [moved], [salary]).map((row) => row.id)
+    ).not.toContain(expect.stringContaining("exp-1"));
+  });
+
+  it("drops a soft-deleted row from balance and activity", () => {
+    const deleted = { ...groceries, deletedAt: "2026-06-06T10:00:00.000Z" };
+
+    expect(computeBankBalance(bank, [deleted], [salary])).toBe(1300);
+    expect(buildAccountActivities(bank, "Bank", [deleted], [salary])).toHaveLength(1);
+  });
+});
+
 describe("borrowing effect on account balances", () => {
   const bank: Account = {
     id: "acc-hdfc",
