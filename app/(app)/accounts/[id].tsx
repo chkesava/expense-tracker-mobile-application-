@@ -20,6 +20,7 @@ import { PastBillingCycles } from "@/components/accounts/PastBillingCycles";
 import { PayCreditBillModal } from "@/components/accounts/PayCreditBillModal";
 import { RecordCashbackModal } from "@/components/accounts/RecordCashbackModal";
 import { CashbackHistoryCard } from "@/components/accounts/CashbackHistoryCard";
+import { CreditCardAnalyticsSection } from "@/components/accounts/CreditCardAnalyticsSection";
 import { CreditStatementCard } from "@/components/accounts/CreditStatementCard";
 import { SmsMatchingUnconfiguredText } from "@/components/accounts/SmsMatchingUnconfiguredText";
 import { TransferFundsModal } from "@/components/accounts/TransferFundsModal";
@@ -98,7 +99,8 @@ export default function AccountDetailScreen() {
   const { accounts, loading: accountsLoading, error: accountsError, retry: retryAccounts } =
     useAccounts();
   const { accountTypes } = useAccountTypes();
-  const { expenses, loading: expensesLoading } = useExpenses();
+  const { expenses, loading: expensesLoading, complete: expensesComplete } =
+    useExpenses();
   const { incomes } = useIncomes();
   const { entries } = useAccountEntries();
   const { payments } = useAccountPayments();
@@ -507,6 +509,19 @@ export default function AccountDetailScreen() {
 
       {isCreditCard && cashbackSummary ? (
         <CashbackHistoryCard summary={cashbackSummary} currency={currency} />
+      ) : null}
+
+      {isCreditCard && account ? (
+        <CreditCardAnalyticsSection
+          account={account}
+          expenses={expenses}
+          payments={payments}
+          bills={bills}
+          today={today}
+          expensesComplete={expensesComplete}
+          currency={currency}
+          onOpenStatement={onOpenBillingCycle}
+        />
       ) : null}
 
       {isCreditCard ? (
