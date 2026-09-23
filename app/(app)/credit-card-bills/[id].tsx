@@ -13,6 +13,8 @@ import { useAccounts } from "@/hooks/useAccounts";
 import { useAccountPayments } from "@/hooks/useAccountPayments";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
 import { useCreditCardBills } from "@/hooks/useCreditCardBills";
+import { useExpenses } from "@/hooks/useExpenses";
+import { shareCreditCardCycleExport } from "@/services/creditCardBills/creditCardStatementExportShare";
 import { appDialog } from "@/lib/appDialog";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
@@ -41,10 +43,12 @@ export default function CreditCardBillDetailScreen() {
   const { accounts } = useAccounts();
   const { accountTypes } = useAccountTypes();
   const { payments } = useAccountPayments();
+  const { expenses } = useExpenses();
   const { settings } = useSettings();
   const [payOpen, setPayOpen] = useState(false);
   const [markPaidOpen, setMarkPaidOpen] = useState(false);
   const [recalculating, setRecalculating] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const bill = useMemo(() => bills.find((b) => b.id === id), [bills, id]);
   const account = useMemo(
@@ -86,6 +90,33 @@ export default function CreditCardBillDetailScreen() {
     () => (bill ? previewBillRecalculation(bill.id) : null),
     [bill, previewBillRecalculation]
   );
+
+  const exportCycle = () => {
+    if (!bill || !account) return;
+    const periodStart = bill.billingPeriodStart || bill.statementDate;
+    const periodEnd = bill.billingPeriodEnd || bill.statementDate;
+    setExporting(true);
+    void shareCreditCardCycleExport({
+      account,
+      periodStart,
+      periodEnd,
+      statementDate: bill.statementDate,
+      billId: bill.id,
+      expenses,
+      payments,
+      currency: bill.currency || settings.currency || "INR",
+    })
+      .then((result) => {
+        toast.success(`Exported ${result.rowCount} rows`);
+      })
+      .catch((error) => {
+        logError("creditCardBill.exportCycle", error);
+        toast.error(
+          friendlyErrorMessage(error, "Couldn't export this statement.")
+        );
+      })
+      .finally(() => setExporting(false));
+  };
 
   const confirmRecalculate = () => {
     if (!bill || !recalculation) return;
@@ -218,6 +249,15 @@ export default function CreditCardBillDetailScreen() {
               {bill.note ? <Row label="Note" value={bill.note} /> : null}
             </View>
           </Card>
+
+          <Button
+            variant="outline"
+            size="lg"
+            disabled={exporting || !account}
+            onPress={() => exportCycle()}
+          >
+            {exporting ? "Exporting…" : "Export statement CSV"}
+          </Button>
 
           {bill.status !== "PAID" && bill.status !== "CANCELLED" ? (
             <View style={{ gap: 10 }}>

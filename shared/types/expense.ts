@@ -332,6 +332,12 @@ export interface Expense {
   smsMatchStatus?: "AUTO_MATCHED" | "AMBIGUOUS" | "NEEDS_REVIEW";
   smsMatchConfidence?: number;
   smsMatchedSignals?: string[];
+  /** SPENDLY-106 — idempotent statement-import fingerprint. */
+  statementImportFingerprint?: string;
+  /** SPENDLY-106 — bill this import line was reconciled against. */
+  creditCardBillId?: string;
+  /** SPENDLY-106 — archived source document id when present. */
+  accountDocumentId?: string;
   /**
    * Soft-delete (SPENDLY-38). A set value means the row is ignored by
    * balances, lists, trips, and auto-bills but kept for the audit trail.

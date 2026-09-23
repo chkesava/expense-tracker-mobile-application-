@@ -47,8 +47,8 @@ import {
 } from "@/shared/utils/statementParse";
 import {
   categoryFromStatementLine,
-  expenseDraftFromStatementLine,
 } from "@/shared/utils/statementReview";
+import { planStatementImport } from "@/shared/utils/statementImport";
 import { computeOutstandingCredit } from "@/shared/utils/accountBalance";
 import { validateCashbackInput } from "@/shared/utils/cashbackValidate";
 import { todayDateKey } from "@/shared/utils/dates";
@@ -420,10 +420,37 @@ export function ReconcileStatementModal({
       if (!line || line.kind !== "debit") return;
       setBusyId(id);
       try {
-        const { outcome } = await createExpense(
-          uid,
-          expenseDraftFromStatementLine(line, accountId)
-        );
+        const plan = planStatementImport({
+          accountId,
+          lines: [line],
+          expenses,
+          payments,
+          provenance: openBill
+            ? {
+                creditCardBillId: openBill.id,
+                statementDate: openBill.statementDate,
+                periodStart: openBill.billingPeriodStart,
+                periodEnd: openBill.billingPeriodEnd || openBill.statementDate,
+              }
+            : undefined,
+        });
+        const decision = plan.decisions[0];
+        if (!decision || decision.status === "duplicate_ledger") {
+          toast.info("Already in your ledger — skipped duplicate.");
+          setAddedIds((prev) => {
+            const next = new Set(prev);
+            next.add(id);
+            return next;
+          });
+          return;
+        }
+        if (decision.status !== "import") {
+          toast.error("That line cannot be imported as an expense.");
+          return;
+        }
+        const { outcome } = await createExpense(uid, decision.draft, {
+          id: decision.expenseId,
+        });
         setAddedIds((prev) => {
           const next = new Set(prev);
           next.add(id);
@@ -437,7 +464,7 @@ export function ReconcileStatementModal({
         setBusyId(null);
       }
     },
-    [accountId, lines, user?.uid]
+    [accountId, expenses, lines, openBill, payments, user?.uid]
   );
 
   const handleAdd = useCallback(
