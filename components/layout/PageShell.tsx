@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "@/theme/ThemeProvider";
 import { AuraBackground } from "./AuraBackground";
 import { APP_BAR_CONTENT_HEIGHT } from "./chrome";
+import { PageShellBottomClearanceContext } from "./usePageListBottomPadding";
 import { useSpendlyBottomClearance } from "./useSpendlyBottomClearance";
 import { haptic } from "@/lib/haptics";
 
@@ -26,6 +27,12 @@ export interface PageShellProps {
   contentContainerStyle?: StyleProp<ViewStyle>;
   hideHeaderOffset?: boolean;
   hideBottomOffset?: boolean;
+  /**
+   * With `scrollable={false}`: the child list extends behind the floating
+   * BottomNav/FAB and applies the clearance itself via
+   * `usePageListBottomPadding`, instead of the shell padding its outer View.
+   */
+  listOwnsBottomInset?: boolean;
   withAura?: boolean;
 }
 
@@ -39,6 +46,7 @@ export function PageShell({
   contentContainerStyle,
   hideHeaderOffset = false,
   hideBottomOffset = false,
+  listOwnsBottomInset = false,
   withAura = true,
 }: PageShellProps) {
   const { theme } = useTheme();
@@ -118,6 +126,12 @@ export function PageShell({
         >
           {children}
         </ScrollView>
+      ) : listOwnsBottomInset ? (
+        <PageShellBottomClearanceContext.Provider value={effectivePaddingBottom}>
+          <View style={[{ flex: 1 }, resolvedContentStyle, { paddingBottom: 0 }]}>
+            {children}
+          </View>
+        </PageShellBottomClearanceContext.Provider>
       ) : (
         <View style={[{ flex: 1 }, resolvedContentStyle]}>
           {children}

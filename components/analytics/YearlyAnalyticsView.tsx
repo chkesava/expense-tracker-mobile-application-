@@ -36,11 +36,7 @@ import { Amount } from "@/components/common/Amount";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { Skeleton } from "@/components/common/Skeleton";
-import {
-  BOTTOM_NAV_CONTENT_CLEARANCE,
-  BOTTOM_NAV_FAB_GAP,
-  BOTTOM_NAV_FAB_SIZE,
-} from "@/components/layout/chrome";
+import { usePageListBottomPadding } from "@/components/layout/usePageListBottomPadding";
 import { haptic } from "@/lib/haptics";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useIncomes } from "@/hooks/useIncomes";
@@ -93,6 +89,7 @@ export interface YearlyAnalyticsViewProps {
 export function YearlyAnalyticsView({ listHeader }: YearlyAnalyticsViewProps) {
   const router = useRouter();
   const { theme, themeName } = useTheme();
+  const listBottomPadding = usePageListBottomPadding();
   const isDark = themeUsesDarkPalette(themeName);
   const accents = insightAccents(isDark);
   const tileText = useYearlyTileTextStyles();
@@ -500,7 +497,7 @@ export function YearlyAnalyticsView({ listHeader }: YearlyAnalyticsViewProps) {
   const stateShell = (children: ReactNode) => (
     <ScrollView
       showsVerticalScrollIndicator={false}
-      contentContainerStyle={styles.stateWrap}
+      contentContainerStyle={[styles.stateWrap, { paddingBottom: listBottomPadding }]}
     >
       {children}
     </ScrollView>
@@ -571,7 +568,7 @@ export function YearlyAnalyticsView({ listHeader }: YearlyAnalyticsViewProps) {
           {yearSelector}
         </View>
       }
-      contentContainerStyle={styles.listContent}
+      contentContainerStyle={{ paddingBottom: listBottomPadding }}
       showsVerticalScrollIndicator={false}
     />
   );
@@ -591,15 +588,7 @@ const styles = StyleSheet.create({
   list: {
     flex: 1,
   },
-  listContent: {
-    // PageShell already clears the nav bar; this only clears the floating
-    // add button so the last card is never hidden behind it.
-    paddingBottom:
-      BOTTOM_NAV_FAB_SIZE + BOTTOM_NAV_FAB_GAP - BOTTOM_NAV_CONTENT_CLEARANCE,
-  },
   stateWrap: {
     gap: 14,
-    paddingBottom:
-      BOTTOM_NAV_FAB_SIZE + BOTTOM_NAV_FAB_GAP - BOTTOM_NAV_CONTENT_CLEARANCE,
   },
 });

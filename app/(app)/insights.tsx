@@ -120,7 +120,11 @@ export default function InsightsScreen() {
   const ownsScroll = activeTab !== "advisor";
 
   return (
-    <PageShell scrollable={!ownsScroll} contentContainerStyle={styles.container}>
+    <PageShell
+      scrollable={!ownsScroll}
+      listOwnsBottomInset
+      contentContainerStyle={styles.container}
+    >
       {activeTab === "analytics" ? (
         <MonthlyAnalyticsView listHeader={pageHeader} />
       ) : activeTab === "yearly" ? (

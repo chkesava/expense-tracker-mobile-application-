@@ -25,6 +25,8 @@ import {
 } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
+import { PageListStateScroll } from "@/components/layout/PageListStateScroll";
+import { usePageListBottomPadding } from "@/components/layout/usePageListBottomPadding";
 import { EmptyState } from "@/components/common/EmptyState";
 import { Modal } from "@/components/common/Modal";
 import {
@@ -104,6 +106,7 @@ export function ExpenseList({
   const router = useRouter();
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
+  const listBottomPadding = usePageListBottomPadding();
   const { user } = useAuth();
   const uid = user?.uid;
   const { settings } = useSettings();
@@ -554,30 +557,32 @@ export function ExpenseList({
 
   if (combinedTransactions.length === 0) {
     return (
-      <EmptyState
-        illustration="expenses"
-        title="No Expenses Yet"
-        description="Track your first expense to begin understanding your spending habits and category breakdowns."
-        primaryAction={{
-          label: "Add Expense",
-          icon: <Plus size={16} color="#FFFFFF" strokeWidth={2.4} />,
-          onPress: () => {
-            if (onAddExpense) {
-              onAddExpense();
-            } else {
+      <PageListStateScroll>
+        <EmptyState
+          illustration="expenses"
+          title="No Expenses Yet"
+          description="Track your first expense to begin understanding your spending habits and category breakdowns."
+          primaryAction={{
+            label: "Add Expense",
+            icon: <Plus size={16} color="#FFFFFF" strokeWidth={2.4} />,
+            onPress: () => {
+              if (onAddExpense) {
+                onAddExpense();
+              } else {
+                router.dismissTo("/dashboard");
+              }
+            },
+          }}
+          secondaryAction={{
+            label: "Scan Receipt",
+            icon: <ScanLine size={16} color={theme.colors.primary} strokeWidth={2} />,
+            onPress: () => {
               router.dismissTo("/dashboard");
-            }
-          },
-        }}
-        secondaryAction={{
-          label: "Scan Receipt",
-          icon: <ScanLine size={16} color={theme.colors.primary} strokeWidth={2} />,
-          onPress: () => {
-            router.dismissTo("/dashboard");
-          },
-        }}
-        tip="Quick-add cash expenses in under 3 seconds using the bottom dock '+' button anytime."
-      />
+            },
+          }}
+          tip="Quick-add cash expenses in under 3 seconds using the bottom dock '+' button anytime."
+        />
+      </PageListStateScroll>
     );
   }
 
@@ -654,7 +659,7 @@ export function ExpenseList({
             />
           ) : undefined
         }
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={{ paddingBottom: listBottomPadding }}
         ListHeaderComponent={
           showMonthSummary ? (
             <View
@@ -1037,9 +1042,6 @@ const styles = StyleSheet.create({
   selectionActions: {
     flexDirection: "row",
     gap: 8,
-  },
-  listContent: {
-    paddingBottom: 32,
   },
   summaryCard: {
     flexDirection: "row",
