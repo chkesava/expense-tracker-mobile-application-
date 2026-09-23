@@ -29,6 +29,7 @@ vi.mock("firebase/firestore", () => ({
     data: () => docs.get(ref.path),
   })),
   increment: (n: number) => ({ __increment: n }),
+  deleteField: () => ({ __deleteField: true }),
   serverTimestamp: () => ({ __serverTimestamp: true }),
   writeBatch: vi.fn(),
 }));
@@ -66,8 +67,11 @@ vi.mock("@/lib/commitMutations", () => ({
 
 import {
   ALREADY_REMOVED_LEDGER_MESSAGE,
+  NOT_REMOVED_LEDGER_MESSAGE,
   PAST_MONTH_LOCKED_MESSAGE,
   SPLIT_OWNED_LEDGER_MESSAGE,
+  restoreExpense,
+  restoreIncome,
   softDeleteExpense,
   softDeleteIncome,
   updateExpense,
@@ -325,5 +329,147 @@ describe("income mutations", () => {
       (write) => write.path === "users/u1/incomes/inc-1"
     );
     expect(typeof incomeWrite?.data.deletedAt).toBe("string");
+  });
+});
+
+describe("restore (SPENDLY-110)", () => {
+  /** Put a row into the soft-deleted state the restore path expects. */
+  function markDeleted(path: string) {
+    docs.set(path, {
+      ...(docs.get(path) ?? {}),
+      deletedAt: "2026-09-02T10:00:00.000Z",
+      deletedBy: "u1",
+      deletedReason: "Wrong account",
+    });
+  }
+
+  it("clears the delete fields instead of recreating the row", async () => {
+    markDeleted("users/u1/expenses/exp-1");
+    await restoreExpense("u1", "exp-1");
+
+    const rowWrite = writes.find(
+      (write) => write.path === "users/u1/expenses/exp-1"
+    );
+    expect(rowWrite?.kind).toBe("update");
+    expect(rowWrite?.data.deletedAt).toEqual({ __deleteField: true });
+    expect(rowWrite?.data.deletedBy).toEqual({ __deleteField: true });
+    expect(rowWrite?.data.deletedReason).toEqual({ __deleteField: true });
+    // The original document is reused, so its id and anything referencing it
+    // survive — nothing is re-created.
+    expect(docs.has("users/u1/expenses/exp-1")).toBe(true);
+  });
+
+  it("writes the row and a restore event in one commit", async () => {
+    markDeleted("users/u1/expenses/exp-1");
+    await restoreExpense("u1", "exp-1", { reason: "Deleted by mistake" });
+
+    expect(commits).toBe(1);
+    const eventWrite = writes.find((write) =>
+      write.path.startsWith("users/u1/ledgerEvents/")
+    );
+    expect(eventWrite?.data).toMatchObject({
+      kind: "expense",
+      docId: "exp-1",
+      action: "restore",
+      reason: "Deleted by mistake",
+    });
+  });
+
+  it("records before and after as the same values", async () => {
+    markDeleted("users/u1/expenses/exp-1");
+    await restoreExpense("u1", "exp-1");
+
+    const eventWrite = writes.find((write) =>
+      write.path.startsWith("users/u1/ledgerEvents/")
+    );
+    const data = eventWrite?.data as { before: unknown; after: unknown };
+    // A restore changes nothing about the row itself, so the snapshots match.
+    expect(data.after).toEqual(data.before);
+  });
+
+  it("gives back the trip spend the delete took away", async () => {
+    // Delete then restore must leave trip spend exactly where it started, or
+    // every restored expense drifts the trip total.
+    await softDeleteExpense("u1", "exp-1");
+    const afterDelete = writes.find(
+      (write) => write.path === "users/u1/trips/trip-1"
+    );
+    expect(afterDelete?.data.spentAmount).toEqual({ __increment: -5000 });
+
+    writes = [];
+    await restoreExpense("u1", "exp-1");
+    const afterRestore = writes.find(
+      (write) => write.path === "users/u1/trips/trip-1"
+    );
+    expect(afterRestore?.data.spentAmount).toEqual({ __increment: 5000 });
+  });
+
+  it("refuses a row that was never deleted", async () => {
+    await expect(restoreExpense("u1", "exp-1")).rejects.toThrow(
+      NOT_REMOVED_LEDGER_MESSAGE
+    );
+    expect(commits).toBe(0);
+  });
+
+  it("refuses a split-owned row", async () => {
+    docs.set("users/u1/expenses/exp-1", {
+      ...EXPENSE,
+      splitId: "split-1",
+      deletedAt: "2026-09-02T10:00:00.000Z",
+    });
+    await expect(restoreExpense("u1", "exp-1")).rejects.toThrow(
+      SPLIT_OWNED_LEDGER_MESSAGE
+    );
+    expect(commits).toBe(0);
+  });
+
+  it("refuses to reopen a locked past month", async () => {
+    docs.set("users/u1/expenses/exp-1", {
+      ...EXPENSE,
+      date: "2020-01-01",
+      month: "2020-01",
+      deletedAt: "2020-01-02T10:00:00.000Z",
+    });
+    await expect(
+      restoreExpense("u1", "exp-1", {
+        lockPastMonths: true,
+        timezone: "UTC",
+      })
+    ).rejects.toThrow(PAST_MONTH_LOCKED_MESSAGE);
+    expect(commits).toBe(0);
+  });
+
+  it("throws when the id is missing", async () => {
+    await expect(restoreExpense("u1", "")).rejects.toThrow();
+    expect(commits).toBe(0);
+  });
+
+  it("restores income without touching any trip", async () => {
+    markDeleted("users/u1/incomes/inc-1");
+    await restoreIncome("u1", "inc-1");
+
+    const rowWrite = writes.find(
+      (write) => write.path === "users/u1/incomes/inc-1"
+    );
+    expect(rowWrite?.data.deletedAt).toEqual({ __deleteField: true });
+    expect(
+      writes.some((write) => write.path.startsWith("users/u1/trips/"))
+    ).toBe(false);
+
+    const eventWrite = writes.find((write) =>
+      write.path.startsWith("users/u1/ledgerEvents/")
+    );
+    expect(eventWrite?.data).toMatchObject({ kind: "income", action: "restore" });
+  });
+
+  it("round-trips a delete and restore back to a live row", async () => {
+    await softDeleteExpense("u1", "exp-1", { reason: "Duplicate" });
+    expect(typeof docs.get("users/u1/expenses/exp-1")?.deletedAt).toBe("string");
+
+    await restoreExpense("u1", "exp-1");
+    expect(docs.get("users/u1/expenses/exp-1")?.deletedAt).toEqual({
+      __deleteField: true,
+    });
+    expect(commits).toBe(2);
   });
 });

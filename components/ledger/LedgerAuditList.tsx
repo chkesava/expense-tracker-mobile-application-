@@ -1,5 +1,5 @@
-import { useCallback } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { FlashList } from "@shopify/flash-list";
 
 import { Amount } from "@/components/common/Amount";
@@ -8,6 +8,16 @@ import { ErrorState } from "@/components/common/ErrorState";
 import { Skeleton } from "@/components/common/Skeleton";
 import { useLedgerEvents } from "@/hooks/useLedgerEvents";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
+import { friendlyErrorMessage, logError } from "@/lib/errors";
+import { haptic } from "@/lib/haptics";
+import { toast } from "@/lib/toast";
+import { writeSavedMessage } from "@/lib/firestoreWrite";
+import { useAuth } from "@/providers/AuthProvider";
+import { useSettings } from "@/providers/SettingsProvider";
+import {
+  restoreExpense,
+  restoreIncome,
+} from "@/services/ledger/mutateLedgerTransaction";
 import type { LedgerEvent } from "@/shared/types/ledgerEvent";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
@@ -46,15 +56,94 @@ export function LedgerAuditList() {
   const isDark = themeUsesDarkPalette(themeName);
   const displayCurrency = useDisplayCurrency();
   const { events, loading, error, retry } = useLedgerEvents();
+  const { user } = useAuth();
+  const { settings } = useSettings();
+  const [restoringId, setRestoringId] = useState<string | null>(null);
+  const restoringRef = useRef(new Set<string>());
+
+  /**
+   * A row is restorable when its newest event is the delete. A later edit or
+   * restore means it is already back, so offering Restore would fail on
+   * `assertRemovedAndRestorable` and read as a broken button.
+   *
+   * `events` arrives newest-first, so the first event seen for a docId is its
+   * latest.
+   */
+  const latestActionByRow = useMemo(() => {
+    const latest = new Map<string, LedgerEvent["action"]>();
+    for (const event of events) {
+      const key = `${event.kind}:${event.docId}`;
+      if (!latest.has(key)) latest.set(key, event.action);
+    }
+    return latest;
+  }, [events]);
+
+  const handleRestore = useCallback(
+    async (event: LedgerEvent) => {
+      const uid = user?.uid;
+      if (!uid) {
+        toast.error("Not authenticated");
+        return;
+      }
+      const key = `${event.kind}:${event.docId}`;
+      if (restoringRef.current.has(key)) return;
+      restoringRef.current.add(key);
+      setRestoringId(key);
+
+      try {
+        const options = {
+          lockPastMonths: settings.lockPastMonths,
+          timezone: settings.timezone,
+          reason: "Restored from the audit trail",
+        };
+        const { outcome } =
+          event.kind === "expense"
+            ? await restoreExpense(uid, event.docId, options)
+            : await restoreIncome(uid, event.docId, options);
+        void haptic.success();
+        toast.success(
+          writeSavedMessage(
+            outcome,
+            `${event.kind === "expense" ? "Expense" : "Income"} restored`
+          )
+        );
+      } catch (err) {
+        logError("ledgerAuditList.restore", err);
+        toast.error(friendlyErrorMessage(err, "Failed to restore transaction"));
+      } finally {
+        restoringRef.current.delete(key);
+        setRestoringId(null);
+      }
+    },
+    [user?.uid, settings.lockPastMonths, settings.timezone]
+  );
 
   const renderItem = useCallback(
     ({ item }: { item: LedgerEvent }) => {
       const isDelete = item.action === "delete";
+      const isRestore = item.action === "restore";
       const title = eventTitle(item);
       const when = eventClock(item.createdAt);
       const kindLabel = item.kind === "income" ? "Income" : "Expense";
-      const actionLabel = isDelete ? "Deleted" : "Edited";
-      const chipColor = isDelete ? "#EF4444" : theme.colors.primary;
+      // `action` is a stored string, so an unrecognised value from another
+      // client falls through to "Edited" rather than vanishing from the trail.
+      const actionLabel = isDelete
+        ? "Deleted"
+        : isRestore
+          ? "Restored"
+          : "Edited";
+      const chipColor = isDelete
+        ? "#EF4444"
+        : isRestore
+          ? theme.colors.success
+          : theme.colors.primary;
+
+      const rowKey = `${item.kind}:${item.docId}`;
+      // Only the newest event for a row can be acted on, and only if it is the
+      // delete — otherwise the row is already back in the ledger.
+      const canRestore =
+        isDelete && latestActionByRow.get(rowKey) === "delete";
+      const isRestoring = restoringId === rowKey;
 
       return (
         <View
@@ -113,15 +202,51 @@ export function LedgerAuditList() {
               />
             </View>
           )}
+          {item.reason ? (
+            <Text
+              style={[styles.reason, { color: theme.colors.mutedForeground }]}
+              numberOfLines={2}
+            >
+              {item.reason}
+            </Text>
+          ) : null}
           {when ? (
             <Text style={[styles.when, { color: theme.colors.mutedForeground }]}>
               {when}
             </Text>
           ) : null}
+          {canRestore ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Restore this ${kindLabel.toLowerCase()}`}
+              accessibilityState={{ disabled: isRestoring }}
+              disabled={isRestoring}
+              onPress={() => {
+                void haptic.impact();
+                void handleRestore(item);
+              }}
+              style={({ pressed }) => [
+                styles.restoreBtn,
+                {
+                  borderColor: theme.colors.border,
+                  backgroundColor: isDark
+                    ? "rgba(255,255,255,0.05)"
+                    : "rgba(0,0,0,0.04)",
+                  opacity: pressed || isRestoring ? 0.6 : 1,
+                },
+              ]}
+            >
+              <Text
+                style={[styles.restoreText, { color: theme.colors.foreground }]}
+              >
+                {isRestoring ? "Restoring…" : "Restore"}
+              </Text>
+            </Pressable>
+          ) : null}
         </View>
       );
     },
-    [displayCurrency, theme]
+    [displayCurrency, theme, isDark, latestActionByRow, restoringId, handleRestore]
   );
 
   if (error) {
@@ -207,6 +332,23 @@ const styles = StyleSheet.create({
   },
   amount: {
     fontSize: 16,
+    fontWeight: "700",
+  },
+  reason: {
+    fontSize: 11,
+    lineHeight: 16,
+    fontStyle: "italic",
+  },
+  restoreBtn: {
+    alignSelf: "flex-start",
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginTop: 4,
+  },
+  restoreText: {
+    fontSize: 12,
     fontWeight: "700",
   },
   when: {

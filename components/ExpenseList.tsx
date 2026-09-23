@@ -5,6 +5,7 @@ import {
   RefreshControl,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { FlashList } from "@shopify/flash-list";
@@ -32,8 +33,12 @@ import {
   closeOpenSwipeableRow,
 } from "@/components/common/SwipeableRow";
 import { AssignToSpaceModal } from "@/components/spaces/AssignToSpaceModal";
+import { JournalRelatedRecords } from "@/components/ledger/JournalRelatedRecords";
+import { JournalTransactionAudit } from "@/components/ledger/JournalTransactionAudit";
 import { Button } from "@/components/ui/Button";
 import { useSpaces } from "@/hooks/useSpaces";
+import { useAccountPayments } from "@/hooks/useAccountPayments";
+import { useAccountEntries } from "@/hooks/useAccountEntries";
 import { toast } from "@/lib/toast";
 import { writeSavedMessage } from "@/lib/firestoreWrite";
 import { useAuth } from "@/providers/AuthProvider";
@@ -44,7 +49,11 @@ import {
 } from "@/services/ledger/mutateLedgerTransaction";
 import { getCategoryIcon } from "@/shared/data/categoryTaxonomy";
 import type { Account, Expense, Income } from "@/shared/types/expense";
-import { postingSortMs } from "@/shared/utils/activityDisplay";
+import {
+  postingSortMs,
+  resolveActivityClockTime,
+} from "@/shared/utils/activityDisplay";
+import { findJournalRelatedRecords } from "@/shared/utils/journalRelatedRecords";
 import { formatDateKey } from "@/shared/utils/dates";
 import { formatDayHeading } from "@/shared/utils/dateDisplay";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -118,6 +127,10 @@ export function ExpenseList({
   const isCompact = settings.compactListMode;
   const displayCurrency = useDisplayCurrency();
   const { spaces, removeExpenseFromSpace } = useSpaces();
+  // SPENDLY-110: related-record context for the detail sheet. Both are already
+  // loaded by the shell's deferred account listeners, so this adds no reads.
+  const { payments } = useAccountPayments();
+  const { entries } = useAccountEntries();
 
   const [selectedTx, setSelectedTx] = useState<CombinedTransaction | null>(null);
   const [swipeCloseSignal, setSwipeCloseSignal] = useState(0);
@@ -214,7 +227,7 @@ export function ExpenseList({
   );
 
   const handleDelete = useCallback(
-    async (target: CombinedTransaction) => {
+    async (target: CombinedTransaction, reason?: string) => {
       const docId = target.id?.trim();
       if (!uid) {
         toast.error("Not authenticated");
@@ -231,12 +244,18 @@ export function ExpenseList({
         const options = {
           lockPastMonths: settings.lockPastMonths,
           timezone: settings.timezone,
+          // SPENDLY-110: `reason` has always been plumbed through to the audit
+          // event but no caller ever set it, so the trail could not explain
+          // itself. An empty string stays undefined — a blank reason is worse
+          // than none, because it looks like one was given.
+          reason: reason?.trim() || undefined,
         };
         const { outcome } =
           target.kind === "expense"
             ? await softDeleteExpense(uid, docId, options)
             : await softDeleteIncome(uid, docId, options);
         setSelectedTx(null);
+        setDeleteReason("");
         void haptic.delete();
 
         toast.success(
@@ -613,6 +632,33 @@ export function ExpenseList({
     ? spaces.find((s) => s.id === selectedSpaceId)
     : undefined;
 
+  // SPENDLY-110: why this row is being corrected, recorded on the audit event.
+  const [deleteReason, setDeleteReason] = useState("");
+
+  // SPENDLY-110: the clock is resolved the same way every list row resolves
+  // it, so the sheet never shows a time the row itself does not have.
+  const selectedClock = selectedTx
+    ? resolveActivityClockTime(selectedTx.data.time, selectedTx.data.createdAt)
+    : undefined;
+
+  // Read-only context. Amounts flagged `isSameMoney` are this transaction seen
+  // from another side and must never be added to a total — see
+  // shared/utils/journalRelatedRecords.ts.
+  const selectedRelated = useMemo(
+    () =>
+      selectedTx
+        ? findJournalRelatedRecords({
+            expense:
+              selectedTx.kind === "expense" ? selectedTx.data : undefined,
+            income: selectedTx.kind === "income" ? selectedTx.data : undefined,
+            payments,
+            entries,
+            nameById: (id) => spaces.find((space) => space.id === id)?.name,
+          })
+        : [],
+    [selectedTx, payments, entries, spaces]
+  );
+
   return (
     <>
       {isSelecting ? (
@@ -838,8 +884,23 @@ export function ExpenseList({
                 </View>
                 <Text style={[styles.detailValue, { color: theme.colors.foreground }]}>
                   {selectedTx.date}
+                  {selectedClock ? ` · ${selectedClock}` : ""}
                 </Text>
               </View>
+
+              {selectedTx.kind === "expense" ? (
+                <View style={styles.detailRow}>
+                  <View style={styles.detailLabelRow}>
+                    <FileText size={15} color={theme.colors.mutedForeground} />
+                    <Text style={[styles.detailLabel, { color: theme.colors.mutedForeground }]}>
+                      Status
+                    </Text>
+                  </View>
+                  <Text style={[styles.detailValue, { color: theme.colors.foreground }]}>
+                    {selectedTx.data.isAudited ? "Audited" : "Not audited"}
+                  </Text>
+                </View>
+              ) : null}
 
               <View style={styles.detailRow}>
                 <View style={styles.detailLabelRow}>
@@ -899,6 +960,13 @@ export function ExpenseList({
                 </View>
               ) : null}
             </View>
+
+            <JournalRelatedRecords records={selectedRelated} />
+
+            <JournalTransactionAudit
+              kind={selectedTx.kind}
+              docId={selectedTx.data.id}
+            />
 
             {/* Action Buttons — plain Pressable avoids Reanimated pressables
                 failing to receive taps inside the bottom sheet on Android. */}
@@ -1001,6 +1069,24 @@ export function ExpenseList({
                 </Text>
               </Pressable>
 
+              <TextInput
+                value={deleteReason}
+                onChangeText={setDeleteReason}
+                placeholder="Reason for this correction (optional)"
+                placeholderTextColor={theme.colors.mutedForeground}
+                accessibilityLabel="Reason for this correction"
+                style={[
+                  styles.reasonInput,
+                  {
+                    color: theme.colors.foreground,
+                    backgroundColor: isDark
+                      ? "rgba(255,255,255,0.04)"
+                      : "rgba(0,0,0,0.03)",
+                    borderColor: theme.colors.border,
+                  },
+                ]}
+              />
+
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Delete Transaction"
@@ -1009,7 +1095,7 @@ export function ExpenseList({
                   const tx = selectedTx;
                   if (!tx) return;
                   void haptic.impact();
-                  void handleDelete(tx);
+                  void handleDelete(tx, deleteReason);
                 }}
                 style={({ pressed }) => [
                   styles.detailActionBtn,
@@ -1187,6 +1273,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: 14,
     gap: 12,
+  },
+  reasonInput: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 13,
   },
   detailRow: {
     flexDirection: "row",
