@@ -29,6 +29,7 @@ import { Skeleton } from "@/components/common/Skeleton";
 import { ExpenseList } from "@/components/ExpenseList";
 import { LedgerAuditList } from "@/components/ledger/LedgerAuditList";
 import { PageHeader, type PageHeaderTab } from "@/components/layout/PageHeader";
+import { PageListStateScroll } from "@/components/layout/PageListStateScroll";
 import { PageShell } from "@/components/layout/PageShell";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useExpenses } from "@/hooks/useExpenses";
@@ -205,6 +206,7 @@ export default function LedgerScreen() {
   return (
     <PageShell
       scrollable={!isExpenseListTab && !isBorrowingsTab}
+      listOwnsBottomInset
       contentContainerStyle={styles.container}
     >
       {isBorrowingsTab ? (
@@ -301,11 +303,13 @@ export default function LedgerScreen() {
                   ))}
                 </View>
               ) : expensesError && expenses.length === 0 ? (
-                <ErrorState
-                  title="Couldn't load your transactions"
-                  description={expensesError.message}
-                  onRetry={expensesError.retryable ? retryExpenses : undefined}
-                />
+                <PageListStateScroll>
+                  <ErrorState
+                    title="Couldn't load your transactions"
+                    description={expensesError.message}
+                    onRetry={expensesError.retryable ? retryExpenses : undefined}
+                  />
+                </PageListStateScroll>
               ) : (
                 <ExpenseList
                   expenses={filteredExpenses}
@@ -335,11 +339,13 @@ export default function LedgerScreen() {
                   ))}
                 </View>
               ) : incomesError && incomes.length === 0 ? (
-                <ErrorState
-                  title="Couldn't load your transactions"
-                  description={incomesError.message}
-                  onRetry={incomesError.retryable ? retryIncomes : undefined}
-                />
+                <PageListStateScroll>
+                  <ErrorState
+                    title="Couldn't load your transactions"
+                    description={incomesError.message}
+                    onRetry={incomesError.retryable ? retryIncomes : undefined}
+                  />
+                </PageListStateScroll>
               ) : (
                 <ExpenseList
                   expenses={[]}

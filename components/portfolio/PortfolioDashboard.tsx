@@ -10,7 +10,7 @@ import {
 
 import { CARD_ORANGE } from "@/components/accounts/accountScreenTheme";
 import { Skeleton, SkeletonList } from "@/components/common/Skeleton";
-import { BOTTOM_NAV_FAB_GAP, BOTTOM_NAV_FAB_SIZE } from "@/components/layout/chrome";
+import { usePageListBottomPadding } from "@/components/layout/usePageListBottomPadding";
 import { OnboardingFlow } from "@/components/portfolio/OnboardingFlow";
 import { PortfolioCharts } from "@/components/portfolio/PortfolioCharts";
 import { PortfolioSummaryCard } from "@/components/portfolio/PortfolioSummaryCard";
@@ -87,6 +87,7 @@ export function PortfolioDashboard({ listHeader }: { listHeader?: ReactNode }) {
 
 function PortfolioDashboardInner({ listHeader }: { listHeader?: ReactNode }) {
   const { theme, themeName } = useTheme();
+  const listBottomPadding = usePageListBottomPadding();
   const isDark = themeUsesDarkPalette(themeName);
   const displayCurrency = useDisplayCurrency();
 
@@ -446,7 +447,7 @@ function PortfolioDashboardInner({ listHeader }: { listHeader?: ReactNode }) {
     <View style={styles.fill}>
       <ScrollView
         style={styles.fill}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: listBottomPadding }]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
@@ -495,7 +496,6 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     gap: 12,
-    paddingBottom: BOTTOM_NAV_FAB_SIZE + BOTTOM_NAV_FAB_GAP + 8,
   },
   skeletonWrap: {
     gap: 14,

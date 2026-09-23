@@ -26,3 +26,17 @@ export function spendlyBottomClearance(
     : BOTTOM_NAV_SCROLL_PADDING;
   return bottomInset + chrome + extra;
 }
+
+/**
+ * Bottom padding for a list that owns its scroll. Inside a PageShell with
+ * `listOwnsBottomInset`, the shell's clearance is reused so both stay in
+ * sync; standalone stack screens fall back to the Spendly chrome formula.
+ */
+export function resolveListBottomPadding(
+  shellClearance: number | null,
+  bottomInset: number,
+  extra = 0
+): number {
+  if (shellClearance !== null) return shellClearance + extra;
+  return spendlyBottomClearance(bottomInset, { withFab: true, extra });
+}

@@ -6,6 +6,8 @@ import { Amount } from "@/components/common/Amount";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { Skeleton } from "@/components/common/Skeleton";
+import { PageListStateScroll } from "@/components/layout/PageListStateScroll";
+import { usePageListBottomPadding } from "@/components/layout/usePageListBottomPadding";
 import { useLedgerEvents } from "@/hooks/useLedgerEvents";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import type { LedgerEvent } from "@/shared/types/ledgerEvent";
@@ -46,6 +48,7 @@ export function LedgerAuditList() {
   const isDark = themeUsesDarkPalette(themeName);
   const displayCurrency = useDisplayCurrency();
   const { events, loading, error, retry } = useLedgerEvents();
+  const listBottomPadding = usePageListBottomPadding();
 
   const renderItem = useCallback(
     ({ item }: { item: LedgerEvent }) => {
@@ -126,11 +129,13 @@ export function LedgerAuditList() {
 
   if (error) {
     return (
-      <ErrorState
-        title="Couldn't load the audit trail"
-        description={error.message}
-        onRetry={retry}
-      />
+      <PageListStateScroll>
+        <ErrorState
+          title="Couldn't load the audit trail"
+          description={error.message}
+          onRetry={retry}
+        />
+      </PageListStateScroll>
     );
   }
 
@@ -146,12 +151,14 @@ export function LedgerAuditList() {
 
   if (events.length === 0) {
     return (
-      <EmptyState
-        illustration="search"
-        title="No edits or deletions yet"
-        description="Changes to journal expenses and income will show up here with the previous and new values."
-        tip="Soft-deleted rows stay on file. They leave History and balances, but this trail keeps the record."
-      />
+      <PageListStateScroll>
+        <EmptyState
+          illustration="search"
+          title="No edits or deletions yet"
+          description="Changes to journal expenses and income will show up here with the previous and new values."
+          tip="Soft-deleted rows stay on file. They leave History and balances, but this trail keeps the record."
+        />
+      </PageListStateScroll>
     );
   }
 
@@ -162,6 +169,7 @@ export function LedgerAuditList() {
       keyExtractor={(item) => item.id}
       renderItem={renderItem}
       showsVerticalScrollIndicator={false}
+      contentContainerStyle={{ paddingBottom: listBottomPadding }}
       extraData={isDark}
     />
   );

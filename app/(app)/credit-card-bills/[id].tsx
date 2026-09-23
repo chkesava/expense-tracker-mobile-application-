@@ -7,6 +7,7 @@ import { ArrowLeft } from "lucide-react-native";
 import { Amount } from "@/components/common/Amount";
 import { MarkBillPaidModal } from "@/components/creditCardBills/MarkBillPaidModal";
 import { PayCreditBillModal } from "@/components/accounts/PayCreditBillModal";
+import { usePageListBottomPadding } from "@/components/layout/usePageListBottomPadding";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { useAccounts } from "@/hooks/useAccounts";
@@ -31,6 +32,7 @@ export default function CreditCardBillDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const listPaddingBottom = usePageListBottomPadding();
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const {
@@ -214,7 +216,7 @@ export default function CreditCardBillDetailScreen() {
           contentContainerStyle={{
             gap: 16,
             padding: 16,
-            paddingBottom: insets.bottom + 40,
+            paddingBottom: listPaddingBottom,
           }}
         >
           <Card>

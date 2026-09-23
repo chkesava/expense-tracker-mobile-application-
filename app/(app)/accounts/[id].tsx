@@ -11,8 +11,6 @@ import { FlashList } from "@shopify/flash-list";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import * as DocumentPicker from "expo-document-picker";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-
 import { AccountBalanceCard } from "@/components/accounts/AccountBalanceCard";
 import { AccountActivityFilterModal } from "@/components/accounts/AccountActivityFilterModal";
 import { AccountCreditHero } from "@/components/accounts/AccountCreditHero";
@@ -54,11 +52,7 @@ import { TransactionRow } from "@/components/accounts/TransactionRow";
 import { ErrorState } from "@/components/common/ErrorState";
 import { CreateCreditCardBillModal } from "@/components/creditCardBills/CreateCreditCardBillModal";
 import { ReconcileStatementModal } from "@/components/creditCardBills/ReconcileStatementModal";
-import {
-  BOTTOM_NAV_BAR_HEIGHT,
-  BOTTOM_NAV_FAB_GAP,
-  BOTTOM_NAV_FAB_SIZE,
-} from "@/components/layout/chrome";
+import { usePageListBottomPadding } from "@/components/layout/usePageListBottomPadding";
 import { haptic } from "@/lib/haptics";
 import { useAccountEntries } from "@/hooks/useAccountEntries";
 import { useAuth } from "@/providers/AuthProvider";
@@ -190,7 +184,7 @@ const EMPTY_ACTIVITIES: AccountActivity[] = [];
 
 export default function AccountDetailScreen() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
+  const listPaddingBottom = usePageListBottomPadding();
   const { width } = useWindowDimensions();
   const compact = width < WIDE_ROW_BREAKPOINT;
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -1147,9 +1141,6 @@ export default function AccountDetailScreen() {
     },
     [router]
   );
-
-  const listPaddingBottom =
-    insets.bottom + BOTTOM_NAV_BAR_HEIGHT + BOTTOM_NAV_FAB_GAP + BOTTOM_NAV_FAB_SIZE + 20;
 
   if (!account) {
     return (

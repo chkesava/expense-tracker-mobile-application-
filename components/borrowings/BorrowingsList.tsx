@@ -24,7 +24,7 @@ import { BorrowingSummaryCard } from "@/components/borrowings/BorrowingSummaryCa
 import { CreateBorrowingModal } from "@/components/borrowings/CreateBorrowingModal";
 import { EmptyState } from "@/components/common/EmptyState";
 import { SkeletonCard } from "@/components/common/Skeleton";
-import { BOTTOM_NAV_FAB_GAP, BOTTOM_NAV_FAB_SIZE } from "@/components/layout/chrome";
+import { usePageListBottomPadding } from "@/components/layout/usePageListBottomPadding";
 import { appDialog } from "@/lib/appDialog";
 import { haptic } from "@/lib/haptics";
 import { useBorrowings } from "@/hooks/useBorrowings";
@@ -48,6 +48,7 @@ function dateFilterCutoff(filter: BorrowingDateFilter, today: string): string | 
 
 export function BorrowingsList({ listHeader }: { listHeader?: ReactNode }) {
   const { theme, themeName } = useTheme();
+  const listBottomPadding = usePageListBottomPadding();
   const isDark = themeUsesDarkPalette(themeName);
   const displayCurrency = useDisplayCurrency();
 
@@ -374,7 +375,7 @@ export function BorrowingsList({ listHeader }: { listHeader?: ReactNode }) {
         ListEmptyComponent={empty}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={{ paddingBottom: listBottomPadding }}
         extraData={`${statusFilter}-${lenderTypeFilter}-${dateFilter}-${searchQuery}-${isDark}`}
       />
 
@@ -421,9 +422,6 @@ const styles = StyleSheet.create({
   },
   list: {
     flex: 1,
-  },
-  listContent: {
-    paddingBottom: BOTTOM_NAV_FAB_SIZE + BOTTOM_NAV_FAB_GAP + 8,
   },
   controls: {
     gap: 14,

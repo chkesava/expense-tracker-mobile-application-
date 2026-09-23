@@ -88,6 +88,7 @@ export default function InvestmentsScreen() {
   return (
     <PageShell
       scrollable={!isPortfolioTab}
+      listOwnsBottomInset
       contentContainerStyle={
         isPortfolioTab ? styles.portfolioShell : styles.container
       }
