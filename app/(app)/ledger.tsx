@@ -32,10 +32,12 @@ import {
   type AccountActivityFilterField,
 } from "@/components/accounts/TransactionFilters";
 import { ExpenseList } from "@/components/ExpenseList";
+import { JournalPeriodSummary } from "@/components/ledger/JournalPeriodSummary";
 import { LedgerAuditList } from "@/components/ledger/LedgerAuditList";
 import { PageHeader, type PageHeaderTab } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { useAccounts } from "@/hooks/useAccounts";
+import { useAccountTypes } from "@/hooks/useAccountTypes";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useIncomes } from "@/hooks/useIncomes";
 import { useLedgerState, type LedgerTab } from "@/providers/LedgerStateProvider";
@@ -58,6 +60,8 @@ import {
   runJournalFilterPipeline,
   withJournalDateScope,
 } from "@/shared/utils/journalFilterPipeline";
+import type { JournalPeriodGranularity } from "@/shared/utils/journalPeriodSummary";
+import { journalCashFlowById } from "@/shared/utils/journalRunningBalance";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
@@ -102,6 +106,9 @@ export default function LedgerScreen() {
     retry: retryIncomes,
   } = useIncomes();
   const { accounts } = useAccounts();
+  // SPENDLY-111: the type name is what tells a credit card from a bank, so a
+  // card purchase is never counted as cash leaving an account.
+  const { accountTypes } = useAccountTypes();
 
   useEffect(() => {
     const remapped = resolveLegacyLedgerTabRoute(params.tab);
@@ -153,6 +160,9 @@ export default function LedgerScreen() {
     [expensesTab]
   );
 
+  const [periodGranularity, setPeriodGranularity] =
+    useState<JournalPeriodGranularity>("month");
+
   // One memo over the pure pipeline, so what ships is what the tests cover.
   const journal = useMemo(
     () =>
@@ -160,19 +170,25 @@ export default function LedgerScreen() {
         expenses,
         incomes,
         accounts,
+        accountTypes,
         query: debouncedQuery,
         filters: journalFilters,
         monthKey: activeMonth,
         scope: journalScope,
+        granularity: periodGranularity,
+        firstDayOfWeek: settings.firstDayOfWeek,
       }),
     [
       expenses,
       incomes,
       accounts,
+      accountTypes,
       debouncedQuery,
       journalFilters,
       activeMonth,
       journalScope,
+      periodGranularity,
+      settings.firstDayOfWeek,
     ]
   );
 
@@ -188,9 +204,14 @@ export default function LedgerScreen() {
   const hasNarrowedView =
     journal.activeFilterCount > 0 || debouncedQuery.trim().length > 0;
 
-  // Totals may only be shown over the complete, unfiltered month — the one
-  // case where they are actually the month's totals.
-  const canShowAuthoritativeTotals = ledgerComplete && !hasNarrowedView;
+  // SPENDLY-111: ExpenseList's own Spent/Income/Net card is superseded by
+  // JournalPeriodSummary, which is rounded, scoped to the rows actually in
+  // view, and refuses to render at all while the ledger is truncated. Showing
+  // both would put two different Spent figures on one screen.
+  const cashFlowById = useMemo(
+    () => journalCashFlowById(journal.runningBalance),
+    [journal.runningBalance]
+  );
 
   // A kind carried over from another sub-tab can leave the list permanently
   // empty with no visible cause, so drop it when it is no longer offered.
@@ -491,6 +512,14 @@ export default function LedgerScreen() {
                   </Text>
                 </View>
               ) : null}
+              <JournalPeriodSummary
+                totals={journal.totals}
+                periods={journal.periods}
+                granularity={periodGranularity}
+                onGranularityChange={setPeriodGranularity}
+                netCashFlow={journal.runningBalance.netCashFlow}
+                complete={ledgerComplete}
+              />
             </>
           ) : null}
 
@@ -531,7 +560,8 @@ export default function LedgerScreen() {
                   expenses={filteredExpenses}
                   incomes={filteredIncomes}
                   accounts={accounts}
-                  showMonthSummary={canShowAuthoritativeTotals}
+                  showMonthSummary={false}
+                  cashFlowById={ledgerComplete ? cashFlowById : undefined}
                   refreshing={refreshing}
                   onRefresh={handleRefresh}
                   onEditExpense={(exp) => {
@@ -584,7 +614,8 @@ export default function LedgerScreen() {
                   expenses={[]}
                   incomes={filteredIncomes}
                   accounts={accounts}
-                  showMonthSummary={canShowAuthoritativeTotals}
+                  showMonthSummary={false}
+                  cashFlowById={ledgerComplete ? cashFlowById : undefined}
                   refreshing={refreshing}
                   onRefresh={handleRefresh}
                   onEditIncome={(inc) => {
