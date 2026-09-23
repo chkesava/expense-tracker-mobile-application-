@@ -1,6 +1,12 @@
 /** Append-only journal of expense/income edits and soft-deletes (SPENDLY-38). */
 
-export type LedgerEventAction = "update" | "delete";
+/**
+ * SPENDLY-110 adds "restore". This is a stored value, so older documents carry
+ * only "update" | "delete" and a future build may add more — renderers must
+ * treat an unrecognised action as an edit rather than dropping the event, or
+ * the audit trail silently loses history.
+ */
+export type LedgerEventAction = "update" | "delete" | "restore";
 export type LedgerEventKind = "expense" | "income";
 
 /** Primitive snapshot stored on a ledger event. No Timestamp objects. */
