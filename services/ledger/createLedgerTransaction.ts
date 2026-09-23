@@ -27,6 +27,10 @@ export type CreateExpenseInput = {
   smsMatchStatus?: "AUTO_MATCHED" | "AMBIGUOUS" | "NEEDS_REVIEW";
   smsMatchConfidence?: number;
   smsMatchedSignals?: string[];
+  /** SPENDLY-106 statement import provenance. */
+  statementImportFingerprint?: string;
+  creditCardBillId?: string;
+  accountDocumentId?: string;
 };
 
 export type CreateIncomeInput = {
@@ -110,6 +114,15 @@ export async function createExpense(
       : {}),
     ...(payload.smsMatchedSignals?.length
       ? { smsMatchedSignals: payload.smsMatchedSignals }
+      : {}),
+    ...(payload.statementImportFingerprint
+      ? { statementImportFingerprint: payload.statementImportFingerprint }
+      : {}),
+    ...(payload.creditCardBillId
+      ? { creditCardBillId: payload.creditCardBillId }
+      : {}),
+    ...(payload.accountDocumentId
+      ? { accountDocumentId: payload.accountDocumentId }
       : {}),
     createdAt: serverTimestamp(),
   };
