@@ -34,6 +34,7 @@ import {
 import { ExpenseList } from "@/components/ExpenseList";
 import { JournalPeriodSummary } from "@/components/ledger/JournalPeriodSummary";
 import { LedgerAuditList } from "@/components/ledger/LedgerAuditList";
+import { LedgerHealthReport } from "@/components/ledger/LedgerHealthReport";
 import { PageHeader, type PageHeaderTab } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { useAccounts } from "@/hooks/useAccounts";
@@ -62,8 +63,18 @@ import {
 } from "@/shared/utils/journalFilterPipeline";
 import type { JournalPeriodGranularity } from "@/shared/utils/journalPeriodSummary";
 import { journalCashFlowById } from "@/shared/utils/journalRunningBalance";
+import type { LedgerAuditSubject } from "@/shared/utils/ledgerAudit";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+
+/**
+ * SPENDLY-112 — the Audit sub-tab holds two different questions. The trail
+ * answers "what changed"; the checks answer "what is wrong now".
+ */
+const AUDIT_VIEWS = [
+  { id: "checks", label: "Checks" },
+  { id: "trail", label: "Trail" },
+] as const;
 
 export default function LedgerScreen() {
   const router = useRouter();
@@ -162,6 +173,33 @@ export default function LedgerScreen() {
 
   const [periodGranularity, setPeriodGranularity] =
     useState<JournalPeriodGranularity>("month");
+
+  // SPENDLY-112 — which half of the Audit workspace is showing. Local to the
+  // screen rather than the provider: unlike the sub-tab itself, there is
+  // nothing here worth preserving across a hop to another hub tab.
+  const [auditView, setAuditView] = useState<"checks" | "trail">("checks");
+
+  /**
+   * SPENDLY-112 — take the user from a finding to the transaction it is about.
+   *
+   * The Journal's search already matches raw document ids
+   * (`accountActivitySearch.ts`), so this needs no change to `ExpenseList`.
+   * The date range is not optional: without it the month pill would hide any
+   * finding outside the selected month, which is most of them. A range
+   * overrides the month by design (`resolveJournalDateScope`).
+   */
+  const handleShowInJournal = useCallback(
+    (subject: LedgerAuditSubject) => {
+      setJournalFilters({
+        ...createEmptyAccountActivityFilters(),
+        fromDate: subject.date ?? "",
+        toDate: subject.date ?? "",
+      });
+      setQuery(subject.id);
+      setExpensesTab("history");
+    },
+    [setJournalFilters, setQuery, setExpensesTab]
+  );
 
   // One memo over the pure pipeline, so what ships is what the tests cover.
   const journal = useMemo(
@@ -628,8 +666,53 @@ export default function LedgerScreen() {
           )}
 
           {expensesTab === "audit" ? (
-            <View style={{ flex: 1 }}>
-              <LedgerAuditList />
+            <View style={{ flex: 1, gap: 12 }}>
+              <View style={styles.auditViewRow}>
+                {AUDIT_VIEWS.map((view) => {
+                  const isActive = auditView === view.id;
+                  return (
+                    <Pressable
+                      key={view.id}
+                      onPress={() => setAuditView(view.id)}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: isActive }}
+                      style={[
+                        styles.auditViewChip,
+                        {
+                          backgroundColor: isActive
+                            ? theme.colors.primary
+                            : isDark
+                              ? "rgba(255,255,255,0.05)"
+                              : "rgba(0,0,0,0.04)",
+                          borderColor: isActive
+                            ? theme.colors.primary
+                            : theme.colors.border,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.auditViewText,
+                          {
+                            color: isActive
+                              ? theme.colors.primaryForeground
+                              : theme.colors.mutedForeground,
+                          },
+                        ]}
+                      >
+                        {view.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              <View style={{ flex: 1 }}>
+                {auditView === "checks" ? (
+                  <LedgerHealthReport onShowInJournal={handleShowInJournal} />
+                ) : (
+                  <LedgerAuditList />
+                )}
+              </View>
             </View>
           ) : null}
 
@@ -704,6 +787,20 @@ const styles = StyleSheet.create({
   },
   subTabText: {
     fontSize: 12,
+  },
+  auditViewRow: {
+    flexDirection: "row",
+    gap: 6,
+  },
+  auditViewChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  auditViewText: {
+    fontSize: 11,
+    fontWeight: "700",
   },
   itemList: {
     gap: 8,
