@@ -31,9 +31,12 @@
 import type {
   Account,
   AccountActivity,
+  AccountKind,
+  AccountType,
   Expense,
   Income,
 } from "@/shared/types/expense";
+import { getAccountKind } from "./accountKind";
 import {
   classifyActivitySpecials,
   type FilterableAccountActivity,
@@ -47,6 +50,15 @@ import { isActiveLedgerRow } from "./ledgerRow";
 export type JournalScope = "all" | "expenses" | "incomes";
 
 /**
+ * The account fields the Journal needs. `typeId` is optional so callers that
+ * only care about names (and the SPENDLY-109 tests) still type-check; without
+ * it a row's `accountKind` is simply unknown.
+ */
+export type JournalAccount = Pick<Account, "id" | "name" | "displayName"> & {
+  typeId?: string;
+};
+
+/**
  * One canonical ledger row, decorated for filtering and search. Exactly one of
  * `expense` / `income` is ever set — the no-double-count invariant expressed in
  * the type system.
@@ -54,16 +66,38 @@ export type JournalScope = "all" | "expenses" | "incomes";
 export interface JournalRecord extends FilterableAccountActivity {
   expense?: Expense;
   income?: Income;
+  /**
+   * SPENDLY-111 — the kind of account this row was posted to, so a credit-card
+   * purchase is never mistaken for cash leaving a bank. `undefined` when the
+   * row has no account, the account is missing, or account types were not
+   * supplied; callers treat that as cash, which is the safe default for the
+   * overwhelmingly common case of an account-less cash expense.
+   */
+  accountKind?: AccountKind;
 }
 
-function accountNameById(
-  accounts: Pick<Account, "id" | "name" | "displayName">[]
-): Map<string, string> {
+function accountNameById(accounts: JournalAccount[]): Map<string, string> {
   const byId = new Map<string, string>();
   for (const account of accounts) {
     if (!account.id) continue;
     const label = getAccountDisplayName(account);
     if (label) byId.set(account.id, label);
+  }
+  return byId;
+}
+
+/** accountId -> ledger kind, resolved through the account's type name. */
+function accountKindById(
+  accounts: JournalAccount[],
+  accountTypes: Pick<AccountType, "id" | "name">[]
+): Map<string, AccountKind> {
+  const typeNameById = new Map(accountTypes.map((type) => [type.id, type.name]));
+  const byId = new Map<string, AccountKind>();
+  for (const account of accounts) {
+    if (!account.id || !account.typeId) continue;
+    const typeName = typeNameById.get(account.typeId);
+    if (!typeName) continue;
+    byId.set(account.id, getAccountKind(typeName));
   }
   return byId;
 }
@@ -77,7 +111,8 @@ function withSearchText(record: JournalRecord): JournalRecord {
 function expenseRecord(
   expense: Expense,
   index: number,
-  accountNames: Map<string, string>
+  accountNames: Map<string, string>,
+  accountKinds: Map<string, AccountKind>
 ): JournalRecord {
   const activity: AccountActivity = {
     id: expense.id || `expense-${expense.date}-${index}`,
@@ -98,6 +133,9 @@ function expenseRecord(
     accountName: expense.accountId
       ? accountNames.get(expense.accountId)
       : undefined,
+    accountKind: expense.accountId
+      ? accountKinds.get(expense.accountId)
+      : undefined,
     tags: expense.tags?.filter(Boolean) ?? [],
     // An expense that has never been reviewed is "unaudited", not "unknown" —
     // the account screen makes the same call, so the status chips agree.
@@ -110,7 +148,8 @@ function expenseRecord(
 function incomeRecord(
   income: Income,
   index: number,
-  accountNames: Map<string, string>
+  accountNames: Map<string, string>,
+  accountKinds: Map<string, AccountKind>
 ): JournalRecord {
   const activity: AccountActivity = {
     id: income.id || `income-${income.date}-${index}`,
@@ -132,6 +171,9 @@ function incomeRecord(
     accountName: income.accountId
       ? accountNames.get(income.accountId)
       : undefined,
+    accountKind: income.accountId
+      ? accountKinds.get(income.accountId)
+      : undefined,
     tags: [],
     ...classifyActivitySpecials({ activity, income }),
     income,
@@ -146,23 +188,28 @@ function incomeRecord(
 export function buildJournalRecords(
   expenses: Expense[],
   incomes: Income[],
-  accounts: Pick<Account, "id" | "name" | "displayName">[],
-  options?: { scope?: JournalScope }
+  accounts: JournalAccount[],
+  options?: {
+    scope?: JournalScope;
+    /** SPENDLY-111 — needed to tell a card purchase from cash leaving a bank. */
+    accountTypes?: Pick<AccountType, "id" | "name">[];
+  }
 ): JournalRecord[] {
   const scope = options?.scope ?? "all";
   const accountNames = accountNameById(accounts);
+  const accountKinds = accountKindById(accounts, options?.accountTypes ?? []);
   const records: JournalRecord[] = [];
 
   if (scope === "all" || scope === "expenses") {
     expenses.forEach((expense, index) => {
       if (!isActiveLedgerRow(expense)) return;
-      records.push(expenseRecord(expense, index, accountNames));
+      records.push(expenseRecord(expense, index, accountNames, accountKinds));
     });
   }
   if (scope === "all" || scope === "incomes") {
     incomes.forEach((income, index) => {
       if (!isActiveLedgerRow(income)) return;
-      records.push(incomeRecord(income, index, accountNames));
+      records.push(incomeRecord(income, index, accountNames, accountKinds));
     });
   }
 

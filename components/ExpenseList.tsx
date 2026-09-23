@@ -59,6 +59,13 @@ export interface ExpenseListProps {
   onEditExpense?: (expense: Expense) => void;
   onEditIncome?: (income: Income) => void;
   showMonthSummary?: boolean;
+  /**
+   * SPENDLY-111 — cumulative net cash flow per activity id, for the Journal.
+   * Deliberately not called a balance: it is movement across the rows in view,
+   * not an account balance (see `journalRunningBalance.ts`). Omit it to hide
+   * the column, which is what happens while the ledger is still truncated.
+   */
+  cashFlowById?: Map<string, number>;
   refreshing?: boolean;
   onRefresh?: () => void;
 }
@@ -98,6 +105,7 @@ export function ExpenseList({
   onEditExpense,
   onEditIncome,
   showMonthSummary = true,
+  cashFlowById,
   refreshing,
   onRefresh,
 }: ExpenseListProps) {
@@ -322,6 +330,7 @@ export function ExpenseList({
       isLastInSection: boolean
     ) => {
     const isExpense = item.kind === "expense";
+    const cashFlow = cashFlowById?.get(item.id);
     const iconChar = isExpense ? getCategoryIcon(item.data.category) : "💰";
     const acc = item.data.accountId ? accountMap.get(item.data.accountId) : undefined;
     const isRowSelected = Boolean(
@@ -482,6 +491,18 @@ export function ExpenseList({
                 color: isExpense ? theme.colors.foreground : theme.colors.success,
               }}
             />
+            {cashFlow !== undefined ? (
+              <Text
+                style={[
+                  styles.cashFlow,
+                  { color: theme.colors.mutedForeground },
+                ]}
+                numberOfLines={1}
+              >
+                {cashFlow < 0 ? "-" : ""}
+                {Math.abs(cashFlow).toLocaleString()}
+              </Text>
+            ) : null}
             {isExpense && item.data.tags && item.data.tags.length > 0 ? (
               <View style={styles.tagsPreview}>
                 <Tag size={10} color={theme.colors.mutedForeground} />
@@ -502,6 +523,7 @@ export function ExpenseList({
     },
     [
       accountMap,
+      cashFlowById,
       handleDelete,
       isDark,
       isSelecting,
@@ -1137,6 +1159,10 @@ const styles = StyleSheet.create({
     flexShrink: 0,
     gap: 4,
     minWidth: 60,
+  },
+  cashFlow: {
+    fontSize: 10,
+    fontVariant: ["tabular-nums"],
   },
   tagsPreview: {
     flexDirection: "row",

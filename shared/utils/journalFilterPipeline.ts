@@ -16,7 +16,7 @@
  *   result count describe the rows actually on screen.
  */
 
-import type { Account, Expense, Income } from "@/shared/types/expense";
+import type { AccountType, Expense, Income } from "@/shared/types/expense";
 import {
   applyAccountActivityFilters,
   countActiveAccountActivityFilters,
@@ -29,22 +29,40 @@ import { searchAccountActivities } from "./accountActivitySearch";
 import {
   buildJournalRecords,
   journalRecordsToRows,
+  type JournalAccount,
   type JournalRecord,
   type JournalScope,
 } from "./journalActivities";
 import {
+  buildJournalRunningBalance,
+  type JournalRunningBalance,
+} from "./journalRunningBalance";
+import {
+  summarizeJournalPeriods,
+  summarizeJournalTotals,
+  type JournalPeriodGranularity,
+  type JournalPeriodSummary,
+  type JournalTotals,
+} from "./journalPeriodSummary";
+import {
   resolveJournalDateScope,
   type JournalDateScope,
 } from "./journalDateScope";
+import type { FirstDayOfWeek } from "./dates";
 
 export interface JournalPipelineInput {
   expenses: Expense[];
   incomes: Income[];
-  accounts: Pick<Account, "id" | "name" | "displayName">[];
+  accounts: JournalAccount[];
   query: string;
   filters: AccountActivityFilters;
   monthKey?: string;
   scope?: JournalScope;
+  /** SPENDLY-111 — lets a card purchase be told apart from cash leaving a bank. */
+  accountTypes?: Pick<AccountType, "id" | "name">[];
+  /** SPENDLY-111 — bucketing for the period breakdown. Defaults to "month". */
+  granularity?: JournalPeriodGranularity;
+  firstDayOfWeek?: FirstDayOfWeek;
 }
 
 export interface JournalKindCounts {
@@ -69,6 +87,16 @@ export interface JournalPipelineResult {
   /** Counts the *user's* filters only — never the injected month range. */
   activeFilterCount: number;
   validationError: string | null;
+  /**
+   * SPENDLY-111 — cumulative cash flow over `filtered`, newest-first. This is
+   * movement across the rows in view, not an account balance; see
+   * `journalRunningBalance.ts` for why the Journal cannot have the latter.
+   */
+  runningBalance: JournalRunningBalance;
+  /** Totals over `filtered`. */
+  totals: JournalTotals;
+  /** `filtered` bucketed by day / week / month, newest bucket first. */
+  periods: JournalPeriodSummary[];
 }
 
 /** Inject a resolved scope into a filter set without disturbing anything else. */
@@ -86,7 +114,7 @@ export function runJournalFilterPipeline(
     input.expenses,
     input.incomes,
     input.accounts,
-    { scope: input.scope }
+    { scope: input.scope, accountTypes: input.accountTypes }
   );
 
   const filterOptions = getAccountActivityFilterOptions(records);
@@ -112,6 +140,11 @@ export function runJournalFilterPipeline(
   const filtered = applyAccountActivityFilters(searched, effectiveFilters);
 
   return {
+    runningBalance: buildJournalRunningBalance(filtered),
+    totals: summarizeJournalTotals(filtered),
+    periods: summarizeJournalPeriods(filtered, input.granularity ?? "month", {
+      firstDayOfWeek: input.firstDayOfWeek,
+    }),
     records,
     filterOptions,
     dateScope,
