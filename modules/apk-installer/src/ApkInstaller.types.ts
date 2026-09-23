@@ -1,1 +1,1 @@
-export type ApkInstallStatus = "success" | "aborted" | "failure";
+export type ApkInstallStatus = "success" | "pending" | "aborted" | "failure";

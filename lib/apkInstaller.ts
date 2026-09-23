@@ -1,4 +1,4 @@
-type ApkInstallStatus = "success" | "aborted" | "failure";
+type ApkInstallStatus = "success" | "pending" | "aborted" | "failure";
 
 const ApkInstaller = {
   canRequestPackageInstalls: async (): Promise<boolean> => false,
