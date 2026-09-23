@@ -25,7 +25,8 @@ service cloud.firestore {
     // Personal data — users/{uid}/...
     //
     // Collections currently written by the app:
-    //   accountEntries, accountPayments, accounts, accountTransfers,
+    //   accountEntries, accountPayments, accountReconciliations, accounts,
+    //   accountTransfers,
     //   accountTypes, alerts, borrowingRepayments, borrowings, categories,
     //   categorizationRules, categoryBudgets, epfContributionEvents,
     //   epfContributions, epfEstablishments, epfProfile,
@@ -83,6 +84,17 @@ service cloud.firestore {
         return !d.keys().hasAny([key]) || boundedNonNeg(d.get(key, -1));
       }
 
+      // Signed twin of boundedNonNeg: a balance can legitimately be negative
+      // (an overdrawn account), and a variance is negative whenever Spendly
+      // thinks there is more money than the bank does.
+      function boundedNumber(value) {
+        return value is number && value > -1000000000 && value < 1000000000;
+      }
+
+      function optionalBoundedNumber(d, key) {
+        return !d.keys().hasAny([key]) || boundedNumber(d.get(key, 0));
+      }
+
       function optionalYmd(d, key) {
         return !d.keys().hasAny([key])
           || d.get(key, '') == null
@@ -99,6 +111,88 @@ service cloud.firestore {
       function personalMoneyWellFormed() {
         let d = request.resource.data;
         return boundedNonNeg(d.amount) && optionalYmd(d, 'date');
+      }
+
+      // SPENDLY-87. Audit metadata, not money: no `amount`, so
+      // personalMoneyWellFormed() does not apply. The balances and the
+      // variance are signed, and `status` is a closed set — a client must not
+      // invent a third state that the app would then have to interpret.
+      function accountReconciliationWellFormed() {
+        let d = request.resource.data;
+        return d.accountId is string
+          && d.accountId.size() > 0
+          && optionalYmd(d, 'fromDate')
+          && optionalYmd(d, 'toDate')
+          && optionalBoundedNumber(d, 'statementClosingBalance')
+          && optionalBoundedNumber(d, 'ledgerClosingBalance')
+          && optionalBoundedNumber(d, 'variance')
+          && (!d.keys().hasAny(['status'])
+              || d.get('status', '') in ['balanced', 'variance']);
+      }
+
+      // SPENDLY-89. A note is context, not money.
+      //
+      // The `amount` ban is the point of this rule rather than a detail: it is
+      // what keeps "notes never affect balances" a property of the data and
+      // not just of the current client. Nothing derives a figure from this
+      // collection today, and a document here cannot start looking like one.
+      //
+      // `accountId` is pinned on update so a note cannot be moved to another
+      // account after the fact, which keeps account scoping a property of the
+      // document rather than of whoever wrote to it last.
+      function accountNoteWellFormed() {
+        let d = request.resource.data;
+        return d.accountId is string
+          && d.accountId.size() > 0
+          && d.title is string
+          && d.title.size() <= 80
+          && d.body is string
+          && d.body.size() <= 2000
+          && (d.title.size() > 0 || d.body.size() > 0)
+          && d.pinned is bool
+          && !d.keys().hasAny(['amount', 'date'])
+          && (!d.keys().hasAny(['createdAtMs']) || d.createdAtMs is number)
+          && (!d.keys().hasAny(['updatedAtMs']) || d.updatedAtMs is number)
+          && (resource == null || d.accountId == resource.data.accountId);
+      }
+
+      // SPENDLY-88. Metadata for a file stored in the private `spendly-files`
+      // bucket. Metadata only -- no bytes ever reach Firestore.
+      //
+      // `storagePath` is pinned to this user's own prefix, and pinned again on
+      // update. That is the rule doing real work: the Edge Function derives
+      // ownership from the path, so a client able to point a metadata row at
+      // `users/<someone-else>/...` would be able to ask for a signed URL for
+      // another person's bank statement using a document it legitimately owns.
+      // The path must also not be a URL -- the signed URLs for these objects
+      // expire, and storing one would rot.
+      //
+      // Like a note, a document is context rather than money, so `amount` and
+      // `date` are refused here too.
+      function accountDocumentWellFormed() {
+        let d = request.resource.data;
+        return d.accountId is string
+          && d.accountId.size() > 0
+          && d.name is string
+          && d.name.size() > 0
+          && d.name.size() <= 120
+          && d.note is string
+          && d.note.size() <= 500
+          && d.storagePath is string
+          && d.storagePath.matches('^users/' + request.auth.uid + '/accounts/[A-Za-z0-9_-]{1,64}/[A-Za-z0-9_-]{1,64}/[A-Za-z0-9._-]{1,80}$')
+          && d.fileName is string
+          && d.fileName.size() <= 200
+          && d.mimeType in ['application/pdf', 'image/jpeg', 'image/png', 'image/webp']
+          && d.sizeBytes is number
+          && d.sizeBytes >= 0
+          && d.sizeBytes <= 10485760
+          && d.status in ['pending', 'ready']
+          && !d.keys().hasAny(['amount', 'date'])
+          && (!d.keys().hasAny(['uploadedAtMs']) || d.uploadedAtMs is number)
+          && (!d.keys().hasAny(['updatedAtMs']) || d.updatedAtMs is number)
+          && (resource == null
+              || (d.accountId == resource.data.accountId
+                  && d.storagePath == resource.data.storagePath));
       }
 
       function holdingWellFormed() {
@@ -244,6 +338,18 @@ service cloud.firestore {
       match /accountPayments/{id} {
         allow read, delete: if isOwner(uid);
         allow create, update: if isOwner(uid) && personalMoneyWellFormed();
+      }
+      match /accountReconciliations/{id} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && accountReconciliationWellFormed();
+      }
+      match /accountDocuments/{id} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && accountDocumentWellFormed();
+      }
+      match /accountNotes/{id} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && accountNoteWellFormed();
       }
       match /accountTransfers/{id} {
         allow read, delete: if isOwner(uid);

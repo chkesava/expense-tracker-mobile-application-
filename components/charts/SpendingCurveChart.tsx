@@ -33,6 +33,16 @@ export interface SpendingCurveChartProps {
   showYAxis?: boolean;
   /** How many x-axis date ticks to label. Clamped to the point count. */
   xTickCount?: number;
+  /**
+   * Scale the y-axis to the data instead of anchoring it at zero. Required for
+   * series that can go negative, such as an account balance.
+   */
+  autoDomain?: boolean;
+  /**
+   * Animate each dot in with a staggered spring. Turn off for long series —
+   * the stagger is per-point, so hundreds of points take many seconds.
+   */
+  animateDots?: boolean;
 }
 
 function AnimatedCurveDot({
@@ -89,6 +99,8 @@ export function SpendingCurveChart({
   showCumulative = false,
   showYAxis = false,
   xTickCount = 3,
+  autoDomain = false,
+  animateDots = true,
 }: SpendingCurveChartProps) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
@@ -111,10 +123,26 @@ export function SpendingCurveChart({
     });
   }, [points, showCumulative]);
 
-  const maxAmount = useMemo(() => {
-    const max = Math.max(...processedData.map((p) => p.amount), 0);
-    return max > 0 ? max * 1.15 : 100;
-  }, [processedData]);
+  // Default keeps the historic zero-anchored scale exactly as it was. With
+  // autoDomain the scale follows the data, so a series that dips below zero
+  // still lands inside the plot area.
+  const { minY, maxY } = useMemo(() => {
+    const values = processedData.map((p) => p.amount);
+    if (!autoDomain) {
+      const max = Math.max(...values, 0);
+      return { minY: 0, maxY: max > 0 ? max * 1.15 : 100 };
+    }
+    const rawMin = Math.min(...values, 0);
+    const rawMax = Math.max(...values, 0);
+    if (rawMax === rawMin) return { minY: rawMin - 100, maxY: rawMax + 100 };
+    const padding = (rawMax - rawMin) * 0.15;
+    return { minY: rawMin - padding, maxY: rawMax + padding };
+  }, [autoDomain, processedData]);
+
+  const maxPointAmount = useMemo(
+    () => Math.max(...processedData.map((p) => p.amount), 0),
+    [processedData]
+  );
 
   const chartPaddingTop = 20;
   const chartPaddingBottom = 26;
@@ -132,10 +160,11 @@ export function SpendingCurveChart({
 
     return processedData.map((p, i) => {
       const x = chartPaddingLeft + i * stepX;
-      const y = chartPaddingTop + chartHeight - (p.amount / maxAmount) * chartHeight;
+      const ratio = (p.amount - minY) / (maxY - minY);
+      const y = chartPaddingTop + chartHeight - ratio * chartHeight;
       return { x, y, ...p, index: i };
     });
-  }, [processedData, chartWidth, chartHeight, maxAmount, chartPaddingLeft, chartPaddingTop]);
+  }, [processedData, chartWidth, chartHeight, minY, maxY, chartPaddingLeft, chartPaddingTop]);
 
   // Generate smooth SVG path (catmull-rom or simple bezier)
   const { linePath, areaPath } = useMemo(() => {
@@ -268,7 +297,7 @@ export function SpendingCurveChart({
                     fill={theme.colors.mutedForeground}
                     textAnchor="end"
                   >
-                    {compactAxisValue(maxAmount * ratio)}
+                    {compactAxisValue(minY + (maxY - minY) * ratio)}
                   </SvgText>
                 ) : null}
               </React.Fragment>
@@ -297,11 +326,17 @@ export function SpendingCurveChart({
               isSelected ||
               i === 0 ||
               i === coordinates.length - 1 ||
-              pt.amount === Math.max(...processedData.map((d) => d.amount));
+              pt.amount === maxPointAmount;
 
             const targetRadius = isSelected ? 6 : isKeyPoint ? 3.5 : 2;
+            const onPress = () => {
+              haptic.selection().catch(() => undefined);
+              setSelectedIndex(i);
+            };
 
-            return (
+            // A plain circle still reads and still responds to touch; it just
+            // skips the per-point spring that makes long series crawl.
+            return animateDots ? (
               <AnimatedCurveDot
                 key={i}
                 cx={pt.x}
@@ -311,10 +346,18 @@ export function SpendingCurveChart({
                 stroke={theme.colors.card}
                 strokeWidth={isSelected ? 2 : 1}
                 index={i}
-                onPress={() => {
-                  haptic.selection().catch(() => undefined);
-                  setSelectedIndex(i);
-                }}
+                onPress={onPress}
+              />
+            ) : (
+              <Circle
+                key={i}
+                cx={pt.x}
+                cy={pt.y}
+                r={targetRadius}
+                fill={isSelected ? theme.colors.foreground : activeLineColor}
+                stroke={theme.colors.card}
+                strokeWidth={isSelected ? 2 : 1}
+                onPress={onPress}
               />
             );
           })}

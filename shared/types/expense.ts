@@ -221,6 +221,95 @@ export interface AccountEntry {
   correlationId?: string;
 }
 
+/**
+ * A record that an account was checked against its real statement (SPENDLY-87).
+ *
+ * Audit metadata, never money. Reconciling changes no balance: a disagreement
+ * is corrected by an explicit `AccountEntry` the user chooses to record, and
+ * `adjustmentEntryId` points at it when they did. Keeping the two separate is
+ * the point — the reconciliation says what was found, the entry says what
+ * somebody decided to do about it.
+ */
+export interface AccountReconciliation {
+  id: string;
+  accountId: string;
+  /** Inclusive period the statement covered. */
+  fromDate: string;
+  toDate: string;
+  /** What the user read off their real statement. */
+  statementClosingBalance: number;
+  /** Spendly's own closing balance for the same period, at the time of check. */
+  ledgerClosingBalance: number;
+  /** Statement minus ledger. Zero when the two agreed. */
+  variance: number;
+  status: "balanced" | "variance";
+  matchedCount: number;
+  /** On the statement, absent from Spendly. */
+  missingCount: number;
+  /** In Spendly, absent from the statement. */
+  extraCount: number;
+  note?: string;
+  /** The account entry recorded to close the variance, when one was. */
+  adjustmentEntryId?: string;
+  createdAt?: unknown;
+}
+
+/**
+ * A file stored against an account (SPENDLY-88).
+ *
+ * This is metadata only. The bytes live in the private `spendly-files` Supabase
+ * bucket at `storagePath`, reachable only through a short-lived signed URL
+ * minted by the `spendly-files` Edge Function. Nothing binary is ever written
+ * to Firestore.
+ *
+ * Like a note, a document is non-financial: it carries no amount, and no
+ * balance, statement or analytics figure is derived from one.
+ */
+export interface AccountDocument {
+  id: string;
+  accountId: string;
+  /** The user's name for it, which need not match the uploaded file name. */
+  name: string;
+  note: string;
+  /** Object key in the bucket. Never a URL -- URLs here expire. */
+  storagePath: string;
+  /** The picked file's own name, kept for display and for re-download. */
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  /**
+   * `pending` until the bytes land. Metadata is written first so a failed
+   * upload leaves a visible row rather than an unreferenced object.
+   */
+  status: "pending" | "ready";
+  uploadedAtMs?: number;
+  uploadedAt?: unknown;
+  updatedAtMs?: number;
+  updatedAt?: unknown;
+}
+
+/**
+ * A free-text note a user keeps against an account (SPENDLY-89).
+ *
+ * Non-financial by construction: it carries no amount, no date key and no
+ * account entry reference, and lives outside the activity pipeline, so it can
+ * never reach a balance, a statement or an analytics figure.
+ */
+export interface AccountNote {
+  id: string;
+  accountId: string;
+  /** Either title or body may be empty, but never both. */
+  title: string;
+  body: string;
+  pinned: boolean;
+  /** Client clock, written for ordering a list the user is looking at now. */
+  createdAtMs?: number;
+  updatedAtMs?: number;
+  /** Server clock, the authority for when this actually happened. */
+  createdAt?: unknown;
+  updatedAt?: unknown;
+}
+
 /** A movement of money between two non-credit accounts. It is never income or an expense. */
 export interface AccountTransfer {
   id: string;

@@ -52,6 +52,45 @@ Foundation done: SPENDLY-95, SPENDLY-97, SPENDLY-99
 3. Export: SPENDLY-113
 4. Confirm whether SPENDLY-114 is a duplicate of SPENDLY-110 before implementing
 
+# SPENDLY-78 Accounts V2 Integration Flow
+
+The Accounts Intelligence & Statement Suite epic (`SPENDLY-78`) uses
+`accounts-v2` as its integration branch.
+
+- For each remaining epic ticket, pull the latest `accounts-v2` and create the
+  ticket branch from it, not from `main`.
+- Keep the Jira key in the branch, commit, and PR title.
+- Open each ticket PR against `accounts-v2`.
+- After checks pass, merge the ticket PR into `accounts-v2`.
+- Do not merge `accounts-v2` into `main` until every SPENDLY-78 ticket is
+  complete and the user explicitly requests the final epic merge.
+- A ticket merged only into `accounts-v2` is not shipped to `main`; keep Jira
+  out of Done until the final integration reaches `main`.
+
+Ticket order (all complete on `accounts-v2` as of 2026-09-23; the epic is
+awaiting its final merge to `main`):
+
+1. Foundation and transaction experience:
+   - SPENDLY-81 Running balance
+   - SPENDLY-82 Advanced filters
+   - SPENDLY-83 Search
+   - SPENDLY-84 Monthly statement summary
+2. Derived account intelligence:
+   - SPENDLY-80 Health and overview metrics
+   - SPENDLY-85 Spending insights
+   - SPENDLY-86 Balance trend/history
+   - SPENDLY-90 Activity statistics
+3. Statement and reconciliation workflows:
+   - SPENDLY-79 PDF/CSV statement export
+   - SPENDLY-87 Bank-account reconciliation
+4. Supporting account context and final organization:
+   - SPENDLY-88 Documents and attachments
+   - SPENDLY-89 Notes
+   - SPENDLY-91 Action center
+
+Remove this section once the final merge lands — see the post-merge checklist
+on SPENDLY-78.
+
 # Phase Delivery Protocol
 After completing every phase:
 1. Provide a step-by-step **Manual Testing Guide** describing how to test/verify that phase on device/simulator.
