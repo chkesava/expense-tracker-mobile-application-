@@ -83,13 +83,16 @@ function createdAtOf(record: JournalRecord): unknown {
 }
 
 /**
- * Order rows oldest-first for accumulation.
+ * Order rows oldest-first for accumulation, agreeing with the order
+ * `ExpenseList` renders in (`postingSortMs(date, time, createdAt)`) — the
+ * running figure has to step monotonically down the list.
  *
- * `createdAt` is included because `ExpenseList` sorts with it
- * (`postingSortMs(date, time, createdAt)`). If this accumulated in a different
- * order, two same-day rows with no clock time would show cumulative figures
- * that jump around instead of stepping monotonically down the list — the
- * running figure has to agree with the order it is rendered in.
+ * Passing `createdAt` is belt-and-braces rather than load-bearing:
+ * `buildJournalRecords` already stores
+ * `time: resolveActivityClockTime(row.time, row.createdAt)`, and
+ * `postingSortMs` gives an explicit time precedence, so the two-argument form
+ * would sort identically. It is spelled out here so the agreement is visible
+ * at the call site instead of depending on a detail two files away.
  *
  * The final tie-break on id keeps the result deterministic, matching
  * `buildAccountActivities`.

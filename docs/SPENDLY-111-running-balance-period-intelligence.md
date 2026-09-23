@@ -105,16 +105,38 @@ Journal later would double-count it against card spend**, since the purchase is
 already there. That is called out in the file header of
 `journalPeriodSummary.ts`.
 
-### 2.5 Ordering had to match the list exactly
+### 2.5 Ordering agreement with the rendered list
 
-`ExpenseList` sorts rows with `postingSortMs(date, time, createdAt)`. The first
-version of the accumulator used `postingSortMs(date, time)` — the comparator
-`buildAccountActivities` uses, since `AccountActivity` has no `createdAt`. For
-two same-day rows with no clock time that produces a *different* order, and the
-cumulative figures would have appeared to jump around instead of stepping
-monotonically down the screen. `JournalRecord` keeps the underlying row, so the
-accumulator now sorts on `createdAt` too, with a deterministic id tie-break.
-Two tests pin this.
+**Correction.** An earlier version of this section claimed the accumulator had
+been ordering rows differently from `ExpenseList` and that this was a bug found
+and fixed here. That was wrong, and it is corrected rather than quietly removed
+because it was also stated on the PR and on the Jira ticket.
+
+`ExpenseList` sorts with `postingSortMs(date, time, createdAt)`, and the
+accumulator originally used the two-argument `postingSortMs(date, time)` — the
+comparator `buildAccountActivities` uses. That looked like dropped information,
+but it is not: `buildJournalRecords` already stores
+
+```ts
+time: resolveActivityClockTime(expense.time, expense.createdAt)
+```
+
+so `activity.time` **is** the `createdAt`-derived clock label, and
+`resolveActivityClockTime` gives `explicitTime` precedence when it is present
+(`activityDisplay.ts:89`). Passing `createdAt` again is therefore a no-op, and
+the two orders already agreed.
+
+This is the same reason the two-argument form is safe in
+`buildAccountActivities`: all of its activity constructors pre-resolve `time`
+the same way (`accountBalance.ts:415, 425, 435, …`), and nothing downstream of
+it re-sorts.
+
+The explicit `createdAt` argument is kept as belt-and-braces — it is correct
+and costs nothing — and the two tests written alongside it are kept as
+regression guards. They would have passed before the change too; their value is
+in pinning that same-day untimed rows order by `createdAt` and that the
+cumulative figures step monotonically down the rendered order, so a future
+refactor cannot quietly break the agreement.
 
 ### 2.6 One summary card, not two
 

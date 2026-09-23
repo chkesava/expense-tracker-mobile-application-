@@ -103,6 +103,14 @@ function receivableRepaymentsInto(
   return repayments.filter((r) => r.receivedAccountId === accountId);
 }
 
+/**
+ * Two arguments, not three, is deliberate: every activity constructor below
+ * stores `time: resolveActivityClockTime(row.time, row.createdAt)`, so
+ * `createdAt` is already folded into `.time` and `postingSortMs` gives an
+ * explicit time precedence over a `createdAt` argument anyway. Adding a third
+ * argument here would change nothing — and `AccountActivity` has no `createdAt`
+ * to pass. Do not "fix" this into inconsistency.
+ */
 function compareActivitiesChronologically(a: AccountActivity, b: AccountActivity) {
   const timeDiff = postingSortMs(a.date, a.time) - postingSortMs(b.date, b.time);
   if (timeDiff !== 0) return timeDiff;
