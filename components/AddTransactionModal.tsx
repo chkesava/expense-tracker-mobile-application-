@@ -1,5 +1,8 @@
+import { useCallback, useRef } from "react";
+
 import { Modal } from "@/components/common/Modal";
 import { ExpenseForm } from "@/components/ExpenseForm";
+import { appDialog } from "@/lib/appDialog";
 import { useModals } from "@/providers/ModalProvider";
 
 export function AddTransactionModal() {
@@ -13,8 +16,10 @@ export function AddTransactionModal() {
     editingIncome,
     setEditingIncome,
   } = useModals();
+  const editDirtyRef = useRef(false);
 
   const handleClose = () => {
+    editDirtyRef.current = false;
     setIsAddExpenseOpen(false);
     setEditingExpense(null);
     setEditingIncome(null);
@@ -22,10 +27,29 @@ export function AddTransactionModal() {
     setAddTransactionKind("expense");
   };
 
+  const requestClose = () => {
+    if (!editDirtyRef.current) {
+      handleClose();
+      return;
+    }
+    appDialog.show({
+      title: "Discard changes?",
+      message: "Your edits to this transaction haven't been saved.",
+      buttons: [
+        { text: "Keep editing", style: "cancel" },
+        { text: "Discard", style: "destructive", onPress: handleClose },
+      ],
+    });
+  };
+
+  const handleDirtyChange = useCallback((dirty: boolean) => {
+    editDirtyRef.current = dirty;
+  }, []);
+
   return (
     <Modal
       isOpen={isAddExpenseOpen}
-      onClose={handleClose}
+      onClose={requestClose}
       title={
         editingExpense
           ? "Edit Expense"
@@ -43,7 +67,8 @@ export function AddTransactionModal() {
           editingExpense={editingExpense}
           editingIncome={editingIncome}
           onSuccess={handleClose}
-          onCancel={handleClose}
+          onCancel={requestClose}
+          onDirtyChange={handleDirtyChange}
         />
       ) : null}
     </Modal>

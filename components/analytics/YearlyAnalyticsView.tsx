@@ -40,7 +40,7 @@ import { usePageListBottomPadding } from "@/components/layout/usePageListBottomP
 import { haptic } from "@/lib/haptics";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useIncomes } from "@/hooks/useIncomes";
-import { useModals } from "@/providers/ModalProvider";
+import { transactionHref } from "@/shared/utils/transactionRef";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { groupByCategory } from "@/shared/utils/analytics";
 import { COLORS } from "@/shared/utils/chartColors";
@@ -93,8 +93,6 @@ export function YearlyAnalyticsView({ listHeader }: YearlyAnalyticsViewProps) {
   const isDark = themeUsesDarkPalette(themeName);
   const accents = insightAccents(isDark);
   const tileText = useYearlyTileTextStyles();
-  const { setEditingExpense } = useModals();
-
   const {
     expenses,
     loading: expensesLoading,
@@ -469,7 +467,15 @@ export function YearlyAnalyticsView({ listHeader }: YearlyAnalyticsViewProps) {
               category={biggestExpense.category}
               amount={biggestExpense.amount}
               currency={currency}
-              onPress={() => setEditingExpense(biggestExpense)}
+              onPress={() => {
+                if (!biggestExpense.id) return;
+                router.push(
+                  transactionHref(
+                    { kind: "expense", id: biggestExpense.id },
+                    biggestExpense.accountId
+                  )
+                );
+              }}
             />
           );
         case "insights":
@@ -487,8 +493,8 @@ export function YearlyAnalyticsView({ listHeader }: YearlyAnalyticsViewProps) {
       monthlyChartData,
       overviewMetrics,
       peakSpend,
+      router,
       selectedYear,
-      setEditingExpense,
       totalAnnualExpense,
     ]
   );

@@ -67,6 +67,7 @@ export const TransactionRow = memo(function TransactionRow({
       ]}
       accessibilityRole="button"
       accessibilityLabel={`${title}, ${dateLabel}${timeLabel ? `, ${timeLabel}` : ""}, ${isCredit ? "income" : "expense"} ${amount}`}
+      accessibilityHint="Opens transaction details"
     >
       <View style={[styles.icon, { backgroundColor: iconBg }]}>
         {isCredit ? (

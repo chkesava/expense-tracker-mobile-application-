@@ -7,6 +7,7 @@ import React, {
 } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { FlashList } from "@shopify/flash-list";
+import { useRouter } from "expo-router";
 
 import {
   FilterSheetModal,
@@ -33,7 +34,7 @@ import { usePageListBottomPadding } from "@/components/layout/usePageListBottomP
 import { useAccounts } from "@/hooks/useAccounts";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useIncomes } from "@/hooks/useIncomes";
-import { useModals } from "@/providers/ModalProvider";
+import { transactionHref } from "@/shared/utils/transactionRef";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import type { Expense, Income } from "@/shared/types/expense";
 import { currentMonthKey, toLocalDateKey } from "@/shared/utils/dates";
@@ -84,7 +85,7 @@ export function AnalysisLabView({
   const { themeName } = useTheme();
   const listBottomPadding = usePageListBottomPadding();
   const stateWrapStyle = [styles.stateWrap, { paddingBottom: listBottomPadding }];
-  const { setEditingExpense, setEditingIncome } = useModals();
+  const router = useRouter();
 
   const {
     expenses,
@@ -372,15 +373,12 @@ export function AnalysisLabView({
 
   const handleOpenTransaction = useCallback(
     (item: UnifiedTransaction) => {
-      if (item.type === "expense") {
-        const expense = expenseById.get(item.id);
-        if (expense) setEditingExpense(expense);
-        return;
-      }
-      const income = incomeById.get(item.id);
-      if (income) setEditingIncome(income);
+      const row =
+        item.type === "expense" ? expenseById.get(item.id) : incomeById.get(item.id);
+      if (!row) return;
+      router.push(transactionHref({ kind: item.type, id: item.id }, row.accountId));
     },
-    [expenseById, incomeById, setEditingExpense, setEditingIncome]
+    [expenseById, incomeById, router]
   );
 
   const renderRow = useCallback(

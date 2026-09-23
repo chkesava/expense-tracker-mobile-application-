@@ -116,6 +116,12 @@ function AppShellInner() {
             }}
           />
           <Stack.Screen
+            name="transactions/[id]"
+            options={{
+              animation: "slide_from_right",
+            }}
+          />
+          <Stack.Screen
             name="epf/[establishmentId]"
             options={{
               animation: "slide_from_right",

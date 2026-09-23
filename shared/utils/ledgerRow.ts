@@ -89,3 +89,31 @@ export const PAST_MONTH_LOCKED_MESSAGE = "Past months are locked in settings";
 
 export const ALREADY_REMOVED_LEDGER_MESSAGE =
   "This transaction was already removed";
+
+export type LedgerRowEditability =
+  | { editable: true; reason: null }
+  | { editable: false; reason: string };
+
+/**
+ * Whether an expense/income row may be edited or soft-deleted. The write
+ * path (`assertLiveAndMutable`) and the Transaction Details UI both use this
+ * so what the screen offers never disagrees with what a save allows.
+ * `activeMonth` is the current month key; pass it only when past months are
+ * locked in settings.
+ */
+export function ledgerRowEditability(
+  row: Record<string, unknown> | null | undefined,
+  options?: { activeMonth?: string | null }
+): LedgerRowEditability {
+  if (!row || !isActiveLedgerRow(row)) {
+    return { editable: false, reason: ALREADY_REMOVED_LEDGER_MESSAGE };
+  }
+  if (optionalString(row.splitId)) {
+    return { editable: false, reason: SPLIT_OWNED_LEDGER_MESSAGE };
+  }
+  const month = typeof row.month === "string" ? row.month : undefined;
+  if (options?.activeMonth && month && month < options.activeMonth) {
+    return { editable: false, reason: PAST_MONTH_LOCKED_MESSAGE };
+  }
+  return { editable: true, reason: null };
+}

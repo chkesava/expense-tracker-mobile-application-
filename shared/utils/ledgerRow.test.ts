@@ -1,10 +1,48 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  ALREADY_REMOVED_LEDGER_MESSAGE,
+  PAST_MONTH_LOCKED_MESSAGE,
+  SPLIT_OWNED_LEDGER_MESSAGE,
   activeLedgerRows,
   isActiveLedgerRow,
   ledgerEventSnapshot,
+  ledgerRowEditability,
 } from "./ledgerRow";
+
+describe("ledgerRowEditability", () => {
+  const live = { amount: 10, month: "2026-09", note: "" };
+
+  it("allows a live row", () => {
+    expect(ledgerRowEditability(live)).toEqual({ editable: true, reason: null });
+  });
+
+  it("refuses a missing or soft-deleted row", () => {
+    expect(ledgerRowEditability(null)).toEqual({
+      editable: false,
+      reason: ALREADY_REMOVED_LEDGER_MESSAGE,
+    });
+    expect(
+      ledgerRowEditability({ ...live, deletedAt: "2026-09-02T00:00:00Z" }).reason
+    ).toBe(ALREADY_REMOVED_LEDGER_MESSAGE);
+  });
+
+  it("refuses a split-owned row", () => {
+    expect(ledgerRowEditability({ ...live, splitId: "s1" }).reason).toBe(
+      SPLIT_OWNED_LEDGER_MESSAGE
+    );
+    expect(ledgerRowEditability({ ...live, splitId: "  " }).editable).toBe(true);
+  });
+
+  it("refuses past months only when an active month is passed", () => {
+    const old = { ...live, month: "2026-08" };
+    expect(ledgerRowEditability(old).editable).toBe(true);
+    expect(ledgerRowEditability(old, { activeMonth: "2026-09" }).reason).toBe(
+      PAST_MONTH_LOCKED_MESSAGE
+    );
+    expect(ledgerRowEditability(live, { activeMonth: "2026-09" }).editable).toBe(true);
+  });
+});
 
 describe("isActiveLedgerRow", () => {
   it("treats a missing deletedAt as live", () => {
