@@ -223,6 +223,9 @@ describe("account activity filters", () => {
     expect(getAccountActivityFilterOptions(records())).toEqual({
       categories: ["Food & Groceries"],
       counterparties: ["Credit Card", "Savings"],
+      // SPENDLY-109: account-detail activities carry no `accountName`, so the
+      // Journal's facet stays empty here and its modal section self-hides.
+      accounts: [],
       tags: ["home", "weekly"],
       statuses: ["audited"],
     });

@@ -32,10 +32,16 @@ function kindTerms(record: FilterableAccountActivity): string[] {
  * Amounts are deliberately excluded: as text, `12500` contains `1250`, so a
  * substring match would pull unrelated rows in. Numeric tokens are compared
  * against the amount by value instead — see `amountMatchesToken`.
+ *
+ * SPENDLY-109: a record may carry a precomputed `searchText`. The Journal
+ * populates it once per row when building records, so a 25k-row ledger does
+ * not rebuild every haystack on every keystroke. Callers that omit it (the
+ * account detail screen) get the same string computed on demand.
  */
 export function buildAccountActivitySearchText(
   record: FilterableAccountActivity
 ): string {
+  if (record.searchText !== undefined) return record.searchText;
   const { activity } = record;
   return [
     activity.note,
@@ -43,6 +49,7 @@ export function buildAccountActivitySearchText(
     record.subcategory,
     activity.source,
     record.counterparty,
+    record.accountName,
     ...record.tags,
     activitySubtypeLabel(activity),
     activity.type,
@@ -123,10 +130,10 @@ function recordMatchesTokens(
  * newest-first ordering and each row's `runningBalance` survive untouched.
  * An empty query returns the same array reference.
  */
-export function searchAccountActivities(
-  records: FilterableAccountActivity[],
+export function searchAccountActivities<T extends FilterableAccountActivity>(
+  records: T[],
   query: string
-): FilterableAccountActivity[] {
+): T[] {
   const tokens = tokenizeAccountActivityQuery(query);
   if (tokens.length === 0) return records;
   return records.filter((record) => recordMatchesTokens(record, tokens));

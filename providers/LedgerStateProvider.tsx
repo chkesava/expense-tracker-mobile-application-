@@ -1,4 +1,17 @@
-import React, { createContext, useContext, useMemo, useState, type ReactNode } from "react";
+import React, {
+  createContext,
+  useContext,
+  useMemo,
+  useState,
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+} from "react";
+
+import {
+  createEmptyAccountActivityFilters,
+  type AccountActivityFilters,
+} from "@/shared/utils/accountActivityFilters";
 
 export type ExpensesTab = "history" | "income" | "audit" | "data";
 export type SubTab = "recurring" | "stats";
@@ -19,12 +32,15 @@ export interface LedgerStateContextType {
   // Expenses (Journal) filters & tabs
   expensesTab: ExpensesTab;
   setExpensesTab: (tab: ExpensesTab) => void;
-  selectedCategory: string;
-  setSelectedCategory: (category: string) => void;
-  selectedAccountId: string;
-  setSelectedAccountId: (id: string) => void;
-  selectedAccountTypeId: string;
-  setSelectedAccountTypeId: (id: string) => void;
+  /**
+   * SPENDLY-109 — the Journal's advanced filter set. Lives here rather than in
+   * the screen so it survives a hop to another Transactions tab and back,
+   * exactly as `query` already does.
+   */
+  journalFilters: AccountActivityFilters;
+  /** Updater form: the chip handlers all apply functional updates. */
+  setJournalFilters: Dispatch<SetStateAction<AccountActivityFilters>>;
+  /** Visibility of the Journal's advanced filter sheet. */
   showFilters: boolean;
   setShowFilters: (show: boolean) => void;
   query: string;
@@ -44,9 +60,9 @@ const LedgerStateContext = createContext<LedgerStateContextType | undefined>(und
 export function LedgerStateProvider({ children }: { children: ReactNode }) {
   const [ledgerTab, setLedgerTab] = useState<LedgerTab>("expenses");
   const [expensesTab, setExpensesTab] = useState<ExpensesTab>("history");
-  const [selectedCategory, setSelectedCategory] = useState<string>("");
-  const [selectedAccountId, setSelectedAccountId] = useState<string>("");
-  const [selectedAccountTypeId, setSelectedAccountTypeId] = useState<string>("");
+  const [journalFilters, setJournalFilters] = useState<AccountActivityFilters>(
+    createEmptyAccountActivityFilters
+  );
   const [showFilters, setShowFilters] = useState(false);
   const [query, setQuery] = useState("");
   const [sortField, setSortField] = useState<"date" | "amount">("date");
@@ -60,12 +76,8 @@ export function LedgerStateProvider({ children }: { children: ReactNode }) {
       setLedgerTab,
       expensesTab,
       setExpensesTab,
-      selectedCategory,
-      setSelectedCategory,
-      selectedAccountId,
-      setSelectedAccountId,
-      selectedAccountTypeId,
-      setSelectedAccountTypeId,
+      journalFilters,
+      setJournalFilters,
       showFilters,
       setShowFilters,
       query,
@@ -80,9 +92,7 @@ export function LedgerStateProvider({ children }: { children: ReactNode }) {
     [
       ledgerTab,
       expensesTab,
-      selectedCategory,
-      selectedAccountId,
-      selectedAccountTypeId,
+      journalFilters,
       showFilters,
       query,
       sortField,
