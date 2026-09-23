@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Platform } from "react-native";
+import { Alert, Platform } from "react-native";
 
 import { Button } from "@/components/ui/Button";
 import {
@@ -7,10 +7,13 @@ import {
   getInstalledVersionCode,
 } from "@/hooks/useAppUpdate";
 import {
+  hasTrustedAppReleaseFallback,
   installAppRelease,
   installProgressLabel,
+  openAppReleaseFallback,
   type InstallProgress,
 } from "@/lib/apkUpdate";
+import type { AppRelease } from "@/lib/appRelease";
 import { productAppName } from "@/lib/activeProduct";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
@@ -30,8 +33,10 @@ export function CheckForAppUpdate() {
 
   const onCheck = async () => {
     setChecking(true);
+    let fallbackRelease: AppRelease | null = null;
     try {
       const release = await fetchLatestRelease();
+      fallbackRelease = release;
       const versionCode = getInstalledVersionCode();
 
       if (!release) {
@@ -48,6 +53,8 @@ export function CheckForAppUpdate() {
           toast.info("Update cancelled");
         } else if (outcome === "fallback") {
           toast.info("Opened the download page");
+        } else if (outcome === "installer-started") {
+          toast.info("Continue in the Android installer");
         } else if (outcome === "up-to-date") {
           toast.success("You are on the latest version");
         }
@@ -57,7 +64,28 @@ export function CheckForAppUpdate() {
       toast.success("You are on the latest version");
     } catch (error) {
       logError("checkForAppUpdate", error);
-      toast.error(friendlyErrorMessage(error, "Could not check for updates"));
+      const message = friendlyErrorMessage(error, "Could not check for updates");
+      if (fallbackRelease && hasTrustedAppReleaseFallback(fallbackRelease)) {
+        const release = fallbackRelease;
+        Alert.alert("Update could not start", message, [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Open download page",
+            onPress: () => {
+              void openAppReleaseFallback(release).catch((fallbackError) => {
+                toast.error(
+                  friendlyErrorMessage(
+                    fallbackError,
+                    "Could not open the download page"
+                  )
+                );
+              });
+            },
+          },
+        ]);
+      } else {
+        toast.error(message);
+      }
     } finally {
       setChecking(false);
       setProgress({ phase: "idle" });

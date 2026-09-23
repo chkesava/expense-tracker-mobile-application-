@@ -12,9 +12,25 @@ class ApkInstallResultReceiver : BroadcastReceiver() {
 
     val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)
     if (status == PackageInstaller.STATUS_PENDING_USER_ACTION) {
-      val confirm = pendingUserActionIntent(intent) ?: return
-      confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-      context.startActivity(confirm)
+      val confirm = pendingUserActionIntent(intent)
+      if (confirm == null) {
+        ApkInstallBridge.reject(
+          "ERR_INSTALL_CONFIRMATION_MISSING",
+          "Android did not provide an installation confirmation screen."
+        )
+        return
+      }
+
+      try {
+        confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(confirm)
+        ApkInstallBridge.resolve("pending")
+      } catch (error: Exception) {
+        ApkInstallBridge.reject(
+          "ERR_INSTALL_CONFIRMATION_FAILED",
+          error.message ?: "Android could not open the installation confirmation screen."
+        )
+      }
       return
     }
 

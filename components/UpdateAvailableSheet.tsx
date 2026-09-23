@@ -6,11 +6,14 @@ import { Button } from "@/components/ui/Button";
 import { useAppUpdate } from "@/hooks/useAppUpdate";
 import { buildsBehind } from "@/lib/appRelease";
 import {
+  hasTrustedAppReleaseFallback,
   installAppRelease,
   installProgressLabel,
+  openAppReleaseFallback,
   type InstallProgress,
 } from "@/lib/apkUpdate";
 import { productAppName } from "@/lib/activeProduct";
+import { friendlyErrorMessage } from "@/lib/errors";
 import { toast } from "@/lib/toast";
 import { useTheme } from "@/theme/ThemeProvider";
 import { haptic } from "@/lib/haptics";
@@ -24,16 +27,25 @@ export function UpdateAvailableSheet() {
   const { release, visible, dismiss, installedVersionName, installedVersionCode, mandatory } =
     useAppUpdate();
   const [progress, setProgress] = useState<InstallProgress>({ phase: "idle" });
+  const [failure, setFailure] = useState<string | null>(null);
 
   if (!release) return null;
 
   const busy = progress.phase !== "idle";
   const behind = buildsBehind(installedVersionCode, release.versionCode);
   const downloadPercent =
-    progress.phase === "downloading" ? progress.percent : busy ? 100 : 0;
+    progress.phase === "downloading"
+      ? progress.percent
+      : progress.phase === "finalizing" ||
+          progress.phase === "verifying" ||
+          progress.phase === "starting-installer" ||
+          progress.phase === "waiting"
+        ? 100
+        : 0;
 
   const handleUpdate = async () => {
     haptic.medium().catch(() => undefined);
+    setFailure(null);
 
     try {
       const outcome = await installAppRelease(release, setProgress);
@@ -43,14 +55,26 @@ export function UpdateAvailableSheet() {
         toast.info("Update cancelled");
       } else if (outcome === "fallback") {
         toast.info("Opened the download page");
+      } else if (outcome === "installer-started") {
+        toast.info("Continue in the Android installer");
       } else if (outcome === "up-to-date") {
         toast.success("You are on the latest version");
         dismiss();
       }
-    } catch {
-      toast.error("Could not start the update");
+    } catch (error) {
+      const message = friendlyErrorMessage(error, "Could not start the update");
+      setFailure(message);
+      toast.error(message, 5000);
     } finally {
       setProgress({ phase: "idle" });
+    }
+  };
+
+  const handleFallback = async () => {
+    try {
+      await openAppReleaseFallback(release);
+    } catch (error) {
+      toast.error(friendlyErrorMessage(error, "Could not open the download page"));
     }
   };
 
@@ -153,6 +177,20 @@ export function UpdateAvailableSheet() {
             </View>
           ) : null}
 
+          {failure ? (
+            <Text
+              accessibilityRole="alert"
+              style={{
+                color: theme.colors.destructive,
+                fontSize: theme.typography.sm,
+                textAlign: "center",
+                lineHeight: 20,
+              }}
+            >
+              {failure}
+            </Text>
+          ) : null}
+
           <Button
             variant="primary"
             size="lg"
@@ -161,8 +199,23 @@ export function UpdateAvailableSheet() {
             onPress={handleUpdate}
             style={styles.action}
           >
-            {busy ? installProgressLabel(progress) : "Install latest"}
+            {busy
+              ? installProgressLabel(progress)
+              : failure
+                ? "Retry update"
+                : "Install latest"}
           </Button>
+
+          {failure && hasTrustedAppReleaseFallback(release) ? (
+            <Button
+              variant="outline"
+              size="lg"
+              onPress={() => void handleFallback()}
+              style={styles.action}
+            >
+              Open trusted download page
+            </Button>
+          ) : null}
 
           {mandatory ? (
             <Text

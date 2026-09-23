@@ -28,6 +28,50 @@ export function hashApkBytes(bytes: Uint8Array): string {
   return bytesToHex(sha256(bytes));
 }
 
+export async function hashApkStream(
+  stream: ReadableStream<Uint8Array>,
+  signal?: AbortSignal
+): Promise<string> {
+  const digest = sha256.create();
+  const reader = stream.getReader();
+  let rejectAbort: (() => void) | undefined;
+
+  const abortPromise = signal
+    ? new Promise<never>((_, reject) => {
+        rejectAbort = () => {
+          const error = new Error("APK verification was cancelled.");
+          error.name = "AbortError";
+          reject(error);
+        };
+
+        if (signal.aborted) {
+          rejectAbort();
+          return;
+        }
+        signal.addEventListener("abort", rejectAbort, { once: true });
+      })
+    : null;
+
+  try {
+    while (true) {
+      const result = abortPromise
+        ? await Promise.race([reader.read(), abortPromise])
+        : await reader.read();
+      if (result.done) break;
+      digest.update(result.value);
+    }
+    return bytesToHex(digest.digest());
+  } finally {
+    if (signal && rejectAbort) {
+      signal.removeEventListener("abort", rejectAbort);
+    }
+    if (signal?.aborted) {
+      await reader.cancel().catch(() => undefined);
+    }
+    reader.releaseLock();
+  }
+}
+
 export function isMandatoryRelease(release: {
   mandatory: boolean;
   sha256?: string;

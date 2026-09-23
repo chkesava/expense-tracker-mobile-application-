@@ -4,6 +4,7 @@ import {
   assertApkIntegrity,
   GITHUB_APK_RELEASE_REPO,
   hashApkBytes,
+  hashApkStream,
   isAllowedApkDownloadUrl,
   isMandatoryRelease,
   normalizeSha256,
@@ -26,6 +27,38 @@ describe("normalizeSha256", () => {
     expect(normalizeSha256("  ")).toBeNull();
     expect(normalizeSha256("deadbeef")).toBeNull();
     expect(normalizeSha256("g".repeat(64))).toBeNull();
+  });
+});
+
+describe("hashApkStream", () => {
+  it("hashes streamed APK chunks without buffering the whole file", async () => {
+    const chunks = ["spendly-", "apk-", "stream"].map((value) =>
+      new TextEncoder().encode(value)
+    );
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        chunks.forEach((chunk) => controller.enqueue(chunk));
+        controller.close();
+      },
+    });
+
+    expect(await hashApkStream(stream)).toBe(
+      hashApkBytes(new TextEncoder().encode("spendly-apk-stream"))
+    );
+  });
+
+  it("stops verification when its abort signal fires", async () => {
+    const controller = new AbortController();
+    const stream = new ReadableStream<Uint8Array>({
+      start() {
+        // Deliberately remains open until verification is aborted.
+      },
+    });
+
+    const result = hashApkStream(stream, controller.signal);
+    controller.abort();
+
+    await expect(result).rejects.toMatchObject({ name: "AbortError" });
   });
 });
 
