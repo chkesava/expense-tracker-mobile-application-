@@ -75,6 +75,10 @@ export function ledgerEventSnapshot(
   if (splitId) snapshot.splitId = splitId;
   const subscriptionId = optionalString(row.subscriptionId);
   if (subscriptionId) snapshot.subscriptionId = subscriptionId;
+  const smsFingerprint = optionalString(row.smsFingerprint);
+  if (smsFingerprint) snapshot.smsFingerprint = smsFingerprint;
+  const smsExternalRef = optionalString(row.smsExternalRef);
+  if (smsExternalRef) snapshot.smsExternalRef = smsExternalRef;
   return snapshot;
 }
 

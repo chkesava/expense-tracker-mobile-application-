@@ -3,6 +3,7 @@ import type {
   SmsReviewInboxItem,
   SmsWritePayload,
 } from "@/shared/types/smsTransaction";
+import { smsMatchReviewReason } from "./smsMatchAudit";
 
 export const SMS_REVIEW_INBOX_MAX = 200;
 
@@ -19,7 +20,15 @@ export function toReviewInboxItem(input: {
   parsed: SmsParsedTransaction;
   write: SmsWritePayload;
   queuedAtMs?: number;
+  matchReason?: string | null;
 }): SmsReviewInboxItem {
+  const matchReason =
+    input.matchReason ??
+    smsMatchReviewReason(
+      input.write.payload.smsMatchStatus
+        ? { status: input.write.payload.smsMatchStatus }
+        : null
+    );
   return {
     id: reviewInboxItemId(input.smsId, input.fingerprint),
     smsId: input.smsId,
@@ -27,6 +36,7 @@ export function toReviewInboxItem(input: {
     parsed: input.parsed,
     write: input.write,
     queuedAtMs: input.queuedAtMs ?? Date.now(),
+    ...(matchReason ? { matchReason } : {}),
   };
 }
 

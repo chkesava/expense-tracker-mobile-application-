@@ -192,6 +192,15 @@ export {
   formatRecurringCadence,
 } from "./smsRecurringDetector";
 
+export {
+  isExactSmsAccountMatch,
+  shouldForceSmsMatchReview,
+  smsMatchAuditFields,
+  smsMatchReviewReason,
+  preservedSmsAuditFromRow,
+  type SmsMatchAuditFields,
+} from "./smsMatchAudit";
+
 export { commitSmsWritePayload } from "./smsExpenseWriter";
 
 export {

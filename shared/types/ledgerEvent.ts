@@ -18,6 +18,9 @@ export type LedgerEventSnapshot = {
   tripId?: string | null;
   splitId?: string;
   subscriptionId?: string;
+  /** Kept across corrections so SMS provenance survives edits (SPENDLY-108). */
+  smsFingerprint?: string;
+  smsExternalRef?: string;
 };
 
 export interface LedgerEvent {

@@ -55,6 +55,7 @@ export default function SmsInboxScreen() {
         amount={reviewItemAmount(item)}
         merchant={reviewItemMerchant(item)}
         categoryLabel={briefSmsCategoryLabel(item)}
+        matchReason={item.matchReason}
         busy={actingId === item.id}
         onAdd={onAdd}
         onIgnore={onIgnore}

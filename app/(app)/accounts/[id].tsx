@@ -39,6 +39,8 @@ import { toast } from "@/lib/toast";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import { PayCreditBillModal } from "@/components/accounts/PayCreditBillModal";
 import { RecordCashbackModal } from "@/components/accounts/RecordCashbackModal";
+import { CashbackHistoryCard } from "@/components/accounts/CashbackHistoryCard";
+import { CreditCardAnalyticsSection } from "@/components/accounts/CreditCardAnalyticsSection";
 import { CreditStatementCard } from "@/components/accounts/CreditStatementCard";
 import { SmsMatchingUnconfiguredText } from "@/components/accounts/SmsMatchingUnconfiguredText";
 import { TransferFundsModal } from "@/components/accounts/TransferFundsModal";
@@ -85,9 +87,10 @@ import {
   computeOutstandingCredit,
   getCreditBillHistory,
 } from "@/shared/utils/accountBalance";
+import { buildCashbackHistory } from "@/shared/utils/cashbackHistory";
 import {
   formatCreditCardHeaderLine,
-  smsMatchingUnconfiguredLabel,
+  smsMatchingStatusLabel,
 } from "@/shared/utils/accountIdentity";
 import {
   applyAccountActivityFilters,
@@ -203,14 +206,17 @@ export default function AccountDetailScreen() {
   const { accounts, loading: accountsLoading, error: accountsError, retry: retryAccounts } =
     useAccounts();
   const { accountTypes } = useAccountTypes();
-  const { expenses } = useExpenses();
+  const { expenses, loading: expensesLoading, complete: expensesComplete } =
+    useExpenses();
   const { incomes } = useIncomes();
   const { entries, addEntry } = useAccountEntries();
   const { payments } = useAccountPayments();
   const { transfers } = useAccountTransfers();
   const { borrowings, repayments: borrowingRepayments } = useBorrowings();
-  const { bills } = useCreditCardBills();
+  const { bills, loading: billsLoading } = useCreditCardBills();
   const { receivables, repayments: receivableRepayments } = useReceivables();
+  
+  const isDataLoading = expensesLoading || billsLoading || accountsLoading;
 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
@@ -1116,6 +1122,11 @@ export default function AccountDetailScreen() {
     });
   }, [account, isCreditCard, creditBillHistory, bills]);
 
+  const cashbackSummary = useMemo(() => {
+    if (!account || !isCreditCard) return null;
+    return buildCashbackHistory(account.id, payments, expenses);
+  }, [account, isCreditCard, payments, expenses]);
+
   const onRecordBillPayment = useCallback(() => {
     if (openStatementBill) {
       router.push(`/credit-card-bills/${openStatementBill.id}` as never);
@@ -1267,9 +1278,27 @@ export default function AccountDetailScreen() {
             availableCredit={creditUsage.availableCredit}
             creditLimit={account.creditLimit || 0}
             daysRemaining={creditUsage.daysRemaining}
+            openCycleStart={creditUsage.openCycleStart}
+            nextResetDate={creditUsage.nextResetDate.toISOString()}
             currency={currency}
             payLabel="Record Bill Payment"
             onPay={onRecordBillPayment}
+            onSetLimit={() => setIsEditModalOpen(true)}
+            isLoading={isDataLoading}
+          />
+        ) : isCreditCard ? (
+          <AccountCreditHero
+            usedThisCycle={0}
+            statementDue={0}
+            totalOutstanding={0}
+            availableCredit={account.creditLimit || 0}
+            creditLimit={account.creditLimit || 0}
+            daysRemaining={0}
+            currency={currency}
+            payLabel="Record Bill Payment"
+            onPay={onRecordBillPayment}
+            onSetLimit={() => setIsEditModalOpen(true)}
+            isLoading
           />
         ) : (
           <AccountBalanceCard
@@ -1295,6 +1324,7 @@ export default function AccountDetailScreen() {
               currency={currency}
               onAdd={() => setIsCreateBillOpen(true)}
               onOpen={onOpenStatementBill}
+              isLoading={isDataLoading}
             />
             <View style={styles.cardActionRow}>
               <Pressable
@@ -1345,6 +1375,23 @@ export default function AccountDetailScreen() {
               </Pressable>
             </View>
           </>
+        ) : null}
+
+        {isCreditCard && cashbackSummary ? (
+          <CashbackHistoryCard summary={cashbackSummary} currency={currency} />
+        ) : null}
+
+        {isCreditCard && account ? (
+          <CreditCardAnalyticsSection
+            account={account}
+            expenses={expenses}
+            payments={payments}
+            bills={bills}
+            today={today}
+            expensesComplete={expensesComplete}
+            currency={currency}
+            onOpenStatement={onOpenBillingCycle}
+          />
         ) : null}
 
         {isCreditCard ? (
@@ -1481,7 +1528,7 @@ export default function AccountDetailScreen() {
         variant={isCreditCard ? "credit" : "default"}
         accentColor={account.color}
         warning={
-          smsMatchingUnconfiguredLabel(account, typeName) ? (
+          smsMatchingStatusLabel(account, typeName) ? (
             <SmsMatchingUnconfiguredText account={account} typeName={typeName} />
           ) : undefined
         }

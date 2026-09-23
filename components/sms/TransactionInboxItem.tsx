@@ -11,6 +11,7 @@ export type TransactionInboxItemProps = {
   amount: number;
   merchant: string;
   categoryLabel: string;
+  matchReason?: string | null;
   busy: boolean;
   onAdd: (id: string) => void;
   onIgnore: (id: string) => void;
@@ -22,6 +23,7 @@ export const TransactionInboxItem = memo(function TransactionInboxItem({
   amount,
   merchant,
   categoryLabel,
+  matchReason,
   busy,
   onAdd,
   onIgnore,
@@ -48,6 +50,14 @@ export const TransactionInboxItem = memo(function TransactionInboxItem({
         >
           {categoryLabel}
         </Text>
+        {matchReason ? (
+          <Text
+            style={[styles.matchReason, { color: theme.colors.warning }]}
+            numberOfLines={2}
+          >
+            {matchReason}
+          </Text>
+        ) : null}
       </View>
       <View style={styles.actions}>
         <View style={styles.actionSlot}>
@@ -98,6 +108,11 @@ const styles = StyleSheet.create({
   category: {
     fontSize: 14,
     fontWeight: "600",
+  },
+  matchReason: {
+    fontSize: 13,
+    fontWeight: "600",
+    marginTop: 2,
   },
   actions: {
     flexDirection: "row",

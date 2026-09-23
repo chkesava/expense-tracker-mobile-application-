@@ -43,6 +43,7 @@ import type {
   CreateIncomeInput,
   LedgerWriteResult,
 } from "./createLedgerTransaction";
+import { preservedSmsAuditFromRow } from "@/services/sms/smsMatchAudit";
 
 export {
   ALREADY_REMOVED_LEDGER_MESSAGE,
@@ -218,6 +219,7 @@ export async function updateExpense(
   const { ref, data } = await loadRow(db, owner, "expenses", docId);
   assertLiveAndMutable(data, options);
 
+  const smsAudit = preservedSmsAuditFromRow(data);
   const afterRow = {
     ...data,
     amount,
@@ -229,6 +231,7 @@ export async function updateExpense(
     note: payload.note.trim(),
     tags: payload.tags.length > 0 ? payload.tags : [],
     spaceId: payload.spaceId || null,
+    ...smsAudit,
   };
   const before = ledgerEventSnapshot(data);
   const after = ledgerEventSnapshot(afterRow);
@@ -251,6 +254,8 @@ export async function updateExpense(
             note: afterRow.note,
             tags: afterRow.tags,
             spaceId: afterRow.spaceId,
+            // SPENDLY-108: keep SMS provenance when the user corrects a match.
+            ...smsAudit,
             updatedAt: serverTimestamp(),
           }),
         },
@@ -288,6 +293,7 @@ export async function updateIncome(
   const { ref, data } = await loadRow(db, owner, "incomes", docId);
   assertLiveAndMutable(data, options);
 
+  const smsAudit = preservedSmsAuditFromRow(data);
   const afterRow = {
     ...data,
     amount,
@@ -296,6 +302,7 @@ export async function updateIncome(
     month: payload.month,
     accountId: payload.accountId || null,
     note: payload.note.trim(),
+    ...smsAudit,
   };
   const before = ledgerEventSnapshot(data);
   const after = ledgerEventSnapshot(afterRow);
@@ -314,6 +321,7 @@ export async function updateIncome(
             month: afterRow.month,
             accountId: afterRow.accountId,
             note: afterRow.note,
+            ...smsAudit,
             updatedAt: serverTimestamp(),
           }),
         },

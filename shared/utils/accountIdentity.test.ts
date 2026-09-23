@@ -6,6 +6,7 @@ import {
   formatCreditCardHeaderLine,
   hydrateAccountIdentity,
   normalizeLast4,
+  smsMatchingStatusLabel,
   smsMatchingUnconfiguredLabel,
   suggestedAccountDisplayName,
   toAccountIdentity,
@@ -57,6 +58,10 @@ describe("hydrateAccountIdentity", () => {
     expect(smsMatchingUnconfiguredLabel(hydrated, "Credit Card")).toBe(
       "SMS matching not configured"
     );
+    expect(smsMatchingStatusLabel(hydrated, "Credit Card")).toEqual({
+      kind: "warning",
+      label: "SMS matching not configured",
+    });
   });
 
   it("does not invent an institution from an unrelated display name", () => {
@@ -90,6 +95,10 @@ describe("hydrateAccountIdentity", () => {
     expect(hydrated.institutionId).toBe("super_money");
     expect(hydrated.institutionName).toBe("Super Money");
     expect(smsMatchingUnconfiguredLabel(hydrated, "Credit Card")).toBeNull();
+    expect(smsMatchingStatusLabel(hydrated, "Credit Card")).toEqual({
+      kind: "ready",
+      label: "SMS matching ready",
+    });
   });
 
   it("prompts for last 4 when a catalog institution is already set", () => {

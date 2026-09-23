@@ -5,6 +5,10 @@ import type {
   SmsParsedTransaction,
   SmsWritePayload,
 } from "@/shared/types/smsTransaction";
+import type {
+  AccountMatchSignal,
+  AccountResolutionStatus,
+} from "@/shared/utils/accountResolver";
 import { normalizeSmsReferenceId } from "./smsDedupe";
 
 export interface AdaptSmsOptions {
@@ -16,6 +20,10 @@ export interface AdaptSmsOptions {
   /** Extra tags always applied (e.g. ["sms"]) */
   tags?: string[];
   fingerprint?: string;
+  /** SPENDLY-108 match audit from the account resolver. */
+  matchStatus?: AccountResolutionStatus;
+  matchConfidence?: number;
+  matchedSignals?: AccountMatchSignal[];
 }
 
 function requireAmountAndDate(
@@ -72,6 +80,18 @@ export function adaptParsedSmsToWritePayload(
   const note = buildNote(parsed);
   const smsFingerprint = options.fingerprint || undefined;
   const smsExternalRef = normalizeSmsReferenceId(parsed.externalRef);
+  const matchAudit =
+    options.matchStatus != null
+      ? {
+          smsMatchStatus: options.matchStatus,
+          ...(typeof options.matchConfidence === "number"
+            ? { smsMatchConfidence: options.matchConfidence }
+            : {}),
+          ...(options.matchedSignals?.length
+            ? { smsMatchedSignals: options.matchedSignals }
+            : {}),
+        }
+      : {};
 
   if (parsed.kind === "income" || parsed.kind === "refund") {
     const payload: SmsIncomeWritePayload = {
@@ -88,6 +108,7 @@ export function adaptParsedSmsToWritePayload(
       note,
       ...(smsFingerprint ? { smsFingerprint } : {}),
       ...(smsExternalRef ? { smsExternalRef } : {}),
+      ...matchAudit,
     };
     return { collection: "incomes", payload };
   }
@@ -111,6 +132,7 @@ export function adaptParsedSmsToWritePayload(
     tags: buildTags(parsed, options.tags),
     ...(smsFingerprint ? { smsFingerprint } : {}),
     ...(smsExternalRef ? { smsExternalRef } : {}),
+    ...matchAudit,
   };
   return { collection: "expenses", payload };
 }

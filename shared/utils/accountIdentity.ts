@@ -178,6 +178,28 @@ export function smsMatchingUnconfiguredLabel(
   return null;
 }
 
+/**
+ * SPENDLY-108 — card-screen matching status users can understand.
+ * Returns a warning when matching cannot run, otherwise a short ready label.
+ */
+export function smsMatchingStatusLabel(
+  account: Pick<
+    Account,
+    "institutionId" | "accountTypeId" | "last4" | "accountNumber" | "smsMatchingEnabled"
+  >,
+  typeName?: string
+): { kind: "warning" | "ready"; label: string } | null {
+  const accountTypeId =
+    account.accountTypeId || canonicalAccountTypeId(typeName || "");
+  if (!requiresCatalogInstitution(accountTypeId)) return null;
+  const warning = smsMatchingUnconfiguredLabel(account, typeName);
+  if (warning) return { kind: "warning", label: warning };
+  if (account.smsMatchingEnabled === false) {
+    return { kind: "warning", label: "SMS matching turned off" };
+  }
+  return { kind: "ready", label: "SMS matching ready" };
+}
+
 export type AccountIdentityMigrationReport = {
   scanned: number;
   migrated: number;

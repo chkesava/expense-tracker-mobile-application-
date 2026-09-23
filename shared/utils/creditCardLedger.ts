@@ -720,3 +720,10 @@ export function oldestOpenStatement(
     .reverse()
     .find((statement) => statement.isOpen && statement.remaining > 0);
 }
+
+export const MAX_UNBILLED_PERCENT = 0.8;
+export function validateUnbilledSpend(limit: number, unbilledSpend: number): void {
+  if (unbilledSpend > limit * MAX_UNBILLED_PERCENT) {
+    throw new Error(`Unbilled spend ${unbilledSpend} exceeds ${MAX_UNBILLED_PERCENT * 100}% of credit limit ${limit}`);
+  }
+}
