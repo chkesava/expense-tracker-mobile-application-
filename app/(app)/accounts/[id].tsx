@@ -61,7 +61,7 @@ import {
 import { buildCashbackHistory } from "@/shared/utils/cashbackHistory";
 import {
   formatCreditCardHeaderLine,
-  smsMatchingUnconfiguredLabel,
+  smsMatchingStatusLabel,
 } from "@/shared/utils/accountIdentity";
 import { effectiveBalanceAsOfDate } from "@/shared/utils/accountBaseline";
 import { getAccountKind } from "@/shared/utils/accountKind";
@@ -544,7 +544,7 @@ export default function AccountDetailScreen() {
         variant={isCreditCard ? "credit" : "default"}
         accentColor={account.color}
         warning={
-          smsMatchingUnconfiguredLabel(account, typeName) ? (
+          smsMatchingStatusLabel(account, typeName) ? (
             <SmsMatchingUnconfiguredText account={account} typeName={typeName} />
           ) : undefined
         }

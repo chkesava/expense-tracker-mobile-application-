@@ -3,12 +3,14 @@ import type {
   SmsReviewInboxItem,
   SmsWritePayload,
 } from "@/shared/types/smsTransaction";
+import type { AccountResolution } from "@/shared/utils/accountResolver";
 import { findReviewInboxItem, toReviewInboxItem } from "./smsReviewInbox";
 import {
   dismissSmsReviewItem,
   enqueueSmsReviewItems,
   loadSmsReviewInbox,
 } from "./smsReviewInboxStore";
+import { smsMatchReviewReason } from "./smsMatchAudit";
 
 export type SmsCommitResult = {
   collection: "expenses" | "incomes";
@@ -27,6 +29,7 @@ export function writeReadyToInboxItems(
       smsId: string;
       fingerprint: string;
       parsed?: SmsParsedTransaction;
+      accountResolution?: AccountResolution;
     };
     write: SmsWritePayload;
   }>
@@ -40,6 +43,7 @@ export function writeReadyToInboxItems(
         fingerprint: entry.record.fingerprint,
         parsed: entry.record.parsed,
         write: entry.write,
+        matchReason: smsMatchReviewReason(entry.record.accountResolution),
       })
     );
   }

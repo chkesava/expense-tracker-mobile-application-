@@ -24,6 +24,9 @@ export type CreateExpenseInput = {
   time?: string;
   smsFingerprint?: string;
   smsExternalRef?: string;
+  smsMatchStatus?: "AUTO_MATCHED" | "AMBIGUOUS" | "NEEDS_REVIEW";
+  smsMatchConfidence?: number;
+  smsMatchedSignals?: string[];
 };
 
 export type CreateIncomeInput = {
@@ -37,6 +40,9 @@ export type CreateIncomeInput = {
   time?: string;
   smsFingerprint?: string;
   smsExternalRef?: string;
+  smsMatchStatus?: "AUTO_MATCHED" | "AMBIGUOUS" | "NEEDS_REVIEW";
+  smsMatchConfidence?: number;
+  smsMatchedSignals?: string[];
 };
 
 export type LedgerWriteResult = {
@@ -96,6 +102,15 @@ export async function createExpense(
     ...(payload.smsExternalRef
       ? { smsExternalRef: payload.smsExternalRef }
       : {}),
+    ...(payload.smsMatchStatus
+      ? { smsMatchStatus: payload.smsMatchStatus }
+      : {}),
+    ...(typeof payload.smsMatchConfidence === "number"
+      ? { smsMatchConfidence: payload.smsMatchConfidence }
+      : {}),
+    ...(payload.smsMatchedSignals?.length
+      ? { smsMatchedSignals: payload.smsMatchedSignals }
+      : {}),
     createdAt: serverTimestamp(),
   };
   const outcome = await commitMutations(
@@ -129,6 +144,15 @@ export async function createIncome(
       : {}),
     ...(payload.smsExternalRef
       ? { smsExternalRef: payload.smsExternalRef }
+      : {}),
+    ...(payload.smsMatchStatus
+      ? { smsMatchStatus: payload.smsMatchStatus }
+      : {}),
+    ...(typeof payload.smsMatchConfidence === "number"
+      ? { smsMatchConfidence: payload.smsMatchConfidence }
+      : {}),
+    ...(payload.smsMatchedSignals?.length
+      ? { smsMatchedSignals: payload.smsMatchedSignals }
       : {}),
     createdAt: serverTimestamp(),
   };
