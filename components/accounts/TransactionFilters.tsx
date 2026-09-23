@@ -6,24 +6,62 @@ import { haptic } from "@/lib/haptics";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
+import { SearchBar } from "@/components/common/SearchBar";
+import type {
+  AccountActivityFilters,
+  AccountActivityKind,
+} from "@/shared/utils/accountActivityFilters";
 
-export type ActivityFilter = "all" | "debit" | "credit";
+export type ActivityFilter = AccountActivityKind;
+
+export type AccountActivityFilterField =
+  | keyof Pick<
+      AccountActivityFilters,
+      | "kind"
+      | "specialKinds"
+      | "categories"
+      | "counterparties"
+      | "fromDate"
+      | "toDate"
+      | "minAmount"
+      | "maxAmount"
+      | "tags"
+      | "statuses"
+    >;
 
 export function TransactionFilters({
-  filter,
+  filters,
+  searchQuery,
+  onSearchChange,
+  totalCount,
   allCount,
-  debitCount,
-  creditCount,
+  incomeCount,
+  expenseCount,
+  transferCount,
+  filteredCount,
+  activeFilterCount,
   compact,
-  onChange,
+  onKindChange,
+  onOpenAdvanced,
+  onRemoveFilter,
+  onClearAll,
   scopeLabel,
 }: {
-  filter: ActivityFilter;
+  filters: AccountActivityFilters;
+  searchQuery: string;
+  onSearchChange: (text: string) => void;
+  totalCount: number;
   allCount: number;
-  debitCount: number;
-  creditCount: number;
+  incomeCount: number;
+  expenseCount: number;
+  transferCount: number;
+  filteredCount: number;
+  activeFilterCount: number;
   compact: boolean;
-  onChange: (filter: ActivityFilter) => void;
+  onKindChange: (filter: ActivityFilter) => void;
+  onOpenAdvanced: () => void;
+  onRemoveFilter: (field: AccountActivityFilterField, value?: string) => void;
+  onClearAll: () => void;
   /** e.g. "this cycle" for a credit card, appended after the activity count. */
   scopeLabel?: string;
 }) {
@@ -37,9 +75,102 @@ export function TransactionFilters({
       label: compact ? "All" : "All Transactions",
       count: allCount,
     },
-    { id: "debit", label: "Debit", count: debitCount },
-    { id: "credit", label: "Credit", count: creditCount },
+    { id: "income", label: "Income", count: incomeCount },
+    { id: "expense", label: "Expense", count: expenseCount },
+    { id: "transfers", label: "Transfers", count: transferCount },
   ];
+
+  const activeChips: Array<{
+    id: string;
+    label: string;
+    field: AccountActivityFilterField;
+    value?: string;
+  }> = [];
+  if (filters.kind !== "all") {
+    activeChips.push({
+      id: "kind",
+      label:
+        filters.kind === "income"
+          ? "Income"
+          : filters.kind === "expense"
+            ? "Expense"
+            : "Transfers",
+      field: "kind",
+    });
+  }
+  filters.specialKinds.forEach((value) =>
+    activeChips.push({
+      id: `special-${value}`,
+      label:
+        value === "refunds"
+          ? "Refunds & cashback"
+          : value === "investments"
+            ? "Investments"
+            : "Bills & payments",
+      field: "specialKinds",
+      value,
+    })
+  );
+  filters.categories.forEach((value) =>
+    activeChips.push({
+      id: `category-${value}`,
+      label: `Category: ${value}`,
+      field: "categories",
+      value,
+    })
+  );
+  filters.counterparties.forEach((value) =>
+    activeChips.push({
+      id: `counterparty-${value}`,
+      label: `With: ${value}`,
+      field: "counterparties",
+      value,
+    })
+  );
+  if (filters.fromDate) {
+    activeChips.push({
+      id: "from-date",
+      label: `From: ${filters.fromDate}`,
+      field: "fromDate",
+    });
+  }
+  if (filters.toDate) {
+    activeChips.push({
+      id: "to-date",
+      label: `To: ${filters.toDate}`,
+      field: "toDate",
+    });
+  }
+  if (filters.minAmount) {
+    activeChips.push({
+      id: "min-amount",
+      label: `Min: ${filters.minAmount}`,
+      field: "minAmount",
+    });
+  }
+  if (filters.maxAmount) {
+    activeChips.push({
+      id: "max-amount",
+      label: `Max: ${filters.maxAmount}`,
+      field: "maxAmount",
+    });
+  }
+  filters.tags.forEach((value) =>
+    activeChips.push({
+      id: `tag-${value}`,
+      label: `Tag: ${value}`,
+      field: "tags",
+      value,
+    })
+  );
+  filters.statuses.forEach((value) =>
+    activeChips.push({
+      id: `status-${value}`,
+      label: value === "audited" ? "Audited" : "Not audited",
+      field: "statuses",
+      value,
+    })
+  );
 
   return (
     <View style={styles.wrap}>
@@ -54,14 +185,17 @@ export function TransactionFilters({
             Transactions
           </Text>
           <Text style={[styles.subtitle, { color: theme.colors.mutedForeground }]}>
-            {allCount} {allCount === 1 ? "activity" : "activities"}
+            {activeFilterCount > 0 || searchQuery.trim()
+              ? `${filteredCount} of `
+              : ""}
+            {totalCount} {totalCount === 1 ? "activity" : "activities"}
             {scopeLabel ? ` · ${scopeLabel}` : ""}
           </Text>
         </View>
         <Pressable
           onPress={() => {
             void haptic.selection();
-            onChange("all");
+            onOpenAdvanced();
           }}
           style={[
             styles.filterIcon,
@@ -71,10 +205,30 @@ export function TransactionFilters({
             },
           ]}
           accessibilityRole="button"
-          accessibilityLabel="Show all transactions"
+          accessibilityLabel={
+            activeFilterCount > 0
+              ? `Open advanced filters, ${activeFilterCount} active`
+              : "Open advanced filters"
+          }
         >
           <Filter size={16} color={theme.colors.mutedForeground} />
+          {activeFilterCount > 0 ? (
+            <View style={[styles.filterCount, { backgroundColor: accent }]}>
+              <Text style={styles.filterCountText}>{activeFilterCount}</Text>
+            </View>
+          ) : null}
         </Pressable>
+      </View>
+
+      <View style={styles.search}>
+        <SearchBar
+          value={searchQuery}
+          onChangeText={onSearchChange}
+          placeholder="Search transactions"
+          returnKeyType="search"
+          autoCorrect={false}
+          autoCapitalize="none"
+        />
       </View>
 
       <HorizontalSwipeBoundary>
@@ -84,13 +238,13 @@ export function TransactionFilters({
           contentContainerStyle={styles.chips}
         >
           {chips.map((chip) => {
-            const selected = filter === chip.id;
+            const selected = filters.kind === chip.id;
             return (
               <Pressable
                 key={chip.id}
                 onPress={() => {
                   void haptic.selection();
-                  onChange(chip.id);
+                  onKindChange(chip.id);
                 }}
                 style={[
                   styles.chip,
@@ -141,6 +295,55 @@ export function TransactionFilters({
           })}
         </ScrollView>
       </HorizontalSwipeBoundary>
+
+      {activeChips.length > 0 ? (
+        <View style={styles.activeChips}>
+          {activeChips.map((chip) => (
+            <Pressable
+              key={chip.id}
+              onPress={() => {
+                void haptic.selection();
+                onRemoveFilter(chip.field, chip.value);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={`Remove filter ${chip.label}`}
+              style={({ pressed }) => [
+                styles.activeChip,
+                {
+                  backgroundColor: isDark
+                    ? "rgba(255,255,255,0.04)"
+                    : "rgba(15,23,42,0.04)",
+                  borderColor: isDark
+                    ? "rgba(148,163,184,0.16)"
+                    : "rgba(15,23,42,0.08)",
+                },
+                pressed ? styles.pressed : null,
+              ]}
+            >
+              <Text
+                style={[styles.activeChipText, { color: theme.colors.foreground }]}
+                numberOfLines={1}
+              >
+                {chip.label} ×
+              </Text>
+            </Pressable>
+          ))}
+          <Pressable
+            onPress={() => {
+              void haptic.selection();
+              onClearAll();
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Clear all transaction filters"
+            style={({ pressed }) => [
+              styles.clearAll,
+              pressed ? styles.pressed : null,
+            ]}
+          >
+            <Text style={[styles.clearAllText, { color: accent }]}>Clear all</Text>
+          </Pressable>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -196,6 +399,26 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  filterCount: {
+    position: "absolute",
+    top: -5,
+    right: -5,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 4,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  filterCountText: {
+    color: "#FFFFFF",
+    fontSize: 10,
+    fontWeight: "800",
+    fontVariant: ["tabular-nums"],
+  },
+  search: {
+    marginBottom: 12,
+  },
   chips: {
     flexDirection: "row",
     alignItems: "center",
@@ -228,6 +451,36 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "700",
     fontVariant: ["tabular-nums"],
+  },
+  activeChips: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: 8,
+  },
+  activeChip: {
+    maxWidth: "100%",
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 10,
+    borderCurve: "continuous",
+    borderWidth: 1,
+  },
+  activeChipText: {
+    flexShrink: 1,
+    fontSize: 11.5,
+    fontWeight: "600",
+  },
+  clearAll: {
+    paddingHorizontal: 6,
+    paddingVertical: 7,
+  },
+  clearAllText: {
+    fontSize: 11.5,
+    fontWeight: "800",
+  },
+  pressed: {
+    opacity: 0.7,
   },
   columns: {
     flexDirection: "row",

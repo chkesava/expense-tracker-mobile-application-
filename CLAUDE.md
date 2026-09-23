@@ -25,6 +25,30 @@ Ticket order and full rules:
 **102 Ledger:** 109 → 111 → 110 → 112 → 113  
 (confirm whether 114 duplicates 110 before implementing)
 
+## SPENDLY-78 Accounts V2 Integration Flow
+
+For the Spendly Accounts Intelligence & Statement Suite epic (`SPENDLY-78`):
+
+- Use `accounts-v2` as the integration branch.
+- Start every remaining ticket branch from the latest `accounts-v2`, not
+  `main`.
+- Target every ticket PR at `accounts-v2` and merge it there after checks pass.
+- Keep the Jira key in the branch, commit, and PR title.
+- Do not merge `accounts-v2` into `main` until all epic tickets are complete
+  and the user explicitly requests the final merge.
+- Do not mark tickets Done while their changes exist only on `accounts-v2`;
+  they are shipped only after the final merge reaches `main`.
+
+Ticket order (all complete on `accounts-v2` as of 2026-09-23):
+
+1. Foundation: SPENDLY-81, SPENDLY-82, SPENDLY-83, SPENDLY-84.
+2. Account intelligence: SPENDLY-80, SPENDLY-85, SPENDLY-86, SPENDLY-90.
+3. Statements and reconciliation: SPENDLY-79, SPENDLY-87.
+4. Context and organization: SPENDLY-88, SPENDLY-89, SPENDLY-91.
+
+The epic is awaiting the final merge to `main`. Remove this section once that
+merge lands — see the post-merge checklist on SPENDLY-78.
+
 ## Scope
 
 These instructions apply to **Ganesh Seva UI/UX work only**.
