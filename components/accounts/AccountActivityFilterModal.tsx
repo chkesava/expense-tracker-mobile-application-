@@ -89,7 +89,13 @@ export function AccountActivityFilterModal({
   );
 
   const setArrayValue = <
-    K extends "specialKinds" | "categories" | "counterparties" | "tags" | "statuses",
+    K extends
+      | "specialKinds"
+      | "categories"
+      | "counterparties"
+      | "accounts"
+      | "tags"
+      | "statuses",
   >(
     key: K,
     value: AccountActivityFilters[K][number]
@@ -327,6 +333,22 @@ export function AccountActivityFilterModal({
                       counterparty,
                       draft.counterparties.includes(counterparty),
                       () => setArrayValue("counterparties", counterparty)
+                    )
+                  )}
+                </View>
+              </View>
+            ) : null}
+
+            {options.accounts.length > 0 ? (
+              <View style={styles.section}>
+                {renderSectionTitle("ACCOUNTS", draft.accounts.length)}
+                <View style={styles.chipRow}>
+                  {options.accounts.map((account) =>
+                    renderChip(
+                      `account-${account}`,
+                      account,
+                      draft.accounts.includes(account),
+                      () => setArrayValue("accounts", account)
                     )
                   )}
                 </View>

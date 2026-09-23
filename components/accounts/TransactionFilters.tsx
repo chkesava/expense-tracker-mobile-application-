@@ -14,6 +14,13 @@ import type {
 
 export type ActivityFilter = AccountActivityKind;
 
+const DEFAULT_ACTIVITY_KINDS: ActivityFilter[] = [
+  "all",
+  "income",
+  "expense",
+  "transfers",
+];
+
 export type AccountActivityFilterField =
   | keyof Pick<
       AccountActivityFilters,
@@ -21,6 +28,7 @@ export type AccountActivityFilterField =
       | "specialKinds"
       | "categories"
       | "counterparties"
+      | "accounts"
       | "fromDate"
       | "toDate"
       | "minAmount"
@@ -46,6 +54,8 @@ export function TransactionFilters({
   onRemoveFilter,
   onClearAll,
   scopeLabel,
+  title = "Transactions",
+  availableKinds = DEFAULT_ACTIVITY_KINDS,
 }: {
   filters: AccountActivityFilters;
   searchQuery: string;
@@ -64,12 +74,20 @@ export function TransactionFilters({
   onClearAll: () => void;
   /** e.g. "this cycle" for a credit card, appended after the activity count. */
   scopeLabel?: string;
+  /** SPENDLY-109 — heading; the Journal calls its rows "Journal". */
+  title?: string;
+  /**
+   * SPENDLY-109 — which kind chips to render. The Journal has no transfer rows
+   * by construction, so a permanently-zero Transfers chip would be a lie; pass
+   * `[]` to hide the chip row entirely.
+   */
+  availableKinds?: ActivityFilter[];
 }) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const accent = accountAccent(isDark);
 
-  const chips: { id: ActivityFilter; label: string; count: number }[] = [
+  const allChips: { id: ActivityFilter; label: string; count: number }[] = [
     {
       id: "all",
       label: compact ? "All" : "All Transactions",
@@ -79,6 +97,7 @@ export function TransactionFilters({
     { id: "expense", label: "Expense", count: expenseCount },
     { id: "transfers", label: "Transfers", count: transferCount },
   ];
+  const chips = allChips.filter((chip) => availableKinds.includes(chip.id));
 
   const activeChips: Array<{
     id: string;
@@ -108,6 +127,14 @@ export function TransactionFilters({
             ? "Investments"
             : "Bills & payments",
       field: "specialKinds",
+      value,
+    })
+  );
+  filters.accounts.forEach((value) =>
+    activeChips.push({
+      id: `account-${value}`,
+      label: `Account: ${value}`,
+      field: "accounts",
       value,
     })
   );
@@ -182,7 +209,7 @@ export function TransactionFilters({
               { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold },
             ]}
           >
-            Transactions
+            {title}
           </Text>
           <Text style={[styles.subtitle, { color: theme.colors.mutedForeground }]}>
             {activeFilterCount > 0 || searchQuery.trim()
@@ -231,6 +258,7 @@ export function TransactionFilters({
         />
       </View>
 
+      {chips.length > 0 ? (
       <HorizontalSwipeBoundary>
         <ScrollView
           horizontal
@@ -295,6 +323,7 @@ export function TransactionFilters({
           })}
         </ScrollView>
       </HorizontalSwipeBoundary>
+      ) : null}
 
       {activeChips.length > 0 ? (
         <View style={styles.activeChips}>
