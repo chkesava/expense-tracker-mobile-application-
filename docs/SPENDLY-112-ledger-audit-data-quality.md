@@ -163,13 +163,13 @@ folds both ledger snapshots with `activeOnly: true`, so soft-deleted rows never
 reach the app. From this data a reference to a removed record and a reference to
 one that never existed are indistinguishable, and "deleted" would be a claim the
 ledger cannot support. A test asserts the wording so nobody later "improves" it
-into a stronger statement than the evidence allows. SPENDLY-112c makes it
+into a stronger statement than the evidence allows. [SPENDLY-130](https://kesavach.atlassian.net/browse/SPENDLY-130) makes it
 precise.
 
 **Trips and splits** are per-screen subscriptions rather than app-wide
 providers, so the Journal does not hold them. Their checks are registered and
 always report *not loaded* — an honest "not checked" rather than a silent
-omission or a verdict inferred from absent data.
+omission or a verdict inferred from absent data ([SPENDLY-129](https://kesavach.atlassian.net/browse/SPENDLY-129)).
 
 ### 2.8 The fourth state
 
@@ -197,7 +197,7 @@ the month by design (`resolveJournalDateScope`).
 
 Opening SPENDLY-110's detail sheet directly is out of scope: `selectedTx` is
 local state inside `ExpenseList` with no prop to drive it, and adding one is a
-change to the busiest list in the app. SPENDLY-112d.
+change to the busiest list in the app. [SPENDLY-132](https://kesavach.atlassian.net/browse/SPENDLY-132).
 
 ### 2.10 Scroll ownership
 
@@ -245,7 +245,7 @@ No `firestore.rules` change, no index change, no Netlify deploy.
 
 Cross-collection money checks — transfer endpoints, a bill payment also entered
 as a manual expense, duplicate cashback, the 80% unbilled gate — were scoped out
-of this ticket with the reporter and are SPENDLY-112e.
+of this ticket with the reporter and are [SPENDLY-131](https://kesavach.atlassian.net/browse/SPENDLY-131).
 
 ---
 
@@ -338,21 +338,25 @@ rules deploy, index change or Netlify deploy; client-side only.
 
 ## 7. Follow-ups raised
 
-* **SPENDLY-112a** — `app/(app)/credit-card-bills/discrepancies.tsx` is an
-  orphan screen: unregistered in `_layout.tsx`, nothing navigates to it,
-  `onBack` is a dead no-op, and it clips past two cards. Recommend folding
+* **[SPENDLY-128](https://kesavach.atlassian.net/browse/SPENDLY-128)** —
+  `app/(app)/credit-card-bills/discrepancies.tsx` is an orphan screen:
+  unregistered in `_layout.tsx`, nothing navigates to it, `onBack` is a dead
+  no-op, and it clips past two cards. Recommends folding
   `buildSettledStatementDiscrepancyReport` into this center behind an explicit
   "Run statement checks" affordance — it needs a per-card `CreditCardLedger`, an
   order of magnitude costlier than every check here — then deleting the screen.
-* **SPENDLY-112b** — trip / split / vault relationship checks, blocked on those
-  collections reaching the ledger screen. Must not be solved by adding reads to
-  a read-only diagnostic; wants an explicit on-demand deep scan.
-* **SPENDLY-112c** — include soft-deleted rows in the audit input so orphan
-  findings can distinguish *removed* from *missing*.
-* **SPENDLY-112d** — deep-link a finding to SPENDLY-110's detail sheet
-  (`focusTransactionId` on `ExpenseList`). Served for now by Show in Journal.
-* **SPENDLY-112e** — the cross-collection money checks scoped out of this
-  ticket.
+* **[SPENDLY-129](https://kesavach.atlassian.net/browse/SPENDLY-129)** — trip /
+  split / vault relationship checks, blocked on those collections reaching the
+  ledger screen. Must not be solved by adding reads to a read-only diagnostic;
+  wants an explicit on-demand deep scan.
+* **[SPENDLY-130](https://kesavach.atlassian.net/browse/SPENDLY-130)** — include
+  soft-deleted rows in the audit input so orphan findings can distinguish
+  *removed* from *missing*, and `deleted_row_still_referenced` becomes possible.
+* **[SPENDLY-131](https://kesavach.atlassian.net/browse/SPENDLY-131)** — the
+  cross-collection money checks scoped out of this ticket.
+* **[SPENDLY-132](https://kesavach.atlassian.net/browse/SPENDLY-132)** —
+  deep-link a finding to SPENDLY-110's detail sheet (`focusTransactionId` on
+  `ExpenseList`). Served for now by Show in Journal.
 
 **A rule, not a ticket:** the audit engine never gains a write path. If a future
 ticket wants one-tap correction it goes through
