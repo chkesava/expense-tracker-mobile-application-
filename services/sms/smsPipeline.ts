@@ -16,6 +16,10 @@ import {
   rememberSmsDedupeKeys,
 } from "./smsDedupe";
 import { isExpenseOrIncomeKind } from "./smsDetector";
+import {
+  isExactSmsAccountMatch,
+  shouldForceSmsMatchReview,
+} from "./smsMatchAudit";
 import { parseBankSms, type SmsParseContext } from "./smsParser";
 import { loadSmsDedupeKeys, mergeSmsDedupeKeys } from "./smsDedupeStore";
 import { defaultSmsReader, type SmsReader } from "./smsReader";
@@ -195,10 +199,15 @@ export function processRawSmsMessages(
       },
       options.accounts ?? []
     );
+    const matchForceReview = shouldForceSmsMatchReview(resolution, forceReview);
     const write = adaptParsedSmsToWritePayload(parsed, {
-      accountId:
-        resolution.status === "AUTO_MATCHED" ? resolution.accountId : null,
+      accountId: isExactSmsAccountMatch(resolution)
+        ? resolution.accountId
+        : null,
       fingerprint,
+      matchStatus: resolution.status,
+      matchConfidence: resolution.confidence,
+      matchedSignals: resolution.matchedSignals,
     });
     if (!write) {
       records.push({
@@ -207,6 +216,7 @@ export function processRawSmsMessages(
         status: "skipped",
         skipReason: forceReview ? "duplicate" : "low_confidence",
         parsed,
+        accountResolution: resolution,
         dedupeKeys,
         updatedAtMs,
       });
@@ -219,11 +229,16 @@ export function processRawSmsMessages(
       fingerprint,
       status: "parsed",
       parsed,
+      accountResolution: resolution,
       dedupeKeys,
       updatedAtMs,
     };
     records.push(record);
-    writeReady.push({ record, write, forceReview: forceReview || undefined });
+    writeReady.push({
+      record,
+      write,
+      forceReview: matchForceReview || undefined,
+    });
     rememberSmsDedupeKeys(known, dedupeKeys);
   }
 

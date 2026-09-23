@@ -129,15 +129,37 @@ describe("updateExpense", () => {
       write.path.startsWith("users/u1/ledgerEvents/")
     );
     expect(expenseWrite?.data.amount).toBe(500);
-    expect(expenseWrite?.data.smsFingerprint).toBeUndefined();
+    // SPENDLY-108: SMS provenance stays on the row when the user corrects it.
+    expect(expenseWrite?.data.smsFingerprint).toBe("sms-abc");
     expect(eventWrite?.kind).toBe("set");
     expect(eventWrite?.data).toMatchObject({
       kind: "expense",
       docId: "exp-1",
       action: "update",
       actorUid: "u1",
-      before: { amount: 5000, tripId: "trip-1" },
-      after: { amount: 500, tripId: "trip-1" },
+      before: { amount: 5000, tripId: "trip-1", smsFingerprint: "sms-abc" },
+      after: { amount: 500, tripId: "trip-1", smsFingerprint: "sms-abc" },
+    });
+  });
+
+  it("keeps SMS audit fields when the account match is corrected", async () => {
+    await updateExpense("u1", "exp-1", {
+      amount: 5000,
+      category: "Food",
+      subcategory: "Groceries",
+      date: "2026-09-01",
+      month: "2026-09",
+      accountId: "card-corrected",
+      note: "Lunch",
+      tags: ["work"],
+    });
+
+    const expenseWrite = writes.find(
+      (write) => write.path === "users/u1/expenses/exp-1"
+    );
+    expect(expenseWrite?.data).toMatchObject({
+      accountId: "card-corrected",
+      smsFingerprint: "sms-abc",
     });
   });
 

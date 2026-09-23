@@ -63,12 +63,34 @@ describe("auto-add routing", () => {
     expect(routed.toReview).toHaveLength(1);
   });
 
-  it("auto mode commits high confidence and reviews the rest", () => {
+  it("does not auto-commit unmatched high-confidence drafts (SPENDLY-108)", () => {
     const result = processRawSmsMessages([swiggy, vagueDebit]);
+    expect(result.writeReady.every((entry) => entry.forceReview)).toBe(true);
+    const routed = routeWriteReady(result.writeReady, "auto");
+    expect(routed.toCommit).toHaveLength(0);
+    expect(routed.toReview.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("auto-commits only when confidence is high and the account exact-matches", () => {
+    const result = processRawSmsMessages([swiggy], {
+      accounts: [
+        {
+          id: "acc-sbi",
+          name: "SBI",
+          typeId: "type-bank",
+          displayName: "SBI",
+          institutionId: "sbi",
+          accountTypeId: "bank",
+          last4: "4521",
+          smsMatchingEnabled: true,
+        },
+      ],
+    });
+    expect(result.writeReady[0]?.forceReview).toBeUndefined();
+    expect(result.writeReady[0]?.write.payload.accountId).toBe("acc-sbi");
     const routed = routeWriteReady(result.writeReady, "auto");
     expect(routed.toCommit).toHaveLength(1);
-    expect(routed.toReview).toHaveLength(1);
-    expect(routed.toCommit[0]?.record.parsed?.merchant).toBe("Swiggy");
+    expect(routed.toReview).toHaveLength(0);
   });
 
   it("sends a weak txn: collision to review even when confidence is high", () => {
@@ -122,20 +144,37 @@ describe("auto-add routing", () => {
     expect(routed.toReview).toHaveLength(0);
   });
 
-  it("auto-adds a high-confidence salary credit", () => {
-    const result = processRawSmsMessages([
-      {
-        id: "3",
-        address: "VK-SBIINB",
-        body: "₹35,000 credited to your account",
-        receivedAtMs: Date.parse("2026-08-12T10:00:00+05:30"),
-      },
-    ]);
-    expect(result.writeReady[0]?.write.collection).toBe("incomes");
-    expect(isHighConfidenceForAutoAdd(result.writeReady[0]?.record.parsed)).toBe(
-      true
+  it("auto-adds a high-confidence salary credit only after an exact account match", () => {
+    const salary: RawSmsMessage = {
+      id: "3",
+      address: "VK-SBIINB",
+      body: "₹35,000 credited to your A/c XX4521",
+      receivedAtMs: Date.parse("2026-08-12T10:00:00+05:30"),
+    };
+    const unmatched = processRawSmsMessages([salary]);
+    expect(unmatched.writeReady[0]?.write.collection).toBe("incomes");
+    expect(
+      isHighConfidenceForAutoAdd(unmatched.writeReady[0]?.record.parsed)
+    ).toBe(true);
+    expect(routeWriteReady(unmatched.writeReady, "auto").toCommit).toHaveLength(
+      0
     );
-    const routed = routeWriteReady(result.writeReady, "auto");
+
+    const matched = processRawSmsMessages([salary], {
+      accounts: [
+        {
+          id: "acc-sbi",
+          name: "SBI",
+          typeId: "type-bank",
+          displayName: "SBI",
+          institutionId: "sbi",
+          accountTypeId: "bank",
+          last4: "4521",
+          smsMatchingEnabled: true,
+        },
+      ],
+    });
+    const routed = routeWriteReady(matched.writeReady, "auto");
     expect(routed.toCommit).toHaveLength(1);
     expect(routed.toReview).toHaveLength(0);
   });

@@ -3,6 +3,12 @@
  * Raw SMS stays local; only ExpenseForm-compatible payloads may reach Firebase later.
  */
 
+import type {
+  AccountMatchSignal,
+  AccountResolution,
+  AccountResolutionStatus,
+} from "@/shared/utils/accountResolver";
+
 /** Lifecycle for a locally processed SMS candidate. */
 export type SmsProcessingStatus =
   | "received"
@@ -113,6 +119,8 @@ export interface SmsProcessingRecord {
   status: SmsProcessingStatus;
   skipReason?: SmsSkipReason;
   parsed?: SmsParsedTransaction;
+  /** Resolver outcome for audit / review (SPENDLY-108). */
+  accountResolution?: AccountResolution;
   /** Keys used for local + Firestore idempotency. */
   dedupeKeys?: string[];
   /** Firestore expense/income id after commit */
@@ -144,6 +152,10 @@ export interface SmsExpenseWritePayload {
   tags: string[];
   smsFingerprint?: string;
   smsExternalRef?: string;
+  /** Original resolver status at ingest (SPENDLY-108 audit). */
+  smsMatchStatus?: AccountResolutionStatus;
+  smsMatchConfidence?: number;
+  smsMatchedSignals?: AccountMatchSignal[];
 }
 
 /** Income payload identical to ExpenseForm income create shape. */
@@ -156,6 +168,9 @@ export interface SmsIncomeWritePayload {
   note: string;
   smsFingerprint?: string;
   smsExternalRef?: string;
+  smsMatchStatus?: AccountResolutionStatus;
+  smsMatchConfidence?: number;
+  smsMatchedSignals?: AccountMatchSignal[];
 }
 
 export type SmsWritePayload =
@@ -172,4 +187,6 @@ export interface SmsReviewInboxItem {
   parsed: SmsParsedTransaction;
   write: SmsWritePayload;
   queuedAtMs: number;
+  /** Why this row needs review (ambiguous / unmatched). */
+  matchReason?: string | null;
 }
