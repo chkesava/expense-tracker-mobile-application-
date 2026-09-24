@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import type { Receivable, ReceivableRepayment } from "../types/receivable";
 import {
+  allocateReceivableRepayment,
+  buildReceivableUpdatePayload,
+  describeInterest,
   receivablesInSpace,
+  roundMoney,
   summarizeReceivable,
   summarizeReceivables,
   validateReceivableRepayment,
@@ -273,5 +277,334 @@ describe("summarizeReceivables — overdue and due-this-month amounts", () => {
       ASOF
     );
     expect(totals.dueThisMonthAmount).toBe(0);
+  });
+});
+
+describe("SPENDLY-160 — interest on money lent", () => {
+  /** 20000 lent on 2026-01-10 at 1% monthly on the outstanding principal. */
+  function lentWithInterest(overrides: Partial<Receivable> = {}): Receivable {
+    return makeReceivable({
+      interestRate: 1,
+      interestType: "SIMPLE",
+      interestFrequency: "MONTHLY",
+      interestBasis: "OUTSTANDING_PRINCIPAL",
+      ...overrides,
+    });
+  }
+
+  describe("documents written before interest existed", () => {
+    it("reads as interest-free, not as broken", () => {
+      const summary = summarizeReceivable(makeReceivable(), [], "2026-06-10");
+
+      expect(summary.interestAccrued).toBe(0);
+      expect(summary.outstandingInterest).toBe(0);
+      expect(summary.outstandingAmount).toBe(20000);
+      expect(summary.outstandingAmount).toBe(summary.outstandingPrincipal);
+    });
+
+    it("treats a repayment with no split as pure principal", () => {
+      const summary = summarizeReceivable(
+        makeReceivable(),
+        [makeRepayment({ amount: 5000, date: "2026-02-10" })],
+        "2026-06-10"
+      );
+
+      expect(summary.principalReceived).toBe(5000);
+      expect(summary.interestReceived).toBe(0);
+      expect(summary.totalReceived).toBe(5000);
+    });
+  });
+
+  describe("accrual", () => {
+    it("charges the configured rate on what is still owed", () => {
+      const summary = summarizeReceivable(lentWithInterest(), [], "2026-03-10");
+
+      // 20000 at 1% for two months.
+      expect(summary.interestAccrued).toBe(400);
+      expect(summary.outstandingInterest).toBe(400);
+      expect(summary.outstandingAmount).toBe(20400);
+    });
+
+    it("keeps outstandingAmount the sum of its two parts", () => {
+      const summary = summarizeReceivable(
+        lentWithInterest(),
+        [makeRepayment({ amount: 5000, date: "2026-02-10" })],
+        "2026-05-10"
+      );
+
+      expect(summary.outstandingAmount).toBe(
+        roundMoney(summary.outstandingPrincipal + summary.outstandingInterest)
+      );
+    });
+
+    it("ignores the rate entirely when the type is NONE", () => {
+      const summary = summarizeReceivable(
+        lentWithInterest({ interestType: "NONE" }),
+        [],
+        "2027-01-10"
+      );
+
+      expect(summary.interestAccrued).toBe(0);
+    });
+  });
+
+  describe("repayments that carry interest", () => {
+    it("separates principal from interest received", () => {
+      const summary = summarizeReceivable(
+        lentWithInterest(),
+        [
+          makeRepayment({
+            amount: 5200,
+            principalComponent: 5000,
+            interestComponent: 200,
+            date: "2026-02-10",
+          }),
+        ],
+        "2026-02-10"
+      );
+
+      expect(summary.totalReceived).toBe(5200);
+      expect(summary.principalReceived).toBe(5000);
+      expect(summary.interestReceived).toBe(200);
+      expect(summary.outstandingPrincipal).toBe(15000);
+      expect(summary.outstandingInterest).toBe(0);
+    });
+
+    it("allocates a repayment to interest before principal", () => {
+      const summary = summarizeReceivable(lentWithInterest(), [], "2026-03-10");
+      const allocation = allocateReceivableRepayment(1000, summary);
+
+      expect(allocation.interestComponent).toBe(400);
+      expect(allocation.principalComponent).toBe(600);
+      expect(allocation.overpayment).toBe(0);
+    });
+  });
+
+  describe("settlement", () => {
+    it("stays open while only interest is owed", () => {
+      const summary = summarizeReceivable(
+        lentWithInterest(),
+        [makeRepayment({ amount: 20000, date: "2026-02-10" })],
+        "2026-03-10"
+      );
+
+      expect(summary.outstandingPrincipal).toBe(0);
+      expect(summary.outstandingInterest).toBeGreaterThan(0);
+      expect(summary.status).not.toBe("FULLY_SETTLED");
+    });
+
+    it("stays overdue while only interest is owed", () => {
+      const summary = summarizeReceivable(
+        lentWithInterest({ dueDate: "2026-02-15" }),
+        [makeRepayment({ amount: 20000, date: "2026-02-10" })],
+        "2026-03-10"
+      );
+
+      expect(summary.isOverdue).toBe(true);
+      expect(summary.status).toBe("OVERDUE");
+    });
+
+    it("settles once waived interest covers the remainder", () => {
+      const repayments = [makeRepayment({ amount: 20000, date: "2026-02-10" })];
+      const open = summarizeReceivable(
+        lentWithInterest(),
+        repayments,
+        "2026-03-10"
+      );
+
+      const waived = summarizeReceivable(
+        lentWithInterest({
+          waivedInterest: open.outstandingInterest,
+          interestStoppedDate: "2026-03-10",
+        }),
+        repayments,
+        "2026-03-10"
+      );
+
+      expect(waived.outstandingInterest).toBe(0);
+      expect(waived.status).toBe("FULLY_SETTLED");
+    });
+
+    it("does not count waived interest as money received", () => {
+      const repayments = [makeRepayment({ amount: 20000, date: "2026-02-10" })];
+      const waived = summarizeReceivable(
+        lentWithInterest({
+          waivedInterest: 200,
+          interestStoppedDate: "2026-03-10",
+        }),
+        repayments,
+        "2026-03-10"
+      );
+
+      expect(waived.totalReceived).toBe(20000);
+      expect(waived.interestReceived).toBe(0);
+      expect(waived.interestWaived).toBe(200);
+    });
+
+    it("stops accruing once interest is stopped, however long ago", () => {
+      const stopped = lentWithInterest({ interestStoppedDate: "2026-03-10" });
+
+      expect(
+        summarizeReceivable(stopped, [], "2026-03-10").interestAccrued
+      ).toBe(400);
+      expect(
+        summarizeReceivable(stopped, [], "2028-03-10").interestAccrued
+      ).toBe(400);
+    });
+  });
+
+  describe("cancellation", () => {
+    it("freezes interest at the write-off date", () => {
+      const cancelled = lentWithInterest({
+        status: "CANCELLED",
+        interestStoppedDate: "2026-04-10",
+      });
+
+      expect(
+        summarizeReceivable(cancelled, [], "2027-01-10").interestAccrued
+      ).toBe(600);
+    });
+
+    it("accrues nothing for a receivable cancelled before interest existed", () => {
+      // No terms and no stop date: the legacy shape, and correctly zero.
+      const legacy = makeReceivable({ status: "CANCELLED" });
+
+      expect(summarizeReceivable(legacy, [], "2027-01-10").interestAccrued).toBe(
+        0
+      );
+    });
+  });
+
+  describe("buildReceivableUpdatePayload", () => {
+    it("measures the floor against principal, not total received", () => {
+      // 5200 received, but only 5000 of it was principal. An edit to 6000 is
+      // legitimate and must not be refused by the interest portion.
+      const repayments = [
+        makeRepayment({
+          amount: 5200,
+          principalComponent: 5000,
+          interestComponent: 200,
+          date: "2026-02-10",
+        }),
+      ];
+      const result = buildReceivableUpdatePayload(
+        lentWithInterest(),
+        { originalAmount: 6000 },
+        repayments,
+        "2026-03-10"
+      );
+
+      expect(result.ok).toBe(true);
+    });
+
+    it("still refuses to drop below principal already received", () => {
+      const repayments = [
+        makeRepayment({
+          amount: 5000,
+          principalComponent: 5000,
+          date: "2026-02-10",
+        }),
+      ];
+      const result = buildReceivableUpdatePayload(
+        lentWithInterest(),
+        { originalAmount: 4000 },
+        repayments,
+        "2026-03-10"
+      );
+
+      expect(result.ok).toBe(false);
+    });
+
+    it("restamps the cache on a status-only write", () => {
+      // The drift this fixes: cancelling used to write status while leaving a
+      // stale outstandingAmount behind it.
+      const result = buildReceivableUpdatePayload(
+        lentWithInterest(),
+        { status: "CANCELLED", interestStoppedDate: "2026-03-10" },
+        [],
+        "2026-03-10"
+      );
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.recomputed).toBe(true);
+      expect(result.fields.status).toBe("CANCELLED");
+      expect(result.fields.accruedInterest).toBe(400);
+    });
+
+    it("leaves the cache alone for an edit that cannot change it", () => {
+      const result = buildReceivableUpdatePayload(
+        lentWithInterest(),
+        { note: "reminder sent" },
+        [],
+        "2026-03-10"
+      );
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.recomputed).toBe(false);
+      expect(result.fields).toEqual({ note: "reminder sent" });
+    });
+
+    it("refreshes accrued interest when the rate changes", () => {
+      const result = buildReceivableUpdatePayload(
+        lentWithInterest(),
+        { interestRate: 2 },
+        [],
+        "2026-03-10"
+      );
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.fields.accruedInterest).toBe(800);
+    });
+  });
+
+  describe("portfolio totals", () => {
+    it("counts outstanding interest as money still owed", () => {
+      const portfolio = summarizeReceivables(
+        [lentWithInterest()],
+        [],
+        "2026-03-10"
+      );
+
+      expect(portfolio.totalOutstanding).toBe(20400);
+    });
+
+    it("counts interest in the overdue bucket", () => {
+      const portfolio = summarizeReceivables(
+        [lentWithInterest({ dueDate: "2026-02-01" })],
+        [],
+        "2026-03-10"
+      );
+
+      expect(portfolio.overdueAmount).toBe(20400);
+    });
+
+    it("keeps cancelled interest out of what is outstanding", () => {
+      const portfolio = summarizeReceivables(
+        [
+          lentWithInterest({
+            status: "CANCELLED",
+            interestStoppedDate: "2026-03-10",
+          }),
+        ],
+        [],
+        "2026-03-10"
+      );
+
+      expect(portfolio.totalOutstanding).toBe(0);
+      expect(portfolio.totalLent).toBe(20000);
+    });
+  });
+
+  describe("describeInterest", () => {
+    it("labels a configured rate", () => {
+      expect(describeInterest(lentWithInterest())).toBe("1% monthly interest");
+    });
+
+    it("labels a receivable with no terms at all", () => {
+      expect(describeInterest(makeReceivable())).toBe("No interest");
+    });
   });
 });
