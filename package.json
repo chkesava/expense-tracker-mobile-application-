@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@expo-google-fonts/inter": "^0.4.2",
+    "@gluestack-ui/core": "^5.0.15",
     "@gorhom/bottom-sheet": "^5.2.14",
     "@hookform/resolvers": "^5.7.1",
     "@noble/hashes": "^1.8.0",
