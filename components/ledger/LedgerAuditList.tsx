@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { FlashList } from "@shopify/flash-list";
 
 import { Amount } from "@/components/common/Amount";
@@ -21,6 +21,7 @@ import {
   restoreIncome,
 } from "@/services/ledger/mutateLedgerTransaction";
 import type { LedgerEvent } from "@/shared/types/ledgerEvent";
+import { Button } from "@/components/ui/Button";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
@@ -136,7 +137,7 @@ export function LedgerAuditList() {
           ? "Restored"
           : "Edited";
       const chipColor = isDelete
-        ? "#EF4444"
+        ? theme.colors.destructive
         : isRestore
           ? theme.colors.success
           : theme.colors.primary;
@@ -219,37 +220,25 @@ export function LedgerAuditList() {
             </Text>
           ) : null}
           {canRestore ? (
-            <Pressable
-              accessibilityRole="button"
+            <Button
+              variant="outline"
+              size="sm"
+              haptic={false}
               accessibilityLabel={`Restore this ${kindLabel.toLowerCase()}`}
-              accessibilityState={{ disabled: isRestoring }}
               disabled={isRestoring}
               onPress={() => {
                 void haptic.impact();
                 void handleRestore(item);
               }}
-              style={({ pressed }) => [
-                styles.restoreBtn,
-                {
-                  borderColor: theme.colors.border,
-                  backgroundColor: isDark
-                    ? "rgba(255,255,255,0.05)"
-                    : "rgba(0,0,0,0.04)",
-                  opacity: pressed || isRestoring ? 0.6 : 1,
-                },
-              ]}
+              style={styles.restoreBtn}
             >
-              <Text
-                style={[styles.restoreText, { color: theme.colors.foreground }]}
-              >
-                {isRestoring ? "Restoring…" : "Restore"}
-              </Text>
-            </Pressable>
+              {isRestoring ? "Restoring…" : "Restore"}
+            </Button>
           ) : null}
         </View>
       );
     },
-    [displayCurrency, theme, isDark, latestActionByRow, restoringId, handleRestore]
+    [displayCurrency, theme, latestActionByRow, restoringId, handleRestore]
   );
 
   if (error) {
@@ -349,15 +338,7 @@ const styles = StyleSheet.create({
   },
   restoreBtn: {
     alignSelf: "flex-start",
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
     marginTop: 4,
-  },
-  restoreText: {
-    fontSize: 12,
-    fontWeight: "700",
   },
   when: {
     fontSize: 11,

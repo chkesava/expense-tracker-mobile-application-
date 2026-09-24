@@ -1,11 +1,13 @@
 import { useEffect, useRef } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { MoreHorizontal } from "lucide-react-native";
 
 import { accountAccent } from "@/components/accounts/accountScreenTheme";
 import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
+import { Chip } from "@/components/ui/Chip";
 import { haptic } from "@/lib/haptics";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useSurfaces } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import {
   LEDGER_SECTIONS,
@@ -40,8 +42,7 @@ export function LedgerSectionTabs({
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const accent = accountAccent(isDark);
-
-  const neutralBg = isDark ? "rgba(255,255,255,0.04)" : "rgba(15,23,42,0.04)";
+  const surfaces = useSurfaces();
 
   const scrollRef = useRef<ScrollView>(null);
   // Offsets are read imperatively when the selection changes; keeping them in
@@ -72,36 +73,23 @@ export function LedgerSectionTabs({
             const label =
               count === undefined ? entry.label : `${entry.label} (${count})`;
             return (
-              <Pressable
+              <Chip
                 key={entry.id}
+                label={label}
+                selected={selected}
+                appearance="outline"
+                accentColor={accent}
+                haptic={!selected}
+                accessibilityRole="tab"
                 onLayout={(event) => {
                   offsets.current[entry.id] = event.nativeEvent.layout.x;
                 }}
                 onPress={() => {
                   if (selected) return;
-                  void haptic.selection();
                   onSelect(entry.id);
                 }}
-                style={[
-                  styles.tab,
-                  {
-                    backgroundColor: neutralBg,
-                    borderColor: selected ? accent : "transparent",
-                  },
-                ]}
-                accessibilityRole="tab"
-                accessibilityState={{ selected }}
-                accessibilityLabel={label}
-              >
-                <Text
-                  style={[
-                    styles.tabLabel,
-                    { color: selected ? accent : theme.colors.foreground },
-                  ]}
-                >
-                  {label}
-                </Text>
-              </Pressable>
+                style={styles.tab}
+              />
             );
           })}
         </ScrollView>
@@ -115,10 +103,8 @@ export function LedgerSectionTabs({
         style={({ pressed }) => [
           styles.more,
           {
-            backgroundColor: neutralBg,
-            borderColor: isDark
-              ? "rgba(148,163,184,0.16)"
-              : "rgba(15,23,42,0.08)",
+            backgroundColor: surfaces.control,
+            borderColor: theme.colors.border,
             opacity: pressed ? 0.6 : 1,
           },
         ]}
@@ -144,15 +130,6 @@ const styles = StyleSheet.create({
   tab: {
     height: 36,
     paddingHorizontal: 16,
-    borderRadius: 18,
-    borderCurve: "continuous",
-    borderWidth: 1.5,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  tabLabel: {
-    fontSize: 13,
-    fontWeight: "700",
   },
   more: {
     width: 36,

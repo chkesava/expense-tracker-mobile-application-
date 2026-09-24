@@ -5,7 +5,6 @@ import {
   RefreshControl,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import { FlashList } from "@shopify/flash-list";
@@ -38,6 +37,7 @@ import { AssignToSpaceModal } from "@/components/spaces/AssignToSpaceModal";
 import { JournalRelatedRecords } from "@/components/ledger/JournalRelatedRecords";
 import { JournalTransactionAudit } from "@/components/ledger/JournalTransactionAudit";
 import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 import { useSpaces } from "@/hooks/useSpaces";
 import { useAccountPayments } from "@/hooks/useAccountPayments";
 import { useAccountEntries } from "@/hooks/useAccountEntries";
@@ -59,7 +59,7 @@ import { findJournalRelatedRecords } from "@/shared/utils/journalRelatedRecords"
 import { formatDateKey } from "@/shared/utils/dates";
 import { formatDayHeading } from "@/shared/utils/dateDisplay";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useSurfaces, withAlpha } from "@/theme/surfaces";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
 export interface ExpenseListProps {
@@ -125,8 +125,8 @@ export function ExpenseList({
   emptyState,
 }: ExpenseListProps) {
   const router = useRouter();
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
   const listBottomPadding = usePageListBottomPadding();
   const { user } = useAuth();
   const uid = user?.uid;
@@ -398,7 +398,7 @@ export function ExpenseList({
             toggleExpenseSelection(item.data.id);
           }}
           android_ripple={{
-            color: theme.colors.primary + "18",
+            color: withAlpha(theme.colors.primary, 0.1),
             borderless: false,
           }}
           style={({ pressed }) => [
@@ -419,7 +419,7 @@ export function ExpenseList({
               opacity: 0.9,
             },
             isRowSelected && {
-              backgroundColor: theme.colors.primary + "1F",
+              backgroundColor: withAlpha(theme.colors.primary, 0.12),
             },
           ]}
         >
@@ -429,9 +429,9 @@ export function ExpenseList({
               styles.avatar,
               isCompact && styles.avatarCompact,
               {
-                backgroundColor: isExpense
-                  ? theme.colors.primary + "18"
-                  : theme.colors.success + "18",
+                backgroundColor: surfaces.wash(
+                  isExpense ? theme.colors.primary : theme.colors.success
+                ),
               },
             ]}
           >
@@ -478,9 +478,7 @@ export function ExpenseList({
                   style={[
                     styles.accBadge,
                     {
-                      backgroundColor: isDark
-                        ? "rgba(255,255,255,0.06)"
-                        : "rgba(0,0,0,0.04)",
+                      backgroundColor: surfaces.control,
                       borderColor: theme.colors.border,
                     },
                   ]}
@@ -551,13 +549,13 @@ export function ExpenseList({
       accountMap,
       cashFlowById,
       handleDelete,
-      isDark,
       isSelecting,
       openEditFromRow,
       selectedExpenseIds,
       swipeCloseSignal,
       displayCurrency,
       isCompact,
+      surfaces,
       theme,
       toggleExpenseSelection,
     ]
@@ -786,7 +784,7 @@ export function ExpenseList({
               description="Track your first expense to begin understanding your spending habits and category breakdowns."
               primaryAction={{
                 label: "Add Expense",
-                icon: <Plus size={16} color="#FFFFFF" strokeWidth={2.4} />,
+                icon: <Plus size={16} color={theme.colors.primaryForeground} strokeWidth={2.4} />,
                 onPress: () => {
                   if (onAddExpense) {
                     onAddExpense();
@@ -830,10 +828,11 @@ export function ExpenseList({
                 style={[
                   styles.modalIconBox,
                   {
-                    backgroundColor:
+                    backgroundColor: surfaces.wash(
                       selectedTx.kind === "expense"
-                        ? theme.colors.primary + "18"
-                        : theme.colors.success + "18",
+                        ? theme.colors.primary
+                        : theme.colors.success
+                    ),
                   },
                 ]}
               >
@@ -879,9 +878,7 @@ export function ExpenseList({
               style={[
                 styles.detailsList,
                 {
-                  backgroundColor: isDark
-                    ? "rgba(255,255,255,0.04)"
-                    : "rgba(0,0,0,0.03)",
+                  backgroundColor: surfaces.tile,
                   borderColor: theme.colors.border,
                 },
               ]}
@@ -979,15 +976,16 @@ export function ExpenseList({
               docId={selectedTx.data.id}
             />
 
-            {/* Action Buttons — plain Pressable avoids Reanimated pressables
-                failing to receive taps inside the bottom sheet on Android. */}
+            {/* Action Buttons. The Gluestack Button root is a plain RN
+                Pressable, so it still receives taps inside the sheet on
+                Android (the old Reanimated pressable did not). */}
             <View style={{ gap: 10 }}>
               {selectedTx.kind === "expense" ? (
                 <View style={{ flexDirection: "row", gap: 10 }}>
-                  <Pressable
-                    accessibilityRole="button"
+                  <Button
+                    variant="tonal"
+                    haptic={false}
                     accessibilityLabel={selectedSpace ? "Change Space" : "Add to Space"}
-                    android_ripple={{ color: theme.colors.primary + "22" }}
                     onPress={() => {
                       const tx = selectedTx;
                       if (!tx || tx.kind !== "expense" || !tx.data.id) return;
@@ -996,136 +994,64 @@ export function ExpenseList({
                       setSelectedExpenseIds(new Set([tx.data.id]));
                       setIsAssignModalOpen(true);
                     }}
-                    style={({ pressed }) => [
-                      styles.detailActionBtn,
-                      {
-                        flex: 1,
-                        backgroundColor: theme.colors.secondaryContainer,
-                        opacity: pressed ? 0.85 : 1,
-                      },
-                    ]}
+                    style={styles.detailActionFlex}
                   >
-                    <Text
-                      style={{
-                        color: theme.colors.onSecondaryContainer,
-                        fontSize: theme.typography.sm,
-                        fontWeight: "700",
-                      }}
-                    >
-                      {selectedSpace ? "Change Space" : "Add to Space"}
-                    </Text>
-                  </Pressable>
+                    {selectedSpace ? "Change Space" : "Add to Space"}
+                  </Button>
 
                   {selectedSpace ? (
-                    <Pressable
-                      accessibilityRole="button"
+                    <Button
+                      variant="outline"
+                      haptic={false}
                       accessibilityLabel="Remove from Space"
-                      android_ripple={{ color: theme.colors.primary + "22" }}
                       onPress={() => {
                         const tx = selectedTx;
                         if (!tx || tx.kind !== "expense" || !tx.data.id) return;
                         void haptic.selection();
                         void removeExpenseFromSpace(tx.data.id);
                       }}
-                      style={({ pressed }) => [
-                        styles.detailActionBtn,
-                        {
-                          flex: 1,
-                          borderWidth: 1,
-                          borderColor: theme.colors.border,
-                          opacity: pressed ? 0.85 : 1,
-                        },
-                      ]}
+                      style={styles.detailActionFlex}
                     >
-                      <Text
-                        style={{
-                          color: theme.colors.foreground,
-                          fontSize: theme.typography.sm,
-                          fontWeight: "700",
-                        }}
-                      >
-                        Remove
-                      </Text>
-                    </Pressable>
+                      Remove
+                    </Button>
                   ) : null}
                 </View>
               ) : null}
 
-              <Pressable
-                accessibilityRole="button"
+              <Button
+                variant="tonal"
+                haptic={false}
                 accessibilityLabel="Edit Transaction"
-                android_ripple={{ color: theme.colors.primary + "22" }}
                 onPress={() => {
                   const tx = selectedTx;
                   if (!tx) return;
                   void haptic.selection();
                   openEditAfterDetailClose(tx);
                 }}
-                style={({ pressed }) => [
-                  styles.detailActionBtn,
-                  {
-                    backgroundColor: theme.colors.secondaryContainer,
-                    opacity: pressed ? 0.85 : 1,
-                  },
-                ]}
               >
-                <Text
-                  style={{
-                    color: theme.colors.onSecondaryContainer,
-                    fontSize: theme.typography.sm,
-                    fontWeight: "700",
-                  }}
-                >
-                  Edit Transaction
-                </Text>
-              </Pressable>
+                Edit Transaction
+              </Button>
 
-              <TextInput
+              <Input
                 value={deleteReason}
                 onChangeText={setDeleteReason}
                 placeholder="Reason for this correction (optional)"
-                placeholderTextColor={theme.colors.mutedForeground}
                 accessibilityLabel="Reason for this correction"
-                style={[
-                  styles.reasonInput,
-                  {
-                    color: theme.colors.foreground,
-                    backgroundColor: isDark
-                      ? "rgba(255,255,255,0.04)"
-                      : "rgba(0,0,0,0.03)",
-                    borderColor: theme.colors.border,
-                  },
-                ]}
               />
 
-              <Pressable
-                accessibilityRole="button"
+              <Button
+                variant="destructive"
+                haptic={false}
                 accessibilityLabel="Delete Transaction"
-                android_ripple={{ color: "rgba(255,255,255,0.24)" }}
                 onPress={() => {
                   const tx = selectedTx;
                   if (!tx) return;
                   void haptic.impact();
                   void handleDelete(tx, deleteReason);
                 }}
-                style={({ pressed }) => [
-                  styles.detailActionBtn,
-                  {
-                    backgroundColor: theme.colors.destructive,
-                    opacity: pressed ? 0.85 : 1,
-                  },
-                ]}
               >
-                <Text
-                  style={{
-                    color: theme.colors.destructiveForeground,
-                    fontSize: theme.typography.sm,
-                    fontWeight: "700",
-                  }}
-                >
-                  Delete Transaction
-                </Text>
-              </Pressable>
+                Delete Transaction
+              </Button>
             </View>
           </View>
         ) : null}
@@ -1282,13 +1208,6 @@ const styles = StyleSheet.create({
     padding: 14,
     gap: 12,
   },
-  reasonInput: {
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 13,
-  },
   detailRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -1307,13 +1226,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
   },
-  detailActionBtn: {
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 48,
-    borderRadius: 999,
-    paddingVertical: 12,
-    paddingHorizontal: 18,
-    overflow: "hidden",
+  detailActionFlex: {
+    flex: 1,
   },
 });
