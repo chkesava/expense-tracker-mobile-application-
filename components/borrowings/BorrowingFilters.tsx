@@ -2,20 +2,25 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { ACCOUNT_GREEN } from "@/components/accounts/accountScreenTheme";
 import { haptic } from "@/lib/haptics";
-import { LENDER_TYPES, LENDER_TYPE_LABELS } from "@/shared/types/borrowing";
+import {
+  INTEREST_TYPES,
+  LENDER_TYPES,
+  LENDER_TYPE_LABELS,
+} from "@/shared/types/borrowing";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
+import type {
+  BorrowingDateFilter,
+  BorrowingInterestFilter,
+  BorrowingStatusFilter,
+} from "@/shared/utils/borrowingFilters";
 
-export type BorrowingStatusFilter =
-  | "all"
-  | "outstanding"
-  | "ACTIVE"
-  | "PARTIALLY_SETTLED"
-  | "OVERDUE"
-  | "FULLY_SETTLED";
-
-export type BorrowingDateFilter = "all" | "thisMonth" | "last6Months" | "thisYear";
+export type {
+  BorrowingDateFilter,
+  BorrowingInterestFilter,
+  BorrowingStatusFilter,
+} from "@/shared/utils/borrowingFilters";
 
 export const BORROWING_STATUS_FILTERS: { id: BorrowingStatusFilter; label: string }[] = [
   { id: "all", label: "All" },
@@ -41,7 +46,28 @@ export const BORROWING_LENDER_FILTERS: { id: string; label: string }[] = [
   })),
 ];
 
-function FilterChip({
+const INTEREST_FILTER_LABELS: Record<(typeof INTEREST_TYPES)[number], string> = {
+  NONE: "Interest-free",
+  SIMPLE: "Simple interest",
+};
+
+export const BORROWING_INTEREST_FILTERS: {
+  id: BorrowingInterestFilter;
+  label: string;
+}[] = [
+  { id: "all", label: "Any terms" },
+  ...INTEREST_TYPES.map((type) => ({
+    id: type as BorrowingInterestFilter,
+    label: INTEREST_FILTER_LABELS[type],
+  })),
+];
+
+/**
+ * Exported so `BorrowingFilterSheet` dresses its options identically to the
+ * status row — one chip, two callers, rather than the sheet growing a
+ * near-copy that drifts.
+ */
+export function FilterChip({
   label,
   active,
   onPress,
@@ -87,9 +113,7 @@ function FilterChip({
         style={[
           styles.chipLabel,
           {
-            color: active
-              ? "#052E16"
-              : theme.colors.mutedForeground,
+            color: active ? "#052E16" : theme.colors.mutedForeground,
             fontWeight: active ? "800" : "600",
           },
         ]}
@@ -100,20 +124,20 @@ function FilterChip({
   );
 }
 
-export function BorrowingFilters({
+/**
+ * The quick status row (SPENDLY-139).
+ *
+ * Lender type, date range and interest terms used to sit here as two more
+ * stacked scrolling rows, which meant three rows of chips competing with the
+ * list for height. They moved into `BorrowingFilterSheet`; status stays out
+ * here because it is the one people flick between constantly.
+ */
+export function BorrowingStatusFilters({
   statusFilter,
-  lenderTypeFilter,
-  dateFilter,
   onStatusChange,
-  onLenderChange,
-  onDateChange,
 }: {
   statusFilter: BorrowingStatusFilter;
-  lenderTypeFilter: string;
-  dateFilter: BorrowingDateFilter;
   onStatusChange: (id: BorrowingStatusFilter) => void;
-  onLenderChange: (id: string) => void;
-  onDateChange: (id: BorrowingDateFilter) => void;
 }) {
   return (
     <View style={styles.wrap}>
@@ -129,38 +153,6 @@ export function BorrowingFilters({
               label={filter.label}
               active={statusFilter === filter.id}
               onPress={() => onStatusChange(filter.id)}
-            />
-          ))}
-        </ScrollView>
-      </HorizontalSwipeBoundary>
-      <HorizontalSwipeBoundary>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.row}
-        >
-          {BORROWING_LENDER_FILTERS.map((filter) => (
-            <FilterChip
-              key={filter.id}
-              label={filter.label}
-              active={lenderTypeFilter === filter.id}
-              onPress={() => onLenderChange(filter.id)}
-            />
-          ))}
-        </ScrollView>
-      </HorizontalSwipeBoundary>
-      <HorizontalSwipeBoundary>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.row}
-        >
-          {BORROWING_DATE_FILTERS.map((filter) => (
-            <FilterChip
-              key={filter.id}
-              label={filter.label}
-              active={dateFilter === filter.id}
-              onPress={() => onDateChange(filter.id)}
             />
           ))}
         </ScrollView>
