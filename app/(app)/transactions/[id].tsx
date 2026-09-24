@@ -53,7 +53,7 @@ import {
   parseTransactionRouteParams,
 } from "@/shared/utils/transactionRef";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useSurfaces } from "@/theme/surfaces";
 
 function timestampLabel(value: unknown): string | null {
   if (!value) return null;
@@ -81,8 +81,8 @@ export default function TransactionDetailsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const listPaddingBottom = usePageListBottomPadding();
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
   const { user } = useAuth();
   const { settings } = useSettings();
   const currency = useDisplayCurrency();
@@ -273,8 +273,6 @@ export default function TransactionDetailsScreen() {
   const updatedLabel = timestampLabel(journalRow?.updatedAt);
   const amountColor = isCredit ? theme.colors.success : theme.colors.foreground;
 
-  const mutedChip = isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)";
-
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
       <View
@@ -287,22 +285,14 @@ export default function TransactionDetailsScreen() {
           gap: 12,
         }}
       >
-        <Pressable
+        <Button
+          variant="tonal"
+          size="icon"
           onPress={goBack}
-          accessibilityRole="button"
           accessibilityLabel="Back"
-          hitSlop={8}
-          style={{
-            width: 44,
-            height: 44,
-            borderRadius: 22,
-            alignItems: "center",
-            justifyContent: "center",
-            backgroundColor: mutedChip,
-          }}
         >
-          <ArrowLeft size={20} color={theme.colors.foreground} />
-        </Pressable>
+          <ArrowLeft size={20} color={theme.colors.onSecondaryContainer} />
+        </Button>
         <View style={{ flex: 1 }}>
           <Text
             accessibilityRole="header"
@@ -325,22 +315,14 @@ export default function TransactionDetailsScreen() {
           ) : null}
         </View>
         {editability?.editable ? (
-          <Pressable
+          <Button
+            variant="tonal"
+            size="icon"
             onPress={openEdit}
-            accessibilityRole="button"
             accessibilityLabel="Edit transaction"
-            hitSlop={8}
-            style={{
-              width: 44,
-              height: 44,
-              borderRadius: 22,
-              alignItems: "center",
-              justifyContent: "center",
-              backgroundColor: mutedChip,
-            }}
           >
             <Pencil size={18} color={theme.colors.primary} />
-          </Pressable>
+          </Button>
         ) : null}
       </View>
 
@@ -372,7 +354,7 @@ export default function TransactionDetailsScreen() {
                   paddingHorizontal: 10,
                   paddingVertical: 3,
                   borderRadius: 999,
-                  backgroundColor: mutedChip,
+                  backgroundColor: surfaces.control,
                 }}
               >
                 <Text style={{ color: theme.colors.mutedForeground, fontSize: 12, fontWeight: "700" }}>
