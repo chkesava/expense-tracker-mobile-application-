@@ -32,11 +32,24 @@ import {
   computeMonthlyCommitments,
   formatSubscriptionSchedule,
   getNextRenewalDate,
+  subscriptionsToUpcomingDues,
 } from "@/shared/utils/subscriptionProcessor";
+import {
+  amountDueWithinDays,
+  duesWithinDays,
+} from "@/shared/utils/spendlyBudget";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
+
+type RecurringTab = "active" | "paused" | "completed";
+
+const RECURRING_TABS: { id: RecurringTab; label: string }[] = [
+  { id: "active", label: "Active" },
+  { id: "paused", label: "Paused" },
+  { id: "completed", label: "Completed" },
+];
 
 export function SubscriptionsList() {
   const { theme, themeName } = useTheme();
@@ -51,7 +64,7 @@ export function SubscriptionsList() {
     decline: declineSuggestion,
   } = useRecurringSuggestions();
 
-  const [activeTab, setActiveTab] = useState<"active" | "completed">("active");
+  const [activeTab, setActiveTab] = useState<RecurringTab>("active");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedSub, setSelectedSub] = useState<Subscription | null>(null);
   const [suggestionKey, setSuggestionKey] = useState<string | null>(null);
@@ -66,12 +79,30 @@ export function SubscriptionsList() {
     return computeMonthlyCommitments(subscriptions);
   }, [subscriptions]);
 
-  const filteredSubscriptions = useMemo(() => {
-    if (activeTab === "completed") {
-      return subscriptions.filter((s) => s.isCompleted);
+  // What actually leaves the account soon, as opposed to the monthly average.
+  const upcoming = useMemo(
+    () => subscriptionsToUpcomingDues(subscriptions),
+    [subscriptions]
+  );
+  const dueInSeven = useMemo(() => amountDueWithinDays(upcoming, 7), [upcoming]);
+  const nextDue = useMemo(() => duesWithinDays(upcoming, 400)[0] ?? null, [upcoming]);
+
+  // One partition feeds both the tabs and their counts. They used to disagree:
+  // the count came from `commitments.activeCount`, which excludes paused items,
+  // while the list showed everything that was not completed.
+  const byTab = useMemo(() => {
+    const active: Subscription[] = [];
+    const paused: Subscription[] = [];
+    const completed: Subscription[] = [];
+    for (const sub of subscriptions) {
+      if (sub.isCompleted) completed.push(sub);
+      else if (sub.isActive) active.push(sub);
+      else paused.push(sub);
     }
-    return subscriptions.filter((s) => !s.isCompleted);
-  }, [subscriptions, activeTab]);
+    return { active, paused, completed };
+  }, [subscriptions]);
+
+  const filteredSubscriptions = byTab[activeTab];
 
   const handleOpenAdd = () => {
     setSelectedSub(null);
@@ -239,6 +270,38 @@ export function SubscriptionsList() {
             />
           </View>
         </View>
+
+        {dueInSeven > 0 || nextDue ? (
+          <View
+            style={[styles.dueStrip, { borderTopColor: theme.colors.border }]}
+          >
+            <View style={styles.dueBlock}>
+              <Text
+                style={[styles.breakdownLabel, { color: theme.colors.mutedForeground }]}
+              >
+                Due in next 7 days
+              </Text>
+              <Amount
+                value={dueInSeven}
+                currency={displayCurrency}
+                ghostable
+                style={{
+                  fontSize: theme.typography.md,
+                  fontWeight: "800",
+                  color: theme.colors.foreground,
+                }}
+              />
+            </View>
+            {nextDue ? (
+              <Text
+                style={[styles.nextDue, { color: theme.colors.mutedForeground }]}
+                numberOfLines={1}
+              >
+                Next: {nextDue.name} · {nextDue.dueDate}
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
       </View>
 
       {reviewItems.length > 0 ? (
@@ -266,69 +329,44 @@ export function SubscriptionsList() {
 
       {/* Tabs / Filter Pills */}
       <View style={styles.filterRow}>
-        <Pressable
-          onPress={() => {
-            haptic.selection().catch(() => undefined);
-            setActiveTab("active");
-          }}
-          style={[
-            styles.filterPill,
-            activeTab === "active"
-              ? { backgroundColor: theme.colors.primary }
-              : {
-                  backgroundColor: isDark
-                    ? "rgba(255,255,255,0.06)"
-                    : "rgba(0,0,0,0.04)",
-                },
-          ]}
-        >
-          <Text
-            style={[
-              styles.filterPillText,
-              {
-                color:
-                  activeTab === "active"
-                    ? theme.colors.primaryForeground
-                    : theme.colors.mutedForeground,
-                fontWeight: activeTab === "active" ? "700" : "500",
-              },
-            ]}
-          >
-            Active ({commitments.activeCount})
-          </Text>
-        </Pressable>
-
-        <Pressable
-          onPress={() => {
-            haptic.selection().catch(() => undefined);
-            setActiveTab("completed");
-          }}
-          style={[
-            styles.filterPill,
-            activeTab === "completed"
-              ? { backgroundColor: theme.colors.primary }
-              : {
-                  backgroundColor: isDark
-                    ? "rgba(255,255,255,0.06)"
-                    : "rgba(0,0,0,0.04)",
-                },
-          ]}
-        >
-          <Text
-            style={[
-              styles.filterPillText,
-              {
-                color:
-                  activeTab === "completed"
-                    ? theme.colors.primaryForeground
-                    : theme.colors.mutedForeground,
-                fontWeight: activeTab === "completed" ? "700" : "500",
-              },
-            ]}
-          >
-            Completed ({commitments.completedCount})
-          </Text>
-        </Pressable>
+        {RECURRING_TABS.map((tab) => {
+          const selected = activeTab === tab.id;
+          return (
+            <Pressable
+              key={tab.id}
+              onPress={() => {
+                haptic.selection().catch(() => undefined);
+                setActiveTab(tab.id);
+              }}
+              style={[
+                styles.filterPill,
+                selected
+                  ? { backgroundColor: theme.colors.primary }
+                  : {
+                      backgroundColor: isDark
+                        ? "rgba(255,255,255,0.06)"
+                        : "rgba(0,0,0,0.04)",
+                    },
+              ]}
+              accessibilityRole="tab"
+              accessibilityState={{ selected }}
+            >
+              <Text
+                style={[
+                  styles.filterPillText,
+                  {
+                    color: selected
+                      ? theme.colors.primaryForeground
+                      : theme.colors.mutedForeground,
+                    fontWeight: selected ? "700" : "500",
+                  },
+                ]}
+              >
+                {tab.label} ({byTab[tab.id].length})
+              </Text>
+            </Pressable>
+          );
+        })}
       </View>
 
       {/* Subscriptions List */}
@@ -576,6 +614,21 @@ export function SubscriptionsList() {
 }
 
 const styles = StyleSheet.create({
+  dueStrip: {
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: 4,
+  },
+  dueBlock: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+  },
+  nextDue: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
   container: {
     paddingBottom: 24,
     gap: 16,

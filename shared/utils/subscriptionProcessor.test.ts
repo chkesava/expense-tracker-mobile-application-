@@ -10,6 +10,7 @@ import {
   planDueSubscriptionPosts,
   applyPostPlanToSubscriptions,
   subscriptionChargeDocId,
+  subscriptionsToUpcomingDues,
 } from "./subscriptionProcessor";
 
 describe("subscriptionProcessor utilities", () => {
@@ -345,5 +346,49 @@ describe("subscriptionProcessor utilities", () => {
       );
       expect(plan[0] && duePostNeedsAccount(plan[0])).toBe(false);
     });
+  });
+});
+
+describe("subscriptionsToUpcomingDues", () => {
+  const base: Subscription = {
+    id: "s1",
+    name: "Gym",
+    amount: 1300,
+    category: "Health",
+    dayOfMonth: 14,
+    isActive: true,
+    lastProcessed: "2026-08",
+    type: "subscription",
+  };
+
+  it("maps an active item to an upcoming due", () => {
+    const [due] = subscriptionsToUpcomingDues([base]);
+    expect(due.id).toBe("s1");
+    expect(due.name).toBe("Gym");
+    expect(due.amount).toBe(1300);
+    expect(due.kind).toBe("subscription");
+    expect(due.dueDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it("excludes paused items — a paused charge is not money going out", () => {
+    expect(subscriptionsToUpcomingDues([{ ...base, isActive: false }])).toEqual([]);
+  });
+
+  it("excludes completed items", () => {
+    expect(
+      subscriptionsToUpcomingDues([{ ...base, isCompleted: true }])
+    ).toEqual([]);
+  });
+
+  it("falls back to the name when an item has no id", () => {
+    const [due] = subscriptionsToUpcomingDues([{ ...base, id: undefined }]);
+    expect(due.id).toBe("Gym");
+  });
+
+  it("treats a missing amount as zero rather than NaN", () => {
+    const [due] = subscriptionsToUpcomingDues([
+      { ...base, amount: undefined as unknown as number },
+    ]);
+    expect(due.amount).toBe(0);
   });
 });
