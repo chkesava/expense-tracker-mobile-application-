@@ -10,16 +10,12 @@ import {
   TextInput,
   View,
 } from "react-native";
-import {
-  Calendar,
-  Check,
-  CreditCard,
-  Repeat,
-  Trash2,
-  X,
-} from "lucide-react-native";
+import { X } from "lucide-react-native";
 
 import { Button } from "@/components/ui/Button";
+import { DayOfMonthSelect } from "@/components/common/DayOfMonthSelect";
+import { MonthYearSelect } from "@/components/common/MonthYearSelect";
+import { validateSubscriptionInput } from "@/shared/utils/subscriptionInput";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useCategories } from "@/hooks/useCategories";
 import { useSubscriptions } from "@/hooks/useSubscriptions";
@@ -87,6 +83,9 @@ export function EditSubscriptionModal({
   const [startMonth, setStartMonth] = useState("");
   const [startYear, setStartYear] = useState("");
   const startTouched = useRef(false);
+  // Latest accounts without making them a reset trigger — see the reset effect.
+  const accountsRef = useRef(accounts);
+  accountsRef.current = accounts;
   const [endMonth, setEndMonth] = useState("");
   const [endYear, setEndYear] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -117,15 +116,19 @@ export function EditSubscriptionModal({
       setFrequency("monthly");
       setIntervalDays("2");
       setCategory("Subscriptions");
-      setAccountId(accounts.length > 0 ? accounts[0].id : "");
-      setToAccountId(accounts.length > 1 ? accounts[1].id : "");
+      const available = accountsRef.current;
+      setAccountId(available.length > 0 ? available[0].id : "");
+      setToAccountId(available.length > 1 ? available[1].id : "");
       startTouched.current = false;
       setStartMonth("");
       setStartYear("");
       setEndMonth("");
       setEndYear("");
     }
-  }, [subscription, visible, accounts]);
+    // `accounts` is read through a ref on purpose. It only seeds defaults, but
+    // as a dependency it re-ran this whole reset every time the Firestore
+    // snapshot re-emitted a new array, wiping whatever the user had typed.
+  }, [subscription, visible]);
 
   // Suggest the first debit month for a new monthly item, and keep the
   // suggestion in step with the billing day until the user overrides it.
@@ -139,80 +142,36 @@ export function EditSubscriptionModal({
   }, [dayOfMonth, monthlyCadence, subscription?.id, visible]);
 
   const handleSave = async () => {
-    if (!name.trim()) {
-      toast.error("Please enter a recurring name.");
+    const checked = validateSubscriptionInput({
+      name,
+      amount,
+      type,
+      frequency,
+      dayOfMonth,
+      intervalDays,
+      startMonth,
+      startYear,
+      endMonth,
+      endYear,
+      accountId,
+      toAccountId,
+    });
+
+    if (!checked.ok) {
+      toast.error(checked.message);
       return;
     }
 
-    const numAmount = parseFloat(amount);
-    if (isNaN(numAmount) || numAmount <= 0) {
-      toast.error("Please enter a valid amount.");
-      return;
-    }
-
-    const effectiveFrequency: SubscriptionFrequency =
-      type === "emi" ? "monthly" : frequency;
-
-    if (effectiveFrequency === "monthly") {
-      const numDay = parseInt(dayOfMonth, 10);
-      if (isNaN(numDay) || numDay < 1 || numDay > 31) {
-        toast.error("Day of month must be between 1 and 31.");
-        return;
-      }
-    }
-
-    const numInterval = parseInt(intervalDays, 10);
-    if (effectiveFrequency === "every_n_days") {
-      if (isNaN(numInterval) || numInterval < 1 || numInterval > 365) {
-        toast.error("Repeat every N days must be between 1 and 365.");
-        return;
-      }
-    }
-
-    const numDay = parseInt(dayOfMonth, 10);
-
-    const numStartMonth = parseInt(startMonth, 10);
-    const numStartYear = parseInt(startYear, 10);
-    const hasStart =
-      effectiveFrequency === "monthly" && !!startMonth.trim() && !!startYear.trim();
-    if (hasStart) {
-      if (
-        isNaN(numStartMonth) ||
-        numStartMonth < 1 ||
-        numStartMonth > 12 ||
-        isNaN(numStartYear) ||
-        numStartYear < 2000 ||
-        numStartYear > 2100
-      ) {
-        toast.error("First debit month must be 1-12 with a valid year.");
-        return;
-      }
-    } else if (
-      effectiveFrequency === "monthly" &&
-      (startMonth.trim() || startYear.trim())
-    ) {
-      toast.error("Enter both the first debit month and year.");
-      return;
-    }
-
-    const startKey = hasStart
-      ? `${numStartYear}-${String(numStartMonth).padStart(2, "0")}`
-      : undefined;
-
+    // Names kept so the payload below stays exactly as it was — that object
+    // drives auto-posting and Firestore field deletion, and is the one part of
+    // this form worth not touching.
+    const numAmount = checked.amount;
+    const effectiveFrequency = checked.effectiveFrequency;
+    const numDay = checked.dayOfMonth;
+    const numInterval = checked.intervalDays;
+    const startKey = checked.startKey;
     const numEndMonth = parseInt(endMonth, 10);
     const numEndYear = parseInt(endYear, 10);
-    if (type === "emi" && endMonth && endYear && startKey) {
-      const endKey = `${numEndYear}-${String(numEndMonth).padStart(2, "0")}`;
-      if (endKey < startKey) {
-        toast.error("The final term cannot be before the first debit.");
-        return;
-      }
-    }
-
-    if (type === "transfer" && accountId && toAccountId && accountId === toAccountId) {
-      toast.error("Source and destination accounts must be different.");
-      return;
-    }
 
     setIsSubmitting(true);
     try {
@@ -285,8 +244,13 @@ export function EditSubscriptionModal({
   const handleDelete = () => {
     if (!subscription?.id) return;
     appDialog.alert(
-      "Delete Recurring Item",
-      `Are you sure you want to delete "${subscription.name}"? This action cannot be undone.`,
+      `Delete "${subscription.name}"?`,
+      // Say what actually happens. Deleting writes one doc delete and nothing
+      // else: already-posted charges keep their `subscriptionId` and stay in
+      // the ledger. Deleting also calls `rememberDeletedSubscription`, which
+      // dismisses the merchant so SMS detection stops re-suggesting it —
+      // surprising enough to be worth stating.
+      "Future charges stop. Transactions it has already added to your ledger stay where they are.\n\nThis also stops SMS detection suggesting this merchant again.",
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -571,34 +535,11 @@ export function EditSubscriptionModal({
                 />
               </View>
             ) : (
-              <View style={{ gap: 6 }}>
-                <Text
-                  style={[
-                    styles.fieldLabel,
-                    { color: theme.colors.mutedForeground },
-                  ]}
-                >
-                  BILLING DAY OF MONTH (1–31)
-                </Text>
-                <TextInput
-                  value={dayOfMonth}
-                  onChangeText={setDayOfMonth}
-                  placeholder="1"
-                  keyboardType="number-pad"
-                  maxLength={2}
-                  placeholderTextColor={theme.colors.mutedForeground}
-                  style={[
-                    styles.input,
-                    {
-                      backgroundColor: isDark
-                        ? "rgba(255,255,255,0.04)"
-                        : "rgba(0,0,0,0.02)",
-                      borderColor: theme.colors.border,
-                      color: theme.colors.foreground,
-                    },
-                  ]}
-                />
-              </View>
+              <DayOfMonthSelect
+                label="Billing day of month"
+                value={parseInt(dayOfMonth, 10)}
+                onChange={(day) => setDayOfMonth(String(day))}
+              />
             )}
 
             {/* First debit month — monthly cadence only */}
@@ -611,55 +552,20 @@ export function EditSubscriptionModal({
                   ]}
                 >
                   {type === "transfer"
-                    ? "FIRST TRANSFER FROM (MONTH & YEAR)"
-                    : "FIRST DEBIT FROM (MONTH & YEAR)"}
+                    ? "FIRST TRANSFER FROM"
+                    : "FIRST DEBIT FROM"}
                 </Text>
-                <View style={{ flexDirection: "row", gap: 10 }}>
-                  <TextInput
-                    value={startMonth}
-                    onChangeText={(value) => {
-                      startTouched.current = true;
-                      setStartMonth(value);
-                    }}
-                    placeholder="Month (1-12)"
-                    keyboardType="number-pad"
-                    maxLength={2}
-                    placeholderTextColor={theme.colors.mutedForeground}
-                    style={[
-                      styles.input,
-                      {
-                        flex: 1,
-                        backgroundColor: isDark
-                          ? "rgba(255,255,255,0.04)"
-                          : "rgba(0,0,0,0.02)",
-                        borderColor: theme.colors.border,
-                        color: theme.colors.foreground,
-                      },
-                    ]}
-                  />
-                  <TextInput
-                    value={startYear}
-                    onChangeText={(value) => {
-                      startTouched.current = true;
-                      setStartYear(value);
-                    }}
-                    placeholder="Year (e.g. 2026)"
-                    keyboardType="number-pad"
-                    maxLength={4}
-                    placeholderTextColor={theme.colors.mutedForeground}
-                    style={[
-                      styles.input,
-                      {
-                        flex: 1,
-                        backgroundColor: isDark
-                          ? "rgba(255,255,255,0.04)"
-                          : "rgba(0,0,0,0.02)",
-                        borderColor: theme.colors.border,
-                        color: theme.colors.foreground,
-                      },
-                    ]}
-                  />
-                </View>
+                <MonthYearSelect
+                  month={parseInt(startMonth, 10) || 0}
+                  year={parseInt(startYear, 10) || 0}
+                  clearable
+                  placeholder="Start from this month"
+                  onChange={({ month, year }) => {
+                    startTouched.current = true;
+                    setStartMonth(month ? String(month) : "");
+                    setStartYear(year ? String(year) : "");
+                  }}
+                />
                 <Text
                   style={[styles.helperText, { color: theme.colors.mutedForeground }]}
                 >
@@ -847,68 +753,32 @@ export function EditSubscriptionModal({
                     { color: theme.colors.mutedForeground },
                   ]}
                 >
-                  FINAL TERM (END MONTH & YEAR)
+                  FINAL TERM
                 </Text>
-                <View style={{ flexDirection: "row", gap: 10 }}>
-                  <TextInput
-                    value={endMonth}
-                    onChangeText={setEndMonth}
-                    placeholder="Month (1-12)"
-                    keyboardType="number-pad"
-                    maxLength={2}
-                    placeholderTextColor={theme.colors.mutedForeground}
-                    style={[
-                      styles.input,
-                      {
-                        flex: 1,
-                        backgroundColor: isDark
-                          ? "rgba(255,255,255,0.04)"
-                          : "rgba(0,0,0,0.02)",
-                        borderColor: theme.colors.border,
-                        color: theme.colors.foreground,
-                      },
-                    ]}
-                  />
-                  <TextInput
-                    value={endYear}
-                    onChangeText={setEndYear}
-                    placeholder="Year (e.g. 2028)"
-                    keyboardType="number-pad"
-                    maxLength={4}
-                    placeholderTextColor={theme.colors.mutedForeground}
-                    style={[
-                      styles.input,
-                      {
-                        flex: 1,
-                        backgroundColor: isDark
-                          ? "rgba(255,255,255,0.04)"
-                          : "rgba(0,0,0,0.02)",
-                        borderColor: theme.colors.border,
-                        color: theme.colors.foreground,
-                      },
-                    ]}
-                  />
-                </View>
+                <MonthYearSelect
+                  month={parseInt(endMonth, 10) || 0}
+                  year={parseInt(endYear, 10) || 0}
+                  clearable
+                  placeholder="No end date"
+                  onChange={({ month, year }) => {
+                    setEndMonth(month ? String(month) : "");
+                    setEndYear(year ? String(year) : "");
+                  }}
+                />
               </View>
             )}
           </ScrollView>
 
-          {/* Action Buttons */}
+          {/* Action Buttons. Delete is deliberately not in this row: it used
+              to sit beside the primary action at a third of its width, which
+              is a lot of destructive surface next to the button people mean
+              to press. */}
           <View style={styles.actionFooter}>
-            {subscription?.id ? (
-              <Button
-                variant="destructive"
-                onPress={handleDelete}
-                style={{ flex: 1 }}
-              >
-                Delete
-              </Button>
-            ) : null}
             <Button
               variant="primary"
               onPress={handleSave}
               disabled={isSubmitting}
-              style={{ flex: subscription?.id ? 2 : 1 }}
+              style={{ flex: 1 }}
             >
               {isSubmitting
                 ? "Saving..."
@@ -919,6 +789,22 @@ export function EditSubscriptionModal({
                     : "Save Recurring"}
             </Button>
           </View>
+
+          {subscription?.id ? (
+            <Pressable
+              onPress={handleDelete}
+              style={({ pressed }) => [
+                styles.deleteRow,
+                { opacity: pressed ? 0.6 : 1 },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={`Delete ${subscription.name}`}
+            >
+              <Text style={[styles.deleteLabel, { color: theme.colors.destructive }]}>
+                Delete recurring
+              </Text>
+            </Pressable>
+          ) : null}
         </View>
       </View>
     </Modal>
@@ -1004,5 +890,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 10,
     marginTop: 16,
+  },
+  deleteRow: {
+    alignSelf: "center",
+    minHeight: 44,
+    justifyContent: "center",
+    paddingHorizontal: 16,
+    marginTop: 4,
+  },
+  deleteLabel: {
+    fontSize: 14,
+    fontWeight: "700",
   },
 });
