@@ -26,6 +26,15 @@ changes, revisit the cadence here rather than calling more often:
 It reads no data, writes nothing, and cannot touch user, account or transaction
 records. Nothing in the app polls or keeps Supabase alive.
 
+Scheduling caveats:
+
+- `*/3` counts days of the month, so runs land on days 1, 4, ... 28, 31. The
+  gap is 3 days, shorter (1 day) across a month end — never longer than 3.
+- Schedules run only from the default branch (`main`).
+- The repository is public: GitHub **disables scheduled workflows after 60
+  days without repository activity**. If commits stop for two months, re-enable
+  it under Actions → Supabase Keep Alive → Enable workflow.
+
 ## Secrets
 
 It reuses the repository secrets the web and Android builds already have. No
