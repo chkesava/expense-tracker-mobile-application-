@@ -1,12 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import Svg, { Circle } from "react-native-svg";
-import {
-  ArrowLeftRight,
-  Calendar,
-  ShieldCheck,
-  SlidersHorizontal,
-} from "lucide-react-native";
+import { ArrowLeftRight, Calendar, SlidersHorizontal } from "lucide-react-native";
 
 import { AccountSafeIllustration } from "@/components/accounts/AccountSafeIllustration";
 import {
@@ -71,6 +65,9 @@ function HeroCurrencyAmount({
         {negative ? `-${symbol}` : symbol}
       </Text>
       <Text
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.6}
         style={[
           styles.heroWhole,
           { color: theme.colors.foreground, fontFamily: theme.fontFamily.bold },
@@ -111,6 +108,8 @@ export function AccountBalanceCard({
   const isDark = themeUsesDarkPalette(themeName);
   const accent = accountAccent(isDark);
   const border = accountAccentBorder(isDark);
+  // #4ADE80 is light enough to need dark text; #16A34A is not.
+  const onAccent = isDark ? "#07120C" : "#FFFFFF";
 
   return (
     <View
@@ -133,32 +132,6 @@ export function AccountBalanceCard({
         end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFill}
       />
-      <Svg pointerEvents="none" style={styles.pattern} width="100%" height="100%">
-        <Circle
-          cx="86%"
-          cy="26%"
-          r="78"
-          stroke={isDark ? "rgba(74,222,128,0.10)" : "rgba(22,163,74,0.12)"}
-          strokeWidth="1"
-          fill="none"
-        />
-        <Circle
-          cx="86%"
-          cy="26%"
-          r="54"
-          stroke={isDark ? "rgba(74,222,128,0.07)" : "rgba(22,163,74,0.10)"}
-          strokeWidth="1"
-          fill="none"
-        />
-        <Circle
-          cx="86%"
-          cy="26%"
-          r="28"
-          stroke={isDark ? "rgba(74,222,128,0.05)" : "rgba(22,163,74,0.08)"}
-          strokeWidth="1"
-          fill="none"
-        />
-      </Svg>
       <View
         pointerEvents="none"
         style={[styles.glow, { backgroundColor: ACCOUNT_GREEN_GLOW }]}
@@ -178,18 +151,6 @@ export function AccountBalanceCard({
             AVAILABLE BALANCE
           </Text>
           <HeroCurrencyAmount value={availableBalance} currency={currency} />
-          <View
-            style={[
-              styles.statusPill,
-              {
-                backgroundColor: isDark ? "rgba(15,23,42,0.72)" : "rgba(255,255,255,0.86)",
-                borderColor: isDark ? "rgba(74,222,128,0.28)" : "rgba(22,163,74,0.28)",
-              },
-            ]}
-          >
-            <ShieldCheck size={12} color={accent} strokeWidth={2.4} />
-            <Text style={[styles.statusText, { color: accent }]}>Account Active</Text>
-          </View>
         </View>
 
         <View
@@ -241,27 +202,30 @@ export function AccountBalanceCard({
         </View>
 
         <View style={styles.actions}>
+          {/*
+            SPENDLY-157 — Transfer and Adjust used to be two identical ghost
+            buttons, so the card offered no primary at all while the credit
+            card's hero right beside it has a filled CTA. Moving money is the
+            action people come here for; correcting a balance is a repair.
+          */}
           <Pressable
             onPress={() => {
               void haptic.impact();
               onTransfer();
             }}
             style={({ pressed }) => [
-              styles.actionBtn,
-              {
-                backgroundColor: isDark ? "rgba(8,12,10,0.65)" : "rgba(255,255,255,0.8)",
-                borderColor: isDark ? "rgba(148,163,184,0.16)" : "rgba(15,23,42,0.1)",
-              },
+              styles.primaryBtn,
+              { backgroundColor: accent },
               pressed && styles.pressed,
             ]}
             accessibilityRole="button"
             accessibilityLabel="Transfer"
           >
-            <ArrowLeftRight size={16} color={accent} strokeWidth={2.2} />
+            <ArrowLeftRight size={18} color={onAccent} strokeWidth={2.4} />
             <Text
               style={[
-                styles.actionLabel,
-                { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold },
+                styles.primaryLabel,
+                { color: onAccent, fontFamily: theme.fontFamily.bold },
               ]}
             >
               Transfer
@@ -281,7 +245,7 @@ export function AccountBalanceCard({
               pressed && styles.pressed,
             ]}
             accessibilityRole="button"
-            accessibilityLabel="Adjust"
+            accessibilityLabel="Adjust balance"
           >
             <SlidersHorizontal size={16} color={accent} strokeWidth={2.2} />
             <Text
@@ -290,7 +254,7 @@ export function AccountBalanceCard({
                 { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold },
               ]}
             >
-              Adjust
+              Adjust balance
             </Text>
           </Pressable>
         </View>
@@ -316,9 +280,6 @@ const styles = StyleSheet.create({
     borderRadius: 110,
     opacity: 0.55,
   },
-  pattern: {
-    ...StyleSheet.absoluteFill,
-  },
   safeSlot: {
     position: "absolute",
     right: -8,
@@ -331,9 +292,9 @@ const styles = StyleSheet.create({
     zIndex: 2,
   },
   heroCopy: {
-    gap: 8,
-    paddingRight: 118,
-    minHeight: 118,
+    gap: 6,
+    paddingRight: 112,
+    minHeight: 92,
   },
   kicker: {
     fontSize: 11,
@@ -350,7 +311,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.6,
   },
   heroWhole: {
-    fontSize: 34,
+    fontSize: 36,
     fontWeight: "800",
     letterSpacing: -1.2,
     fontVariant: ["tabular-nums"],
@@ -361,20 +322,6 @@ const styles = StyleSheet.create({
     letterSpacing: -0.4,
     fontVariant: ["tabular-nums"],
     paddingBottom: 4,
-  },
-  statusPill: {
-    alignSelf: "flex-start",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 999,
-    borderWidth: 1,
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: "700",
   },
   metaPanel: {
     flexDirection: "row",
@@ -414,9 +361,23 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 10,
   },
+  primaryBtn: {
+    flex: 1.35,
+    minHeight: 52,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    borderRadius: 16,
+    borderCurve: "continuous",
+  },
+  primaryLabel: {
+    fontSize: 15,
+    fontWeight: "800",
+  },
   actionBtn: {
     flex: 1,
-    minHeight: 48,
+    minHeight: 52,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
