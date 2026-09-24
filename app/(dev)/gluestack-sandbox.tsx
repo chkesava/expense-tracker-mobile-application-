@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, ScrollView } from 'react-native';
-import { Button, ButtonText } from '@/components/ui/button';
-import { Input, InputField } from '@/components/ui/input';
+import { Button, ButtonText } from '@/components/ui/button/index';
+import { Input, InputField } from '@/components/ui/input/index';
 
 export default function GluestackSandboxScreen() {
   return (
@@ -10,13 +10,13 @@ export default function GluestackSandboxScreen() {
       
       <View className="gap-4">
         <Text className="text-lg font-semibold text-foreground">Buttons</Text>
-        <Button action="primary">
+        <Button variant="default">
           <ButtonText>Primary Button</ButtonText>
         </Button>
-        <Button action="secondary">
+        <Button variant="secondary">
           <ButtonText>Secondary Button</ButtonText>
         </Button>
-        <Button action="negative">
+        <Button variant="destructive">
           <ButtonText>Destructive Button</ButtonText>
         </Button>
       </View>

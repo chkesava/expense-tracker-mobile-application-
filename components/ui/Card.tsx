@@ -9,7 +9,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
-import { Card as GluestackCard } from "@/components/ui/card";
+import { Card as GluestackCard } from "@/components/ui/card/index";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,

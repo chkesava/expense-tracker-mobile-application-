@@ -17,7 +17,8 @@ const UIInput = createInput({
   Input: TextInput,
 });
 
-cssInterop(UIIcon, {
+// UIIcon's inferred props omit the SVG style keys nativeStyleToProp maps onto.
+cssInterop(UIIcon as React.ComponentType<any>, {
   className: {
     target: 'style',
     nativeStyleToProp: {
