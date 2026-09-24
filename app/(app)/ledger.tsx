@@ -10,6 +10,7 @@ import {
   ArrowDownLeft,
   Calendar,
   CreditCard,
+  Download,
   History,
   Landmark,
   Repeat,
@@ -35,6 +36,10 @@ import { ExpenseList } from "@/components/ExpenseList";
 import { JournalPeriodSummary } from "@/components/ledger/JournalPeriodSummary";
 import { LedgerAuditList } from "@/components/ledger/LedgerAuditList";
 import { LedgerHealthReport } from "@/components/ledger/LedgerHealthReport";
+import {
+  JournalReportWorkspace,
+  type JournalExportFormat,
+} from "@/components/ledger/JournalReportWorkspace";
 import { PageHeader, type PageHeaderTab } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { useAccounts } from "@/hooks/useAccounts";
@@ -64,6 +69,17 @@ import {
 import type { JournalPeriodGranularity } from "@/shared/utils/journalPeriodSummary";
 import { journalCashFlowById } from "@/shared/utils/journalRunningBalance";
 import type { LedgerAuditSubject } from "@/shared/utils/ledgerAudit";
+import { describeAccountActivityFilters } from "@/shared/utils/accountActivityFilterLabels";
+import { buildJournalReport } from "@/shared/utils/journalReport";
+import {
+  exportJournalReportCsv,
+  exportJournalReportPdf,
+} from "@/services/ledger/journalReportDelivery";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
+import { useSystemSettings } from "@/providers/SystemSettingsProvider";
+import { appDialog } from "@/lib/appDialog";
+import { friendlyErrorMessage, logError } from "@/lib/errors";
+import { toast } from "@/lib/toast";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
@@ -71,6 +87,9 @@ import { themeUsesDarkPalette } from "@/theme/tokens";
  * SPENDLY-112 — the Audit sub-tab holds two different questions. The trail
  * answers "what changed"; the checks answer "what is wrong now".
  */
+/** Above this many rows, laying out a PDF is slow enough to ask first. */
+const LARGE_PDF_ROWS = 5000;
+
 const AUDIT_VIEWS = [
   { id: "checks", label: "Checks" },
   { id: "trail", label: "Trail" },
@@ -120,6 +139,8 @@ export default function LedgerScreen() {
   // SPENDLY-111: the type name is what tells a credit card from a bank, so a
   // card purchase is never counted as cash leaving an account.
   const { accountTypes } = useAccountTypes();
+  const displayCurrency = useDisplayCurrency();
+  const { settings: systemSettings } = useSystemSettings();
 
   useEffect(() => {
     const remapped = resolveLegacyLedgerTabRoute(params.tab);
@@ -295,6 +316,141 @@ export default function LedgerScreen() {
     setQuery("");
   }, [setJournalFilters, setQuery]);
 
+  /* ---- SPENDLY-113: reports and export ------------------------------- */
+
+  const [exportBusy, setExportBusy] = useState<JournalExportFormat | null>(null);
+
+  /**
+   * A stamp captured on arrival so the memo below stays pure. The file gets a
+   * fresh one at the moment of export, not the moment the tab was opened.
+   */
+  const [reportStamp, setReportStamp] = useState(() => new Date().toISOString());
+  useEffect(() => {
+    if (expensesTab === "data") setReportStamp(new Date().toISOString());
+  }, [expensesTab]);
+
+  // Gated on the tab so a multi-thousand-row build does not run on every
+  // keystroke over on History.
+  const reportResult = useMemo(
+    () =>
+      expensesTab === "data"
+        ? buildJournalReport({
+            runningBalance: journal.runningBalance,
+            totals: journal.totals,
+            periods: journal.periods,
+            dateScope: journal.dateScope,
+            // The *raw* filters, not `effectiveFilters`: the latter has the
+            // resolved month range injected, so the header would list the
+            // period twice and disagree with the chips on the History tab.
+            filters: journalFilters,
+            query: debouncedQuery,
+            scope: journalScope,
+            currency: displayCurrency,
+            timezone: settings.timezone,
+            generatedAt: reportStamp,
+            readiness: { expensesComplete, incomesComplete },
+          })
+        : undefined,
+    [
+      expensesTab,
+      journal,
+      journalFilters,
+      debouncedQuery,
+      journalScope,
+      displayCurrency,
+      settings.timezone,
+      reportStamp,
+      expensesComplete,
+      incomesComplete,
+    ]
+  );
+
+  const reportFilterChips = useMemo(
+    () => describeAccountActivityFilters(journalFilters),
+    [journalFilters]
+  );
+
+  const handleExport = useCallback(
+    async (format: JournalExportFormat) => {
+      if (!systemSettings.allowDataExport) {
+        appDialog.alert(
+          "Export is turned off",
+          "Data export is disabled for this account."
+        );
+        return;
+      }
+
+      // Rebuilt rather than reused, so the file's stamp is the moment of
+      // export. It also re-runs the readiness gate against the latest flags.
+      const fresh = buildJournalReport({
+        runningBalance: journal.runningBalance,
+        totals: journal.totals,
+        periods: journal.periods,
+        dateScope: journal.dateScope,
+        filters: journalFilters,
+        query: debouncedQuery,
+        scope: journalScope,
+        currency: displayCurrency,
+        timezone: settings.timezone,
+        generatedAt: new Date().toISOString(),
+        readiness: { expensesComplete, incomesComplete },
+      });
+
+      if (fresh.status !== "ready") {
+        appDialog.alert(
+          "Still loading your full history",
+          "Exports stay paused until the rest of your transactions load, so a file can never be missing rows."
+        );
+        return;
+      }
+
+      const run = async () => {
+        setExportBusy(format);
+        try {
+          if (format === "csv") await exportJournalReportCsv(fresh.report);
+          else await exportJournalReportPdf(fresh.report);
+        } catch (error) {
+          logError("journalReport.export", error, {
+            format,
+            rowCount: fresh.report.rowCount,
+          });
+          toast.error(friendlyErrorMessage(error));
+        } finally {
+          setExportBusy(null);
+        }
+        // No success toast: the share sheet resolving does not mean the user
+        // saved anything.
+      };
+
+      // Laying out a very large PDF is the one path that can stall for seconds
+      // with no way to cancel, so it asks first.
+      if (format === "pdf" && fresh.report.rowCount > LARGE_PDF_ROWS) {
+        appDialog.alert(
+          "Large report",
+          `This will lay out ${fresh.report.rowCount} transactions and may take a few seconds.`,
+          [
+            { text: "Cancel", style: "cancel" },
+            { text: "Continue", onPress: () => void run() },
+          ]
+        );
+        return;
+      }
+
+      await run();
+    },
+    [
+      systemSettings.allowDataExport,
+      journal,
+      journalFilters,
+      debouncedQuery,
+      journalScope,
+      displayCurrency,
+      settings.timezone,
+      expensesComplete,
+      incomesComplete,
+    ]
+  );
+
   // The sheet's live count must re-resolve the scope from the *draft*, because
   // the draft's own dates decide whether the month is still in force.
   const getFilterResultCount = useCallback(
@@ -460,6 +616,13 @@ export default function LedgerScreen() {
                 onOpenAdvanced={() => setShowFilters(true)}
                 onRemoveFilter={handleRemoveFilter}
                 onClearAll={clearJournalFilters}
+                action={{
+                  accessibilityLabel: "Export these transactions",
+                  icon: (
+                    <Download size={16} color={theme.colors.mutedForeground} />
+                  ),
+                  onPress: () => setExpensesTab("data"),
+                }}
               />
 
               <Pressable
@@ -717,19 +880,17 @@ export default function LedgerScreen() {
           ) : null}
 
           {expensesTab === "data" && (
-            <EmptyState
-              illustration="general"
-              title="Data & Backup Vault"
-              description="Export, backup, and restore your financial datasets securely."
-              primaryAction={{
-                label: "Export CSV / JSON",
-                onPress: () => router.push("/settings"),
-              }}
-              secondaryAction={{
-                label: "Manage Cloud Sync",
-                onPress: () => router.push("/settings"),
-              }}
-              tip="Cloud synchronization keeps all your accounts seamlessly aligned across devices."
+            <JournalReportWorkspace
+              report={
+                reportResult?.status === "ready" ? reportResult.report : undefined
+              }
+              filterChips={reportFilterChips}
+              searchQuery={debouncedQuery.trim()}
+              exportAllowed={systemSettings.allowDataExport}
+              busy={exportBusy}
+              onExport={(format) => void handleExport(format)}
+              onEditFilters={() => setExpensesTab("history")}
+              onClearFilters={clearJournalFilters}
             />
           )}
         </View>
