@@ -357,6 +357,7 @@ describe("subscriptionsToUpcomingDues", () => {
     category: "Health",
     dayOfMonth: 14,
     isActive: true,
+    lastProcessed: "2026-08",
     type: "subscription",
   };
 
