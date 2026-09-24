@@ -1,7 +1,9 @@
 import { Pressable, Text, View } from "react-native";
 
 import type { GaneshRole } from "@/shared/types/ganesh";
-import { ganeshRoleLabel } from "@/shared/utils/ganeshPermissions";
+import { useGaneshT } from "@/providers/GaneshI18nProvider";
+import { ganeshRoleLabelKey } from "@/shared/utils/ganeshPermissions";
+import { useGaneshTokens } from "@/components/ganesh/ui/tokens";
 import { useTheme } from "@/theme/ThemeProvider";
 
 export function RoleChips({
@@ -14,6 +16,8 @@ export function RoleChips({
   onChange: (role: GaneshRole) => void;
 }) {
   const { theme } = useTheme();
+  const t = useGaneshT();
+  const g = useGaneshTokens();
   return (
     <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
       {options.map((role) => {
@@ -32,10 +36,10 @@ export function RoleChips({
             <Text
               style={{
                 color: selected ? theme.colors.primaryForeground : theme.colors.foreground,
-                fontWeight: "700",
+                fontFamily: g.font.semibold,
               }}
             >
-              {ganeshRoleLabel(role)}
+              {t(ganeshRoleLabelKey(role))}
             </Text>
           </Pressable>
         );

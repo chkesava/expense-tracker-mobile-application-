@@ -19,7 +19,8 @@ import { useGaneshSession } from "@/providers/GaneshSessionProvider";
 import type { GaneshFestivalAudit, PandalMember, PandalMemberAudit } from "@/shared/types/ganesh";
 import { formatGaneshWhen, memberDisplayName } from "@/shared/utils/ganeshIdentity";
 import { memberAuditLine } from "@/shared/utils/ganeshMemberCopy";
-import { ganeshRoleLabel } from "@/shared/utils/ganeshPermissions";
+import { useGaneshT } from "@/providers/GaneshI18nProvider";
+import { ganeshRoleLabelKey } from "@/shared/utils/ganeshPermissions";
 import { useTheme } from "@/theme/ThemeProvider";
 
 type Row = {
@@ -71,6 +72,7 @@ function changeText(oldValue?: unknown, newValue?: unknown): string | undefined 
 }
 
 export default function AdminAuditScreen() {
+  const t = useGaneshT();
   const { theme } = useTheme();
   const { back } = useRouter();
   const { pandalId, festivalId } = useGaneshSession();
@@ -95,7 +97,7 @@ export default function AdminAuditScreen() {
       title: memberLine(audit, members),
       detail:
         audit.oldRole && audit.newRole && audit.oldRole !== audit.newRole
-          ? `${ganeshRoleLabel(audit.oldRole)} → ${ganeshRoleLabel(audit.newRole)}`
+          ? `${t(ganeshRoleLabelKey(audit.oldRole))} → ${t(ganeshRoleLabelKey(audit.newRole))}`
           : audit.reason,
       actorId: audit.actorId,
       action: "members",
