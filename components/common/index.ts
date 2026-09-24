@@ -1,4 +1,5 @@
 export { Amount } from "./Amount";
+export { LiabilityAmount } from "./LiabilityAmount";
 export { AnimatedCounter, type AnimatedCounterProps } from "./AnimatedCounter";
 export { EmptyState } from "./EmptyState";
 export {
