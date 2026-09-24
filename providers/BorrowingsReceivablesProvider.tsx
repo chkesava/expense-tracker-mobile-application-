@@ -114,6 +114,11 @@ export type BorrowingsContextType = {
   deleteBorrowing: (id: string) => Promise<boolean>;
   addRepayment: (input: AddRepaymentInput) => Promise<string | null>;
   deleteRepayment: (repaymentId: string, borrowingId: string) => Promise<boolean>;
+  /**
+   * SPENDLY-159 — manual close. Not `markSettled`: a paid-off borrowing is
+   * already FULLY_SETTLED by derivation. See the implementation.
+   */
+  closeBorrowing: (id: string) => Promise<boolean>;
 };
 
 export type ReceivablesContextType = {
@@ -852,6 +857,30 @@ export function BorrowingsReceivablesProvider({
     [uid, receivables, receivableRepayments, today]
   );
 
+  /**
+   * SPENDLY-159 — "Mark completed" for a borrowing.
+   *
+   * Deliberately NOT the twin of `markReceivableSettled`, which refuses while
+   * anything is owed and then writes `FULLY_SETTLED`. On the borrowing side
+   * `deriveStatus` already returns `FULLY_SETTLED` the moment outstanding
+   * principal and interest both hit zero, so a settle-when-paid-off action
+   * would be unreachable: by the time it applied, the status was already there.
+   *
+   * What a borrowing actually lacks is a way to close one that derivation will
+   * never close — written off, refinanced, or settled outside the app. That is
+   * `CLOSED`, which `deriveStatus` documents as outranking derivation and which
+   * every repayment guard already recognises, but which nothing could set.
+   *
+   * Closing does not hide money: `summarizeBorrowings` still adds a closed
+   * borrowing's outstanding to the portfolio total. It moves the borrowing out
+   * of the active count and stops offering repayment actions on it.
+   */
+  const closeBorrowing = useCallback(
+    async (id: string): Promise<boolean> =>
+      updateBorrowing(id, { status: "CLOSED" }),
+    [updateBorrowing]
+  );
+
   const markReceivableSettled = useCallback(
     async (id: string): Promise<boolean> => {
       const receivable = receivables.find((r) => r.id === id);
@@ -899,6 +928,7 @@ export function BorrowingsReceivablesProvider({
       deleteBorrowing,
       addRepayment: addBorrowingRepayment,
       deleteRepayment: deleteBorrowingRepayment,
+      closeBorrowing,
     }),
     [
       borrowings,
@@ -915,6 +945,7 @@ export function BorrowingsReceivablesProvider({
       deleteBorrowing,
       addBorrowingRepayment,
       deleteBorrowingRepayment,
+      closeBorrowing,
     ]
   );
 

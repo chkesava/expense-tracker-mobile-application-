@@ -52,9 +52,11 @@ export function BorrowingsList({ listHeader }: { listHeader?: ReactNode }) {
     getSummary,
     getRepayments,
     createBorrowing,
+    updateBorrowing,
     deleteBorrowing,
     addRepayment,
     deleteRepayment,
+    closeBorrowing,
   } = useBorrowings();
 
   const [filters, setFilters] = useState<BorrowingFilterState>(
@@ -65,6 +67,7 @@ export function BorrowingsList({ listHeader }: { listHeader?: ReactNode }) {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [startRepaying, setStartRepaying] = useState(false);
+  const [startEditing, setStartEditing] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
 
   const today = todayDateKey();
@@ -129,6 +132,27 @@ export function BorrowingsList({ listHeader }: { listHeader?: ReactNode }) {
     setSelectedId(id);
   }, []);
 
+  // SPENDLY-159 — closing is not settling: money can still be owed, and the
+  // portfolio total still counts it. The wording has to say so.
+  const confirmClose = useCallback(
+    (id: string) => {
+      appDialog.alert(
+        "Mark this borrowing completed?",
+        "It moves out of your active borrowings and stops offering repayments. Anything still outstanding keeps counting toward your total.",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Mark completed",
+            onPress: () => {
+              void closeBorrowing(id);
+            },
+          },
+        ]
+      );
+    },
+    [closeBorrowing]
+  );
+
   const confirmDelete = useCallback(
     (id: string) => {
       appDialog.alert(
@@ -174,6 +198,24 @@ export function BorrowingsList({ listHeader }: { listHeader?: ReactNode }) {
                   setSelectedId(id);
                 },
               },
+              {
+                text: "Edit",
+                onPress: () => {
+                  setStartEditing(true);
+                  setSelectedId(id);
+                },
+              },
+            ]),
+        // SPENDLY-159 — only for a borrowing derivation will not close on its
+        // own. Once nothing is owed the status is already FULLY_SETTLED and
+        // `settled` above has removed this entry along with the others.
+        ...(settled
+          ? []
+          : [
+              {
+                text: "Mark completed",
+                onPress: () => confirmClose(id),
+              },
             ]),
         {
           text: "Delete",
@@ -182,7 +224,7 @@ export function BorrowingsList({ listHeader }: { listHeader?: ReactNode }) {
         },
       ]);
     },
-    [borrowings, summaries, confirmDelete]
+    [borrowings, summaries, confirmDelete, confirmClose]
   );
 
   const renderItem = useCallback(
@@ -392,12 +434,16 @@ export function BorrowingsList({ listHeader }: { listHeader?: ReactNode }) {
         repayments={selectedId ? getRepayments(selectedId) : []}
         currency={displayCurrency}
         startRepaying={startRepaying}
+        startEditing={startEditing}
         onClose={() => {
           setSelectedId(null);
           setStartRepaying(false);
+          setStartEditing(false);
         }}
         onAddRepayment={addRepayment}
         onDeleteRepayment={deleteRepayment}
+        onUpdateBorrowing={updateBorrowing}
+        onCloseBorrowing={closeBorrowing}
         onDeleteBorrowing={async (id) => {
           const ok = await deleteBorrowing(id);
           if (ok) {

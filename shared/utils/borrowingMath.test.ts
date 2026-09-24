@@ -526,6 +526,40 @@ describe("buildBorrowingUpdatePayload", () => {
     expect(result.fields.settledDate).toBe("2026-02-01");
   });
 
+  /**
+   * SPENDLY-159 — "Mark completed" writes `{ status: "CLOSED" }` and nothing
+   * else. Because `status` is a summary-affecting key, the payload is rebuilt
+   * from `summarizeBorrowing`, whose derived status is spread over the caller's
+   * — so the close survives only because `deriveStatus` lets a manual CLOSED
+   * outrank derivation. If that ever changes, the action silently stops
+   * working, which is why it is pinned here.
+   */
+  it("keeps a manual close through the recompute, with money still owed", () => {
+    const borrowing = makeBorrowing({
+      interestType: "NONE",
+      interestFrequency: "NONE",
+      interestRate: 0,
+      status: "ACTIVE",
+    });
+    const repayments = [
+      makeRepayment({ amount: 2000, principalComponent: 2000 }),
+    ];
+
+    const result = buildBorrowingUpdatePayload(
+      borrowing,
+      { status: "CLOSED" },
+      repayments,
+      asOf
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.fields.status).toBe("CLOSED");
+    // Closing is not settling: the outstanding cache still reports the debt.
+    expect(result.fields.outstandingPrincipal).toBeGreaterThan(0);
+    expect(result.fields.totalOutstanding).toBeGreaterThan(0);
+  });
+
   it("rejects a principal below already-repaid principal", () => {
     const borrowing = makeBorrowing({
       interestType: "NONE",
