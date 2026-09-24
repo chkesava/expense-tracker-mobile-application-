@@ -1,4 +1,5 @@
 import type { Subscription } from "@/shared/types/subscription";
+import type { UpcomingDueItem } from "@/shared/utils/spendlyBudget";
 import { subscriptionFrequency } from "@/shared/types/subscription";
 import type { Expense, AccountTransfer } from "@/shared/types/expense";
 import {
@@ -454,4 +455,32 @@ export function computeMonthlyCommitments(
     emisTotal,
     transfersTotal,
   };
+}
+
+/**
+ * Active recurring items as upcoming dues, for the `spendlyBudget` helpers.
+ *
+ * The dashboard widget built this shape inline twice over; the Recurring screen
+ * needs the same thing, so it lives here next to `getNextRenewalDate` rather
+ * than becoming a third and fourth copy.
+ *
+ * Paused and completed items are excluded — neither will be charged, so neither
+ * is money to expect out.
+ */
+export function subscriptionsToUpcomingDues(
+  subscriptions: Subscription[]
+): UpcomingDueItem[] {
+  return subscriptions
+    .filter((sub) => sub.isActive && !sub.isCompleted)
+    .map((sub) => {
+      const next = getNextRenewalDate(sub);
+      return {
+        id: sub.id || sub.name,
+        name: sub.name,
+        amount: sub.amount || 0,
+        dueDate: next.dateStr,
+        daysRemaining: next.daysRemaining,
+        kind: "subscription" as const,
+      };
+    });
 }
