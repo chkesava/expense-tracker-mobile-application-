@@ -90,11 +90,12 @@ describe("isNavItemActive", () => {
     expect(isNavItemActive("/settings/privacy", "settings")).toBe(true);
   });
 
-  it("keeps ledger as the internal route and shows Transactions", () => {
+  it("keeps ledger as the internal route and shows Money", () => {
     const ledger = CORE_NAV_ITEMS.find((item) => item.id === "ledger");
     expect(ledger?.path).toBe("/ledger");
-    expect(ledger?.label).toBe("Transactions");
-    expect(ledger?.mobileLabel).toBe("Transactions");
+    expect(ledger?.translationKey).toBe("nav_money");
+    expect(ledger?.label).toBe("Money");
+    expect(ledger?.mobileLabel).toBe("Money");
   });
 
   it("exposes investments as a feature-flagged bottom-nav hub", () => {

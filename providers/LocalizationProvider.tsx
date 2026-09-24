@@ -39,7 +39,7 @@ export const SUPPORTED_LANGUAGES: LanguageOption[] = [
 export const TRANSLATIONS: Record<LanguageCode, Record<string, string>> = {
   en: {
     nav_dashboard: "Dashboard",
-    nav_expenses: "Expenses",
+    nav_money: "Money",
     nav_add: "Add",
     nav_analytics: "Analytics",
     nav_vaults: "Vaults",
@@ -99,7 +99,7 @@ export const TRANSLATIONS: Record<LanguageCode, Record<string, string>> = {
   },
   hi: {
     nav_dashboard: "डैशबोर्ड",
-    nav_expenses: "खर्चे",
+    nav_money: "पैसा",
     nav_add: "जोड़ें",
     nav_analytics: "विश्लेषण",
     nav_vaults: "वॉल्ट्स",
@@ -159,7 +159,7 @@ export const TRANSLATIONS: Record<LanguageCode, Record<string, string>> = {
   },
   es: {
     nav_dashboard: "Panel",
-    nav_expenses: "Gastos",
+    nav_money: "Dinero",
     nav_add: "Añadir",
     nav_analytics: "Analítica",
     nav_vaults: "Bóvedas",
@@ -219,7 +219,7 @@ export const TRANSLATIONS: Record<LanguageCode, Record<string, string>> = {
   },
   fr: {
     nav_dashboard: "Tableau de Bord",
-    nav_expenses: "Dépenses",
+    nav_money: "Argent",
     nav_add: "Ajouter",
     nav_analytics: "Analytique",
     nav_vaults: "Coffres",
@@ -279,7 +279,7 @@ export const TRANSLATIONS: Record<LanguageCode, Record<string, string>> = {
   },
   de: {
     nav_dashboard: "Übersicht",
-    nav_expenses: "Ausgaben",
+    nav_money: "Geld",
     nav_add: "Hinzufügen",
     nav_analytics: "Analysen",
     nav_vaults: "Tresore",
@@ -339,7 +339,7 @@ export const TRANSLATIONS: Record<LanguageCode, Record<string, string>> = {
   },
   ja: {
     nav_dashboard: "ダッシュボード",
-    nav_expenses: "支出",
+    nav_money: "お金",
     nav_add: "追加",
     nav_analytics: "分析",
     nav_vaults: "貯金箱",
@@ -399,7 +399,7 @@ export const TRANSLATIONS: Record<LanguageCode, Record<string, string>> = {
   },
   ar: {
     nav_dashboard: "لوحة التحكم",
-    nav_expenses: "المصروفات",
+    nav_money: "المال",
     nav_add: "إضافة",
     nav_analytics: "التحليلات",
     nav_vaults: "الخزائن",
