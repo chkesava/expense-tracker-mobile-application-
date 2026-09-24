@@ -392,6 +392,43 @@ describe("personal tree", () => {
     );
   });
 
+  it("owner writes a receivable carrying interest", async () => {
+    const db = env.authenticatedContext(OWNER).firestore();
+    await assertSucceeds(
+      addDoc(collection(db, "users", OWNER, "receivables"), {
+        originalAmount: 5000,
+        outstandingAmount: 5100,
+        totalReceived: 0,
+        accruedInterest: 100,
+        waivedInterest: 0,
+        lentDate: "2026-09-17",
+        interestStoppedDate: null,
+      })
+    );
+  });
+
+  it("owner cannot write a negative receivable accruedInterest", async () => {
+    const db = env.authenticatedContext(OWNER).firestore();
+    await assertFails(
+      addDoc(collection(db, "users", OWNER, "receivables"), {
+        originalAmount: 5000,
+        accruedInterest: -1,
+        lentDate: "2026-09-17",
+      })
+    );
+  });
+
+  it("owner cannot write a malformed receivable interestStoppedDate", async () => {
+    const db = env.authenticatedContext(OWNER).firestore();
+    await assertFails(
+      addDoc(collection(db, "users", OWNER, "receivables"), {
+        originalAmount: 5000,
+        lentDate: "2026-09-17",
+        interestStoppedDate: "17-09-2026",
+      })
+    );
+  });
+
   it("owner cannot write a negative receivable originalAmount", async () => {
     const db = env.authenticatedContext(OWNER).firestore();
     await assertFails(

@@ -49,3 +49,16 @@ export const INTEREST_BASIS_LABELS: Record<InterestBasis, string> = {
   ORIGINAL_PRINCIPAL: "On original principal",
   OUTSTANDING_PRINCIPAL: "On outstanding principal",
 };
+
+/**
+ * A configured interest arrangement, independent of what is accruing. Lives
+ * with the vocabulary rather than in `interestMath.ts` so a type file never has
+ * to reach into a util for it.
+ */
+export interface InterestTerms {
+  /** Percentage, interpreted according to `frequency`. */
+  rate: number;
+  type: InterestType;
+  frequency: InterestFrequency;
+  basis: InterestBasis;
+}

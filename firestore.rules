@@ -261,7 +261,10 @@ service cloud.firestore {
         return optionalBoundedNonNeg(d, 'originalAmount')
           && optionalBoundedNonNeg(d, 'outstandingAmount')
           && optionalBoundedNonNeg(d, 'totalReceived')
-          && optionalYmd(d, 'lentDate');
+          && optionalBoundedNonNeg(d, 'accruedInterest')
+          && optionalBoundedNonNeg(d, 'waivedInterest')
+          && optionalYmd(d, 'lentDate')
+          && optionalYmd(d, 'interestStoppedDate');
       }
 
       function goalWellFormed() {

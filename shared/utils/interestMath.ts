@@ -15,24 +15,13 @@
  * receivables) and generalising them would earn nothing.
  */
 
-import type {
-  InterestBasis,
-  InterestFrequency,
-  InterestType,
-} from "../types/interest";
+import type { InterestTerms } from "../types/interest";
+export type { InterestTerms };
 import { daysInMonth, parseLocalDate } from "./dates";
 import { roundMoney } from "./money";
 
 /** Guards against runaway loops on absurd date ranges (200 years). */
 const MAX_MONTH_STEPS = 2400;
-
-export interface InterestTerms {
-  /** Percentage, interpreted according to `frequency`. */
-  rate: number;
-  type: InterestType;
-  frequency: InterestFrequency;
-  basis: InterestBasis;
-}
 
 /** A principal balance that starts accruing on `startDate`. */
 export interface InterestPosition {
