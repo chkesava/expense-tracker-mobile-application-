@@ -12,6 +12,7 @@
 
 import {
   collection,
+  deleteField,
   doc,
   getDoc,
   increment,
@@ -27,8 +28,10 @@ import { roundMoney } from "@/shared/utils/money";
 import { currentMonthKey, isValidDateKey } from "@/shared/utils/dates";
 import {
   ALREADY_REMOVED_LEDGER_MESSAGE,
+  NOT_REMOVED_LEDGER_MESSAGE,
   PAST_MONTH_LOCKED_MESSAGE,
   SPLIT_OWNED_LEDGER_MESSAGE,
+  isActiveLedgerRow,
   ledgerEventSnapshot,
   ledgerRowEditability,
 } from "@/shared/utils/ledgerRow";
@@ -47,6 +50,7 @@ import { preservedSmsAuditFromRow } from "@/services/sms/smsMatchAudit";
 
 export {
   ALREADY_REMOVED_LEDGER_MESSAGE,
+  NOT_REMOVED_LEDGER_MESSAGE,
   PAST_MONTH_LOCKED_MESSAGE,
   SPLIT_OWNED_LEDGER_MESSAGE,
   ledgerRowEditability,
@@ -122,6 +126,27 @@ function assertLiveAndMutable(
   if (!editability.editable) {
     throw new LedgerMutationError(editability.reason);
   }
+}
+
+/**
+ * SPENDLY-110 — the mirror of `assertLiveAndMutable` for restore: the row has
+ * to actually be removed, and everything that blocks an edit still blocks a
+ * restore. A split-owned row stays off-limits (reversing those is SPENDLY-39),
+ * and a locked past month must not be reopened by the back door.
+ */
+function assertRemovedAndRestorable(
+  data: Record<string, unknown>,
+  options?: LedgerMutationOptions
+) {
+  if (isActiveLedgerRow(data)) {
+    throw new LedgerMutationError(NOT_REMOVED_LEDGER_MESSAGE);
+  }
+  const splitId = typeof data.splitId === "string" ? data.splitId.trim() : "";
+  if (splitId) {
+    throw new LedgerMutationError(SPLIT_OWNED_LEDGER_MESSAGE);
+  }
+  const month = typeof data.month === "string" ? data.month : undefined;
+  assertUnlockedMonth(month, options);
 }
 
 function stripUndefined<T extends Record<string, unknown>>(value: T): T {
@@ -389,6 +414,79 @@ async function softDeleteRow(
     { label: "transaction deletion" }
   );
   return { id: docId, outcome };
+}
+
+/**
+ * Undo a soft delete. The row is never recreated — `deletedAt`, `deletedBy` and
+ * `deletedReason` are cleared on the original document, so its id, its history
+ * and anything referencing it all survive. A `restore` event records who did it
+ * and why, exactly as the delete did.
+ */
+async function restoreRow(
+  uid: string,
+  id: string,
+  kind: LedgerEventKind,
+  options?: LedgerMutationOptions
+): Promise<LedgerWriteResult> {
+  const { owner, db } = requireUidAndDb(uid);
+  const collectionName = kind === "expense" ? "expenses" : "incomes";
+  const docId = requireDocId(id, kind === "expense" ? "expense" : "income");
+  const { ref, data } = await loadRow(db, owner, collectionName, docId);
+  assertRemovedAndRestorable(data, options);
+
+  const before = ledgerEventSnapshot(data);
+
+  const outcome = await commitMutations(
+    owner,
+    (() => {
+      const ops: MutationOp[] = [
+        {
+          op: "update",
+          ref,
+          data: {
+            deletedAt: deleteField(),
+            deletedBy: deleteField(),
+            deletedReason: deleteField(),
+            updatedAt: serverTimestamp(),
+          },
+        },
+      ];
+      writeEvent(ops, db, owner, {
+        kind,
+        docId,
+        action: "restore",
+        before,
+        // The row comes back exactly as it was; nothing else is changed, so
+        // before and after describe the same values.
+        after: before,
+        reason: options?.reason,
+      });
+      if (kind === "expense") {
+        // Symmetrical with the delete's decrement, or trip spend drifts by the
+        // amount of every restored expense.
+        applyTripIncrement(ops, db, owner, data, before.amount);
+      }
+      return ops;
+    })(),
+    { label: "transaction restore" }
+  );
+  return { id: docId, outcome };
+}
+
+export async function restoreExpense(
+  uid: string,
+  id: string,
+  options?: LedgerMutationOptions
+): Promise<LedgerWriteResult> {
+  return restoreRow(uid, id, "expense", options);
+}
+
+export async function restoreIncome(
+  uid: string,
+  id: string,
+  options?: LedgerMutationOptions
+): Promise<LedgerWriteResult> {
+  return restoreRow(uid, id, "income", options);
 }
 
 export async function softDeleteExpense(

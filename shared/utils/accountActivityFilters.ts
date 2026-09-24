@@ -14,6 +14,12 @@ export interface AccountActivityFilters {
   specialKinds: AccountActivitySpecialKind[];
   categories: string[];
   counterparties: string[];
+  /**
+   * SPENDLY-109 — the account a row was posted to. Distinct from
+   * `counterparties`, which is the *other* side of a movement. The Journal
+   * filters by this; the account detail screen leaves it empty.
+   */
+  accounts: string[];
   fromDate: string;
   toDate: string;
   minAmount: string;
@@ -28,16 +34,26 @@ export interface FilterableAccountActivity {
   category?: string;
   subcategory?: string;
   counterparty?: string;
+  /** SPENDLY-109 — display name of the account this row was posted to. */
+  accountName?: string;
   tags: string[];
   status?: AccountActivityStatus;
   isRefund: boolean;
   isInvestment: boolean;
   isBill: boolean;
+  /**
+   * SPENDLY-109 — precomputed search haystack. Optional: when absent
+   * `buildAccountActivitySearchText` computes it on demand, which is what the
+   * account screen does. The Journal populates it once per row so a large
+   * ledger does not rebuild every string on every keystroke.
+   */
+  searchText?: string;
 }
 
 export interface AccountActivityFilterOptions {
   categories: string[];
   counterparties: string[];
+  accounts: string[];
   tags: string[];
   statuses: AccountActivityStatus[];
 }
@@ -47,6 +63,7 @@ export const EMPTY_ACCOUNT_ACTIVITY_FILTERS: AccountActivityFilters = {
   specialKinds: [],
   categories: [],
   counterparties: [],
+  accounts: [],
   fromDate: "",
   toDate: "",
   minAmount: "",
@@ -61,6 +78,7 @@ export function createEmptyAccountActivityFilters(): AccountActivityFilters {
     specialKinds: [],
     categories: [],
     counterparties: [],
+    accounts: [],
     tags: [],
     statuses: [],
   };
@@ -100,11 +118,19 @@ function classifyKind(
   return "other";
 }
 
-function activityIsRefund(
-  activity: AccountActivity,
-  income?: Income,
-  expense?: Expense
-): boolean {
+/**
+ * SPENDLY-109 — the single source of truth for "is this a refund / investment
+ * / bill". Shared by `enrichAccountActivities` (account detail) and
+ * `buildJournalRecords` (the Journal) so the two screens can never drift on
+ * what counts as a bill.
+ */
+export function classifyActivitySpecials(args: {
+  activity: AccountActivity;
+  expense?: Expense;
+  income?: Income;
+  entry?: AccountEntry;
+}): { isRefund: boolean; isInvestment: boolean; isBill: boolean } {
+  const { activity, expense, income, entry } = args;
   const terms = [
     normalized(activity.source),
     normalized(income?.source),
@@ -112,48 +138,37 @@ function activityIsRefund(
     normalized(expense?.category),
     normalized(expense?.subcategory),
   ].join(" ");
-  return Boolean(
-    activity.isCashback || includesAny(terms, ["refund", "cashback"])
-  );
-}
-
-function activityIsInvestment(
-  activity: AccountActivity,
-  income?: Income,
-  expense?: Expense,
-  entry?: AccountEntry
-): boolean {
-  const terms = [
-    normalized(activity.source),
-    normalized(income?.source),
+  const billTerms = [
     normalized(activity.category),
     normalized(expense?.category),
     normalized(expense?.subcategory),
   ].join(" ");
-  return Boolean(
-    entry?.transferId ||
-      entry?.correlationId ||
-      includesAny(terms, [
-        "investment",
-        "mutual fund",
-        "stocks",
-        "sip",
-        "nps",
-        "ppf",
-      ])
-  );
-}
 
-function activityIsBill(activity: AccountActivity, expense?: Expense): boolean {
-  const terms = [
-    normalized(activity.category),
-    normalized(expense?.category),
-    normalized(expense?.subcategory),
-  ].join(" ");
-  return Boolean(
-    activity.isBillPayment ||
-      includesAny(terms, ["bills & communication", " bill", "credit card payment"])
-  );
+  return {
+    isRefund: Boolean(
+      activity.isCashback || includesAny(terms, ["refund", "cashback"])
+    ),
+    isInvestment: Boolean(
+      entry?.transferId ||
+        entry?.correlationId ||
+        includesAny(terms, [
+          "investment",
+          "mutual fund",
+          "stocks",
+          "sip",
+          "nps",
+          "ppf",
+        ])
+    ),
+    isBill: Boolean(
+      activity.isBillPayment ||
+        includesAny(billTerms, [
+          "bills & communication",
+          " bill",
+          "credit card payment",
+        ])
+    ),
+  };
 }
 
 export function enrichAccountActivities(
@@ -193,9 +208,7 @@ export function enrichAccountActivities(
           ? "audited"
           : "unaudited"
         : undefined,
-      isRefund: activityIsRefund(activity, income, expense),
-      isInvestment: activityIsInvestment(activity, income, expense, entry),
-      isBill: activityIsBill(activity, expense),
+      ...classifyActivitySpecials({ activity, expense, income, entry }),
     };
   });
 }
@@ -218,10 +231,10 @@ function parseAmount(value: string): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
-export function applyAccountActivityFilters(
-  records: FilterableAccountActivity[],
+export function applyAccountActivityFilters<T extends FilterableAccountActivity>(
+  records: T[],
   filters: AccountActivityFilters
-): FilterableAccountActivity[] {
+): T[] {
   const minAmount = parseAmount(filters.minAmount);
   const maxAmount = parseAmount(filters.maxAmount);
 
@@ -239,6 +252,12 @@ export function applyAccountActivityFilters(
       filters.counterparties.length > 0 &&
       (!record.counterparty ||
         !filters.counterparties.includes(record.counterparty))
+    ) {
+      return false;
+    }
+    if (
+      filters.accounts.length > 0 &&
+      (!record.accountName || !filters.accounts.includes(record.accountName))
     ) {
       return false;
     }
@@ -273,6 +292,7 @@ export function getAccountActivityFilterOptions(
   return {
     categories: uniqueSorted(records.map((record) => record.category)),
     counterparties: uniqueSorted(records.map((record) => record.counterparty)),
+    accounts: uniqueSorted(records.map((record) => record.accountName)),
     tags: uniqueSorted(records.flatMap((record) => record.tags)),
     statuses: [...new Set(
       records
@@ -290,6 +310,7 @@ export function countActiveAccountActivityFilters(
     filters.specialKinds.length +
     filters.categories.length +
     filters.counterparties.length +
+    filters.accounts.length +
     (filters.fromDate ? 1 : 0) +
     (filters.toDate ? 1 : 0) +
     (filters.minAmount ? 1 : 0) +

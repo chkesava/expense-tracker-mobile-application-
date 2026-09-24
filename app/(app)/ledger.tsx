@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Pressable,
   StyleSheet,
@@ -10,6 +10,7 @@ import {
   ArrowDownLeft,
   Calendar,
   CreditCard,
+  Download,
   History,
   Landmark,
   Repeat,
@@ -24,14 +25,26 @@ import { ReceivablesList } from "@/components/receivables/ReceivablesList";
 import { SubscriptionsList } from "@/components/subscriptions/SubscriptionsList";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
-import { SearchBar } from "@/components/common/SearchBar";
 import { Skeleton } from "@/components/common/Skeleton";
+import { AccountActivityFilterModal } from "@/components/accounts/AccountActivityFilterModal";
+import {
+  TransactionFilters,
+  type ActivityFilter,
+  type AccountActivityFilterField,
+} from "@/components/accounts/TransactionFilters";
 import { ExpenseList } from "@/components/ExpenseList";
+import { JournalPeriodSummary } from "@/components/ledger/JournalPeriodSummary";
 import { LedgerAuditList } from "@/components/ledger/LedgerAuditList";
+import { LedgerHealthReport } from "@/components/ledger/LedgerHealthReport";
+import {
+  JournalReportWorkspace,
+  type JournalExportFormat,
+} from "@/components/ledger/JournalReportWorkspace";
 import { PageHeader, type PageHeaderTab } from "@/components/layout/PageHeader";
 import { PageListStateScroll } from "@/components/layout/PageListStateScroll";
 import { PageShell } from "@/components/layout/PageShell";
 import { useAccounts } from "@/hooks/useAccounts";
+import { useAccountTypes } from "@/hooks/useAccountTypes";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useIncomes } from "@/hooks/useIncomes";
 import { useLedgerState, type LedgerTab } from "@/providers/LedgerStateProvider";
@@ -41,9 +54,47 @@ import {
   LEDGER_HUB_TAB_IDS,
   resolveLegacyLedgerTabRoute,
 } from "@/shared/config/navigation";
-import { currentMonthKey, isInMonth } from "@/shared/utils/dates";
+import { currentMonthKey } from "@/shared/utils/dates";
+import {
+  createEmptyAccountActivityFilters,
+  type AccountActivityFilters,
+} from "@/shared/utils/accountActivityFilters";
+import { applyAccountActivityFilters } from "@/shared/utils/accountActivityFilters";
+import { searchAccountActivities } from "@/shared/utils/accountActivitySearch";
+import { buildJournalRecords, type JournalScope } from "@/shared/utils/journalActivities";
+import { resolveJournalDateScope } from "@/shared/utils/journalDateScope";
+import {
+  runJournalFilterPipeline,
+  withJournalDateScope,
+} from "@/shared/utils/journalFilterPipeline";
+import type { JournalPeriodGranularity } from "@/shared/utils/journalPeriodSummary";
+import { journalCashFlowById } from "@/shared/utils/journalRunningBalance";
+import type { LedgerAuditSubject } from "@/shared/utils/ledgerAudit";
+import { describeAccountActivityFilters } from "@/shared/utils/accountActivityFilterLabels";
+import { buildJournalReport } from "@/shared/utils/journalReport";
+import {
+  exportJournalReportCsv,
+  exportJournalReportPdf,
+} from "@/services/ledger/journalReportDelivery";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
+import { useSystemSettings } from "@/providers/SystemSettingsProvider";
+import { appDialog } from "@/lib/appDialog";
+import { friendlyErrorMessage, logError } from "@/lib/errors";
+import { toast } from "@/lib/toast";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+
+/**
+ * SPENDLY-112 — the Audit sub-tab holds two different questions. The trail
+ * answers "what changed"; the checks answer "what is wrong now".
+ */
+/** Above this many rows, laying out a PDF is slow enough to ask first. */
+const LARGE_PDF_ROWS = 5000;
+
+const AUDIT_VIEWS = [
+  { id: "checks", label: "Checks" },
+  { id: "trail", label: "Trail" },
+] as const;
 
 export default function LedgerScreen() {
   const router = useRouter();
@@ -65,21 +116,32 @@ export default function LedgerScreen() {
     setExpensesTab,
     query,
     setQuery,
+    journalFilters,
+    setJournalFilters,
+    showFilters,
+    setShowFilters,
   } = useLedgerState();
 
   const {
     expenses,
     loading: expensesLoading,
+    complete: expensesComplete,
     error: expensesError,
     retry: retryExpenses,
   } = useExpenses();
   const {
     incomes,
     loading: incomesLoading,
+    complete: incomesComplete,
     error: incomesError,
     retry: retryIncomes,
   } = useIncomes();
   const { accounts } = useAccounts();
+  // SPENDLY-111: the type name is what tells a credit card from a bank, so a
+  // card purchase is never counted as cash leaving an account.
+  const { accountTypes } = useAccountTypes();
+  const displayCurrency = useDisplayCurrency();
+  const { settings: systemSettings } = useSystemSettings();
 
   useEffect(() => {
     const remapped = resolveLegacyLedgerTabRoute(params.tab);
@@ -115,35 +177,297 @@ export default function LedgerScreen() {
     return () => clearTimeout(timeoutId);
   }, [query]);
 
-  // Filtered expenses for active month + search query
-  const filteredExpenses = useMemo(() => {
-    const q = debouncedQuery.trim().toLowerCase();
-    return expenses.filter((e) => {
-      const matchMonth = !activeMonth || isInMonth(e, activeMonth);
-      if (!matchMonth) return false;
-      if (!q) return true;
-      return (
-        (e.note && e.note.toLowerCase().includes(q)) ||
-        (e.category && e.category.toLowerCase().includes(q)) ||
-        (e.subcategory && e.subcategory.toLowerCase().includes(q)) ||
-        (e.tags && e.tags.some((t) => t.toLowerCase().includes(q)))
-      );
-    });
-  }, [expenses, activeMonth, debouncedQuery]);
+  // Which canonical rows this sub-tab shows. `audit` and `data` are untouched
+  // by SPENDLY-109 — the audit workspace belongs to SPENDLY-112.
+  const journalScope: JournalScope =
+    expensesTab === "income" ? "incomes" : "all";
 
-  // Filtered incomes for active month + search query
-  const filteredIncomes = useMemo(() => {
-    const q = debouncedQuery.trim().toLowerCase();
-    return incomes.filter((i) => {
-      const matchMonth = !activeMonth || isInMonth(i, activeMonth);
-      if (!matchMonth) return false;
-      if (!q) return true;
-      return (
-        (i.source && i.source.toLowerCase().includes(q)) ||
-        (i.note && i.note.toLowerCase().includes(q))
-      );
-    });
-  }, [incomes, activeMonth, debouncedQuery]);
+  // The Journal contains no transfer rows by construction (one record per
+  // expense and per income, nothing else), so offering a Transfers chip that
+  // can only ever read zero would be misleading.
+  const availableKinds: ActivityFilter[] = useMemo(
+    () =>
+      expensesTab === "income"
+        ? []
+        : (["all", "income", "expense"] as ActivityFilter[]),
+    [expensesTab]
+  );
+
+  const [periodGranularity, setPeriodGranularity] =
+    useState<JournalPeriodGranularity>("month");
+
+  // SPENDLY-112 — which half of the Audit workspace is showing. Local to the
+  // screen rather than the provider: unlike the sub-tab itself, there is
+  // nothing here worth preserving across a hop to another hub tab.
+  const [auditView, setAuditView] = useState<"checks" | "trail">("checks");
+
+  /**
+   * SPENDLY-112 — take the user from a finding to the transaction it is about.
+   *
+   * The Journal's search already matches raw document ids
+   * (`accountActivitySearch.ts`), so this needs no change to `ExpenseList`.
+   * The date range is not optional: without it the month pill would hide any
+   * finding outside the selected month, which is most of them. A range
+   * overrides the month by design (`resolveJournalDateScope`).
+   */
+  const handleShowInJournal = useCallback(
+    (subject: LedgerAuditSubject) => {
+      setJournalFilters({
+        ...createEmptyAccountActivityFilters(),
+        fromDate: subject.date ?? "",
+        toDate: subject.date ?? "",
+      });
+      setQuery(subject.id);
+      setExpensesTab("history");
+    },
+    [setJournalFilters, setQuery, setExpensesTab]
+  );
+
+  // One memo over the pure pipeline, so what ships is what the tests cover.
+  const journal = useMemo(
+    () =>
+      runJournalFilterPipeline({
+        expenses,
+        incomes,
+        accounts,
+        accountTypes,
+        query: debouncedQuery,
+        filters: journalFilters,
+        monthKey: activeMonth,
+        scope: journalScope,
+        granularity: periodGranularity,
+        firstDayOfWeek: settings.firstDayOfWeek,
+      }),
+    [
+      expenses,
+      incomes,
+      accounts,
+      accountTypes,
+      debouncedQuery,
+      journalFilters,
+      activeMonth,
+      journalScope,
+      periodGranularity,
+      settings.firstDayOfWeek,
+    ]
+  );
+
+  const filteredExpenses = journal.rows.expenses;
+  const filteredIncomes = journal.rows.incomes;
+
+  // The income sub-tab reads only incomes, so it must not wait on expenses.
+  const ledgerComplete =
+    expensesTab === "income"
+      ? incomesComplete
+      : expensesComplete && incomesComplete;
+
+  const hasNarrowedView =
+    journal.activeFilterCount > 0 || debouncedQuery.trim().length > 0;
+
+  // SPENDLY-111: ExpenseList's own Spent/Income/Net card is superseded by
+  // JournalPeriodSummary, which is rounded, scoped to the rows actually in
+  // view, and refuses to render at all while the ledger is truncated. Showing
+  // both would put two different Spent figures on one screen.
+  const cashFlowById = useMemo(
+    () => journalCashFlowById(journal.runningBalance),
+    [journal.runningBalance]
+  );
+
+  // A kind carried over from another sub-tab can leave the list permanently
+  // empty with no visible cause, so drop it when it is no longer offered.
+  useEffect(() => {
+    if (
+      journalFilters.kind !== "all" &&
+      !availableKinds.includes(journalFilters.kind)
+    ) {
+      setJournalFilters((previous) => ({ ...previous, kind: "all" }));
+    }
+  }, [availableKinds, journalFilters.kind, setJournalFilters]);
+
+  const handleRemoveFilter = useCallback(
+    (field: AccountActivityFilterField, value?: string) => {
+      setJournalFilters((previous) => {
+        switch (field) {
+          case "kind":
+            return { ...previous, kind: "all" };
+          case "fromDate":
+            return { ...previous, fromDate: "" };
+          case "toDate":
+            return { ...previous, toDate: "" };
+          case "minAmount":
+            return { ...previous, minAmount: "" };
+          case "maxAmount":
+            return { ...previous, maxAmount: "" };
+          default:
+            if (value === undefined) return previous;
+            return {
+              ...previous,
+              [field]: (previous[field] as string[]).filter(
+                (entry) => entry !== value
+              ),
+            };
+        }
+      });
+    },
+    [setJournalFilters]
+  );
+
+  const clearJournalFilters = useCallback(() => {
+    setJournalFilters(createEmptyAccountActivityFilters());
+    setQuery("");
+  }, [setJournalFilters, setQuery]);
+
+  /* ---- SPENDLY-113: reports and export ------------------------------- */
+
+  const [exportBusy, setExportBusy] = useState<JournalExportFormat | null>(null);
+
+  /**
+   * A stamp captured on arrival so the memo below stays pure. The file gets a
+   * fresh one at the moment of export, not the moment the tab was opened.
+   */
+  const [reportStamp, setReportStamp] = useState(() => new Date().toISOString());
+  useEffect(() => {
+    if (expensesTab === "data") setReportStamp(new Date().toISOString());
+  }, [expensesTab]);
+
+  // Gated on the tab so a multi-thousand-row build does not run on every
+  // keystroke over on History.
+  const reportResult = useMemo(
+    () =>
+      expensesTab === "data"
+        ? buildJournalReport({
+            runningBalance: journal.runningBalance,
+            totals: journal.totals,
+            periods: journal.periods,
+            dateScope: journal.dateScope,
+            // The *raw* filters, not `effectiveFilters`: the latter has the
+            // resolved month range injected, so the header would list the
+            // period twice and disagree with the chips on the History tab.
+            filters: journalFilters,
+            query: debouncedQuery,
+            scope: journalScope,
+            currency: displayCurrency,
+            timezone: settings.timezone,
+            generatedAt: reportStamp,
+            readiness: { expensesComplete, incomesComplete },
+          })
+        : undefined,
+    [
+      expensesTab,
+      journal,
+      journalFilters,
+      debouncedQuery,
+      journalScope,
+      displayCurrency,
+      settings.timezone,
+      reportStamp,
+      expensesComplete,
+      incomesComplete,
+    ]
+  );
+
+  const reportFilterChips = useMemo(
+    () => describeAccountActivityFilters(journalFilters),
+    [journalFilters]
+  );
+
+  const handleExport = useCallback(
+    async (format: JournalExportFormat) => {
+      if (!systemSettings.allowDataExport) {
+        appDialog.alert(
+          "Export is turned off",
+          "Data export is disabled for this account."
+        );
+        return;
+      }
+
+      // Rebuilt rather than reused, so the file's stamp is the moment of
+      // export. It also re-runs the readiness gate against the latest flags.
+      const fresh = buildJournalReport({
+        runningBalance: journal.runningBalance,
+        totals: journal.totals,
+        periods: journal.periods,
+        dateScope: journal.dateScope,
+        filters: journalFilters,
+        query: debouncedQuery,
+        scope: journalScope,
+        currency: displayCurrency,
+        timezone: settings.timezone,
+        generatedAt: new Date().toISOString(),
+        readiness: { expensesComplete, incomesComplete },
+      });
+
+      if (fresh.status !== "ready") {
+        appDialog.alert(
+          "Still loading your full history",
+          "Exports stay paused until the rest of your transactions load, so a file can never be missing rows."
+        );
+        return;
+      }
+
+      const run = async () => {
+        setExportBusy(format);
+        try {
+          if (format === "csv") await exportJournalReportCsv(fresh.report);
+          else await exportJournalReportPdf(fresh.report);
+        } catch (error) {
+          logError("journalReport.export", error, {
+            format,
+            rowCount: fresh.report.rowCount,
+          });
+          toast.error(friendlyErrorMessage(error));
+        } finally {
+          setExportBusy(null);
+        }
+        // No success toast: the share sheet resolving does not mean the user
+        // saved anything.
+      };
+
+      // Laying out a very large PDF is the one path that can stall for seconds
+      // with no way to cancel, so it asks first.
+      if (format === "pdf" && fresh.report.rowCount > LARGE_PDF_ROWS) {
+        appDialog.alert(
+          "Large report",
+          `This will lay out ${fresh.report.rowCount} transactions and may take a few seconds.`,
+          [
+            { text: "Cancel", style: "cancel" },
+            { text: "Continue", onPress: () => void run() },
+          ]
+        );
+        return;
+      }
+
+      await run();
+    },
+    [
+      systemSettings.allowDataExport,
+      journal,
+      journalFilters,
+      debouncedQuery,
+      journalScope,
+      displayCurrency,
+      settings.timezone,
+      expensesComplete,
+      incomesComplete,
+    ]
+  );
+
+  // The sheet's live count must re-resolve the scope from the *draft*, because
+  // the draft's own dates decide whether the month is still in force.
+  const getFilterResultCount = useCallback(
+    (draft: AccountActivityFilters) => {
+      const records = buildJournalRecords(expenses, incomes, accounts, {
+        scope: journalScope,
+      });
+      const searched = searchAccountActivities(records, debouncedQuery);
+      const scope = resolveJournalDateScope(activeMonth, draft);
+      return applyAccountActivityFilters(
+        searched,
+        withJournalDateScope(draft, scope)
+      ).length;
+    },
+    [expenses, incomes, accounts, debouncedQuery, activeMonth, journalScope]
+  );
 
   const tabIconColor = (id: string) =>
     ledgerTab === id ? theme.colors.success : theme.colors.mutedForeground;
@@ -151,7 +475,7 @@ export default function LedgerScreen() {
   const allTabs: PageHeaderTab[] = [
     {
       id: "expenses",
-      label: `Journal (${filteredExpenses.length})`,
+      label: `Journal (${journal.records.length})`,
       icon: <History size={16} color={tabIconColor("expenses")} />,
     },
     {
@@ -185,6 +509,12 @@ export default function LedgerScreen() {
       icon: <Repeat size={16} color={tabIconColor("subscriptions")} />,
     },
   ];
+
+  // Search/filters belong to the two transaction lists only. `audit` is
+  // SPENDLY-112's workspace and `data` is unrelated.
+  const isFilterableTab =
+    ledgerTab === "expenses" &&
+    (expensesTab === "history" || expensesTab === "income");
 
   const isExpenseListTab =
     ledgerTab === "expenses" &&
@@ -258,41 +588,143 @@ export default function LedgerScreen() {
             })}
           </View>
 
-          {/* Search bar & Active Month Pill */}
-          <View style={styles.searchAndMonthRow}>
-            <View style={{ flex: 1 }}>
-              <SearchBar
-                value={query}
-                onChangeText={setQuery}
-                placeholder="Search notes, categories, tags..."
-              />
-            </View>
-            <Pressable
-              onPress={() => {
-                setIsMonthDrawerOpen(true);
-              }}
-              style={[
-                styles.monthPickerButton,
-                {
-                  backgroundColor: isDark
-                    ? "rgba(255,255,255,0.06)"
-                    : "rgba(0,0,0,0.04)",
-                  borderColor: theme.colors.border,
-                },
-              ]}
-            >
-              <Calendar size={16} color={theme.colors.primary} />
-              <Text
-                style={{
-                  fontSize: theme.typography.xs,
-                  fontWeight: "700",
-                  color: theme.colors.foreground,
+          {/* Search, filters & active month pill */}
+          {isFilterableTab ? (
+            <>
+              <TransactionFilters
+                title="Journal"
+                filters={journalFilters}
+                searchQuery={query}
+                onSearchChange={setQuery}
+                totalCount={journal.records.length}
+                allCount={journal.kindCounts.all}
+                incomeCount={journal.kindCounts.income}
+                expenseCount={journal.kindCounts.expense}
+                transferCount={journal.kindCounts.transfers}
+                filteredCount={journal.filtered.length}
+                activeFilterCount={journal.activeFilterCount}
+                availableKinds={availableKinds}
+                compact
+                scopeLabel={
+                  !ledgerComplete
+                    ? "loaded so far"
+                    : journal.dateScope.monthOverridden
+                      ? "custom range"
+                      : activeMonth
+                }
+                onKindChange={(kind) =>
+                  setJournalFilters((previous) => ({ ...previous, kind }))
+                }
+                onOpenAdvanced={() => setShowFilters(true)}
+                onRemoveFilter={handleRemoveFilter}
+                onClearAll={clearJournalFilters}
+                action={{
+                  accessibilityLabel: "Export these transactions",
+                  icon: (
+                    <Download size={16} color={theme.colors.mutedForeground} />
+                  ),
+                  onPress: () => setExpensesTab("data"),
                 }}
+              />
+
+              <Pressable
+                onPress={() => {
+                  // While a range is in force the pill's job is to get you back
+                  // to month scope, not to open the month drawer.
+                  if (journal.dateScope.monthOverridden) {
+                    setJournalFilters((previous) => ({
+                      ...previous,
+                      fromDate: "",
+                      toDate: "",
+                    }));
+                    return;
+                  }
+                  setIsMonthDrawerOpen(true);
+                }}
+                style={[
+                  styles.monthPickerButton,
+                  {
+                    alignSelf: "flex-start",
+                    backgroundColor: isDark
+                      ? "rgba(255,255,255,0.06)"
+                      : "rgba(0,0,0,0.04)",
+                    borderColor: theme.colors.border,
+                    opacity: journal.dateScope.monthOverridden ? 0.6 : 1,
+                  },
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  journal.dateScope.monthOverridden
+                    ? `Month ${activeMonth} overridden by a date range. Tap to clear the range.`
+                    : `Change month, currently ${activeMonth}`
+                }
               >
-                {activeMonth}
-              </Text>
-            </Pressable>
-          </View>
+                <Calendar size={16} color={theme.colors.primary} />
+                <Text
+                  style={{
+                    fontSize: theme.typography.xs,
+                    fontWeight: "700",
+                    color: theme.colors.foreground,
+                  }}
+                >
+                  {journal.dateScope.monthOverridden
+                    ? `${activeMonth} · overridden`
+                    : activeMonth}
+                </Text>
+              </Pressable>
+
+              {journal.validationError ? (
+                <Text
+                  style={[
+                    styles.noticeBody,
+                    { color: theme.colors.destructive },
+                  ]}
+                >
+                  {journal.validationError}
+                </Text>
+              ) : null}
+
+              {/* Distinct from loading and from no-results: rows are shown, but
+                  the ledger behind them is still a page. */}
+              {!ledgerComplete && !expensesLoading && !incomesLoading ? (
+                <View
+                  style={[
+                    styles.notice,
+                    {
+                      backgroundColor: theme.colors.card,
+                      borderColor: theme.colors.warning,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.noticeTitle,
+                      { color: theme.colors.foreground },
+                    ]}
+                  >
+                    Still loading your full history
+                  </Text>
+                  <Text
+                    style={[
+                      styles.noticeBody,
+                      { color: theme.colors.mutedForeground },
+                    ]}
+                  >
+                    Showing your most recent transactions. Results may be
+                    incomplete, and totals stay hidden, until the rest loads.
+                  </Text>
+                </View>
+              ) : null}
+              <JournalPeriodSummary
+                totals={journal.totals}
+                periods={journal.periods}
+                granularity={periodGranularity}
+                onGranularityChange={setPeriodGranularity}
+                netCashFlow={journal.runningBalance.netCashFlow}
+                complete={ledgerComplete}
+              />
+            </>
+          ) : null}
 
           {expensesTab === "history" && (
             <View style={{ flex: 1 }}>
@@ -310,11 +742,33 @@ export default function LedgerScreen() {
                     onRetry={expensesError.retryable ? retryExpenses : undefined}
                   />
                 </PageListStateScroll>
+              ) : hasNarrowedView && journal.filtered.length === 0 ? (
+                <PageListStateScroll>
+                  <EmptyState
+                    illustration="general"
+                    title={
+                      ledgerComplete
+                        ? "No transactions match"
+                        : "No matches loaded yet"
+                    }
+                    description={
+                      ledgerComplete
+                        ? "Nothing in this view matches your search and filters. Try widening the date or amount range."
+                        : "No matches in the transactions loaded so far — the rest of your history is still loading."
+                    }
+                    primaryAction={{
+                      label: "Clear filters",
+                      onPress: clearJournalFilters,
+                    }}
+                  />
+                </PageListStateScroll>
               ) : (
                 <ExpenseList
                   expenses={filteredExpenses}
                   incomes={filteredIncomes}
                   accounts={accounts}
+                  showMonthSummary={false}
+                  cashFlowById={ledgerComplete ? cashFlowById : undefined}
                   refreshing={refreshing}
                   onRefresh={handleRefresh}
                   onEditExpense={(exp) => {
@@ -346,11 +800,33 @@ export default function LedgerScreen() {
                     onRetry={incomesError.retryable ? retryIncomes : undefined}
                   />
                 </PageListStateScroll>
+              ) : hasNarrowedView && journal.filtered.length === 0 ? (
+                <PageListStateScroll>
+                  <EmptyState
+                    illustration="general"
+                    title={
+                      ledgerComplete
+                        ? "No transactions match"
+                        : "No matches loaded yet"
+                    }
+                    description={
+                      ledgerComplete
+                        ? "Nothing in this view matches your search and filters. Try widening the date or amount range."
+                        : "No matches in the transactions loaded so far — the rest of your history is still loading."
+                    }
+                    primaryAction={{
+                      label: "Clear filters",
+                      onPress: clearJournalFilters,
+                    }}
+                  />
+                </PageListStateScroll>
               ) : (
                 <ExpenseList
                   expenses={[]}
                   incomes={filteredIncomes}
                   accounts={accounts}
+                  showMonthSummary={false}
+                  cashFlowById={ledgerComplete ? cashFlowById : undefined}
                   refreshing={refreshing}
                   onRefresh={handleRefresh}
                   onEditIncome={(inc) => {
@@ -363,25 +839,68 @@ export default function LedgerScreen() {
           )}
 
           {expensesTab === "audit" ? (
-            <View style={{ flex: 1 }}>
-              <LedgerAuditList />
+            <View style={{ flex: 1, gap: 12 }}>
+              <View style={styles.auditViewRow}>
+                {AUDIT_VIEWS.map((view) => {
+                  const isActive = auditView === view.id;
+                  return (
+                    <Pressable
+                      key={view.id}
+                      onPress={() => setAuditView(view.id)}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: isActive }}
+                      style={[
+                        styles.auditViewChip,
+                        {
+                          backgroundColor: isActive
+                            ? theme.colors.primary
+                            : isDark
+                              ? "rgba(255,255,255,0.05)"
+                              : "rgba(0,0,0,0.04)",
+                          borderColor: isActive
+                            ? theme.colors.primary
+                            : theme.colors.border,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.auditViewText,
+                          {
+                            color: isActive
+                              ? theme.colors.primaryForeground
+                              : theme.colors.mutedForeground,
+                          },
+                        ]}
+                      >
+                        {view.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              <View style={{ flex: 1 }}>
+                {auditView === "checks" ? (
+                  <LedgerHealthReport onShowInJournal={handleShowInJournal} />
+                ) : (
+                  <LedgerAuditList />
+                )}
+              </View>
             </View>
           ) : null}
 
           {expensesTab === "data" && (
-            <EmptyState
-              illustration="general"
-              title="Data & Backup Vault"
-              description="Export, backup, and restore your financial datasets securely."
-              primaryAction={{
-                label: "Export CSV / JSON",
-                onPress: () => router.push("/settings"),
-              }}
-              secondaryAction={{
-                label: "Manage Cloud Sync",
-                onPress: () => router.push("/settings"),
-              }}
-              tip="Cloud synchronization keeps all your accounts seamlessly aligned across devices."
+            <JournalReportWorkspace
+              report={
+                reportResult?.status === "ready" ? reportResult.report : undefined
+              }
+              filterChips={reportFilterChips}
+              searchQuery={debouncedQuery.trim()}
+              exportAllowed={systemSettings.allowDataExport}
+              busy={exportBusy}
+              onExport={(format) => void handleExport(format)}
+              onEditFilters={() => setExpensesTab("history")}
+              onClearFilters={clearJournalFilters}
             />
           )}
         </View>
@@ -403,6 +922,18 @@ export default function LedgerScreen() {
       {ledgerTab === "subscriptions" && <SubscriptionsList />}
         </>
       )}
+
+      <AccountActivityFilterModal
+        visible={isFilterableTab && showFilters}
+        filters={journalFilters}
+        options={journal.filterOptions}
+        onClose={() => setShowFilters(false)}
+        onApply={(next) => {
+          setJournalFilters(next);
+          setShowFilters(false);
+        }}
+        getResultCount={getFilterResultCount}
+      />
     </PageShell>
   );
 }
@@ -428,6 +959,20 @@ const styles = StyleSheet.create({
   subTabText: {
     fontSize: 12,
   },
+  auditViewRow: {
+    flexDirection: "row",
+    gap: 6,
+  },
+  auditViewChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  auditViewText: {
+    fontSize: 11,
+    fontWeight: "700",
+  },
   itemList: {
     gap: 8,
   },
@@ -435,6 +980,20 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+  },
+  notice: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    gap: 4,
+  },
+  noticeTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  noticeBody: {
+    fontSize: 12,
+    lineHeight: 17,
   },
   monthPickerButton: {
     flexDirection: "row",

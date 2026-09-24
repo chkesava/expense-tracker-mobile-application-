@@ -90,6 +90,10 @@ export const PAST_MONTH_LOCKED_MESSAGE = "Past months are locked in settings";
 export const ALREADY_REMOVED_LEDGER_MESSAGE =
   "This transaction was already removed";
 
+/** SPENDLY-110 — restoring a row that was never deleted. */
+export const NOT_REMOVED_LEDGER_MESSAGE =
+  "This transaction is already in your ledger";
+
 export type LedgerRowEditability =
   | { editable: true; reason: null }
   | { editable: false; reason: string };

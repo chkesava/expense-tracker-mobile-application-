@@ -8,6 +8,19 @@ import {
   prasadamToCsv,
   prasadamToHtml,
 } from "@/shared/utils/ganeshPrasadamExport";
+import { csvField } from "@/shared/utils/csv";
+
+describe("prasadam CSV escaping (SPENDLY-113)", () => {
+  it("quotes a note carrying a bare carriage return", () => {
+    // The local escaper's regex was /[",\n]/ — missing \r — so a note pasted
+    // from Windows broke the row. The shared writer handles it.
+    expect(csvField("line one\rline two")).toBe('"line one\rline two"');
+  });
+
+  it("neutralises a note that would otherwise run as a formula", () => {
+    expect(csvField("=1+1")).toBe("\"'=1+1\"");
+  });
+});
 
 let seq = 0;
 

@@ -102,6 +102,12 @@ export type ExpensesContextType = {
 export type IncomesContextType = {
   incomes: Income[];
   incomesLoading: boolean;
+  /**
+   * SPENDLY-109: `incomesLoading` goes false on the *staged* 300-row page, so
+   * anything that must not reason from a truncated ledger gates on this
+   * instead. Mirrors `expensesComplete` (SPENDLY-97).
+   */
+  incomesComplete: boolean;
   financeError: LoadFailure | null;
   retryFinanceData: () => void;
 };
@@ -204,6 +210,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
   const [expensesComplete, setExpensesComplete] = useState(false);
   const [incomes, setIncomes] = useState<Income[]>([]);
   const [incomesLoading, setIncomesLoading] = useState(true);
+  const [incomesComplete, setIncomesComplete] = useState(false);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [accountsLoading, setAccountsLoading] = useState(true);
   const accountsRef = useRef(accounts);
@@ -306,6 +313,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       setExpensesLoading(false);
       setExpensesComplete(false);
       setIncomesLoading(false);
+      setIncomesComplete(false);
       setAccountsLoading(false);
       setAccountTypesLoading(false);
       setPaymentsLoading(false);
@@ -336,6 +344,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     // has to be re-earned even when the rows already on screen stay put.
     setExpensesComplete(false);
     setIncomesLoading(!incomesHydratedRef.current);
+    setIncomesComplete(false);
     setAccountsLoading(!accountsHydratedRef.current);
     setAccountTypesLoading(!accountTypesHydratedRef.current);
     setPaymentsLoading(true);
@@ -379,21 +388,32 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
 
     const applyExpensesSnap = makeApplyExpensesSnap(false);
 
-    const applyIncomesSnap = (snap: QuerySnapshot) => {
-      logQuerySnapshot(incomePath, snap);
-      const { items, pendingWrites } = foldLedgerSnapshot<Income>(snap.docs, {
-        activeOnly: true,
-      });
-      if (shouldApplySnapshotDocs(snap, incomesHydratedRef.current)) {
-        setIncomes(items);
-      }
-      pendingIncomesCountRef.current = pendingWrites;
-      updatePendingSyncCount();
-      noteServerSync(snap.metadata.fromCache);
-      incomesHydratedRef.current = true;
-      setFinanceError(null);
-      setIncomesLoading(false);
-    };
+    // SPENDLY-109: same factory shape as expenses above — `fromFullQuery`
+    // marks the unlimited listener, which is the only difference.
+    const makeApplyIncomesSnap =
+      (fromFullQuery: boolean) => (snap: QuerySnapshot) => {
+        logQuerySnapshot(incomePath, snap);
+        const { items, pendingWrites } = foldLedgerSnapshot<Income>(snap.docs, {
+          activeOnly: true,
+        });
+        if (shouldApplySnapshotDocs(snap, incomesHydratedRef.current)) {
+          setIncomes(items);
+        }
+        pendingIncomesCountRef.current = pendingWrites;
+        updatePendingSyncCount();
+        noteServerSync(snap.metadata.fromCache);
+        incomesHydratedRef.current = true;
+        setFinanceError(null);
+        setIncomesLoading(false);
+        // A cache-served *unlimited* snapshot is still the entire local ledger,
+        // so it counts as complete. Only the short-page shortcut demands a
+        // server snapshot.
+        if (fromFullQuery || isStagedPageComplete(snap)) {
+          setIncomesComplete(true);
+        }
+      };
+
+    const applyIncomesSnap = makeApplyIncomesSnap(false);
 
     // SPENDLY-12: first paint is a page, not the lifetime ledger. The idle
     // upgrade below is the same pattern docs/PERF_BASELINE.md described and
@@ -445,7 +465,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         incomesUnsub = onSnapshot(
           query(incomesCol, orderBy("createdAt", "desc")),
           FINANCE_SNAPSHOT_LISTEN_OPTIONS,
-          applyIncomesSnap,
+          makeApplyIncomesSnap(true),
           snapshotErrorHandler(
             "snapshot.incomes",
             (failure) => {
@@ -1278,10 +1298,11 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     () => ({
       incomes,
       incomesLoading,
+      incomesComplete,
       financeError,
       retryFinanceData,
     }),
-    [incomes, incomesLoading, financeError, retryFinanceData]
+    [incomes, incomesLoading, incomesComplete, financeError, retryFinanceData]
   );
 
   const typeNameById = useMemo(() => {

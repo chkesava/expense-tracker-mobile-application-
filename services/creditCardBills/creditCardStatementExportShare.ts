@@ -1,6 +1,4 @@
-import { Directory, File, Paths } from "expo-file-system";
-import * as Sharing from "expo-sharing";
-
+import { deliverCsv } from "@/services/export/fileDelivery";
 import {
   buildCreditCardCycleExport,
   creditCardCycleExportFileName,
@@ -8,34 +6,26 @@ import {
   type BuildCreditCardCycleExportInput,
 } from "@/shared/utils/creditCardStatementExport";
 
-function exportDirectory(): Directory {
-  const dir = new Directory(Paths.document, "credit-card-exports");
-  dir.create({ idempotent: true });
-  return dir;
-}
-
 /**
  * Build the cycle CSV and open the system share sheet as a real file
  * (not a truncated message body).
+ *
+ * SPENDLY-113 moved this onto `services/export/fileDelivery`, which brings two
+ * fixes it did not have: the UTF-8 byte-order mark Excel on Windows needs to
+ * render a currency symbol, and a web branch — on web this previously tried to
+ * write into a document directory that does not exist there.
  */
 export async function shareCreditCardCycleExport(
   input: BuildCreditCardCycleExportInput
 ): Promise<{ fileName: string; rowCount: number }> {
   const exported = buildCreditCardCycleExport(input);
-  const csv = creditCardCycleExportToCsv(exported);
   const fileName = creditCardCycleExportFileName(exported);
-  const file = new File(exportDirectory(), fileName);
-  if (file.exists) file.delete();
-  file.create();
-  file.write(csv);
 
-  if (!(await Sharing.isAvailableAsync())) {
-    throw new Error("Sharing is not available on this device");
-  }
-  await Sharing.shareAsync(file.uri, {
-    mimeType: "text/csv",
-    dialogTitle: `Export ${exported.periodStart} → ${exported.periodEnd}`,
-    UTI: "public.comma-separated-values-text",
+  await deliverCsv({
+    content: creditCardCycleExportToCsv(exported),
+    fileName,
+    directory: "credit-card-exports",
+    title: `Export ${exported.periodStart} → ${exported.periodEnd}`,
   });
 
   return { fileName, rowCount: exported.totals.rowCount };
