@@ -1,9 +1,10 @@
 import { useRouter } from "expo-router";
 import { ArrowLeft } from "lucide-react-native";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 
 import { ExpenseForm } from "@/components/ExpenseForm";
 import { PageShell } from "@/components/layout/PageShell";
+import { Button } from "@/components/ui/Button";
 import { useTheme } from "@/theme/ThemeProvider";
 
 export default function AddScreen() {
@@ -14,13 +15,14 @@ export default function AddScreen() {
     <PageShell scrollable={false}>
       {/* Header */}
       <View style={styles.header}>
-        <Pressable
+        <Button
+          variant="tonal"
+          size="icon"
           onPress={() => router.back()}
-          style={[styles.backButton, { backgroundColor: theme.colors.muted }]}
           accessibilityLabel="Go back"
         >
-          <ArrowLeft size={20} color={theme.colors.foreground} />
-        </Pressable>
+          <ArrowLeft size={20} color={theme.colors.onSecondaryContainer} />
+        </Button>
         <Text
           style={[
             styles.headerTitle,
@@ -29,7 +31,7 @@ export default function AddScreen() {
         >
           New Transaction
         </Text>
-        <View style={{ width: 40 }} />
+        <View style={styles.headerSpacer} />
       </View>
 
       <View style={styles.formWrap}>
@@ -50,12 +52,8 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     paddingHorizontal: 4,
   },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: "center",
-    justifyContent: "center",
+  headerSpacer: {
+    width: 48,
   },
   headerTitle: {
     fontWeight: "800",
