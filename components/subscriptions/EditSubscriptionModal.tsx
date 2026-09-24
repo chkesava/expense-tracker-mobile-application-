@@ -15,7 +15,10 @@ import { X } from "lucide-react-native";
 import { Button } from "@/components/ui/Button";
 import { DayOfMonthSelect } from "@/components/common/DayOfMonthSelect";
 import { MonthYearSelect } from "@/components/common/MonthYearSelect";
-import { validateSubscriptionInput } from "@/shared/utils/subscriptionInput";
+import {
+  validateSubscriptionInput,
+  type SubscriptionField,
+} from "@/shared/utils/subscriptionInput";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useCategories } from "@/hooks/useCategories";
 import { useSubscriptions } from "@/hooks/useSubscriptions";
@@ -55,6 +58,28 @@ export function defaultFirstDebit(
   return month === 12 ? { month: 1, year: year + 1 } : { month: month + 1, year };
 }
 
+type WizardStep = 1 | 2 | 3;
+
+const STEP_TITLES: Record<WizardStep, string> = {
+  1: "Basics",
+  2: "Schedule",
+  3: "Classification",
+};
+
+/**
+ * Which step owns each validation failure, so a save blocked on step 1 sends
+ * the user back to step 1 rather than just showing a toast they cannot act on.
+ */
+const FIELD_STEP: Record<SubscriptionField, WizardStep> = {
+  name: 1,
+  amount: 1,
+  dayOfMonth: 2,
+  intervalDays: 2,
+  start: 2,
+  end: 2,
+  accounts: 3,
+};
+
 export function EditSubscriptionModal({
   visible,
   subscription,
@@ -89,6 +114,7 @@ export function EditSubscriptionModal({
   const [endMonth, setEndMonth] = useState("");
   const [endYear, setEndYear] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [step, setStep] = useState<WizardStep>(1);
 
   useEffect(() => {
     if (subscription) {
@@ -128,6 +154,7 @@ export function EditSubscriptionModal({
     // `accounts` is read through a ref on purpose. It only seeds defaults, but
     // as a dependency it re-ran this whole reset every time the Firestore
     // snapshot re-emitted a new array, wiping whatever the user had typed.
+    setStep(1);
   }, [subscription, visible]);
 
   // Suggest the first debit month for a new monthly item, and keep the
@@ -141,24 +168,45 @@ export function EditSubscriptionModal({
     setStartYear(String(suggestion.year));
   }, [dayOfMonth, monthlyCadence, subscription?.id, visible]);
 
+  const currentValues = {
+    name,
+    amount,
+    type,
+    frequency,
+    dayOfMonth,
+    intervalDays,
+    startMonth,
+    startYear,
+    endMonth,
+    endYear,
+    accountId,
+    toAccountId,
+  };
+
+  const handleNext = () => {
+    // One validator for the whole form; only complain about problems the user
+    // has actually reached, so a blank amount does not block leaving step 1
+    // before they have seen the field.
+    const checked = validateSubscriptionInput(currentValues);
+    if (!checked.ok && FIELD_STEP[checked.field] <= step) {
+      toast.error(checked.message);
+      return;
+    }
+    haptic.selection().catch(() => undefined);
+    setStep((prev) => Math.min(3, prev + 1) as WizardStep);
+  };
+
+  const handleBack = () => {
+    haptic.selection().catch(() => undefined);
+    setStep((prev) => Math.max(1, prev - 1) as WizardStep);
+  };
+
   const handleSave = async () => {
-    const checked = validateSubscriptionInput({
-      name,
-      amount,
-      type,
-      frequency,
-      dayOfMonth,
-      intervalDays,
-      startMonth,
-      startYear,
-      endMonth,
-      endYear,
-      accountId,
-      toAccountId,
-    });
+    const checked = validateSubscriptionInput(currentValues);
 
     if (!checked.ok) {
       toast.error(checked.message);
+      setStep(FIELD_STEP[checked.field]);
       return;
     }
 
@@ -300,7 +348,7 @@ export function EditSubscriptionModal({
                   { color: theme.colors.mutedForeground },
                 ]}
               >
-                Manage scheduled bills, EMIs, and auto-transfers
+                Step {step} of 3 · {STEP_TITLES[step]}
               </Text>
             </View>
             <Pressable
@@ -317,11 +365,29 @@ export function EditSubscriptionModal({
             </Pressable>
           </View>
 
+          <View style={styles.stepRow}>
+            {([1, 2, 3] as WizardStep[]).map((s) => (
+              <View
+                key={s}
+                style={[
+                  styles.stepDot,
+                  {
+                    backgroundColor:
+                      s <= step ? theme.colors.primary : theme.colors.muted,
+                    height: s === step ? 4 : 3,
+                  },
+                ]}
+              />
+            ))}
+          </View>
+
           <ScrollView
             style={styles.scrollArea}
             contentContainerStyle={{ gap: 16, paddingBottom: 16 }}
             keyboardShouldPersistTaps="handled"
           >
+            {step === 1 ? (
+              <>
             {/* Type Selector */}
             <View style={{ gap: 6 }}>
               <Text
@@ -443,6 +509,11 @@ export function EditSubscriptionModal({
               />
             </View>
 
+              </>
+            ) : null}
+
+            {step === 2 ? (
+              <>
             {/* Frequency */}
             {type !== "emi" ? (
               <View style={{ gap: 6 }}>
@@ -574,6 +645,34 @@ export function EditSubscriptionModal({
               </View>
             )}
 
+            {/* EMI End Date (if EMI) */}
+            {type === "emi" && (
+              <View style={{ gap: 6 }}>
+                <Text
+                  style={[
+                    styles.fieldLabel,
+                    { color: theme.colors.mutedForeground },
+                  ]}
+                >
+                  FINAL TERM
+                </Text>
+                <MonthYearSelect
+                  month={parseInt(endMonth, 10) || 0}
+                  year={parseInt(endYear, 10) || 0}
+                  clearable
+                  placeholder="No end date"
+                  onChange={({ month, year }) => {
+                    setEndMonth(month ? String(month) : "");
+                    setEndYear(year ? String(year) : "");
+                  }}
+                />
+              </View>
+            )}
+              </>
+            ) : null}
+
+            {step === 3 ? (
+              <>
             {/* Category (if not transfer) */}
             {type !== "transfer" && (
               <View style={{ gap: 6 }}>
@@ -744,29 +843,9 @@ export function EditSubscriptionModal({
               </View>
             )}
 
-            {/* EMI End Date (if EMI) */}
-            {type === "emi" && (
-              <View style={{ gap: 6 }}>
-                <Text
-                  style={[
-                    styles.fieldLabel,
-                    { color: theme.colors.mutedForeground },
-                  ]}
-                >
-                  FINAL TERM
-                </Text>
-                <MonthYearSelect
-                  month={parseInt(endMonth, 10) || 0}
-                  year={parseInt(endYear, 10) || 0}
-                  clearable
-                  placeholder="No end date"
-                  onChange={({ month, year }) => {
-                    setEndMonth(month ? String(month) : "");
-                    setEndYear(year ? String(year) : "");
-                  }}
-                />
-              </View>
-            )}
+              </>
+            ) : null}
+
           </ScrollView>
 
           {/* Action Buttons. Delete is deliberately not in this row: it used
@@ -774,20 +853,35 @@ export function EditSubscriptionModal({
               is a lot of destructive surface next to the button people mean
               to press. */}
           <View style={styles.actionFooter}>
-            <Button
-              variant="primary"
-              onPress={handleSave}
-              disabled={isSubmitting}
-              style={{ flex: 1 }}
-            >
-              {isSubmitting
-                ? "Saving..."
-                : subscription?.id
-                  ? "Update Recurring"
-                  : suggestionKey
-                    ? "Add Recurring"
-                    : "Save Recurring"}
-            </Button>
+            {step > 1 ? (
+              <Button variant="outline" onPress={handleBack} style={{ flex: 1 }}>
+                Back
+              </Button>
+            ) : null}
+            {step < 3 ? (
+              <Button
+                variant="primary"
+                onPress={handleNext}
+                style={{ flex: step > 1 ? 2 : 1 }}
+              >
+                Next
+              </Button>
+            ) : (
+              <Button
+                variant="primary"
+                onPress={handleSave}
+                disabled={isSubmitting}
+                style={{ flex: 2 }}
+              >
+                {isSubmitting
+                  ? "Saving..."
+                  : subscription?.id
+                    ? "Update Recurring"
+                    : suggestionKey
+                      ? "Add Recurring"
+                      : "Save Recurring"}
+              </Button>
+            )}
           </View>
 
           {subscription?.id ? (
@@ -885,6 +979,15 @@ const styles = StyleSheet.create({
   },
   chipText: {
     fontSize: 12,
+  },
+  stepRow: {
+    flexDirection: "row",
+    gap: 6,
+    marginBottom: 14,
+  },
+  stepDot: {
+    flex: 1,
+    borderRadius: 4,
   },
   actionFooter: {
     flexDirection: "row",
