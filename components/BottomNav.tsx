@@ -30,8 +30,9 @@ import {
 import {
   BOTTOM_NAV_BAR_HEIGHT,
   BOTTOM_NAV_FAB_EDGE,
-  BOTTOM_NAV_FAB_GAP,
   BOTTOM_NAV_FAB_SIZE,
+  BOTTOM_NAV_MIN_INSET,
+  bottomNavFabOffset,
 } from "@/components/layout/chrome";
 import { haptic } from "@/lib/haptics";
 import { useModals } from "@/providers/ModalProvider";
@@ -268,8 +269,11 @@ export function BottomNav() {
     ],
   }));
 
-  const bottomInset = Math.max(insets.bottom, 8);
-  const fabBottomOffset = BOTTOM_NAV_BAR_HEIGHT + bottomInset + BOTTOM_NAV_FAB_GAP;
+  // Both numbers come from the shared chrome geometry, which is also what
+  // every list pads by — so the FAB cannot drift above the clearance that is
+  // meant to keep it off the last row (SPENDLY-141).
+  const bottomInset = Math.max(insets.bottom, BOTTOM_NAV_MIN_INSET);
+  const fabBottomOffset = bottomNavFabOffset(insets.bottom);
 
   return (
     <Animated.View

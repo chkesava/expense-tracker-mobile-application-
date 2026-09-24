@@ -4,10 +4,11 @@ import {
   BOTTOM_NAV_BAR_HEIGHT,
   BOTTOM_NAV_CONTENT_CLEARANCE,
   BOTTOM_NAV_FAB_CLEARANCE,
-  BOTTOM_NAV_FAB_GAP,
   BOTTOM_NAV_FAB_SIZE,
   BOTTOM_NAV_SCROLL_PADDING,
+  BOTTOM_NAV_MIN_INSET,
   BOTTOM_NAV_SCROLL_PADDING_WITH_FAB,
+  bottomNavFabOffset,
 } from "@/components/layout/chrome";
 import {
   resolveListBottomPadding,
@@ -40,8 +41,10 @@ describe("spendlyBottomClearance", () => {
   });
 
   it("adds optional extra breathing room", () => {
+    // SPENDLY-141: a zero system inset is floored at BottomNav's own minimum,
+    // because that is where the bar and FAB actually sit.
     expect(spendlyBottomClearance(0, { withFab: true, extra: 16 })).toBe(
-      BOTTOM_NAV_SCROLL_PADDING_WITH_FAB + 16
+      BOTTOM_NAV_MIN_INSET + BOTTOM_NAV_SCROLL_PADDING_WITH_FAB + 16
     );
   });
 });
@@ -57,14 +60,13 @@ describe("resolveListBottomPadding", () => {
       spendlyBottomClearance(34, { withFab: true })
     );
     expect(resolveListBottomPadding(null, 0, 20)).toBe(
-      BOTTOM_NAV_SCROLL_PADDING_WITH_FAB + 20
+      BOTTOM_NAV_MIN_INSET + BOTTOM_NAV_SCROLL_PADDING_WITH_FAB + 20
     );
   });
 
   it("lets the last row scroll above the top edge of the FAB", () => {
     for (const inset of [0, 16, 34, 48]) {
-      const fabTopFromBottom =
-        inset + BOTTOM_NAV_BAR_HEIGHT + BOTTOM_NAV_FAB_GAP + BOTTOM_NAV_FAB_SIZE;
+      const fabTopFromBottom = bottomNavFabOffset(inset) + BOTTOM_NAV_FAB_SIZE;
       expect(resolveListBottomPadding(null, inset)).toBeGreaterThan(fabTopFromBottom);
     }
   });

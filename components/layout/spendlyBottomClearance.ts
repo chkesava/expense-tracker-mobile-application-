@@ -1,7 +1,7 @@
 import {
-  BOTTOM_NAV_SCROLL_PADDING,
-  BOTTOM_NAV_SCROLL_PADDING_WITH_FAB,
-} from "@/components/layout/chrome";
+  bottomChromeClearance,
+  type BottomNavStyle,
+} from "@/shared/config/bottomChrome";
 
 export type SpendlyBottomClearanceOptions = {
   /**
@@ -11,20 +11,25 @@ export type SpendlyBottomClearanceOptions = {
   withFab?: boolean;
   /** Extra breathing room on top of chrome + system inset. */
   extra?: number;
+  /**
+   * Which bottom chrome the shell is rendering. Defaults to the nav bar, which
+   * is what every product other than Spendly's dock layout mounts.
+   */
+  navStyle?: BottomNavStyle;
 };
 
 /**
  * Pure clearance math shared by PageShell, sticky footers, and stack lists.
  * Prefer `useSpendlyBottomClearance` in components; export this for unit tests.
+ *
+ * The geometry itself lives in `shared/config/bottomChrome`, alongside the
+ * offsets the FAB is positioned from, so the two cannot drift (SPENDLY-141).
  */
 export function spendlyBottomClearance(
   bottomInset: number,
-  { withFab = true, extra = 0 }: SpendlyBottomClearanceOptions = {}
+  { withFab = true, extra = 0, navStyle = "bottom" }: SpendlyBottomClearanceOptions = {}
 ): number {
-  const chrome = withFab
-    ? BOTTOM_NAV_SCROLL_PADDING_WITH_FAB
-    : BOTTOM_NAV_SCROLL_PADDING;
-  return bottomInset + chrome + extra;
+  return bottomChromeClearance(bottomInset, { withFab, extra, navStyle });
 }
 
 /**
@@ -35,8 +40,9 @@ export function spendlyBottomClearance(
 export function resolveListBottomPadding(
   shellClearance: number | null,
   bottomInset: number,
-  extra = 0
+  extra = 0,
+  navStyle: BottomNavStyle = "bottom"
 ): number {
   if (shellClearance !== null) return shellClearance + extra;
-  return spendlyBottomClearance(bottomInset, { withFab: true, extra });
+  return spendlyBottomClearance(bottomInset, { withFab: true, extra, navStyle });
 }
