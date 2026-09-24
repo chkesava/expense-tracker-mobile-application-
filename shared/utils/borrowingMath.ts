@@ -10,62 +10,46 @@ import type {
   BorrowingRepayment,
   BorrowingStatus,
 } from "../types/borrowing";
-import { daysInMonth, parseLocalDate } from "./dates";
+import {
+  accrueInterest,
+  allocateInterestFirst,
+  describeInterestTerms,
+  elapsedMonths,
+  monthlyRateOf,
+  validatePayment,
+  type InterestPosition,
+  type InterestTerms,
+} from "./interestMath";
 import { roundMoney } from "./money";
 export { roundMoney };
-
-/** Guards against runaway loops on absurd date ranges (200 years). */
-const MAX_MONTH_STEPS = 2400;
-
-function addMonthsClamped(date: Date, months: number): Date {
-  const target = new Date(date.getFullYear(), date.getMonth() + months, 1);
-  const day = Math.min(
-    date.getDate(),
-    daysInMonth(target.getFullYear(), target.getMonth())
-  );
-  return new Date(target.getFullYear(), target.getMonth(), day);
-}
+/** Re-exported so this module's public API is unchanged (SPENDLY-160). */
+export { elapsedMonths };
 
 /**
- * Months between two date keys, with the trailing partial month expressed as a
- * fraction of that month's own length. Exactly 1 at a calendar month boundary.
+ * The accrual engine moved to `interestMath.ts` so money lent accrues through
+ * the same code. Everything below keeps its old name and signature; only the
+ * bodies became adapters.
  */
-export function elapsedMonths(fromKey: string, toKey: string): number {
-  const from = parseLocalDate(fromKey);
-  const to = parseLocalDate(toKey);
-  if (!Number.isFinite(from.getTime()) || !Number.isFinite(to.getTime())) return 0;
-  if (to.getTime() <= from.getTime()) return 0;
+function termsOf(borrowing: Borrowing): InterestTerms {
+  return {
+    rate: borrowing.interestRate,
+    type: borrowing.interestType,
+    frequency: borrowing.interestFrequency,
+    basis: borrowing.interestBasis,
+  };
+}
 
-  let whole = 0;
-  while (
-    whole < MAX_MONTH_STEPS &&
-    addMonthsClamped(from, whole + 1).getTime() <= to.getTime()
-  ) {
-    whole += 1;
-  }
-
-  const anchor = addMonthsClamped(from, whole);
-  const nextAnchor = addMonthsClamped(from, whole + 1);
-  const span = nextAnchor.getTime() - anchor.getTime();
-  if (span <= 0) return whole;
-
-  return whole + (to.getTime() - anchor.getTime()) / span;
+function positionOf(borrowing: Borrowing): InterestPosition {
+  return {
+    principal: borrowing.principalAmount,
+    startDate: borrowing.borrowedDate,
+    terms: termsOf(borrowing),
+  };
 }
 
 /** Per-month rate as a decimal. Returns 0 for one-time and interest-free. */
 export function monthlyInterestRate(borrowing: Borrowing): number {
-  if (borrowing.interestType === "NONE") return 0;
-  const rate = borrowing.interestRate;
-  if (!Number.isFinite(rate) || rate <= 0) return 0;
-
-  switch (borrowing.interestFrequency) {
-    case "MONTHLY":
-      return rate / 100;
-    case "ANNUAL":
-      return rate / 100 / 12;
-    default:
-      return 0;
-  }
+  return monthlyRateOf(termsOf(borrowing));
 }
 
 function principalComponentOf(repayment: BorrowingRepayment): number {
@@ -106,44 +90,13 @@ export function computeAccruedInterest(
   repayments: BorrowingRepayment[],
   asOfDate: string
 ): number {
-  if (borrowing.interestType === "NONE") return 0;
-  if (asOfDate < borrowing.borrowedDate) return 0;
-
-  if (borrowing.interestFrequency === "ONE_TIME") {
-    const rate = borrowing.interestRate;
-    if (!Number.isFinite(rate) || rate <= 0) return 0;
-    return roundMoney((borrowing.principalAmount * rate) / 100);
-  }
-
-  const monthlyRate = monthlyInterestRate(borrowing);
-  if (monthlyRate <= 0) return 0;
-
-  if (borrowing.interestBasis === "ORIGINAL_PRINCIPAL") {
-    const months = elapsedMonths(borrowing.borrowedDate, asOfDate);
-    return roundMoney(borrowing.principalAmount * monthlyRate * months);
-  }
-
-  const relevant = repaymentsUpTo(
-    repaymentsFor(borrowing.id, repayments),
-    asOfDate
-  );
-
-  let cursor = borrowing.borrowedDate;
-  let outstanding = borrowing.principalAmount;
-  let interest = 0;
-
-  for (const repayment of relevant) {
-    const segmentEnd = repayment.date < cursor ? cursor : repayment.date;
-    interest +=
-      Math.max(0, outstanding) * monthlyRate * elapsedMonths(cursor, segmentEnd);
-    outstanding -= principalComponentOf(repayment);
-    cursor = segmentEnd;
-  }
-
-  interest +=
-    Math.max(0, outstanding) * monthlyRate * elapsedMonths(cursor, asOfDate);
-
-  return roundMoney(interest);
+  // The id filter stays here: an id-less borrowing has no repayments to find,
+  // so it accrues on full principal exactly as it did before the extraction.
+  const movements = repaymentsFor(borrowing.id, repayments).map((r) => ({
+    date: r.date,
+    principalComponent: principalComponentOf(r),
+  }));
+  return accrueInterest(positionOf(borrowing), movements, asOfDate);
 }
 
 export interface BorrowingSummary {
@@ -336,17 +289,7 @@ export function allocateRepayment(
   amount: number,
   summary: Pick<BorrowingSummary, "outstandingInterest" | "outstandingPrincipal">
 ): RepaymentAllocation {
-  const paid = Math.max(0, amount);
-  const interestComponent = roundMoney(
-    Math.min(paid, summary.outstandingInterest)
-  );
-  const afterInterest = roundMoney(paid - interestComponent);
-  const principalComponent = roundMoney(
-    Math.min(afterInterest, summary.outstandingPrincipal)
-  );
-  const overpayment = roundMoney(afterInterest - principalComponent);
-
-  return { interestComponent, principalComponent, overpayment };
+  return allocateInterestFirst(amount, summary);
 }
 
 export interface RepaymentValidation {
@@ -360,48 +303,12 @@ export function validateRepayment(
   summary: Pick<BorrowingSummary, "outstandingInterest" | "outstandingPrincipal">,
   options?: { allowOverpayment?: boolean }
 ): RepaymentValidation {
-  if (!Number.isFinite(amount) || amount <= 0) {
-    return { ok: false, error: "Enter a repayment amount greater than zero." };
-  }
-
-  const totalOutstanding = roundMoney(
-    summary.outstandingPrincipal + summary.outstandingInterest
-  );
-
-  if (totalOutstanding <= 0) {
-    return { ok: false, error: "This borrowing is already fully settled." };
-  }
-
-  if (amount > totalOutstanding && !options?.allowOverpayment) {
-    return {
-      ok: false,
-      error: `Repayment exceeds the ${totalOutstanding} outstanding.`,
-    };
-  }
-
-  return { ok: true };
+  return validatePayment(amount, summary, { ...options, subject: "borrowing" });
 }
 
 /** Short human label for a borrowing's interest configuration. */
 export function describeInterest(borrowing: Borrowing): string {
-  if (borrowing.interestType === "NONE" || borrowing.interestFrequency === "NONE") {
-    return "No interest";
-  }
-  if (!Number.isFinite(borrowing.interestRate) || borrowing.interestRate <= 0) {
-    return "No interest";
-  }
-
-  const rate = `${borrowing.interestRate}%`;
-  switch (borrowing.interestFrequency) {
-    case "MONTHLY":
-      return `${rate} monthly interest`;
-    case "ANNUAL":
-      return `${rate} annual interest`;
-    case "ONE_TIME":
-      return `${rate} one-time interest`;
-    default:
-      return "No interest";
-  }
+  return describeInterestTerms(termsOf(borrowing));
 }
 
 export interface BorrowingPortfolioSummary {
