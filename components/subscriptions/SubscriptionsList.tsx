@@ -32,7 +32,11 @@ import {
   computeMonthlyCommitments,
   formatSubscriptionSchedule,
   getNextRenewalDate,
+  isSubscriptionOverdue,
+  partitionRecurringByTab,
+  subscriptionNeedsAccount,
   subscriptionsToUpcomingDues,
+  type RecurringTabId,
 } from "@/shared/utils/subscriptionProcessor";
 import {
   amountDueWithinDays,
@@ -43,10 +47,9 @@ import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
-type RecurringTab = "active" | "paused" | "completed";
-
-const RECURRING_TABS: { id: RecurringTab; label: string }[] = [
+const RECURRING_TABS: { id: RecurringTabId; label: string }[] = [
   { id: "active", label: "Active" },
+  { id: "overdue", label: "Overdue" },
   { id: "paused", label: "Paused" },
   { id: "completed", label: "Completed" },
 ];
@@ -64,7 +67,7 @@ export function SubscriptionsList() {
     decline: declineSuggestion,
   } = useRecurringSuggestions();
 
-  const [activeTab, setActiveTab] = useState<RecurringTab>("active");
+  const [activeTab, setActiveTab] = useState<RecurringTabId>("active");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedSub, setSelectedSub] = useState<Subscription | null>(null);
   const [suggestionKey, setSuggestionKey] = useState<string | null>(null);
@@ -89,18 +92,13 @@ export function SubscriptionsList() {
 
   // One partition feeds both the tabs and their counts. They used to disagree:
   // the count came from `commitments.activeCount`, which excludes paused items,
-  // while the list showed everything that was not completed.
-  const byTab = useMemo(() => {
-    const active: Subscription[] = [];
-    const paused: Subscription[] = [];
-    const completed: Subscription[] = [];
-    for (const sub of subscriptions) {
-      if (sub.isCompleted) completed.push(sub);
-      else if (sub.isActive) active.push(sub);
-      else paused.push(sub);
-    }
-    return { active, paused, completed };
-  }, [subscriptions]);
+  // while the list showed everything that was not completed. SPENDLY-158 moved
+  // the split itself into `partitionRecurringByTab` so Overdue is derived from
+  // the same rule the auto-poster refuses on.
+  const byTab = useMemo(
+    () => partitionRecurringByTab(subscriptions),
+    [subscriptions]
+  );
 
   const filteredSubscriptions = byTab[activeTab];
 
@@ -371,17 +369,28 @@ export function SubscriptionsList() {
 
       {/* Subscriptions List */}
       {filteredSubscriptions.length === 0 && reviewItems.length === 0 ? (
-        <EmptyState
-          illustration="subscriptions"
-          title="No Subscriptions Yet"
-          description="Track recurring subscriptions, software licenses, utilities, and memberships with automated renewal alerts."
-          primaryAction={{
-            label: "Add Subscription",
-            icon: <Plus size={16} color="#FFFFFF" strokeWidth={2.4} />,
-            onPress: handleOpenAdd,
-          }}
-          tip="Receive advance renewal reminders so you never get surprised by automatic debits."
-        />
+        activeTab === "overdue" ? (
+          // An empty Overdue tab is good news, and needs to read as such
+          // rather than as "you have no subscriptions".
+          <EmptyState
+            illustration="subscriptions"
+            title="Nothing overdue"
+            description="Every active recurring payment has an account to debit, so each one can post itself when it falls due."
+            tip="An item lands here when its charge is due but it has no account set — auto-post skips it rather than guessing."
+          />
+        ) : (
+          <EmptyState
+            illustration="subscriptions"
+            title="No Subscriptions Yet"
+            description="Track recurring subscriptions, software licenses, utilities, and memberships with automated renewal alerts."
+            primaryAction={{
+              label: "Add Subscription",
+              icon: <Plus size={16} color="#FFFFFF" strokeWidth={2.4} />,
+              onPress: handleOpenAdd,
+            }}
+            tip="Receive advance renewal reminders so you never get surprised by automatic debits."
+          />
+        )
       ) : (
         <View style={styles.listContainer}>
           {filteredSubscriptions.map((sub) => {
@@ -443,6 +452,21 @@ export function SubscriptionsList() {
                         </Text>
                       </View>
 
+                      {isSubscriptionOverdue(sub) ? (
+                        <View
+                          style={[
+                            styles.pausedBadge,
+                            { backgroundColor: "rgba(239, 68, 68, 0.15)" },
+                          ]}
+                        >
+                          <Text
+                            style={[styles.pausedBadgeText, { color: "#EF4444" }]}
+                          >
+                            OVERDUE
+                          </Text>
+                        </View>
+                      ) : null}
+
                       {!sub.isActive && !sub.isCompleted ? (
                         <View
                           style={[
@@ -500,6 +524,19 @@ export function SubscriptionsList() {
                       {sourceAccName ? ` • ${sourceAccName}` : ""}
                       {destAccName ? ` → ${destAccName}` : ""}
                     </Text>
+
+                    {/*
+                      The row is already tappable into the edit form, which is
+                      where the account is set — so the reason doubles as the
+                      instruction rather than needing its own button.
+                    */}
+                    {subscriptionNeedsAccount(sub) && !sub.isCompleted ? (
+                      <Text style={[styles.subMeta, { color: "#EF4444" }]}>
+                        {sub.type === "transfer"
+                          ? "Needs both accounts before it can post"
+                          : "Needs an account before it can post"}
+                      </Text>
+                    ) : null}
                   </View>
 
                   <View style={{ alignItems: "flex-end", gap: 6 }}>

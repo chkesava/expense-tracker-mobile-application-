@@ -6,6 +6,9 @@ import {
   computeMonthlyCommitments,
   duePostNeedsAccount,
   evaluateSubscriptionDue,
+  isSubscriptionOverdue,
+  partitionRecurringByTab,
+  subscriptionNeedsAccount,
   getNextRenewalDate,
   planDueSubscriptionPosts,
   applyPostPlanToSubscriptions,
@@ -390,5 +393,104 @@ describe("subscriptionsToUpcomingDues", () => {
       { ...base, amount: undefined as unknown as number },
     ]);
     expect(due.amount).toBe(0);
+  });
+});
+
+describe("SPENDLY-158 — overdue recurring items", () => {
+  /** The 15th: a day-10 monthly item is due, a day-20 one is not. */
+  const now = new Date(2026, 8, 15);
+
+  const base: Subscription = {
+    id: "sub-x",
+    name: "Gym",
+    amount: 1300,
+    category: "Health",
+    dayOfMonth: 10,
+    isActive: true,
+    lastProcessed: "2026-08",
+    type: "subscription",
+  };
+
+  it("flags a due item that has no account to debit", () => {
+    expect(isSubscriptionOverdue(base, now)).toBe(true);
+  });
+
+  it("does not flag the same item once it has an account", () => {
+    expect(isSubscriptionOverdue({ ...base, accountId: "acc-1" }, now)).toBe(
+      false
+    );
+  });
+
+  it("does not flag an accountless item that is not due yet", () => {
+    expect(isSubscriptionOverdue({ ...base, dayOfMonth: 20 }, now)).toBe(false);
+  });
+
+  it("does not flag a paused or completed item", () => {
+    expect(isSubscriptionOverdue({ ...base, isActive: false }, now)).toBe(false);
+    expect(isSubscriptionOverdue({ ...base, isCompleted: true }, now)).toBe(
+      false
+    );
+  });
+
+  it("does not flag an SMS-detected item, which never auto-posts by design", () => {
+    // Its expense already exists; posting would double-count, so it stays due
+    // forever and would drown the real failures.
+    expect(isSubscriptionOverdue({ ...base, source: "sms" }, now)).toBe(false);
+  });
+
+  it("needs both legs of a transfer, not just one", () => {
+    const transfer: Subscription = { ...base, type: "transfer" };
+    expect(subscriptionNeedsAccount(transfer)).toBe(true);
+    expect(
+      subscriptionNeedsAccount({ ...transfer, accountId: "acc-1" })
+    ).toBe(true);
+    expect(
+      subscriptionNeedsAccount({
+        ...transfer,
+        accountId: "acc-1",
+        toAccountId: "acc-2",
+      })
+    ).toBe(false);
+  });
+
+  it("agrees with the planner: what it flags is what auto-post refuses", () => {
+    // The whole design rests on this. If planning ever stopped refusing an
+    // accountless charge, the overdue tab would be describing nothing.
+    const plan = planDueSubscriptionPosts([base], now);
+    expect(plan).toHaveLength(1);
+    expect(duePostNeedsAccount(plan[0])).toBe(true);
+    expect(isSubscriptionOverdue(base, now)).toBe(true);
+  });
+
+  it("gives every item exactly one tab", () => {
+    const subs: Subscription[] = [
+      { ...base, id: "overdue-1" },
+      { ...base, id: "active-1", accountId: "acc-1" },
+      { ...base, id: "paused-1", isActive: false },
+      { ...base, id: "done-1", isCompleted: true },
+    ];
+
+    const buckets = partitionRecurringByTab(subs, now);
+
+    expect(buckets.overdue.map((s) => s.id)).toEqual(["overdue-1"]);
+    expect(buckets.active.map((s) => s.id)).toEqual(["active-1"]);
+    expect(buckets.paused.map((s) => s.id)).toEqual(["paused-1"]);
+    expect(buckets.completed.map((s) => s.id)).toEqual(["done-1"]);
+
+    const total =
+      buckets.overdue.length +
+      buckets.active.length +
+      buckets.paused.length +
+      buckets.completed.length;
+    expect(total).toBe(subs.length);
+  });
+
+  it("calls a switched-off item paused, however long it has been due", () => {
+    const buckets = partitionRecurringByTab(
+      [{ ...base, id: "off", isActive: false }],
+      now
+    );
+    expect(buckets.paused).toHaveLength(1);
+    expect(buckets.overdue).toHaveLength(0);
   });
 });
