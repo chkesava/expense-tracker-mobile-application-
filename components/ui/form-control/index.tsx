@@ -177,7 +177,7 @@ cssInterop(UIIcon, {
       height: true,
       width: true,
       fill: true,
-      color: true,
+      color: 'classNameColor',
       stroke: true,
     },
   },
