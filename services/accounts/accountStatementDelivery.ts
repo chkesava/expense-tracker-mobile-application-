@@ -1,8 +1,4 @@
-import { Directory, File, Paths } from "expo-file-system";
-import * as Print from "expo-print";
-import * as Sharing from "expo-sharing";
-import { Platform } from "react-native";
-
+import { deliverCsv, deliverPdf } from "@/services/export/fileDelivery";
 import type { AccountStatement } from "@/shared/utils/accountStatement";
 import {
   statementFileName,
@@ -13,115 +9,38 @@ import {
 /**
  * Turning an account statement into a file the user can keep (SPENDLY-79).
  *
- * Files, not `Share.share({ message })`: a statement shared as message text
- * loses its `.csv` association, mangles anything long, and cannot carry a PDF
- * at all. A statement should arrive as a document.
+ * SPENDLY-113 moved the write-and-share mechanics into
+ * `services/export/fileDelivery`, which this module had been the reference
+ * implementation for. The behaviour is unchanged except that the share sheet
+ * now receives a real UTI for CSV rather than a MIME type in the UTI slot.
  *
  * Rendering is pure and lives in `accountStatementExport`; this module only
- * writes and hands over, so everything worth testing is testable without a
+ * picks the file name, so everything worth testing is testable without a
  * device.
  */
 
-/**
- * Where the statement lands.
- *
- * `Paths.document`, not cache: the OS may reclaim cache between writing the
- * file and the user picking an app in the share sheet, and a statement that
- * vanishes mid-share is worse than one that never generated.
- */
-function statementsDirectory(): Directory {
-  const dir = new Directory(Paths.document, "account-statements");
-  dir.create({ idempotent: true });
-  return dir;
-}
-
-async function shareFile(
-  uri: string,
-  mimeType: string,
-  title: string
-): Promise<void> {
-  if (!(await Sharing.isAvailableAsync())) {
-    throw new Error("Sharing is not available on this device.");
-  }
-  await Sharing.shareAsync(uri, { mimeType, dialogTitle: title, UTI: mimeType });
-}
-
-/**
- * Hand the CSV to the browser as a download.
- *
- * There is no document directory and no share sheet on web, so an object URL
- * on a synthetic anchor is the route that actually produces a `.csv` file the
- * user keeps.
- */
-function downloadCsvOnWeb(statement: AccountStatement): void {
-  const blob = new Blob([`﻿${statementToCsv(statement)}`], {
-    type: "text/csv;charset=utf-8",
-  });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = statementFileName(statement, "csv");
-  anchor.click();
-  // Revoking immediately can cancel the download in some browsers; one tick is
-  // enough for the click to have been taken up.
-  setTimeout(() => URL.revokeObjectURL(url), 0);
-}
+const DIRECTORY = "account-statements";
 
 /** Write the CSV and open the share sheet. Returns the file's uri. */
 export async function exportStatementCsv(
   statement: AccountStatement
 ): Promise<string | undefined> {
-  if (Platform.OS === "web") {
-    downloadCsvOnWeb(statement);
-    return undefined;
-  }
-
-  const file = new File(statementsDirectory(), statementFileName(statement, "csv"));
-  if (file.exists) file.delete();
-  file.create();
-  // UTF-8 with a BOM: without it Excel on Windows renders the currency symbol
-  // and any non-Latin merchant name as mojibake, and those are exactly the
-  // lines a person checks one by one.
-  file.write(`﻿${statementToCsv(statement)}`);
-  await shareFile(file.uri, "text/csv", "Share statement");
-  return file.uri;
+  return deliverCsv({
+    content: statementToCsv(statement),
+    fileName: statementFileName(statement, "csv"),
+    directory: DIRECTORY,
+    title: "Share statement",
+  });
 }
 
-/**
- * Render the PDF and hand it over.
- *
- * On web there is no share sheet and no document directory, so the print
- * dialog is the honest route — it offers "Save as PDF" and prints the same
- * HTML.
- */
+/** Render the PDF and hand it over. */
 export async function exportStatementPdf(
   statement: AccountStatement
 ): Promise<string | undefined> {
-  const html = statementToHtml(statement);
-
-  if (Platform.OS === "web") {
-    await Print.printAsync({ html });
-    return undefined;
-  }
-
-  const { uri } = await Print.printToFileAsync({ html });
-
-  // printToFileAsync names the file with a random id, which is useless in a
-  // mail thread six months later. Rename to something self-describing.
-  try {
-    const source = new File(uri);
-    const target = new File(
-      statementsDirectory(),
-      statementFileName(statement, "pdf")
-    );
-    if (target.exists) target.delete();
-    source.move(target);
-    await shareFile(target.uri, "application/pdf", "Share statement");
-    return target.uri;
-  } catch {
-    // A failed rename is not worth losing the document over — share the
-    // original rather than making the user generate it again.
-    await shareFile(uri, "application/pdf", "Share statement");
-    return uri;
-  }
+  return deliverPdf({
+    html: statementToHtml(statement),
+    fileName: statementFileName(statement, "pdf"),
+    directory: DIRECTORY,
+    title: "Share statement",
+  });
 }
