@@ -15,6 +15,7 @@ import {
   validateRepayment,
 } from "@/shared/utils/borrowingMath";
 import {
+  allocateReceivableRepayment,
   summarizeReceivable,
   validateReceivableRepayment,
 } from "@/shared/utils/receivableMath";
@@ -139,6 +140,7 @@ export function createMemoryLedger(uid: string): MemoryLedger {
       ...receivable,
       totalReceived: summary.totalReceived,
       outstandingAmount: summary.outstandingAmount,
+      accruedInterest: summary.interestAccrued,
       status: summary.status,
       settledDate: summary.settledDate,
     });
@@ -318,11 +320,16 @@ export function createMemoryLedger(uid: string): MemoryLedger {
         return { ok: false, error: validation.error ?? "Invalid repayment." };
       }
 
+      // Mirrors the provider: interest is cleared before principal, and the
+      // split is recorded so the ledger stays deterministic (SPENDLY-160).
+      const allocation = allocateReceivableRepayment(input.amount, summary);
       const repaymentId = id("rrp");
       const row: ReceivableRepayment = {
         ...input,
         id: repaymentId,
         month: monthFromDateKey(input.date),
+        principalComponent: allocation.principalComponent,
+        interestComponent: allocation.interestComponent,
         createdAt: input.date,
       };
 
