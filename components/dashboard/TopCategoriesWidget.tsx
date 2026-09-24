@@ -11,7 +11,7 @@ import { PieChart } from "lucide-react-native";
 import { Amount } from "@/components/common/Amount";
 import { EmptyState } from "@/components/common/EmptyState";
 import {
-  CATEGORY_RAMP,
+  categoryRamp,
   MetaLabel,
   Section,
   useSurfaces,
@@ -77,9 +77,7 @@ export function TopCategoriesWidget({
   }, [expenses]);
 
   /** Darkest = largest share; ramp carries no positive/negative meaning. */
-  const barColors = surfaces.isDark
-    ? [theme.colors.foreground, ...CATEGORY_RAMP.slice(1)]
-    : CATEGORY_RAMP;
+  const barColors = categoryRamp(theme.colors);
 
   if (categories.length === 0) {
     return (

@@ -1,4 +1,6 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
+
+import { Chip } from "@/components/ui/Chip";
 import { ArrowDownLeft, ArrowUpRight, Calendar } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
@@ -8,7 +10,6 @@ import {
   Section,
   useSurfaces,
 } from "@/components/dashboard/primitives";
-import { haptic } from "@/lib/haptics";
 import { useTheme } from "@/theme/ThemeProvider";
 
 export interface OverviewWidgetProps {
@@ -43,33 +44,15 @@ export function OverviewWidget({
     <Section
       title="Total Net Balance"
       action={
-        <Pressable
-          onPress={() => {
-            void haptic.selection();
-            onOpenMonthPicker();
-          }}
-          hitSlop={6}
-          style={({ pressed }) => [
-            styles.monthChip,
-            { backgroundColor: surfaces.tile },
-            pressed && { opacity: 0.7 },
-          ]}
-          accessibilityRole="button"
+        <Chip
+          size="sm"
+          label={activeMonth}
+          onPress={onOpenMonthPicker}
           accessibilityLabel={`Change month, currently ${activeMonth}`}
-        >
-          <Calendar size={12} color={theme.colors.mutedForeground} strokeWidth={2.2} />
-          <Text
-            style={[
-              styles.monthChipText,
-              {
-                color: theme.colors.mutedForeground,
-                fontFamily: theme.fontFamily.medium,
-              },
-            ]}
-          >
-            {activeMonth}
-          </Text>
-        </Pressable>
+          icon={() => (
+            <Calendar size={12} color={theme.colors.mutedForeground} strokeWidth={2.2} />
+          )}
+        />
       }
     >
       {/* The single largest number on the dashboard. */}
@@ -162,18 +145,6 @@ export function OverviewWidget({
 }
 
 const styles = StyleSheet.create({
-  monthChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    minHeight: 32,
-  },
-  monthChipText: {
-    fontSize: 12,
-  },
   heroBlock: {
     gap: 2,
     marginBottom: 16,

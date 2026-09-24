@@ -7,7 +7,9 @@
  * for dashboard surfaces so every section shares one radius scale, one border
  * treatment, one type hierarchy, and semantic-only colour.
  *
- * `Card` is still used by the rest of the app and is intentionally untouched.
+ * Since SPENDLY-152 `Section` renders through the canonical `Card` and
+ * `SectionAction` through the canonical `Button`, so the dashboard shares the
+ * app's surfaces while keeping its own radius scale and type hierarchy.
  */
 
 import React, { type ReactNode } from "react";
@@ -22,6 +24,8 @@ import {
 } from "react-native";
 import { ChevronRight } from "lucide-react-native";
 
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
 import { haptic } from "@/lib/haptics";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useSurfaces } from "@/theme/surfaces";
@@ -51,21 +55,15 @@ export type Tone =
 
 type Colors = ReturnType<typeof useTheme>["theme"]["colors"];
 
-/** Purple secondary accent, per the Vault identity. */
-export const ACCENT_PURPLE = "#7C5CFC";
-
 /**
  * Non-semantic ramp for category bars. Deliberately excludes the success green
  * and destructive red so a large category never reads as "good" or "bad".
+ * The two leading stops follow the theme (ink, then the user's accent); the
+ * tail is a fixed data-viz ramp.
  */
-export const CATEGORY_RAMP = [
-  "#1E293B",
-  ACCENT_PURPLE,
-  "#EC4899",
-  "#F59E0B",
-  "#0EA5E9",
-  "#14B8A6",
-] as const;
+export function categoryRamp(colors: Colors): string[] {
+  return [colors.foreground, colors.primary, "#EC4899", "#F59E0B", "#0EA5E9", "#14B8A6"];
+}
 
 export function toneColor(colors: Colors, tone: Tone = "default"): string {
   switch (tone) {
@@ -78,7 +76,7 @@ export function toneColor(colors: Colors, tone: Tone = "default"): string {
     case "warning":
       return colors.warning;
     case "accent":
-      return ACCENT_PURPLE;
+      return colors.primary;
     case "info":
       return colors.info;
     default:
@@ -135,23 +133,8 @@ export function Section({
 
   const hasHeader = Boolean(title || subtitle || icon || action || badge);
 
-  return (
-    <View
-      testID={testID}
-      style={[
-        plain
-          ? null
-          : {
-              backgroundColor: theme.colors.card,
-              borderRadius: DASH_RADIUS.section,
-              borderCurve: "continuous",
-              borderWidth: StyleSheet.hairlineWidth,
-              borderColor: surfaces.divider,
-              padding: DASH_SPACE.sectionPadding,
-            },
-        style,
-      ]}
-    >
+  const body = (
+    <>
       {hasHeader ? (
         <View style={styles.header}>
           <View style={styles.headerLeft}>
@@ -209,7 +192,28 @@ export function Section({
           {footer}
         </View>
       ) : null}
-    </View>
+    </>
+  );
+
+  if (plain) {
+    return (
+      <View testID={testID} style={style}>
+        {body}
+      </View>
+    );
+  }
+
+  return (
+    <Card
+      testID={testID}
+      variant="outlined"
+      elevation={0}
+      radius={DASH_RADIUS.section}
+      style={[styles.sectionSurface, style]}
+      contentStyle={styles.sectionContent}
+    >
+      {body}
+    </Card>
   );
 }
 
@@ -230,13 +234,16 @@ export function SectionAction({
   const color = tone === "accent" ? theme.colors.primary : toneColor(theme.colors, tone);
 
   return (
-    <Pressable
+    <Button
+      variant="text"
+      size="sm"
+      haptic={false}
       onPress={() => {
         void haptic.selection();
         onPress();
       }}
       hitSlop={8}
-      style={({ pressed }) => [styles.action, pressed && { opacity: 0.6 }]}
+      style={styles.action}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? label}
     >
@@ -249,7 +256,7 @@ export function SectionAction({
         {label}
       </Text>
       <ChevronRight size={14} color={color} strokeWidth={2.4} />
-    </Pressable>
+    </Button>
   );
 }
 
@@ -447,7 +454,7 @@ export function DataRow({
         onPress();
       }}
       android_ripple={{
-        color: surfaces.isDark ? "rgba(255,255,255,0.06)" : "rgba(15,23,42,0.05)",
+        color: surfaces.control,
         borderless: false,
       }}
       style={({ pressed }) => [rowStyle, pressed && { opacity: 0.85 }]}
@@ -638,11 +645,21 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
+  sectionSurface: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderCurve: "continuous",
+  },
+  sectionContent: {
+    padding: DASH_SPACE.sectionPadding,
+  },
   action: {
     flexDirection: "row",
     alignItems: "center",
     gap: 1,
+    height: 32,
     minHeight: 32,
+    paddingHorizontal: 0,
+    backgroundColor: "transparent",
   },
   actionLabel: {
     fontSize: 13,

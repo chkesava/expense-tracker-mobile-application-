@@ -1,5 +1,5 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
-import { ChevronRight, Receipt } from "lucide-react-native";
+import { StyleSheet, Text, View } from "react-native";
+import { Receipt } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -10,7 +10,6 @@ import {
   SectionAction,
   useSurfaces,
 } from "@/components/dashboard/primitives";
-import { haptic } from "@/lib/haptics";
 import type { Expense } from "@/shared/types/expense";
 import { useTheme } from "@/theme/ThemeProvider";
 
@@ -44,28 +43,9 @@ export function RecentActivityWidget({
       action={hasMore ? <SectionAction label="View all" onPress={onViewAll} /> : null}
       footer={
         hasMore ? (
-          <Pressable
-            onPress={() => {
-              void haptic.selection();
-              onViewAll();
-            }}
-            style={({ pressed }) => [styles.seeAll, pressed && { opacity: 0.6 }]}
-            accessibilityRole="button"
-            accessibilityLabel="See all transactions"
-          >
-            <Text
-              style={[
-                styles.seeAllText,
-                {
-                  color: theme.colors.primary,
-                  fontFamily: theme.fontFamily.semibold,
-                },
-              ]}
-            >
-              See all transactions
-            </Text>
-            <ChevronRight size={14} color={theme.colors.primary} strokeWidth={2.4} />
-          </Pressable>
+          <View style={styles.seeAll}>
+            <SectionAction label="See all transactions" onPress={onViewAll} />
+          </View>
         ) : null
       }
     >
@@ -132,8 +112,5 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 2,
     minHeight: 32,
-  },
-  seeAllText: {
-    fontSize: 13,
   },
 });
