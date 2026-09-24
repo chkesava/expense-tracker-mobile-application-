@@ -1,3 +1,4 @@
+import { csvField, csvRow, joinCsvLines } from "@/shared/utils/csv";
 import type { GaneshReport } from "@/shared/utils/ganeshReportBuilder";
 
 /**
@@ -11,17 +12,7 @@ import type { GaneshReport } from "@/shared/utils/ganeshReportBuilder";
  * CSV — for a spreadsheet
  * ------------------------------------------------------------------ */
 
-/** RFC-4180. */
-function csvField(value: unknown): string {
-  if (value === null || value === undefined) return "";
-  const text = String(value);
-  if (/[",\n\r]/.test(text)) return `"${text.replace(/"/g, '""')}"`;
-  return text;
-}
-
-function csvRow(cells: unknown[]): string {
-  return cells.map(csvField).join(",");
-}
+/** SPENDLY-113 — escaping and the injection guard come from the shared writer. */
 
 /**
  * Transaction-level CSV, with the report's own context in the file.
@@ -155,7 +146,7 @@ export function reportToCsv(report: GaneshReport): string {
     }
   }
 
-  return lines.join("\r\n");
+  return joinCsvLines(lines);
 }
 
 /* ------------------------------------------------------------------ *

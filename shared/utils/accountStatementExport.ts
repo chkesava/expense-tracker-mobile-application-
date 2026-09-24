@@ -1,3 +1,4 @@
+import { csvField, csvNumber, csvRow, joinCsvLines } from "./csv";
 import { formatAmount } from "./formatCurrency";
 import type { AccountStatement, AccountStatementRow } from "./accountStatement";
 
@@ -12,22 +13,12 @@ import type { AccountStatement, AccountStatementRow } from "./accountStatement";
  * CSV — for a spreadsheet
  * ------------------------------------------------------------------ */
 
-/** RFC-4180. */
-function csvField(value: unknown): string {
-  if (value === null || value === undefined) return "";
-  const text = String(value);
-  if (/[",\n\r]/.test(text)) return `"${text.replace(/"/g, '""')}"`;
-  return text;
-}
-
-function csvRow(cells: unknown[]): string {
-  return cells.map(csvField).join(",");
-}
-
-/** Blank rather than 0: an empty cell says "not this side of the ledger". */
-function money(value: number | undefined): string {
-  return value === undefined ? "" : String(value);
-}
+/**
+ * SPENDLY-113 — escaping, the formula-injection guard and the line ending all
+ * come from the shared writer now. `money` is `csvNumber` under its old name,
+ * kept as a local alias so the column code below reads unchanged.
+ */
+const money = csvNumber;
 
 function accountLine(statement: AccountStatement): string {
   const { name, institution, last4 } = statement.account;
@@ -107,7 +98,7 @@ export function statementToCsv(statement: AccountStatement): string {
     );
   }
 
-  return lines.join("\r\n");
+  return joinCsvLines(lines);
 }
 
 /* ------------------------------------------------------------------ *
