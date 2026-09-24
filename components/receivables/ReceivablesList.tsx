@@ -52,6 +52,7 @@ export function ReceivablesList() {
     addRepayment,
     deleteRepayment,
     markSettled,
+    waiveInterest,
     cancelReceivable,
   } = useReceivables();
 
@@ -173,6 +174,14 @@ export function ReceivablesList() {
               />
             </View>
           </View>
+
+          {portfolio.totalInterest > 0 ? (
+            <Text
+              style={[styles.overdueNote, { color: theme.colors.mutedForeground }]}
+            >
+              Includes {portfolio.totalInterest} of accrued interest
+            </Text>
+          ) : null}
 
           {portfolio.overdueCount > 0 ? (
             <Text style={[styles.overdueNote, { color: "#EF4444" }]}>
@@ -310,6 +319,7 @@ export function ReceivablesList() {
         onDeleteRepayment={deleteRepayment}
         onUpdateReceivable={updateReceivable}
         onMarkSettled={markSettled}
+        onWaiveInterest={waiveInterest}
         onCancelReceivable={cancelReceivable}
         onDeleteReceivable={async (id) => {
           const ok = await deleteReceivable(id);

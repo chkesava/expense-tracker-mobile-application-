@@ -24,7 +24,26 @@ Person is free-text (`personName` + `personType`). Optional `spaceId` can link a
 lend into a Spending Space without mixing it into expense spend.
 
 Outstanding and status are denormalized for list filters; `summarizeReceivable`
-is authoritative for display. No interest in v1.
+is authoritative for display.
+
+Interest arrived in SPENDLY-160, on the same terms money borrowed already used:
+rate, type, frequency and basis, accruing through the shared engine in
+`shared/utils/interestMath.ts`. The fields are optional, unlike the borrowing
+side where they are required — receivables shipped without them, so a document
+that carries none reads as interest-free, which is what it was. That is why no
+backfill was needed.
+
+`outstandingAmount` is principal plus outstanding interest. It kept its name
+rather than becoming `totalOutstanding` because it is a stored field and the
+scalar net worth reads; widening its meaning left `netWorth.ts` and every
+existing document untouched.
+
+Interest stops at `interestStoppedDate`, stamped when a receivable is cancelled
+or its remaining interest waived. Without it a write-off would keep climbing,
+and waived interest would re-accrue and re-open the receivable.
+
+Cash is principal-only: `computeBankBalance` moves `originalAmount` out when the
+money is lent, because accrued interest never left an account.
 
 ## Accounting
 

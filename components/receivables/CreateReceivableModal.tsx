@@ -9,8 +9,14 @@ import { useAccounts } from "@/hooks/useAccounts";
 import type { CreateReceivableInput } from "@/hooks/useReceivables";
 import { useSpaces } from "@/hooks/useSpaces";
 import {
+  INTEREST_BASES,
+  INTEREST_BASIS_LABELS,
+  INTEREST_FREQUENCIES,
+  INTEREST_FREQUENCY_LABELS,
   PERSON_TYPES,
   PERSON_TYPE_LABELS,
+  type InterestBasis,
+  type InterestFrequency,
   type PersonType,
 } from "@/shared/types/receivable";
 import { isValidDateKey, todayDateKey } from "@/shared/utils/dates";
@@ -44,6 +50,14 @@ export function CreateReceivableModal({
   const [dueDate, setDueDate] = useState("");
   const [purpose, setPurpose] = useState("");
   const [note, setNote] = useState("");
+  // Defaults to interest-free, unlike the borrowing form's ANNUAL: lending to a
+  // friend usually is, and the ordinary flow should look untouched (SPENDLY-160).
+  const [interestFrequency, setInterestFrequency] =
+    useState<InterestFrequency>("NONE");
+  const [interestRate, setInterestRate] = useState("");
+  const [interestBasis, setInterestBasis] = useState<InterestBasis>(
+    "OUTSTANDING_PRINCIPAL"
+  );
   const [spaceId, setSpaceId] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -94,9 +108,16 @@ export function CreateReceivableModal({
       return;
     }
 
+    const isInterestFree = interestFrequency === "NONE";
+    const numRate = isInterestFree ? 0 : Number(interestRate) || 0;
+
     setIsSubmitting(true);
     try {
       const created = await onSubmit({
+        interestRate: numRate,
+        interestType: isInterestFree || numRate <= 0 ? "NONE" : "SIMPLE",
+        interestFrequency,
+        interestBasis,
         personType,
         personName: personName.trim(),
         originalAmount: numAmount,
@@ -265,6 +286,81 @@ export function CreateReceivableModal({
             placeholder="Any additional details"
           />
         </View>
+
+        <View style={styles.group}>
+          <Text style={[styles.label, { color: theme.colors.foreground }]}>
+            Interest
+          </Text>
+          <View style={styles.pillWrap}>
+            {INTEREST_FREQUENCIES.map((freq) => {
+              const isActive = interestFrequency === freq;
+              return (
+                <Pressable
+                  key={freq}
+                  onPress={() => {
+                    haptic.selection().catch(() => undefined);
+                    setInterestFrequency(freq);
+                  }}
+                  style={[styles.pill, pillStyle(isActive)]}
+                >
+                  <Text style={[styles.pillText, pillTextStyle(isActive)]}>
+                    {INTEREST_FREQUENCY_LABELS[freq]}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+
+        {interestFrequency === "NONE" ? null : (
+          <>
+            <View style={styles.group}>
+              <Text style={[styles.label, { color: theme.colors.foreground }]}>
+                Interest Rate (%)
+              </Text>
+              <Input
+                value={interestRate}
+                onChangeText={setInterestRate}
+                placeholder={
+                  interestFrequency === "MONTHLY" ? "e.g. 1" : "e.g. 12"
+                }
+                keyboardType="decimal-pad"
+              />
+            </View>
+
+            <View style={styles.group}>
+              <Text style={[styles.label, { color: theme.colors.foreground }]}>
+                Charged On
+              </Text>
+              <View style={styles.pillWrap}>
+                {INTEREST_BASES.map((basis) => {
+                  const isActive = interestBasis === basis;
+                  return (
+                    <Pressable
+                      key={basis}
+                      onPress={() => {
+                        haptic.selection().catch(() => undefined);
+                        setInterestBasis(basis);
+                      }}
+                      style={[styles.pill, pillStyle(isActive)]}
+                    >
+                      <Text style={[styles.pillText, pillTextStyle(isActive)]}>
+                        {INTEREST_BASIS_LABELS[basis]}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              <Text
+                style={[styles.helper, { color: theme.colors.mutedForeground }]}
+              >
+                {interestBasis === "ORIGINAL_PRINCIPAL"
+                  ? "Interest always charged on the full amount lent."
+                  : "Interest charged only on what is still owed."}
+              </Text>
+            </View>
+          </>
+        )}
 
         {activeSpaces.length > 0 ? (
           <View style={styles.group}>
