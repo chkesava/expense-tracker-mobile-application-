@@ -31,6 +31,7 @@ export function SettingsHubRow({
   subtitle,
   icon: Icon,
   onPress,
+  selected = false,
 }: {
   title: string;
   subtitle: string;
@@ -40,9 +41,12 @@ export function SettingsHubRow({
     strokeWidth?: number;
   }>;
   onPress: () => void;
+  /** Marks the row as the current destination (SPENDLY-137's sections sheet). */
+  selected?: boolean;
 }) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
+  const accent = isDark ? ACCOUNT_GREEN : theme.colors.success;
 
   return (
     <Pressable
@@ -54,12 +58,17 @@ export function SettingsHubRow({
         styles.row,
         {
           backgroundColor: isDark ? "#10141C" : theme.colors.card,
-          borderColor: isDark ? "rgba(148, 163, 184, 0.12)" : theme.colors.border,
+          borderColor: selected
+            ? accent
+            : isDark
+              ? "rgba(148, 163, 184, 0.12)"
+              : theme.colors.border,
           opacity: pressed ? 0.92 : 1,
         },
       ]}
       accessibilityRole="button"
       accessibilityLabel={title}
+      accessibilityState={{ selected }}
     >
       <View
         style={[
