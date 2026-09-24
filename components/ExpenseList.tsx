@@ -79,6 +79,8 @@ export interface ExpenseListProps {
   cashFlowById?: Map<string, number>;
   refreshing?: boolean;
   onRefresh?: () => void;
+  listHeader?: React.ReactNode;
+  emptyState?: React.ReactNode;
 }
 
 type CombinedTransaction =
@@ -119,6 +121,8 @@ export function ExpenseList({
   cashFlowById,
   refreshing,
   onRefresh,
+  listHeader,
+  emptyState,
 }: ExpenseListProps) {
   const router = useRouter();
   const { theme, themeName } = useTheme();
@@ -596,37 +600,6 @@ export function ExpenseList({
     [formatHeaderDate, renderTxRow, displayCurrency, theme]
   );
 
-  if (combinedTransactions.length === 0) {
-    return (
-      <PageListStateScroll>
-        <EmptyState
-          illustration="expenses"
-          title="No Expenses Yet"
-          description="Track your first expense to begin understanding your spending habits and category breakdowns."
-          primaryAction={{
-            label: "Add Expense",
-            icon: <Plus size={16} color="#FFFFFF" strokeWidth={2.4} />,
-            onPress: () => {
-              if (onAddExpense) {
-                onAddExpense();
-              } else {
-                router.dismissTo("/dashboard");
-              }
-            },
-          }}
-          secondaryAction={{
-            label: "Scan Receipt",
-            icon: <ScanLine size={16} color={theme.colors.primary} strokeWidth={2} />,
-            onPress: () => {
-              router.dismissTo("/dashboard");
-            },
-          }}
-          tip="Quick-add cash expenses in under 3 seconds using the bottom dock '+' button anytime."
-        />
-      </PageListStateScroll>
-    );
-  }
-
   const selectedAcc = selectedTx?.data.accountId
     ? accountMap.get(selectedTx.data.accountId)
     : undefined;
@@ -729,76 +702,109 @@ export function ExpenseList({
         }
         contentContainerStyle={{ paddingBottom: listBottomPadding }}
         ListHeaderComponent={
-          showMonthSummary ? (
-            <View
-              style={[
-                styles.summaryCard,
-                theme.elevation[1],
-                {
-                  backgroundColor: theme.colors.card,
-                  borderColor: theme.colors.border,
+          <>
+            {listHeader}
+            {showMonthSummary ? (
+              <View
+                style={[
+                  styles.summaryCard,
+                  theme.elevation[1],
+                  {
+                    backgroundColor: theme.colors.card,
+                    borderColor: theme.colors.border,
+                  },
+                ]}
+              >
+                <View style={styles.summaryCol}>
+                  <Text
+                    style={[styles.summaryLabel, { color: theme.colors.mutedForeground }]}
+                  >
+                    Spent
+                  </Text>
+                  <Amount
+                    value={totals.totalSpent}
+                    currency={displayCurrency}
+                    ghostable
+                    style={{
+                      fontSize: theme.typography.md,
+                      fontWeight: "800",
+                      color: theme.colors.destructive,
+                    }}
+                  />
+                </View>
+
+                <View style={[styles.summaryDivider, { backgroundColor: theme.colors.border }]} />
+
+                <View style={styles.summaryCol}>
+                  <Text
+                    style={[styles.summaryLabel, { color: theme.colors.mutedForeground }]}
+                  >
+                    Income
+                  </Text>
+                  <Amount
+                    value={totals.totalIncome}
+                    currency={displayCurrency}
+                    ghostable
+                    style={{
+                      fontSize: theme.typography.md,
+                      fontWeight: "800",
+                      color: theme.colors.success,
+                    }}
+                  />
+                </View>
+
+                <View style={[styles.summaryDivider, { backgroundColor: theme.colors.border }]} />
+
+                <View style={styles.summaryCol}>
+                  <Text
+                    style={[styles.summaryLabel, { color: theme.colors.mutedForeground }]}
+                  >
+                    Net
+                  </Text>
+                  <Amount
+                    value={totals.net}
+                    currency={displayCurrency}
+                    ghostable
+                    style={{
+                      fontSize: theme.typography.md,
+                      fontWeight: "800",
+                      color: totals.net >= 0 ? theme.colors.success : theme.colors.destructive,
+                    }}
+                  />
+                </View>
+              </View>
+            ) : null}
+          </>
+        }
+        ListEmptyComponent={
+          emptyState ? (
+            <>{emptyState}</>
+          ) : (
+            <EmptyState
+              illustration="expenses"
+              title="No Expenses Yet"
+              description="Track your first expense to begin understanding your spending habits and category breakdowns."
+              primaryAction={{
+                label: "Add Expense",
+                icon: <Plus size={16} color="#FFFFFF" strokeWidth={2.4} />,
+                onPress: () => {
+                  if (onAddExpense) {
+                    onAddExpense();
+                  } else {
+                    router.dismissTo("/dashboard");
+                  }
                 },
-              ]}
-            >
-              <View style={styles.summaryCol}>
-                <Text
-                  style={[styles.summaryLabel, { color: theme.colors.mutedForeground }]}
-                >
-                  Spent
-                </Text>
-                <Amount
-                  value={totals.totalSpent}
-                  currency={displayCurrency}
-                  ghostable
-                  style={{
-                    fontSize: theme.typography.md,
-                    fontWeight: "800",
-                    color: theme.colors.destructive,
-                  }}
-                />
-              </View>
-
-              <View style={[styles.summaryDivider, { backgroundColor: theme.colors.border }]} />
-
-              <View style={styles.summaryCol}>
-                <Text
-                  style={[styles.summaryLabel, { color: theme.colors.mutedForeground }]}
-                >
-                  Income
-                </Text>
-                <Amount
-                  value={totals.totalIncome}
-                  currency={displayCurrency}
-                  ghostable
-                  style={{
-                    fontSize: theme.typography.md,
-                    fontWeight: "800",
-                    color: theme.colors.success,
-                  }}
-                />
-              </View>
-
-              <View style={[styles.summaryDivider, { backgroundColor: theme.colors.border }]} />
-
-              <View style={styles.summaryCol}>
-                <Text
-                  style={[styles.summaryLabel, { color: theme.colors.mutedForeground }]}
-                >
-                  Net
-                </Text>
-                <Amount
-                  value={totals.net}
-                  currency={displayCurrency}
-                  ghostable
-                  style={{
-                    fontSize: theme.typography.md,
-                    fontWeight: "800",
-                    color: totals.net >= 0 ? theme.colors.success : theme.colors.destructive,
-                  }}
-                />
-              </View>
-            </View>
-          ) : null
+              }}
+              secondaryAction={{
+                label: "Scan Receipt",
+                icon: <ScanLine size={16} color={theme.colors.primary} strokeWidth={2} />,
+                onPress: () => {
+                  router.dismissTo("/dashboard");
+                },
+              }}
+              tip="Quick-add cash expenses in under 3 seconds using the bottom dock '+' button anytime."
+            />
+          )
         }
         renderItem={renderListItem}
       />
