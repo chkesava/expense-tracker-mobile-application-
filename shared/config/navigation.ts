@@ -24,10 +24,10 @@ export const CORE_NAV_ITEMS: NavigationItem[] = [
   },
   {
     id: "ledger",
-    translationKey: "nav_expenses",
+    translationKey: "nav_money",
     path: "/ledger",
-    label: "Transactions",
-    mobileLabel: "Transactions",
+    label: "Money",
+    mobileLabel: "Money",
     includeInBottomNav: true,
     includeInDrawer: true,
   },

@@ -523,8 +523,8 @@ export default function LedgerScreen() {
 
   const pageHeader = (
       <PageHeader
-        title="Transactions"
-        subtitle="Journal, accounts & bills"
+        title="Money"
+        subtitle="Activity, accounts & bills"
         icon={<Wallet size={22} color={isDark ? "#FFFFFF" : theme.colors.success} />}
         activeTab={ledgerTab}
         onTabChange={(tab) => setLedgerTab(tab as LedgerTab)}
