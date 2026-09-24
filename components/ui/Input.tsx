@@ -1,15 +1,7 @@
-import { useState } from "react";
-import {
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-  type StyleProp,
-  type TextInputProps,
-  type ViewStyle,
-} from "react-native";
-
-import { useTheme } from "@/theme/ThemeProvider";
+import React from "react";
+import { type StyleProp, type TextInputProps, type ViewStyle, View } from "react-native";
+import { Input as GluestackInput, InputField as GluestackInputField, InputSlot as GluestackInputSlot } from "@/components/ui/input/index";
+import { FormControl as GluestackFormControl, FormControlLabel as GluestackFormControlLabel, FormControlLabelText as GluestackFormControlLabelText, FormControlError as GluestackFormControlError, FormControlErrorText as GluestackFormControlErrorText, FormControlHelper as GluestackFormControlHelper, FormControlHelperText as GluestackFormControlHelperText } from "@/components/ui/form-control/index";
 
 export type InputProps = TextInputProps & {
   label?: string;
@@ -30,138 +22,49 @@ export function Input({
   containerStyle,
   onFocus,
   onBlur,
+  editable,
   ...props
 }: InputProps) {
-  const { theme } = useTheme();
-  const [focused, setFocused] = useState(false);
-
-  const isError = Boolean(error);
-  const borderColor = isError
-    ? theme.colors.destructive
-    : focused
-      ? theme.colors.primary
-      : theme.colors.outline ?? theme.colors.border;
-
-  const borderWidth = focused || isError ? 2 : 1;
+  const isInvalid = Boolean(error);
+  const isDisabled = editable === false;
 
   return (
-    <View style={[styles.wrap, containerStyle]}>
-      {label ? (
-        <Text
-          style={[
-            styles.label,
-            {
-              color: isError
-                ? theme.colors.destructive
-                : focused
-                  ? theme.colors.primary
-                  : theme.colors.mutedForeground,
-              fontFamily: theme.fontFamily.medium,
-            },
-          ]}
-        >
-          {label}
-        </Text>
-      ) : null}
-
-      <View
-        style={[
-          styles.inputContainer,
-          {
-            borderColor,
-            borderWidth,
-            backgroundColor: theme.colors.card,
-            borderRadius: theme.radius.md,
-          },
-        ]}
-      >
-        {leadingIcon ? <View style={styles.iconSlot}>{leadingIcon}</View> : null}
-
-        <TextInput
-          placeholderTextColor={theme.colors.mutedForeground}
-          accessibilityLabel={label ?? props.placeholder}
+    <GluestackFormControl isInvalid={isInvalid} isDisabled={isDisabled} style={containerStyle as any}>
+      {label && (
+        <GluestackFormControlLabel className="mb-1">
+          <GluestackFormControlLabelText>{label}</GluestackFormControlLabelText>
+        </GluestackFormControlLabel>
+      )}
+      
+      <GluestackInput className="min-h-[52px]">
+        {leadingIcon && (
+          <GluestackInputSlot className="pl-3">
+            {leadingIcon}
+          </GluestackInputSlot>
+        )}
+        <GluestackInputField
+          onFocus={onFocus as any}
+          onBlur={onBlur as any}
+          editable={editable}
+          style={style as any}
           {...props}
-          onFocus={(e) => {
-            setFocused(true);
-            onFocus?.(e);
-          }}
-          onBlur={(e) => {
-            setFocused(false);
-            onBlur?.(e);
-          }}
-          style={[
-            styles.textInput,
-            {
-              color: theme.colors.foreground,
-              fontSize: theme.typography.md,
-              fontFamily: theme.fontFamily.regular,
-            },
-            style,
-          ]}
         />
-
-        {trailingIcon ? <View style={styles.iconSlot}>{trailingIcon}</View> : null}
-      </View>
+        {trailingIcon && (
+          <GluestackInputSlot className="pr-3">
+            {trailingIcon}
+          </GluestackInputSlot>
+        )}
+      </GluestackInput>
 
       {error ? (
-        <Text
-          style={[
-            styles.helperText,
-            {
-              color: theme.colors.destructive,
-              fontFamily: theme.fontFamily.medium,
-            },
-          ]}
-        >
-          {error}
-        </Text>
+        <GluestackFormControlError>
+          <GluestackFormControlErrorText>{error}</GluestackFormControlErrorText>
+        </GluestackFormControlError>
       ) : helperText ? (
-        <Text
-          style={[
-            styles.helperText,
-            {
-              color: theme.colors.mutedForeground,
-              fontFamily: theme.fontFamily.regular,
-            },
-          ]}
-        >
-          {helperText}
-        </Text>
+        <GluestackFormControlHelper>
+          <GluestackFormControlHelperText>{helperText}</GluestackFormControlHelperText>
+        </GluestackFormControlHelper>
       ) : null}
-    </View>
+    </GluestackFormControl>
   );
 }
-
-const styles = StyleSheet.create({
-  wrap: {
-    width: "100%",
-    gap: 4,
-  },
-  label: {
-    fontSize: 13,
-    letterSpacing: 0.2,
-    marginLeft: 2,
-  },
-  inputContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    minHeight: 52,
-    paddingHorizontal: 16,
-    overflow: "hidden",
-  },
-  textInput: {
-    flex: 1,
-    paddingVertical: 12,
-    minHeight: 48,
-  },
-  iconSlot: {
-    marginHorizontal: 4,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  helperText: {
-    fontSize: 12,
-    marginTop: 2,
-    marginLeft: 4,
-  },
-});

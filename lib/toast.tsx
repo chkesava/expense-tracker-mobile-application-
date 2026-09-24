@@ -16,6 +16,7 @@ import {
   AlertTriangle,
   type LucideIcon,
 } from "lucide-react-native";
+import { Toast as GluestackToast, ToastTitle as GluestackToastTitle } from "@/components/ui/toast/index";
 
 import { useTheme } from "@/theme/ThemeProvider";
 import { haptic } from "@/lib/haptics";
@@ -162,31 +163,13 @@ function ToastViewport({
     >
       {items.map((item) => {
         const Icon = kindIcon(item.kind);
+        const mappedAction = item.kind === "message" ? "muted" : item.kind;
         return (
-          <Pressable
-            key={item.id}
-            onPress={() => onDismiss(item.id)}
-            accessibilityRole="alert"
-            style={[
-              styles.toast,
-              theme.elevation[3],
-              {
-                backgroundColor: theme.colors.card,
-                borderRadius: theme.radius.md,
-              },
-            ]}
-          >
-            {Icon ? <Icon size={theme.iconSize.md} color={kindColor(item.kind)} /> : null}
-            <Text
-              style={{
-                flex: 1,
-                color: theme.colors.cardForeground,
-                fontSize: theme.typography.sm,
-                fontFamily: theme.fontFamily.medium,
-              }}
-            >
-              {item.message}
-            </Text>
+          <Pressable key={item.id} onPress={() => onDismiss(item.id)}>
+            <GluestackToast action={mappedAction as any} variant="solid">
+              {Icon ? <Icon size={18} color={kindColor(item.kind)} style={{ marginRight: 8 }} /> : null}
+              <GluestackToastTitle>{item.message}</GluestackToastTitle>
+            </GluestackToast>
           </Pressable>
         );
       })}
