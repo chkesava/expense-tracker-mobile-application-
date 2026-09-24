@@ -33,6 +33,7 @@ import {
   SPLIT_OWNED_LEDGER_MESSAGE,
   isActiveLedgerRow,
   ledgerEventSnapshot,
+  ledgerRowEditability,
 } from "@/shared/utils/ledgerRow";
 import type {
   LedgerEventAction,
@@ -52,6 +53,7 @@ export {
   NOT_REMOVED_LEDGER_MESSAGE,
   PAST_MONTH_LOCKED_MESSAGE,
   SPLIT_OWNED_LEDGER_MESSAGE,
+  ledgerRowEditability,
 };
 
 export type LedgerMutationOptions = {
@@ -116,16 +118,14 @@ function assertLiveAndMutable(
   data: Record<string, unknown>,
   options?: LedgerMutationOptions
 ) {
-  if (!isActiveLedgerRow(data)) {
-    throw new LedgerMutationError(ALREADY_REMOVED_LEDGER_MESSAGE);
+  const editability = ledgerRowEditability(data, {
+    activeMonth: options?.lockPastMonths
+      ? currentMonthKey(options.timezone)
+      : null,
+  });
+  if (!editability.editable) {
+    throw new LedgerMutationError(editability.reason);
   }
-  const splitId =
-    typeof data.splitId === "string" ? data.splitId.trim() : "";
-  if (splitId) {
-    throw new LedgerMutationError(SPLIT_OWNED_LEDGER_MESSAGE);
-  }
-  const month = typeof data.month === "string" ? data.month : undefined;
-  assertUnlockedMonth(month, options);
 }
 
 /**

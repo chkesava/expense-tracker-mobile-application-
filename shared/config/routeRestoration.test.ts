@@ -59,6 +59,7 @@ describe("isRestorableRoute", () => {
     expect(isRestorableRoute("/settings/privacy")).toBe(true);
     expect(isRestorableRoute("/accounts/abc123")).toBe(true);
     expect(isRestorableRoute("/credit-card-bills/bill-1")).toBe(true);
+    expect(isRestorableRoute("/transactions/exp-1?kind=expense&accountId=a1")).toBe(true);
   });
 
   it("rejects routes the shell cannot resume into", () => {

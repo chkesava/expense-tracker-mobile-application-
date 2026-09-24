@@ -1,11 +1,13 @@
-import { useCallback } from "react";
+import { useCallback, type ReactElement } from "react";
 import { StyleSheet, View } from "react-native";
 import { FlashList } from "@shopify/flash-list";
 import { Inbox } from "lucide-react-native";
 
 import { EmptyState } from "@/components/common/EmptyState";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { PageListStateScroll } from "@/components/layout/PageListStateScroll";
 import { PageShell } from "@/components/layout/PageShell";
+import { usePageListBottomPadding } from "@/components/layout/usePageListBottomPadding";
 import { TransactionInboxItem } from "@/components/sms/TransactionInboxItem";
 import { useSmsReviewInbox } from "@/hooks/useSmsReviewInbox";
 import { toast } from "@/lib/toast";
@@ -67,29 +69,47 @@ export default function SmsInboxScreen() {
   const keyExtractor = useCallback((item: SmsReviewInboxItem) => item.id, []);
 
   return (
-    <PageShell scrollable={false}>
+    <PageShell scrollable={false} listOwnsBottomInset>
       <PageHeader
         title="Transaction Inbox"
         subtitle={formatDetectedCount(count)}
         icon={<Inbox size={20} color={theme.colors.primary} />}
       />
       {count === 0 && !loading ? (
-        <EmptyState
-          illustration="expenses"
-          title="No transactions to review"
-          description="Scan your SMS inbox in Settings, or wait for a bank alert. Raw SMS stays on this device."
-        />
-      ) : (
-        <View style={styles.listWrap}>
-          <FlashList
-            data={items}
-            renderItem={renderItem}
-            keyExtractor={keyExtractor}
-            showsVerticalScrollIndicator={false}
+        <PageListStateScroll>
+          <EmptyState
+            illustration="expenses"
+            title="No transactions to review"
+            description="Scan your SMS inbox in Settings, or wait for a bank alert. Raw SMS stays on this device."
           />
-        </View>
+        </PageListStateScroll>
+      ) : (
+        <SmsInboxList items={items} renderItem={renderItem} keyExtractor={keyExtractor} />
       )}
     </PageShell>
+  );
+}
+
+function SmsInboxList({
+  items,
+  renderItem,
+  keyExtractor,
+}: {
+  items: SmsReviewInboxItem[];
+  renderItem: ({ item }: { item: SmsReviewInboxItem }) => ReactElement;
+  keyExtractor: (item: SmsReviewInboxItem) => string;
+}) {
+  const bottomPadding = usePageListBottomPadding();
+  return (
+    <View style={styles.listWrap}>
+      <FlashList
+        data={items}
+        renderItem={renderItem}
+        keyExtractor={keyExtractor}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: bottomPadding }}
+      />
+    </View>
   );
 }
 

@@ -1,6 +1,6 @@
-import { View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { ScrollView, View } from "react-native";
 import { SettledStatementDiscrepancyReport } from "@/components/creditCardBills/SettledStatementDiscrepancyReport";
+import { usePageListBottomPadding } from "@/components/layout/usePageListBottomPadding";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -11,7 +11,7 @@ export default function DiscrepanciesScreen() {
   const { accounts } = useAccounts();
   const { accountTypes } = useAccountTypes();
   const { theme } = useTheme();
-  const insets = useSafeAreaInsets();
+  const listPaddingBottom = usePageListBottomPadding();
   
   const creditCards = accounts.filter(account => {
     const typeName = accountTypes.find(t => t.id === account.typeId)?.name || "";
@@ -26,11 +26,15 @@ export default function DiscrepanciesScreen() {
         onBack={() => {}} 
       />
       
-      <View style={{ flex: 1, paddingBottom: insets.bottom }}>
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingBottom: listPaddingBottom }}
+        showsVerticalScrollIndicator={false}
+      >
         {creditCards.map(card => (
           <SettledStatementDiscrepancyReport key={card.id} accountId={card.id} />
         ))}
-      </View>
+      </ScrollView>
     </View>
   );
 }

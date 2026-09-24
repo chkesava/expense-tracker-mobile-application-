@@ -11,8 +11,6 @@ import { FlashList } from "@shopify/flash-list";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import * as DocumentPicker from "expo-document-picker";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-
 import { AccountBalanceCard } from "@/components/accounts/AccountBalanceCard";
 import { AccountActivityFilterModal } from "@/components/accounts/AccountActivityFilterModal";
 import { AccountCreditHero } from "@/components/accounts/AccountCreditHero";
@@ -54,12 +52,9 @@ import { TransactionRow } from "@/components/accounts/TransactionRow";
 import { ErrorState } from "@/components/common/ErrorState";
 import { CreateCreditCardBillModal } from "@/components/creditCardBills/CreateCreditCardBillModal";
 import { ReconcileStatementModal } from "@/components/creditCardBills/ReconcileStatementModal";
-import {
-  BOTTOM_NAV_BAR_HEIGHT,
-  BOTTOM_NAV_FAB_GAP,
-  BOTTOM_NAV_FAB_SIZE,
-} from "@/components/layout/chrome";
+import { usePageListBottomPadding } from "@/components/layout/usePageListBottomPadding";
 import { haptic } from "@/lib/haptics";
+import { useAccountActivities } from "@/hooks/useAccountActivities";
 import { useAccountEntries } from "@/hooks/useAccountEntries";
 import { useAuth } from "@/providers/AuthProvider";
 import { useAccountPayments } from "@/hooks/useAccountPayments";
@@ -71,18 +66,18 @@ import { useCreditCardBills } from "@/hooks/useCreditCardBills";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useIncomes } from "@/hooks/useIncomes";
 import { useReceivables } from "@/hooks/useReceivables";
-import { useModals } from "@/providers/ModalProvider";
 import { useSettings } from "@/providers/SettingsProvider";
 import { OPEN_BILL_STATUSES } from "@/shared/types/creditCardBill";
 import type {
   AccountActivity,
   AccountDocument,
   AccountNote,
-  Expense,
-  Income,
 } from "@/shared/types/expense";
 import {
-  buildAccountActivities,
+  activityToTransactionRef,
+  transactionHref,
+} from "@/shared/utils/transactionRef";
+import {
   computeBankBalance,
   computeOutstandingCredit,
   getCreditBillHistory,
@@ -190,7 +185,7 @@ const EMPTY_ACTIVITIES: AccountActivity[] = [];
 
 export default function AccountDetailScreen() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
+  const listPaddingBottom = usePageListBottomPadding();
   const { width } = useWindowDimensions();
   const compact = width < WIDE_ROW_BREAKPOINT;
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -201,8 +196,6 @@ export default function AccountDetailScreen() {
   const { settings: systemSettings } = useSystemSettings();
   const { user } = useAuth();
   const today = todayDateKey(settings.timezone);
-  const { setEditingExpense, setEditingIncome } = useModals();
-
   const { accounts, loading: accountsLoading, error: accountsError, retry: retryAccounts } =
     useAccounts();
   const { accountTypes } = useAccountTypes();
@@ -364,34 +357,7 @@ export default function AccountDetailScreen() {
     );
   }, [account, isCreditCard, bills]);
 
-  const allActivities = useMemo(() => {
-    if (!account) return [];
-    return buildAccountActivities(
-      account,
-      typeName,
-      expenses,
-      incomes,
-      payments,
-      entries,
-      transfers,
-      accountNameById,
-      { borrowings, borrowingRepayments },
-      { receivables, receivableRepayments }
-    );
-  }, [
-    account,
-    typeName,
-    expenses,
-    incomes,
-    payments,
-    entries,
-    transfers,
-    accountNameById,
-    borrowings,
-    borrowingRepayments,
-    receivables,
-    receivableRepayments,
-  ]);
+  const { activities: allActivities } = useAccountActivities(id);
 
   // Past cycles get their own "Past Billing Cycles" section, so this list is
   // scoped to the open cycle for credit cards — otherwise it silently mixes
@@ -1047,37 +1013,14 @@ export default function AccountDetailScreen() {
     setActivityFilters(createEmptyAccountActivityFilters());
   }, []);
 
-  const expenseById = useMemo(() => {
-    const map = new Map<string, Expense>();
-    for (const expense of expenses) {
-      if (expense.id) map.set(expense.id, expense);
-    }
-    return map;
-  }, [expenses]);
-
-  const incomeById = useMemo(() => {
-    const map = new Map<string, Income>();
-    for (const income of incomes) {
-      if (income.id) map.set(income.id, income);
-    }
-    return map;
-  }, [incomes]);
-
   const onPressActivity = useCallback(
     (activityId: string) => {
       const act = activities.find((item) => item.id === activityId);
-      if (!act) return;
-      if (act.linkedExpenseId) {
-        const expense = expenseById.get(act.linkedExpenseId);
-        if (expense) setEditingExpense(expense);
-        return;
-      }
-      if (act.linkedIncomeId) {
-        const income = incomeById.get(act.linkedIncomeId);
-        if (income) setEditingIncome(income);
-      }
+      const ref = act ? activityToTransactionRef(act) : null;
+      if (!ref || !id) return;
+      router.push(transactionHref(ref, id));
     },
-    [activities, expenseById, incomeById, setEditingExpense, setEditingIncome]
+    [activities, id, router]
   );
 
   const renderItem = useCallback(
@@ -1147,9 +1090,6 @@ export default function AccountDetailScreen() {
     },
     [router]
   );
-
-  const listPaddingBottom =
-    insets.bottom + BOTTOM_NAV_BAR_HEIGHT + BOTTOM_NAV_FAB_GAP + BOTTOM_NAV_FAB_SIZE + 20;
 
   if (!account) {
     return (

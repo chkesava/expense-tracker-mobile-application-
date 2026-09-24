@@ -68,6 +68,7 @@ Tick only the rows that match the diff.
 | `firestore.indexes.json` | Deploy indexes (see warning below) |
 | `storage.rules` | Deploy Storage rules |
 | `functions/` | Deploy Cloud Functions |
+| `supabase/*.sql` | Run the file in the Supabase SQL editor (keep-alive: [SUPABASE_KEEP_ALIVE.md](./SUPABASE_KEEP_ALIVE.md)) |
 | App / providers / hooks / screens | Netlify web build **and** Android if people use the APK |
 | Docs / tests only | Nothing to ship |
 

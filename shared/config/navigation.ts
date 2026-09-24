@@ -158,6 +158,7 @@ export const HOME_ROUTE = "/dashboard";
 const SUB_SCREEN_PREFIXES = [
   "/accounts/",
   "/credit-card-bills/",
+  "/transactions/",
   "/settings/",
 ];
 

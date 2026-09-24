@@ -101,6 +101,8 @@ export interface ExpenseFormProps {
    * being edited already determines its own type.
    */
   initialType?: "expense" | "income";
+  /** Edit mode only: fires when the form diverges from (or returns to) the saved row. */
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 export function ExpenseForm({
@@ -110,6 +112,7 @@ export function ExpenseForm({
   onCancel,
   embedded = false,
   initialType = "expense",
+  onDirtyChange,
 }: ExpenseFormProps) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
@@ -233,6 +236,54 @@ export function ExpenseForm({
     settings.timezone,
     accounts,
   ]);
+
+  // Must mirror the hydration above so an untouched edit never reads as dirty.
+  const editBaseline = useMemo(() => {
+    if (editingExpense) {
+      return JSON.stringify([
+        "expense",
+        String(editingExpense.amount || ""),
+        editingExpense.date || todayDateKey(settings.timezone),
+        editingExpense.category || DEFAULT_EXPENSE_CATEGORY,
+        editingExpense.subcategory || "Other",
+        editingExpense.accountId || "",
+        editingExpense.note || "",
+        editingExpense.tags || [],
+        editingExpense.spaceId || "",
+      ]);
+    }
+    if (editingIncome) {
+      return JSON.stringify([
+        "income",
+        String(editingIncome.amount || ""),
+        editingIncome.date || todayDateKey(settings.timezone),
+        editingIncome.source || "Salary",
+        editingIncome.accountId || "",
+        editingIncome.note || "",
+      ]);
+    }
+    return null;
+  }, [editingExpense, editingIncome, settings.timezone]);
+
+  const editCurrent =
+    type === "income"
+      ? JSON.stringify(["income", amount, date, source, accountId, note])
+      : JSON.stringify([
+          "expense",
+          amount,
+          date,
+          category,
+          subcategory,
+          accountId,
+          note,
+          tags,
+          spaceId,
+        ]);
+  const isEditDirty = editBaseline !== null && editCurrent !== editBaseline;
+
+  useEffect(() => {
+    onDirtyChange?.(isEditDirty);
+  }, [isEditDirty, onDirtyChange]);
 
   // An archived space stays on its existing expenses but is no longer offered.
   const selectableSpaces = useMemo(

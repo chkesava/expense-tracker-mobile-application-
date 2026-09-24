@@ -21,6 +21,7 @@ describe("resolveAndroidBackAction", () => {
     expect(resolveAndroidBackAction("/sms-inbox")).toBe("pop");
     expect(resolveAndroidBackAction("/app-selector")).toBe("pop");
     expect(resolveAndroidBackAction("/accounts/abc123")).toBe("pop");
+    expect(resolveAndroidBackAction("/transactions/exp-1")).toBe("pop");
   });
 
   it("pops out of screens that used to fall through to the navigator", () => {

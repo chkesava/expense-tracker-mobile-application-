@@ -41,6 +41,7 @@ import {
   type JournalExportFormat,
 } from "@/components/ledger/JournalReportWorkspace";
 import { PageHeader, type PageHeaderTab } from "@/components/layout/PageHeader";
+import { PageListStateScroll } from "@/components/layout/PageListStateScroll";
 import { PageShell } from "@/components/layout/PageShell";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
@@ -535,6 +536,7 @@ export default function LedgerScreen() {
   return (
     <PageShell
       scrollable={!isExpenseListTab && !isBorrowingsTab}
+      listOwnsBottomInset
       contentContainerStyle={styles.container}
     >
       {isBorrowingsTab ? (
@@ -733,29 +735,33 @@ export default function LedgerScreen() {
                   ))}
                 </View>
               ) : expensesError && expenses.length === 0 ? (
-                <ErrorState
-                  title="Couldn't load your transactions"
-                  description={expensesError.message}
-                  onRetry={expensesError.retryable ? retryExpenses : undefined}
-                />
+                <PageListStateScroll>
+                  <ErrorState
+                    title="Couldn't load your transactions"
+                    description={expensesError.message}
+                    onRetry={expensesError.retryable ? retryExpenses : undefined}
+                  />
+                </PageListStateScroll>
               ) : hasNarrowedView && journal.filtered.length === 0 ? (
-                <EmptyState
-                  illustration="general"
-                  title={
-                    ledgerComplete
-                      ? "No transactions match"
-                      : "No matches loaded yet"
-                  }
-                  description={
-                    ledgerComplete
-                      ? "Nothing in this view matches your search and filters. Try widening the date or amount range."
-                      : "No matches in the transactions loaded so far — the rest of your history is still loading."
-                  }
-                  primaryAction={{
-                    label: "Clear filters",
-                    onPress: clearJournalFilters,
-                  }}
-                />
+                <PageListStateScroll>
+                  <EmptyState
+                    illustration="general"
+                    title={
+                      ledgerComplete
+                        ? "No transactions match"
+                        : "No matches loaded yet"
+                    }
+                    description={
+                      ledgerComplete
+                        ? "Nothing in this view matches your search and filters. Try widening the date or amount range."
+                        : "No matches in the transactions loaded so far — the rest of your history is still loading."
+                    }
+                    primaryAction={{
+                      label: "Clear filters",
+                      onPress: clearJournalFilters,
+                    }}
+                  />
+                </PageListStateScroll>
               ) : (
                 <ExpenseList
                   expenses={filteredExpenses}
@@ -787,29 +793,33 @@ export default function LedgerScreen() {
                   ))}
                 </View>
               ) : incomesError && incomes.length === 0 ? (
-                <ErrorState
-                  title="Couldn't load your transactions"
-                  description={incomesError.message}
-                  onRetry={incomesError.retryable ? retryIncomes : undefined}
-                />
+                <PageListStateScroll>
+                  <ErrorState
+                    title="Couldn't load your transactions"
+                    description={incomesError.message}
+                    onRetry={incomesError.retryable ? retryIncomes : undefined}
+                  />
+                </PageListStateScroll>
               ) : hasNarrowedView && journal.filtered.length === 0 ? (
-                <EmptyState
-                  illustration="general"
-                  title={
-                    ledgerComplete
-                      ? "No transactions match"
-                      : "No matches loaded yet"
-                  }
-                  description={
-                    ledgerComplete
-                      ? "Nothing in this view matches your search and filters. Try widening the date or amount range."
-                      : "No matches in the transactions loaded so far — the rest of your history is still loading."
-                  }
-                  primaryAction={{
-                    label: "Clear filters",
-                    onPress: clearJournalFilters,
-                  }}
-                />
+                <PageListStateScroll>
+                  <EmptyState
+                    illustration="general"
+                    title={
+                      ledgerComplete
+                        ? "No transactions match"
+                        : "No matches loaded yet"
+                    }
+                    description={
+                      ledgerComplete
+                        ? "Nothing in this view matches your search and filters. Try widening the date or amount range."
+                        : "No matches in the transactions loaded so far — the rest of your history is still loading."
+                    }
+                    primaryAction={{
+                      label: "Clear filters",
+                      onPress: clearJournalFilters,
+                    }}
+                  />
+                </PageListStateScroll>
               ) : (
                 <ExpenseList
                   expenses={[]}

@@ -16,7 +16,7 @@ import {
   CARD_ORANGE,
 } from "@/components/accounts/accountScreenTheme";
 import { EmptyState } from "@/components/common/EmptyState";
-import { BOTTOM_NAV_FAB_GAP, BOTTOM_NAV_FAB_SIZE } from "@/components/layout/chrome";
+import { usePageListBottomPadding } from "@/components/layout/usePageListBottomPadding";
 import { HoldingCard } from "@/components/portfolio/HoldingCard";
 import { HoldingDetailModal } from "@/components/portfolio/HoldingDetailModal";
 import { AddHoldingModal, type AddHoldingOptions } from "@/components/portfolio/AddHoldingModal";
@@ -62,6 +62,7 @@ function ItemSeparator() {
 
 export function HoldingsList({ listHeader }: { listHeader?: ReactNode }) {
   const { theme, themeName } = useTheme();
+  const listBottomPadding = usePageListBottomPadding();
   const isDark = themeUsesDarkPalette(themeName);
   const displayCurrency = useDisplayCurrency();
 
@@ -544,7 +545,7 @@ export function HoldingsList({ listHeader }: { listHeader?: ReactNode }) {
         ListEmptyComponent={empty}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={{ paddingBottom: listBottomPadding }}
         extraData={`${filter}-${sort}-${search}-${isDark}-${detailHoldingId}-${trade?.id ?? ""}`}
         onScrollBeginDrag={() => sampleScrollFps("portfolio_holdings")}
       />
@@ -604,9 +605,6 @@ const styles = StyleSheet.create({
   },
   list: {
     flex: 1,
-  },
-  listContent: {
-    paddingBottom: BOTTOM_NAV_FAB_SIZE + BOTTOM_NAV_FAB_GAP + 8,
   },
   toolbar: {
     gap: 12,

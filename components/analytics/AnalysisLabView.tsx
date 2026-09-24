@@ -7,6 +7,7 @@ import React, {
 } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { FlashList } from "@shopify/flash-list";
+import { useRouter } from "expo-router";
 
 import {
   FilterSheetModal,
@@ -29,15 +30,11 @@ import { SearchSummaryCard } from "@/components/analytics/search/SearchSummaryCa
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { Skeleton } from "@/components/common/Skeleton";
-import {
-  BOTTOM_NAV_CONTENT_CLEARANCE,
-  BOTTOM_NAV_FAB_GAP,
-  BOTTOM_NAV_FAB_SIZE,
-} from "@/components/layout/chrome";
+import { usePageListBottomPadding } from "@/components/layout/usePageListBottomPadding";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useIncomes } from "@/hooks/useIncomes";
-import { useModals } from "@/providers/ModalProvider";
+import { transactionHref } from "@/shared/utils/transactionRef";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import type { Expense, Income } from "@/shared/types/expense";
 import { currentMonthKey, toLocalDateKey } from "@/shared/utils/dates";
@@ -86,7 +83,9 @@ export function AnalysisLabView({
   listHeader,
 }: AnalysisLabViewProps) {
   const { themeName } = useTheme();
-  const { setEditingExpense, setEditingIncome } = useModals();
+  const listBottomPadding = usePageListBottomPadding();
+  const stateWrapStyle = [styles.stateWrap, { paddingBottom: listBottomPadding }];
+  const router = useRouter();
 
   const {
     expenses,
@@ -374,15 +373,12 @@ export function AnalysisLabView({
 
   const handleOpenTransaction = useCallback(
     (item: UnifiedTransaction) => {
-      if (item.type === "expense") {
-        const expense = expenseById.get(item.id);
-        if (expense) setEditingExpense(expense);
-        return;
-      }
-      const income = incomeById.get(item.id);
-      if (income) setEditingIncome(income);
+      const row =
+        item.type === "expense" ? expenseById.get(item.id) : incomeById.get(item.id);
+      if (!row) return;
+      router.push(transactionHref({ kind: item.type, id: item.id }, row.accountId));
     },
-    [expenseById, incomeById, setEditingExpense, setEditingIncome]
+    [expenseById, incomeById, router]
   );
 
   const renderRow = useCallback(
@@ -477,7 +473,7 @@ export function AnalysisLabView({
     return (
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.stateWrap}
+        contentContainerStyle={stateWrapStyle}
       >
         {listHeader}
         <ErrorState
@@ -493,7 +489,7 @@ export function AnalysisLabView({
     return (
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.stateWrap}
+        contentContainerStyle={stateWrapStyle}
       >
         {listHeader}
         <Skeleton height={52} borderRadius={16} />
@@ -542,7 +538,7 @@ export function AnalysisLabView({
             tip="Search & Lab slices notes, categories, tags, accounts and amounts across every ledger account at once."
           />
         }
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={{ paddingBottom: listBottomPadding }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       />
@@ -571,15 +567,7 @@ const styles = StyleSheet.create({
   separator: {
     height: 8,
   },
-  listContent: {
-    // PageShell already clears the nav bar; this only clears the floating
-    // add button so the last row is never hidden behind it.
-    paddingBottom:
-      BOTTOM_NAV_FAB_SIZE + BOTTOM_NAV_FAB_GAP - BOTTOM_NAV_CONTENT_CLEARANCE,
-  },
   stateWrap: {
     gap: 12,
-    paddingBottom:
-      BOTTOM_NAV_FAB_SIZE + BOTTOM_NAV_FAB_GAP - BOTTOM_NAV_CONTENT_CLEARANCE,
   },
 });
