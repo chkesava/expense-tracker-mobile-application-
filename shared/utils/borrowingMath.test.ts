@@ -710,3 +710,114 @@ describe("summarizeBorrowings", () => {
     expect(totals.overdueCount).toBe(1);
   });
 });
+
+/**
+ * SPENDLY-160 — characterization tests.
+ *
+ * These pin behaviour that the engine already has but nothing asserted: the
+ * branches an extraction of this math into a shared, direction-agnostic module
+ * is most likely to change by accident. They were written against the current
+ * implementation and must keep passing through that move unmodified.
+ */
+describe("borrowing interest engine — characterized behaviour", () => {
+  it("rounds once at the end, not per segment", () => {
+    // The property most at risk from a well-meaning refactor. Segments here
+    // accrue 33.3333 and 22.2222: summed then rounded that is 55.56, but
+    // rounded per segment it would be 33.33 + 22.22 = 55.55.
+    const borrowing = makeBorrowing({
+      principalAmount: 3333.33,
+      interestRate: 1,
+      interestFrequency: "MONTHLY",
+      interestBasis: "OUTSTANDING_PRINCIPAL",
+      borrowedDate: "2026-01-01",
+    });
+    const repayments = [
+      makeRepayment({
+        amount: 1111.11,
+        principalComponent: 1111.11,
+        date: "2026-02-01",
+      }),
+    ];
+
+    expect(computeAccruedInterest(borrowing, repayments, "2026-03-01")).toBe(
+      55.56
+    );
+  });
+
+  it("does not run a repayment dated before the borrowing backwards", () => {
+    // `segmentEnd` clamps to the cursor, so a mis-dated repayment reduces the
+    // balance without ever producing a negative-length segment.
+    const borrowing = makeBorrowing({
+      principalAmount: 10000,
+      interestRate: 1,
+      interestFrequency: "MONTHLY",
+      interestBasis: "OUTSTANDING_PRINCIPAL",
+      borrowedDate: "2026-01-01",
+    });
+    const repayments = [
+      makeRepayment({
+        amount: 4000,
+        principalComponent: 4000,
+        date: "2025-06-01",
+      }),
+    ];
+
+    // Only 6000 was ever outstanding, for one month.
+    expect(computeAccruedInterest(borrowing, repayments, "2026-02-01")).toBe(60);
+  });
+
+  it("charges nothing, rather than negative interest, after an overpayment", () => {
+    const borrowing = makeBorrowing({
+      principalAmount: 10000,
+      interestRate: 1,
+      interestFrequency: "MONTHLY",
+      interestBasis: "OUTSTANDING_PRINCIPAL",
+      borrowedDate: "2026-01-01",
+    });
+    const repayments = [
+      makeRepayment({
+        amount: 15000,
+        principalComponent: 15000,
+        date: "2026-02-01",
+      }),
+    ];
+
+    // 100 for the first month, then a negative balance floored at zero.
+    expect(computeAccruedInterest(borrowing, repayments, "2026-06-01")).toBe(100);
+  });
+
+  it("keeps a one-time charge fixed however long it runs or how much is repaid", () => {
+    const borrowing = makeBorrowing({
+      principalAmount: 10000,
+      interestRate: 5,
+      interestFrequency: "ONE_TIME",
+      interestBasis: "OUTSTANDING_PRINCIPAL",
+      borrowedDate: "2026-01-01",
+    });
+    const repayments = [
+      makeRepayment({ amount: 9000, principalComponent: 9000, date: "2026-02-01" }),
+    ];
+
+    expect(computeAccruedInterest(borrowing, repayments, "2026-02-01")).toBe(500);
+    expect(computeAccruedInterest(borrowing, repayments, "2056-02-01")).toBe(500);
+  });
+
+  it("terminates on an absurd date range", () => {
+    // MAX_MONTH_STEPS caps the whole-month walk at 200 years; the result is
+    // approximate beyond that but must stay finite rather than hang.
+    const months = elapsedMonths("1800-01-01", "2100-01-01");
+    expect(Number.isFinite(months)).toBe(true);
+    expect(months).toBeGreaterThanOrEqual(2400);
+  });
+
+  it("accrues nothing on the day the money was borrowed", () => {
+    const borrowing = makeBorrowing({
+      principalAmount: 10000,
+      interestRate: 1,
+      interestFrequency: "MONTHLY",
+      borrowedDate: "2026-01-01",
+    });
+
+    expect(computeAccruedInterest(borrowing, [], "2026-01-01")).toBe(0);
+  });
+});
