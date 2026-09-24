@@ -21,6 +21,8 @@ import { FlashList } from "@shopify/flash-list";
 import { Check, TriangleAlert } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
+import { PageListStateScroll } from "@/components/layout/PageListStateScroll";
+import { usePageListBottomPadding } from "@/components/layout/usePageListBottomPadding";
 import { ErrorState } from "@/components/common/ErrorState";
 import { Skeleton } from "@/components/common/Skeleton";
 import {
@@ -61,6 +63,7 @@ export function LedgerHealthReport({
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const currency = useDisplayCurrency();
+  const listBottomPadding = usePageListBottomPadding();
 
   const { expenses, complete: expensesComplete, error, retry, isFromCache } =
     useExpenses();
@@ -196,17 +199,21 @@ export function LedgerHealthReport({
   const footer = <CheckList checks={report.checks} />;
 
   if (report.findings.length === 0) {
+    // A clean report is still a full check list, which is taller than the
+    // viewport on a short phone — and its tail sat under the FAB while a
+    // plain View gave it nothing to scroll (SPENDLY-141).
     return (
-      <View style={styles.staticBody}>
+      <PageListStateScroll contentContainerStyle={styles.staticBody}>
         {header}
         {footer}
-      </View>
+      </PageListStateScroll>
     );
   }
 
   return (
     <FlashList
       style={styles.list}
+      contentContainerStyle={{ paddingBottom: listBottomPadding }}
       data={report.findings}
       keyExtractor={(item, index) =>
         `${item.code}-${item.subjects[0]?.id ?? index}`

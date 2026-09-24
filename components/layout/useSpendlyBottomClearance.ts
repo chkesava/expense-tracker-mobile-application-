@@ -1,5 +1,6 @@
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { useBottomNavStyle } from "@/components/layout/BottomChromeProvider";
 import {
   spendlyBottomClearance,
   type SpendlyBottomClearanceOptions,
@@ -16,5 +17,6 @@ export function useSpendlyBottomClearance(
   options: SpendlyBottomClearanceOptions = {}
 ): number {
   const insets = useSafeAreaInsets();
-  return spendlyBottomClearance(insets.bottom, options);
+  const navStyle = useBottomNavStyle();
+  return spendlyBottomClearance(insets.bottom, { navStyle, ...options });
 }

@@ -31,6 +31,14 @@ export interface ModalActionsType {
   setIsTransferOpen: (open: boolean) => void;
   setIsCreateInvestmentOpen: (open: boolean) => void;
   setIsDebtPaymentOpen: (open: boolean) => void;
+  /**
+   * SPENDLY-141 — the add sheet offers Money Lent, Borrowing and Recurring,
+   * so their create forms need an owner outside the list screens that used to
+   * be the only way in.
+   */
+  setIsCreateReceivableOpen: (open: boolean) => void;
+  setIsCreateBorrowingOpen: (open: boolean) => void;
+  setIsCreateRecurringOpen: (open: boolean) => void;
 }
 
 export interface ModalUiContextType {
@@ -47,6 +55,9 @@ export interface ModalUiContextType {
   isTransferOpen: boolean;
   isCreateInvestmentOpen: boolean;
   isDebtPaymentOpen: boolean;
+  isCreateReceivableOpen: boolean;
+  isCreateBorrowingOpen: boolean;
+  isCreateRecurringOpen: boolean;
 }
 
 export type ModalContextType = MonthContextType &
@@ -76,6 +87,9 @@ export function ModalProvider({ children }: { children: ReactNode }) {
   const [isTransferOpen, setIsTransferOpen] = useState(false);
   const [isCreateInvestmentOpen, setIsCreateInvestmentOpen] = useState(false);
   const [isDebtPaymentOpen, setIsDebtPaymentOpen] = useState(false);
+  const [isCreateReceivableOpen, setIsCreateReceivableOpen] = useState(false);
+  const [isCreateBorrowingOpen, setIsCreateBorrowingOpen] = useState(false);
+  const [isCreateRecurringOpen, setIsCreateRecurringOpen] = useState(false);
 
   const monthValue = useMemo(
     () => ({
@@ -102,6 +116,9 @@ export function ModalProvider({ children }: { children: ReactNode }) {
       isTransferOpen,
       isCreateInvestmentOpen,
       isDebtPaymentOpen,
+      isCreateReceivableOpen,
+      isCreateBorrowingOpen,
+      isCreateRecurringOpen,
     }),
     [
       isAddExpenseOpen,
@@ -117,6 +134,9 @@ export function ModalProvider({ children }: { children: ReactNode }) {
       isTransferOpen,
       isCreateInvestmentOpen,
       isDebtPaymentOpen,
+      isCreateReceivableOpen,
+      isCreateBorrowingOpen,
+      isCreateRecurringOpen,
     ]
   );
 
@@ -135,6 +155,9 @@ export function ModalProvider({ children }: { children: ReactNode }) {
       setIsTransferOpen,
       setIsCreateInvestmentOpen,
       setIsDebtPaymentOpen,
+      setIsCreateReceivableOpen,
+      setIsCreateBorrowingOpen,
+      setIsCreateRecurringOpen,
     }),
     []
   );
