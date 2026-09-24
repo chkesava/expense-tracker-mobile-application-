@@ -11,7 +11,10 @@ import {
   RECEIVABLE_STATUS_LABELS,
 } from "@/shared/types/receivable";
 import { formatDisplayDate } from "@/shared/utils/dateDisplay";
-import type { ReceivableSummary } from "@/shared/utils/receivableMath";
+import {
+  describeInterest,
+  type ReceivableSummary,
+} from "@/shared/utils/receivableMath";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
@@ -43,10 +46,11 @@ export function ReceivableCard({
   const isDark = themeUsesDarkPalette(themeName);
 
   const statusColor = STATUS_COLORS[summary.status];
+  // Measured against principal plus accrued interest, or the bar would read
+  // 100% while interest was still owed (SPENDLY-160).
+  const collectable = summary.originalAmount + summary.interestAccrued;
   const receivedRatio =
-    summary.originalAmount > 0
-      ? Math.min(1, summary.totalReceived / summary.originalAmount)
-      : 0;
+    collectable > 0 ? Math.min(1, summary.totalReceived / collectable) : 0;
   // Nothing left to collect on a settled or cancelled receivable.
   const closed =
     summary.status === "FULLY_SETTLED" || summary.status === "CANCELLED";
@@ -75,6 +79,7 @@ export function ReceivableCard({
           </Text>
           <Text style={[styles.meta, { color: theme.colors.mutedForeground }]}>
             {PERSON_TYPE_LABELS[receivable.personType]}
+            {summary.interestAccrued > 0 ? ` · ${describeInterest(receivable)}` : ""}
             {receivable.purpose ? ` · ${receivable.purpose}` : ""}
           </Text>
         </View>

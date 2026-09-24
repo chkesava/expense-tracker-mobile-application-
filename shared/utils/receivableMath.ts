@@ -319,6 +319,8 @@ export function validateReceivableRepayment(
 export interface ReceivablePortfolioSummary {
   totalLent: number;
   totalReceived: number;
+  /** Interest accrued across every receivable, mirroring the borrowing side. */
+  totalInterest: number;
   totalOutstanding: number;
   /** Outstanding on receivables already past their due date. */
   overdueAmount: number;
@@ -343,6 +345,7 @@ export function summarizeReceivables(
       const summary = summarizeReceivable(receivable, repayments, asOfDate);
       acc.totalLent = roundMoney(acc.totalLent + summary.originalAmount);
       acc.totalReceived = roundMoney(acc.totalReceived + summary.totalReceived);
+      acc.totalInterest = roundMoney(acc.totalInterest + summary.interestAccrued);
       if (summary.status !== "CANCELLED") {
         acc.totalOutstanding = roundMoney(
           acc.totalOutstanding + summary.outstandingAmount
@@ -376,6 +379,7 @@ export function summarizeReceivables(
     {
       totalLent: 0,
       totalReceived: 0,
+      totalInterest: 0,
       totalOutstanding: 0,
       overdueAmount: 0,
       dueThisMonthAmount: 0,
