@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Filter } from "lucide-react-native";
 
@@ -11,6 +12,8 @@ import type {
   AccountActivityFilters,
   AccountActivityKind,
 } from "@/shared/utils/accountActivityFilters";
+import { describeAccountActivityFilters } from "@/shared/utils/accountActivityFilterLabels";
+import type { AccountActivityFilterField } from "@/shared/utils/accountActivityFilterLabels";
 
 export type ActivityFilter = AccountActivityKind;
 
@@ -21,21 +24,12 @@ const DEFAULT_ACTIVITY_KINDS: ActivityFilter[] = [
   "transfers",
 ];
 
-export type AccountActivityFilterField =
-  | keyof Pick<
-      AccountActivityFilters,
-      | "kind"
-      | "specialKinds"
-      | "categories"
-      | "counterparties"
-      | "accounts"
-      | "fromDate"
-      | "toDate"
-      | "minAmount"
-      | "maxAmount"
-      | "tags"
-      | "statuses"
-    >;
+/**
+ * SPENDLY-113 — the chip labels moved to `accountActivityFilterLabels` so the
+ * Journal's export header can state the same filters in the same words. The
+ * type is re-exported from here so no existing import has to change.
+ */
+export type { AccountActivityFilterField };
 
 export function TransactionFilters({
   filters,
@@ -56,6 +50,7 @@ export function TransactionFilters({
   scopeLabel,
   title = "Transactions",
   availableKinds = DEFAULT_ACTIVITY_KINDS,
+  action,
 }: {
   filters: AccountActivityFilters;
   searchQuery: string;
@@ -82,6 +77,19 @@ export function TransactionFilters({
    * `[]` to hide the chip row entirely.
    */
   availableKinds?: ActivityFilter[];
+  /**
+   * SPENDLY-113 — an optional action beside the filter button, used by the
+   * Journal to export the rows these filters produced. A narrow typed object
+   * rather than a `ReactNode`: a bar shared by three screens should not accept
+   * arbitrary injected layout. Omitted at the account and card call sites, so
+   * their filter bars are unchanged.
+   */
+  action?: {
+    accessibilityLabel: string;
+    icon: ReactNode;
+    onPress: () => void;
+    busy?: boolean;
+  };
 }) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
@@ -99,105 +107,7 @@ export function TransactionFilters({
   ];
   const chips = allChips.filter((chip) => availableKinds.includes(chip.id));
 
-  const activeChips: Array<{
-    id: string;
-    label: string;
-    field: AccountActivityFilterField;
-    value?: string;
-  }> = [];
-  if (filters.kind !== "all") {
-    activeChips.push({
-      id: "kind",
-      label:
-        filters.kind === "income"
-          ? "Income"
-          : filters.kind === "expense"
-            ? "Expense"
-            : "Transfers",
-      field: "kind",
-    });
-  }
-  filters.specialKinds.forEach((value) =>
-    activeChips.push({
-      id: `special-${value}`,
-      label:
-        value === "refunds"
-          ? "Refunds & cashback"
-          : value === "investments"
-            ? "Investments"
-            : "Bills & payments",
-      field: "specialKinds",
-      value,
-    })
-  );
-  filters.accounts.forEach((value) =>
-    activeChips.push({
-      id: `account-${value}`,
-      label: `Account: ${value}`,
-      field: "accounts",
-      value,
-    })
-  );
-  filters.categories.forEach((value) =>
-    activeChips.push({
-      id: `category-${value}`,
-      label: `Category: ${value}`,
-      field: "categories",
-      value,
-    })
-  );
-  filters.counterparties.forEach((value) =>
-    activeChips.push({
-      id: `counterparty-${value}`,
-      label: `With: ${value}`,
-      field: "counterparties",
-      value,
-    })
-  );
-  if (filters.fromDate) {
-    activeChips.push({
-      id: "from-date",
-      label: `From: ${filters.fromDate}`,
-      field: "fromDate",
-    });
-  }
-  if (filters.toDate) {
-    activeChips.push({
-      id: "to-date",
-      label: `To: ${filters.toDate}`,
-      field: "toDate",
-    });
-  }
-  if (filters.minAmount) {
-    activeChips.push({
-      id: "min-amount",
-      label: `Min: ${filters.minAmount}`,
-      field: "minAmount",
-    });
-  }
-  if (filters.maxAmount) {
-    activeChips.push({
-      id: "max-amount",
-      label: `Max: ${filters.maxAmount}`,
-      field: "maxAmount",
-    });
-  }
-  filters.tags.forEach((value) =>
-    activeChips.push({
-      id: `tag-${value}`,
-      label: `Tag: ${value}`,
-      field: "tags",
-      value,
-    })
-  );
-  filters.statuses.forEach((value) =>
-    activeChips.push({
-      id: `status-${value}`,
-      label: value === "audited" ? "Audited" : "Not audited",
-      field: "statuses",
-      value,
-    })
-  );
+  const activeChips = describeAccountActivityFilters(filters);
 
   return (
     <View style={styles.wrap}>
@@ -219,6 +129,27 @@ export function TransactionFilters({
             {scopeLabel ? ` · ${scopeLabel}` : ""}
           </Text>
         </View>
+        {action ? (
+          <Pressable
+            onPress={() => {
+              void haptic.selection();
+              action.onPress();
+            }}
+            disabled={action.busy}
+            style={[
+              styles.filterIcon,
+              {
+                backgroundColor: isDark ? "rgba(255,255,255,0.04)" : "rgba(15,23,42,0.04)",
+                borderColor: isDark ? "rgba(148,163,184,0.16)" : "rgba(15,23,42,0.08)",
+                opacity: action.busy ? 0.5 : 1,
+              },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel={action.accessibilityLabel}
+          >
+            {action.icon}
+          </Pressable>
+        ) : null}
         <Pressable
           onPress={() => {
             void haptic.selection();
