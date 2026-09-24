@@ -1,17 +1,7 @@
 import type { Expense, Income } from "../types/expense";
+import { csvField, joinCsvLines } from "./csv";
 
-/**
- * Escapes a string field according to RFC-4180 CSV standard.
- */
-function escapeCsvField(field: unknown): string {
-  if (field === null || field === undefined) return "";
-  const str = String(field);
-  // If string contains comma, quote, or newline, escape double quotes and wrap in quotes
-  if (str.includes(",") || str.includes('"') || str.includes("\n") || str.includes("\r")) {
-    return `"${str.replace(/"/g, '""')}"`;
-  }
-  return str;
-}
+/** SPENDLY-113 — escaping and the injection guard come from the shared writer. */
 
 export interface ExportDataOptions {
   currency?: string;
@@ -82,10 +72,10 @@ export function generateTransactionsCsv(
   // Sort rows chronologically descending by date (skip header row)
   const sortedDataRows = rows.slice(1).sort((a, b) => b[0].localeCompare(a[0]));
 
-  return [
-    headers.map(escapeCsvField).join(","),
-    ...sortedDataRows.map((row) => row.map(escapeCsvField).join(",")),
-  ].join("\n");
+  return joinCsvLines([
+    headers.map(csvField).join(","),
+    ...sortedDataRows.map((row) => row.map(csvField).join(",")),
+  ]);
 }
 
 /**

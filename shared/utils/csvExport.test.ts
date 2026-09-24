@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Expense, Income } from "../types/expense";
+import { CSV_LINE_ENDING } from "./csv";
 import { generateTransactionsCsv, generateTransactionsJson } from "./csvExport";
 
 describe("csvExport utilities", () => {
@@ -48,7 +49,9 @@ describe("csvExport utilities", () => {
       accountMap,
     });
 
-    const lines = csv.split("\n");
+    // SPENDLY-113 — rows are joined with CRLF now (RFC-4180 §2.1), so splitting
+    // on "\n" would leave a trailing "\r" on every line.
+    const lines = csv.split(CSV_LINE_ENDING);
     expect(lines[0]).toBe("Date,Type,Category,Subcategory,Amount,Currency,Account,Note,Tags,ID");
     
     // Row 1 (2026-08-02 Expense sorted first by descending date)

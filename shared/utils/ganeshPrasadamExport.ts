@@ -5,6 +5,7 @@ import type {
   PrasadamStatus,
   PrasadamUnitTotal,
 } from "@/shared/types/ganeshPrasadam";
+import { csvField, joinCsvLines } from "@/shared/utils/csv";
 import {
   entriesForSession,
   formatPrasadamQuantity,
@@ -283,10 +284,10 @@ export function prasadamToCsv(model: PrasadamExport): string {
     "Status",
     "Note",
   ];
-  const cell = (value: unknown) => {
-    const text = String(value ?? "");
-    return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-  };
+  // SPENDLY-113 — was a local copy whose regex omitted `\r`, so a note pasted
+  // from Windows broke the row. The shared writer handles it, and guards
+  // formula injection besides.
+  const cell = csvField;
 
   const lines = [head.join(",")];
   for (const day of model.days) {
@@ -312,7 +313,7 @@ export function prasadamToCsv(model: PrasadamExport): string {
     }
   }
   // No totals row: one across mixed units would be either wrong or empty.
-  return lines.join("\n");
+  return joinCsvLines(lines);
 }
 
 /** A filename that says what it is without being opened. */

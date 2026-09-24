@@ -22,8 +22,9 @@ import {
 import { currentMonthKey, isInMonth, todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
-import { logWarning } from "@/lib/errors";
+import { friendlyErrorMessage, logWarning } from "@/lib/errors";
 import { haptic } from "@/lib/haptics";
+import { toast } from "@/lib/toast";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { useSettings } from "@/providers/SettingsProvider";
 
@@ -39,8 +40,13 @@ export function ExportDataModal({ visible, onClose }: ExportDataModalProps) {
   const displayCurrency = useDisplayCurrency();
   const { settings, setExportYear } = useSettings();
 
-  const { expenses } = useExpenses();
-  const { incomes } = useIncomes();
+  const { expenses, complete: expensesComplete } = useExpenses();
+  const { incomes, complete: incomesComplete } = useIncomes();
+  /**
+   * SPENDLY-113 — `loading` goes false on the staged 300-row page, so anything
+   * gated on it could ship a silently truncated file. These are the real flags.
+   */
+  const ledgerComplete = expensesComplete && incomesComplete;
   const { accounts } = useAccounts();
 
   const [scope, setScope] = useState<"all" | "year" | "month">("all");
@@ -95,6 +101,14 @@ export function ExportDataModal({ visible, onClose }: ExportDataModalProps) {
       return;
     }
 
+    if (!ledgerComplete) {
+      appDialog.alert(
+        "Still loading your full history",
+        "Exporting now would leave rows out. Try again in a moment."
+      );
+      return;
+    }
+
     setIsExporting(true);
     try {
       let content = "";
@@ -132,7 +146,9 @@ export function ExportDataModal({ visible, onClose }: ExportDataModalProps) {
       );
       onClose();
     } catch (err) {
+      // Was silent: a failed export told the user nothing at all.
       logWarning("exportDataModal.export", err);
+      toast.error(friendlyErrorMessage(err, "Could not create the export."));
     } finally {
       setIsExporting(false);
     }
@@ -190,6 +206,28 @@ export function ExportDataModal({ visible, onClose }: ExportDataModalProps) {
             </View>
           ) : (
             <View style={styles.body}>
+              {/* SPENDLY-113 — worded to match the Journal's own truncation
+                  notice, so two screens can never contradict each other. */}
+              {!ledgerComplete ? (
+                <View
+                  style={[
+                    styles.lockedBanner,
+                    {
+                      backgroundColor: isDark
+                        ? "rgba(245,158,11,0.10)"
+                        : "rgba(245,158,11,0.08)",
+                      borderColor: theme.colors.warning,
+                    },
+                  ]}
+                >
+                  <Text style={[styles.lockedText, { color: theme.colors.foreground }]}>
+                    Still loading your full history — exports stay disabled until
+                    the rest of your transactions load, so a file can never be
+                    missing rows.
+                  </Text>
+                </View>
+              ) : null}
+
               {/* Scope Selection */}
               <View style={styles.section}>
                 <Text style={[styles.sectionLabel, { color: theme.colors.mutedForeground }]}>
@@ -198,7 +236,12 @@ export function ExportDataModal({ visible, onClose }: ExportDataModalProps) {
                 <View style={styles.chipRow}>
                   {(
                     [
-                      { id: "all", label: `All History (${expenses.length + incomes.length})` },
+                      {
+                        id: "all",
+                        label: `All History (${expenses.length + incomes.length})${
+                          ledgerComplete ? "" : " so far"
+                        }`,
+                      },
                       { id: "year", label: `Year (${selectedYearStr})` },
                       { id: "month", label: `This Month (${currentMonth})` },
                     ] as const
@@ -360,12 +403,16 @@ export function ExportDataModal({ visible, onClose }: ExportDataModalProps) {
               {/* Action Button */}
               <Button
                 onPress={handleExport}
-                disabled={isExporting}
+                disabled={isExporting || !ledgerComplete}
                 style={{ marginTop: 8 }}
               >
                 <Download size={18} color="#FFFFFF" />
                 <Text style={{ marginLeft: 8, fontWeight: "800", color: "#FFFFFF" }}>
-                  {isExporting ? "Generating..." : "Export & Share"}
+                  {isExporting
+                    ? "Generating..."
+                    : ledgerComplete
+                      ? "Export & Share"
+                      : "Still loading…"}
                 </Text>
               </Button>
             </View>

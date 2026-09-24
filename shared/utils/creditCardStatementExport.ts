@@ -6,6 +6,7 @@
 import type { Account, AccountPayment, Expense } from "../types/expense";
 import { isCashbackPayment } from "../types/expense";
 import { isActiveLedgerRow } from "./ledgerRow";
+import { csvField, joinCsvLines } from "./csv";
 import { roundMoney } from "./money";
 
 export type CreditCardCycleExportRow = {
@@ -149,20 +150,6 @@ export function assertCycleExportComplete(
   }
 }
 
-function escapeCsvField(field: unknown): string {
-  if (field === null || field === undefined) return "";
-  const str = String(field);
-  if (
-    str.includes(",") ||
-    str.includes('"') ||
-    str.includes("\n") ||
-    str.includes("\r")
-  ) {
-    return `"${str.replace(/"/g, '""')}"`;
-  }
-  return str;
-}
-
 /** RFC-4180 CSV for the selected cycle — includes every row in `exported.rows`. */
 export function creditCardCycleExportToCsv(
   exported: CreditCardCycleExport
@@ -193,11 +180,11 @@ export function creditCardCycleExportToCsv(
     row.id,
   ]);
 
-  return [
-    ...meta.map((row) => row.map(escapeCsvField).join(",")),
-    headers.map(escapeCsvField).join(","),
-    ...body.map((row) => row.map(escapeCsvField).join(",")),
-  ].join("\n");
+  return joinCsvLines([
+    ...meta.map((row) => row.map(csvField).join(",")),
+    headers.map(csvField).join(","),
+    ...body.map((row) => row.map(csvField).join(",")),
+  ]);
 }
 
 export function creditCardCycleExportFileName(
