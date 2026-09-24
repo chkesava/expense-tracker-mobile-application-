@@ -24,7 +24,7 @@ import { ChevronRight } from "lucide-react-native";
 
 import { haptic } from "@/lib/haptics";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useSurfaces } from "@/theme/surfaces";
 
 /** One radius per role — no per-component radii. */
 export const DASH_RADIUS = {
@@ -86,44 +86,9 @@ export function toneColor(colors: Colors, tone: Tone = "default"): string {
   }
 }
 
-/**
- * Subtle fills used inside sections. Kept extremely low-contrast so nesting a
- * tile inside a section never reads as a second card.
- */
-export function useSurfaces() {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
-
-  return {
-    isDark,
-    /** Inset tile fill. */
-    tile: isDark ? "rgba(255,255,255,0.04)" : "rgba(15,23,42,0.025)",
-    /** Progress / meter track. */
-    track: isDark ? "rgba(255,255,255,0.09)" : "rgba(15,23,42,0.07)",
-    /** Hairline divider between list rows. */
-    divider: theme.colors.outlineVariant ?? theme.colors.border,
-    /** Tint a semantic colour down to a background wash. */
-    wash: (hex: string) => withAlpha(hex, isDark ? 0.16 : 0.1),
-  };
-}
-
-/** #RRGGBB → rgba(). Accepts already-rgba strings unchanged. */
-export function withAlpha(color: string, alpha: number): string {
-  if (!color.startsWith("#")) return color;
-  const hex = color.slice(1);
-  const full =
-    hex.length === 3
-      ? hex
-          .split("")
-          .map((c) => c + c)
-          .join("")
-      : hex;
-  const r = parseInt(full.slice(0, 2), 16);
-  const g = parseInt(full.slice(2, 4), 16);
-  const b = parseInt(full.slice(4, 6), 16);
-  if ([r, g, b].some((n) => Number.isNaN(n))) return color;
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
+// Shared with the rest of Spendly since SPENDLY-152; re-exported so widget
+// imports stay put.
+export { useSurfaces, withAlpha } from "@/theme/surfaces";
 
 /* ------------------------------------------------------------------ Section */
 
