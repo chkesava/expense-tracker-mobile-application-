@@ -6,16 +6,7 @@ import {
   View,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
-import {
-  ArrowDownLeft,
-  Calendar,
-  CreditCard,
-  Download,
-  History,
-  Landmark,
-  Repeat,
-  Wallet,
-} from "lucide-react-native";
+import { Calendar, Download, Wallet } from "lucide-react-native";
 
 import { AccountsList } from "@/components/accounts/AccountsList";
 import { CardsList } from "@/components/accounts/CardsList";
@@ -40,7 +31,9 @@ import {
   JournalReportWorkspace,
   type JournalExportFormat,
 } from "@/components/ledger/JournalReportWorkspace";
-import { PageHeader, type PageHeaderTab } from "@/components/layout/PageHeader";
+import { AllSectionsSheet } from "@/components/ledger/AllSectionsSheet";
+import { LedgerSectionTabs } from "@/components/ledger/LedgerSectionTabs";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { PageListStateScroll } from "@/components/layout/PageListStateScroll";
 import { PageShell } from "@/components/layout/PageShell";
 import { useAccounts } from "@/hooks/useAccounts";
@@ -200,6 +193,8 @@ export default function LedgerScreen() {
   // screen rather than the provider: unlike the sub-tab itself, there is
   // nothing here worth preserving across a hop to another hub tab.
   const [auditView, setAuditView] = useState<"checks" | "trail">("checks");
+
+  const [showAllSections, setShowAllSections] = useState(false);
 
   /**
    * SPENDLY-112 — take the user from a finding to the transaction it is about.
@@ -469,46 +464,23 @@ export default function LedgerScreen() {
     [expenses, incomes, accounts, debouncedQuery, activeMonth, journalScope]
   );
 
-  const tabIconColor = (id: string) =>
-    ledgerTab === id ? theme.colors.success : theme.colors.mutedForeground;
+  const sectionCounts = useMemo(
+    () => ({
+      expenses: journal.records.length,
+      accounts: accounts.length,
+    }),
+    [journal.records.length, accounts.length]
+  );
 
-  const allTabs: PageHeaderTab[] = [
-    {
-      id: "expenses",
-      label: `Journal (${journal.records.length})`,
-      icon: <History size={16} color={tabIconColor("expenses")} />,
+  // Keep `?tab=` honest so a shared or restored link reopens the same section.
+  const selectSection = useCallback(
+    (next: LedgerTab) => {
+      if (next === ledgerTab) return;
+      setLedgerTab(next);
+      router.setParams({ tab: next });
     },
-    {
-      id: "accounts",
-      label: `Accounts (${accounts.length})`,
-      icon: <Wallet size={16} color={tabIconColor("accounts")} />,
-    },
-    {
-      id: "cards",
-      label: "Cards",
-      icon: <CreditCard size={16} color={tabIconColor("cards")} />,
-    },
-    {
-      id: "ccBills",
-      label: "CC Bills",
-      icon: <Calendar size={16} color={tabIconColor("ccBills")} />,
-    },
-    {
-      id: "borrowings",
-      label: "Borrowings",
-      icon: <Landmark size={16} color={tabIconColor("borrowings")} />,
-    },
-    {
-      id: "receivables",
-      label: "Receivables",
-      icon: <ArrowDownLeft size={16} color={tabIconColor("receivables")} />,
-    },
-    {
-      id: "subscriptions",
-      label: "Subscriptions",
-      icon: <Repeat size={16} color={tabIconColor("subscriptions")} />,
-    },
-  ];
+    [ledgerTab, setLedgerTab, router]
+  );
 
   // Search/filters belong to the two transaction lists only. `audit` is
   // SPENDLY-112's workspace and `data` is unrelated.
@@ -526,11 +498,19 @@ export default function LedgerScreen() {
         title="Money"
         subtitle="Activity, accounts & bills"
         icon={<Wallet size={22} color={isDark ? "#FFFFFF" : theme.colors.success} />}
-        activeTab={ledgerTab}
-        onTabChange={(tab) => setLedgerTab(tab as LedgerTab)}
-        tabs={allTabs}
-        tabVariant="underline"
       />
+  );
+
+  // A fixed-height sibling of the header, never inside a list: six of the seven
+  // sections hand scrolling to an inner FlashList, so a nav that grew vertically
+  // or lived in a ScrollView would unbound those lists.
+  const sectionNav = (
+    <LedgerSectionTabs
+      section={ledgerTab}
+      onSelect={selectSection}
+      onOpenAllSections={() => setShowAllSections(true)}
+      counts={sectionCounts}
+    />
   );
 
   return (
@@ -540,10 +520,20 @@ export default function LedgerScreen() {
       contentContainerStyle={styles.container}
     >
       {isBorrowingsTab ? (
-        <BorrowingsList listHeader={pageHeader} />
+        // Borrowings injects the chrome as its list header, so the nav has to
+        // travel with it or it would vanish on this tab alone.
+        <BorrowingsList
+          listHeader={
+            <>
+              {pageHeader}
+              {sectionNav}
+            </>
+          }
+        />
       ) : (
         <>
       {pageHeader}
+      {sectionNav}
 
       {/* Tab: Expenses (Journal) */}
       {ledgerTab === "expenses" && (
@@ -933,6 +923,13 @@ export default function LedgerScreen() {
           setShowFilters(false);
         }}
         getResultCount={getFilterResultCount}
+      />
+
+      <AllSectionsSheet
+        isOpen={showAllSections}
+        onClose={() => setShowAllSections(false)}
+        section={ledgerTab}
+        onSelect={selectSection}
       />
     </PageShell>
   );

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   CORE_NAV_ITEMS,
+  LEDGER_GROUPS,
+  LEDGER_HUB_TAB_IDS,
+  LEDGER_SECTIONS,
   isAccountDetailRoute,
   isNavItemActive,
   resolveAndroidBackAction,
@@ -163,5 +166,29 @@ describe("resolvePrimaryTabId", () => {
       (item) => item.id
     );
     expect(swipeOrder).toEqual(["home", "ledger", "vaults", "investments", "insights"]);
+  });
+});
+
+describe("Money hub sections", () => {
+  it("covers every hub tab exactly once", () => {
+    const ids = LEDGER_SECTIONS.map((section) => section.id);
+    expect([...ids].sort()).toEqual([...LEDGER_HUB_TAB_IDS].sort());
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("puts every section in a real group", () => {
+    const groupIds = new Set(LEDGER_GROUPS.map((group) => group.id));
+    for (const section of LEDGER_SECTIONS) {
+      expect(groupIds.has(section.group)).toBe(true);
+    }
+  });
+
+  it("leaves no group without sections", () => {
+    for (const group of LEDGER_GROUPS) {
+      const members = LEDGER_SECTIONS.filter(
+        (section) => section.group === group.id
+      );
+      expect(members.length).toBeGreaterThan(0);
+    }
   });
 });
