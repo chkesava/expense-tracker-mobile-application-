@@ -1,5 +1,5 @@
 import { appDialog } from "@/lib/appDialog";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Pressable,
   ScrollView,
@@ -37,6 +37,8 @@ export interface ReceivableDetailModalProps {
   summary: ReceivableSummary | null;
   repayments: ReceivableRepayment[];
   currency?: string;
+  /** Open straight into the repayment form, for the card's primary action. */
+  startRepaying?: boolean;
   onClose: () => void;
   onAddRepayment: (input: AddReceivableRepaymentInput) => Promise<string | null>;
   onDeleteRepayment: (
@@ -58,6 +60,7 @@ export function ReceivableDetailModal({
   summary,
   repayments,
   currency,
+  startRepaying = false,
   onClose,
   onAddRepayment,
   onDeleteRepayment,
@@ -84,6 +87,17 @@ export function ReceivableDetailModal({
   const [editOriginalAmount, setEditOriginalAmount] = useState("");
   const [editSpaceId, setEditSpaceId] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Mirrors BorrowingDetailModal: the modal stays mounted between opens, so the
+  // repayment mode has to be driven by the prop rather than initial state, and
+  // cleared on close or it resurfaces the next time the card is tapped.
+  useEffect(() => {
+    if (!visible) {
+      setIsRepaying(false);
+      return;
+    }
+    if (startRepaying) setIsRepaying(true);
+  }, [visible, startRepaying]);
 
   const numericAmount = Number(amount);
 

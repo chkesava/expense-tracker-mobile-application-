@@ -1,12 +1,16 @@
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
+import { ACCOUNT_GREEN } from "@/components/accounts/accountScreenTheme";
 import { Amount } from "@/components/common/Amount";
+import { haptic } from "@/lib/haptics";
+import { useSettings } from "@/providers/SettingsProvider";
 import type { Receivable, ReceivableStatus } from "@/shared/types/receivable";
 import {
   PERSON_TYPE_LABELS,
   RECEIVABLE_STATUS_LABELS,
 } from "@/shared/types/receivable";
+import { formatDisplayDate } from "@/shared/utils/dateDisplay";
 import type { ReceivableSummary } from "@/shared/utils/receivableMath";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
@@ -24,6 +28,7 @@ export interface ReceivableCardProps {
   summary: ReceivableSummary;
   currency?: string;
   onPress: () => void;
+  onRecordRepayment: () => void;
 }
 
 export function ReceivableCard({
@@ -31,8 +36,10 @@ export function ReceivableCard({
   summary,
   currency,
   onPress,
+  onRecordRepayment,
 }: ReceivableCardProps) {
   const { theme, themeName } = useTheme();
+  const { settings } = useSettings();
   const isDark = themeUsesDarkPalette(themeName);
 
   const statusColor = STATUS_COLORS[summary.status];
@@ -40,6 +47,9 @@ export function ReceivableCard({
     summary.originalAmount > 0
       ? Math.min(1, summary.totalReceived / summary.originalAmount)
       : 0;
+  // Nothing left to collect on a settled or cancelled receivable.
+  const closed =
+    summary.status === "FULLY_SETTLED" || summary.status === "CANCELLED";
 
   return (
     <Pressable
@@ -145,6 +155,42 @@ export function ReceivableCard({
           />
         </View>
       </View>
+
+      {receivable.dueDate ? (
+        <Text style={[styles.dueDate, { color: theme.colors.mutedForeground }]}>
+          {summary.isOverdue ? "Was due " : "Due "}
+          {formatDisplayDate(receivable.dueDate, settings.dateFormat)}
+        </Text>
+      ) : null}
+
+      {closed ? null : (
+        <Pressable
+          onPress={(event) => {
+            // The card itself opens the detail view; don't do both.
+            event.stopPropagation();
+            void haptic.selection();
+            onRecordRepayment();
+          }}
+          style={({ pressed }) => [
+            styles.repayBtn,
+            {
+              borderColor: isDark ? ACCOUNT_GREEN : theme.colors.success,
+              opacity: pressed ? 0.75 : 1,
+            },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel={`Record repayment from ${receivable.personName}`}
+        >
+          <Text
+            style={[
+              styles.repayLabel,
+              { color: isDark ? ACCOUNT_GREEN : theme.colors.success },
+            ]}
+          >
+            Record Repayment
+          </Text>
+        </Pressable>
+      )}
     </Pressable>
   );
 }
@@ -156,6 +202,22 @@ const styles = StyleSheet.create({
     borderCurve: "continuous",
     padding: 16,
     gap: 12,
+  },
+  dueDate: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  repayBtn: {
+    minHeight: 40,
+    borderRadius: 12,
+    borderCurve: "continuous",
+    borderWidth: 1.5,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  repayLabel: {
+    fontSize: 13,
+    fontWeight: "800",
   },
   topRow: {
     flexDirection: "row",

@@ -139,6 +139,11 @@ export interface ReceivablePortfolioSummary {
   totalLent: number;
   totalReceived: number;
   totalOutstanding: number;
+  /** Outstanding on receivables already past their due date. */
+  overdueAmount: number;
+  /** Outstanding on receivables falling due in the current calendar month and
+   * not yet overdue — what to expect back before the month is out. */
+  dueThisMonthAmount: number;
   activeCount: number;
   settledCount: number;
   overdueCount: number;
@@ -169,19 +174,45 @@ export function summarizeReceivables(
       } else {
         acc.activeCount += 1;
       }
-      if (summary.status === "OVERDUE") acc.overdueCount += 1;
+      if (summary.status === "OVERDUE") {
+        acc.overdueCount += 1;
+        acc.overdueAmount = roundMoney(
+          acc.overdueAmount + summary.outstandingAmount
+        );
+      } else if (
+        summary.status !== "CANCELLED" &&
+        summary.status !== "FULLY_SETTLED" &&
+        isDueInMonthOf(receivable.dueDate, asOfDate)
+      ) {
+        // Overdue is its own bucket, so this stays "still to come this month"
+        // rather than double-counting money that is already late.
+        acc.dueThisMonthAmount = roundMoney(
+          acc.dueThisMonthAmount + summary.outstandingAmount
+        );
+      }
       return acc;
     },
     {
       totalLent: 0,
       totalReceived: 0,
       totalOutstanding: 0,
+      overdueAmount: 0,
+      dueThisMonthAmount: 0,
       activeCount: 0,
       settledCount: 0,
       overdueCount: 0,
       cancelledCount: 0,
     }
   );
+}
+
+/** True when `dueDate` falls in the same calendar month as `asOfDate`. */
+function isDueInMonthOf(
+  dueDate: string | null | undefined,
+  asOfDate: string
+): boolean {
+  if (!dueDate) return false;
+  return dueDate.slice(0, 7) === asOfDate.slice(0, 7);
 }
 
 /** Receivables assigned to a Space. Unassigned are always excluded. */

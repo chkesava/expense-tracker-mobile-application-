@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Plus } from "lucide-react-native";
 
+import { CARD_ORANGE } from "@/components/accounts/accountScreenTheme";
 import { Amount } from "@/components/common/Amount";
 import { EmptyState } from "@/components/common/EmptyState";
 import { SearchBar } from "@/components/common/SearchBar";
@@ -58,6 +59,7 @@ export function ReceivablesList() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [startRepaying, setStartRepaying] = useState(false);
 
   const today = todayDateKey();
 
@@ -119,10 +121,10 @@ export function ReceivablesList() {
               <Text
                 style={[styles.summaryLabel, { color: theme.colors.mutedForeground }]}
               >
-                TOTAL LENT
+                TOTAL RECEIVABLE
               </Text>
               <Amount
-                value={portfolio.totalLent}
+                value={portfolio.totalOutstanding}
                 currency={displayCurrency}
                 style={{
                   fontSize: 18,
@@ -136,10 +138,10 @@ export function ReceivablesList() {
               <Text
                 style={[styles.summaryLabel, { color: theme.colors.mutedForeground }]}
               >
-                OUTSTANDING
+                OVERDUE
               </Text>
               <Amount
-                value={portfolio.totalOutstanding}
+                value={portfolio.overdueAmount}
                 currency={displayCurrency}
                 style={{ fontSize: 18, fontWeight: "900", color: "#EF4444" }}
               />
@@ -149,7 +151,20 @@ export function ReceivablesList() {
               <Text
                 style={[styles.summaryLabel, { color: theme.colors.mutedForeground }]}
               >
-                RECEIVED
+                DUE THIS MONTH
+              </Text>
+              <Amount
+                value={portfolio.dueThisMonthAmount}
+                currency={displayCurrency}
+                style={{ fontSize: 18, fontWeight: "900", color: CARD_ORANGE }}
+              />
+            </View>
+
+            <View style={styles.summaryCell}>
+              <Text
+                style={[styles.summaryLabel, { color: theme.colors.mutedForeground }]}
+              >
+                REPAID
               </Text>
               <Amount
                 value={portfolio.totalReceived}
@@ -260,7 +275,14 @@ export function ReceivablesList() {
                 receivable={receivable}
                 summary={summary}
                 currency={displayCurrency}
-                onPress={() => setSelectedId(receivable.id ?? null)}
+                onPress={() => {
+                  setStartRepaying(false);
+                  setSelectedId(receivable.id ?? null);
+                }}
+                onRecordRepayment={() => {
+                  setStartRepaying(true);
+                  setSelectedId(receivable.id ?? null);
+                }}
               />
             );
           })}
@@ -279,7 +301,11 @@ export function ReceivablesList() {
         summary={selectedId ? getSummary(selectedId) : null}
         repayments={selectedId ? getRepayments(selectedId) : []}
         currency={displayCurrency}
-        onClose={() => setSelectedId(null)}
+        startRepaying={startRepaying}
+        onClose={() => {
+          setSelectedId(null);
+          setStartRepaying(false);
+        }}
         onAddRepayment={addRepayment}
         onDeleteRepayment={deleteRepayment}
         onUpdateReceivable={updateReceivable}
