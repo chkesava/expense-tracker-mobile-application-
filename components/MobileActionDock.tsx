@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Menu } from "lucide-react-native";
 
+import { ACTION_DOCK_EDGE, actionDockOffset } from "@/components/layout/chrome";
 import { haptic } from "@/lib/haptics";
 import { SideDrawer } from "@/components/SideDrawer";
 import { AddFab } from "@/components/ui/AddFab";
@@ -29,7 +30,9 @@ export function MobileActionDock() {
         style={[
           styles.container,
           {
-            bottom: Math.max(insets.bottom, 16),
+            // Shared with the clearance lists pad by, so the dock's FAB always
+            // floats above the last row rather than over it (SPENDLY-141).
+            bottom: actionDockOffset(insets.bottom),
           },
         ]}
       >
@@ -80,7 +83,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 24,
+    paddingHorizontal: ACTION_DOCK_EDGE,
     zIndex: 90,
   },
   centerFab: {
@@ -89,7 +92,7 @@ const styles = StyleSheet.create({
   },
   menuButton: {
     position: "absolute",
-    right: 24,
+    right: ACTION_DOCK_EDGE,
     width: 52,
     height: 52,
     borderRadius: 20,

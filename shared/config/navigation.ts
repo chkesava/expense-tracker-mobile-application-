@@ -24,10 +24,10 @@ export const CORE_NAV_ITEMS: NavigationItem[] = [
   },
   {
     id: "ledger",
-    translationKey: "nav_expenses",
+    translationKey: "nav_money",
     path: "/ledger",
-    label: "Transactions",
-    mobileLabel: "Transactions",
+    label: "Money",
+    mobileLabel: "Money",
     includeInBottomNav: true,
     includeInDrawer: true,
   },
@@ -87,6 +87,92 @@ export const LEDGER_HUB_TAB_IDS = [
   "receivables",
   "subscriptions",
 ] as const;
+
+export type LedgerHubTabId = (typeof LEDGER_HUB_TAB_IDS)[number];
+
+/**
+ * Groups for the Money hub's sections (SPENDLY-137).
+ *
+ * The seven sections used to render as identical peer tabs, which made a card
+ * and a borrowing read as the same kind of thing. Grouping them is what lets
+ * the All-sections sheet explain the hub instead of just listing it.
+ */
+export const LEDGER_GROUPS = [
+  { id: "activity", label: "Activity" },
+  { id: "accounts", label: "Money & Accounts" },
+  { id: "debt", label: "Credit & Debt" },
+  { id: "owed", label: "Receivables" },
+  { id: "recurring", label: "Recurring" },
+] as const;
+
+export type LedgerGroupId = (typeof LEDGER_GROUPS)[number]["id"];
+
+export type LedgerSectionMeta = {
+  id: LedgerHubTabId;
+  group: LedgerGroupId;
+  /** Short form for the horizontal tab row. */
+  label: string;
+  /** Longer form for the All-sections sheet row. */
+  title: string;
+  subtitle: string;
+};
+
+/**
+ * Icons deliberately live in `components/ledger/ledgerSectionIcons.tsx`, not
+ * here: this is a shared module and must not pull in a React icon library.
+ * `settingsNav.ts` splits them the same way.
+ */
+export const LEDGER_SECTIONS: LedgerSectionMeta[] = [
+  {
+    id: "expenses",
+    group: "activity",
+    label: "Journal",
+    title: "Journal",
+    subtitle: "Every expense, income and transfer",
+  },
+  {
+    id: "accounts",
+    group: "accounts",
+    label: "Accounts",
+    title: "Accounts",
+    subtitle: "Where your money is held",
+  },
+  {
+    id: "cards",
+    group: "accounts",
+    label: "Cards",
+    title: "Cards",
+    subtitle: "Credit and debit cards",
+  },
+  {
+    id: "ccBills",
+    group: "accounts",
+    label: "CC Bills",
+    title: "Credit card bills",
+    subtitle: "Statements, dues and payments",
+  },
+  {
+    id: "borrowings",
+    group: "debt",
+    label: "Borrowings",
+    title: "Borrowings",
+    subtitle: "Money you owe and repayments",
+  },
+  {
+    id: "receivables",
+    group: "owed",
+    label: "Receivables",
+    title: "Receivables",
+    subtitle: "Money lent and what is owed back",
+  },
+  {
+    id: "subscriptions",
+    group: "recurring",
+    label: "Subscriptions",
+    title: "Recurring",
+    subtitle: "Subscriptions, EMIs and auto-transfers",
+  },
+];
 
 export const VAULT_HUB_TAB_IDS = [
   "shared",

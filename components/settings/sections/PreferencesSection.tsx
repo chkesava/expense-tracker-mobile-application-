@@ -209,7 +209,7 @@ export function PreferencesSection() {
             fontSize: theme.typography.xs,
           }}
         >
-          Tighter rows in Transactions — hides the category/account sub-line to
+          Tighter rows in Money — hides the category/account sub-line to
           fit more on screen.
         </Text>
       </SettingsPanel>

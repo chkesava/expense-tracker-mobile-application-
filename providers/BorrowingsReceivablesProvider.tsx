@@ -47,6 +47,10 @@ import {
   type BorrowingSummary,
 } from "@/shared/utils/borrowingMath";
 import {
+  allocateReceivableRepayment,
+  buildReceivableUpdatePayload,
+  denormalizedReceivableCacheFields,
+  roundMoney,
   summarizeReceivable,
   summarizeReceivables,
   validateReceivableRepayment,
@@ -91,10 +95,7 @@ function denormalizedBorrowingFields(summary: BorrowingSummary) {
 
 function denormalizedReceivableFields(summary: ReceivableSummary) {
   return {
-    totalReceived: summary.totalReceived,
-    outstandingAmount: summary.outstandingAmount,
-    status: summary.status,
-    settledDate: summary.settledDate,
+    ...denormalizedReceivableCacheFields(summary),
     updatedAt: serverTimestamp(),
   };
 }
@@ -114,6 +115,11 @@ export type BorrowingsContextType = {
   deleteBorrowing: (id: string) => Promise<boolean>;
   addRepayment: (input: AddRepaymentInput) => Promise<string | null>;
   deleteRepayment: (repaymentId: string, borrowingId: string) => Promise<boolean>;
+  /**
+   * SPENDLY-159 — manual close. Not `markSettled`: a paid-off borrowing is
+   * already FULLY_SETTLED by derivation. See the implementation.
+   */
+  closeBorrowing: (id: string) => Promise<boolean>;
 };
 
 export type ReceivablesContextType = {
@@ -135,6 +141,8 @@ export type ReceivablesContextType = {
     receivableId: string
   ) => Promise<boolean>;
   markSettled: (id: string) => Promise<boolean>;
+  /** SPENDLY-160 — forgive outstanding interest once the principal is back. */
+  waiveInterest: (id: string) => Promise<boolean>;
   cancelReceivable: (id: string) => Promise<boolean>;
 };
 
@@ -612,8 +620,15 @@ export function BorrowingsReceivablesProvider({
               purpose: input.purpose ?? "",
               note: input.note ?? "",
               ...(input.spaceId ? { spaceId: input.spaceId } : {}),
+              interestRate: input.interestRate ?? 0,
+              interestType: input.interestType ?? "NONE",
+              interestFrequency: input.interestFrequency ?? "NONE",
+              interestBasis: input.interestBasis ?? "OUTSTANDING_PRINCIPAL",
+              interestStoppedDate: null,
+              waivedInterest: 0,
               totalReceived: 0,
               outstandingAmount: input.originalAmount,
+              accruedInterest: 0,
               status: "ACTIVE",
               settledDate: null,
               createdAt: serverTimestamp(),
@@ -638,19 +653,6 @@ export function BorrowingsReceivablesProvider({
       if (!uid || !db || !id) return false;
 
       const existing = receivables.find((r) => r.id === id);
-      if (existing && updates.originalAmount != null) {
-        const summary = summarizeReceivable(
-          existing,
-          receivableRepayments,
-          today
-        );
-        if (updates.originalAmount < summary.totalReceived) {
-          toast.error(
-            `Original amount cannot be less than ${summary.totalReceived} already received.`
-          );
-          return false;
-        }
-      }
 
       try {
         const payload: Record<string, unknown> = {
@@ -664,13 +666,22 @@ export function BorrowingsReceivablesProvider({
         // The edit and its recomputed totals go up as one write: a connection
         // dropping between two separate updates would leave the receivable
         // showing a new principal against stale outstanding/status fields.
-        if (existing && updates.originalAmount != null) {
-          const next = summarizeReceivable(
-            { ...existing, ...updates, originalAmount: updates.originalAmount },
+        //
+        // SPENDLY-160 moved the rule into `buildReceivableUpdatePayload`, which
+        // also widened it: the cache used to be restamped only for an amount
+        // edit, so a cancel wrote a status against a stale outstanding.
+        if (existing) {
+          const built = buildReceivableUpdatePayload(
+            existing,
+            updates,
             receivableRepayments,
             today
           );
-          Object.assign(payload, denormalizedReceivableFields(next));
+          if (!built.ok) {
+            toast.error(built.error);
+            return false;
+          }
+          Object.assign(payload, built.fields);
         }
 
         const outcome = await commitWrite(
@@ -760,6 +771,10 @@ export function BorrowingsReceivablesProvider({
         return null;
       }
 
+      // Split as of the repayment date, so the interest cleared is the interest
+      // that had actually accrued when the money arrived (SPENDLY-160).
+      const allocation = allocateReceivableRepayment(input.amount, summary);
+
       try {
         const ref = doc(collection(db, "users", uid, "receivableRepayments"));
 
@@ -771,6 +786,8 @@ export function BorrowingsReceivablesProvider({
               id: ref.id,
               receivableId: input.receivableId,
               amount: input.amount,
+              principalComponent: allocation.principalComponent,
+              interestComponent: allocation.interestComponent,
               date: input.date,
             },
           ],
@@ -784,6 +801,8 @@ export function BorrowingsReceivablesProvider({
         batch.set(ref, {
           receivableId: input.receivableId,
           amount: input.amount,
+          principalComponent: allocation.principalComponent,
+          interestComponent: allocation.interestComponent,
           receivedAccountId: input.receivedAccountId ?? null,
           date: input.date,
           month: monthFromDateKey(input.date),
@@ -852,6 +871,30 @@ export function BorrowingsReceivablesProvider({
     [uid, receivables, receivableRepayments, today]
   );
 
+  /**
+   * SPENDLY-159 — "Mark completed" for a borrowing.
+   *
+   * Deliberately NOT the twin of `markReceivableSettled`, which refuses while
+   * anything is owed and then writes `FULLY_SETTLED`. On the borrowing side
+   * `deriveStatus` already returns `FULLY_SETTLED` the moment outstanding
+   * principal and interest both hit zero, so a settle-when-paid-off action
+   * would be unreachable: by the time it applied, the status was already there.
+   *
+   * What a borrowing actually lacks is a way to close one that derivation will
+   * never close — written off, refinanced, or settled outside the app. That is
+   * `CLOSED`, which `deriveStatus` documents as outranking derivation and which
+   * every repayment guard already recognises, but which nothing could set.
+   *
+   * Closing does not hide money: `summarizeBorrowings` still adds a closed
+   * borrowing's outstanding to the portfolio total. It moves the borrowing out
+   * of the active count and stops offering repayment actions on it.
+   */
+  const closeBorrowing = useCallback(
+    async (id: string): Promise<boolean> =>
+      updateBorrowing(id, { status: "CLOSED" }),
+    [updateBorrowing]
+  );
+
   const markReceivableSettled = useCallback(
     async (id: string): Promise<boolean> => {
       const receivable = receivables.find((r) => r.id === id);
@@ -875,10 +918,52 @@ export function BorrowingsReceivablesProvider({
     [receivables, receivableRepayments, updateReceivable, today]
   );
 
+  /**
+   * SPENDLY-160 — forgive interest that will not be collected.
+   *
+   * The principal has to be back first: waiving is for the case where a friend
+   * returned what they borrowed and you let the interest go, not a way to make
+   * an unpaid lend disappear. Stamping `interestStoppedDate` is what stops the
+   * waived amount re-accruing tomorrow and re-opening the receivable.
+   */
+  const waiveReceivableInterest = useCallback(
+    async (id: string): Promise<boolean> => {
+      const receivable = receivables.find((r) => r.id === id);
+      if (!receivable) return false;
+      const summary = summarizeReceivable(
+        receivable,
+        receivableRepayments,
+        today
+      );
+      if (summary.outstandingPrincipal > 0) {
+        toast.error(
+          `Still ${summary.outstandingPrincipal} of principal outstanding. Only interest can be waived.`
+        );
+        return false;
+      }
+      if (summary.outstandingInterest <= 0) {
+        toast.error("There is no outstanding interest to waive.");
+        return false;
+      }
+      return updateReceivable(id, {
+        waivedInterest: roundMoney(
+          summary.interestWaived + summary.outstandingInterest
+        ),
+        interestStoppedDate: today,
+      });
+    },
+    [receivables, receivableRepayments, updateReceivable, today]
+  );
+
   const cancelReceivable = useCallback(
     async (id: string): Promise<boolean> =>
-      updateReceivable(id, { status: "CANCELLED" }),
-    [updateReceivable]
+      // Freeze accrual at the write-off: a debt you have given up on should not
+      // keep climbing in a detail view you have no way to correct.
+      updateReceivable(id, {
+        status: "CANCELLED",
+        interestStoppedDate: today,
+      }),
+    [updateReceivable, today]
   );
 
   // ─── Context values ─────────────────────────────────────────────────────
@@ -899,6 +984,7 @@ export function BorrowingsReceivablesProvider({
       deleteBorrowing,
       addRepayment: addBorrowingRepayment,
       deleteRepayment: deleteBorrowingRepayment,
+      closeBorrowing,
     }),
     [
       borrowings,
@@ -915,6 +1001,7 @@ export function BorrowingsReceivablesProvider({
       deleteBorrowing,
       addBorrowingRepayment,
       deleteBorrowingRepayment,
+      closeBorrowing,
     ]
   );
 
@@ -935,6 +1022,7 @@ export function BorrowingsReceivablesProvider({
       addRepayment: addReceivableRepayment,
       deleteRepayment: deleteReceivableRepayment,
       markSettled: markReceivableSettled,
+      waiveInterest: waiveReceivableInterest,
       cancelReceivable,
     }),
     [
@@ -953,6 +1041,7 @@ export function BorrowingsReceivablesProvider({
       addReceivableRepayment,
       deleteReceivableRepayment,
       markReceivableSettled,
+      waiveReceivableInterest,
       cancelReceivable,
     ]
   );

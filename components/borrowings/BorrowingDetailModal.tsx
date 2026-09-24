@@ -7,7 +7,7 @@ import {
   Text,
   View,
 } from "react-native";
-import { CheckCircle2, Trash2 } from "lucide-react-native";
+import { CheckCircle2, Pencil, Trash2 } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
 import { Modal } from "@/components/common/Modal";
@@ -19,10 +19,12 @@ import { toast } from "@/lib/toast";
 import type {
   Borrowing,
   BorrowingRepayment,
+  LenderType,
 } from "@/shared/types/borrowing";
 import {
   BORROWING_STATUS_LABELS,
   INTEREST_BASIS_LABELS,
+  LENDER_TYPES,
   LENDER_TYPE_LABELS,
 } from "@/shared/types/borrowing";
 import {
@@ -49,7 +51,12 @@ export interface BorrowingDetailModalProps {
     borrowingId: string
   ) => Promise<boolean>;
   onDeleteBorrowing: (id: string) => Promise<boolean>;
+  /** SPENDLY-159 — edit, and the manual close derivation will not perform. */
+  onUpdateBorrowing: (id: string, updates: Partial<Borrowing>) => Promise<boolean>;
+  onCloseBorrowing: (id: string) => Promise<boolean>;
   startRepaying?: boolean;
+  /** Open straight into the edit form, for the card's Edit action. */
+  startEditing?: boolean;
 }
 
 export function BorrowingDetailModal({
@@ -62,22 +69,32 @@ export function BorrowingDetailModal({
   onAddRepayment,
   onDeleteRepayment,
   onDeleteBorrowing,
+  onUpdateBorrowing,
+  onCloseBorrowing,
   startRepaying = false,
+  startEditing = false,
 }: BorrowingDetailModalProps) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const { accounts } = useAccounts();
 
   const [isRepaying, setIsRepaying] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
   const [amount, setAmount] = useState("");
   const [paymentAccountId, setPaymentAccountId] = useState("");
   const [date, setDate] = useState(todayDateKey());
   const [note, setNote] = useState("");
+  const [editLenderName, setEditLenderName] = useState("");
+  const [editLenderType, setEditLenderType] = useState<LenderType>("OTHER");
+  const [editPrincipal, setEditPrincipal] = useState("");
+  const [editDueDate, setEditDueDate] = useState("");
+  const [editNote, setEditNote] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (!visible) {
       setIsRepaying(false);
+      setIsEditing(false);
       setAmount("");
       setPaymentAccountId("");
       setDate(todayDateKey());
@@ -86,6 +103,22 @@ export function BorrowingDetailModal({
     }
     if (startRepaying) setIsRepaying(true);
   }, [visible, startRepaying]);
+
+  // Keyed on the id, not the borrowing object: the snapshot hands back a fresh
+  // object after every write, and depending on it would drop the user back into
+  // the edit form the moment they saved their way out of it.
+  const borrowingId = borrowing?.id;
+  useEffect(() => {
+    if (!visible || !startEditing || !borrowing) return;
+    setEditLenderName(borrowing.lenderName);
+    setEditLenderType(borrowing.lenderType);
+    setEditPrincipal(String(borrowing.principalAmount));
+    setEditDueDate(borrowing.dueDate ?? "");
+    setEditNote(borrowing.note ?? "");
+    setIsEditing(true);
+    setIsRepaying(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, startEditing, borrowingId]);
 
   const numericAmount = Number(amount);
 
@@ -148,6 +181,76 @@ export function BorrowingDetailModal({
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const beginEditing = () => {
+    setEditLenderName(borrowing.lenderName);
+    setEditLenderType(borrowing.lenderType);
+    setEditPrincipal(String(borrowing.principalAmount));
+    setEditDueDate(borrowing.dueDate ?? "");
+    setEditNote(borrowing.note ?? "");
+    setIsEditing(true);
+    setIsRepaying(false);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!borrowing.id) return;
+
+    if (!editLenderName.trim()) {
+      toast.error("Lender name is required");
+      return;
+    }
+
+    const numPrincipal = Number(editPrincipal);
+    if (!Number.isFinite(numPrincipal) || numPrincipal <= 0) {
+      toast.error("Enter a valid principal amount");
+      return;
+    }
+
+    // The provider re-checks this against the authoritative summary; saying it
+    // here means the user finds out before the round trip.
+    if (numPrincipal < summary.principalPaid) {
+      toast.error(
+        `Principal cannot be less than ${summary.principalPaid} already repaid`
+      );
+      return;
+    }
+
+    if (editDueDate.trim() && !isValidDateKey(editDueDate.trim())) {
+      toast.error("Due date must be YYYY-MM-DD");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const ok = await onUpdateBorrowing(borrowing.id, {
+        lenderName: editLenderName.trim(),
+        lenderType: editLenderType,
+        principalAmount: numPrincipal,
+        dueDate: editDueDate.trim() ? editDueDate.trim() : null,
+        note: editNote.trim(),
+      });
+      if (ok) setIsEditing(false);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const confirmCloseBorrowing = () => {
+    if (!borrowing.id) return;
+    appDialog.alert(
+      "Mark this borrowing completed?",
+      "It moves out of your active borrowings and stops offering repayments. Anything still outstanding keeps counting toward your total.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Mark completed",
+          onPress: () => {
+            void onCloseBorrowing(borrowing.id as string);
+          },
+        },
+      ]
+    );
   };
 
   const confirmDeleteBorrowing = () => {
@@ -297,7 +400,113 @@ export function BorrowingDetailModal({
           </Text>
         </View>
 
-        {isSettled ? null : isRepaying ? (
+        {isSettled ? null : isEditing ? (
+          <View style={styles.repayForm}>
+            <Text style={[styles.sectionTitle, { color: theme.colors.foreground }]}>
+              Edit Borrowing
+            </Text>
+
+            <View style={styles.group}>
+              <Text style={[styles.label, { color: theme.colors.foreground }]}>
+                Lender Name
+              </Text>
+              <Input value={editLenderName} onChangeText={setEditLenderName} />
+            </View>
+
+            <View style={styles.group}>
+              <Text style={[styles.label, { color: theme.colors.foreground }]}>
+                Lender Type
+              </Text>
+              <View style={styles.editPillRow}>
+                {LENDER_TYPES.map((type) => {
+                  const isActive = editLenderType === type;
+                  return (
+                    <Pressable
+                      key={type}
+                      onPress={() => {
+                        void haptic.selection();
+                        setEditLenderType(type);
+                      }}
+                      style={[styles.pill, pillStyle(isActive)]}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: isActive }}
+                    >
+                      <Text style={[styles.pillText, pillTextStyle(isActive)]}>
+                        {LENDER_TYPE_LABELS[type]}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+
+            <View style={styles.group}>
+              <Text style={[styles.label, { color: theme.colors.foreground }]}>
+                Principal Borrowed
+              </Text>
+              <Input
+                value={editPrincipal}
+                onChangeText={setEditPrincipal}
+                keyboardType="decimal-pad"
+                placeholder={`Min ${summary.principalPaid}`}
+              />
+              {editPrincipal !== "" && Number(editPrincipal) < summary.principalPaid ? (
+                <Text style={[styles.meta, { color: "#EF4444" }]}>
+                  Cannot be less than {summary.principalPaid} already repaid
+                </Text>
+              ) : null}
+            </View>
+
+            <View style={styles.group}>
+              <Text style={[styles.label, { color: theme.colors.foreground }]}>
+                Due Date (optional)
+              </Text>
+              <Input
+                value={editDueDate}
+                onChangeText={setEditDueDate}
+                placeholder="YYYY-MM-DD"
+              />
+            </View>
+
+            <View style={styles.group}>
+              <Text style={[styles.label, { color: theme.colors.foreground }]}>
+                Note
+              </Text>
+              <Input value={editNote} onChangeText={setEditNote} />
+            </View>
+
+            {/*
+              Interest terms are not editable here. Changing a rate or basis
+              would re-accrue interest behind repayments whose principal and
+              interest components are already recorded, and nothing re-splits
+              those. Delete and re-record is the honest path until it does.
+            */}
+            <Text style={[styles.meta, { color: theme.colors.mutedForeground }]}>
+              Interest terms cannot be changed after repayments are recorded
+              against them.
+            </Text>
+
+            <View style={styles.actionRow}>
+              <Button
+                onPress={handleSaveEdit}
+                loading={isSubmitting}
+                disabled={isSubmitting}
+                style={{ flex: 1 }}
+              >
+                <Text
+                  style={{ fontWeight: "800", color: theme.colors.primaryForeground }}
+                >
+                  Save Changes
+                </Text>
+              </Button>
+              <Button variant="outline" onPress={() => setIsEditing(false)}>
+                <Text style={{ fontWeight: "700", color: theme.colors.foreground }}>
+                  Cancel
+                </Text>
+              </Button>
+            </View>
+          </View>
+        ) : isRepaying ? (
           <View style={styles.repayForm}>
             <Text style={[styles.sectionTitle, { color: theme.colors.foreground }]}>
               Make Repayment
@@ -401,14 +610,37 @@ export function BorrowingDetailModal({
             </View>
           </View>
         ) : (
-          <Button onPress={() => setIsRepaying(true)}>
-            <Text
-              style={{ fontWeight: "800", color: theme.colors.primaryForeground }}
-            >
-              Make Repayment
+          <View style={styles.actionRow}>
+            <Button onPress={() => setIsRepaying(true)} style={{ flex: 1 }}>
+              <Text
+                style={{ fontWeight: "800", color: theme.colors.primaryForeground }}
+              >
+                Make Repayment
+              </Text>
+            </Button>
+            <Button variant="outline" onPress={beginEditing}>
+              <Pencil size={16} color={theme.colors.foreground} />
+              <Text style={{ fontWeight: "700", color: theme.colors.foreground }}>
+                Edit
+              </Text>
+            </Button>
+          </View>
+        )}
+
+        {/*
+          Closing is for a borrowing derivation will not close by itself. Once
+          nothing is owed `isSettled` is already true and this is gone, so the
+          only borrowing reachable here is one with money still outstanding —
+          which is exactly what the confirmation has to say.
+        */}
+        {!isEditing && !isSettled ? (
+          <Button variant="outline" onPress={confirmCloseBorrowing}>
+            <CheckCircle2 size={16} color="#10B981" />
+            <Text style={{ fontWeight: "700", color: "#10B981" }}>
+              Mark Completed
             </Text>
           </Button>
-        )}
+        ) : null}
 
         <View style={styles.group}>
           <Text style={[styles.sectionTitle, { color: theme.colors.foreground }]}>
@@ -549,6 +781,11 @@ const styles = StyleSheet.create({
   },
   pillRow: {
     flexDirection: "row",
+    gap: 8,
+  },
+  editPillRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: 8,
   },
   pill: {

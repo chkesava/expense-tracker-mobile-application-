@@ -19,7 +19,10 @@ import {
   duesWithinDays,
   type UpcomingDueItem,
 } from "@/shared/utils/spendlyBudget";
-import { computeMonthlyCommitments, getNextRenewalDate } from "@/shared/utils/subscriptionProcessor";
+import {
+  computeMonthlyCommitments,
+  subscriptionsToUpcomingDues,
+} from "@/shared/utils/subscriptionProcessor";
 import { useTheme } from "@/theme/ThemeProvider";
 
 export interface SubscriptionsWidgetProps {
@@ -55,36 +58,12 @@ export function SubscriptionsWidget({
   }, [subscriptions]);
 
   const preview = useMemo(() => {
-    const recurring: UpcomingDueItem[] = subscriptions
-      .filter((sub) => sub.isActive && !sub.isCompleted)
-      .map((sub) => {
-        const next = getNextRenewalDate(sub);
-        return {
-          id: sub.id || sub.name,
-          name: sub.name,
-          amount: sub.amount || 0,
-          dueDate: next.dateStr,
-          daysRemaining: next.daysRemaining,
-          kind: "subscription" as const,
-        };
-      });
+    const recurring = subscriptionsToUpcomingDues(subscriptions);
     return duesWithinDays([...recurring, ...extraDues], 45).slice(0, PREVIEW_LIMIT);
   }, [extraDues, subscriptions]);
 
   const dueInSeven = useMemo(() => {
-    const recurring: UpcomingDueItem[] = subscriptions
-      .filter((sub) => sub.isActive && !sub.isCompleted)
-      .map((sub) => {
-        const next = getNextRenewalDate(sub);
-        return {
-          id: sub.id || sub.name,
-          name: sub.name,
-          amount: sub.amount || 0,
-          dueDate: next.dateStr,
-          daysRemaining: next.daysRemaining,
-          kind: "subscription" as const,
-        };
-      });
+    const recurring = subscriptionsToUpcomingDues(subscriptions);
     return amountDueWithinDays([...recurring, ...extraDues], 7);
   }, [extraDues, subscriptions]);
 

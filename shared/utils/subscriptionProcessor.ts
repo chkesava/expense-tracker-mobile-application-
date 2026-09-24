@@ -1,4 +1,5 @@
 import type { Subscription } from "@/shared/types/subscription";
+import type { UpcomingDueItem } from "@/shared/utils/spendlyBudget";
 import { subscriptionFrequency } from "@/shared/types/subscription";
 import type { Expense, AccountTransfer } from "@/shared/types/expense";
 import {
@@ -454,4 +455,103 @@ export function computeMonthlyCommitments(
     emisTotal,
     transfersTotal,
   };
+}
+
+/**
+ * Active recurring items as upcoming dues, for the `spendlyBudget` helpers.
+ *
+ * The dashboard widget built this shape inline twice over; the Recurring screen
+ * needs the same thing, so it lives here next to `getNextRenewalDate` rather
+ * than becoming a third and fourth copy.
+ *
+ * Paused and completed items are excluded — neither will be charged, so neither
+ * is money to expect out.
+ */
+export function subscriptionsToUpcomingDues(
+  subscriptions: Subscription[]
+): UpcomingDueItem[] {
+  return subscriptions
+    .filter((sub) => sub.isActive && !sub.isCompleted)
+    .map((sub) => {
+      const next = getNextRenewalDate(sub);
+      return {
+        id: sub.id || sub.name,
+        name: sub.name,
+        amount: sub.amount || 0,
+        dueDate: next.dateStr,
+        daysRemaining: next.daysRemaining,
+        kind: "subscription" as const,
+      };
+    });
+}
+
+/**
+ * True when posting this subscription would create a charge with no account to
+ * debit. The subscription-level twin of `duePostNeedsAccount`, which asks the
+ * same question of an already-planned action.
+ */
+export function subscriptionNeedsAccount(
+  sub: Pick<Subscription, "type" | "accountId" | "toAccountId">
+): boolean {
+  if (sub.type === "transfer") return !sub.accountId || !sub.toAccountId;
+  return !sub.accountId;
+}
+
+/**
+ * SPENDLY-158 — a recurring item whose charge is due and cannot post itself.
+ *
+ * Derived, not stored. The obvious predicate, "`isDue` is true", does not work
+ * on its own: the idle auto-poster clears that within seconds of app open, so
+ * a tab built on it reads empty almost always. But the auto-poster clears it by
+ * *posting* — and the one case it can never clear is the charge it refused,
+ * `duePostNeedsAccount` → `skipped_no_account`, which today is a toast and then
+ * nothing. So "due AND still missing its account" is exactly the set that
+ * survives a run, which makes the failure derivable and means there is no
+ * `lastPostFailedAt` to write, drift from, or migrate.
+ *
+ * Excluded:
+ * - paused and completed items: neither is going to be charged, and a paused
+ *   item is not overdue, it is switched off.
+ * - `source: "sms"` items: never auto-posted on purpose, because the expense
+ *   they were detected from already exists. They stay due forever by design,
+ *   and listing them as overdue would be the noise that hides the real ones.
+ */
+export function isSubscriptionOverdue(
+  sub: Subscription,
+  evaluationDate = new Date()
+): boolean {
+  if (!sub.isActive || sub.isCompleted) return false;
+  if (sub.source === "sms") return false;
+  if (!subscriptionNeedsAccount(sub)) return false;
+  return evaluateSubscriptionDue(sub, evaluationDate).isDue;
+}
+
+export type RecurringTabId = "active" | "overdue" | "paused" | "completed";
+
+/**
+ * One pass, one home per item — the Recurring tabs and their counts read the
+ * same partition, so they cannot disagree.
+ *
+ * Order is the precedence: completed outranks paused outranks overdue. An item
+ * you switched off is paused, not overdue, however long it has been due.
+ */
+export function partitionRecurringByTab(
+  subscriptions: Subscription[],
+  evaluationDate = new Date()
+): Record<RecurringTabId, Subscription[]> {
+  const buckets: Record<RecurringTabId, Subscription[]> = {
+    active: [],
+    overdue: [],
+    paused: [],
+    completed: [],
+  };
+
+  for (const sub of subscriptions) {
+    if (sub.isCompleted) buckets.completed.push(sub);
+    else if (!sub.isActive) buckets.paused.push(sub);
+    else if (isSubscriptionOverdue(sub, evaluationDate)) buckets.overdue.push(sub);
+    else buckets.active.push(sub);
+  }
+
+  return buckets;
 }

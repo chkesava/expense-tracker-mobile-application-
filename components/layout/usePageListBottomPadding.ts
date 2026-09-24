@@ -1,6 +1,7 @@
 import { createContext, useContext } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { useBottomNavStyle } from "@/components/layout/BottomChromeProvider";
 import { resolveListBottomPadding } from "@/components/layout/spendlyBottomClearance";
 
 /**
@@ -16,5 +17,6 @@ export const PageShellBottomClearanceContext = createContext<number | null>(null
 export function usePageListBottomPadding(extra = 0): number {
   const shellClearance = useContext(PageShellBottomClearanceContext);
   const insets = useSafeAreaInsets();
-  return resolveListBottomPadding(shellClearance, insets.bottom, extra);
+  const navStyle = useBottomNavStyle();
+  return resolveListBottomPadding(shellClearance, insets.bottom, extra, navStyle);
 }

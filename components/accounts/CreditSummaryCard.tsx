@@ -73,7 +73,7 @@ export function CreditSummaryCard({
               { color: isDark ? "#E2E8F0" : theme.colors.mutedForeground },
             ]}
           >
-            TOTAL CREDIT USED
+            UNBILLED THIS CYCLE
           </Text>
         </View>
         <View

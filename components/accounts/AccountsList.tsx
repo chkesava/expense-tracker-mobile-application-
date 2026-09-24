@@ -15,11 +15,12 @@ import {
 } from "lucide-react-native";
 
 import { AddAccountEntryModal } from "@/components/accounts/AddAccountEntryModal";
-import { AccountEditButton } from "@/components/accounts/AccountEditButton";
+import { AccountRow } from "@/components/accounts/AccountRow";
 import { EditAccountModal } from "@/components/accounts/EditAccountModal";
 import { PayCreditBillModal } from "@/components/accounts/PayCreditBillModal";
 import { TransferFundsModal } from "@/components/accounts/TransferFundsModal";
 import { Amount } from "@/components/common/Amount";
+import { LiabilityAmount } from "@/components/common/LiabilityAmount";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ManageStockCashModal } from "@/components/portfolio/ManageStockCashModal";
 import { Button } from "@/components/ui/Button";
@@ -41,11 +42,7 @@ import {
   computeOutstandingCredit,
 } from "@/shared/utils/accountBalance";
 import { getAccountKind } from "@/shared/utils/accountKind";
-import {
-  formatAccountIdentityLine,
-} from "@/shared/utils/accountIdentity";
 import { todayDateKey } from "@/shared/utils/dates";
-import { SmsMatchingUnconfiguredText } from "@/components/accounts/SmsMatchingUnconfiguredText";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
@@ -169,14 +166,25 @@ export function AccountsList() {
     });
   }, [accounts, typeMap]);
 
+  // Outstanding per credit card, computed once. The credit rows used to call
+  // computeOutstandingCredit again while rendering, pricing every card twice.
+  const creditOutstandingById = useMemo(() => {
+    const map = new Map<string, number>();
+    accounts.forEach((a) => {
+      if (getAccountKind(typeMap.get(a.typeId) || "") !== "credit") return;
+      const usage = computeOutstandingCredit(a, expenses, payments, bills, today);
+      map.set(a.id, usage.totalOutstanding);
+    });
+    return map;
+  }, [accounts, typeMap, expenses, payments, bills, today]);
+
   const accountBalances = useMemo(() => {
     const map = new Map<string, number>();
     accounts.forEach((a) => {
       const typeName = typeMap.get(a.typeId) || "";
       const kind = getAccountKind(typeName);
       if (kind === "credit") {
-        const usage = computeOutstandingCredit(a, expenses, payments, bills, today);
-        map.set(a.id, -usage.totalOutstanding);
+        map.set(a.id, -(creditOutstandingById.get(a.id) ?? 0));
       } else {
         const bal = computeBankBalance(
           a,
@@ -198,10 +206,10 @@ export function AccountsList() {
   }, [
     accounts,
     typeMap,
+    creditOutstandingById,
     expenses,
     incomes,
     payments,
-    bills,
     entries,
     transfers,
     borrowings,
@@ -572,8 +580,10 @@ export function AccountsList() {
         </View>
       </View>
 
-      {/* Grouped accounts */}
-      {groupedAccounts.length === 0 ? (
+      {/* Grouped accounts. The empty state keys off every account, not just
+          deposits: a user holding only credit cards was told "No accounts yet"
+          directly above their populated credit-cards section. */}
+      {groupedAccounts.length === 0 && creditAccounts.length === 0 ? (
         <EmptyState
           illustration="accounts"
           title="No accounts yet"
@@ -607,55 +617,17 @@ export function AccountsList() {
                   const tint = account.color || accent.icon;
 
                   return (
-                    <Pressable
+                    <AccountRow
                       key={account.id}
+                      account={account}
+                      typeName={group.typeName}
+                      icon={<TypeIcon size={18} color={tint} strokeWidth={2.1} />}
+                      accentBg={accent.softBg}
+                      accentBorder={accent.softBorder}
                       onPress={() => handleOpenAccountDetail(account)}
                       onLongPress={() => handleOpenEditAccount(account)}
-                      android_ripple={{ color: ripple, borderless: false }}
-                      style={({ pressed }) => [
-                        styles.accountRow,
-                        {
-                          backgroundColor: theme.colors.card,
-                          borderColor: theme.colors.outlineVariant,
-                          opacity: pressed ? 0.92 : 1,
-                        },
-                      ]}
-                      accessibilityRole="button"
                       accessibilityLabel={`${account.name}, balance`}
-                    >
-                      <View
-                        style={[
-                          styles.accountIconBox,
-                          {
-                            backgroundColor: accent.softBg,
-                            borderColor: accent.softBorder,
-                            borderWidth: StyleSheet.hairlineWidth,
-                          },
-                        ]}
-                      >
-                        <TypeIcon size={18} color={tint} strokeWidth={2.1} />
-                      </View>
-
-                      <View style={styles.accountMeta}>
-                        <Text
-                          style={[styles.accountName, { color: theme.colors.foreground }]}
-                          numberOfLines={1}
-                        >
-                          {account.name}
-                        </Text>
-                        <Text
-                          style={[styles.accountSub, { color: theme.colors.mutedForeground }]}
-                          numberOfLines={1}
-                        >
-                          {formatAccountIdentityLine(account, group.typeName)}
-                        </Text>
-                        <SmsMatchingUnconfiguredText
-                          account={account}
-                          typeName={group.typeName}
-                        />
-                      </View>
-
-                      <View style={styles.accountRight}>
+                      trailing={
                         <Amount
                           value={balance}
                           currency={displayCurrency}
@@ -669,17 +641,8 @@ export function AccountsList() {
                                 : theme.colors.destructive,
                           }}
                         />
-                        <AccountEditButton
-                          label={`Edit ${account.name}`}
-                          color={theme.colors.mutedForeground}
-                          onPress={() => handleOpenEditAccount(account)}
-                        />
-                        <ChevronRight
-                          size={16}
-                          color={theme.colors.mutedForeground}
-                        />
-                      </View>
-                    </Pressable>
+                      }
+                    />
                   );
                 })}
               </View>
@@ -696,75 +659,30 @@ export function AccountsList() {
           </Text>
           <View style={styles.accountList}>
             {creditAccounts.map((account) => {
-              const usage = computeOutstandingCredit(
-                account,
-                expenses,
-                payments,
-                bills,
-                today
-              );
+              const outstanding = creditOutstandingById.get(account.id) ?? 0;
               const accent = accentForTypeName("credit", isDark);
               const cardColor = account.color || accent.icon;
 
               return (
-                <Pressable
+                <AccountRow
                   key={account.id}
+                  account={account}
+                  typeName="Credit Card"
+                  icon={<CreditCard size={18} color={cardColor} strokeWidth={2.1} />}
+                  accentBg={accent.softBg}
+                  accentBorder={accent.softBorder}
                   onPress={() => handleOpenAccountDetail(account)}
                   onLongPress={() => handleOpenEditAccount(account)}
-                  android_ripple={{ color: ripple, borderless: false }}
-                  style={({ pressed }) => [
-                    styles.accountRow,
-                    {
-                      backgroundColor: theme.colors.card,
-                      borderColor: theme.colors.outlineVariant,
-                      opacity: pressed ? 0.92 : 1,
-                    },
-                  ]}
-                >
-                  <View
-                    style={[
-                      styles.accountIconBox,
-                      {
-                        backgroundColor: accent.softBg,
-                        borderColor: accent.softBorder,
-                        borderWidth: StyleSheet.hairlineWidth,
-                      },
-                    ]}
-                  >
-                    <CreditCard size={18} color={cardColor} strokeWidth={2.1} />
-                  </View>
-                  <View style={styles.accountMeta}>
-                    <Text
-                      style={[styles.accountName, { color: theme.colors.foreground }]}
-                      numberOfLines={1}
-                    >
-                      {account.name}
-                    </Text>
-                    <Text
-                      style={[styles.accountSub, { color: theme.colors.mutedForeground }]}
-                      numberOfLines={1}
-                    >
-                      {formatAccountIdentityLine(account, "Credit Card")}
-                    </Text>
-                    <SmsMatchingUnconfiguredText
-                      account={account}
-                      typeName="Credit Card"
-                    />
-                  </View>
-                  <View style={styles.accountRight}>
+                  accessibilityLabel={`${account.name}, outstanding`}
+                  trailing={
                     <View style={{ alignItems: "flex-end" }}>
-                      <Amount
-                        value={usage.totalOutstanding}
+                      <LiabilityAmount
+                        value={outstanding}
                         currency={displayCurrency}
-                        prefix={usage.totalOutstanding > 0 ? "-" : ""}
                         ghostable
                         style={{
                           fontSize: theme.typography.md,
                           fontWeight: "700",
-                          color:
-                            usage.totalOutstanding > 0
-                              ? red
-                              : theme.colors.foreground,
                         }}
                       />
                       <Text
@@ -777,14 +695,8 @@ export function AccountsList() {
                         Outstanding
                       </Text>
                     </View>
-                    <AccountEditButton
-                      label={`Edit ${account.name}`}
-                      color={theme.colors.mutedForeground}
-                      onPress={() => handleOpenEditAccount(account)}
-                    />
-                    <ChevronRight size={16} color={theme.colors.mutedForeground} />
-                  </View>
-                </Pressable>
+                  }
+                />
               );
             })}
           </View>
@@ -1006,18 +918,6 @@ const styles = StyleSheet.create({
   accountList: {
     gap: 8,
   },
-  accountRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    minHeight: 56,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 16,
-    borderCurve: "continuous",
-    borderWidth: 1,
-    overflow: "hidden",
-  },
   accountIconBox: {
     width: 40,
     height: 40,
@@ -1025,11 +925,6 @@ const styles = StyleSheet.create({
     borderCurve: "continuous",
     alignItems: "center",
     justifyContent: "center",
-  },
-  accountMeta: {
-    flex: 1,
-    minWidth: 0,
-    gap: 2,
   },
   accountName: {
     fontSize: 15,
@@ -1039,12 +934,6 @@ const styles = StyleSheet.create({
   accountSub: {
     fontSize: 12,
     fontWeight: "500",
-  },
-  accountRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    flexShrink: 0,
   },
   addAccountButton: {
     flexDirection: "row",

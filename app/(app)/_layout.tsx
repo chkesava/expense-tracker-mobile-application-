@@ -16,6 +16,7 @@ import { useAppShortcutHandler } from "@/hooks/useAppShortcutHandler";
 import { useNavigationStateRestoration } from "@/hooks/useNavigationStateRestoration";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAuth } from "@/providers/AuthProvider";
+import { BottomChromeProvider } from "@/components/layout/BottomChromeProvider";
 import { BorrowingsReceivablesProvider } from "@/providers/BorrowingsReceivablesProvider";
 import { ExpenseReferenceDataProvider } from "@/providers/ExpenseReferenceDataProvider";
 import { FinanceDataProvider } from "@/providers/FinanceDataProvider";
@@ -44,104 +45,109 @@ function AppShellInner() {
   useNavigationStateRestoration(user?.uid);
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
-      <Header />
-      <TabSwipeArea>
-        <Stack
-          screenOptions={{
-            headerShown: false,
-            contentStyle: { backgroundColor: theme.colors.background },
-            animation: "fade_from_bottom",
-          }}
-        >
-          <Stack.Screen name="index" />
-          <Stack.Screen
-            name="dashboard"
-            options={{
-              animation: "fade",
-            }}
-          />
-          <Stack.Screen
-            name="ledger"
-            options={{
-              animation: "fade",
-            }}
-          />
-          <Stack.Screen
-            name="insights"
-            options={{
-              animation: "fade",
-            }}
-          />
-          <Stack.Screen
-            name="vaults"
-            options={{
-              animation: "fade",
-            }}
-          />
-          <Stack.Screen
-            name="investments"
-            options={{
-              animation: "fade",
-            }}
-          />
-          <Stack.Screen
-            name="settings"
-            options={{
-              animation: "slide_from_right",
-            }}
-          />
-          <Stack.Screen
-            name="sms-inbox"
-            options={{
-              animation: "slide_from_right",
-            }}
-          />
-          <Stack.Screen
-            name="app-selector"
-            options={{
-              animation: "slide_from_right",
-            }}
-          />
-          <Stack.Screen
-            name="accounts"
-            options={{
-              animation: "slide_from_right",
-            }}
-          />
-          <Stack.Screen
-            name="credit-card-bills/[id]"
-            options={{
-              animation: "slide_from_right",
-            }}
-          />
-          <Stack.Screen
-            name="transactions/[id]"
-            options={{
-              animation: "slide_from_right",
-            }}
-          />
-          <Stack.Screen
-            name="epf/[establishmentId]"
-            options={{
-              animation: "slide_from_right",
-            }}
-          />
-          <Stack.Screen
-            name="add"
-            options={{
+    // The clearance every list pads by has to describe the chrome actually
+    // on screen, so the dock's centred FAB is not measured as a bar
+    // (SPENDLY-141).
+    <BottomChromeProvider navStyle={settings.navigationStyle}>
+      <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
+        <Header />
+        <TabSwipeArea>
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              contentStyle: { backgroundColor: theme.colors.background },
               animation: "fade_from_bottom",
             }}
-          />
-        </Stack>
-      </TabSwipeArea>
+          >
+            <Stack.Screen name="index" />
+            <Stack.Screen
+              name="dashboard"
+              options={{
+                animation: "fade",
+              }}
+            />
+            <Stack.Screen
+              name="ledger"
+              options={{
+                animation: "fade",
+              }}
+            />
+            <Stack.Screen
+              name="insights"
+              options={{
+                animation: "fade",
+              }}
+            />
+            <Stack.Screen
+              name="vaults"
+              options={{
+                animation: "fade",
+              }}
+            />
+            <Stack.Screen
+              name="investments"
+              options={{
+                animation: "fade",
+              }}
+            />
+            <Stack.Screen
+              name="settings"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
+              name="sms-inbox"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
+              name="app-selector"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
+              name="accounts"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
+              name="credit-card-bills/[id]"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
+              name="transactions/[id]"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
+              name="epf/[establishmentId]"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
+              name="add"
+              options={{
+                animation: "fade_from_bottom",
+              }}
+            />
+          </Stack>
+        </TabSwipeArea>
 
-      {settings.navigationStyle === "dock" ? <MobileActionDock /> : <BottomNav />}
-      <AddTransactionModal />
-      <AddActionSheet />
-      <GlobalAddModals />
-      <SetupWizardModal />
-    </View>
+        {settings.navigationStyle === "dock" ? <MobileActionDock /> : <BottomNav />}
+        <AddTransactionModal />
+        <AddActionSheet />
+        <GlobalAddModals />
+        <SetupWizardModal />
+      </View>
+    </BottomChromeProvider>
   );
 }
 

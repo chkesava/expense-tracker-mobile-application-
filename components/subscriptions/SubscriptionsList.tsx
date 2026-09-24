@@ -32,11 +32,27 @@ import {
   computeMonthlyCommitments,
   formatSubscriptionSchedule,
   getNextRenewalDate,
+  isSubscriptionOverdue,
+  partitionRecurringByTab,
+  subscriptionNeedsAccount,
+  subscriptionsToUpcomingDues,
+  type RecurringTabId,
 } from "@/shared/utils/subscriptionProcessor";
+import {
+  amountDueWithinDays,
+  duesWithinDays,
+} from "@/shared/utils/spendlyBudget";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
+
+const RECURRING_TABS: { id: RecurringTabId; label: string }[] = [
+  { id: "active", label: "Active" },
+  { id: "overdue", label: "Overdue" },
+  { id: "paused", label: "Paused" },
+  { id: "completed", label: "Completed" },
+];
 
 export function SubscriptionsList() {
   const { theme, themeName } = useTheme();
@@ -51,7 +67,7 @@ export function SubscriptionsList() {
     decline: declineSuggestion,
   } = useRecurringSuggestions();
 
-  const [activeTab, setActiveTab] = useState<"active" | "completed">("active");
+  const [activeTab, setActiveTab] = useState<RecurringTabId>("active");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedSub, setSelectedSub] = useState<Subscription | null>(null);
   const [suggestionKey, setSuggestionKey] = useState<string | null>(null);
@@ -66,12 +82,25 @@ export function SubscriptionsList() {
     return computeMonthlyCommitments(subscriptions);
   }, [subscriptions]);
 
-  const filteredSubscriptions = useMemo(() => {
-    if (activeTab === "completed") {
-      return subscriptions.filter((s) => s.isCompleted);
-    }
-    return subscriptions.filter((s) => !s.isCompleted);
-  }, [subscriptions, activeTab]);
+  // What actually leaves the account soon, as opposed to the monthly average.
+  const upcoming = useMemo(
+    () => subscriptionsToUpcomingDues(subscriptions),
+    [subscriptions]
+  );
+  const dueInSeven = useMemo(() => amountDueWithinDays(upcoming, 7), [upcoming]);
+  const nextDue = useMemo(() => duesWithinDays(upcoming, 400)[0] ?? null, [upcoming]);
+
+  // One partition feeds both the tabs and their counts. They used to disagree:
+  // the count came from `commitments.activeCount`, which excludes paused items,
+  // while the list showed everything that was not completed. SPENDLY-158 moved
+  // the split itself into `partitionRecurringByTab` so Overdue is derived from
+  // the same rule the auto-poster refuses on.
+  const byTab = useMemo(
+    () => partitionRecurringByTab(subscriptions),
+    [subscriptions]
+  );
+
+  const filteredSubscriptions = byTab[activeTab];
 
   const handleOpenAdd = () => {
     setSelectedSub(null);
@@ -239,6 +268,38 @@ export function SubscriptionsList() {
             />
           </View>
         </View>
+
+        {dueInSeven > 0 || nextDue ? (
+          <View
+            style={[styles.dueStrip, { borderTopColor: theme.colors.border }]}
+          >
+            <View style={styles.dueBlock}>
+              <Text
+                style={[styles.breakdownLabel, { color: theme.colors.mutedForeground }]}
+              >
+                Due in next 7 days
+              </Text>
+              <Amount
+                value={dueInSeven}
+                currency={displayCurrency}
+                ghostable
+                style={{
+                  fontSize: theme.typography.md,
+                  fontWeight: "800",
+                  color: theme.colors.foreground,
+                }}
+              />
+            </View>
+            {nextDue ? (
+              <Text
+                style={[styles.nextDue, { color: theme.colors.mutedForeground }]}
+                numberOfLines={1}
+              >
+                Next: {nextDue.name} · {nextDue.dueDate}
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
       </View>
 
       {reviewItems.length > 0 ? (
@@ -266,84 +327,70 @@ export function SubscriptionsList() {
 
       {/* Tabs / Filter Pills */}
       <View style={styles.filterRow}>
-        <Pressable
-          onPress={() => {
-            haptic.selection().catch(() => undefined);
-            setActiveTab("active");
-          }}
-          style={[
-            styles.filterPill,
-            activeTab === "active"
-              ? { backgroundColor: theme.colors.primary }
-              : {
-                  backgroundColor: isDark
-                    ? "rgba(255,255,255,0.06)"
-                    : "rgba(0,0,0,0.04)",
-                },
-          ]}
-        >
-          <Text
-            style={[
-              styles.filterPillText,
-              {
-                color:
-                  activeTab === "active"
-                    ? theme.colors.primaryForeground
-                    : theme.colors.mutedForeground,
-                fontWeight: activeTab === "active" ? "700" : "500",
-              },
-            ]}
-          >
-            Active ({commitments.activeCount})
-          </Text>
-        </Pressable>
-
-        <Pressable
-          onPress={() => {
-            haptic.selection().catch(() => undefined);
-            setActiveTab("completed");
-          }}
-          style={[
-            styles.filterPill,
-            activeTab === "completed"
-              ? { backgroundColor: theme.colors.primary }
-              : {
-                  backgroundColor: isDark
-                    ? "rgba(255,255,255,0.06)"
-                    : "rgba(0,0,0,0.04)",
-                },
-          ]}
-        >
-          <Text
-            style={[
-              styles.filterPillText,
-              {
-                color:
-                  activeTab === "completed"
-                    ? theme.colors.primaryForeground
-                    : theme.colors.mutedForeground,
-                fontWeight: activeTab === "completed" ? "700" : "500",
-              },
-            ]}
-          >
-            Completed ({commitments.completedCount})
-          </Text>
-        </Pressable>
+        {RECURRING_TABS.map((tab) => {
+          const selected = activeTab === tab.id;
+          return (
+            <Pressable
+              key={tab.id}
+              onPress={() => {
+                haptic.selection().catch(() => undefined);
+                setActiveTab(tab.id);
+              }}
+              style={[
+                styles.filterPill,
+                selected
+                  ? { backgroundColor: theme.colors.primary }
+                  : {
+                      backgroundColor: isDark
+                        ? "rgba(255,255,255,0.06)"
+                        : "rgba(0,0,0,0.04)",
+                    },
+              ]}
+              accessibilityRole="tab"
+              accessibilityState={{ selected }}
+            >
+              <Text
+                style={[
+                  styles.filterPillText,
+                  {
+                    color: selected
+                      ? theme.colors.primaryForeground
+                      : theme.colors.mutedForeground,
+                    fontWeight: selected ? "700" : "500",
+                  },
+                ]}
+              >
+                {tab.label} ({byTab[tab.id].length})
+              </Text>
+            </Pressable>
+          );
+        })}
       </View>
 
       {/* Subscriptions List */}
       {filteredSubscriptions.length === 0 && reviewItems.length === 0 ? (
-        <EmptyState
-          illustration="subscriptions"
-          title="No Subscriptions Yet"
-          description="Track recurring subscriptions, software licenses, utilities, and memberships with automated renewal alerts."
-          primaryAction={{
-            label: "Add Subscription",
-            icon: <Plus size={16} color="#FFFFFF" strokeWidth={2.4} />,
-            onPress: handleOpenAdd,
-          }}
-          tip="Receive advance renewal reminders so you never get surprised by automatic debits."
-        />
+        activeTab === "overdue" ? (
+          // An empty Overdue tab is good news, and needs to read as such
+          // rather than as "you have no subscriptions".
+          <EmptyState
+            illustration="subscriptions"
+            title="Nothing overdue"
+            description="Every active recurring payment has an account to debit, so each one can post itself when it falls due."
+            tip="An item lands here when its charge is due but it has no account set — auto-post skips it rather than guessing."
+          />
+        ) : (
+          <EmptyState
+            illustration="subscriptions"
+            title="No Subscriptions Yet"
+            description="Track recurring subscriptions, software licenses, utilities, and memberships with automated renewal alerts."
+            primaryAction={{
+              label: "Add Subscription",
+              icon: <Plus size={16} color="#FFFFFF" strokeWidth={2.4} />,
+              onPress: handleOpenAdd,
+            }}
+            tip="Receive advance renewal reminders so you never get surprised by automatic debits."
+          />
+        )
       ) : (
         <View style={styles.listContainer}>
           {filteredSubscriptions.map((sub) => {
@@ -405,6 +452,21 @@ export function SubscriptionsList() {
                         </Text>
                       </View>
 
+                      {isSubscriptionOverdue(sub) ? (
+                        <View
+                          style={[
+                            styles.pausedBadge,
+                            { backgroundColor: "rgba(239, 68, 68, 0.15)" },
+                          ]}
+                        >
+                          <Text
+                            style={[styles.pausedBadgeText, { color: "#EF4444" }]}
+                          >
+                            OVERDUE
+                          </Text>
+                        </View>
+                      ) : null}
+
                       {!sub.isActive && !sub.isCompleted ? (
                         <View
                           style={[
@@ -462,6 +524,19 @@ export function SubscriptionsList() {
                       {sourceAccName ? ` • ${sourceAccName}` : ""}
                       {destAccName ? ` → ${destAccName}` : ""}
                     </Text>
+
+                    {/*
+                      The row is already tappable into the edit form, which is
+                      where the account is set — so the reason doubles as the
+                      instruction rather than needing its own button.
+                    */}
+                    {subscriptionNeedsAccount(sub) && !sub.isCompleted ? (
+                      <Text style={[styles.subMeta, { color: "#EF4444" }]}>
+                        {sub.type === "transfer"
+                          ? "Needs both accounts before it can post"
+                          : "Needs an account before it can post"}
+                      </Text>
+                    ) : null}
                   </View>
 
                   <View style={{ alignItems: "flex-end", gap: 6 }}>
@@ -576,6 +651,21 @@ export function SubscriptionsList() {
 }
 
 const styles = StyleSheet.create({
+  dueStrip: {
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: 4,
+  },
+  dueBlock: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+  },
+  nextDue: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
   container: {
     paddingBottom: 24,
     gap: 16,

@@ -10,11 +10,13 @@ import {
 
 import {
   ACCOUNT_GREEN,
-  ACCOUNT_RED,
   CARD_ORANGE,
 } from "@/components/accounts/accountScreenTheme";
 import { Amount } from "@/components/common/Amount";
+import { LiabilityAmount } from "@/components/common/LiabilityAmount";
+import { useSettings } from "@/providers/SettingsProvider";
 import type { CreditCardBill } from "@/shared/types/creditCardBill";
+import { formatDisplayDate } from "@/shared/utils/dateDisplay";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
@@ -54,12 +56,8 @@ export const CreditCardListItem = memo(function CreditCardListItem({
   onPay: (id: string) => void;
 }) {
   const { theme, themeName } = useTheme();
+  const { settings } = useSettings();
   const isDark = themeUsesDarkPalette(themeName);
-  const usedColor = row.outstanding > 0
-    ? isDark
-      ? ACCOUNT_RED
-      : theme.colors.destructive
-    : theme.colors.foreground;
   const utilizationPercent = Math.round(Math.min(100, Math.max(0, row.utilization)));
 
   return (
@@ -132,11 +130,11 @@ export const CreditCardListItem = memo(function CreditCardListItem({
           <Text style={[styles.metricLabel, { color: theme.colors.mutedForeground }]}>
             Outstanding
           </Text>
-          <Amount
+          <LiabilityAmount
             value={row.outstanding}
             currency={currency}
             ghostable
-            style={[styles.metricValue, { color: usedColor }]}
+            style={styles.metricValue}
           />
         </View>
         <View style={[styles.metricCol, styles.metricRight]}>
@@ -230,9 +228,22 @@ export const CreditCardListItem = memo(function CreditCardListItem({
               ghostable
             />
             <Text style={[styles.due, { color: theme.colors.mutedForeground }]}>
-              Due {row.openBill.dueDate}
+              Due {formatDisplayDate(row.openBill.dueDate, settings.dateFormat)}
             </Text>
           </View>
+          {row.openBill.minimumDueAmount > 0 ? (
+            <View style={styles.statementRow}>
+              <Text style={[styles.minDueLabel, { color: theme.colors.mutedForeground }]}>
+                Minimum due
+              </Text>
+              <Amount
+                value={row.openBill.minimumDueAmount}
+                currency={currency}
+                ghostable
+                style={[styles.minDueValue, { color: theme.colors.foreground }]}
+              />
+            </View>
+          ) : null}
         </View>
       ) : (
         <Pressable
@@ -457,6 +468,14 @@ const styles = StyleSheet.create({
   },
   due: {
     fontSize: 13,
+  },
+  minDueLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  minDueValue: {
+    fontSize: 13,
+    fontWeight: "700",
   },
   addStatement: {
     color: CARD_ORANGE,

@@ -55,12 +55,14 @@ export const BorrowingCard = memo(function BorrowingCard({
   currency,
   onPress,
   onMenu,
+  onRecordRepayment,
 }: {
   borrowing: Borrowing;
   summary: BorrowingSummary;
   currency?: string;
   onPress: (id: string) => void;
   onMenu: (id: string) => void;
+  onRecordRepayment: (id: string) => void;
 }) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
@@ -78,6 +80,9 @@ export const BorrowingCard = memo(function BorrowingCard({
         ? ACCOUNT_RED
         : theme.colors.destructive
       : theme.colors.foreground;
+  // Mirrors the list's own guard: a fully settled or closed borrowing has
+  // nothing left to repay, so it must not offer the action.
+  const settled = summary.status === "FULLY_SETTLED" || summary.status === "CLOSED";
   const repaidColor = isDark ? ACCOUNT_GREEN : theme.colors.success;
 
   return (
@@ -188,11 +193,65 @@ export const BorrowingCard = memo(function BorrowingCard({
           />
         </View>
       </View>
+
+      {borrowing.dueDate ? (
+        <Text style={[styles.dueDate, { color: theme.colors.mutedForeground }]}>
+          {summary.isOverdue ? "Was due " : "Due "}
+          {borrowing.dueDate}
+        </Text>
+      ) : null}
+
+      {settled ? null : (
+        <Pressable
+          onPress={(event) => {
+            // The whole card navigates; keep the action from doing both.
+            event.stopPropagation();
+            void haptic.selection();
+            onRecordRepayment(id);
+          }}
+          style={({ pressed }) => [
+            styles.repayBtn,
+            {
+              borderColor: isDark ? ACCOUNT_GREEN : theme.colors.success,
+              opacity: pressed ? 0.75 : 1,
+            },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel={`Record repayment for ${borrowing.lenderName}`}
+        >
+          <Text
+            style={[
+              styles.repayLabel,
+              { color: isDark ? ACCOUNT_GREEN : theme.colors.success },
+            ]}
+          >
+            Record Repayment
+          </Text>
+        </Pressable>
+      )}
     </Pressable>
   );
 });
 
 const styles = StyleSheet.create({
+  dueDate: {
+    marginTop: 8,
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  repayBtn: {
+    marginTop: 12,
+    minHeight: 40,
+    borderRadius: 12,
+    borderCurve: "continuous",
+    borderWidth: 1.5,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  repayLabel: {
+    fontSize: 13,
+    fontWeight: "800",
+  },
   card: {
     borderWidth: 1,
     borderRadius: 18,

@@ -42,7 +42,7 @@ export function QuickAddWidget({ onAddExpense }: QuickAddWidgetProps) {
         onAddExpense();
       },
     },
-    { id: "ledger", label: "Ledger", icon: Wallet, onPress: go("/ledger") },
+    { id: "ledger", label: "Money", icon: Wallet, onPress: go("/ledger") },
     {
       id: "insights",
       label: "Insights",

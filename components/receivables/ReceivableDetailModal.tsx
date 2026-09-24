@@ -1,5 +1,5 @@
 import { appDialog } from "@/lib/appDialog";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Pressable,
   ScrollView,
@@ -19,10 +19,13 @@ import { useSpaces } from "@/hooks/useSpaces";
 import { toast } from "@/lib/toast";
 import type { Receivable, ReceivableRepayment } from "@/shared/types/receivable";
 import {
+  INTEREST_BASIS_LABELS,
   PERSON_TYPE_LABELS,
   RECEIVABLE_STATUS_LABELS,
 } from "@/shared/types/receivable";
 import {
+  allocateReceivableRepayment,
+  describeInterest,
   validateReceivableRepayment,
   type ReceivableSummary,
 } from "@/shared/utils/receivableMath";
@@ -37,6 +40,8 @@ export interface ReceivableDetailModalProps {
   summary: ReceivableSummary | null;
   repayments: ReceivableRepayment[];
   currency?: string;
+  /** Open straight into the repayment form, for the card's primary action. */
+  startRepaying?: boolean;
   onClose: () => void;
   onAddRepayment: (input: AddReceivableRepaymentInput) => Promise<string | null>;
   onDeleteRepayment: (
@@ -48,6 +53,8 @@ export interface ReceivableDetailModalProps {
     updates: Partial<Receivable>
   ) => Promise<boolean>;
   onMarkSettled: (id: string) => Promise<boolean>;
+  /** SPENDLY-160 — forgive outstanding interest once the principal is back. */
+  onWaiveInterest: (id: string) => Promise<boolean>;
   onCancelReceivable: (id: string) => Promise<boolean>;
   onDeleteReceivable: (id: string) => Promise<boolean>;
 }
@@ -58,11 +65,13 @@ export function ReceivableDetailModal({
   summary,
   repayments,
   currency,
+  startRepaying = false,
   onClose,
   onAddRepayment,
   onDeleteRepayment,
   onUpdateReceivable,
   onMarkSettled,
+  onWaiveInterest,
   onCancelReceivable,
   onDeleteReceivable,
 }: ReceivableDetailModalProps) {
@@ -85,7 +94,27 @@ export function ReceivableDetailModal({
   const [editSpaceId, setEditSpaceId] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Mirrors BorrowingDetailModal: the modal stays mounted between opens, so the
+  // repayment mode has to be driven by the prop rather than initial state, and
+  // cleared on close or it resurfaces the next time the card is tapped.
+  useEffect(() => {
+    if (!visible) {
+      setIsRepaying(false);
+      return;
+    }
+    if (startRepaying) setIsRepaying(true);
+  }, [visible, startRepaying]);
+
   const numericAmount = Number(amount);
+
+  // Live split for the repayment form, so the user sees interest coming off
+  // first before they commit to the amount (SPENDLY-160).
+  const preview = useMemo(() => {
+    if (!summary || !Number.isFinite(numericAmount) || numericAmount <= 0) {
+      return null;
+    }
+    return allocateReceivableRepayment(numericAmount, summary);
+  }, [summary, numericAmount]);
 
   const accountNameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -113,7 +142,7 @@ export function ReceivableDetailModal({
   const canEditAmount =
     summary != null &&
     (editOriginalAmount === "" ||
-      Number(editOriginalAmount) >= summary.totalReceived);
+      Number(editOriginalAmount) >= summary.principalReceived);
 
   if (!receivable || !summary) {
     return (
@@ -192,9 +221,11 @@ export function ReceivableDetailModal({
       return;
     }
 
-    if (numAmount < summary.totalReceived) {
+    // Principal, not total: once interest is collected the two diverge, and
+    // measuring against the total would refuse a legitimate edit (SPENDLY-160).
+    if (numAmount < summary.principalReceived) {
       toast.error(
-        `Original amount cannot be less than ${summary.totalReceived} already received`
+        `Original amount cannot be less than ${summary.principalReceived} already received`
       );
       return;
     }
@@ -218,6 +249,23 @@ export function ReceivableDetailModal({
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const confirmWaiveInterest = () => {
+    if (!receivable.id) return;
+    appDialog.alert(
+      "Waive the remaining interest?",
+      `This closes the receivable and records ${summary.outstandingInterest} as forgiven rather than received. Your account balance does not change.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Waive interest",
+          onPress: () => {
+            void onWaiveInterest(receivable.id as string);
+          },
+        },
+      ]
+    );
   };
 
   const confirmDeleteReceivable = () => {
@@ -286,19 +334,52 @@ export function ReceivableDetailModal({
 
   const rows: { label: string; value: number }[] = [
     { label: "Original amount", value: summary.originalAmount },
-    { label: "Total received", value: summary.totalReceived },
-    { label: "Outstanding", value: summary.outstandingAmount },
   ];
+
+  if (summary.interestAccrued > 0) {
+    rows.push({ label: "Interest accrued", value: summary.interestAccrued });
+  }
+
+  rows.push({ label: "Total received", value: summary.totalReceived });
+
+  if (summary.interestReceived > 0) {
+    rows.push({ label: "Interest received", value: summary.interestReceived });
+  }
+  if (summary.interestWaived > 0) {
+    rows.push({ label: "Interest waived", value: summary.interestWaived });
+  }
+  if (summary.outstandingInterest > 0) {
+    rows.push({
+      label: "Outstanding principal",
+      value: summary.outstandingPrincipal,
+    });
+    rows.push({
+      label: "Outstanding interest",
+      value: summary.outstandingInterest,
+    });
+  }
+
+  rows.push({ label: "Outstanding", value: summary.outstandingAmount });
 
   return (
     <Modal isOpen={visible} onClose={onClose} title={receivable.personName}>
       <View style={styles.body}>
         <View style={styles.headerMeta}>
           <Text style={[styles.meta, { color: theme.colors.mutedForeground }]}>
-            {PERSON_TYPE_LABELS[receivable.personType]} · Lent on{" "}
-            {receivable.lentDate}
+            {PERSON_TYPE_LABELS[receivable.personType]} ·{" "}
+            {describeInterest(receivable)}
+          </Text>
+          <Text style={[styles.meta, { color: theme.colors.mutedForeground }]}>
+            Lent on {receivable.lentDate}
             {receivable.dueDate ? ` · Due ${receivable.dueDate}` : ""}
           </Text>
+          {receivable.interestType && receivable.interestType !== "NONE" ? (
+            <Text style={[styles.meta, { color: theme.colors.mutedForeground }]}>
+              {INTEREST_BASIS_LABELS[
+                receivable.interestBasis ?? "OUTSTANDING_PRINCIPAL"
+              ]}
+            </Text>
+          ) : null}
           {receivable.purpose ? (
             <Text style={[styles.meta, { color: theme.colors.mutedForeground }]}>
               {receivable.purpose}
@@ -417,11 +498,11 @@ export function ReceivableDetailModal({
                 value={editOriginalAmount}
                 onChangeText={setEditOriginalAmount}
                 keyboardType="decimal-pad"
-                placeholder={`Min ${summary.totalReceived}`}
+                placeholder={`Min ${summary.principalReceived}`}
               />
               {!canEditAmount ? (
                 <Text style={[styles.meta, { color: "#EF4444" }]}>
-                  Cannot be less than {summary.totalReceived} already received
+                  Cannot be less than {summary.principalReceived} already received
                 </Text>
               ) : null}
             </View>
@@ -490,6 +571,20 @@ export function ReceivableDetailModal({
                   })}
                 </ScrollView>
               </View>
+            ) : null}
+
+            {/*
+              Interest terms are not editable here. Changing a rate or basis
+              would re-accrue interest behind repayments whose principal and
+              interest components are already recorded, and nothing re-splits
+              those. Delete and re-record is the honest path until it does —
+              the same compromise the borrowing side makes.
+            */}
+            {receivable.interestType && receivable.interestType !== "NONE" ? (
+              <Text style={[styles.meta, { color: theme.colors.mutedForeground }]}>
+                Interest terms cannot be changed after repayments are recorded
+                against them.
+              </Text>
             ) : null}
 
             <View style={styles.actionRow}>
@@ -595,6 +690,13 @@ export function ReceivableDetailModal({
               />
             </View>
 
+            {preview && summary.outstandingInterest > 0 ? (
+              <Text style={[styles.meta, { color: theme.colors.mutedForeground }]}>
+                Applies {preview.interestComponent} to interest and{" "}
+                {preview.principalComponent} to principal.
+              </Text>
+            ) : null}
+
             <View style={styles.actionRow}>
               <Button
                 onPress={handleRepay}
@@ -632,6 +734,24 @@ export function ReceivableDetailModal({
             </Button>
           </View>
         )}
+
+        {/*
+          Offered only when the principal is back and interest is all that
+          remains — the case Mark Settled correctly refuses. Waiving records
+          the amount as forgiven, never as received.
+        */}
+        {!isEditing &&
+        receivable.status !== "FULLY_SETTLED" &&
+        receivable.status !== "CANCELLED" &&
+        summary.outstandingPrincipal <= 0 &&
+        summary.outstandingInterest > 0 ? (
+          <Button variant="outline" onPress={confirmWaiveInterest}>
+            <Ban size={16} color={theme.colors.mutedForeground} />
+            <Text style={{ fontWeight: "700", color: theme.colors.foreground }}>
+              Waive remaining interest
+            </Text>
+          </Button>
+        ) : null}
 
         {!isEditing &&
         receivable.status !== "FULLY_SETTLED" &&
@@ -685,6 +805,9 @@ export function ReceivableDetailModal({
                       {repayment.date}
                       {repayment.receivedAccountId
                         ? ` · ${accountNameById.get(repayment.receivedAccountId) ?? "Account"}`
+                        : ""}
+                      {repayment.interestComponent
+                        ? ` · ${repayment.interestComponent} interest`
                         : ""}
                     </Text>
                     {repayment.note ? (

@@ -15,11 +15,8 @@ import {
 } from "@/components/accounts/accountScreenTheme";
 import { BorrowingCard } from "@/components/borrowings/BorrowingCard";
 import { BorrowingDetailModal } from "@/components/borrowings/BorrowingDetailModal";
-import {
-  BorrowingFilters,
-  type BorrowingDateFilter,
-  type BorrowingStatusFilter,
-} from "@/components/borrowings/BorrowingFilters";
+import { BorrowingStatusFilters } from "@/components/borrowings/BorrowingFilters";
+import { BorrowingFilterSheet } from "@/components/borrowings/BorrowingFilterSheet";
 import { BorrowingSummaryCard } from "@/components/borrowings/BorrowingSummaryCard";
 import { CreateBorrowingModal } from "@/components/borrowings/CreateBorrowingModal";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -30,21 +27,16 @@ import { haptic } from "@/lib/haptics";
 import { useBorrowings } from "@/hooks/useBorrowings";
 import type { Borrowing } from "@/shared/types/borrowing";
 import { summarizeBorrowings } from "@/shared/utils/borrowingMath";
-import { todayDateKey, toLocalDateKey } from "@/shared/utils/dates";
+import {
+  EMPTY_BORROWING_FILTERS,
+  countActiveBorrowingFilters,
+  matchesBorrowingFilters,
+  type BorrowingFilterState,
+} from "@/shared/utils/borrowingFilters";
+import { todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
-
-function dateFilterCutoff(filter: BorrowingDateFilter, today: string): string | null {
-  if (filter === "all") return null;
-  const [year, month] = today.split("-").map(Number);
-
-  if (filter === "thisMonth") return `${today.slice(0, 7)}-01`;
-  if (filter === "thisYear") return `${year}-01-01`;
-
-  const start = new Date(year, month - 1 - 5, 1);
-  return toLocalDateKey(start);
-}
 
 export function BorrowingsList({ listHeader }: { listHeader?: ReactNode }) {
   const { theme, themeName } = useTheme();
@@ -60,63 +52,55 @@ export function BorrowingsList({ listHeader }: { listHeader?: ReactNode }) {
     getSummary,
     getRepayments,
     createBorrowing,
+    updateBorrowing,
     deleteBorrowing,
     addRepayment,
     deleteRepayment,
+    closeBorrowing,
   } = useBorrowings();
 
-  const [statusFilter, setStatusFilter] = useState<BorrowingStatusFilter>("all");
-  const [lenderTypeFilter, setLenderTypeFilter] = useState("all");
-  const [dateFilter, setDateFilter] = useState<BorrowingDateFilter>("all");
+  const [filters, setFilters] = useState<BorrowingFilterState>(
+    EMPTY_BORROWING_FILTERS
+  );
+  const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [startRepaying, setStartRepaying] = useState(false);
+  const [startEditing, setStartEditing] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
 
   const today = todayDateKey();
-  const filtersActive =
-    statusFilter !== "all" ||
-    lenderTypeFilter !== "all" ||
-    dateFilter !== "all" ||
-    searchQuery.trim().length > 0;
+  const activeFilterCount = countActiveBorrowingFilters(filters);
 
-  const filtered = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    const cutoff = dateFilterCutoff(dateFilter, today);
+  const filtered = useMemo(
+    () =>
+      borrowings.filter((borrowing) =>
+        matchesBorrowingFilters({
+          borrowing,
+          summary: borrowing.id ? summaries.get(borrowing.id) : undefined,
+          filters,
+          query: searchQuery,
+          today,
+        })
+      ),
+    [borrowings, summaries, filters, searchQuery, today]
+  );
 
-    return borrowings.filter((borrowing) => {
-      if (!borrowing.id) return false;
-      const summary = summaries.get(borrowing.id);
-      if (!summary) return false;
-
-      if (statusFilter === "outstanding") {
-        if (summary.totalOutstanding <= 0) return false;
-      } else if (statusFilter !== "all" && summary.status !== statusFilter) {
-        return false;
-      }
-
-      if (lenderTypeFilter !== "all" && borrowing.lenderType !== lenderTypeFilter) {
-        return false;
-      }
-
-      if (cutoff && borrowing.borrowedDate < cutoff) return false;
-
-      if (!q) return true;
-      return (
-        borrowing.lenderName.toLowerCase().includes(q) ||
-        (borrowing.note ?? "").toLowerCase().includes(q)
-      );
-    });
-  }, [
-    borrowings,
-    summaries,
-    statusFilter,
-    lenderTypeFilter,
-    dateFilter,
-    searchQuery,
-    today,
-  ]);
+  // The sheet's "Show N" must be the same computation as the list itself.
+  const getFilterResultCount = useCallback(
+    (candidate: BorrowingFilterState) =>
+      borrowings.filter((borrowing) =>
+        matchesBorrowingFilters({
+          borrowing,
+          summary: borrowing.id ? summaries.get(borrowing.id) : undefined,
+          filters: candidate,
+          query: searchQuery,
+          today,
+        })
+      ).length,
+    [borrowings, summaries, searchQuery, today]
+  );
 
   const portfolio = useMemo(
     () => summarizeBorrowings(filtered, repayments, today),
@@ -129,9 +113,7 @@ export function BorrowingsList({ listHeader }: { listHeader?: ReactNode }) {
   );
 
   const clearFilters = useCallback(() => {
-    setStatusFilter("all");
-    setLenderTypeFilter("all");
-    setDateFilter("all");
+    setFilters(EMPTY_BORROWING_FILTERS);
     setSearchQuery("");
   }, []);
 
@@ -144,6 +126,32 @@ export function BorrowingsList({ listHeader }: { listHeader?: ReactNode }) {
     setStartRepaying(false);
     setSelectedId(id);
   }, []);
+
+  const onRecordRepayment = useCallback((id: string) => {
+    setStartRepaying(true);
+    setSelectedId(id);
+  }, []);
+
+  // SPENDLY-159 — closing is not settling: money can still be owed, and the
+  // portfolio total still counts it. The wording has to say so.
+  const confirmClose = useCallback(
+    (id: string) => {
+      appDialog.alert(
+        "Mark this borrowing completed?",
+        "It moves out of your active borrowings and stops offering repayments. Anything still outstanding keeps counting toward your total.",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Mark completed",
+            onPress: () => {
+              void closeBorrowing(id);
+            },
+          },
+        ]
+      );
+    },
+    [closeBorrowing]
+  );
 
   const confirmDelete = useCallback(
     (id: string) => {
@@ -190,6 +198,24 @@ export function BorrowingsList({ listHeader }: { listHeader?: ReactNode }) {
                   setSelectedId(id);
                 },
               },
+              {
+                text: "Edit",
+                onPress: () => {
+                  setStartEditing(true);
+                  setSelectedId(id);
+                },
+              },
+            ]),
+        // SPENDLY-159 — only for a borrowing derivation will not close on its
+        // own. Once nothing is owed the status is already FULLY_SETTLED and
+        // `settled` above has removed this entry along with the others.
+        ...(settled
+          ? []
+          : [
+              {
+                text: "Mark completed",
+                onPress: () => confirmClose(id),
+              },
             ]),
         {
           text: "Delete",
@@ -198,7 +224,7 @@ export function BorrowingsList({ listHeader }: { listHeader?: ReactNode }) {
         },
       ]);
     },
-    [borrowings, summaries, confirmDelete]
+    [borrowings, summaries, confirmDelete, confirmClose]
   );
 
   const renderItem = useCallback(
@@ -212,10 +238,11 @@ export function BorrowingsList({ listHeader }: { listHeader?: ReactNode }) {
           currency={displayCurrency}
           onPress={onPressCard}
           onMenu={onMenuCard}
+          onRecordRepayment={onRecordRepayment}
         />
       );
     },
-    [summaries, displayCurrency, onPressCard, onMenuCard]
+    [summaries, displayCurrency, onPressCard, onMenuCard, onRecordRepayment]
   );
 
   const keyExtractor = useCallback((item: Borrowing) => item.id ?? "", []);
@@ -229,15 +256,6 @@ export function BorrowingsList({ listHeader }: { listHeader?: ReactNode }) {
         totalRepaid={portfolio.totalRepaid}
         overdueCount={portfolio.overdueCount}
         currency={displayCurrency}
-      />
-
-      <BorrowingFilters
-        statusFilter={statusFilter}
-        lenderTypeFilter={lenderTypeFilter}
-        dateFilter={dateFilter}
-        onStatusChange={setStatusFilter}
-        onLenderChange={setLenderTypeFilter}
-        onDateChange={setDateFilter}
       />
 
       <View style={styles.searchRow}>
@@ -279,13 +297,13 @@ export function BorrowingsList({ listHeader }: { listHeader?: ReactNode }) {
         <Pressable
           onPress={() => {
             void haptic.selection();
-            if (filtersActive) clearFilters();
+            setIsFilterSheetOpen(true);
           }}
           style={({ pressed }) => [
             styles.filterBtn,
             {
               backgroundColor: isDark ? "#10141C" : theme.colors.card,
-              borderColor: filtersActive
+              borderColor: activeFilterCount > 0
                 ? ACCOUNT_GREEN_BORDER
                 : isDark
                   ? "rgba(148,163,184,0.14)"
@@ -294,15 +312,28 @@ export function BorrowingsList({ listHeader }: { listHeader?: ReactNode }) {
             pressed && styles.pressed,
           ]}
           accessibilityRole="button"
-          accessibilityLabel={filtersActive ? "Clear filters" : "Filters"}
+          accessibilityLabel={
+            activeFilterCount > 0
+              ? `Filters, ${activeFilterCount} active`
+              : "Filters"
+          }
         >
           <SlidersHorizontal
             size={18}
-            color={filtersActive ? ACCOUNT_GREEN : theme.colors.mutedForeground}
+            color={
+              activeFilterCount > 0 ? ACCOUNT_GREEN : theme.colors.mutedForeground
+            }
           />
-          {filtersActive ? <View style={styles.filterDot} /> : null}
+          {activeFilterCount > 0 ? <View style={styles.filterDot} /> : null}
         </Pressable>
       </View>
+
+      <BorrowingStatusFilters
+        statusFilter={filters.status}
+        onStatusChange={(status) =>
+          setFilters((prev) => ({ ...prev, status }))
+        }
+      />
 
       <Pressable
         onPress={openCreate}
@@ -376,7 +407,18 @@ export function BorrowingsList({ listHeader }: { listHeader?: ReactNode }) {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ paddingBottom: listBottomPadding }}
-        extraData={`${statusFilter}-${lenderTypeFilter}-${dateFilter}-${searchQuery}-${isDark}`}
+        extraData={`${filters.status}-${filters.lenderType}-${filters.date}-${filters.interest}-${searchQuery}-${isDark}`}
+      />
+
+      <BorrowingFilterSheet
+        visible={isFilterSheetOpen}
+        filters={filters}
+        onClose={() => setIsFilterSheetOpen(false)}
+        onApply={(next) => {
+          setFilters(next);
+          setIsFilterSheetOpen(false);
+        }}
+        getResultCount={getFilterResultCount}
       />
 
       <CreateBorrowingModal
@@ -392,12 +434,16 @@ export function BorrowingsList({ listHeader }: { listHeader?: ReactNode }) {
         repayments={selectedId ? getRepayments(selectedId) : []}
         currency={displayCurrency}
         startRepaying={startRepaying}
+        startEditing={startEditing}
         onClose={() => {
           setSelectedId(null);
           setStartRepaying(false);
+          setStartEditing(false);
         }}
         onAddRepayment={addRepayment}
         onDeleteRepayment={deleteRepayment}
+        onUpdateBorrowing={updateBorrowing}
+        onCloseBorrowing={closeBorrowing}
         onDeleteBorrowing={async (id) => {
           const ok = await deleteBorrowing(id);
           if (ok) {

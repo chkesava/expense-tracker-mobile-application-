@@ -52,7 +52,12 @@ export interface NetWorthInputs {
   receivableRepayments: ReceivableRepayment[];
   /** `portfolio.totalOutstanding` from `useBorrowings` — a liability. */
   borrowingOutstanding: number;
-  /** `portfolio.totalOutstanding` from `useReceivables` — a non-cash asset. */
+  /**
+   * `portfolio.totalOutstanding` from `useReceivables` — a non-cash asset.
+   * Includes accrued interest since SPENDLY-160, which is what keeps it
+   * symmetric with `borrowingOutstanding`: an equal lend and borrowing at the
+   * same rate cancel out instead of drifting apart by the interest.
+   */
   receivableOutstanding: number;
   investments: Investment[];
   holdings: Holding[];
