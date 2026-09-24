@@ -177,3 +177,101 @@ describe("receivablesInSpace", () => {
     expect(receivablesInSpace(rows, "")).toEqual([]);
   });
 });
+
+describe("summarizeReceivables — overdue and due-this-month amounts", () => {
+  const ASOF = "2026-03-15";
+
+  it("is zero for an empty portfolio", () => {
+    const totals = summarizeReceivables([], [], ASOF);
+    expect(totals.overdueAmount).toBe(0);
+    expect(totals.dueThisMonthAmount).toBe(0);
+  });
+
+  it("sums outstanding on receivables past their due date", () => {
+    const totals = summarizeReceivables(
+      [makeReceivable({ id: "r1", dueDate: "2026-03-01", originalAmount: 5000 })],
+      [],
+      ASOF
+    );
+    expect(totals.overdueCount).toBe(1);
+    expect(totals.overdueAmount).toBe(5000);
+  });
+
+  it("counts a due date later this month as due-this-month, not overdue", () => {
+    const totals = summarizeReceivables(
+      [makeReceivable({ id: "r1", dueDate: "2026-03-28", originalAmount: 8000 })],
+      [],
+      ASOF
+    );
+    expect(totals.overdueAmount).toBe(0);
+    expect(totals.dueThisMonthAmount).toBe(8000);
+  });
+
+  it("never counts the same money in both buckets", () => {
+    const totals = summarizeReceivables(
+      [
+        makeReceivable({ id: "r1", dueDate: "2026-03-01", originalAmount: 5000 }),
+        makeReceivable({ id: "r2", dueDate: "2026-03-28", originalAmount: 8000 }),
+      ],
+      [],
+      ASOF
+    );
+    expect(totals.overdueAmount).toBe(5000);
+    expect(totals.dueThisMonthAmount).toBe(8000);
+  });
+
+  it("ignores receivables due in another month", () => {
+    const totals = summarizeReceivables(
+      [makeReceivable({ id: "r1", dueDate: "2026-04-10", originalAmount: 9000 })],
+      [],
+      ASOF
+    );
+    expect(totals.overdueAmount).toBe(0);
+    expect(totals.dueThisMonthAmount).toBe(0);
+  });
+
+  it("ignores receivables with no due date", () => {
+    const totals = summarizeReceivables(
+      [makeReceivable({ id: "r1", dueDate: null, originalAmount: 7000 })],
+      [],
+      ASOF
+    );
+    expect(totals.dueThisMonthAmount).toBe(0);
+    expect(totals.overdueAmount).toBe(0);
+  });
+
+  it("counts only what is still owed, not the original amount", () => {
+    const totals = summarizeReceivables(
+      [makeReceivable({ id: "r1", dueDate: "2026-03-28", originalAmount: 10000 })],
+      [makeRepayment({ id: "p1", receivableId: "r1", amount: 4000 })],
+      ASOF
+    );
+    expect(totals.dueThisMonthAmount).toBe(6000);
+  });
+
+  it("drops a receivable out of both buckets once it is settled", () => {
+    const totals = summarizeReceivables(
+      [makeReceivable({ id: "r1", dueDate: "2026-03-01", originalAmount: 10000 })],
+      [makeRepayment({ id: "p1", receivableId: "r1", amount: 10000 })],
+      ASOF
+    );
+    expect(totals.overdueAmount).toBe(0);
+    expect(totals.dueThisMonthAmount).toBe(0);
+  });
+
+  it("excludes cancelled receivables from due-this-month", () => {
+    const totals = summarizeReceivables(
+      [
+        makeReceivable({
+          id: "r1",
+          dueDate: "2026-03-28",
+          originalAmount: 10000,
+          status: "CANCELLED",
+        }),
+      ],
+      [],
+      ASOF
+    );
+    expect(totals.dueThisMonthAmount).toBe(0);
+  });
+});
