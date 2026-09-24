@@ -533,6 +533,139 @@ export default function LedgerScreen() {
       />
   );
 
+  const listHeaderNode = isFilterableTab ? (
+    <>
+      <TransactionFilters
+        title="Journal"
+        filters={journalFilters}
+        searchQuery={query}
+        onSearchChange={setQuery}
+        totalCount={journal.records.length}
+        allCount={journal.kindCounts.all}
+        incomeCount={journal.kindCounts.income}
+        expenseCount={journal.kindCounts.expense}
+        transferCount={journal.kindCounts.transfers}
+        filteredCount={journal.filtered.length}
+        activeFilterCount={journal.activeFilterCount}
+        availableKinds={availableKinds}
+        compact
+        scopeLabel={
+          !ledgerComplete
+            ? "loaded so far"
+            : journal.dateScope.monthOverridden
+              ? "custom range"
+              : activeMonth
+        }
+        onKindChange={(kind) =>
+          setJournalFilters((previous) => ({ ...previous, kind }))
+        }
+        onOpenAdvanced={() => setShowFilters(true)}
+        onRemoveFilter={handleRemoveFilter}
+        onClearAll={clearJournalFilters}
+        action={{
+          accessibilityLabel: "Export these transactions",
+          icon: (
+            <Download size={16} color={theme.colors.mutedForeground} />
+          ),
+          onPress: () => setExpensesTab("data"),
+        }}
+      />
+
+      <Pressable
+        onPress={() => {
+          if (journal.dateScope.monthOverridden) {
+            setJournalFilters((previous) => ({
+              ...previous,
+              fromDate: "",
+              toDate: "",
+            }));
+            return;
+          }
+          setIsMonthDrawerOpen(true);
+        }}
+        style={[
+          styles.monthPickerButton,
+          {
+            alignSelf: "flex-start",
+            backgroundColor: isDark
+              ? "rgba(255,255,255,0.06)"
+              : "rgba(0,0,0,0.04)",
+            borderColor: theme.colors.border,
+            opacity: journal.dateScope.monthOverridden ? 0.6 : 1,
+          },
+        ]}
+        accessibilityRole="button"
+        accessibilityLabel={
+          journal.dateScope.monthOverridden
+            ? `Month ${activeMonth} overridden by a date range. Tap to clear the range.`
+            : `Change month, currently ${activeMonth}`
+        }
+      >
+        <Calendar size={16} color={theme.colors.primary} />
+        <Text
+          style={{
+            fontSize: theme.typography.xs,
+            fontWeight: "700",
+            color: theme.colors.foreground,
+          }}
+        >
+          {journal.dateScope.monthOverridden
+            ? `${activeMonth} · overridden`
+            : activeMonth}
+        </Text>
+      </Pressable>
+
+      {journal.validationError ? (
+        <Text
+          style={[
+            styles.noticeBody,
+            { color: theme.colors.destructive },
+          ]}
+        >
+          {journal.validationError}
+        </Text>
+      ) : null}
+
+      {!ledgerComplete && !expensesLoading && !incomesLoading ? (
+        <View
+          style={[
+            styles.notice,
+            {
+              backgroundColor: theme.colors.card,
+              borderColor: theme.colors.warning,
+            },
+          ]}
+        >
+          <Text
+            style={[
+              styles.noticeTitle,
+              { color: theme.colors.foreground },
+            ]}
+          >
+            Still loading your full history
+          </Text>
+          <Text
+            style={[
+              styles.noticeBody,
+              { color: theme.colors.mutedForeground },
+            ]}
+          >
+            Showing your most recent transactions. Results may be
+            incomplete, and totals stay hidden, until the rest loads.
+          </Text>
+        </View>
+      ) : null}
+      <JournalPeriodSummary
+        totals={journal.totals}
+        periods={journal.periods}
+        granularity={periodGranularity}
+        onGranularityChange={setPeriodGranularity}
+        netCashFlow={journal.runningBalance.netCashFlow}
+        complete={ledgerComplete}
+      />
+    </>
+  ) : null;
+
   return (
     <PageShell
       scrollable={!isExpenseListTab && !isBorrowingsTab}
@@ -588,182 +721,52 @@ export default function LedgerScreen() {
             })}
           </View>
 
-          {/* Search, filters & active month pill */}
-          {isFilterableTab ? (
-            <>
-              <TransactionFilters
-                title="Journal"
-                filters={journalFilters}
-                searchQuery={query}
-                onSearchChange={setQuery}
-                totalCount={journal.records.length}
-                allCount={journal.kindCounts.all}
-                incomeCount={journal.kindCounts.income}
-                expenseCount={journal.kindCounts.expense}
-                transferCount={journal.kindCounts.transfers}
-                filteredCount={journal.filtered.length}
-                activeFilterCount={journal.activeFilterCount}
-                availableKinds={availableKinds}
-                compact
-                scopeLabel={
-                  !ledgerComplete
-                    ? "loaded so far"
-                    : journal.dateScope.monthOverridden
-                      ? "custom range"
-                      : activeMonth
-                }
-                onKindChange={(kind) =>
-                  setJournalFilters((previous) => ({ ...previous, kind }))
-                }
-                onOpenAdvanced={() => setShowFilters(true)}
-                onRemoveFilter={handleRemoveFilter}
-                onClearAll={clearJournalFilters}
-                action={{
-                  accessibilityLabel: "Export these transactions",
-                  icon: (
-                    <Download size={16} color={theme.colors.mutedForeground} />
-                  ),
-                  onPress: () => setExpensesTab("data"),
-                }}
-              />
 
-              <Pressable
-                onPress={() => {
-                  // While a range is in force the pill's job is to get you back
-                  // to month scope, not to open the month drawer.
-                  if (journal.dateScope.monthOverridden) {
-                    setJournalFilters((previous) => ({
-                      ...previous,
-                      fromDate: "",
-                      toDate: "",
-                    }));
-                    return;
-                  }
-                  setIsMonthDrawerOpen(true);
-                }}
-                style={[
-                  styles.monthPickerButton,
-                  {
-                    alignSelf: "flex-start",
-                    backgroundColor: isDark
-                      ? "rgba(255,255,255,0.06)"
-                      : "rgba(0,0,0,0.04)",
-                    borderColor: theme.colors.border,
-                    opacity: journal.dateScope.monthOverridden ? 0.6 : 1,
-                  },
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel={
-                  journal.dateScope.monthOverridden
-                    ? `Month ${activeMonth} overridden by a date range. Tap to clear the range.`
-                    : `Change month, currently ${activeMonth}`
-                }
-              >
-                <Calendar size={16} color={theme.colors.primary} />
-                <Text
-                  style={{
-                    fontSize: theme.typography.xs,
-                    fontWeight: "700",
-                    color: theme.colors.foreground,
-                  }}
-                >
-                  {journal.dateScope.monthOverridden
-                    ? `${activeMonth} · overridden`
-                    : activeMonth}
-                </Text>
-              </Pressable>
-
-              {journal.validationError ? (
-                <Text
-                  style={[
-                    styles.noticeBody,
-                    { color: theme.colors.destructive },
-                  ]}
-                >
-                  {journal.validationError}
-                </Text>
-              ) : null}
-
-              {/* Distinct from loading and from no-results: rows are shown, but
-                  the ledger behind them is still a page. */}
-              {!ledgerComplete && !expensesLoading && !incomesLoading ? (
-                <View
-                  style={[
-                    styles.notice,
-                    {
-                      backgroundColor: theme.colors.card,
-                      borderColor: theme.colors.warning,
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.noticeTitle,
-                      { color: theme.colors.foreground },
-                    ]}
-                  >
-                    Still loading your full history
-                  </Text>
-                  <Text
-                    style={[
-                      styles.noticeBody,
-                      { color: theme.colors.mutedForeground },
-                    ]}
-                  >
-                    Showing your most recent transactions. Results may be
-                    incomplete, and totals stay hidden, until the rest loads.
-                  </Text>
-                </View>
-              ) : null}
-              <JournalPeriodSummary
-                totals={journal.totals}
-                periods={journal.periods}
-                granularity={periodGranularity}
-                onGranularityChange={setPeriodGranularity}
-                netCashFlow={journal.runningBalance.netCashFlow}
-                complete={ledgerComplete}
-              />
-            </>
-          ) : null}
 
           {expensesTab === "history" && (
             <View style={{ flex: 1 }}>
               {expensesLoading && filteredExpenses.length === 0 ? (
-                <View style={{ gap: 8, marginTop: 8 }}>
-                  {[0, 1, 2, 3, 4].map((i) => (
-                    <Skeleton key={i} height={64} borderRadius={theme.radius.lg} />
-                  ))}
-                </View>
+                <PageListStateScroll>
+                  {listHeaderNode}
+                  <View style={{ gap: 8, marginTop: 8 }}>
+                    {[0, 1, 2, 3, 4].map((i) => (
+                      <Skeleton key={i} height={64} borderRadius={theme.radius.lg} />
+                    ))}
+                  </View>
+                </PageListStateScroll>
               ) : expensesError && expenses.length === 0 ? (
                 <PageListStateScroll>
+                  {listHeaderNode}
                   <ErrorState
                     title="Couldn't load your transactions"
                     description={expensesError.message}
                     onRetry={expensesError.retryable ? retryExpenses : undefined}
                   />
                 </PageListStateScroll>
-              ) : hasNarrowedView && journal.filtered.length === 0 ? (
-                <PageListStateScroll>
-                  <EmptyState
-                    illustration="general"
-                    title={
-                      ledgerComplete
-                        ? "No transactions match"
-                        : "No matches loaded yet"
-                    }
-                    description={
-                      ledgerComplete
-                        ? "Nothing in this view matches your search and filters. Try widening the date or amount range."
-                        : "No matches in the transactions loaded so far — the rest of your history is still loading."
-                    }
-                    primaryAction={{
-                      label: "Clear filters",
-                      onPress: clearJournalFilters,
-                    }}
-                  />
-                </PageListStateScroll>
               ) : (
                 <ExpenseList
+                  listHeader={listHeaderNode}
+                  emptyState={
+                    hasNarrowedView && journal.filtered.length === 0 ? (
+                      <EmptyState
+                        illustration="general"
+                        title={
+                          ledgerComplete
+                            ? "No transactions match"
+                            : "No matches loaded yet"
+                        }
+                        description={
+                          ledgerComplete
+                            ? "Nothing in this view matches your search and filters. Try widening the date or amount range."
+                            : "No matches in the transactions loaded so far — the rest of your history is still loading."
+                        }
+                        primaryAction={{
+                          label: "Clear filters",
+                          onPress: clearJournalFilters,
+                        }}
+                      />
+                    ) : undefined
+                  }
                   expenses={filteredExpenses}
                   incomes={filteredIncomes}
                   accounts={accounts}
@@ -787,41 +790,47 @@ export default function LedgerScreen() {
           {expensesTab === "income" && (
             <View style={{ flex: 1 }}>
               {incomesLoading && filteredIncomes.length === 0 ? (
-                <View style={{ gap: 8, marginTop: 8 }}>
-                  {[0, 1, 2, 3, 4].map((i) => (
-                    <Skeleton key={i} height={64} borderRadius={theme.radius.lg} />
-                  ))}
-                </View>
+                <PageListStateScroll>
+                  {listHeaderNode}
+                  <View style={{ gap: 8, marginTop: 8 }}>
+                    {[0, 1, 2, 3, 4].map((i) => (
+                      <Skeleton key={i} height={64} borderRadius={theme.radius.lg} />
+                    ))}
+                  </View>
+                </PageListStateScroll>
               ) : incomesError && incomes.length === 0 ? (
                 <PageListStateScroll>
+                  {listHeaderNode}
                   <ErrorState
                     title="Couldn't load your transactions"
                     description={incomesError.message}
                     onRetry={incomesError.retryable ? retryIncomes : undefined}
                   />
                 </PageListStateScroll>
-              ) : hasNarrowedView && journal.filtered.length === 0 ? (
-                <PageListStateScroll>
-                  <EmptyState
-                    illustration="general"
-                    title={
-                      ledgerComplete
-                        ? "No transactions match"
-                        : "No matches loaded yet"
-                    }
-                    description={
-                      ledgerComplete
-                        ? "Nothing in this view matches your search and filters. Try widening the date or amount range."
-                        : "No matches in the transactions loaded so far — the rest of your history is still loading."
-                    }
-                    primaryAction={{
-                      label: "Clear filters",
-                      onPress: clearJournalFilters,
-                    }}
-                  />
-                </PageListStateScroll>
               ) : (
                 <ExpenseList
+                  listHeader={listHeaderNode}
+                  emptyState={
+                    hasNarrowedView && journal.filtered.length === 0 ? (
+                      <EmptyState
+                        illustration="general"
+                        title={
+                          ledgerComplete
+                            ? "No transactions match"
+                            : "No matches loaded yet"
+                        }
+                        description={
+                          ledgerComplete
+                            ? "Nothing in this view matches your search and filters. Try widening the date or amount range."
+                            : "No matches in the transactions loaded so far — the rest of your history is still loading."
+                        }
+                        primaryAction={{
+                          label: "Clear filters",
+                          onPress: clearJournalFilters,
+                        }}
+                      />
+                    ) : undefined
+                  }
                   expenses={[]}
                   incomes={filteredIncomes}
                   accounts={accounts}
