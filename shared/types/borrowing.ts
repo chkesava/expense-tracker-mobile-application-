@@ -44,47 +44,28 @@ export const BORROWING_STATUS_LABELS: Record<BorrowingStatus, string> = {
   CLOSED: "Closed",
 };
 
-/**
- * How often the configured rate applies.
- * `ONE_TIME` charges the rate once on the principal, no matter how long the
- * borrowing stays open. `NONE` means interest-free.
- */
-export const INTEREST_FREQUENCIES = [
-  "MONTHLY",
-  "ANNUAL",
-  "ONE_TIME",
-  "NONE",
-] as const;
-
-export type InterestFrequency = (typeof INTEREST_FREQUENCIES)[number];
-
-export const INTEREST_FREQUENCY_LABELS: Record<InterestFrequency, string> = {
-  MONTHLY: "Monthly",
-  ANNUAL: "Annual",
-  ONE_TIME: "One-time",
-  NONE: "No interest",
-};
-
-/** Simple interest is the only supported method today; stored so it can grow. */
-export const INTEREST_TYPES = ["NONE", "SIMPLE"] as const;
-
-export type InterestType = (typeof INTEREST_TYPES)[number];
+import type {
+  InterestBasis,
+  InterestFrequency,
+  InterestType,
+} from "./interest";
 
 /**
- * Whether each period charges interest on the amount originally borrowed or on
- * what is still owed. Stored explicitly so nothing about interest is assumed.
+ * The interest vocabulary now lives in `interest.ts`, shared with receivables
+ * (SPENDLY-160). Re-exported so every existing import site is untouched.
  */
-export const INTEREST_BASES = [
-  "ORIGINAL_PRINCIPAL",
-  "OUTSTANDING_PRINCIPAL",
-] as const;
-
-export type InterestBasis = (typeof INTEREST_BASES)[number];
-
-export const INTEREST_BASIS_LABELS: Record<InterestBasis, string> = {
-  ORIGINAL_PRINCIPAL: "On original principal",
-  OUTSTANDING_PRINCIPAL: "On outstanding principal",
-};
+export {
+  INTEREST_BASES,
+  INTEREST_BASIS_LABELS,
+  INTEREST_FREQUENCIES,
+  INTEREST_FREQUENCY_LABELS,
+  INTEREST_TYPES,
+} from "./interest";
+export type {
+  InterestBasis,
+  InterestFrequency,
+  InterestType,
+} from "./interest";
 
 export interface Borrowing {
   id?: string;
