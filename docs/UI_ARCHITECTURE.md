@@ -36,7 +36,7 @@ Ganesh Seva and Nutrition have their own design systems. Nothing here changes th
 | Bottom sheet | `Modal` (`components/common/Modal`) | Gluestack sheet with its own ScrollView. |
 | Confirm or alert | `appDialog` (`lib/appDialog`), `Dialog` (`components/common/Dialog`) | Never call `Alert.alert`. |
 | Toast | `toast` (`lib/toast`) | |
-| Floating glass | `GlassSurface` (`components/ui/GlassSurface`) | `tone="smoke"` is the glossy dark glass used by the nav. |
+| Floating glass | `GlassSurface` (`components/ui/GlassSurface`) | `tone="smoke"` is the dark frosted glass used by the nav (SPENDLY-170); its active tab uses `glassAccent(theme.colors.primary)` from `components/ui/glassTokens`. |
 | Add FAB | `AddFab` (`components/ui/AddFab`) | |
 
 ## 3. Rules for new and changed screens
@@ -75,7 +75,10 @@ Ganesh Seva and Nutrition have their own design systems. Nothing here changes th
   - Without it, Gluestack portals the sheet into the nearest `OverlayProvider`. That causes two problems:
     - The capsule nav's Android `elevation` draws it *above* the sheet and its backdrop.
     - Content rendered at the root loses its caller's context: "useX must be used within a ...Provider", or Ganesh sheets picking up the Spendly theme.
-  - The `OverlayProvider` inside `AppShellInner` stays as a fallback for any future portal-based overlay (popover, menu). It sits below every app provider for the same context reason, and anything portalled into it still needs `elevation` above the capsule's (10).
+  - The `OverlayProvider` inside `AppShellInner` stays as a fallback for any future portal-based overlay (popover, menu). It sits below every app provider for the same context reason, and anything portalled into it still has to render above the capsule's container (`zIndex` 90). The capsule itself has no `elevation`; its shadow is a `boxShadow`.
+- **Android glass blur needs the scope around the chrome.**
+  - `GlassSurface` only blurs on Android when it can see the blur target's ref. `GlassBlurScope` publishes it and has to wrap both `GlassBlurTarget` (the screen stack) and the nav or dock that render beside it. Without the scope the glass silently falls back to tint only; the capsule shipped that way until SPENDLY-170.
+  - expo-blur's Android radius is `intensity / blurReductionFactor` physical pixels and its dark tint scales with `intensity`. `smokeAndroidBlur()` in `components/ui/glassTokens` solves for both; don't pass a raw intensity for smoke glass.
 - **Colour-variable scope.** `SpendlyUIScope` applies the Spendly Gluestack variables to the Spendly shell only. Ganesh and Nutrition keep the root defaults.
 - **`expo prebuild` wipes the release signing.**
   - It regenerates `android/` even without `--clean`, dropping the hand-edited release signing in `android/app/build.gradle` and `android/gradle.properties`.

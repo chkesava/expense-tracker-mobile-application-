@@ -71,10 +71,10 @@ describe("bottomChromeClearance", () => {
   });
 
   it("pins the capsule numbers", () => {
-    // 64 capsule + 24 breathing room above the inset.
-    expect(bottomChromeClearance(34)).toBe(34 + 88);
+    // 72 capsule + 24 breathing room above the inset.
+    expect(bottomChromeClearance(34)).toBe(34 + 96);
     // No inset: the capsule still floats 12 above the screen edge.
-    expect(bottomChromeClearance(0)).toBe(12 + 88);
+    expect(bottomChromeClearance(0)).toBe(12 + 96);
   });
 
   it("keeps the dock below the capsule's reach", () => {
@@ -122,7 +122,7 @@ describe("capsule tab sizing", () => {
     for (const screen of [360, 390, 412, 480]) {
       expect(navTabWidth(capsuleRowWidth(screen), 5)).toBeGreaterThanOrEqual(48);
     }
-    // The capsule is 64dp tall minus 6dp padding each side: 52dp.
-    expect(CAPSULE_HEIGHT - 12).toBeGreaterThanOrEqual(48);
+    // The capsule is 72dp tall minus 8dp padding each side: 56dp.
+    expect(CAPSULE_HEIGHT - 16).toBeGreaterThanOrEqual(48);
   });
 });
