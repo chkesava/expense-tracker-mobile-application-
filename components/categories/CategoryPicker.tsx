@@ -12,7 +12,6 @@ import {
   Check,
   ChevronDown,
   Plus,
-  Search,
   Star,
   X,
 } from "lucide-react-native";
@@ -28,10 +27,13 @@ import {
   pushRecentCategoryPair,
 } from "@/shared/utils/categoryPreferences";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useSurfaces } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
 import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
 
+import { SearchBar } from "@/components/common/SearchBar";
+import { SheetBottomInset } from "@/components/common/SheetBottomInset";
 export interface CategoryPickerProps {
   category: string;
   subcategory: string;
@@ -63,6 +65,7 @@ export function CategoryPicker({
   onComplete,
 }: CategoryPickerProps) {
   const { theme, themeName } = useTheme();
+  const surfaces = useSurfaces();
   const isDark = themeUsesDarkPalette(themeName);
 
   const {
@@ -204,31 +207,11 @@ export function CategoryPicker({
     <>
       {searchable ? (
         <View style={styles.searchContainer}>
-          <View
-            style={[
-              styles.searchBar,
-              {
-                backgroundColor: isDark
-                  ? "rgba(255,255,255,0.06)"
-                  : "rgba(0,0,0,0.04)",
-                borderColor: theme.colors.border,
-              },
-            ]}
-          >
-            <Search size={16} color={theme.colors.mutedForeground} />
-            <TextInput
-              value={search}
-              onChangeText={setSearch}
-              placeholder="Search categories or subcategories..."
-              placeholderTextColor={theme.colors.mutedForeground}
-              style={[styles.searchInput, { color: theme.colors.foreground }]}
-            />
-            {search ? (
-              <Pressable onPress={() => setSearch("")} hitSlop={8}>
-                <X size={16} color={theme.colors.mutedForeground} />
-              </Pressable>
-            ) : null}
-          </View>
+          <SearchBar
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Search categories or subcategories..."
+          />
         </View>
       ) : null}
 
@@ -252,9 +235,7 @@ export function CategoryPicker({
                   style={({ pressed }) => [
                     styles.chipPill,
                     {
-                      backgroundColor: isDark
-                        ? "rgba(255,255,255,0.06)"
-                        : "rgba(0,0,0,0.04)",
+                      backgroundColor: surfaces.control,
                       borderColor: theme.colors.border,
                     },
                     pressed && { opacity: 0.75 },
@@ -670,6 +651,7 @@ export function CategoryPicker({
             </View>
 
             {pickerBody}
+            <SheetBottomInset />
           </View>
         </View>
       </Modal>

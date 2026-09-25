@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { SkeletonHero, SkeletonList } from "@/components/common/Skeleton";
 import { CreatePaymentRequestModal } from "@/components/collect/CreatePaymentRequestModal";
 import { PaymentRequestCard } from "@/components/collect/PaymentRequestCard";
+import { Chip } from "@/components/ui/Chip";
 import { usePaymentRequests } from "@/hooks/usePaymentRequests";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
@@ -121,39 +122,12 @@ export function CollectList() {
         {(["active", "cancelled"] as CollectTab[]).map((tab) => {
           const isSelected = activeTab === tab;
           return (
-            <Pressable
+            <Chip
               key={tab}
-              onPress={() => {
-                haptic.selection().catch(() => undefined);
-                setActiveTab(tab);
-              }}
-              style={[
-                styles.filterPill,
-                isSelected
-                  ? { backgroundColor: theme.colors.primary }
-                  : {
-                      backgroundColor: isDark
-                        ? "rgba(255,255,255,0.06)"
-                        : "rgba(0,0,0,0.04)",
-                    },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.filterPillText,
-                  {
-                    color: isSelected
-                      ? theme.colors.primaryForeground
-                      : theme.colors.mutedForeground,
-                    fontWeight: isSelected ? "700" : "500",
-                  },
-                ]}
-              >
-                {tab === "active"
-                  ? `Active (${activeRequests.length})`
-                  : `Cancelled (${cancelledRequests.length})`}
-              </Text>
-            </Pressable>
+              label={`${tab === "active" ? `Active (${activeRequests.length})` : `Cancelled (${cancelledRequests.length})`}`}
+              selected={isSelected}
+              onPress={() => setActiveTab(tab)}
+            />
           );
         })}
       </View>

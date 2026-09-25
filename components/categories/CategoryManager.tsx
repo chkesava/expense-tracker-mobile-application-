@@ -1,3 +1,4 @@
+import { SearchBar } from "@/components/common/SearchBar";
 import { appDialog } from "@/lib/appDialog";
 import { useMemo, useState } from "react";
 import {
@@ -21,7 +22,6 @@ import {
   Palette,
   Pencil,
   Plus,
-  Search,
   Star,
   Trash2,
   X,
@@ -34,13 +34,14 @@ import {
   CATEGORY_ICON_PRESETS,
 } from "@/shared/utils/categoryPreferences";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useSurfaces } from "@/theme/surfaces";
 import { haptic } from "@/lib/haptics";
 import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
 
+import { Input } from "@/components/ui/Input";
 export function CategoryManager() {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
 
   const {
     parentCategories,
@@ -138,31 +139,11 @@ export function CategoryManager() {
     <View style={styles.container}>
       {/* Search & Add Bar */}
       <View style={styles.headerSection}>
-        <View
-          style={[
-            styles.searchBar,
-            {
-              backgroundColor: isDark
-                ? "rgba(255,255,255,0.06)"
-                : "rgba(0,0,0,0.04)",
-              borderColor: theme.colors.border,
-            },
-          ]}
-        >
-          <Search size={16} color={theme.colors.mutedForeground} />
-          <TextInput
-            value={search}
-            onChangeText={setSearch}
-            placeholder="Search categories & subcategories..."
-            placeholderTextColor={theme.colors.mutedForeground}
-            style={[styles.searchInput, { color: theme.colors.foreground }]}
-          />
-          {search ? (
-            <Pressable onPress={() => setSearch("")} hitSlop={8}>
-              <X size={16} color={theme.colors.mutedForeground} />
-            </Pressable>
-          ) : null}
-        </View>
+        <SearchBar
+          value={search}
+          onChangeText={setSearch}
+          placeholder="Search categories & subcategories..."
+        />
 
         <View style={styles.addCategoryRow}>
           <TextInput
@@ -361,9 +342,7 @@ export function CategoryManager() {
                       style={[
                         styles.addSubInput,
                         {
-                          backgroundColor: isDark
-                            ? "rgba(255,255,255,0.04)"
-                            : "rgba(0,0,0,0.03)",
+                          backgroundColor: surfaces.tile,
                           borderColor: theme.colors.border,
                           color: theme.colors.foreground,
                         },
@@ -391,9 +370,7 @@ export function CategoryManager() {
                       style={[
                         styles.subItemRow,
                         {
-                          backgroundColor: isDark
-                            ? "rgba(255,255,255,0.02)"
-                            : "rgba(0,0,0,0.02)",
+                          backgroundColor: surfaces.tile,
                           borderColor: theme.colors.border,
                         },
                       ]}
@@ -570,18 +547,10 @@ export function CategoryManager() {
               </Pressable>
             </View>
 
-            <TextInput
+            <Input
               value={renameValue}
               onChangeText={setRenameValue}
               placeholder="Enter new name"
-              placeholderTextColor={theme.colors.mutedForeground}
-              style={[
-                styles.dialogInput,
-                {
-                  color: theme.colors.foreground,
-                  borderColor: theme.colors.border,
-                },
-              ]}
               autoFocus
             />
 
@@ -671,9 +640,7 @@ export function CategoryManager() {
                         backgroundColor:
                           mergeSourceId === p.id
                             ? theme.colors.destructive
-                            : isDark
-                              ? "rgba(255,255,255,0.06)"
-                              : "rgba(0,0,0,0.04)",
+                            : surfaces.control,
                         borderColor:
                           mergeSourceId === p.id
                             ? theme.colors.destructive
@@ -724,9 +691,7 @@ export function CategoryManager() {
                           backgroundColor:
                             mergeTargetId === p.id
                               ? theme.colors.primary
-                              : isDark
-                                ? "rgba(255,255,255,0.06)"
-                                : "rgba(0,0,0,0.04)",
+                              : surfaces.control,
                           borderColor:
                             mergeTargetId === p.id
                               ? theme.colors.primary

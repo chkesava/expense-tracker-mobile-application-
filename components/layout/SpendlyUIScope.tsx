@@ -1,7 +1,6 @@
 import React, { useMemo, type ReactNode } from "react";
 import { View } from "react-native";
 import { vars } from "nativewind";
-import { OverlayProvider } from "@gluestack-ui/core/overlay/creator";
 
 import { useTheme } from "@/theme/ThemeProvider";
 import { toGluestackVars } from "@/theme/gluestackVars";
@@ -11,9 +10,12 @@ import { toGluestackVars } from "@/theme/gluestackVars";
  * everything under the Spendly shell. Ganesh Seva and Nutrition render
  * outside this scope and keep the root GluestackUIProvider defaults.
  *
- * The nested OverlayProvider matters: Gluestack Modal / AlertDialog portal
- * into the nearest provider, and the root one sits outside this View, so
- * without it every dialog would lose the Spendly variables.
+ * common/Modal and common/Dialog open real RN Modal windows (`useRNModal`).
+ * They render in place in the React tree, so they inherit these variables and
+ * their caller's context. The Gluestack OverlayProvider fallback is NOT here.
+ * Portalled content renders wherever that provider sits, so it has to be
+ * inside the app providers. The Spendly shell mounts it inside AppShellInner,
+ * still under this View.
  */
 export function SpendlyUIScope({ children }: { children: ReactNode }) {
   const { theme } = useTheme();
@@ -21,7 +23,7 @@ export function SpendlyUIScope({ children }: { children: ReactNode }) {
 
   return (
     <View style={[{ flex: 1 }, scopeStyle]}>
-      <OverlayProvider>{children}</OverlayProvider>
+      {children}
     </View>
   );
 }

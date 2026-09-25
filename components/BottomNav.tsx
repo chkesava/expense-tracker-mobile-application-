@@ -38,6 +38,7 @@ import {
 } from "@/shared/config/bottomChrome";
 import { AddFab } from "@/components/ui/AddFab";
 import { GlassSurface } from "@/components/ui/GlassSurface";
+import { SMOKE_INACTIVE_ALPHA } from "@/components/ui/glassTokens";
 import { haptic } from "@/lib/haptics";
 import { useModals } from "@/providers/ModalProvider";
 import { useTranslation } from "@/providers/LocalizationProvider";
@@ -49,7 +50,6 @@ import {
   type NavSectionId,
 } from "@/shared/config/navigation";
 import { durations, easing } from "@/theme/motion";
-import { useTheme } from "@/theme/ThemeProvider";
 
 const ICON_MAP: Record<
   string,
@@ -129,7 +129,6 @@ export function BottomNav() {
   const insets = useSafeAreaInsets();
   const { setIsAddSheetOpen } = useModals();
   const investmentsEnabled = useInvestmentsEnabled();
-  const { theme } = useTheme();
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const keyboardProgress = useSharedValue(0);
 
@@ -237,11 +236,11 @@ export function BottomNav() {
     ],
   }));
 
-  // SPENDLY-165: the accent itself on a tinted pill fell below 4.5:1 for
-  // several accents (amber ~2.8:1). The MD3 container pair is contrast-safe
-  // for every theme and accent; lib/navContrast.test.ts pins that.
-  const activeColor = theme.colors.onPrimaryContainer;
-  const inactiveColor = theme.colors.mutedForeground;
+  // SPENDLY-154: the capsule is glossy smoke glass in every theme, so its
+  // content is white; the active tab sits in a frosted white pill.
+  // lib/navContrast.test.ts pins both against the lightest backdrops.
+  const activeColor = "#FFFFFF";
+  const inactiveColor = `rgba(255, 255, 255, ${SMOKE_INACTIVE_ALPHA})`;
 
   return (
     <Animated.View
@@ -252,7 +251,7 @@ export function BottomNav() {
         keyboardStyle,
       ]}
     >
-      <GlassSurface style={styles.capsule} contentStyle={styles.capsuleContent}>
+      <GlassSurface tone="smoke" style={styles.capsule} contentStyle={styles.capsuleContent}>
         <View
           style={styles.row}
           accessibilityRole="tablist"
@@ -262,7 +261,7 @@ export function BottomNav() {
             pointerEvents="none"
             style={[
               styles.indicator,
-              { backgroundColor: theme.colors.primaryContainer },
+              styles.indicatorGloss,
               indicatorStyle,
             ]}
           />
@@ -326,6 +325,11 @@ const styles = StyleSheet.create({
     left: 0,
     borderRadius: 999,
     borderCurve: "continuous",
+  },
+  indicatorGloss: {
+    backgroundColor: "rgba(255, 255, 255, 0.16)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255, 255, 255, 0.32)",
   },
   tab: {
     flex: 1,

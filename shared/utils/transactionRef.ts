@@ -68,7 +68,10 @@ export function findActivityForRef(
   });
 }
 
-export function transactionHref(ref: TransactionRef, accountId?: string | null): string {
+export function transactionHref(
+  ref: TransactionRef,
+  accountId?: string | null
+): `/transactions/${string}` {
   const params = new URLSearchParams({ kind: ref.kind });
   const account = accountId?.trim();
   if (account) params.set("accountId", account);

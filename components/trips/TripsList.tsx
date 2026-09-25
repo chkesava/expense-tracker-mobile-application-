@@ -12,6 +12,7 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { SkeletonHero, SkeletonList } from "@/components/common/Skeleton";
 import { CreateTripModal } from "@/components/trips/CreateTripModal";
 import { TripDetailModal } from "@/components/trips/TripDetailModal";
+import { Chip } from "@/components/ui/Chip";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useTrips } from "@/hooks/useTrips";
 import type { Trip } from "@/shared/types/trip";
@@ -192,37 +193,12 @@ export function TripsList() {
         {(["active", "upcoming", "completed"] as TripTab[]).map((tab) => {
           const isSelected = activeTab === tab;
           return (
-            <Pressable
+            <Chip
               key={tab}
-              onPress={() => {
-                haptic.selection().catch(() => undefined);
-                setActiveTab(tab);
-              }}
-              style={[
-                styles.filterPill,
-                isSelected
-                  ? { backgroundColor: theme.colors.primary }
-                  : {
-                      backgroundColor: isDark
-                        ? "rgba(255,255,255,0.06)"
-                        : "rgba(0,0,0,0.04)",
-                    },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.filterPillText,
-                  {
-                    color: isSelected
-                      ? theme.colors.primaryForeground
-                      : theme.colors.mutedForeground,
-                    fontWeight: isSelected ? "700" : "500",
-                  },
-                ]}
-              >
-                {tab.charAt(0).toUpperCase() + tab.slice(1)}
-              </Text>
-            </Pressable>
+              label={tab.charAt(0).toUpperCase() + tab.slice(1)}
+              selected={isSelected}
+              onPress={() => setActiveTab(tab)}
+            />
           );
         })}
       </View>

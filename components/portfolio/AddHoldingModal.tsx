@@ -1,9 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, StyleSheet, Text, Modal, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard } from 'react-native';
+import { View, StyleSheet, Text, Modal, ScrollView, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard } from 'react-native';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { useTheme } from '@/theme/ThemeProvider';
-import { themeUsesDarkPalette } from '@/theme/tokens';
 import { X } from 'lucide-react-native';
 import { Amount } from '@/components/common/Amount';
 import { newId } from '@/lib/id';
@@ -16,6 +15,8 @@ import {
 } from '@/shared/features/portfolio/utils/investmentCash';
 import type { Holding, InstrumentType, Exchange, Broker } from '@/shared/features/portfolio/types';
 
+import { Chip } from '@/components/ui/Chip';
+import { SheetBottomInset } from '@/components/common/SheetBottomInset';
 export type AddHoldingOptions = {
   fundingSource: HoldingFundingSource;
   /** Minted once per open so a retried submit rewrites the same docs. */
@@ -66,8 +67,7 @@ export function AddHoldingModal({
   currency,
   onAddCash,
 }: AddHoldingModalProps) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
 
   const [instrument, setInstrument] = useState<InstrumentType>('stock');
   const [exchange, setExchange] = useState<Exchange>('NSE');
@@ -203,9 +203,6 @@ export function AddHoldingModal({
 
   const textStyle = { color: theme.colors.foreground };
   const cardBg = { backgroundColor: theme.colors.card };
-  const primaryBg = { backgroundColor: theme.colors.primary };
-  const primaryText = { color: theme.colors.primaryForeground };
-  const unselectedBg = { backgroundColor: theme.colors.muted };
 
   return (
     <Modal visible={visible} animationType="slide" transparent={true} onRequestClose={handleClose}>
@@ -217,15 +214,16 @@ export function AddHoldingModal({
           <View style={[styles.modalContent, cardBg]}>
             <View style={styles.header}>
               <Text style={[styles.title, textStyle]}>Add Holding</Text>
-              <TouchableOpacity
+              <Button
+                variant="ghost"
+                size="icon"
                 onPress={handleClose}
                 hitSlop={12}
-                accessibilityRole="button"
                 accessibilityLabel="Close"
                 style={styles.closeBtn}
               >
                 <X size={24} color={theme.colors.foreground} />
-              </TouchableOpacity>
+              </Button>
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
@@ -233,15 +231,12 @@ export function AddHoldingModal({
               <Text style={[styles.sectionTitle, textStyle]}>Instrument Type</Text>
               <View style={styles.pillsRow}>
                 {INSTRUMENTS.map((inst) => (
-                  <TouchableOpacity
+                  <Chip
                     key={inst.value}
-                    style={[styles.pill, instrument === inst.value ? primaryBg : unselectedBg]}
+                    label={inst.label}
+                    selected={instrument === inst.value}
                     onPress={() => setInstrument(inst.value)}
-                  >
-                    <Text style={[styles.pillText, instrument === inst.value ? primaryText : textStyle]}>
-                      {inst.label}
-                    </Text>
-                  </TouchableOpacity>
+                  />
                 ))}
               </View>
 
@@ -250,15 +245,13 @@ export function AddHoldingModal({
                   <Text style={[styles.sectionTitle, textStyle]}>Exchange</Text>
                   <View style={styles.pillsRow}>
                     {EXCHANGES.map((ex) => (
-                      <TouchableOpacity
+                      <Chip
                         key={ex.value}
-                        style={[styles.pill, exchange === ex.value ? primaryBg : unselectedBg, { flex: 1 }]}
+                        label={ex.label}
+                        selected={exchange === ex.value}
                         onPress={() => setExchange(ex.value)}
-                      >
-                        <Text style={[styles.pillText, exchange === ex.value ? primaryText : textStyle, { textAlign: 'center' }]}>
-                          {ex.label}
-                        </Text>
-                      </TouchableOpacity>
+                        style={{ flex: 1 }}
+                      />
                     ))}
                   </View>
                 </View>
@@ -311,15 +304,13 @@ export function AddHoldingModal({
               <Text style={[styles.sectionTitle, textStyle]}>Broker (Optional)</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.brokerScroll}>
                 {BROKERS.map((b) => (
-                  <TouchableOpacity
+                  <Chip
                     key={b.value}
-                    style={[styles.pill, broker === b.value ? primaryBg : unselectedBg]}
+                    label={b.label}
+                    selected={broker === b.value}
                     onPress={() => setBroker(b.value)}
-                  >
-                    <Text style={[styles.pillText, broker === b.value ? primaryText : textStyle]}>
-                      {b.label}
-                    </Text>
-                  </TouchableOpacity>
+                    style={styles.brokerChip}
+                  />
                 ))}
               </ScrollView>
 
@@ -352,55 +343,22 @@ export function AddHoldingModal({
                 </View>
 
                 <View style={styles.fundingOptions}>
-                  <TouchableOpacity
+                  <Chip
+                    label="Use investment cash"
+                    selected={fundingSource === 'investment_cash'}
                     disabled={!affordability.ok}
                     onPress={() => setFundingSource('investment_cash')}
-                    style={[
-                      styles.fundingOption,
-                      {
-                        borderColor:
-                          fundingSource === 'investment_cash'
-                            ? theme.colors.primary
-                            : theme.colors.border,
-                        opacity: affordability.ok ? 1 : 0.45,
-                      },
-                      fundingSource === 'investment_cash' ? primaryBg : cardBg,
-                    ]}
                     accessibilityRole="radio"
-                    accessibilityState={{ selected: fundingSource === 'investment_cash', disabled: !affordability.ok }}
-                  >
-                    <Text
-                      style={[
-                        styles.fundingOptionText,
-                        fundingSource === 'investment_cash' ? primaryText : textStyle,
-                      ]}
-                    >
-                      Use investment cash
-                    </Text>
-                  </TouchableOpacity>
+                    style={styles.fundingOption}
+                  />
 
-                  <TouchableOpacity
+                  <Chip
+                    label="Already own it"
+                    selected={fundingSource === 'external'}
                     onPress={() => setFundingSource('external')}
-                    style={[
-                      styles.fundingOption,
-                      {
-                        borderColor:
-                          fundingSource === 'external' ? theme.colors.primary : theme.colors.border,
-                      },
-                      fundingSource === 'external' ? primaryBg : cardBg,
-                    ]}
                     accessibilityRole="radio"
-                    accessibilityState={{ selected: fundingSource === 'external' }}
-                  >
-                    <Text
-                      style={[
-                        styles.fundingOptionText,
-                        fundingSource === 'external' ? primaryText : textStyle,
-                      ]}
-                    >
-                      Already own it
-                    </Text>
-                  </TouchableOpacity>
+                    style={styles.fundingOption}
+                  />
                 </View>
 
                 {deductsCash ? (
@@ -429,11 +387,14 @@ export function AddHoldingModal({
                       cash.
                     </Text>
                     {onAddCash ? (
-                      <TouchableOpacity onPress={onAddCash} accessibilityRole="button">
-                        <Text style={[styles.fundingLink, { color: theme.colors.primary }]}>
-                          Add cash from a bank account
-                        </Text>
-                      </TouchableOpacity>
+                      <Button
+                        variant="text"
+                        size="sm"
+                        onPress={onAddCash}
+                        style={styles.fundingLinkButton}
+                      >
+                        Add cash from a bank account
+                      </Button>
                     ) : null}
                   </View>
                 ) : null}
@@ -451,6 +412,7 @@ export function AddHoldingModal({
 
               <View style={{ height: 40 }} />
             </ScrollView>
+            <SheetBottomInset />
           </View>
         </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
@@ -459,6 +421,14 @@ export function AddHoldingModal({
 }
 
 const styles = StyleSheet.create({
+  brokerChip: {
+    marginRight: 8,
+  },
+  fundingLinkButton: {
+    alignSelf: 'flex-start',
+    minHeight: 32,
+    paddingHorizontal: 0,
+  },
   fundingCard: {
     borderWidth: 1,
     borderRadius: 12,
@@ -485,11 +455,6 @@ const styles = StyleSheet.create({
   },
   fundingOption: {
     flex: 1,
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-    alignItems: 'center',
   },
   fundingOptionText: {
     fontSize: 13,

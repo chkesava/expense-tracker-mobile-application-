@@ -7,19 +7,20 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import { X } from "lucide-react-native";
 
 import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Chip } from "@/components/ui/Chip";
 import { usePaymentRequests } from "@/hooks/usePaymentRequests";
 import { useSettings } from "@/providers/SettingsProvider";
 import { useAuth } from "@/providers/AuthProvider";
 import type { QrStyleId } from "@/shared/utils/qrStyles";
 import { QR_STYLES, storeQrStyleId } from "@/shared/utils/qrStyles";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useSurfaces } from "@/theme/surfaces";
 import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
@@ -34,8 +35,8 @@ export function CreatePaymentRequestModal({
   visible,
   onClose,
 }: CreatePaymentRequestModalProps) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
   const { user } = useAuth();
   const { settings: userSettings } = useSettings();
   const displayCurrency = useDisplayCurrency();
@@ -153,9 +154,7 @@ export function CreatePaymentRequestModal({
               style={[
                 styles.upiCard,
                 {
-                  backgroundColor: isDark
-                    ? "rgba(255,255,255,0.04)"
-                    : "rgba(0,0,0,0.02)",
+                  backgroundColor: surfaces.tile,
                   borderColor: theme.colors.border,
                 },
               ]}
@@ -189,24 +188,11 @@ export function CreatePaymentRequestModal({
               >
                 AMOUNT ({displayCurrency})
               </Text>
-              <TextInput
+              <Input
                 value={amount}
                 onChangeText={setAmount}
                 placeholder="0.00"
                 keyboardType="decimal-pad"
-                placeholderTextColor={theme.colors.mutedForeground}
-                style={[
-                  styles.input,
-                  {
-                    backgroundColor: isDark
-                      ? "rgba(255,255,255,0.04)"
-                      : "rgba(0,0,0,0.02)",
-                    borderColor: theme.colors.border,
-                    color: theme.colors.foreground,
-                    fontSize: 22,
-                    fontWeight: "800",
-                  },
-                ]}
               />
             </View>
 
@@ -228,40 +214,12 @@ export function CreatePaymentRequestModal({
                 {NOTE_PREFIXES.map((prefix) => {
                   const isSelected = notePrefix === prefix;
                   return (
-                    <Pressable
+                    <Chip
                       key={prefix}
-                      onPress={() => {
-                        haptic.selection().catch(() => undefined);
-                        setNotePrefix(prefix);
-                      }}
-                      style={[
-                        styles.chip,
-                        {
-                          backgroundColor: isSelected
-                            ? theme.colors.primary
-                            : isDark
-                              ? "rgba(255,255,255,0.06)"
-                              : "rgba(0,0,0,0.04)",
-                          borderColor: isSelected
-                            ? theme.colors.primary
-                            : theme.colors.border,
-                        },
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.chipText,
-                          {
-                            color: isSelected
-                              ? theme.colors.primaryForeground
-                              : theme.colors.foreground,
-                            fontWeight: isSelected ? "700" : "500",
-                          },
-                        ]}
-                      >
-                        {prefix}
-                      </Text>
-                    </Pressable>
+                      label={prefix}
+                      selected={isSelected}
+                      onPress={() => setNotePrefix(prefix)}
+                    />
                   );
                 })}
               </ScrollView>
@@ -277,21 +235,10 @@ export function CreatePaymentRequestModal({
               >
                 NOTE (optional)
               </Text>
-              <TextInput
+              <Input
                 value={note}
                 onChangeText={setNote}
                 placeholder={`e.g. ${notePrefix} July Rent`}
-                placeholderTextColor={theme.colors.mutedForeground}
-                style={[
-                  styles.input,
-                  {
-                    backgroundColor: isDark
-                      ? "rgba(255,255,255,0.04)"
-                      : "rgba(0,0,0,0.02)",
-                    borderColor: theme.colors.border,
-                    color: theme.colors.foreground,
-                  },
-                ]}
               />
             </View>
 
