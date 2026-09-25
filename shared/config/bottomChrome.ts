@@ -108,3 +108,45 @@ export function bottomChromeClearance(
     extra
   );
 }
+
+/*
+ * SPENDLY-165: the capsule has a fixed height but its width depends on the
+ * screen, and five labels at a large system font scale overflow a narrow
+ * phone. Below these widths the labels drop out and the tabs go icon-only;
+ * each tab keeps its accessibility label, so nothing is lost to a screen
+ * reader.
+ */
+/** Narrowest tab (dp) that still fits an 11pt label (shrinkable to 75%) at 1× font. */
+export const NAV_LABEL_MIN_TAB_WIDTH = 52;
+/** Label font scaling stops here; beyond it the label would clip. */
+export const NAV_LABEL_MAX_FONT_SCALE = 1.3;
+
+/** Width of one tab, given the measured tab-row width. */
+export function navTabWidth(rowWidth: number, tabCount: number): number {
+  return tabCount > 0 ? rowWidth / tabCount : rowWidth;
+}
+
+/** True when the tab row is too tight for labels at this font scale. */
+export function shouldCompactNavLabels(
+  rowWidth: number,
+  tabCount: number,
+  fontScale: number
+): boolean {
+  if (rowWidth <= 0) return false; // not measured yet
+  const effectiveScale = Math.min(Math.max(fontScale, 1), NAV_LABEL_MAX_FONT_SCALE);
+  return navTabWidth(rowWidth, tabCount) < NAV_LABEL_MIN_TAB_WIDTH * effectiveScale;
+}
+
+/**
+ * Width available to the tab row on a screen of `screenWidth`: the screen,
+ * minus side margins, minus the FAB and its gap, minus capsule padding.
+ */
+export function capsuleRowWidth(screenWidth: number, capsulePadding = 6): number {
+  return (
+    screenWidth -
+    CAPSULE_SIDE_MARGIN * 2 -
+    CAPSULE_FAB_SIZE -
+    CAPSULE_FAB_GAP -
+    capsulePadding * 2
+  );
+}

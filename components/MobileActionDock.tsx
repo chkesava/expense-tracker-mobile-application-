@@ -7,16 +7,15 @@ import { ACTION_DOCK_EDGE, actionDockOffset } from "@/components/layout/chrome";
 import { haptic } from "@/lib/haptics";
 import { SideDrawer } from "@/components/SideDrawer";
 import { AddFab } from "@/components/ui/AddFab";
+import { GlassSurface } from "@/components/ui/GlassSurface";
 import { useModals } from "@/providers/ModalProvider";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
 
 export function MobileActionDock() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const { setIsAddSheetOpen } = useModals();
   const insets = useSafeAreaInsets();
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
 
   const handleOpenMenu = () => {
     void haptic.navigation();
@@ -45,27 +44,20 @@ export function MobileActionDock() {
           />
         </View>
 
-        {/* Right Menu Button */}
-        <Pressable
-          onPress={handleOpenMenu}
-          accessibilityRole="button"
-          accessibilityLabel="Open navigation menu"
-          style={({ pressed }) => [
-            styles.menuButton,
-            {
-              backgroundColor: theme.colors.card,
-              borderColor: theme.colors.border,
-              shadowColor: "#000",
-              shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: isDark ? 0.35 : 0.12,
-              shadowRadius: 10,
-              elevation: 8,
-            },
-            pressed && { transform: [{ scale: 0.94 }], opacity: 0.8 },
-          ]}
-        >
-          <Menu size={24} color={theme.colors.foreground} strokeWidth={2.2} />
-        </Pressable>
+        {/* Right Menu Button — same glass as the capsule nav (SPENDLY-165). */}
+        <GlassSurface radius={20} style={styles.menuButton}>
+          <Pressable
+            onPress={handleOpenMenu}
+            accessibilityRole="button"
+            accessibilityLabel="Open navigation menu"
+            style={({ pressed }) => [
+              styles.menuHit,
+              pressed && { transform: [{ scale: 0.94 }], opacity: 0.8 },
+            ]}
+          >
+            <Menu size={24} color={theme.colors.foreground} strokeWidth={2.2} />
+          </Pressable>
+        </GlassSurface>
       </View>
 
       <SideDrawer isOpen={isMenuOpen} onClose={() => setIsMenuOpen(false)} />
@@ -95,8 +87,10 @@ const styles = StyleSheet.create({
     right: ACTION_DOCK_EDGE,
     width: 52,
     height: 52,
-    borderRadius: 20,
-    borderWidth: 1,
+  },
+  menuHit: {
+    width: 52,
+    height: 52,
     alignItems: "center",
     justifyContent: "center",
   },

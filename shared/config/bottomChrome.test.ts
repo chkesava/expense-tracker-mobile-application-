@@ -11,6 +11,9 @@ import {
   bottomChromeTopEdge,
   bottomNavFabOffset,
   capsuleOffset,
+  capsuleRowWidth,
+  navTabWidth,
+  shouldCompactNavLabels,
   type BottomNavStyle,
 } from "@/shared/config/bottomChrome";
 
@@ -91,5 +94,35 @@ describe("bottomChromeClearance", () => {
     expect(bottomChromeClearance(48, { navStyle })).toBeGreaterThan(
       bottomChromeClearance(0, { navStyle })
     );
+  });
+});
+
+describe("capsule tab sizing", () => {
+  it("keeps five labelled tabs on a standard 390dp phone at 1× font", () => {
+    expect(shouldCompactNavLabels(capsuleRowWidth(390), 5, 1)).toBe(false);
+  });
+
+  it("drops labels on a standard phone at the maximum font scale", () => {
+    expect(shouldCompactNavLabels(capsuleRowWidth(390), 5, 1.3)).toBe(true);
+  });
+
+  it("keeps labels at large font when only four tabs are shown", () => {
+    expect(shouldCompactNavLabels(capsuleRowWidth(412), 4, 1.3)).toBe(false);
+  });
+
+  it("drops labels on a narrow 320dp phone", () => {
+    expect(shouldCompactNavLabels(capsuleRowWidth(320), 5, 1)).toBe(true);
+  });
+
+  it("does not compact before the row has been measured", () => {
+    expect(shouldCompactNavLabels(0, 5, 1.3)).toBe(false);
+  });
+
+  it("gives every tab a 48dp touch target from 360dp screens up", () => {
+    for (const screen of [360, 390, 412, 480]) {
+      expect(navTabWidth(capsuleRowWidth(screen), 5)).toBeGreaterThanOrEqual(48);
+    }
+    // The capsule is 64dp tall minus 6dp padding each side: 52dp.
+    expect(CAPSULE_HEIGHT - 12).toBeGreaterThanOrEqual(48);
   });
 });

@@ -6,6 +6,7 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
   type LayoutChangeEvent,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -31,6 +32,10 @@ import {
   CAPSULE_SIDE_MARGIN,
   capsuleOffset,
 } from "@/components/layout/chrome";
+import {
+  NAV_LABEL_MAX_FONT_SCALE,
+  shouldCompactNavLabels,
+} from "@/shared/config/bottomChrome";
 import { AddFab } from "@/components/ui/AddFab";
 import { GlassSurface } from "@/components/ui/GlassSurface";
 import { haptic } from "@/lib/haptics";
@@ -45,7 +50,6 @@ import {
 } from "@/shared/config/navigation";
 import { durations, easing } from "@/theme/motion";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
 
 const ICON_MAP: Record<
   string,
@@ -61,14 +65,6 @@ const ICON_MAP: Record<
 /** Inner padding between the capsule edge and the tab row. */
 const CAPSULE_PADDING = 6;
 
-/** #RRGGBB -> rgba(). Anything else is returned unchanged. */
-function alpha(color: string, a: number): string {
-  const m = /^#([0-9a-f]{6})$/i.exec(color);
-  if (!m) return color;
-  const n = parseInt(m[1], 16);
-  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
-}
-
 type TabFrame = { x: number; width: number };
 
 function NavDestination({
@@ -76,6 +72,7 @@ function NavDestination({
   isActive,
   activeColor,
   inactiveColor,
+  compact,
   onPress,
   onLayout,
 }: {
@@ -83,6 +80,8 @@ function NavDestination({
   isActive: boolean;
   activeColor: string;
   inactiveColor: string;
+  /** Icon-only: the row is too narrow for labels at this font scale. */
+  compact: boolean;
   onPress: () => void;
   onLayout: (event: LayoutChangeEvent) => void;
 }) {
@@ -100,18 +99,21 @@ function NavDestination({
       accessibilityLabel={`Go to ${label}`}
       accessibilityState={{ selected: isActive }}
     >
-      <Icon size={22} color={color} strokeWidth={isActive ? 2.4 : 1.85} />
-      <Text
-        style={[
-          styles.tabLabel,
-          { color, fontWeight: isActive ? "700" : "500" },
-        ]}
-        numberOfLines={1}
-        adjustsFontSizeToFit
-        minimumFontScale={0.75}
-      >
-        {label}
-      </Text>
+      <Icon size={compact ? 24 : 22} color={color} strokeWidth={isActive ? 2.4 : 1.85} />
+      {compact ? null : (
+        <Text
+          style={[
+            styles.tabLabel,
+            { color, fontWeight: isActive ? "700" : "500" },
+          ]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.75}
+          maxFontSizeMultiplier={NAV_LABEL_MAX_FONT_SCALE}
+        >
+          {label}
+        </Text>
+      )}
     </Pressable>
   );
 }
@@ -127,8 +129,7 @@ export function BottomNav() {
   const insets = useSafeAreaInsets();
   const { setIsAddSheetOpen } = useModals();
   const investmentsEnabled = useInvestmentsEnabled();
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const keyboardProgress = useSharedValue(0);
 
@@ -137,6 +138,10 @@ export function BottomNav() {
       item.includeInBottomNav &&
       (!item.requiresInvestmentsFeature || investmentsEnabled)
   );
+  const { fontScale } = useWindowDimensions();
+  const [rowWidth, setRowWidth] = useState(0);
+  const compactLabels = shouldCompactNavLabels(rowWidth, navLinks.length, fontScale);
+
   const activeIndex = navLinks.findIndex((link) =>
     isNavItemActive(pathname, link.id as NavSectionId)
   );
@@ -232,7 +237,10 @@ export function BottomNav() {
     ],
   }));
 
-  const activeColor = theme.colors.primary;
+  // SPENDLY-165: the accent itself on a tinted pill fell below 4.5:1 for
+  // several accents (amber ~2.8:1). The MD3 container pair is contrast-safe
+  // for every theme and accent; lib/navContrast.test.ts pins that.
+  const activeColor = theme.colors.onPrimaryContainer;
   const inactiveColor = theme.colors.mutedForeground;
 
   return (
@@ -245,12 +253,16 @@ export function BottomNav() {
       ]}
     >
       <GlassSurface style={styles.capsule} contentStyle={styles.capsuleContent}>
-        <View style={styles.row} accessibilityRole="tablist">
+        <View
+          style={styles.row}
+          accessibilityRole="tablist"
+          onLayout={(event) => setRowWidth(event.nativeEvent.layout.width)}
+        >
           <Animated.View
             pointerEvents="none"
             style={[
               styles.indicator,
-              { backgroundColor: alpha(activeColor, isDark ? 0.2 : 0.12) },
+              { backgroundColor: theme.colors.primaryContainer },
               indicatorStyle,
             ]}
           />
@@ -263,6 +275,7 @@ export function BottomNav() {
                 isActive={isActive}
                 activeColor={activeColor}
                 inactiveColor={inactiveColor}
+                compact={compactLabels}
                 onPress={() => handleTabPress(link, isActive)}
                 onLayout={handleTabLayout(index)}
               />
