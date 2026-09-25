@@ -17,6 +17,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { usePathname, useRouter } from "expo-router";
+import { LinearGradient } from "expo-linear-gradient";
 import {
   BarChart3,
   Home,
@@ -40,6 +41,7 @@ import { AddFab } from "@/components/ui/AddFab";
 import { GlassSurface } from "@/components/ui/GlassSurface";
 import {
   SMOKE_ACTIVE_PILL_ALPHA,
+  SMOKE_ACTIVE_PILL_BOTTOM_ALPHA,
   SMOKE_ACTIVE_PILL_BORDER_ALPHA,
   SMOKE_INACTIVE_ALPHA,
   SMOKE_INACTIVE_ICON_ALPHA,
@@ -73,6 +75,8 @@ const ICON_MAP: Record<
 
 /** Inner padding between the capsule edge and the tab row. */
 const CAPSULE_PADDING = 8;
+/** How far the active lens reaches into that padding. */
+const PILL_OVERHANG = 5;
 
 type TabFrame = { x: number; width: number };
 
@@ -111,7 +115,7 @@ function NavDestination({
       accessibilityLabel={`Go to ${label}`}
       accessibilityState={{ selected: isActive }}
     >
-      <Icon size={compact ? 24 : 22} color={iconColor} strokeWidth={isActive ? 2.4 : 1.85} />
+      <Icon size={24} color={iconColor} strokeWidth={isActive ? 2.4 : 2} />
       {compact ? null : (
         <Text
           style={[
@@ -277,14 +281,19 @@ export function BottomNav() {
           accessibilityRole="tablist"
           onLayout={(event) => setRowWidth(event.nativeEvent.layout.width)}
         >
+          {/* A lens of lighter glass: brightest at the top, like the reference. */}
           <Animated.View
             pointerEvents="none"
-            style={[
-              styles.indicator,
-              styles.indicatorGloss,
-              indicatorStyle,
-            ]}
-          />
+            style={[styles.indicator, styles.indicatorGloss, indicatorStyle]}
+          >
+            <LinearGradient
+              colors={[
+                `rgba(255, 255, 255, ${SMOKE_ACTIVE_PILL_ALPHA})`,
+                `rgba(255, 255, 255, ${SMOKE_ACTIVE_PILL_BOTTOM_ALPHA})`,
+              ]}
+              style={StyleSheet.absoluteFill}
+            />
+          </Animated.View>
           {navLinks.map((link, index) => {
             const isActive = index === activeIndex;
             return (
@@ -340,15 +349,17 @@ const styles = StyleSheet.create({
     alignItems: "stretch",
   },
   indicator: {
+    // Reaches past the row into the capsule padding, so the lens fills
+    // nearly the full height of the glass.
     position: "absolute",
-    top: 0,
-    bottom: 0,
+    top: -PILL_OVERHANG,
+    bottom: -PILL_OVERHANG,
     left: 0,
     borderRadius: 999,
     borderCurve: "continuous",
   },
   indicatorGloss: {
-    backgroundColor: `rgba(255, 255, 255, ${SMOKE_ACTIVE_PILL_ALPHA})`,
+    overflow: "hidden",
     borderWidth: 1,
     borderColor: `rgba(255, 255, 255, ${SMOKE_ACTIVE_PILL_BORDER_ALPHA})`,
   },

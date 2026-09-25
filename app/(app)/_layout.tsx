@@ -10,7 +10,7 @@ import { MaintenanceScreen } from "@/components/MaintenanceScreen";
 import { MobileActionDock } from "@/components/MobileActionDock";
 import { PrivacyLock } from "@/components/PrivacyLock";
 import { TabSwipeArea } from "@/components/navigation/TabSwipeArea";
-import { GlassBlurTarget } from "@/components/ui/GlassSurface";
+import { GlassBlurScope, GlassBlurTarget } from "@/components/ui/GlassSurface";
 import { OverlayProvider } from "@gluestack-ui/core/overlay/creator";
 import { NavigationBar } from "expo-navigation-bar";
 import { themeUsesDarkPalette } from "@/theme/tokens";
@@ -64,7 +64,9 @@ function AppShellInner() {
             of a light band under the capsule. Android-only; no-op elsewhere. */}
         <NavigationBar style={themeUsesDarkPalette(themeName) ? "dark" : "light"} />
         <Header />
-        {/* SPENDLY-161: the glass nav/dock blur whatever scrolls in here. */}
+        {/* SPENDLY-161/170: the glass nav/dock blur whatever scrolls in the
+            target. The scope wraps the chrome too, or it can't find it. */}
+        <GlassBlurScope>
         <GlassBlurTarget>
         <TabSwipeArea>
           <Stack
@@ -158,6 +160,7 @@ function AppShellInner() {
         </GlassBlurTarget>
 
         {settings.navigationStyle === "dock" ? <MobileActionDock /> : <BottomNav />}
+        </GlassBlurScope>
         <AddTransactionModal />
         <AddActionSheet />
         <GlobalAddModals />

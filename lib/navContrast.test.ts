@@ -10,6 +10,9 @@ import {
   SMOKE_ACTIVE_PILL_ALPHA,
   SMOKE_INACTIVE_ALPHA,
   SMOKE_INACTIVE_ICON_ALPHA,
+  SMOKE_BLUR_RADIUS_DP,
+  SMOKE_BLUR_TINT,
+  smokeAndroidBlur,
   SMOKE_TINT_ALPHA,
   SMOKE_TINT_ALPHA_NO_BLUR,
   SMOKE_TINT_RGB,
@@ -44,9 +47,11 @@ describe("capsule nav contrast (smoke glass)", () => {
     const dark = themeUsesDarkPalette(name);
     const backdrops = [rgb(t.colors.background), rgb(t.colors.card)];
     const lightest = backdrops.sort((a, b) => luminance(b) - luminance(a))[0];
+    // The blur layer's own dark tint (counted conservatively), then ours.
+    const blurred = over([...SMOKE_BLUR_TINT.rgb] as RGB, lightest, SMOKE_BLUR_TINT.alpha);
     return over(
       [...SMOKE_TINT_RGB] as RGB,
-      lightest,
+      blurred,
       dark ? SMOKE_TINT_ALPHA.dark : SMOKE_TINT_ALPHA.light
     );
   }
@@ -79,6 +84,16 @@ describe("capsule nav contrast (smoke glass)", () => {
     expect(glassAccent(lifted, pill)).toBe(lifted);
     expect(lifted).not.toBe("#4F46FF");
     expect(luminance(rgb(lifted))).toBeGreaterThan(luminance(rgb("#4F46FF")));
+  });
+
+  it("never lets the Android blur tint fall below what this model assumes", () => {
+    // expo-blur's dark tint is 0.69 x intensity / 100 of rgb(25,25,25).
+    for (const ratio of [1.5, 2, 2.75, 3.5]) {
+      const { intensity, blurReductionFactor } = smokeAndroidBlur(ratio);
+      expect(0.69 * (intensity / 100)).toBeGreaterThanOrEqual(SMOKE_BLUR_TINT.alpha);
+      // ...and the pair still lands on the intended radius.
+      expect(intensity / blurReductionFactor).toBeCloseTo(SMOKE_BLUR_RADIUS_DP * ratio);
+    }
   });
 
   it("stays readable without blur", () => {

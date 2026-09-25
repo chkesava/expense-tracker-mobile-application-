@@ -4,25 +4,55 @@
  */
 
 /**
- * SPENDLY-154/170: "smoke" is the dark frosted glass used by the capsule nav:
- * a near-black tint in both themes (after the product reference), with white
- * labels on top. Light themes get a denser tint because light page content
- * shows through behind the blur.
+ * SPENDLY-154/170: "smoke" is the iOS-style frosted glass used by the capsule
+ * nav: heavy blur, a cool blue-grey smoke tint, a bright rim and grain, with
+ * white content on top. It looks the same in every theme; only the tint
+ * density adapts, because a light page shows through brighter than a dark one.
  */
-export const SMOKE_TINT_RGB = [20, 20, 22] as const;
-export const SMOKE_TINT_ALPHA = { dark: 0.72, light: 0.8 } as const;
+/** Deeper than any Spendly page, so the smoke darkens what it covers instead of greying it. */
+export const SMOKE_TINT_RGB = [8, 10, 18] as const;
+export const SMOKE_TINT_ALPHA = { dark: 0.42, light: 0.84 } as const;
 /** Without blur the tint has to carry contrast on its own. */
 export const SMOKE_TINT_ALPHA_NO_BLUR = 0.9;
-/** One BlurView per capsule; strong enough to frost, light enough to hint at content. */
-export const SMOKE_BLUR_INTENSITY = 60;
+
+/**
+ * Blur radius in dp. expo-blur's Android radius is `intensity /
+ * blurReductionFactor` physical pixels, and its dark tint is 0.69 x
+ * intensity / 100, so the two are coupled. GlassSurface picks the intensity
+ * for the tint it wants (`SMOKE_ANDROID_BLUR_TINT_ALPHA`) and then the
+ * reduction factor that turns that into this radius on the device's density.
+ * iOS uses `SMOKE_IOS_INTENSITY` with its native dark material.
+ */
+export const SMOKE_BLUR_RADIUS_DP = 10;
+export const SMOKE_ANDROID_BLUR_TINT_ALPHA = 0.2;
+export const SMOKE_IOS_INTENSITY = 70;
+/**
+ * Darkening the blur layer itself adds before our tint, as the contrast model
+ * counts it: rgb(25,25,25), a little under what Android actually lays down.
+ */
+export const SMOKE_BLUR_TINT = { rgb: [25, 25, 25] as const, alpha: 0.18 } as const;
+
+/** Android BlurView props that give `SMOKE_BLUR_RADIUS_DP` at `pixelRatio`. */
+export function smokeAndroidBlur(pixelRatio: number): {
+  intensity: number;
+  blurReductionFactor: number;
+} {
+  const intensity = (SMOKE_ANDROID_BLUR_TINT_ALPHA / 0.69) * 100;
+  const radiusPx = SMOKE_BLUR_RADIUS_DP * pixelRatio;
+  return { intensity, blurReductionFactor: intensity / radiusPx };
+}
 
 /** Inactive nav labels on smoke glass. */
 export const SMOKE_INACTIVE_ALPHA = 0.85;
 /** Inactive nav icons: a touch brighter than labels, as in the reference. */
 export const SMOKE_INACTIVE_ICON_ALPHA = 0.9;
-/** The frosted pill behind the active tab. */
-export const SMOKE_ACTIVE_PILL_ALPHA = 0.1;
-export const SMOKE_ACTIVE_PILL_BORDER_ALPHA = 0.06;
+/**
+ * The lens-like pill behind the active tab: a white gradient, brightest at the
+ * top. The contrast model uses the brightest stop.
+ */
+export const SMOKE_ACTIVE_PILL_ALPHA = 0.16;
+export const SMOKE_ACTIVE_PILL_BOTTOM_ALPHA = 0.07;
+export const SMOKE_ACTIVE_PILL_BORDER_ALPHA = 0.14;
 
 // ---- Contrast maths (WCAG 2) -----------------------------------------------
 
@@ -64,12 +94,17 @@ export function smokeActivePill(backdrops: string[], isDark: boolean): RGB {
   const lightest = backdrops
     .map(hexToRgb)
     .sort((a, b) => luminance(b) - luminance(a))[0] ?? ([255, 255, 255] as RGB);
-  const glass = over(
+  return over([255, 255, 255], smokeGlass(lightest, isDark), SMOKE_ACTIVE_PILL_ALPHA);
+}
+
+/** The smoke glass over an opaque backdrop: the blur's own tint, then ours. */
+export function smokeGlass(backdrop: RGB, isDark: boolean): RGB {
+  const blurred = over([...SMOKE_BLUR_TINT.rgb] as RGB, backdrop, SMOKE_BLUR_TINT.alpha);
+  return over(
     [...SMOKE_TINT_RGB] as RGB,
-    lightest,
+    blurred,
     isDark ? SMOKE_TINT_ALPHA.dark : SMOKE_TINT_ALPHA.light
   );
-  return over([255, 255, 255], glass, SMOKE_ACTIVE_PILL_ALPHA);
 }
 
 const AA_SMALL_TEXT = 4.5;
