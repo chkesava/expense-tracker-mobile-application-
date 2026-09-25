@@ -10,6 +10,7 @@ import { MaintenanceScreen } from "@/components/MaintenanceScreen";
 import { MobileActionDock } from "@/components/MobileActionDock";
 import { PrivacyLock } from "@/components/PrivacyLock";
 import { TabSwipeArea } from "@/components/navigation/TabSwipeArea";
+import { GlassBlurTarget } from "@/components/ui/GlassSurface";
 import { SetupWizardModal } from "@/components/onboarding/SetupWizardModal";
 import { useAndroidBackHandler } from "@/hooks/useAndroidBackHandler";
 import { useAppShortcutHandler } from "@/hooks/useAppShortcutHandler";
@@ -52,6 +53,8 @@ function AppShellInner() {
     <BottomChromeProvider navStyle={settings.navigationStyle}>
       <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
         <Header />
+        {/* SPENDLY-161: the glass nav/dock blur whatever scrolls in here. */}
+        <GlassBlurTarget>
         <TabSwipeArea>
           <Stack
             screenOptions={{
@@ -141,6 +144,7 @@ function AppShellInner() {
             />
           </Stack>
         </TabSwipeArea>
+        </GlassBlurTarget>
 
         {settings.navigationStyle === "dock" ? <MobileActionDock /> : <BottomNav />}
         <AddTransactionModal />

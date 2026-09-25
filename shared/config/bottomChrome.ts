@@ -34,13 +34,33 @@ export const ACTION_DOCK_FAB_SIZE = 56;
 /** Horizontal inset for the dock's trailing menu button. */
 export const ACTION_DOCK_EDGE = 24;
 
-/** Distance from the screen bottom to the underside of the bottom-nav FAB. */
+/*
+ * SPENDLY-161: Spendly's bottom nav is a floating capsule rather than a
+ * full-width bar, with the add FAB beside it on the same baseline instead of
+ * stacked above it. The `BOTTOM_NAV_*` constants above describe the old flat
+ * bar and stay because the Ganesh and Nutrition tab bars still size
+ * themselves from them.
+ */
+export const CAPSULE_HEIGHT = 64;
+/** The capsule floats: it floors the system inset higher than the old bar. */
+export const CAPSULE_MIN_INSET = 12;
+/** Horizontal margin between the capsule (or FAB) and the screen edge. */
+export const CAPSULE_SIDE_MARGIN = 12;
+/** Gap between the capsule and the FAB beside it. */
+export const CAPSULE_FAB_GAP = 10;
+export const CAPSULE_FAB_SIZE = 56;
+
+/** Distance from the screen bottom to the underside of the nav capsule. */
+export function capsuleOffset(bottomInset: number): number {
+  return Math.max(bottomInset, CAPSULE_MIN_INSET);
+}
+
+/**
+ * Distance from the screen bottom to the underside of the bottom-nav FAB.
+ * The FAB is centred on the capsule's height, so it never rises above it.
+ */
 export function bottomNavFabOffset(bottomInset: number): number {
-  return (
-    BOTTOM_NAV_BAR_HEIGHT +
-    Math.max(bottomInset, BOTTOM_NAV_MIN_INSET) +
-    BOTTOM_NAV_FAB_GAP
-  );
+  return capsuleOffset(bottomInset) + (CAPSULE_HEIGHT - CAPSULE_FAB_SIZE) / 2;
 }
 
 /** Distance from the screen bottom to the underside of the dock's FAB. */
@@ -52,8 +72,9 @@ export type BottomChromeOptions = {
   /** Which chrome is mounted. Defaults to the bottom nav bar. */
   navStyle?: BottomNavStyle;
   /**
-   * When false, clear only the nav bar — for screens that hide the FAB. The
-   * dock ignores this: there is no bar under its FAB to clear instead.
+   * When false, the screen hides the FAB. Neither chrome gets shorter for it:
+   * the capsule's FAB sits beside it rather than above, and the dock's FAB is
+   * the chrome itself. Kept so callers can state intent.
    */
   withFab?: boolean;
 };
@@ -64,15 +85,12 @@ export type BottomChromeOptions = {
  */
 export function bottomChromeTopEdge(
   bottomInset: number,
-  { navStyle = "bottom", withFab = true }: BottomChromeOptions = {}
+  { navStyle = "bottom" }: BottomChromeOptions = {}
 ): number {
   if (navStyle === "dock") {
     return actionDockOffset(bottomInset) + ACTION_DOCK_FAB_SIZE;
   }
-  if (!withFab) {
-    return BOTTOM_NAV_BAR_HEIGHT + Math.max(bottomInset, BOTTOM_NAV_MIN_INSET);
-  }
-  return bottomNavFabOffset(bottomInset) + BOTTOM_NAV_FAB_SIZE;
+  return capsuleOffset(bottomInset) + CAPSULE_HEIGHT;
 }
 
 /**
@@ -88,5 +106,47 @@ export function bottomChromeClearance(
     bottomChromeTopEdge(bottomInset, chrome) +
     BOTTOM_NAV_CONTENT_CLEARANCE +
     extra
+  );
+}
+
+/*
+ * SPENDLY-165: the capsule has a fixed height but its width depends on the
+ * screen, and five labels at a large system font scale overflow a narrow
+ * phone. Below these widths the labels drop out and the tabs go icon-only;
+ * each tab keeps its accessibility label, so nothing is lost to a screen
+ * reader.
+ */
+/** Narrowest tab (dp) that still fits an 11pt label (shrinkable to 75%) at 1× font. */
+export const NAV_LABEL_MIN_TAB_WIDTH = 52;
+/** Label font scaling stops here; beyond it the label would clip. */
+export const NAV_LABEL_MAX_FONT_SCALE = 1.3;
+
+/** Width of one tab, given the measured tab-row width. */
+export function navTabWidth(rowWidth: number, tabCount: number): number {
+  return tabCount > 0 ? rowWidth / tabCount : rowWidth;
+}
+
+/** True when the tab row is too tight for labels at this font scale. */
+export function shouldCompactNavLabels(
+  rowWidth: number,
+  tabCount: number,
+  fontScale: number
+): boolean {
+  if (rowWidth <= 0) return false; // not measured yet
+  const effectiveScale = Math.min(Math.max(fontScale, 1), NAV_LABEL_MAX_FONT_SCALE);
+  return navTabWidth(rowWidth, tabCount) < NAV_LABEL_MIN_TAB_WIDTH * effectiveScale;
+}
+
+/**
+ * Width available to the tab row on a screen of `screenWidth`: the screen,
+ * minus side margins, minus the FAB and its gap, minus capsule padding.
+ */
+export function capsuleRowWidth(screenWidth: number, capsulePadding = 6): number {
+  return (
+    screenWidth -
+    CAPSULE_SIDE_MARGIN * 2 -
+    CAPSULE_FAB_SIZE -
+    CAPSULE_FAB_GAP -
+    capsulePadding * 2
   );
 }
