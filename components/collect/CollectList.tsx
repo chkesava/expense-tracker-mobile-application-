@@ -124,7 +124,7 @@ export function CollectList() {
           return (
             <Chip
               key={tab}
-              label={`${tab === "active" ? `Active ($${activeRequests.length})` : `Cancelled ($${cancelledRequests.length})`}`}
+              label={`${tab === "active" ? `Active (${activeRequests.length})` : `Cancelled (${cancelledRequests.length})`}`}
               selected={isSelected}
               onPress={() => setActiveTab(tab)}
             />

@@ -153,7 +153,7 @@ export function UseGiftMoneyModal({
               return (
                 <Chip
                   key={acc.id}
-                  label={`${acc.name} ${kind === "credit" ? " (card)" : ""}`}
+                  label={`${acc.name}${kind === "credit" ? " (card)" : ""}`}
                   selected={isSelected}
                   onPress={() => setAccountId(acc.id)}
                 />

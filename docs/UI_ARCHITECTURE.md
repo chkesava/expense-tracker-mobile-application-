@@ -54,7 +54,7 @@ Ganesh Seva and Nutrition have their own design systems. Nothing here changes th
    - full-screen pickers;
    - form sheets that host scrolling lists plus text inputs above another open sheet (keyboard and nested-scroll risk).
 
-   Everything else uses `common/Modal`.
+   Everything else uses `common/Modal`. A bottom-anchored sheet in React Native's own `Modal` must end with `<SheetBottomInset />` (`components/common/SheetBottomInset`). Under Android edge-to-edge the modal window draws behind the system navigation bar, and without the spacer the footer button sits under the 3-button bar.
 6. **Lists pad their bottom with `usePageListBottomPadding()`** (or `PageShell` with `listOwnsBottomInset`) so the last row clears the capsule and FAB. Never hard-code a bottom inset.
 7. **Touch targets are at least 48dp.** `Button` and `Chip` already meet this. Custom rows need `minHeight: 48`.
 8. **Accessibility.**
@@ -71,8 +71,11 @@ Ganesh Seva and Nutrition have their own design systems. Nothing here changes th
   - `lib/pressableStyleFix.ts` shims this and has to stay the first import in `app/_layout.tsx`.
   - After any `nativewind` or `react-native-css-interop` upgrade, check a function-style Pressable on a device (the capsule nav tabs are the quickest).
 - **Where sheets render.**
-  - Gluestack Modal and AlertDialog portal into the nearest `OverlayProvider`.
-  - Spendly's lives inside `AppShellInner`, below every app provider. Moving it above them makes sheet content lose context: "useX must be used within a ...Provider".
+  - `common/Modal` and `common/Dialog` pass `useRNModal`, so each opens a real React Native Modal window, as on `main`. Keep it that way.
+  - Without it, Gluestack portals the sheet into the nearest `OverlayProvider`. That causes two problems:
+    - The capsule nav's Android `elevation` draws it *above* the sheet and its backdrop.
+    - Content rendered at the root loses its caller's context: "useX must be used within a ...Provider", or Ganesh sheets picking up the Spendly theme.
+  - The `OverlayProvider` inside `AppShellInner` stays as a fallback for any future portal-based overlay (popover, menu). It sits below every app provider for the same context reason, and anything portalled into it still needs `elevation` above the capsule's (10).
 - **Colour-variable scope.** `SpendlyUIScope` applies the Spendly Gluestack variables to the Spendly shell only. Ganesh and Nutrition keep the root defaults.
 - **`expo prebuild` wipes the release signing.**
   - It regenerates `android/` even without `--clean`, dropping the hand-edited release signing in `android/app/build.gradle` and `android/gradle.properties`.
