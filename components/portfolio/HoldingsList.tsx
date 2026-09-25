@@ -4,11 +4,10 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import { FlashList } from "@shopify/flash-list";
-import { Download, Plus, Search, X } from "lucide-react-native";
+import { Download, Plus } from "lucide-react-native";
 
 import {
   ACCOUNT_GREEN,
@@ -35,10 +34,12 @@ import type {
   InstrumentType,
 } from "@/shared/features/portfolio/types";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useSurfaces } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
 
+import { SearchBar } from "@/components/common/SearchBar";
 type SortOption = "value" | "pl_percent" | "day_change";
 
 const FILTERS: { label: string; value: InstrumentType | "all" }[] = [
@@ -62,6 +63,7 @@ function ItemSeparator() {
 
 export function HoldingsList({ listHeader }: { listHeader?: ReactNode }) {
   const { theme, themeName } = useTheme();
+  const surfaces = useSurfaces();
   const listBottomPadding = usePageListBottomPadding();
   const isDark = themeUsesDarkPalette(themeName);
   const displayCurrency = useDisplayCurrency();
@@ -99,7 +101,6 @@ export function HoldingsList({ listHeader }: { listHeader?: ReactNode }) {
   const [trade, setTrade] = useState<{ id: string; side: "BUY" | "SELL" } | null>(
     null
   );
-  const [searchFocused, setSearchFocused] = useState(false);
 
   const holdingsWithMetrics: HoldingWithMetrics[] = useMemo(() => {
     return holdings.map((holding) => {
@@ -316,41 +317,14 @@ export function HoldingsList({ listHeader }: { listHeader?: ReactNode }) {
     holdings.length > 0 ? (
       <View style={styles.toolbar}>
         <View style={styles.searchRow}>
-          <View
-            style={[
-              styles.searchField,
-              {
-                backgroundColor: isDark ? "#10141C" : theme.colors.card,
-                borderColor: searchFocused
-                  ? CARD_ORANGE
-                  : isDark
-                    ? "rgba(148,163,184,0.14)"
-                    : theme.colors.border,
-              },
-            ]}
-          >
-            <Search size={18} color={theme.colors.mutedForeground} />
-            <TextInput
-              value={search}
-              onChangeText={setSearch}
-              placeholder="Search holdings..."
-              placeholderTextColor={theme.colors.mutedForeground}
-              accessibilityLabel="Search holdings"
-              onFocus={() => setSearchFocused(true)}
-              onBlur={() => setSearchFocused(false)}
-              style={[styles.searchInput, { color: theme.colors.foreground }]}
-            />
-            {search.length > 0 ? (
-              <Pressable
-                onPress={clearSearch}
-                hitSlop={8}
-                accessibilityRole="button"
-                accessibilityLabel="Clear search"
-              >
-                <X size={16} color={theme.colors.mutedForeground} />
-              </Pressable>
-            ) : null}
-          </View>
+          <SearchBar
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Search holdings..."
+            accessibilityLabel="Search holdings"
+            accentColor={CARD_ORANGE}
+            containerStyle={styles.searchBarFlex}
+          />
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Import holdings CSV"
@@ -396,9 +370,7 @@ export function HoldingsList({ listHeader }: { listHeader?: ReactNode }) {
                     {
                       backgroundColor: active
                         ? CARD_ORANGE
-                        : isDark
-                          ? "rgba(255,255,255,0.05)"
-                          : "rgba(15,23,42,0.04)",
+                        : surfaces.control,
                       borderColor: active
                         ? CARD_ORANGE
                         : isDark
@@ -615,16 +587,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
   },
-  searchField: {
+  searchBarFlex: {
     flex: 1,
-    minHeight: 48,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 14,
-    borderRadius: 16,
-    borderCurve: "continuous",
-    borderWidth: 1,
   },
   searchInput: {
     flex: 1,

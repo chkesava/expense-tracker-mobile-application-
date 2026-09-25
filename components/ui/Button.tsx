@@ -1,25 +1,12 @@
+import React, { ReactNode } from "react";
+import { type PressableProps, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
 import {
-  ActivityIndicator,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  type GestureResponderEvent,
-  type PressableProps,
-  type StyleProp,
-  type ViewStyle,
-} from "react-native";
-import type { ReactNode } from "react";
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-} from "react-native-reanimated";
-
-import { useTheme } from "@/theme/ThemeProvider";
+  Button as GluestackButton,
+  ButtonText as GluestackButtonText,
+  ButtonSpinner as GluestackButtonSpinner
+} from "@/components/ui/button/index"; // Import the gluestack implementation
 import { haptic as hapticFeedback } from "@/lib/haptics";
-
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+import { useTheme } from "@/theme/ThemeProvider";
 
 export type ButtonVariant =
   | "primary"
@@ -51,89 +38,13 @@ export function Button({
   haptic = true,
   disabled,
   onPress,
-  onPressIn,
-  onPressOut,
   style,
   ...props
 }: ButtonProps) {
   const { theme } = useTheme();
   const isDisabled = disabled || loading;
-  const scale = useSharedValue(1);
 
-  const isPrimary = variant === "primary" || variant === "filled";
-  const isText = variant === "ghost" || variant === "text";
-  const isDestructive = variant === "destructive";
-  const isTonal = variant === "tonal";
-  const isElevated = variant === "elevated";
-  const isOutline = variant === "outline";
-  const isSecondary = variant === "secondary";
-
-  const background = isPrimary
-    ? theme.colors.primary
-    : isDestructive
-      ? theme.colors.destructive
-      : isSecondary
-        ? theme.colors.secondary
-        : isTonal
-          ? theme.colors.secondaryContainer
-          : isElevated
-            ? theme.colors.card
-            : "transparent";
-
-  const foreground = isPrimary
-    ? theme.colors.primaryForeground
-    : isDestructive
-      ? theme.colors.destructiveForeground
-      : isTonal
-        ? theme.colors.onSecondaryContainer
-        : isText || isOutline
-          ? theme.colors.primary
-          : theme.colors.foreground;
-
-  const borderColor = isOutline
-    ? theme.colors.outline ?? theme.colors.border
-    : isSecondary
-      ? theme.colors.border
-      : "transparent";
-
-  const borderWidth = isOutline || isSecondary ? 1 : 0;
-
-  const paddingVertical =
-    size === "sm" ? 8 : size === "lg" ? 14 : size === "icon" ? 8 : 10;
-  const paddingHorizontal =
-    size === "sm" ? 14 : size === "lg" ? 24 : size === "icon" ? 8 : 18;
-  const minHeight = size === "sm" ? 40 : size === "lg" ? 54 : size === "icon" ? 48 : 48;
-  const minWidth = size === "icon" ? 48 : undefined;
-  const borderRadius = theme.radius.full; // MD3 pill buttons
-
-  const fontSize =
-    size === "sm"
-      ? theme.typography.xs
-      : size === "lg"
-        ? theme.typography.md
-        : theme.typography.sm;
-
-  const elevationStyle = isElevated ? theme.elevation[1] : undefined;
-
-  const rippleColor = isPrimary || isDestructive
-    ? "rgba(255, 255, 255, 0.24)"
-    : theme.colors.primary + "22";
-
-  const handlePressIn = (e: GestureResponderEvent) => {
-    if (!isDisabled) {
-      scale.value = withSpring(0.96, { damping: 14, stiffness: 350 });
-    }
-    onPressIn?.(e);
-  };
-
-  const handlePressOut = (e: GestureResponderEvent) => {
-    if (!isDisabled) {
-      scale.value = withSpring(1, { damping: 12, stiffness: 300 });
-    }
-    onPressOut?.(e);
-  };
-
-  const handlePress = (e: GestureResponderEvent) => {
+  const handlePress = (e: any) => {
     if (isDisabled) return;
     if (haptic) {
       hapticFeedback.light().catch(() => undefined);
@@ -141,75 +52,67 @@ export function Button({
     onPress?.(e);
   };
 
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
+  // Map legacy variants to Gluestack v5 variants
+  let mappedVariant: "default" | "destructive" | "outline" | "secondary" | "ghost" | "link" = "default";
+  
+  if (variant === "destructive") mappedVariant = "destructive";
+  else if (variant === "outline") mappedVariant = "outline";
+  else if (variant === "secondary" || variant === "tonal") mappedVariant = "secondary";
+  else if (variant === "ghost" || variant === "text") mappedVariant = "ghost";
+  // primary, filled, elevated fall back to 'default'
+
+  let mappedSize: "default" | "sm" | "lg" | "icon" = "default";
+  if (size === "sm") mappedSize = "sm";
+  else if (size === "lg") mappedSize = "lg";
+  else if (size === "icon") mappedSize = "icon";
+
+  // Gluestack's default sizes are desktop-dense (~36dp, rounded-md). Keep the
+  // pre-Gluestack Spendly contract — pill shape and 48dp touch targets — so
+  // swapping a screen onto Button never shrinks its tap area (SPENDLY-152).
+  const sizeStyle: ViewStyle = {
+    minHeight: size === "sm" ? 40 : size === "lg" ? 54 : 48,
+    minWidth: size === "icon" ? 48 : undefined,
+    paddingVertical: size === "lg" ? 14 : size === "md" ? 10 : 8,
+    paddingHorizontal: size === "sm" ? 14 : size === "lg" ? 24 : size === "icon" ? 8 : 18,
+    borderRadius: theme.radius.full,
+  };
+  const tonalStyle: ViewStyle | undefined =
+    variant === "tonal"
+      ? { backgroundColor: theme.colors.secondaryContainer }
+      : variant === "elevated"
+        ? { backgroundColor: theme.colors.card, ...theme.elevation[1] }
+        : undefined;
+
+  const labelColor =
+    variant === "text" || variant === "ghost" || variant === "outline"
+      ? theme.colors.primary
+      : variant === "tonal"
+        ? theme.colors.onSecondaryContainer
+        : undefined;
+  const labelStyle: TextStyle = {
+    fontSize: size === "sm" ? theme.typography.xs : size === "lg" ? theme.typography.md : theme.typography.sm,
+    fontFamily: theme.fontFamily.semibold,
+    ...(labelColor ? { color: labelColor } : null),
+  };
 
   return (
-    <AnimatedPressable
-      accessibilityRole="button"
-      accessibilityState={{ disabled: isDisabled, busy: loading }}
-      disabled={isDisabled}
+    <GluestackButton
+      variant={mappedVariant}
+      size={mappedSize}
+      isDisabled={isDisabled}
       onPress={handlePress}
-      onPressIn={handlePressIn}
-      onPressOut={handlePressOut}
-      android_ripple={{
-        color: rippleColor,
-        borderless: false,
-        foreground: true,
-      }}
-      style={[
-        styles.base,
-        {
-          backgroundColor: background,
-          borderColor,
-          borderWidth,
-          paddingVertical,
-          paddingHorizontal,
-          minHeight,
-          minWidth,
-          borderRadius,
-          opacity: isDisabled ? 0.45 : 1,
-        },
-        elevationStyle,
-        style,
-        animatedStyle,
-      ]}
+      accessibilityState={{ disabled: isDisabled, busy: loading }}
+      style={[sizeStyle, tonalStyle, style] as any}
       {...props}
     >
-      {loading ? (
-        <ActivityIndicator size="small" color={foreground} />
-      ) : typeof children === "string" ? (
-        <Text
-          style={[
-            styles.text,
-            {
-              color: foreground,
-              fontSize,
-              fontFamily: theme.fontFamily.semibold,
-            },
-          ]}
-          numberOfLines={1}
-        >
+      {loading && <GluestackButtonSpinner color={labelColor} />}
+      {typeof children === "string" ? (
+        <GluestackButtonText style={labelStyle} numberOfLines={1}>
           {children}
-        </Text>
+        </GluestackButtonText>
       ) : (
         children
       )}
-    </AnimatedPressable>
+    </GluestackButton>
   );
 }
-
-const styles = StyleSheet.create({
-  base: {
-    alignItems: "center",
-    justifyContent: "center",
-    flexDirection: "row",
-    gap: 8,
-    overflow: "hidden",
-  },
-  text: {
-    letterSpacing: 0.2,
-  },
-});
-

@@ -28,9 +28,11 @@ import {
   type ParsedTransaction,
 } from "@/shared/utils/magicParser";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useSurfaces } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
+import { SheetBottomInset } from "@/components/common/SheetBottomInset";
 
 export interface MagicChatModalProps {
   visible: boolean;
@@ -52,6 +54,7 @@ export function MagicChatModal({
   onApplyParsed,
 }: MagicChatModalProps) {
   const { theme, themeName } = useTheme();
+  const surfaces = useSurfaces();
   const isDark = themeUsesDarkPalette(themeName);
   const displayCurrency = useDisplayCurrency();
   const { accounts } = useAccounts();
@@ -144,9 +147,7 @@ export function MagicChatModal({
               style={[
                 styles.inputWrapper,
                 {
-                  backgroundColor: isDark
-                    ? "rgba(255,255,255,0.05)"
-                    : "rgba(0,0,0,0.03)",
+                  backgroundColor: surfaces.control,
                   borderColor: parsed?.amount
                     ? theme.colors.primary
                     : theme.colors.border,
@@ -187,9 +188,7 @@ export function MagicChatModal({
                     style={({ pressed }) => [
                       styles.sampleChip,
                       {
-                        backgroundColor: isDark
-                          ? "rgba(255,255,255,0.06)"
-                          : "rgba(0,0,0,0.04)",
+                        backgroundColor: surfaces.control,
                         borderColor: theme.colors.border,
                         opacity: pressed ? 0.7 : 1,
                       },
@@ -391,6 +390,7 @@ export function MagicChatModal({
               </Text>
             </Button>
           </View>
+          <SheetBottomInset />
         </View>
       </View>
     </Modal>

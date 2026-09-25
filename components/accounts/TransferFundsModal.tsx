@@ -13,7 +13,7 @@ import { toast } from "@/lib/toast";
 import type { Account } from "@/shared/types/expense";
 import { formatDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useSurfaces } from "@/theme/surfaces";
 import { haptic } from "@/lib/haptics";
 
 export const DEMAT_ACCOUNT_ID = "stocks_demat";
@@ -33,8 +33,8 @@ export function TransferFundsModal({
   defaultToAccountId,
   accounts,
 }: TransferFundsModalProps) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
   const { addTransfer } = useAccountTransfers();
   const { depositCash, withdrawCash } = usePortfolioMutations();
   const transferIds = useRef({ entryId: newId(), accountEntryId: newId() });
@@ -208,9 +208,7 @@ export function TransferFundsModal({
                     {
                       backgroundColor: isSelected
                         ? theme.colors.primary
-                        : isDark
-                          ? "rgba(255,255,255,0.06)"
-                          : "rgba(0,0,0,0.04)",
+                        : surfaces.control,
                       borderColor: isSelected
                         ? theme.colors.primary
                         : theme.colors.border,
@@ -308,9 +306,7 @@ export function TransferFundsModal({
                       {
                         backgroundColor: isSelected
                           ? theme.colors.primary
-                          : isDark
-                            ? "rgba(255,255,255,0.06)"
-                            : "rgba(0,0,0,0.04)",
+                          : surfaces.control,
                         borderColor: isSelected
                           ? theme.colors.primary
                           : theme.colors.border,

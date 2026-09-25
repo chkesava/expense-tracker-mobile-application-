@@ -47,9 +47,9 @@ const SHARED_PLUGINS = [
 
 function splashScreenPlugin(image, backgroundColor, imageWidth) {
   const plugin = {
-    image: image || "./assets/branding/splash-logo.png",
+    image: image || "./assets/branding/spendly-splash.png",
     resizeMode: "contain",
-    backgroundColor: backgroundColor || "#071A2B",
+    backgroundColor: backgroundColor || "#071423",
   };
   if (imageWidth) {
     plugin.imageWidth = imageWidth;
@@ -122,6 +122,9 @@ module.exports = ({ config }) => {
       experiments: { ...config.experiments, baseUrl: override.web.basePath || "" },
       web: {
         ...config.web,
+        // SPENDLY-162: the base favicon is now the new Spendly icon; products
+        // that must keep their previous favicon pin it here.
+        favicon: override.web.favicon || config.web?.favicon,
         name: override.name,
         themeColor: override.web.themeColor,
         description: override.web.description,
@@ -152,6 +155,10 @@ module.exports = ({ config }) => {
       adaptiveIcon: {
         ...config.android?.adaptiveIcon,
         foregroundImage: override.adaptiveIconForeground || config.android?.adaptiveIcon?.foregroundImage,
+        // SPENDLY-162 moved the shared background to the new Spendly navy;
+        // Nutrition and Ganesh pin the colour their icons shipped with.
+        backgroundColor:
+          override.adaptiveIconBackgroundColor || config.android?.adaptiveIcon?.backgroundColor,
       },
     },
     plugins: [

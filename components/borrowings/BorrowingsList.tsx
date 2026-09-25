@@ -3,11 +3,10 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import { FlashList } from "@shopify/flash-list";
-import { Plus, Search, SlidersHorizontal, X } from "lucide-react-native";
+import { Plus, SlidersHorizontal } from "lucide-react-native";
 
 import {
   ACCOUNT_GREEN,
@@ -22,6 +21,7 @@ import { CreateBorrowingModal } from "@/components/borrowings/CreateBorrowingMod
 import { EmptyState } from "@/components/common/EmptyState";
 import { SkeletonCard } from "@/components/common/Skeleton";
 import { usePageListBottomPadding } from "@/components/layout/usePageListBottomPadding";
+import { SearchBar } from "@/components/common/SearchBar";
 import { appDialog } from "@/lib/appDialog";
 import { haptic } from "@/lib/haptics";
 import { useBorrowings } from "@/hooks/useBorrowings";
@@ -68,7 +68,6 @@ export function BorrowingsList({ listHeader }: { listHeader?: ReactNode }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [startRepaying, setStartRepaying] = useState(false);
   const [startEditing, setStartEditing] = useState(false);
-  const [searchFocused, setSearchFocused] = useState(false);
 
   const today = todayDateKey();
   const activeFilterCount = countActiveBorrowingFilters(filters);
@@ -259,41 +258,14 @@ export function BorrowingsList({ listHeader }: { listHeader?: ReactNode }) {
       />
 
       <View style={styles.searchRow}>
-        <View
-          style={[
-            styles.searchField,
-            {
-              backgroundColor: isDark ? "#10141C" : theme.colors.card,
-              borderColor: searchFocused
-                ? ACCOUNT_GREEN_BORDER
-                : isDark
-                  ? "rgba(148,163,184,0.14)"
-                  : theme.colors.border,
-            },
-          ]}
-        >
-          <Search size={18} color={theme.colors.mutedForeground} />
-          <TextInput
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholder="Search lender or note..."
-            placeholderTextColor={theme.colors.mutedForeground}
-            accessibilityLabel="Search lender or note"
-            onFocus={() => setSearchFocused(true)}
-            onBlur={() => setSearchFocused(false)}
-            style={[styles.searchInput, { color: theme.colors.foreground }]}
-          />
-          {searchQuery.length > 0 ? (
-            <Pressable
-              onPress={() => setSearchQuery("")}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel="Clear search"
-            >
-              <X size={16} color={theme.colors.mutedForeground} />
-            </Pressable>
-          ) : null}
-        </View>
+        <SearchBar
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholder="Search lender or note..."
+          accessibilityLabel="Search lender or note"
+          accentColor={ACCOUNT_GREEN_BORDER}
+          containerStyle={styles.searchBar}
+        />
         <Pressable
           onPress={() => {
             void haptic.selection();
@@ -478,21 +450,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
   },
-  searchField: {
+  searchBar: {
     flex: 1,
-    minHeight: 48,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 14,
-    borderRadius: 16,
-    borderCurve: "continuous",
-    borderWidth: 1,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 15,
-    paddingVertical: 0,
   },
   filterBtn: {
     width: 48,

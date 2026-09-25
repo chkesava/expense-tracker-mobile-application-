@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Pressable } from "react-native";
 import Animated, { Layout, FadeIn, FadeOut } from "react-native-reanimated";
 import { Check, ChevronRight } from "lucide-react-native";
 import { useTheme } from "@/theme/ThemeProvider";
+import { withAlpha } from "@/theme/surfaces";
 import { haptic } from "@/lib/haptics";
 
 interface SetupStepItemProps {
@@ -27,7 +28,7 @@ export function SetupStepItem({ label, completed, onPress }: SetupStepItemProps)
         onPress={handlePress}
         disabled={!onPress || completed}
         android_ripple={{
-          color: theme.colors.primary + "1A",
+          color: withAlpha(theme.colors.primary, 0.1),
           borderless: false,
         }}
         style={({ pressed }) => [
@@ -53,7 +54,7 @@ export function SetupStepItem({ label, completed, onPress }: SetupStepItemProps)
               exiting={FadeOut}
               style={[
                 styles.circle,
-                { borderColor: theme.colors.mutedForeground + "60", backgroundColor: "transparent" },
+                { borderColor: withAlpha(theme.colors.mutedForeground, 0.38), backgroundColor: "transparent" },
               ]}
             />
           )}

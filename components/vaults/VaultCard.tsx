@@ -6,7 +6,7 @@ import { Amount } from "@/components/common/Amount";
 import { Card } from "@/components/ui/Card";
 import type { SharedVault, VaultStats } from "@/shared/types/vault";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useSurfaces } from "@/theme/surfaces";
 
 export interface VaultCardProps {
   vault: SharedVault;
@@ -15,8 +15,8 @@ export interface VaultCardProps {
 }
 
 export function VaultCard({ vault, stats, onPress }: VaultCardProps) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
 
   const themeColor = vault.themeColor || "#6366F1";
   const progressRatio = Math.min(
@@ -133,9 +133,7 @@ export function VaultCard({ vault, stats, onPress }: VaultCardProps) {
                   style={[
                     styles.progressBarBg,
                     {
-                      backgroundColor: isDark
-                        ? "rgba(255,255,255,0.1)"
-                        : "rgba(0,0,0,0.06)",
+                      backgroundColor: surfaces.track,
                     },
                   ]}
                 >

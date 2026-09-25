@@ -32,7 +32,9 @@ import { CategoryPicker } from "@/components/categories/CategoryPicker";
 import { Amount } from "@/components/common/Amount";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { Chip } from "@/components/ui/Chip";
 import { Input } from "@/components/ui/Input";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { useAccountEntries } from "@/hooks/useAccountEntries";
 import { useAccountPayments } from "@/hooks/useAccountPayments";
 import { useAccounts } from "@/hooks/useAccounts";
@@ -83,7 +85,7 @@ import {
 } from "@/shared/utils/dates";
 import { roundMoney } from "@/shared/utils/money";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useSurfaces } from "@/theme/surfaces";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
 export interface ExpenseFormProps {
@@ -114,8 +116,8 @@ export function ExpenseForm({
   initialType = "expense",
   onDirtyChange,
 }: ExpenseFormProps) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
   const { user } = useAuth();
   const uid = user?.uid;
   const { settings } = useSettings();
@@ -537,144 +539,59 @@ export function ExpenseForm({
     <>
       {/* Type Switcher */}
       {!editingExpense && !editingIncome ? (
-        <View
-          style={[
-            styles.typeSegment,
+        <SegmentedControl
+          value={type}
+          onChange={setType}
+          options={[
             {
-              backgroundColor: isDark
-                ? "rgba(255,255,255,0.06)"
-                : "rgba(0,0,0,0.04)",
-              borderColor: theme.colors.border,
+              value: "expense",
+              label: "Expense",
+              activeColor: theme.colors.destructive,
+              icon: (color) => <ArrowUpRight size={18} color={color} />,
+            },
+            {
+              value: "income",
+              label: "Income",
+              activeColor: theme.colors.success,
+              icon: (color) => <ArrowDownLeft size={18} color={color} />,
             },
           ]}
-        >
-          <Pressable
-            onPress={() => {
-                void haptic.selection();
-              setType("expense");
-            }}
-            style={[
-              styles.typeTab,
-              type === "expense" && {
-                backgroundColor: theme.colors.card,
-                shadowColor: "#000",
-                shadowOpacity: 0.1,
-                shadowRadius: 4,
-                elevation: 2,
-              },
-            ]}
-          >
-            <ArrowUpRight
-              size={18}
-              color={
-                type === "expense"
-                  ? theme.colors.destructive
-                  : theme.colors.mutedForeground
-              }
-            />
-            <Text
-              style={[
-                styles.typeTabText,
-                {
-                  color:
-                    type === "expense"
-                      ? theme.colors.foreground
-                      : theme.colors.mutedForeground,
-                  fontWeight: type === "expense" ? "700" : "500",
-                },
-              ]}
-            >
-              Expense
-            </Text>
-          </Pressable>
-
-          <Pressable
-            onPress={() => {
-                void haptic.selection();
-              setType("income");
-            }}
-            style={[
-              styles.typeTab,
-              type === "income" && {
-                backgroundColor: theme.colors.card,
-                shadowColor: "#000",
-                shadowOpacity: 0.1,
-                shadowRadius: 4,
-                elevation: 2,
-              },
-            ]}
-          >
-            <ArrowDownLeft
-              size={18}
-              color={
-                type === "income"
-                  ? theme.colors.success
-                  : theme.colors.mutedForeground
-              }
-            />
-            <Text
-              style={[
-                styles.typeTabText,
-                {
-                  color:
-                    type === "income"
-                      ? theme.colors.foreground
-                      : theme.colors.mutedForeground,
-                  fontWeight: type === "income" ? "700" : "500",
-                },
-              ]}
-            >
-              Income
-            </Text>
-          </Pressable>
-        </View>
+        />
       ) : null}
 
       {/* AI Quick Actions Toolbar */}
       {system.enableAIFeatures && !editingExpense && !editingIncome ? (
         <View style={styles.aiQuickStrip}>
-          <Pressable
+          <Button
+            variant="tonal"
+            size="sm"
+            haptic={false}
             onPress={() => {
-                void haptic.selection();
+              void haptic.selection();
               setIsMagicModalOpen(true);
             }}
-            style={({ pressed }) => [
-              styles.aiQuickButton,
-              {
-                backgroundColor: isDark
-                  ? "rgba(99,102,241,0.15)"
-                  : "rgba(99,102,241,0.08)",
-                borderColor: "rgba(99,102,241,0.3)",
-                opacity: pressed ? 0.7 : 1,
-              },
-            ]}
+            style={styles.aiQuickButton}
           >
-            <Sparkles size={15} color={theme.colors.primary} />
+            <Sparkles size={15} color={theme.colors.onSecondaryContainer} />
             <Text
               style={[
                 styles.aiQuickButtonText,
-                { color: theme.colors.primary },
+                { color: theme.colors.onSecondaryContainer },
               ]}
             >
               Magic NLP Input
             </Text>
-          </Pressable>
+          </Button>
 
-          <Pressable
+          <Button
+            variant="outline"
+            size="sm"
+            haptic={false}
             onPress={() => {
-                void haptic.selection();
+              void haptic.selection();
               setIsReceiptModalOpen(true);
             }}
-            style={({ pressed }) => [
-              styles.aiQuickButton,
-              {
-                backgroundColor: isDark
-                  ? "rgba(255,255,255,0.06)"
-                  : "rgba(0,0,0,0.04)",
-                borderColor: theme.colors.border,
-                opacity: pressed ? 0.7 : 1,
-              },
-            ]}
+            style={styles.aiQuickButton}
           >
             <Receipt size={15} color={theme.colors.foreground} />
             <Text
@@ -685,7 +602,7 @@ export function ExpenseForm({
             >
               Scan Receipt OCR
             </Text>
-          </Pressable>
+          </Button>
         </View>
       ) : null}
 
@@ -735,29 +652,14 @@ export function ExpenseForm({
           {/* Quick Amount Increment Pills */}
           <View style={styles.quickPillsRow}>
             {[100, 500, 1000, 2000].map((pill) => (
-              <Pressable
+              <Chip
                 key={pill}
+                size="sm"
+                label={`+${pill}`}
+                haptic={false}
                 onPress={() => handleAddQuickAmount(pill)}
-                style={[
-                  styles.quickPill,
-                  {
-                    backgroundColor: isDark
-                      ? "rgba(255,255,255,0.06)"
-                      : "rgba(0,0,0,0.04)",
-                    borderColor: theme.colors.border,
-                  },
-                ]}
-              >
-                <Text
-                  style={{
-                    fontSize: theme.typography.xs,
-                    fontWeight: "600",
-                    color: theme.colors.foreground,
-                  }}
-                >
-                  +{pill}
-                </Text>
-              </Pressable>
+                accessibilityLabel={`Add ${pill}`}
+              />
             ))}
           </View>
         </View>
@@ -804,18 +706,18 @@ export function ExpenseForm({
               style={[
                 styles.selectorButton,
                 {
-                  backgroundColor: isDark
-                    ? "rgba(255,255,255,0.04)"
-                    : "rgba(0,0,0,0.02)",
+                  backgroundColor: surfaces.tile,
                   borderColor: theme.colors.border,
                 },
               ]}
+              accessibilityRole="button"
+              accessibilityLabel={`Category ${category}${subcategory ? `, ${subcategory}` : ""}. Change`}
             >
               <View style={styles.selectorLeft}>
                 <View
                   style={[
                     styles.iconCircle,
-                    { backgroundColor: theme.colors.primary + "18" },
+                    { backgroundColor: surfaces.wash(theme.colors.primary) },
                   ]}
                 >
                   <FolderTree size={18} color={theme.colors.primary} />
@@ -865,43 +767,15 @@ export function ExpenseForm({
               INCOME SOURCE
             </Text>
             <View style={styles.sourcesRow}>
-              {INCOME_SOURCES.map((src) => {
-                const active = source === src;
-                return (
-                  <Pressable
-                    key={src}
-                    onPress={() => {
-                        void haptic.selection();
-                      setSource(src);
-                    }}
-                    style={[
-                      styles.sourceChip,
-                      {
-                        backgroundColor: active
-                          ? theme.colors.success
-                          : isDark
-                            ? "rgba(255,255,255,0.04)"
-                            : "rgba(0,0,0,0.03)",
-                        borderColor: active
-                          ? theme.colors.success
-                          : theme.colors.border,
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={{
-                        fontSize: theme.typography.xs,
-                        fontWeight: "700",
-                        color: active
-                          ? theme.colors.primaryForeground
-                          : theme.colors.foreground,
-                      }}
-                    >
-                      {src}
-                    </Text>
-                  </Pressable>
-                );
-              })}
+              {INCOME_SOURCES.map((src) => (
+                <Chip
+                  key={src}
+                  label={src}
+                  tone="success"
+                  selected={source === src}
+                  onPress={() => setSource(src)}
+                />
+              ))}
             </View>
           </View>
         </Card>
@@ -936,62 +810,24 @@ export function ExpenseForm({
               contentContainerStyle={{ gap: 8 }}
             >
               {accounts.map((acc) => {
-                const active = accountId === acc.id;
                 const kind = getAccountKind(typeMap.get(acc.typeId) || "");
+                const KindIcon = kind === "credit" ? CreditCard : Wallet;
+                const active = accountId === acc.id;
                 return (
-                  <Pressable
+                  <Chip
                     key={acc.id}
-                    onPress={() => {
-                        void haptic.selection();
-                      setAccountId(acc.id);
-                    }}
-                    style={[
-                      styles.accountCard,
-                      {
-                        backgroundColor: active
-                          ? isDark
-                            ? "rgba(107,99,255,0.18)"
-                            : "rgba(79,70,255,0.1)"
-                          : isDark
-                            ? "rgba(255,255,255,0.04)"
-                            : "rgba(0,0,0,0.03)",
-                        borderColor: active
-                          ? theme.colors.primary
-                          : theme.colors.border,
-                      },
-                    ]}
-                  >
-                    <View style={styles.accountCardTop}>
-                      {kind === "credit" ? (
-                        <CreditCard
-                          size={16}
-                          color={
-                            active
-                              ? theme.colors.primary
-                              : theme.colors.mutedForeground
-                          }
-                        />
-                      ) : (
-                        <Wallet
-                          size={16}
-                          color={
-                            active
-                              ? theme.colors.primary
-                              : theme.colors.mutedForeground
-                          }
-                        />
-                      )}
-                      <Text
-                        style={{
-                          fontSize: theme.typography.sm,
-                          fontWeight: "700",
-                          color: theme.colors.foreground,
-                        }}
-                      >
-                        {acc.name}
-                      </Text>
-                    </View>
-                  </Pressable>
+                    label={acc.name}
+                    appearance="outline"
+                    selected={active}
+                    onPress={() => setAccountId(acc.id)}
+                    style={styles.accountChip}
+                    icon={(color) => (
+                      <KindIcon
+                        size={16}
+                        color={active ? color : theme.colors.mutedForeground}
+                      />
+                    )}
+                  />
                 );
               })}
             </ScrollView>
@@ -1092,7 +928,12 @@ export function ExpenseForm({
                     >
                       {t}
                     </Text>
-                    <Pressable onPress={() => handleRemoveTag(t)}>
+                    <Pressable
+                      onPress={() => handleRemoveTag(t)}
+                      hitSlop={10}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Remove tag ${t}`}
+                    >
                       <X size={12} color={theme.colors.mutedForeground} />
                     </Pressable>
                   </View>
@@ -1100,22 +941,13 @@ export function ExpenseForm({
               </View>
 
               <View style={styles.tagInputRow}>
-                <TextInput
+                <Input
                   value={tagInput}
                   onChangeText={setTagInput}
                   onSubmitEditing={handleAddTag}
+                  returnKeyType="done"
                   placeholder="Add tag..."
-                  placeholderTextColor={theme.colors.mutedForeground}
-                  style={[
-                    styles.tagTextInput,
-                    {
-                      color: theme.colors.foreground,
-                      backgroundColor: isDark
-                        ? "rgba(255,255,255,0.04)"
-                        : "rgba(0,0,0,0.03)",
-                      borderColor: theme.colors.border,
-                    },
-                  ]}
+                  containerStyle={styles.tagInput}
                 />
                 <Button variant="outline" size="sm" onPress={handleAddTag}>
                   Add
@@ -1143,37 +975,13 @@ export function ExpenseForm({
               >
                 {[{ id: "", name: "None" }, ...selectableSpaces].map((option) => {
                   const optionId = option.id ?? "";
-                  const isActive = spaceId === optionId;
                   return (
-                    <Pressable
+                    <Chip
                       key={optionId || "none"}
+                      label={option.name}
+                      selected={spaceId === optionId}
                       onPress={() => setSpaceId(optionId)}
-                      style={[
-                        styles.spacePill,
-                        {
-                          backgroundColor: isActive
-                            ? theme.colors.primary
-                            : isDark
-                              ? "rgba(255,255,255,0.06)"
-                              : "rgba(0,0,0,0.04)",
-                          borderColor: isActive
-                            ? theme.colors.primary
-                            : theme.colors.border,
-                        },
-                      ]}
-                    >
-                      <Text
-                        style={{
-                          fontSize: theme.typography.xs,
-                          fontWeight: isActive ? "700" : "500",
-                          color: isActive
-                            ? theme.colors.primaryForeground
-                            : theme.colors.foreground,
-                        }}
-                      >
-                        {option.name}
-                      </Text>
-                    </Pressable>
+                    />
                   );
                 })}
               </ScrollView>
@@ -1243,17 +1051,14 @@ export function ExpenseForm({
                 Pick a category, then a subcategory
               </Text>
             </View>
-            <Pressable
+            <Button
+              variant="tonal"
+              size="icon"
               onPress={() => setShowCategoryPickerModal(false)}
-              style={{
-                padding: 8,
-                borderRadius: 20,
-                backgroundColor: theme.colors.muted,
-              }}
               accessibilityLabel="Close category picker"
             >
-              <X size={18} color={theme.colors.foreground} />
-            </Pressable>
+              <X size={18} color={theme.colors.onSecondaryContainer} />
+            </Button>
           </View>
           <CategoryPicker
             inline
@@ -1317,37 +1122,11 @@ const styles = StyleSheet.create({
   },
   aiQuickButton: {
     flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
     gap: 6,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 14,
-    borderWidth: 1,
   },
   aiQuickButtonText: {
     fontSize: 12,
     fontWeight: "700",
-  },
-  typeSegment: {
-    flexDirection: "row",
-    padding: 4,
-    borderRadius: 14,
-    borderWidth: 1,
-    gap: 4,
-  },
-  typeTab: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingVertical: 10,
-    borderRadius: 10,
-  },
-  typeTabText: {
-    fontSize: 14,
   },
   amountInputRow: {
     flexDirection: "row",
@@ -1362,12 +1141,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
     marginTop: 4,
-  },
-  quickPill: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    borderWidth: 1,
   },
   suggestionBadge: {
     flexDirection: "row",
@@ -1399,23 +1172,6 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 8,
   },
-  sourceChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-  },
-  accountCard: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 14,
-    borderWidth: 1.5,
-  },
-  accountCardTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
   tagsContainer: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -1435,23 +1191,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
   },
+  tagInput: {
+    flex: 1,
+  },
+  accountChip: {
+    minHeight: 40,
+    borderRadius: 14,
+  },
   spacePillRow: {
     flexDirection: "row",
     gap: 8,
-  },
-  spacePill: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 12,
-    borderCurve: "continuous",
-    borderWidth: 1,
-  },
-  tagTextInput: {
-    flex: 1,
-    height: 38,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    fontSize: 13,
   },
 });

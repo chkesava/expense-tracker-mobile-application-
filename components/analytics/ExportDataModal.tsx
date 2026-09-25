@@ -11,6 +11,7 @@ import {
 import { Download, FileSpreadsheet, FileText, Lock, X } from "lucide-react-native";
 
 import { Button } from "@/components/ui/Button";
+import { Chip } from "@/components/ui/Chip";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useIncomes } from "@/hooks/useIncomes";
@@ -248,36 +249,12 @@ export function ExportDataModal({ visible, onClose }: ExportDataModalProps) {
                   ).map((s) => {
                     const isSelected = scope === s.id;
                     return (
-                      <Pressable
+                      <Chip
                         key={s.id}
-                        onPress={() => {
-                          haptic.selection().catch(() => undefined);
-                          setScope(s.id);
-                        }}
-                        style={[
-                          styles.chip,
-                          {
-                            backgroundColor: isSelected
-                              ? theme.colors.primary
-                              : isDark
-                              ? "rgba(255,255,255,0.06)"
-                              : "rgba(0,0,0,0.04)",
-                            borderColor: isSelected ? theme.colors.primary : theme.colors.border,
-                          },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.chipText,
-                            {
-                              color: isSelected ? "#FFFFFF" : theme.colors.foreground,
-                              fontWeight: isSelected ? "700" : "500",
-                            },
-                          ]}
-                        >
-                          {s.label}
-                        </Text>
-                      </Pressable>
+                        label={s.label}
+                        selected={isSelected}
+                        onPress={() => setScope(s.id)}
+                      />
                     );
                   })}
                 </View>

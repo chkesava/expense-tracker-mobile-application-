@@ -52,7 +52,7 @@ export function SpendlyLogo({ size = 80 }: { size?: number }) {
         ]}
       >
         <Image
-          source={require("@/assets/branding/icon.png")}
+          source={require("@/assets/branding/spendly-icon.png")}
           style={{ width: size * 0.6, height: size * 0.6, resizeMode: "contain", borderRadius: size * 0.15 }}
         />
       </View>

@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { AlertTriangle, ChevronRight, CalendarClock } from "lucide-react-native";
 
 import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { useEpfContributions } from "@/hooks/useEpfContributions";
 import { epfCurrentMonth, epfTodayKey } from "@/shared/features/epf/utils/epfClock";
@@ -18,6 +19,7 @@ import {
 import { wageForProjection } from "@/shared/features/epf/utils/schedule";
 import { formatAmount } from "@/shared/utils/formatCurrency";
 import { useTheme } from "@/theme/ThemeProvider";
+import { withAlpha } from "@/theme/surfaces";
 import { monthLabel } from "@/shared/utils/monthLabel";
 
 /**
@@ -72,12 +74,17 @@ export function EpfCurrentMonthCard({
             </Text>
           </View>
         </View>
-        <Pressable onPress={() => onOpen(establishment)} style={styles.cta}>
+        <Button
+          variant="outline"
+          size="sm"
+          onPress={() => onOpen(establishment)}
+          style={styles.cta}
+        >
           <Text style={[styles.ctaText, { color: theme.colors.primary }]}>
             {blocker === "no_wage" ? "Add a month" : "Add employer"}
           </Text>
           <ChevronRight size={theme.iconSize.sm} color={theme.colors.primary} />
-        </Pressable>
+        </Button>
       </Card>
     );
   }
@@ -95,7 +102,7 @@ export function EpfCurrentMonthCard({
     <Card>
       <Pressable onPress={() => onOpen(establishment)} accessibilityRole="button">
         <View style={styles.header}>
-          <View style={[styles.iconBadge, { backgroundColor: theme.colors.primary + "1A" }]}>
+          <View style={[styles.iconBadge, { backgroundColor: withAlpha(theme.colors.primary, 0.1) }]}>
             <CalendarClock size={theme.iconSize.md} color={theme.colors.primary} />
           </View>
           <View style={styles.headerText}>

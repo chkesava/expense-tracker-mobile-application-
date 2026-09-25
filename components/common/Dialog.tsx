@@ -1,8 +1,15 @@
 import type { ReactNode } from "react";
-import { Modal as RNModal, Pressable, StyleSheet, Text, View } from "react-native";
-
-import { Button } from "@/components/ui/Button";
-import { useTheme } from "@/theme/ThemeProvider";
+import { StyleSheet, View } from "react-native";
+import { Button } from "@/components/ui/Button"; // Keep using our bridged Button
+import {
+  AlertDialog,
+  AlertDialogBackdrop,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogBody,
+  AlertDialogFooter
+} from "@/components/ui/alert-dialog";
+import { Text } from "react-native";
 
 export type DialogAction = {
   label: string;
@@ -18,14 +25,14 @@ export type DialogProps = {
   title: string;
   description?: string;
   children?: ReactNode;
-  actions?: DialogAction[];
   /** Row for short confirms; stacked for 3+ actions or explicit long labels. */
   actionsLayout?: "row" | "stacked";
+  actions?: DialogAction[];
   /** When false, scrim tap does not dismiss (back still calls onClose). */
   dismissible?: boolean;
 };
 
-/** MD3 alert dialog — centered, for confirm/alert-style prompts. */
+/** MD3 alert dialog mapped to Gluestack AlertDialog. */
 export function Dialog({
   isOpen,
   onClose,
@@ -36,66 +43,37 @@ export function Dialog({
   actionsLayout,
   dismissible = true,
 }: DialogProps) {
-  const { theme } = useTheme();
   const layout =
     actionsLayout ??
     (actions && actions.length > 2 ? "stacked" : "row");
 
+  // Keep existing action styles
+  const isStacked = layout === "stacked";
+
   return (
-    <RNModal visible={isOpen} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
-      <View style={[styles.overlay, { backgroundColor: theme.colors.scrim }]}>
-        <Pressable
-          style={StyleSheet.absoluteFill}
-          onPress={dismissible ? onClose : undefined}
-          accessibilityLabel="Close dialog overlay"
-        />
-        <View
-          style={[
-            styles.card,
-            theme.elevation[3],
-            {
-              backgroundColor: theme.colors.card,
-              borderRadius: theme.radius.xl,
-              borderCurve: "continuous",
-              padding: theme.space.xl,
-            },
-          ]}
-          accessibilityRole="alert"
-          accessibilityViewIsModal
-        >
-          <Text
-            accessibilityRole="header"
-            style={{
-              color: theme.colors.foreground,
-              fontSize: theme.type.titleMedium.fontSize,
-              lineHeight: theme.type.titleMedium.lineHeight,
-              fontFamily: theme.type.titleMedium.fontFamily,
-              marginBottom: description || children ? theme.space.sm : theme.space.lg,
-            }}
-          >
-            {title}
-          </Text>
-          {description ? (
-            <Text
-              style={{
-                color: theme.colors.mutedForeground,
-                fontSize: theme.type.bodyMedium.fontSize,
-                lineHeight: theme.type.bodyMedium.lineHeight,
-                fontFamily: theme.type.bodyMedium.fontFamily,
-                marginBottom: theme.space.lg,
-              }}
-            >
-              {description}
-            </Text>
-          ) : null}
+    <AlertDialog
+      isOpen={isOpen}
+      onClose={dismissible ? onClose : () => {}}
+      // A real RN Modal window, as on main: it stays above the capsule nav
+      // (Android elevation beats portal order) and keeps the caller's context.
+      useRNModal
+    >
+      <AlertDialogBackdrop />
+      <AlertDialogContent className="p-6 bg-card border-none max-w-[400px]">
+        <AlertDialogHeader className="mb-2 p-0 border-none">
+          <Text className="text-xl font-bold text-foreground">{title}</Text>
+        </AlertDialogHeader>
+        
+        <AlertDialogBody className="mb-4 p-0">
+          {description && (
+            <Text className="text-sm text-muted-foreground mb-4">{description}</Text>
+          )}
           {children}
-          {actions?.length ? (
-            <View
-              style={[
-                layout === "stacked" ? styles.actionsStacked : styles.actionsRow,
-                { gap: theme.space.sm, marginTop: theme.space.md },
-              ]}
-            >
+        </AlertDialogBody>
+        
+        {actions?.length ? (
+          <AlertDialogFooter className="p-0 border-none">
+            <View className={`w-full flex ${isStacked ? 'flex-col gap-2' : 'flex-row justify-end gap-2 flex-wrap'}`}>
               {actions.map((action) => (
                 <Button
                   key={action.label}
@@ -103,40 +81,15 @@ export function Dialog({
                   loading={action.loading}
                   disabled={action.disabled}
                   onPress={action.onPress}
-                  style={layout === "stacked" ? styles.actionFull : undefined}
+                  style={isStacked ? { width: '100%' } : undefined}
                 >
                   {action.label}
                 </Button>
               ))}
             </View>
-          ) : null}
-        </View>
-      </View>
-    </RNModal>
+          </AlertDialogFooter>
+        ) : null}
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
-
-const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 24,
-  },
-  card: {
-    width: "100%",
-    maxWidth: 400,
-    zIndex: 1,
-  },
-  actionsRow: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    flexWrap: "wrap",
-  },
-  actionsStacked: {
-    flexDirection: "column",
-  },
-  actionFull: {
-    width: "100%",
-  },
-});

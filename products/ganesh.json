@@ -9,6 +9,7 @@
   "icon": "./assets/branding/ganesh-pandal-adaptive-icon.png",
   "adaptiveIconForeground": "./assets/branding/ganesh-pandal-adaptive-icon.png",
   "splashImage": "./assets/branding/ganesh-pandal-splash-logo.png",
+  "adaptiveIconBackgroundColor": "#071A2B",
   "splashBackgroundColor": "#3D1224",
   "splashImageWidth": 200,
   "permissions": [
@@ -32,6 +33,7 @@
     "themeColor": "#F97316",
     "backgroundColor": "#3D1224",
     "description": "Shared Pandal hisab: contributions, sponsors and expenses.",
-    "manifestIcon": "./assets/branding/ganesh-pandal-adaptive-icon.png"
+    "manifestIcon": "./assets/branding/ganesh-pandal-adaptive-icon.png",
+    "favicon": "./assets/branding/logo.png"
   }
 }

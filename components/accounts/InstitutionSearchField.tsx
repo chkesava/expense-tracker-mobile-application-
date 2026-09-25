@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Search, X } from "lucide-react-native";
 
 import { Input } from "@/components/ui/Input";
+import { Button } from "@/components/ui/Button";
 import type { Institution } from "@/shared/data/institutions";
 import {
   getInstitutionById,
@@ -59,19 +60,20 @@ export function InstitutionSearchField({
           >
             {selected.name}
           </Text>
-          <Pressable
+          <Button
+            variant="ghost"
+            size="icon"
             onPress={() => {
               onSelect(null);
               setQuery("");
               setFocused(true);
             }}
-            accessibilityRole="button"
             accessibilityLabel="Change institution"
             hitSlop={8}
             style={styles.clearBtn}
           >
             <X size={16} color={theme.colors.mutedForeground} />
-          </Pressable>
+          </Button>
         </View>
       </View>
     );

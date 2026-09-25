@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { Plus } from "lucide-react-native";
 
 import { CARD_ORANGE } from "@/components/accounts/accountScreenTheme";
@@ -17,11 +17,10 @@ import type { Receivable, ReceivableStatus } from "@/shared/types/receivable";
 import { summarizeReceivables } from "@/shared/utils/receivableMath";
 import { todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
-import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
 
+import { Chip } from "@/components/ui/Chip";
 type StatusFilter = "all" | "outstanding" | ReceivableStatus;
 
 const STATUS_FILTERS: { id: StatusFilter; label: string }[] = [
@@ -35,8 +34,7 @@ const STATUS_FILTERS: { id: StatusFilter; label: string }[] = [
 ];
 
 export function ReceivablesList() {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
   const displayCurrency = useDisplayCurrency();
 
   const {
@@ -98,20 +96,6 @@ export function ReceivablesList() {
     () => receivables.find((r) => r.id === selectedId) ?? null,
     [receivables, selectedId]
   );
-
-  const pillStyle = (isActive: boolean) => ({
-    backgroundColor: isActive
-      ? theme.colors.primary
-      : isDark
-        ? "rgba(255,255,255,0.06)"
-        : "rgba(0,0,0,0.04)",
-    borderColor: isActive ? theme.colors.primary : theme.colors.border,
-  });
-
-  const pillTextStyle = (isActive: boolean) => ({
-    color: isActive ? theme.colors.primaryForeground : theme.colors.foreground,
-    fontWeight: isActive ? ("700" as const) : ("500" as const),
-  });
 
   return (
     <View style={styles.container}>
@@ -202,18 +186,12 @@ export function ReceivablesList() {
             {STATUS_FILTERS.map((filter) => {
               const isActive = statusFilter === filter.id;
               return (
-                <Pressable
+                <Chip
                   key={filter.id}
-                  onPress={() => {
-                    haptic.selection().catch(() => undefined);
-                    setStatusFilter(filter.id);
-                  }}
-                  style={[styles.pill, pillStyle(isActive)]}
-                >
-                  <Text style={[styles.pillText, pillTextStyle(isActive)]}>
-                    {filter.label}
-                  </Text>
-                </Pressable>
+                  label={filter.label}
+                  selected={isActive}
+                  onPress={() => setStatusFilter(filter.id)}
+                />
               );
             })}
           </ScrollView>

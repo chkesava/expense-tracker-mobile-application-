@@ -11,6 +11,8 @@ import {
 import { X } from "lucide-react-native";
 
 import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Chip } from "@/components/ui/Chip";
 import { useCategories } from "@/hooks/useCategories";
 import type { Split, SplitType } from "@/shared/types/split";
 import {
@@ -27,7 +29,7 @@ import {
   type SplitDetailsUpdate,
 } from "@/shared/utils/splitMath";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useSurfaces } from "@/theme/surfaces";
 import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
@@ -61,8 +63,8 @@ export function EditSplitModal({
   onClose,
   onConfirm,
 }: EditSplitModalProps) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
   const displayCurrency = useDisplayCurrency();
   const { visibleParents } = useCategories();
   const [title, setTitle] = useState("");
@@ -200,46 +202,23 @@ export function EditSplitModal({
             </Text>
 
             <FieldLabel color={theme.colors.mutedForeground}>SPLIT TITLE</FieldLabel>
-            <TextInput
+            <Input
               value={title}
               onChangeText={setTitle}
               placeholder={
                 collect ? "e.g. Rahul's wedding gift" : "e.g. Weekend BBQ"
               }
-              placeholderTextColor={theme.colors.mutedForeground}
-              style={[
-                styles.input,
-                {
-                  backgroundColor: isDark
-                    ? "rgba(255,255,255,0.04)"
-                    : "rgba(0,0,0,0.02)",
-                  borderColor: theme.colors.border,
-                  color: theme.colors.foreground,
-                },
-              ]}
             />
 
             <FieldLabel color={theme.colors.mutedForeground}>
               {`${collect ? "TARGET AMOUNT" : "TOTAL AMOUNT"} (${displayCurrency})`}
             </FieldLabel>
-            <TextInput
+            <Input
               value={amount}
               onChangeText={setAmount}
               keyboardType="decimal-pad"
               editable={!spent}
               placeholder="0.00"
-              placeholderTextColor={theme.colors.mutedForeground}
-              style={[
-                styles.input,
-                {
-                  backgroundColor: isDark
-                    ? "rgba(255,255,255,0.04)"
-                    : "rgba(0,0,0,0.02)",
-                  borderColor: theme.colors.border,
-                  color: theme.colors.foreground,
-                  opacity: spent ? 0.6 : 1,
-                },
-              ]}
             />
 
             <FieldLabel color={theme.colors.mutedForeground}>SPLIT METHOD</FieldLabel>
@@ -247,9 +226,7 @@ export function EditSplitModal({
               style={[
                 styles.segmentRow,
                 {
-                  backgroundColor: isDark
-                    ? "rgba(255,255,255,0.06)"
-                    : "rgba(0,0,0,0.04)",
+                  backgroundColor: surfaces.control,
                 },
               ]}
             >
@@ -301,9 +278,7 @@ export function EditSplitModal({
                     styles.personRow,
                     {
                       borderColor: theme.colors.border,
-                      backgroundColor: isDark
-                        ? "rgba(255,255,255,0.03)"
-                        : "rgba(0,0,0,0.02)",
+                      backgroundColor: surfaces.tile,
                     },
                   ]}
                 >
@@ -331,9 +306,7 @@ export function EditSplitModal({
                       style={[
                         styles.personAmount,
                         {
-                          backgroundColor: isDark
-                            ? "rgba(255,255,255,0.06)"
-                            : "rgba(0,0,0,0.04)",
+                          backgroundColor: surfaces.control,
                           borderColor: theme.colors.border,
                           color: theme.colors.foreground,
                         },
@@ -369,38 +342,12 @@ export function EditSplitModal({
               {categoryOptions.map((name) => {
                 const selected = category === name;
                 return (
-                  <Pressable
+                  <Chip
                     key={name}
-                    onPress={() => {
-                      haptic.selection().catch(() => undefined);
-                      setCategory(name);
-                    }}
-                    style={[
-                      styles.chip,
-                      {
-                        backgroundColor: selected
-                          ? theme.colors.primary
-                          : isDark
-                            ? "rgba(255,255,255,0.06)"
-                            : "rgba(0,0,0,0.04)",
-                        borderColor: selected
-                          ? theme.colors.primary
-                          : theme.colors.border,
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={{
-                        fontSize: 12,
-                        fontWeight: selected ? "700" : "500",
-                        color: selected
-                          ? theme.colors.primaryForeground
-                          : theme.colors.foreground,
-                      }}
-                    >
-                      {name}
-                    </Text>
-                  </Pressable>
+                    label={name}
+                    selected={selected}
+                    onPress={() => setCategory(name)}
+                  />
                 );
               })}
             </ScrollView>
@@ -415,9 +362,7 @@ export function EditSplitModal({
               style={[
                 styles.notes,
                 {
-                  backgroundColor: isDark
-                    ? "rgba(255,255,255,0.04)"
-                    : "rgba(0,0,0,0.02)",
+                  backgroundColor: surfaces.tile,
                   borderColor: theme.colors.border,
                   color: theme.colors.foreground,
                 },

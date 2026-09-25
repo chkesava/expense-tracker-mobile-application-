@@ -7,7 +7,7 @@ import { SmsMatchingUnconfiguredText } from "@/components/accounts/SmsMatchingUn
 import type { Account } from "@/shared/types/expense";
 import { formatAccountIdentityLine } from "@/shared/utils/accountIdentity";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useSurfaces } from "@/theme/surfaces";
 
 /**
  * One account in the Accounts list (SPENDLY-139).
@@ -40,9 +40,9 @@ export function AccountRow({
   onLongPress: () => void;
   accessibilityLabel: string;
 }) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
-  const ripple = isDark ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.06)";
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
+  const ripple = surfaces.track;
 
   return (
     <Pressable

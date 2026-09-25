@@ -12,7 +12,7 @@
  */
 
 import { useMemo } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 
 import { Amount } from "@/components/common/Amount";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
@@ -22,8 +22,8 @@ import type {
   JournalPeriodSummary as JournalPeriod,
   JournalTotals,
 } from "@/shared/utils/journalPeriodSummary";
+import { Chip } from "@/components/ui/Chip";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
 
 const GRANULARITIES: { id: JournalPeriodGranularity; label: string }[] = [
   { id: "day", label: "Daily" },
@@ -56,8 +56,7 @@ export function JournalPeriodSummary({
   /** False while the ledger is still the staged page. */
   complete: boolean;
 }) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
   const currency = useDisplayCurrency();
 
   const visible = useMemo(() => periods.slice(0, MAX_ROWS), [periods]);
@@ -90,43 +89,15 @@ export function JournalPeriodSummary({
           This view
         </Text>
         <View style={styles.granularityRow}>
-          {GRANULARITIES.map((option) => {
-            const active = option.id === granularity;
-            return (
-              <Pressable
-                key={option.id}
-                onPress={() => onGranularityChange(option.id)}
-                accessibilityRole="button"
-                accessibilityState={{ selected: active }}
-                style={[
-                  styles.granularityChip,
-                  {
-                    backgroundColor: active
-                      ? theme.colors.primary
-                      : isDark
-                        ? "rgba(255,255,255,0.05)"
-                        : "rgba(0,0,0,0.04)",
-                    borderColor: active
-                      ? theme.colors.primary
-                      : theme.colors.border,
-                  },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.granularityText,
-                    {
-                      color: active
-                        ? theme.colors.primaryForeground
-                        : theme.colors.mutedForeground,
-                    },
-                  ]}
-                >
-                  {option.label}
-                </Text>
-              </Pressable>
-            );
-          })}
+          {GRANULARITIES.map((option) => (
+            <Chip
+              key={option.id}
+              size="sm"
+              label={option.label}
+              selected={option.id === granularity}
+              onPress={() => onGranularityChange(option.id)}
+            />
+          ))}
         </View>
       </View>
 
@@ -274,16 +245,6 @@ const styles = StyleSheet.create({
   granularityRow: {
     flexDirection: "row",
     gap: 6,
-  },
-  granularityChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 10,
-    borderWidth: 1,
-  },
-  granularityText: {
-    fontSize: 11,
-    fontWeight: "700",
   },
   totalsRow: {
     flexDirection: "row",

@@ -7,7 +7,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -30,6 +29,7 @@ import {
 } from "lucide-react-native";
 
 import { InstitutionSearchField } from "@/components/accounts/InstitutionSearchField";
+import { Input } from "@/components/ui/Input";
 import { useAccountsContext } from "@/providers/FinanceDataProvider";
 import { getFirestoreDb } from "@/lib/firebase";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
@@ -48,6 +48,7 @@ import { useSettings } from "@/providers/SettingsProvider";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import { useUserDoc } from "@/providers/UserDocProvider";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useSurfaces, withAlpha } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
 import { createExpense } from "@/services/ledger/createLedgerTransaction";
@@ -98,6 +99,7 @@ const WIZARD_STEPS = [
 export function SetupWizardModal() {
   const insets = useSafeAreaInsets();
   const { theme, themeName } = useTheme();
+  const surfaces = useSurfaces();
   const isDark = themeUsesDarkPalette(themeName);
   const { isSetupWizardOpen, setIsSetupWizardOpen, setupWizardInitialStep } = useModals();
   const { user } = useAuth();
@@ -333,7 +335,7 @@ export function SetupWizardModal() {
               onPress={handleClose}
               style={[
                 styles.iconBtn,
-                { backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)" },
+                { backgroundColor: surfaces.control },
               ]}
               accessibilityLabel="Close wizard"
             >
@@ -378,19 +380,10 @@ export function SetupWizardModal() {
                   <Text style={[styles.inputLabel, { color: theme.colors.mutedForeground }]}>
                     Display Name
                   </Text>
-                  <TextInput
+                  <Input
                     value={username}
                     onChangeText={setUsername}
                     placeholder="Enter your name"
-                    placeholderTextColor={theme.colors.mutedForeground}
-                    style={[
-                      styles.textInput,
-                      {
-                        backgroundColor: theme.colors.card,
-                        borderColor: theme.colors.border,
-                        color: theme.colors.foreground,
-                      },
-                    ]}
                   />
                 </View>
 
@@ -411,7 +404,7 @@ export function SetupWizardModal() {
                           styles.emojiChip,
                           selectedEmoji === emoji && [
                             styles.emojiChipActive,
-                            { borderColor: theme.colors.primary, backgroundColor: theme.colors.primary + "20" },
+                            { borderColor: theme.colors.primary, backgroundColor: withAlpha(theme.colors.primary, 0.13) },
                           ],
                         ]}
                       >
@@ -497,22 +490,11 @@ export function SetupWizardModal() {
                   <Text style={[styles.inputLabel, { color: theme.colors.mutedForeground }]}>
                     Monthly Budget ({selectedCurrency})
                   </Text>
-                  <TextInput
+                  <Input
                     value={budgetAmount}
                     onChangeText={setBudgetAmount}
                     keyboardType="numeric"
                     placeholder="e.g. 50000"
-                    placeholderTextColor={theme.colors.mutedForeground}
-                    style={[
-                      styles.textInput,
-                      {
-                        backgroundColor: theme.colors.card,
-                        borderColor: theme.colors.border,
-                        color: theme.colors.foreground,
-                        fontSize: 22,
-                        fontWeight: "800",
-                      },
-                    ]}
                   />
                 </View>
 
@@ -647,20 +629,11 @@ export function SetupWizardModal() {
                     <Text style={[styles.inputLabel, { color: theme.colors.mutedForeground }]}>
                       Last 4
                     </Text>
-                    <TextInput
+                    <Input
                       value={accountLast4}
                       onChangeText={setAccountLast4}
                       placeholder="e.g. 4521"
                       keyboardType="number-pad"
-                      placeholderTextColor={theme.colors.mutedForeground}
-                      style={[
-                        styles.textInput,
-                        {
-                          backgroundColor: theme.colors.card,
-                          borderColor: theme.colors.border,
-                          color: theme.colors.foreground,
-                        },
-                      ]}
                     />
                   </View>
                 ) : null}
@@ -669,7 +642,7 @@ export function SetupWizardModal() {
                   <Text style={[styles.inputLabel, { color: theme.colors.mutedForeground }]}>
                     Display Name
                   </Text>
-                  <TextInput
+                  <Input
                     value={accountName}
                     onChangeText={(value) => {
                       setDisplayNameTouched(true);
@@ -681,15 +654,6 @@ export function SetupWizardModal() {
                         wizardAccountTypeId(accountTypeKey)
                       ) || "Optional nickname"
                     }
-                    placeholderTextColor={theme.colors.mutedForeground}
-                    style={[
-                      styles.textInput,
-                      {
-                        backgroundColor: theme.colors.card,
-                        borderColor: theme.colors.border,
-                        color: theme.colors.foreground,
-                      },
-                    ]}
                   />
                 </View>
 
@@ -697,20 +661,11 @@ export function SetupWizardModal() {
                   <Text style={[styles.inputLabel, { color: theme.colors.mutedForeground }]}>
                     Current Balance ({selectedCurrency})
                   </Text>
-                  <TextInput
+                  <Input
                     value={accountBalance}
                     onChangeText={setAccountBalance}
                     keyboardType="numeric"
                     placeholder="e.g. 10000"
-                    placeholderTextColor={theme.colors.mutedForeground}
-                    style={[
-                      styles.textInput,
-                      {
-                        backgroundColor: theme.colors.card,
-                        borderColor: theme.colors.border,
-                        color: theme.colors.foreground,
-                      },
-                    ]}
                   />
                 </View>
               </View>
@@ -735,22 +690,11 @@ export function SetupWizardModal() {
                   <Text style={[styles.inputLabel, { color: theme.colors.mutedForeground }]}>
                     Amount ({selectedCurrency})
                   </Text>
-                  <TextInput
+                  <Input
                     value={expenseAmount}
                     onChangeText={setExpenseAmount}
                     keyboardType="numeric"
                     placeholder="e.g. 250"
-                    placeholderTextColor={theme.colors.mutedForeground}
-                    style={[
-                      styles.textInput,
-                      {
-                        backgroundColor: theme.colors.card,
-                        borderColor: theme.colors.border,
-                        color: theme.colors.foreground,
-                        fontSize: 22,
-                        fontWeight: "800",
-                      },
-                    ]}
                   />
                 </View>
 
@@ -759,19 +703,10 @@ export function SetupWizardModal() {
                   <Text style={[styles.inputLabel, { color: theme.colors.mutedForeground }]}>
                     Description / Note
                   </Text>
-                  <TextInput
+                  <Input
                     value={expenseNote}
                     onChangeText={setExpenseNote}
                     placeholder="e.g. Coffee & snacks"
-                    placeholderTextColor={theme.colors.mutedForeground}
-                    style={[
-                      styles.textInput,
-                      {
-                        backgroundColor: theme.colors.card,
-                        borderColor: theme.colors.border,
-                        color: theme.colors.foreground,
-                      },
-                    ]}
                   />
                 </View>
               </View>

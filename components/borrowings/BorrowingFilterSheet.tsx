@@ -6,6 +6,7 @@ import {
   accountAccent,
 } from "@/components/accounts/accountScreenTheme";
 import { Modal } from "@/components/common";
+import { Button } from "@/components/ui/Button";
 import {
   BORROWING_DATE_FILTERS,
   BORROWING_INTEREST_FILTERS,
@@ -109,23 +110,22 @@ export function BorrowingFilterSheet({
       </View>
 
       <View style={[styles.footer, { borderTopColor: theme.colors.border }]}>
-        <Pressable
+        <Button
+          variant="outline"
+          size="sm"
+          haptic={false}
           onPress={() => {
             void haptic.selection();
             setDraft(EMPTY_BORROWING_FILTERS);
           }}
           disabled={activeCount === 0}
-          style={({ pressed }) => [
-            styles.resetBtn,
-            { opacity: activeCount === 0 ? 0.4 : pressed ? 0.7 : 1 },
-          ]}
-          accessibilityRole="button"
           accessibilityLabel="Reset all borrowing filters"
+          style={styles.resetBtn}
         >
           <Text style={[styles.resetLabel, { color: theme.colors.mutedForeground }]}>
             Reset
           </Text>
-        </Pressable>
+        </Button>
 
         <Pressable
           onPress={() => {

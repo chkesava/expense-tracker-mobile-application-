@@ -8,7 +8,7 @@ import { getInstalledVersionCode, getInstalledVersionName } from "@/hooks/useApp
 import { haptic } from "@/lib/haptics";
 import { useSetupProgress } from "@/providers/SetupProgressProvider";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useSurfaces } from "@/theme/surfaces";
 
 export function AboutSection() {
   return (
@@ -39,8 +39,8 @@ function AppVersionCard() {
 }
 
 function GettingStartedCard() {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
   const router = useRouter();
 
   let setupProgress: ReturnType<typeof useSetupProgress> | null = null;
@@ -74,7 +74,7 @@ function GettingStartedCard() {
         style={[
           styles.track,
           {
-            backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)",
+            backgroundColor: surfaces.track,
           },
         ]}
       >

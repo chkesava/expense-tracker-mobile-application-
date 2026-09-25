@@ -1,4 +1,4 @@
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
 import {
   BarChart3,
@@ -8,7 +8,8 @@ import {
   Wallet,
 } from "lucide-react-native";
 
-import { useSurfaces, withAlpha } from "@/components/dashboard/primitives";
+import { Chip } from "@/components/ui/Chip";
+import { withAlpha } from "@/theme/surfaces";
 import { haptic } from "@/lib/haptics";
 import { useTheme } from "@/theme/ThemeProvider";
 import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
@@ -24,7 +25,6 @@ export interface QuickAddWidgetProps {
 export function QuickAddWidget({ onAddExpense }: QuickAddWidgetProps) {
   const router = useRouter();
   const { theme } = useTheme();
-  const surfaces = useSurfaces();
 
   const go = (path: string) => () => {
     void haptic.selection();
@@ -63,9 +63,6 @@ export function QuickAddWidget({ onAddExpense }: QuickAddWidgetProps) {
     },
   ];
 
-  /** Deep navy in light mode, elevated surface in dark — the "primary" identity. */
-  const featuredBg = surfaces.isDark ? theme.colors.primary : "#1E293B";
-
   return (
     <HorizontalSwipeBoundary>
       <ScrollView
@@ -75,47 +72,30 @@ export function QuickAddWidget({ onAddExpense }: QuickAddWidgetProps) {
       >
         {chips.map((chip) => {
           const Icon = chip.icon;
-          const color = chip.featured ? "#FFFFFF" : theme.colors.foreground;
           return (
-            <Pressable
+            <Chip
               key={chip.id}
+              label={chip.label}
+              // The one filled primary action; the rest stay quiet.
+              selected={chip.featured}
+              haptic={false}
               onPress={chip.onPress}
-              android_ripple={{
-                color: chip.featured
-                  ? "rgba(255,255,255,0.2)"
-                  : withAlpha(theme.colors.primary, 0.12),
-                borderless: false,
-              }}
-              style={({ pressed }) => [
-                styles.chip,
-                chip.featured
-                  ? { backgroundColor: featuredBg }
-                  : {
-                      backgroundColor: theme.colors.card,
-                      borderWidth: StyleSheet.hairlineWidth,
-                      borderColor: surfaces.divider,
-                    },
-                pressed && { opacity: 0.9 },
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel={chip.label}
-            >
-              {chip.featured ? (
-                <View style={styles.featuredGlyph}>
-                  <Icon size={14} color={color} strokeWidth={2.6} />
-                </View>
-              ) : (
-                <Icon size={16} color={theme.colors.mutedForeground} strokeWidth={2.2} />
-              )}
-              <Text
-                style={[
-                  styles.label,
-                  { color, fontFamily: theme.fontFamily.semibold },
-                ]}
-              >
-                {chip.label}
-              </Text>
-            </Pressable>
+              style={styles.chip}
+              icon={(color) =>
+                chip.featured ? (
+                  <View
+                    style={[
+                      styles.featuredGlyph,
+                      { backgroundColor: withAlpha(color, 0.22) },
+                    ]}
+                  >
+                    <Icon size={14} color={color} strokeWidth={2.6} />
+                  </View>
+                ) : (
+                  <Icon size={16} color={theme.colors.mutedForeground} strokeWidth={2.2} />
+                )
+              }
+            />
           );
         })}
       </ScrollView>
@@ -130,12 +110,8 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   chip: {
-    flexDirection: "row",
-    alignItems: "center",
     gap: 8,
-    paddingVertical: 11,
     paddingHorizontal: 15,
-    borderRadius: 999,
     minHeight: 46,
   },
   featuredGlyph: {
@@ -144,10 +120,5 @@ const styles = StyleSheet.create({
     borderRadius: 11,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.22)",
-  },
-  label: {
-    fontSize: 13.5,
-    letterSpacing: 0.1,
   },
 });

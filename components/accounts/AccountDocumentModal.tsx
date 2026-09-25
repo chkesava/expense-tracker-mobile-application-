@@ -10,6 +10,7 @@ import { accountAccent, ACCOUNT_RED } from "@/components/accounts/accountScreenT
 import { haptic } from "@/lib/haptics";
 import { logWarning } from "@/lib/errors";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useSurfaces } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import type { AccountDocument } from "@/shared/types/expense";
 import type { PickedDocumentFile } from "@/services/accounts/accountDocumentsStore";
@@ -44,6 +45,7 @@ export function AccountDocumentModal({
   onSaveMeta: (meta: { name: string; note: string }) => Promise<void>;
 }) {
   const { theme, themeName } = useTheme();
+  const surfaces = useSurfaces();
   const isDark = themeUsesDarkPalette(themeName);
   const accent = accountAccent(isDark);
 
@@ -140,9 +142,7 @@ export function AccountDocumentModal({
             style={[
               styles.storedFile,
               {
-                backgroundColor: isDark
-                  ? "rgba(255,255,255,0.04)"
-                  : "rgba(15,23,42,0.03)",
+                backgroundColor: surfaces.tile,
                 borderColor: isDark
                   ? "rgba(148,163,184,0.16)"
                   : "rgba(15,23,42,0.08)",
@@ -178,9 +178,7 @@ export function AccountDocumentModal({
               {
                 backgroundColor: file
                   ? `${accent}12`
-                  : isDark
-                    ? "rgba(255,255,255,0.04)"
-                    : "rgba(15,23,42,0.03)",
+                  : surfaces.tile,
                 borderColor: file
                   ? accent
                   : isDark

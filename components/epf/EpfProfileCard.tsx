@@ -8,6 +8,7 @@ import type { EpfProfile } from "@/shared/features/epf/types";
 import { formatUan, maskUan } from "@/shared/features/epf/utils";
 import { useTheme } from "@/theme/ThemeProvider";
 
+import { withAlpha } from "@/theme/surfaces";
 type Props = {
   profile: EpfProfile;
   onEdit: () => void;
@@ -27,7 +28,7 @@ export function EpfProfileCard({ profile, onEdit }: Props) {
   return (
     <Card>
       <View style={styles.header}>
-        <View style={[styles.iconBadge, { backgroundColor: theme.colors.primary + "1A" }]}>
+        <View style={[styles.iconBadge, { backgroundColor: withAlpha(theme.colors.primary, 0.1) }]}>
           <IdCard size={theme.iconSize.md} color={theme.colors.primary} />
         </View>
         <View style={styles.headerText}>

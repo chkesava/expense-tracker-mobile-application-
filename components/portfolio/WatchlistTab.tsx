@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/Input";
 import { watchlistSchema } from "@/shared/features/portfolio/schemas";
 import type { MarketQuote, WatchlistItem } from "@/shared/features/portfolio/types";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useSurfaces } from "@/theme/surfaces";
 import { haptic } from "@/lib/haptics";
 
 export interface WatchlistTabProps {
@@ -21,8 +21,8 @@ export interface WatchlistTabProps {
 }
 
 export function WatchlistTab({ watchlist, quotes, currency, onAdd, onRemove }: WatchlistTabProps) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
   const [search, setSearch] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [symbol, setSymbol] = useState("");
@@ -95,7 +95,7 @@ export function WatchlistTab({ watchlist, quotes, currency, onAdd, onRemove }: W
             const changePercent = quote?.dayChangePercent ?? 0;
             const positive = change >= 0;
             return (
-              <View key={item.id} style={[styles.item, { borderColor: theme.colors.border, backgroundColor: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.02)" }]}>
+              <View key={item.id} style={[styles.item, { borderColor: theme.colors.border, backgroundColor: surfaces.tile }]}>
                 <View style={{ flex: 1 }}>
                   <Text style={{ color: theme.colors.foreground, fontSize: 13, fontWeight: "800" }}>{item.symbol}</Text>
                   <Text style={{ color: theme.colors.mutedForeground, fontSize: 11 }} numberOfLines={1}>{item.name}</Text>

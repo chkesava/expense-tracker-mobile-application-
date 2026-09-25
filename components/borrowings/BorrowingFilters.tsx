@@ -1,12 +1,12 @@
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, StyleSheet, View } from "react-native";
 
 import { ACCOUNT_GREEN } from "@/components/accounts/accountScreenTheme";
-import { haptic } from "@/lib/haptics";
 import {
   INTEREST_TYPES,
   LENDER_TYPES,
   LENDER_TYPE_LABELS,
 } from "@/shared/types/borrowing";
+import { Chip } from "@/components/ui/Chip";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
@@ -76,51 +76,18 @@ export function FilterChip({
   active: boolean;
   onPress: () => void;
 }) {
-  const { theme, themeName } = useTheme();
+  const { themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
 
+  // The Money hub's green: the brighter account green on dark, success on light.
   return (
-    <Pressable
-      onPress={() => {
-        void haptic.selection();
-        onPress();
-      }}
-      style={({ pressed }) => [
-        styles.chip,
-        {
-          backgroundColor: active
-            ? isDark
-              ? ACCOUNT_GREEN
-              : theme.colors.success
-            : isDark
-              ? "rgba(255,255,255,0.05)"
-              : "rgba(15,23,42,0.04)",
-          borderColor: active
-            ? isDark
-              ? ACCOUNT_GREEN
-              : theme.colors.success
-            : isDark
-              ? "rgba(148,163,184,0.16)"
-              : theme.colors.border,
-        },
-        pressed && styles.pressed,
-      ]}
-      accessibilityRole="button"
-      accessibilityState={{ selected: active }}
-      accessibilityLabel={label}
-    >
-      <Text
-        style={[
-          styles.chipLabel,
-          {
-            color: active ? "#052E16" : theme.colors.mutedForeground,
-            fontWeight: active ? "800" : "600",
-          },
-        ]}
-      >
-        {label}
-      </Text>
-    </Pressable>
+    <Chip
+      label={label}
+      selected={active}
+      onPress={onPress}
+      tone="success"
+      accentColor={isDark ? ACCOUNT_GREEN : undefined}
+    />
   );
 }
 

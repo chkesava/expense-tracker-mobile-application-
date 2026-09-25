@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { CreateCreditCardBillModal } from "@/components/creditCardBills/CreateCreditCardBillModal";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { Chip } from "@/components/ui/Chip";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
 import { useCreditCardBills } from "@/hooks/useCreditCardBills";
@@ -261,40 +262,17 @@ function ScrollFilters({
   onChange: (f: FilterKey) => void;
   isDark: boolean;
 }) {
-  const { theme } = useTheme();
   return (
     <View style={styles.filterRow}>
       {FILTERS.map((f) => {
         const selected = filter === f.key;
         return (
-          <Pressable
+          <Chip
             key={f.key}
-            onPress={() => {
-              haptic.selection().catch(() => undefined);
-              onChange(f.key);
-            }}
-            style={[
-              styles.filterPill,
-              {
-                backgroundColor: selected
-                  ? theme.colors.primary
-                  : isDark
-                    ? "rgba(255,255,255,0.06)"
-                    : "rgba(0,0,0,0.04)",
-                borderColor: selected ? theme.colors.primary : theme.colors.border,
-              },
-            ]}
-          >
-            <Text
-              style={{
-                color: selected ? "#fff" : theme.colors.foreground,
-                fontSize: theme.typography.xs,
-                fontWeight: "600",
-              }}
-            >
-              {f.label}
-            </Text>
-          </Pressable>
+            label={f.label}
+            selected={selected}
+            onPress={() => onChange(f.key)}
+          />
         );
       })}
     </View>

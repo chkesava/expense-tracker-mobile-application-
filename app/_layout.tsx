@@ -1,3 +1,6 @@
+// Must run before any render: restores function-form Pressable styles under
+// NativeWind (SPENDLY-154, see lib/pressableStyleFix.ts).
+import "@/lib/pressableStyleFix";
 import { useEffect, useState } from "react";
 import { Platform } from "react-native";
 import { Stack, useNavigationContainerRef } from "expo-router";
@@ -17,6 +20,8 @@ import {
   Inter_700Bold,
 } from "@expo-google-fonts/inter";
 import "react-native-reanimated";
+import "../globals.css";
+import { GluestackUIProvider } from "@/components/ui/gluestack-ui-provider";
 
 import { ACTIVE_PRODUCT, IS_LANDING_BUILD } from "@/lib/activeProduct";
 import { AppErrorBoundary } from "@/components/common/AppErrorBoundary";
@@ -261,6 +266,7 @@ export default function RootLayout() {
                 <UserDocProvider>
                   <WorkspaceProvider>
                     <AppThemeProvider>
+                      <GluestackUIProvider mode="system">
                       <SettingsProvider>
                         {/* SPENDLY-22: owns the device-local PIN and the
                             one-time migration off Firestore. One mount covers
@@ -284,6 +290,7 @@ export default function RootLayout() {
                         </LocalizationProvider>
                         </PrivacyPinProvider>
                       </SettingsProvider>
+                      </GluestackUIProvider>
                     </AppThemeProvider>
                   </WorkspaceProvider>
                 </UserDocProvider>

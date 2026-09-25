@@ -1,5 +1,6 @@
 const path = require("path");
 const { getDefaultConfig } = require("expo/metro-config");
+const { withNativeWind } = require("nativewind/metro");
 
 /** @type {import('expo/metro-config').MetroConfig} */
 const config = getDefaultConfig(__dirname);
@@ -83,7 +84,7 @@ if (activeProduct) {
 
 /**
  * Product-specific JS splash overlay. A static import of both overlays would
- * pull the Expense `splash-logo.png` into a Ganesh bundle. Metro resolves the
+ * pull the Expense `spendly-splash.png` into a Ganesh bundle. Metro resolves the
  * `product-splash-overlay` package name to one file per EXPO_PUBLIC_PRODUCT.
  */
 const splashOverlayFile =
@@ -142,8 +143,8 @@ if (activeProduct === "ganesh") {
       : [];
   config.resolver.blockList = [
     ...currentList,
-    /[\\/]assets[\\/]branding[\\/]splash-logo\.png$/,
+    /[\\/]assets[\\/]branding[\\/]spendly-splash\.png$/,
   ];
 }
 
-module.exports = config;
+module.exports = withNativeWind(config, { input: './globals.css' });

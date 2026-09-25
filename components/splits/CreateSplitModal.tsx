@@ -14,6 +14,8 @@ import {
 import { Plus, Trash2, X } from "lucide-react-native";
 
 import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Chip } from "@/components/ui/Chip";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useAuth } from "@/providers/AuthProvider";
 import { useCategories } from "@/hooks/useCategories";
@@ -29,7 +31,7 @@ import {
   validateCustomSplits,
 } from "@/shared/utils/splitMath";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useSurfaces } from "@/theme/surfaces";
 import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
@@ -52,8 +54,8 @@ function organizerLabelFor(kind: SplitKind): string {
 }
 
 export function CreateSplitModal({ visible, onClose }: CreateSplitModalProps) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
   const { user } = useAuth();
   const displayCurrency = useDisplayCurrency();
   const { settings: userSettings } = useSettings();
@@ -350,9 +352,7 @@ export function CreateSplitModal({ visible, onClose }: CreateSplitModalProps) {
                 style={[
                   styles.segmentRow,
                   {
-                    backgroundColor: isDark
-                      ? "rgba(255,255,255,0.06)"
-                      : "rgba(0,0,0,0.04)",
+                    backgroundColor: surfaces.control,
                   },
                 ]}
               >
@@ -403,7 +403,7 @@ export function CreateSplitModal({ visible, onClose }: CreateSplitModalProps) {
               >
                 SPLIT TITLE
               </Text>
-              <TextInput
+              <Input
                 value={title}
                 onChangeText={setTitle}
                 placeholder={
@@ -411,17 +411,6 @@ export function CreateSplitModal({ visible, onClose }: CreateSplitModalProps) {
                     ? "e.g. Rahul's wedding gift"
                     : "e.g. Weekend BBQ, Goa Trip Hotel, Movie Night"
                 }
-                placeholderTextColor={theme.colors.mutedForeground}
-                style={[
-                  styles.input,
-                  {
-                    backgroundColor: isDark
-                      ? "rgba(255,255,255,0.04)"
-                      : "rgba(0,0,0,0.02)",
-                    borderColor: theme.colors.border,
-                    color: theme.colors.foreground,
-                  },
-                ]}
               />
             </View>
 
@@ -435,24 +424,11 @@ export function CreateSplitModal({ visible, onClose }: CreateSplitModalProps) {
               >
                 {isCollect ? "TARGET AMOUNT" : "TOTAL BILL"} ({displayCurrency})
               </Text>
-              <TextInput
+              <Input
                 value={totalAmount}
                 onChangeText={setTotalAmount}
                 placeholder="0.00"
                 keyboardType="decimal-pad"
-                placeholderTextColor={theme.colors.mutedForeground}
-                style={[
-                  styles.input,
-                  {
-                    backgroundColor: isDark
-                      ? "rgba(255,255,255,0.04)"
-                      : "rgba(0,0,0,0.02)",
-                    borderColor: theme.colors.border,
-                    color: theme.colors.foreground,
-                    fontSize: theme.typography.lg,
-                    fontWeight: "700",
-                  },
-                ]}
               />
             </View>
 
@@ -470,9 +446,7 @@ export function CreateSplitModal({ visible, onClose }: CreateSplitModalProps) {
                 style={[
                   styles.segmentRow,
                   {
-                    backgroundColor: isDark
-                      ? "rgba(255,255,255,0.06)"
-                      : "rgba(0,0,0,0.04)",
+                    backgroundColor: surfaces.control,
                   },
                 ]}
               >
@@ -561,9 +535,7 @@ export function CreateSplitModal({ visible, onClose }: CreateSplitModalProps) {
                     style={[
                       styles.participantCard,
                       {
-                        backgroundColor: isDark
-                          ? "rgba(255,255,255,0.03)"
-                          : "rgba(0,0,0,0.02)",
+                        backgroundColor: surfaces.tile,
                         borderColor: theme.colors.border,
                       },
                     ]}
@@ -607,9 +579,7 @@ export function CreateSplitModal({ visible, onClose }: CreateSplitModalProps) {
                           style={[
                             styles.customAmountInput,
                             {
-                              backgroundColor: isDark
-                                ? "rgba(255,255,255,0.06)"
-                                : "rgba(0,0,0,0.04)",
+                              backgroundColor: surfaces.control,
                               borderColor: theme.colors.border,
                               color: theme.colors.foreground,
                             },
@@ -678,37 +648,12 @@ export function CreateSplitModal({ visible, onClose }: CreateSplitModalProps) {
                 {categoryOptions.map((name) => {
                   const isSelected = category === name;
                   return (
-                    <Pressable
+                    <Chip
                       key={name}
+                      label={name}
+                      selected={isSelected}
                       onPress={() => setCategory(name)}
-                      style={[
-                        styles.chip,
-                        {
-                          backgroundColor: isSelected
-                            ? theme.colors.primary
-                            : isDark
-                              ? "rgba(255,255,255,0.06)"
-                              : "rgba(0,0,0,0.04)",
-                          borderColor: isSelected
-                            ? theme.colors.primary
-                            : theme.colors.border,
-                        },
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.chipText,
-                          {
-                            color: isSelected
-                              ? theme.colors.primaryForeground
-                              : theme.colors.foreground,
-                            fontWeight: isSelected ? "700" : "500",
-                          },
-                        ]}
-                      >
-                        {name}
-                      </Text>
-                    </Pressable>
+                    />
                   );
                 })}
               </ScrollView>
@@ -720,9 +665,7 @@ export function CreateSplitModal({ visible, onClose }: CreateSplitModalProps) {
                 style={[
                   styles.toggleCard,
                   {
-                    backgroundColor: isDark
-                      ? "rgba(255,255,255,0.03)"
-                      : "rgba(0,0,0,0.02)",
+                    backgroundColor: surfaces.tile,
                     borderColor: theme.colors.border,
                   },
                 ]}
@@ -786,37 +729,12 @@ export function CreateSplitModal({ visible, onClose }: CreateSplitModalProps) {
                   {accounts.map((acc) => {
                     const isSelected = selectedAccountId === acc.id;
                     return (
-                      <Pressable
+                      <Chip
                         key={acc.id}
+                        label={acc.name}
+                        selected={isSelected}
                         onPress={() => setSelectedAccountId(acc.id)}
-                        style={[
-                          styles.chip,
-                          {
-                            backgroundColor: isSelected
-                              ? theme.colors.primary
-                              : isDark
-                                ? "rgba(255,255,255,0.06)"
-                                : "rgba(0,0,0,0.04)",
-                            borderColor: isSelected
-                              ? theme.colors.primary
-                              : theme.colors.border,
-                          },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.chipText,
-                            {
-                              color: isSelected
-                                ? theme.colors.primaryForeground
-                                : theme.colors.foreground,
-                              fontWeight: isSelected ? "700" : "500",
-                            },
-                          ]}
-                        >
-                          {acc.name}
-                        </Text>
-                      </Pressable>
+                      />
                     );
                   })}
                 </ScrollView>

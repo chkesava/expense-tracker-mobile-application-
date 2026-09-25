@@ -7,6 +7,7 @@ import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { useEpfNetWorth } from "@/hooks/useEpfNetWorth";
 import { useTheme } from "@/theme/ThemeProvider";
 
+import { withAlpha } from "@/theme/surfaces";
 /**
  * Total EPF across every employer — KAN-71.
  *
@@ -40,7 +41,7 @@ export function EpfPortfolioCard() {
   return (
     <Card>
       <View style={styles.header}>
-        <View style={[styles.iconBadge, { backgroundColor: theme.colors.success + "1A" }]}>
+        <View style={[styles.iconBadge, { backgroundColor: withAlpha(theme.colors.success, 0.1) }]}>
           <PiggyBank size={theme.iconSize.md} color={theme.colors.success} />
         </View>
         <View style={styles.headerText}>

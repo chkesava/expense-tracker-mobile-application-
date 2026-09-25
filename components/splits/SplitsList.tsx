@@ -17,6 +17,7 @@ import { ErrorState } from "@/components/common/ErrorState";
 import { SkeletonHero, SkeletonList } from "@/components/common/Skeleton";
 import { CreateSplitModal } from "@/components/splits/CreateSplitModal";
 import { SplitDetailModal } from "@/components/splits/SplitDetailModal";
+import { Chip } from "@/components/ui/Chip";
 import { useAuth } from "@/providers/AuthProvider";
 import { useSplits } from "@/hooks/useSplits";
 import {
@@ -163,69 +164,17 @@ export function SplitsList() {
 
       {/* Tabs / Filter Pills */}
       <View style={styles.filterRow}>
-        <Pressable
-          onPress={() => {
-            haptic.selection().catch(() => undefined);
-            setActiveTab("active");
-          }}
-          style={[
-            styles.filterPill,
-            activeTab === "active"
-              ? { backgroundColor: theme.colors.primary }
-              : {
-                  backgroundColor: isDark
-                    ? "rgba(255,255,255,0.06)"
-                    : "rgba(0,0,0,0.04)",
-                },
-          ]}
-        >
-          <Text
-            style={[
-              styles.filterPillText,
-              {
-                color:
-                  activeTab === "active"
-                    ? theme.colors.primaryForeground
-                    : theme.colors.mutedForeground,
-                fontWeight: activeTab === "active" ? "700" : "500",
-              },
-            ]}
-          >
-            Active ({summary.activeCount})
-          </Text>
-        </Pressable>
+        <Chip
+          label={`Active (${summary.activeCount})`}
+          selected={activeTab === "active"}
+          onPress={() => setActiveTab("active")}
+        />
 
-        <Pressable
-          onPress={() => {
-            haptic.selection().catch(() => undefined);
-            setActiveTab("settled");
-          }}
-          style={[
-            styles.filterPill,
-            activeTab === "settled"
-              ? { backgroundColor: theme.colors.primary }
-              : {
-                  backgroundColor: isDark
-                    ? "rgba(255,255,255,0.06)"
-                    : "rgba(0,0,0,0.04)",
-                },
-          ]}
-        >
-          <Text
-            style={[
-              styles.filterPillText,
-              {
-                color:
-                  activeTab === "settled"
-                    ? theme.colors.primaryForeground
-                    : theme.colors.mutedForeground,
-                fontWeight: activeTab === "settled" ? "700" : "500",
-              },
-            ]}
-          >
-            Settled ({summary.settledCount})
-          </Text>
-        </Pressable>
+        <Chip
+          label={`Settled (${summary.settledCount})`}
+          selected={activeTab === "settled"}
+          onPress={() => setActiveTab("settled")}
+        />
       </View>
 
       {/* Splits List */}

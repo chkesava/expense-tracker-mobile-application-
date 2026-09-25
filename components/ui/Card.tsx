@@ -9,6 +9,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
+import { Card as GluestackCard } from "@/components/ui/card/index";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -22,7 +23,7 @@ import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
 
-export type CardVariant = "outlined" | "elevated" | "filled" | "tonal";
+export type CardVariant = "outlined" | "elevated" | "filled" | "tonal" | "glass";
 export type CardElevation = 0 | 1 | 2 | 3 | 4 | 5;
 export type CardRadius = "sm" | "md" | "lg" | "xl" | "xxl" | "full";
 
@@ -143,25 +144,28 @@ export function Card({
   const isTonal = variant === "tonal" || variant === "filled";
   const isElevated = variant === "elevated";
   const isOutlined = variant === "outlined";
+  const isGlass = variant === "glass";
 
   const resolvedElevationLevel: CardElevation =
     elevation !== undefined ? elevation : isElevated ? 2 : isTonal ? 0 : 1;
 
-  const elevationStyle = theme.elevation[resolvedElevationLevel];
+  const elevationStyle = isGlass ? undefined : theme.elevation[resolvedElevationLevel];
 
   // Resolve background with MD3 dark surface tinting
   let backgroundColor: string = isTonal
     ? theme.colors.surfaceVariant
-    : theme.colors.card;
+    : isGlass 
+      ? "rgba(255,255,255,0.05)" // Fake blur for now
+      : theme.colors.card;
 
-  if (isDark && resolvedElevationLevel >= 2 && !isTonal) {
+  if (isDark && resolvedElevationLevel >= 2 && !isTonal && !isGlass) {
     backgroundColor = resolvedElevationLevel >= 3 ? "#222530" : "#1C1E26";
   }
 
   const borderColor = isOutlined
     ? theme.colors.outlineVariant ?? theme.colors.border
-    : "transparent";
-  const borderWidth = isOutlined ? 1 : 0;
+    : isGlass ? "rgba(255,255,255,0.1)" : "transparent";
+  const borderWidth = isOutlined || isGlass ? 1 : 0;
 
   // Header
   const hasHeader = Boolean(title || subtitle || icon || badge || headerRight);
@@ -337,9 +341,9 @@ export function Card({
   }
 
   return (
-    <View testID={testID} style={containerStyle}>
+    <GluestackCard testID={testID} style={containerStyle}>
       {cardInner}
-    </View>
+    </GluestackCard>
   );
 }
 
