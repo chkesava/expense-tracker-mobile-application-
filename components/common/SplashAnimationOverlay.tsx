@@ -109,7 +109,7 @@ export function SplashAnimationOverlay({
 
       {/* Centered App Logo */}
       <Animated.Image
-        source={require("../../assets/branding/splash-logo.png")}
+        source={require("../../assets/branding/spendly-splash.png")}
         style={[styles.logo, logoStyle]}
         resizeMode="contain"
       />
@@ -120,7 +120,9 @@ export function SplashAnimationOverlay({
 const styles = StyleSheet.create({
   container: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: "#0F2F4B",
+    // Same navy as the native splash (app.json), so the handoff has no
+    // colour jump (SPENDLY-162).
+    backgroundColor: "#071423",
     zIndex: 99999, // Render on top of navigation stack
     alignItems: "center",
     justifyContent: "center",
@@ -130,7 +132,8 @@ const styles = StyleSheet.create({
     width: 280,
     height: 280,
     borderRadius: 140,
-    backgroundColor: "rgba(107, 99, 255, 0.35)",
+    // Picks up the wallet's green rather than the old indigo mark.
+    backgroundColor: "rgba(46, 230, 160, 0.22)",
   },
   logo: {
     width: 220,
