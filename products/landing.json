@@ -8,9 +8,9 @@
   "web": {
     "basePath": "",
     "shortName": "Spendly",
-    "themeColor": "#071A2B",
-    "backgroundColor": "#071A2B",
+    "themeColor": "#071423",
+    "backgroundColor": "#071423",
     "description": "Spendly — Expense, Nutrition and Ganesh Seva.",
-    "manifestIcon": "./assets/branding/icon.png"
+    "manifestIcon": "./assets/branding/spendly-icon.png"
   }
 }

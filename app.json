@@ -4,7 +4,7 @@
     "slug": "spendly",
     "version": "4.3.0",
     "orientation": "portrait",
-    "icon": "./assets/branding/icon.png",
+    "icon": "./assets/branding/spendly-icon.png",
     "scheme": "spendly",
     "userInterfaceStyle": "automatic",
     "ios": {
@@ -14,8 +14,8 @@
       "softwareKeyboardLayoutMode": "pan",
       "package": "com.example.expensetracker",
       "adaptiveIcon": {
-        "backgroundColor": "#071A2B",
-        "foregroundImage": "./assets/branding/adaptive-icon.png"
+        "backgroundColor": "#071423",
+        "foregroundImage": "./assets/branding/spendly-adaptive-foreground.png"
       },
       "predictiveBackGestureEnabled": false,
       "allowBackup": false,
@@ -33,7 +33,7 @@
     "web": {
       "bundler": "metro",
       "output": "single",
-      "favicon": "./assets/branding/logo.png"
+      "favicon": "./assets/branding/spendly-icon.png"
     },
     "plugins": [
       [
@@ -45,9 +45,9 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/branding/splash-logo.png",
+          "image": "./assets/branding/spendly-splash.png",
           "resizeMode": "contain",
-          "backgroundColor": "#071A2B"
+          "backgroundColor": "#071423"
         }
       ],
       "expo-secure-store",
@@ -72,19 +72,19 @@
         {
           "androidIcons": {
             "shortcut_expense": {
-              "foregroundImage": "./assets/branding/adaptive-icon.png",
-              "backgroundColor": "#071A2B"
+              "foregroundImage": "./assets/branding/spendly-adaptive-foreground.png",
+              "backgroundColor": "#071423"
             },
             "shortcut_income": {
-              "foregroundImage": "./assets/branding/adaptive-icon.png",
+              "foregroundImage": "./assets/branding/spendly-adaptive-foreground.png",
               "backgroundColor": "#0B3D2E"
             },
             "shortcut_receipt": {
-              "foregroundImage": "./assets/branding/adaptive-icon.png",
+              "foregroundImage": "./assets/branding/spendly-adaptive-foreground.png",
               "backgroundColor": "#3D2A0B"
             },
             "shortcut_accounts": {
-              "foregroundImage": "./assets/branding/adaptive-icon.png",
+              "foregroundImage": "./assets/branding/spendly-adaptive-foreground.png",
               "backgroundColor": "#1A2744"
             }
           },

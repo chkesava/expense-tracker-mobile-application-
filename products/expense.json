@@ -20,19 +20,19 @@
       {
         "androidIcons": {
           "shortcut_expense": {
-            "foregroundImage": "./assets/branding/adaptive-icon.png",
-            "backgroundColor": "#071A2B"
+            "foregroundImage": "./assets/branding/spendly-adaptive-foreground.png",
+            "backgroundColor": "#071423"
           },
           "shortcut_income": {
-            "foregroundImage": "./assets/branding/adaptive-icon.png",
+            "foregroundImage": "./assets/branding/spendly-adaptive-foreground.png",
             "backgroundColor": "#0B3D2E"
           },
           "shortcut_receipt": {
-            "foregroundImage": "./assets/branding/adaptive-icon.png",
+            "foregroundImage": "./assets/branding/spendly-adaptive-foreground.png",
             "backgroundColor": "#3D2A0B"
           },
           "shortcut_accounts": {
-            "foregroundImage": "./assets/branding/adaptive-icon.png",
+            "foregroundImage": "./assets/branding/spendly-adaptive-foreground.png",
             "backgroundColor": "#1A2744"
           }
         },
@@ -80,9 +80,9 @@
   "web": {
     "basePath": "/expense",
     "shortName": "Spendly",
-    "themeColor": "#071A2B",
-    "backgroundColor": "#071A2B",
+    "themeColor": "#071423",
+    "backgroundColor": "#071423",
     "description": "Personal ledger, accounts, splits and vaults.",
-    "manifestIcon": "./assets/branding/icon.png"
+    "manifestIcon": "./assets/branding/spendly-icon.png"
   }
 }
