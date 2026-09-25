@@ -12,12 +12,14 @@ import {
   SMOKE_INACTIVE_ICON_ALPHA,
   SMOKE_BLUR_RADIUS_DP,
   SMOKE_BLUR_TINT,
+  SMOKE_GLOSS_ALPHA,
   smokeAndroidBlur,
   SMOKE_TINT_ALPHA,
   SMOKE_TINT_ALPHA_NO_BLUR,
   SMOKE_TINT_RGB,
   contrastRatio as contrast,
   glassAccent,
+  smokeActiveLens,
   smokeActivePill,
   hexToRgb as rgb,
   luminance,
@@ -75,6 +77,22 @@ describe("capsule nav contrast (smoke glass)", () => {
     const navPill = smokeActivePill([t.colors.background, t.colors.card], themeUsesDarkPalette(name));
     expect(navPill).toEqual(pill);
     expect(contrast(rgb(glassAccent(t.colors.primary, navPill)), pill)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  // Icons sit in the top gloss band. WCAG asks 3:1 for graphics; check them
+  // at the brightest point of the gloss.
+  it.each(COMBOS)("%s / %s: icons read inside the top gloss", (name, accent) => {
+    const t = createTheme(name, accent);
+    const glossed = over(WHITE, glassOver(name, accent), SMOKE_GLOSS_ALPHA);
+    const icon = over(WHITE, glossed, SMOKE_INACTIVE_ICON_ALPHA);
+    expect(contrast(icon, glossed)).toBeGreaterThanOrEqual(3);
+    const lens = over(WHITE, glossed, SMOKE_ACTIVE_PILL_ALPHA);
+    const backdrops = [t.colors.background, t.colors.card];
+    const dark = themeUsesDarkPalette(name);
+    const navLens = smokeActiveLens(backdrops, dark);
+    expect(navLens).toEqual(lens);
+    const accentColor = glassAccent(t.colors.primary, smokeActivePill(backdrops, dark), navLens);
+    expect(contrast(rgb(accentColor), lens)).toBeGreaterThanOrEqual(3);
   });
 
   it("keeps an accent that already reads, and only lightens the ones that don't", () => {

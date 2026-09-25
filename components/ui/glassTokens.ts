@@ -42,6 +42,14 @@ export function smokeAndroidBlur(pixelRatio: number): {
   return { intensity, blurReductionFactor: intensity / radiusPx };
 }
 
+/**
+ * Specular gloss across the top of the glass: white at this alpha along the
+ * top edge, fading out by `SMOKE_GLOSS_END` of the height. Icons sit in that
+ * band, so the contrast test checks them against the glossed glass.
+ */
+export const SMOKE_GLOSS_ALPHA = 0.22;
+export const SMOKE_GLOSS_END = 0.55;
+
 /** Inactive nav labels on smoke glass. */
 export const SMOKE_INACTIVE_ALPHA = 0.85;
 /** Inactive nav icons: a touch brighter than labels, as in the reference. */
@@ -91,10 +99,20 @@ export function over(fg: RGB, bg: RGB, alpha: number): RGB {
  * wash. `backdrops` are that theme's page and card colours.
  */
 export function smokeActivePill(backdrops: string[], isDark: boolean): RGB {
-  const lightest = backdrops
-    .map(hexToRgb)
-    .sort((a, b) => luminance(b) - luminance(a))[0] ?? ([255, 255, 255] as RGB);
-  return over([255, 255, 255], smokeGlass(lightest, isDark), SMOKE_ACTIVE_PILL_ALPHA);
+  return over([255, 255, 255], smokeGlass(lightestOf(backdrops), isDark), SMOKE_ACTIVE_PILL_ALPHA);
+}
+
+/** The active pill at the top of the glass, where the gloss adds to it: behind the icon. */
+export function smokeActiveLens(backdrops: string[], isDark: boolean): RGB {
+  const glossed = over([255, 255, 255], smokeGlass(lightestOf(backdrops), isDark), SMOKE_GLOSS_ALPHA);
+  return over([255, 255, 255], glossed, SMOKE_ACTIVE_PILL_ALPHA);
+}
+
+function lightestOf(backdrops: string[]): RGB {
+  return (
+    backdrops.map(hexToRgb).sort((a, b) => luminance(b) - luminance(a))[0] ??
+    ([255, 255, 255] as RGB)
+  );
 }
 
 /** The smoke glass over an opaque backdrop: the blur's own tint, then ours. */
@@ -108,6 +126,8 @@ export function smokeGlass(backdrop: RGB, isDark: boolean): RGB {
 }
 
 const AA_SMALL_TEXT = 4.5;
+/** WCAG non-text contrast, for the icon. */
+const AA_GRAPHICS = 3;
 
 /**
  * The user's accent as it should appear on the active pill: unchanged when it
@@ -115,11 +135,12 @@ const AA_SMALL_TEXT = 4.5;
  * pass. Dark themes keep most of the colour; light themes, whose page shows
  * through brighter, lift it further.
  */
-export function glassAccent(primaryHex: string, pill: RGB): string {
+export function glassAccent(primaryHex: string, pill: RGB, lens: RGB = pill): string {
   const base = hexToRgb(primaryHex);
   for (let step = 0; step <= 20; step++) {
     const mixed = over([255, 255, 255], base, step / 20);
-    if (contrastRatio(mixed, pill) >= AA_SMALL_TEXT) {
+    // The label sits on the pill; the icon sits higher, on the glossed lens.
+    if (contrastRatio(mixed, pill) >= AA_SMALL_TEXT && contrastRatio(mixed, lens) >= AA_GRAPHICS) {
       return step === 0 ? primaryHex : rgbToHex(mixed);
     }
   }

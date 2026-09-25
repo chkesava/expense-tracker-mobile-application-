@@ -46,6 +46,7 @@ import {
   SMOKE_INACTIVE_ALPHA,
   SMOKE_INACTIVE_ICON_ALPHA,
   glassAccent,
+  smokeActiveLens,
   smokeActivePill,
 } from "@/components/ui/glassTokens";
 import { haptic } from "@/lib/haptics";
@@ -260,7 +261,12 @@ export function BottomNav() {
   const isDark = themeUsesDarkPalette(themeName);
   const { primary, background, card } = theme.colors;
   const activeColor = useMemo(
-    () => glassAccent(primary, smokeActivePill([background, card], isDark)),
+    () =>
+      glassAccent(
+        primary,
+        smokeActivePill([background, card], isDark),
+        smokeActiveLens([background, card], isDark)
+      ),
     [primary, background, card, isDark]
   );
   const inactiveColor = `rgba(255, 255, 255, ${SMOKE_INACTIVE_ALPHA})`;
@@ -292,6 +298,13 @@ export function BottomNav() {
                 `rgba(255, 255, 255, ${SMOKE_ACTIVE_PILL_BOTTOM_ALPHA})`,
               ]}
               style={StyleSheet.absoluteFill}
+            />
+            {/* The lens's own glint along its top edge. */}
+            <LinearGradient
+              colors={["rgba(255, 255, 255, 0)", "rgba(255, 255, 255, 0.45)", "rgba(255, 255, 255, 0)"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.lensGlint}
             />
           </Animated.View>
           {navLinks.map((link, index) => {
@@ -358,10 +371,18 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderCurve: "continuous",
   },
+  lensGlint: {
+    position: "absolute",
+    top: 1,
+    left: "22%",
+    right: "22%",
+    height: 1,
+  },
   indicatorGloss: {
     overflow: "hidden",
     borderWidth: 1,
     borderColor: `rgba(255, 255, 255, ${SMOKE_ACTIVE_PILL_BORDER_ALPHA})`,
+    borderTopColor: "rgba(255, 255, 255, 0.28)",
   },
   tab: {
     flex: 1,

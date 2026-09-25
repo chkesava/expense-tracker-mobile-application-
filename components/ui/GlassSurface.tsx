@@ -21,6 +21,8 @@ import { BlurTargetView, BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 
 import {
+  SMOKE_GLOSS_ALPHA,
+  SMOKE_GLOSS_END,
   SMOKE_IOS_INTENSITY,
   SMOKE_TINT_ALPHA,
   SMOKE_TINT_ALPHA_NO_BLUR,
@@ -187,12 +189,26 @@ export function GlassSurface({
             style={[StyleSheet.absoluteFill, styles.grain]}
             accessibilityIgnoresInvertColors
           />
-          {/* Specular gloss: light pooling along the top of the glass. */}
+          {/* Specular gloss: a bright sheen over the top of the glass that falls
+              off quickly, so the surface reads as curved and polished. */}
           <LinearGradient
             pointerEvents="none"
-            colors={["rgba(255,255,255,0.11)", "rgba(255,255,255,0.025)", "rgba(255,255,255,0)"]}
-            locations={[0, 0.4, 0.75]}
+            colors={[
+              `rgba(255,255,255,${SMOKE_GLOSS_ALPHA})`,
+              `rgba(255,255,255,${SMOKE_GLOSS_ALPHA * 0.35})`,
+              "rgba(255,255,255,0)",
+            ]}
+            locations={[0, SMOKE_GLOSS_END * 0.6, SMOKE_GLOSS_END]}
             style={StyleSheet.absoluteFill}
+          />
+          {/* Light catching the top edge: a thin line, brightest mid-width. */}
+          <LinearGradient
+            pointerEvents="none"
+            colors={["rgba(255,255,255,0)", "rgba(255,255,255,0.55)", "rgba(255,255,255,0)"]}
+            locations={[0, 0.5, 1]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={[styles.specularLine, { left: radius * 0.6, right: radius * 0.6 }]}
           />
           {/* Faint lift along the bottom edge, where the glass catches reflected light. */}
           <LinearGradient
@@ -272,9 +288,14 @@ const styles = StyleSheet.create({
     left: 0,
     borderWidth: 1,
     borderCurve: "continuous",
-    borderColor: "rgba(255, 255, 255, 0.10)",
-    borderTopColor: "rgba(255, 255, 255, 0.26)",
-    borderLeftColor: "rgba(255, 255, 255, 0.18)",
+    borderColor: "rgba(255, 255, 255, 0.12)",
+    borderTopColor: "rgba(255, 255, 255, 0.38)",
+    borderLeftColor: "rgba(255, 255, 255, 0.24)",
+  },
+  specularLine: {
+    position: "absolute",
+    top: 1.5,
+    height: 1,
   },
   grain: {
     width: "100%",
