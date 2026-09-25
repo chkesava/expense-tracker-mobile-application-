@@ -40,13 +40,13 @@ describe("product splash overlay isolation", () => {
     expect(metro).toContain("GaneshSplashOverlay.tsx");
     expect(metro).toContain("DefaultSplashOverlay.tsx");
     expect(metro).toContain("WorkspaceSplashOverlay.tsx");
-    expect(metro).toContain("splash-logo.png");
+    expect(metro).toContain("spendly-splash.png");
   });
 
   it("keeps the Expense overlay hardcoded to the Spendly logo", () => {
     const overlay = read("components/common/SplashAnimationOverlay.tsx");
-    expect(overlay).toContain("splash-logo.png");
-    expect(overlay).toContain("#0F2F4B");
+    expect(overlay).toContain("spendly-splash.png");
+    expect(overlay).toContain("#071423");
     expect(overlay).not.toContain("ganesh-emblem");
     expect(overlay).not.toContain("Ganesh Seva");
   });
@@ -57,6 +57,7 @@ describe("product splash overlay isolation", () => {
     expect(overlay).toContain("Ganesh Seva");
     expect(overlay).toContain("Seva. Sangathan. Samruddhi.");
     expect(overlay).toContain("prefetchGaneshStartup");
+    expect(overlay).not.toContain("spendly-splash.png");
     expect(overlay).not.toContain("splash-logo.png");
     expect(overlay).not.toContain("Spendly");
   });
