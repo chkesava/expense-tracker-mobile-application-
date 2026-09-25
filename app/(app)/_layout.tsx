@@ -11,6 +11,7 @@ import { MobileActionDock } from "@/components/MobileActionDock";
 import { PrivacyLock } from "@/components/PrivacyLock";
 import { TabSwipeArea } from "@/components/navigation/TabSwipeArea";
 import { GlassBlurTarget } from "@/components/ui/GlassSurface";
+import { OverlayProvider } from "@gluestack-ui/core/overlay/creator";
 import { SetupWizardModal } from "@/components/onboarding/SetupWizardModal";
 import { useAndroidBackHandler } from "@/hooks/useAndroidBackHandler";
 import { useAppShortcutHandler } from "@/hooks/useAppShortcutHandler";
@@ -52,6 +53,9 @@ function AppShellInner() {
     // (SPENDLY-141).
     <BottomChromeProvider navStyle={settings.navigationStyle}>
       <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
+        {/* Gluestack dialogs/sheets portal here: inside every app provider,
+            so their content can use them (SPENDLY-154). */}
+        <OverlayProvider>
         <Header />
         {/* SPENDLY-161: the glass nav/dock blur whatever scrolls in here. */}
         <GlassBlurTarget>
@@ -151,6 +155,7 @@ function AppShellInner() {
         <AddActionSheet />
         <GlobalAddModals />
         <SetupWizardModal />
+        </OverlayProvider>
       </View>
     </BottomChromeProvider>
   );

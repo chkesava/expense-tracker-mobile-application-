@@ -1,3 +1,6 @@
+// Must run before any render: restores function-form Pressable styles under
+// NativeWind (SPENDLY-154, see lib/pressableStyleFix.ts).
+import "@/lib/pressableStyleFix";
 import { useEffect, useState } from "react";
 import { Platform } from "react-native";
 import { Stack, useNavigationContainerRef } from "expo-router";
