@@ -19,6 +19,7 @@ import { BlurTargetView, BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 
 import {
+  SMOKE_BLUR_INTENSITY,
   SMOKE_TINT_ALPHA,
   SMOKE_TINT_ALPHA_NO_BLUR,
   SMOKE_TINT_RGB,
@@ -141,7 +142,7 @@ export function GlassSurface({
     <View style={[StyleSheet.absoluteFill, { borderRadius: radius, overflow: "hidden" }]}>
       {canBlur ? (
         <BlurView
-          intensity={smoke ? Math.max(intensity, 55) : intensity}
+          intensity={smoke ? SMOKE_BLUR_INTENSITY : intensity}
           tint={smoke || isDark ? "dark" : "light"}
           blurMethod="dimezisBlurViewSdk31Plus"
           blurTarget={blurTarget ?? undefined}
@@ -150,11 +151,11 @@ export function GlassSurface({
       ) : null}
       <View style={[StyleSheet.absoluteFill, { backgroundColor: overlay }]} />
       {smoke ? (
-        // Specular sheen across the top half: the "wet" gloss.
+        // Faint reflection across the top half, like light on glass.
         <LinearGradient
           pointerEvents="none"
-          colors={["rgba(255,255,255,0.20)", "rgba(255,255,255,0.04)", "rgba(255,255,255,0)"]}
-          locations={[0, 0.45, 1]}
+          colors={["rgba(255,255,255,0.06)", "rgba(255,255,255,0.02)", "rgba(255,255,255,0)"]}
+          locations={[0, 0.5, 1]}
           style={StyleSheet.absoluteFill}
         />
       ) : (
@@ -166,20 +167,15 @@ export function GlassSurface({
 
   if (smoke) {
     // The rim is a gradient ring: an outer gradient with the glass inset 1px,
-    // brightest at the top-left like light catching a glass edge.
+    // a quiet edge that is brightest along the top, where light catches it.
     return (
       <View testID={testID} style={[styles.smokeShell, { borderRadius: radius }, style]}>
         <LinearGradient
           pointerEvents="none"
-          colors={[
-            "rgba(255,255,255,0.55)",
-            "rgba(255,255,255,0.10)",
-            "rgba(255,255,255,0.06)",
-            "rgba(255,255,255,0.30)",
-          ]}
-          locations={[0, 0.35, 0.65, 1]}
+          colors={["rgba(255,255,255,0.16)", "rgba(255,255,255,0.10)", "rgba(255,255,255,0.08)"]}
+          locations={[0, 0.4, 1]}
           start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
+          end={{ x: 0, y: 1 }}
           style={[StyleSheet.absoluteFill, { borderRadius: radius }]}
         />
         <View style={[styles.smokeInner, { borderRadius: radius - 1 }]}>
@@ -218,10 +214,11 @@ const styles = StyleSheet.create({
     padding: 1,
     borderCurve: "continuous",
     shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.35,
-    shadowRadius: 18,
-    elevation: 10,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.38,
+    shadowRadius: 24,
+    // Android draws this from the rounded outline; shadowColor tints it on API 28+.
+    elevation: 12,
   },
   smokeInner: {
     flex: 1,

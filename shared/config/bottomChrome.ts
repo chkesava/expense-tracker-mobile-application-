@@ -41,11 +41,12 @@ export const ACTION_DOCK_EDGE = 24;
  * bar and stay because the Ganesh and Nutrition tab bars still size
  * themselves from them.
  */
-export const CAPSULE_HEIGHT = 64;
+/** SPENDLY-170: 72dp, the compact end of the reference's 68–76dp. */
+export const CAPSULE_HEIGHT = 72;
 /** The capsule floats: it floors the system inset higher than the old bar. */
 export const CAPSULE_MIN_INSET = 12;
 /** Horizontal margin between the capsule (or FAB) and the screen edge. */
-export const CAPSULE_SIDE_MARGIN = 12;
+export const CAPSULE_SIDE_MARGIN = 16;
 /** Gap between the capsule and the FAB beside it. */
 export const CAPSULE_FAB_GAP = 10;
 export const CAPSULE_FAB_SIZE = 56;
@@ -141,7 +142,7 @@ export function shouldCompactNavLabels(
  * Width available to the tab row on a screen of `screenWidth`: the screen,
  * minus side margins, minus the FAB and its gap, minus capsule padding.
  */
-export function capsuleRowWidth(screenWidth: number, capsulePadding = 6): number {
+export function capsuleRowWidth(screenWidth: number, capsulePadding = 8): number {
   return (
     screenWidth -
     CAPSULE_SIDE_MARGIN * 2 -

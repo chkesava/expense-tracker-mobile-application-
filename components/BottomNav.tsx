@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Keyboard,
   Platform,
@@ -38,7 +38,14 @@ import {
 } from "@/shared/config/bottomChrome";
 import { AddFab } from "@/components/ui/AddFab";
 import { GlassSurface } from "@/components/ui/GlassSurface";
-import { SMOKE_INACTIVE_ALPHA } from "@/components/ui/glassTokens";
+import {
+  SMOKE_ACTIVE_PILL_ALPHA,
+  SMOKE_ACTIVE_PILL_BORDER_ALPHA,
+  SMOKE_INACTIVE_ALPHA,
+  SMOKE_INACTIVE_ICON_ALPHA,
+  glassAccent,
+  smokeActivePill,
+} from "@/components/ui/glassTokens";
 import { haptic } from "@/lib/haptics";
 import { useModals } from "@/providers/ModalProvider";
 import { useTranslation } from "@/providers/LocalizationProvider";
@@ -50,6 +57,8 @@ import {
   type NavSectionId,
 } from "@/shared/config/navigation";
 import { durations, easing } from "@/theme/motion";
+import { useTheme } from "@/theme/ThemeProvider";
+import { themeUsesDarkPalette } from "@/theme/tokens";
 
 const ICON_MAP: Record<
   string,
@@ -63,7 +72,7 @@ const ICON_MAP: Record<
 };
 
 /** Inner padding between the capsule edge and the tab row. */
-const CAPSULE_PADDING = 6;
+const CAPSULE_PADDING = 8;
 
 type TabFrame = { x: number; width: number };
 
@@ -72,6 +81,7 @@ function NavDestination({
   isActive,
   activeColor,
   inactiveColor,
+  inactiveIconColor,
   compact,
   onPress,
   onLayout,
@@ -80,6 +90,7 @@ function NavDestination({
   isActive: boolean;
   activeColor: string;
   inactiveColor: string;
+  inactiveIconColor: string;
   /** Icon-only: the row is too narrow for labels at this font scale. */
   compact: boolean;
   onPress: () => void;
@@ -89,6 +100,7 @@ function NavDestination({
   const Icon = ICON_MAP[link.id] || Wallet;
   const label = t(link.translationKey, link.mobileLabel || link.label);
   const color = isActive ? activeColor : inactiveColor;
+  const iconColor = isActive ? activeColor : inactiveIconColor;
 
   return (
     <Pressable
@@ -99,7 +111,7 @@ function NavDestination({
       accessibilityLabel={`Go to ${label}`}
       accessibilityState={{ selected: isActive }}
     >
-      <Icon size={compact ? 24 : 22} color={color} strokeWidth={isActive ? 2.4 : 1.85} />
+      <Icon size={compact ? 24 : 22} color={iconColor} strokeWidth={isActive ? 2.4 : 1.85} />
       {compact ? null : (
         <Text
           style={[
@@ -127,6 +139,7 @@ export function BottomNav() {
   const { navigate, dismissTo } = useRouter();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
+  const { theme, themeName } = useTheme();
   const { setIsAddSheetOpen } = useModals();
   const investmentsEnabled = useInvestmentsEnabled();
   const [keyboardOpen, setKeyboardOpen] = useState(false);
@@ -236,11 +249,18 @@ export function BottomNav() {
     ],
   }));
 
-  // SPENDLY-154: the capsule is glossy smoke glass in every theme, so its
-  // content is white; the active tab sits in a frosted white pill.
+  // SPENDLY-170: the capsule is dark frosted glass in every theme, so its
+  // content is white; the active tab takes the user's accent, lifted toward
+  // white only as far as it needs to read, inside a frosted pill.
   // lib/navContrast.test.ts pins both against the lightest backdrops.
-  const activeColor = "#FFFFFF";
+  const isDark = themeUsesDarkPalette(themeName);
+  const { primary, background, card } = theme.colors;
+  const activeColor = useMemo(
+    () => glassAccent(primary, smokeActivePill([background, card], isDark)),
+    [primary, background, card, isDark]
+  );
   const inactiveColor = `rgba(255, 255, 255, ${SMOKE_INACTIVE_ALPHA})`;
+  const inactiveIconColor = `rgba(255, 255, 255, ${SMOKE_INACTIVE_ICON_ALPHA})`;
 
   return (
     <Animated.View
@@ -274,6 +294,7 @@ export function BottomNav() {
                 isActive={isActive}
                 activeColor={activeColor}
                 inactiveColor={inactiveColor}
+                inactiveIconColor={inactiveIconColor}
                 compact={compactLabels}
                 onPress={() => handleTabPress(link, isActive)}
                 onLayout={handleTabLayout(index)}
@@ -327,9 +348,9 @@ const styles = StyleSheet.create({
     borderCurve: "continuous",
   },
   indicatorGloss: {
-    backgroundColor: "rgba(255, 255, 255, 0.16)",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255, 255, 255, 0.32)",
+    backgroundColor: `rgba(255, 255, 255, ${SMOKE_ACTIVE_PILL_ALPHA})`,
+    borderWidth: 1,
+    borderColor: `rgba(255, 255, 255, ${SMOKE_ACTIVE_PILL_BORDER_ALPHA})`,
   },
   tab: {
     flex: 1,
