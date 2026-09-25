@@ -5,7 +5,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -20,6 +19,7 @@ import { useAccounts } from "@/hooks/useAccounts";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
+import { Input } from "@/components/ui/Input";
 export type DatePreset = "all" | "this_month" | "last_30_days" | "this_year";
 
 export interface LabFilters {
@@ -156,20 +156,11 @@ export function FilterSheetModal({
       <Text style={[styles.inputLabel, { color: theme.colors.mutedForeground }]}>
         {label}
       </Text>
-      <TextInput
+      <Input
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
-        placeholderTextColor={theme.colors.mutedForeground}
         keyboardType="numeric"
-        style={[
-          styles.input,
-          {
-            backgroundColor: surface.inset,
-            borderColor: surface.insetBorder,
-            color: theme.colors.foreground,
-          },
-        ]}
       />
     </View>
   );

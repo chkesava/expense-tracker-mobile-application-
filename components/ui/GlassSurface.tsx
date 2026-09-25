@@ -16,6 +16,13 @@ import {
   type ViewStyle,
 } from "react-native";
 import { BlurTargetView, BlurView } from "expo-blur";
+import { LinearGradient } from "expo-linear-gradient";
+
+import {
+  SMOKE_TINT_ALPHA,
+  SMOKE_TINT_ALPHA_NO_BLUR,
+  SMOKE_TINT_RGB,
+} from "@/components/ui/glassTokens";
 
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
@@ -85,6 +92,12 @@ export type GlassSurfaceProps = {
   intensity?: number;
   /** Set false to force the opaque fallback (e.g. a busy background). */
   blur?: boolean;
+  /**
+   * `adaptive` (default): tinted with the theme card colour.
+   * `smoke`: glossy dark glass in every theme, with a gradient rim and a top
+   * sheen. Put white content on it (SPENDLY-154 nav capsule).
+   */
+  tone?: "adaptive" | "smoke";
   style?: StyleProp<ViewStyle>;
   contentStyle?: StyleProp<ViewStyle>;
   testID?: string;
@@ -95,6 +108,7 @@ export function GlassSurface({
   radius = 999,
   intensity = 40,
   blur = true,
+  tone = "adaptive",
   style,
   contentStyle,
   testID,
@@ -111,11 +125,70 @@ export function GlassSurface({
     Platform.OS !== "web" &&
     (Platform.OS !== "android" || blurTarget !== null);
 
+  const smoke = tone === "smoke";
+  const [r, g, b] = SMOKE_TINT_RGB;
   // With blur the overlay only tints; without it the surface must carry the
   // contrast on its own, so it goes near-opaque.
-  const overlay = tint(theme.colors.card, canBlur ? (isDark ? 0.6 : 0.72) : 0.96);
+  const overlay = smoke
+    ? `rgba(${r}, ${g}, ${b}, ${
+        canBlur ? (isDark ? SMOKE_TINT_ALPHA.dark : SMOKE_TINT_ALPHA.light) : SMOKE_TINT_ALPHA_NO_BLUR
+      })`
+    : tint(theme.colors.card, canBlur ? (isDark ? 0.6 : 0.72) : 0.96);
   const highlight = isDark ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.65)";
   const hairline = theme.colors.outlineVariant ?? theme.colors.border;
+
+  const layers = (
+    <View style={[StyleSheet.absoluteFill, { borderRadius: radius, overflow: "hidden" }]}>
+      {canBlur ? (
+        <BlurView
+          intensity={smoke ? Math.max(intensity, 55) : intensity}
+          tint={smoke || isDark ? "dark" : "light"}
+          blurMethod="dimezisBlurViewSdk31Plus"
+          blurTarget={blurTarget ?? undefined}
+          style={StyleSheet.absoluteFill}
+        />
+      ) : null}
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: overlay }]} />
+      {smoke ? (
+        // Specular sheen across the top half: the "wet" gloss.
+        <LinearGradient
+          pointerEvents="none"
+          colors={["rgba(255,255,255,0.20)", "rgba(255,255,255,0.04)", "rgba(255,255,255,0)"]}
+          locations={[0, 0.45, 1]}
+          style={StyleSheet.absoluteFill}
+        />
+      ) : (
+        // Top-edge highlight that sells the glass.
+        <View style={[styles.highlight, { backgroundColor: highlight }]} />
+      )}
+    </View>
+  );
+
+  if (smoke) {
+    // The rim is a gradient ring: an outer gradient with the glass inset 1px,
+    // brightest at the top-left like light catching a glass edge.
+    return (
+      <View testID={testID} style={[styles.smokeShell, { borderRadius: radius }, style]}>
+        <LinearGradient
+          pointerEvents="none"
+          colors={[
+            "rgba(255,255,255,0.55)",
+            "rgba(255,255,255,0.10)",
+            "rgba(255,255,255,0.06)",
+            "rgba(255,255,255,0.30)",
+          ]}
+          locations={[0, 0.35, 0.65, 1]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[StyleSheet.absoluteFill, { borderRadius: radius }]}
+        />
+        <View style={[styles.smokeInner, { borderRadius: radius - 1 }]}>
+          {layers}
+          <View style={contentStyle}>{children}</View>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View
@@ -127,20 +200,7 @@ export function GlassSurface({
         style,
       ]}
     >
-      <View style={[StyleSheet.absoluteFill, { borderRadius: radius, overflow: "hidden" }]}>
-        {canBlur ? (
-          <BlurView
-            intensity={intensity}
-            tint={isDark ? "dark" : "light"}
-            blurMethod="dimezisBlurViewSdk31Plus"
-            blurTarget={blurTarget ?? undefined}
-            style={StyleSheet.absoluteFill}
-          />
-        ) : null}
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: overlay }]} />
-        {/* Top-edge highlight that sells the glass. */}
-        <View style={[styles.highlight, { backgroundColor: highlight }]} />
-      </View>
+      {layers}
       <View style={contentStyle}>{children}</View>
     </View>
   );
@@ -152,6 +212,20 @@ const styles = StyleSheet.create({
   },
   shell: {
     borderWidth: StyleSheet.hairlineWidth,
+    borderCurve: "continuous",
+  },
+  smokeShell: {
+    padding: 1,
+    borderCurve: "continuous",
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.35,
+    shadowRadius: 18,
+    elevation: 10,
+  },
+  smokeInner: {
+    flex: 1,
+    overflow: "hidden",
     borderCurve: "continuous",
   },
   highlight: {

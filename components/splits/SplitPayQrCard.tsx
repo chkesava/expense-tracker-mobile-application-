@@ -9,7 +9,7 @@ import { getQrStyle, getStoredQrStyleId } from "@/shared/utils/qrStyles";
 import { generateSplitShareMessage, participantRemainingDue } from "@/shared/utils/splitMath";
 import { generateUpiLink } from "@/shared/utils/upi";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useSurfaces } from "@/theme/surfaces";
 import { logError } from "@/lib/errors";
 import { haptic } from "@/lib/haptics";
 
@@ -26,8 +26,8 @@ export function SplitPayQrCard({
   creatorUpiId,
   currency,
 }: SplitPayQrCardProps) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
   const qrStyle = getQrStyle(getStoredQrStyleId());
   const payeeName = split.createdByName || "Split Organizer";
   const remainingDue = participantRemainingDue(participant);
@@ -69,7 +69,7 @@ export function SplitPayQrCard({
       style={[
         styles.card,
         {
-          backgroundColor: isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)",
+          backgroundColor: surfaces.tile,
           borderColor: theme.colors.border,
         },
       ]}

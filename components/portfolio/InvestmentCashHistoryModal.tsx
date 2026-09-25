@@ -23,8 +23,10 @@ import {
 import type { InvestmentCashEntryType } from "@/shared/features/portfolio/types";
 import { formatActivityDateLabel } from "@/shared/utils/activityDisplay";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useSurfaces } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
+import { SheetBottomInset } from "@/components/common/SheetBottomInset";
 
 interface InvestmentCashHistoryModalProps {
   visible: boolean;
@@ -64,6 +66,7 @@ export function InvestmentCashHistoryModal({
   currency,
 }: InvestmentCashHistoryModalProps) {
   const { theme, themeName } = useTheme();
+  const surfaces = useSurfaces();
   const isDark = themeUsesDarkPalette(themeName);
   const { settings, cashEntries, cashBalance } = usePortfolio();
 
@@ -118,7 +121,7 @@ export function InvestmentCashHistoryModal({
               style={[
                 styles.closeButton,
                 {
-                  backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)",
+                  backgroundColor: surfaces.track,
                 },
               ]}
             >
@@ -174,9 +177,7 @@ export function InvestmentCashHistoryModal({
                     {
                       backgroundColor: isSelected
                         ? theme.colors.primary
-                        : isDark
-                          ? "rgba(255,255,255,0.06)"
-                          : "rgba(0,0,0,0.04)",
+                        : surfaces.control,
                       borderColor: isSelected ? theme.colors.primary : theme.colors.border,
                     },
                   ]}
@@ -238,9 +239,7 @@ export function InvestmentCashHistoryModal({
                       style={[
                         styles.activityIcon,
                         {
-                          backgroundColor: isDark
-                            ? "rgba(255,255,255,0.06)"
-                            : "rgba(0,0,0,0.04)",
+                          backgroundColor: surfaces.control,
                         },
                       ]}
                     >
@@ -317,6 +316,7 @@ export function InvestmentCashHistoryModal({
 
             <View style={{ height: 24 }} />
           </ScrollView>
+          <SheetBottomInset />
         </Card>
       </View>
     </Modal>

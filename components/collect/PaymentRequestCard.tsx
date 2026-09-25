@@ -10,7 +10,7 @@ import { getPaymentRequestShareUrl } from "@/shared/utils/paymentRequestUrl";
 import { generateUpiLink } from "@/shared/utils/upi";
 import { getQrStyle } from "@/shared/utils/qrStyles";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useSurfaces } from "@/theme/surfaces";
 import { logError } from "@/lib/errors";
 import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
@@ -26,8 +26,8 @@ export function PaymentRequestCard({
   onCancel,
   onDelete,
 }: PaymentRequestCardProps) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
   const displayCurrency = useDisplayCurrency();
 
   const qrStyle = getQrStyle(request.qrStyleId);
@@ -196,9 +196,7 @@ export function PaymentRequestCard({
                 style={({ pressed }) => [
                   styles.iconBtn,
                   {
-                    backgroundColor: isDark
-                      ? "rgba(255,255,255,0.08)"
-                      : "rgba(0,0,0,0.06)",
+                    backgroundColor: surfaces.track,
                   },
                   pressed && { opacity: 0.7 },
                 ]}

@@ -51,7 +51,13 @@ export function Dialog({
   const isStacked = layout === "stacked";
 
   return (
-    <AlertDialog isOpen={isOpen} onClose={dismissible ? onClose : () => {}}>
+    <AlertDialog
+      isOpen={isOpen}
+      onClose={dismissible ? onClose : () => {}}
+      // A real RN Modal window, as on main: it stays above the capsule nav
+      // (Android elevation beats portal order) and keeps the caller's context.
+      useRNModal
+    >
       <AlertDialogBackdrop />
       <AlertDialogContent className="p-6 bg-card border-none max-w-[400px]">
         <AlertDialogHeader className="mb-2 p-0 border-none">

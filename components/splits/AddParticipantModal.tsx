@@ -4,12 +4,12 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import { X } from "lucide-react-native";
 
 import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 import type { Split } from "@/shared/types/split";
 import {
   addParticipantBlockedReason,
@@ -19,7 +19,7 @@ import {
   recalibrateSplitAfterAddParticipant,
 } from "@/shared/utils/splitMath";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useSurfaces } from "@/theme/surfaces";
 import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
@@ -38,8 +38,8 @@ export function AddParticipantModal({
   onClose,
   onConfirm,
 }: AddParticipantModalProps) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
   const displayCurrency = useDisplayCurrency();
   const [name, setName] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -133,32 +133,19 @@ export function AddParticipantModal({
           <Text style={[styles.label, { color: theme.colors.mutedForeground }]}>
             NAME
           </Text>
-          <TextInput
+          <Input
             value={name}
             onChangeText={setName}
             autoFocus
             autoCapitalize="words"
             placeholder="e.g. Priya"
-            placeholderTextColor={theme.colors.mutedForeground}
-            style={[
-              styles.input,
-              {
-                backgroundColor: isDark
-                  ? "rgba(255,255,255,0.04)"
-                  : "rgba(0,0,0,0.02)",
-                borderColor: theme.colors.border,
-                color: theme.colors.foreground,
-              },
-            ]}
           />
 
           <View
             style={[
               styles.breakdown,
               {
-                backgroundColor: isDark
-                  ? "rgba(255,255,255,0.03)"
-                  : "rgba(0,0,0,0.02)",
+                backgroundColor: surfaces.tile,
                 borderColor: theme.colors.border,
               },
             ]}

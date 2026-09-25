@@ -59,6 +59,9 @@ export function Modal({
       onClose={onClose}
       size="md"
       className="justify-end m-0 p-0 w-full"
+      // A real RN Modal window, as on main: it stays above the capsule nav
+      // (Android elevation beats portal order) and keeps the caller's context.
+      useRNModal
     >
       <ModalBackdrop />
       <ModalContent

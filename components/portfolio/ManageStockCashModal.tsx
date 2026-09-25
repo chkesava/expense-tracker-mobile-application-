@@ -37,6 +37,7 @@ import { toast } from "@/lib/toast";
 import { getAccountKind } from "@/shared/utils/accountKind";
 import { formatDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useSurfaces } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
 
@@ -85,6 +86,7 @@ export function ManageStockCashModal({
   currency,
 }: ManageStockCashModalProps) {
   const { theme, themeName } = useTheme();
+  const surfaces = useSurfaces();
   const isDark = themeUsesDarkPalette(themeName);
   const insets = useSafeAreaInsets();
 
@@ -306,7 +308,7 @@ export function ManageStockCashModal({
 
   const canSubmit = mode !== "adjust" || reason.trim().length >= 3;
 
-  const inactiveChipBg = isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)";
+  const inactiveChipBg = surfaces.control;
 
   return (
     <Modal
@@ -363,9 +365,7 @@ export function ManageStockCashModal({
                 style={[
                   styles.closeButton,
                   {
-                    backgroundColor: isDark
-                      ? "rgba(255,255,255,0.08)"
-                      : "rgba(0,0,0,0.05)",
+                    backgroundColor: surfaces.track,
                   },
                 ]}
               >
@@ -455,9 +455,7 @@ export function ManageStockCashModal({
                         {
                           backgroundColor: selected
                             ? "rgba(255,255,255,0.18)"
-                            : isDark
-                              ? "rgba(255,255,255,0.08)"
-                              : "rgba(0,0,0,0.06)",
+                            : surfaces.track,
                         },
                       ]}
                     >

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, Text, StyleSheet, Modal, ScrollView, TouchableOpacity} from "react-native";
+import { View, Text, StyleSheet, Modal, ScrollView } from "react-native";
 import { X } from "lucide-react-native";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
@@ -9,6 +9,8 @@ import { Input } from "@/components/ui/Input";
 import { sipPlanFormSchema, SipPlanFormInput } from "@/shared/features/sip/schemas";
 import { todayDateKey } from "@/shared/utils/dates";
 
+import { Chip } from "@/components/ui/Chip";
+import { SheetBottomInset } from "@/components/common/SheetBottomInset";
 export type SipPlanFormModalProps = {
   visible: boolean;
   onClose: () => void;
@@ -95,25 +97,7 @@ export function SipPlanFormModal({ visible, onClose, onSubmit }: SipPlanFormModa
     onPress: () => void
   ) => {
     return (
-      <TouchableOpacity
-        style={[
-          styles.pill,
-          {
-            backgroundColor: isActive ? theme.colors.primary : theme.colors.card,
-            borderColor: isActive ? theme.colors.primary : theme.colors.border,
-          },
-        ]}
-        onPress={onPress}
-      >
-        <Text
-          style={[
-            styles.pillText,
-            { color: isActive ? theme.colors.primaryForeground : theme.colors.foreground },
-          ]}
-        >
-          {label}
-        </Text>
-      </TouchableOpacity>
+      <Chip label={label} selected={isActive} onPress={onPress} style={styles.pill} />
     );
   };
 
@@ -126,15 +110,16 @@ export function SipPlanFormModal({ visible, onClose, onSubmit }: SipPlanFormModa
         >
           <View style={[styles.header, { borderBottomColor: theme.colors.border }]}>
             <Text style={[styles.headerTitle, { color: theme.colors.foreground }]}>Create SIP Plan</Text>
-            <TouchableOpacity
+            <Button
+              variant="ghost"
+              size="icon"
               onPress={onClose}
               hitSlop={12}
-              accessibilityRole="button"
               accessibilityLabel="Close"
               style={styles.closeBtn}
             >
               <X size={24} color={theme.colors.foreground} />
-            </TouchableOpacity>
+            </Button>
           </View>
 
           <View style={styles.inputGroup}>
@@ -214,6 +199,7 @@ export function SipPlanFormModal({ visible, onClose, onSubmit }: SipPlanFormModa
               {loading ? "Creating..." : "Create Plan"}
             </Text>
           </Button>
+          <SheetBottomInset />
         </View>
       </View>
     </Modal>

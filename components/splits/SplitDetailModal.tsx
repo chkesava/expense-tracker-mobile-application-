@@ -47,7 +47,7 @@ import { splitClaimDocId } from "@/shared/utils/splitClaims";
 import type { SplitShareClaim } from "@/shared/types/splitShareClaim";
 import { toast } from "@/lib/toast";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useSurfaces } from "@/theme/surfaces";
 import { logError } from "@/lib/errors";
 import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
@@ -63,8 +63,8 @@ export function SplitDetailModal({
   split,
   onClose,
 }: SplitDetailModalProps) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
   const { user } = useAuth();
   const displayCurrency = useDisplayCurrency();
   const { settings: userSettings } = useSettings();
@@ -631,9 +631,7 @@ export function SplitDetailModal({
               style={[
                 styles.progressCard,
                 {
-                  backgroundColor: isDark
-                    ? "rgba(255,255,255,0.03)"
-                    : "rgba(0,0,0,0.02)",
+                  backgroundColor: surfaces.tile,
                   borderColor: theme.colors.border,
                 },
               ]}
@@ -832,9 +830,7 @@ export function SplitDetailModal({
                     style={[
                       styles.participantRow,
                       {
-                        backgroundColor: isDark
-                          ? "rgba(255,255,255,0.03)"
-                          : "rgba(0,0,0,0.02)",
+                        backgroundColor: surfaces.tile,
                         borderColor: theme.colors.border,
                       },
                     ]}
@@ -979,9 +975,7 @@ export function SplitDetailModal({
                                 style={({ pressed }) => [
                                   styles.iconActionBtn,
                                   {
-                                    backgroundColor: isDark
-                                      ? "rgba(255,255,255,0.08)"
-                                      : "rgba(0,0,0,0.06)",
+                                    backgroundColor: surfaces.track,
                                   },
                                   sharing !== null && { opacity: 0.5 },
                                   pressed && { opacity: 0.8 },
@@ -1008,9 +1002,7 @@ export function SplitDetailModal({
                                 style={({ pressed }) => [
                                   styles.iconActionBtn,
                                   {
-                                    backgroundColor: isDark
-                                      ? "rgba(255,255,255,0.08)"
-                                      : "rgba(0,0,0,0.06)",
+                                    backgroundColor: surfaces.track,
                                   },
                                   pressed && { opacity: 0.8 },
                                 ]}
@@ -1048,9 +1040,7 @@ export function SplitDetailModal({
                               style={[
                                 styles.chip,
                                 {
-                                  backgroundColor: isDark
-                                    ? "rgba(255,255,255,0.06)"
-                                    : "rgba(0,0,0,0.04)",
+                                  backgroundColor: surfaces.control,
                                   borderColor: theme.colors.border,
                                 },
                               ]}
