@@ -9,6 +9,7 @@ import {
 } from "@/components/accounts/accountScreenTheme";
 import { haptic } from "@/lib/haptics";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useSurfaces } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { formatActivityDateLabel } from "@/shared/utils/activityDisplay";
 import {
@@ -58,6 +59,7 @@ export function BalanceTrendCard({
   unavailableReason: string;
 }) {
   const { theme, themeName } = useTheme();
+  const surfaces = useSurfaces();
   const isDark = themeUsesDarkPalette(themeName);
   const accent = accountAccent(isDark);
 
@@ -134,9 +136,7 @@ export function BalanceTrendCard({
                 style={[
                   styles.period,
                   {
-                    backgroundColor: isDark
-                      ? "rgba(255,255,255,0.04)"
-                      : "rgba(15,23,42,0.04)",
+                    backgroundColor: surfaces.tile,
                     borderColor: selected ? accent : "transparent",
                   },
                 ]}

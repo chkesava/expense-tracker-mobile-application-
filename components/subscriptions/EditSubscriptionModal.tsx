@@ -7,7 +7,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import { X } from "lucide-react-native";
@@ -15,6 +14,7 @@ import { X } from "lucide-react-native";
 import { Button } from "@/components/ui/Button";
 import { DayOfMonthSelect } from "@/components/common/DayOfMonthSelect";
 import { MonthYearSelect } from "@/components/common/MonthYearSelect";
+import { Input } from "@/components/ui/Input";
 import {
   validateSubscriptionInput,
   type SubscriptionField,
@@ -27,7 +27,7 @@ import { subscriptionFrequency } from "@/shared/types/subscription";
 import { todayDateKey } from "@/shared/utils/dates";
 import { acceptRecurringSuggestion } from "@/services/sms/smsRecurringSync";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useSurfaces } from "@/theme/surfaces";
 import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
@@ -86,8 +86,8 @@ export function EditSubscriptionModal({
   suggestionKey,
   onClose,
 }: EditSubscriptionModalProps) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
   const displayCurrency = useDisplayCurrency();
   const { accounts } = useAccounts();
   const { categories } = useCategories();
@@ -402,9 +402,7 @@ export function EditSubscriptionModal({
                 style={[
                   styles.segmentRow,
                   {
-                    backgroundColor: isDark
-                      ? "rgba(255,255,255,0.06)"
-                      : "rgba(0,0,0,0.04)",
+                    backgroundColor: surfaces.control,
                   },
                 ]}
               >
@@ -460,21 +458,10 @@ export function EditSubscriptionModal({
               >
                 NAME
               </Text>
-              <TextInput
+              <Input
                 value={name}
                 onChangeText={setName}
                 placeholder="e.g. Netflix 4K, Car EMI, SIP Savings"
-                placeholderTextColor={theme.colors.mutedForeground}
-                style={[
-                  styles.input,
-                  {
-                    backgroundColor: isDark
-                      ? "rgba(255,255,255,0.04)"
-                      : "rgba(0,0,0,0.02)",
-                    borderColor: theme.colors.border,
-                    color: theme.colors.foreground,
-                  },
-                ]}
               />
             </View>
 
@@ -488,24 +475,11 @@ export function EditSubscriptionModal({
               >
                 AMOUNT ({displayCurrency})
               </Text>
-              <TextInput
+              <Input
                 value={amount}
                 onChangeText={setAmount}
                 placeholder="0.00"
                 keyboardType="decimal-pad"
-                placeholderTextColor={theme.colors.mutedForeground}
-                style={[
-                  styles.input,
-                  {
-                    backgroundColor: isDark
-                      ? "rgba(255,255,255,0.04)"
-                      : "rgba(0,0,0,0.02)",
-                    borderColor: theme.colors.border,
-                    color: theme.colors.foreground,
-                    fontSize: theme.typography.lg,
-                    fontWeight: "700",
-                  },
-                ]}
               />
             </View>
 
@@ -529,9 +503,7 @@ export function EditSubscriptionModal({
                   style={[
                     styles.segmentRow,
                     {
-                      backgroundColor: isDark
-                        ? "rgba(255,255,255,0.06)"
-                        : "rgba(0,0,0,0.04)",
+                      backgroundColor: surfaces.control,
                     },
                   ]}
                 >
@@ -586,23 +558,12 @@ export function EditSubscriptionModal({
                 >
                   REPEAT EVERY N DAYS
                 </Text>
-                <TextInput
+                <Input
                   value={intervalDays}
                   onChangeText={setIntervalDays}
                   placeholder="2"
                   keyboardType="number-pad"
                   maxLength={3}
-                  placeholderTextColor={theme.colors.mutedForeground}
-                  style={[
-                    styles.input,
-                    {
-                      backgroundColor: isDark
-                        ? "rgba(255,255,255,0.04)"
-                        : "rgba(0,0,0,0.02)",
-                      borderColor: theme.colors.border,
-                      color: theme.colors.foreground,
-                    },
-                  ]}
                 />
               </View>
             ) : (
@@ -700,9 +661,7 @@ export function EditSubscriptionModal({
                           {
                             backgroundColor: isSelected
                               ? theme.colors.primary
-                              : isDark
-                                ? "rgba(255,255,255,0.06)"
-                                : "rgba(0,0,0,0.04)",
+                              : surfaces.control,
                             borderColor: isSelected
                               ? theme.colors.primary
                               : theme.colors.border,
@@ -759,9 +718,7 @@ export function EditSubscriptionModal({
                         {
                           backgroundColor: isSelected
                             ? theme.colors.primary
-                            : isDark
-                              ? "rgba(255,255,255,0.06)"
-                              : "rgba(0,0,0,0.04)",
+                            : surfaces.control,
                           borderColor: isSelected
                             ? theme.colors.primary
                             : theme.colors.border,
@@ -814,9 +771,7 @@ export function EditSubscriptionModal({
                           {
                             backgroundColor: isSelected
                               ? theme.colors.primary
-                              : isDark
-                                ? "rgba(255,255,255,0.06)"
-                                : "rgba(0,0,0,0.04)",
+                              : surfaces.control,
                             borderColor: isSelected
                               ? theme.colors.primary
                               : theme.colors.border,

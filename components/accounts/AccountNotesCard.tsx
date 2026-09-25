@@ -5,6 +5,7 @@ import { NotebookPen, Pencil, Pin, PinOff, Trash2 } from "lucide-react-native";
 import { accountAccent } from "@/components/accounts/accountScreenTheme";
 import { haptic } from "@/lib/haptics";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useSurfaces } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import type { AccountNote } from "@/shared/types/expense";
 import { accountNoteSortMs } from "@/shared/utils/accountNotes";
@@ -47,6 +48,7 @@ export function AccountNotesCard({
   onDelete: (note: AccountNote) => void;
 }) {
   const { theme, themeName } = useTheme();
+  const surfaces = useSurfaces();
   const isDark = themeUsesDarkPalette(themeName);
   const accent = accountAccent(isDark);
 
@@ -76,9 +78,7 @@ export function AccountNotesCard({
           borderColor: isDark ? "rgba(148,163,184,0.16)" : "rgba(15,23,42,0.08)",
           backgroundColor: destructive
             ? "transparent"
-            : isDark
-              ? "rgba(255,255,255,0.04)"
-              : "rgba(15,23,42,0.03)",
+            : surfaces.tile,
           opacity: pressed ? 0.6 : 1,
         },
       ]}

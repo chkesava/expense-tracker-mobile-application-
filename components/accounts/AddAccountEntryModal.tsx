@@ -11,7 +11,7 @@ import { toast } from "@/lib/toast";
 import type { Account } from "@/shared/types/expense";
 import { formatDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useSurfaces } from "@/theme/surfaces";
 import { haptic } from "@/lib/haptics";
 
 export interface AddAccountEntryModalProps {
@@ -27,8 +27,8 @@ export function AddAccountEntryModal({
   defaultAccountId,
   accounts,
 }: AddAccountEntryModalProps) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
   const { addEntry } = useAccountEntries();
 
   const [accountId, setAccountId] = useState(
@@ -99,9 +99,7 @@ export function AddAccountEntryModal({
           style={[
             styles.segmentRow,
             {
-              backgroundColor: isDark
-                ? "rgba(255,255,255,0.06)"
-                : "rgba(0,0,0,0.04)",
+              backgroundColor: surfaces.control,
               borderColor: theme.colors.border,
             },
           ]}
@@ -206,9 +204,7 @@ export function AddAccountEntryModal({
                     {
                       backgroundColor: isSelected
                         ? theme.colors.primary
-                        : isDark
-                          ? "rgba(255,255,255,0.06)"
-                          : "rgba(0,0,0,0.04)",
+                        : surfaces.control,
                       borderColor: isSelected
                         ? theme.colors.primary
                         : theme.colors.border,

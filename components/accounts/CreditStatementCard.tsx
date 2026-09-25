@@ -10,6 +10,7 @@ import { Amount } from "@/components/common/Amount";
 import { haptic } from "@/lib/haptics";
 import type { CreditCardBill, CreditCardBillStatus } from "@/shared/types/creditCardBill";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useSurfaces } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
 function statementStatusColor(status: CreditCardBillStatus): string {
@@ -33,6 +34,7 @@ export function CreditStatementCard({
   isLoading?: boolean;
 }) {
   const { theme, themeName } = useTheme();
+  const surfaces = useSurfaces();
   const isDark = themeUsesDarkPalette(themeName);
   const statusColor = bill ? statementStatusColor(bill.status) : CARD_ORANGE;
 
@@ -64,12 +66,12 @@ export function CreditStatementCard({
         <View style={styles.body}>
           <View style={styles.details}>
             <View style={styles.row}>
-              <View style={{ height: 16, width: 80, backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)", borderRadius: 4 }} />
-              <View style={{ height: 16, width: 60, backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)", borderRadius: 4 }} />
+              <View style={{ height: 16, width: 80, backgroundColor: surfaces.track, borderRadius: 4 }} />
+              <View style={{ height: 16, width: 60, backgroundColor: surfaces.track, borderRadius: 4 }} />
             </View>
             <View style={styles.row}>
-              <View style={{ height: 16, width: 100, backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)", borderRadius: 4 }} />
-              <View style={{ height: 16, width: 70, backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)", borderRadius: 4 }} />
+              <View style={{ height: 16, width: 100, backgroundColor: surfaces.track, borderRadius: 4 }} />
+              <View style={{ height: 16, width: 70, backgroundColor: surfaces.track, borderRadius: 4 }} />
             </View>
           </View>
         </View>

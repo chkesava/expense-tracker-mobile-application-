@@ -44,6 +44,7 @@ import {
 import { getAccountKind } from "@/shared/utils/accountKind";
 import { todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useSurfaces } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
@@ -120,6 +121,7 @@ function NetWorthTrendMark({ color }: { color: string }) {
 export function AccountsList() {
   const { push } = useRouter();
   const { theme, themeName } = useTheme();
+  const surfaces = useSurfaces();
   const isDark = themeUsesDarkPalette(themeName);
   const displayCurrency = useDisplayCurrency();
   const { settings } = useSettings();
@@ -263,7 +265,7 @@ export function AccountsList() {
   const red = isDark ? "#f87171" : "#dc2626";
   const purple = isDark ? "#a78bfa" : "#7c3aed";
   const blue = isDark ? "#60a5fa" : "#2563eb";
-  const ripple = isDark ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.06)";
+  const ripple = surfaces.track;
 
   return (
     <View style={styles.container}>
@@ -353,9 +355,7 @@ export function AccountsList() {
           style={[
             styles.breakdownRow,
             {
-              borderTopColor: isDark
-                ? "rgba(255,255,255,0.08)"
-                : "rgba(15,23,42,0.06)",
+              borderTopColor: surfaces.track,
             },
           ]}
         >

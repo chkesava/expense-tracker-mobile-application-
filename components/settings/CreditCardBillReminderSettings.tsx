@@ -6,7 +6,7 @@ import { Card } from "@/components/ui/Card";
 import { useSettings } from "@/providers/SettingsProvider";
 import { requestBillNotificationPermission } from "@/services/creditCardBills/billReminderScheduler";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useSurfaces } from "@/theme/surfaces";
 import { haptic } from "@/lib/haptics";
 
 const DAY_OPTIONS = [7, 3, 1] as const;
@@ -20,8 +20,8 @@ const QUIET_START_OPTIONS = ["06:00", "07:00", "08:00", "09:00", "10:00"] as con
 const QUIET_END_OPTIONS = ["18:00", "20:00", "21:00", "22:00", "23:00"] as const;
 
 export function CreditCardBillReminderSettings() {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
   const { settings, setCreditCardBillReminders } = useSettings();
   const prefs = settings.creditCardBillReminders;
   const [permHint, setPermHint] = useState<string | null>(null);
@@ -95,9 +95,7 @@ export function CreditCardBillReminderSettings() {
                     opacity: prefs.enabled ? 1 : 0.5,
                     backgroundColor: selected
                       ? theme.colors.primary
-                      : isDark
-                        ? "rgba(255,255,255,0.06)"
-                        : "rgba(0,0,0,0.04)",
+                      : surfaces.control,
                     borderColor: selected
                       ? theme.colors.primary
                       : theme.colors.border,
@@ -157,9 +155,7 @@ export function CreditCardBillReminderSettings() {
                     opacity: prefs.enabled ? 1 : 0.5,
                     backgroundColor: selected
                       ? theme.colors.primary
-                      : isDark
-                        ? "rgba(255,255,255,0.06)"
-                        : "rgba(0,0,0,0.04)",
+                      : surfaces.control,
                     borderColor: selected
                       ? theme.colors.primary
                       : theme.colors.border,
@@ -235,8 +231,8 @@ function TimePill({
   disabled?: boolean;
   onPress: () => void;
 }) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
   return (
     <Pressable
       disabled={disabled}
@@ -249,9 +245,7 @@ function TimePill({
           opacity: disabled ? 0.5 : 1,
           backgroundColor: selected
             ? theme.colors.primary
-            : isDark
-              ? "rgba(255,255,255,0.06)"
-              : "rgba(0,0,0,0.04)",
+            : surfaces.control,
           borderColor: selected ? theme.colors.primary : theme.colors.border,
         },
       ]}

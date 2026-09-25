@@ -22,6 +22,7 @@ import {
   type BorrowingSummary,
 } from "@/shared/utils/borrowingMath";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useSurfaces } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
 const STATUS_COLORS: Record<BorrowingStatus, string> = {
@@ -65,6 +66,7 @@ export const BorrowingCard = memo(function BorrowingCard({
   onRecordRepayment: (id: string) => void;
 }) {
   const { theme, themeName } = useTheme();
+  const surfaces = useSurfaces();
   const isDark = themeUsesDarkPalette(themeName);
   const id = borrowing.id ?? "";
   const statusColor = STATUS_COLORS[summary.status];
@@ -153,7 +155,7 @@ export const BorrowingCard = memo(function BorrowingCard({
         style={[
           styles.track,
           {
-            backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)",
+            backgroundColor: surfaces.track,
           },
         ]}
         accessibilityLabel={`${Math.round(repaidRatio * 100)} percent repaid`}

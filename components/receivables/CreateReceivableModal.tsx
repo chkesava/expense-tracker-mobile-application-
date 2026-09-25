@@ -21,7 +21,7 @@ import {
 } from "@/shared/types/receivable";
 import { isValidDateKey, todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useSurfaces } from "@/theme/surfaces";
 import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
@@ -36,8 +36,8 @@ export function CreateReceivableModal({
   onClose,
   onSubmit,
 }: CreateReceivableModalProps) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
   const displayCurrency = useDisplayCurrency();
   const { accounts } = useAccounts();
   const { spaces } = useSpaces();
@@ -141,9 +141,7 @@ export function CreateReceivableModal({
   const pillStyle = (isActive: boolean) => ({
     backgroundColor: isActive
       ? theme.colors.primary
-      : isDark
-        ? "rgba(255,255,255,0.06)"
-        : "rgba(0,0,0,0.04)",
+      : surfaces.control,
     borderColor: isActive ? theme.colors.primary : theme.colors.border,
   });
 

@@ -5,7 +5,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import { RotateCcw, X } from "lucide-react-native";
@@ -27,8 +26,10 @@ import {
   getAccountActivityFilterValidationError,
 } from "@/shared/utils/accountActivityFilters";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useSurfaces } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
+import { Input } from "@/components/ui/Input";
 interface AccountActivityFilterModalProps {
   visible: boolean;
   filters: AccountActivityFilters;
@@ -67,12 +68,13 @@ export function AccountActivityFilterModal({
   getResultCount,
 }: AccountActivityFilterModalProps) {
   const { theme, themeName } = useTheme();
+  const surfaces = useSurfaces();
   const isDark = themeUsesDarkPalette(themeName);
   const insets = useSafeAreaInsets();
   const accent = accountAccent(isDark);
   const accentBorder = accountAccentBorder(isDark);
   const surface = isDark ? "#10141C" : theme.colors.card;
-  const inset = isDark ? "rgba(255,255,255,0.04)" : "rgba(15,23,42,0.04)";
+  const inset = surfaces.tile;
   const insetBorder = isDark
     ? "rgba(148,163,184,0.16)"
     : "rgba(15,23,42,0.09)";
@@ -170,21 +172,12 @@ export function AccountActivityFilterModal({
       <Text style={[styles.inputLabel, { color: theme.colors.mutedForeground }]}>
         {label}
       </Text>
-      <TextInput
+      <Input
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
-        placeholderTextColor={theme.colors.mutedForeground}
         keyboardType={keyboardType}
         autoCapitalize="none"
-        style={[
-          styles.input,
-          {
-            color: theme.colors.foreground,
-            backgroundColor: inset,
-            borderColor: insetBorder,
-          },
-        ]}
       />
     </View>
   );

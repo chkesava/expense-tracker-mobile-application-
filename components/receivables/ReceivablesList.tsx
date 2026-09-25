@@ -17,7 +17,7 @@ import type { Receivable, ReceivableStatus } from "@/shared/types/receivable";
 import { summarizeReceivables } from "@/shared/utils/receivableMath";
 import { todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useSurfaces } from "@/theme/surfaces";
 import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
@@ -35,8 +35,8 @@ const STATUS_FILTERS: { id: StatusFilter; label: string }[] = [
 ];
 
 export function ReceivablesList() {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
   const displayCurrency = useDisplayCurrency();
 
   const {
@@ -102,9 +102,7 @@ export function ReceivablesList() {
   const pillStyle = (isActive: boolean) => ({
     backgroundColor: isActive
       ? theme.colors.primary
-      : isDark
-        ? "rgba(255,255,255,0.06)"
-        : "rgba(0,0,0,0.04)",
+      : surfaces.control,
     borderColor: isActive ? theme.colors.primary : theme.colors.border,
   });
 

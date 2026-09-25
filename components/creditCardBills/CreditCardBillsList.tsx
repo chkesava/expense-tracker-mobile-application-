@@ -13,6 +13,7 @@ import { useAccountTypes } from "@/hooks/useAccountTypes";
 import { useCreditCardBills } from "@/hooks/useCreditCardBills";
 import type { CreditCardBill, CreditCardBillStatus } from "@/shared/types/creditCardBill";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useSurfaces } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
 
@@ -262,6 +263,7 @@ function ScrollFilters({
   isDark: boolean;
 }) {
   const { theme } = useTheme();
+  const surfaces = useSurfaces();
   return (
     <View style={styles.filterRow}>
       {FILTERS.map((f) => {
@@ -278,9 +280,7 @@ function ScrollFilters({
               {
                 backgroundColor: selected
                   ? theme.colors.primary
-                  : isDark
-                    ? "rgba(255,255,255,0.06)"
-                    : "rgba(0,0,0,0.04)",
+                  : surfaces.control,
                 borderColor: selected ? theme.colors.primary : theme.colors.border,
               },
             ]}

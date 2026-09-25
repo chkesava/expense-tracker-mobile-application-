@@ -18,6 +18,7 @@ import {
 import { wageForProjection } from "@/shared/features/epf/utils/schedule";
 import { formatAmount } from "@/shared/utils/formatCurrency";
 import { useTheme } from "@/theme/ThemeProvider";
+import { withAlpha } from "@/theme/surfaces";
 import { monthLabel } from "@/shared/utils/monthLabel";
 
 /**
@@ -95,7 +96,7 @@ export function EpfCurrentMonthCard({
     <Card>
       <Pressable onPress={() => onOpen(establishment)} accessibilityRole="button">
         <View style={styles.header}>
-          <View style={[styles.iconBadge, { backgroundColor: theme.colors.primary + "1A" }]}>
+          <View style={[styles.iconBadge, { backgroundColor: withAlpha(theme.colors.primary, 0.1) }]}>
             <CalendarClock size={theme.iconSize.md} color={theme.colors.primary} />
           </View>
           <View style={styles.headerText}>

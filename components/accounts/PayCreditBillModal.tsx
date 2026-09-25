@@ -22,7 +22,7 @@ import { earliestOpenCreditCardBill } from "@/shared/utils/creditCardBillStatus"
 import { formatDateKey, todayDateKey } from "@/shared/utils/dates";
 import { roundMoney } from "@/shared/utils/money";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useSurfaces } from "@/theme/surfaces";
 import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
@@ -54,8 +54,8 @@ export function PayCreditBillModal({
   applyToBillId,
   onPaid,
 }: PayCreditBillModalProps) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
   const displayCurrency = useDisplayCurrency();
   const { settings } = useSettings();
   const { payments } = useAccountPayments();
@@ -280,9 +280,7 @@ export function PayCreditBillModal({
                     {
                       backgroundColor: isSelected
                         ? theme.colors.primary
-                        : isDark
-                          ? "rgba(255,255,255,0.06)"
-                          : "rgba(0,0,0,0.04)",
+                        : surfaces.control,
                       borderColor: isSelected
                         ? theme.colors.primary
                         : theme.colors.border,
@@ -322,9 +320,7 @@ export function PayCreditBillModal({
             style={[
               styles.usageCard,
               {
-                backgroundColor: isDark
-                  ? "rgba(255,255,255,0.04)"
-                  : "rgba(0,0,0,0.02)",
+                backgroundColor: surfaces.tile,
                 borderColor: theme.colors.border,
               },
             ]}
@@ -412,9 +408,7 @@ export function PayCreditBillModal({
                 {
                   backgroundColor: isExternal
                     ? theme.colors.primary
-                    : isDark
-                      ? "rgba(255,255,255,0.06)"
-                      : "rgba(0,0,0,0.04)",
+                    : surfaces.control,
                   borderColor: isExternal
                     ? theme.colors.primary
                     : theme.colors.border,
@@ -455,9 +449,7 @@ export function PayCreditBillModal({
                       {
                         backgroundColor: isSelected
                           ? theme.colors.primary
-                          : isDark
-                            ? "rgba(255,255,255,0.06)"
-                            : "rgba(0,0,0,0.04)",
+                          : surfaces.control,
                         borderColor: isSelected
                           ? theme.colors.primary
                           : theme.colors.border,

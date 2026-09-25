@@ -12,6 +12,7 @@ import {
 } from "@/shared/features/epf/utils";
 import { useTheme } from "@/theme/ThemeProvider";
 
+import { withAlpha } from "@/theme/surfaces";
 type Props = {
   establishment: EpfEstablishment;
   todayKey: string;
@@ -62,7 +63,7 @@ export function EpfEstablishmentCard({
         }
       >
         <View style={styles.header}>
-          <View style={[styles.iconBadge, { backgroundColor: chipColor + "1A" }]}>
+          <View style={[styles.iconBadge, { backgroundColor: withAlpha(chipColor, 0.1) }]}>
             <Building2 size={theme.iconSize.md} color={chipColor} />
           </View>
 
@@ -76,7 +77,7 @@ export function EpfEstablishmentCard({
           </View>
 
           <View style={styles.headerActions}>
-            <View style={[styles.chip, { backgroundColor: chipColor + "1A" }]}>
+            <View style={[styles.chip, { backgroundColor: withAlpha(chipColor, 0.1) }]}>
               <Text style={[styles.chipText, { color: chipColor }]}>
                 {STATE_LABEL[state] ?? state}
               </Text>

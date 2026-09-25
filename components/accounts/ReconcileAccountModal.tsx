@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Check, FileUp, TriangleAlert, X } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
+import { Input } from "@/components/ui/Input";
 import {
   accountAccent,
   accountAccentBorder,
@@ -40,6 +41,7 @@ import {
 } from "@/shared/utils/accountReconciliation";
 import { parseStatementLines, type StatementLine } from "@/shared/utils/statementParse";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useSurfaces } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import type { FilterableAccountActivity } from "@/shared/utils/accountActivityFilters";
 
@@ -103,12 +105,13 @@ export function ReconcileAccountModal({
   onRecordAdjustment,
 }: ReconcileAccountModalProps) {
   const { theme, themeName } = useTheme();
+  const surfaces = useSurfaces();
   const isDark = themeUsesDarkPalette(themeName);
   const insets = useSafeAreaInsets();
   const accent = accountAccent(isDark);
   const accentBorder = accountAccentBorder(isDark);
   const surface = isDark ? "#10141C" : theme.colors.card;
-  const inset = isDark ? "rgba(255,255,255,0.04)" : "rgba(15,23,42,0.04)";
+  const inset = surfaces.tile;
   const insetBorder = isDark ? "rgba(148,163,184,0.16)" : "rgba(15,23,42,0.09)";
 
   const [preset, setPreset] = useState<StatementPreset>("last-month");
@@ -427,20 +430,11 @@ export function ReconcileAccountModal({
                       >
                         From
                       </Text>
-                      <TextInput
+                      <Input
                         value={customFrom}
                         onChangeText={setCustomFrom}
                         placeholder="YYYY-MM-DD"
-                        placeholderTextColor={theme.colors.mutedForeground}
                         autoCapitalize="none"
-                        style={[
-                          styles.input,
-                          {
-                            color: theme.colors.foreground,
-                            backgroundColor: inset,
-                            borderColor: insetBorder,
-                          },
-                        ]}
                       />
                     </View>
                     <View style={styles.inputColumn}>
@@ -449,20 +443,11 @@ export function ReconcileAccountModal({
                       >
                         To
                       </Text>
-                      <TextInput
+                      <Input
                         value={customTo}
                         onChangeText={setCustomTo}
                         placeholder="YYYY-MM-DD"
-                        placeholderTextColor={theme.colors.mutedForeground}
                         autoCapitalize="none"
-                        style={[
-                          styles.input,
-                          {
-                            color: theme.colors.foreground,
-                            backgroundColor: inset,
-                            borderColor: insetBorder,
-                          },
-                        ]}
                       />
                     </View>
                   </View>
@@ -499,21 +484,12 @@ export function ReconcileAccountModal({
                 >
                   STATEMENT CLOSING BALANCE
                 </Text>
-                <TextInput
+                <Input
                   value={closingInput}
                   onChangeText={setClosingInput}
                   placeholder="As printed on your bank statement"
-                  placeholderTextColor={theme.colors.mutedForeground}
                   keyboardType="numbers-and-punctuation"
                   autoCapitalize="none"
-                  style={[
-                    styles.input,
-                    {
-                      color: theme.colors.foreground,
-                      backgroundColor: inset,
-                      borderColor: insetBorder,
-                    },
-                  ]}
                 />
               </View>
 
@@ -662,19 +638,10 @@ export function ReconcileAccountModal({
                 >
                   NOTE
                 </Text>
-                <TextInput
+                <Input
                   value={note}
                   onChangeText={setNote}
                   placeholder="Why this reconciliation, or what the variance was"
-                  placeholderTextColor={theme.colors.mutedForeground}
-                  style={[
-                    styles.input,
-                    {
-                      color: theme.colors.foreground,
-                      backgroundColor: inset,
-                      borderColor: insetBorder,
-                    },
-                  ]}
                 />
               </View>
 

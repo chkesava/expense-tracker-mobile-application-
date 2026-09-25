@@ -43,6 +43,7 @@ import {
   duesWithinDays,
 } from "@/shared/utils/spendlyBudget";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useSurfaces } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
@@ -56,6 +57,7 @@ const RECURRING_TABS: { id: RecurringTabId; label: string }[] = [
 
 export function SubscriptionsList() {
   const { theme, themeName } = useTheme();
+  const surfaces = useSurfaces();
   const isDark = themeUsesDarkPalette(themeName);
   const { user } = useAuth();
   const displayCurrency = useDisplayCurrency();
@@ -341,9 +343,7 @@ export function SubscriptionsList() {
                 selected
                   ? { backgroundColor: theme.colors.primary }
                   : {
-                      backgroundColor: isDark
-                        ? "rgba(255,255,255,0.06)"
-                        : "rgba(0,0,0,0.04)",
+                      backgroundColor: surfaces.control,
                     },
               ]}
               accessibilityRole="tab"
@@ -561,9 +561,7 @@ export function SubscriptionsList() {
                         style={({ pressed }) => [
                           styles.pauseBtn,
                           {
-                            backgroundColor: isDark
-                              ? "rgba(255,255,255,0.06)"
-                              : "rgba(0,0,0,0.04)",
+                            backgroundColor: surfaces.control,
                             borderColor: theme.colors.border,
                           },
                           pressed && { opacity: 0.7 },

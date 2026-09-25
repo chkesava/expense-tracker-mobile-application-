@@ -31,7 +31,7 @@ import {
 } from "@/shared/utils/receivableMath";
 import { isValidDateKey, todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useSurfaces } from "@/theme/surfaces";
 import { haptic } from "@/lib/haptics";
 
 export interface ReceivableDetailModalProps {
@@ -75,8 +75,8 @@ export function ReceivableDetailModal({
   onCancelReceivable,
   onDeleteReceivable,
 }: ReceivableDetailModalProps) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
   const { accounts } = useAccounts();
   const { spaces } = useSpaces();
 
@@ -321,9 +321,7 @@ export function ReceivableDetailModal({
   const pillStyle = (isActive: boolean) => ({
     backgroundColor: isActive
       ? theme.colors.primary
-      : isDark
-        ? "rgba(255,255,255,0.06)"
-        : "rgba(0,0,0,0.04)",
+      : surfaces.control,
     borderColor: isActive ? theme.colors.primary : theme.colors.border,
   });
 

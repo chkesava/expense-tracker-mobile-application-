@@ -10,6 +10,7 @@ import {
 } from "@/shared/utils/creditCardAnalytics";
 import { useTheme } from "@/theme/ThemeProvider";
 
+import { withAlpha } from "@/theme/surfaces";
 type Props = {
   account: Account;
   expenses: Expense[];
@@ -117,7 +118,7 @@ export function CreditCardAnalyticsSection({
                   styles.modeChip,
                   {
                     backgroundColor: active
-                      ? theme.colors.primary + "22"
+                      ? withAlpha(theme.colors.primary, 0.13)
                       : theme.colors.card,
                     borderColor: active
                       ? theme.colors.primary

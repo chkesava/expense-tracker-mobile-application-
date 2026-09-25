@@ -11,6 +11,7 @@ import {
 import { Amount } from "@/components/common/Amount";
 import { haptic } from "@/lib/haptics";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useSurfaces } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
 export function AccountCreditHero({
@@ -51,6 +52,7 @@ export function AccountCreditHero({
   isLoading?: boolean;
 }) {
   const { theme, themeName } = useTheme();
+  const surfaces = useSurfaces();
   const isDark = themeUsesDarkPalette(themeName);
   const utilizationRate =
     creditLimit > 0 ? Math.min(100, (usedThisCycle / creditLimit) * 100) : 0;
@@ -117,7 +119,7 @@ export function AccountCreditHero({
         </View>
 
         {isLoading ? (
-          <View style={{ height: 40, width: 140, backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)", borderRadius: 8, marginVertical: 4 }} />
+          <View style={{ height: 40, width: 140, backgroundColor: surfaces.track, borderRadius: 8, marginVertical: 4 }} />
         ) : (
           <Amount
             value={usedThisCycle}

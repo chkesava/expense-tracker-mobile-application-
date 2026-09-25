@@ -4,14 +4,12 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import {
   Banknote,
   Landmark,
   Plus,
-  Search,
   TrendingUp,
 } from "lucide-react-native";
 
@@ -28,16 +26,17 @@ import type { Investment, InvestmentKind } from "@/shared/types/investment";
 import { todayDateKey } from "@/shared/utils/dates";
 import { getInvestmentValuation } from "@/shared/utils/investmentInterest";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useSurfaces } from "@/theme/surfaces";
 import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
 
+import { SearchBar } from "@/components/common/SearchBar";
 type FilterTab = "all" | InvestmentKind;
 
 export function InvestmentsList() {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
   const displayCurrency = useDisplayCurrency();
 
   const {
@@ -159,9 +158,7 @@ export function InvestmentsList() {
                     {
                       backgroundColor: isActive
                         ? theme.colors.primary
-                        : isDark
-                        ? "rgba(255,255,255,0.06)"
-                        : "rgba(0,0,0,0.04)",
+                        : surfaces.control,
                       borderColor: isActive
                         ? theme.colors.primary
                         : theme.colors.border,
@@ -188,26 +185,11 @@ export function InvestmentsList() {
 
       {/* Search Input */}
       {investments.length > 2 && (
-        <View
-          style={[
-            styles.searchBar,
-            {
-              backgroundColor: isDark
-                ? "rgba(255,255,255,0.06)"
-                : "rgba(0,0,0,0.04)",
-              borderColor: theme.colors.border,
-            },
-          ]}
-        >
-          <Search size={16} color={theme.colors.mutedForeground} />
-          <TextInput
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholder="Search investment assets..."
-            placeholderTextColor={theme.colors.mutedForeground}
-            style={[styles.searchInput, { color: theme.colors.foreground }]}
-          />
-        </View>
+        <SearchBar
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholder="Search investment assets..."
+        />
       )}
 
       {/* Investment Asset Cards */}
@@ -302,20 +284,6 @@ const styles = StyleSheet.create({
   },
   filterPillText: {
     fontSize: 12,
-  },
-  searchBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 14,
-    borderWidth: 1,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 14,
-    padding: 0,
   },
   loadingContainer: {
     padding: 40,

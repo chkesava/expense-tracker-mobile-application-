@@ -29,7 +29,7 @@ import { cashbackAppliedToExpense, validateCashbackInput } from "@/shared/utils/
 import { formatDateKey, todayDateKey } from "@/shared/utils/dates";
 import { roundMoney } from "@/shared/utils/money";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useSurfaces, withAlpha } from "@/theme/surfaces";
 
 /** How many recent card purchases to offer as link targets. */
 const LINKABLE_PURCHASE_LIMIT = 25;
@@ -68,8 +68,8 @@ export function RecordCashbackModal({
   source = "manual",
   onRecorded,
 }: RecordCashbackModalProps) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
   const displayCurrency = useDisplayCurrency();
   const { settings } = useSettings();
   const { payments, addCashback } = useAccountPayments();
@@ -256,8 +256,8 @@ export function RecordCashbackModal({
     }
   };
 
-  const subtleBg = isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)";
-  const panelBg = isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.02)";
+  const subtleBg = surfaces.control;
+  const panelBg = surfaces.tile;
 
   const kindOptions: { value: CashbackKind; label: string; hint: string }[] = [
     {
@@ -466,7 +466,7 @@ export function RecordCashbackModal({
                     styles.kindRow,
                     {
                       backgroundColor: isSelected
-                        ? theme.colors.primary + "14"
+                        ? withAlpha(theme.colors.primary, 0.08)
                         : subtleBg,
                       borderColor: isSelected
                         ? theme.colors.primary

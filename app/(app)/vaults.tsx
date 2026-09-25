@@ -3,7 +3,6 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import { useLocalSearchParams } from "expo-router";
@@ -12,7 +11,6 @@ import {
   LayoutGrid,
   Plane,
   Plus,
-  Search,
   Shield,
   Users,
 } from "lucide-react-native";
@@ -31,13 +29,13 @@ import { Card } from "@/components/ui/Card";
 import { CreateVaultModal } from "@/components/vaults/CreateVaultModal";
 import { VaultCard } from "@/components/vaults/VaultCard";
 import { VaultDetailModal } from "@/components/vaults/VaultDetailModal";
+import { SearchBar } from "@/components/common/SearchBar";
 import { useVaults } from "@/hooks/useVaults";
 import {
   VAULT_HUB_TAB_IDS,
 } from "@/shared/config/navigation";
 import type { SharedVault } from "@/shared/types/vault";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
@@ -107,8 +105,7 @@ export default function VaultsScreen() {
 }
 
 function SharedVaultsPanel() {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
   const displayCurrency = useDisplayCurrency();
 
   const { vaults, loading, error, retry, createVault, deleteVault } = useVaults();
@@ -183,26 +180,11 @@ function SharedVaultsPanel() {
       ) : null}
 
       {vaults.length > 2 ? (
-        <View
-          style={[
-            styles.searchBar,
-            {
-              backgroundColor: isDark
-                ? "rgba(255,255,255,0.06)"
-                : "rgba(0,0,0,0.04)",
-              borderColor: theme.colors.border,
-            },
-          ]}
-        >
-          <Search size={16} color={theme.colors.mutedForeground} />
-          <TextInput
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholder="Search vaults by name..."
-            placeholderTextColor={theme.colors.mutedForeground}
-            style={[styles.searchInput, { color: theme.colors.foreground }]}
-          />
-        </View>
+        <SearchBar
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholder="Search vaults by name..."
+        />
       ) : null}
 
       {loading ? (
@@ -316,19 +298,5 @@ const styles = StyleSheet.create({
   summaryValue: {
     fontSize: 19,
     fontWeight: "900",
-  },
-  searchBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingHorizontal: 16,
-    height: 52,
-    borderRadius: 16,
-    borderWidth: 1,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 15,
-    padding: 0,
   },
 });

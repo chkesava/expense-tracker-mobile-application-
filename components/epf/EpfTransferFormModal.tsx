@@ -18,6 +18,7 @@ import type {
 import { transferableBalance, validateTransfer } from "@/shared/features/epf/utils/transfers";
 import { formatAmount } from "@/shared/utils/formatCurrency";
 import { useTheme } from "@/theme/ThemeProvider";
+import { withAlpha } from "@/theme/surfaces";
 import { fieldErrorsFromIssues } from "@/shared/utils/fieldErrors";
 
 type Props = {
@@ -172,7 +173,7 @@ export function EpfTransferFormModal({
                 style={[
                   styles.chip,
                   {
-                    backgroundColor: active ? theme.colors.primary + "1A" : theme.colors.muted,
+                    backgroundColor: active ? withAlpha(theme.colors.primary, 0.1) : theme.colors.muted,
                     borderColor: active ? theme.colors.primary : "transparent",
                   },
                 ]}
