@@ -3,3 +3,4 @@ export { Input } from "./Input";
 export { Card, type CardProps, type CardVariant } from "./Card";
 export { AddFab, type AddFabProps } from "./AddFab";
 
+export { GlassBlurTarget, GlassSurface, type GlassSurfaceProps } from "./GlassSurface";

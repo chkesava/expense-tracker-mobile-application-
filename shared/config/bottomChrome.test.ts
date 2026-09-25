@@ -2,14 +2,15 @@ import { describe, expect, it } from "vitest";
 
 import {
   ACTION_DOCK_FAB_SIZE,
-  BOTTOM_NAV_BAR_HEIGHT,
   BOTTOM_NAV_CONTENT_CLEARANCE,
-  BOTTOM_NAV_FAB_SIZE,
-  BOTTOM_NAV_MIN_INSET,
+  CAPSULE_FAB_SIZE,
+  CAPSULE_HEIGHT,
+  CAPSULE_MIN_INSET,
   actionDockOffset,
   bottomChromeClearance,
   bottomChromeTopEdge,
   bottomNavFabOffset,
+  capsuleOffset,
   type BottomNavStyle,
 } from "@/shared/config/bottomChrome";
 
@@ -18,9 +19,18 @@ const INSETS = [0, 8, 16, 24, 34, 48];
 const STYLES: BottomNavStyle[] = ["bottom", "dock"];
 
 describe("bottom chrome geometry", () => {
-  it("floors the inset the way BottomNav itself does", () => {
-    expect(bottomNavFabOffset(0)).toBe(bottomNavFabOffset(BOTTOM_NAV_MIN_INSET));
-    expect(bottomNavFabOffset(34)).toBe(BOTTOM_NAV_BAR_HEIGHT + 34 + 12);
+  it("floats the capsule above the system inset, never flush", () => {
+    expect(capsuleOffset(0)).toBe(CAPSULE_MIN_INSET);
+    expect(capsuleOffset(34)).toBe(34);
+  });
+
+  it("centres the FAB on the capsule rather than stacking it above", () => {
+    for (const inset of INSETS) {
+      const fabBottom = bottomNavFabOffset(inset);
+      const fabTop = fabBottom + CAPSULE_FAB_SIZE;
+      expect(fabBottom).toBeGreaterThanOrEqual(capsuleOffset(inset));
+      expect(fabTop).toBeLessThanOrEqual(capsuleOffset(inset) + CAPSULE_HEIGHT);
+    }
   });
 
   it("floors the dock inset at the dock's own minimum", () => {
@@ -28,10 +38,8 @@ describe("bottom chrome geometry", () => {
     expect(actionDockOffset(34)).toBe(34);
   });
 
-  it("puts the bottom-nav FAB above the bar", () => {
-    expect(bottomChromeTopEdge(34)).toBe(
-      BOTTOM_NAV_BAR_HEIGHT + 34 + 12 + BOTTOM_NAV_FAB_SIZE
-    );
+  it("measures the bottom nav from the capsule's top", () => {
+    expect(bottomChromeTopEdge(34)).toBe(34 + CAPSULE_HEIGHT);
   });
 
   it("measures the dock from its FAB, since it has no bar", () => {
@@ -40,17 +48,11 @@ describe("bottom chrome geometry", () => {
     );
   });
 
-  it("still clears the dock's FAB when the caller opts out of the FAB", () => {
-    // `withFab: false` means "this screen hides the trailing FAB". The dock's
-    // FAB is the chrome, so there is nothing smaller to fall back to.
-    expect(bottomChromeTopEdge(0, { navStyle: "dock", withFab: false })).toBe(
-      bottomChromeTopEdge(0, { navStyle: "dock" })
-    );
-  });
-
-  it("clears only the bar when the bottom-nav FAB is hidden", () => {
-    expect(bottomChromeTopEdge(34, { withFab: false })).toBe(
-      BOTTOM_NAV_BAR_HEIGHT + 34
+  it.each(STYLES)("does not shrink %s chrome when the FAB is hidden", (navStyle) => {
+    // The capsule's FAB sits beside it and the dock's FAB is the chrome, so
+    // hiding the FAB never lowers the top edge.
+    expect(bottomChromeTopEdge(0, { navStyle, withFab: false })).toBe(
+      bottomChromeTopEdge(0, { navStyle })
     );
   });
 });
@@ -65,12 +67,14 @@ describe("bottomChromeClearance", () => {
     }
   });
 
-  it("keeps the bottom-nav numbers the shell shipped with", () => {
-    // 64 bar + 12 gap + 56 FAB + 24 breathing room.
-    expect(bottomChromeClearance(34)).toBe(34 + 156);
+  it("pins the capsule numbers", () => {
+    // 64 capsule + 24 breathing room above the inset.
+    expect(bottomChromeClearance(34)).toBe(34 + 88);
+    // No inset: the capsule still floats 12 above the screen edge.
+    expect(bottomChromeClearance(0)).toBe(12 + 88);
   });
 
-  it("does not pad the dock for a bar it never renders", () => {
+  it("keeps the dock below the capsule's reach", () => {
     expect(bottomChromeClearance(34, { navStyle: "dock" })).toBe(34 + 80);
     expect(bottomChromeClearance(34, { navStyle: "dock" })).toBeLessThan(
       bottomChromeClearance(34)

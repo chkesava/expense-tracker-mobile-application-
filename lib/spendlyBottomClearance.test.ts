@@ -1,14 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  BOTTOM_NAV_BAR_HEIGHT,
   BOTTOM_NAV_CONTENT_CLEARANCE,
-  BOTTOM_NAV_FAB_CLEARANCE,
-  BOTTOM_NAV_FAB_SIZE,
-  BOTTOM_NAV_SCROLL_PADDING,
-  BOTTOM_NAV_MIN_INSET,
-  BOTTOM_NAV_SCROLL_PADDING_WITH_FAB,
+  CAPSULE_FAB_SIZE,
+  CAPSULE_HEIGHT,
+  CAPSULE_MIN_INSET,
   bottomNavFabOffset,
+  capsuleOffset,
 } from "@/components/layout/chrome";
 import {
   resolveListBottomPadding,
@@ -16,35 +14,23 @@ import {
 } from "@/components/layout/spendlyBottomClearance";
 
 describe("spendlyBottomClearance", () => {
-  it("clears BottomNav + FAB + system inset by default", () => {
+  it("clears the capsule + system inset by default", () => {
     const inset = 34;
-    const padding = spendlyBottomClearance(inset);
-
-    expect(padding).toBe(inset + BOTTOM_NAV_SCROLL_PADDING_WITH_FAB);
-    expect(padding).toBeGreaterThanOrEqual(
-      inset +
-        BOTTOM_NAV_BAR_HEIGHT +
-        BOTTOM_NAV_CONTENT_CLEARANCE +
-        BOTTOM_NAV_FAB_CLEARANCE
+    expect(spendlyBottomClearance(inset)).toBe(
+      inset + CAPSULE_HEIGHT + BOTTOM_NAV_CONTENT_CLEARANCE
     );
   });
 
-  it("clears BottomNav + system inset when withFab is false", () => {
-    const inset = 20;
-    const padding = spendlyBottomClearance(inset, { withFab: false });
-
-    expect(padding).toBe(inset + BOTTOM_NAV_SCROLL_PADDING);
-    expect(padding).toBeGreaterThanOrEqual(
-      inset + BOTTOM_NAV_BAR_HEIGHT + BOTTOM_NAV_CONTENT_CLEARANCE
+  it("is unchanged when the FAB is hidden, since the FAB sits beside the capsule", () => {
+    expect(spendlyBottomClearance(20, { withFab: false })).toBe(
+      spendlyBottomClearance(20)
     );
-    expect(padding).toBeLessThan(inset + BOTTOM_NAV_SCROLL_PADDING_WITH_FAB);
   });
 
   it("adds optional extra breathing room", () => {
-    // SPENDLY-141: a zero system inset is floored at BottomNav's own minimum,
-    // because that is where the bar and FAB actually sit.
+    // A zero system inset is floored at the capsule's minimum float height.
     expect(spendlyBottomClearance(0, { withFab: true, extra: 16 })).toBe(
-      BOTTOM_NAV_MIN_INSET + BOTTOM_NAV_SCROLL_PADDING_WITH_FAB + 16
+      CAPSULE_MIN_INSET + CAPSULE_HEIGHT + BOTTOM_NAV_CONTENT_CLEARANCE + 16
     );
   });
 });
@@ -55,19 +41,22 @@ describe("resolveListBottomPadding", () => {
     expect(resolveListBottomPadding(190, 34, 12)).toBe(202);
   });
 
-  it("falls back to nav + FAB clearance outside a list-owning PageShell", () => {
+  it("falls back to capsule clearance outside a list-owning PageShell", () => {
     expect(resolveListBottomPadding(null, 34)).toBe(
       spendlyBottomClearance(34, { withFab: true })
     );
     expect(resolveListBottomPadding(null, 0, 20)).toBe(
-      BOTTOM_NAV_MIN_INSET + BOTTOM_NAV_SCROLL_PADDING_WITH_FAB + 20
+      CAPSULE_MIN_INSET + CAPSULE_HEIGHT + BOTTOM_NAV_CONTENT_CLEARANCE + 20
     );
   });
 
-  it("lets the last row scroll above the top edge of the FAB", () => {
+  it("lets the last row scroll above both the capsule and the FAB", () => {
     for (const inset of [0, 16, 34, 48]) {
-      const fabTopFromBottom = bottomNavFabOffset(inset) + BOTTOM_NAV_FAB_SIZE;
-      expect(resolveListBottomPadding(null, inset)).toBeGreaterThan(fabTopFromBottom);
+      const capsuleTop = capsuleOffset(inset) + CAPSULE_HEIGHT;
+      const fabTop = bottomNavFabOffset(inset) + CAPSULE_FAB_SIZE;
+      const padding = resolveListBottomPadding(null, inset);
+      expect(padding).toBeGreaterThan(capsuleTop);
+      expect(padding).toBeGreaterThan(fabTop);
     }
   });
 });
