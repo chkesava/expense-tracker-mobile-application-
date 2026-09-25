@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Switch, Text, View } from "react-native";
 import { ACCOUNT_GREEN } from "@/components/accounts/accountScreenTheme";
 import { haptic } from "@/lib/haptics";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useSurfaces, withAlpha } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
 export function SettingsPanel({
@@ -89,7 +90,7 @@ export function RowSwitch({
     <Pressable
       onPress={handleToggle}
       android_ripple={{
-        color: theme.colors.primary + "14",
+        color: withAlpha(theme.colors.primary, 0.08),
         borderless: false,
       }}
       style={styles.switchRow}
@@ -126,6 +127,7 @@ export function ChipRow<T extends string>({
   onSelect: (value: T) => void;
 }) {
   const { theme, themeName } = useTheme();
+  const surfaces = useSurfaces();
   const isDark = themeUsesDarkPalette(themeName);
 
   return (
@@ -140,7 +142,7 @@ export function ChipRow<T extends string>({
               onSelect(opt.value);
             }}
             android_ripple={{
-              color: active ? "rgba(15,23,42,0.12)" : theme.colors.primary + "1A",
+              color: active ? "rgba(15,23,42,0.12)" : withAlpha(theme.colors.primary, 0.1),
               borderless: false,
             }}
             style={[
@@ -153,9 +155,7 @@ export function ChipRow<T extends string>({
                     : theme.colors.border,
                 backgroundColor: active
                   ? ACCOUNT_GREEN
-                  : isDark
-                    ? "rgba(255,255,255,0.04)"
-                    : "rgba(0,0,0,0.03)",
+                  : surfaces.tile,
               },
             ]}
             accessibilityRole="radio"

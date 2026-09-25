@@ -24,6 +24,7 @@ import {
 import { processRawSmsMessages } from "@/services/sms/smsPipeline";
 import type { RawSmsMessage } from "@/shared/types/smsTransaction";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useSurfaces, withAlpha } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
 
@@ -98,7 +99,7 @@ function RowSwitch({
       onPress={handleToggle}
       disabled={disabled}
       android_ripple={{
-        color: theme.colors.primary + "14",
+        color: withAlpha(theme.colors.primary, 0.08),
         borderless: false,
       }}
       style={{
@@ -141,6 +142,7 @@ function RowSwitch({
 export function SmsAutomationSettings() {
   const router = useRouter();
   const { theme, themeName } = useTheme();
+  const surfaces = useSurfaces();
   const isDark = themeUsesDarkPalette(themeName);
   const [readerExpanded, setReaderExpanded] = useState(true);
   const [scanning, setScanning] = useState(false);
@@ -394,7 +396,7 @@ export function SmsAutomationSettings() {
             borderRadius: 14,
             borderCurve: "continuous",
             borderWidth: 1,
-            borderColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)",
+            borderColor: surfaces.track,
             overflow: "hidden",
           }}
         >

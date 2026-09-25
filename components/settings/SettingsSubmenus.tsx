@@ -26,6 +26,7 @@ import {
 
 import { ACCOUNT_GREEN } from "@/components/accounts/accountScreenTheme";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useSurfaces, withAlpha } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { useCelebration } from "@/providers/CelebrationProvider";
 import { useSettings } from "@/providers/SettingsProvider";
@@ -69,6 +70,7 @@ function CollapsibleSection({
   icon?: React.ComponentType<{ size: number; color: string }>;
 }) {
   const { theme, themeName } = useTheme();
+  const surfaces = useSurfaces();
   const isDark = themeUsesDarkPalette(themeName);
   const [expanded, setExpanded] = useState(true);
 
@@ -84,14 +86,14 @@ function CollapsibleSection({
         theme.elevation[1],
         {
           backgroundColor: theme.colors.card,
-          borderColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)",
+          borderColor: surfaces.track,
         },
       ]}
     >
       <Pressable
         onPress={toggleExpand}
         android_ripple={{
-          color: theme.colors.primary + "18",
+          color: withAlpha(theme.colors.primary, 0.09),
           borderless: false,
         }}
         style={styles.sectionHeader}
@@ -128,7 +130,7 @@ function CollapsibleSection({
         <View
           style={[
             styles.chevronBox,
-            { backgroundColor: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" },
+            { backgroundColor: surfaces.tile },
           ]}
         >
           {expanded ? (
@@ -159,8 +161,8 @@ const WIDGET_DEFS = [
 ] as const;
 
 export function DashboardWidgetToggles() {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
   const { settings, updateSettings } = useSettings();
 
   const toggleWidget = (id: keyof typeof settings.dashboardWidgets) => {
@@ -192,15 +194,13 @@ export function DashboardWidgetToggles() {
               key={widget.id}
               onPress={() => toggleWidget(widget.id as any)}
               android_ripple={{
-                color: theme.colors.primary + "14",
+                color: withAlpha(theme.colors.primary, 0.08),
                 borderless: false,
               }}
               style={[
                 styles.tileRow,
                 {
-                  backgroundColor: isDark
-                    ? "rgba(255,255,255,0.03)"
-                    : "rgba(0,0,0,0.02)",
+                  backgroundColor: surfaces.tile,
                   borderColor: theme.colors.border,
                 },
               ]}
@@ -245,8 +245,8 @@ const WIDGET_ORDER_LABELS: Record<string, string> = {
 };
 
 export function DashboardWidgetOrder() {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
   const { settings, setDashboardOrder } = useSettings();
 
   // Saved order first, then any widget the saved order predates.
@@ -287,9 +287,7 @@ export function DashboardWidgetOrder() {
             style={[
               styles.tileRow,
               {
-                backgroundColor: isDark
-                  ? "rgba(255,255,255,0.03)"
-                  : "rgba(0,0,0,0.02)",
+                backgroundColor: surfaces.tile,
                 borderColor: theme.colors.border,
               },
             ]}
@@ -348,8 +346,8 @@ export function DashboardWidgetOrder() {
 // 2. Auto-Categorization Rules (Personalization)
 // -------------------------------------------------------------
 export function AutoCategorizationRulesManager() {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
   const { rules, addRule, deleteRule } = useCategorizationRules();
   const [keyword, setKeyword] = useState("");
   const [category, setCategory] = useState(DEFAULT_EXPENSE_CATEGORY);
@@ -421,9 +419,7 @@ export function AutoCategorizationRulesManager() {
                 style={[
                   styles.itemCard,
                   {
-                    backgroundColor: isDark
-                      ? "rgba(255,255,255,0.03)"
-                      : "rgba(0,0,0,0.02)",
+                    backgroundColor: surfaces.tile,
                     borderColor: theme.colors.border,
                   },
                 ]}
@@ -438,19 +434,15 @@ export function AutoCategorizationRulesManager() {
                 </View>
 
                 {/* 48x48dp Touch Target Delete Button */}
-                <Pressable
+                <Button
+                  variant="ghost"
+                  size="icon"
                   onPress={() => handleDelete(rule.id)}
-                  android_ripple={{
-                    color: "rgba(239, 68, 68, 0.2)",
-                    borderless: true,
-                    radius: 24,
-                  }}
-                  style={styles.touchActionBtn}
-                  accessibilityRole="button"
                   accessibilityLabel={`Delete rule for ${rule.keyword}`}
+                  style={styles.touchActionBtn}
                 >
                   <Trash2 size={18} color={theme.colors.destructive} />
-                </Pressable>
+                </Button>
               </View>
             ))
           )}
@@ -464,8 +456,8 @@ export function AutoCategorizationRulesManager() {
 // 3. Category Budgets (Manage)
 // -------------------------------------------------------------
 export function CategoryBudgetsManager() {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
   const { budgets, addBudget, deleteBudget } = useCategoryBudgets();
   const { celebrateMilestone } = useCelebration();
   const [amount, setAmount] = useState("");
@@ -558,9 +550,7 @@ export function CategoryBudgetsManager() {
                 style={[
                   styles.itemCard,
                   {
-                    backgroundColor: isDark
-                      ? "rgba(255,255,255,0.03)"
-                      : "rgba(0,0,0,0.02)",
+                    backgroundColor: surfaces.tile,
                     borderColor: theme.colors.border,
                   },
                 ]}
@@ -575,19 +565,15 @@ export function CategoryBudgetsManager() {
                 </View>
 
                 {/* 48x48dp Touch Target Delete Button */}
-                <Pressable
+                <Button
+                  variant="ghost"
+                  size="icon"
                   onPress={() => handleDelete(b.id)}
-                  android_ripple={{
-                    color: "rgba(239, 68, 68, 0.2)",
-                    borderless: true,
-                    radius: 24,
-                  }}
-                  style={styles.touchActionBtn}
-                  accessibilityRole="button"
                   accessibilityLabel="Delete budget"
+                  style={styles.touchActionBtn}
                 >
                   <Trash2 size={18} color={theme.colors.destructive} />
-                </Pressable>
+                </Button>
               </View>
             ))
           )}
@@ -601,8 +587,8 @@ export function CategoryBudgetsManager() {
 // 4. Financial Goals (Manage)
 // -------------------------------------------------------------
 export function FinancialGoalsManager() {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
   const { goals, addGoal, deleteGoal } = useFinancialGoals();
   const { celebrateMilestone } = useCelebration();
   const [name, setName] = useState("");
@@ -701,9 +687,7 @@ export function FinancialGoalsManager() {
                   style={[
                     styles.itemCard,
                     {
-                      backgroundColor: isDark
-                        ? "rgba(255,255,255,0.03)"
-                        : "rgba(0,0,0,0.02)",
+                      backgroundColor: surfaces.tile,
                       borderColor: theme.colors.border,
                     },
                   ]}
@@ -721,7 +705,7 @@ export function FinancialGoalsManager() {
                     <View
                       style={[
                         styles.goalProgressBarBg,
-                        { backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)" },
+                        { backgroundColor: surfaces.control },
                       ]}
                     >
                       <View
@@ -737,19 +721,15 @@ export function FinancialGoalsManager() {
                   </View>
 
                   {/* 48x48dp Touch Target Delete Button */}
-                  <Pressable
+                  <Button
+                    variant="ghost"
+                    size="icon"
                     onPress={() => handleDelete(g.id)}
-                    android_ripple={{
-                      color: "rgba(239, 68, 68, 0.2)",
-                      borderless: true,
-                      radius: 24,
-                    }}
-                    style={styles.touchActionBtn}
-                    accessibilityRole="button"
                     accessibilityLabel={`Delete goal ${g.name}`}
+                    style={styles.touchActionBtn}
                   >
                     <Trash2 size={18} color={theme.colors.destructive} />
-                  </Pressable>
+                  </Button>
                 </View>
               );
             })
@@ -764,8 +744,8 @@ export function FinancialGoalsManager() {
 // 5. Account Types (Accounts)
 // -------------------------------------------------------------
 export function AccountTypesManager() {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
   const { accountTypes, addAccountType, deleteAccountType } = useAccountTypes();
   const [newType, setNewType] = useState("");
 
@@ -827,9 +807,7 @@ export function AccountTypesManager() {
                 style={[
                   styles.itemCard,
                   {
-                    backgroundColor: isDark
-                      ? "rgba(255,255,255,0.03)"
-                      : "rgba(0,0,0,0.02)",
+                    backgroundColor: surfaces.tile,
                     borderColor: theme.colors.border,
                   },
                 ]}
@@ -839,19 +817,15 @@ export function AccountTypesManager() {
                 </Text>
 
                 {/* 48x48dp Touch Target Delete Button */}
-                <Pressable
+                <Button
+                  variant="ghost"
+                  size="icon"
                   onPress={() => handleDelete(t.id)}
-                  android_ripple={{
-                    color: "rgba(239, 68, 68, 0.2)",
-                    borderless: true,
-                    radius: 24,
-                  }}
-                  style={styles.touchActionBtn}
-                  accessibilityRole="button"
                   accessibilityLabel={`Delete account type ${t.name}`}
+                  style={styles.touchActionBtn}
                 >
                   <Trash2 size={18} color={theme.colors.destructive} />
-                </Pressable>
+                </Button>
               </View>
             ))
           )}
@@ -865,8 +839,8 @@ export function AccountTypesManager() {
 // 6. Custom Accounts (Accounts)
 // -------------------------------------------------------------
 export function AccountsManager() {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
   const { accounts, deleteAccount } = useAccounts();
   const { accountTypes } = useAccountTypes();
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -940,9 +914,7 @@ export function AccountsManager() {
                   style={[
                     styles.itemCard,
                     {
-                      backgroundColor: isDark
-                        ? "rgba(255,255,255,0.03)"
-                        : "rgba(0,0,0,0.02)",
+                      backgroundColor: surfaces.tile,
                       borderColor: theme.colors.border,
                     },
                   ]}
@@ -986,16 +958,12 @@ export function AccountsManager() {
                     />
                   </Pressable>
 
-                  <Pressable
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onPress={() => handleOpenEdit(acc)}
-                    android_ripple={{
-                      color: theme.colors.primary + "1A",
-                      borderless: true,
-                      radius: 24,
-                    }}
-                    style={styles.editActionBtn}
-                    accessibilityRole="button"
                     accessibilityLabel={`Edit account ${acc.name}`}
+                    style={styles.editActionBtn}
                   >
                     <Pencil size={18} color={theme.colors.foreground} />
                     <Text
@@ -1007,21 +975,17 @@ export function AccountsManager() {
                     >
                       Edit
                     </Text>
-                  </Pressable>
+                  </Button>
 
-                  <Pressable
+                  <Button
+                    variant="ghost"
+                    size="icon"
                     onPress={() => handleDelete(acc.id)}
-                    android_ripple={{
-                      color: "rgba(239, 68, 68, 0.2)",
-                      borderless: true,
-                      radius: 24,
-                    }}
-                    style={styles.touchActionBtn}
-                    accessibilityRole="button"
                     accessibilityLabel={`Delete account ${acc.name}`}
+                    style={styles.touchActionBtn}
                   >
                     <Trash2 size={18} color={theme.colors.destructive} />
-                  </Pressable>
+                  </Button>
                 </View>
               );
             })

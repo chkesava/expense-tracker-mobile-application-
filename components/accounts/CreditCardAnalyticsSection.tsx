@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { Amount } from "@/components/common/Amount";
+import { Chip } from "@/components/ui/Chip";
 import type { Account, AccountPayment, Expense } from "@/shared/types/expense";
 import type { CreditCardBill } from "@/shared/types/creditCardBill";
 import {
@@ -110,33 +111,12 @@ export function CreditCardAnalyticsSection({
           ).map(([value, label]) => {
             const active = mode === value;
             return (
-              <Pressable
+              <Chip
                 key={value}
+                label={label}
+                selected={active}
                 onPress={() => setMode(value)}
-                style={[
-                  styles.modeChip,
-                  {
-                    backgroundColor: active
-                      ? theme.colors.primary + "22"
-                      : theme.colors.card,
-                    borderColor: active
-                      ? theme.colors.primary
-                      : theme.colors.border,
-                  },
-                ]}
-              >
-                <Text
-                  style={{
-                    color: active
-                      ? theme.colors.primary
-                      : theme.colors.mutedForeground,
-                    fontSize: 12,
-                    fontWeight: "700",
-                  }}
-                >
-                  {label}
-                </Text>
-              </Pressable>
+              />
             );
           })}
         </View>

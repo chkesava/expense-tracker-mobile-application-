@@ -1,14 +1,6 @@
 import { appDialog } from "@/lib/appDialog";
 import React, { useMemo, useState } from "react";
-import {
-  FlatList,
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -16,10 +8,10 @@ import {
   Trash2,
   Users,
   Wallet,
-  X,
 } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
+import { Modal } from "@/components/common/Modal";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { VaultTransactionModal } from "@/components/vaults/VaultTransactionModal";
@@ -31,7 +23,7 @@ import {
   calculateVaultStats,
 } from "@/shared/utils/vaultMath";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useSurfaces, withAlpha } from "@/theme/surfaces";
 import { haptic } from "@/lib/haptics";
 
 export interface VaultDetailModalProps {
@@ -47,8 +39,8 @@ export function VaultDetailModal({
   onClose,
   onDeleteVault,
 }: VaultDetailModalProps) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
   const { user } = useAuth();
 
   const vaultId = vault?.id;
@@ -92,303 +84,264 @@ export function VaultDetailModal({
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.backdrop}>
-        <View
-          style={[
-            styles.sheetContainer,
-            {
-              backgroundColor: theme.colors.card,
-              borderColor: theme.colors.border,
-            },
-          ]}
-        >
-          {/* Header */}
-          <View style={styles.header}>
-            <View style={styles.titleRow}>
-              <View
-                style={[
-                  styles.iconCircle,
-                  { backgroundColor: `${themeColor}20` },
-                ]}
-              >
-                <Wallet size={20} color={themeColor} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text
-                  style={[styles.title, { color: theme.colors.foreground }]}
-                  numberOfLines={1}
-                >
-                  {vault.name}
-                </Text>
-                <Text
-                  style={[styles.subtitle, { color: theme.colors.mutedForeground }]}
-                  numberOfLines={1}
-                >
-                  {vault.description || "Shared Vault Overview"}
-                </Text>
-              </View>
+    <>
+      <Modal isOpen={visible} onClose={onClose} title={vault.name} maxHeight="90%">
+        {/* Identity */}
+        <View style={styles.header}>
+          <View style={styles.titleRow}>
+            <View
+              style={[
+                styles.iconCircle,
+                { backgroundColor: withAlpha(themeColor, 0.13) },
+              ]}
+            >
+              <Wallet size={20} color={themeColor} />
+            </View>
+            <Text
+              style={[styles.subtitle, { color: theme.colors.mutedForeground, flex: 1 }]}
+              numberOfLines={2}
+            >
+              {vault.description || "Shared Vault Overview"}
+            </Text>
+          </View>
+
+          {isOwner && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onPress={handleDelete}
+              accessibilityLabel="Delete vault"
+            >
+              <Trash2 size={18} color={theme.colors.destructive} />
+            </Button>
+          )}
+        </View>
+
+        {/* Balance & Budget Card */}
+        <Card style={styles.statsCard}>
+          <View style={styles.statRow}>
+            <View>
+              <Text style={[styles.statLabel, { color: theme.colors.mutedForeground }]}>
+                AVAILABLE BALANCE
+              </Text>
+              <Amount
+                value={stats.currentBalance}
+                currency={vault.currency}
+                style={{
+                  fontSize: 22,
+                  fontWeight: "900",
+                  color:
+                    stats.currentBalance >= 0
+                      ? theme.colors.foreground
+                      : theme.colors.destructive,
+                }}
+              />
             </View>
 
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-              {isOwner && (
-                <Pressable
-                  onPress={handleDelete}
-                  style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.6 }]}
-                >
-                  <Trash2 size={18} color={theme.colors.destructive} />
-                </Pressable>
-              )}
-              <Pressable
-                onPress={onClose}
-                style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.6 }]}
-              >
-                <X size={20} color={theme.colors.mutedForeground} />
-              </Pressable>
+            <View style={{ alignItems: "flex-end" }}>
+              <Text style={[styles.statLabel, { color: theme.colors.mutedForeground }]}>
+                BUDGET LIMIT
+              </Text>
+              <Amount
+                value={vault.budget}
+                currency={vault.currency}
+                style={{ fontSize: 16, fontWeight: "700", color: theme.colors.foreground }}
+              />
             </View>
           </View>
 
-          <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
-            {/* Balance & Budget Card */}
-            <Card style={styles.statsCard}>
-              <View style={styles.statRow}>
-                <View>
-                  <Text style={[styles.statLabel, { color: theme.colors.mutedForeground }]}>
-                    AVAILABLE BALANCE
-                  </Text>
+          {/* Progress */}
+          {vault.budget > 0 && (
+            <View style={{ gap: 6, marginTop: 4 }}>
+              <View
+                style={[
+                  styles.progressBarBg,
+                  {
+                    backgroundColor: surfaces.track,
+                  },
+                ]}
+              >
+                <View
+                  style={[
+                    styles.progressBarFill,
+                    {
+                      width: `${Math.min(100, stats.budgetUsagePercent)}%`,
+                      backgroundColor:
+                        stats.status === "healthy"
+                          ? themeColor
+                          : stats.status === "warning"
+                          ? "#F59E0B"
+                          : "#EF4444",
+                    },
+                  ]}
+                />
+              </View>
+              <View style={styles.progressInfo}>
+                <Text style={{ fontSize: 11, color: theme.colors.mutedForeground }}>
+                  Spent: {vault.currency} {stats.totalWithdrawals.toLocaleString()} ({stats.budgetUsagePercent}%)
+                </Text>
+                <Text style={{ fontSize: 11, color: theme.colors.mutedForeground }}>
+                  Remaining: {vault.currency} {stats.remainingBudget.toLocaleString()}
+                </Text>
+              </View>
+            </View>
+          )}
+        </Card>
+
+        {/* Member Contributions Breakdown */}
+        {memberContributions.length > 0 && (
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: theme.colors.mutedForeground }]}>
+              MEMBER CONTRIBUTIONS
+            </Text>
+            <Card style={styles.membersCard}>
+              {memberContributions.map((m, idx) => (
+                <View
+                  key={m.userId}
+                  style={[
+                    styles.memberRow,
+                    idx > 0 && {
+                      borderTopWidth: StyleSheet.hairlineWidth,
+                      borderTopColor: theme.colors.border,
+                    },
+                  ]}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.memberName, { color: theme.colors.foreground }]}>
+                      {m.userName || `Member (${m.userId.slice(0, 5)})`}
+                    </Text>
+                    <Text style={{ fontSize: 11, color: theme.colors.mutedForeground }}>
+                      Deposited: {vault.currency} {m.totalDeposited.toLocaleString()} • Spent: {vault.currency} {m.totalWithdrawn.toLocaleString()}
+                    </Text>
+                  </View>
                   <Amount
-                    value={stats.currentBalance}
+                    value={m.netContribution}
                     currency={vault.currency}
                     style={{
-                      fontSize: 22,
-                      fontWeight: "900",
-                      color:
-                        stats.currentBalance >= 0
-                          ? theme.colors.foreground
-                          : theme.colors.destructive,
+                      fontSize: 13,
+                      fontWeight: "800",
+                      color: m.netContribution >= 0 ? "#22C55E" : theme.colors.destructive,
                     }}
                   />
                 </View>
-
-                <View style={{ alignItems: "flex-end" }}>
-                  <Text style={[styles.statLabel, { color: theme.colors.mutedForeground }]}>
-                    BUDGET LIMIT
-                  </Text>
-                  <Amount
-                    value={vault.budget}
-                    currency={vault.currency}
-                    style={{ fontSize: 16, fontWeight: "700", color: theme.colors.foreground }}
-                  />
-                </View>
-              </View>
-
-              {/* Progress */}
-              {vault.budget > 0 && (
-                <View style={{ gap: 6, marginTop: 4 }}>
-                  <View
-                    style={[
-                      styles.progressBarBg,
-                      {
-                        backgroundColor: isDark
-                          ? "rgba(255,255,255,0.1)"
-                          : "rgba(0,0,0,0.06)",
-                      },
-                    ]}
-                  >
-                    <View
-                      style={[
-                        styles.progressBarFill,
-                        {
-                          width: `${Math.min(100, stats.budgetUsagePercent)}%`,
-                          backgroundColor:
-                            stats.status === "healthy"
-                              ? themeColor
-                              : stats.status === "warning"
-                              ? "#F59E0B"
-                              : "#EF4444",
-                        },
-                      ]}
-                    />
-                  </View>
-                  <View style={styles.progressInfo}>
-                    <Text style={{ fontSize: 11, color: theme.colors.mutedForeground }}>
-                      Spent: {vault.currency} {stats.totalWithdrawals.toLocaleString()} ({stats.budgetUsagePercent}%)
-                    </Text>
-                    <Text style={{ fontSize: 11, color: theme.colors.mutedForeground }}>
-                      Remaining: {vault.currency} {stats.remainingBudget.toLocaleString()}
-                    </Text>
-                  </View>
-                </View>
-              )}
+              ))}
             </Card>
+          </View>
+        )}
 
-            {/* Member Contributions Breakdown */}
-            {memberContributions.length > 0 && (
-              <View style={styles.section}>
-                <Text style={[styles.sectionTitle, { color: theme.colors.mutedForeground }]}>
-                  MEMBER CONTRIBUTIONS
-                </Text>
-                <Card style={styles.membersCard}>
-                  {memberContributions.map((m, idx) => (
+        {/* Transactions Activity List */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, { color: theme.colors.mutedForeground }]}>
+              ACTIVITY & TRANSACTIONS ({expenses.length})
+            </Text>
+          </View>
+
+          {expenses.length === 0 ? (
+            <Card style={styles.emptyCard}>
+              <Text style={{ fontSize: 13, color: theme.colors.mutedForeground, textAlign: "center" }}>
+                No transactions recorded yet in this vault.
+              </Text>
+            </Card>
+          ) : (
+            <View style={{ gap: 8 }}>
+              {expenses.map((e) => (
+                <Card key={e.id} style={styles.txCard}>
+                  <View style={styles.txRow}>
                     <View
-                      key={m.userId}
                       style={[
-                        styles.memberRow,
-                        idx > 0 && {
-                          borderTopWidth: StyleSheet.hairlineWidth,
-                          borderTopColor: theme.colors.border,
+                        styles.txIconCircle,
+                        {
+                          backgroundColor:
+                            e.type === "deposit"
+                              ? "rgba(34,197,94,0.15)"
+                              : "rgba(239,68,68,0.15)",
                         },
                       ]}
                     >
-                      <View style={{ flex: 1 }}>
-                        <Text style={[styles.memberName, { color: theme.colors.foreground }]}>
-                          {m.userName || `Member (${m.userId.slice(0, 5)})`}
-                        </Text>
-                        <Text style={{ fontSize: 11, color: theme.colors.mutedForeground }}>
-                          Deposited: {vault.currency} {m.totalDeposited.toLocaleString()} • Spent: {vault.currency} {m.totalWithdrawn.toLocaleString()}
-                        </Text>
-                      </View>
+                      {e.type === "deposit" ? (
+                        <ArrowDownLeft size={16} color="#22C55E" />
+                      ) : (
+                        <ArrowUpRight size={16} color="#EF4444" />
+                      )}
+                    </View>
+
+                    <View style={{ flex: 1, gap: 2 }}>
+                      <Text style={[styles.txCategory, { color: theme.colors.foreground }]}>
+                        {e.category || (e.type === "deposit" ? "Deposit" : "Expense")}
+                      </Text>
+                      <Text style={{ fontSize: 11, color: theme.colors.mutedForeground }}>
+                        {e.createdByName ? `${e.createdByName} • ` : ""}{e.date}
+                        {e.note ? ` • ${e.note}` : ""}
+                      </Text>
+                    </View>
+
+                    <View style={{ alignItems: "flex-end", gap: 4 }}>
                       <Amount
-                        value={m.netContribution}
+                        value={e.amount}
                         currency={vault.currency}
                         style={{
-                          fontSize: 13,
+                          fontSize: 14,
                           fontWeight: "800",
-                          color: m.netContribution >= 0 ? "#22C55E" : theme.colors.destructive,
+                          color:
+                            e.type === "deposit"
+                              ? theme.colors.success
+                              : theme.colors.destructive,
                         }}
                       />
-                    </View>
-                  ))}
-                </Card>
-              </View>
-            )}
-
-            {/* Transactions Activity List */}
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <Text style={[styles.sectionTitle, { color: theme.colors.mutedForeground }]}>
-                  ACTIVITY & TRANSACTIONS ({expenses.length})
-                </Text>
-              </View>
-
-              {expenses.length === 0 ? (
-                <Card style={styles.emptyCard}>
-                  <Text style={{ fontSize: 13, color: theme.colors.mutedForeground, textAlign: "center" }}>
-                    No transactions recorded yet in this vault.
-                  </Text>
-                </Card>
-              ) : (
-                <View style={{ gap: 8 }}>
-                  {expenses.map((e) => (
-                    <Card key={e.id} style={styles.txCard}>
-                      <View style={styles.txRow}>
-                        <View
-                          style={[
-                            styles.txIconCircle,
-                            {
-                              backgroundColor:
-                                e.type === "deposit"
-                                  ? "rgba(34,197,94,0.15)"
-                                  : "rgba(239,68,68,0.15)",
-                            },
-                          ]}
+                      {e.id && (isOwner || e.createdBy === user?.uid) ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          haptic={false}
+                          onPress={() => deleteVaultExpense(e.id!)}
+                          accessibilityLabel="Delete vault entry"
+                          style={{ minHeight: 28, paddingHorizontal: 8, paddingVertical: 2 }}
                         >
-                          {e.type === "deposit" ? (
-                            <ArrowDownLeft size={16} color="#22C55E" />
-                          ) : (
-                            <ArrowUpRight size={16} color="#EF4444" />
-                          )}
-                        </View>
-
-                        <View style={{ flex: 1, gap: 2 }}>
-                          <Text style={[styles.txCategory, { color: theme.colors.foreground }]}>
-                            {e.category || (e.type === "deposit" ? "Deposit" : "Expense")}
+                          <Text style={{ fontSize: 10, color: theme.colors.mutedForeground }}>
+                            Delete
                           </Text>
-                          <Text style={{ fontSize: 11, color: theme.colors.mutedForeground }}>
-                            {e.createdByName ? `${e.createdByName} • ` : ""}{e.date}
-                            {e.note ? ` • ${e.note}` : ""}
-                          </Text>
-                        </View>
-
-                        <View style={{ alignItems: "flex-end", gap: 4 }}>
-                          <Amount
-                            value={e.amount}
-                            currency={vault.currency}
-                            style={{
-                              fontSize: 14,
-                              fontWeight: "800",
-                              color:
-                                e.type === "deposit"
-                                  ? "#22C55E"
-                                  : theme.colors.destructive,
-                            }}
-                          />
-                          {e.id && (isOwner || e.createdBy === user?.uid) ? (
-                            <Pressable
-                              onPress={() => deleteVaultExpense(e.id!)}
-                              style={({ pressed }) => [pressed && { opacity: 0.5 }]}
-                            >
-                              <Text style={{ fontSize: 10, color: theme.colors.mutedForeground }}>
-                                Delete
-                              </Text>
-                            </Pressable>
-                          ) : null}
-                        </View>
-                      </View>
-                    </Card>
-                  ))}
-                </View>
-              )}
+                        </Button>
+                      ) : null}
+                    </View>
+                  </View>
+                </Card>
+              ))}
             </View>
-          </ScrollView>
-
-          {/* Footer Actions */}
-          <View style={[styles.footer, { borderTopColor: theme.colors.border }]}>
-            <Button
-              onPress={() => {
-                haptic.selection().catch(() => undefined);
-                setIsTxModalOpen(true);
-              }}
-              style={{ flex: 1 }}
-            >
-              <Plus size={18} color="#FFFFFF" />
-              <Text style={{ marginLeft: 8, fontWeight: "800", color: "#FFFFFF" }}>
-                Add Transaction
-              </Text>
-            </Button>
-          </View>
+          )}
         </View>
-      </View>
 
-      {/* Transaction Modal */}
+        {/* Footer Actions */}
+        <Button
+          haptic={false}
+          onPress={() => {
+            haptic.selection().catch(() => undefined);
+            setIsTxModalOpen(true);
+          }}
+        >
+          <Plus size={18} color={theme.colors.primaryForeground} />
+          <Text style={{ marginLeft: 8, fontWeight: "800", color: theme.colors.primaryForeground }}>
+            Add Transaction
+          </Text>
+        </Button>
+      </Modal>
+
+      {/* Transaction Modal — a sibling, so it stacks above the sheet. */}
       <VaultTransactionModal
         visible={isTxModalOpen}
         vault={vault}
         onClose={() => setIsTxModalOpen(false)}
         onSubmit={addVaultExpense}
       />
-    </Modal>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    justifyContent: "flex-end",
-  },
-  sheetContainer: {
-    maxHeight: "90%",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    borderWidth: 1,
-    paddingTop: 18,
-  },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 20,
     marginBottom: 14,
   },
   titleRow: {
@@ -405,18 +358,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  title: {
-    fontSize: 17,
-    fontWeight: "800",
-  },
   subtitle: {
     fontSize: 12,
-  },
-  iconBtn: {
-    padding: 6,
-  },
-  body: {
-    paddingHorizontal: 20,
   },
   statsCard: {
     padding: 16,
@@ -500,9 +443,5 @@ const styles = StyleSheet.create({
   txCategory: {
     fontSize: 13,
     fontWeight: "700",
-  },
-  footer: {
-    padding: 16,
-    borderTopWidth: StyleSheet.hairlineWidth,
   },
 });

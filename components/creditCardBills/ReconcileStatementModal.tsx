@@ -4,7 +4,6 @@ import {
   KeyboardAvoidingView,
   Modal,
   Platform,
-  Pressable,
   StyleSheet,
   Text,
   View,
@@ -152,16 +151,17 @@ const ReadOnlyLine = memo(function ReadOnlyLine({
         style={[styles.readOnlyAmount, { color: theme.colors.foreground }]}
       />
       {actionLabel && onAction ? (
-        <Pressable
+        <Button
+          variant="outline"
+          size="sm"
           onPress={onAction}
-          accessibilityRole="button"
           accessibilityLabel={actionLabel}
-          style={[styles.readOnlyAction, { borderColor: theme.colors.primary }]}
+          style={styles.readOnlyAction}
         >
           <Text style={[styles.readOnlyActionText, { color: theme.colors.primary }]}>
             {actionLabel}
           </Text>
-        </Pressable>
+        </Button>
       ) : null}
     </View>
   );
@@ -837,17 +837,19 @@ export function ReconcileStatementModal({
               {accountName}
             </Text>
           </View>
-          <Pressable
+          <Button
+            variant="ghost"
+            size="icon"
+            haptic={false}
             onPress={() => {
               void haptic.selection();
               close();
             }}
-            style={[styles.closeBtn, { backgroundColor: theme.colors.muted }]}
-            accessibilityRole="button"
             accessibilityLabel="Close statement review"
+            style={styles.closeBtn}
           >
             <X size={18} color={theme.colors.foreground} />
-          </Pressable>
+          </Button>
         </View>
 
         {listHeader}

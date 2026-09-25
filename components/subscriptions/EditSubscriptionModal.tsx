@@ -7,7 +7,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import { X } from "lucide-react-native";
@@ -15,6 +14,9 @@ import { X } from "lucide-react-native";
 import { Button } from "@/components/ui/Button";
 import { DayOfMonthSelect } from "@/components/common/DayOfMonthSelect";
 import { MonthYearSelect } from "@/components/common/MonthYearSelect";
+import { Input } from "@/components/ui/Input";
+import { Chip } from "@/components/ui/Chip";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import {
   validateSubscriptionInput,
   type SubscriptionField,
@@ -27,7 +29,6 @@ import { subscriptionFrequency } from "@/shared/types/subscription";
 import { todayDateKey } from "@/shared/utils/dates";
 import { acceptRecurringSuggestion } from "@/services/sms/smsRecurringSync";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
@@ -86,8 +87,7 @@ export function EditSubscriptionModal({
   suggestionKey,
   onClose,
 }: EditSubscriptionModalProps) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
   const displayCurrency = useDisplayCurrency();
   const { accounts } = useAccounts();
   const { categories } = useCategories();
@@ -351,18 +351,16 @@ export function EditSubscriptionModal({
                 Step {step} of 3 · {STEP_TITLES[step]}
               </Text>
             </View>
-            <Pressable
+            <Button
+              variant="ghost"
+              size="icon"
               onPress={onClose}
               hitSlop={12}
-              accessibilityRole="button"
               accessibilityLabel="Close"
-              style={({ pressed }) => [
-                styles.closeButton,
-                pressed && { opacity: 0.6 },
-              ]}
+              style={styles.closeButton}
             >
               <X size={20} color={theme.colors.mutedForeground} />
-            </Pressable>
+            </Button>
           </View>
 
           <View style={styles.stepRow}>
@@ -398,56 +396,18 @@ export function EditSubscriptionModal({
               >
                 TYPE
               </Text>
-              <View
-                style={[
-                  styles.segmentRow,
-                  {
-                    backgroundColor: isDark
-                      ? "rgba(255,255,255,0.06)"
-                      : "rgba(0,0,0,0.04)",
-                  },
+              <SegmentedControl
+                value={type}
+                onChange={(next) => {
+                  setType(next);
+                  if (next === "emi") setFrequency("monthly");
+                }}
+                options={[
+                  { value: "subscription", label: "Subscription" },
+                  { value: "emi", label: "EMI / Loan" },
+                  { value: "transfer", label: "Auto-Transfer" },
                 ]}
-              >
-                {(
-                  [
-                    { key: "subscription", label: "Subscription" },
-                    { key: "emi", label: "EMI / Loan" },
-                    { key: "transfer", label: "Auto-Transfer" },
-                  ] as const
-                ).map((item) => {
-                  const isSelected = type === item.key;
-                  return (
-                    <Pressable
-                      key={item.key}
-                      onPress={() => {
-                        haptic.selection().catch(() => undefined);
-                        setType(item.key);
-                        if (item.key === "emi") setFrequency("monthly");
-                      }}
-                      style={[
-                        styles.segmentBtn,
-                        isSelected && {
-                          backgroundColor: theme.colors.primary,
-                        },
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.segmentText,
-                          {
-                            color: isSelected
-                              ? theme.colors.primaryForeground
-                              : theme.colors.mutedForeground,
-                            fontWeight: isSelected ? "700" : "500",
-                          },
-                        ]}
-                      >
-                        {item.label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
+              />
             </View>
 
             {/* Name */}
@@ -460,21 +420,10 @@ export function EditSubscriptionModal({
               >
                 NAME
               </Text>
-              <TextInput
+              <Input
                 value={name}
                 onChangeText={setName}
                 placeholder="e.g. Netflix 4K, Car EMI, SIP Savings"
-                placeholderTextColor={theme.colors.mutedForeground}
-                style={[
-                  styles.input,
-                  {
-                    backgroundColor: isDark
-                      ? "rgba(255,255,255,0.04)"
-                      : "rgba(0,0,0,0.02)",
-                    borderColor: theme.colors.border,
-                    color: theme.colors.foreground,
-                  },
-                ]}
               />
             </View>
 
@@ -488,24 +437,11 @@ export function EditSubscriptionModal({
               >
                 AMOUNT ({displayCurrency})
               </Text>
-              <TextInput
+              <Input
                 value={amount}
                 onChangeText={setAmount}
                 placeholder="0.00"
                 keyboardType="decimal-pad"
-                placeholderTextColor={theme.colors.mutedForeground}
-                style={[
-                  styles.input,
-                  {
-                    backgroundColor: isDark
-                      ? "rgba(255,255,255,0.04)"
-                      : "rgba(0,0,0,0.02)",
-                    borderColor: theme.colors.border,
-                    color: theme.colors.foreground,
-                    fontSize: theme.typography.lg,
-                    fontWeight: "700",
-                  },
-                ]}
               />
             </View>
 
@@ -525,54 +461,14 @@ export function EditSubscriptionModal({
                 >
                   FREQUENCY
                 </Text>
-                <View
-                  style={[
-                    styles.segmentRow,
-                    {
-                      backgroundColor: isDark
-                        ? "rgba(255,255,255,0.06)"
-                        : "rgba(0,0,0,0.04)",
-                    },
+                <SegmentedControl
+                  value={frequency}
+                  onChange={setFrequency}
+                  options={[
+                    { value: "every_n_days", label: "Every N days" },
+                    { value: "monthly", label: "Monthly" },
                   ]}
-                >
-                  {(
-                    [
-                      { key: "every_n_days", label: "Every N days" },
-                      { key: "monthly", label: "Monthly" },
-                    ] as const
-                  ).map((item) => {
-                    const isSelected = frequency === item.key;
-                    return (
-                      <Pressable
-                        key={item.key}
-                        onPress={() => {
-                          haptic.selection().catch(() => undefined);
-                          setFrequency(item.key);
-                        }}
-                        style={[
-                          styles.segmentBtn,
-                          isSelected && {
-                            backgroundColor: theme.colors.primary,
-                          },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.segmentText,
-                            {
-                              color: isSelected
-                                ? theme.colors.primaryForeground
-                                : theme.colors.mutedForeground,
-                              fontWeight: isSelected ? "700" : "500",
-                            },
-                          ]}
-                        >
-                          {item.label}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
+                />
               </View>
             ) : null}
 
@@ -586,23 +482,12 @@ export function EditSubscriptionModal({
                 >
                   REPEAT EVERY N DAYS
                 </Text>
-                <TextInput
+                <Input
                   value={intervalDays}
                   onChangeText={setIntervalDays}
                   placeholder="2"
                   keyboardType="number-pad"
                   maxLength={3}
-                  placeholderTextColor={theme.colors.mutedForeground}
-                  style={[
-                    styles.input,
-                    {
-                      backgroundColor: isDark
-                        ? "rgba(255,255,255,0.04)"
-                        : "rgba(0,0,0,0.02)",
-                      borderColor: theme.colors.border,
-                      color: theme.colors.foreground,
-                    },
-                  ]}
                 />
               </View>
             ) : (
@@ -692,37 +577,12 @@ export function EditSubscriptionModal({
                   {categories.map((c) => {
                     const isSelected = category === c.name;
                     return (
-                      <Pressable
+                      <Chip
                         key={c.id}
+                        label={c.name}
+                        selected={isSelected}
                         onPress={() => setCategory(c.name)}
-                        style={[
-                          styles.chip,
-                          {
-                            backgroundColor: isSelected
-                              ? theme.colors.primary
-                              : isDark
-                                ? "rgba(255,255,255,0.06)"
-                                : "rgba(0,0,0,0.04)",
-                            borderColor: isSelected
-                              ? theme.colors.primary
-                              : theme.colors.border,
-                          },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.chipText,
-                            {
-                              color: isSelected
-                                ? theme.colors.primaryForeground
-                                : theme.colors.foreground,
-                              fontWeight: isSelected ? "700" : "500",
-                            },
-                          ]}
-                        >
-                          {c.name}
-                        </Text>
-                      </Pressable>
+                      />
                     );
                   })}
                 </ScrollView>
@@ -751,37 +611,12 @@ export function EditSubscriptionModal({
                 {accounts.map((acc) => {
                   const isSelected = accountId === acc.id;
                   return (
-                    <Pressable
+                    <Chip
                       key={acc.id}
+                      label={acc.name}
+                      selected={isSelected}
                       onPress={() => setAccountId(acc.id)}
-                      style={[
-                        styles.chip,
-                        {
-                          backgroundColor: isSelected
-                            ? theme.colors.primary
-                            : isDark
-                              ? "rgba(255,255,255,0.06)"
-                              : "rgba(0,0,0,0.04)",
-                          borderColor: isSelected
-                            ? theme.colors.primary
-                            : theme.colors.border,
-                        },
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.chipText,
-                          {
-                            color: isSelected
-                              ? theme.colors.primaryForeground
-                              : theme.colors.foreground,
-                            fontWeight: isSelected ? "700" : "500",
-                          },
-                        ]}
-                      >
-                        {acc.name}
-                      </Text>
-                    </Pressable>
+                    />
                   );
                 })}
               </ScrollView>
@@ -806,37 +641,12 @@ export function EditSubscriptionModal({
                   {accounts.map((acc) => {
                     const isSelected = toAccountId === acc.id;
                     return (
-                      <Pressable
+                      <Chip
                         key={acc.id}
+                        label={acc.name}
+                        selected={isSelected}
                         onPress={() => setToAccountId(acc.id)}
-                        style={[
-                          styles.chip,
-                          {
-                            backgroundColor: isSelected
-                              ? theme.colors.primary
-                              : isDark
-                                ? "rgba(255,255,255,0.06)"
-                                : "rgba(0,0,0,0.04)",
-                            borderColor: isSelected
-                              ? theme.colors.primary
-                              : theme.colors.border,
-                          },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.chipText,
-                            {
-                              color: isSelected
-                                ? theme.colors.primaryForeground
-                                : theme.colors.foreground,
-                              fontWeight: isSelected ? "700" : "500",
-                            },
-                          ]}
-                        >
-                          {acc.name}
-                        </Text>
-                      </Pressable>
+                      />
                     );
                   })}
                 </ScrollView>
@@ -944,21 +754,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "800",
     letterSpacing: 0.5,
-  },
-  segmentRow: {
-    flexDirection: "row",
-    borderRadius: 12,
-    padding: 4,
-    gap: 4,
-  },
-  segmentBtn: {
-    flex: 1,
-    paddingVertical: 8,
-    alignItems: "center",
-    borderRadius: 8,
-  },
-  segmentText: {
-    fontSize: 11,
   },
   input: {
     height: 48,

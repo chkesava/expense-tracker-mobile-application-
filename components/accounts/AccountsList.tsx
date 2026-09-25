@@ -44,6 +44,7 @@ import {
 import { getAccountKind } from "@/shared/utils/accountKind";
 import { todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useSurfaces } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
@@ -120,6 +121,7 @@ function NetWorthTrendMark({ color }: { color: string }) {
 export function AccountsList() {
   const { push } = useRouter();
   const { theme, themeName } = useTheme();
+  const surfaces = useSurfaces();
   const isDark = themeUsesDarkPalette(themeName);
   const displayCurrency = useDisplayCurrency();
   const { settings } = useSettings();
@@ -263,7 +265,7 @@ export function AccountsList() {
   const red = isDark ? "#f87171" : "#dc2626";
   const purple = isDark ? "#a78bfa" : "#7c3aed";
   const blue = isDark ? "#60a5fa" : "#2563eb";
-  const ripple = isDark ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.06)";
+  const ripple = surfaces.track;
 
   return (
     <View style={styles.container}>
@@ -353,9 +355,7 @@ export function AccountsList() {
           style={[
             styles.breakdownRow,
             {
-              borderTopColor: isDark
-                ? "rgba(255,255,255,0.08)"
-                : "rgba(15,23,42,0.06)",
+              borderTopColor: surfaces.track,
             },
           ]}
         >
@@ -413,22 +413,16 @@ export function AccountsList() {
 
       {/* Quick actions */}
       <View style={styles.quickActionsRow}>
-        <Pressable
+        <Button
+          variant="outline"
+          size="sm"
+          haptic={false}
           onPress={() => {
             haptic.selection().catch(() => undefined);
             setIsStockCashModalOpen(true);
           }}
-          android_ripple={{ color: purple + "22", borderless: false }}
-          style={({ pressed }) => [
-            styles.quickAction,
-            {
-              backgroundColor: theme.colors.card,
-              borderColor: theme.colors.outlineVariant,
-            },
-            pressed && { opacity: 0.85 },
-          ]}
-          accessibilityRole="button"
           accessibilityLabel="Stocks Cash"
+          style={styles.quickAction}
         >
           <TrendingUp size={18} color={purple} strokeWidth={2.2} />
           <Text
@@ -437,24 +431,18 @@ export function AccountsList() {
           >
             Stocks Cash
           </Text>
-        </Pressable>
+        </Button>
 
-        <Pressable
+        <Button
+          variant="outline"
+          size="sm"
+          haptic={false}
           onPress={() => {
             haptic.selection().catch(() => undefined);
             setIsEntryModalOpen(true);
           }}
-          android_ripple={{ color: green + "22", borderless: false }}
-          style={({ pressed }) => [
-            styles.quickAction,
-            {
-              backgroundColor: theme.colors.card,
-              borderColor: theme.colors.outlineVariant,
-            },
-            pressed && { opacity: 0.85 },
-          ]}
-          accessibilityRole="button"
           accessibilityLabel="Adjust Balance"
+          style={styles.quickAction}
         >
           <SlidersHorizontal size={18} color={green} strokeWidth={2.2} />
           <Text
@@ -463,7 +451,7 @@ export function AccountsList() {
           >
             Adjust Balance
           </Text>
-        </Pressable>
+        </Button>
       </View>
 
       {/* Stocks & Demat */}
@@ -704,27 +692,16 @@ export function AccountsList() {
       ) : null}
 
       {/* Add Account */}
-      <Pressable
+      <Button
+        variant="outline"
+        size="sm"
         onPress={handleOpenCreateAccount}
-        android_ripple={{ color: green + "22", borderless: false }}
-        style={({ pressed }) => [
-          styles.addAccountButton,
-          {
-            backgroundColor: isDark
-              ? "rgba(52, 179, 122, 0.12)"
-              : "rgba(37, 150, 90, 0.08)",
-            borderColor: isDark
-              ? "rgba(52, 179, 122, 0.28)"
-              : "rgba(37, 150, 90, 0.2)",
-          },
-          pressed && { opacity: 0.85 },
-        ]}
-        accessibilityRole="button"
         accessibilityLabel="Add Account"
+        style={styles.addAccountButton}
       >
         <Plus size={18} color={green} strokeWidth={2.4} />
         <Text style={[styles.addAccountText, { color: green }]}>Add Account</Text>
-      </Pressable>
+      </Button>
 
       <Pressable
         onPress={() => {

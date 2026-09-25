@@ -18,6 +18,7 @@ import { useSettings } from "@/providers/SettingsProvider";
 import type { CreditCardBill } from "@/shared/types/creditCardBill";
 import { formatDisplayDate } from "@/shared/utils/dateDisplay";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useSurfaces } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
 export type CreditCardRowModel = {
@@ -56,6 +57,7 @@ export const CreditCardListItem = memo(function CreditCardListItem({
   onPay: (id: string) => void;
 }) {
   const { theme, themeName } = useTheme();
+  const surfaces = useSurfaces();
   const { settings } = useSettings();
   const isDark = themeUsesDarkPalette(themeName);
   const utilizationPercent = Math.round(Math.min(100, Math.max(0, row.utilization)));
@@ -113,7 +115,7 @@ export const CreditCardListItem = memo(function CreditCardListItem({
           style={[
             styles.resetBadge,
             {
-              backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(15,23,42,0.05)",
+              backgroundColor: surfaces.control,
               borderColor: isDark ? "rgba(148,163,184,0.14)" : theme.colors.border,
             },
           ]}
@@ -193,7 +195,7 @@ export const CreditCardListItem = memo(function CreditCardListItem({
         <View
           style={[
             styles.track,
-            { backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.08)" },
+            { backgroundColor: surfaces.track },
           ]}
         >
           <View

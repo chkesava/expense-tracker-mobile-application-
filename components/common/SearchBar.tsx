@@ -1,5 +1,13 @@
 import { useState } from "react";
-import { Pressable, StyleSheet, TextInput, View, type TextInputProps } from "react-native";
+import {
+  Pressable,
+  StyleSheet,
+  TextInput,
+  View,
+  type StyleProp,
+  type TextInputProps,
+  type ViewStyle,
+} from "react-native";
 import { Search, X } from "lucide-react-native";
 
 import { useTheme } from "@/theme/ThemeProvider";
@@ -7,10 +15,22 @@ import { useTheme } from "@/theme/ThemeProvider";
 export type SearchBarProps = Omit<TextInputProps, "style"> & {
   value: string;
   onChangeText: (text: string) => void;
+  /** Focus-ring colour, for hubs with their own identity accent. Defaults to primary. */
+  accentColor?: string;
+  containerStyle?: StyleProp<ViewStyle>;
 };
 
 /** MD3 search field — pill shape, leading icon, clear button, elevates on focus. */
-export function SearchBar({ value, onChangeText, placeholder, onFocus, onBlur, ...props }: SearchBarProps) {
+export function SearchBar({
+  value,
+  onChangeText,
+  placeholder,
+  onFocus,
+  onBlur,
+  accentColor,
+  containerStyle,
+  ...props
+}: SearchBarProps) {
   const { theme } = useTheme();
   const [focused, setFocused] = useState(false);
 
@@ -22,8 +42,9 @@ export function SearchBar({ value, onChangeText, placeholder, onFocus, onBlur, .
         {
           backgroundColor: theme.colors.surfaceVariant,
           borderRadius: theme.radius.full,
-          borderColor: focused ? theme.colors.primary : "transparent",
+          borderColor: focused ? (accentColor ?? theme.colors.primary) : "transparent",
         },
+        containerStyle,
       ]}
     >
       <Search size={theme.iconSize.md} color={theme.colors.onSurfaceVariant} />
