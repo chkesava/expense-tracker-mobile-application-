@@ -1,5 +1,7 @@
 import { useMemo } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
+
+import { Chip } from "@/components/ui/Chip";
 import { ChevronDown, TrendingUp } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
@@ -9,7 +11,6 @@ import {
   TrendText,
   useSurfaces,
 } from "@/components/dashboard/primitives";
-import { haptic } from "@/lib/haptics";
 import { useTheme } from "@/theme/ThemeProvider";
 
 export interface QuickInsightsWidgetProps {
@@ -98,34 +99,15 @@ export function QuickInsightsWidget({
       iconTint={surfaces.wash(theme.colors.primary)}
       action={
         onOpenMonthPicker ? (
-          <Pressable
-            onPress={() => {
-              void haptic.selection();
-              onOpenMonthPicker();
-            }}
-            hitSlop={6}
-            style={({ pressed }) => [
-              styles.monthChip,
-              { backgroundColor: surfaces.tile },
-              pressed && { opacity: 0.7 },
-            ]}
-            accessibilityRole="button"
+          <Chip
+            size="sm"
+            label={monthLabel}
+            onPress={onOpenMonthPicker}
             accessibilityLabel={`Change month, currently ${monthLabel}`}
-          >
-            <Text
-              style={[
-                styles.monthChipText,
-                {
-                  color: theme.colors.mutedForeground,
-                  fontFamily: theme.fontFamily.medium,
-                },
-              ]}
-              numberOfLines={1}
-            >
-              {monthLabel}
-            </Text>
-            <ChevronDown size={12} color={theme.colors.mutedForeground} />
-          </Pressable>
+            trailing={() => (
+              <ChevronDown size={12} color={theme.colors.mutedForeground} />
+            )}
+          />
         ) : null
       }
     >
@@ -180,19 +162,6 @@ export function QuickInsightsWidget({
 }
 
 const styles = StyleSheet.create({
-  monthChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    maxWidth: 128,
-    minHeight: 32,
-  },
-  monthChipText: {
-    fontSize: 12,
-  },
   row: {
     flexDirection: "row",
   },

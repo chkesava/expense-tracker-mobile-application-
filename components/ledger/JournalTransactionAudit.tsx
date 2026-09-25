@@ -23,7 +23,7 @@ import {
   type LedgerFieldChange,
 } from "@/shared/utils/ledgerEventDiff";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useSurfaces } from "@/theme/surfaces";
 
 function eventTimestamp(createdAt: unknown): string {
   if (!createdAt) return "";
@@ -99,8 +99,8 @@ export function JournalTransactionAudit({
   kind: LedgerEventKind;
   docId?: string;
 }) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
   // Scoped to this row, and only while the sheet is open.
   const { events, loading, error } = useLedgerEvents({
     enabled: Boolean(docId),
@@ -164,9 +164,7 @@ export function JournalTransactionAudit({
               style={[
                 styles.event,
                 {
-                  backgroundColor: isDark
-                    ? "rgba(255,255,255,0.03)"
-                    : "rgba(0,0,0,0.02)",
+                  backgroundColor: surfaces.tile,
                   borderColor: theme.colors.border,
                 },
               ]}

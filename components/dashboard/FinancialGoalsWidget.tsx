@@ -45,14 +45,7 @@ export function FinancialGoalsWidget({
         iconTint={surfaces.wash(theme.colors.success)}
       >
         <Button variant="primary" size="sm" onPress={openGoals}>
-          <Text
-            style={[
-              styles.ctaText,
-              { color: "#FFFFFF", fontFamily: theme.fontFamily.semibold },
-            ]}
-          >
-            Create goal
-          </Text>
+          Create goal
         </Button>
 
         <View style={[styles.tip, { backgroundColor: surfaces.tile }]}>

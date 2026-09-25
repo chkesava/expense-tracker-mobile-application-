@@ -17,15 +17,15 @@ import { Amount } from "@/components/common/Amount";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import type { JournalRelatedRecord } from "@/shared/utils/journalRelatedRecords";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useSurfaces } from "@/theme/surfaces";
 
 export function JournalRelatedRecords({
   records,
 }: {
   records: JournalRelatedRecord[];
 }) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
   const currency = useDisplayCurrency();
 
   // The common case is a plain row with nothing attached — render nothing
@@ -44,9 +44,7 @@ export function JournalRelatedRecords({
           style={[
             styles.row,
             {
-              backgroundColor: isDark
-                ? "rgba(255,255,255,0.03)"
-                : "rgba(0,0,0,0.02)",
+              backgroundColor: surfaces.tile,
               borderColor: theme.colors.border,
             },
           ]}
