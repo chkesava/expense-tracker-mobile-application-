@@ -13,6 +13,7 @@ import { useAuth } from "@/providers/AuthProvider";
 import { useSetupProgress } from "@/providers/SetupProgressProvider";
 import { useUserDoc } from "@/providers/UserDocProvider";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useSurfaces } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
 
@@ -30,6 +31,7 @@ export function WelcomeScreen() {
   const { data } = useUserDoc();
   const { isFirstLaunch, completeWelcome, launchSetupWizard } = useSetupProgress();
   const { theme, themeName } = useTheme();
+  const surfaces = useSurfaces();
   const isDark = themeUsesDarkPalette(themeName);
 
   const [visible, setVisible] = useState(isFirstLaunch);
@@ -99,7 +101,7 @@ export function WelcomeScreen() {
             Let's set up your profile, primary currency, initial accounts, and spending goals in under 2 minutes.
           </Text>
 
-          <View style={[styles.pill, { backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)" }]}>
+          <View style={[styles.pill, { backgroundColor: surfaces.control }]}>
             <Text style={[styles.pillText, { color: theme.colors.mutedForeground }]}>
               ⏱ 5 quick steps • Fully customizable later
             </Text>

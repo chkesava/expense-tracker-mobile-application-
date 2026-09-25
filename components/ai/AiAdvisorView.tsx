@@ -33,6 +33,7 @@ import {
   type ChatMessage,
 } from "@/services/aiAdvisorService";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useSurfaces } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
@@ -48,6 +49,7 @@ const INITIAL_SUGGESTIONS = [
 
 export function AiAdvisorView() {
   const { theme, themeName } = useTheme();
+  const surfaces = useSurfaces();
   const isDark = themeUsesDarkPalette(themeName);
   const displayCurrency = useDisplayCurrency();
   const { settings } = useSettings();
@@ -237,9 +239,7 @@ export function AiAdvisorView() {
                     {
                       backgroundColor: isUser
                         ? theme.colors.primary
-                        : isDark
-                        ? "rgba(255,255,255,0.06)"
-                        : "rgba(0,0,0,0.04)",
+                        : surfaces.control,
                       borderColor: isUser ? theme.colors.primary : theme.colors.border,
                     },
                   ]}
@@ -310,9 +310,7 @@ export function AiAdvisorView() {
                         style={({ pressed }) => [
                           styles.actionPill,
                           {
-                            backgroundColor: isDark
-                              ? "rgba(255,255,255,0.06)"
-                              : "rgba(0,0,0,0.04)",
+                            backgroundColor: surfaces.control,
                             borderColor: theme.colors.border,
                             opacity: pressed ? 0.7 : 1,
                           },
@@ -360,9 +358,7 @@ export function AiAdvisorView() {
               style={({ pressed }) => [
                 styles.suggestionChip,
                 {
-                  backgroundColor: isDark
-                    ? "rgba(255,255,255,0.05)"
-                    : "rgba(0,0,0,0.03)",
+                  backgroundColor: surfaces.control,
                   borderColor: theme.colors.border,
                   opacity: pressed ? 0.7 : 1,
                 },
@@ -411,9 +407,7 @@ export function AiAdvisorView() {
             {
               backgroundColor: inputText.trim()
                 ? theme.colors.primary
-                : isDark
-                ? "rgba(255,255,255,0.1)"
-                : "rgba(0,0,0,0.08)",
+                : surfaces.track,
               opacity: pressed ? 0.7 : 1,
             },
           ]}

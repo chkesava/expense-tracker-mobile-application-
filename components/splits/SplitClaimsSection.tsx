@@ -19,7 +19,7 @@ import {
   describeClaimForOrganizer,
 } from "@/shared/utils/splitClaims";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useSurfaces } from "@/theme/surfaces";
 
 export type SplitClaimsSectionProps = {
   split: Split;
@@ -46,8 +46,8 @@ export function SplitClaimsSection({
   claimsEnabled,
   togglePending,
 }: SplitClaimsSectionProps) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
   const muted = theme.colors.mutedForeground;
 
   const hasClaims = claims.length > 0;
@@ -71,9 +71,7 @@ export function SplitClaimsSection({
                 style={[
                   styles.card,
                   {
-                    backgroundColor: isDark
-                      ? "rgba(255,255,255,0.05)"
-                      : "rgba(0,0,0,0.03)",
+                    backgroundColor: surfaces.control,
                     borderColor: theme.colors.border,
                   },
                 ]}

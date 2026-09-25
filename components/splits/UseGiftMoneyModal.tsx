@@ -5,12 +5,13 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import { X } from "lucide-react-native";
 
 import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Chip } from "@/components/ui/Chip";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
 import type { Split } from "@/shared/types/split";
@@ -20,7 +21,7 @@ import {
   uniqueCollectedAccountIds,
 } from "@/shared/utils/splitMath";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useSurfaces } from "@/theme/surfaces";
 import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
@@ -37,8 +38,8 @@ export function UseGiftMoneyModal({
   onClose,
   onConfirm,
 }: UseGiftMoneyModalProps) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
   const displayCurrency = useDisplayCurrency();
   const { accounts } = useAccounts();
   const { accountTypes } = useAccountTypes();
@@ -131,22 +132,11 @@ export function UseGiftMoneyModal({
           <Text style={[styles.label, { color: theme.colors.mutedForeground }]}>
             ACTUAL GIFT AMOUNT ({displayCurrency})
           </Text>
-          <TextInput
+          <Input
             value={amount}
             onChangeText={setAmount}
             keyboardType="decimal-pad"
             placeholder="0.00"
-            placeholderTextColor={theme.colors.mutedForeground}
-            style={[
-              styles.input,
-              {
-                backgroundColor: isDark
-                  ? "rgba(255,255,255,0.04)"
-                  : "rgba(0,0,0,0.02)",
-                borderColor: theme.colors.border,
-                color: theme.colors.foreground,
-              },
-            ]}
           />
 
           <Text style={[styles.label, { color: theme.colors.mutedForeground }]}>
@@ -161,36 +151,12 @@ export function UseGiftMoneyModal({
               const isSelected = accountId === acc.id;
               const kind = getAccountKind(typeMap.get(acc.typeId) || "");
               return (
-                <Pressable
+                <Chip
                   key={acc.id}
+                  label={`${acc.name} ${kind === "credit" ? " (card)" : ""}`}
+                  selected={isSelected}
                   onPress={() => setAccountId(acc.id)}
-                  style={[
-                    styles.chip,
-                    {
-                      backgroundColor: isSelected
-                        ? theme.colors.primary
-                        : isDark
-                          ? "rgba(255,255,255,0.06)"
-                          : "rgba(0,0,0,0.04)",
-                      borderColor: isSelected
-                        ? theme.colors.primary
-                        : theme.colors.border,
-                    },
-                  ]}
-                >
-                  <Text
-                    style={{
-                      fontSize: 12,
-                      fontWeight: isSelected ? "700" : "500",
-                      color: isSelected
-                        ? theme.colors.primaryForeground
-                        : theme.colors.foreground,
-                    }}
-                  >
-                    {acc.name}
-                    {kind === "credit" ? " (card)" : ""}
-                  </Text>
-                </Pressable>
+                />
               );
             })}
           </ScrollView>
@@ -207,9 +173,7 @@ export function UseGiftMoneyModal({
             style={[
               styles.breakdown,
               {
-                backgroundColor: isDark
-                  ? "rgba(255,255,255,0.03)"
-                  : "rgba(0,0,0,0.02)",
+                backgroundColor: surfaces.tile,
                 borderColor: theme.colors.border,
               },
             ]}

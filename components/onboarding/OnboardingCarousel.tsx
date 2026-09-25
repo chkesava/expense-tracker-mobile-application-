@@ -24,6 +24,7 @@ import {
 } from "lucide-react-native";
 
 import { useTheme } from "@/theme/ThemeProvider";
+import { useSurfaces, withAlpha } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
 
@@ -88,6 +89,7 @@ export function OnboardingCarousel() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { theme, themeName } = useTheme();
+  const surfaces = useSurfaces();
   const isDark = themeUsesDarkPalette(themeName);
   const [activeIndex, setActiveIndex] = useState(0);
   const flatListRef = useRef<FlatList>(null);
@@ -157,9 +159,7 @@ export function OnboardingCarousel() {
           style={({ pressed }) => [
             styles.skipButton,
             {
-              backgroundColor: isDark
-                ? "rgba(255,255,255,0.06)"
-                : "rgba(0,0,0,0.04)",
+              backgroundColor: surfaces.control,
             },
             pressed && { opacity: 0.7 },
           ]}
@@ -223,10 +223,8 @@ export function OnboardingCarousel() {
                   style={[
                     styles.badge,
                     {
-                      backgroundColor: isDark
-                        ? "rgba(255,255,255,0.06)"
-                        : "rgba(0,0,0,0.04)",
-                      borderColor: item.accentColor + "40",
+                      backgroundColor: surfaces.control,
+                      borderColor: withAlpha(item.accentColor, 0.25),
                     },
                   ]}
                 >

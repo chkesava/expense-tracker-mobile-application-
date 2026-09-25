@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, Text, Modal, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard } from 'react-native';
+import { View, StyleSheet, Text, Modal, ScrollView, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard } from 'react-native';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Amount } from '@/components/common/Amount';
@@ -10,6 +10,7 @@ import type { HoldingWithMetrics } from '@/shared/features/portfolio/types';
 import { canAfford } from '@/shared/features/portfolio/utils/investmentCash';
 import { logError } from '@/lib/errors';
 
+import { Chip } from '@/components/ui/Chip';
 interface MockTradeModalProps {
   visible: boolean;
   holding: HoldingWithMetrics | null;
@@ -103,7 +104,6 @@ export function MockTradeModal({ visible, holding, onClose, onBuy, onSell, cashB
   const textStyle = { color: theme.colors.foreground };
   const subTextStyle = { color: theme.colors.mutedForeground };
   const cardBg = { backgroundColor: theme.colors.card };
-  const unselectedBg = { backgroundColor: theme.colors.muted };
 
   const buyBg = { backgroundColor: isDark ? '#166534' : '#22c55e' }; // green
   const sellBg = { backgroundColor: isDark ? '#991b1b' : '#ef4444' }; // red
@@ -121,31 +121,36 @@ export function MockTradeModal({ visible, holding, onClose, onBuy, onSell, cashB
           <View style={[styles.modalContent, cardBg]}>
             <View style={styles.header}>
               <Text style={[styles.title, textStyle]}>Trade {holding.symbol}</Text>
-              <TouchableOpacity
+              <Button
+                variant="ghost"
+                size="icon"
                 onPress={handleClose}
                 hitSlop={12}
-                accessibilityRole="button"
                 accessibilityLabel="Close"
                 style={styles.closeBtn}
               >
                 <X size={24} color={theme.colors.foreground} />
-              </TouchableOpacity>
+              </Button>
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
               <View style={styles.toggleRow}>
-                <TouchableOpacity
-                  style={[styles.toggleBtn, tradeType === 'BUY' ? buyBg : unselectedBg]}
+                <Chip
+                  label="BUY"
+                  tone="success"
+                  selected={tradeType === 'BUY'}
                   onPress={() => setTradeType('BUY')}
-                >
-                  <Text style={[styles.toggleText, tradeType === 'BUY' ? { color: '#fff' } : textStyle]}>BUY</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.toggleBtn, tradeType === 'SELL' ? sellBg : unselectedBg]}
+                  accessibilityRole="radio"
+                  style={styles.toggleChip}
+                />
+                <Chip
+                  label="SELL"
+                  tone="destructive"
+                  selected={tradeType === 'SELL'}
                   onPress={() => setTradeType('SELL')}
-                >
-                  <Text style={[styles.toggleText, tradeType === 'SELL' ? { color: '#fff' } : textStyle]}>SELL</Text>
-                </TouchableOpacity>
+                  accessibilityRole="radio"
+                  style={styles.toggleChip}
+                />
               </View>
 
               <View style={styles.holdingInfo}>
@@ -226,6 +231,10 @@ export function MockTradeModal({ visible, holding, onClose, onBuy, onSell, cashB
 }
 
 const styles = StyleSheet.create({
+  toggleChip: {
+    flex: 1,
+    minHeight: 44,
+  },
   modalOverlay: {
     flex: 1,
     justifyContent: 'flex-end',

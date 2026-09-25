@@ -33,6 +33,7 @@ import {
 } from "@/services/ocrService";
 import { todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useSurfaces } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
@@ -49,6 +50,7 @@ export function ReceiptScannerModal({
   onApplyReceipt,
 }: ReceiptScannerModalProps) {
   const { theme, themeName } = useTheme();
+  const surfaces = useSurfaces();
   const isDark = themeUsesDarkPalette(themeName);
   const displayCurrency = useDisplayCurrency();
 
@@ -206,9 +208,7 @@ Thank you for visiting!`;
                   style={({ pressed }) => [
                     styles.actionCard,
                     {
-                      backgroundColor: isDark
-                        ? "rgba(255,255,255,0.06)"
-                        : "rgba(0,0,0,0.04)",
+                      backgroundColor: surfaces.control,
                       borderColor: theme.colors.border,
                       opacity: pressed ? 0.7 : 1,
                     },
@@ -235,9 +235,7 @@ Thank you for visiting!`;
                   style={({ pressed }) => [
                     styles.actionCard,
                     {
-                      backgroundColor: isDark
-                        ? "rgba(255,255,255,0.06)"
-                        : "rgba(0,0,0,0.04)",
+                      backgroundColor: surfaces.control,
                       borderColor: theme.colors.border,
                       opacity: pressed ? 0.7 : 1,
                     },

@@ -32,7 +32,7 @@ import {
   isTripOverBudget,
 } from "@/shared/utils/tripCalculations";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useSurfaces } from "@/theme/surfaces";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
 export interface TripDetailModalProps {
@@ -42,8 +42,8 @@ export interface TripDetailModalProps {
 }
 
 export function TripDetailModal({ visible, trip, onClose }: TripDetailModalProps) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
   const displayCurrency = useDisplayCurrency();
   const { expenses } = useExpenses();
   const { deleteTrip, completeTrip, unlinkExpense } = useTrips({ enabled: false });
@@ -217,9 +217,7 @@ export function TripDetailModal({ visible, trip, onClose }: TripDetailModalProps
               style={[
                 styles.budgetCard,
                 {
-                  backgroundColor: isDark
-                    ? "rgba(255,255,255,0.03)"
-                    : "rgba(0,0,0,0.02)",
+                  backgroundColor: surfaces.tile,
                   borderColor: theme.colors.border,
                 },
               ]}
@@ -386,9 +384,7 @@ export function TripDetailModal({ visible, trip, onClose }: TripDetailModalProps
                     style={[
                       styles.expenseRow,
                       {
-                        backgroundColor: isDark
-                          ? "rgba(255,255,255,0.03)"
-                          : "rgba(0,0,0,0.02)",
+                        backgroundColor: surfaces.tile,
                         borderColor: theme.colors.border,
                       },
                     ]}

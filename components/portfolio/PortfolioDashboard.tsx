@@ -29,6 +29,7 @@ import type {
   PortfolioSummary,
 } from "@/shared/features/portfolio/types";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useSurfaces, withAlpha } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
@@ -87,6 +88,7 @@ export function PortfolioDashboard({ listHeader }: { listHeader?: ReactNode }) {
 
 function PortfolioDashboardInner({ listHeader }: { listHeader?: ReactNode }) {
   const { theme, themeName } = useTheme();
+  const surfaces = useSurfaces();
   const listBottomPadding = usePageListBottomPadding();
   const isDark = themeUsesDarkPalette(themeName);
   const displayCurrency = useDisplayCurrency();
@@ -319,8 +321,8 @@ function PortfolioDashboardInner({ listHeader }: { listHeader?: ReactNode }) {
           style={[
             styles.quoteWarning,
             {
-              backgroundColor: theme.colors.warning + "1A",
-              borderColor: theme.colors.warning + "55",
+              backgroundColor: withAlpha(theme.colors.warning, 0.1),
+              borderColor: withAlpha(theme.colors.warning, 0.33),
             },
           ]}
         >
@@ -364,9 +366,7 @@ function PortfolioDashboardInner({ listHeader }: { listHeader?: ReactNode }) {
                   {
                     backgroundColor: active
                       ? CARD_ORANGE
-                      : isDark
-                        ? "rgba(255,255,255,0.05)"
-                        : "rgba(0,0,0,0.04)",
+                      : surfaces.control,
                     borderColor: active
                       ? CARD_ORANGE
                       : isDark

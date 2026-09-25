@@ -1,7 +1,8 @@
-import { View, Text, StyleSheet, Modal, TouchableOpacity, FlatList } from "react-native";
+import { View, Text, StyleSheet, Modal, Pressable, FlatList } from "react-native";
 import { AppNotification } from "@/shared/features/sip/types";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Button } from "@/components/ui/Button";
+import { withAlpha } from "@/theme/surfaces";
 import { X, CheckCircle, AlertCircle, Info } from "lucide-react-native";
 
 export type SipNotificationsModalProps = {
@@ -34,14 +35,17 @@ export function SipNotificationsModal({
   };
 
   const renderItem = ({ item }: { item: AppNotification }) => (
-    <TouchableOpacity
-      style={[
+    <Pressable
+      style={({ pressed }) => [
         styles.notificationItem,
         {
-          backgroundColor: item.read ? theme.colors.card : theme.colors.primary + "10",
+          backgroundColor: item.read ? theme.colors.card : withAlpha(theme.colors.primary, 0.06),
           borderColor: theme.colors.border,
         },
+        pressed && !item.read && { opacity: 0.8 },
       ]}
+      accessibilityRole="button"
+      accessibilityState={{ disabled: item.read }}
       onPress={() => {
         if (!item.read) onMarkAsRead(item.id);
       }}
@@ -60,7 +64,7 @@ export function SipNotificationsModal({
         <Text style={[styles.body, { color: theme.colors.mutedForeground }]}>{item.body}</Text>
       </View>
       {!item.read && <View style={[styles.unreadDot, { backgroundColor: theme.colors.primary }]} />}
-    </TouchableOpacity>
+    </Pressable>
   );
 
   return (
@@ -69,15 +73,16 @@ export function SipNotificationsModal({
         <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
           <View style={[styles.header, { borderBottomColor: theme.colors.border }]}>
             <Text style={[styles.headerTitle, { color: theme.colors.foreground }]}>Notifications</Text>
-            <TouchableOpacity
+            <Button
+              variant="ghost"
+              size="icon"
               onPress={onClose}
               hitSlop={12}
-              accessibilityRole="button"
               accessibilityLabel="Close"
               style={styles.closeButton}
             >
               <X size={24} color={theme.colors.foreground} />
-            </TouchableOpacity>
+            </Button>
           </View>
 
           <FlatList

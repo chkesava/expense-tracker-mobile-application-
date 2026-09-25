@@ -13,7 +13,7 @@ import Animated, {
 import { Card } from "@/components/ui/Card";
 import type { AllocationSlice } from "@/shared/features/portfolio/types";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useSurfaces } from "@/theme/surfaces";
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
@@ -226,8 +226,8 @@ export function PortfolioCharts({
   sparklineData,
   currency,
 }: PortfolioChartsProps) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
 
   return (
     <Card title="Portfolio Analytics" subtitle="Allocation & Performance">
@@ -281,9 +281,7 @@ export function PortfolioCharts({
             style={[
               styles.sparklineBg,
               {
-                backgroundColor: isDark
-                  ? "rgba(255,255,255,0.04)"
-                  : "rgba(0,0,0,0.02)",
+                backgroundColor: surfaces.tile,
               },
             ]}
           >

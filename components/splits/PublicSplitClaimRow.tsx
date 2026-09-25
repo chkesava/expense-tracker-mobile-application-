@@ -28,7 +28,7 @@ import {
   type PendingClaimRow,
 } from "@/shared/utils/splitClaims";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useSurfaces } from "@/theme/surfaces";
 
 export type PublicSplitClaimRowProps = {
   row: PendingClaimRow;
@@ -50,8 +50,8 @@ export function PublicSplitClaimRow({
   submitting,
   onSubmit,
 }: PublicSplitClaimRowProps) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
   const [open, setOpen] = useState(false);
   const [amountText, setAmountText] = useState(String(row.remainingDue || row.amount));
   const [confirming, setConfirming] = useState<SplitClaimType | null>(null);
@@ -72,7 +72,7 @@ export function PublicSplitClaimRow({
         style={[
           styles.chip,
           {
-            backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
+            backgroundColor: surfaces.control,
             borderColor: theme.colors.border,
           },
         ]}
@@ -178,9 +178,7 @@ export function PublicSplitClaimRow({
                   {
                     color: theme.colors.foreground,
                     borderColor: theme.colors.border,
-                    backgroundColor: isDark
-                      ? "rgba(255,255,255,0.06)"
-                      : "rgba(0,0,0,0.03)",
+                    backgroundColor: surfaces.control,
                   },
                 ]}
               />

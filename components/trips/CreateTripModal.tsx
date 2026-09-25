@@ -18,11 +18,12 @@ import {
 } from "lucide-react-native";
 
 import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 import { useTrips } from "@/hooks/useTrips";
 import type { TripCategoryBudget } from "@/shared/types/trip";
 import { TRIP_BUDGET_CATEGORIES } from "@/shared/utils/tripCalculations";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useSurfaces } from "@/theme/surfaces";
 import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
@@ -34,8 +35,8 @@ export interface CreateTripModalProps {
 type WizardStep = 1 | 2 | 3;
 
 export function CreateTripModal({ visible, onClose }: CreateTripModalProps) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
   const displayCurrency = useDisplayCurrency();
   const { createTrip } = useTrips({ enabled: false });
 
@@ -218,21 +219,10 @@ export function CreateTripModal({ visible, onClose }: CreateTripModalProps) {
                   >
                     DESTINATION *
                   </Text>
-                  <TextInput
+                  <Input
                     value={destination}
                     onChangeText={setDestination}
                     placeholder="e.g. Goa, Manali, Bangkok"
-                    placeholderTextColor={theme.colors.mutedForeground}
-                    style={[
-                      styles.input,
-                      {
-                        backgroundColor: isDark
-                          ? "rgba(255,255,255,0.04)"
-                          : "rgba(0,0,0,0.02)",
-                        borderColor: theme.colors.border,
-                        color: theme.colors.foreground,
-                      },
-                    ]}
                   />
                 </View>
 
@@ -245,21 +235,10 @@ export function CreateTripModal({ visible, onClose }: CreateTripModalProps) {
                   >
                     TRIP NAME (optional)
                   </Text>
-                  <TextInput
+                  <Input
                     value={tripName}
                     onChangeText={setTripName}
                     placeholder="e.g. Summer Goa Trip 2026"
-                    placeholderTextColor={theme.colors.mutedForeground}
-                    style={[
-                      styles.input,
-                      {
-                        backgroundColor: isDark
-                          ? "rgba(255,255,255,0.04)"
-                          : "rgba(0,0,0,0.02)",
-                        borderColor: theme.colors.border,
-                        color: theme.colors.foreground,
-                      },
-                    ]}
                   />
                 </View>
 
@@ -273,21 +252,10 @@ export function CreateTripModal({ visible, onClose }: CreateTripModalProps) {
                     >
                       START DATE *
                     </Text>
-                    <TextInput
+                    <Input
                       value={startDate}
                       onChangeText={setStartDate}
                       placeholder="YYYY-MM-DD"
-                      placeholderTextColor={theme.colors.mutedForeground}
-                      style={[
-                        styles.input,
-                        {
-                          backgroundColor: isDark
-                            ? "rgba(255,255,255,0.04)"
-                            : "rgba(0,0,0,0.02)",
-                          borderColor: theme.colors.border,
-                          color: theme.colors.foreground,
-                        },
-                      ]}
                     />
                   </View>
                   <View style={{ flex: 1, gap: 6 }}>
@@ -299,21 +267,10 @@ export function CreateTripModal({ visible, onClose }: CreateTripModalProps) {
                     >
                       END DATE *
                     </Text>
-                    <TextInput
+                    <Input
                       value={endDate}
                       onChangeText={setEndDate}
                       placeholder="YYYY-MM-DD"
-                      placeholderTextColor={theme.colors.mutedForeground}
-                      style={[
-                        styles.input,
-                        {
-                          backgroundColor: isDark
-                            ? "rgba(255,255,255,0.04)"
-                            : "rgba(0,0,0,0.02)",
-                          borderColor: theme.colors.border,
-                          color: theme.colors.foreground,
-                        },
-                      ]}
                     />
                   </View>
                 </View>
@@ -332,24 +289,11 @@ export function CreateTripModal({ visible, onClose }: CreateTripModalProps) {
                   >
                     TOTAL TRIP BUDGET ({displayCurrency}) *
                   </Text>
-                  <TextInput
+                  <Input
                     value={totalBudget}
                     onChangeText={setTotalBudget}
                     placeholder="0.00"
                     keyboardType="decimal-pad"
-                    placeholderTextColor={theme.colors.mutedForeground}
-                    style={[
-                      styles.input,
-                      {
-                        backgroundColor: isDark
-                          ? "rgba(255,255,255,0.04)"
-                          : "rgba(0,0,0,0.02)",
-                        borderColor: theme.colors.border,
-                        color: theme.colors.foreground,
-                        fontSize: theme.typography.lg,
-                        fontWeight: "700",
-                      },
-                    ]}
                   />
                 </View>
 
@@ -383,9 +327,7 @@ export function CreateTripModal({ visible, onClose }: CreateTripModalProps) {
                       style={[
                         styles.categoryBudgetInput,
                         {
-                          backgroundColor: isDark
-                            ? "rgba(255,255,255,0.04)"
-                            : "rgba(0,0,0,0.02)",
+                          backgroundColor: surfaces.tile,
                           borderColor: theme.colors.border,
                           color: theme.colors.foreground,
                         },
@@ -403,9 +345,7 @@ export function CreateTripModal({ visible, onClose }: CreateTripModalProps) {
                   style={[
                     styles.reviewCard,
                     {
-                      backgroundColor: isDark
-                        ? "rgba(255,255,255,0.03)"
-                        : "rgba(0,0,0,0.02)",
+                      backgroundColor: surfaces.tile,
                       borderColor: theme.colors.border,
                     },
                   ]}

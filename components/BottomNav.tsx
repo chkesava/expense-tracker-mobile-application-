@@ -50,7 +50,6 @@ import {
   type NavSectionId,
 } from "@/shared/config/navigation";
 import { durations, easing } from "@/theme/motion";
-import { useTheme } from "@/theme/ThemeProvider";
 
 const ICON_MAP: Record<
   string,
@@ -130,7 +129,6 @@ export function BottomNav() {
   const insets = useSafeAreaInsets();
   const { setIsAddSheetOpen } = useModals();
   const investmentsEnabled = useInvestmentsEnabled();
-  const { theme } = useTheme();
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const keyboardProgress = useSharedValue(0);
 
