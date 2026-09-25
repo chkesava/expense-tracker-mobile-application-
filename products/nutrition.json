@@ -9,6 +9,8 @@
   "icon": "./assets/branding/nutrition-adaptive-icon.png",
   "adaptiveIconForeground": "./assets/branding/nutrition-adaptive-icon.png",
   "splashImage": "./assets/branding/nutrition-splash-logo.png",
+  "adaptiveIconBackgroundColor": "#071A2B",
+  "splashBackgroundColor": "#071A2B",
   "permissions": [
     "android.permission.USE_BIOMETRIC",
     "android.permission.USE_FINGERPRINT",
@@ -30,6 +32,7 @@
     "themeColor": "#166534",
     "backgroundColor": "#071A2B",
     "description": "Meal logging, food photo analysis and nutrition insights.",
-    "manifestIcon": "./assets/branding/nutrition-adaptive-icon.png"
+    "manifestIcon": "./assets/branding/nutrition-adaptive-icon.png",
+    "favicon": "./assets/branding/logo.png"
   }
 }
