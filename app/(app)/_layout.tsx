@@ -12,6 +12,8 @@ import { PrivacyLock } from "@/components/PrivacyLock";
 import { TabSwipeArea } from "@/components/navigation/TabSwipeArea";
 import { GlassBlurTarget } from "@/components/ui/GlassSurface";
 import { OverlayProvider } from "@gluestack-ui/core/overlay/creator";
+import { NavigationBar } from "expo-navigation-bar";
+import { themeUsesDarkPalette } from "@/theme/tokens";
 import { SetupWizardModal } from "@/components/onboarding/SetupWizardModal";
 import { useAndroidBackHandler } from "@/hooks/useAndroidBackHandler";
 import { useAppShortcutHandler } from "@/hooks/useAppShortcutHandler";
@@ -34,7 +36,7 @@ import { useTheme } from "@/theme/ThemeProvider";
 
 function AppShellInner() {
   const { settings } = useSettings();
-  const { theme } = useTheme();
+  const { theme, themeName } = useTheme();
   const { user } = useAuth();
 
   // Android hardware / gesture Back button behavior
@@ -56,6 +58,11 @@ function AppShellInner() {
         {/* Gluestack dialogs/sheets portal here: inside every app provider,
             so their content can use them (SPENDLY-154). */}
         <OverlayProvider>
+        {/* SPENDLY-154: Android 15 draws a contrast scrim behind the 3-button
+            nav bar and picks its tone from the bar style. Follow the Spendly
+            theme so dark themes get a dark scrim with light buttons instead
+            of a light band under the capsule. Android-only; no-op elsewhere. */}
+        <NavigationBar style={themeUsesDarkPalette(themeName) ? "dark" : "light"} />
         <Header />
         {/* SPENDLY-161: the glass nav/dock blur whatever scrolls in here. */}
         <GlassBlurTarget>
