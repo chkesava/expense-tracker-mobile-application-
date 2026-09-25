@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version name (e.g. 1.0.1). Defaults to auto-bumped patch from products/nutrition.json.'
+        description: 'Version name, e.g. 1.0.1 (a leading v is dropped). Empty = auto-bump the patch from products/nutrition.json. Must not be lower than the current version.'
         required: false
         type: string
       mandatory:
