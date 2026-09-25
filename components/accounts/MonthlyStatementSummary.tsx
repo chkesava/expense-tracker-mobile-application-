@@ -9,6 +9,7 @@ import {
 } from "@/components/accounts/accountScreenTheme";
 import { haptic } from "@/lib/haptics";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useSurfaces } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import type { AccountMonthSummary } from "@/shared/utils/accountMonthSummary";
 
@@ -48,6 +49,7 @@ export function MonthlyStatementSummary({
   isDrilledDown: boolean;
 }) {
   const { theme, themeName } = useTheme();
+  const surfaces = useSurfaces();
   const isDark = themeUsesDarkPalette(themeName);
   const accent = accountAccent(isDark);
 
@@ -71,9 +73,7 @@ export function MonthlyStatementSummary({
       style={[
         styles.step,
         {
-          backgroundColor: isDark
-            ? "rgba(255,255,255,0.04)"
-            : "rgba(15,23,42,0.04)",
+          backgroundColor: surfaces.tile,
           borderColor: isDark
             ? "rgba(148,163,184,0.16)"
             : "rgba(15,23,42,0.08)",

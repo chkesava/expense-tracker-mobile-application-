@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
-import { Pressable, StyleSheet, TextInput, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
-import { Search, Settings as SettingsIcon, X } from "lucide-react-native";
+import { Settings as SettingsIcon } from "lucide-react-native";
 
 import { CARD_ORANGE } from "@/components/accounts/accountScreenTheme";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -12,6 +12,7 @@ import {
   SettingsHubRow,
 } from "@/components/settings/SettingsHubRow";
 import { SETTINGS_SECTION_ICONS } from "@/components/settings/settingsIcons";
+import { SearchBar } from "@/components/common/SearchBar";
 import {
   SETTINGS_GROUPS,
   SETTINGS_SECTIONS,
@@ -26,7 +27,6 @@ export default function SettingsHubScreen() {
   const isDark = themeUsesDarkPalette(themeName);
   const { push } = useRouter();
   const [query, setQuery] = useState("");
-  const [searchFocused, setSearchFocused] = useState(false);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -56,46 +56,18 @@ export default function SettingsHubScreen() {
         icon={
           <SettingsIcon
             size={22}
-            color={isDark ? "#FFFFFF" : theme.colors.success}
+            color={isDark ? theme.colors.foreground : theme.colors.success}
           />
         }
       />
 
-      <View
-        style={[
-          styles.searchField,
-          {
-            backgroundColor: isDark ? "#10141C" : theme.colors.card,
-            borderColor: searchFocused
-              ? CARD_ORANGE
-              : isDark
-                ? "rgba(148,163,184,0.14)"
-                : theme.colors.border,
-          },
-        ]}
-      >
-        <Search size={18} color={theme.colors.mutedForeground} />
-        <TextInput
-          value={query}
-          onChangeText={setQuery}
-          placeholder="Search settings..."
-          placeholderTextColor={theme.colors.mutedForeground}
-          accessibilityLabel="Search settings"
-          onFocus={() => setSearchFocused(true)}
-          onBlur={() => setSearchFocused(false)}
-          style={[styles.searchInput, { color: theme.colors.foreground }]}
-        />
-        {query.length > 0 ? (
-          <Pressable
-            onPress={() => setQuery("")}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="Clear search"
-          >
-            <X size={16} color={theme.colors.mutedForeground} />
-          </Pressable>
-        ) : null}
-      </View>
+      <SearchBar
+        value={query}
+        onChangeText={setQuery}
+        placeholder="Search settings..."
+        accessibilityLabel="Search settings"
+        accentColor={CARD_ORANGE}
+      />
 
       {grouped.length === 0 ? (
         <EmptyState
@@ -131,21 +103,6 @@ export default function SettingsHubScreen() {
 }
 
 const styles = StyleSheet.create({
-  searchField: {
-    minHeight: 48,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 14,
-    borderRadius: 16,
-    borderCurve: "continuous",
-    borderWidth: 1,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 15,
-    paddingVertical: 0,
-  },
   group: {
     gap: 8,
   },

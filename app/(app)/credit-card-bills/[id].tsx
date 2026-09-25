@@ -25,7 +25,7 @@ import { formatCardLabel } from "@/services/creditCardBills/billNotificationCopy
 import { isCashbackPayment } from "@/shared/types/expense";
 import { roundMoney } from "@/shared/utils/money";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useSurfaces } from "@/theme/surfaces";
 import { haptic } from "@/lib/haptics";
 
 export default function CreditCardBillDetailScreen() {
@@ -33,8 +33,8 @@ export default function CreditCardBillDetailScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const listPaddingBottom = usePageListBottomPadding();
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
   const {
     bills,
     loading: billsLoading,
@@ -180,9 +180,7 @@ export default function CreditCardBillDetailScreen() {
             borderRadius: 20,
             alignItems: "center",
             justifyContent: "center",
-            backgroundColor: isDark
-              ? "rgba(255,255,255,0.06)"
-              : "rgba(0,0,0,0.04)",
+            backgroundColor: surfaces.control,
           }}
         >
           <ArrowLeft size={20} color={theme.colors.foreground} />

@@ -1,9 +1,11 @@
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { MoreHorizontal } from "lucide-react-native";
 
 import { accountAccent } from "@/components/accounts/accountScreenTheme";
+import { Chip } from "@/components/ui/Chip";
 import { haptic } from "@/lib/haptics";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useSurfaces } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import {
   ACCOUNT_SECTIONS,
@@ -37,10 +39,10 @@ export function AccountSectionTabs({
   attentionCount?: number;
 }) {
   const { theme, themeName } = useTheme();
+  const surfaces = useSurfaces();
   const isDark = themeUsesDarkPalette(themeName);
   const accent = accountAccent(isDark);
 
-  const neutralBg = isDark ? "rgba(255,255,255,0.04)" : "rgba(15,23,42,0.04)";
 
   return (
     <View style={styles.wrap}>
@@ -54,33 +56,20 @@ export function AccountSectionTabs({
         {ACCOUNT_SECTIONS.map((entry) => {
           const selected = entry.id === section;
           return (
-            <Pressable
+            <Chip
               key={entry.id}
+              label={entry.label}
+              selected={selected}
+              appearance="outline"
+              accentColor={accent}
+              haptic={!selected}
+              accessibilityRole="tab"
               onPress={() => {
                 if (selected) return;
-                void haptic.selection();
                 onSelect(entry.id);
               }}
-              style={[
-                styles.tab,
-                {
-                  backgroundColor: neutralBg,
-                  borderColor: selected ? accent : "transparent",
-                },
-              ]}
-              accessibilityRole="tab"
-              accessibilityState={{ selected }}
-              accessibilityLabel={entry.label}
-            >
-              <Text
-                style={[
-                  styles.tabLabel,
-                  { color: selected ? accent : theme.colors.foreground },
-                ]}
-              >
-                {entry.label}
-              </Text>
-            </Pressable>
+              style={styles.tab}
+            />
           );
         })}
       </ScrollView>
@@ -93,8 +82,8 @@ export function AccountSectionTabs({
         style={({ pressed }) => [
           styles.more,
           {
-            backgroundColor: neutralBg,
-            borderColor: isDark ? "rgba(148,163,184,0.16)" : "rgba(15,23,42,0.08)",
+            backgroundColor: surfaces.control,
+            borderColor: theme.colors.border,
             opacity: pressed ? 0.6 : 1,
           },
         ]}
@@ -127,15 +116,6 @@ const styles = StyleSheet.create({
   tab: {
     height: 36,
     paddingHorizontal: 16,
-    borderRadius: 18,
-    borderCurve: "continuous",
-    borderWidth: 1.5,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  tabLabel: {
-    fontSize: 13,
-    fontWeight: "700",
   },
   more: {
     width: 36,

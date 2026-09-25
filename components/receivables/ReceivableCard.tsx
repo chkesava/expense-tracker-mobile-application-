@@ -16,6 +16,7 @@ import {
   type ReceivableSummary,
 } from "@/shared/utils/receivableMath";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useSurfaces, withAlpha } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
 const STATUS_COLORS: Record<ReceivableStatus, string> = {
@@ -42,6 +43,7 @@ export function ReceivableCard({
   onRecordRepayment,
 }: ReceivableCardProps) {
   const { theme, themeName } = useTheme();
+  const surfaces = useSurfaces();
   const { settings } = useSettings();
   const isDark = themeUsesDarkPalette(themeName);
 
@@ -85,7 +87,7 @@ export function ReceivableCard({
         </View>
 
         <View
-          style={[styles.statusPill, { backgroundColor: statusColor + "22" }]}
+          style={[styles.statusPill, { backgroundColor: withAlpha(statusColor, 0.13) }]}
         >
           <Text style={[styles.statusText, { color: statusColor }]}>
             {RECEIVABLE_STATUS_LABELS[summary.status]}
@@ -97,9 +99,7 @@ export function ReceivableCard({
         style={[
           styles.track,
           {
-            backgroundColor: isDark
-              ? "rgba(255,255,255,0.08)"
-              : "rgba(0,0,0,0.06)",
+            backgroundColor: surfaces.track,
           },
         ]}
       >

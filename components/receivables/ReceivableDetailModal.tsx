@@ -13,6 +13,7 @@ import { Amount } from "@/components/common/Amount";
 import { Modal } from "@/components/common/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { Chip } from "@/components/ui/Chip";
 import { useAccounts } from "@/hooks/useAccounts";
 import type { AddReceivableRepaymentInput } from "@/hooks/useReceivables";
 import { useSpaces } from "@/hooks/useSpaces";
@@ -31,8 +32,6 @@ import {
 } from "@/shared/utils/receivableMath";
 import { isValidDateKey, todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
-import { haptic } from "@/lib/haptics";
 
 export interface ReceivableDetailModalProps {
   visible: boolean;
@@ -75,8 +74,7 @@ export function ReceivableDetailModal({
   onCancelReceivable,
   onDeleteReceivable,
 }: ReceivableDetailModalProps) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
   const { accounts } = useAccounts();
   const { spaces } = useSpaces();
 
@@ -318,20 +316,6 @@ export function ReceivableDetailModal({
     ]);
   };
 
-  const pillStyle = (isActive: boolean) => ({
-    backgroundColor: isActive
-      ? theme.colors.primary
-      : isDark
-        ? "rgba(255,255,255,0.06)"
-        : "rgba(0,0,0,0.04)",
-    borderColor: isActive ? theme.colors.primary : theme.colors.border,
-  });
-
-  const pillTextStyle = (isActive: boolean) => ({
-    color: isActive ? theme.colors.primaryForeground : theme.colors.foreground,
-    fontWeight: isActive ? ("700" as const) : ("500" as const),
-  });
-
   const rows: { label: string; value: number }[] = [
     { label: "Original amount", value: summary.originalAmount },
   ];
@@ -542,31 +526,20 @@ export function ReceivableDetailModal({
                   showsHorizontalScrollIndicator={false}
                   contentContainerStyle={styles.pillRow}
                 >
-                  <Pressable
+                  <Chip
+                    label="None"
+                    selected={editSpaceId === ""}
                     onPress={() => setEditSpaceId("")}
-                    style={[styles.pill, pillStyle(editSpaceId === "")]}
-                  >
-                    <Text
-                      style={[styles.pillText, pillTextStyle(editSpaceId === "")]}
-                    >
-                      None
-                    </Text>
-                  </Pressable>
+                  />
                   {activeSpaces.map((space) => {
                     const isActive = editSpaceId === space.id;
                     return (
-                      <Pressable
+                      <Chip
                         key={space.id}
-                        onPress={() => {
-                          haptic.selection().catch(() => undefined);
-                          setEditSpaceId(space.id ?? "");
-                        }}
-                        style={[styles.pill, pillStyle(isActive)]}
-                      >
-                        <Text style={[styles.pillText, pillTextStyle(isActive)]}>
-                          {space.name}
-                        </Text>
-                      </Pressable>
+                        label={space.name}
+                        selected={isActive}
+                        onPress={() => setEditSpaceId(space.id ?? "")}
+                      />
                     );
                   })}
                 </ScrollView>
@@ -635,34 +608,20 @@ export function ReceivableDetailModal({
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.pillRow}
               >
-                <Pressable
+                <Chip
+                  label="None"
+                  selected={receivedAccountId === ""}
                   onPress={() => setReceivedAccountId("")}
-                  style={[styles.pill, pillStyle(receivedAccountId === "")]}
-                >
-                  <Text
-                    style={[
-                      styles.pillText,
-                      pillTextStyle(receivedAccountId === ""),
-                    ]}
-                  >
-                    None
-                  </Text>
-                </Pressable>
+                />
                 {accounts.map((account) => {
                   const isActive = receivedAccountId === account.id;
                   return (
-                    <Pressable
+                    <Chip
                       key={account.id}
-                      onPress={() => {
-                        haptic.selection().catch(() => undefined);
-                        setReceivedAccountId(account.id);
-                      }}
-                      style={[styles.pill, pillStyle(isActive)]}
-                    >
-                      <Text style={[styles.pillText, pillTextStyle(isActive)]}>
-                        {account.name}
-                      </Text>
-                    </Pressable>
+                      label={account.name}
+                      selected={isActive}
+                      onPress={() => setReceivedAccountId(account.id)}
+                    />
                   );
                 })}
               </ScrollView>

@@ -36,6 +36,16 @@ module.exports = {
         },
         destructive: {
           DEFAULT: 'rgb(var(--destructive) / <alpha-value>)',
+          foreground: 'rgb(var(--destructive-foreground) / <alpha-value>)',
+        },
+        // Spendly semantic roles, fed by SpendlyUIScope (theme/gluestackVars.ts).
+        success: {
+          DEFAULT: 'rgb(var(--success) / <alpha-value>)',
+          foreground: 'rgb(var(--success-foreground) / <alpha-value>)',
+        },
+        warning: {
+          DEFAULT: 'rgb(var(--warning) / <alpha-value>)',
+          foreground: 'rgb(var(--warning-foreground) / <alpha-value>)',
         },
         border: 'rgb(var(--border)/<alpha-value>)',
         input: 'rgb(var(--input)/<alpha-value>)',

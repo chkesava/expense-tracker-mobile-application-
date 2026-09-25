@@ -46,6 +46,7 @@ import {
 } from "@/shared/utils/ledgerAudit";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useSurfaces, withAlpha } from "@/theme/surfaces";
 
 /** Rows past this are summarised rather than listed. */
 const MAX_SUBJECTS = 6;
@@ -247,13 +248,7 @@ function Verdict({
       style={[
         styles.panel,
         {
-          backgroundColor: healthy
-            ? isDark
-              ? "rgba(74,222,128,0.12)"
-              : "rgba(22,163,74,0.08)"
-            : isDark
-              ? "rgba(248,113,113,0.12)"
-              : "rgba(239,68,68,0.08)",
+          backgroundColor: withAlpha(accent, isDark ? 0.12 : 0.08),
           borderColor: healthy ? accountAccentBorder(isDark) : ACCOUNT_RED,
         },
       ]}
@@ -342,8 +337,8 @@ function FindingCard({
   currency: string;
   onShowInJournal: (subject: LedgerAuditSubject) => void;
 }) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
   const chipColor =
     finding.severity === "error" ? ACCOUNT_RED : theme.colors.warning;
   const visible = finding.subjects.slice(0, MAX_SUBJECTS);
@@ -382,9 +377,7 @@ function FindingCard({
           style={[
             styles.subject,
             {
-              backgroundColor: isDark
-                ? "rgba(255,255,255,0.03)"
-                : "rgba(0,0,0,0.02)",
+              backgroundColor: surfaces.tile,
               borderColor: theme.colors.border,
             },
           ]}

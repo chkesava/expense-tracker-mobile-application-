@@ -21,6 +21,7 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { SkeletonHero, SkeletonList } from "@/components/common/Skeleton";
 import { EditSubscriptionModal } from "@/components/subscriptions/EditSubscriptionModal";
 import { RecurringReviewItem } from "@/components/subscriptions/RecurringReviewItem";
+import { Button } from "@/components/ui/Button";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useRecurringSuggestions } from "@/hooks/useRecurringSuggestions";
 import { useSubscriptions } from "@/hooks/useSubscriptions";
@@ -43,6 +44,7 @@ import {
   duesWithinDays,
 } from "@/shared/utils/spendlyBudget";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useSurfaces } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
@@ -56,6 +58,7 @@ const RECURRING_TABS: { id: RecurringTabId; label: string }[] = [
 
 export function SubscriptionsList() {
   const { theme, themeName } = useTheme();
+  const surfaces = useSurfaces();
   const isDark = themeUsesDarkPalette(themeName);
   const { user } = useAuth();
   const displayCurrency = useDisplayCurrency();
@@ -166,13 +169,11 @@ export function SubscriptionsList() {
           >
             MONTHLY RECURRING OUTFLOW
           </Text>
-          <Pressable
+          <Button
+            variant="primary"
+            size="sm"
             onPress={handleOpenAdd}
-            style={({ pressed }) => [
-              styles.addBtn,
-              { backgroundColor: theme.colors.primary },
-              pressed && { opacity: 0.8 },
-            ]}
+            style={styles.addBtn}
           >
             <Plus size={14} color={theme.colors.primaryForeground} strokeWidth={2.5} />
             <Text
@@ -183,7 +184,7 @@ export function SubscriptionsList() {
             >
               Add New
             </Text>
-          </Pressable>
+          </Button>
         </View>
 
         <Amount
@@ -341,9 +342,7 @@ export function SubscriptionsList() {
                 selected
                   ? { backgroundColor: theme.colors.primary }
                   : {
-                      backgroundColor: isDark
-                        ? "rgba(255,255,255,0.06)"
-                        : "rgba(0,0,0,0.04)",
+                      backgroundColor: surfaces.control,
                     },
               ]}
               accessibilityRole="tab"
@@ -552,22 +551,16 @@ export function SubscriptionsList() {
                     />
 
                     {sub.id && !sub.isCompleted ? (
-                      <Pressable
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        haptic={false}
                         onPress={(e) => {
                           e.stopPropagation();
                           haptic.selection().catch(() => undefined);
                           toggleActive(sub.id!, sub.isActive);
                         }}
-                        style={({ pressed }) => [
-                          styles.pauseBtn,
-                          {
-                            backgroundColor: isDark
-                              ? "rgba(255,255,255,0.06)"
-                              : "rgba(0,0,0,0.04)",
-                            borderColor: theme.colors.border,
-                          },
-                          pressed && { opacity: 0.7 },
-                        ]}
+                        style={styles.pauseBtn}
                       >
                         {sub.isActive ? (
                           <Pause
@@ -589,7 +582,7 @@ export function SubscriptionsList() {
                         >
                           {sub.isActive ? "Pause" : "Resume"}
                         </Text>
-                      </Pressable>
+                      </Button>
                     ) : null}
                   </View>
                 </View>

@@ -53,6 +53,7 @@ import { ErrorState } from "@/components/common/ErrorState";
 import { CreateCreditCardBillModal } from "@/components/creditCardBills/CreateCreditCardBillModal";
 import { ReconcileStatementModal } from "@/components/creditCardBills/ReconcileStatementModal";
 import { usePageListBottomPadding } from "@/components/layout/usePageListBottomPadding";
+import { Button } from "@/components/ui/Button";
 import { haptic } from "@/lib/haptics";
 import { useAccountActivities } from "@/hooks/useAccountActivities";
 import { useAccountEntries } from "@/hooks/useAccountEntries";
@@ -1267,52 +1268,36 @@ export default function AccountDetailScreen() {
               isLoading={isDataLoading}
             />
             <View style={styles.cardActionRow}>
-              <Pressable
+              <Button
+                variant="outline"
+                size="sm"
+                haptic={false}
                 onPress={() => {
                   void haptic.selection();
                   setIsReconcileOpen(true);
                 }}
-                style={({ pressed }) => [
-                  styles.reconcileBtn,
-                  styles.cardActionItem,
-                  {
-                    backgroundColor: isDark ? "#10141C" : theme.colors.card,
-                    borderColor: isDark
-                      ? "rgba(148, 163, 184, 0.12)"
-                      : theme.colors.border,
-                  },
-                  pressed ? styles.reconcilePressed : null,
-                ]}
-                accessibilityRole="button"
                 accessibilityLabel="Reconcile statement"
+                style={styles.reconcileBtn}
               >
                 <Text style={[styles.reconcileLabel, { color: theme.colors.primary }]}>
                   Reconcile statement
                 </Text>
-              </Pressable>
-              <Pressable
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                haptic={false}
                 onPress={() => {
                   void haptic.selection();
                   setIsCashbackOpen(true);
                 }}
-                style={({ pressed }) => [
-                  styles.reconcileBtn,
-                  styles.cardActionItem,
-                  {
-                    backgroundColor: isDark ? "#10141C" : theme.colors.card,
-                    borderColor: isDark
-                      ? "rgba(148, 163, 184, 0.12)"
-                      : theme.colors.border,
-                  },
-                  pressed ? styles.reconcilePressed : null,
-                ]}
-                accessibilityRole="button"
                 accessibilityLabel="Record cashback"
+                style={styles.reconcileBtn}
               >
                 <Text style={[styles.reconcileLabel, { color: theme.colors.primary }]}>
                   Record cashback
                 </Text>
-              </Pressable>
+              </Button>
             </View>
           </>
         ) : null}

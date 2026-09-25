@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Pressable,
   StyleSheet,
   Text,
   View,
@@ -36,6 +35,7 @@ import { LedgerSectionTabs } from "@/components/ledger/LedgerSectionTabs";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageListStateScroll } from "@/components/layout/PageListStateScroll";
 import { PageShell } from "@/components/layout/PageShell";
+import { Chip } from "@/components/ui/Chip";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
 import { useExpenses } from "@/hooks/useExpenses";
@@ -497,7 +497,7 @@ export default function LedgerScreen() {
       <PageHeader
         title="Money"
         subtitle="Activity, accounts & bills"
-        icon={<Wallet size={22} color={isDark ? "#FFFFFF" : theme.colors.success} />}
+        icon={<Wallet size={22} color={isDark ? theme.colors.foreground : theme.colors.success} />}
       />
   );
 
@@ -551,7 +551,12 @@ export default function LedgerScreen() {
         }}
       />
 
-      <Pressable
+      <Chip
+        label={
+          journal.dateScope.monthOverridden
+            ? `${activeMonth} · overridden`
+            : activeMonth
+        }
         onPress={() => {
           if (journal.dateScope.monthOverridden) {
             setJournalFilters((previous) => ({
@@ -563,37 +568,18 @@ export default function LedgerScreen() {
           }
           setIsMonthDrawerOpen(true);
         }}
+        haptic={false}
         style={[
-          styles.monthPickerButton,
-          {
-            alignSelf: "flex-start",
-            backgroundColor: isDark
-              ? "rgba(255,255,255,0.06)"
-              : "rgba(0,0,0,0.04)",
-            borderColor: theme.colors.border,
-            opacity: journal.dateScope.monthOverridden ? 0.6 : 1,
-          },
+          styles.monthPickerChip,
+          journal.dateScope.monthOverridden && { opacity: 0.6 },
         ]}
-        accessibilityRole="button"
         accessibilityLabel={
           journal.dateScope.monthOverridden
             ? `Month ${activeMonth} overridden by a date range. Tap to clear the range.`
             : `Change month, currently ${activeMonth}`
         }
-      >
-        <Calendar size={16} color={theme.colors.primary} />
-        <Text
-          style={{
-            fontSize: theme.typography.xs,
-            fontWeight: "700",
-            color: theme.colors.foreground,
-          }}
-        >
-          {journal.dateScope.monthOverridden
-            ? `${activeMonth} · overridden`
-            : activeMonth}
-        </Text>
-      </Pressable>
+        icon={() => <Calendar size={16} color={theme.colors.primary} />}
+      />
 
       {journal.validationError ? (
         <Text
@@ -673,42 +659,17 @@ export default function LedgerScreen() {
         <View style={[styles.sectionContainer, isExpenseListTab && { flex: 1 }]}>
           {/* Sub-tab pills */}
           <View style={styles.subTabsRow}>
-            {(["history", "income", "audit", "data"] as const).map((sub) => {
-              const isActive = expensesTab === sub;
-              return (
-                <Pressable
-                  key={sub}
-                  onPress={() => setExpensesTab(sub)}
-                  style={[
-                    styles.subTabPill,
-                    {
-                      backgroundColor: isActive
-                        ? theme.colors.primary
-                        : isDark
-                          ? "rgba(255,255,255,0.05)"
-                          : "rgba(0,0,0,0.04)",
-                      borderColor: isActive
-                        ? theme.colors.primary
-                        : theme.colors.border,
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.subTabText,
-                      {
-                        color: isActive
-                          ? theme.colors.primaryForeground
-                          : theme.colors.mutedForeground,
-                        fontWeight: isActive ? "700" : "500",
-                      },
-                    ]}
-                  >
-                    {sub.charAt(0).toUpperCase() + sub.slice(1)}
-                  </Text>
-                </Pressable>
-              );
-            })}
+            {(["history", "income", "audit", "data"] as const).map((sub) => (
+              <Chip
+                key={sub}
+                size="sm"
+                label={sub.charAt(0).toUpperCase() + sub.slice(1)}
+                selected={expensesTab === sub}
+                haptic={false}
+                onPress={() => setExpensesTab(sub)}
+                accessibilityRole="tab"
+              />
+            ))}
           </View>
 
 
@@ -840,43 +801,16 @@ export default function LedgerScreen() {
           {expensesTab === "audit" ? (
             <View style={{ flex: 1, gap: 12 }}>
               <View style={styles.auditViewRow}>
-                {AUDIT_VIEWS.map((view) => {
-                  const isActive = auditView === view.id;
-                  return (
-                    <Pressable
-                      key={view.id}
-                      onPress={() => setAuditView(view.id)}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: isActive }}
-                      style={[
-                        styles.auditViewChip,
-                        {
-                          backgroundColor: isActive
-                            ? theme.colors.primary
-                            : isDark
-                              ? "rgba(255,255,255,0.05)"
-                              : "rgba(0,0,0,0.04)",
-                          borderColor: isActive
-                            ? theme.colors.primary
-                            : theme.colors.border,
-                        },
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.auditViewText,
-                          {
-                            color: isActive
-                              ? theme.colors.primaryForeground
-                              : theme.colors.mutedForeground,
-                          },
-                        ]}
-                      >
-                        {view.label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
+                {AUDIT_VIEWS.map((view) => (
+                  <Chip
+                    key={view.id}
+                    size="sm"
+                    label={view.label}
+                    selected={auditView === view.id}
+                    haptic={false}
+                    onPress={() => setAuditView(view.id)}
+                  />
+                ))}
               </View>
               <View style={{ flex: 1 }}>
                 {auditView === "checks" ? (
@@ -956,28 +890,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
   },
-  subTabPill: {
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  subTabText: {
-    fontSize: 12,
-  },
   auditViewRow: {
     flexDirection: "row",
     gap: 6,
-  },
-  auditViewChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 10,
-    borderWidth: 1,
-  },
-  auditViewText: {
-    fontSize: 11,
-    fontWeight: "700",
   },
   itemList: {
     gap: 8,
@@ -1001,14 +916,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
   },
-  monthPickerButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 12,
-    height: 48,
-    borderRadius: 12,
-    borderWidth: 1,
+  monthPickerChip: {
+    alignSelf: "flex-start",
+    minHeight: 44,
   },
   itemCard: {
     flexDirection: "row",

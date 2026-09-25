@@ -8,6 +8,7 @@ import {
 import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
 import { haptic } from "@/lib/haptics";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useSurfaces } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { formatActivityDateLabel } from "@/shared/utils/activityDisplay";
 import {
@@ -37,6 +38,7 @@ export function AccountHealthCard({
   onWindowChange: (window: AccountHistoryWindow) => void;
 }) {
   const { theme, themeName } = useTheme();
+  const surfaces = useSurfaces();
   const isDark = themeUsesDarkPalette(themeName);
   const accent = accountAccent(isDark);
 
@@ -52,9 +54,7 @@ export function AccountHealthCard({
       style={[
         styles.metric,
         {
-          backgroundColor: isDark
-            ? "rgba(255,255,255,0.03)"
-            : "rgba(15,23,42,0.03)",
+          backgroundColor: surfaces.tile,
           borderColor: isDark
             ? "rgba(148,163,184,0.14)"
             : "rgba(15,23,42,0.07)",
@@ -121,9 +121,7 @@ export function AccountHealthCard({
                   style={[
                     styles.window,
                     {
-                      backgroundColor: isDark
-                        ? "rgba(255,255,255,0.04)"
-                        : "rgba(15,23,42,0.04)",
+                      backgroundColor: surfaces.tile,
                       borderColor: selected ? accent : "transparent",
                     },
                   ]}

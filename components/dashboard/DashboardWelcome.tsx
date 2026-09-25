@@ -113,7 +113,7 @@ export function DashboardWelcome({
           { backgroundColor: withAlpha(theme.colors.primary, 0.92) },
         ]}
       >
-        <Wallet size={22} color="#FFFFFF" strokeWidth={2.2} />
+        <Wallet size={22} color={theme.colors.primaryForeground} strokeWidth={2.2} />
         <View
           style={[
             styles.dot,

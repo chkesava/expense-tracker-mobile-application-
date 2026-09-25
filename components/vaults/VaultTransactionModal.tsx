@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import {
   Modal,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,12 +11,11 @@ import { ArrowDownLeft, ArrowUpRight, Plus, X } from "lucide-react-native";
 
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { toast } from "@/lib/toast";
 import type { SharedVault } from "@/shared/types/vault";
 import { todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
-import { haptic } from "@/lib/haptics";
 
 export interface VaultTransactionModalProps {
   visible: boolean;
@@ -38,8 +36,7 @@ export function VaultTransactionModal({
   onClose,
   onSubmit,
 }: VaultTransactionModalProps) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
 
   const [type, setType] = useState<"deposit" | "withdrawal">("deposit");
   const [amount, setAmount] = useState("");
@@ -115,106 +112,38 @@ export function VaultTransactionModal({
               </View>
             </View>
 
-            <Pressable
+            <Button
+              variant="ghost"
+              size="icon"
               onPress={onClose}
               hitSlop={12}
-              accessibilityRole="button"
               accessibilityLabel="Close"
-              style={({ pressed }) => [styles.closeBtn, pressed && { opacity: 0.6 }]}
+              style={styles.closeBtn}
             >
               <X size={20} color={theme.colors.mutedForeground} />
-            </Pressable>
+            </Button>
           </View>
 
           <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
             {/* Type Switcher */}
-            <View
-              style={[
-                styles.typeSegment,
+            <SegmentedControl
+              value={type}
+              onChange={setType}
+              options={[
                 {
-                  backgroundColor: isDark
-                    ? "rgba(255,255,255,0.06)"
-                    : "rgba(0,0,0,0.04)",
-                  borderColor: theme.colors.border,
+                  value: "deposit",
+                  label: "Deposit (Inflow)",
+                  activeColor: theme.colors.success,
+                  icon: (color) => <ArrowDownLeft size={16} color={color} />,
+                },
+                {
+                  value: "withdrawal",
+                  label: "Withdrawal (Spend)",
+                  activeColor: theme.colors.destructive,
+                  icon: (color) => <ArrowUpRight size={16} color={color} />,
                 },
               ]}
-            >
-              <Pressable
-                onPress={() => {
-                  haptic.selection().catch(() => undefined);
-                  setType("deposit");
-                }}
-                style={[
-                  styles.typeTab,
-                  type === "deposit" && {
-                    backgroundColor: theme.colors.card,
-                    shadowColor: "#000",
-                    shadowOpacity: 0.1,
-                    shadowRadius: 4,
-                    elevation: 2,
-                  },
-                ]}
-              >
-                <ArrowDownLeft
-                  size={16}
-                  color={type === "deposit" ? "#22C55E" : theme.colors.mutedForeground}
-                />
-                <Text
-                  style={[
-                    styles.typeTabText,
-                    {
-                      color:
-                        type === "deposit"
-                          ? theme.colors.foreground
-                          : theme.colors.mutedForeground,
-                      fontWeight: type === "deposit" ? "700" : "500",
-                    },
-                  ]}
-                >
-                  Deposit (Inflow)
-                </Text>
-              </Pressable>
-
-              <Pressable
-                onPress={() => {
-                  haptic.selection().catch(() => undefined);
-                  setType("withdrawal");
-                }}
-                style={[
-                  styles.typeTab,
-                  type === "withdrawal" && {
-                    backgroundColor: theme.colors.card,
-                    shadowColor: "#000",
-                    shadowOpacity: 0.1,
-                    shadowRadius: 4,
-                    elevation: 2,
-                  },
-                ]}
-              >
-                <ArrowUpRight
-                  size={16}
-                  color={
-                    type === "withdrawal"
-                      ? theme.colors.destructive
-                      : theme.colors.mutedForeground
-                  }
-                />
-                <Text
-                  style={[
-                    styles.typeTabText,
-                    {
-                      color:
-                        type === "withdrawal"
-                          ? theme.colors.foreground
-                          : theme.colors.mutedForeground,
-                      fontWeight: type === "withdrawal" ? "700" : "500",
-                    },
-                  ]}
-                >
-                  Withdrawal (Spend)
-                </Text>
-              </Pressable>
-            </View>
+            />
 
             {/* Amount */}
             <View style={styles.inputGroup}>
@@ -320,25 +249,6 @@ const styles = StyleSheet.create({
   body: {
     paddingHorizontal: 20,
     gap: 16,
-  },
-  typeSegment: {
-    flexDirection: "row",
-    padding: 4,
-    borderRadius: 14,
-    borderWidth: 1,
-    gap: 4,
-  },
-  typeTab: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingVertical: 10,
-    borderRadius: 10,
-  },
-  typeTabText: {
-    fontSize: 13,
   },
   inputGroup: {
     gap: 6,

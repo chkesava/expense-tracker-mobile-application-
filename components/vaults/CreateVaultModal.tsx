@@ -16,7 +16,6 @@ import { toast } from "@/lib/toast";
 import { useCelebration } from "@/providers/CelebrationProvider";
 import type { SharedVault } from "@/shared/types/vault";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
@@ -48,8 +47,7 @@ export function CreateVaultModal({
   onClose,
   onSubmit,
 }: CreateVaultModalProps) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
   const displayCurrency = useDisplayCurrency();
   const { celebrateMilestone } = useCelebration();
 
@@ -123,15 +121,16 @@ export function CreateVaultModal({
               </View>
             </View>
 
-            <Pressable
+            <Button
+              variant="ghost"
+              size="icon"
               onPress={onClose}
               hitSlop={12}
-              accessibilityRole="button"
               accessibilityLabel="Close"
-              style={({ pressed }) => [styles.closeBtn, pressed && { opacity: 0.6 }]}
+              style={styles.closeBtn}
             >
               <X size={20} color={theme.colors.mutedForeground} />
-            </Pressable>
+            </Button>
           </View>
 
           <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>

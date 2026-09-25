@@ -6,13 +6,15 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import { FileSpreadsheet, FileText, X } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Amount } from "@/components/common/Amount";
+import { Input } from "@/components/ui/Input";
+import { Chip } from "@/components/ui/Chip";
+import { Button } from "@/components/ui/Button";
 import {
   accountAccent,
   accountAccentBorder,
@@ -27,6 +29,7 @@ import {
   type StatementPreset,
 } from "@/shared/utils/accountStatement";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useSurfaces } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
 const PRESET_LABELS: Record<StatementPreset, string> = {
@@ -78,12 +81,13 @@ export function DownloadStatementModal({
   emphasis = "pdf",
 }: DownloadStatementModalProps) {
   const { theme, themeName } = useTheme();
+  const surfaces = useSurfaces();
   const isDark = themeUsesDarkPalette(themeName);
   const insets = useSafeAreaInsets();
   const accent = accountAccent(isDark);
   const accentBorder = accountAccentBorder(isDark);
   const surface = isDark ? "#10141C" : theme.colors.card;
-  const inset = isDark ? "rgba(255,255,255,0.04)" : "rgba(15,23,42,0.04)";
+  const inset = surfaces.tile;
   const insetBorder = isDark ? "rgba(148,163,184,0.16)" : "rgba(15,23,42,0.09)";
 
   const [preset, setPreset] = useState<StatementPreset>("this-month");
@@ -185,19 +189,16 @@ export function DownloadStatementModal({
                 A bank-style statement of this account, as a PDF or a spreadsheet
               </Text>
             </View>
-            <Pressable
+            <Button
+              variant="ghost"
+              size="icon"
               onPress={onClose}
-              accessibilityRole="button"
               accessibilityLabel="Close download statement"
               hitSlop={12}
-              style={({ pressed }) => [
-                styles.closeButton,
-                { backgroundColor: inset, borderColor: insetBorder },
-                pressed ? styles.pressed : null,
-              ]}
+              style={styles.closeButton}
             >
               <X size={18} color={theme.colors.mutedForeground} />
-            </Pressable>
+            </Button>
           </View>
 
           <ScrollView
@@ -216,40 +217,15 @@ export function DownloadStatementModal({
                 {STATEMENT_PRESETS.map((option) => {
                   const selected = option === preset;
                   return (
-                    <Pressable
+                    <Chip
                       key={option}
-                      onPress={() => {
-                        void haptic.selection();
-                        setPreset(option);
-                      }}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected }}
+                      label={PRESET_LABELS[option]}
+                      selected={selected}
+                      appearance="tonal"
+                      accentColor={accent}
+                      onPress={() => setPreset(option)}
                       accessibilityLabel={PRESET_LABELS[option]}
-                      style={({ pressed }) => [
-                        styles.chip,
-                        {
-                          backgroundColor: selected
-                            ? isDark
-                              ? "rgba(74,222,128,0.16)"
-                              : "rgba(22,163,74,0.12)"
-                            : inset,
-                          borderColor: selected ? accentBorder : insetBorder,
-                        },
-                        pressed ? styles.pressed : null,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.chipText,
-                          {
-                            color: selected ? accent : theme.colors.foreground,
-                            fontWeight: selected ? "700" : "500",
-                          },
-                        ]}
-                      >
-                        {PRESET_LABELS[option]}
-                      </Text>
-                    </Pressable>
+                    />
                   );
                 })}
               </View>
@@ -267,20 +243,11 @@ export function DownloadStatementModal({
                     >
                       From
                     </Text>
-                    <TextInput
+                    <Input
                       value={customFrom}
                       onChangeText={setCustomFrom}
                       placeholder="YYYY-MM-DD"
-                      placeholderTextColor={theme.colors.mutedForeground}
                       autoCapitalize="none"
-                      style={[
-                        styles.input,
-                        {
-                          color: theme.colors.foreground,
-                          backgroundColor: inset,
-                          borderColor: insetBorder,
-                        },
-                      ]}
                     />
                   </View>
                   <View style={styles.inputColumn}>
@@ -292,20 +259,11 @@ export function DownloadStatementModal({
                     >
                       To
                     </Text>
-                    <TextInput
+                    <Input
                       value={customTo}
                       onChangeText={setCustomTo}
                       placeholder="YYYY-MM-DD"
-                      placeholderTextColor={theme.colors.mutedForeground}
                       autoCapitalize="none"
-                      style={[
-                        styles.input,
-                        {
-                          color: theme.colors.foreground,
-                          backgroundColor: inset,
-                          borderColor: insetBorder,
-                        },
-                      ]}
                     />
                   </View>
                 </View>

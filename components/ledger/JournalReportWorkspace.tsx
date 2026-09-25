@@ -23,7 +23,7 @@ import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import type { AccountActivityFilterChip } from "@/shared/utils/accountActivityFilterLabels";
 import type { JournalReport } from "@/shared/utils/journalReport";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useSurfaces } from "@/theme/surfaces";
 
 export type JournalExportFormat = "csv" | "pdf";
 
@@ -48,8 +48,8 @@ export function JournalReportWorkspace({
   onEditFilters: () => void;
   onClearFilters: () => void;
 }) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
   const currency = useDisplayCurrency();
 
   const surface = {
@@ -102,9 +102,7 @@ export function JournalReportWorkspace({
                 style={[
                   styles.chip,
                   {
-                    backgroundColor: isDark
-                      ? "rgba(255,255,255,0.05)"
-                      : "rgba(0,0,0,0.04)",
+                    backgroundColor: surfaces.control,
                     borderColor: theme.colors.border,
                   },
                 ]}

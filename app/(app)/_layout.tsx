@@ -17,6 +17,7 @@ import { useNavigationStateRestoration } from "@/hooks/useNavigationStateRestora
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAuth } from "@/providers/AuthProvider";
 import { BottomChromeProvider } from "@/components/layout/BottomChromeProvider";
+import { SpendlyUIScope } from "@/components/layout/SpendlyUIScope";
 import { BorrowingsReceivablesProvider } from "@/providers/BorrowingsReceivablesProvider";
 import { ExpenseReferenceDataProvider } from "@/providers/ExpenseReferenceDataProvider";
 import { FinanceDataProvider } from "@/providers/FinanceDataProvider";
@@ -186,6 +187,7 @@ export default function AppLayout() {
 
   return (
     <PrivacyLock>
+      <SpendlyUIScope>
       <FinanceDataProvider>
         <ExpenseReferenceDataProvider>
           <BorrowingsReceivablesProvider>
@@ -203,6 +205,7 @@ export default function AppLayout() {
           </BorrowingsReceivablesProvider>
         </ExpenseReferenceDataProvider>
       </FinanceDataProvider>
+      </SpendlyUIScope>
       {showGate ? (
         <View
           pointerEvents="auto"

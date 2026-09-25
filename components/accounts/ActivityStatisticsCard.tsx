@@ -5,6 +5,7 @@ import {
   ACCOUNT_RED,
 } from "@/components/accounts/accountScreenTheme";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useSurfaces } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { formatActivityDateLabel } from "@/shared/utils/activityDisplay";
 import type { AccountActivityStats } from "@/shared/utils/accountActivityStats";
@@ -20,12 +21,11 @@ function plural(count: number, one: string, many: string): string {
  */
 export function ActivityStatisticsCard({ stats }: { stats: AccountActivityStats }) {
   const { theme, themeName } = useTheme();
+  const surfaces = useSurfaces();
   const isDark = themeUsesDarkPalette(themeName);
   const accent = accountAccent(isDark);
 
-  const tileBackground = isDark
-    ? "rgba(255,255,255,0.03)"
-    : "rgba(15,23,42,0.03)";
+  const tileBackground = surfaces.tile;
   const tileBorder = isDark ? "rgba(148,163,184,0.14)" : "rgba(15,23,42,0.07)";
 
   const tile = (

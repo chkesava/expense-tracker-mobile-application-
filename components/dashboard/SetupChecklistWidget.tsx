@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import Animated, {
   FadeInDown,
   useAnimatedStyle,
@@ -8,13 +8,15 @@ import Animated, {
 } from "react-native-reanimated";
 import { Sparkles, Wand2 } from "lucide-react-native";
 
+import { Pill, Section } from "@/components/dashboard/primitives";
 import { SetupStepItem } from "@/components/onboarding/SetupStepItem";
+import { Button } from "@/components/ui/Button";
 import {
   useSetupProgress,
   type SetupStep,
 } from "@/providers/SetupProgressProvider";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useSurfaces } from "@/theme/surfaces";
 import { haptic } from "@/lib/haptics";
 
 export function SetupChecklistWidget() {
@@ -27,8 +29,8 @@ export function SetupChecklistWidget() {
     dismissOnboarding,
     launchSetupWizard,
   } = useSetupProgress();
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
 
   const progressWidth = useSharedValue(0);
 
@@ -64,166 +66,111 @@ export function SetupChecklistWidget() {
   return (
     <Animated.View
       entering={FadeInDown.springify().damping(15)}
-      style={[
-        styles.card,
-        theme.elevation[2],
-        {
-          backgroundColor: theme.colors.card,
-          borderColor: isDark ? "rgba(107, 99, 255, 0.25)" : "rgba(79, 70, 255, 0.15)",
-        },
-      ]}
+      style={styles.wrap}
     >
-      {/* Header: Title & Progress Counter */}
-      <View style={styles.header}>
-        <View style={styles.titleRow}>
-          <Sparkles size={18} color={theme.colors.primary} />
-          <Text style={[styles.title, { color: theme.colors.foreground }]}>
-            Getting Started
-          </Text>
+      <Section
+        title="Getting Started"
+        icon={<Sparkles size={16} color={theme.colors.primary} />}
+        iconTint={surfaces.wash(theme.colors.primary)}
+        badge={<Pill label={`${completedCount} / ${totalCount} Completed`} />}
+      >
+        {/* Segmented Block Progress Bar (10 Segment Units) */}
+        <View style={styles.segmentsRow}>
+          {Array.from({ length: totalCount || 10 }).map((_, index) => {
+            const isFilled = index < completedCount;
+            return (
+              <View
+                key={index}
+                style={[
+                  styles.segmentBlock,
+                  {
+                    backgroundColor: isFilled
+                      ? theme.colors.primary
+                      : surfaces.track,
+                  },
+                ]}
+              />
+            );
+          })}
         </View>
 
+        {/* Continuous Smooth Progress Bar */}
         <View
           style={[
-            styles.badge,
-            {
-              backgroundColor: isDark
-                ? "rgba(107, 99, 255, 0.18)"
-                : "rgba(79, 70, 255, 0.1)",
-            },
+            styles.progressBarBg,
+            { backgroundColor: surfaces.control },
           ]}
         >
-          <Text style={[styles.progressText, { color: theme.colors.primary }]}>
-            {completedCount} / {totalCount} Completed
-          </Text>
+          <Animated.View
+            style={[
+              styles.progressBarFill,
+              { backgroundColor: theme.colors.primary },
+              animatedProgressStyle,
+            ]}
+          />
         </View>
-      </View>
 
-      {/* Segmented Block Progress Bar (10 Segment Units) */}
-      <View style={styles.segmentsRow}>
-        {Array.from({ length: totalCount || 10 }).map((_, index) => {
-          const isFilled = index < completedCount;
-          return (
-            <View
-              key={index}
+        {/* Setup Wizard Quick CTA */}
+        {completedCount < totalCount && (
+          <Button
+            onPress={handleStartWizard}
+            haptic={false}
+            style={styles.wizardCta}
+            accessibilityLabel="Launch Setup Wizard"
+          >
+            <Wand2 size={16} color={theme.colors.primaryForeground} />
+            <Text
               style={[
-                styles.segmentBlock,
+                styles.wizardCtaText,
                 {
-                  backgroundColor: isFilled
-                    ? theme.colors.primary
-                    : isDark
-                    ? "rgba(255, 255, 255, 0.08)"
-                    : "rgba(0, 0, 0, 0.08)",
+                  color: theme.colors.primaryForeground,
+                  fontFamily: theme.fontFamily.semibold,
                 },
               ]}
+            >
+              Launch Setup Wizard
+            </Text>
+          </Button>
+        )}
+
+        {/* 10 Checklist Step Items */}
+        <View style={styles.list}>
+          {steps.map((step: SetupStep) => (
+            <SetupStepItem
+              key={step.id}
+              label={step.label}
+              completed={step.completed}
+              onPress={step.completed ? undefined : step.onNavigate}
             />
-          );
-        })}
-      </View>
+          ))}
+        </View>
 
-      {/* Continuous Smooth Progress Bar */}
-      <View
-        style={[
-          styles.progressBarBg,
-          { backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)" },
-        ]}
-      >
-        <Animated.View
-          style={[
-            styles.progressBarFill,
-            { backgroundColor: theme.colors.primary },
-            animatedProgressStyle,
-          ]}
-        />
-      </View>
-
-      {/* Setup Wizard Quick CTA */}
-      {completedCount < totalCount && (
-        <Pressable
-          onPress={handleStartWizard}
-          android_ripple={{
-            color: "rgba(255, 255, 255, 0.2)",
-            borderless: false,
-          }}
-          style={({ pressed }) => [
-            styles.wizardCta,
-            { backgroundColor: theme.colors.primary },
-            pressed && { opacity: 0.88, transform: [{ scale: 0.98 }] },
-          ]}
-          accessibilityRole="button"
-          accessibilityLabel="Launch Setup Wizard"
+        {/* Dismiss Action */}
+        <Button
+          variant="ghost"
+          size="sm"
+          haptic={false}
+          onPress={handleDismiss}
+          style={styles.dismissButton}
+          accessibilityLabel="Dismiss Getting Started Checklist"
         >
-          <Wand2 size={16} color="#FFFFFF" />
-          <Text style={styles.wizardCtaText}>
-            Launch Setup Wizard
+          <Text
+            style={[
+              styles.dismissText,
+              { color: theme.colors.mutedForeground },
+            ]}
+          >
+            Dismiss Checklist
           </Text>
-        </Pressable>
-      )}
-
-      {/* 10 Checklist Step Items */}
-      <View style={styles.list}>
-        {steps.map((step: SetupStep) => (
-          <SetupStepItem
-            key={step.id}
-            label={step.label}
-            completed={step.completed}
-            onPress={step.completed ? undefined : step.onNavigate}
-          />
-        ))}
-      </View>
-
-      {/* Dismiss Action */}
-      <Pressable
-        onPress={handleDismiss}
-        style={({ pressed }) => [
-          styles.dismissButton,
-          pressed && { opacity: 0.7 },
-        ]}
-        accessibilityRole="button"
-        accessibilityLabel="Dismiss Getting Started Checklist"
-      >
-        <Text
-          style={[
-            styles.dismissText,
-            { color: theme.colors.mutedForeground },
-          ]}
-        >
-          Dismiss Checklist
-        </Text>
-      </Pressable>
+        </Button>
+      </Section>
     </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    borderRadius: 20,
-    borderWidth: 1,
-    padding: 18,
+  wrap: {
     marginBottom: 16,
-  },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  titleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  title: {
-    fontSize: 17,
-    fontWeight: "800",
-  },
-  badge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  progressText: {
-    fontSize: 12,
-    fontWeight: "800",
   },
   segmentsRow: {
     flexDirection: "row",
@@ -248,26 +195,16 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
   wizardCta: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    height: 42,
-    borderRadius: 12,
     marginBottom: 12,
   },
   wizardCtaText: {
-    color: "#FFFFFF",
     fontSize: 14,
-    fontWeight: "800",
   },
   list: {
     marginBottom: 8,
   },
   dismissButton: {
     alignSelf: "center",
-    paddingVertical: 8,
-    paddingHorizontal: 16,
   },
   dismissText: {
     fontSize: 13,

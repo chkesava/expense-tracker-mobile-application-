@@ -19,6 +19,7 @@ export default defineConfig({
       // provable here rather than only against a deployed function.
       "supabase/functions/**/*.test.ts",
       "scripts/**/*.test.ts",
+      "theme/**/*.test.ts",
     ],
     environment: "node",
   },

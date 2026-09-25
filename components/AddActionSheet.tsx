@@ -24,6 +24,7 @@ import {
   type AddActionMeta,
 } from "@/shared/config/addActions";
 import { useTheme } from "@/theme/ThemeProvider";
+import { withAlpha } from "@/theme/surfaces";
 
 const ICONS: Record<AddActionId, typeof PlusCircle> = {
   expense: MinusCircle,
@@ -104,7 +105,7 @@ export function AddActionSheet() {
       <Pressable
         key={action.id}
         onPress={() => handleSelect(action.id)}
-        android_ripple={{ color: theme.colors.primary + "18" }}
+        android_ripple={{ color: withAlpha(theme.colors.primary, 0.1) }}
         style={({ pressed }) => [
           styles.row,
           { borderColor: theme.colors.border },

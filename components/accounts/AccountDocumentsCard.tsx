@@ -10,8 +10,10 @@ import {
 } from "lucide-react-native";
 
 import { accountAccent, ACCOUNT_RED } from "@/components/accounts/accountScreenTheme";
+import { Button } from "@/components/ui/Button";
 import { haptic } from "@/lib/haptics";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useSurfaces } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import type { AccountDocument } from "@/shared/types/expense";
 import {
@@ -61,6 +63,7 @@ export function AccountDocumentsCard({
   onDelete: (document: AccountDocument) => void;
 }) {
   const { theme, themeName } = useTheme();
+  const surfaces = useSurfaces();
   const isDark = themeUsesDarkPalette(themeName);
   const accent = accountAccent(isDark);
 
@@ -78,7 +81,10 @@ export function AccountDocumentsCard({
     onPress: () => void,
     disabled?: boolean
   ) => (
-    <Pressable
+    <Button
+      variant="outline"
+      size="sm"
+      haptic={false}
       onPress={() => {
         if (disabled) return;
         void haptic.selection();
@@ -86,20 +92,12 @@ export function AccountDocumentsCard({
       }}
       disabled={disabled}
       hitSlop={8}
-      accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ disabled: Boolean(disabled) }}
-      style={({ pressed }) => [
-        styles.iconBtn,
-        {
-          borderColor: isDark ? "rgba(148,163,184,0.16)" : "rgba(15,23,42,0.08)",
-          backgroundColor: isDark ? "rgba(255,255,255,0.04)" : "rgba(15,23,42,0.03)",
-          opacity: disabled ? 0.35 : pressed ? 0.6 : 1,
-        },
-      ]}
+      style={styles.iconBtn}
     >
       {icon}
-    </Pressable>
+    </Button>
   );
 
   return (
@@ -197,9 +195,7 @@ export function AccountDocumentsCard({
                 {
                   backgroundColor: pending
                     ? "rgba(239,68,68,0.10)"
-                    : isDark
-                      ? "rgba(255,255,255,0.05)"
-                      : "rgba(15,23,42,0.04)",
+                    : surfaces.control,
                 },
               ]}
             >
