@@ -16,6 +16,7 @@ import { toast } from "@/lib/toast";
 import type { SharedVault } from "@/shared/types/vault";
 import { todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
+import { SheetBottomInset } from "@/components/common/SheetBottomInset";
 
 export interface VaultTransactionModalProps {
   visible: boolean;
@@ -197,6 +198,7 @@ export function VaultTransactionModal({
               </Text>
             </Button>
           </View>
+          <SheetBottomInset />
         </View>
       </View>
     </Modal>

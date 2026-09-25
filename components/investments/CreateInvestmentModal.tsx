@@ -28,6 +28,7 @@ import type {
 import { todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
+import { SheetBottomInset } from "@/components/common/SheetBottomInset";
 
 export interface CreateInvestmentModalProps {
   visible: boolean;
@@ -302,6 +303,7 @@ export function CreateInvestmentModal({
               </Text>
             </Button>
           </View>
+          <SheetBottomInset />
         </View>
       </View>
     </Modal>

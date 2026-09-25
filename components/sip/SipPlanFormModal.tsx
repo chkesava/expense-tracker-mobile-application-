@@ -10,6 +10,7 @@ import { sipPlanFormSchema, SipPlanFormInput } from "@/shared/features/sip/schem
 import { todayDateKey } from "@/shared/utils/dates";
 
 import { Chip } from "@/components/ui/Chip";
+import { SheetBottomInset } from "@/components/common/SheetBottomInset";
 export type SipPlanFormModalProps = {
   visible: boolean;
   onClose: () => void;
@@ -198,6 +199,7 @@ export function SipPlanFormModal({ visible, onClose, onSubmit }: SipPlanFormModa
               {loading ? "Creating..." : "Create Plan"}
             </Text>
           </Button>
+          <SheetBottomInset />
         </View>
       </View>
     </Modal>

@@ -37,6 +37,7 @@ import { useSurfaces } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
+import { SheetBottomInset } from "@/components/common/SheetBottomInset";
 
 export interface ReceiptScannerModalProps {
   visible: boolean;
@@ -386,6 +387,7 @@ Thank you for visiting!`;
               </Button>
             </View>
           )}
+          <SheetBottomInset />
         </View>
       </View>
     </Modal>

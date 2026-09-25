@@ -26,6 +26,7 @@ import { useTheme } from "@/theme/ThemeProvider";
 import { useSurfaces } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
+import { SheetBottomInset } from "@/components/common/SheetBottomInset";
 
 interface InvestmentCashHistoryModalProps {
   visible: boolean;
@@ -315,6 +316,7 @@ export function InvestmentCashHistoryModal({
 
             <View style={{ height: 24 }} />
           </ScrollView>
+          <SheetBottomInset />
         </Card>
       </View>
     </Modal>

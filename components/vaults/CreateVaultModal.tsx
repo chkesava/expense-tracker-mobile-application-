@@ -18,6 +18,7 @@ import type { SharedVault } from "@/shared/types/vault";
 import { useTheme } from "@/theme/ThemeProvider";
 import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
+import { SheetBottomInset } from "@/components/common/SheetBottomInset";
 
 export interface CreateVaultModalProps {
   visible: boolean;
@@ -214,6 +215,7 @@ export function CreateVaultModal({
               </Text>
             </Button>
           </View>
+          <SheetBottomInset />
         </View>
       </View>
     </Modal>

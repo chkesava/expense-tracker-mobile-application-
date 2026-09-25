@@ -3,6 +3,7 @@ import { AppNotification } from "@/shared/features/sip/types";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Button } from "@/components/ui/Button";
 import { withAlpha } from "@/theme/surfaces";
+import { SheetBottomInset } from "@/components/common/SheetBottomInset";
 import { X, CheckCircle, AlertCircle, Info } from "lucide-react-native";
 
 export type SipNotificationsModalProps = {
@@ -106,6 +107,7 @@ export function SipNotificationsModal({
               <Text style={{ color: theme.colors.foreground, fontWeight: "700" }}>Clear All</Text>
             </Button>
           </View>
+          <SheetBottomInset />
         </View>
       </View>
     </Modal>

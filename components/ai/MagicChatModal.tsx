@@ -32,6 +32,7 @@ import { useSurfaces } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
+import { SheetBottomInset } from "@/components/common/SheetBottomInset";
 
 export interface MagicChatModalProps {
   visible: boolean;
@@ -389,6 +390,7 @@ export function MagicChatModal({
               </Text>
             </Button>
           </View>
+          <SheetBottomInset />
         </View>
       </View>
     </Modal>

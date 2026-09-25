@@ -16,6 +16,7 @@ import {
 import type { Holding, InstrumentType, Exchange, Broker } from '@/shared/features/portfolio/types';
 
 import { Chip } from '@/components/ui/Chip';
+import { SheetBottomInset } from '@/components/common/SheetBottomInset';
 export type AddHoldingOptions = {
   fundingSource: HoldingFundingSource;
   /** Minted once per open so a retried submit rewrites the same docs. */
@@ -411,6 +412,7 @@ export function AddHoldingModal({
 
               <View style={{ height: 40 }} />
             </ScrollView>
+            <SheetBottomInset />
           </View>
         </TouchableWithoutFeedback>
       </KeyboardAvoidingView>

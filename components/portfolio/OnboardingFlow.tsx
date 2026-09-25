@@ -16,6 +16,7 @@ import type { PortfolioSettings } from "@/shared/features/portfolio/types";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useSurfaces } from "@/theme/surfaces";
 import { haptic } from "@/lib/haptics";
+import { SheetBottomInset } from "@/components/common/SheetBottomInset";
 
 export interface OnboardingFlowProps {
   visible: boolean;
@@ -207,6 +208,7 @@ export function OnboardingFlow({
               </Text>
             </Button>
           </View>
+          <SheetBottomInset />
         </View>
       </View>
     </Modal>

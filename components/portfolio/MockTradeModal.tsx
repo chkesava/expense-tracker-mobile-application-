@@ -11,6 +11,7 @@ import { canAfford } from '@/shared/features/portfolio/utils/investmentCash';
 import { logError } from '@/lib/errors';
 
 import { Chip } from '@/components/ui/Chip';
+import { SheetBottomInset } from '@/components/common/SheetBottomInset';
 interface MockTradeModalProps {
   visible: boolean;
   holding: HoldingWithMetrics | null;
@@ -223,6 +224,7 @@ export function MockTradeModal({ visible, holding, onClose, onBuy, onSell, cashB
 
               <View style={{ height: 40 }} />
             </ScrollView>
+            <SheetBottomInset />
           </View>
         </TouchableWithoutFeedback>
       </KeyboardAvoidingView>

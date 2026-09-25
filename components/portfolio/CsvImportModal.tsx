@@ -10,6 +10,7 @@ import { logError } from "@/lib/errors";
 import { addHoldingSchema } from "@/shared/features/portfolio/schemas";
 import type { Holding } from "@/shared/features/portfolio/types";
 import { useTheme } from "@/theme/ThemeProvider";
+import { SheetBottomInset } from "@/components/common/SheetBottomInset";
 
 type CreateHoldingInput = Omit<Holding, "id" | "createdAt" | "updatedAt">;
 
@@ -179,6 +180,7 @@ export function CsvImportModal({ visible, onClose, onImport }: CsvImportModalPro
             <Button variant="ghost" onPress={close} style={{ flex: 1 }}>Cancel</Button>
             <Button onPress={importHoldings} loading={importing} disabled={!holdings.length} style={{ flex: 1 }}>Replace holdings</Button>
           </View>
+          <SheetBottomInset />
         </View>
       </View>
     </Modal>

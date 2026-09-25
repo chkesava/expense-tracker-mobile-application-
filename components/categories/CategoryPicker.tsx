@@ -33,6 +33,7 @@ import { haptic } from "@/lib/haptics";
 import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
 
 import { SearchBar } from "@/components/common/SearchBar";
+import { SheetBottomInset } from "@/components/common/SheetBottomInset";
 export interface CategoryPickerProps {
   category: string;
   subcategory: string;
@@ -650,6 +651,7 @@ export function CategoryPicker({
             </View>
 
             {pickerBody}
+            <SheetBottomInset />
           </View>
         </View>
       </Modal>
