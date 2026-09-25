@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Redirect, Stack } from "expo-router";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
+import { OverlayProvider } from "@gluestack-ui/core/overlay/creator";
 
 import { GaneshMembershipGate } from "@/components/ganesh/GaneshMembershipGate";
 import { PrivacyLock } from "@/components/PrivacyLock";
@@ -167,7 +168,12 @@ export default function GaneshLayout() {
       <PrivacyLock>
         <GaneshSessionProvider>
           <GaneshGate>
-            <GaneshStack />
+            {/* Gluestack sheets and dialogs portal into the nearest overlay.
+                Without this one they would render at the root, outside the
+                Ganesh theme and session providers. */}
+            <OverlayProvider>
+              <GaneshStack />
+            </OverlayProvider>
           </GaneshGate>
         </GaneshSessionProvider>
       </PrivacyLock>
