@@ -14,7 +14,7 @@ export const SMOKE_TINT_ALPHA = { dark: 0.72, light: 0.8 } as const;
 /** Without blur the tint has to carry contrast on its own. */
 export const SMOKE_TINT_ALPHA_NO_BLUR = 0.9;
 /** One BlurView per capsule; strong enough to frost, light enough to hint at content. */
-export const SMOKE_BLUR_INTENSITY = 45;
+export const SMOKE_BLUR_INTENSITY = 60;
 
 /** Inactive nav labels on smoke glass. */
 export const SMOKE_INACTIVE_ALPHA = 0.85;
