@@ -201,22 +201,59 @@ function getCurrentVersion(product) {
   };
 }
 
-/** Bump the patch segment: 1.1.0 → 1.1.1. Missing parts default to 0. */
+/**
+ * Canonical MAJOR.MINOR.PATCH form of a version name, or null if it isn't one.
+ * Tolerates the "v2.1.0" people naturally type into the release form. The
+ * last Expense release stored exactly that, and the old bump turned it into
+ * 0.1.1.
+ */
+function normalizeVersionName(versionName) {
+  const match = /^\s*[vV]?(\d+)\.(\d+)\.(\d+)\s*$/.exec(String(versionName ?? ''));
+  if (!match) return null;
+  return match.slice(1, 4).map((part) => String(Number(part))).join('.');
+}
+
+/** -1, 0 or 1. Both names must already be valid (see normalizeVersionName). */
+function compareVersionNames(a, b) {
+  const pa = normalizeVersionName(a).split('.').map(Number);
+  const pb = normalizeVersionName(b).split('.').map(Number);
+  for (let i = 0; i < 3; i++) {
+    if (pa[i] !== pb[i]) return pa[i] < pb[i] ? -1 : 1;
+  }
+  return 0;
+}
+
+/** Bump the patch segment: 1.1.0 → 1.1.1 (and v1.1.0 → 1.1.1). Throws on a malformed name. */
 function bumpPatchVersion(versionName) {
-  const parts = String(versionName || '0.0.0')
-    .split('.')
-    .map((part) => {
-      const n = Number.parseInt(part, 10);
-      return Number.isFinite(n) && n >= 0 ? n : 0;
-    });
-  while (parts.length < 3) parts.push(0);
-  parts[2] += 1;
-  return `${parts[0]}.${parts[1]}.${parts[2]}`;
+  const normalized = normalizeVersionName(versionName);
+  if (!normalized) {
+    throw new Error(`Cannot bump "${versionName}": expected MAJOR.MINOR.PATCH, e.g. 2.1.0.`);
+  }
+  const [major, minor, patch] = normalized.split('.').map(Number);
+  return `${major}.${minor}.${patch + 1}`;
 }
 
 function updateVersion({ versionName, versionCode, product }) {
   const current = getCurrentVersion(product);
-  const newVersionName = versionName || current.versionName;
+  const newVersionName = normalizeVersionName(versionName || current.versionName);
+
+  if (!newVersionName) {
+    failFast({
+      step: 'Version Management',
+      error: `Invalid version name "${versionName || current.versionName}"`,
+      why: 'Users see the version name in the update prompt and in Settings; it has to be MAJOR.MINOR.PATCH.',
+      fix: 'Pass a version such as 2.1.1 (a leading "v" is accepted and dropped).'
+    });
+  }
+  const currentName = normalizeVersionName(current.versionName);
+  if (currentName && compareVersionNames(newVersionName, currentName) < 0) {
+    failFast({
+      step: 'Version Management',
+      error: `Cannot decrease versionName from ${currentName} to ${newVersionName}`,
+      why: 'Users would see the app version go backwards.',
+      fix: `Specify a version >= ${currentName}`
+    });
+  }
   let newVersionCode = versionCode !== undefined ? versionCode : current.versionCode + 1;
 
   if (newVersionCode < current.versionCode) {
@@ -315,6 +352,8 @@ module.exports = {
   parseCliArgs,
   getCurrentVersion,
   bumpPatchVersion,
+  normalizeVersionName,
+  compareVersionNames,
   updateVersion,
   saveReleaseState,
   getReleaseState,
