@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import {
   Modal,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -18,6 +17,7 @@ import {
 
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { Chip } from "@/components/ui/Chip";
 import { toast } from "@/lib/toast";
 import type {
   InterestCreditFrequency,
@@ -27,8 +27,6 @@ import type {
 } from "@/shared/types/investment";
 import { todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
-import { useSurfaces } from "@/theme/surfaces";
-import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
 export interface CreateInvestmentModalProps {
@@ -43,7 +41,6 @@ export function CreateInvestmentModal({
   onSubmit,
 }: CreateInvestmentModalProps) {
   const { theme } = useTheme();
-  const surfaces = useSurfaces();
   const displayCurrency = useDisplayCurrency();
 
   const [kind, setKind] = useState<InvestmentKind>("fixed_deposit");
@@ -177,40 +174,15 @@ export function CreateInvestmentModal({
                 const isSelected = kind === item.id;
                 const IconComp = item.icon;
                 return (
-                  <Pressable
+                  <Chip
                     key={item.id}
-                    onPress={() => {
-                      haptic.selection().catch(() => undefined);
-                      setKind(item.id as InvestmentKind);
-                    }}
-                    style={[
-                      styles.kindTab,
-                      {
-                        backgroundColor: isSelected
-                          ? theme.colors.primary
-                          : surfaces.control,
-                        borderColor: isSelected
-                          ? theme.colors.primary
-                          : theme.colors.border,
-                      },
-                    ]}
-                  >
-                    <IconComp
-                      size={14}
-                      color={isSelected ? "#FFFFFF" : theme.colors.foreground}
-                    />
-                    <Text
-                      style={[
-                        styles.kindTabText,
-                        {
-                          color: isSelected ? "#FFFFFF" : theme.colors.foreground,
-                          fontWeight: isSelected ? "700" : "500",
-                        },
-                      ]}
-                    >
-                      {item.label}
-                    </Text>
-                  </Pressable>
+                    label={item.label}
+                    selected={isSelected}
+                    onPress={() => setKind(item.id as InvestmentKind)}
+                    icon={(color) => (
+                      <IconComp size={14} color={isSelected ? color : theme.colors.foreground} />
+                    )}
+                  />
                 );
               })}
             </View>
@@ -387,19 +359,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
     marginBottom: 4,
-  },
-  kindTab: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingVertical: 8,
-    borderRadius: 10,
-    borderWidth: 1,
-  },
-  kindTabText: {
-    fontSize: 11,
   },
   inputGroup: {
     gap: 6,

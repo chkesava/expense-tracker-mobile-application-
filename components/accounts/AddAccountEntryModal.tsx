@@ -1,19 +1,18 @@
 import { useEffect, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { ArrowDownLeft, ArrowUpRight, Wallet } from "lucide-react-native";
 
 import { Modal } from "@/components/common/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Chip } from "@/components/ui/Chip";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { useAccountEntries } from "@/hooks/useAccountEntries";
 import { logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
 import type { Account } from "@/shared/types/expense";
 import { formatDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
-import { useSurfaces } from "@/theme/surfaces";
-import { haptic } from "@/lib/haptics";
 
 export interface AddAccountEntryModalProps {
   isOpen: boolean;
@@ -29,7 +28,6 @@ export function AddAccountEntryModal({
   accounts,
 }: AddAccountEntryModalProps) {
   const { theme } = useTheme();
-  const surfaces = useSurfaces();
   const { addEntry } = useAccountEntries();
 
   const [accountId, setAccountId] = useState(
@@ -96,85 +94,24 @@ export function AddAccountEntryModal({
         keyboardShouldPersistTaps="handled"
       >
         {/* Direction Toggle */}
-        <View
-          style={[
-            styles.segmentRow,
+        <SegmentedControl
+          value={direction}
+          onChange={setDirection}
+          options={[
             {
-              backgroundColor: surfaces.control,
-              borderColor: theme.colors.border,
+              value: "credit",
+              label: "Credit (+ Money In)",
+              activeColor: theme.colors.success,
+              icon: (color) => <ArrowDownLeft size={16} color={color} />,
+            },
+            {
+              value: "debit",
+              label: "Debit (- Money Out)",
+              activeColor: theme.colors.destructive,
+              icon: (color) => <ArrowUpRight size={16} color={color} />,
             },
           ]}
-        >
-          <Pressable
-            onPress={() => {
-              haptic.selection().catch(() => undefined);
-              setDirection("credit");
-            }}
-            style={[
-              styles.segmentBtn,
-              direction === "credit" && {
-                backgroundColor: theme.colors.success,
-              },
-            ]}
-          >
-            <ArrowDownLeft
-              size={16}
-              color={
-                direction === "credit"
-                  ? "#FFF"
-                  : theme.colors.mutedForeground
-              }
-            />
-            <Text
-              style={[
-                styles.segmentText,
-                {
-                  color:
-                    direction === "credit"
-                      ? "#FFF"
-                      : theme.colors.mutedForeground,
-                },
-              ]}
-            >
-              Credit (+ Money In)
-            </Text>
-          </Pressable>
-
-          <Pressable
-            onPress={() => {
-              haptic.selection().catch(() => undefined);
-              setDirection("debit");
-            }}
-            style={[
-              styles.segmentBtn,
-              direction === "debit" && {
-                backgroundColor: theme.colors.destructive,
-              },
-            ]}
-          >
-            <ArrowUpRight
-              size={16}
-              color={
-                direction === "debit"
-                  ? "#FFF"
-                  : theme.colors.mutedForeground
-              }
-            />
-            <Text
-              style={[
-                styles.segmentText,
-                {
-                  color:
-                    direction === "debit"
-                      ? "#FFF"
-                      : theme.colors.mutedForeground,
-                },
-              ]}
-            >
-              Debit (- Money Out)
-            </Text>
-          </Pressable>
-        </View>
+        />
 
         {/* Account Selector */}
         <View style={{ gap: 6 }}>
@@ -275,26 +212,6 @@ export function AddAccountEntryModal({
 const styles = StyleSheet.create({
   label: {
     fontWeight: "700",
-  },
-  segmentRow: {
-    flexDirection: "row",
-    padding: 4,
-    borderRadius: 14,
-    borderWidth: 1,
-    gap: 4,
-  },
-  segmentBtn: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 10,
-    borderRadius: 10,
-    gap: 6,
-  },
-  segmentText: {
-    fontWeight: "700",
-    fontSize: 12,
   },
   accountPill: {
     flexDirection: "row",

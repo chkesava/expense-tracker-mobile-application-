@@ -16,6 +16,7 @@ import { DayOfMonthSelect } from "@/components/common/DayOfMonthSelect";
 import { MonthYearSelect } from "@/components/common/MonthYearSelect";
 import { Input } from "@/components/ui/Input";
 import { Chip } from "@/components/ui/Chip";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import {
   validateSubscriptionInput,
   type SubscriptionField,
@@ -28,7 +29,6 @@ import { subscriptionFrequency } from "@/shared/types/subscription";
 import { todayDateKey } from "@/shared/utils/dates";
 import { acceptRecurringSuggestion } from "@/services/sms/smsRecurringSync";
 import { useTheme } from "@/theme/ThemeProvider";
-import { useSurfaces } from "@/theme/surfaces";
 import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
@@ -88,7 +88,6 @@ export function EditSubscriptionModal({
   onClose,
 }: EditSubscriptionModalProps) {
   const { theme } = useTheme();
-  const surfaces = useSurfaces();
   const displayCurrency = useDisplayCurrency();
   const { accounts } = useAccounts();
   const { categories } = useCategories();
@@ -397,54 +396,18 @@ export function EditSubscriptionModal({
               >
                 TYPE
               </Text>
-              <View
-                style={[
-                  styles.segmentRow,
-                  {
-                    backgroundColor: surfaces.control,
-                  },
+              <SegmentedControl
+                value={type}
+                onChange={(next) => {
+                  setType(next);
+                  if (next === "emi") setFrequency("monthly");
+                }}
+                options={[
+                  { value: "subscription", label: "Subscription" },
+                  { value: "emi", label: "EMI / Loan" },
+                  { value: "transfer", label: "Auto-Transfer" },
                 ]}
-              >
-                {(
-                  [
-                    { key: "subscription", label: "Subscription" },
-                    { key: "emi", label: "EMI / Loan" },
-                    { key: "transfer", label: "Auto-Transfer" },
-                  ] as const
-                ).map((item) => {
-                  const isSelected = type === item.key;
-                  return (
-                    <Pressable
-                      key={item.key}
-                      onPress={() => {
-                        haptic.selection().catch(() => undefined);
-                        setType(item.key);
-                        if (item.key === "emi") setFrequency("monthly");
-                      }}
-                      style={[
-                        styles.segmentBtn,
-                        isSelected && {
-                          backgroundColor: theme.colors.primary,
-                        },
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.segmentText,
-                          {
-                            color: isSelected
-                              ? theme.colors.primaryForeground
-                              : theme.colors.mutedForeground,
-                            fontWeight: isSelected ? "700" : "500",
-                          },
-                        ]}
-                      >
-                        {item.label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
+              />
             </View>
 
             {/* Name */}
@@ -498,52 +461,14 @@ export function EditSubscriptionModal({
                 >
                   FREQUENCY
                 </Text>
-                <View
-                  style={[
-                    styles.segmentRow,
-                    {
-                      backgroundColor: surfaces.control,
-                    },
+                <SegmentedControl
+                  value={frequency}
+                  onChange={setFrequency}
+                  options={[
+                    { value: "every_n_days", label: "Every N days" },
+                    { value: "monthly", label: "Monthly" },
                   ]}
-                >
-                  {(
-                    [
-                      { key: "every_n_days", label: "Every N days" },
-                      { key: "monthly", label: "Monthly" },
-                    ] as const
-                  ).map((item) => {
-                    const isSelected = frequency === item.key;
-                    return (
-                      <Pressable
-                        key={item.key}
-                        onPress={() => {
-                          haptic.selection().catch(() => undefined);
-                          setFrequency(item.key);
-                        }}
-                        style={[
-                          styles.segmentBtn,
-                          isSelected && {
-                            backgroundColor: theme.colors.primary,
-                          },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.segmentText,
-                            {
-                              color: isSelected
-                                ? theme.colors.primaryForeground
-                                : theme.colors.mutedForeground,
-                              fontWeight: isSelected ? "700" : "500",
-                            },
-                          ]}
-                        >
-                          {item.label}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
+                />
               </View>
             ) : null}
 
@@ -829,21 +754,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "800",
     letterSpacing: 0.5,
-  },
-  segmentRow: {
-    flexDirection: "row",
-    borderRadius: 12,
-    padding: 4,
-    gap: 4,
-  },
-  segmentBtn: {
-    flex: 1,
-    paddingVertical: 8,
-    alignItems: "center",
-    borderRadius: 8,
-  },
-  segmentText: {
-    fontSize: 11,
   },
   input: {
     height: 48,
