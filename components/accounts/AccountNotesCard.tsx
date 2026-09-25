@@ -3,9 +3,9 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { NotebookPen, Pencil, Pin, PinOff, Trash2 } from "lucide-react-native";
 
 import { accountAccent } from "@/components/accounts/accountScreenTheme";
+import { Button } from "@/components/ui/Button";
 import { haptic } from "@/lib/haptics";
 import { useTheme } from "@/theme/ThemeProvider";
-import { useSurfaces } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import type { AccountNote } from "@/shared/types/expense";
 import { accountNoteSortMs } from "@/shared/utils/accountNotes";
@@ -48,7 +48,6 @@ export function AccountNotesCard({
   onDelete: (note: AccountNote) => void;
 }) {
   const { theme, themeName } = useTheme();
-  const surfaces = useSurfaces();
   const isDark = themeUsesDarkPalette(themeName);
   const accent = accountAccent(isDark);
 
@@ -64,27 +63,20 @@ export function AccountNotesCard({
     onPress: () => void,
     destructive?: boolean
   ) => (
-    <Pressable
+    <Button
+      variant="outline"
+      size="sm"
+      haptic={false}
       onPress={() => {
         void haptic.selection();
         onPress();
       }}
       hitSlop={8}
-      accessibilityRole="button"
       accessibilityLabel={label}
-      style={({ pressed }) => [
-        styles.iconBtn,
-        {
-          borderColor: isDark ? "rgba(148,163,184,0.16)" : "rgba(15,23,42,0.08)",
-          backgroundColor: destructive
-            ? "transparent"
-            : surfaces.tile,
-          opacity: pressed ? 0.6 : 1,
-        },
-      ]}
+      style={styles.iconBtn}
     >
       {icon}
-    </Pressable>
+    </Button>
   );
 
   return (

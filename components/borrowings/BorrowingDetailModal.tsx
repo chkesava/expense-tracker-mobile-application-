@@ -13,6 +13,7 @@ import { Amount } from "@/components/common/Amount";
 import { Modal } from "@/components/common/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { Chip } from "@/components/ui/Chip";
 import { useAccounts } from "@/hooks/useAccounts";
 import type { AddRepaymentInput } from "@/hooks/useBorrowings";
 import { toast } from "@/lib/toast";
@@ -35,8 +36,6 @@ import {
 } from "@/shared/utils/borrowingMath";
 import { isValidDateKey, todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
-import { useSurfaces } from "@/theme/surfaces";
-import { haptic } from "@/lib/haptics";
 
 export interface BorrowingDetailModalProps {
   visible: boolean;
@@ -75,7 +74,6 @@ export function BorrowingDetailModal({
   startEditing = false,
 }: BorrowingDetailModalProps) {
   const { theme } = useTheme();
-  const surfaces = useSurfaces();
   const { accounts } = useAccounts();
 
   const [isRepaying, setIsRepaying] = useState(false);
@@ -285,18 +283,6 @@ export function BorrowingDetailModal({
     ]);
   };
 
-  const pillStyle = (isActive: boolean) => ({
-    backgroundColor: isActive
-      ? theme.colors.primary
-      : surfaces.control,
-    borderColor: isActive ? theme.colors.primary : theme.colors.border,
-  });
-
-  const pillTextStyle = (isActive: boolean) => ({
-    color: isActive ? theme.colors.primaryForeground : theme.colors.foreground,
-    fontWeight: isActive ? ("700" as const) : ("500" as const),
-  });
-
   const rows: { label: string; value: number; tone?: string }[] = [
     { label: "Principal borrowed", value: summary.principalAmount },
     { label: "Principal paid", value: summary.principalPaid },
@@ -419,20 +405,12 @@ export function BorrowingDetailModal({
                 {LENDER_TYPES.map((type) => {
                   const isActive = editLenderType === type;
                   return (
-                    <Pressable
+                    <Chip
                       key={type}
-                      onPress={() => {
-                        void haptic.selection();
-                        setEditLenderType(type);
-                      }}
-                      style={[styles.pill, pillStyle(isActive)]}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: isActive }}
-                    >
-                      <Text style={[styles.pillText, pillTextStyle(isActive)]}>
-                        {LENDER_TYPE_LABELS[type]}
-                      </Text>
-                    </Pressable>
+                      label={LENDER_TYPE_LABELS[type]}
+                      selected={isActive}
+                      onPress={() => setEditLenderType(type)}
+                    />
                   );
                 })}
               </View>
@@ -532,31 +510,20 @@ export function BorrowingDetailModal({
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.pillRow}
               >
-                <Pressable
+                <Chip
+                  label="None"
+                  selected={paymentAccountId === ""}
                   onPress={() => setPaymentAccountId("")}
-                  style={[styles.pill, pillStyle(paymentAccountId === "")]}
-                >
-                  <Text
-                    style={[styles.pillText, pillTextStyle(paymentAccountId === "")]}
-                  >
-                    None
-                  </Text>
-                </Pressable>
+                />
                 {accounts.map((account) => {
                   const isActive = paymentAccountId === account.id;
                   return (
-                    <Pressable
+                    <Chip
                       key={account.id}
-                      onPress={() => {
-                        haptic.selection().catch(() => undefined);
-                        setPaymentAccountId(account.id);
-                      }}
-                      style={[styles.pill, pillStyle(isActive)]}
-                    >
-                      <Text style={[styles.pillText, pillTextStyle(isActive)]}>
-                        {account.name}
-                      </Text>
-                    </Pressable>
+                      label={account.name}
+                      selected={isActive}
+                      onPress={() => setPaymentAccountId(account.id)}
+                    />
                   );
                 })}
               </ScrollView>

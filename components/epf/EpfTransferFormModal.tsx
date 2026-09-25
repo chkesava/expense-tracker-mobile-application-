@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { ArrowRight } from "lucide-react-native";
 
 import { Modal } from "@/components/common/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { Chip } from "@/components/ui/Chip";
 import type { EpfTransferInput } from "@/hooks/useEpfTransfers";
 import { epfTodayKey } from "@/shared/features/epf/utils/epfClock";
 import { epfTransferFormSchema } from "@/shared/features/epf/schemas";
@@ -18,7 +19,6 @@ import type {
 import { transferableBalance, validateTransfer } from "@/shared/features/epf/utils/transfers";
 import { formatAmount } from "@/shared/utils/formatCurrency";
 import { useTheme } from "@/theme/ThemeProvider";
-import { withAlpha } from "@/theme/surfaces";
 import { fieldErrorsFromIssues } from "@/shared/utils/fieldErrors";
 
 type Props = {
@@ -167,29 +167,13 @@ export function EpfTransferFormModal({
           .map((item) => {
             const active = selected === item.id;
             return (
-              <Pressable
+              <Chip
                 key={item.id}
+                label={item.employerName}
+                selected={active}
                 onPress={() => onSelect(item.id)}
-                style={[
-                  styles.chip,
-                  {
-                    backgroundColor: active ? withAlpha(theme.colors.primary, 0.1) : theme.colors.muted,
-                    borderColor: active ? theme.colors.primary : "transparent",
-                  },
-                ]}
-                accessibilityRole="button"
                 accessibilityLabel={item.employerName}
-              >
-                <Text
-                  style={[
-                    styles.chipText,
-                    { color: active ? theme.colors.primary : theme.colors.foreground },
-                  ]}
-                  numberOfLines={1}
-                >
-                  {item.employerName}
-                </Text>
-              </Pressable>
+              />
             );
           })}
       </ScrollView>

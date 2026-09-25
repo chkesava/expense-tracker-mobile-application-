@@ -413,22 +413,16 @@ export function AccountsList() {
 
       {/* Quick actions */}
       <View style={styles.quickActionsRow}>
-        <Pressable
+        <Button
+          variant="outline"
+          size="sm"
+          haptic={false}
           onPress={() => {
             haptic.selection().catch(() => undefined);
             setIsStockCashModalOpen(true);
           }}
-          android_ripple={{ color: purple + "22", borderless: false }}
-          style={({ pressed }) => [
-            styles.quickAction,
-            {
-              backgroundColor: theme.colors.card,
-              borderColor: theme.colors.outlineVariant,
-            },
-            pressed && { opacity: 0.85 },
-          ]}
-          accessibilityRole="button"
           accessibilityLabel="Stocks Cash"
+          style={styles.quickAction}
         >
           <TrendingUp size={18} color={purple} strokeWidth={2.2} />
           <Text
@@ -437,24 +431,18 @@ export function AccountsList() {
           >
             Stocks Cash
           </Text>
-        </Pressable>
+        </Button>
 
-        <Pressable
+        <Button
+          variant="outline"
+          size="sm"
+          haptic={false}
           onPress={() => {
             haptic.selection().catch(() => undefined);
             setIsEntryModalOpen(true);
           }}
-          android_ripple={{ color: green + "22", borderless: false }}
-          style={({ pressed }) => [
-            styles.quickAction,
-            {
-              backgroundColor: theme.colors.card,
-              borderColor: theme.colors.outlineVariant,
-            },
-            pressed && { opacity: 0.85 },
-          ]}
-          accessibilityRole="button"
           accessibilityLabel="Adjust Balance"
+          style={styles.quickAction}
         >
           <SlidersHorizontal size={18} color={green} strokeWidth={2.2} />
           <Text
@@ -463,7 +451,7 @@ export function AccountsList() {
           >
             Adjust Balance
           </Text>
-        </Pressable>
+        </Button>
       </View>
 
       {/* Stocks & Demat */}
@@ -704,27 +692,16 @@ export function AccountsList() {
       ) : null}
 
       {/* Add Account */}
-      <Pressable
+      <Button
+        variant="outline"
+        size="sm"
         onPress={handleOpenCreateAccount}
-        android_ripple={{ color: green + "22", borderless: false }}
-        style={({ pressed }) => [
-          styles.addAccountButton,
-          {
-            backgroundColor: isDark
-              ? "rgba(52, 179, 122, 0.12)"
-              : "rgba(37, 150, 90, 0.08)",
-            borderColor: isDark
-              ? "rgba(52, 179, 122, 0.28)"
-              : "rgba(37, 150, 90, 0.2)",
-          },
-          pressed && { opacity: 0.85 },
-        ]}
-        accessibilityRole="button"
         accessibilityLabel="Add Account"
+        style={styles.addAccountButton}
       >
         <Plus size={18} color={green} strokeWidth={2.4} />
         <Text style={[styles.addAccountText, { color: green }]}>Add Account</Text>
-      </Pressable>
+      </Button>
 
       <Pressable
         onPress={() => {

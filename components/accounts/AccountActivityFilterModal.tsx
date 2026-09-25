@@ -26,10 +26,11 @@ import {
   getAccountActivityFilterValidationError,
 } from "@/shared/utils/accountActivityFilters";
 import { useTheme } from "@/theme/ThemeProvider";
-import { useSurfaces } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
 import { Input } from "@/components/ui/Input";
+import { Chip } from "@/components/ui/Chip";
+import { Button } from "@/components/ui/Button";
 interface AccountActivityFilterModalProps {
   visible: boolean;
   filters: AccountActivityFilters;
@@ -68,13 +69,11 @@ export function AccountActivityFilterModal({
   getResultCount,
 }: AccountActivityFilterModalProps) {
   const { theme, themeName } = useTheme();
-  const surfaces = useSurfaces();
   const isDark = themeUsesDarkPalette(themeName);
   const insets = useSafeAreaInsets();
   const accent = accountAccent(isDark);
   const accentBorder = accountAccentBorder(isDark);
   const surface = isDark ? "#10141C" : theme.colors.card;
-  const inset = surfaces.tile;
   const insetBorder = isDark
     ? "rgba(148,163,184,0.16)"
     : "rgba(15,23,42,0.09)";
@@ -115,37 +114,15 @@ export function AccountActivityFilterModal({
     selected: boolean,
     onPress: () => void
   ) => (
-    <Pressable
+    <Chip
       key={key}
+      label={label}
+      selected={selected}
+      appearance="tonal"
+      accentColor={accent}
       onPress={onPress}
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
       accessibilityLabel={label}
-      style={({ pressed }) => [
-        styles.chip,
-        {
-          backgroundColor: selected
-            ? isDark
-              ? "rgba(74,222,128,0.14)"
-              : "rgba(22,163,74,0.10)"
-            : inset,
-          borderColor: selected ? accentBorder : insetBorder,
-        },
-        pressed ? styles.pressed : null,
-      ]}
-    >
-      <Text
-        style={[
-          styles.chipText,
-          {
-            color: selected ? accent : theme.colors.foreground,
-            fontWeight: selected ? "700" : "500",
-          },
-        ]}
-      >
-        {label}
-      </Text>
-    </Pressable>
+    />
   );
 
   const renderSectionTitle = (title: string, selectionCount = 0) => (
@@ -228,19 +205,16 @@ export function AccountActivityFilterModal({
                 Combine criteria to narrow this account&apos;s activity
               </Text>
             </View>
-            <Pressable
+            <Button
+              variant="ghost"
+              size="icon"
               onPress={onClose}
-              accessibilityRole="button"
               accessibilityLabel="Close filters"
               hitSlop={12}
-              style={({ pressed }) => [
-                styles.closeButton,
-                { backgroundColor: inset, borderColor: insetBorder },
-                pressed ? styles.pressed : null,
-              ]}
+              style={styles.closeButton}
             >
               <X size={18} color={theme.colors.mutedForeground} />
-            </Pressable>
+            </Button>
           </View>
 
           <ScrollView
@@ -388,21 +362,18 @@ export function AccountActivityFilterModal({
           ) : null}
 
           <View style={[styles.footer, { borderTopColor: theme.colors.border }]}>
-            <Pressable
+            <Button
+              variant="outline"
+              size="sm"
               onPress={handleClear}
-              accessibilityRole="button"
               accessibilityLabel="Clear all transaction filters"
-              style={({ pressed }) => [
-                styles.footerButton,
-                { backgroundColor: inset, borderColor: insetBorder },
-                pressed ? styles.pressed : null,
-              ]}
+              style={styles.footerButton}
             >
               <RotateCcw size={16} color={theme.colors.foreground} />
               <Text style={[styles.footerText, { color: theme.colors.foreground }]}>
                 Clear all
               </Text>
-            </Pressable>
+            </Button>
             <Pressable
               onPress={handleApply}
               disabled={Boolean(validationError)}

@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  Pressable,
   StyleSheet,
   Text,
   View,
@@ -30,6 +29,7 @@ import { CreateVaultModal } from "@/components/vaults/CreateVaultModal";
 import { VaultCard } from "@/components/vaults/VaultCard";
 import { VaultDetailModal } from "@/components/vaults/VaultDetailModal";
 import { SearchBar } from "@/components/common/SearchBar";
+import { Button } from "@/components/ui/Button";
 import { useVaults } from "@/hooks/useVaults";
 import {
   VAULT_HUB_TAB_IDS,
@@ -135,22 +135,19 @@ function SharedVaultsPanel() {
   return (
     <View style={styles.panel}>
       <View style={styles.panelHeaderRow}>
-        <Pressable
+        <Button
+          variant="primary"
+          size="sm"
+          haptic={false}
           onPress={() => {
             haptic.selection().catch(() => undefined);
             setIsCreateModalOpen(true);
           }}
-          style={({ pressed }) => [
-            styles.headerActionBtn,
-            {
-              backgroundColor: theme.colors.primary,
-              opacity: pressed ? 0.8 : 1,
-            },
-          ]}
+          style={styles.headerActionBtn}
         >
           <Plus size={16} color="#FFFFFF" />
           <Text style={styles.headerActionText}>Create</Text>
-        </Pressable>
+        </Button>
       </View>
 
       {vaults.length > 0 ? (

@@ -9,6 +9,7 @@ import {
   CARD_ORANGE,
 } from "@/components/accounts/accountScreenTheme";
 import { Amount } from "@/components/common/Amount";
+import { Button } from "@/components/ui/Button";
 import { haptic } from "@/lib/haptics";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useSurfaces } from "@/theme/surfaces";
@@ -249,18 +250,20 @@ export function AccountCreditHero({
           </View>
         </View>
 
-        <Pressable
+        <Button
+          variant="outline"
+          size="sm"
+          haptic={false}
           onPress={() => {
             void haptic.impact();
             onPay();
           }}
-          style={({ pressed }) => [styles.cta, pressed && styles.pressed]}
-          accessibilityRole="button"
           accessibilityLabel={payLabel}
+          style={styles.cta}
         >
           <CheckCircle2 size={18} color="#111111" strokeWidth={2.4} />
           <Text style={styles.ctaLabel}>{payLabel}</Text>
-        </Pressable>
+        </Button>
       </View>
     </View>
   );

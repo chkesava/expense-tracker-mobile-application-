@@ -5,6 +5,7 @@ import { ArrowDownLeft, ArrowUpRight, Wallet } from "lucide-react-native";
 import { Modal } from "@/components/common/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { Chip } from "@/components/ui/Chip";
 import { useAccountEntries } from "@/hooks/useAccountEntries";
 import { logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
@@ -193,46 +194,13 @@ export function AddAccountEntryModal({
             {accounts.map((a) => {
               const isSelected = accountId === a.id;
               return (
-                <Pressable
+                <Chip
                   key={a.id}
-                  onPress={() => {
-                    haptic.selection().catch(() => undefined);
-                    setAccountId(a.id);
-                  }}
-                  style={[
-                    styles.accountPill,
-                    {
-                      backgroundColor: isSelected
-                        ? theme.colors.primary
-                        : surfaces.control,
-                      borderColor: isSelected
-                        ? theme.colors.primary
-                        : theme.colors.border,
-                    },
-                  ]}
-                >
-                  <Wallet
-                    size={14}
-                    color={
-                      isSelected
-                        ? theme.colors.primaryForeground
-                        : theme.colors.mutedForeground
-                    }
-                  />
-                  <Text
-                    style={[
-                      styles.accountPillText,
-                      {
-                        color: isSelected
-                          ? theme.colors.primaryForeground
-                          : theme.colors.foreground,
-                        fontSize: theme.typography.xs,
-                      },
-                    ]}
-                  >
-                    {a.name}
-                  </Text>
-                </Pressable>
+                  label={a.name}
+                  selected={isSelected}
+                  onPress={() => setAccountId(a.id)}
+                  icon={(color) => <Wallet size={14} color={isSelected ? color : theme.colors.mutedForeground} />}
+                />
               );
             })}
           </ScrollView>

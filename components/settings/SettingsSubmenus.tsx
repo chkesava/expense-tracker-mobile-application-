@@ -434,19 +434,15 @@ export function AutoCategorizationRulesManager() {
                 </View>
 
                 {/* 48x48dp Touch Target Delete Button */}
-                <Pressable
+                <Button
+                  variant="ghost"
+                  size="icon"
                   onPress={() => handleDelete(rule.id)}
-                  android_ripple={{
-                    color: "rgba(239, 68, 68, 0.2)",
-                    borderless: true,
-                    radius: 24,
-                  }}
-                  style={styles.touchActionBtn}
-                  accessibilityRole="button"
                   accessibilityLabel={`Delete rule for ${rule.keyword}`}
+                  style={styles.touchActionBtn}
                 >
                   <Trash2 size={18} color={theme.colors.destructive} />
-                </Pressable>
+                </Button>
               </View>
             ))
           )}
@@ -569,19 +565,15 @@ export function CategoryBudgetsManager() {
                 </View>
 
                 {/* 48x48dp Touch Target Delete Button */}
-                <Pressable
+                <Button
+                  variant="ghost"
+                  size="icon"
                   onPress={() => handleDelete(b.id)}
-                  android_ripple={{
-                    color: "rgba(239, 68, 68, 0.2)",
-                    borderless: true,
-                    radius: 24,
-                  }}
-                  style={styles.touchActionBtn}
-                  accessibilityRole="button"
                   accessibilityLabel="Delete budget"
+                  style={styles.touchActionBtn}
                 >
                   <Trash2 size={18} color={theme.colors.destructive} />
-                </Pressable>
+                </Button>
               </View>
             ))
           )}
@@ -729,19 +721,15 @@ export function FinancialGoalsManager() {
                   </View>
 
                   {/* 48x48dp Touch Target Delete Button */}
-                  <Pressable
+                  <Button
+                    variant="ghost"
+                    size="icon"
                     onPress={() => handleDelete(g.id)}
-                    android_ripple={{
-                      color: "rgba(239, 68, 68, 0.2)",
-                      borderless: true,
-                      radius: 24,
-                    }}
-                    style={styles.touchActionBtn}
-                    accessibilityRole="button"
                     accessibilityLabel={`Delete goal ${g.name}`}
+                    style={styles.touchActionBtn}
                   >
                     <Trash2 size={18} color={theme.colors.destructive} />
-                  </Pressable>
+                  </Button>
                 </View>
               );
             })
@@ -829,19 +817,15 @@ export function AccountTypesManager() {
                 </Text>
 
                 {/* 48x48dp Touch Target Delete Button */}
-                <Pressable
+                <Button
+                  variant="ghost"
+                  size="icon"
                   onPress={() => handleDelete(t.id)}
-                  android_ripple={{
-                    color: "rgba(239, 68, 68, 0.2)",
-                    borderless: true,
-                    radius: 24,
-                  }}
-                  style={styles.touchActionBtn}
-                  accessibilityRole="button"
                   accessibilityLabel={`Delete account type ${t.name}`}
+                  style={styles.touchActionBtn}
                 >
                   <Trash2 size={18} color={theme.colors.destructive} />
-                </Pressable>
+                </Button>
               </View>
             ))
           )}
@@ -974,16 +958,12 @@ export function AccountsManager() {
                     />
                   </Pressable>
 
-                  <Pressable
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onPress={() => handleOpenEdit(acc)}
-                    android_ripple={{
-                      color: withAlpha(theme.colors.primary, 0.1),
-                      borderless: true,
-                      radius: 24,
-                    }}
-                    style={styles.editActionBtn}
-                    accessibilityRole="button"
                     accessibilityLabel={`Edit account ${acc.name}`}
+                    style={styles.editActionBtn}
                   >
                     <Pencil size={18} color={theme.colors.foreground} />
                     <Text
@@ -995,21 +975,17 @@ export function AccountsManager() {
                     >
                       Edit
                     </Text>
-                  </Pressable>
+                  </Button>
 
-                  <Pressable
+                  <Button
+                    variant="ghost"
+                    size="icon"
                     onPress={() => handleDelete(acc.id)}
-                    android_ripple={{
-                      color: "rgba(239, 68, 68, 0.2)",
-                      borderless: true,
-                      radius: 24,
-                    }}
-                    style={styles.touchActionBtn}
-                    accessibilityRole="button"
                     accessibilityLabel={`Delete account ${acc.name}`}
+                    style={styles.touchActionBtn}
                   >
                     <Trash2 size={18} color={theme.colors.destructive} />
-                  </Pressable>
+                  </Button>
                 </View>
               );
             })

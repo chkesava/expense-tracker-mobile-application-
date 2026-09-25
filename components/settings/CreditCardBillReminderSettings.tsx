@@ -1,12 +1,12 @@
 import { useState } from "react";
-import { Pressable, StyleSheet, Switch, Text, View } from "react-native";
+import { StyleSheet, Switch, Text, View } from "react-native";
 import { Bell } from "lucide-react-native";
 
 import { Card } from "@/components/ui/Card";
+import { Chip } from "@/components/ui/Chip";
 import { useSettings } from "@/providers/SettingsProvider";
 import { requestBillNotificationPermission } from "@/services/creditCardBills/billReminderScheduler";
 import { useTheme } from "@/theme/ThemeProvider";
-import { useSurfaces } from "@/theme/surfaces";
 import { haptic } from "@/lib/haptics";
 
 const DAY_OPTIONS = [7, 3, 1] as const;
@@ -21,7 +21,6 @@ const QUIET_END_OPTIONS = ["18:00", "20:00", "21:00", "22:00", "23:00"] as const
 
 export function CreditCardBillReminderSettings() {
   const { theme } = useTheme();
-  const surfaces = useSurfaces();
   const { settings, setCreditCardBillReminders } = useSettings();
   const prefs = settings.creditCardBillReminders;
   const [permHint, setPermHint] = useState<string | null>(null);
@@ -85,32 +84,13 @@ export function CreditCardBillReminderSettings() {
           {DAY_OPTIONS.map((day) => {
             const selected = prefs.daysBefore.includes(day);
             return (
-              <Pressable
+              <Chip
                 key={day}
-                disabled={!prefs.enabled}
+                label={`${day}d before`}
+                selected={selected}
                 onPress={() => toggleDay(day)}
-                style={[
-                  styles.pill,
-                  {
-                    opacity: prefs.enabled ? 1 : 0.5,
-                    backgroundColor: selected
-                      ? theme.colors.primary
-                      : surfaces.control,
-                    borderColor: selected
-                      ? theme.colors.primary
-                      : theme.colors.border,
-                  },
-                ]}
-              >
-                <Text
-                  style={{
-                    color: selected ? "#fff" : theme.colors.foreground,
-                    fontSize: theme.typography.sm,
-                  }}
-                >
-                  {day}d before
-                </Text>
-              </Pressable>
+                disabled={!prefs.enabled}
+              />
             );
           })}
         </View>
@@ -140,37 +120,17 @@ export function CreditCardBillReminderSettings() {
           {OVERDUE_OPTIONS.map((n) => {
             const selected = prefs.overdueEveryDays === n;
             return (
-              <Pressable
+              <Chip
                 key={n}
-                disabled={!prefs.enabled}
+                label={`Every ${n}d`}
+                selected={selected}
                 onPress={() => {
-                  haptic.selection().catch(() => undefined);
                   setCreditCardBillReminders({
                     overdueEveryDays: n as 1 | 2 | 3,
                   });
                 }}
-                style={[
-                  styles.pill,
-                  {
-                    opacity: prefs.enabled ? 1 : 0.5,
-                    backgroundColor: selected
-                      ? theme.colors.primary
-                      : surfaces.control,
-                    borderColor: selected
-                      ? theme.colors.primary
-                      : theme.colors.border,
-                  },
-                ]}
-              >
-                <Text
-                  style={{
-                    color: selected ? "#fff" : theme.colors.foreground,
-                    fontSize: theme.typography.sm,
-                  }}
-                >
-                  Every {n}d
-                </Text>
-              </Pressable>
+                disabled={!prefs.enabled}
+              />
             );
           })}
         </View>
@@ -231,34 +191,13 @@ function TimePill({
   disabled?: boolean;
   onPress: () => void;
 }) {
-  const { theme } = useTheme();
-  const surfaces = useSurfaces();
   return (
-    <Pressable
-      disabled={disabled}
+    <Chip
+      label={label}
+      selected={selected}
       onPress={onPress}
-      accessibilityRole="radio"
-      accessibilityState={{ selected, disabled: Boolean(disabled) }}
-      style={[
-        styles.pill,
-        {
-          opacity: disabled ? 0.5 : 1,
-          backgroundColor: selected
-            ? theme.colors.primary
-            : surfaces.control,
-          borderColor: selected ? theme.colors.primary : theme.colors.border,
-        },
-      ]}
-    >
-      <Text
-        style={{
-          color: selected ? "#fff" : theme.colors.foreground,
-          fontSize: theme.typography.sm,
-        }}
-      >
-        {label}
-      </Text>
-    </Pressable>
+      disabled={disabled}
+    />
   );
 }
 

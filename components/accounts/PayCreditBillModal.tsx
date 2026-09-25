@@ -7,6 +7,7 @@ import { Modal } from "@/components/common/Modal";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
+import { Chip } from "@/components/ui/Chip";
 import { useAccountPayments } from "@/hooks/useAccountPayments";
 import { useCreditCardBills } from "@/hooks/useCreditCardBills";
 import { useExpenses } from "@/hooks/useExpenses";
@@ -23,7 +24,6 @@ import { formatDateKey, todayDateKey } from "@/shared/utils/dates";
 import { roundMoney } from "@/shared/utils/money";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useSurfaces } from "@/theme/surfaces";
-import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
 export interface PayCreditBillModalProps {
@@ -269,46 +269,13 @@ export function PayCreditBillModal({
             {creditCards.map((c) => {
               const isSelected = toCardId === c.id;
               return (
-                <Pressable
+                <Chip
                   key={c.id}
-                  onPress={() => {
-                    haptic.selection().catch(() => undefined);
-                    setToCardId(c.id);
-                  }}
-                  style={[
-                    styles.pill,
-                    {
-                      backgroundColor: isSelected
-                        ? theme.colors.primary
-                        : surfaces.control,
-                      borderColor: isSelected
-                        ? theme.colors.primary
-                        : theme.colors.border,
-                    },
-                  ]}
-                >
-                  <CreditCard
-                    size={14}
-                    color={
-                      isSelected
-                        ? theme.colors.primaryForeground
-                        : theme.colors.mutedForeground
-                    }
-                  />
-                  <Text
-                    style={[
-                      styles.pillText,
-                      {
-                        color: isSelected
-                          ? theme.colors.primaryForeground
-                          : theme.colors.foreground,
-                        fontSize: theme.typography.xs,
-                      },
-                    ]}
-                  >
-                    {c.name}
-                  </Text>
-                </Pressable>
+                  label={c.name}
+                  selected={isSelected}
+                  onPress={() => setToCardId(c.id)}
+                  icon={(color) => <CreditCard size={14} color={isSelected ? color : theme.colors.mutedForeground} />}
+                />
               );
             })}
           </ScrollView>
@@ -366,12 +333,11 @@ export function PayCreditBillModal({
             </View>
 
             {usageInfo.outstanding > 0 ? (
-              <Pressable
+              <Button
+                variant="primary"
+                size="sm"
                 onPress={handleFillOutstanding}
-                style={[
-                  styles.quickPayBtn,
-                  { backgroundColor: theme.colors.primary },
-                ]}
+                style={styles.quickPayBtn}
               >
                 <Text
                   style={{
@@ -382,7 +348,7 @@ export function PayCreditBillModal({
                 >
                   Pay Full
                 </Text>
-              </Pressable>
+              </Button>
             ) : null}
           </View>
         ) : null}
@@ -438,46 +404,13 @@ export function PayCreditBillModal({
               {bankAccounts.map((b) => {
                 const isSelected = fromAccountId === b.id;
                 return (
-                  <Pressable
+                  <Chip
                     key={b.id}
-                    onPress={() => {
-                      haptic.selection().catch(() => undefined);
-                      setFromAccountId(b.id);
-                    }}
-                    style={[
-                      styles.pill,
-                      {
-                        backgroundColor: isSelected
-                          ? theme.colors.primary
-                          : surfaces.control,
-                        borderColor: isSelected
-                          ? theme.colors.primary
-                          : theme.colors.border,
-                      },
-                    ]}
-                  >
-                    <Landmark
-                      size={14}
-                      color={
-                        isSelected
-                          ? theme.colors.primaryForeground
-                          : theme.colors.mutedForeground
-                      }
-                    />
-                    <Text
-                      style={[
-                        styles.pillText,
-                        {
-                          color: isSelected
-                            ? theme.colors.primaryForeground
-                            : theme.colors.foreground,
-                          fontSize: theme.typography.xs,
-                        },
-                      ]}
-                    >
-                      {b.name}
-                    </Text>
-                  </Pressable>
+                    label={b.name}
+                    selected={isSelected}
+                    onPress={() => setFromAccountId(b.id)}
+                    icon={(color) => <Landmark size={14} color={isSelected ? color : theme.colors.mutedForeground} />}
+                  />
                 );
               })}
             </ScrollView>

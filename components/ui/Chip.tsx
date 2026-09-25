@@ -17,9 +17,11 @@ export type ChipSize = "sm" | "md";
 /**
  * `solid` fills the selected chip with its tone (filters, pickers);
  * `outline` keeps the neutral fill and only tints the border and label
- * (tab-like rows where several chips sit side by side).
+ * (tab-like rows where several chips sit side by side);
+ * `tonal` washes the fill with the tone and tints border and label (the
+ * Money hub's quieter selection).
  */
-export type ChipAppearance = "solid" | "outline";
+export type ChipAppearance = "solid" | "outline" | "tonal";
 
 export type ChipProps = {
   label: string;
@@ -80,7 +82,11 @@ export function Chip({
         : c.primaryForeground;
 
   const solid = selected && appearance === "solid";
-  const background = solid ? toneColor : surfaces.control;
+  const background = solid
+    ? toneColor
+    : selected && appearance === "tonal"
+      ? surfaces.wash(toneColor)
+      : surfaces.control;
   const border = selected ? toneColor : c.border;
   const foreground = solid ? toneForeground : selected ? toneColor : c.foreground;
 
@@ -100,7 +106,7 @@ export function Chip({
         {
           backgroundColor: background,
           borderColor: border,
-          borderWidth: selected && appearance === "outline" ? 1.5 : 1,
+          borderWidth: selected && appearance !== "solid" ? 1.5 : 1,
           opacity: disabled ? 0.5 : pressed ? 0.7 : 1,
         },
         style,

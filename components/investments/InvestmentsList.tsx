@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from "react";
 import {
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -26,17 +25,15 @@ import type { Investment, InvestmentKind } from "@/shared/types/investment";
 import { todayDateKey } from "@/shared/utils/dates";
 import { getInvestmentValuation } from "@/shared/utils/investmentInterest";
 import { useTheme } from "@/theme/ThemeProvider";
-import { useSurfaces } from "@/theme/surfaces";
-import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
 
 import { SearchBar } from "@/components/common/SearchBar";
+import { Chip } from "@/components/ui/Chip";
 type FilterTab = "all" | InvestmentKind;
 
 export function InvestmentsList() {
   const { theme } = useTheme();
-  const surfaces = useSurfaces();
   const displayCurrency = useDisplayCurrency();
 
   const {
@@ -147,36 +144,12 @@ export function InvestmentsList() {
             ].map((tab) => {
               const isActive = activeFilter === tab.id;
               return (
-                <Pressable
+                <Chip
                   key={tab.id}
-                  onPress={() => {
-                    haptic.selection().catch(() => undefined);
-                    setActiveFilter(tab.id as FilterTab);
-                  }}
-                  style={[
-                    styles.filterPill,
-                    {
-                      backgroundColor: isActive
-                        ? theme.colors.primary
-                        : surfaces.control,
-                      borderColor: isActive
-                        ? theme.colors.primary
-                        : theme.colors.border,
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.filterPillText,
-                      {
-                        color: isActive ? "#FFFFFF" : theme.colors.foreground,
-                        fontWeight: isActive ? "700" : "500",
-                      },
-                    ]}
-                  >
-                    {tab.label}
-                  </Text>
-                </Pressable>
+                  label={tab.label}
+                  selected={isActive}
+                  onPress={() => setActiveFilter(tab.id as FilterTab)}
+                />
               );
             })}
           </ScrollView>

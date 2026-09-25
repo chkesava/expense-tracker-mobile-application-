@@ -18,6 +18,8 @@ import { Check, FileUp, TriangleAlert, X } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
 import { Input } from "@/components/ui/Input";
+import { Chip } from "@/components/ui/Chip";
+import { Button } from "@/components/ui/Button";
 import {
   accountAccent,
   accountAccentBorder,
@@ -354,19 +356,16 @@ export function ReconcileAccountModal({
                   Check Spendly against your real bank statement
                 </Text>
               </View>
-              <Pressable
+              <Button
+                variant="ghost"
+                size="icon"
                 onPress={onClose}
-                accessibilityRole="button"
                 accessibilityLabel="Close reconcile account"
                 hitSlop={12}
-                style={({ pressed }) => [
-                  styles.closeButton,
-                  { backgroundColor: inset, borderColor: insetBorder },
-                  pressed ? styles.pressed : null,
-                ]}
+                style={styles.closeButton}
               >
                 <X size={18} color={theme.colors.mutedForeground} />
-              </Pressable>
+              </Button>
             </View>
 
             <ScrollView
@@ -385,40 +384,15 @@ export function ReconcileAccountModal({
                   {STATEMENT_PRESETS.map((option) => {
                     const selected = option === preset;
                     return (
-                      <Pressable
+                      <Chip
                         key={option}
-                        onPress={() => {
-                          void haptic.selection();
-                          setPreset(option);
-                        }}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected }}
+                        label={PRESET_LABELS[option]}
+                        selected={selected}
+                        appearance="tonal"
+                        accentColor={accent}
+                        onPress={() => setPreset(option)}
                         accessibilityLabel={PRESET_LABELS[option]}
-                        style={({ pressed }) => [
-                          styles.chip,
-                          {
-                            backgroundColor: selected
-                              ? isDark
-                                ? "rgba(74,222,128,0.16)"
-                                : "rgba(22,163,74,0.12)"
-                              : inset,
-                            borderColor: selected ? accentBorder : insetBorder,
-                          },
-                          pressed ? styles.pressed : null,
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.chipText,
-                            {
-                              color: selected ? accent : theme.colors.foreground,
-                              fontWeight: selected ? "700" : "500",
-                            },
-                          ]}
-                        >
-                          {PRESET_LABELS[option]}
-                        </Text>
-                      </Pressable>
+                      />
                     );
                   })}
                 </View>
@@ -559,21 +533,18 @@ export function ReconcileAccountModal({
                   Import a CSV or paste the lines to see which transactions match.
                   Read on this device only — nothing is uploaded.
                 </Text>
-                <Pressable
+                <Button
+                  variant="outline"
+                  size="sm"
                   onPress={() => void pickFile()}
-                  accessibilityRole="button"
                   accessibilityLabel="Import a statement file"
-                  style={({ pressed }) => [
-                    styles.importButton,
-                    { backgroundColor: inset, borderColor: insetBorder },
-                    pressed ? styles.pressed : null,
-                  ]}
+                  style={styles.importButton}
                 >
                   <FileUp size={16} color={theme.colors.foreground} />
                   <Text style={[styles.importLabel, { color: theme.colors.foreground }]}>
                     Import CSV
                   </Text>
-                </Pressable>
+                </Button>
                 <TextInput
                   value={pastedText}
                   onChangeText={setPastedText}
@@ -646,20 +617,13 @@ export function ReconcileAccountModal({
               </View>
 
               {adjustment ? (
-                <Pressable
+                <Button
+                  variant="outline"
+                  size="sm"
                   onPress={() => void handleAdjust()}
                   disabled={adjusting}
-                  accessibilityRole="button"
                   accessibilityLabel="Record an adjustment entry"
-                  style={({ pressed }) => [
-                    styles.adjustButton,
-                    {
-                      backgroundColor: inset,
-                      borderColor: insetBorder,
-                      opacity: adjusting ? 0.6 : 1,
-                    },
-                    pressed ? styles.pressed : null,
-                  ]}
+                  style={styles.adjustButton}
                 >
                   {adjusting ? (
                     <ActivityIndicator size="small" color={theme.colors.foreground} />
@@ -669,7 +633,7 @@ export function ReconcileAccountModal({
                   >
                     Record a {adjustment.direction} adjustment entry
                   </Text>
-                </Pressable>
+                </Button>
               ) : null}
             </ScrollView>
 

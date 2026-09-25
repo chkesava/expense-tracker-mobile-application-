@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/Button";
 import { DayOfMonthSelect } from "@/components/common/DayOfMonthSelect";
 import { MonthYearSelect } from "@/components/common/MonthYearSelect";
 import { Input } from "@/components/ui/Input";
+import { Chip } from "@/components/ui/Chip";
 import {
   validateSubscriptionInput,
   type SubscriptionField,
@@ -351,18 +352,16 @@ export function EditSubscriptionModal({
                 Step {step} of 3 · {STEP_TITLES[step]}
               </Text>
             </View>
-            <Pressable
+            <Button
+              variant="ghost"
+              size="icon"
               onPress={onClose}
               hitSlop={12}
-              accessibilityRole="button"
               accessibilityLabel="Close"
-              style={({ pressed }) => [
-                styles.closeButton,
-                pressed && { opacity: 0.6 },
-              ]}
+              style={styles.closeButton}
             >
               <X size={20} color={theme.colors.mutedForeground} />
-            </Pressable>
+            </Button>
           </View>
 
           <View style={styles.stepRow}>
@@ -653,35 +652,12 @@ export function EditSubscriptionModal({
                   {categories.map((c) => {
                     const isSelected = category === c.name;
                     return (
-                      <Pressable
+                      <Chip
                         key={c.id}
+                        label={c.name}
+                        selected={isSelected}
                         onPress={() => setCategory(c.name)}
-                        style={[
-                          styles.chip,
-                          {
-                            backgroundColor: isSelected
-                              ? theme.colors.primary
-                              : surfaces.control,
-                            borderColor: isSelected
-                              ? theme.colors.primary
-                              : theme.colors.border,
-                          },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.chipText,
-                            {
-                              color: isSelected
-                                ? theme.colors.primaryForeground
-                                : theme.colors.foreground,
-                              fontWeight: isSelected ? "700" : "500",
-                            },
-                          ]}
-                        >
-                          {c.name}
-                        </Text>
-                      </Pressable>
+                      />
                     );
                   })}
                 </ScrollView>
@@ -710,35 +686,12 @@ export function EditSubscriptionModal({
                 {accounts.map((acc) => {
                   const isSelected = accountId === acc.id;
                   return (
-                    <Pressable
+                    <Chip
                       key={acc.id}
+                      label={acc.name}
+                      selected={isSelected}
                       onPress={() => setAccountId(acc.id)}
-                      style={[
-                        styles.chip,
-                        {
-                          backgroundColor: isSelected
-                            ? theme.colors.primary
-                            : surfaces.control,
-                          borderColor: isSelected
-                            ? theme.colors.primary
-                            : theme.colors.border,
-                        },
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.chipText,
-                          {
-                            color: isSelected
-                              ? theme.colors.primaryForeground
-                              : theme.colors.foreground,
-                            fontWeight: isSelected ? "700" : "500",
-                          },
-                        ]}
-                      >
-                        {acc.name}
-                      </Text>
-                    </Pressable>
+                    />
                   );
                 })}
               </ScrollView>
@@ -763,35 +716,12 @@ export function EditSubscriptionModal({
                   {accounts.map((acc) => {
                     const isSelected = toAccountId === acc.id;
                     return (
-                      <Pressable
+                      <Chip
                         key={acc.id}
+                        label={acc.name}
+                        selected={isSelected}
                         onPress={() => setToAccountId(acc.id)}
-                        style={[
-                          styles.chip,
-                          {
-                            backgroundColor: isSelected
-                              ? theme.colors.primary
-                              : surfaces.control,
-                            borderColor: isSelected
-                              ? theme.colors.primary
-                              : theme.colors.border,
-                          },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.chipText,
-                            {
-                              color: isSelected
-                                ? theme.colors.primaryForeground
-                                : theme.colors.foreground,
-                              fontWeight: isSelected ? "700" : "500",
-                            },
-                          ]}
-                        >
-                          {acc.name}
-                        </Text>
-                      </Pressable>
+                      />
                     );
                   })}
                 </ScrollView>

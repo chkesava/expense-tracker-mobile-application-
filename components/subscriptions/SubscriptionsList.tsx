@@ -21,6 +21,7 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { SkeletonHero, SkeletonList } from "@/components/common/Skeleton";
 import { EditSubscriptionModal } from "@/components/subscriptions/EditSubscriptionModal";
 import { RecurringReviewItem } from "@/components/subscriptions/RecurringReviewItem";
+import { Button } from "@/components/ui/Button";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useRecurringSuggestions } from "@/hooks/useRecurringSuggestions";
 import { useSubscriptions } from "@/hooks/useSubscriptions";
@@ -168,13 +169,11 @@ export function SubscriptionsList() {
           >
             MONTHLY RECURRING OUTFLOW
           </Text>
-          <Pressable
+          <Button
+            variant="primary"
+            size="sm"
             onPress={handleOpenAdd}
-            style={({ pressed }) => [
-              styles.addBtn,
-              { backgroundColor: theme.colors.primary },
-              pressed && { opacity: 0.8 },
-            ]}
+            style={styles.addBtn}
           >
             <Plus size={14} color={theme.colors.primaryForeground} strokeWidth={2.5} />
             <Text
@@ -185,7 +184,7 @@ export function SubscriptionsList() {
             >
               Add New
             </Text>
-          </Pressable>
+          </Button>
         </View>
 
         <Amount
@@ -552,20 +551,16 @@ export function SubscriptionsList() {
                     />
 
                     {sub.id && !sub.isCompleted ? (
-                      <Pressable
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        haptic={false}
                         onPress={(e) => {
                           e.stopPropagation();
                           haptic.selection().catch(() => undefined);
                           toggleActive(sub.id!, sub.isActive);
                         }}
-                        style={({ pressed }) => [
-                          styles.pauseBtn,
-                          {
-                            backgroundColor: surfaces.control,
-                            borderColor: theme.colors.border,
-                          },
-                          pressed && { opacity: 0.7 },
-                        ]}
+                        style={styles.pauseBtn}
                       >
                         {sub.isActive ? (
                           <Pause
@@ -587,7 +582,7 @@ export function SubscriptionsList() {
                         >
                           {sub.isActive ? "Pause" : "Resume"}
                         </Text>
-                      </Pressable>
+                      </Button>
                     ) : null}
                   </View>
                 </View>

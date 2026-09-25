@@ -115,15 +115,16 @@ export function VaultTransactionModal({
               </View>
             </View>
 
-            <Pressable
+            <Button
+              variant="ghost"
+              size="icon"
               onPress={onClose}
               hitSlop={12}
-              accessibilityRole="button"
               accessibilityLabel="Close"
-              style={({ pressed }) => [styles.closeBtn, pressed && { opacity: 0.6 }]}
+              style={styles.closeBtn}
             >
               <X size={20} color={theme.colors.mutedForeground} />
-            </Pressable>
+            </Button>
           </View>
 
           <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>

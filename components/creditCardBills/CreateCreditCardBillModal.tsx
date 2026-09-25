@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
+import { ScrollView, Switch, Text, View } from "react-native";
 import { CreditCard } from "lucide-react-native";
 
 import { Modal } from "@/components/common/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { Chip } from "@/components/ui/Chip";
 import { useAccountPayments } from "@/hooks/useAccountPayments";
 import { useCreditCardBills } from "@/hooks/useCreditCardBills";
 import { useExpenses } from "@/hooks/useExpenses";
@@ -18,8 +19,6 @@ import { previewClosedCycleCreditCardBill } from "@/shared/utils/autoCreditCardB
 import { validateCreditCardBillInput } from "@/shared/utils/creditCardBillInput";
 import { todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
-import { useSurfaces } from "@/theme/surfaces";
-import { haptic } from "@/lib/haptics";
 
 export type CreateCreditCardBillModalProps = {
   isOpen: boolean;
@@ -37,7 +36,6 @@ export function CreateCreditCardBillModal({
   defaultAccountId,
 }: CreateCreditCardBillModalProps) {
   const { theme } = useTheme();
-  const surfaces = useSurfaces();
   const { settings } = useSettings();
   const { createBill, bills } = useCreditCardBills();
   const { expenses } = useExpenses();
@@ -220,39 +218,13 @@ export function CreateCreditCardBillModal({
               {creditCards.map((c) => {
                 const selected = accountId === c.id;
                 return (
-                  <Pressable
+                  <Chip
                     key={c.id}
-                    onPress={() => {
-                      haptic.selection().catch(() => undefined);
-                      setAccountId(c.id);
-                    }}
-                    style={[
-                      styles.pill,
-                      {
-                        backgroundColor: selected
-                          ? theme.colors.primary
-                          : surfaces.control,
-                        borderColor: selected
-                          ? theme.colors.primary
-                          : theme.colors.border,
-                      },
-                    ]}
-                  >
-                    <CreditCard
-                      size={14}
-                      color={
-                        selected ? "#fff" : theme.colors.mutedForeground
-                      }
-                    />
-                    <Text
-                      style={{
-                        color: selected ? "#fff" : theme.colors.foreground,
-                        fontSize: theme.typography.sm,
-                      }}
-                    >
-                      {c.name}
-                    </Text>
-                  </Pressable>
+                    label={c.name}
+                    selected={selected}
+                    onPress={() => setAccountId(c.id)}
+                    icon={(color) => <CreditCard size={14} color={selected ? color : theme.colors.mutedForeground} />}
+                  />
                 );
               })}
             </ScrollView>
@@ -347,16 +319,3 @@ export function CreateCreditCardBillModal({
     </Modal>
   );
 }
-
-const styles = StyleSheet.create({
-  pill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderCurve: "continuous",
-  },
-});

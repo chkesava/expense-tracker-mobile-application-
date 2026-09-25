@@ -6,6 +6,7 @@ import { Amount } from "@/components/common/Amount";
 import { Modal } from "@/components/common/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { Chip } from "@/components/ui/Chip";
 import { useAccountPayments } from "@/hooks/useAccountPayments";
 import { useCreditCardBills } from "@/hooks/useCreditCardBills";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
@@ -324,47 +325,14 @@ export function RecordCashbackModal({
             {creditCards.map((c) => {
               const isSelected = cardId === c.id;
               return (
-                <Pressable
+                <Chip
                   key={c.id}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: isSelected }}
+                  label={c.name}
+                  selected={isSelected}
+                  onPress={() => setCardId(c.id)}
                   accessibilityLabel={`Credit card ${c.name}`}
-                  onPress={() => {
-                    haptic.selection().catch(() => undefined);
-                    setCardId(c.id);
-                  }}
-                  style={[
-                    styles.pill,
-                    {
-                      backgroundColor: isSelected ? theme.colors.primary : subtleBg,
-                      borderColor: isSelected
-                        ? theme.colors.primary
-                        : theme.colors.border,
-                    },
-                  ]}
-                >
-                  <CreditCard
-                    size={14}
-                    color={
-                      isSelected
-                        ? theme.colors.primaryForeground
-                        : theme.colors.mutedForeground
-                    }
-                  />
-                  <Text
-                    style={[
-                      styles.pillText,
-                      {
-                        color: isSelected
-                          ? theme.colors.primaryForeground
-                          : theme.colors.foreground,
-                        fontSize: theme.typography.xs,
-                      },
-                    ]}
-                  >
-                    {c.name}
-                  </Text>
-                </Pressable>
+                  icon={(color) => <CreditCard size={14} color={isSelected ? color : theme.colors.mutedForeground} />}
+                />
               );
             })}
           </ScrollView>
@@ -399,14 +367,16 @@ export function RecordCashbackModal({
               />
             </View>
             {usageInfo.totalOutstanding > 0 ? (
-              <Pressable
-                accessibilityRole="button"
+              <Button
+                variant="primary"
+                size="sm"
+                haptic={false}
                 accessibilityLabel="Use the full outstanding amount"
                 onPress={() => {
                   haptic.selection().catch(() => undefined);
                   setAmount(String(usageInfo.totalOutstanding));
                 }}
-                style={[styles.quickBtn, { backgroundColor: theme.colors.primary }]}
+                style={styles.quickBtn}
               >
                 <Text
                   style={{
@@ -417,7 +387,7 @@ export function RecordCashbackModal({
                 >
                   Use full
                 </Text>
-              </Pressable>
+              </Button>
             ) : null}
           </View>
         ) : null}
@@ -521,80 +491,25 @@ export function RecordCashbackModal({
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={{ gap: 8 }}
             >
-              <Pressable
-                accessibilityRole="button"
-                accessibilityState={{ selected: !linkedExpenseId }}
+              <Chip
+                label="Not linked"
+                selected={!linkedExpenseId}
+                onPress={() => setLinkedExpenseId(undefined)}
                 accessibilityLabel="Not linked to a purchase"
-                onPress={() => {
-                  haptic.selection().catch(() => undefined);
-                  setLinkedExpenseId(undefined);
-                }}
-                style={[
-                  styles.pill,
-                  {
-                    backgroundColor: !linkedExpenseId
-                      ? theme.colors.primary
-                      : subtleBg,
-                    borderColor: !linkedExpenseId
-                      ? theme.colors.primary
-                      : theme.colors.border,
-                  },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.pillText,
-                    {
-                      color: !linkedExpenseId
-                        ? theme.colors.primaryForeground
-                        : theme.colors.foreground,
-                      fontSize: theme.typography.xs,
-                    },
-                  ]}
-                >
-                  Not linked
-                </Text>
-              </Pressable>
+              />
               {linkablePurchases.map((purchase) => {
                 const isSelected = linkedExpenseId === purchase.id;
                 const label = `${purchase.date.slice(5)} · ${
                   purchase.note || purchase.category
                 }`;
                 return (
-                  <Pressable
+                  <Chip
                     key={purchase.id}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: isSelected }}
+                    label={label}
+                    selected={isSelected}
+                    onPress={() => setLinkedExpenseId(purchase.id)}
                     accessibilityLabel={`Link to ${label}`}
-                    onPress={() => {
-                      haptic.selection().catch(() => undefined);
-                      setLinkedExpenseId(purchase.id);
-                    }}
-                    style={[
-                      styles.pill,
-                      {
-                        backgroundColor: isSelected ? theme.colors.primary : subtleBg,
-                        borderColor: isSelected
-                          ? theme.colors.primary
-                          : theme.colors.border,
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.pillText,
-                        {
-                          color: isSelected
-                            ? theme.colors.primaryForeground
-                            : theme.colors.foreground,
-                          fontSize: theme.typography.xs,
-                        },
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {label}
-                    </Text>
-                  </Pressable>
+                  />
                 );
               })}
             </ScrollView>

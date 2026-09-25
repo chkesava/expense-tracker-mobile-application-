@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { AlertTriangle, ChevronRight, CalendarClock } from "lucide-react-native";
 
 import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { useEpfContributions } from "@/hooks/useEpfContributions";
 import { epfCurrentMonth, epfTodayKey } from "@/shared/features/epf/utils/epfClock";
@@ -73,12 +74,17 @@ export function EpfCurrentMonthCard({
             </Text>
           </View>
         </View>
-        <Pressable onPress={() => onOpen(establishment)} style={styles.cta}>
+        <Button
+          variant="outline"
+          size="sm"
+          onPress={() => onOpen(establishment)}
+          style={styles.cta}
+        >
           <Text style={[styles.ctaText, { color: theme.colors.primary }]}>
             {blocker === "no_wage" ? "Add a month" : "Add employer"}
           </Text>
           <ChevronRight size={theme.iconSize.sm} color={theme.colors.primary} />
-        </Pressable>
+        </Button>
       </Card>
     );
   }
