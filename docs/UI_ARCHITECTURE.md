@@ -108,6 +108,7 @@ Build-level verification: on `SPENDLY-154-final-qa`, `assembleRelease` succeeds 
 
 1. `npm run typecheck` and `npm test`. The contrast and bottom-chrome geometry tests live in `lib/` and `shared/config/`.
 2. Run it on a real Android device. Unit tests can't catch styling that fails silently; the Pressable bug only showed up in device screenshots.
+   - Test with **Spendly Test** against the local Firebase emulator, not the real app: see [LOCAL_TEST_MODE.md](LOCAL_TEST_MODE.md). It uses mock data and never touches production.
    - `npx expo run:android` builds the dev client, which is signed with the release key, so it installs as an update.
    - After a prebuild, restore the signing first (see section 4).
 3. Look at light theme, dark theme and a non-default accent, at a large font scale, and with 3-button and gesture navigation.

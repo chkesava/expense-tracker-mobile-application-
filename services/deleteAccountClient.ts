@@ -19,6 +19,7 @@ import {
   type DeletePhase,
 } from "@/shared/utils/deleteAccountRemote";
 import { getPublicAppOrigin } from "@/shared/utils/paymentRequestUrl";
+import { assertNetworkAllowed } from "@/lib/networkGuard";
 
 /** Guard against a server that never reports `done`. */
 const MAX_CALLS = 60;
@@ -66,6 +67,9 @@ export async function runAccountDeletion(
     throw new Error("Cannot reach the server. Deleting an account needs a connection.");
   }
   const doFetch = deps.fetchFn ?? fetch;
+  // Deleting an account runs firebase-admin against production: never from a
+  // local test build (SPENDLY-175).
+  assertNetworkAllowed(url);
   const getToken = deps.idToken ?? defaultIdToken;
 
   let phase: DeletePhase = "shared";

@@ -24,9 +24,10 @@
  */
 
 import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
-import type { Auth } from "firebase/auth";
+import { connectAuthEmulator, type Auth } from "firebase/auth";
 import {
   clearIndexedDbPersistence,
+  connectFirestoreEmulator,
   initializeFirestore,
   memoryLocalCache,
   persistentLocalCache,
@@ -36,13 +37,19 @@ import {
   waitForPendingWrites,
   type Firestore,
 } from "firebase/firestore";
-import { getStorage, type FirebaseStorage } from "firebase/storage";
+import { connectStorageEmulator, getStorage, type FirebaseStorage } from "firebase/storage";
 import { getFunctions, type Functions } from "firebase/functions";
 import { Platform } from "react-native";
 
 import { initializeFirebaseAppCheck } from "./appCheck";
 import { createAuth } from "./createAuth";
-import { env, isFirebaseEnvConfigured } from "./env";
+import {
+  FIREBASE_EMULATOR_PORTS,
+  LOCAL_TEST_PROJECT_ID,
+  env,
+  isFirebaseEnvConfigured,
+  isLocalTestMode,
+} from "./env";
 import { logWarning } from "./errors";
 import { setWriteQueueDurable } from "./firestoreWrite";
 
@@ -74,6 +81,19 @@ let cacheMode: FirebaseClients["firestoreCacheMode"] = "uninitialized";
 
 function createApp(): FirebaseApp {
   if (getApps().length > 0) return getApp();
+  if (isLocalTestMode()) {
+    // SPENDLY-175: a local test build never loads the production config. The
+    // `demo-` project does not exist in Google's cloud, so even a build that
+    // somehow missed the emulator could not read or write real data.
+    return initializeApp({
+      apiKey: "demo-api-key",
+      authDomain: `${LOCAL_TEST_PROJECT_ID}.firebaseapp.com`,
+      projectId: LOCAL_TEST_PROJECT_ID,
+      storageBucket: `${LOCAL_TEST_PROJECT_ID}.appspot.com`,
+      messagingSenderId: "0",
+      appId: "demo",
+    });
+  }
   return initializeApp({
     apiKey: env.firebase.apiKey,
     authDomain: env.firebase.authDomain,
@@ -85,6 +105,16 @@ function createApp(): FirebaseApp {
 }
 
 function createDb(firebaseApp: FirebaseApp): Firestore {
+  const instance = createDbInstance(firebaseApp);
+  // Every instance, including the one recreated after logout, must be pointed
+  // at the emulator before its first read.
+  if (isLocalTestMode()) {
+    connectFirestoreEmulator(instance, env.firebaseEmulatorHost, FIREBASE_EMULATOR_PORTS.firestore);
+  }
+  return instance;
+}
+
+function createDbInstance(firebaseApp: FirebaseApp): Firestore {
   try {
     if (Platform.OS === "web") {
       // Web: IndexedDB persistence with multi-tab support
@@ -137,10 +167,22 @@ export function getFirebaseClients(): FirebaseClients {
   if (!app) {
     try {
       app = createApp();
-      initializeFirebaseAppCheck(app);
+      const testMode = isLocalTestMode();
+      // App Check attests to the production project; the emulator needs none.
+      if (!testMode) initializeFirebaseAppCheck(app);
       auth = createAuth(app);
+      if (testMode) {
+        const host = env.firebaseEmulatorHost;
+        connectAuthEmulator(auth, `http://${host}:${FIREBASE_EMULATOR_PORTS.auth}`, {
+          disableWarnings: true,
+        });
+        console.info(`[firebase] LOCAL EMULATOR MODE (${host}), project ${LOCAL_TEST_PROJECT_ID}`);
+      }
       db = createDb(app);
       storage = getStorage(app);
+      if (testMode) {
+        connectStorageEmulator(storage, env.firebaseEmulatorHost, FIREBASE_EMULATOR_PORTS.storage);
+      }
       // Same region the Ganesh functions are deployed to (functions/src/index.ts).
       functions = getFunctions(app, "asia-south1");
       initError = null;

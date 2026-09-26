@@ -1,5 +1,6 @@
 import { ganeshDrawFunctionUrl, type DrawResponse } from "@/shared/utils/ganeshDrawRemote";
 import { getPublicAppOrigin } from "@/shared/utils/paymentRequestUrl";
+import { assertNetworkAllowed } from "@/lib/networkGuard";
 
 /**
  * Asks the server to run one draw (KAN-125).
@@ -26,6 +27,7 @@ export async function requestTokenDraw(input: {
   const idToken = await getFirebaseAuth()?.currentUser?.getIdToken();
   if (!idToken) throw new Error("Sign in first.");
 
+  assertNetworkAllowed(url);
   const response = await fetch(url, {
     method: "POST",
     headers: { Authorization: `Bearer ${idToken}`, "Content-Type": "application/json" },

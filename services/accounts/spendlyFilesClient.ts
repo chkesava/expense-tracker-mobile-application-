@@ -2,6 +2,7 @@ import { getFirebaseAuth } from "@/lib/firebase";
 import { env } from "@/lib/env";
 import { getSupabaseClient } from "@/lib/supabase";
 import { SPENDLY_FILES_BUCKET } from "@/shared/utils/accountDocuments";
+import { assertNetworkAllowed } from "@/lib/networkGuard";
 
 /**
  * The client half of account document storage (SPENDLY-88).
@@ -78,6 +79,7 @@ async function requireIdToken(): Promise<string> {
 async function callSpendlyFiles(payload: Record<string, unknown>): Promise<FunctionResult> {
   if (!env.supabase.url) throw new Error("Storage is not configured.");
   const idToken = await requireIdToken();
+  assertNetworkAllowed(`${env.supabase.url}/functions/v1/spendly-files`);
   const response = await fetch(`${env.supabase.url}/functions/v1/spendly-files`, {
     method: "POST",
     headers: {

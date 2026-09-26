@@ -94,6 +94,51 @@ function failFast({ step, error, why, fix }) {
   process.exit(1);
 }
 
+/**
+ * SPENDLY-175: the variable that turns a build into a local emulator test
+ * build. A release must never carry it.
+ */
+const LOCAL_TEST_ENV_KEY = 'EXPO_PUBLIC_FIREBASE_EMULATOR_HOST';
+const LOCAL_TEST_PACKAGE_SUFFIX = '.localtest';
+
+/**
+ * Why this checkout cannot produce a release build, or null when it can.
+ * Pure over its inputs so it can be unit tested.
+ */
+function localTestBuildBlocker({ envFileVars, processEnv, buildGradle }) {
+  if ((envFileVars[LOCAL_TEST_ENV_KEY] || '').trim() !== '') {
+    return `${LOCAL_TEST_ENV_KEY} is set in .env/.env.local/.env.release`;
+  }
+  if ((processEnv[LOCAL_TEST_ENV_KEY] || '').trim() !== '') {
+    return `${LOCAL_TEST_ENV_KEY} is set in the environment`;
+  }
+  const appId = /applicationId\s+['"]([^'"]+)['"]/.exec(buildGradle || '');
+  if (appId && appId[1].endsWith(LOCAL_TEST_PACKAGE_SUFFIX)) {
+    return `android/ was generated for the local test app (${appId[1]})`;
+  }
+  return null;
+}
+
+/** Fails the release pipeline if anything would make this a test build. */
+function assertNotLocalTestBuild() {
+  const buildGradle = fs.existsSync(BUILD_GRADLE_PATH)
+    ? fs.readFileSync(BUILD_GRADLE_PATH, 'utf8')
+    : '';
+  const blocker = localTestBuildBlocker({
+    envFileVars: getMergedEnvFileVars(),
+    processEnv: process.env,
+    buildGradle,
+  });
+  if (blocker) {
+    failFast({
+      step: 'Local test build guard',
+      error: blocker,
+      why: 'A release must talk to production Firebase. Local test builds use the emulator and a separate app id (docs/LOCAL_TEST_MODE.md).',
+      fix: `Remove ${LOCAL_TEST_ENV_KEY} (and .env.local), then run "npx expo prebuild --platform android" to regenerate android/ for the real app.`,
+    });
+  }
+}
+
 function parseCliArgs() {
   const args = process.argv.slice(2);
   const options = {
@@ -358,5 +403,9 @@ module.exports = {
   saveReleaseState,
   getReleaseState,
   getExpoPublicEnv,
-  getMergedEnvFileVars
+  getMergedEnvFileVars,
+  LOCAL_TEST_ENV_KEY,
+  LOCAL_TEST_PACKAGE_SUFFIX,
+  localTestBuildBlocker,
+  assertNotLocalTestBuild
 };
