@@ -8,6 +8,8 @@
  * the request instead of paying for a response nobody will read.
  */
 
+import { assertNetworkAllowed } from "./networkGuard";
+
 export const DEFAULT_REQUEST_TIMEOUT_MS = 8000;
 
 export type FetchWithTimeoutOptions = RequestInit & {
@@ -29,6 +31,8 @@ export async function fetchWithTimeout(
   options: FetchWithTimeoutOptions = {}
 ): Promise<Response> {
   const { timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS, signal, ...init } = options;
+  // Local test builds may only reach the Firebase emulator (SPENDLY-175).
+  assertNetworkAllowed(url);
 
   const controller = new AbortController();
   const abortFromUpstream = () => controller.abort();

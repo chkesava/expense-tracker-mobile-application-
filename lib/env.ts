@@ -51,13 +51,43 @@ export const env = {
    * Unused until an SDK is wired; keep the key static so Metro can inline it.
    */
   sentryDsn: trimEnv(process.env.EXPO_PUBLIC_SENTRY_DSN),
+
+  /**
+   * SPENDLY-175: host of the Firebase Local Emulator Suite. Set only for local
+   * test builds (`npm run android:test-build` or a gitignored `.env.local`);
+   * the release workflow refuses to build with it. When set, the app talks to
+   * a `demo-` project on the emulator and never to production Firebase.
+   */
+  firebaseEmulatorHost: trimEnv(process.env.EXPO_PUBLIC_FIREBASE_EMULATOR_HOST),
 } as const;
 
+/** Project the emulator serves. `demo-` projects never exist in Google's cloud. */
+export const LOCAL_TEST_PROJECT_ID = "demo-spendly";
+
+/** Emulator ports; keep in step with `emulators` in firebase.json. */
+export const FIREBASE_EMULATOR_PORTS = {
+  auth: 9099,
+  firestore: 8080,
+  storage: 9199,
+} as const;
+
+/**
+ * True in a local test build: Firebase goes to the emulator, and every other
+ * backend (Netlify, Supabase, market data) is blocked by `lib/networkGuard`.
+ */
+export function isLocalTestMode(): boolean {
+  return env.firebaseEmulatorHost !== "";
+}
+
 export function isSupabaseEnvConfigured(): boolean {
+  // Test builds never reach Supabase (SPENDLY-175).
+  if (isLocalTestMode()) return false;
   return Boolean(env.supabase.url && env.supabase.publishableKey);
 }
 
 export function isFirebaseEnvConfigured(): boolean {
+  // The emulator needs no production keys; lib/firebase uses a demo config.
+  if (isLocalTestMode()) return true;
   const f = env.firebase;
   return Boolean(
     f.apiKey &&

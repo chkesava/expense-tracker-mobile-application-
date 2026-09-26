@@ -74,8 +74,13 @@ supabase/.temp/
 *-firebase-adminsdk-*.json
 *-sa.json
 
+# SPENDLY-175: local emulator data for test builds (npm run emulators:local)
+.emulator-data/
+
 # Firestore emulator debug output (npm run test:rules)
 firestore-debug.log
+firebase-debug.log
+ui-debug.log
 
 # Bundled Netlify function output (scripts/bundle-ganesh-summary-fn.js)
 netlify/functions-dist/

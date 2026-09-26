@@ -77,7 +77,7 @@ function resolveProduct() {
   return raw;
 }
 
-module.exports = ({ config }) => {
+function buildConfig({ config }) {
   const product = resolveProduct();
   if (!product) return config;
 
@@ -171,4 +171,37 @@ module.exports = ({ config }) => {
       ...(override.extraPlugins || []),
     ],
   };
-};
+}
+
+/**
+ * SPENDLY-175: a local test build (EXPO_PUBLIC_FIREBASE_EMULATOR_HOST set,
+ * never in CI) installs as a separate "Spendly Test" app next to the real one,
+ * so its demo sign-in, caches and write outbox can never mix with the real
+ * account. google-services.json has no client for the test package, and the
+ * JS Firebase SDK does not need it, so the file is dropped (no push in test).
+ * With the variable unset the config is returned untouched.
+ */
+const LOCAL_TEST_SUFFIX = ".localtest";
+
+function applyLocalTestBuild(config) {
+  const emulatorHost = (process.env.EXPO_PUBLIC_FIREBASE_EMULATOR_HOST || "").trim();
+  if (emulatorHost === "" || isWebBuild) return config;
+
+  const { googleServicesFile: _dropped, ...android } = config.android || {};
+  const ios = config.ios || {};
+  return {
+    ...config,
+    name: `${config.name} Test`,
+    scheme: "spendly-test",
+    android: {
+      ...android,
+      package: `${android.package}${LOCAL_TEST_SUFFIX}`,
+    },
+    ios: ios.bundleIdentifier
+      ? { ...ios, bundleIdentifier: `${ios.bundleIdentifier}${LOCAL_TEST_SUFFIX}` }
+      : ios,
+  };
+}
+
+module.exports = (context) => applyLocalTestBuild(buildConfig(context));
+module.exports.LOCAL_TEST_SUFFIX = LOCAL_TEST_SUFFIX;

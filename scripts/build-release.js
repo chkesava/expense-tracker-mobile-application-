@@ -11,7 +11,8 @@ const {
   getCurrentVersion,
   parseCliArgs,
   failFast,
-  saveReleaseState
+  saveReleaseState,
+  assertNotLocalTestBuild
 } = require('./common');
 const { prepareRelease } = require('./prepare-release');
 
@@ -139,6 +140,8 @@ function getUniqueReleaseApkPath(baseName) {
 function buildRelease(cliOptions = null) {
   const startTime = Date.now();
   const options = cliOptions || parseCliArgs();
+  // SPENDLY-175: never compile a release from a local emulator test setup.
+  assertNotLocalTestBuild();
 
   console.log('\n' + '='.repeat(60));
   console.log('🏗️  [PHASE 2] COMPILING ANDROID RELEASE APK');

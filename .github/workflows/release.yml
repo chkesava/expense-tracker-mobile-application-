@@ -166,6 +166,18 @@ jobs:
           fi
           echo "Wrote .env with $KEY_COUNT EXPO_PUBLIC_* keys for product=$PRODUCT."
 
+          # SPENDLY-175: a release must talk to production Firebase. Refuse a
+          # local emulator test build, whether the flag came from a secret or a
+          # stray .env.local.
+          if grep -q '^EXPO_PUBLIC_FIREBASE_EMULATOR_HOST=' .env; then
+            echo "::error::EXPO_PUBLIC_FIREBASE_EMULATOR_HOST is set. That is a local test build and can never be released."
+            exit 1
+          fi
+          if [ -f .env.local ] || [ -f .env.release ]; then
+            echo "::error::.env.local/.env.release must not exist in CI: they would override the release .env."
+            exit 1
+          fi
+
       - name: Restore signing keystore
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}

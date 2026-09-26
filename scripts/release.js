@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-const { parseCliArgs } = require('./common');
+const { parseCliArgs, assertNotLocalTestBuild } = require('./common');
 const { verifyEnvironment } = require('./verify-environment');
 const { verifyKeystore } = require('./verify-keystore');
 const { verifyGoogleServices } = require('./verify-google-services');
@@ -19,6 +19,8 @@ function main() {
 
   // Step 1: Verification
   console.log('--- Phase 1: Environment & Asset Verification ---');
+  // SPENDLY-175: never ship a local emulator test build.
+  assertNotLocalTestBuild();
   verifyEnvironment();
   verifyKeystore();
   verifyGoogleServices(options.product);

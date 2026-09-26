@@ -12,6 +12,7 @@ import {
 import { AppBarActions } from "@/components/layout/AppBarActions";
 import { MonthDrawer } from "@/components/MonthDrawer";
 import { SideDrawer } from "@/components/SideDrawer";
+import { isLocalTestMode } from "@/lib/env";
 import { haptic } from "@/lib/haptics";
 import { isAccountDetailRoute } from "@/shared/config/navigation";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -72,6 +73,22 @@ export function Header() {
               >
                 Vault
               </Text>
+              {LOCAL_TEST_MODE ? (
+                // SPENDLY-175: a local test build must never pass for the real app.
+                <View
+                  style={[styles.testPill, { backgroundColor: theme.colors.warning }]}
+                  accessibilityLabel="Test data, local emulator"
+                >
+                  <Text
+                    style={[
+                      styles.testPillText,
+                      { color: theme.colors.warningForeground, fontFamily: theme.fontFamily.bold },
+                    ]}
+                  >
+                    TEST DATA
+                  </Text>
+                </View>
+              ) : null}
             </Pressable>
 
             <AppBarActions onOpenProfile={() => setIsDrawerOpen(true)} />
@@ -86,6 +103,9 @@ export function Header() {
 }
 
 export default Header;
+
+/** Build-time constant: the flag is inlined into the bundle. */
+const LOCAL_TEST_MODE = isLocalTestMode();
 
 const styles = StyleSheet.create({
   container: {
@@ -131,5 +151,14 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.72,
+  },
+  testPill: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 999,
+  },
+  testPillText: {
+    fontSize: 10,
+    letterSpacing: 0.4,
   },
 });

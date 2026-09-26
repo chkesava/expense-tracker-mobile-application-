@@ -1,6 +1,7 @@
 import { logError } from "@/lib/errors";
 import { ganeshSummaryFunctionUrl } from "@/shared/utils/ganeshSummaryRemote";
 import { getPublicAppOrigin } from "@/shared/utils/paymentRequestUrl";
+import { assertNetworkAllowed } from "@/lib/networkGuard";
 
 export type SummaryClientMode = "rebuild" | "seed" | "recompute";
 
@@ -19,6 +20,7 @@ async function postFestivalSummary(input: {
   const idToken = await user?.getIdToken();
   if (!idToken) throw new Error("Sign in first.");
 
+  assertNetworkAllowed(url);
   const response = await fetch(url, {
     method: "POST",
     headers: {

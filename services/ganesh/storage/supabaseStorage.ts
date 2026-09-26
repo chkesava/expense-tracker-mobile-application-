@@ -3,6 +3,7 @@ import { env } from "@/lib/env";
 import { getSupabaseClient } from "@/lib/supabase";
 import { bytesFromUri } from "@/services/ganesh/storage/imagePrepare";
 import { GANESH_FILES_BUCKET } from "@/services/ganesh/storage/storageTypes";
+import { assertNetworkAllowed } from "@/lib/networkGuard";
 
 /**
  * Every operation below routes through the `ganesh-files` Supabase Edge
@@ -88,6 +89,7 @@ async function callGaneshFiles(
 async function callGaneshFilesRaw(payload: Record<string, unknown>): Promise<FunctionResult> {
   if (!env.supabase.url) throw new Error("Storage is not configured.");
   const idToken = await requireIdToken();
+  assertNetworkAllowed(`${env.supabase.url}/functions/v1/ganesh-files`);
   const response = await fetch(`${env.supabase.url}/functions/v1/ganesh-files`, {
     method: "POST",
     headers: {
