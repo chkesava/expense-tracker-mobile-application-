@@ -78,6 +78,7 @@ describe("app.config.js test app", () => {
     name: string;
     scheme: string;
     android: { package: string; googleServicesFile?: string };
+    plugins?: unknown[];
   };
   const base = () =>
     JSON.parse(readFileSync(resolve(__dirname, "../app.json"), "utf8")).expo as Record<string, unknown>;
@@ -93,6 +94,8 @@ describe("app.config.js test app", () => {
     expect(cfg.android.package).toBe("com.example.expensetracker");
     expect(cfg.android.googleServicesFile).toBe("./google-services.json");
     expect(cfg.name).toBe("Spendly");
+    // The real app never allows cleartext http.
+    expect(JSON.stringify(cfg.plugins)).not.toContain("withLocalTestCleartext");
   });
 
   it("returns the combined config object itself when nothing is set", () => {
@@ -110,6 +113,7 @@ describe("app.config.js test app", () => {
     expect(cfg.android.googleServicesFile).toBeUndefined();
     expect(cfg.name).toBe("Spendly Test");
     expect(cfg.scheme).toBe("spendly-test");
+    expect(JSON.stringify(cfg.plugins)).toContain("withLocalTestCleartext");
   });
 });
 
@@ -205,5 +209,19 @@ describe("seed-emulator.js", () => {
     for (const row of collections.expenses) expect(accountIds).toContain(row.data.accountId);
     // Straight to the Dashboard, no onboarding.
     expect(userDoc.onboarding).toMatchObject({ welcomeCompleted: true, onboardingDismissed: true, setupStartedAt: "" });
+  });
+});
+
+describe("withLocalTestCleartext", () => {
+  const { networkSecurityXml } = require("../plugins/withLocalTestCleartext.js") as {
+    networkSecurityXml: (hosts: string[]) => string;
+  };
+
+  it("permits cleartext only for the listed emulator hosts", () => {
+    const xml = networkSecurityXml(["127.0.0.1", "localhost"]);
+    expect(xml).toContain('<domain-config cleartextTrafficPermitted="true">');
+    expect(xml).toContain("<domain includeSubdomains=\"false\">127.0.0.1</domain>");
+    // No base-config: every other host keeps the https-only default.
+    expect(xml).not.toContain("base-config");
   });
 });

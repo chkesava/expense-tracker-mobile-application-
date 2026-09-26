@@ -200,6 +200,11 @@ function applyLocalTestBuild(config) {
     ios: ios.bundleIdentifier
       ? { ...ios, bundleIdentifier: `${ios.bundleIdentifier}${LOCAL_TEST_SUFFIX}` }
       : ios,
+    // The emulator speaks plain http, which release builds refuse by default.
+    plugins: [
+      ...(config.plugins || []),
+      ["./plugins/withLocalTestCleartext", { host: emulatorHost }],
+    ],
   };
 }
 
