@@ -79,6 +79,7 @@ Ganesh Seva and Nutrition have their own design systems. Nothing here changes th
 - **Android glass blur needs the scope around the chrome.**
   - `GlassSurface` only blurs on Android when it can see the blur target's ref. `GlassBlurScope` publishes it and has to wrap both `GlassBlurTarget` (the screen stack) and the nav or dock that render beside it. Without the scope the glass silently falls back to tint only; the capsule shipped that way until SPENDLY-170.
   - expo-blur's Android radius is `intensity / blurReductionFactor` physical pixels and its dark tint scales with `intensity`. `smokeAndroidBlur()` in `components/ui/glassTokens` solves for both; don't pass a raw intensity for smoke glass.
+- **`NavigationBar style` names the button colour.** expo-navigation-bar's type docs say `"dark"` is a dark bar, but the native module treats it as dark *buttons* on a light scrim. Use `navigationBarStyleFor()` from `lib/navigationBarStyle`, whose test pins the native behaviour (SPENDLY-174).
 - **Colour-variable scope.** `SpendlyUIScope` applies the Spendly Gluestack variables to the Spendly shell only. Ganesh and Nutrition keep the root defaults.
 - **`expo prebuild` wipes the release signing.**
   - It regenerates `android/` even without `--clean`, dropping the hand-edited release signing in `android/app/build.gradle` and `android/gradle.properties`.
