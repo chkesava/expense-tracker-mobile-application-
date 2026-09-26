@@ -11,7 +11,13 @@
  * through brighter than a dark one.
  */
 export const SMOKE_TINT_RGB = [25, 32, 58] as const;
-export const SMOKE_TINT_ALPHA = { dark: 0.48, light: 0.72 } as const;
+/**
+ * Dark themes: a thin film, so the blurred page shows through as glass rather
+ * than a grey slab (the tint is lighter than a dark page, so a dense one reads
+ * opaque). Light themes need more, or white labels lose contrast over a white
+ * page; lib/navContrast.test.ts holds that line.
+ */
+export const SMOKE_TINT_ALPHA = { dark: 0.2, light: 0.72 } as const;
 /** Without blur the tint has to carry contrast on its own. */
 export const SMOKE_TINT_ALPHA_NO_BLUR = 0.9;
 
@@ -23,14 +29,14 @@ export const SMOKE_TINT_ALPHA_NO_BLUR = 0.9;
  * reduction factor that turns that into this radius on the device's density.
  * iOS uses `SMOKE_IOS_INTENSITY` with its native dark material.
  */
-export const SMOKE_BLUR_RADIUS_DP = 10;
-export const SMOKE_ANDROID_BLUR_TINT_ALPHA = 0.2;
+export const SMOKE_BLUR_RADIUS_DP = 8;
+export const SMOKE_ANDROID_BLUR_TINT_ALPHA = 0.1;
 export const SMOKE_IOS_INTENSITY = 70;
 /**
  * Darkening the blur layer itself adds before our tint, as the contrast model
  * counts it: rgb(25,25,25), a little under what Android actually lays down.
  */
-export const SMOKE_BLUR_TINT = { rgb: [25, 25, 25] as const, alpha: 0.18 } as const;
+export const SMOKE_BLUR_TINT = { rgb: [25, 25, 25] as const, alpha: 0.09 } as const;
 
 /** Android BlurView props that give `SMOKE_BLUR_RADIUS_DP` at `pixelRatio`. */
 export function smokeAndroidBlur(pixelRatio: number): {
@@ -47,7 +53,7 @@ export function smokeAndroidBlur(pixelRatio: number): {
  * top edge, fading out by `SMOKE_GLOSS_END` of the height. Icons sit in that
  * band, so the contrast test checks them against the glossed glass.
  */
-export const SMOKE_GLOSS_ALPHA = 0.08;
+export const SMOKE_GLOSS_ALPHA = 0.18;
 export const SMOKE_GLOSS_END = 0.55;
 
 /** Inactive nav labels on smoke glass. */

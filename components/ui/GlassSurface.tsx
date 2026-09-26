@@ -182,8 +182,8 @@ export function GlassSurface({
       <View style={[StyleSheet.absoluteFill, { backgroundColor: overlay }]} />
       {smoke ? (
         <>
-          {/* A restrained cool sheen over the top of the glass: translucent
-              glass, not glossy plastic (SPENDLY-172). */}
+          {/* Glossy sheen over the top of the glass: bright at the edge and
+              falling off by mid-height, so the surface reads as curved glass. */}
           <LinearGradient
             pointerEvents="none"
             colors={[
@@ -199,11 +199,19 @@ export function GlassSurface({
               pill default would push it off the glass. */}
           <LinearGradient
             pointerEvents="none"
-            colors={["rgba(160,180,255,0)", "rgba(160,180,255,0.18)", "rgba(160,180,255,0)"]}
+            colors={["rgba(210,220,255,0)", "rgba(230,236,255,0.55)", "rgba(210,220,255,0)"]}
             locations={[0, 0.5, 1]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={[styles.specularLine, { left: specularInset, right: specularInset }]}
+          />
+          {/* Soft reflection along the bottom edge, where glass catches light
+              bounced from below. */}
+          <LinearGradient
+            pointerEvents="none"
+            colors={["rgba(200,210,255,0)", "rgba(200,210,255,0.07)"]}
+            locations={[0.72, 1]}
+            style={StyleSheet.absoluteFill}
           />
         </>
       ) : (
@@ -278,9 +286,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderCurve: "continuous",
     // A subtle cool edge, brightest along the top, not a white outline.
-    borderColor: "rgba(150, 170, 255, 0.10)",
-    borderTopColor: "rgba(180, 195, 255, 0.20)",
-    borderLeftColor: "rgba(150, 175, 255, 0.14)",
+    borderColor: "rgba(170, 185, 255, 0.14)",
+    borderTopColor: "rgba(220, 228, 255, 0.34)",
+    borderLeftColor: "rgba(190, 205, 255, 0.22)",
   },
   specularLine: {
     position: "absolute",

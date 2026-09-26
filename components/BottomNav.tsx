@@ -299,6 +299,13 @@ export function BottomNav() {
                 colors={[rgbaString(SMOKE_LENS_TOP), rgbaString(SMOKE_LENS_BOTTOM)]}
                 style={StyleSheet.absoluteFill}
               />
+              {/* The lens's own glint along its top edge. */}
+              <LinearGradient
+                colors={["rgba(220, 225, 255, 0)", "rgba(220, 225, 255, 0.4)", "rgba(220, 225, 255, 0)"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.lensGlint}
+              />
             </Animated.View>
           ) : null}
           {navLinks.map((link, index) => {
@@ -362,6 +369,13 @@ const styles = StyleSheet.create({
     bottom: -PILL_OVERHANG,
     borderRadius: 999,
     borderCurve: "continuous",
+  },
+  lensGlint: {
+    position: "absolute",
+    top: 1,
+    left: "22%",
+    right: "22%",
+    height: 1,
   },
   indicatorLens: {
     overflow: "hidden",
