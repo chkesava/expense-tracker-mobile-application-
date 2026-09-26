@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   ACTION_DOCK_FAB_SIZE,
   BOTTOM_NAV_CONTENT_CLEARANCE,
+  CAPSULE_FAB_GAP,
   CAPSULE_FAB_SIZE,
   CAPSULE_HEIGHT,
   CAPSULE_MIN_INSET,
@@ -27,12 +28,10 @@ describe("bottom chrome geometry", () => {
     expect(capsuleOffset(34)).toBe(34);
   });
 
-  it("centres the FAB on the capsule rather than stacking it above", () => {
+  it("floats the FAB above the capsule, a fixed gap over its top (SPENDLY-172)", () => {
     for (const inset of INSETS) {
-      const fabBottom = bottomNavFabOffset(inset);
-      const fabTop = fabBottom + CAPSULE_FAB_SIZE;
-      expect(fabBottom).toBeGreaterThanOrEqual(capsuleOffset(inset));
-      expect(fabTop).toBeLessThanOrEqual(capsuleOffset(inset) + CAPSULE_HEIGHT);
+      const capsuleTop = capsuleOffset(inset) + CAPSULE_HEIGHT;
+      expect(bottomNavFabOffset(inset)).toBe(capsuleTop + CAPSULE_FAB_GAP);
     }
   });
 
@@ -41,8 +40,9 @@ describe("bottom chrome geometry", () => {
     expect(actionDockOffset(34)).toBe(34);
   });
 
-  it("measures the bottom nav from the capsule's top", () => {
-    expect(bottomChromeTopEdge(34)).toBe(34 + CAPSULE_HEIGHT);
+  it("measures the bottom nav from the floating FAB's top", () => {
+    expect(bottomChromeTopEdge(34)).toBe(bottomNavFabOffset(34) + CAPSULE_FAB_SIZE);
+    expect(bottomChromeTopEdge(34)).toBe(34 + CAPSULE_HEIGHT + CAPSULE_FAB_GAP + CAPSULE_FAB_SIZE);
   });
 
   it("measures the dock from its FAB, since it has no bar", () => {
@@ -52,8 +52,8 @@ describe("bottom chrome geometry", () => {
   });
 
   it.each(STYLES)("does not shrink %s chrome when the FAB is hidden", (navStyle) => {
-    // The capsule's FAB sits beside it and the dock's FAB is the chrome, so
-    // hiding the FAB never lowers the top edge.
+    // The bottom nav always renders its floating FAB and the dock's FAB is the
+    // chrome, so hiding the FAB never lowers the top edge.
     expect(bottomChromeTopEdge(0, { navStyle, withFab: false })).toBe(
       bottomChromeTopEdge(0, { navStyle })
     );
@@ -71,10 +71,10 @@ describe("bottomChromeClearance", () => {
   });
 
   it("pins the capsule numbers", () => {
-    // 72 capsule + 24 breathing room above the inset.
-    expect(bottomChromeClearance(34)).toBe(34 + 96);
+    // 68 capsule + 10 gap + 56 FAB + 24 breathing room above the inset.
+    expect(bottomChromeClearance(34)).toBe(34 + 158);
     // No inset: the capsule still floats 12 above the screen edge.
-    expect(bottomChromeClearance(0)).toBe(12 + 96);
+    expect(bottomChromeClearance(0)).toBe(12 + 158);
   });
 
   it("keeps the dock below the capsule's reach", () => {
@@ -102,16 +102,21 @@ describe("capsule tab sizing", () => {
     expect(shouldCompactNavLabels(capsuleRowWidth(390), 5, 1)).toBe(false);
   });
 
-  it("drops labels on a standard phone at the maximum font scale", () => {
-    expect(shouldCompactNavLabels(capsuleRowWidth(390), 5, 1.3)).toBe(true);
+  it("keeps labels on a standard phone even at the maximum font scale", () => {
+    // The full-width capsule (SPENDLY-172) gives each tab ~73dp at 390dp.
+    expect(shouldCompactNavLabels(capsuleRowWidth(390), 5, 1.3)).toBe(false);
+  });
+
+  it("drops labels on a 360dp phone at the maximum font scale", () => {
+    expect(shouldCompactNavLabels(capsuleRowWidth(360), 5, 1.3)).toBe(true);
   });
 
   it("keeps labels at large font when only four tabs are shown", () => {
     expect(shouldCompactNavLabels(capsuleRowWidth(412), 4, 1.3)).toBe(false);
   });
 
-  it("drops labels on a narrow 320dp phone", () => {
-    expect(shouldCompactNavLabels(capsuleRowWidth(320), 5, 1)).toBe(true);
+  it("keeps labels on a narrow 320dp phone at 1× font", () => {
+    expect(shouldCompactNavLabels(capsuleRowWidth(320), 5, 1)).toBe(false);
   });
 
   it("does not compact before the row has been measured", () => {
@@ -122,7 +127,7 @@ describe("capsule tab sizing", () => {
     for (const screen of [360, 390, 412, 480]) {
       expect(navTabWidth(capsuleRowWidth(screen), 5)).toBeGreaterThanOrEqual(48);
     }
-    // The capsule is 72dp tall minus 8dp padding each side: 56dp.
+    // The capsule is 68dp tall minus 8dp padding each side: 52dp.
     expect(CAPSULE_HEIGHT - 16).toBeGreaterThanOrEqual(48);
   });
 });

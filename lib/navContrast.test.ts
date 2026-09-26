@@ -7,7 +7,7 @@ import {
   themeUsesDarkPalette,
 } from "@/theme/tokens";
 import {
-  SMOKE_ACTIVE_PILL_ALPHA,
+  SMOKE_LENS_TOP,
   SMOKE_INACTIVE_ALPHA,
   SMOKE_INACTIVE_ICON_ALPHA,
   SMOKE_BLUR_RADIUS_DP,
@@ -70,9 +70,13 @@ describe("capsule nav contrast (smoke glass)", () => {
     expect(contrast(icon, glass)).toBeGreaterThanOrEqual(4.5);
   });
 
-  it.each(COMBOS)("%s / %s: the accent active tab reads on its frosted pill", (name, accent) => {
+  // The lens is a blue/purple tint over the glass (SPENDLY-172), modelled at
+  // its brighter top stop.
+  const LENS: RGB = [...SMOKE_LENS_TOP.rgb] as RGB;
+
+  it.each(COMBOS)("%s / %s: the accent active tab reads on its lens", (name, accent) => {
     const t = createTheme(name, accent);
-    const pill = over(WHITE, glassOver(name, accent), SMOKE_ACTIVE_PILL_ALPHA);
+    const pill = over(LENS, glassOver(name, accent), SMOKE_LENS_TOP.alpha);
     // BottomNav's pill model must agree with this test's independent one.
     const navPill = smokeActivePill([t.colors.background, t.colors.card], themeUsesDarkPalette(name));
     expect(navPill).toEqual(pill);
@@ -86,7 +90,7 @@ describe("capsule nav contrast (smoke glass)", () => {
     const glossed = over(WHITE, glassOver(name, accent), SMOKE_GLOSS_ALPHA);
     const icon = over(WHITE, glossed, SMOKE_INACTIVE_ICON_ALPHA);
     expect(contrast(icon, glossed)).toBeGreaterThanOrEqual(3);
-    const lens = over(WHITE, glossed, SMOKE_ACTIVE_PILL_ALPHA);
+    const lens = over(LENS, glossed, SMOKE_LENS_TOP.alpha);
     const backdrops = [t.colors.background, t.colors.card];
     const dark = themeUsesDarkPalette(name);
     const navLens = smokeActiveLens(backdrops, dark);

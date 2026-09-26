@@ -9,7 +9,6 @@ import React, {
 } from "react";
 import {
   AccessibilityInfo,
-  Image,
   PixelRatio,
   Platform,
   StyleSheet,
@@ -105,8 +104,6 @@ function tint(color: string, alpha: number): string {
   return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
 }
 
-const GRAIN = require("@/assets/branding/glass-grain.png");
-
 export type GlassSurfaceProps = {
   children?: ReactNode;
   /** Corner radius; defaults to a full pill. */
@@ -168,6 +165,9 @@ export function GlassSurface({
       : { intensity: SMOKE_IOS_INTENSITY }
     : { intensity };
 
+  // Clamp: a pill left at the 999 default still gets a line on the glass.
+  const specularInset = Math.min(radius, 40) * 0.6;
+
   const layers = (
     <View style={[StyleSheet.absoluteFill, { borderRadius: radius, overflow: "hidden" }]}>
       {canBlur ? (
@@ -182,40 +182,28 @@ export function GlassSurface({
       <View style={[StyleSheet.absoluteFill, { backgroundColor: overlay }]} />
       {smoke ? (
         <>
-          {/* Fine grain, as in iOS glass materials: keeps the smoke from reading as flat paint. */}
-          <Image
-            source={GRAIN}
-            resizeMode="repeat"
-            style={[StyleSheet.absoluteFill, styles.grain]}
-            accessibilityIgnoresInvertColors
-          />
-          {/* Specular gloss: a bright sheen over the top of the glass that falls
-              off quickly, so the surface reads as curved and polished. */}
+          {/* A restrained cool sheen over the top of the glass: translucent
+              glass, not glossy plastic (SPENDLY-172). */}
           <LinearGradient
             pointerEvents="none"
             colors={[
-              `rgba(255,255,255,${SMOKE_GLOSS_ALPHA})`,
-              `rgba(255,255,255,${SMOKE_GLOSS_ALPHA * 0.35})`,
-              "rgba(255,255,255,0)",
+              `rgba(200,210,255,${SMOKE_GLOSS_ALPHA})`,
+              `rgba(200,210,255,${SMOKE_GLOSS_ALPHA * 0.35})`,
+              "rgba(200,210,255,0)",
             ]}
             locations={[0, SMOKE_GLOSS_END * 0.6, SMOKE_GLOSS_END]}
             style={StyleSheet.absoluteFill}
           />
-          {/* Light catching the top edge: a thin line, brightest mid-width. */}
+          {/* Light catching the top edge: a thin cool line, brightest mid-width.
+              Inset from the corner curve, so it needs a real radius; the 999
+              pill default would push it off the glass. */}
           <LinearGradient
             pointerEvents="none"
-            colors={["rgba(255,255,255,0)", "rgba(255,255,255,0.55)", "rgba(255,255,255,0)"]}
+            colors={["rgba(160,180,255,0)", "rgba(160,180,255,0.18)", "rgba(160,180,255,0)"]}
             locations={[0, 0.5, 1]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
-            style={[styles.specularLine, { left: radius * 0.6, right: radius * 0.6 }]}
-          />
-          {/* Faint lift along the bottom edge, where the glass catches reflected light. */}
-          <LinearGradient
-            pointerEvents="none"
-            colors={["rgba(255,255,255,0)", "rgba(255,255,255,0.05)"]}
-            locations={[0.7, 1]}
-            style={StyleSheet.absoluteFill}
+            style={[styles.specularLine, { left: specularInset, right: specularInset }]}
           />
         </>
       ) : (
@@ -227,15 +215,15 @@ export function GlassSurface({
 
   if (smoke) {
     // Everything drawn here stays outside or on the edge of the glass: the
-    // shadow and the dark-page glow are outset-only box shadows, and the rim
-    // is a 1px border, brightest along the top and left like light catching
-    // a glass edge. Nothing translucent sits *under* the glass to grey it.
+    // blue glow and drop shadow are outset-only box shadows, and the rim is a
+    // 1px cool border, brightest along the top and left like light catching a
+    // glass edge. Nothing translucent sits *under* the glass to grey it.
     return (
       <View
         testID={testID}
         style={[
           styles.smokeShell,
-          { borderRadius: radius, boxShadow: isDark ? SMOKE_SHADOW_DARK : SMOKE_SHADOW },
+          { borderRadius: radius, boxShadow: SMOKE_SHADOW },
           style,
         ]}
       >
@@ -264,10 +252,11 @@ export function GlassSurface({
   );
 }
 
-/** A wide soft drop plus a tight contact shadow. */
-const SMOKE_SHADOW = "0px 10px 28px rgba(0, 0, 0, 0.42), 0px 2px 8px rgba(0, 0, 0, 0.24)";
-/** On dark pages a faint cool halo spreads around the capsule, as in the reference. */
-const SMOKE_SHADOW_DARK = `0px 0px 22px 6px rgba(110, 120, 200, 0.10), ${SMOKE_SHADOW}`;
+/**
+ * A restrained blue atmospheric glow plus a soft drop, both outset-only and
+ * static, so nothing translucent sits under the glass and nothing animates.
+ */
+const SMOKE_SHADOW = "0px 0px 28px 8px rgba(70, 90, 220, 0.18), 0px 8px 24px rgba(0, 0, 0, 0.35)";
 
 const styles = StyleSheet.create({
   fill: {
@@ -288,19 +277,15 @@ const styles = StyleSheet.create({
     left: 0,
     borderWidth: 1,
     borderCurve: "continuous",
-    borderColor: "rgba(255, 255, 255, 0.12)",
-    borderTopColor: "rgba(255, 255, 255, 0.38)",
-    borderLeftColor: "rgba(255, 255, 255, 0.24)",
+    // A subtle cool edge, brightest along the top, not a white outline.
+    borderColor: "rgba(150, 170, 255, 0.10)",
+    borderTopColor: "rgba(180, 195, 255, 0.20)",
+    borderLeftColor: "rgba(150, 175, 255, 0.14)",
   },
   specularLine: {
     position: "absolute",
     top: 1.5,
     height: 1,
-  },
-  grain: {
-    width: "100%",
-    height: "100%",
-    opacity: 0.12,
   },
   smokeInner: {
     flex: 1,

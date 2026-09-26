@@ -4,14 +4,14 @@
  */
 
 /**
- * SPENDLY-154/170: "smoke" is the iOS-style frosted glass used by the capsule
- * nav: heavy blur, a cool blue-grey smoke tint, a bright rim and grain, with
- * white content on top. It looks the same in every theme; only the tint
- * density adapts, because a light page shows through brighter than a dark one.
+ * SPENDLY-154/170/172: "smoke" is the iOS-style glass used by the capsule nav:
+ * a backdrop blur under a cool blue/indigo tint, a subtle cool rim, a restrained
+ * gloss and a blue atmospheric glow, with white content on top. It looks the
+ * same in every theme; only the tint density adapts, because a light page shows
+ * through brighter than a dark one.
  */
-/** Deeper than any Spendly page, so the smoke darkens what it covers instead of greying it. */
-export const SMOKE_TINT_RGB = [8, 10, 18] as const;
-export const SMOKE_TINT_ALPHA = { dark: 0.42, light: 0.84 } as const;
+export const SMOKE_TINT_RGB = [25, 32, 58] as const;
+export const SMOKE_TINT_ALPHA = { dark: 0.48, light: 0.72 } as const;
 /** Without blur the tint has to carry contrast on its own. */
 export const SMOKE_TINT_ALPHA_NO_BLUR = 0.9;
 
@@ -47,7 +47,7 @@ export function smokeAndroidBlur(pixelRatio: number): {
  * top edge, fading out by `SMOKE_GLOSS_END` of the height. Icons sit in that
  * band, so the contrast test checks them against the glossed glass.
  */
-export const SMOKE_GLOSS_ALPHA = 0.22;
+export const SMOKE_GLOSS_ALPHA = 0.08;
 export const SMOKE_GLOSS_END = 0.55;
 
 /** Inactive nav labels on smoke glass. */
@@ -55,12 +55,17 @@ export const SMOKE_INACTIVE_ALPHA = 0.85;
 /** Inactive nav icons: a touch brighter than labels, as in the reference. */
 export const SMOKE_INACTIVE_ICON_ALPHA = 0.9;
 /**
- * The lens-like pill behind the active tab: a white gradient, brightest at the
- * top. The contrast model uses the brightest stop.
+ * The lens behind the active tab: a blue/purple translucent gradient rather
+ * than a white bubble. The contrast model uses the brighter top stop.
  */
-export const SMOKE_ACTIVE_PILL_ALPHA = 0.16;
-export const SMOKE_ACTIVE_PILL_BOTTOM_ALPHA = 0.07;
-export const SMOKE_ACTIVE_PILL_BORDER_ALPHA = 0.14;
+export const SMOKE_LENS_TOP = { rgb: [120, 110, 255] as const, alpha: 0.16 } as const;
+export const SMOKE_LENS_BOTTOM = { rgb: [80, 90, 180] as const, alpha: 0.08 } as const;
+export const SMOKE_LENS_BORDER = "rgba(160, 170, 255, 0.10)";
+
+/** `{rgb, alpha}` as a CSS colour string. */
+export function rgbaString({ rgb, alpha }: { rgb: readonly number[]; alpha: number }): string {
+  return `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${alpha})`;
+}
 
 // ---- Contrast maths (WCAG 2) -----------------------------------------------
 
@@ -94,18 +99,22 @@ export function over(fg: RGB, bg: RGB, alpha: number): RGB {
 }
 
 /**
- * The active pill as it composites over a page: the smoke tint over the
- * lightest surface that can scroll beneath the capsule, plus the pill's white
- * wash. `backdrops` are that theme's page and card colours.
+ * The active lens as it composites over a page, at the label's height: the
+ * smoke glass over the lightest surface that can scroll beneath the capsule,
+ * plus the lens tint. `backdrops` are that theme's page and card colours.
  */
 export function smokeActivePill(backdrops: string[], isDark: boolean): RGB {
-  return over([255, 255, 255], smokeGlass(lightestOf(backdrops), isDark), SMOKE_ACTIVE_PILL_ALPHA);
+  return overLens(smokeGlass(lightestOf(backdrops), isDark));
 }
 
-/** The active pill at the top of the glass, where the gloss adds to it: behind the icon. */
+/** The active lens at the icon's height, where the top gloss adds to it. */
 export function smokeActiveLens(backdrops: string[], isDark: boolean): RGB {
   const glossed = over([255, 255, 255], smokeGlass(lightestOf(backdrops), isDark), SMOKE_GLOSS_ALPHA);
-  return over([255, 255, 255], glossed, SMOKE_ACTIVE_PILL_ALPHA);
+  return overLens(glossed);
+}
+
+function overLens(glass: RGB): RGB {
+  return over([...SMOKE_LENS_TOP.rgb] as RGB, glass, SMOKE_LENS_TOP.alpha);
 }
 
 function lightestOf(backdrops: string[]): RGB {
