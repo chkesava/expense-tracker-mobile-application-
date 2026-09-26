@@ -22,11 +22,13 @@ import { Skeleton } from "@/components/common/Skeleton";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
+import { cardContentPadding, type CardDensity } from "./cardDensity";
+
+export { cardContentPadding, type CardDensity } from "./cardDensity";
 
 export type CardVariant = "outlined" | "elevated" | "filled" | "tonal" | "glass";
 export type CardElevation = 0 | 1 | 2 | 3 | 4 | 5;
 export type CardRadius = "sm" | "md" | "lg" | "xl" | "xxl" | "full";
-
 export type CardProps = {
   children?: ReactNode;
   title?: string;
@@ -55,6 +57,8 @@ export type CardProps = {
   emptyNode?: ReactNode;
   style?: StyleProp<ViewStyle>;
   contentStyle?: StyleProp<ViewStyle>;
+  /** Padding density; see `CardDensity`. */
+  density?: CardDensity;
   testID?: string;
 };
 
@@ -86,6 +90,7 @@ export function Card({
   emptyNode,
   style,
   contentStyle,
+  density = "default",
   testID,
 }: CardProps) {
   const { theme, themeName } = useTheme();
@@ -278,7 +283,9 @@ export function Card({
   };
 
   const cardInner = (
-    <View style={[styles.innerContent, contentStyle]}>
+    <View
+      style={[styles.innerContent, cardContentPadding(density, theme.space), contentStyle]}
+    >
       {renderHeader()}
       {loading
         ? renderLoadingSkeleton()
@@ -308,6 +315,8 @@ export function Card({
       opacity: disabled ? 0.6 : 1,
     },
     elevationStyle,
+    // Compact drops the Gluestack card's own p-4 (style beats className).
+    density === "compact" ? styles.compactShell : null,
     style,
   ];
 
@@ -357,7 +366,9 @@ const styles = StyleSheet.create({
   },
   innerContent: {
     width: "100%",
-    padding: 16,
+  },
+  compactShell: {
+    padding: 0,
   },
   headerRow: {
     flexDirection: "row",

@@ -182,7 +182,7 @@ export type ThemeTokens = {
   type: TypeScaleTokens;
 };
 
-const space: SpaceTokens = {
+export const space: SpaceTokens = {
   xs: 4,
   sm: 8,
   md: 12,

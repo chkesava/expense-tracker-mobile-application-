@@ -48,6 +48,8 @@ export function AddTransactionModal() {
 
   return (
     <Modal
+      // SPENDLY-173: the form needs the full width; see Modal's `density`.
+      density="compact"
       isOpen={isAddExpenseOpen}
       onClose={requestClose}
       title={

@@ -32,6 +32,7 @@ import { CategoryPicker } from "@/components/categories/CategoryPicker";
 import { Amount } from "@/components/common/Amount";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { space } from "@/theme/tokens";
 import { Chip } from "@/components/ui/Chip";
 import { Input } from "@/components/ui/Input";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
@@ -607,8 +608,8 @@ export function ExpenseForm({
       ) : null}
 
       {/* Amount Input Card */}
-      <Card>
-        <View style={{ gap: 8 }}>
+      <Card density="compact">
+        <View style={{ gap: FORM_SPACING.labelGap }}>
           <Text
             style={{
               fontSize: theme.typography.xs,
@@ -650,7 +651,12 @@ export function ExpenseForm({
           </View>
 
           {/* Quick Amount Increment Pills */}
-          <View style={styles.quickPillsRow}>
+          {/* Scrolls rather than clipping "+2000" on narrow phones. */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.quickPillsRow}
+          >
             {[100, 500, 1000, 2000].map((pill) => (
               <Chip
                 key={pill}
@@ -661,14 +667,14 @@ export function ExpenseForm({
                 accessibilityLabel={`Add ${pill}`}
               />
             ))}
-          </View>
+          </ScrollView>
         </View>
       </Card>
 
       {/* Category / Source Picker */}
       {type === "expense" ? (
-        <Card>
-          <View style={{ gap: 8 }}>
+        <Card density="compact">
+          <View style={{ gap: FORM_SPACING.labelGap }}>
             <View
               style={{
                 flexDirection: "row",
@@ -755,8 +761,8 @@ export function ExpenseForm({
           </View>
         </Card>
       ) : (
-        <Card>
-          <View style={{ gap: 8 }}>
+        <Card density="compact">
+          <View style={{ gap: FORM_SPACING.labelGap }}>
             <Text
               style={{
                 fontSize: theme.typography.xs,
@@ -782,8 +788,8 @@ export function ExpenseForm({
       )}
 
       {/* Account Selection with Balance Preview */}
-      <Card>
-        <View style={{ gap: 8 }}>
+      <Card density="compact">
+        <View style={{ gap: FORM_SPACING.labelGap }}>
           <Text
             style={{
               fontSize: theme.typography.xs,
@@ -876,8 +882,8 @@ export function ExpenseForm({
       </Card>
 
       {/* Note & Date Details */}
-      <Card>
-        <View style={{ gap: 12 }}>
+      <Card density="compact">
+        <View style={{ gap: FORM_SPACING.fieldGap }}>
           <Input
             label="NOTE / DESCRIPTION"
             value={note}
@@ -896,7 +902,7 @@ export function ExpenseForm({
 
           {/* Tags */}
           {type === "expense" ? (
-            <View style={{ gap: 8 }}>
+            <View style={{ gap: FORM_SPACING.labelGap }}>
               <Text
                 style={{
                   fontSize: theme.typography.xs,
@@ -958,7 +964,7 @@ export function ExpenseForm({
 
           {/* Spending Space (optional grouping label) */}
           {type === "expense" && selectableSpaces.length > 0 ? (
-            <View style={{ gap: 8 }}>
+            <View style={{ gap: FORM_SPACING.labelGap }}>
               <Text
                 style={{
                   fontSize: theme.typography.xs,
@@ -991,7 +997,7 @@ export function ExpenseForm({
       </Card>
 
       {/* Action Buttons */}
-      <View style={{ gap: 10, marginTop: 16, marginBottom: 8 }}>
+      <View style={{ gap: FORM_SPACING.controlGap, marginTop: FORM_SPACING.footerOffset, marginBottom: space.sm }}>
         <Button loading={isSubmitting} onPress={handleSubmit}>
           {editingExpense || editingIncome
             ? "Update Transaction"
@@ -1103,16 +1109,33 @@ export function ExpenseForm({
   );
 }
 
+/**
+ * SPENDLY-173: the Add Transaction form's one spacing contract, built from
+ * the Spendly space tokens. Section cards use `Card density="compact"`.
+ */
+const FORM_SPACING = {
+  /** Between section cards. */
+  sectionGap: space.md,
+  /** A section label to its control. */
+  labelGap: space.xs + 2,
+  /** Between controls inside a section (chips, pills). */
+  controlGap: space.sm,
+  /** Between stacked inputs (note, date, tags). */
+  fieldGap: space.md,
+  /** Extra room above the Save/Cancel actions, on top of `sectionGap`. */
+  footerOffset: space.xs,
+} as const;
+
 const styles = StyleSheet.create({
   embeddedBody: {
-    gap: 16,
+    gap: FORM_SPACING.sectionGap,
     paddingBottom: 8,
   },
   pageScroll: {
     flex: 1,
   },
   pageScrollContent: {
-    gap: 16,
+    gap: FORM_SPACING.sectionGap,
     paddingTop: 8,
     paddingBottom: 48,
   },
@@ -1135,12 +1158,11 @@ const styles = StyleSheet.create({
   },
   amountInput: {
     flex: 1,
-    paddingVertical: 4,
+    paddingVertical: 0,
   },
   quickPillsRow: {
     flexDirection: "row",
-    gap: 8,
-    marginTop: 4,
+    gap: FORM_SPACING.controlGap,
   },
   suggestionBadge: {
     flexDirection: "row",
