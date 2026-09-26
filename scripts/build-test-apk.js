@@ -7,6 +7,12 @@
  *
  *   npm run android:test-build            # emulator host 127.0.0.1 (adb reverse)
  *   npm run android:test-build -- --host=192.168.1.20
+ *   npm run android:test-build -- --prebuild   # force a fresh android/
+ *
+ * Prebuild wipes android/ and forces a full native recompile (about 25
+ * minutes), so it only runs when android/ is not already the test variant,
+ * or with --prebuild. Use --prebuild after changing app.config.js, plugins
+ * or native dependencies; JS/UI changes only need the fast path.
  *
  * Steps:
  *   1. expo prebuild for the Expense product with the emulator flag. The
@@ -77,18 +83,31 @@ function testBuildEnv(host) {
   };
 }
 
+/** True when android/ was generated for the *.localtest app. */
+function isTestVariantAndroidDir() {
+  const gradlePath = path.join(ANDROID_DIR, 'app', 'build.gradle');
+  if (!fs.existsSync(gradlePath)) return false;
+  const gradle = fs.readFileSync(gradlePath, 'utf8');
+  return new RegExp(`applicationId\\s+['"][^'"]+\\${LOCAL_TEST_PACKAGE_SUFFIX}['"]`).test(gradle);
+}
+
 function run(command, cwd, env) {
   console.log(`\n> ${command}`);
   execSync(command, { cwd, env, stdio: 'inherit' });
 }
 
 function main() {
-  const host = parseHost(process.argv.slice(2));
+  const argv = process.argv.slice(2);
+  const host = parseHost(argv);
   const env = testBuildEnv(host);
 
   console.log(`\nBuilding Spendly Test against the Firebase emulator at ${host}`);
 
-  run('npx expo prebuild --platform android --no-install', ROOT_DIR, env);
+  if (argv.includes('--prebuild') || !isTestVariantAndroidDir()) {
+    run('npx expo prebuild --platform android --no-install', ROOT_DIR, env);
+  } else {
+    console.log('android/ is already the test variant: skipping prebuild (pass --prebuild to force one).');
+  }
   verifyGradle();
 
   const buildGradle = fs.readFileSync(path.join(ANDROID_DIR, 'app', 'build.gradle'), 'utf8');
@@ -132,4 +151,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { parseHost, testBuildEnv };
+module.exports = { parseHost, testBuildEnv, isTestVariantAndroidDir };

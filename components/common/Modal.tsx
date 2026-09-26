@@ -12,6 +12,7 @@ import {
   ModalBody
 } from "@/components/ui/modal";
 import { Text } from "react-native";
+import { sheetBodyPadding } from "./sheetDensity";
 
 export interface ModalProps {
   isOpen: boolean;
@@ -20,7 +21,16 @@ export interface ModalProps {
   children: ReactNode;
   /** Cap sheet height. Number = px; string like "88%" = fraction of window. */
   maxHeight?: number | string;
+  /**
+   * SPENDLY-173: `compact` for dense forms (Add Transaction). By default the
+   * sheet stacks Gluestack's ModalContent `p-6` and ModalBody `mt-2 mb-6` on
+   * top of its own 20dp body padding, 44dp from the screen edge to the
+   * content. Compact clears the Gluestack layers and uses the standard 16dp
+   * gutter. The default is unchanged for every other sheet (Ganesh included).
+   */
+  density?: "default" | "compact";
 }
+
 
 function resolveMaxHeight(maxHeight: number | string, windowHeight: number): number {
   if (typeof maxHeight === "number" && Number.isFinite(maxHeight)) {
@@ -68,7 +78,9 @@ export function Modal({
   title,
   children,
   maxHeight = "88%",
+  density = "default",
 }: ModalProps) {
+  const compact = density === "compact";
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
   const keyboardHeight = useKeyboardHeight();
@@ -90,7 +102,7 @@ export function Modal({
     >
       <ModalBackdrop />
       <ModalContent
-        className="w-full bg-card rounded-t-3xl rounded-b-none border-t border-border overflow-hidden m-0 pb-0"
+        className={`w-full bg-card rounded-t-3xl rounded-b-none border-t border-border overflow-hidden m-0 pb-0${compact ? " p-0" : ""}`}
         style={{
           maxHeight: sheetMaxHeight,
           // The keyboard already covers the nav bar inset while it is up.
@@ -99,7 +111,9 @@ export function Modal({
         }}
       >
         {title && (
-          <ModalHeader className="px-5 py-3 border-b border-border items-center flex-row justify-between">
+          <ModalHeader
+            className={`${compact ? "px-4" : "px-5"} py-3 border-b border-border items-center flex-row justify-between`}
+          >
             <Text className="text-lg font-bold text-foreground flex-1 tracking-tight" numberOfLines={1}>
               {title}
             </Text>
@@ -116,10 +130,10 @@ export function Modal({
           Borrowing) become unreachable. SPENDLY-171.
         */}
         <ModalBody
-          className="p-0"
+          className={compact ? "p-0 m-0" : "p-0"}
           scrollEnabled
           style={{ flexGrow: 0, flexShrink: 1 }}
-          contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 20, paddingBottom: 40 }}
+          contentContainerStyle={sheetBodyPadding(density)}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="always"
           bounces
