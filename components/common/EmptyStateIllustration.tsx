@@ -9,12 +9,15 @@ import Svg, {
 } from "react-native-svg";
 import Animated, {
   FadeIn,
+  cancelAnimation,
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
   withRepeat,
   withSequence,
   withTiming,
 } from "react-native-reanimated";
+import { useIsFocused } from "expo-router";
 import {
   Receipt,
   Coins,
@@ -55,6 +58,8 @@ export type EmptyIllustrationType =
   | "search"
   | "general";
 
+const FLOAT_CYCLES = 2;
+
 export interface EmptyStateIllustrationProps {
   type?: EmptyIllustrationType;
   size?: "normal" | "compact";
@@ -76,17 +81,33 @@ export function EmptyStateIllustration({
 
   // Gentle floating animation for the secondary accent badge
   const floatOffset = useSharedValue(0);
+  const reduceMotion = useReducedMotion();
+  // Tab screens stay mounted after the user moves away, so unmount alone
+  // never stops the float on a tab that isn't showing.
+  const isFocused = useIsFocused();
 
   React.useEffect(() => {
-    floatOffset.value = withRepeat(
-      withSequence(
-        withTiming(-4, { duration: 1600 }),
-        withTiming(2, { duration: 1600 })
+    if (reduceMotion || !isFocused) {
+      cancelAnimation(floatOffset);
+      floatOffset.value = 0;
+      return;
+    }
+
+    // A few cycles, then settle. An endless loop kept an idle screen with
+    // an empty state redrawing the whole window every frame (SPENDLY-168).
+    floatOffset.value = withSequence(
+      withRepeat(
+        withSequence(
+          withTiming(-4, { duration: 1600 }),
+          withTiming(2, { duration: 1600 })
+        ),
+        FLOAT_CYCLES
       ),
-      -1,
-      true
+      withTiming(0, { duration: 800 })
     );
-  }, [floatOffset]);
+
+    return () => cancelAnimation(floatOffset);
+  }, [floatOffset, reduceMotion, isFocused]);
 
   const floatingStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: floatOffset.value }],
