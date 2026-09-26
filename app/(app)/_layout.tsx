@@ -13,6 +13,7 @@ import { TabSwipeArea } from "@/components/navigation/TabSwipeArea";
 import { GlassBlurScope, GlassBlurTarget } from "@/components/ui/GlassSurface";
 import { OverlayProvider } from "@gluestack-ui/core/overlay/creator";
 import { NavigationBar } from "expo-navigation-bar";
+import { navigationBarStyleFor } from "@/lib/navigationBarStyle";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { SetupWizardModal } from "@/components/onboarding/SetupWizardModal";
 import { useAndroidBackHandler } from "@/hooks/useAndroidBackHandler";
@@ -61,8 +62,9 @@ function AppShellInner() {
         {/* SPENDLY-154: Android 15 draws a contrast scrim behind the 3-button
             nav bar and picks its tone from the bar style. Follow the Spendly
             theme so dark themes get a dark scrim with light buttons instead
-            of a light band under the capsule. Android-only; no-op elsewhere. */}
-        <NavigationBar style={themeUsesDarkPalette(themeName) ? "dark" : "light"} />
+            of a light band under the capsule. The prop names the *button*
+            colour; see lib/navigationBarStyle (SPENDLY-174). Android-only. */}
+        <NavigationBar style={navigationBarStyleFor(themeUsesDarkPalette(themeName))} />
         <Header />
         {/* SPENDLY-161/170: the glass nav/dock blur whatever scrolls in the
             target. The scope wraps the chrome too, or it can't find it. */}
