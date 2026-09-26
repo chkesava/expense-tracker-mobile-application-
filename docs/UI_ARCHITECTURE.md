@@ -36,8 +36,8 @@ Ganesh Seva and Nutrition have their own design systems. Nothing here changes th
 | Bottom sheet | `Modal` (`components/common/Modal`) | Gluestack sheet with its own ScrollView. |
 | Confirm or alert | `appDialog` (`lib/appDialog`), `Dialog` (`components/common/Dialog`) | Never call `Alert.alert`. |
 | Toast | `toast` (`lib/toast`) | |
-| Floating glass | `GlassSurface` (`components/ui/GlassSurface`) | `tone="smoke"` is the dark frosted glass used by the nav (SPENDLY-170); its active tab uses `glassAccent(theme.colors.primary)` from `components/ui/glassTokens`. |
-| Add FAB | `AddFab` (`components/ui/AddFab`) | |
+| Floating glass | `GlassSurface` (`components/ui/GlassSurface`) | `tone="smoke"` is the blue-indigo iOS-style glass used by the nav (SPENDLY-170/172). All its values live in `components/ui/glassTokens`; the active tab uses `glassAccent(theme.colors.primary)` on a blue/purple lens. Pass an explicit `radius`: the specular line is inset from the corner curve. |
+| Add FAB | `AddFab` (`components/ui/AddFab`) | In the bottom nav it floats above the capsule's trailing end (SPENDLY-172), so the capsule keeps the full width. |
 
 ## 3. Rules for new and changed screens
 

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   BOTTOM_NAV_CONTENT_CLEARANCE,
+  CAPSULE_FAB_GAP,
   CAPSULE_FAB_SIZE,
   CAPSULE_HEIGHT,
   CAPSULE_MIN_INSET,
@@ -13,15 +14,16 @@ import {
   spendlyBottomClearance,
 } from "@/components/layout/spendlyBottomClearance";
 
+/** Capsule, the gap, and the FAB floating above it (SPENDLY-172). */
+const CHROME = CAPSULE_HEIGHT + CAPSULE_FAB_GAP + CAPSULE_FAB_SIZE;
+
 describe("spendlyBottomClearance", () => {
-  it("clears the capsule + system inset by default", () => {
+  it("clears the capsule, its floating FAB and the system inset by default", () => {
     const inset = 34;
-    expect(spendlyBottomClearance(inset)).toBe(
-      inset + CAPSULE_HEIGHT + BOTTOM_NAV_CONTENT_CLEARANCE
-    );
+    expect(spendlyBottomClearance(inset)).toBe(inset + CHROME + BOTTOM_NAV_CONTENT_CLEARANCE);
   });
 
-  it("is unchanged when the FAB is hidden, since the FAB sits beside the capsule", () => {
+  it("is unchanged when the FAB is hidden, since the nav always renders it", () => {
     expect(spendlyBottomClearance(20, { withFab: false })).toBe(
       spendlyBottomClearance(20)
     );
@@ -30,7 +32,7 @@ describe("spendlyBottomClearance", () => {
   it("adds optional extra breathing room", () => {
     // A zero system inset is floored at the capsule's minimum float height.
     expect(spendlyBottomClearance(0, { withFab: true, extra: 16 })).toBe(
-      CAPSULE_MIN_INSET + CAPSULE_HEIGHT + BOTTOM_NAV_CONTENT_CLEARANCE + 16
+      CAPSULE_MIN_INSET + CHROME + BOTTOM_NAV_CONTENT_CLEARANCE + 16
     );
   });
 });
@@ -46,7 +48,7 @@ describe("resolveListBottomPadding", () => {
       spendlyBottomClearance(34, { withFab: true })
     );
     expect(resolveListBottomPadding(null, 0, 20)).toBe(
-      CAPSULE_MIN_INSET + CAPSULE_HEIGHT + BOTTOM_NAV_CONTENT_CLEARANCE + 20
+      CAPSULE_MIN_INSET + CHROME + BOTTOM_NAV_CONTENT_CLEARANCE + 20
     );
   });
 

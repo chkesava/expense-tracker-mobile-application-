@@ -35,21 +35,25 @@ export const ACTION_DOCK_FAB_SIZE = 56;
 export const ACTION_DOCK_EDGE = 24;
 
 /*
- * SPENDLY-161: Spendly's bottom nav is a floating capsule rather than a
- * full-width bar, with the add FAB beside it on the same baseline instead of
- * stacked above it. The `BOTTOM_NAV_*` constants above describe the old flat
- * bar and stay because the Ganesh and Nutrition tab bars still size
- * themselves from them.
+ * SPENDLY-161/172: Spendly's bottom nav is a floating capsule rather than a
+ * full-width bar. Since SPENDLY-172 it spans almost the whole screen width,
+ * after the iOS-style reference, and the add FAB floats above its trailing end
+ * instead of sitting beside it and squeezing the tabs. The `BOTTOM_NAV_*`
+ * constants above describe the old flat bar and stay because the Ganesh and
+ * Nutrition tab bars still size themselves from them.
  */
-/** SPENDLY-170: 72dp, the compact end of the reference's 68–76dp. */
-export const CAPSULE_HEIGHT = 72;
+export const CAPSULE_HEIGHT = 68;
+/** A full pill: half the height. */
+export const CAPSULE_RADIUS = CAPSULE_HEIGHT / 2;
 /** The capsule floats: it floors the system inset higher than the old bar. */
 export const CAPSULE_MIN_INSET = 12;
-/** Horizontal margin between the capsule (or FAB) and the screen edge. */
-export const CAPSULE_SIDE_MARGIN = 16;
-/** Gap between the capsule and the FAB beside it. */
+/** Horizontal margin between the capsule and the screen edge: nearly full width. */
+export const CAPSULE_SIDE_MARGIN = 4;
+/** Vertical gap between the capsule's top and the FAB floating above it. */
 export const CAPSULE_FAB_GAP = 10;
 export const CAPSULE_FAB_SIZE = 56;
+/** Inset of the floating FAB from the trailing screen edge. */
+export const CAPSULE_FAB_EDGE = 12;
 
 /** Distance from the screen bottom to the underside of the nav capsule. */
 export function capsuleOffset(bottomInset: number): number {
@@ -57,11 +61,11 @@ export function capsuleOffset(bottomInset: number): number {
 }
 
 /**
- * Distance from the screen bottom to the underside of the bottom-nav FAB.
- * The FAB is centred on the capsule's height, so it never rises above it.
+ * Distance from the screen bottom to the underside of the bottom-nav FAB,
+ * which floats `CAPSULE_FAB_GAP` above the capsule's top.
  */
 export function bottomNavFabOffset(bottomInset: number): number {
-  return capsuleOffset(bottomInset) + (CAPSULE_HEIGHT - CAPSULE_FAB_SIZE) / 2;
+  return capsuleOffset(bottomInset) + CAPSULE_HEIGHT + CAPSULE_FAB_GAP;
 }
 
 /** Distance from the screen bottom to the underside of the dock's FAB. */
@@ -74,8 +78,8 @@ export type BottomChromeOptions = {
   navStyle?: BottomNavStyle;
   /**
    * When false, the screen hides the FAB. Neither chrome gets shorter for it:
-   * the capsule's FAB sits beside it rather than above, and the dock's FAB is
-   * the chrome itself. Kept so callers can state intent.
+   * the bottom nav always renders its floating FAB, and the dock's FAB is the
+   * chrome itself. Kept so callers can state intent.
    */
   withFab?: boolean;
 };
@@ -91,7 +95,8 @@ export function bottomChromeTopEdge(
   if (navStyle === "dock") {
     return actionDockOffset(bottomInset) + ACTION_DOCK_FAB_SIZE;
   }
-  return capsuleOffset(bottomInset) + CAPSULE_HEIGHT;
+  // The FAB floats above the capsule, so it is the chrome's highest point.
+  return bottomNavFabOffset(bottomInset) + CAPSULE_FAB_SIZE;
 }
 
 /**
@@ -140,14 +145,9 @@ export function shouldCompactNavLabels(
 
 /**
  * Width available to the tab row on a screen of `screenWidth`: the screen,
- * minus side margins, minus the FAB and its gap, minus capsule padding.
+ * minus side margins, minus capsule padding. The FAB floats above, so it
+ * takes no width from the row.
  */
 export function capsuleRowWidth(screenWidth: number, capsulePadding = 8): number {
-  return (
-    screenWidth -
-    CAPSULE_SIDE_MARGIN * 2 -
-    CAPSULE_FAB_SIZE -
-    CAPSULE_FAB_GAP -
-    capsulePadding * 2
-  );
+  return screenWidth - CAPSULE_SIDE_MARGIN * 2 - capsulePadding * 2;
 }

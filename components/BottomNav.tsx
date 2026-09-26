@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Keyboard,
   Platform,
@@ -7,13 +7,13 @@ import {
   Text,
   View,
   useWindowDimensions,
-  type LayoutChangeEvent,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, {
   interpolate,
   useAnimatedStyle,
   useSharedValue,
+  withSequence,
   withTiming,
 } from "react-native-reanimated";
 import { usePathname, useRouter } from "expo-router";
@@ -28,8 +28,11 @@ import {
 } from "lucide-react-native";
 
 import {
+  CAPSULE_FAB_EDGE,
   CAPSULE_FAB_GAP,
+  CAPSULE_FAB_SIZE,
   CAPSULE_HEIGHT,
+  CAPSULE_RADIUS,
   CAPSULE_SIDE_MARGIN,
   capsuleOffset,
 } from "@/components/layout/chrome";
@@ -40,12 +43,13 @@ import {
 import { AddFab } from "@/components/ui/AddFab";
 import { GlassSurface } from "@/components/ui/GlassSurface";
 import {
-  SMOKE_ACTIVE_PILL_ALPHA,
-  SMOKE_ACTIVE_PILL_BOTTOM_ALPHA,
-  SMOKE_ACTIVE_PILL_BORDER_ALPHA,
   SMOKE_INACTIVE_ALPHA,
   SMOKE_INACTIVE_ICON_ALPHA,
+  SMOKE_LENS_BORDER,
+  SMOKE_LENS_BOTTOM,
+  SMOKE_LENS_TOP,
   glassAccent,
+  rgbaString,
   smokeActiveLens,
   smokeActivePill,
 } from "@/components/ui/glassTokens";
@@ -76,10 +80,8 @@ const ICON_MAP: Record<
 
 /** Inner padding between the capsule edge and the tab row. */
 const CAPSULE_PADDING = 8;
-/** How far the active lens reaches into that padding. */
-const PILL_OVERHANG = 5;
-
-type TabFrame = { x: number; width: number };
+/** How far the active lens reaches into that padding: just enough to stay contained. */
+const PILL_OVERHANG = 2;
 
 function NavDestination({
   link,
@@ -89,7 +91,6 @@ function NavDestination({
   inactiveIconColor,
   compact,
   onPress,
-  onLayout,
 }: {
   link: NavigationItem;
   isActive: boolean;
@@ -99,7 +100,6 @@ function NavDestination({
   /** Icon-only: the row is too narrow for labels at this font scale. */
   compact: boolean;
   onPress: () => void;
-  onLayout: (event: LayoutChangeEvent) => void;
 }) {
   const { t } = useTranslation();
   const Icon = ICON_MAP[link.id] || Wallet;
@@ -110,13 +110,12 @@ function NavDestination({
   return (
     <Pressable
       onPress={onPress}
-      onLayout={onLayout}
       style={({ pressed }) => [styles.tab, pressed && !isActive && styles.tabPressed]}
       accessibilityRole="tab"
       accessibilityLabel={`Go to ${label}`}
       accessibilityState={{ selected: isActive }}
     >
-      <Icon size={24} color={iconColor} strokeWidth={isActive ? 2.4 : 2} />
+      <Icon size={22} color={iconColor} strokeWidth={isActive ? 2.4 : 2} />
       {compact ? null : (
         <Text
           style={[
@@ -136,8 +135,8 @@ function NavDestination({
 }
 
 /**
- * Floating glass capsule navigation with the add FAB riding beside it
- * (SPENDLY-161). Geometry comes from `shared/config/bottomChrome`, which is
+ * Floating glass capsule navigation, nearly full width, with the add FAB
+ * floating above its trailing end (SPENDLY-161/172). Geometry comes from `shared/config/bottomChrome`, which is
  * also what every list pads by, so content always scrolls clear of both.
  */
 export function BottomNav() {
@@ -187,51 +186,36 @@ export function BottomNav() {
   }, [keyboardProgress]);
 
   // ---- Sliding active indicator -------------------------------------------
-  // Tab frames are read imperatively; keeping them in state would re-render
-  // the whole row on every layout pass.
-  const frames = useRef<Record<number, TabFrame>>({});
-  const indicatorX = useSharedValue(0);
-  const indicatorWidth = useSharedValue(0);
-  const indicatorOpacity = useSharedValue(0);
-  const placedOnce = useRef(false);
+  // SPENDLY-172: React owns where the lens is and whether it shows; Reanimated
+  // only animates a transient offset that slides it in from the previous tab.
+  // The tabs are equal-width flex children, so the lens's frame follows from
+  // the measured row width. The old version placed it from per-tab layout
+  // events with an animated opacity, and on a cold start (the saved route is
+  // restored after the first render) those animated values could fail to reach
+  // the view, leaving no lens at all. If the slide is ever interrupted now, the
+  // lens still lands on the right tab.
+  const tabWidth = rowWidth > 0 && navLinks.length > 0 ? rowWidth / navLinks.length : 0;
+  const slideOffset = useSharedValue(0);
+  const previousIndex = useRef(activeIndex);
 
-  const moveIndicator = useCallback(
-    (index: number) => {
-      const frame = frames.current[index];
-      if (index < 0 || !frame) {
-        indicatorOpacity.set(withTiming(0, { duration: durations.short }));
-        return;
-      }
-      const timing = { duration: durations.medium, easing: easing.standard };
-      if (!placedOnce.current) {
-        // First placement snaps; only later changes slide.
-        indicatorX.set(frame.x);
-        indicatorWidth.set(frame.width);
-        placedOnce.current = true;
-      } else {
-        indicatorX.set(withTiming(frame.x, timing));
-        indicatorWidth.set(withTiming(frame.width, timing));
-      }
-      indicatorOpacity.set(withTiming(1, { duration: durations.short }));
-    },
-    [indicatorOpacity, indicatorWidth, indicatorX]
-  );
+  // Layout effect: set the offset before the new `left` paints, so the lens
+  // doesn't flash at its destination for a frame before sliding.
+  useLayoutEffect(() => {
+    const from = previousIndex.current;
+    previousIndex.current = activeIndex;
+    if (from < 0 || activeIndex < 0 || from === activeIndex || tabWidth <= 0) return;
+    slideOffset.set(
+      withSequence(
+        withTiming((from - activeIndex) * tabWidth, { duration: 0 }),
+        withTiming(0, { duration: durations.medium, easing: easing.standard })
+      )
+    );
+  }, [activeIndex, tabWidth, slideOffset]);
 
-  useEffect(() => {
-    moveIndicator(activeIndex);
-  }, [activeIndex, moveIndicator]);
-
-  const handleTabLayout = (index: number) => (event: LayoutChangeEvent) => {
-    const { x, width } = event.nativeEvent.layout;
-    frames.current[index] = { x, width };
-    if (index === activeIndex) moveIndicator(activeIndex);
-  };
-
-  const indicatorStyle = useAnimatedStyle(() => ({
-    opacity: indicatorOpacity.get(),
-    width: indicatorWidth.get(),
-    transform: [{ translateX: indicatorX.get() }],
+  const slideStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: slideOffset.get() }],
   }));
+  const showLens = activeIndex >= 0 && tabWidth > 0;
 
   // ---- Actions --------------------------------------------------------------
   const handleTabPress = (link: NavigationItem, isActive: boolean) => {
@@ -254,9 +238,9 @@ export function BottomNav() {
     ],
   }));
 
-  // SPENDLY-170: the capsule is dark frosted glass in every theme, so its
+  // SPENDLY-170/172: the capsule is blue-indigo glass in every theme, so its
   // content is white; the active tab takes the user's accent, lifted toward
-  // white only as far as it needs to read, inside a frosted pill.
+  // white only as far as it needs to read, inside a blue/purple lens.
   // lib/navContrast.test.ts pins both against the lightest backdrops.
   const isDark = themeUsesDarkPalette(themeName);
   const { primary, background, card } = theme.colors;
@@ -281,32 +265,49 @@ export function BottomNav() {
         keyboardStyle,
       ]}
     >
-      <GlassSurface tone="smoke" style={styles.capsule} contentStyle={styles.capsuleContent}>
+      <View style={styles.fabSlot} pointerEvents="box-none">
+        <AddFab
+          size="lg"
+          onPress={() => setIsAddSheetOpen(true)}
+          accessibilityLabel="Add"
+        />
+      </View>
+
+      <GlassSurface
+        tone="smoke"
+        radius={CAPSULE_RADIUS}
+        style={styles.capsule}
+        contentStyle={styles.capsuleContent}
+      >
         <View
           style={styles.row}
           accessibilityRole="tablist"
           onLayout={(event) => setRowWidth(event.nativeEvent.layout.width)}
         >
-          {/* A lens of lighter glass: brightest at the top, like the reference. */}
-          <Animated.View
-            pointerEvents="none"
-            style={[styles.indicator, styles.indicatorGloss, indicatorStyle]}
-          >
-            <LinearGradient
-              colors={[
-                `rgba(255, 255, 255, ${SMOKE_ACTIVE_PILL_ALPHA})`,
-                `rgba(255, 255, 255, ${SMOKE_ACTIVE_PILL_BOTTOM_ALPHA})`,
+          {/* A subtle blue/purple lens, contained inside the capsule. */}
+          {showLens ? (
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.indicator,
+                styles.indicatorLens,
+                { left: activeIndex * tabWidth, width: tabWidth },
+                slideStyle,
               ]}
-              style={StyleSheet.absoluteFill}
-            />
-            {/* The lens's own glint along its top edge. */}
-            <LinearGradient
-              colors={["rgba(255, 255, 255, 0)", "rgba(255, 255, 255, 0.45)", "rgba(255, 255, 255, 0)"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.lensGlint}
-            />
-          </Animated.View>
+            >
+              <LinearGradient
+                colors={[rgbaString(SMOKE_LENS_TOP), rgbaString(SMOKE_LENS_BOTTOM)]}
+                style={StyleSheet.absoluteFill}
+              />
+              {/* The lens's own glint along its top edge. */}
+              <LinearGradient
+                colors={["rgba(220, 225, 255, 0)", "rgba(220, 225, 255, 0.4)", "rgba(220, 225, 255, 0)"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.lensGlint}
+              />
+            </Animated.View>
+          ) : null}
           {navLinks.map((link, index) => {
             const isActive = index === activeIndex;
             return (
@@ -319,18 +320,11 @@ export function BottomNav() {
                 inactiveIconColor={inactiveIconColor}
                 compact={compactLabels}
                 onPress={() => handleTabPress(link, isActive)}
-                onLayout={handleTabLayout(index)}
               />
             );
           })}
         </View>
       </GlassSurface>
-
-      <AddFab
-        size="lg"
-        onPress={() => setIsAddSheetOpen(true)}
-        accessibilityLabel="Add"
-      />
     </Animated.View>
   );
 }
@@ -338,18 +332,24 @@ export function BottomNav() {
 export default BottomNav;
 
 const styles = StyleSheet.create({
+  // SPENDLY-172: a column, so the FAB floats above the capsule's trailing end
+  // and the capsule keeps the full width. Both stay inside this box: Android
+  // only delivers touches within a view's bounds.
   navContainer: {
     position: "absolute",
     left: CAPSULE_SIDE_MARGIN,
     right: CAPSULE_SIDE_MARGIN,
     zIndex: 90,
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: "column",
+    alignItems: "stretch",
     gap: CAPSULE_FAB_GAP,
-    height: CAPSULE_HEIGHT,
+    height: CAPSULE_FAB_SIZE + CAPSULE_FAB_GAP + CAPSULE_HEIGHT,
+  },
+  fabSlot: {
+    alignSelf: "flex-end",
+    marginRight: CAPSULE_FAB_EDGE - CAPSULE_SIDE_MARGIN,
   },
   capsule: {
-    flex: 1,
     height: CAPSULE_HEIGHT,
   },
   capsuleContent: {
@@ -367,7 +367,6 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: -PILL_OVERHANG,
     bottom: -PILL_OVERHANG,
-    left: 0,
     borderRadius: 999,
     borderCurve: "continuous",
   },
@@ -378,11 +377,10 @@ const styles = StyleSheet.create({
     right: "22%",
     height: 1,
   },
-  indicatorGloss: {
+  indicatorLens: {
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: `rgba(255, 255, 255, ${SMOKE_ACTIVE_PILL_BORDER_ALPHA})`,
-    borderTopColor: "rgba(255, 255, 255, 0.28)",
+    borderColor: SMOKE_LENS_BORDER,
   },
   tab: {
     flex: 1,
@@ -398,8 +396,9 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   tabLabel: {
-    fontSize: 11,
-    letterSpacing: 0.1,
+    fontSize: 10.5,
+    lineHeight: 13,
+    letterSpacing: 0,
     textAlign: "center",
   },
 });
