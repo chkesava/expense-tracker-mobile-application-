@@ -28,7 +28,7 @@ from each story's scope and acceptance criteria.
 |---|---|---|---|---|
 | 1 | [SPENDLY-313](https://kesavach.atlassian.net/browse/SPENDLY-313) | Taxonomy, data model, provenance | — | Merged to epic |
 | 2 | [SPENDLY-314](https://kesavach.atlassian.net/browse/SPENDLY-314) | Detection & classification engine | 313 | Merged to epic |
-| 3 | SPENDLY-315 | Review, confirmation & correction flow | 314 | To Do |
+| 3 | [SPENDLY-315](https://kesavach.atlassian.net/browse/SPENDLY-315) | Review, confirmation & correction flow | 314 | Committed on story branch, awaiting merge approval |
 | 4 | SPENDLY-316 | Dashboard & cost overview | 314, 315 | To Do |
 | 5 | SPENDLY-317 | Fee detail, evidence & linkage | 314, 315 | To Do |
 | 6 | SPENDLY-318 | Recurring & fee-pattern intelligence | 314 | To Do |
@@ -46,3 +46,4 @@ second calendar. Only local `expo-notifications` exists (bill reminders, SMS);
 
 * [SPENDLY-313](SPENDLY-313-fee-taxonomy-model.md)
 * [SPENDLY-314](SPENDLY-314-fee-detection.md)
+* [SPENDLY-315](SPENDLY-315-fee-review-correction.md)

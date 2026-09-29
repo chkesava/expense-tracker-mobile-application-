@@ -490,7 +490,7 @@ service cloud.firestore {
             'subtype', 'components', 'linkedKind', 'linkedId',
             'sourceAmount', 'inferredRole', 'inferredFeeType',
             'inferredConfidence', 'engineVersion', 'note', 'revision',
-            'createdAtMs', 'updatedAtMs'])
+            'history', 'createdAtMs', 'updatedAtMs'])
           && d.sourceKind in feeSourceKinds()
           && feeRefId(d.sourceId)
           && reviewId == d.sourceKind + '__' + d.sourceId
@@ -510,6 +510,10 @@ service cloud.firestore {
                   && d.inferredConfidence >= 0 && d.inferredConfidence <= 1))
           && (!d.keys().hasAny(['engineVersion']) || d.engineVersion is int)
           && (!d.keys().hasAny(['note']) || (d.note is string && d.note.size() <= 500))
+          // SPENDLY-315 correction history: earlier states, capped so the
+          // document can never grow without bound (FEE_REVIEW_HISTORY_LIMIT).
+          && (!d.keys().hasAny(['history'])
+              || (d.history is list && d.history.size() <= 20))
           && d.revision is int
           && d.revision >= 1
           && d.createdAtMs is number

@@ -176,6 +176,24 @@ export interface FeeInference {
 export type FeeReviewDecision = "confirm" | "correct" | "not_fee";
 
 /**
+ * SPENDLY-315 — one earlier state of a review, kept on the review document
+ * itself (newest last, at most `FEE_REVIEW_HISTORY_LIMIT`). An embedded list
+ * rather than a subcollection: it is only ever read alongside the review, and
+ * one document keeps a correction to one atomic write.
+ */
+export interface FeeReviewHistoryEntry {
+  revision: number;
+  decision: FeeReviewDecision;
+  role: FeeRole;
+  feeType?: FeeTypeId;
+  subtype?: string;
+  components: FeeComponents;
+  linkedKind?: TransactionKind;
+  linkedId?: string;
+  atMs: number;
+}
+
+/**
  * The user's decision about one source transaction. Doc id is
  * `feeReviewDocId(source)`, so a transaction can never carry two reviews.
  *
@@ -203,6 +221,8 @@ export interface FeeReview {
   note?: string;
   /** Increments on every write; correction history keys off it. */
   revision: number;
+  /** Earlier states of this review, oldest first (SPENDLY-315). */
+  history?: FeeReviewHistoryEntry[];
   createdAtMs: number;
   updatedAtMs: number;
 }
