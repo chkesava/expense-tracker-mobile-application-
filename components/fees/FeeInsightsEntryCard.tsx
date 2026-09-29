@@ -3,27 +3,39 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { ChevronRight, ReceiptText } from "lucide-react-native";
 
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { useFeeIntelligence } from "@/hooks/useFeeIntelligence";
+import { todayDateKey } from "@/shared/utils/dates";
+import { EMPTY_FEE_DASHBOARD_FILTERS, buildFeeDashboard } from "@/shared/utils/feeDashboard";
+import { formatAmount } from "@/shared/utils/formatCurrency";
 import { feeCandidateQueue } from "@/shared/utils/feeDetection";
 import { useSurfaces } from "@/theme/surfaces";
 import { useTheme } from "@/theme/ThemeProvider";
 
 /**
- * Entry point to Fees & charges from Insights (SPENDLY-315). Shows only the
- * review count; totals belong to the overview (SPENDLY-316).
+ * Entry point to Fees & charges from Insights (SPENDLY-315): this month's fee
+ * cost from the same aggregate as the overview (SPENDLY-316) plus the review
+ * count.
  */
 export function FeeInsightsEntryCard() {
   const { theme } = useTheme();
   const surfaces = useSurfaces();
   const router = useRouter();
   const { result, loading } = useFeeIntelligence();
-  const toReview = useMemo(() => (result ? feeCandidateQueue(result.records).length : 0), [result]);
+  const currency = useDisplayCurrency();
+  const summary = useMemo(() => {
+    if (!result) return null;
+    const dash = buildFeeDashboard(result.records, EMPTY_FEE_DASHBOARD_FILTERS, todayDateKey());
+    return { cost: dash.cost, toReview: feeCandidateQueue(result.records).length };
+  }, [result]);
+  const toReview = summary?.toReview ?? 0;
 
-  const subtitle = loading
+  const subtitle = loading || !summary
     ? "Checking your transactions…"
-    : toReview > 0
-      ? `${toReview} to review`
-      : "Bank charges, card fees and GST on fees";
+    : [
+        summary.cost !== 0 ? `${formatAmount(summary.cost, currency)} this month` : null,
+        toReview > 0 ? `${toReview} to review` : null,
+      ].filter(Boolean).join(" · ") || "Bank charges, card fees and GST on fees";
 
   return (
     <Pressable
