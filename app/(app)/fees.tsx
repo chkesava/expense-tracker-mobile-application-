@@ -7,6 +7,7 @@ import { ListChecks, ReceiptText, WifiOff } from "lucide-react-native";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingState } from "@/components/common/LoadingState";
+import { FeeOverview } from "@/components/fees/FeeOverview";
 import { FeeRecordRow } from "@/components/fees/FeeRecordRow";
 import { FeeReviewSheet, type FeeReviewSubmit } from "@/components/fees/FeeReviewSheet";
 import { PageHeader, type PageHeaderTab } from "@/components/layout/PageHeader";
@@ -32,12 +33,11 @@ import { feeCandidateQueue } from "@/shared/utils/feeDetection";
 import { bulkReviewPlan, feeIssueMessage, sortForReview } from "@/shared/utils/feeReviewForm";
 import { useTheme } from "@/theme/ThemeProvider";
 
-type FeesTab = "review" | "all";
+type FeesTab = "overview" | "review" | "all";
 
 /**
- * Fees & charges (SPENDLY-315): review what Spendly detected, confirm it,
- * reject it or correct it. SPENDLY-316/317 add the overview and detail views
- * to this route.
+ * Fees & charges: the cost overview (SPENDLY-316), and reviewing what
+ * Spendly detected — confirm, reject or correct it (SPENDLY-315).
  */
 export default function FeesScreen() {
   const { theme } = useTheme();
@@ -49,7 +49,7 @@ export default function FeesScreen() {
   const { accounts } = useAccountsContext();
   const { result, reviewById, loading, error, retry } = useFeeIntelligence();
 
-  const [tab, setTab] = useState<FeesTab>("review");
+  const [tab, setTab] = useState<FeesTab>("overview");
   const [openKey, setOpenKey] = useState<string | null>(null);
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
@@ -178,6 +178,7 @@ export default function FeesScreen() {
   );
 
   const tabs: PageHeaderTab[] = [
+    { id: "overview", label: "Overview" },
     { id: "review", label: "Review", badge: queue.length > 0 ? queue.length : undefined },
     { id: "all", label: "All fees" },
   ];
@@ -196,7 +197,7 @@ export default function FeesScreen() {
       }}
       tabVariant="underline"
       rightElement={
-        visible.length > 0 && !selecting ? (
+        tab !== "overview" && visible.length > 0 && !selecting ? (
           <Button variant="ghost" size="icon" onPress={() => setSelecting(true)} accessibilityLabel="Select several to review at once">
             <ListChecks size={20} color={theme.colors.primary} />
           </Button>
@@ -214,6 +215,16 @@ export default function FeesScreen() {
     );
   } else if (loading) {
     body = <LoadingState variant="list" count={6} label="Checking your transactions for fees…" />;
+  } else if (tab === "overview") {
+    body = (
+      <FeeOverview
+        records={records}
+        currency={currency}
+        accountNames={accountNames}
+        onOpenReview={() => setTab("review")}
+        onOpenRecord={(record) => setOpenKey(record.key)}
+      />
+    );
   } else if (visible.length === 0) {
     body = (
       <PageListStateScroll>
