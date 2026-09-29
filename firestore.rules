@@ -31,7 +31,7 @@ service cloud.firestore {
     //   categorizationRules, categoryBudgets, epfContributionEvents,
     //   epfContributions, epfEstablishments, epfProfile,
     //   epfInterestEntries, epfReconciliations, epfTransferEvents,
-    //   epfTransfers, expenses, financialGoals, focus,
+    //   epfTransfers, expenses, feeReviews, financialGoals, focus,
     //   holdings, incomes, investments, meta, portfolioOrders,
     //   portfolioSettings, portfolioSnapshots, portfolioTransactions,
     //   receivableRepayments, receivables, spaces,
@@ -437,6 +437,93 @@ service cloud.firestore {
       match /portfolioOrders/{id} {
         allow read, delete: if isOwner(uid);
         allow create, update: if isOwner(uid) && portfolioOrderWellFormed();
+      }
+
+      // SPENDLY-313. A user's decision about how one ledger transaction
+      // divides into principal / fee / tax / interest (shared/types/fee.ts).
+      //
+      // Classification, not money: `amount` is refused (hasOnly) so no
+      // balance or spending figure can ever be read from here, and the
+      // ledger row it names stays the only money record.
+      //
+      // The doc id must be `<sourceKind>__<sourceId>` of its own body, so a
+      // transaction can never carry two reviews — two reviews would be one
+      // fee counted twice. Source identity and createdAtMs are pinned on
+      // update and `revision` must advance, which is what correction history
+      // keys off. Enum lists mirror TS and are checked by
+      // shared/utils/feeModel.rules.contract.test.ts.
+      function feeComponentsWellFormed(c) {
+        return c is map
+          && c.keys().hasAll(['principal', 'fee', 'tax', 'interest'])
+          && c.keys().hasOnly(['principal', 'fee', 'tax', 'interest'])
+          && boundedNonNeg(c.principal)
+          && boundedNonNeg(c.fee)
+          && boundedNonNeg(c.tax)
+          && boundedNonNeg(c.interest);
+      }
+
+      function feeSourceKinds() {
+        return ['expense', 'income', 'payment', 'transfer', 'entry',
+                'borrowing', 'borrowingRepayment', 'receivable',
+                'receivableRepayment'];
+      }
+
+      function feeRoles() {
+        return ['fee', 'tax_on_fee', 'interest', 'reversal', 'refund', 'not_fee'];
+      }
+
+      function feeTypeIds() {
+        return ['atm_cash', 'bank_service', 'min_balance', 'debit_card',
+                'credit_card', 'late_payment', 'cash_advance',
+                'emi_conversion', 'forex', 'payment_upi', 'cheque',
+                'transfer_remittance', 'investment', 'loan', 'other'];
+      }
+
+      function feeRefId(value) {
+        return value is string && value.size() > 0 && value.size() <= 128;
+      }
+
+      function feeReviewWellFormed(reviewId) {
+        let d = request.resource.data;
+        return d.keys().hasOnly([
+            'sourceKind', 'sourceId', 'decision', 'role', 'feeType',
+            'subtype', 'components', 'linkedKind', 'linkedId',
+            'sourceAmount', 'inferredRole', 'inferredFeeType',
+            'inferredConfidence', 'engineVersion', 'note', 'revision',
+            'createdAtMs', 'updatedAtMs'])
+          && d.sourceKind in feeSourceKinds()
+          && feeRefId(d.sourceId)
+          && reviewId == d.sourceKind + '__' + d.sourceId
+          && d.decision in ['confirm', 'correct', 'not_fee']
+          && d.role in feeRoles()
+          && (!d.keys().hasAny(['feeType']) || d.feeType in feeTypeIds())
+          && (!d.keys().hasAny(['subtype'])
+              || (d.subtype is string && d.subtype.size() <= 40))
+          && feeComponentsWellFormed(d.components)
+          && (!d.keys().hasAny(['linkedKind']) || d.linkedKind in feeSourceKinds())
+          && (!d.keys().hasAny(['linkedId']) || feeRefId(d.linkedId))
+          && boundedNonNeg(d.sourceAmount)
+          && (!d.keys().hasAny(['inferredRole']) || d.inferredRole in feeRoles())
+          && (!d.keys().hasAny(['inferredFeeType']) || d.inferredFeeType in feeTypeIds())
+          && (!d.keys().hasAny(['inferredConfidence'])
+              || (d.inferredConfidence is number
+                  && d.inferredConfidence >= 0 && d.inferredConfidence <= 1))
+          && (!d.keys().hasAny(['engineVersion']) || d.engineVersion is int)
+          && (!d.keys().hasAny(['note']) || (d.note is string && d.note.size() <= 500))
+          && d.revision is int
+          && d.revision >= 1
+          && d.createdAtMs is number
+          && d.updatedAtMs is number
+          && (resource == null
+              || (d.sourceKind == resource.data.sourceKind
+                  && d.sourceId == resource.data.sourceId
+                  && d.createdAtMs == resource.data.createdAtMs
+                  && d.revision > resource.data.revision));
+      }
+
+      match /feeReviews/{reviewId} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && feeReviewWellFormed(reviewId);
       }
 
       // `collection` is only bound inside this match. Helpers declared on
