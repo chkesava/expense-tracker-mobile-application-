@@ -30,7 +30,7 @@ from each story's scope and acceptance criteria.
 | 2 | [SPENDLY-314](https://kesavach.atlassian.net/browse/SPENDLY-314) | Detection & classification engine | 313 | Merged to epic |
 | 3 | [SPENDLY-315](https://kesavach.atlassian.net/browse/SPENDLY-315) | Review, confirmation & correction flow | 314 | Merged to epic |
 | 4 | [SPENDLY-316](https://kesavach.atlassian.net/browse/SPENDLY-316) | Dashboard & cost overview | 314, 315 | Merged to epic |
-| 5 | SPENDLY-317 | Fee detail, evidence & linkage | 314, 315 | To Do |
+| 5 | [SPENDLY-317](https://kesavach.atlassian.net/browse/SPENDLY-317) | Fee detail, evidence & linkage | 314, 315 | Committed on story branch, awaiting merge approval |
 | 6 | SPENDLY-318 | Recurring & fee-pattern intelligence | 314 | To Do |
 | 7 | SPENDLY-319 | Anomaly, duplicate & reversal intelligence | 314, 315 | To Do |
 | — | SPENDLY-320 | Financial Calendar integration | **SPENDLY-176** (all of 177–185 To Do) | On hold (user decision 2026-09-29) until SPENDLY-176 lands |
@@ -48,3 +48,4 @@ second calendar. Only local `expo-notifications` exists (bill reminders, SMS);
 * [SPENDLY-314](SPENDLY-314-fee-detection.md)
 * [SPENDLY-315](SPENDLY-315-fee-review-correction.md)
 * [SPENDLY-316](SPENDLY-316-fee-dashboard.md)
+* [SPENDLY-317](SPENDLY-317-fee-detail.md)

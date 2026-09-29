@@ -116,7 +116,13 @@ function AppShellInner() {
               }}
             />
             <Stack.Screen
-              name="fees"
+              name="fees/index"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
+              name="fees/[key]"
               options={{
                 animation: "slide_from_right",
               }}
