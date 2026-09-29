@@ -9,6 +9,7 @@ import type {
 import {
   FEE_CANDIDATE_MIN_CONFIDENCE,
   FEE_INFERRED_MIN_CONFIDENCE,
+  FEE_REVIEW_HISTORY_LIMIT,
   buildFeeReview,
   countsTowardFeeTotals,
   defaultFeeComponents,
@@ -473,6 +474,55 @@ describe("buildFeeReview", () => {
     });
     expect(out.ok && out.review.revision).toBe(4);
     expect(out.ok && out.review.createdAtMs).toBe(7);
+  });
+
+  it("keeps the previous state as correction history, oldest first and capped", () => {
+    const first = buildFeeReview({
+      source: s,
+      decision: "confirm",
+      classification: { role: "fee", feeType: "atm_cash", components: defaultFeeComponents("fee", 23.6) },
+      nowMs: 10,
+    });
+    if (!first.ok) throw new Error("expected ok");
+    expect(first.review.history).toBeUndefined();
+
+    const second = buildFeeReview({
+      source: s,
+      decision: "correct",
+      classification: {
+        role: "fee",
+        feeType: "bank_service",
+        components: { principal: 0, fee: 20, tax: 3.6, interest: 0 },
+      },
+      previous: { ...first.review, id: first.docId },
+      nowMs: 20,
+    });
+    if (!second.ok) throw new Error("expected ok");
+    expect(second.review.history).toEqual([
+      { revision: 1, decision: "confirm", role: "fee", feeType: "atm_cash", components: defaultFeeComponents("fee", 23.6), atMs: 10 },
+    ]);
+
+    const long = review(s, {
+      revision: 30,
+      history: Array.from({ length: FEE_REVIEW_HISTORY_LIMIT }, (_, i) => ({
+        revision: i + 1,
+        decision: "confirm" as const,
+        role: "fee" as const,
+        components: defaultFeeComponents("fee", 23.6),
+        atMs: i,
+      })),
+    });
+    const capped = buildFeeReview({
+      source: s,
+      decision: "not_fee",
+      classification: { role: "not_fee", components: defaultFeeComponents("not_fee", 23.6) },
+      previous: long,
+      nowMs: 99,
+    });
+    if (!capped.ok) throw new Error("expected ok");
+    expect(capped.review.history).toHaveLength(FEE_REVIEW_HISTORY_LIMIT);
+    expect(capped.review.history?.[0].revision).toBe(2);
+    expect(capped.review.history?.at(-1)?.revision).toBe(30);
   });
 
   it("normalises 'not a fee' to pure principal whatever the form sent", () => {

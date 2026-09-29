@@ -159,6 +159,21 @@ describe("feeReviews shape", () => {
     await denied({ components: 23.6 });
   });
 
+  it("accepts bounded correction history and refuses an unbounded one", async () => {
+    const entry = { revision: 1, decision: "confirm", role: "fee", components: { principal: 0, fee: 23.6, tax: 0, interest: 0 }, atMs: 1 };
+    await assertSucceeds(
+      setDoc(doc(ownerDb(), "users", OWNER, "feeReviews", DOC_ID), validReview({ revision: 2, history: [entry] }))
+    );
+    await assertSucceeds(
+      setDoc(
+        doc(ownerDb(), "users", OWNER, "feeReviews", "expense__e8"),
+        validReview({ sourceId: "e8", history: Array.from({ length: 20 }, () => entry) })
+      )
+    );
+    await denied({ sourceId: "e9", history: Array.from({ length: 21 }, () => entry) }, "expense__e9");
+    await denied({ sourceId: "e7", history: "not a list" }, "expense__e7");
+  });
+
   it("refuses out-of-range values", async () => {
     await denied({ sourceAmount: -1 });
     await denied({ inferredConfidence: 1.5 });

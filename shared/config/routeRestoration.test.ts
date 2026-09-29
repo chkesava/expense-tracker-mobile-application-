@@ -52,6 +52,7 @@ describe("isPersistableRoute", () => {
 
 describe("isRestorableRoute", () => {
   it("accepts top-level sections and detail routes", () => {
+    expect(isRestorableRoute("/fees")).toBe(true);
     expect(isRestorableRoute("/ledger")).toBe(true);
     expect(isRestorableRoute("/investments")).toBe(true);
     expect(isRestorableRoute("/investments?tab=sip")).toBe(true);

@@ -15,6 +15,7 @@ import {
   type FeeRecord,
   type FeeReview,
   type FeeReviewDecision,
+  type FeeReviewHistoryEntry,
   type FeeRole,
   type FeeSourceRef,
   type FeeSourceSnapshot,
@@ -447,8 +448,32 @@ export function buildFeeReview(args: {
     review.engineVersion = inference.engineVersion;
   }
   if (note) review.note = note.slice(0, 500);
+  if (previous) {
+    const history = [...(previous.history ?? []), historyEntryOf(previous)];
+    review.history = history.slice(-FEE_REVIEW_HISTORY_LIMIT);
+  }
 
   return { ok: true, review, docId: feeReviewDocId(source.ref) };
+}
+
+/** Earlier states kept on a review document. Mirrored by firestore.rules. */
+export const FEE_REVIEW_HISTORY_LIMIT = 20;
+
+function historyEntryOf(review: FeeReview): FeeReviewHistoryEntry {
+  const entry: FeeReviewHistoryEntry = {
+    revision: review.revision,
+    decision: review.decision,
+    role: review.role,
+    components: review.components,
+    atMs: review.updatedAtMs,
+  };
+  if (review.feeType) entry.feeType = review.feeType;
+  if (review.subtype) entry.subtype = review.subtype;
+  if (review.linkedKind && review.linkedId) {
+    entry.linkedKind = review.linkedKind;
+    entry.linkedId = review.linkedId;
+  }
+  return entry;
 }
 
 export function isFeeRole(value: unknown): value is FeeRole {
