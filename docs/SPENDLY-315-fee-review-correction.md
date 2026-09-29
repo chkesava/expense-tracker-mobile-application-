@@ -2,7 +2,7 @@
 
 **Ticket:** [SPENDLY-315](https://kesavach.atlassian.net/browse/SPENDLY-315) (Story)
 **Epic:** [SPENDLY-312](https://kesavach.atlassian.net/browse/SPENDLY-312) — see [epic record](SPENDLY-312-fee-charges-intelligence.md)
-**Branch:** `feature/SPENDLY-315-fee-review-correction`, cut from the epic branch. Not merged yet: waiting for approval.
+**Branch:** `feature/SPENDLY-315-fee-review-correction`, cut from the epic branch and merged back with approval.
 **Depends on:** SPENDLY-313 (model), SPENDLY-314 (engine)
 **Scope:** Spendly only.
 
