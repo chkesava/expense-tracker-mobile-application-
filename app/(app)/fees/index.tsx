@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { FlashList } from "@shopify/flash-list";
-import { useRouter } from "expo-router";
+import { useRouter, type Href } from "expo-router";
 import { ListChecks, ReceiptText, WifiOff } from "lucide-react-native";
 
 import { EmptyState } from "@/components/common/EmptyState";
@@ -9,7 +9,6 @@ import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingState } from "@/components/common/LoadingState";
 import { FeeOverview } from "@/components/fees/FeeOverview";
 import { FeeRecordRow } from "@/components/fees/FeeRecordRow";
-import { FeeReviewSheet, type FeeReviewSubmit } from "@/components/fees/FeeReviewSheet";
 import { PageHeader, type PageHeaderTab } from "@/components/layout/PageHeader";
 import { PageListStateScroll } from "@/components/layout/PageListStateScroll";
 import { PageShell } from "@/components/layout/PageShell";
@@ -17,43 +16,34 @@ import { usePageListBottomPadding } from "@/components/layout/usePageListBottomP
 import { Button } from "@/components/ui/Button";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { useFeeIntelligence } from "@/hooks/useFeeIntelligence";
-import { friendlyErrorMessage, logError } from "@/lib/errors";
-import { writeSavedMessage } from "@/lib/firestoreWrite";
-import { toast } from "@/lib/toast";
-import { useAuth } from "@/providers/AuthProvider";
+import { useFeeReviewActions } from "@/hooks/useFeeReviewActions";
 import { useAccountsContext } from "@/providers/FinanceDataProvider";
 import { useNetwork } from "@/providers/NetworkProvider";
-import {
-  FeeReviewInvalidError,
-  saveFeeReview,
-  saveFeeReviewsBulk,
-} from "@/services/fees/feeReviewStore";
 import type { FeeRecord } from "@/shared/types/fee";
 import { feeCandidateQueue } from "@/shared/utils/feeDetection";
-import { bulkReviewPlan, feeIssueMessage, sortForReview } from "@/shared/utils/feeReviewForm";
+import { feeDetailHref } from "@/shared/utils/feeDetail";
+import { sortForReview } from "@/shared/utils/feeReviewForm";
 import { useTheme } from "@/theme/ThemeProvider";
 
 type FeesTab = "overview" | "review" | "all";
 
 /**
- * Fees & charges: the cost overview (SPENDLY-316), and reviewing what
- * Spendly detected — confirm, reject or correct it (SPENDLY-315).
+ * Fees & charges: the cost overview (SPENDLY-316), the review queue and
+ * bulk review (SPENDLY-315). A row opens the fee detail (SPENDLY-317), where
+ * a single fee is reviewed and corrected.
  */
 export default function FeesScreen() {
   const { theme } = useTheme();
   const router = useRouter();
-  const { user } = useAuth();
-  const uid = user?.uid;
   const currency = useDisplayCurrency();
   const { isOnline } = useNetwork();
   const { accounts } = useAccountsContext();
   const { result, reviewById, loading, error, retry } = useFeeIntelligence();
 
   const [tab, setTab] = useState<FeesTab>("overview");
-  const [openKey, setOpenKey] = useState<string | null>(null);
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
-  const [saving, setSaving] = useState(false);
+  const { saving, saveBulk } = useFeeReviewActions({ result, reviewById });
 
   const accountNames = useMemo(
     () => new Map(accounts.map((a) => [a.id, a.displayName || a.name] as const)),
@@ -63,7 +53,6 @@ export default function FeesScreen() {
   const queue = useMemo(() => sortForReview(feeCandidateQueue(records)), [records]);
   const all = useMemo(() => sortForReview(records), [records]);
   const visible = tab === "review" ? queue : all;
-  const openRecord = openKey ? records.find((r) => r.key === openKey) ?? null : null;
 
   const exitSelection = useCallback(() => {
     setSelecting(false);
@@ -79,9 +68,13 @@ export default function FeesScreen() {
     });
   }, []);
 
+  const openDetail = useCallback(
+    (record: FeeRecord) => router.push(feeDetailHref(record.key) as Href),
+    [router]
+  );
   const onRowPress = useCallback(
-    (record: FeeRecord) => (selecting ? toggle(record) : setOpenKey(record.key)),
-    [selecting, toggle]
+    (record: FeeRecord) => (selecting ? toggle(record) : openDetail(record)),
+    [openDetail, selecting, toggle]
   );
   const onRowLongPress = useCallback(
     (record: FeeRecord) => {
@@ -91,75 +84,12 @@ export default function FeesScreen() {
     [toggle]
   );
 
-  const reportFailure = useCallback((scope: string, err: unknown) => {
-    if (err instanceof FeeReviewInvalidError) {
-      toast.error(feeIssueMessage(err.issues[0]));
-      return;
-    }
-    logError(scope, err);
-    toast.error(friendlyErrorMessage(err, "Couldn't save your review."));
-  }, []);
-
-  const onSubmit = useCallback(
-    async ({ record, decision, classification, note }: FeeReviewSubmit) => {
-      if (!uid || saving) return;
-      setSaving(true);
-      try {
-        const outcome = await saveFeeReview(uid, {
-          record,
-          decision,
-          classification,
-          note,
-          inference: result?.inferences.get(record.key) ?? null,
-          previous: reviewById.get(record.key) ?? null,
-        });
-        toast.success(
-          writeSavedMessage(outcome, decision === "not_fee" ? "Marked as not a fee" : decision === "confirm" ? "Fee confirmed" : "Correction saved")
-        );
-        setOpenKey(null);
-      } catch (err) {
-        reportFailure("fees.saveReview", err);
-      } finally {
-        setSaving(false);
-      }
-    },
-    [reportFailure, result, reviewById, saving, uid]
-  );
-
   const onBulk = useCallback(
     async (decision: "confirm" | "not_fee") => {
-      if (!uid || saving) return;
-      const chosen = records.filter((r) => selected.has(r.key));
-      const plan = bulkReviewPlan(chosen, decision);
-      if (plan.ready.length === 0) {
-        toast.info("None of these can be confirmed as they are — open each one to decide.");
-        return;
-      }
-      setSaving(true);
-      try {
-        const outcome = await saveFeeReviewsBulk(
-          uid,
-          plan.ready.map((item) => ({
-            record: item.record,
-            decision: item.decision,
-            classification: item.classification,
-            inference: result?.inferences.get(item.record.key) ?? null,
-            previous: reviewById.get(item.record.key) ?? null,
-          }))
-        );
-        const done = `${plan.ready.length} ${decision === "confirm" ? "confirmed" : "marked as not fees"}`;
-        toast.success(writeSavedMessage(outcome, done));
-        if (plan.skipped.length > 0) {
-          toast.info(`${plan.skipped.length} need a closer look — open each to decide.`);
-        }
-        exitSelection();
-      } catch (err) {
-        reportFailure("fees.saveBulk", err);
-      } finally {
-        setSaving(false);
-      }
+      const ok = await saveBulk(records.filter((r) => selected.has(r.key)), decision);
+      if (ok) exitSelection();
     },
-    [exitSelection, records, reportFailure, result, reviewById, saving, selected, uid]
+    [exitSelection, records, saveBulk, selected]
   );
 
   const renderItem = useCallback(
@@ -222,7 +152,7 @@ export default function FeesScreen() {
         currency={currency}
         accountNames={accountNames}
         onOpenReview={() => setTab("review")}
-        onOpenRecord={(record) => setOpenKey(record.key)}
+        onOpenRecord={openDetail}
       />
     );
   } else if (visible.length === 0) {
@@ -286,17 +216,6 @@ export default function FeesScreen() {
     <PageShell scrollable={false} listOwnsBottomInset>
       {header}
       {body}
-      <FeeReviewSheet
-        record={openRecord}
-        review={openKey ? reviewById.get(openKey) : undefined}
-        records={records}
-        currency={currency}
-        accountName={openRecord?.source.accountId ? accountNames.get(openRecord.source.accountId) : undefined}
-        online={isOnline}
-        saving={saving}
-        onSubmit={(submit) => void onSubmit(submit)}
-        onClose={() => setOpenKey(null)}
-      />
     </PageShell>
   );
 }

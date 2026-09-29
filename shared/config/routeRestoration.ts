@@ -18,6 +18,7 @@ const RESTORABLE_ROUTES = [
   "/settings/",
   "/sms-inbox",
   "/fees",
+  "/fees/",
   "/app-selector",
   "/accounts/",
   "/credit-card-bills/",
