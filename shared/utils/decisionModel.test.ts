@@ -9,6 +9,7 @@ import {
   decisionStatusLabel,
   deletionEvent,
   newDecisionDraft,
+  sortDecisionsForList,
   transitionDecision,
   validateDecision,
 } from "./decisionModel";
@@ -224,5 +225,13 @@ describe("labels", () => {
   it("labels every status and category", () => {
     expect(decisionStatusLabel("tracking")).toBe("Tracking");
     expect(decisionCategoryLabel("loan_debt")).toBe("Loan or debt");
+  });
+});
+
+describe("sortDecisionsForList", () => {
+  it("puts drafts first, archived last, newest touched first", () => {
+    const mk = (id: string, status: MoneyDecision["status"], updatedAtMs: number) => ({ ...draft({ id, status }), updatedAtMs });
+    const out = sortDecisionsForList([mk("a", "archived", 9), mk("b", "decided", 5), mk("c", "draft", 1), mk("d", "closed", 8), mk("e", "tracking", 7)]);
+    expect(out.map((d) => d.id)).toEqual(["c", "e", "b", "d", "a"]);
   });
 });

@@ -330,3 +330,9 @@ export function decisionStatusLabel(status: DecisionStatus): string {
 export function decisionCategoryLabel(category: DecisionCategory): string {
   return CATEGORY_LABELS[category];
 }
+
+/** Drafts first, then open decisions, then closed, then archived; newest touched first. */
+export function sortDecisionsForList(decisions: readonly MoneyDecision[]): MoneyDecision[] {
+  const rank = (d: MoneyDecision) => (d.status === "draft" ? 0 : d.status === "archived" ? 3 : d.status === "closed" ? 2 : 1);
+  return [...decisions].sort((a, b) => rank(a) - rank(b) || b.updatedAtMs - a.updatedAtMs || a.id.localeCompare(b.id));
+}
