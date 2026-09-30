@@ -1,5 +1,5 @@
 import React, { useEffect, useState, type ReactNode } from "react";
-import { Keyboard, Platform, useWindowDimensions } from "react-native";
+import { useWindowDimensions } from "react-native";
 import { X } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/modal";
 import { Text } from "react-native";
 import { sheetBodyPadding } from "./sheetDensity";
+import { useKeyboardHeight } from "@/hooks/useKeyboardHeight";
 
 export interface ModalProps {
   isOpen: boolean;
@@ -50,26 +51,6 @@ function resolveMaxHeight(maxHeight: number | string, windowHeight: number): num
     }
   }
   return windowHeight * 0.88;
-}
-
-/**
- * Height of the on-screen keyboard, 0 when hidden. Android is edge-to-edge, so
- * the keyboard overlays the modal window instead of resizing it; the sheet has
- * to lift itself. iOS gets the will* events so the sheet moves with it.
- */
-function useKeyboardHeight(): number {
-  const [height, setHeight] = useState(0);
-  useEffect(() => {
-    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
-    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
-    const show = Keyboard.addListener(showEvent, (e) => setHeight(e.endCoordinates.height));
-    const hide = Keyboard.addListener(hideEvent, () => setHeight(0));
-    return () => {
-      show.remove();
-      hide.remove();
-    };
-  }, []);
-  return height;
 }
 
 export function Modal({

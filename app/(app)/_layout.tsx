@@ -116,6 +116,24 @@ function AppShellInner() {
               }}
             />
             <Stack.Screen
+              name="decisions/index"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
+              name="decisions/[id]"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
+              name="decisions/edit"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
               name="sms-inbox"
               options={{
                 animation: "slide_from_right",
