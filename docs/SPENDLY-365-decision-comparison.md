@@ -2,7 +2,7 @@
 
 **Ticket:** [SPENDLY-365](https://kesavach.atlassian.net/browse/SPENDLY-365) (Story)
 **Epic:** [SPENDLY-361](https://kesavach.atlassian.net/browse/SPENDLY-361) — see [epic record](SPENDLY-361-financial-decision-journal.md)
-**Branch:** `feature/SPENDLY-365-decision-comparison`, cut from the epic branch after 364.
+**Branch:** `feature/SPENDLY-365-decision-comparison`, cut from the epic branch after 364 and merged back with approval.
 **Depends on:** 362 (alternatives, inputs, assumptions, snapshot), 363 (screens)
 **Scope:** Spendly only. No rules or data-model changes; every field was already in the 362 model.
 
