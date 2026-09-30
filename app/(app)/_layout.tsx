@@ -128,6 +128,12 @@ function AppShellInner() {
               }}
             />
             <Stack.Screen
+              name="decisions/compare"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
               name="decisions/edit"
               options={{
                 animation: "slide_from_right",
