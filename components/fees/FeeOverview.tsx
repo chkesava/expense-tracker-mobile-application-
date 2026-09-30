@@ -7,6 +7,7 @@ import { Amount } from "@/components/common/Amount";
 import { EmptyState } from "@/components/common/EmptyState";
 import { Modal } from "@/components/common/Modal";
 import { ProgressTrack, Section } from "@/components/dashboard/primitives";
+import { FeePatternsSection } from "@/components/fees/FeePatternsSection";
 import { FeeRecordRow } from "@/components/fees/FeeRecordRow";
 import { feeTypeIcon } from "@/components/fees/feeIcons";
 import { usePageListBottomPadding } from "@/components/layout/usePageListBottomPadding";
@@ -171,6 +172,15 @@ export function FeeOverview({ records, currency, accountNames, onOpenReview, onO
             })}</Section>
             <Section title="By account or card">{renderRows(dash.byAccount, accountLabel)}</Section>
             <Section title="Top fee sources" subtitle="Banks and providers that charged you">{renderRows(dash.byProvider, (k) => k)}</Section>
+
+            <FeePatternsSection
+              records={records}
+              filters={filters}
+              today={today}
+              currency={currency}
+              accountNames={accountNames}
+              onOpenRecord={onOpenRecord}
+            />
 
             <Section title="Recent fees" plain>
               <View style={{ marginHorizontal: -theme.space.lg }}>
