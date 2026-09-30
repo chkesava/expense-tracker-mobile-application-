@@ -26,6 +26,7 @@ import {
   decisionStatusLabel,
   transitionDecision,
 } from "@/shared/utils/decisionModel";
+import { getDecisionTemplate } from "@/shared/data/decisionTemplates";
 import { formatAmount } from "@/shared/utils/formatCurrency";
 import { useTheme } from "@/theme/ThemeProvider";
 
@@ -166,6 +167,7 @@ export default function DecisionDetailScreen() {
               {decision.decidedAtMs ? ` · Decided ${new Date(decision.decidedAtMs).toISOString().slice(0, 10)}` : ""}
               {decision.reviewDate ? ` · Review on ${decision.reviewDate}` : ""}
             </Text>
+            {decision.templateId ? <Text style={muted}>Started from the {getDecisionTemplate(decision.templateId, decision.templateVersion).label} template</Text> : null}
             {decision.status === "draft" ? (
               <Button variant="primary" onPress={() => router.push(`/decisions/edit?id=${decision.id}` as Href)}>
                 Continue this draft

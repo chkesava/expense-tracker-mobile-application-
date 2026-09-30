@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import type { MoneyDecision } from "../types/decision";
+import { getDecisionTemplate } from "../data/decisionTemplates";
 import {
+  addSuggestedAssumption,
+  addSuggestedConstraint,
+  addSuggestedOption,
+  applyDecisionTemplate,
+  unusedSuggestions,
   decisionFormIssues,
   decisionStepIssues,
   decisionToForm,
@@ -110,5 +116,45 @@ describe("helpers", () => {
     const f = decisionToForm(base());
     expect(isDecisionFormDirty(f, f)).toBe(false);
     expect(isDecisionFormDirty({ ...f, goal: "x" }, f)).toBe(true);
+  });
+});
+
+describe("templates (SPENDLY-364)", () => {
+  const loan = getDecisionTemplate("loan_debt", 1);
+
+  it("record the template and version and set its category without touching answers", () => {
+    const form = { ...decisionToForm(base()), title: "Prepay?", rationale: "mine" };
+    const next = applyDecisionTemplate(form, loan);
+    expect(next).toMatchObject({ templateId: "loan_debt", templateVersion: 1, category: "loan_debt", title: "Prepay?", rationale: "mine" });
+    expect(next.constraints).toEqual([]);
+    expect(next.alternatives).toEqual([]);
+  });
+
+  it("persist on the decision and survive a round trip", () => {
+    const d = formToDecision(applyDecisionTemplate(decisionToForm(base()), loan), base());
+    expect(d).toMatchObject({ templateId: "loan_debt", templateVersion: 1 });
+    expect(decisionToForm(d).templateVersion).toBe(1);
+    expect(buildDecisionWrite(null, d, 1).ok).toBe(true);
+    const cleared = formToDecision({ ...decisionToForm(d), templateId: null, templateVersion: null }, d);
+    expect(cleared.templateId).toBeUndefined();
+  });
+
+  it("add suggestions only when tapped, once each", () => {
+    let form = decisionToForm(base());
+    form = addSuggestedConstraint(form, loan.suggestedConstraints[0]);
+    form = addSuggestedConstraint(form, loan.suggestedConstraints[0].toUpperCase());
+    form = addSuggestedAssumption(form, loan.suggestedAssumptions[0], "s1");
+    form = addSuggestedOption(form, loan.suggestedOptions[0], "o1");
+    form = addSuggestedOption(form, loan.suggestedOptions[0], "o2");
+    expect(form.constraints).toHaveLength(1);
+    expect(form.assumptions).toEqual([{ id: "s1", text: loan.suggestedAssumptions[0] }]);
+    expect(form.alternatives).toEqual([{ id: "o1", title: loan.suggestedOptions[0], notes: "" }]);
+    expect(unusedSuggestions(loan.suggestedOptions, form.alternatives.map((a) => a.title))).toHaveLength(loan.suggestedOptions.length - 1);
+  });
+
+  it("are purely a form change — no records, no writes", () => {
+    const before = JSON.stringify(loan);
+    applyDecisionTemplate(decisionToForm(base()), loan);
+    expect(JSON.stringify(loan)).toBe(before);
   });
 });
