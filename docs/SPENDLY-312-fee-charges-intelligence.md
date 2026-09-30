@@ -35,7 +35,7 @@ from each story's scope and acceptance criteria.
 | 7 | [SPENDLY-319](https://kesavach.atlassian.net/browse/SPENDLY-319) | Anomaly, duplicate & reversal intelligence | 314, 315 | Merged to epic |
 | — | SPENDLY-320 | Financial Calendar integration | **SPENDLY-176** (all of 177–185 To Do) | On hold (user decision 2026-09-29) until SPENDLY-176 lands |
 | — | SPENDLY-321 | Fee alerts & notification preferences | **SPENDLY-222** (esp. 224, 226, 230; all To Do) | On hold (user decision 2026-09-29) until SPENDLY-222 lands |
-| 8 | SPENDLY-322 | Insights & cost-control prompts | 316, 318, 319 | To Do |
+| 8 | [SPENDLY-322](https://kesavach.atlassian.net/browse/SPENDLY-322) | Insights & cost-control prompts | 316, 318, 319 | Committed on story branch, awaiting merge approval |
 | 9 | SPENDLY-323 | QA, accuracy, privacy, performance, rollout | all | To Do — calendar/notification AC need 320/321 |
 
 **Blockers.** No Financial Calendar code exists, and 320's AC forbid a
@@ -51,3 +51,4 @@ second calendar. Only local `expo-notifications` exists (bill reminders, SMS);
 * [SPENDLY-317](SPENDLY-317-fee-detail.md)
 * [SPENDLY-318](SPENDLY-318-recurring-fee-intelligence.md)
 * [SPENDLY-319](SPENDLY-319-fee-anomaly-reversal.md)
+* [SPENDLY-322](SPENDLY-322-fee-insights.md)

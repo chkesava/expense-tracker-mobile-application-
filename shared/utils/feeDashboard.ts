@@ -98,7 +98,8 @@ export function feePeriodMonths(period: FeePeriod, today: string): { from?: stri
   }
 }
 
-function matchesDimensions(item: AttributedFee, filters: FeeDashboardFilters): boolean {
+/** Account / type / provider filters (not the period). Shared with 318/322. */
+export function matchesDimensions(item: AttributedFee, filters: FeeDashboardFilters): boolean {
   if (filters.accountIds.length > 0 && (!item.accountId || !filters.accountIds.includes(item.accountId))) return false;
   if (filters.feeTypes.length > 0 && (!item.feeType || !filters.feeTypes.includes(item.feeType))) return false;
   if (filters.providers.length > 0 && !filters.providers.includes(item.provider)) return false;
