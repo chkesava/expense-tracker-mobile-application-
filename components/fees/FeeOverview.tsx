@@ -8,6 +8,8 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { Modal } from "@/components/common/Modal";
 import { ProgressTrack, Section } from "@/components/dashboard/primitives";
 import { FeePatternsSection } from "@/components/fees/FeePatternsSection";
+import { FeeSignalsSection } from "@/components/fees/FeeSignals";
+import { useFeeSignals } from "@/hooks/useFeeSignals";
 import { FeeRecordRow } from "@/components/fees/FeeRecordRow";
 import { feeTypeIcon } from "@/components/fees/feeIcons";
 import { usePageListBottomPadding } from "@/components/layout/usePageListBottomPadding";
@@ -51,6 +53,7 @@ export function FeeOverview({ records, currency, accountNames, onOpenReview, onO
   const today = todayDateKey();
 
   const dash = useMemo(() => buildFeeDashboard(records, filters, today), [records, filters, today]);
+  const signals = useFeeSignals(records);
   const activeFilters = countActiveFeeFilters(filters);
   const hasAnyFee = dash.options.feeTypes.length > 0 || dash.totals.count > 0 || dash.options.accountIds.length > 0;
   const periodLabel = FEE_PERIODS.find((p) => p.id === filters.period)?.label ?? "";
@@ -150,6 +153,17 @@ export function FeeOverview({ records, currency, accountNames, onOpenReview, onO
             </Text>
           </View>
         </Section>
+
+        <FeeSignalsSection
+          active={signals.active}
+          dismissed={signals.dismissed}
+          records={records}
+          currency={currency}
+          accountNames={accountNames}
+          actions={signals}
+          restore={signals.restore}
+          onOpenRecord={onOpenRecord}
+        />
 
         {/* Trend */}
         <Section title="Last 12 months" subtitle="Fees + GST per month. Tap a bar for the amount.">

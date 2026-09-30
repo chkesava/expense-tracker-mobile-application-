@@ -10,6 +10,7 @@ import { LoadingState } from "@/components/common/LoadingState";
 import { Section } from "@/components/dashboard/primitives";
 import { feeRecordIcon } from "@/components/fees/feeIcons";
 import { FeeReviewSheet } from "@/components/fees/FeeReviewSheet";
+import { FeeSignalRow, FeeSignalSheet } from "@/components/fees/FeeSignals";
 import { FeeStatusBadge } from "@/components/fees/FeeStatusBadge";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
@@ -18,6 +19,8 @@ import { Button } from "@/components/ui/Button";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { useFeeIntelligence } from "@/hooks/useFeeIntelligence";
 import { useFeeReviewActions } from "@/hooks/useFeeReviewActions";
+import { useFeeSignals } from "@/hooks/useFeeSignals";
+import { signalsForRecord } from "@/shared/utils/feeAnomalies";
 import { useAccountsContext } from "@/providers/FinanceDataProvider";
 import { useNetwork } from "@/providers/NetworkProvider";
 import type { FeeRecord } from "@/shared/types/fee";
@@ -46,12 +49,17 @@ export default function FeeDetailScreen() {
   const intel = useFeeIntelligence();
   const { saving, saveOne } = useFeeReviewActions(intel);
   const [reviewing, setReviewing] = useState(false);
+  const [openSignalId, setOpenSignalId] = useState<string | null>(null);
   const bottomPadding = usePageListBottomPadding();
 
   const records = intel.result?.records ?? [];
   const detail = useMemo(() => (key ? buildFeeDetail(key, records) : null), [key, records]);
   const accountById = useMemo(() => new Map(accounts.map((a) => [a.id, a] as const)), [accounts]);
   const review = key ? intel.reviewById.get(key) : undefined;
+  const signals = useFeeSignals(intel.result?.records ?? null);
+  const recordSignals = useMemo(() => (key ? signalsForRecord(signals.active, key) : []), [key, signals.active]);
+  const openSignal = openSignalId ? recordSignals.find((s) => s.id === openSignalId) ?? null : null;
+  const accountNames = useMemo(() => new Map(accounts.map((a) => [a.id, a.displayName || a.name] as const)), [accounts]);
   const money = (v: number) => formatAmount(v, currency);
   const goBack = () => (router.canGoBack() ? router.back() : router.replace("/fees" as Href));
 
@@ -127,6 +135,16 @@ export default function FeeDetailScreen() {
             <Text style={muted}>{detail.countedReason}</Text>
           </View>
         </Section>
+
+        {recordSignals.length > 0 ? (
+          <Section title="Worth a look">
+            <View style={{ gap: theme.space.xs }}>
+              {recordSignals.map((sig) => (
+                <FeeSignalRow key={sig.id} signal={sig} onPress={() => setOpenSignalId(sig.id)} />
+              ))}
+            </View>
+          </Section>
+        ) : null}
 
         {/* Context */}
         <Section title="Where it came from">
@@ -217,6 +235,17 @@ export default function FeeDetailScreen() {
         </Text>
       </ScrollView>
 
+      <FeeSignalSheet
+        signal={openSignal}
+        records={records}
+        currency={currency}
+        accountNames={accountNames}
+        actions={signals}
+        onClose={() => setOpenSignalId(null)}
+        onOpenRecord={(r) => {
+          if (r.key !== record.key) router.push(feeDetailHref(r.key) as Href);
+        }}
+      />
       <FeeReviewSheet
         record={reviewing ? record : null}
         review={review}
