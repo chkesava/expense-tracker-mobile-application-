@@ -7,6 +7,7 @@ import { Amount } from "@/components/common/Amount";
 import { EmptyState } from "@/components/common/EmptyState";
 import { Modal } from "@/components/common/Modal";
 import { ProgressTrack, Section } from "@/components/dashboard/primitives";
+import { FeeInsightsSection } from "@/components/fees/FeeInsightsSection";
 import { FeePatternsSection } from "@/components/fees/FeePatternsSection";
 import { FeeSignalsSection } from "@/components/fees/FeeSignals";
 import { useFeeSignals } from "@/hooks/useFeeSignals";
@@ -153,6 +154,15 @@ export function FeeOverview({ records, currency, accountNames, onOpenReview, onO
             </Text>
           </View>
         </Section>
+
+        <FeeInsightsSection
+          records={records}
+          filters={filters}
+          today={today}
+          currency={currency}
+          accountNames={accountNames}
+          onOpenRecord={onOpenRecord}
+        />
 
         <FeeSignalsSection
           active={signals.active}
