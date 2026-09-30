@@ -21,7 +21,7 @@ export function FeeInsightsEntryCard() {
   const { theme } = useTheme();
   const surfaces = useSurfaces();
   const router = useRouter();
-  const { result, loading } = useFeeIntelligence();
+  const { result, loading, error } = useFeeIntelligence();
   const currency = useDisplayCurrency();
   const summary = useMemo(() => {
     if (!result) return null;
@@ -30,7 +30,9 @@ export function FeeInsightsEntryCard() {
   }, [result]);
   const toReview = summary?.toReview ?? 0;
 
-  const subtitle = loading || !summary
+  const subtitle = error
+    ? "Couldn't check fees right now — open to retry"
+    : loading || !summary
     ? "Checking your transactions…"
     : [
         summary.cost !== 0 ? `${formatAmount(summary.cost, currency)} this month` : null,

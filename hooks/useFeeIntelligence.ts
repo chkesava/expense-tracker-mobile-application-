@@ -88,7 +88,7 @@ export function useFeeIntelligence(options?: { enabled?: boolean }): FeeIntellig
     result,
     reviews,
     reviewById,
-    loading: enabled && !failure && (!historyReady || reviewsLoading || result === null),
+    loading: enabled && Boolean(uid) && !failure && (!historyReady || reviewsLoading || result === null),
     error: failure ? { message: failure.message, retryable: failure.retryable } : null,
     retry,
   };
