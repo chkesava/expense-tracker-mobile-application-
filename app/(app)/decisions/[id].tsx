@@ -209,8 +209,22 @@ export default function DecisionDetailScreen() {
                     {a.id === chosenId ? <Text style={[muted, { color: theme.colors.success }]}>Your choice</Text> : null}
                   </View>
                   {a.notes ? <Text style={muted}>{a.notes}</Text> : null}
+                  {a.pros.length || a.cons.length || a.inputs.length ? (
+                    <Text style={muted}>
+                      {[
+                        a.pros.length ? `${a.pros.length} pro${a.pros.length === 1 ? "" : "s"}` : null,
+                        a.cons.length ? `${a.cons.length} con${a.cons.length === 1 ? "" : "s"}` : null,
+                        a.inputs.length ? `${a.inputs.length} amount${a.inputs.length === 1 ? "" : "s"} entered` : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </Text>
+                  ) : null}
                 </View>
               ))}
+              <Button variant="tonal" onPress={() => router.push(`/decisions/compare?id=${decision.id}` as Href)}>
+                Compare options
+              </Button>
             </View>
           </Section>
         ) : null}
