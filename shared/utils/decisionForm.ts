@@ -15,6 +15,7 @@ import {
   type DecisionLink,
   type MoneyDecision,
 } from "../types/decision";
+import type { DecisionTemplate } from "../data/decisionTemplates";
 import { shiftDateKey } from "./dates";
 import { roundMoney } from "./money";
 
@@ -31,6 +32,9 @@ export type DecisionStepId = (typeof DECISION_STEPS)[number]["id"];
 export interface DecisionFormState {
   title: string;
   category: DecisionCategory;
+  /** SPENDLY-364 — template the prompts come from, at its version. */
+  templateId: string | null;
+  templateVersion: number | null;
   situation: string;
   goal: string;
   constraints: string[];
@@ -55,6 +59,8 @@ export function decisionToForm(d: MoneyDecision): DecisionFormState {
   return {
     title: d.title,
     category: d.category,
+    templateId: d.templateId ?? null,
+    templateVersion: d.templateVersion ?? null,
     situation: d.context.situation ?? "",
     goal: d.context.goal ?? "",
     constraints: [...d.context.constraints],
@@ -171,6 +177,14 @@ export function formToDecision(form: DecisionFormState, base: MoneyDecision): Mo
     assumptions: [...userAssumptions, ...nonUser],
     links: form.links,
   };
+  if (form.templateId) {
+    next.templateId = form.templateId;
+    if (form.templateVersion !== null) next.templateVersion = form.templateVersion;
+    else delete next.templateVersion;
+  } else {
+    delete next.templateId;
+    delete next.templateVersion;
+  }
   if (selected) next.selectedAlternativeId = selected;
   else delete next.selectedAlternativeId;
   if (form.rationale.trim()) next.rationale = form.rationale.trim();
@@ -214,4 +228,40 @@ export function reviewDateChoices(today: string): Array<{ label: string; date: s
 /** Anything typed that a save would keep? Drives the unsaved-changes guard. */
 export function isDecisionFormDirty(form: DecisionFormState, saved: DecisionFormState): boolean {
   return JSON.stringify(form) !== JSON.stringify(saved);
+}
+
+// ---------------------------------------------------------------------------
+// Templates (SPENDLY-364)
+// ---------------------------------------------------------------------------
+
+/**
+ * Start from a template: records which template (and version) the prompts
+ * came from and sets its category. Nothing the user typed is changed, and no
+ * answer is filled in on their behalf — suggestions stay suggestions.
+ */
+export function applyDecisionTemplate(form: DecisionFormState, template: DecisionTemplate): DecisionFormState {
+  return { ...form, templateId: template.id, templateVersion: template.version, category: template.category };
+}
+
+const norm = (s: string) => s.trim().toLocaleLowerCase();
+
+/** Suggestions not already in the list (so tapping one twice adds it once). */
+export function unusedSuggestions(suggestions: readonly string[], existing: readonly string[]): string[] {
+  const have = new Set(existing.map(norm));
+  return suggestions.filter((s) => !have.has(norm(s)));
+}
+
+export function addSuggestedConstraint(form: DecisionFormState, text: string): DecisionFormState {
+  if (unusedSuggestions([text], form.constraints).length === 0) return form;
+  return { ...form, constraints: [...form.constraints, text] };
+}
+
+export function addSuggestedAssumption(form: DecisionFormState, text: string, id = newItemId()): DecisionFormState {
+  if (unusedSuggestions([text], form.assumptions.map((a) => a.text)).length === 0) return form;
+  return { ...form, assumptions: [...form.assumptions, { id, text }] };
+}
+
+export function addSuggestedOption(form: DecisionFormState, text: string, id = newItemId()): DecisionFormState {
+  if (unusedSuggestions([text], form.alternatives.map((a) => a.title)).length === 0) return form;
+  return { ...form, alternatives: [...form.alternatives, { id, title: text, notes: "" }] };
 }

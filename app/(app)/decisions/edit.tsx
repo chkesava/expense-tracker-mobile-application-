@@ -31,11 +31,17 @@ import {
   firstStepWithIssues,
   formToDecision,
   isDecisionFormDirty,
+  addSuggestedAssumption,
+  addSuggestedConstraint,
+  addSuggestedOption,
+  applyDecisionTemplate,
   moveItem,
   newItemId,
+  unusedSuggestions,
   reviewDateChoices,
   type DecisionFormState,
 } from "@/shared/utils/decisionForm";
+import { DECISION_TEMPLATES, getDecisionTemplate } from "@/shared/data/decisionTemplates";
 import { removeLink, addLink } from "@/shared/utils/decisionLinks";
 import { decisionCategoryLabel, newDecisionDraft, transitionDecision } from "@/shared/utils/decisionModel";
 import { useSurfaces } from "@/theme/surfaces";
@@ -126,7 +132,21 @@ export default function DecisionEditScreen() {
     );
   }
 
+  const muted = { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular, fontSize: theme.typography.xs };
   const set = (patch: Partial<DecisionFormState>) => setForm({ ...form, ...patch });
+  // SPENDLY-364: prompts come from the template at the version this decision
+  // was started with, so an older decision keeps its original structure.
+  const template = getDecisionTemplate(form.templateId ?? undefined, form.templateVersion ?? undefined);
+  const canChangeTemplate = base.status === "draft" || base.status === "considering";
+  const suggestionChips = (items: string[], onAdd: (text: string) => void) =>
+    items.length > 0 ? (
+      <View style={[styles.wrap, { gap: theme.space.sm }]}>
+        <Text style={[muted, { width: "100%" }]}>Suggestions - tap to add, or skip</Text>
+        {items.map((text) => (
+          <Chip key={text} label={`+ ${text}`} size="sm" appearance="outline" onPress={() => onAdd(text)} accessibilityLabel={`Add suggestion: ${text}`} />
+        ))}
+      </View>
+    ) : null;
   const fieldError = (field: string) => (showIssues ? issues.find((i) => i.field === field)?.message : undefined);
 
   const save = async (markDecided: boolean) => {
@@ -174,7 +194,6 @@ export default function DecisionEditScreen() {
     setStepIndex(Math.min(stepIndex + 1, DECISION_STEPS.length - 1));
   };
 
-  const muted = { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular, fontSize: theme.typography.xs };
   const sectionTitle = (text: string) => (
     <Text style={{ color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold, fontSize: theme.typography.sm }}>{text}</Text>
   );
@@ -201,16 +220,36 @@ export default function DecisionEditScreen() {
 
         {step.id === "question" ? (
           <>
+            {canChangeTemplate ? (
+              <>
+                {sectionTitle("Start from a template (optional)")}
+                <View style={[styles.wrap, { gap: theme.space.sm }]} accessibilityRole="radiogroup">
+                  {DECISION_TEMPLATES.map((t) => (
+                    <Chip
+                      key={t.id}
+                      label={t.label}
+                      selected={form.templateId === t.id}
+                      onPress={() => setForm(applyDecisionTemplate(form, t))}
+                      accessibilityRole="radio"
+                      accessibilityLabel={`${t.label} template. ${t.description}`}
+                    />
+                  ))}
+                </View>
+                {form.templateId ? <Text style={muted}>{template.description} It only suggests prompts; you choose what to fill in.</Text> : null}
+              </>
+            ) : form.templateId ? (
+              <Text style={muted}>Started from the {template.label} template.</Text>
+            ) : null}
             <Input
               label="What are you deciding?"
               value={form.title}
               onChangeText={(title) => set({ title })}
-              placeholder="e.g. Should I prepay my car loan?"
+              placeholder={template.prompts.title}
               maxLength={DECISION_LIMITS.title}
               error={fieldError("title")}
               autoFocus={!editingId}
             />
-            {sectionTitle("What kind of decision is it?")}
+            {sectionTitle("Category")}
             <View style={[styles.wrap, { gap: theme.space.sm }]}>
               {DECISION_CATEGORIES.map((c) => (
                 <Chip key={c} label={decisionCategoryLabel(c)} selected={form.category === c} onPress={() => set({ category: c })} accessibilityRole="radio" />
@@ -222,8 +261,8 @@ export default function DecisionEditScreen() {
 
         {step.id === "context" ? (
           <>
-            <Input label="What's going on? (optional)" value={form.situation} onChangeText={(situation) => set({ situation })} multiline maxLength={DECISION_LIMITS.text} placeholder="What prompted this decision" />
-            <Input label="What do you want to achieve? (optional)" value={form.goal} onChangeText={(goal) => set({ goal })} multiline maxLength={DECISION_LIMITS.text} placeholder="e.g. Be debt-free by 2028" />
+            <Input label="What's going on? (optional)" value={form.situation} onChangeText={(situation) => set({ situation })} multiline maxLength={DECISION_LIMITS.text} placeholder={template.prompts.situation} />
+            <Input label="What do you want to achieve? (optional)" value={form.goal} onChangeText={(goal) => set({ goal })} multiline maxLength={DECISION_LIMITS.text} placeholder={template.prompts.goal} />
             {sectionTitle("Constraints (optional)")}
             <Text style={muted}>Limits you have to work within, like a budget or a date.</Text>
             <DecisionListEditor
@@ -235,6 +274,7 @@ export default function DecisionEditScreen() {
               newId={newItemId}
               max={DECISION_LIMITS.listItems}
             />
+            {suggestionChips(unusedSuggestions(template.suggestedConstraints, form.constraints), (text) => setForm(addSuggestedConstraint(form, text)))}
             {sectionTitle("Assumptions (optional)")}
             <Text style={muted}>What you're taking as given. These are your assumptions, not facts from Spendly.</Text>
             <DecisionListEditor
@@ -246,6 +286,7 @@ export default function DecisionEditScreen() {
               newId={newItemId}
               max={DECISION_LIMITS.assumptions}
             />
+            {suggestionChips(unusedSuggestions(template.suggestedAssumptions, form.assumptions.map((a) => a.text)), (text) => setForm(addSuggestedAssumption(form, text)))}
           </>
         ) : null}
 
@@ -294,6 +335,9 @@ export default function DecisionEditScreen() {
                 + Add an option
               </Button>
             ) : null}
+            {form.alternatives.length < DECISION_LIMITS.alternatives
+              ? suggestionChips(unusedSuggestions(template.suggestedOptions, form.alternatives.map((a) => a.title)), (text) => setForm(addSuggestedOption(form, text)))
+              : null}
           </>
         ) : null}
 
@@ -313,7 +357,7 @@ export default function DecisionEditScreen() {
             ) : (
               <Text style={muted}>No options listed — that's fine for a simple yes/no decision.</Text>
             )}
-            <Input label="Why? (optional)" value={form.rationale} onChangeText={(rationale) => set({ rationale })} multiline maxLength={DECISION_LIMITS.text} placeholder="Your reasoning, in your words" />
+            <Input label="Why? (optional)" value={form.rationale} onChangeText={(rationale) => set({ rationale })} multiline maxLength={DECISION_LIMITS.text} placeholder={template.prompts.rationale} />
             {sectionTitle("How sure are you? (optional)")}
             <View style={[styles.wrap, { gap: theme.space.sm }]} accessibilityRole="radiogroup">
               {[1, 2, 3, 4, 5].map((n) => (
@@ -332,7 +376,7 @@ export default function DecisionEditScreen() {
 
         {step.id === "expected" ? (
           <>
-            <Input label="What do you expect to happen? (optional)" value={form.expectedSummary} onChangeText={(expectedSummary) => set({ expectedSummary })} multiline maxLength={DECISION_LIMITS.text} placeholder="e.g. Save on interest and close the loan a year early" />
+            <Input label="What do you expect to happen? (optional)" value={form.expectedSummary} onChangeText={(expectedSummary) => set({ expectedSummary })} multiline maxLength={DECISION_LIMITS.text} placeholder={template.prompts.expected} />
             <View style={[styles.row, { gap: theme.space.sm }]}>
               <Input label="Expected amount, ₹ (optional)" value={form.expectedAmount} onChangeText={(expectedAmount) => set({ expectedAmount })} keyboardType="decimal-pad" placeholder="0" error={fieldError("expectedAmount")} containerStyle={{ flex: 1 }} helperText="Your estimate" />
               <Input label="By (optional)" value={form.expectedByDate} onChangeText={(expectedByDate) => set({ expectedByDate })} placeholder="YYYY-MM-DD" error={fieldError("expectedByDate")} containerStyle={{ flex: 1 }} />
@@ -389,7 +433,7 @@ export default function DecisionEditScreen() {
         </View>
       </ScrollView>
 
-      <DecisionLinkPicker isOpen={pickerOpen} links={form.links} onAdd={(link) => set({ links: addLink(form.links, link) })} onClose={() => setPickerOpen(false)} />
+      <DecisionLinkPicker initialTab={template.linkHint} isOpen={pickerOpen} links={form.links} onAdd={(link) => set({ links: addLink(form.links, link) })} onClose={() => setPickerOpen(false)} />
     </PageShell>
   );
 }

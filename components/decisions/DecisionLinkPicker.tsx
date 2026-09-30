@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Check } from "lucide-react-native";
 
@@ -30,7 +30,10 @@ export function DecisionLinkPicker({
   links,
   onAdd,
   onClose,
+  initialTab = "transactions",
 }: {
+  /** Which list opens first (SPENDLY-364 templates suggest one). */
+  initialTab?: "transactions" | "accounts";
   isOpen: boolean;
   links: readonly DecisionLink[];
   onAdd: (link: DecisionLink) => void;
@@ -42,7 +45,10 @@ export function DecisionLinkPicker({
   const { accounts } = useAccountsContext();
   const { expenses, expensesComplete } = useExpensesContext();
   const { incomes } = useIncomesContext();
-  const [tab, setTab] = useState<"transactions" | "accounts">("transactions");
+  const [tab, setTab] = useState<"transactions" | "accounts">(initialTab);
+  useEffect(() => {
+    if (isOpen) setTab(initialTab);
+  }, [isOpen, initialTab]);
   const [query, setQuery] = useState("");
 
   const results = useMemo(() => (tab === "transactions" ? searchLinkableTransactions(expenses, incomes, query) : []), [tab, expenses, incomes, query]);
