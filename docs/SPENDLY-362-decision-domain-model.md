@@ -2,7 +2,7 @@
 
 **Ticket:** [SPENDLY-362](https://kesavach.atlassian.net/browse/SPENDLY-362) (Story)
 **Epic:** [SPENDLY-361](https://kesavach.atlassian.net/browse/SPENDLY-361) — see [epic record](SPENDLY-361-financial-decision-journal.md)
-**Branch:** `feature/SPENDLY-362-decision-domain-model`, cut from the epic branch.
+**Branch:** `feature/SPENDLY-362-decision-domain-model`, cut from the epic branch and merged back with approval.
 **Scope:** types, pure rules and Firestore rules. No UI, and no writes from the app yet.
 
 ---

@@ -14,7 +14,7 @@ A decision is a record of reasoning, not money. It is stored at `users/{uid}/dec
 
 | Order | Story | Summary | State |
 |---|---|---|---|
-| 1 | [SPENDLY-362](https://kesavach.atlassian.net/browse/SPENDLY-362) | Domain model, lifecycle, provenance, rules | Committed on story branch, awaiting merge approval |
+| 1 | [SPENDLY-362](https://kesavach.atlassian.net/browse/SPENDLY-362) | Domain model, lifecycle, provenance, rules | Merged to epic |
 | 2 | SPENDLY-363 | Capture and editing, minimal list, entry points | To Do |
 | 3 | SPENDLY-364 | Templates | To Do |
 | 4 | SPENDLY-365 | Alternatives and comparison workspace | To Do |
