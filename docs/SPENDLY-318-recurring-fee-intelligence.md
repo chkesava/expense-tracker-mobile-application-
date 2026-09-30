@@ -2,7 +2,7 @@
 
 **Ticket:** [SPENDLY-318](https://kesavach.atlassian.net/browse/SPENDLY-318) (Story)
 **Epic:** [SPENDLY-312](https://kesavach.atlassian.net/browse/SPENDLY-312) — see [epic record](SPENDLY-312-fee-charges-intelligence.md)
-**Branch:** `feature/SPENDLY-318-recurring-fee-intelligence`, cut from the epic branch after 317.
+**Branch:** `feature/SPENDLY-318-recurring-fee-intelligence`, cut from the epic branch after 317 and merged back with approval.
 **Depends on:** 313 (totals), 314 (records), 316 (attribution, overview), 317 (detail)
 **Scope:** Spendly only. No rules, index or data-model changes.
 

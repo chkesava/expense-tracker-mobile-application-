@@ -31,7 +31,7 @@ from each story's scope and acceptance criteria.
 | 3 | [SPENDLY-315](https://kesavach.atlassian.net/browse/SPENDLY-315) | Review, confirmation & correction flow | 314 | Merged to epic |
 | 4 | [SPENDLY-316](https://kesavach.atlassian.net/browse/SPENDLY-316) | Dashboard & cost overview | 314, 315 | Merged to epic |
 | 5 | [SPENDLY-317](https://kesavach.atlassian.net/browse/SPENDLY-317) | Fee detail, evidence & linkage | 314, 315 | Merged to epic |
-| 6 | [SPENDLY-318](https://kesavach.atlassian.net/browse/SPENDLY-318) | Recurring & fee-pattern intelligence | 314 | Committed on story branch, awaiting merge approval |
+| 6 | [SPENDLY-318](https://kesavach.atlassian.net/browse/SPENDLY-318) | Recurring & fee-pattern intelligence | 314 | Merged to epic |
 | 7 | SPENDLY-319 | Anomaly, duplicate & reversal intelligence | 314, 315 | To Do |
 | — | SPENDLY-320 | Financial Calendar integration | **SPENDLY-176** (all of 177–185 To Do) | On hold (user decision 2026-09-29) until SPENDLY-176 lands |
 | — | SPENDLY-321 | Fee alerts & notification preferences | **SPENDLY-222** (esp. 224, 226, 230; all To Do) | On hold (user decision 2026-09-29) until SPENDLY-222 lands |
