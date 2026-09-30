@@ -16,7 +16,7 @@ A decision is a record of reasoning, not money. It is stored at `users/{uid}/dec
 |---|---|---|---|
 | 1 | [SPENDLY-362](https://kesavach.atlassian.net/browse/SPENDLY-362) | Domain model, lifecycle, provenance, rules | Merged to epic |
 | 2 | [SPENDLY-363](https://kesavach.atlassian.net/browse/SPENDLY-363) | Capture and editing, minimal list, entry points | Merged to epic |
-| 3 | [SPENDLY-364](https://kesavach.atlassian.net/browse/SPENDLY-364) | Templates | Committed on story branch, awaiting merge approval |
+| 3 | [SPENDLY-364](https://kesavach.atlassian.net/browse/SPENDLY-364) | Templates | Merged to epic |
 | 4 | SPENDLY-365 | Alternatives and comparison workspace | To Do |
 | 5 | SPENDLY-366 | Linked records and context | To Do |
 | 6 | SPENDLY-367 | Commitments and review dates | To Do. The Financial Calendar part waits for SPENDLY-176 |
