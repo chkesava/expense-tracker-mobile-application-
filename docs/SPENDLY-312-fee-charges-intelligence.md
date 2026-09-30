@@ -36,7 +36,7 @@ from each story's scope and acceptance criteria.
 | — | SPENDLY-320 | Financial Calendar integration | **SPENDLY-176** (all of 177–185 To Do) | On hold (user decision 2026-09-29) until SPENDLY-176 lands |
 | — | SPENDLY-321 | Fee alerts & notification preferences | **SPENDLY-222** (esp. 224, 226, 230; all To Do) | On hold (user decision 2026-09-29) until SPENDLY-222 lands |
 | 8 | [SPENDLY-322](https://kesavach.atlassian.net/browse/SPENDLY-322) | Insights & cost-control prompts | 316, 318, 319 | Merged to epic |
-| 9 | [SPENDLY-323](https://kesavach.atlassian.net/browse/SPENDLY-323) | QA, accuracy, privacy, performance, rollout | all | Ready parts committed on story branch, awaiting merge approval; calendar/notification + device QA open |
+| 9 | [SPENDLY-323](https://kesavach.atlassian.net/browse/SPENDLY-323) | QA, accuracy, privacy, performance, rollout | all | Ready parts merged to epic; calendar/notification + device QA open |
 
 **Blockers.** No Financial Calendar code exists, and 320's AC forbid a
 second calendar. Only local `expo-notifications` exists (bill reminders, SMS);

@@ -2,7 +2,7 @@
 
 **Ticket:** [SPENDLY-323](https://kesavach.atlassian.net/browse/SPENDLY-323) (Story)
 **Epic:** [SPENDLY-312](https://kesavach.atlassian.net/browse/SPENDLY-312) — see [epic record](SPENDLY-312-fee-charges-intelligence.md)
-**Branch:** `feature/SPENDLY-323-fee-qa-rollout`, cut from the epic branch after 322.
+**Branch:** `feature/SPENDLY-323-fee-qa-rollout`, cut from the epic branch after 322 and merged back with approval.
 **Status:** Partial by agreement (2026-09-30). The parts that can be done now are complete. Calendar and notification QA waits for 320/321 (on hold), and device QA needs a device run. **323 stays In Progress, and the epic cannot be marked Done yet.**
 
 ---
