@@ -11,6 +11,7 @@ import { describe, expect, it } from "vitest";
 
 import { FEE_ROLES, FEE_TYPE_IDS } from "../types/fee";
 import { TRANSACTION_KINDS } from "./transactionRef";
+import { FEE_SIGNAL_KINDS, FEE_SIGNAL_MAX_RECORDS } from "./feeAnomalies";
 import { FEE_REVIEW_HISTORY_LIMIT, FEE_REVIEW_ID_SEPARATOR } from "./feeModel";
 
 const RULES = readFileSync("firestore.rules", "utf8");
@@ -32,6 +33,14 @@ describe("feeReviews rules ↔ TS model", () => {
 
   it("allows exactly the ledger transaction kinds", () => {
     expect(ruleList("feeSourceKinds")).toEqual([...TRANSACTION_KINDS]);
+  });
+
+  it("allows exactly the TS fee signal kinds (SPENDLY-319)", () => {
+    expect(ruleList("feeSignalKinds")).toEqual([...FEE_SIGNAL_KINDS]);
+  });
+
+  it("caps records on a signal dismissal at the TS limit", () => {
+    expect(RULES).toContain(`d.recordKeys.size() <= ${FEE_SIGNAL_MAX_RECORDS}`);
   });
 
   it("caps correction history at the TS limit", () => {

@@ -32,7 +32,7 @@ from each story's scope and acceptance criteria.
 | 4 | [SPENDLY-316](https://kesavach.atlassian.net/browse/SPENDLY-316) | Dashboard & cost overview | 314, 315 | Merged to epic |
 | 5 | [SPENDLY-317](https://kesavach.atlassian.net/browse/SPENDLY-317) | Fee detail, evidence & linkage | 314, 315 | Merged to epic |
 | 6 | [SPENDLY-318](https://kesavach.atlassian.net/browse/SPENDLY-318) | Recurring & fee-pattern intelligence | 314 | Merged to epic |
-| 7 | SPENDLY-319 | Anomaly, duplicate & reversal intelligence | 314, 315 | To Do |
+| 7 | [SPENDLY-319](https://kesavach.atlassian.net/browse/SPENDLY-319) | Anomaly, duplicate & reversal intelligence | 314, 315 | Merged to epic |
 | — | SPENDLY-320 | Financial Calendar integration | **SPENDLY-176** (all of 177–185 To Do) | On hold (user decision 2026-09-29) until SPENDLY-176 lands |
 | — | SPENDLY-321 | Fee alerts & notification preferences | **SPENDLY-222** (esp. 224, 226, 230; all To Do) | On hold (user decision 2026-09-29) until SPENDLY-222 lands |
 | 8 | SPENDLY-322 | Insights & cost-control prompts | 316, 318, 319 | To Do |
@@ -50,3 +50,4 @@ second calendar. Only local `expo-notifications` exists (bill reminders, SMS);
 * [SPENDLY-316](SPENDLY-316-fee-dashboard.md)
 * [SPENDLY-317](SPENDLY-317-fee-detail.md)
 * [SPENDLY-318](SPENDLY-318-recurring-fee-intelligence.md)
+* [SPENDLY-319](SPENDLY-319-fee-anomaly-reversal.md)
