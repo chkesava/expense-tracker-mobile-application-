@@ -15,7 +15,7 @@
 |---|---|---|---|---|
 | 1 | [SPENDLY-205](https://kesavach.atlassian.net/browse/SPENDLY-205) | Liquidity, burn classes, calculation contract | None | Merged to the epic branch |
 | 2 | [SPENDLY-207](https://kesavach.atlassian.net/browse/SPENDLY-207) | Liquid resource classification and overrides | 205 | Merged to the epic branch |
-| 3 | [SPENDLY-206](https://kesavach.atlassian.net/browse/SPENDLY-206) | Calculation and projection engine | 205, 207 | Committed on its story branch, awaiting merge approval |
+| 3 | [SPENDLY-206](https://kesavach.atlassian.net/browse/SPENDLY-206) | Calculation and projection engine | 205, 207 | Merged to the epic branch |
 | 4 | SPENDLY-208 | Historical burn rate and baseline | 206 | Not started |
 | 5 | SPENDLY-209 | Commitment-aware runway using Financial Calendar | 206; needs **SPENDLY-176** | Blocked: SPENDLY-176 is To Do |
 | 6 | SPENDLY-210 | Timeline, threshold planning, explanatory UI | 206, **209** | Blocked through 209 |

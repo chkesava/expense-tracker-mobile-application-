@@ -2,7 +2,7 @@
 
 **Ticket:** [SPENDLY-206](https://kesavach.atlassian.net/browse/SPENDLY-206) (Story)
 **Epic:** [SPENDLY-204](https://kesavach.atlassian.net/browse/SPENDLY-204). See the [epic record](SPENDLY-204-financial-runway.md).
-**Branch:** `feature/SPENDLY-206-runway-engine`, cut from the epic branch after 207.
+**Branch:** `feature/SPENDLY-206-runway-engine`, cut from the epic branch after 207 and merged back with approval.
 **Depends on:** 205 (contract) and 207 (liquid total). **Scope:** pure logic only. There is no UI, no Firestore and no rules change.
 
 ---
