@@ -1,6 +1,6 @@
 import { useMemo } from "react";
-import { StyleSheet, Text, View } from "react-native";
-import { useRouter } from "expo-router";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useRouter, type Href } from "expo-router";
 import { Landmark, Repeat, Wallet } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
@@ -139,6 +139,18 @@ export function SubscriptionsWidget({
           Repeating merchants like Netflix will show up here.
         </MetaLabel>
       )}
+      {/* SPENDLY-179: every due date, by day */}
+      <Pressable
+        onPress={() => push("/calendar" as Href)}
+        accessibilityRole="link"
+        accessibilityLabel="View all commitments in the financial calendar"
+        hitSlop={8}
+        style={{ alignSelf: "flex-start", paddingTop: 8, minHeight: 32, justifyContent: "center" }}
+      >
+        <Text style={{ color: theme.colors.primary, fontFamily: theme.fontFamily.semibold, fontSize: theme.typography.xs }}>
+          View in calendar →
+        </Text>
+      </Pressable>
     </Section>
   );
 }
