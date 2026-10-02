@@ -14,6 +14,7 @@ import {
 } from "@/components/accounts/accountScreenTheme";
 import { BorrowingCard } from "@/components/borrowings/BorrowingCard";
 import { BorrowingDetailModal } from "@/components/borrowings/BorrowingDetailModal";
+import { useOpenFromRouteParam } from "@/hooks/useOpenFromRouteParam";
 import { BorrowingStatusFilters } from "@/components/borrowings/BorrowingFilters";
 import { BorrowingFilterSheet } from "@/components/borrowings/BorrowingFilterSheet";
 import { BorrowingSummaryCard } from "@/components/borrowings/BorrowingSummaryCard";
@@ -105,6 +106,14 @@ export function BorrowingsList({ listHeader }: { listHeader?: ReactNode }) {
     () => summarizeBorrowings(filtered, repayments, today),
     [filtered, repayments, today]
   );
+
+  // SPENDLY-181: `/ledger?tab=borrowings&id=…` opens this borrowing's detail.
+  useOpenFromRouteParam(!loading, (id) => {
+    if (!borrowings.some((b) => b.id === id)) return false;
+    setStartRepaying(false);
+    setSelectedId(id);
+    return true;
+  });
 
   const selectedBorrowing: Borrowing | null = useMemo(
     () => borrowings.find((b) => b.id === selectedId) ?? null,

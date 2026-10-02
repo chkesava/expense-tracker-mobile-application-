@@ -5,6 +5,7 @@ import { useRouter, type Href } from "expo-router";
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react-native";
 
 import { CalendarEventRow } from "@/components/calendar/CalendarEventRow";
+import { CalendarEventSheet } from "@/components/calendar/CalendarEventSheet";
 import { CalendarLegend, CalendarMonthGrid } from "@/components/calendar/CalendarMonthGrid";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingState } from "@/components/common/LoadingState";
@@ -58,7 +59,11 @@ export default function FinancialCalendarScreen() {
     setMonth(m);
     setSelected(m === today.slice(0, 7) ? today : `${m}-01`);
   };
-  const open = useCallback((e: CalendarEvent) => router.push(e.href as Href), [router]);
+  // SPENDLY-181: tapping an event opens its detail sheet. The event is looked
+  // up from live data each render, so a deleted source shows as unavailable.
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const open = useCallback((e: CalendarEvent) => setDetailId(e.id), []);
+  const detailEvent = detailId ? cal.events.find((e) => e.id === detailId) ?? cal.earlierOverdue.find((e) => e.id === detailId) ?? null : null;
   const agenda = useMemo(
     () => (view === "agenda" ? buildAgendaRows({ events: cal.events, earlierOverdue: cal.earlierOverdue, today }) : null),
     [view, cal.events, cal.earlierOverdue, today]
@@ -254,6 +259,16 @@ export default function FinancialCalendarScreen() {
     <PageShell scrollable={false} listOwnsBottomInset>
       {header}
       {body}
+      <CalendarEventSheet
+        isOpen={detailId !== null}
+        event={detailEvent}
+        format={fmt}
+        onClose={() => setDetailId(null)}
+        onAction={(a) => {
+          setDetailId(null);
+          router.push(a.href as Href);
+        }}
+      />
     </PageShell>
   );
 }

@@ -10,6 +10,7 @@ import { SkeletonCard } from "@/components/common/Skeleton";
 import { CreateReceivableModal } from "@/components/receivables/CreateReceivableModal";
 import { ReceivableCard } from "@/components/receivables/ReceivableCard";
 import { ReceivableDetailModal } from "@/components/receivables/ReceivableDetailModal";
+import { useOpenFromRouteParam } from "@/hooks/useOpenFromRouteParam";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { useReceivables } from "@/hooks/useReceivables";
@@ -59,6 +60,14 @@ export function ReceivablesList() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [startRepaying, setStartRepaying] = useState(false);
+
+  // SPENDLY-181: `/ledger?tab=receivables&id=…` opens this receivable's detail.
+  useOpenFromRouteParam(!loading, (id) => {
+    if (!receivables.some((r) => r.id === id)) return false;
+    setStartRepaying(false);
+    setSelectedId(id);
+    return true;
+  });
 
   const today = todayDateKey();
 
