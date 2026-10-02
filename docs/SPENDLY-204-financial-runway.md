@@ -18,7 +18,7 @@
 | 3 | [SPENDLY-206](https://kesavach.atlassian.net/browse/SPENDLY-206) | Calculation and projection engine | 205, 207 | Merged to the epic branch |
 | 4 | [SPENDLY-208](https://kesavach.atlassian.net/browse/SPENDLY-208) | Historical burn rate and baseline | 206 | Merged to the epic branch |
 | 5 | SPENDLY-209 | Commitment-aware runway using Financial Calendar | 206; needs **SPENDLY-176** | Blocked: SPENDLY-176 is To Do |
-| 6 | [SPENDLY-210](https://kesavach.atlassian.net/browse/SPENDLY-210) | Timeline, threshold planning, explanatory UI | 206 (209 link relaxed 2026-10-03) | Committed on its story branch, awaiting merge approval |
+| 6 | [SPENDLY-210](https://kesavach.atlassian.net/browse/SPENDLY-210) | Timeline, threshold planning, explanatory UI | 206 (209 link relaxed 2026-10-03) | Merged to the epic branch |
 | 7 | SPENDLY-211 | What-If integration | 210; needs **SPENDLY-195** | Blocked: SPENDLY-195 is To Do |
 | 8 | SPENDLY-212 | QA and rollout | 206, 208–211 | Last |
 

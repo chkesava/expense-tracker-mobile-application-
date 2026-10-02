@@ -2,7 +2,7 @@
 
 **Ticket:** [SPENDLY-210](https://kesavach.atlassian.net/browse/SPENDLY-210) (Story)
 **Epic:** [SPENDLY-204](https://kesavach.atlassian.net/browse/SPENDLY-204). See the [epic record](SPENDLY-204-financial-runway.md).
-**Branch:** `feature/SPENDLY-210-runway-ui`, cut from the epic branch after 208.
+**Branch:** `feature/SPENDLY-210-runway-ui`, cut from the epic branch after 208 and merged back with approval.
 **Depends on:** 205–208.
 
 **Dependency decision (2026-10-03, product owner):** 210 no longer waits for 209.
