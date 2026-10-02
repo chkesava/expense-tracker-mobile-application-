@@ -2,7 +2,7 @@
 
 **Ticket:** [SPENDLY-208](https://kesavach.atlassian.net/browse/SPENDLY-208) (Story)
 **Epic:** [SPENDLY-204](https://kesavach.atlassian.net/browse/SPENDLY-204). See the [epic record](SPENDLY-204-financial-runway.md).
-**Branch:** `feature/SPENDLY-208-burn-baseline`, cut from the epic branch after 206.
+**Branch:** `feature/SPENDLY-208-burn-baseline`, cut from the epic branch after 206 and merged back with approval.
 **Depends on:** 205 (classes) and 206 (engine). **Scope:** pure logic only. There is no UI, no Firestore and no rules change. The window, method and month table are shown in the 210 UI.
 
 ---
