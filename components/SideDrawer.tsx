@@ -25,6 +25,7 @@ import {
   Activity,
   ArrowLeftRight,
   BarChart3,
+  CalendarDays,
   Eye,
   EyeOff,
   Home,
@@ -125,6 +126,7 @@ function SideDrawerPanel({ onClose }: { onClose: () => void }) {
     investments: TrendingUp,
     vaults: Shield,
     insights: BarChart3,
+    calendar: CalendarDays,
     settings: Settings,
     admin: Shield,
   };

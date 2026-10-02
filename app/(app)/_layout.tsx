@@ -140,6 +140,12 @@ function AppShellInner() {
               }}
             />
             <Stack.Screen
+              name="calendar/index"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
               name="runway/index"
               options={{
                 animation: "slide_from_right",

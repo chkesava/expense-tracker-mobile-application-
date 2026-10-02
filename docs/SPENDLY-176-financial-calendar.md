@@ -13,7 +13,7 @@
 |---|---|---|---|---|
 | 1 | [SPENDLY-177](https://kesavach.atlassian.net/browse/SPENDLY-177) | Event model and source mapping | None | Merged to the epic branch |
 | 2 | [SPENDLY-178](https://kesavach.atlassian.net/browse/SPENDLY-178) | Aggregation and query layer | 177 | Merged to the epic branch |
-| 3 | SPENDLY-179 | Month view and navigation | 177, 178 | Not started |
+| 3 | [SPENDLY-179](https://kesavach.atlassian.net/browse/SPENDLY-179) | Month view and navigation | 177, 178 | Merged to the epic branch |
 | 4 | SPENDLY-180 | Day and week agenda | 177, 178 | Not started |
 | 5 | SPENDLY-181 | Event detail and source actions | 177 | Not started |
 | 6 | SPENDLY-182 | Upcoming commitments and projected cash summary | 177 | Not started |
