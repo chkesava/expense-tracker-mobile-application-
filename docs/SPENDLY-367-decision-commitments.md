@@ -2,7 +2,7 @@
 
 **Ticket:** [SPENDLY-367](https://kesavach.atlassian.net/browse/SPENDLY-367) (Story)
 **Epic:** [SPENDLY-361](https://kesavach.atlassian.net/browse/SPENDLY-361) — see [epic record](SPENDLY-361-financial-decision-journal.md)
-**Branch:** `feature/SPENDLY-367-decision-commitments`, cut from the epic branch after 366.
+**Branch:** `feature/SPENDLY-367-decision-commitments`, cut from the epic branch after 366 and merged back with approval.
 **Depends on:** 362 (the `commitments` and `reviewDate` fields, audited writes)
 **Scope:** Spendly only. No rules change. The model gains an optional `owner` on a commitment, which rides inside the already-capped `commitments` list.
 **Partial by agreement:** the Financial Calendar representation waits for SPENDLY-176, so this ticket stays In Progress for that part.
