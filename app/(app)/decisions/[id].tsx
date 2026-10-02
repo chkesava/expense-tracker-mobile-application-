@@ -1,18 +1,21 @@
 import { useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter, type Href } from "expo-router";
-import { Check, Link2, Pencil, Scale } from "lucide-react-native";
+import { Check, Pencil, Scale } from "lucide-react-native";
 
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingState } from "@/components/common/LoadingState";
 import { Section } from "@/components/dashboard/primitives";
 import { DecisionStatusBadge } from "@/components/decisions/DecisionStatusBadge";
+import { LinkedRecordRow } from "@/components/decisions/LinkedRecordRow";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { usePageListBottomPadding } from "@/components/layout/usePageListBottomPadding";
 import { Button } from "@/components/ui/Button";
+import { useDecisionLinkSources } from "@/hooks/useDecisionLinkSources";
 import { useDecisions } from "@/hooks/useDecisions";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { appDialog } from "@/lib/appDialog";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { writeSavedMessage } from "@/lib/firestoreWrite";
@@ -27,6 +30,7 @@ import {
   transitionDecision,
 } from "@/shared/utils/decisionModel";
 import { getDecisionTemplate } from "@/shared/data/decisionTemplates";
+import { removeLink, resolveDecisionLink } from "@/shared/utils/decisionLinks";
 import { formatAmount } from "@/shared/utils/formatCurrency";
 import { useTheme } from "@/theme/ThemeProvider";
 
@@ -55,6 +59,9 @@ export default function DecisionDetailScreen() {
   const decision = byId.get(id);
   const bottomPadding = usePageListBottomPadding();
   const [busy, setBusy] = useState(false);
+  const linkSources = useDecisionLinkSources();
+  const currency = useDisplayCurrency();
+  const resolvedLinks = useMemo(() => (decision ? decision.links.map((l) => resolveDecisionLink(l, linkSources)) : []), [decision, linkSources]);
 
   const header = (
     <PageHeader
@@ -121,6 +128,24 @@ export default function DecisionDetailScreen() {
     } finally {
       setBusy(false);
     }
+  };
+
+  const unlink = (linkId: string, title: string) => {
+    appDialog.alert("Remove this link?", `"${title}" stays in Spendly exactly as it is. Only the link from this decision is removed.`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove link",
+        onPress: () => {
+          if (!uid) return;
+          void saveDecision(uid, decision, { ...decision, links: removeLink(decision.links, linkId) })
+            .then(({ outcome }) => toast.success(writeSavedMessage(outcome, "Link removed")))
+            .catch((err) => {
+              logError("decisions.unlink", err);
+              toast.error(friendlyErrorMessage(err, "Couldn't remove the link."));
+            });
+        },
+      },
+    ]);
   };
 
   const remove = () => {
@@ -249,14 +274,16 @@ export default function DecisionDetailScreen() {
         ) : null}
 
         {decision.links.length > 0 ? (
-          <Section title="Linked records" subtitle="References to Spendly records — never copied or counted here">
-            <View style={{ gap: theme.space.xs }}>
-              {decision.links.map((l) => (
-                <View key={l.id} style={[styles.row, { gap: theme.space.sm }]}>
-                  <Link2 size={14} color={theme.colors.primary} />
-                  <Text style={[body, { flex: 1 }]} numberOfLines={1}>{l.capturedLabel}</Text>
-                  <Text style={muted}>linked {new Date(l.capturedAtMs).toISOString().slice(0, 10)}</Text>
-                </View>
+          <Section title="Linked records" subtitle="Read-only context from Spendly — never copied or counted in this decision">
+            <View>
+              {resolvedLinks.map((r) => (
+                <LinkedRecordRow
+                  key={r.link.id}
+                  resolved={r}
+                  currency={currency}
+                  onOpen={(href) => router.push(href as Href)}
+                  onRemove={() => unlink(r.link.id, r.title)}
+                />
               ))}
             </View>
           </Section>

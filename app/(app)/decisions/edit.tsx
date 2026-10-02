@@ -13,6 +13,7 @@ import { usePageListBottomPadding } from "@/components/layout/usePageListBottomP
 import { Button } from "@/components/ui/Button";
 import { Chip } from "@/components/ui/Chip";
 import { Input } from "@/components/ui/Input";
+import { useDecisionLinkSources } from "@/hooks/useDecisionLinkSources";
 import { useDecisions } from "@/hooks/useDecisions";
 import { useKeyboardHeight } from "@/hooks/useKeyboardHeight";
 import { useUnsavedChangesGuard } from "@/hooks/useUnsavedChangesGuard";
@@ -42,7 +43,7 @@ import {
   type DecisionFormState,
 } from "@/shared/utils/decisionForm";
 import { DECISION_TEMPLATES, getDecisionTemplate } from "@/shared/data/decisionTemplates";
-import { removeLink, addLink } from "@/shared/utils/decisionLinks";
+import { removeLink, addLink, linkFromRouteParams } from "@/shared/utils/decisionLinks";
 import { decisionCategoryLabel, newDecisionDraft, transitionDecision } from "@/shared/utils/decisionModel";
 import { useSurfaces } from "@/theme/surfaces";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -57,7 +58,7 @@ export default function DecisionEditScreen() {
   const { theme } = useTheme();
   const surfaces = useSurfaces();
   const router = useRouter();
-  const params = useLocalSearchParams<{ id?: string }>();
+  const params = useLocalSearchParams<{ id?: string; linkKind?: string; linkRef?: string; linkRefKind?: string }>();
   const { user } = useAuth();
   const uid = user?.uid;
   const { isOnline } = useNetwork();
@@ -83,6 +84,8 @@ export default function DecisionEditScreen() {
   const [saving, setSaving] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const loadedFor = useRef<string | null>(null);
+  const linkSources = useDecisionLinkSources();
+  const prelinked = useRef(false);
 
   useEffect(() => {
     if (!base || loadedFor.current === base.id) return;
@@ -91,6 +94,17 @@ export default function DecisionEditScreen() {
     setForm(f);
     setSavedForm(f);
   }, [base]);
+
+  // SPENDLY-366: "Log a decision about this" opens a new decision already
+  // linked to the record it came from — as a reference, once.
+  useEffect(() => {
+    if (editingId || prelinked.current || !form || !params.linkRef) return;
+    const kind = params.linkKind === "account" ? "account" : "transaction";
+    if (!linkSources.ready[kind]) return;
+    prelinked.current = true;
+    const link = linkFromRouteParams(params, linkSources, newItemId(), Date.now());
+    if (link) setForm({ ...form, links: addLink(form.links, link) });
+  }, [editingId, form, params, linkSources]);
 
   const dirty = Boolean(form && savedForm && isDecisionFormDirty(form, savedForm));
   const { confirmLeave } = useUnsavedChangesGuard(dirty && !saving);

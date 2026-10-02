@@ -8,7 +8,7 @@ import {
   View,
 } from "react-native";
 import { FlashList } from "@shopify/flash-list";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter, type Href } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import * as DocumentPicker from "expo-document-picker";
 import { AccountBalanceCard } from "@/components/accounts/AccountBalanceCard";
@@ -1384,6 +1384,15 @@ export default function AccountDetailScreen() {
           }}
           onDelete={onDeleteNote}
         />
+
+        {/* SPENDLY-366: start a Money Decision already linked to this account. */}
+        <Button
+          variant="ghost"
+          onPress={() => router.push(`/decisions/edit?linkKind=account&linkRef=${encodeURIComponent(account.id)}` as Href)}
+          accessibilityLabel="Log a decision about this account"
+        >
+          Log a decision about this account
+        </Button>
         </>
       ) : null}
 
