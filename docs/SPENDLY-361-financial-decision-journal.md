@@ -24,7 +24,7 @@ A decision is a record of reasoning, not money. It is stored at `users/{uid}/dec
 | 8 | [SPENDLY-369](https://kesavach.atlassian.net/browse/SPENDLY-369) | Expected vs actual outcomes | Merged to epic |
 | 9 | [SPENDLY-370](https://kesavach.atlassian.net/browse/SPENDLY-370) | Insights | Merged to epic |
 | — | SPENDLY-371 | Reminders and notifications | **On hold** until SPENDLY-222 (user decision, 2026-09-30) |
-| 10 | SPENDLY-372 | QA and rollout | To Do. Notification QA waits for 371 |
+| 10 | [SPENDLY-372](https://kesavach.atlassian.net/browse/SPENDLY-372) | QA and rollout | Ready parts committed on story branch, awaiting merge approval. Notification QA waits for 371; device QA open |
 
 ## Per-story records
 
@@ -37,3 +37,10 @@ A decision is a record of reasoning, not money. It is stored at `users/{uid}/dec
 * [SPENDLY-368](SPENDLY-368-decision-history.md)
 * [SPENDLY-369](SPENDLY-369-decision-outcomes.md)
 * [SPENDLY-370](SPENDLY-370-decision-insights.md)
+* [SPENDLY-372](SPENDLY-372-decision-qa-rollout.md) — QA report, limitations, rollout/rollback/monitoring, device checklist
+
+## Before this epic can merge to `main`
+
+1. Decide on the open 372 items: notification QA waits for 371 (which waits for SPENDLY-222), and the device QA checklist (372 §8) has not been run.
+2. Deploy the Firestore rules **before** the app release, rules only and no indexes (372 §6).
+3. Get explicit approval for the epic → `main` merge; after it lands, move the stories to Done.
