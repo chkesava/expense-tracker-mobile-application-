@@ -44,11 +44,21 @@ function eventTimestamp(createdAt: unknown): string {
   return "";
 }
 
-function ChangeRow({ change }: { change: LedgerFieldChange }) {
+function ChangeRow({
+  change,
+  formatAccount,
+}: {
+  change: LedgerFieldChange;
+  formatAccount?: (accountId: string) => string;
+}) {
   const { theme } = useTheme();
   const currency = useDisplayCurrency();
 
-  const renderValue = (value: string | number | undefined) => {
+  const renderValue = (raw: string | number | undefined) => {
+    const value =
+      change.field === "accountId" && formatAccount && typeof raw === "string"
+        ? formatAccount(raw)
+        : raw;
     if (value === undefined) {
       return (
         <Text style={[styles.value, { color: theme.colors.mutedForeground }]}>
@@ -95,9 +105,12 @@ function ChangeRow({ change }: { change: LedgerFieldChange }) {
 export function JournalTransactionAudit({
   kind,
   docId,
+  formatAccount,
 }: {
   kind: LedgerEventKind;
   docId?: string;
+  /** Turns a stored account id into a name for display. */
+  formatAccount?: (accountId: string) => string;
 }) {
   const { theme } = useTheme();
   const surfaces = useSurfaces();
@@ -190,7 +203,11 @@ export function JournalTransactionAudit({
               </Text>
 
               {summary.changes.map((change) => (
-                <ChangeRow key={change.field} change={change} />
+                <ChangeRow
+                  key={change.field}
+                  change={change}
+                  formatAccount={formatAccount}
+                />
               ))}
             </View>
           );

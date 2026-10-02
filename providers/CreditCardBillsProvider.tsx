@@ -65,7 +65,9 @@ import {
   reconcileBillReminders,
 } from "@/services/creditCardBills/billReminderScheduler";
 import {
+  editCreditBillPayment,
   recordCreditBillPayment,
+  type EditCreditBillPaymentPatch,
   type RecordCreditBillPaymentInput,
 } from "@/services/creditCardBills/billPayment";
 
@@ -86,6 +88,16 @@ type CreditCardBillsContextType = {
   recordBillPayment: (
     input: RecordCreditBillPaymentInput
   ) => Promise<string | null>;
+  /**
+   * SPENDLY-385: correct a recorded payment in place. `expectedUpdatedAt` is
+   * the payment's `updatedAt` when the form opened; resolves true once saved
+   * (or when nothing changed), false after an error has been shown.
+   */
+  editBillPayment: (
+    paymentId: string,
+    patch: EditCreditBillPaymentPatch,
+    expectedUpdatedAt: unknown
+  ) => Promise<boolean>;
   markBillPaid: (
     billId: string,
     opts: {
@@ -850,6 +862,43 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
     [user, timezone]
   );
 
+  const editBillPayment = useCallback(
+    async (
+      paymentId: string,
+      patch: EditCreditBillPaymentPatch,
+      expectedUpdatedAt: unknown
+    ): Promise<boolean> => {
+      if (!user) {
+        toast.error("Not authenticated");
+        return false;
+      }
+      try {
+        const result = await editCreditBillPayment(user.uid, paymentId, patch, {
+          expectedUpdatedAt,
+          timezone,
+        });
+        if (!result.changed) {
+          toast.info("No changes to save");
+          return true;
+        }
+        if (result.billId) {
+          if (result.billStatus === "PAID" || result.billStatus === "CANCELLED") {
+            await cancelBillReminders(result.billId);
+          } else {
+            void refreshReminderSchedules();
+          }
+        }
+        toast.success(writeSavedMessage(result.outcome, "Payment updated"));
+        return true;
+      } catch (err) {
+        logError("creditCardBills.editBillPayment", err);
+        toast.error(friendlyErrorMessage(err, "Failed to update payment"));
+        return false;
+      }
+    },
+    [user, timezone, refreshReminderSchedules]
+  );
+
   const markBillPaid = useCallback(
     async (
       billId: string,
@@ -910,6 +959,7 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
       updateBill,
       applyPaymentToBill,
       recordBillPayment,
+      editBillPayment,
       markBillPaid,
       cancelBill,
       previewBillRecalculation,
@@ -924,6 +974,7 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
       updateBill,
       applyPaymentToBill,
       recordBillPayment,
+      editBillPayment,
       markBillPaid,
       cancelBill,
       previewBillRecalculation,
