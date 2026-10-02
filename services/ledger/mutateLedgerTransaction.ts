@@ -69,6 +69,9 @@ export class LedgerMutationError extends Error {
   }
 }
 
+/** The journal kinds this module mutates; payment events are written elsewhere. */
+type JournalEventKind = Exclude<LedgerEventKind, "payment">;
+
 type ExpenseUpdateInput = CreateExpenseInput;
 type IncomeUpdateInput = CreateIncomeInput;
 
@@ -83,7 +86,7 @@ function requireUidAndDb(uid: string): { owner: string; db: Firestore } {
   return { owner: uid, db };
 }
 
-function requireDocId(id: string | undefined, kind: LedgerEventKind): string {
+function requireDocId(id: string | undefined, kind: JournalEventKind): string {
   const trimmed = id?.trim() ?? "";
   if (!trimmed) {
     throw new LedgerMutationError(
@@ -368,7 +371,7 @@ export async function updateIncome(
 async function softDeleteRow(
   uid: string,
   id: string,
-  kind: LedgerEventKind,
+  kind: JournalEventKind,
   options?: LedgerMutationOptions
 ): Promise<LedgerWriteResult> {
   const { owner, db } = requireUidAndDb(uid);
@@ -425,7 +428,7 @@ async function softDeleteRow(
 async function restoreRow(
   uid: string,
   id: string,
-  kind: LedgerEventKind,
+  kind: JournalEventKind,
   options?: LedgerMutationOptions
 ): Promise<LedgerWriteResult> {
   const { owner, db } = requireUidAndDb(uid);

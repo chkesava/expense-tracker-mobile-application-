@@ -11,11 +11,15 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ArrowLeft, ChevronRight, Lock, Pencil, Trash2 } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
+import { PayCreditBillModal } from "@/components/accounts/PayCreditBillModal";
+import { JournalTransactionAudit } from "@/components/ledger/JournalTransactionAudit";
 import { usePageListBottomPadding } from "@/components/layout/usePageListBottomPadding";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { useAccountActivities } from "@/hooks/useAccountActivities";
 import { useAccountPayments } from "@/hooks/useAccountPayments";
+import { useAccountTypes } from "@/hooks/useAccountTypes";
+import { useAccounts } from "@/hooks/useAccounts";
 import { useAccountTransfers } from "@/hooks/useAccountTransfers";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { useExpenses } from "@/hooks/useExpenses";
@@ -40,6 +44,7 @@ import {
   formatActivityDateLabel,
   formatClockLabel,
 } from "@/shared/utils/activityDisplay";
+import { isCashbackPayment } from "@/shared/types/expense";
 import { currentMonthKey } from "@/shared/utils/dates";
 import { currencySymbol, formatAmount } from "@/shared/utils/formatCurrency";
 import { ledgerRowEditability } from "@/shared/utils/ledgerRow";
@@ -92,6 +97,8 @@ export default function TransactionDetailsScreen() {
   const { incomes, loading: incomesLoading } = useIncomes();
   const { payments } = useAccountPayments();
   const { transfers } = useAccountTransfers();
+  const { accounts } = useAccounts();
+  const { accountTypes } = useAccountTypes();
   const { spaces } = useSpaces();
 
   const journalKind = ref && isJournalKind(ref.kind) ? ref.kind : null;
@@ -122,6 +129,23 @@ export default function TransactionDetailsScreen() {
     () => (ref?.kind === "payment" ? payments.find((p) => p.id === ref.id) : undefined),
     [payments, ref]
   );
+  /**
+   * SPENDLY-385: a live bill payment is corrected here, in place. Cashback is
+   * a provider credit with its own flow, and a voided row is history.
+   */
+  const editablePayment =
+    payment && !payment.voidedAt && !isCashbackPayment(payment) ? payment : null;
+  const [paymentEditOpen, setPaymentEditOpen] = useState(false);
+  const paymentAccountName = (accountId: string) =>
+    accountId === "external"
+      ? "Already paid / External"
+      : accounts.find((a) => a.id === accountId)?.name ?? "Removed account";
+  const openPaymentEdit = () => {
+    if (!editablePayment) return;
+    haptic.selection().catch(() => undefined);
+    setPaymentEditOpen(true);
+  };
+
   const transfer = useMemo(
     () => (ref?.kind === "transfer" ? transfers.find((t) => t.id === ref.id) : undefined),
     [transfers, ref]
@@ -314,12 +338,12 @@ export default function TransactionDetailsScreen() {
             </Text>
           ) : null}
         </View>
-        {editability?.editable ? (
+        {editability?.editable || editablePayment ? (
           <Button
             variant="tonal"
             size="icon"
-            onPress={openEdit}
-            accessibilityLabel="Edit transaction"
+            onPress={editablePayment ? openPaymentEdit : openEdit}
+            accessibilityLabel={editablePayment ? "Edit payment" : "Edit transaction"}
           >
             <Pencil size={18} color={theme.colors.primary} />
           </Button>
@@ -456,12 +480,22 @@ export default function TransactionDetailsScreen() {
             </Card>
           ) : null}
 
+          {payment ? (
+            <Card>
+              <JournalTransactionAudit
+                kind="payment"
+                docId={payment.id}
+                formatAccount={paymentAccountName}
+              />
+            </Card>
+          ) : null}
+
           {editability && !editability.editable ? (
             <Notice icon={<Lock size={16} color={theme.colors.mutedForeground} />}>
               {editability.reason}
             </Notice>
           ) : null}
-          {!journalKind ? (
+          {!journalKind && !editablePayment ? (
             <Notice icon={<Lock size={16} color={theme.colors.mutedForeground} />}>
               {`${typeLabel || "This transaction"} can't be edited here.${
                 related ? " Open it where it's managed to make changes." : ""
@@ -473,6 +507,11 @@ export default function TransactionDetailsScreen() {
             {editability?.editable ? (
               <Button size="lg" onPress={openEdit} accessibilityLabel="Edit transaction">
                 Edit transaction
+              </Button>
+            ) : null}
+            {editablePayment ? (
+              <Button size="lg" onPress={openPaymentEdit} accessibilityLabel="Edit payment">
+                Edit payment
               </Button>
             ) : null}
             {related ? (
@@ -503,6 +542,16 @@ export default function TransactionDetailsScreen() {
           </View>
         </ScrollView>
       )}
+
+      {editablePayment && paymentEditOpen ? (
+        <PayCreditBillModal
+          isOpen
+          onClose={() => setPaymentEditOpen(false)}
+          accounts={accounts}
+          accountTypes={accountTypes}
+          initialPayment={editablePayment}
+        />
+      ) : null}
     </View>
   );
 }
