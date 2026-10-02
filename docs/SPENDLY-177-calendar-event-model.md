@@ -2,7 +2,7 @@
 
 **Ticket:** [SPENDLY-177](https://kesavach.atlassian.net/browse/SPENDLY-177) (Story)
 **Epic:** [SPENDLY-176](https://kesavach.atlassian.net/browse/SPENDLY-176). See the [epic record](SPENDLY-176-financial-calendar.md).
-**Branch:** `feature/SPENDLY-177-calendar-event-model`, cut from the epic branch.
+**Branch:** `feature/SPENDLY-177-calendar-event-model`, cut from the epic branch and merged back with approval.
 **Scope:** pure contract and adapters. There is no UI, no Firestore and no rules change.
 
 ---

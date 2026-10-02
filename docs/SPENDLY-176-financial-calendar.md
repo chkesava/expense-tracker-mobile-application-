@@ -11,7 +11,7 @@
 ## Stories
 | # | Story | Scope | Jira dependencies | State |
 |---|---|---|---|---|
-| 1 | [SPENDLY-177](https://kesavach.atlassian.net/browse/SPENDLY-177) | Event model and source mapping | None | Committed on its story branch, awaiting merge approval |
+| 1 | [SPENDLY-177](https://kesavach.atlassian.net/browse/SPENDLY-177) | Event model and source mapping | None | Merged to the epic branch |
 | 2 | SPENDLY-178 | Aggregation and query layer | 177 | Not started |
 | 3 | SPENDLY-179 | Month view and navigation | 177, 178 | Not started |
 | 4 | SPENDLY-180 | Day and week agenda | 177, 178 | Not started |
