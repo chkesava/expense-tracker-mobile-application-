@@ -159,7 +159,7 @@ export function validateDecision(d: MoneyDecision): DecisionIssue[] {
   if (
     d.alternatives.some((a) => !a.title.trim() || tooLong(a.title, L.label) || tooLong(a.notes, L.text) || tooLong(a.nonFinancial, L.text)) ||
     d.assumptions.some((a) => tooLong(a.text, L.text)) ||
-    d.commitments.some((c) => tooLong(c.text, L.text)) ||
+    d.commitments.some((c) => !c.text.trim() || tooLong(c.text, L.text) || tooLong(c.owner, 60)) ||
     d.links.some((l) => tooLong(l.capturedLabel, L.label))
   ) {
     issues.add("text_too_long");

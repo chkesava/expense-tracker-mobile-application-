@@ -145,9 +145,16 @@ export interface DecisionLink {
   capturedAtMs: number;
 }
 
+/**
+ * An action the user committed to (SPENDLY-367). Distinct from transactions:
+ * it records what someone meant to do, never money. Completing one says the
+ * action happened — not that the decision worked out.
+ */
 export interface DecisionCommitment {
   id: string;
   text: string;
+  /** Who does it, when that isn't just the user (e.g. "Spouse"). */
+  owner?: string;
   targetDate?: string;
   status: "open" | "done" | "dropped";
   completedAtMs?: number;
