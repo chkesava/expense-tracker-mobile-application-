@@ -2,7 +2,7 @@
 
 **Ticket:** [SPENDLY-205](https://kesavach.atlassian.net/browse/SPENDLY-205) (Story)
 **Epic:** [SPENDLY-204](https://kesavach.atlassian.net/browse/SPENDLY-204). See the [epic record](SPENDLY-204-financial-runway.md).
-**Branch:** `feature/SPENDLY-205-runway-contract`, cut from the epic branch, which was cut from origin/main @ `db813fa`.
+**Branch:** `feature/SPENDLY-205-runway-contract`, cut from the epic branch (from origin/main @ `db813fa`) and merged back with approval.
 **Scope:** pure contract only. There is no UI, no Firestore, no rules change, and existing calculations are untouched.
 
 ---

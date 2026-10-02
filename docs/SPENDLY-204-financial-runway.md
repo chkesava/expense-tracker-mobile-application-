@@ -13,7 +13,7 @@
 ## Stories
 | # | Story | Scope | Jira dependencies | State |
 |---|---|---|---|---|
-| 1 | [SPENDLY-205](https://kesavach.atlassian.net/browse/SPENDLY-205) | Liquidity, burn classes, calculation contract | None | Committed on its story branch, awaiting merge approval |
+| 1 | [SPENDLY-205](https://kesavach.atlassian.net/browse/SPENDLY-205) | Liquidity, burn classes, calculation contract | None | Merged to the epic branch |
 | 2 | SPENDLY-207 | Liquid resource classification and overrides | 205 | Not started |
 | 3 | SPENDLY-206 | Calculation and projection engine | 205, 207 | Not started |
 | 4 | SPENDLY-208 | Historical burn rate and baseline | 206 | Not started |
