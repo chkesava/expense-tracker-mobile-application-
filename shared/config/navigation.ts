@@ -246,6 +246,7 @@ const SUB_SCREEN_PREFIXES = [
   "/credit-card-bills/",
   "/transactions/",
   "/settings/",
+  "/runway/",
 ];
 
 const SUB_SCREEN_ROUTES = ["/settings", "/sms-inbox", "/app-selector", "/add"];

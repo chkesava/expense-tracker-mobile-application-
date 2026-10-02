@@ -66,6 +66,8 @@ export interface RunwayResource {
   liquidity: RunwayLiquidity;
   /** Counted in the starting liquid balance. */
   included: boolean;
+  /** Whether the user may change `included` (SPENDLY-207). */
+  overridable: boolean;
   /** Why it is included/excluded, from RUNWAY_ASSUMPTION codes. */
   reasons: RunwayAssumptionCode[];
   provenance: RunwayProvenance;
@@ -130,6 +132,8 @@ export type RunwayAssumptionCode =
   | "unknown_kind_excluded"
   | "currency_unsupported"
   | "overdrawn_counted"
+  | "user_included"
+  | "user_excluded"
   | "category_mapped_from_legacy"
   | "category_unresolved"
   | "income_source_unrecognised"
@@ -143,4 +147,17 @@ export interface RunwayAssumption {
   text: string;
   /** How much the assumption could move the answer. */
   impact: "low" | "medium" | "high";
+}
+
+/**
+ * A user's choice to count or not count one resource (SPENDLY-207). Stored at
+ * `users/{uid}/runwayOverrides/{kind__refId}`. Only kinds in
+ * RUNWAY_OVERRIDABLE_KINDS can be overridden; the rules enforce the same list.
+ */
+export interface RunwayOverride {
+  id: string;
+  kind: RunwayResourceKind;
+  refId: string;
+  included: boolean;
+  updatedAtMs: number;
 }

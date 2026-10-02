@@ -14,7 +14,7 @@
 | # | Story | Scope | Jira dependencies | State |
 |---|---|---|---|---|
 | 1 | [SPENDLY-205](https://kesavach.atlassian.net/browse/SPENDLY-205) | Liquidity, burn classes, calculation contract | None | Merged to the epic branch |
-| 2 | SPENDLY-207 | Liquid resource classification and overrides | 205 | Not started |
+| 2 | [SPENDLY-207](https://kesavach.atlassian.net/browse/SPENDLY-207) | Liquid resource classification and overrides | 205 | Committed on its story branch, awaiting merge approval |
 | 3 | SPENDLY-206 | Calculation and projection engine | 205, 207 | Not started |
 | 4 | SPENDLY-208 | Historical burn rate and baseline | 206 | Not started |
 | 5 | SPENDLY-209 | Commitment-aware runway using Financial Calendar | 206; needs **SPENDLY-176** | Blocked: SPENDLY-176 is To Do |
@@ -28,6 +28,7 @@
   - Restricted: EPF, stocks.
   - Expected inflow: receivables.
   - Obligations: credit cards, borrowings.
+- **2026-10-02 (207):** overrides are allowed for a safe set only. Bank, cash and wallet can be excluded; near-liquid items and unrecognised accounts can be included; EPF, stocks, receivables, cards and loans are locked (the rules enforce this). The UI is a Runway sources screen plus a row on account detail.
 - **2026-10-02:** savings and investment contributions are a separate, pausable class. They count in net burn and stay out of essential burn.
 
 ## Open: where Jira differs from the roadmap

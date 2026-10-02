@@ -14,6 +14,7 @@ import {
   INCOME_CLASS_BY_SOURCE,
   LIQUIDITY_INCLUDED_BY_DEFAULT,
   LIQUIDITY_REASON,
+  RUNWAY_OVERRIDABLE_KINDS,
   RUNWAY_PROJECTION_LIMITS,
 } from "../data/runwayRules";
 import { CATEGORY_TAXONOMY, collapseToCurrentTaxonomy } from "../data/categoryTaxonomy";
@@ -65,10 +66,20 @@ function sameCurrency(a: string | undefined, displayCurrency: string): boolean {
   return !a || a.trim().toUpperCase() === displayCurrency.trim().toUpperCase();
 }
 
+export function isOverridableKind(kind: RunwayResourceKind): boolean {
+  return RUNWAY_OVERRIDABLE_KINDS.includes(kind);
+}
+
+/** Stable document id for an override. Firestore ids can't contain "/". */
+export function runwayOverrideId(kind: RunwayResourceKind, refId: string): string {
+  return `${kind}__${refId.replace(/\//g, "_")}`;
+}
+
 /**
- * Classify any resource with the default rules. `amount` is the source's own
- * balance (obligations as a positive amount owed). A resource is counted only
- * if its liquidity is counted by default and its currency is supported.
+ * Classify any resource. `amount` is the source's own balance (obligations as
+ * a positive amount owed). A resource is counted if its liquidity is counted
+ * by default, or the user overrode an overridable kind, and its currency is
+ * supported. An override can never count a locked kind or another currency.
  */
 export function classifyResource(input: {
   kind: RunwayResourceKind;
@@ -78,17 +89,22 @@ export function classifyResource(input: {
   provenance: RunwayProvenance;
   currency?: string;
   displayCurrency: string;
+  override?: { included: boolean } | null;
 }): RunwayResource {
   const liquidity = defaultLiquidity(input.kind);
   const reasons: RunwayAssumptionCode[] = [LIQUIDITY_REASON[liquidity]];
   let included = LIQUIDITY_INCLUDED_BY_DEFAULT[liquidity];
+  if (input.override && isOverridableKind(input.kind) && input.override.included !== included) {
+    included = input.override.included;
+    reasons.push(included ? "user_included" : "user_excluded");
+  }
   if (!sameCurrency(input.currency, input.displayCurrency)) {
     included = false;
     reasons.push("currency_unsupported");
   }
   const amount = Number.isFinite(input.amount) ? roundMoney(input.amount) : 0;
   if (included && amount < 0) reasons.push("overdrawn_counted");
-  return { kind: input.kind, refId: input.refId, label: input.label, amount, liquidity, included, reasons, provenance: input.provenance };
+  return { overridable: isOverridableKind(input.kind), kind: input.kind, refId: input.refId, label: input.label, amount, liquidity, included, reasons, provenance: input.provenance };
 }
 
 /** Convenience for accounts: kind from the existing classifier, balance as an actual value. */
