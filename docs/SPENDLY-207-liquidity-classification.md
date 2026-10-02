@@ -2,7 +2,7 @@
 
 **Ticket:** [SPENDLY-207](https://kesavach.atlassian.net/browse/SPENDLY-207) (Story)
 **Epic:** [SPENDLY-204](https://kesavach.atlassian.net/browse/SPENDLY-204). See the [epic record](SPENDLY-204-financial-runway.md).
-**Branch:** `feature/SPENDLY-207-liquidity-classification`, cut from the epic branch after 205.
+**Branch:** `feature/SPENDLY-207-liquidity-classification`, cut from the epic branch after 205 and merged back with approval.
 **Depends on:** SPENDLY-205, which provides the contract and default rules.
 
 ---
