@@ -16,6 +16,8 @@ import { Button } from "@/components/ui/Button";
 import { useDecisions } from "@/hooks/useDecisions";
 import { useNetwork } from "@/providers/NetworkProvider";
 import type { MoneyDecision } from "@/shared/types/decision";
+import { todayDateKey } from "@/shared/utils/dates";
+import { DUE_LABELS, followUps } from "@/shared/utils/decisionCommitments";
 import { sortDecisionsForList } from "@/shared/utils/decisionModel";
 import { useTheme } from "@/theme/ThemeProvider";
 
@@ -32,6 +34,7 @@ export default function DecisionsScreen() {
   const sorted = useMemo(() => sortDecisionsForList(decisions), [decisions]);
   const bottomPadding = usePageListBottomPadding();
   const drafts = decisions.filter((d) => d.status === "draft").length;
+  const comingUp = useMemo(() => followUps(decisions, todayDateKey()).slice(0, 5), [decisions]);
 
   const open = useCallback((d: MoneyDecision) => router.push((d.status === "draft" ? `/decisions/edit?id=${d.id}` : `/decisions/${d.id}`) as Href), [router]);
   const create = () => router.push("/decisions/edit" as Href);
@@ -78,14 +81,32 @@ export default function DecisionsScreen() {
           keyExtractor={(d) => d.id}
           renderItem={({ item }) => <DecisionRow decision={item} onPress={open} />}
           ListHeaderComponent={
-            !isOnline ? (
-              <View style={[styles.banner, { gap: theme.space.sm, paddingHorizontal: theme.space.lg }]}>
-                <WifiOff size={16} color={theme.colors.mutedForeground} />
-                <Text style={{ flex: 1, color: theme.colors.mutedForeground, fontSize: theme.typography.xs, fontFamily: theme.fontFamily.regular }}>
-                  You're offline. Changes save on this device and sync later.
-                </Text>
-              </View>
-            ) : null
+            <View>
+              {!isOnline ? (
+                <View style={[styles.banner, { gap: theme.space.sm, paddingHorizontal: theme.space.lg }]}>
+                  <WifiOff size={16} color={theme.colors.mutedForeground} />
+                  <Text style={{ flex: 1, color: theme.colors.mutedForeground, fontSize: theme.typography.xs, fontFamily: theme.fontFamily.regular }}>
+                    You're offline. Changes save on this device and sync later.
+                  </Text>
+                </View>
+              ) : null}
+              {comingUp.length > 0 ? (
+                <View style={{ paddingHorizontal: theme.space.lg, paddingVertical: theme.space.sm, gap: theme.space.xs }} accessibilityRole="summary">
+                  <Text style={{ color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold, fontSize: theme.typography.sm }}>Coming up</Text>
+                  {comingUp.map((f) => (
+                    <Text
+                      key={f.key}
+                      onPress={() => router.push(`/decisions/${f.decisionId}` as Href)}
+                      accessibilityRole="link"
+                      style={{ color: f.state === "overdue" ? theme.colors.destructive : theme.colors.foreground, fontFamily: theme.fontFamily.regular, fontSize: theme.typography.xs, paddingVertical: 4 }}
+                    >
+                      {DUE_LABELS[f.state]} · {f.kind === "review" ? `Review "${f.decisionTitle}"` : `${f.text} (${f.decisionTitle})`}
+                      {f.date ? ` · ${f.date}` : ""}
+                    </Text>
+                  ))}
+                </View>
+              ) : null}
+            </View>
           }
           contentContainerStyle={{ paddingBottom: bottomPadding }}
         />

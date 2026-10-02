@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingState } from "@/components/common/LoadingState";
 import { Section } from "@/components/dashboard/primitives";
+import { DecisionCommitmentsSection } from "@/components/decisions/DecisionCommitmentsSection";
 import { DecisionStatusBadge } from "@/components/decisions/DecisionStatusBadge";
 import { LinkedRecordRow } from "@/components/decisions/LinkedRecordRow";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -287,6 +288,24 @@ export default function DecisionDetailScreen() {
               ))}
             </View>
           </Section>
+        ) : null}
+
+        {decision.status !== "draft" ? (
+          <DecisionCommitmentsSection
+            decision={decision}
+            busy={busy}
+            onSave={(next, message) => {
+              if (!uid || busy) return;
+              setBusy(true);
+              saveDecision(uid, decision, next)
+                .then(({ outcome }) => toast.success(writeSavedMessage(outcome, message)))
+                .catch((err) => {
+                  logError("decisions.commitments", err);
+                  toast.error(friendlyErrorMessage(err, "Couldn't save that change."));
+                })
+                .finally(() => setBusy(false));
+            }}
+          />
         ) : null}
 
         {decision.decisionSnapshot ? (
