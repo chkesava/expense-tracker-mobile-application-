@@ -4,6 +4,7 @@ import { ChevronRight, Scale } from "lucide-react-native";
 
 import { DecisionStatusBadge } from "@/components/decisions/DecisionStatusBadge";
 import type { MoneyDecision } from "@/shared/types/decision";
+import { outcomeStatus } from "@/shared/utils/decisionHistory";
 import { decisionCategoryLabel } from "@/shared/utils/decisionModel";
 import { useSurfaces } from "@/theme/surfaces";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -19,8 +20,16 @@ export const DecisionRow = memo(function DecisionRow({
   const { theme } = useTheme();
   const surfaces = useSurfaces();
   const chosen = decision.alternatives.find((a) => a.id === decision.selectedAlternativeId)?.title;
-  const updated = new Date(decision.updatedAtMs).toISOString().slice(0, 10);
-  const meta = [decisionCategoryLabel(decision.category), chosen ? `Chose: ${chosen}` : null, `Updated ${updated}`].filter(Boolean).join(" · ");
+  const when = decision.decidedAtMs ? `Decided ${new Date(decision.decidedAtMs).toISOString().slice(0, 10)}` : `Started ${new Date(decision.createdAtMs).toISOString().slice(0, 10)}`;
+  const outcome = outcomeStatus(decision);
+  const meta = [
+    decisionCategoryLabel(decision.category),
+    chosen ? `Chose: ${chosen}` : null,
+    when,
+    outcome === "recorded" ? "Outcome recorded" : outcome === "awaiting" ? "Awaiting outcome" : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <Pressable
@@ -40,7 +49,7 @@ export const DecisionRow = memo(function DecisionRow({
         <Text numberOfLines={2} style={{ color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold, fontSize: theme.typography.sm }}>
           {decision.title}
         </Text>
-        <Text numberOfLines={1} style={{ color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular, fontSize: theme.typography.xs }}>
+        <Text numberOfLines={2} style={{ color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular, fontSize: theme.typography.xs }}>
           {meta}
         </Text>
         <DecisionStatusBadge status={decision.status} />
