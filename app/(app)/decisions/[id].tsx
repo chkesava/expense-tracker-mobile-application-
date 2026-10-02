@@ -8,6 +8,7 @@ import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingState } from "@/components/common/LoadingState";
 import { Section } from "@/components/dashboard/primitives";
 import { DecisionCommitmentsSection } from "@/components/decisions/DecisionCommitmentsSection";
+import { DecisionOutcomeSection } from "@/components/decisions/DecisionOutcomeSection";
 import { DecisionStatusBadge } from "@/components/decisions/DecisionStatusBadge";
 import { LinkedRecordRow } from "@/components/decisions/LinkedRecordRow";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -84,7 +85,16 @@ export default function DecisionDetailScreen() {
     if (decision.status === "archived") return [{ to: decision.archivedFromStatus ?? "draft", label: "Restore" }];
     return (Object.keys(ACTION_LABELS) as DecisionStatus[])
       .filter((to) => canTransitionDecision(decision, to))
-      .map((to) => ({ to, label: ACTION_LABELS[to]! }));
+      .map((to) => ({
+        to,
+        // SPENDLY-369: moving back from a finished review is a reopen, and says so.
+        label:
+          decision.status === "reviewed" && to === "tracking"
+            ? "Reopen review"
+            : decision.status === "closed" && to === "reviewed"
+              ? "Reopen"
+              : ACTION_LABELS[to]!,
+      }));
   }, [decision]);
 
   if (error) {
@@ -129,6 +139,18 @@ export default function DecisionDetailScreen() {
     } finally {
       setBusy(false);
     }
+  };
+
+  const saveChange = (next: typeof decision, message: string) => {
+    if (!uid || busy) return;
+    setBusy(true);
+    saveDecision(uid, decision, next)
+      .then(({ outcome }) => toast.success(writeSavedMessage(outcome, message)))
+      .catch((err) => {
+        logError("decisions.change", err);
+        toast.error(friendlyErrorMessage(err, "Couldn't save that change."));
+      })
+      .finally(() => setBusy(false));
   };
 
   const unlink = (linkId: string, title: string) => {
@@ -264,7 +286,7 @@ export default function DecisionDetailScreen() {
           </Section>
         ) : null}
 
-        {decision.expected ? (
+        {decision.expected && !decision.decisionSnapshot ? (
           <Section title="What you expected" subtitle="Your expectation at the time">
             <View style={{ gap: theme.space.xs }}>
               {decision.expected.summary ? <Text style={body}>{decision.expected.summary}</Text> : null}
@@ -290,23 +312,9 @@ export default function DecisionDetailScreen() {
           </Section>
         ) : null}
 
-        {decision.status !== "draft" ? (
-          <DecisionCommitmentsSection
-            decision={decision}
-            busy={busy}
-            onSave={(next, message) => {
-              if (!uid || busy) return;
-              setBusy(true);
-              saveDecision(uid, decision, next)
-                .then(({ outcome }) => toast.success(writeSavedMessage(outcome, message)))
-                .catch((err) => {
-                  logError("decisions.commitments", err);
-                  toast.error(friendlyErrorMessage(err, "Couldn't save that change."));
-                })
-                .finally(() => setBusy(false));
-            }}
-          />
-        ) : null}
+        {decision.status !== "draft" ? <DecisionCommitmentsSection decision={decision} busy={busy} onSave={saveChange} /> : null}
+
+        <DecisionOutcomeSection decision={decision} busy={busy} onSave={saveChange} />
 
         {decision.decisionSnapshot ? (
           <Text style={muted}>

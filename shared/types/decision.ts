@@ -120,6 +120,8 @@ export interface DecisionOutcome {
   /** The user's own verdict. Spendly never infers one. */
   userAssessment?: "better" | "as_expected" | "worse" | "mixed" | "unsure";
   lessons?: string;
+  /** Notes from looking back (SPENDLY-369). */
+  reviewNotes?: string;
 }
 
 export const DECISION_LINK_KINDS = [
