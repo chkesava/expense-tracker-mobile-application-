@@ -107,6 +107,8 @@ export type RunwayState =
   | "not_depleting"
   /** Liquid money is already at or below the floor. */
   | "already_below"
+  /** The projection stays above the floor for the whole horizon but is falling (SPENDLY-206). */
+  | "beyond_horizon"
   /** Inputs are missing, so no number is shown. */
   | "insufficient_data";
 
