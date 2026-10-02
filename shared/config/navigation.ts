@@ -249,7 +249,7 @@ const SUB_SCREEN_PREFIXES = [
   "/runway/",
 ];
 
-const SUB_SCREEN_ROUTES = ["/settings", "/sms-inbox", "/app-selector", "/add"];
+const SUB_SCREEN_ROUTES = ["/settings", "/sms-inbox", "/app-selector", "/add", "/runway"];
 
 const SECONDARY_TAB_PREFIXES = ["/ledger", "/vaults", "/investments", "/insights"];
 

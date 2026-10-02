@@ -61,6 +61,7 @@ describe("isRestorableRoute", () => {
     expect(isRestorableRoute("/credit-card-bills/bill-1")).toBe(true);
     expect(isRestorableRoute("/transactions/exp-1?kind=expense&accountId=a1")).toBe(true);
     expect(isRestorableRoute("/runway/sources")).toBe(true);
+    expect(isRestorableRoute("/runway")).toBe(true);
   });
 
   it("rejects routes the shell cannot resume into", () => {
