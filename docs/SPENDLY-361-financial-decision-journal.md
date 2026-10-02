@@ -24,7 +24,7 @@ A decision is a record of reasoning, not money. It is stored at `users/{uid}/dec
 | 8 | [SPENDLY-369](https://kesavach.atlassian.net/browse/SPENDLY-369) | Expected vs actual outcomes | Merged to epic |
 | 9 | [SPENDLY-370](https://kesavach.atlassian.net/browse/SPENDLY-370) | Insights | Merged to epic |
 | — | SPENDLY-371 | Reminders and notifications | **On hold** until SPENDLY-222 (user decision, 2026-09-30) |
-| 10 | [SPENDLY-372](https://kesavach.atlassian.net/browse/SPENDLY-372) | QA and rollout | Ready parts committed on story branch, awaiting merge approval. Notification QA waits for 371; device QA open |
+| 10 | [SPENDLY-372](https://kesavach.atlassian.net/browse/SPENDLY-372) | QA and rollout | Ready parts merged to epic. Notification QA waits for 371; device QA open |
 
 ## Per-story records
 

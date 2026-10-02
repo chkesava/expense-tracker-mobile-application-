@@ -2,7 +2,7 @@
 
 **Ticket:** [SPENDLY-372](https://kesavach.atlassian.net/browse/SPENDLY-372) (Story)
 **Epic:** [SPENDLY-361](https://kesavach.atlassian.net/browse/SPENDLY-361) — see [epic record](SPENDLY-361-financial-decision-journal.md)
-**Branch:** `feature/SPENDLY-372-decision-qa-rollout`, cut from the epic branch after 370.
+**Branch:** `feature/SPENDLY-372-decision-qa-rollout`, cut from the epic branch after 370 and merged back with approval.
 **Status:** Partial by agreement (2026-10-02). The parts that can be done now are complete. Notification and deep-link QA waits for SPENDLY-371, which is on hold until SPENDLY-222. Android release-build, accessibility and device-performance QA need a device run. **372 stays In Progress, and the epic is not Done.**
 
 ---
