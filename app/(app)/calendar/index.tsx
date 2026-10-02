@@ -5,7 +5,12 @@ import { useRouter, type Href } from "expo-router";
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react-native";
 
 import { CalendarEventRow } from "@/components/calendar/CalendarEventRow";
+import { CalendarCashSummaryCard } from "@/components/calendar/CalendarCashSummaryCard";
 import { CalendarEventSheet } from "@/components/calendar/CalendarEventSheet";
+import { Modal } from "@/components/common/Modal";
+import { useRunwaySources } from "@/hooks/useRunwaySources";
+import { monthGridRange, queryCalendar } from "@/shared/utils/calendarQuery";
+import { summarizeCalendarCash, summaryRange, type SummaryWindow } from "@/shared/utils/calendarSummary";
 import { CalendarLegend, CalendarMonthGrid } from "@/components/calendar/CalendarMonthGrid";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingState } from "@/components/common/LoadingState";
@@ -18,7 +23,6 @@ import { useSettings } from "@/providers/SettingsProvider";
 import type { CalendarEvent } from "@/shared/types/calendar";
 import { agendaRange, agendaTitle, buildAgendaRows, shiftAgenda, type AgendaRow, type AgendaSpan } from "@/shared/utils/calendarAgenda";
 import { CALENDAR_SOURCE_LABELS, buildMonthGrid, dayTotals, longDateLabel, monthTitle, nextMonth, previousMonth } from "@/shared/utils/calendarMonth";
-import { monthGridRange } from "@/shared/utils/calendarQuery";
 import { todayDateKey } from "@/shared/utils/dates";
 import { formatAmount } from "@/shared/utils/formatCurrency";
 import { useSurfaces } from "@/theme/surfaces";
@@ -63,7 +67,21 @@ export default function FinancialCalendarScreen() {
   // up from live data each render, so a deleted source shows as unavailable.
   const [detailId, setDetailId] = useState<string | null>(null);
   const open = useCallback((e: CalendarEvent) => setDetailId(e.id), []);
-  const detailEvent = detailId ? cal.events.find((e) => e.id === detailId) ?? cal.earlierOverdue.find((e) => e.id === detailId) ?? null : null;
+  // SPENDLY-182: upcoming commitments and projected cash for a planning window.
+  const [summaryWindow, setSummaryWindow] = useState<SummaryWindow>("next30");
+  const [lineSheet, setLineSheet] = useState<{ title: string; events: CalendarEvent[] } | null>(null);
+  const { sources } = useRunwaySources();
+  const summary = useMemo(() => {
+    const r = summaryRange(summaryWindow, today);
+    const q = queryCalendar({ range: r, today, currency: cal.currency, data: cal.data, status: cal.status });
+    return summarizeCalendarCash({ range: r, counted: sources.liquidTotal, events: q.events, earlierOverdue: q.earlierOverdue, currency: cal.currency });
+  }, [summaryWindow, today, cal.currency, cal.data, cal.status, sources.liquidTotal]);
+  const detailEvent = detailId
+    ? cal.events.find((e) => e.id === detailId) ??
+      cal.earlierOverdue.find((e) => e.id === detailId) ??
+      [...summary.expectedIn.events, ...summary.commitments.events, ...summary.overdue.events].find((e) => e.id === detailId) ??
+      null
+    : null;
   const agenda = useMemo(
     () => (view === "agenda" ? buildAgendaRows({ events: cal.events, earlierOverdue: cal.earlierOverdue, today }) : null),
     [view, cal.events, cal.earlierOverdue, today]
@@ -188,6 +206,15 @@ export default function FinancialCalendarScreen() {
     body = (
       <ScrollView contentContainerStyle={{ padding: theme.space.lg, paddingBottom: bottomPadding, gap: theme.space.md }}>
         {viewSwitch}
+        <CalendarCashSummaryCard
+          summary={summary}
+          window={summaryWindow}
+          onWindowChange={setSummaryWindow}
+          format={fmt}
+          onOpenLine={(_, title, events) => setLineSheet({ title, events })}
+          onOpenRunway={() => router.push("/runway" as Href)}
+          onOpenSources={() => router.push("/runway/sources" as Href)}
+        />
         <View style={styles.navRow}>
           <Pressable onPress={() => go(previousMonth(month))} accessibilityRole="button" accessibilityLabel={`Previous month, ${monthTitle(previousMonth(month))}`} hitSlop={8} style={styles.navBtn}>
             <ChevronLeft size={22} color={theme.colors.foreground} />
@@ -259,6 +286,21 @@ export default function FinancialCalendarScreen() {
     <PageShell scrollable={false} listOwnsBottomInset>
       {header}
       {body}
+      <Modal isOpen={lineSheet !== null} onClose={() => setLineSheet(null)} title={lineSheet?.title} density="compact">
+        <View>
+          {lineSheet?.events.map((e) => (
+            <CalendarEventRow
+              key={e.id}
+              event={e}
+              format={fmt}
+              onPress={(ev) => {
+                setLineSheet(null);
+                setDetailId(ev.id);
+              }}
+            />
+          ))}
+        </View>
+      </Modal>
       <CalendarEventSheet
         isOpen={detailId !== null}
         event={detailEvent}

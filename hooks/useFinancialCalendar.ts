@@ -16,7 +16,7 @@ import { useSubscriptions } from "@/hooks/useSubscriptions";
 import { useSettings } from "@/providers/SettingsProvider";
 import type { CalendarEvent, CalendarRange, CalendarSource } from "@/shared/types/calendar";
 import { getAccountKind } from "@/shared/utils/accountKind";
-import { queryCalendar, type CalendarSourceStatus } from "@/shared/utils/calendarQuery";
+import { queryCalendar, type CalendarData, type CalendarSourceStatus } from "@/shared/utils/calendarQuery";
 import { todayDateKey } from "@/shared/utils/dates";
 
 const status = (loading: boolean, error?: unknown): CalendarSourceStatus => (error ? "error" : loading ? "loading" : "ready");
@@ -64,32 +64,32 @@ export function useFinancialCalendar(range: CalendarRange, options?: { includeCa
   };
   const statusKey = JSON.stringify(sourceStatus);
 
+  // Exposed so a screen can query a second range (182 summary) from the same data.
+  const data: CalendarData = useMemo(
+    () => ({
+      bills,
+      cardNames,
+      subscriptions,
+      borrowings: borrowingsCtx.borrowings,
+      receivables: receivablesCtx.receivables,
+      incomes,
+      goals,
+      investments,
+      sipPlans: plans,
+      epfContributions: contributions,
+      epfEmployerNames: employerNames,
+      extraEvents: options?.extraEvents,
+    }),
+    [bills, cardNames, subscriptions, borrowingsCtx.borrowings, receivablesCtx.receivables, incomes, goals, investments, plans, contributions, employerNames, options?.extraEvents]
+  );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const stableStatus = useMemo(() => sourceStatus, [statusKey]);
+
   const result = useMemo(
-    () =>
-      queryCalendar({
-        range,
-        today,
-        currency,
-        includeCancelled: options?.includeCancelled,
-        status: sourceStatus,
-        data: {
-          bills,
-          cardNames,
-          subscriptions,
-          borrowings: borrowingsCtx.borrowings,
-          receivables: receivablesCtx.receivables,
-          incomes,
-          goals,
-          investments,
-          sipPlans: plans,
-          epfContributions: contributions,
-          epfEmployerNames: employerNames,
-          extraEvents: options?.extraEvents,
-        },
-      }),
+    () => queryCalendar({ range, today, currency, includeCancelled: options?.includeCancelled, status: stableStatus, data }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [range.from, range.to, today, currency, options?.includeCancelled, options?.extraEvents, statusKey, bills, cardNames, subscriptions, borrowingsCtx.borrowings, receivablesCtx.receivables, incomes, goals, investments, plans, contributions, employerNames]
+    [range.from, range.to, today, currency, options?.includeCancelled, stableStatus, data]
   );
 
-  return { ...result, today, currency };
+  return { ...result, today, currency, data, status: stableStatus };
 }
