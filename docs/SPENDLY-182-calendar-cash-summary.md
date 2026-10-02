@@ -2,7 +2,7 @@
 
 **Ticket:** [SPENDLY-182](https://kesavach.atlassian.net/browse/SPENDLY-182) (Story)
 **Epic:** [SPENDLY-176](https://kesavach.atlassian.net/browse/SPENDLY-176). See the [epic record](SPENDLY-176-financial-calendar.md).
-**Branch:** `feature/SPENDLY-182-calendar-cash-summary`, cut from the epic branch after 181.
+**Branch:** `feature/SPENDLY-182-calendar-cash-summary`, cut from the epic branch after 181 and merged back with approval.
 **Depends on:** 177 (events) and the runway epic's counted money (207). No data model, no rules, no writes.
 
 ---
