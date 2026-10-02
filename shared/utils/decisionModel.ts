@@ -143,7 +143,7 @@ export function validateDecision(d: MoneyDecision): DecisionIssue[] {
   if (!isDecisionCategory(d.category)) issues.add("unknown_category");
   if (!isDecisionStatus(d.status)) issues.add("unknown_status");
 
-  const texts = [d.rationale, d.context.situation, d.context.goal, d.expected?.summary, d.outcome?.summary, d.outcome?.lessons];
+  const texts = [d.rationale, d.context.situation, d.context.goal, d.expected?.summary, d.outcome?.summary, d.outcome?.lessons, d.outcome?.reviewNotes];
   if (texts.some((t) => tooLong(t, L.text))) issues.add("text_too_long");
 
   if (
