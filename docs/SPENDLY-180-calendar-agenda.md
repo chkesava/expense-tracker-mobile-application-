@@ -2,7 +2,7 @@
 
 **Ticket:** [SPENDLY-180](https://kesavach.atlassian.net/browse/SPENDLY-180) (Story)
 **Epic:** [SPENDLY-176](https://kesavach.atlassian.net/browse/SPENDLY-176). See the [epic record](SPENDLY-176-financial-calendar.md).
-**Branch:** `feature/SPENDLY-180-calendar-agenda`, cut from the epic branch after 179.
+**Branch:** `feature/SPENDLY-180-calendar-agenda`, cut from the epic branch after 179 and merged back with approval.
 **Depends on:** 177 and 178. No data model, no rules, no writes.
 
 ---
