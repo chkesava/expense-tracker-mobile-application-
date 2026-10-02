@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { FlashList } from "@shopify/flash-list";
 import { useRouter, type Href } from "expo-router";
-import { Plus, Scale, SlidersHorizontal, WifiOff } from "lucide-react-native";
+import { Lightbulb, Plus, Scale, SlidersHorizontal, WifiOff } from "lucide-react-native";
 
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
@@ -96,9 +96,16 @@ export default function DecisionsScreen() {
       icon={<Scale size={20} color={theme.colors.primary} />}
       onBack={() => router.back()}
       rightElement={
-        <Button variant="tonal" size="icon" onPress={create} accessibilityLabel="Log a new decision">
-          <Plus size={20} color={theme.colors.primary} />
-        </Button>
+        <View style={[styles.row, { gap: theme.space.xs }]}>
+          {decisions.some((d) => d.status !== "draft") ? (
+            <Button variant="ghost" size="icon" onPress={() => router.push("/decisions/insights" as Href)} accessibilityLabel="Decision insights">
+              <Lightbulb size={20} color={theme.colors.primary} />
+            </Button>
+          ) : null}
+          <Button variant="tonal" size="icon" onPress={create} accessibilityLabel="Log a new decision">
+            <Plus size={20} color={theme.colors.primary} />
+          </Button>
+        </View>
       }
     />
   );
