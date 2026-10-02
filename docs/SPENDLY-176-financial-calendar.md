@@ -15,7 +15,7 @@
 | 2 | [SPENDLY-178](https://kesavach.atlassian.net/browse/SPENDLY-178) | Aggregation and query layer | 177 | Merged to the epic branch |
 | 3 | [SPENDLY-179](https://kesavach.atlassian.net/browse/SPENDLY-179) | Month view and navigation | 177, 178 | Merged to the epic branch |
 | 4 | [SPENDLY-180](https://kesavach.atlassian.net/browse/SPENDLY-180) | Day and week agenda | 177, 178 | Merged to the epic branch |
-| 5 | [SPENDLY-181](https://kesavach.atlassian.net/browse/SPENDLY-181) | Event detail and source actions | 177 | Committed on its story branch, awaiting merge approval |
+| 5 | [SPENDLY-181](https://kesavach.atlassian.net/browse/SPENDLY-181) | Event detail and source actions | 177 | Merged to the epic branch |
 | 6 | SPENDLY-182 | Upcoming commitments and projected cash summary | 177 | Not started |
 | 7 | SPENDLY-183 | User reminders and recurring events | 177, 182 | Not started |
 | 8 | SPENDLY-184 | Reminders and notifications | None in Jira | Not started. **Local notifications** (decision 2026-10-03); remote push stays with SPENDLY-222 |
