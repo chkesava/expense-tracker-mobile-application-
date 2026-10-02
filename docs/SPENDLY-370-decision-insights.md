@@ -2,7 +2,7 @@
 
 **Ticket:** [SPENDLY-370](https://kesavach.atlassian.net/browse/SPENDLY-370) (Story)
 **Epic:** [SPENDLY-361](https://kesavach.atlassian.net/browse/SPENDLY-361) — see [epic record](SPENDLY-361-financial-decision-journal.md)
-**Branch:** `feature/SPENDLY-370-decision-insights`, cut from the epic branch after 369.
+**Branch:** `feature/SPENDLY-370-decision-insights`, cut from the epic branch after 369 and merged back with approval.
 **Depends on:** 362–369
 **Scope:** Spendly only. No rules or data-model changes.
 
