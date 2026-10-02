@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { usePathname } from "expo-router";
+import { usePathname, useRouter, type Href } from "expo-router";
 import {
   ArrowLeftRight,
   CalendarSync,
@@ -9,6 +9,7 @@ import {
   Landmark,
   MinusCircle,
   PlusCircle,
+  Scale,
   Wallet,
 } from "lucide-react-native";
 
@@ -35,11 +36,13 @@ const ICONS: Record<AddActionId, typeof PlusCircle> = {
   recurring: CalendarSync,
   investment: Landmark,
   cardBill: CreditCard,
+  decision: Scale,
 };
 
 export function AddActionSheet() {
   const { theme } = useTheme();
   const pathname = usePathname();
+  const router = useRouter();
   const investmentsEnabled = useInvestmentsEnabled();
   const { ledgerTab } = useLedgerState();
   const {
@@ -95,6 +98,9 @@ export function AddActionSheet() {
         return;
       case "cardBill":
         setIsDebtPaymentOpen(true);
+        return;
+      case "decision":
+        router.push("/decisions/edit" as Href);
         return;
     }
   };

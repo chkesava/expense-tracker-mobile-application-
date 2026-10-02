@@ -18,6 +18,7 @@ import { YearlyAnalyticsView } from "@/components/analytics/YearlyAnalyticsView"
 import { AnalysisLabView } from "@/components/analytics/AnalysisLabView";
 import { ExportDataModal } from "@/components/analytics/ExportDataModal";
 import { AiAdvisorView } from "@/components/ai/AiAdvisorView";
+import { DecisionsEntryCard } from "@/components/decisions/DecisionsEntryCard";
 import { haptic } from "@/lib/haptics";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import { useSetupProgress } from "@/providers/SetupProgressProvider";
@@ -126,7 +127,14 @@ export default function InsightsScreen() {
       contentContainerStyle={styles.container}
     >
       {activeTab === "analytics" ? (
-        <MonthlyAnalyticsView listHeader={pageHeader} />
+        <MonthlyAnalyticsView
+          listHeader={
+            <>
+              {pageHeader}
+              <DecisionsEntryCard />
+            </>
+          }
+        />
       ) : activeTab === "yearly" ? (
         <YearlyAnalyticsView listHeader={pageHeader} />
       ) : activeTab === "search" ? (
