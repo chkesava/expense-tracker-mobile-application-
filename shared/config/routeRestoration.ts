@@ -21,6 +21,8 @@ const RESTORABLE_ROUTES = [
   "/accounts/",
   "/credit-card-bills/",
   "/transactions/",
+  "/runway",
+  "/runway/",
 ] as const;
 
 /**

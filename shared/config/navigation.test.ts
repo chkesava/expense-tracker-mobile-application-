@@ -25,6 +25,8 @@ describe("resolveAndroidBackAction", () => {
     expect(resolveAndroidBackAction("/app-selector")).toBe("pop");
     expect(resolveAndroidBackAction("/accounts/abc123")).toBe("pop");
     expect(resolveAndroidBackAction("/transactions/exp-1")).toBe("pop");
+    expect(resolveAndroidBackAction("/runway/sources")).toBe("pop");
+    expect(resolveAndroidBackAction("/runway")).toBe("pop");
   });
 
   it("pops out of screens that used to fall through to the navigator", () => {
