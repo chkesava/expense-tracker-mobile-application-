@@ -25,8 +25,11 @@ export const DAYS_PER_MONTH = 30.4375;
 
 export type RunwaySchedule =
   | { kind: "once"; date: string }
-  /** Every month on `dayOfMonth` (clamped to short months), from `firstDate`. */
-  | { kind: "monthly"; firstDate: string; dayOfMonth: number; untilMonth?: string }
+  /**
+   * Every `intervalMonths` months (default 1) on `dayOfMonth`, clamped to short
+   * months, from `firstDate`. 3 = quarterly, 12 = yearly.
+   */
+  | { kind: "monthly"; firstDate: string; dayOfMonth: number; untilMonth?: string; intervalMonths?: number }
   | { kind: "every_n_days"; firstDate: string; intervalDays: number; untilDate?: string };
 
 export interface RunwayEvent {
@@ -147,7 +150,7 @@ export function occurrencesBetween(schedule: RunwaySchedule, from: string, to: s
         const date = guard === 0 ? schedule.firstDate : clampedDate(month, schedule.dayOfMonth);
         if (date > to) break;
         if (date >= from) out.push(date);
-        month = shiftMonthKey(month, 1);
+        month = shiftMonthKey(month, Math.max(1, Math.round(schedule.intervalMonths ?? 1)));
       }
       return out;
     }
