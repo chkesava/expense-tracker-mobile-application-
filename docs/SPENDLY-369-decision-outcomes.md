@@ -2,7 +2,7 @@
 
 **Ticket:** [SPENDLY-369](https://kesavach.atlassian.net/browse/SPENDLY-369) (Story)
 **Epic:** [SPENDLY-361](https://kesavach.atlassian.net/browse/SPENDLY-361) — see [epic record](SPENDLY-361-financial-decision-journal.md)
-**Branch:** `feature/SPENDLY-369-decision-outcomes`, cut from the epic branch after 368.
+**Branch:** `feature/SPENDLY-369-decision-outcomes`, cut from the epic branch after 368 and merged back with approval.
 **Depends on:** 362 (snapshot, outcome field, lifecycle), 367 (review dates)
 **Scope:** Spendly only. No rules change. The model gains an optional `outcome.reviewNotes`, which sits inside the `outcome` map the 362 rules already allow.
 
