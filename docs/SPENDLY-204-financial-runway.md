@@ -18,7 +18,7 @@
 | 3 | [SPENDLY-206](https://kesavach.atlassian.net/browse/SPENDLY-206) | Calculation and projection engine | 205, 207 | Merged to the epic branch |
 | 4 | [SPENDLY-208](https://kesavach.atlassian.net/browse/SPENDLY-208) | Historical burn rate and baseline | 206 | Merged to the epic branch |
 | 5 | SPENDLY-209 | Commitment-aware runway using Financial Calendar | 206; needs **SPENDLY-176** | Blocked: SPENDLY-176 is To Do |
-| 6 | SPENDLY-210 | Timeline, threshold planning, explanatory UI | 206, **209** | Blocked through 209 |
+| 6 | [SPENDLY-210](https://kesavach.atlassian.net/browse/SPENDLY-210) | Timeline, threshold planning, explanatory UI | 206 (209 link relaxed 2026-10-03) | Merged to the epic branch |
 | 7 | SPENDLY-211 | What-If integration | 210; needs **SPENDLY-195** | Blocked: SPENDLY-195 is To Do |
 | 8 | SPENDLY-212 | QA and rollout | 206, 208–211 | Last |
 
@@ -31,6 +31,9 @@
 - **2026-10-02 (207):** overrides are allowed for a safe set only. Bank, cash and wallet can be excluded; near-liquid items and unrecognised accounts can be included; EPF, stocks, receivables, cards and loans are locked (the rules enforce this). The UI is a Runway sources screen plus a row on account detail.
 - **2026-10-02:** savings and investment contributions are a separate, pausable class. They count in net burn and stay out of essential burn.
 
-## Open: where Jira differs from the roadmap
+## Decision: 210 no longer waits for 209 (2026-10-03)
+The runway UI ships with net burn, essential burn and a projection built from recurring items and card bills. SPENDLY-209 will add Financial Calendar events to the same engine once SPENDLY-176 is ready. The Jira link "209 blocks 210" must be removed by hand, since the tools can't delete links.
+
+## Earlier note: where Jira differs from the roadmap
 - The roadmap says the core of 204 doesn't need the Calendar. In Jira, **210 (the UI) is blocked by 209**, which needs SPENDLY-176. Unless that link is relaxed, for example by shipping 210 with net and gross modes and adding the projection when 209 lands, the runway UI can't ship before the Calendar. **This needs a decision before 209 or 210.**
 - 211 needs SPENDLY-195 (What-If), which the roadmap schedules after 204.
