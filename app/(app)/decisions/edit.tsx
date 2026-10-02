@@ -121,6 +121,16 @@ export default function DecisionEditScreen() {
     />
   );
 
+  // SPENDLY-372: without a signed-in user there is nowhere to save a draft —
+  // say so instead of showing a loading state that never ends.
+  if (!uid) {
+    return (
+      <PageShell scrollable={false}>
+        {header}
+        <ErrorState title="Sign in to record a decision" description="Decisions are saved to your account, so you need to be signed in." onRetry={() => router.back()} retryLabel="Go back" />
+      </PageShell>
+    );
+  }
   if (error) {
     return (
       <PageShell scrollable={false}>
