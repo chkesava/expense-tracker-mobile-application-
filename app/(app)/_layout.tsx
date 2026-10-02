@@ -140,6 +140,12 @@ function AppShellInner() {
               }}
             />
             <Stack.Screen
+              name="runway/sources"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
               name="transactions/[id]"
               options={{
                 animation: "slide_from_right",

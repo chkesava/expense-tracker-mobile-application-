@@ -51,6 +51,23 @@ export const LIQUIDITY_INCLUDED_BY_DEFAULT: Record<RunwayLiquidity, boolean> = {
   unknown: false,
 };
 
+/**
+ * Kinds the user may override (SPENDLY-207 decision, 2026-10-02): liquid
+ * accounts can be excluded; near-liquid investments and unrecognised accounts
+ * can be included. EPF, stocks, receivables, cards and loans are locked so
+ * they can never silently inflate runway. firestore.rules mirrors this list.
+ */
+export const RUNWAY_OVERRIDABLE_KINDS: readonly RunwayResourceKind[] = [
+  "bank",
+  "cash",
+  "wallet",
+  "other_account",
+  "fixed_deposit",
+  "interest_savings",
+  "mutual_fund",
+  "demat_cash",
+];
+
 /** The reason code recorded for each liquidity level. */
 export const LIQUIDITY_REASON: Record<RunwayLiquidity, RunwayAssumptionCode> = {
   liquid: "liquid_by_default",
@@ -205,6 +222,8 @@ export const RUNWAY_ASSUMPTIONS: Record<RunwayAssumptionCode, RunwayAssumption> 
     impact: "high",
   },
   overdrawn_counted: { code: "overdrawn_counted", text: "An overdrawn balance reduces your liquid money.", impact: "medium" },
+  user_included: { code: "user_included", text: "You chose to count this toward runway.", impact: "medium" },
+  user_excluded: { code: "user_excluded", text: "You chose not to count this toward runway.", impact: "medium" },
   category_mapped_from_legacy: {
     code: "category_mapped_from_legacy",
     text: "Some older categories were mapped to the current list to classify them.",
