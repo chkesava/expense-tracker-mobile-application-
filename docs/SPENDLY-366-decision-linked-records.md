@@ -2,7 +2,7 @@
 
 **Ticket:** [SPENDLY-366](https://kesavach.atlassian.net/browse/SPENDLY-366) (Story)
 **Epic:** [SPENDLY-361](https://kesavach.atlassian.net/browse/SPENDLY-361) — see [epic record](SPENDLY-361-financial-decision-journal.md)
-**Branch:** `feature/SPENDLY-366-decision-linked-records`, cut from the epic branch after 365.
+**Branch:** `feature/SPENDLY-366-decision-linked-records`, cut from the epic branch after 365 and merged back with approval.
 **Depends on:** 362 (link model), 363 (picker and screens)
 **Scope:** Spendly only. No rules or data-model changes: every link kind was already in the 362 enum.
 
