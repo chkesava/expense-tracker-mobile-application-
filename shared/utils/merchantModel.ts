@@ -8,9 +8,9 @@ import { MERCHANT_OVERRIDE_KINDS, type MerchantOverride, type MerchantSourceText
 
 export const MERCHANT_LIMITS = { name: 60, refKey: 200, category: 80 } as const;
 
-/** Lowercase alphanumerics only — the folding used for alias keys. */
+/** Lowercase letters and digits only — the folding used for alias keys. Keeps non-Latin letters and their vowel signs. */
 export function foldKey(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+  return value.toLowerCase().replace(/[^\p{L}\p{M}\p{N}]/gu, "");
 }
 
 /** Stable slug for a merchant name: "Adyar Ananda Bhavan" → "adyar-ananda-bhavan". */
