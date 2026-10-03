@@ -2,7 +2,7 @@
 
 **Ticket:** [SPENDLY-216](https://kesavach.atlassian.net/browse/SPENDLY-216) (Story)
 **Epic:** [SPENDLY-213](https://kesavach.atlassian.net/browse/SPENDLY-213). See the [epic record](SPENDLY-213-goal-funding-optimizer.md).
-**Branch:** `feature/SPENDLY-216-goal-target-math`, cut from the epic branch after 215.
+**Branch:** `feature/SPENDLY-216-goal-target-math`, cut from the epic branch after 215 and merged back with approval.
 **Depends on:** 214. Pure logic only: no UI and no writes.
 
 ---
