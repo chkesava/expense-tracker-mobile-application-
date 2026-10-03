@@ -15,7 +15,7 @@
 | # | Story | Scope | Jira dependencies | State |
 |---|---|---|---|---|
 | 1 | [SPENDLY-214](https://kesavach.atlassian.net/browse/SPENDLY-214) | Model and constraints | None | Merged to the epic branch |
-| 2 | SPENDLY-215 | Funding capacity and affordability | 214 | Not started |
+| 2 | [SPENDLY-215](https://kesavach.atlassian.net/browse/SPENDLY-215) | Funding capacity and affordability | 214 | Merged to the epic branch |
 | 3 | SPENDLY-216 | Target-date maths and funding gaps | 214 | Not started |
 | 4 | SPENDLY-217 | Multi-goal allocation modes | 215, 216 | Not started |
 | 5 | SPENDLY-219 | Financial Calendar and What-If inputs | 176 (built, #213), **195 (To Do)** | Calendar part next; **What-If part on hold for SPENDLY-195** |
