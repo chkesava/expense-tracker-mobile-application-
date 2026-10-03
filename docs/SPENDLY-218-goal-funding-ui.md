@@ -2,7 +2,7 @@
 
 **Ticket:** [SPENDLY-218](https://kesavach.atlassian.net/browse/SPENDLY-218) (Story)
 **Epic:** [SPENDLY-213](https://kesavach.atlassian.net/browse/SPENDLY-213). See the [epic record](SPENDLY-213-goal-funding-optimizer.md).
-**Branch:** `feature/SPENDLY-218-goal-funding-ui`, cut from the epic branch after 219's calendar part.
+**Branch:** `feature/SPENDLY-218-goal-funding-ui`, cut from the epic branch after 219's calendar part and merged back with approval.
 
 **Dependencies:** 217 and 219's calendar part. The wait on 219's What-If part was relaxed on 2026-10-03.
 
