@@ -85,7 +85,7 @@ export default function FinancialCalendarScreen() {
     return summarizeCalendarCash({ range: r, counted: sources.liquidTotal, events: q.events, earlierOverdue: q.earlierOverdue, currency: cal.currency });
   }, [summaryWindow, today, cal.currency, cal.data, cal.status, sources.liquidTotal]);
   // SPENDLY-183: user reminders.
-  const params = useLocalSearchParams<{ newReminder?: string; reminder?: string; date?: string }>();
+  const params = useLocalSearchParams<{ newReminder?: string; reminder?: string; focus?: string; date?: string }>();
   const [editor, setEditor] = useState<{ existing: CalendarReminder | null; date: string } | null>(null);
   const [savingReminder, setSavingReminder] = useState(false);
   const uid = cal.uid;
@@ -93,6 +93,13 @@ export default function FinancialCalendarScreen() {
     if (params.newReminder) {
       setEditor({ existing: null, date: today });
       router.setParams({ newReminder: undefined });
+    } else if (params.focus && params.date) {
+      // SPENDLY-184: a notification tap opens the item's day with its detail.
+      setMonth(params.date.slice(0, 7));
+      setSelected(params.date);
+      setView("month");
+      setDetailId(params.focus);
+      router.setParams({ focus: undefined, date: undefined });
     } else if (params.reminder && params.date) {
       setMonth(params.date.slice(0, 7));
       setSelected(params.date);
@@ -101,7 +108,7 @@ export default function FinancialCalendarScreen() {
       router.setParams({ reminder: undefined, date: undefined });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.newReminder, params.reminder, params.date]);
+  }, [params.newReminder, params.reminder, params.focus, params.date]);
 
   const runReminderWrite = async (work: () => Promise<WriteOutcome | null>, message: string) => {
     if (!uid) return false;

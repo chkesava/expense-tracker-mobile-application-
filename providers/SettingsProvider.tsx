@@ -73,6 +73,7 @@ type SettingsContextType = {
   setCreditCardBillReminders: (
     val: Partial<UserSettings["creditCardBillReminders"]>
   ) => void;
+  setCalendarNotifications: (val: Partial<UserSettings["calendarNotifications"]>) => void;
 };
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
@@ -244,6 +245,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
               val.daysBefore ?? settings.creditCardBillReminders.daysBefore,
           },
         });
+      },
+      setCalendarNotifications: (val) => {
+        void updateSettings({ calendarNotifications: { ...settings.calendarNotifications, ...val } });
       },
     }),
     [settings, loading, updateSettings]
