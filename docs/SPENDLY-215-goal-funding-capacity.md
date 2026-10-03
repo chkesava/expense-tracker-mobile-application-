@@ -2,7 +2,7 @@
 
 **Ticket:** [SPENDLY-215](https://kesavach.atlassian.net/browse/SPENDLY-215) (Story)
 **Epic:** [SPENDLY-213](https://kesavach.atlassian.net/browse/SPENDLY-213). See the [epic record](SPENDLY-213-goal-funding-optimizer.md).
-**Branch:** `feature/SPENDLY-215-goal-funding-capacity`, cut from the epic branch after 214.
+**Branch:** `feature/SPENDLY-215-goal-funding-capacity`, cut from the epic branch after 214 and merged back with approval.
 **Depends on:** 214, the runway baseline (208, PR #212) and calendar events (178, PR #213). Pure logic only: no UI and no writes.
 
 ---
