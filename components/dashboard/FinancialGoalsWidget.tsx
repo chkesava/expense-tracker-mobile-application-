@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { Calendar, Lightbulb, Sprout, Target } from "lucide-react-native";
 
@@ -127,6 +127,16 @@ export function FinancialGoalsWidget({
           </View>
         );
       })}
+      {/* SPENDLY-218: plan how to fund these goals */}
+      <Pressable
+        onPress={() => router.push("/goals/optimizer" as never)}
+        accessibilityRole="link"
+        accessibilityLabel="Plan how to fund your goals"
+        hitSlop={8}
+        style={{ alignSelf: "flex-start", paddingTop: 8, minHeight: 32, justifyContent: "center" }}
+      >
+        <Text style={{ color: theme.colors.primary, fontFamily: theme.fontFamily.semibold, fontSize: theme.typography.xs }}>Plan funding →</Text>
+      </Pressable>
     </Section>
   );
 }
