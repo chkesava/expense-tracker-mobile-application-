@@ -18,7 +18,7 @@
 | 5 | [SPENDLY-181](https://kesavach.atlassian.net/browse/SPENDLY-181) | Event detail and source actions | 177 | Merged to the epic branch |
 | 6 | [SPENDLY-182](https://kesavach.atlassian.net/browse/SPENDLY-182) | Upcoming commitments and projected cash summary | 177 | Merged to the epic branch |
 | 7 | [SPENDLY-183](https://kesavach.atlassian.net/browse/SPENDLY-183) | User reminders and recurring events | 177, 182 | Merged to the epic branch |
-| 8 | [SPENDLY-184](https://kesavach.atlassian.net/browse/SPENDLY-184) | Reminders and notifications | None in Jira | Committed on its story branch, awaiting merge approval. **Local notifications**; remote push stays with SPENDLY-222 |
+| 8 | [SPENDLY-184](https://kesavach.atlassian.net/browse/SPENDLY-184) | Reminders and notifications | None in Jira | Merged to the epic branch. **Local notifications**; remote push stays with SPENDLY-222 |
 | 9 | SPENDLY-185 | QA, accessibility, performance, analytics | 181 | Last |
 
 ## Decisions (2026-10-03)

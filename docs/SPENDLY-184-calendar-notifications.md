@@ -2,7 +2,7 @@
 
 **Ticket:** [SPENDLY-184](https://kesavach.atlassian.net/browse/SPENDLY-184) (Story)
 **Epic:** [SPENDLY-176](https://kesavach.atlassian.net/browse/SPENDLY-176). See the [epic record](SPENDLY-176-financial-calendar.md).
-**Branch:** `feature/SPENDLY-184-calendar-notifications`, cut from the epic branch after 183.
+**Branch:** `feature/SPENDLY-184-calendar-notifications`, cut from the epic branch after 183 and merged back with approval.
 
 **Decision (2026-10-03):**
 - Notifications are **on-device** (expo-notifications), using the existing card-bill pattern.
