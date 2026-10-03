@@ -21,6 +21,7 @@ export const ADD_ACTION_IDS = [
   "recurring",
   "investment",
   "cardBill",
+  "reminder",
 ] as const;
 
 export type AddActionId = (typeof ADD_ACTION_IDS)[number];
@@ -78,6 +79,12 @@ export const ADD_ACTIONS: AddActionMeta[] = [
     id: "cardBill",
     label: "Card Bill Payment",
     hint: "Pay a credit-card statement",
+  },
+  {
+    // SPENDLY-183: a calendar note, not a transaction.
+    id: "reminder",
+    label: "Reminder",
+    hint: "A dated note on your financial calendar",
   },
 ];
 

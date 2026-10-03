@@ -20,12 +20,15 @@ export function CalendarEventSheet({
   format,
   onClose,
   onAction,
+  reminderActions,
 }: {
   isOpen: boolean;
   event: CalendarEvent | null;
   format: (n: number) => string;
   onClose: () => void;
   onAction: (action: CalendarEventAction) => void;
+  /** SPENDLY-183: shown for reminder events instead of source actions. */
+  reminderActions?: { onToggleDone: (done: boolean) => void; onEdit: () => void; onDelete: () => void };
 }) {
   const { theme } = useTheme();
   const surfaces = useSurfaces();
@@ -58,6 +61,19 @@ export function CalendarEventSheet({
           <View style={{ backgroundColor: surfaces.tile, borderRadius: theme.radius.md, padding: theme.space.md }}>
             <Text style={label}>{calendarStateExplanation(event)}</Text>
           </View>
+          {event.source === "reminder" && reminderActions ? (
+            <View style={{ gap: theme.space.sm }}>
+              <Button onPress={() => reminderActions.onToggleDone(event.state !== "completed")}>
+                {event.state === "completed" ? "Mark as not done" : "Mark as done"}
+              </Button>
+              <Button variant="outline" onPress={reminderActions.onEdit}>
+                Edit reminder
+              </Button>
+              <Button variant="outline" onPress={reminderActions.onDelete}>
+                Delete reminder
+              </Button>
+            </View>
+          ) : null}
           {actions.map((a) => (
             <Button key={a.label} variant={a.primary ? "primary" : "outline"} onPress={() => onAction(a)}>
               {a.label}

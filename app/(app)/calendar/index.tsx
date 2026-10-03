@@ -1,12 +1,20 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { FlashList } from "@shopify/flash-list";
-import { useRouter, type Href } from "expo-router";
-import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react-native";
+import { useLocalSearchParams, useRouter, type Href } from "expo-router";
+import { CalendarDays, ChevronLeft, ChevronRight, Plus } from "lucide-react-native";
 
 import { CalendarEventRow } from "@/components/calendar/CalendarEventRow";
 import { CalendarCashSummaryCard } from "@/components/calendar/CalendarCashSummaryCard";
 import { CalendarEventSheet } from "@/components/calendar/CalendarEventSheet";
+import { ReminderEditorSheet } from "@/components/calendar/ReminderEditorSheet";
+import { friendlyErrorMessage, logError } from "@/lib/errors";
+import { appDialog } from "@/lib/appDialog";
+import { writeSavedMessage, type WriteOutcome } from "@/lib/firestoreWrite";
+import { toast } from "@/lib/toast";
+import { deleteReminder, saveReminder, setReminderOccurrenceDone } from "@/services/calendar/reminderStore";
+import type { CalendarReminder } from "@/shared/types/calendarReminder";
+import type { ReminderDraft } from "@/shared/utils/calendarReminders";
 import { Modal } from "@/components/common/Modal";
 import { useRunwaySources } from "@/hooks/useRunwaySources";
 import { monthGridRange, queryCalendar } from "@/shared/utils/calendarQuery";
@@ -76,6 +84,46 @@ export default function FinancialCalendarScreen() {
     const q = queryCalendar({ range: r, today, currency: cal.currency, data: cal.data, status: cal.status });
     return summarizeCalendarCash({ range: r, counted: sources.liquidTotal, events: q.events, earlierOverdue: q.earlierOverdue, currency: cal.currency });
   }, [summaryWindow, today, cal.currency, cal.data, cal.status, sources.liquidTotal]);
+  // SPENDLY-183: user reminders.
+  const params = useLocalSearchParams<{ newReminder?: string; reminder?: string; date?: string }>();
+  const [editor, setEditor] = useState<{ existing: CalendarReminder | null; date: string } | null>(null);
+  const [savingReminder, setSavingReminder] = useState(false);
+  const uid = cal.uid;
+  useEffect(() => {
+    if (params.newReminder) {
+      setEditor({ existing: null, date: today });
+      router.setParams({ newReminder: undefined });
+    } else if (params.reminder && params.date) {
+      setMonth(params.date.slice(0, 7));
+      setSelected(params.date);
+      setView("month");
+      setDetailId(`reminder:${params.reminder}:${params.date}`);
+      router.setParams({ reminder: undefined, date: undefined });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.newReminder, params.reminder, params.date]);
+
+  const runReminderWrite = async (work: () => Promise<WriteOutcome | null>, message: string) => {
+    if (!uid) return false;
+    setSavingReminder(true);
+    try {
+      const outcome = await work();
+      if (outcome) toast.success(writeSavedMessage(outcome, message));
+      return true;
+    } catch (e) {
+      logError("calendar.reminder", e);
+      toast.error(friendlyErrorMessage(e));
+      return false;
+    } finally {
+      setSavingReminder(false);
+    }
+  };
+  const onSaveReminder = async (draft: ReminderDraft) => {
+    const existing = editor?.existing ?? undefined;
+    const ok = await runReminderWrite(() => saveReminder(uid!, draft, existing), existing ? "Reminder updated" : "Reminder added");
+    if (ok) setEditor(null);
+  };
+
   const detailEvent = detailId
     ? cal.events.find((e) => e.id === detailId) ??
       cal.earlierOverdue.find((e) => e.id === detailId) ??
@@ -104,6 +152,17 @@ export default function FinancialCalendarScreen() {
       subtitle="Bills, income and commitments by date"
       icon={<CalendarDays size={20} color={theme.colors.primary} />}
       onBack={() => (router.canGoBack() ? router.back() : router.replace("/dashboard" as Href))}
+      rightElement={
+        <Pressable
+          onPress={() => setEditor({ existing: null, date: selected < today ? today : selected })}
+          accessibilityRole="button"
+          accessibilityLabel="Add a reminder"
+          hitSlop={8}
+          style={{ padding: theme.space.sm }}
+        >
+          <Plus size={22} color={theme.colors.foreground} />
+        </Pressable>
+      }
     />
   );
 
@@ -301,7 +360,43 @@ export default function FinancialCalendarScreen() {
           ))}
         </View>
       </Modal>
+      <ReminderEditorSheet
+        isOpen={editor !== null}
+        existing={editor?.existing ?? null}
+        defaultDate={editor?.date ?? today}
+        today={today}
+        saving={savingReminder}
+        onClose={() => setEditor(null)}
+        onSave={(d) => void onSaveReminder(d)}
+      />
       <CalendarEventSheet
+        reminderActions={
+          detailEvent?.source === "reminder"
+            ? (() => {
+                const r = cal.reminders.find((x) => x.id === detailEvent.refId);
+                if (!r) return undefined;
+                return {
+                  onToggleDone: (done: boolean) => void runReminderWrite(() => setReminderOccurrenceDone(uid!, r, detailEvent.date, done), done ? "Marked as done" : "Marked as not done"),
+                  onEdit: () => {
+                    setDetailId(null);
+                    setEditor({ existing: r, date: r.startDate });
+                  },
+                  onDelete: () =>
+                    appDialog.alert("Delete this reminder?", r.recurrence !== "none" ? "Every repeat of it is removed. Nothing else changes." : "Nothing else changes.", [
+                      { text: "Cancel", style: "cancel" },
+                      {
+                        text: "Delete",
+                        style: "destructive",
+                        onPress: () => {
+                          setDetailId(null);
+                          void runReminderWrite(() => deleteReminder(uid!, r.id), "Reminder deleted");
+                        },
+                      },
+                    ]),
+                };
+              })()
+            : undefined
+        }
         isOpen={detailId !== null}
         event={detailEvent}
         format={fmt}

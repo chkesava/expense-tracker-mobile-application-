@@ -2,6 +2,7 @@ import { useMemo } from "react";
 
 import { useAccounts } from "@/hooks/useAccounts";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
+import { useCalendarReminders } from "@/hooks/useCalendarReminders";
 import { useBorrowings } from "@/hooks/useBorrowings";
 import { useCreditCardBills } from "@/hooks/useCreditCardBills";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
@@ -43,6 +44,7 @@ export function useFinancialCalendar(range: CalendarRange, options?: { includeCa
   const { plans, loading: sipLoading, error: sipError } = useSipPlans();
   const { contributions, loading: epfLoading, error: epfError } = useEpfAllContributions();
   const { establishments } = useEpf();
+  const { uid, reminders, loading: remindersLoading, error: remindersError } = useCalendarReminders();
 
   const cardNames = useMemo(() => {
     const typeName = new Map(accountTypes.map((t) => [t.id, t.name]));
@@ -61,6 +63,7 @@ export function useFinancialCalendar(range: CalendarRange, options?: { includeCa
     investment: status(investmentsLoading, investmentsError),
     sip: status(sipLoading, sipError),
     epf: status(epfLoading, epfError),
+    reminder: status(remindersLoading, remindersError),
   };
   const statusKey = JSON.stringify(sourceStatus);
 
@@ -78,9 +81,10 @@ export function useFinancialCalendar(range: CalendarRange, options?: { includeCa
       sipPlans: plans,
       epfContributions: contributions,
       epfEmployerNames: employerNames,
+      reminders,
       extraEvents: options?.extraEvents,
     }),
-    [bills, cardNames, subscriptions, borrowingsCtx.borrowings, receivablesCtx.receivables, incomes, goals, investments, plans, contributions, employerNames, options?.extraEvents]
+    [bills, cardNames, subscriptions, borrowingsCtx.borrowings, receivablesCtx.receivables, incomes, goals, investments, plans, contributions, employerNames, reminders, options?.extraEvents]
   );
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const stableStatus = useMemo(() => sourceStatus, [statusKey]);
@@ -91,5 +95,5 @@ export function useFinancialCalendar(range: CalendarRange, options?: { includeCa
     [range.from, range.to, today, currency, options?.includeCancelled, stableStatus, data]
   );
 
-  return { ...result, today, currency, data, status: stableStatus };
+  return { ...result, today, currency, data, status: stableStatus, reminders, uid };
 }
