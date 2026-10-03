@@ -2,7 +2,7 @@
 
 **Ticket:** [SPENDLY-183](https://kesavach.atlassian.net/browse/SPENDLY-183) (Story)
 **Epic:** [SPENDLY-176](https://kesavach.atlassian.net/browse/SPENDLY-176). See the [epic record](SPENDLY-176-financial-calendar.md).
-**Branch:** `feature/SPENDLY-183-calendar-reminders`, cut from the epic branch after 182.
+**Branch:** `feature/SPENDLY-183-calendar-reminders`, cut from the epic branch after 182 and merged back with approval.
 **Depends on:** 177 and 182. **New data and rules:** `users/{uid}/calendarReminders`.
 
 ---
