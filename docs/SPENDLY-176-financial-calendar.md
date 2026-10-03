@@ -19,7 +19,7 @@
 | 6 | [SPENDLY-182](https://kesavach.atlassian.net/browse/SPENDLY-182) | Upcoming commitments and projected cash summary | 177 | Merged to the epic branch |
 | 7 | [SPENDLY-183](https://kesavach.atlassian.net/browse/SPENDLY-183) | User reminders and recurring events | 177, 182 | Merged to the epic branch |
 | 8 | [SPENDLY-184](https://kesavach.atlassian.net/browse/SPENDLY-184) | Reminders and notifications | None in Jira | Merged to the epic branch. **Local notifications**; remote push stays with SPENDLY-222 |
-| 9 | SPENDLY-185 | QA, accessibility, performance, analytics | 181 | Last |
+| 9 | [SPENDLY-185](https://kesavach.atlassian.net/browse/SPENDLY-185) | QA, accessibility, performance, analytics | 181 | Ready parts committed on story branch, awaiting merge approval. Device QA open |
 
 ## Decisions (2026-10-03)
 - The base is the runway epic branch, so the calendar reuses its scheduling and doesn't duplicate it.
