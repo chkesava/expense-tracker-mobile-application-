@@ -1,24 +1,38 @@
 import { useCallback, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useRouter, type Href } from "expo-router";
-import { ChevronRight, Target } from "lucide-react-native";
+import { ChevronRight, FolderOpen, Target } from "lucide-react-native";
 
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingState } from "@/components/common/LoadingState";
 import { Modal } from "@/components/common/Modal";
+import { GoalFundingPlansSheet } from "@/components/goals/GoalFundingPlansSheet";
 import { GoalPlanInputsSheet } from "@/components/goals/GoalPlanInputsSheet";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { usePageListBottomPadding } from "@/components/layout/usePageListBottomPadding";
 import { ChipRow, RowSwitch } from "@/components/settings/SettingsControls";
+import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { useGoalFunding } from "@/hooks/useGoalFunding";
+import { useGoalFundingPlans } from "@/hooks/useGoalFundingPlans";
+import { friendlyErrorMessage, logError } from "@/lib/errors";
+import { writeSavedMessage, type WriteOutcome } from "@/lib/firestoreWrite";
+import { toast } from "@/lib/toast";
+import {
+  deleteGoalFundingPlan,
+  duplicateGoalFundingPlan,
+  renameGoalFundingPlan,
+  saveGoalFundingPlan,
+  setGoalFundingPlanArchived,
+} from "@/services/goals/goalFundingPlanStore";
 import { GOAL_FUNDING_MODES, type GoalFundingMode, type GoalPlanInput } from "@/shared/types/goalFunding";
 import { formatAmount } from "@/shared/utils/formatCurrency";
 import { inputsForGoals } from "@/shared/utils/goalFundingModel";
 import { runGoalFundingScenario } from "@/shared/utils/goalFundingOptimizer";
+import { GOAL_CHANGE_LABELS, goalFundingPlanDoc, goalsChangedSince, validatePlanName, type GoalFundingPlan } from "@/shared/utils/goalFundingPlans";
 import {
   GOAL_FUNDING_MODE_INFO,
   GOAL_FUNDING_STATUS_LABELS,
@@ -36,7 +50,7 @@ import { useTheme } from "@/theme/ThemeProvider";
 /**
  * Goal Funding Optimizer (SPENDLY-218): compare your current goal plan with a
  * scenario. Planning only — nothing here is ever applied to your goals or
- * moves money. Saving plans arrives with SPENDLY-220.
+ * moves money. Plans can be saved and reopened (SPENDLY-220).
  */
 export default function GoalFundingScreen() {
   const { theme } = useTheme();
@@ -57,6 +71,51 @@ export default function GoalFundingScreen() {
   const { today, goals, capacity, historyMonths, loading, error } = useGoalFunding({ plannedMonthly: planned !== null && Number.isFinite(planned) ? planned : null });
 
   const allInputs = useMemo(() => inputsForGoals(goals, inputs), [goals, inputs]);
+
+  // SPENDLY-220: saved plans. Results are always recalculated from today's goals.
+  const { uid, plans } = useGoalFundingPlans();
+  const [openPlanId, setOpenPlanId] = useState<string | null>(null);
+  const [plansOpen, setPlansOpen] = useState(false);
+  const [namePrompt, setNamePrompt] = useState<{ title: string; value: string; action: (name: string) => Promise<void> } | null>(null);
+  const [nameError, setNameError] = useState<string | null>(null);
+  const openPlan = plans.find((p) => p.id === openPlanId) ?? null;
+  const changes = useMemo(() => (openPlan ? goalsChangedSince(openPlan.goalSnapshot, goals) : []), [openPlan, goals]);
+
+  const write = async <T,>(work: () => Promise<T>, message: (r: T) => WriteOutcome | null | undefined, text: string) => {
+    try {
+      const r = await work();
+      const outcome = message(r);
+      if (outcome) toast.success(writeSavedMessage(outcome, text));
+      return r;
+    } catch (e) {
+      logError("goals.fundingPlan", e);
+      toast.error(friendlyErrorMessage(e));
+      return null;
+    }
+  };
+  const currentDoc = (name: string, existing?: GoalFundingPlan) =>
+    goalFundingPlanDoc({
+      name,
+      mode,
+      plannedMonthly: planned !== null && Number.isFinite(planned) ? planned : null,
+      allowOverAllocation: allowOver,
+      inputs: allInputs,
+      goals,
+      nowMs: Date.now(),
+      existing,
+    });
+  const loadPlan = (p: GoalFundingPlan) => {
+    setMode(p.mode);
+    setPlannedText(p.plannedMonthly !== undefined ? String(p.plannedMonthly) : "");
+    setAllowOver(p.allowOverAllocation);
+    setInputs(p.inputs);
+    setOpenPlanId(p.id);
+    setPlansOpen(false);
+  };
+  const askName = (title: string, value: string, action: (name: string) => Promise<void>) => {
+    setNameError(null);
+    setNamePrompt({ title, value, action });
+  };
   const result = useMemo(
     () => runGoalFundingScenario({ goals, today, scenario: { mode, monthlyPool: capacity.monthly, allowOverAllocation: allowOver, inputs: allInputs } }),
     [goals, today, mode, capacity.monthly, allowOver, allInputs]
@@ -73,6 +132,11 @@ export default function GoalFundingScreen() {
       subtitle="Planning only — your goals don't change"
       icon={<Target size={20} color={theme.colors.primary} />}
       onBack={() => (router.canGoBack() ? router.back() : router.replace("/dashboard" as Href))}
+      rightElement={
+        <Pressable onPress={() => setPlansOpen(true)} accessibilityRole="button" accessibilityLabel="Saved plans" hitSlop={8} style={{ padding: theme.space.sm }}>
+          <FolderOpen size={20} color={theme.colors.foreground} />
+        </Pressable>
+      }
     />
   );
 
@@ -95,6 +159,40 @@ export default function GoalFundingScreen() {
     const whyGoal = result.goals.find((g) => g.goalId === why) ?? null;
     body = (
       <ScrollView contentContainerStyle={{ padding: theme.space.lg, paddingBottom: bottomPadding, gap: theme.space.lg }}>
+        <View style={[card, { backgroundColor: surfaces.tile }]}>
+          <Text style={[text, { fontFamily: theme.fontFamily.semibold }]}>{openPlan ? `Plan: ${openPlan.name}` : "Unsaved plan"}</Text>
+          {openPlan ? <Text style={muted}>Results are recalculated from your goals as they are today.</Text> : null}
+          {changes.length ? (
+            <View accessibilityLiveRegion="polite">
+              <Text style={[muted, { fontFamily: theme.fontFamily.semibold }]}>Goals changed since this plan was saved:</Text>
+              {changes.map((c) => (
+                <Text key={c.goalId} style={muted}>{`• ${c.name}: ${c.kinds.map((k) => GOAL_CHANGE_LABELS[k]).join(", ")}`}</Text>
+              ))}
+            </View>
+          ) : null}
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: theme.space.sm }}>
+            {openPlan ? (
+              <Button
+                size="sm"
+                onPress={() => void write(() => saveGoalFundingPlan(uid!, currentDoc(openPlan.name, openPlan), openPlan.id), (r) => r?.outcome, "Plan updated")}
+              >
+                Update plan
+              </Button>
+            ) : null}
+            <Button
+              size="sm"
+              variant={openPlan ? "outline" : "primary"}
+              onPress={() =>
+                askName(openPlan ? "Save as a new plan" : "Save plan", openPlan ? `${openPlan.name} (copy)` : "", async (name) => {
+                  const r = await write(() => saveGoalFundingPlan(uid!, currentDoc(name)), (x) => x?.outcome, "Plan saved");
+                  if (r) setOpenPlanId(r.id);
+                })
+              }
+            >
+              {openPlan ? "Save as new" : "Save plan"}
+            </Button>
+          </View>
+        </View>
         <View style={card}>
           <View style={styles.rowBetween}>
             <Text style={muted}>Available each month for goals</Text>
@@ -209,6 +307,47 @@ export default function GoalFundingScreen() {
             setEditing(null);
           }}
         />
+        <GoalFundingPlansSheet
+          isOpen={plansOpen}
+          plans={plans}
+          openPlanId={openPlanId}
+          onClose={() => setPlansOpen(false)}
+          onOpen={loadPlan}
+          onRename={(p) => askName("Rename plan", p.name, async (name) => void (await write(() => renameGoalFundingPlan(uid!, p.id, name), (x) => x, "Plan renamed")))}
+          onDuplicate={(p) => askName("Duplicate plan", `${p.name} (copy)`, async (name) => void (await write(() => duplicateGoalFundingPlan(uid!, p, name), (x) => x?.outcome, "Plan duplicated")))}
+          onArchive={(p, archived) => void write(() => setGoalFundingPlanArchived(uid!, p.id, archived), (x) => x, archived ? "Plan archived" : "Plan restored")}
+          onDelete={(p) => {
+            if (p.id === openPlanId) setOpenPlanId(null);
+            void write(() => deleteGoalFundingPlan(uid!, p.id), (x) => x, "Plan deleted");
+          }}
+        />
+        <Modal isOpen={namePrompt !== null} onClose={() => setNamePrompt(null)} title={namePrompt?.title} density="compact">
+          <View style={{ gap: theme.space.md }}>
+            <Input
+              label="Plan name"
+              value={namePrompt?.value ?? ""}
+              onChangeText={(v) => setNamePrompt((p) => (p ? { ...p, value: v } : p))}
+              error={nameError ?? undefined}
+              maxLength={80}
+            />
+            <Button
+              onPress={async () => {
+                if (!namePrompt || !uid) return;
+                const issue = validatePlanName(namePrompt.value);
+                if (issue) {
+                  setNameError(issue);
+                  return;
+                }
+                const action = namePrompt.action;
+                const value = namePrompt.value.trim();
+                setNamePrompt(null);
+                await action(value);
+              }}
+            >
+              Save
+            </Button>
+          </View>
+        </Modal>
         <Modal isOpen={whyGoal !== null} onClose={() => setWhy(null)} title={whyGoal ? `Why: ${whyGoal.name}` : undefined} density="compact">
           <View style={{ gap: theme.space.sm }}>
             {whyGoal ? whyLines(whyGoal, mode, fmt).map((l) => <Text key={l} style={text}>{`• ${l}`}</Text>) : null}
