@@ -15,6 +15,7 @@
 
 import type { Borrowing } from "../types/borrowing";
 import type { CalendarEvent, CalendarRange, CalendarSource } from "../types/calendar";
+import type { CalendarReminder } from "../types/calendarReminder";
 import type { CreditCardBill } from "../types/creditCardBill";
 import type { FinancialGoal, Income } from "../types/expense";
 import type { Investment } from "../types/investment";
@@ -34,6 +35,7 @@ import {
   subscriptionEvents,
   type CalendarContext,
 } from "./calendarSources";
+import { reminderEvents } from "./calendarReminders";
 import { daysBetweenDateKeys, daysInMonth, endOfWeekDateKey, isValidDateKey, shiftDateKey, startOfWeekDateKey, type FirstDayOfWeek } from "./dates";
 
 /** Longest range one query may cover; longer requests are cut to this. */
@@ -56,7 +58,9 @@ export interface CalendarData {
   sipPlans: readonly SipPlan[];
   epfContributions: readonly EpfContribution[];
   epfEmployerNames: ReadonlyMap<string, string>;
-  /** Events from other features (user reminders in 183, later fee/decision/runway sources). */
+  /** User reminders (SPENDLY-183). */
+  reminders?: readonly CalendarReminder[];
+  /** Events from other features (later fee/decision/runway sources). */
   extraEvents?: readonly CalendarEvent[];
 }
 
@@ -132,6 +136,7 @@ function collect(ctx: CalendarContext, data: CalendarData): CalendarEvent[] {
     ...investmentEvents(data.investments, ctx),
     ...sipEvents(data.sipPlans, ctx),
     ...epfEvents(data.epfContributions, data.epfEmployerNames, ctx),
+    ...reminderEvents(data.reminders ?? [], ctx),
     ...(data.extraEvents ?? []).filter((e) => e.date >= ctx.range.from && e.date <= ctx.range.to),
   ];
 }

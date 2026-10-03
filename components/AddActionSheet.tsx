@@ -1,9 +1,10 @@
 import { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { usePathname } from "expo-router";
+import { usePathname, useRouter, type Href } from "expo-router";
 import {
   ArrowLeftRight,
   CalendarSync,
+  BellRing,
   CreditCard,
   HandCoins,
   Landmark,
@@ -35,11 +36,13 @@ const ICONS: Record<AddActionId, typeof PlusCircle> = {
   recurring: CalendarSync,
   investment: Landmark,
   cardBill: CreditCard,
+  reminder: BellRing,
 };
 
 export function AddActionSheet() {
   const { theme } = useTheme();
   const pathname = usePathname();
+  const router = useRouter();
   const investmentsEnabled = useInvestmentsEnabled();
   const { ledgerTab } = useLedgerState();
   const {
@@ -95,6 +98,9 @@ export function AddActionSheet() {
         return;
       case "cardBill":
         setIsDebtPaymentOpen(true);
+        return;
+      case "reminder":
+        router.push("/calendar?newReminder=1" as Href);
         return;
     }
   };
