@@ -21,7 +21,7 @@
 | 5 | SPENDLY-219 | Financial Calendar and What-If inputs | 176 (built, #213), **195 (To Do)** | Calendar part merged to the epic branch; **What-If part on hold for SPENDLY-195** |
 | 6 | [SPENDLY-218](https://kesavach.atlassian.net/browse/SPENDLY-218) | Comparison and funding-plan UI | 217, 219 (What-If wait relaxed 2026-10-03) | Merged to the epic branch |
 | 7 | [SPENDLY-220](https://kesavach.atlassian.net/browse/SPENDLY-220) | Saved funding plans | 218 | Merged to the epic branch |
-| 8 | SPENDLY-221 | QA and rollout | 217–220 | Last |
+| 8 | [SPENDLY-221](https://kesavach.atlassian.net/browse/SPENDLY-221) | QA and rollout | 217–220 | Ready parts committed on story branch, awaiting merge approval. Device QA open; What-If cases wait for SPENDLY-195 |
 
 ## Decisions (2026-10-03)
 - The base is the calendar epic branch, so its PR is a three-PR stack.
