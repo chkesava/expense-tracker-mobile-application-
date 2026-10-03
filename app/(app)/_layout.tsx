@@ -3,6 +3,7 @@ import { Redirect, Stack } from "expo-router";
 
 import { AddActionSheet } from "@/components/AddActionSheet";
 import { AddTransactionModal } from "@/components/AddTransactionModal";
+import { CalendarNotificationSync } from "@/components/calendar/CalendarNotificationSync";
 import { GlobalAddModals } from "@/components/GlobalAddModals";
 import { BottomNav } from "@/components/BottomNav";
 import { Header } from "@/components/Header";
@@ -140,6 +141,12 @@ function AppShellInner() {
               }}
             />
             <Stack.Screen
+              name="calendar/index"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
               name="runway/index"
               options={{
                 animation: "slide_from_right",
@@ -178,6 +185,8 @@ function AppShellInner() {
         <AddTransactionModal />
         <AddActionSheet />
         <GlobalAddModals />
+        {/* SPENDLY-184: keeps calendar notifications in step with the data */}
+        <CalendarNotificationSync />
         <SetupWizardModal />
         </OverlayProvider>
       </View>

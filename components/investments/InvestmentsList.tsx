@@ -20,6 +20,7 @@ import { Card } from "@/components/ui/Card";
 import { CreateInvestmentModal } from "@/components/investments/CreateInvestmentModal";
 import { InvestmentCard } from "@/components/investments/InvestmentCard";
 import { InvestmentDetailModal } from "@/components/investments/InvestmentDetailModal";
+import { useOpenFromRouteParam } from "@/hooks/useOpenFromRouteParam";
 import { useInvestments } from "@/hooks/useInvestments";
 import type { Investment, InvestmentKind } from "@/shared/types/investment";
 import { todayDateKey } from "@/shared/utils/dates";
@@ -49,6 +50,13 @@ export function InvestmentsList() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [selectedInvestment, setSelectedInvestment] =
     useState<Investment | null>(null);
+
+  // SPENDLY-181: `/investments?tab=investments&id=…` opens this investment's detail.
+  useOpenFromRouteParam(!loading, (id) => {
+    const found = investments.find((i) => i.id === id);
+    if (found) setSelectedInvestment(found);
+    return Boolean(found);
+  });
 
   const today = todayDateKey();
 
