@@ -83,6 +83,26 @@ export type UserSettings = {
   themeMode?: string;
   /** Credit card bill local reminder preferences */
   creditCardBillReminders: CreditCardBillRemindersSettings;
+  /** SPENDLY-184: Financial Calendar on-device notifications. */
+  calendarNotifications: CalendarNotificationSettings;
+};
+
+export type CalendarNotificationSettings = {
+  /** The user's own calendar reminders. On by default — the user asked to be reminded. */
+  remindersEnabled: boolean;
+  /** Loan, receivable and recurring-item due dates. Off by default to avoid noise. */
+  duesEnabled: boolean;
+  duesDaysBefore: 0 | 1 | 3;
+  quietHoursStart: string;
+  quietHoursEnd: string;
+};
+
+export const DEFAULT_CALENDAR_NOTIFICATIONS: CalendarNotificationSettings = {
+  remindersEnabled: true,
+  duesEnabled: false,
+  duesDaysBefore: 1,
+  quietHoursStart: "08:00",
+  quietHoursEnd: "21:00",
 };
 
 function deviceTimezone(): string {
@@ -219,6 +239,7 @@ export const SETTINGS_DEFAULTS: UserSettings = {
   firstDayOfWeek: "monday",
   themeMode: "system",
   creditCardBillReminders: { ...DEFAULT_CREDIT_CARD_BILL_REMINDERS },
+  calendarNotifications: { ...DEFAULT_CALENDAR_NOTIFICATIONS },
 };
 
 /**
@@ -256,6 +277,7 @@ const USER_SETTINGS_KEYS: (keyof UserSettings)[] = [
   "firstDayOfWeek",
   "themeMode",
   "creditCardBillReminders",
+  "calendarNotifications",
 ];
 
 function pickKnownSettings(
@@ -295,6 +317,8 @@ export function mergeSettingsFromDoc(
   const remindersSource =
     asPlainRecord(source.creditCardBillReminders) ??
     asPlainRecord(data.creditCardBillReminders);
+  const calendarNotificationsSource =
+    asPlainRecord(source.calendarNotifications) ?? asPlainRecord(data.calendarNotifications);
 
   return {
     ...SETTINGS_DEFAULTS,
@@ -364,6 +388,21 @@ export function mergeSettingsFromDoc(
         ? (remindersSource.daysBefore as number[])
         : SETTINGS_DEFAULTS.creditCardBillReminders.daysBefore,
     },
+    calendarNotifications: normalizeCalendarNotifications(calendarNotificationsSource),
+  };
+}
+
+/** Stored calendar notification prefs → valid settings; unknown values fall back to defaults. */
+export function normalizeCalendarNotifications(raw: Record<string, unknown> | null | undefined): CalendarNotificationSettings {
+  const d = DEFAULT_CALENDAR_NOTIFICATIONS;
+  const r = raw ?? {};
+  const hm = (v: unknown, fallback: string) => (typeof v === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(v) ? v : fallback);
+  return {
+    remindersEnabled: typeof r.remindersEnabled === "boolean" ? r.remindersEnabled : d.remindersEnabled,
+    duesEnabled: typeof r.duesEnabled === "boolean" ? r.duesEnabled : d.duesEnabled,
+    duesDaysBefore: r.duesDaysBefore === 0 || r.duesDaysBefore === 1 || r.duesDaysBefore === 3 ? r.duesDaysBefore : d.duesDaysBefore,
+    quietHoursStart: hm(r.quietHoursStart, d.quietHoursStart),
+    quietHoursEnd: hm(r.quietHoursEnd, d.quietHoursEnd),
   };
 }
 

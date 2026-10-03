@@ -215,3 +215,23 @@ describe("merge does not absorb unrelated profile fields", () => {
     expect(merged.photoURL).toBeUndefined();
   });
 });
+
+describe("calendar notification settings (SPENDLY-184)", () => {
+  it("defaults to reminders on and dues off", () => {
+    expect(mergeSettingsFromDoc({}).calendarNotifications).toEqual({
+      remindersEnabled: true,
+      duesEnabled: false,
+      duesDaysBefore: 1,
+      quietHoursStart: "08:00",
+      quietHoursEnd: "21:00",
+    });
+  });
+
+  it("keeps stored choices and repairs bad values", () => {
+    const s = mergeSettingsFromDoc({
+      calendarNotifications: { remindersEnabled: false, duesEnabled: true, duesDaysBefore: 3, quietHoursStart: "7am", quietHoursEnd: "22:00" },
+    });
+    expect(s.calendarNotifications).toEqual({ remindersEnabled: false, duesEnabled: true, duesDaysBefore: 3, quietHoursStart: "08:00", quietHoursEnd: "22:00" });
+    expect(mergeSettingsFromDoc({ calendarNotifications: { duesDaysBefore: 5 } }).calendarNotifications.duesDaysBefore).toBe(1);
+  });
+});
