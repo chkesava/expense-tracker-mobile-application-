@@ -2,7 +2,7 @@
 
 **Ticket:** [SPENDLY-217](https://kesavach.atlassian.net/browse/SPENDLY-217) (Story)
 **Epic:** [SPENDLY-213](https://kesavach.atlassian.net/browse/SPENDLY-213). See the [epic record](SPENDLY-213-goal-funding-optimizer.md).
-**Branch:** `feature/SPENDLY-217-goal-allocation-modes`, cut from the epic branch after 216.
+**Branch:** `feature/SPENDLY-217-goal-allocation-modes`, cut from the epic branch after 216 and merged back with approval.
 **Depends on:** 215 (capacity, used as the pool) and 216 (per-goal maths). Pure logic only: no UI and no writes.
 
 ---
