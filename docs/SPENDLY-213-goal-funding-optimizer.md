@@ -14,7 +14,7 @@
 ## Stories
 | # | Story | Scope | Jira dependencies | State |
 |---|---|---|---|---|
-| 1 | [SPENDLY-214](https://kesavach.atlassian.net/browse/SPENDLY-214) | Model and constraints | None | Committed on its story branch, awaiting merge approval |
+| 1 | [SPENDLY-214](https://kesavach.atlassian.net/browse/SPENDLY-214) | Model and constraints | None | Merged to the epic branch |
 | 2 | SPENDLY-215 | Funding capacity and affordability | 214 | Not started |
 | 3 | SPENDLY-216 | Target-date maths and funding gaps | 214 | Not started |
 | 4 | SPENDLY-217 | Multi-goal allocation modes | 215, 216 | Not started |
