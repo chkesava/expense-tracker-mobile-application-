@@ -2,7 +2,7 @@
 
 **Ticket:** [SPENDLY-221](https://kesavach.atlassian.net/browse/SPENDLY-221) (Story)
 **Epic:** [SPENDLY-213](https://kesavach.atlassian.net/browse/SPENDLY-213). See the [epic record](SPENDLY-213-goal-funding-optimizer.md).
-**Branch:** `feature/SPENDLY-221-goal-funding-qa`, cut from the epic branch after 220.
+**Branch:** `feature/SPENDLY-221-goal-funding-qa`, cut from the epic branch after 220 and merged back with approval.
 
 **Status:** partial by agreement (2026-10-03), like the other epics.
 - The code-verifiable parts are done.
