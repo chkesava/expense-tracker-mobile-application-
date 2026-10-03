@@ -2,7 +2,7 @@
 
 **Ticket:** [SPENDLY-185](https://kesavach.atlassian.net/browse/SPENDLY-185) (Story)
 **Epic:** [SPENDLY-176](https://kesavach.atlassian.net/browse/SPENDLY-176). See the [epic record](SPENDLY-176-financial-calendar.md).
-**Branch:** `feature/SPENDLY-185-calendar-qa`, cut from the epic branch after 184.
+**Branch:** `feature/SPENDLY-185-calendar-qa`, cut from the epic branch after 184 and merged back with approval.
 
 **Status:** partial by agreement (2026-10-03), like the runway and decision epics.
 - Everything that can be verified in code is done.
