@@ -18,7 +18,7 @@
 | 2 | [SPENDLY-215](https://kesavach.atlassian.net/browse/SPENDLY-215) | Funding capacity and affordability | 214 | Merged to the epic branch |
 | 3 | [SPENDLY-216](https://kesavach.atlassian.net/browse/SPENDLY-216) | Target-date maths and funding gaps | 214 | Merged to the epic branch |
 | 4 | [SPENDLY-217](https://kesavach.atlassian.net/browse/SPENDLY-217) | Multi-goal allocation modes | 215, 216 | Merged to the epic branch |
-| 5 | SPENDLY-219 | Financial Calendar and What-If inputs | 176 (built, #213), **195 (To Do)** | Calendar part next; **What-If part on hold for SPENDLY-195** |
+| 5 | SPENDLY-219 | Financial Calendar and What-If inputs | 176 (built, #213), **195 (To Do)** | Calendar part committed on its story branch, awaiting merge approval; **What-If part on hold for SPENDLY-195** |
 | 6 | SPENDLY-218 | Comparison and funding-plan UI | 217, 219 | After 219's calendar part (relaxed 2026-10-03) |
 | 7 | SPENDLY-220 | Saved funding plans | 218 | Not started |
 | 8 | SPENDLY-221 | QA and rollout | 217–220 | Last |
