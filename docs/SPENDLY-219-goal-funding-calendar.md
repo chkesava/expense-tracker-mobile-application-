@@ -2,7 +2,7 @@
 
 **Ticket:** [SPENDLY-219](https://kesavach.atlassian.net/browse/SPENDLY-219) (Story)
 **Epic:** [SPENDLY-213](https://kesavach.atlassian.net/browse/SPENDLY-213). See the [epic record](SPENDLY-213-goal-funding-optimizer.md).
-**Branch:** `feature/SPENDLY-219-goal-funding-calendar`, cut from the epic branch after 217.
+**Branch:** `feature/SPENDLY-219-goal-funding-calendar`, cut from the epic branch after 217; the calendar part was merged back with approval.
 
 **Status:** split by decision (2026-10-03).
 - **The Financial Calendar part is done here.**
