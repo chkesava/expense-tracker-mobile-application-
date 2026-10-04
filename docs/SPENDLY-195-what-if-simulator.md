@@ -20,7 +20,7 @@
 | 4 | [SPENDLY-199](https://kesavach.atlassian.net/browse/SPENDLY-199) | Debt, EMI and borrowing simulation | 197 | Implemented; merge approval pending |
 | 5 | [SPENDLY-200](https://kesavach.atlassian.net/browse/SPENDLY-200) | Savings, goals and investment scenarios | 197 | Implemented; merge approval pending |
 | 6 | [SPENDLY-201](https://kesavach.atlassian.net/browse/SPENDLY-201) | Baseline/scenario comparison and timeline | 198, 199, 200 | Implemented; merge approval pending |
-| 7 | [SPENDLY-202](https://kesavach.atlassian.net/browse/SPENDLY-202) | Saved scenarios and lifecycle | 196, 201 | To Do |
+| 7 | [SPENDLY-202](https://kesavach.atlassian.net/browse/SPENDLY-202) | Saved scenarios and lifecycle | 196, 201 | Implemented; merge approval pending |
 | 8 | [SPENDLY-203](https://kesavach.atlassian.net/browse/SPENDLY-203) | QA, performance, safety and rollout | 198–202 | To Do |
 
 ## Decisions
