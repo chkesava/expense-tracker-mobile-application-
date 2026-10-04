@@ -1396,6 +1396,15 @@ export default function AccountDetailScreen() {
           }}
           onDelete={onDeleteNote}
         />
+
+        {/* SPENDLY-366: start a Money Decision already linked to this account. */}
+        <Button
+          variant="ghost"
+          onPress={() => router.push(`/decisions/edit?linkKind=account&linkRef=${encodeURIComponent(account.id)}` as Href)}
+          accessibilityLabel="Log a decision about this account"
+        >
+          Log a decision about this account
+        </Button>
         </>
       ) : null}
 

@@ -10,6 +10,7 @@ import {
   Landmark,
   MinusCircle,
   PlusCircle,
+  Scale,
   Wallet,
 } from "lucide-react-native";
 
@@ -37,6 +38,7 @@ const ICONS: Record<AddActionId, typeof PlusCircle> = {
   investment: Landmark,
   cardBill: CreditCard,
   reminder: BellRing,
+  decision: Scale,
 };
 
 export function AddActionSheet() {
@@ -101,6 +103,9 @@ export function AddActionSheet() {
         return;
       case "reminder":
         router.push("/calendar?newReminder=1" as Href);
+        return;
+      case "decision":
+        router.push("/decisions/edit" as Href);
         return;
     }
   };

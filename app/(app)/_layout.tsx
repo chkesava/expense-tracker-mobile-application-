@@ -117,6 +117,48 @@ function AppShellInner() {
               }}
             />
             <Stack.Screen
+              name="decisions/index"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
+              name="decisions/[id]"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
+              name="decisions/insights"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
+              name="decisions/compare"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
+              name="decisions/edit"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
+              name="fees/index"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
+              name="fees/[key]"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
               name="sms-inbox"
               options={{
                 animation: "slide_from_right",
@@ -160,6 +202,18 @@ function AppShellInner() {
             />
             <Stack.Screen
               name="transactions/[id]"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
+              name="merchants/[id]"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
+              name="merchants/index"
               options={{
                 animation: "slide_from_right",
               }}
