@@ -10,6 +10,7 @@ import { useLocalSearchParams, useRouter, type Href } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ArrowLeft, ChevronRight, Lock, Pencil, Trash2 } from "lucide-react-native";
 
+import { TransactionFeeCard } from "@/components/fees/TransactionFeeCard";
 import { Amount } from "@/components/common/Amount";
 import { PayCreditBillModal } from "@/components/accounts/PayCreditBillModal";
 import { MerchantCorrectionSheet } from "@/components/merchant/MerchantCorrectionSheet";
@@ -509,6 +510,8 @@ export default function TransactionDetailsScreen() {
               ) : null}
             </View>
           </Card>
+
+          <TransactionFeeCard transactionRef={parsed.ref} />
 
           {journalRow ? (
             <Card>
