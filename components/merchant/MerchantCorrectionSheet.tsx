@@ -24,6 +24,7 @@ export interface MerchantCorrectionSheetProps {
   initialSubcategory?: string;
   onClose: () => void;
   onSaved: () => void;
+  onOpenProfile?: () => void;
 }
 
 export function MerchantCorrectionSheet({
@@ -35,6 +36,7 @@ export function MerchantCorrectionSheet({
   initialSubcategory = "Other Food",
   onClose,
   onSaved,
+  onOpenProfile,
 }: MerchantCorrectionSheetProps) {
   const { theme } = useTheme();
   const surfaces = useSurfaces();
@@ -130,6 +132,9 @@ export function MerchantCorrectionSheet({
             </View>
 
             <View style={styles.actions}>
+              {onOpenProfile && resolution.merchantId ? (
+                <Button variant="outline" onPress={onOpenProfile}>View merchant profile</Button>
+              ) : null}
               {resolution.merchantId ? (
                 <Button disabled={saving} onPress={() => void save({
                   ...namedDraft("transaction", source.refKey),
