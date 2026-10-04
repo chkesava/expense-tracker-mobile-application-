@@ -67,6 +67,7 @@ describe("isRestorableRoute", () => {
     expect(isRestorableRoute("/runway/sources")).toBe(true);
     expect(isRestorableRoute("/runway")).toBe(true);
     expect(isRestorableRoute("/calendar")).toBe(true);
+    expect(isRestorableRoute("/goals/optimizer")).toBe(true);
   });
 
   it("rejects routes the shell cannot resume into", () => {

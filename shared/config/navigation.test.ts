@@ -33,6 +33,7 @@ describe("resolveAndroidBackAction", () => {
     expect(resolveAndroidBackAction("/runway/sources")).toBe("pop");
     expect(resolveAndroidBackAction("/runway")).toBe("pop");
     expect(resolveAndroidBackAction("/calendar")).toBe("pop");
+    expect(resolveAndroidBackAction("/goals/optimizer")).toBe("pop");
   });
 
   it("pops out of screens that used to fall through to the navigator", () => {

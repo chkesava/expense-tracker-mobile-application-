@@ -183,6 +183,12 @@ function AppShellInner() {
               }}
             />
             <Stack.Screen
+              name="goals/optimizer"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
               name="calendar/index"
               options={{
                 animation: "slide_from_right",
