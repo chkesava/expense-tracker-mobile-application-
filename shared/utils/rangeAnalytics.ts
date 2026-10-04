@@ -1,4 +1,5 @@
 import type { Expense, CategoryBudget } from "../types/expense";
+import type { MerchantResolution } from "../types/merchant";
 import {
   daysInMonth,
   orderedWeekdays,
@@ -76,6 +77,23 @@ export const getTopVendors = (expenses: Expense[]) => {
     .map(([note, stats]) => ({ note, ...stats }))
     .sort((a, b) => b.total - a.total)
     .slice(0, 10);
+};
+
+/** SPENDLY-192 — canonical merchant grouping for merchant-aware consumers. */
+export const getTopMerchantVendors = (
+  expenses: Expense[],
+  resolutionsByExpenseId: ReadonlyMap<string, MerchantResolution>,
+) => {
+  const map = new Map<string, { name: string; count: number; total: number }>();
+  expenses.forEach((expense) => {
+    const resolution = expense.id ? resolutionsByExpenseId.get(expense.id) : undefined;
+    const key = resolution?.merchantId ?? `unknown:${resolution?.normalized ?? expense.note?.trim() ?? "empty"}`;
+    const current = map.get(key) ?? { name: resolution?.displayName ?? expense.note?.trim() ?? "Unknown merchant", count: 0, total: 0 };
+    current.count += 1;
+    current.total += expense.amount;
+    map.set(key, current);
+  });
+  return [...map].map(([merchantId, value]) => ({ merchantId, ...value })).sort((a, b) => b.total - a.total || a.name.localeCompare(b.name)).slice(0, 10);
 };
 
 /**

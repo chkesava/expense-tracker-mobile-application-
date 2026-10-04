@@ -22,6 +22,7 @@ export const ADD_ACTION_IDS = [
   "investment",
   "cardBill",
   "reminder",
+  "decision",
 ] as const;
 
 export type AddActionId = (typeof ADD_ACTION_IDS)[number];
@@ -85,6 +86,12 @@ export const ADD_ACTIONS: AddActionMeta[] = [
     id: "reminder",
     label: "Reminder",
     hint: "A dated note on your financial calendar",
+  },
+  {
+    // SPENDLY-363 — not money: opens Money Decisions to record a decision.
+    id: "decision",
+    label: "Decision",
+    hint: "Note a money decision and why you made it",
   },
 ];
 

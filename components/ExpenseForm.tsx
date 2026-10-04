@@ -78,6 +78,8 @@ import {
   previewBalanceAfterTransaction,
 } from "@/shared/utils/accountBalance";
 import { pushRecentCategoryPair } from "@/shared/utils/categoryPreferences";
+import { merchantCategorySuggestion } from "@/shared/utils/merchantCategory";
+import { resolveMerchant } from "@/shared/utils/merchantResolve";
 import {
   currentMonthKey,
   monthFromDateKey,
@@ -332,6 +334,18 @@ export function ExpenseForm({
       if (ruleMatch.subcategory) setSubcategory(ruleMatch.subcategory);
       setSuggestionHint(
         `${ruleMatch.category} › ${ruleMatch.subcategory || "…"}`
+      );
+      return;
+    }
+
+    const merchantSuggestion = merchantCategorySuggestion(
+      resolveMerchant({ refKey: "draft:expense", text: note, kind: "expense" }),
+    );
+    if (merchantSuggestion) {
+      setCategory(merchantSuggestion.category);
+      setSubcategory(merchantSuggestion.subcategory);
+      setSuggestionHint(
+        `${merchantSuggestion.merchantName} · ${merchantSuggestion.category} › ${merchantSuggestion.subcategory}`,
       );
       return;
     }
