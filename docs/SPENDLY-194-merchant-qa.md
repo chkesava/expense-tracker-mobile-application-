@@ -41,7 +41,7 @@ The test asserts repeatability and the presence of unresolved negative cases. Th
 
 1. Run `npm test`, `npm run typecheck:shared`, `npx tsc -p tsconfig.json --noEmit`, and `npm run test:rules` before release.
 2. Complete the manual device checklist below in Spendly Test/emulator first.
-3. Ship the app before tightening or deploying any Firestore rules; follow `docs/AFTER_MERGE_CHECKLIST.md` after the epic reaches `main`.
+3. Deploy the Firestore rules first, rules only — never indexes — so the new validated `merchantOverrides` collection is available before the app writes it. Then release the app; follow `docs/AFTER_MERGE_CHECKLIST.md` after the epic reaches `main`.
 4. Roll back by disabling/removing the merchant profile entry points and resolver consumers. Existing expense/income documents are unchanged; correction documents can remain isolated for a later re-enable.
 
 ## Manual Testing Guide

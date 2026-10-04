@@ -10,17 +10,19 @@
 - We go one story at a time.
 - Stories move to Done only when the epic reaches `main`.
 
+**Epic complete, PR open.** All eight stories are merged into `feature/SPENDLY-186-merchant-intelligence`; PR review and device QA are pending before the epic can reach `main`.
+
 ## Stories
 | # | Story | Scope | Jira dependencies | State |
 |---|---|---|---|---|
 | 1 | [SPENDLY-187](https://kesavach.atlassian.net/browse/SPENDLY-187) | Merchant identity, alias and data model | None | Merged into the epic |
 | 2 | [SPENDLY-188](https://kesavach.atlassian.net/browse/SPENDLY-188) | India-first normalization and alias registry | 187 | Merged into the epic |
-| 3 | SPENDLY-189 | Deterministic resolution and confidence | 187, 188 | **In Progress.** Branch `feature/SPENDLY-189-merchant-resolution`; implementation and validation underway |
-| 4 | SPENDLY-190 | Merchant-aware categories | 189 | **In Progress.** Branch `feature/SPENDLY-190-merchant-categories` |
-| 5 | SPENDLY-191 | Corrections and personalization | 189 | **In Progress.** Branch `feature/SPENDLY-191-merchant-corrections` |
-| 6 | SPENDLY-192 | Merchant profile, grouping and search | 189 | **In Progress.** Branch `feature/SPENDLY-192-merchant-profile` |
-| 7 | SPENDLY-193 | Merchant patterns and recurring | 190, 192 | **In Progress.** Branch `feature/SPENDLY-193-merchant-patterns` |
-| 8 | SPENDLY-194 | Privacy, performance, accuracy QA and rollout | 191–193 | **In Progress.** Branch `feature/SPENDLY-194-merchant-qa` |
+| 3 | SPENDLY-189 | Deterministic resolution and confidence | 187, 188 | Merged into the epic |
+| 4 | SPENDLY-190 | Merchant-aware categories | 189 | Merged into the epic |
+| 5 | SPENDLY-191 | Corrections and personalization | 189 | Merged into the epic |
+| 6 | SPENDLY-192 | Merchant profile, grouping and search | 189 | Merged into the epic |
+| 7 | SPENDLY-193 | Merchant patterns and recurring | 190, 192 | Merged into the epic |
+| 8 | SPENDLY-194 | Privacy, performance, accuracy QA and rollout | 191–193 | Merged into the epic |
 
 ## Decisions (2026-10-03)
 - **Base branch:** origin/main.
