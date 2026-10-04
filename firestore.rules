@@ -35,7 +35,8 @@ service cloud.firestore {
     //   holdings, incomes, investments, meta, portfolioOrders,
     //   portfolioSettings, portfolioSnapshots, portfolioTransactions,
     //   receivableRepayments, receivables, spaces,
-    //   stats, subscriptions, recurringDismissals, trips, watchlist
+    //   stats, subscriptions, recurringDismissals, trips, watchlist,
+    //   merchantOverrides
     //
     // The recursive match keeps a new collection from silently becoming
     // unreadable the moment it ships, while still confining everything to the
@@ -320,6 +321,36 @@ service cloud.firestore {
           && optionalBoundedNonNeg(d, 'targetPrice');
       }
 
+      // SPENDLY-191. Corrections are private user preferences, never ledger
+      // fields. The document id is deterministic (kind + refKey), so repeated
+      // corrections replace one preference instead of creating duplicates.
+      function merchantOverrideWellFormed() {
+        let d = request.resource.data;
+        let hasMerchant = d.keys().hasAny(['merchantId']);
+        let hasCustom = d.keys().hasAny(['customName']);
+        let rejected = d.keys().hasAny(['rejected']) && d.rejected == true;
+        return d.keys().hasOnly([
+            'kind', 'refKey', 'merchantId', 'customName', 'rejected',
+            'category', 'subcategory', 'createdAtMs', 'updatedAtMs'
+          ])
+          && d.kind in ['transaction', 'alias']
+          && d.refKey is string && d.refKey.size() > 0 && d.refKey.size() <= 200
+          && (!hasMerchant || (d.merchantId is string && d.merchantId.size() > 0 && d.merchantId.size() <= 100))
+          && (!hasCustom || (d.customName is string && d.customName.size() > 0 && d.customName.size() <= 60))
+          && (!d.keys().hasAny(['rejected']) || d.rejected is bool)
+          && (!d.keys().hasAny(['category']) || (d.category is string && d.category.size() <= 80))
+          && (!d.keys().hasAny(['subcategory']) || (d.subcategory is string && d.subcategory.size() <= 80))
+          && (!d.keys().hasAny(['createdAtMs']) || (d.createdAtMs is number && d.createdAtMs >= 0 && d.createdAtMs < 10000000000000))
+          && (!d.keys().hasAny(['updatedAtMs']) || (d.updatedAtMs is number && d.updatedAtMs >= 0 && d.updatedAtMs < 10000000000000))
+          && ((rejected && !hasMerchant && !hasCustom) || (!rejected && hasMerchant != hasCustom));
+      }
+
+      function merchantOverrideUpdateStable() {
+        return request.resource.data.kind == resource.data.kind
+          && request.resource.data.refKey == resource.data.refKey
+          && request.resource.data.createdAtMs == resource.data.createdAtMs;
+      }
+
       match /expenses/{id} {
         allow read, delete: if isOwner(uid);
         allow create, update: if isOwner(uid) && personalMoneyWellFormed();
@@ -437,6 +468,14 @@ service cloud.firestore {
       match /portfolioOrders/{id} {
         allow read, delete: if isOwner(uid);
         allow create, update: if isOwner(uid) && portfolioOrderWellFormed();
+      }
+
+      match /merchantOverrides/{id} {
+        allow read, delete: if isOwner(uid);
+        allow create: if isOwner(uid) && merchantOverrideWellFormed();
+        allow update: if isOwner(uid)
+          && merchantOverrideWellFormed()
+          && merchantOverrideUpdateStable();
       }
 
       // `collection` is only bound inside this match. Helpers declared on

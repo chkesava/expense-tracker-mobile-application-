@@ -17,7 +17,7 @@
 | 2 | [SPENDLY-188](https://kesavach.atlassian.net/browse/SPENDLY-188) | India-first normalization and alias registry | 187 | Merged into the epic |
 | 3 | SPENDLY-189 | Deterministic resolution and confidence | 187, 188 | **In Progress.** Branch `feature/SPENDLY-189-merchant-resolution`; implementation and validation underway |
 | 4 | SPENDLY-190 | Merchant-aware categories | 189 | **In Progress.** Branch `feature/SPENDLY-190-merchant-categories` |
-| 5 | SPENDLY-191 | Corrections and personalization | 189 | Not started |
+| 5 | SPENDLY-191 | Corrections and personalization | 189 | **In Progress.** Branch `feature/SPENDLY-191-merchant-corrections` |
 | 6 | SPENDLY-192 | Merchant profile, grouping and search | 189 | Not started |
 | 7 | SPENDLY-193 | Merchant patterns and recurring | 190, 192 | Not started |
 | 8 | SPENDLY-194 | Privacy, performance, accuracy QA and rollout | 191–193 | Last |
