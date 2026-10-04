@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -12,6 +12,7 @@ import { ArrowLeft, ChevronRight, Lock, Pencil, Trash2 } from "lucide-react-nati
 
 import { Amount } from "@/components/common/Amount";
 import { PayCreditBillModal } from "@/components/accounts/PayCreditBillModal";
+import { MerchantCorrectionSheet } from "@/components/merchant/MerchantCorrectionSheet";
 import { JournalTransactionAudit } from "@/components/ledger/JournalTransactionAudit";
 import { usePageListBottomPadding } from "@/components/layout/usePageListBottomPadding";
 import { Button } from "@/components/ui/Button";
@@ -59,6 +60,11 @@ import {
 } from "@/shared/utils/transactionRef";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useSurfaces } from "@/theme/surfaces";
+import type { MerchantOverride, MerchantSourceText } from "@/shared/types/merchant";
+import { listMerchantOverrides } from "@/services/merchant/merchantOverrideStore";
+import { expenseSourceText, incomeSourceText } from "@/shared/utils/merchantModel";
+import { resolveMerchant } from "@/shared/utils/merchantResolve";
+import { merchantProfileId } from "@/shared/utils/merchantGrouping";
 
 function timestampLabel(value: unknown): string | null {
   if (!value) return null;
@@ -111,6 +117,33 @@ export default function TransactionDetailsScreen() {
     [journalKind, incomes, ref?.id]
   );
   const journalRow = expense ?? income;
+
+  const [merchantOverrides, setMerchantOverrides] = useState<MerchantOverride[]>([]);
+  const [merchantSheetOpen, setMerchantSheetOpen] = useState(false);
+
+  const reloadMerchantOverrides = () => {
+    if (!user?.uid) return;
+    void listMerchantOverrides(user.uid)
+      .then(setMerchantOverrides)
+      .catch((error) => logError("merchantCorrection.load", error));
+  };
+
+  useEffect(() => {
+    reloadMerchantOverrides();
+  }, [user?.uid]);
+
+  const merchantSource = useMemo<MerchantSourceText | null>(() => {
+    if (expense?.id) return expenseSourceText(expense as typeof expense & { id: string });
+    if (income?.id) return incomeSourceText(income as typeof income & { id: string });
+    return null;
+  }, [expense, income]);
+  const merchantResolution = useMemo(
+    () => (merchantSource ? resolveMerchant(merchantSource, merchantOverrides) : null),
+    [merchantSource, merchantOverrides],
+  );
+  const transactionOverride = merchantSource
+    ? merchantOverrides.find((entry) => entry.kind === "transaction" && entry.refKey === merchantSource.refKey)
+    : undefined;
 
   const contextAccountId = parsed?.accountId ?? journalRow?.accountId ?? null;
   const {
@@ -434,6 +467,18 @@ export default function TransactionDetailsScreen() {
               {activity?.counterpartyName ? (
                 <Row label="Counterparty" value={activity.counterpartyName} />
               ) : null}
+              {merchantSource && merchantResolution ? (
+                <Row
+                  label="Merchant"
+                  value={
+                    merchantResolution.confidence === "low"
+                      ? `might be ${merchantResolution.displayName}`
+                      : merchantResolution.displayName
+                  }
+                  onPress={() => setMerchantSheetOpen(true)}
+                  accessibilityHint="Review or correct merchant recognition"
+                />
+              ) : null}
               <Row
                 label="Date"
                 value={clock ? `${formatActivityDateLabel(date)} · ${clock}` : formatActivityDateLabel(date)}
@@ -550,6 +595,28 @@ export default function TransactionDetailsScreen() {
           accounts={accounts}
           accountTypes={accountTypes}
           initialPayment={editablePayment}
+        />
+      ) : null}
+      {merchantSource && merchantResolution ? (
+        <MerchantCorrectionSheet
+          visible={merchantSheetOpen}
+          source={merchantSource}
+          resolution={merchantResolution}
+          existingOverride={transactionOverride}
+          initialCategory={expense?.category}
+          initialSubcategory={expense?.subcategory}
+          onClose={() => setMerchantSheetOpen(false)}
+          onSaved={reloadMerchantOverrides}
+          onOpenProfile={
+            merchantResolution?.merchantId
+              ? () => {
+                  setMerchantSheetOpen(false);
+                  router.push(
+                    `/merchants/${encodeURIComponent(merchantProfileId(merchantResolution))}` as Href,
+                  );
+                }
+              : undefined
+          }
         />
       ) : null}
     </View>
