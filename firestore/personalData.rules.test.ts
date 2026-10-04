@@ -17,6 +17,7 @@ import {
   query,
   setDoc,
   updateDoc,
+  writeBatch,
 } from "firebase/firestore";
 import { afterAll, beforeAll, beforeEach, describe, it } from "vitest";
 
@@ -693,6 +694,83 @@ describe("personal tree", () => {
       );
       await assertFails(
         getDocs(collection(db, "users", OWNER, "ledgerEvents"))
+      );
+    });
+  });
+
+  // SPENDLY-385 — a bill payment correction is one batch: the payment row in
+  // place, the bill stamp moved by a delta, and a "payment" ledger event.
+  describe("bill payment correction", () => {
+    const seedPaymentAndBill = async () => {
+      await env.withSecurityRulesDisabled(async (context) => {
+        const db = context.firestore();
+        await setDoc(doc(db, "users", OWNER, "accountPayments", "pay-1"), {
+          fromAccountId: "hdfc",
+          toAccountId: "card-1",
+          amount: 730,
+          date: "2026-09-17",
+          sourceType: "account",
+          creditCardBillId: "bill-1",
+          billAppliedAmount: 730,
+        });
+        await setDoc(doc(db, "users", OWNER, "creditCardBills", "bill-1"), {
+          accountId: "card-1",
+          statementAmount: 730,
+          amountPaid: 730,
+          remainingAmount: 0,
+          statementDate: "2026-09-05",
+          dueDate: "2026-09-25",
+          status: "PAID",
+          paymentIds: ["pay-1"],
+        });
+      });
+    };
+
+    const paymentEvent = {
+      kind: "payment",
+      docId: "pay-1",
+      action: "update",
+      before: { amount: 730, date: "2026-09-17", month: "2026-09", accountId: "hdfc", note: "" },
+      after: { amount: 500, date: "2026-09-17", month: "2026-09", accountId: "sbi", note: "" },
+      actorUid: OWNER,
+    };
+
+    it("owner commits the correction batch", async () => {
+      await seedPaymentAndBill();
+      const db = env.authenticatedContext(OWNER).firestore();
+      const batch = writeBatch(db);
+      batch.update(doc(db, "users", OWNER, "accountPayments", "pay-1"), {
+        fromAccountId: "sbi",
+        sourceType: "account",
+        amount: 500,
+        billAppliedAmount: 500,
+      });
+      batch.update(doc(db, "users", OWNER, "creditCardBills", "bill-1"), {
+        amountPaid: increment(-230),
+        remainingAmount: 230,
+        status: "PARTIALLY_PAID",
+      });
+      batch.set(doc(collection(db, "users", OWNER, "ledgerEvents")), paymentEvent);
+      await assertSucceeds(batch.commit());
+    });
+
+    it("rejects a stamp reversal that would take amountPaid below zero", async () => {
+      await seedPaymentAndBill();
+      const db = env.authenticatedContext(OWNER).firestore();
+      await assertFails(
+        updateDoc(doc(db, "users", OWNER, "creditCardBills", "bill-1"), {
+          amountPaid: increment(-1000),
+        })
+      );
+    });
+
+    it("a stranger cannot correct the owner's payment", async () => {
+      await seedPaymentAndBill();
+      const db = env.authenticatedContext(OTHER).firestore();
+      await assertFails(
+        updateDoc(doc(db, "users", OWNER, "accountPayments", "pay-1"), {
+          fromAccountId: "sbi",
+        })
       );
     });
   });

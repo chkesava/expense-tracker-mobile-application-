@@ -282,3 +282,66 @@ describe("ledger event diff (SPENDLY-110)", () => {
     });
   });
 });
+
+describe("bill payment events (SPENDLY-385)", () => {
+  const paymentSnapshot = (over: Partial<LedgerEventSnapshot> = {}) =>
+    snapshot({
+      category: undefined,
+      accountId: "hdfc",
+      amount: 730,
+      note: "Credit card bill payment",
+      toAccountId: "card-1",
+      sourceType: "account",
+      creditCardBillId: "bill-1",
+      ...over,
+    });
+
+  it("labels a source change as Paid from", () => {
+    const changes = diffLedgerEvent(
+      event({
+        kind: "payment",
+        docId: "pay-1",
+        before: paymentSnapshot(),
+        after: paymentSnapshot({ accountId: "sbi" }),
+      })
+    );
+    expect(changes).toEqual([
+      {
+        field: "accountId",
+        label: "Paid from",
+        before: "hdfc",
+        after: "sbi",
+        isMoney: false,
+      },
+    ]);
+  });
+
+  it("does not count the derived month as a second change", () => {
+    const changes = diffLedgerEvent(
+      event({
+        kind: "payment",
+        before: paymentSnapshot({ date: "2026-09-30", month: "2026-09" }),
+        after: paymentSnapshot({ date: "2026-10-01", month: "2026-10" }),
+      })
+    );
+    expect(changes.map((change) => change.label)).toEqual(["Date"]);
+  });
+
+  it("keeps the journal labels for expense events", () => {
+    const changes = diffLedgerSnapshots(
+      snapshot(),
+      snapshot({ accountId: "acc-other" })
+    );
+    expect(changes[0].label).toBe("Account");
+  });
+
+  it("selects a payment's events by kind", () => {
+    const events = [
+      event({ id: "a", kind: "payment", docId: "pay-1" }),
+      event({ id: "b", kind: "expense", docId: "pay-1" }),
+    ];
+    expect(selectEventsForRow(events, "payment", "pay-1").map((e) => e.id)).toEqual([
+      "a",
+    ]);
+  });
+});

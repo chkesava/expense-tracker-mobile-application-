@@ -1,3 +1,7 @@
+# Repository-wide agent workflow
+
+For **all** work in this repository, first read and follow **[docs/AGENT_WORKFLOW.md](docs/AGENT_WORKFLOW.md)**, which is shared with Codex. It wins over private memory when they disagree. The Ganesh Seva rules below apply in addition, for Ganesh Seva UI/UX work.
+
 # Ganesh Seva UI/UX Design Instructions
 
 ## Scope

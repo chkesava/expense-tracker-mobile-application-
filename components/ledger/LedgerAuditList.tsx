@@ -45,6 +45,9 @@ function eventClock(createdAt: unknown): string {
 }
 
 function eventTitle(event: LedgerEvent): string {
+  if (event.kind === "payment") {
+    return event.after?.note || event.before.note || "Credit card bill payment";
+  }
   return (
     event.before.category ||
     event.before.source ||
@@ -128,7 +131,12 @@ export function LedgerAuditList() {
       const isRestore = item.action === "restore";
       const title = eventTitle(item);
       const when = eventClock(item.createdAt);
-      const kindLabel = item.kind === "income" ? "Income" : "Expense";
+      const kindLabel =
+        item.kind === "payment"
+          ? "Bill payment"
+          : item.kind === "income"
+            ? "Income"
+            : "Expense";
       // `action` is a stored string, so an unrecognised value from another
       // client falls through to "Edited" rather than vanishing from the trail.
       const actionLabel = isDelete
@@ -145,8 +153,12 @@ export function LedgerAuditList() {
       const rowKey = `${item.kind}:${item.docId}`;
       // Only the newest event for a row can be acted on, and only if it is the
       // delete — otherwise the row is already back in the ledger.
+      // Payment corrections are never deletes, and restore only knows journal
+      // rows — keep a stray payment event from offering it.
       const canRestore =
-        isDelete && latestActionByRow.get(rowKey) === "delete";
+        item.kind !== "payment" &&
+        isDelete &&
+        latestActionByRow.get(rowKey) === "delete";
       const isRestoring = restoringId === rowKey;
 
       return (
