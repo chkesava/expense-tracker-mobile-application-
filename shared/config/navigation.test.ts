@@ -22,6 +22,9 @@ describe("resolveAndroidBackAction", () => {
     expect(resolveAndroidBackAction("/settings")).toBe("pop");
     expect(resolveAndroidBackAction("/settings/privacy")).toBe("pop");
     expect(resolveAndroidBackAction("/sms-inbox")).toBe("pop");
+    expect(resolveAndroidBackAction("/decisions")).toBe("pop");
+    expect(resolveAndroidBackAction("/decisions/abc")).toBe("pop");
+    expect(resolveAndroidBackAction("/decisions/edit?id=abc")).toBe("pop");
     expect(resolveAndroidBackAction("/fees")).toBe("pop");
     expect(resolveAndroidBackAction("/fees/expense__abc")).toBe("pop");
     expect(resolveAndroidBackAction("/app-selector")).toBe("pop");

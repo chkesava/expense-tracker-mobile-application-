@@ -31,8 +31,8 @@ service cloud.firestore {
     //   categorizationRules, categoryBudgets, epfContributionEvents,
     //   epfContributions, epfEstablishments, epfProfile,
     //   epfInterestEntries, epfReconciliations, epfTransferEvents,
-    //   epfTransfers, expenses, feeReviews, feeSignalDismissals,
-    //   financialGoals, focus,
+    //   decisionEvents, decisions, epfTransfers, expenses, feeReviews,
+    //   feeSignalDismissals, financialGoals, focus,
     //   holdings, incomes, investments, meta, portfolioOrders,
     //   portfolioSettings, portfolioSnapshots, portfolioTransactions,
     //   receivableRepayments, receivables, spaces,
@@ -469,6 +469,106 @@ service cloud.firestore {
       match /portfolioOrders/{id} {
         allow read, delete: if isOwner(uid);
         allow create, update: if isOwner(uid) && portfolioOrderWellFormed();
+      }
+
+      // SPENDLY-362. Money Decisions (epic SPENDLY-361): a record of
+      // reasoning, never money. `hasOnly` keeps ledger-shaped `amount` /
+      // `date` fields out, so no balance or spending figure can be read from
+      // a decision; linked records are references only.
+      //
+      // `decisionSnapshot` is the reasoning frozen when the user decided. It
+      // is pinned once present, so later edits can never rewrite history.
+      // Lists and strings are capped so a document stays well under the
+      // Firestore size limit. Enums and caps mirror shared/types/decision.ts
+      // (shared/utils/decisionModel.rules.contract.test.ts).
+      function decisionCategories() {
+        return ['purchase', 'loan_debt', 'savings', 'investment', 'insurance',
+                'subscription', 'income', 'major_recurring', 'goal', 'other'];
+      }
+
+      function decisionStatuses() {
+        return ['draft', 'considering', 'decided', 'tracking', 'reviewed',
+                'closed', 'archived'];
+      }
+
+      function optionalText(d, key, max) {
+        return !d.keys().hasAny([key]) || (d.get(key, '') is string && d.get(key, '').size() <= max);
+      }
+
+      function optionalMap(d, key) {
+        return !d.keys().hasAny([key]) || d.get(key, {}) is map;
+      }
+
+      function optionalNumber(d, key) {
+        return !d.keys().hasAny([key]) || d.get(key, 0) is number;
+      }
+
+      function decisionWellFormed() {
+        let d = request.resource.data;
+        return d.keys().hasOnly([
+            'title', 'category', 'status', 'archivedFromStatus', 'templateId',
+            'templateVersion', 'context', 'alternatives',
+            'selectedAlternativeId', 'assumptions', 'rationale', 'confidence',
+            'expected', 'outcome', 'links', 'commitments', 'reviewDate',
+            'decisionSnapshot', 'revision', 'createdAtMs', 'updatedAtMs',
+            'decidedAtMs', 'closedAtMs'])
+          && d.title is string && d.title.size() >= 1 && d.title.size() <= 140
+          && d.category in decisionCategories()
+          && d.status in decisionStatuses()
+          && (!d.keys().hasAny(['archivedFromStatus']) || d.archivedFromStatus in decisionStatuses())
+          && optionalText(d, 'templateId', 40)
+          && (!d.keys().hasAny(['templateVersion']) || d.templateVersion is int)
+          && d.context is map
+          && d.context.keys().hasOnly(['situation', 'goal', 'constraints'])
+          && d.context.constraints is list && d.context.constraints.size() <= 20
+          && d.alternatives is list && d.alternatives.size() <= 20
+          && optionalText(d, 'selectedAlternativeId', 40)
+          && d.assumptions is list && d.assumptions.size() <= 30
+          && optionalText(d, 'rationale', 2000)
+          && (!d.keys().hasAny(['confidence'])
+              || (d.confidence is int && d.confidence >= 1 && d.confidence <= 5))
+          && optionalMap(d, 'expected')
+          && optionalMap(d, 'outcome')
+          && d.links is list && d.links.size() <= 30
+          && d.commitments is list && d.commitments.size() <= 30
+          && optionalYmd(d, 'reviewDate')
+          && optionalMap(d, 'decisionSnapshot')
+          && d.revision is int && d.revision >= 1
+          && d.createdAtMs is number
+          && d.updatedAtMs is number
+          && optionalNumber(d, 'decidedAtMs')
+          && optionalNumber(d, 'closedAtMs')
+          && (resource == null
+              || (d.revision > resource.data.revision
+                  && d.createdAtMs == resource.data.createdAtMs
+                  && (!resource.data.keys().hasAny(['decisionSnapshot'])
+                      || d.decisionSnapshot == resource.data.decisionSnapshot)));
+      }
+
+      match /decisions/{decisionId} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && decisionWellFormed();
+      }
+
+      // Append-only audit of decision changes: field names and statuses,
+      // never content. Mirrors ledgerEvents.
+      function decisionEventWellFormed() {
+        let d = request.resource.data;
+        return d.keys().hasOnly(['decisionId', 'action', 'fromStatus', 'toStatus',
+                                 'changedFields', 'revision', 'atMs'])
+          && d.decisionId is string && d.decisionId.size() > 0 && d.decisionId.size() <= 128
+          && d.action in ['create', 'update', 'status', 'delete']
+          && (!d.keys().hasAny(['fromStatus']) || d.fromStatus in decisionStatuses())
+          && (!d.keys().hasAny(['toStatus']) || d.toStatus in decisionStatuses())
+          && d.changedFields is list && d.changedFields.size() <= 40
+          && d.revision is int
+          && d.atMs is number;
+      }
+
+      match /decisionEvents/{eventId} {
+        allow read: if isOwner(uid);
+        allow create: if isOwner(uid) && decisionEventWellFormed();
+        allow update, delete: if false;
       }
 
       // SPENDLY-313. A user's decision about how one ledger transaction

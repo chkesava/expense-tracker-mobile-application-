@@ -571,6 +571,20 @@ export default function TransactionDetailsScreen() {
                 {related.label}
               </Button>
             ) : null}
+            {parsed.ref.kind === "expense" || parsed.ref.kind === "income" || parsed.ref.kind === "payment" || parsed.ref.kind === "transfer" ? (
+              <Button
+                size="lg"
+                variant="ghost"
+                onPress={() =>
+                  router.push(
+                    `/decisions/edit?linkKind=transaction&linkRef=${encodeURIComponent(parsed.ref.id)}&linkRefKind=${parsed.ref.kind}` as Href
+                  )
+                }
+                accessibilityLabel="Log a decision about this transaction"
+              >
+                Log a decision about this
+              </Button>
+            ) : null}
             {editability?.editable ? (
               <Button
                 size="lg"

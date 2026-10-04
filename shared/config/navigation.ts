@@ -247,10 +247,11 @@ const SUB_SCREEN_PREFIXES = [
   "/transactions/",
   "/merchants/",
   "/settings/",
+  "/decisions/",
   "/fees/",
 ];
 
-const SUB_SCREEN_ROUTES = ["/settings", "/sms-inbox", "/fees", "/app-selector", "/add"];
+const SUB_SCREEN_ROUTES = ["/settings", "/sms-inbox", "/decisions", "/fees", "/app-selector", "/add"];
 
 const SECONDARY_TAB_PREFIXES = ["/ledger", "/vaults", "/investments", "/insights"];
 

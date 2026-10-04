@@ -17,6 +17,8 @@ const RESTORABLE_ROUTES = [
   "/settings",
   "/settings/",
   "/sms-inbox",
+  "/decisions",
+  "/decisions/",
   "/fees",
   "/fees/",
   "/app-selector",

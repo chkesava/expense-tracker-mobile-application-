@@ -21,6 +21,7 @@ export const ADD_ACTION_IDS = [
   "recurring",
   "investment",
   "cardBill",
+  "decision",
 ] as const;
 
 export type AddActionId = (typeof ADD_ACTION_IDS)[number];
@@ -78,6 +79,12 @@ export const ADD_ACTIONS: AddActionMeta[] = [
     id: "cardBill",
     label: "Card Bill Payment",
     hint: "Pay a credit-card statement",
+  },
+  {
+    // SPENDLY-363 — not money: opens Money Decisions to record a decision.
+    id: "decision",
+    label: "Decision",
+    hint: "Note a money decision and why you made it",
   },
 ];
 
