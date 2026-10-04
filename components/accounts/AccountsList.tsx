@@ -23,6 +23,7 @@ import { Amount } from "@/components/common/Amount";
 import { LiabilityAmount } from "@/components/common/LiabilityAmount";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ManageStockCashModal } from "@/components/portfolio/ManageStockCashModal";
+import { RunwayEntryRow } from "@/components/runway/RunwayEntryRow";
 import { Button } from "@/components/ui/Button";
 import { useAccountEntries } from "@/hooks/useAccountEntries";
 import { useAccountPayments } from "@/hooks/useAccountPayments";
@@ -410,6 +411,9 @@ export function AccountsList() {
           ) : null}
         </View>
       </View>
+
+      {/* SPENDLY-210: entry to Financial Runway */}
+      <RunwayEntryRow />
 
       {/* Quick actions */}
       <View style={styles.quickActionsRow}>

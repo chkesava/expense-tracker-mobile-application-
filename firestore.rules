@@ -35,7 +35,7 @@ service cloud.firestore {
     //   feeSignalDismissals, financialGoals, focus,
     //   holdings, incomes, investments, meta, portfolioOrders,
     //   portfolioSettings, portfolioSnapshots, portfolioTransactions,
-    //   receivableRepayments, receivables, spaces,
+    //   receivableRepayments, receivables, runwayOverrides, runwaySettings, spaces,
     //   stats, subscriptions, recurringDismissals, trips, watchlist,
     //   merchantOverrides
     //
@@ -156,6 +156,49 @@ service cloud.firestore {
           && (!d.keys().hasAny(['createdAtMs']) || d.createdAtMs is number)
           && (!d.keys().hasAny(['updatedAtMs']) || d.updatedAtMs is number)
           && (resource == null || d.accountId == resource.data.accountId);
+      }
+
+      // SPENDLY-207. The user's choice to count or not count one resource
+      // toward Financial Runway. Only overridable kinds are accepted (mirrors
+      // RUNWAY_OVERRIDABLE_KINDS): EPF, stocks, receivables, cards and loans
+      // can never be counted. The id is `${kind}__${refId}` so one resource
+      // has one override, and kind/refId can't be changed afterwards.
+      function runwayOverrideWellFormed(id) {
+        let d = request.resource.data;
+        return d.keys().hasOnly(['kind', 'refId', 'included', 'updatedAtMs'])
+          && d.kind in ['bank', 'cash', 'wallet', 'other_account', 'fixed_deposit',
+                        'interest_savings', 'mutual_fund', 'demat_cash']
+          && d.refId is string
+          && d.refId.size() > 0
+          && d.refId.size() <= 128
+          && id == d.kind + '__' + d.refId
+          && d.included is bool
+          && d.updatedAtMs is number;
+      }
+
+      // SPENDLY-210. The user's runway preferences: one document, `default`.
+      // Every field is required and bounded so the screen can always read it.
+      function runwaySettingsWellFormed(id) {
+        let d = request.resource.data;
+        return id == 'default'
+          && d.keys().hasOnly(['mode', 'thresholdKind', 'thresholdAmount', 'thresholdMonths',
+                               'windowMonths', 'method', 'includeUnusual', 'projectionMonths',
+                               'updatedAtMs'])
+          && d.mode in ['net_burn', 'gross_burn', 'commitment_projection']
+          && d.thresholdKind in ['none', 'amount', 'essential_months']
+          && d.thresholdAmount is number
+          && d.thresholdAmount >= 0
+          && d.thresholdAmount <= 1000000000000
+          && d.thresholdMonths is number
+          && d.thresholdMonths >= 0
+          && d.thresholdMonths <= 24
+          && d.windowMonths in [3, 6, 12]
+          && d.method in ['average', 'median']
+          && d.includeUnusual is bool
+          && d.projectionMonths is int
+          && d.projectionMonths >= 1
+          && d.projectionMonths <= 24
+          && d.updatedAtMs is number;
       }
 
       // SPENDLY-88. Metadata for a file stored in the private `spendly-files`
@@ -385,6 +428,14 @@ service cloud.firestore {
       match /accountNotes/{id} {
         allow read, delete: if isOwner(uid);
         allow create, update: if isOwner(uid) && accountNoteWellFormed();
+      }
+      match /runwayOverrides/{id} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && runwayOverrideWellFormed(id);
+      }
+      match /runwaySettings/{id} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && runwaySettingsWellFormed(id);
       }
       match /accountTransfers/{id} {
         allow read, delete: if isOwner(uid);

@@ -26,6 +26,7 @@ import { AccountDocumentModal } from "@/components/accounts/AccountDocumentModal
 import { AccountSectionTabs } from "@/components/accounts/AccountSectionTabs";
 import { ActionMenuSheet, type ActionMenuItem } from "@/components/common/ActionMenuSheet";
 import { AccountHealthCard } from "@/components/accounts/AccountHealthCard";
+import { AccountRunwayRow } from "@/components/runway/AccountRunwayRow";
 import { SpendingInsightsCard } from "@/components/accounts/SpendingInsightsCard";
 import { BalanceTrendCard } from "@/components/accounts/BalanceTrendCard";
 import { ActivityStatisticsCard } from "@/components/accounts/ActivityStatisticsCard";
@@ -1346,6 +1347,17 @@ export default function AccountDetailScreen() {
             onNewer={() => onSelectAdjacentMonth(-1)}
             onDrillDown={onToggleMonthDrillDown}
             isDrilledDown={isMonthDrilledDown}
+          />
+        ) : null}
+
+        {!isCreditCard ? (
+          <AccountRunwayRow
+            account={account}
+            typeName={typeName}
+            balance={bankBalance}
+            asOf={today}
+            displayCurrency={currency}
+            onOpen={() => router.push("/runway/sources" as Href)}
           />
         ) : null}
 
