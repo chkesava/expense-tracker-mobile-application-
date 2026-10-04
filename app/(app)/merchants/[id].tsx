@@ -15,6 +15,7 @@ import { logError } from "@/lib/errors";
 import { useAuth } from "@/providers/AuthProvider";
 import { listMerchantOverrides } from "@/services/merchant/merchantOverrideStore";
 import { buildMerchantLedgerItems, buildMerchantProfiles, merchantProfileId } from "@/shared/utils/merchantGrouping";
+import { buildMerchantInsights } from "@/shared/utils/merchantInsights";
 import { transactionHref } from "@/shared/utils/transactionRef";
 import { useTheme } from "@/theme/ThemeProvider";
 
@@ -44,6 +45,7 @@ export default function MerchantProfileScreen() {
   const cutoff = period === "all" ? "" : new Date(Date.now() - (period === "30d" ? 30 : 90) * 86400000).toISOString().slice(0, 10);
   const transactions = profile?.transactions.filter((transaction) => !cutoff || transaction.date >= cutoff) ?? [];
   const total = transactions.reduce((sum, transaction) => sum + (transaction.kind === "expense" ? transaction.amount : -transaction.amount), 0);
+  const insights = profile ? buildMerchantInsights(profile.transactions) : null;
 
   if (expensesLoading || incomesLoading) {
     return <PageShell><ActivityIndicator color={theme.colors.primary} style={{ marginTop: 80 }} /></PageShell>;
@@ -71,6 +73,7 @@ export default function MerchantProfileScreen() {
         <Card title="Spend trend">
           {profile.spendTrend.slice(-12).map((point) => <View key={point.date} style={styles.trend}><Text style={{ color: theme.colors.mutedForeground }}>{point.date}</Text><Amount value={point.amount} currency={currency} style={{ color: theme.colors.foreground }} /></View>)}
         </Card>
+        {insights ? <Card title="Observed patterns"><View style={{ gap: 8 }}>{insights.observations.map((observation) => <Text key={observation} style={{ color: theme.colors.foreground }}>• {observation}</Text>)}</View></Card> : null}
       </ScrollView>
     </PageShell>
   );

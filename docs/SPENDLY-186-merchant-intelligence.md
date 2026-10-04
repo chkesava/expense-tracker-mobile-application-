@@ -19,7 +19,7 @@
 | 4 | SPENDLY-190 | Merchant-aware categories | 189 | **In Progress.** Branch `feature/SPENDLY-190-merchant-categories` |
 | 5 | SPENDLY-191 | Corrections and personalization | 189 | **In Progress.** Branch `feature/SPENDLY-191-merchant-corrections` |
 | 6 | SPENDLY-192 | Merchant profile, grouping and search | 189 | **In Progress.** Branch `feature/SPENDLY-192-merchant-profile` |
-| 7 | SPENDLY-193 | Merchant patterns and recurring | 190, 192 | Not started |
+| 7 | SPENDLY-193 | Merchant patterns and recurring | 190, 192 | **In Progress.** Branch `feature/SPENDLY-193-merchant-patterns` |
 | 8 | SPENDLY-194 | Privacy, performance, accuracy QA and rollout | 191–193 | Last |
 
 ## Decisions (2026-10-03)
