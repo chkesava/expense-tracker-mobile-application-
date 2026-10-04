@@ -16,7 +16,7 @@
 |---|---|---|---|---|
 | 1 | [SPENDLY-196](https://kesavach.atlassian.net/browse/SPENDLY-196) | Scenario model and baseline snapshot | None | Implemented; merge approval pending |
 | 2 | [SPENDLY-197](https://kesavach.atlassian.net/browse/SPENDLY-197) | Core financial projection engine | 196 | Implemented; merge approval pending |
-| 3 | [SPENDLY-198](https://kesavach.atlassian.net/browse/SPENDLY-198) | Income, expense and purchase scenarios | 197 | To Do |
+| 3 | [SPENDLY-198](https://kesavach.atlassian.net/browse/SPENDLY-198) | Income, expense and purchase scenarios | 197 | Implemented; merge approval pending |
 | 4 | [SPENDLY-199](https://kesavach.atlassian.net/browse/SPENDLY-199) | Debt, EMI and borrowing simulation | 197 | To Do |
 | 5 | [SPENDLY-200](https://kesavach.atlassian.net/browse/SPENDLY-200) | Savings, goals and investment scenarios | 197 | To Do |
 | 6 | [SPENDLY-201](https://kesavach.atlassian.net/browse/SPENDLY-201) | Baseline/scenario comparison and timeline | 198, 199, 200 | To Do |
