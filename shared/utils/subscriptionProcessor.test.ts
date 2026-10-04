@@ -90,6 +90,75 @@ describe("subscriptionProcessor utilities", () => {
       expect(result.isCompleted).toBe(true);
     });
 
+    // SPENDLY-386: EMI must NOT be completed before billing day in final month
+    it("EMI in final month, before billing day → isDue=false, isCompleted=false", () => {
+      const emi: Subscription = {
+        ...mockEmi,
+        endMonth: 10,
+        endYear: 2026,
+        dayOfMonth: 5,
+        lastProcessed: "2026-09",
+      };
+      // Oct 4 — one day before billing day 5
+      const result = evaluateSubscriptionDue(emi, new Date(2026, 9, 4, 12, 0, 0));
+      expect(result.isDue).toBe(false);
+      expect(result.isCompleted).toBe(false);
+    });
+
+    it("EMI in final month, on billing day → isDue=true, isCompleted=true", () => {
+      const emi: Subscription = {
+        ...mockEmi,
+        endMonth: 10,
+        endYear: 2026,
+        dayOfMonth: 5,
+        lastProcessed: "2026-09",
+      };
+      // Oct 5 — billing day
+      const result = evaluateSubscriptionDue(emi, new Date(2026, 9, 5, 12, 0, 0));
+      expect(result.isDue).toBe(true);
+      expect(result.isCompleted).toBe(true);
+    });
+
+    it("EMI in final month, after billing day → isDue=true, isCompleted=true", () => {
+      const emi: Subscription = {
+        ...mockEmi,
+        endMonth: 10,
+        endYear: 2026,
+        dayOfMonth: 5,
+        lastProcessed: "2026-09",
+      };
+      // Oct 15 — well past billing day
+      const result = evaluateSubscriptionDue(emi, new Date(2026, 9, 15, 12, 0, 0));
+      expect(result.isDue).toBe(true);
+      expect(result.isCompleted).toBe(true);
+    });
+
+    it("EMI billing day 7, final month Oct, evaluated Oct 4 → not completed", () => {
+      const emi: Subscription = {
+        ...mockEmi,
+        endMonth: 10,
+        endYear: 2026,
+        dayOfMonth: 7,
+        lastProcessed: "2026-09",
+      };
+      const result = evaluateSubscriptionDue(emi, new Date(2026, 9, 4, 12, 0, 0));
+      expect(result.isDue).toBe(false);
+      expect(result.isCompleted).toBe(false);
+    });
+
+    it("EMI billing day 7, final month Oct, evaluated Oct 7 → completed", () => {
+      const emi: Subscription = {
+        ...mockEmi,
+        endMonth: 10,
+        endYear: 2026,
+        dayOfMonth: 7,
+        lastProcessed: "2026-09",
+      };
+      const result = evaluateSubscriptionDue(emi, new Date(2026, 9, 7, 12, 0, 0));
+      expect(result.isDue).toBe(true);
+      expect(result.isCompleted).toBe(true);
+    });
+
     it("clamps billing day to days in month (e.g. day 31 on 30-day month)", () => {
       const subEndMonth: Subscription = {
         ...mockSub,
@@ -214,6 +283,57 @@ describe("subscriptionProcessor utilities", () => {
       expect(updated[0]?.isCompleted).toBe(true);
       expect(updated[0]?.isActive).toBe(false);
       expect(planDueSubscriptionPosts(updated, evalDate)).toHaveLength(0);
+    });
+
+    // SPENDLY-386: plan-level regression tests
+    it("does NOT plan completion for EMI before billing day in final month", () => {
+      const emi: Subscription = {
+        ...mockEmi,
+        endMonth: 10,
+        endYear: 2026,
+        dayOfMonth: 5,
+        lastProcessed: "2026-09",
+      };
+      // Oct 4 — before billing day
+      const plan = planDueSubscriptionPosts([emi], new Date(2026, 9, 4, 12, 0, 0));
+      expect(plan).toHaveLength(0); // Not due yet, nothing planned
+    });
+
+    it("plans completion for EMI on billing day in final month", () => {
+      const emi: Subscription = {
+        ...mockEmi,
+        endMonth: 10,
+        endYear: 2026,
+        dayOfMonth: 5,
+        lastProcessed: "2026-09",
+      };
+      // Oct 5 — billing day
+      const plan = planDueSubscriptionPosts([emi], new Date(2026, 9, 5, 12, 0, 0));
+      expect(plan).toHaveLength(1);
+      expect(plan[0]?.markCompleted).toBe(true);
+
+      const updated = applyPostPlanToSubscriptions([emi], plan);
+      expect(updated[0]?.isCompleted).toBe(true);
+      expect(updated[0]?.isActive).toBe(false);
+
+      // Replay is empty (idempotency)
+      const replay = planDueSubscriptionPosts(updated, new Date(2026, 9, 5, 12, 0, 0));
+      expect(replay).toHaveLength(0);
+    });
+
+    it("EMI past final term produces no charge", () => {
+      const emi: Subscription = {
+        ...mockEmi,
+        endMonth: 10,
+        endYear: 2026,
+        dayOfMonth: 5,
+        lastProcessed: "2026-10",
+        isCompleted: true,
+        isActive: false,
+      };
+      // Nov 5 — past end term
+      const plan = planDueSubscriptionPosts([emi], new Date(2026, 10, 5, 12, 0, 0));
+      expect(plan).toHaveLength(0);
     });
 
     it("uses a stable expense id so two devices post the same document", () => {

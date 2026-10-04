@@ -144,7 +144,7 @@ export function evaluateSubscriptionDue(
 
   return {
     isDue,
-    isCompleted: willCompleteAfterThis,
+    isCompleted: willCompleteAfterThis && isDue,
     targetDateStr,
     monthKey,
   };
