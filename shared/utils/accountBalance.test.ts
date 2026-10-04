@@ -1013,3 +1013,46 @@ describe("computeOutstandingCredit", () => {
     expect(result.totalOutstanding).toBe(18464);
   });
 });
+
+/**
+ * SPENDLY-385: correcting a bill payment's source is an in-place edit of
+ * `fromAccountId`. Bank balances are derived from payment rows, so the edit
+ * alone must move the debit — no compensating row, no double count.
+ */
+describe("bill payment source correction", () => {
+  const bank = (id: string): Account => ({
+    id,
+    name: id.toUpperCase(),
+    typeId: "bank-type",
+    openingBalance: 10000,
+    balanceInitialized: true,
+    balanceAsOfDate: "2026-09-01",
+  });
+  const hdfc = bank("hdfc");
+  const sbi = bank("sbi");
+  const recorded: AccountPayment = {
+    id: "pay-1",
+    fromAccountId: "hdfc",
+    toAccountId: "card-1",
+    amount: 730,
+    date: "2026-09-17",
+    sourceType: "account",
+    creditCardBillId: "bill-1",
+    billAppliedAmount: 730,
+  };
+  const balances = (payments: AccountPayment[]) => [
+    computeBankBalance(hdfc, [], [], payments, [], [], [], [], [], [], "2026-10-01"),
+    computeBankBalance(sbi, [], [], payments, [], [], [], [], [], [], "2026-10-01"),
+  ];
+
+  it("moves the debit from the wrong bank to the right one", () => {
+    expect(balances([recorded])).toEqual([9270, 10000]);
+    expect(balances([{ ...recorded, fromAccountId: "sbi" }])).toEqual([10000, 9270]);
+  });
+
+  it("debits no tracked bank once the payment is external", () => {
+    expect(
+      balances([{ ...recorded, fromAccountId: "external", sourceType: "external" }])
+    ).toEqual([10000, 10000]);
+  });
+});

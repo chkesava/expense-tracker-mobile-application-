@@ -57,6 +57,18 @@ const FIELD_LABELS: Array<{
 ];
 
 /**
+ * Bill payment corrections (SPENDLY-385) reuse the snapshot shape, with
+ * `accountId` holding the paying account. Month is derived from the date, so
+ * listing it as well would report one change twice.
+ */
+const PAYMENT_FIELD_LABELS: typeof FIELD_LABELS = [
+  { field: "accountId", label: "Paid from" },
+  { field: "amount", label: "Amount", isMoney: true },
+  { field: "date", label: "Date" },
+  { field: "note", label: "Note" },
+];
+
+/**
  * Normalize a snapshot value for comparison and display.
  *
  * `null` and `""` both mean "not set" on these records — `accountId` is
@@ -86,12 +98,14 @@ function normalizeValue(
  */
 export function diffLedgerSnapshots(
   before: LedgerEventSnapshot,
-  after: LedgerEventSnapshot | null
+  after: LedgerEventSnapshot | null,
+  kind?: LedgerEvent["kind"]
 ): LedgerFieldChange[] {
   if (!after) return [];
 
+  const labels = kind === "payment" ? PAYMENT_FIELD_LABELS : FIELD_LABELS;
   const changes: LedgerFieldChange[] = [];
-  for (const { field, label, isMoney } of FIELD_LABELS) {
+  for (const { field, label, isMoney } of labels) {
     const beforeValue = normalizeValue(before[field]);
     const afterValue = normalizeValue(after[field]);
     if (beforeValue === afterValue) continue;
@@ -108,7 +122,7 @@ export function diffLedgerSnapshots(
 
 /** Convenience: the changes carried by one event. */
 export function diffLedgerEvent(event: LedgerEvent): LedgerFieldChange[] {
-  return diffLedgerSnapshots(event.before, event.after);
+  return diffLedgerSnapshots(event.before, event.after, event.kind);
 }
 
 export type LedgerEventSummaryTone = "removed" | "restored" | "edited";

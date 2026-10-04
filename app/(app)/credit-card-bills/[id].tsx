@@ -1,8 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ArrowLeft } from "lucide-react-native";
+import { ArrowLeft, Pencil } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
 import { MarkBillPaidModal } from "@/components/creditCardBills/MarkBillPaidModal";
@@ -22,14 +22,18 @@ import { toast } from "@/lib/toast";
 import { formatAmount } from "@/shared/utils/formatCurrency";
 import { useSettings } from "@/providers/SettingsProvider";
 import { formatCardLabel } from "@/services/creditCardBills/billNotificationCopy";
-import { isCashbackPayment } from "@/shared/types/expense";
+import { isCashbackPayment, type AccountPayment } from "@/shared/types/expense";
 import { roundMoney } from "@/shared/utils/money";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useSurfaces } from "@/theme/surfaces";
 import { haptic } from "@/lib/haptics";
 
 export default function CreditCardBillDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, editPayment } = useLocalSearchParams<{
+    id: string;
+    /** SPENDLY-385: open this payment's editor on arrival. */
+    editPayment?: string;
+  }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const listPaddingBottom = usePageListBottomPadding();
@@ -51,6 +55,7 @@ export default function CreditCardBillDetailScreen() {
   const [markPaidOpen, setMarkPaidOpen] = useState(false);
   const [recalculating, setRecalculating] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [editingPayment, setEditingPayment] = useState<AccountPayment | null>(null);
 
   const bill = useMemo(() => bills.find((b) => b.id === id), [bills, id]);
   const account = useMemo(
@@ -81,6 +86,43 @@ export default function CreditCardBillDetailScreen() {
       )
     );
   }, [bill, payments]);
+
+  /**
+   * Bill payments recorded against this statement that can still be
+   * corrected (SPENDLY-385). Cashback is a provider credit with its own flow,
+   * and a bill marked paid "in history only" has no payment row at all — in
+   * both cases there is nothing here to edit.
+   */
+  const editablePayments = useMemo(() => {
+    if (!bill) return [];
+    const linked = new Set((bill.paymentIds || []).filter(Boolean));
+    return payments
+      .filter(
+        (payment) =>
+          (linked.has(payment.id) || payment.creditCardBillId === bill.id) &&
+          !payment.voidedAt &&
+          !isCashbackPayment(payment)
+      )
+      .sort((a, b) => b.date.localeCompare(a.date));
+  }, [bill, payments]);
+
+  // Open the deep-linked payment once. The param stays on the route, so
+  // without this the editor would reopen every time the payment list updates.
+  const deepLinkHandled = useRef(false);
+  useEffect(() => {
+    if (!editPayment || deepLinkHandled.current) return;
+    const target = editablePayments.find((payment) => payment.id === editPayment);
+    if (target) {
+      deepLinkHandled.current = true;
+      setEditingPayment(target);
+    }
+  }, [editPayment, editablePayments]);
+
+  const sourceLabel = (payment: AccountPayment) =>
+    payment.sourceType === "external" || payment.fromAccountId === "external"
+      ? "Already paid / External"
+      : accounts.find((a) => a.id === payment.fromAccountId)?.name ||
+        "Removed account";
 
   /**
    * SPENDLY-99: null unless this is a settled auto statement whose cycle now
@@ -250,6 +292,65 @@ export default function CreditCardBillDetailScreen() {
             </View>
           </Card>
 
+          {editablePayments.length > 0 ? (
+            <Card>
+              <View style={{ gap: 4 }}>
+                <Text
+                  style={{
+                    color: theme.colors.foreground,
+                    fontWeight: "700",
+                    fontSize: theme.typography.md,
+                    marginBottom: 4,
+                  }}
+                >
+                  {editablePayments.length === 1 ? "Payment" : "Payments"}
+                </Text>
+                {editablePayments.map((payment, index) => (
+                  <View
+                    key={payment.id}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 12,
+                      paddingVertical: 8,
+                      borderTopWidth: index === 0 ? 0 : 1,
+                      borderTopColor: surfaces.divider,
+                    }}
+                  >
+                    <View style={{ flex: 1, gap: 2 }}>
+                      <Text
+                        style={{ color: theme.colors.foreground, fontWeight: "600" }}
+                        numberOfLines={1}
+                      >
+                        {sourceLabel(payment)}
+                      </Text>
+                      <Text
+                        style={{
+                          color: theme.colors.mutedForeground,
+                          fontSize: theme.typography.xs,
+                        }}
+                      >
+                        {payment.date}
+                      </Text>
+                    </View>
+                    <Amount value={payment.amount} />
+                    <Button
+                      variant="tonal"
+                      size="icon"
+                      onPress={() => {
+                        haptic.selection().catch(() => undefined);
+                        setEditingPayment(payment);
+                      }}
+                      accessibilityLabel={`Edit payment from ${sourceLabel(payment)}`}
+                    >
+                      <Pencil size={16} color={theme.colors.primary} />
+                    </Button>
+                  </View>
+                ))}
+              </View>
+            </Card>
+          ) : null}
+
           <Button
             variant="outline"
             size="lg"
@@ -342,6 +443,15 @@ export default function CreditCardBillDetailScreen() {
             onClose={() => setMarkPaidOpen(false)}
             bill={bill}
           />
+          {editingPayment ? (
+            <PayCreditBillModal
+              isOpen
+              onClose={() => setEditingPayment(null)}
+              accounts={accounts}
+              accountTypes={accountTypes}
+              initialPayment={editingPayment}
+            />
+          ) : null}
         </>
       ) : null}
     </View>

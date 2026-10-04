@@ -11,16 +11,18 @@ import { Chip } from "@/components/ui/Chip";
 import { useAccountPayments } from "@/hooks/useAccountPayments";
 import { useCreditCardBills } from "@/hooks/useCreditCardBills";
 import { useExpenses } from "@/hooks/useExpenses";
+import { appDialog } from "@/lib/appDialog";
 import { logError } from "@/lib/errors";
 import { newId } from "@/lib/id";
 import { toast } from "@/lib/toast";
 import { useSettings } from "@/providers/SettingsProvider";
 import { OPEN_BILL_STATUSES } from "@/shared/types/creditCardBill";
-import type { Account, AccountType } from "@/shared/types/expense";
+import type { Account, AccountPayment, AccountType } from "@/shared/types/expense";
 import { computeOutstandingCredit } from "@/shared/utils/accountBalance";
 import { getAccountKind } from "@/shared/utils/accountKind";
 import { earliestOpenCreditCardBill } from "@/shared/utils/creditCardBillStatus";
 import { formatDateKey, todayDateKey } from "@/shared/utils/dates";
+import { formatAmount } from "@/shared/utils/formatCurrency";
 import { roundMoney } from "@/shared/utils/money";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useSurfaces } from "@/theme/surfaces";
@@ -42,6 +44,12 @@ export interface PayCreditBillModalProps {
     paymentDate: string,
     paymentId?: string
   ) => void | Promise<void>;
+  /**
+   * SPENDLY-385: edit this recorded payment instead of recording a new one.
+   * The card stays the payment's own card; source, amount, date and note can
+   * be corrected.
+   */
+  initialPayment?: AccountPayment;
 }
 
 export function PayCreditBillModal({
@@ -53,15 +61,18 @@ export function PayCreditBillModal({
   defaultAmount,
   applyToBillId,
   onPaid,
+  initialPayment,
 }: PayCreditBillModalProps) {
+  const isEdit = Boolean(initialPayment);
   const { theme } = useTheme();
   const surfaces = useSurfaces();
   const displayCurrency = useDisplayCurrency();
   const { settings } = useSettings();
   const { payments } = useAccountPayments();
   const { expenses } = useExpenses();
-  const { bills, recordBillPayment } = useCreditCardBills();
+  const { bills, recordBillPayment, editBillPayment } = useCreditCardBills();
   const paymentIdRef = useRef(newId());
+  const savingRef = useRef(false);
 
   const typeMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -72,10 +83,11 @@ export function PayCreditBillModal({
   // Split into credit cards and payment source accounts
   const creditCards = useMemo(() => {
     return accounts.filter((a) => {
+      if (initialPayment) return a.id === initialPayment.toAccountId;
       const typeName = typeMap.get(a.typeId) || "";
       return getAccountKind(typeName) === "credit";
     });
-  }, [accounts, typeMap]);
+  }, [accounts, typeMap, initialPayment]);
 
   const bankAccounts = useMemo(() => {
     return accounts.filter((a) => {
@@ -113,15 +125,35 @@ export function PayCreditBillModal({
 
   // Sync default credit card
   useEffect(() => {
-    if (defaultCreditCardId) {
+    if (initialPayment) {
+      setToCardId(initialPayment.toAccountId);
+    } else if (defaultCreditCardId) {
       setToCardId(defaultCreditCardId);
     } else if (creditCards[0]?.id && !toCardId) {
       setToCardId(creditCards[0].id);
     }
-  }, [defaultCreditCardId, creditCards, toCardId]);
+  }, [initialPayment, defaultCreditCardId, creditCards, toCardId]);
+
+  // Edit mode: load the recorded payment once per open. Kept apart from the
+  // create prefill so live ledger updates can't overwrite what the user typed.
+  useEffect(() => {
+    if (!isOpen || !initialPayment) return;
+    const external =
+      initialPayment.sourceType === "external" ||
+      initialPayment.fromAccountId === "external";
+    setToCardId(initialPayment.toAccountId);
+    setIsExternal(external);
+    setFromAccountId(
+      external ? bankAccounts[0]?.id || "external" : initialPayment.fromAccountId
+    );
+    setAmount(String(initialPayment.amount));
+    setDate(initialPayment.date);
+    setNote(initialPayment.note ?? "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reload only when the form opens on a payment
+  }, [isOpen, initialPayment?.id]);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || initialPayment) return;
     paymentIdRef.current = newId();
     if (defaultAmount != null && defaultAmount > 0) {
       setAmount(String(defaultAmount));
@@ -131,7 +163,7 @@ export function PayCreditBillModal({
     if (ledgerRemaining > 0) {
       setAmount((prev) => (prev.trim() ? prev : String(ledgerRemaining)));
     }
-  }, [isOpen, defaultAmount, usageInfo]);
+  }, [isOpen, initialPayment, defaultAmount, usageInfo]);
 
   const openBill = useMemo(() => {
     if (applyToBillId) {
@@ -176,7 +208,11 @@ export function PayCreditBillModal({
     // Paying more than the card owes leaves an advance no statement can absorb,
     // which is confusing to read and easy to create by accident. Cap the payment
     // at what is actually owed and say what that is.
-    const owed = usageInfo?.totalOutstanding ?? 0;
+    // Editing: the outstanding figure already has this payment taken off, so
+    // what it may cover is that plus the payment itself.
+    const owed = roundMoney(
+      (usageInfo?.totalOutstanding ?? 0) + (initialPayment?.amount ?? 0)
+    );
     if (owed <= 0) {
       toast.error(
         `Nothing is owed on ${selectedCard?.name || "this card"} right now`
@@ -187,6 +223,11 @@ export function PayCreditBillModal({
       toast.error(
         `That is more than the ${displayCurrency} ${owed.toLocaleString()} owed on this card`
       );
+      return;
+    }
+
+    if (initialPayment) {
+      confirmEdit(initialPayment, parsedAmount);
       return;
     }
 
@@ -245,8 +286,76 @@ export function PayCreditBillModal({
     }
   };
 
+  const accountName = (id: string) =>
+    accounts.find((a) => a.id === id)?.name || "the old account";
+
+  /**
+   * Moving a payment between tracked accounts changes two balances, so say
+   * which and by how much before doing it. Edits that leave the source alone
+   * go straight through.
+   */
+  const confirmEdit = (payment: AccountPayment, parsedAmount: number) => {
+    const wasExternal =
+      payment.sourceType === "external" || payment.fromAccountId === "external";
+    const nowExternal = isExternal || fromAccountId === "external";
+    const sourceChanged =
+      wasExternal !== nowExternal ||
+      (!nowExternal && fromAccountId !== payment.fromAccountId);
+    if (!sourceChanged) {
+      void runEdit(payment, parsedAmount);
+      return;
+    }
+    const fmt = (value: number) => formatAmount(value, displayCurrency);
+    const lines: string[] = [];
+    if (!wasExternal) {
+      lines.push(`${accountName(payment.fromAccountId)} gets ${fmt(payment.amount)} back.`);
+    }
+    if (!nowExternal) {
+      lines.push(`${accountName(fromAccountId)} is debited ${fmt(parsedAmount)}.`);
+    } else {
+      lines.push("No tracked account will carry this payment.");
+    }
+    lines.push("It stays one payment against the same bill.");
+    appDialog.show({
+      title: "Change the paying account?",
+      message: lines.join("\n"),
+      buttons: [
+        { text: "Cancel", style: "cancel" },
+        { text: "Change", onPress: () => void runEdit(payment, parsedAmount) },
+      ],
+    });
+  };
+
+  const runEdit = async (payment: AccountPayment, parsedAmount: number) => {
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
+    try {
+      const external = isExternal || fromAccountId === "external";
+      const ok = await editBillPayment(
+        payment.id,
+        {
+          fromAccountId: external ? "external" : fromAccountId,
+          sourceType: external ? "external" : "account",
+          amount: parsedAmount,
+          date: date.trim(),
+          note: note.trim(),
+        },
+        payment.updatedAt
+      );
+      if (ok) onClose();
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
+  };
+
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Pay Credit Card Bill">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={isEdit ? "Edit Bill Payment" : "Pay Credit Card Bill"}
+    >
       <ScrollView
         contentContainerStyle={{ gap: 16, paddingBottom: 20 }}
         keyboardShouldPersistTaps="handled"
@@ -273,7 +382,9 @@ export function PayCreditBillModal({
                   key={c.id}
                   label={c.name}
                   selected={isSelected}
-                  onPress={() => setToCardId(c.id)}
+                  onPress={() => {
+                    if (!isEdit) setToCardId(c.id);
+                  }}
                   icon={(color) => <CreditCard size={14} color={isSelected ? color : theme.colors.mutedForeground} />}
                 />
               );
@@ -332,7 +443,7 @@ export function PayCreditBillModal({
               </View>
             </View>
 
-            {usageInfo.outstanding > 0 ? (
+            {usageInfo.outstanding > 0 && !isEdit ? (
               <Button
                 variant="primary"
                 size="sm"
@@ -486,7 +597,13 @@ export function PayCreditBillModal({
           size="lg"
           style={{ marginTop: 8 }}
         >
-          {saving ? "Processing..." : "Record Bill Payment"}
+          {saving
+            ? isEdit
+              ? "Saving…"
+              : "Processing..."
+            : isEdit
+              ? "Save changes"
+              : "Record Bill Payment"}
         </Button>
       </ScrollView>
     </Modal>

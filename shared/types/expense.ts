@@ -183,6 +183,12 @@ export interface AccountPayment {
   voidReason?: string;
   /** Statement this payment stamped (SPENDLY-30). */
   creditCardBillId?: string;
+  /**
+   * How much of `amount` this payment added to its bill's `amountPaid`
+   * (SPENDLY-385). Can differ from `amount` — the stamp is capped at what the
+   * statement still owed. Absent on payments recorded before it existed.
+   */
+  billAppliedAmount?: number;
   createdAt?: unknown;
   updatedAt?: unknown;
 }

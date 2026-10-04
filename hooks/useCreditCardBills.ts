@@ -11,6 +11,7 @@ export function useCreditCardBills() {
     updateBill: ctx.updateBill,
     applyPaymentToBill: ctx.applyPaymentToBill,
     recordBillPayment: ctx.recordBillPayment,
+    editBillPayment: ctx.editBillPayment,
     markBillPaid: ctx.markBillPaid,
     cancelBill: ctx.cancelBill,
     /** SPENDLY-99: settled-statement correction. Preview is pure. */
