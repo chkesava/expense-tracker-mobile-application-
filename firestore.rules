@@ -31,11 +31,13 @@ service cloud.firestore {
     //   categorizationRules, categoryBudgets, epfContributionEvents,
     //   epfContributions, epfEstablishments, epfProfile,
     //   epfInterestEntries, epfReconciliations, epfTransferEvents,
-    //   epfTransfers, expenses, financialGoals, focus,
+    //   decisionEvents, decisions, epfTransfers, expenses, feeReviews,
+    //   feeSignalDismissals, financialGoals, focus,
     //   holdings, incomes, investments, meta, portfolioOrders,
     //   portfolioSettings, portfolioSnapshots, portfolioTransactions,
     //   receivableRepayments, receivables, runwayOverrides, runwaySettings, spaces,
-    //   stats, subscriptions, recurringDismissals, trips, watchlist
+    //   stats, subscriptions, recurringDismissals, trips, watchlist,
+    //   merchantOverrides
     //
     // The recursive match keeps a new collection from silently becoming
     // unreadable the moment it ships, while still confining everything to the
@@ -363,6 +365,36 @@ service cloud.firestore {
           && optionalBoundedNonNeg(d, 'targetPrice');
       }
 
+      // SPENDLY-191. Corrections are private user preferences, never ledger
+      // fields. The document id is deterministic (kind + refKey), so repeated
+      // corrections replace one preference instead of creating duplicates.
+      function merchantOverrideWellFormed() {
+        let d = request.resource.data;
+        let hasMerchant = d.keys().hasAny(['merchantId']);
+        let hasCustom = d.keys().hasAny(['customName']);
+        let rejected = d.keys().hasAny(['rejected']) && d.rejected == true;
+        return d.keys().hasOnly([
+            'kind', 'refKey', 'merchantId', 'customName', 'rejected',
+            'category', 'subcategory', 'createdAtMs', 'updatedAtMs'
+          ])
+          && d.kind in ['transaction', 'alias']
+          && d.refKey is string && d.refKey.size() > 0 && d.refKey.size() <= 200
+          && (!hasMerchant || (d.merchantId is string && d.merchantId.size() > 0 && d.merchantId.size() <= 100))
+          && (!hasCustom || (d.customName is string && d.customName.size() > 0 && d.customName.size() <= 60))
+          && (!d.keys().hasAny(['rejected']) || d.rejected is bool)
+          && (!d.keys().hasAny(['category']) || (d.category is string && d.category.size() <= 80))
+          && (!d.keys().hasAny(['subcategory']) || (d.subcategory is string && d.subcategory.size() <= 80))
+          && (!d.keys().hasAny(['createdAtMs']) || (d.createdAtMs is number && d.createdAtMs >= 0 && d.createdAtMs < 10000000000000))
+          && (!d.keys().hasAny(['updatedAtMs']) || (d.updatedAtMs is number && d.updatedAtMs >= 0 && d.updatedAtMs < 10000000000000))
+          && ((rejected && !hasMerchant && !hasCustom) || (!rejected && hasMerchant != hasCustom));
+      }
+
+      function merchantOverrideUpdateStable() {
+        return request.resource.data.kind == resource.data.kind
+          && request.resource.data.refKey == resource.data.refKey
+          && request.resource.data.createdAtMs == resource.data.createdAtMs;
+      }
+
       match /expenses/{id} {
         allow read, delete: if isOwner(uid);
         allow create, update: if isOwner(uid) && personalMoneyWellFormed();
@@ -488,6 +520,236 @@ service cloud.firestore {
       match /portfolioOrders/{id} {
         allow read, delete: if isOwner(uid);
         allow create, update: if isOwner(uid) && portfolioOrderWellFormed();
+      }
+
+      // SPENDLY-362. Money Decisions (epic SPENDLY-361): a record of
+      // reasoning, never money. `hasOnly` keeps ledger-shaped `amount` /
+      // `date` fields out, so no balance or spending figure can be read from
+      // a decision; linked records are references only.
+      //
+      // `decisionSnapshot` is the reasoning frozen when the user decided. It
+      // is pinned once present, so later edits can never rewrite history.
+      // Lists and strings are capped so a document stays well under the
+      // Firestore size limit. Enums and caps mirror shared/types/decision.ts
+      // (shared/utils/decisionModel.rules.contract.test.ts).
+      function decisionCategories() {
+        return ['purchase', 'loan_debt', 'savings', 'investment', 'insurance',
+                'subscription', 'income', 'major_recurring', 'goal', 'other'];
+      }
+
+      function decisionStatuses() {
+        return ['draft', 'considering', 'decided', 'tracking', 'reviewed',
+                'closed', 'archived'];
+      }
+
+      function optionalText(d, key, max) {
+        return !d.keys().hasAny([key]) || (d.get(key, '') is string && d.get(key, '').size() <= max);
+      }
+
+      function optionalMap(d, key) {
+        return !d.keys().hasAny([key]) || d.get(key, {}) is map;
+      }
+
+      function optionalNumber(d, key) {
+        return !d.keys().hasAny([key]) || d.get(key, 0) is number;
+      }
+
+      function decisionWellFormed() {
+        let d = request.resource.data;
+        return d.keys().hasOnly([
+            'title', 'category', 'status', 'archivedFromStatus', 'templateId',
+            'templateVersion', 'context', 'alternatives',
+            'selectedAlternativeId', 'assumptions', 'rationale', 'confidence',
+            'expected', 'outcome', 'links', 'commitments', 'reviewDate',
+            'decisionSnapshot', 'revision', 'createdAtMs', 'updatedAtMs',
+            'decidedAtMs', 'closedAtMs'])
+          && d.title is string && d.title.size() >= 1 && d.title.size() <= 140
+          && d.category in decisionCategories()
+          && d.status in decisionStatuses()
+          && (!d.keys().hasAny(['archivedFromStatus']) || d.archivedFromStatus in decisionStatuses())
+          && optionalText(d, 'templateId', 40)
+          && (!d.keys().hasAny(['templateVersion']) || d.templateVersion is int)
+          && d.context is map
+          && d.context.keys().hasOnly(['situation', 'goal', 'constraints'])
+          && d.context.constraints is list && d.context.constraints.size() <= 20
+          && d.alternatives is list && d.alternatives.size() <= 20
+          && optionalText(d, 'selectedAlternativeId', 40)
+          && d.assumptions is list && d.assumptions.size() <= 30
+          && optionalText(d, 'rationale', 2000)
+          && (!d.keys().hasAny(['confidence'])
+              || (d.confidence is int && d.confidence >= 1 && d.confidence <= 5))
+          && optionalMap(d, 'expected')
+          && optionalMap(d, 'outcome')
+          && d.links is list && d.links.size() <= 30
+          && d.commitments is list && d.commitments.size() <= 30
+          && optionalYmd(d, 'reviewDate')
+          && optionalMap(d, 'decisionSnapshot')
+          && d.revision is int && d.revision >= 1
+          && d.createdAtMs is number
+          && d.updatedAtMs is number
+          && optionalNumber(d, 'decidedAtMs')
+          && optionalNumber(d, 'closedAtMs')
+          && (resource == null
+              || (d.revision > resource.data.revision
+                  && d.createdAtMs == resource.data.createdAtMs
+                  && (!resource.data.keys().hasAny(['decisionSnapshot'])
+                      || d.decisionSnapshot == resource.data.decisionSnapshot)));
+      }
+
+      match /decisions/{decisionId} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && decisionWellFormed();
+      }
+
+      // Append-only audit of decision changes: field names and statuses,
+      // never content. Mirrors ledgerEvents.
+      function decisionEventWellFormed() {
+        let d = request.resource.data;
+        return d.keys().hasOnly(['decisionId', 'action', 'fromStatus', 'toStatus',
+                                 'changedFields', 'revision', 'atMs'])
+          && d.decisionId is string && d.decisionId.size() > 0 && d.decisionId.size() <= 128
+          && d.action in ['create', 'update', 'status', 'delete']
+          && (!d.keys().hasAny(['fromStatus']) || d.fromStatus in decisionStatuses())
+          && (!d.keys().hasAny(['toStatus']) || d.toStatus in decisionStatuses())
+          && d.changedFields is list && d.changedFields.size() <= 40
+          && d.revision is int
+          && d.atMs is number;
+      }
+
+      match /decisionEvents/{eventId} {
+        allow read: if isOwner(uid);
+        allow create: if isOwner(uid) && decisionEventWellFormed();
+        allow update, delete: if false;
+      }
+
+      // SPENDLY-313. A user's decision about how one ledger transaction
+      // divides into principal / fee / tax / interest (shared/types/fee.ts).
+      //
+      // Classification, not money: `amount` is refused (hasOnly) so no
+      // balance or spending figure can ever be read from here, and the
+      // ledger row it names stays the only money record.
+      //
+      // The doc id must be `<sourceKind>__<sourceId>` of its own body, so a
+      // transaction can never carry two reviews — two reviews would be one
+      // fee counted twice. Source identity and createdAtMs are pinned on
+      // update and `revision` must advance, which is what correction history
+      // keys off. Enum lists mirror TS and are checked by
+      // shared/utils/feeModel.rules.contract.test.ts.
+      function feeComponentsWellFormed(c) {
+        return c is map
+          && c.keys().hasAll(['principal', 'fee', 'tax', 'interest'])
+          && c.keys().hasOnly(['principal', 'fee', 'tax', 'interest'])
+          && boundedNonNeg(c.principal)
+          && boundedNonNeg(c.fee)
+          && boundedNonNeg(c.tax)
+          && boundedNonNeg(c.interest);
+      }
+
+      function feeSourceKinds() {
+        return ['expense', 'income', 'payment', 'transfer', 'entry',
+                'borrowing', 'borrowingRepayment', 'receivable',
+                'receivableRepayment'];
+      }
+
+      function feeRoles() {
+        return ['fee', 'tax_on_fee', 'interest', 'reversal', 'refund', 'not_fee'];
+      }
+
+      function feeTypeIds() {
+        return ['atm_cash', 'bank_service', 'min_balance', 'debit_card',
+                'credit_card', 'late_payment', 'cash_advance',
+                'emi_conversion', 'forex', 'payment_upi', 'cheque',
+                'transfer_remittance', 'investment', 'loan', 'other'];
+      }
+
+      function feeRefId(value) {
+        return value is string && value.size() > 0 && value.size() <= 128;
+      }
+
+      function feeReviewWellFormed(reviewId) {
+        let d = request.resource.data;
+        return d.keys().hasOnly([
+            'sourceKind', 'sourceId', 'decision', 'role', 'feeType',
+            'subtype', 'components', 'linkedKind', 'linkedId',
+            'sourceAmount', 'inferredRole', 'inferredFeeType',
+            'inferredConfidence', 'engineVersion', 'note', 'revision',
+            'history', 'createdAtMs', 'updatedAtMs'])
+          && d.sourceKind in feeSourceKinds()
+          && feeRefId(d.sourceId)
+          && reviewId == d.sourceKind + '__' + d.sourceId
+          && d.decision in ['confirm', 'correct', 'not_fee']
+          && d.role in feeRoles()
+          && (!d.keys().hasAny(['feeType']) || d.feeType in feeTypeIds())
+          && (!d.keys().hasAny(['subtype'])
+              || (d.subtype is string && d.subtype.size() <= 40))
+          && feeComponentsWellFormed(d.components)
+          && (!d.keys().hasAny(['linkedKind']) || d.linkedKind in feeSourceKinds())
+          && (!d.keys().hasAny(['linkedId']) || feeRefId(d.linkedId))
+          && boundedNonNeg(d.sourceAmount)
+          && (!d.keys().hasAny(['inferredRole']) || d.inferredRole in feeRoles())
+          && (!d.keys().hasAny(['inferredFeeType']) || d.inferredFeeType in feeTypeIds())
+          && (!d.keys().hasAny(['inferredConfidence'])
+              || (d.inferredConfidence is number
+                  && d.inferredConfidence >= 0 && d.inferredConfidence <= 1))
+          && (!d.keys().hasAny(['engineVersion']) || d.engineVersion is int)
+          && (!d.keys().hasAny(['note']) || (d.note is string && d.note.size() <= 500))
+          // SPENDLY-315 correction history: earlier states, capped so the
+          // document can never grow without bound (FEE_REVIEW_HISTORY_LIMIT).
+          && (!d.keys().hasAny(['history'])
+              || (d.history is list && d.history.size() <= 20))
+          && d.revision is int
+          && d.revision >= 1
+          && d.createdAtMs is number
+          && d.updatedAtMs is number
+          && (resource == null
+              || (d.sourceKind == resource.data.sourceKind
+                  && d.sourceId == resource.data.sourceId
+                  && d.createdAtMs == resource.data.createdAtMs
+                  && d.revision > resource.data.revision));
+      }
+
+      match /feeReviews/{reviewId} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && feeReviewWellFormed(reviewId);
+      }
+
+      // SPENDLY-319. The user dismissed or resolved a fee signal (possible
+      // duplicate, unusual amount, ...). The doc id is the signal's own
+      // deterministic id (`<kind>--<record keys>`), so a dismissal sticks
+      // until the evidence changes and a new signal id appears. Metadata
+      // only: no money, and nothing here can reach a source transaction.
+      // Kinds mirror shared/utils/feeAnomalies.ts (contract test).
+      function feeSignalKinds() {
+        return ['possible_duplicate', 'unusual_amount', 'repeated_penalty',
+                'reversed', 'partly_reversed', 'unmatched_credit',
+                'needs_attention'];
+      }
+
+      function feeSignalDismissalWellFormed(signalId) {
+        let d = request.resource.data;
+        return d.keys().hasOnly(['kind', 'resolution', 'recordKeys', 'note', 'atMs'])
+          && d.kind in feeSignalKinds()
+          && signalId.size() <= 1400
+          && signalId.matches(d.kind + '--[A-Za-z0-9_-]+')
+          && d.resolution in ['dismissed', 'resolved']
+          && d.recordKeys is list
+          && d.recordKeys.size() >= 1
+          && d.recordKeys.size() <= 12
+          && (!d.keys().hasAny(['note']) || (d.note is string && d.note.size() <= 500))
+          && d.atMs is number;
+      }
+
+      match /feeSignalDismissals/{signalId} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && feeSignalDismissalWellFormed(signalId);
+      }
+
+      match /merchantOverrides/{id} {
+        allow read, delete: if isOwner(uid);
+        allow create: if isOwner(uid) && merchantOverrideWellFormed();
+        allow update: if isOwner(uid)
+          && merchantOverrideWellFormed()
+          && merchantOverrideUpdateStable();
       }
 
       // `collection` is only bound inside this match. Helpers declared on

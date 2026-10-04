@@ -2,6 +2,17 @@
 
 Read the exact versioned docs at https://docs.expo.dev/versions/v57.0.0/ before writing any code.
 
+# Shared agent workflow (read first)
+
+Before any task, read **[docs/AGENT_WORKFLOW.md](docs/AGENT_WORKFLOW.md)** and follow it. It is the single source of truth shared by Codex and Claude Code. It covers:
+- the story-by-story branching and approval rules;
+- Jira status rules;
+- validation;
+- safety;
+- handoff.
+
+It also points to the roadmap (`.claude/spendly_epic_execution_roadmap.md`, context only) and to the active epic's tracker and plan in `docs/`.
+
 # Phase Delivery Protocol
 After completing every phase:
 1. Provide a step-by-step **Manual Testing Guide** describing how to test/verify that phase on device/simulator.
