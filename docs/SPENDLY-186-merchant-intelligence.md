@@ -15,7 +15,7 @@
 |---|---|---|---|---|
 | 1 | [SPENDLY-187](https://kesavach.atlassian.net/browse/SPENDLY-187) | Merchant identity, alias and data model | None | Merged into the epic |
 | 2 | [SPENDLY-188](https://kesavach.atlassian.net/browse/SPENDLY-188) | India-first normalization and alias registry | 187 | Merged into the epic |
-| 3 | SPENDLY-189 | Deterministic resolution and confidence | 187, 188 | **Next.** Not started; the user said Codex will pick it up |
+| 3 | SPENDLY-189 | Deterministic resolution and confidence | 187, 188 | **In Progress.** Branch `feature/SPENDLY-189-merchant-resolution`; implementation and validation underway |
 | 4 | SPENDLY-190 | Merchant-aware categories | 189 | Not started |
 | 5 | SPENDLY-191 | Corrections and personalization | 189 | Not started |
 | 6 | SPENDLY-192 | Merchant profile, grouping and search | 189 | Not started |
