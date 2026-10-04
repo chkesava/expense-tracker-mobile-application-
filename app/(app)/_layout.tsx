@@ -146,6 +146,18 @@ function AppShellInner() {
               }}
             />
             <Stack.Screen
+              name="merchants/[id]"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
+              name="merchants/index"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
               name="epf/[establishmentId]"
               options={{
                 animation: "slide_from_right",

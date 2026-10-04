@@ -64,6 +64,7 @@ import type { MerchantOverride, MerchantSourceText } from "@/shared/types/mercha
 import { listMerchantOverrides } from "@/services/merchant/merchantOverrideStore";
 import { expenseSourceText, incomeSourceText } from "@/shared/utils/merchantModel";
 import { resolveMerchant } from "@/shared/utils/merchantResolve";
+import { merchantProfileId } from "@/shared/utils/merchantGrouping";
 
 function timestampLabel(value: unknown): string | null {
   if (!value) return null;
@@ -606,6 +607,16 @@ export default function TransactionDetailsScreen() {
           initialSubcategory={expense?.subcategory}
           onClose={() => setMerchantSheetOpen(false)}
           onSaved={reloadMerchantOverrides}
+          onOpenProfile={
+            merchantResolution?.merchantId
+              ? () => {
+                  setMerchantSheetOpen(false);
+                  router.push(
+                    `/merchants/${encodeURIComponent(merchantProfileId(merchantResolution))}` as Href,
+                  );
+                }
+              : undefined
+          }
         />
       ) : null}
     </View>
