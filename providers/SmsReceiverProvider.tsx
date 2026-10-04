@@ -41,6 +41,7 @@ import {
 import { processIncomingSmsMessages } from "@/services/sms/smsTransactionProcessor";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useSmsRecurringSync } from "@/hooks/useSmsRecurringSync";
+import { isRoutableNotification } from "@/shared/utils/calendarNotifications";
 import { logWarning } from "@/lib/errors";
 
 /**
@@ -134,13 +135,11 @@ export function SmsReceiverProvider({ children }: { children: ReactNode }) {
     const navigateToNotification = (response: {
       notification: { request: { content: { data?: unknown } } };
     }) => {
-      const data = response.notification.request.content.data as
-        | { source?: string; url?: string }
-        | undefined;
-      const source = data?.source;
-      if (source !== "sms" && source !== "credit_card_bill") return;
-      const url = data?.url;
-      if (typeof url !== "string" || !url.startsWith("/")) return;
+      // SPENDLY-184: the allow-list (sms, credit_card_bill, calendar) lives in
+      // one tested place; anything else, or a non in-app url, is ignored.
+      const data = response.notification.request.content.data;
+      if (!isRoutableNotification(data)) return;
+      const url = data.url;
       // `dismissTo` reuses the screen when it is already in the stack, so
       // repeated notification taps cannot pile up duplicate copies of it.
       router.dismissTo(url as Href);

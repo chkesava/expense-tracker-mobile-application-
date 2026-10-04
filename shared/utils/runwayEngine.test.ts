@@ -184,6 +184,20 @@ describe("cadence, month boundaries and leap years", () => {
     ]);
   });
 
+  it("supports quarterly and yearly intervals", () => {
+    expect(occurrencesBetween({ kind: "monthly", firstDate: "2026-11-30", dayOfMonth: 30, intervalMonths: 3 }, "2026-10-01", "2027-08-31")).toEqual([
+      "2026-11-30",
+      "2027-02-28",
+      "2027-05-30",
+      "2027-08-30",
+    ]);
+    expect(occurrencesBetween({ kind: "monthly", firstDate: "2028-02-29", dayOfMonth: 29, intervalMonths: 12 }, "2028-01-01", "2030-12-31")).toEqual([
+      "2028-02-29",
+      "2029-02-28",
+      "2030-02-28",
+    ]);
+  });
+
   it("stops monthly items after their end month", () => {
     expect(occurrencesBetween({ kind: "monthly", firstDate: "2026-10-03", dayOfMonth: 3, untilMonth: "2026-12" }, "2026-10-01", "2027-06-30")).toEqual([
       "2026-10-03",

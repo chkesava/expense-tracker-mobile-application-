@@ -4,6 +4,7 @@ import { usePathname, useRouter, type Href } from "expo-router";
 import {
   ArrowLeftRight,
   CalendarSync,
+  BellRing,
   CreditCard,
   HandCoins,
   Landmark,
@@ -36,6 +37,7 @@ const ICONS: Record<AddActionId, typeof PlusCircle> = {
   recurring: CalendarSync,
   investment: Landmark,
   cardBill: CreditCard,
+  reminder: BellRing,
   decision: Scale,
 };
 
@@ -98,6 +100,9 @@ export function AddActionSheet() {
         return;
       case "cardBill":
         setIsDebtPaymentOpen(true);
+        return;
+      case "reminder":
+        router.push("/calendar?newReminder=1" as Href);
         return;
       case "decision":
         router.push("/decisions/edit" as Href);

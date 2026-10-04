@@ -31,6 +31,7 @@ describe("the add catalogue", () => {
       "recurring",
       "investment",
       "cardBill",
+      "reminder",
       "decision",
     ]);
   });
@@ -96,6 +97,7 @@ describe("orderAddActions", () => {
       "borrowing",
       "investment",
       "cardBill",
+      "reminder",
       "decision",
     ]);
   });

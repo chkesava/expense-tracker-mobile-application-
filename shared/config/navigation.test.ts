@@ -32,6 +32,7 @@ describe("resolveAndroidBackAction", () => {
     expect(resolveAndroidBackAction("/transactions/exp-1")).toBe("pop");
     expect(resolveAndroidBackAction("/runway/sources")).toBe("pop");
     expect(resolveAndroidBackAction("/runway")).toBe("pop");
+    expect(resolveAndroidBackAction("/calendar")).toBe("pop");
   });
 
   it("pops out of screens that used to fall through to the navigator", () => {
@@ -59,6 +60,8 @@ describe("resolveAndroidBackAction", () => {
 describe("isNavItemActive", () => {
   it("matches home/dashboard paths", () => {
     expect(isNavItemActive("/dashboard", "home")).toBe(true);
+    expect(isNavItemActive("/calendar", "calendar")).toBe(true);
+    expect(isNavItemActive("/calendar", "ledger")).toBe(false);
     expect(isNavItemActive("/(app)/dashboard", "home")).toBe(true);
     expect(isNavItemActive("/", "home")).toBe(true);
     expect(isNavItemActive("/(app)", "home")).toBe(true);

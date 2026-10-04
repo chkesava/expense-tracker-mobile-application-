@@ -21,6 +21,7 @@ export const ADD_ACTION_IDS = [
   "recurring",
   "investment",
   "cardBill",
+  "reminder",
   "decision",
 ] as const;
 
@@ -79,6 +80,12 @@ export const ADD_ACTIONS: AddActionMeta[] = [
     id: "cardBill",
     label: "Card Bill Payment",
     hint: "Pay a credit-card statement",
+  },
+  {
+    // SPENDLY-183: a calendar note, not a transaction.
+    id: "reminder",
+    label: "Reminder",
+    hint: "A dated note on your financial calendar",
   },
   {
     // SPENDLY-363 — not money: opens Money Decisions to record a decision.

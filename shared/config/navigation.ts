@@ -1,4 +1,4 @@
-export type NavSectionId = "home" | "ledger" | "investments" | "vaults" | "insights" | "settings" | "admin";
+export type NavSectionId = "home" | "ledger" | "investments" | "vaults" | "insights" | "calendar" | "settings" | "admin";
 
 export type NavigationItem = {
   id: NavSectionId;
@@ -57,6 +57,15 @@ export const CORE_NAV_ITEMS: NavigationItem[] = [
     label: "Insights",
     mobileLabel: "Insights",
     includeInBottomNav: true,
+    includeInDrawer: true,
+  },
+  {
+    // SPENDLY-179: drawer only — the bottom nav stays at five tabs.
+    id: "calendar",
+    translationKey: "nav_calendar",
+    path: "/calendar",
+    label: "Financial calendar",
+    includeInBottomNav: false,
     includeInDrawer: true,
   },
   {
@@ -252,7 +261,7 @@ const SUB_SCREEN_PREFIXES = [
   "/runway/",
 ];
 
-const SUB_SCREEN_ROUTES = ["/settings", "/sms-inbox", "/decisions", "/fees", "/app-selector", "/add", "/runway"];
+const SUB_SCREEN_ROUTES = ["/settings", "/sms-inbox", "/decisions", "/fees", "/app-selector", "/add", "/runway", "/calendar"];
 
 const SECONDARY_TAB_PREFIXES = ["/ledger", "/vaults", "/investments", "/insights"];
 
@@ -281,6 +290,7 @@ export function isNavItemActive(pathname: string, id: NavSectionId): boolean {
   if (id === "home") return clean === "/dashboard" || clean === "/";
   if (id === "settings") return clean.startsWith("/settings");
   if (id === "admin") return clean.startsWith("/admin");
+  if (id === "calendar") return clean.startsWith("/calendar");
   if (id === "vaults") return VAULT_PREFIXES.some((prefix) => clean.startsWith(prefix));
   if (id === "investments") {
     return INVESTMENTS_PREFIXES.some((prefix) => clean.startsWith(prefix));
