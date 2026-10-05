@@ -14,6 +14,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import type { Subscription } from "../types/subscription";
+import type { CalendarEvent } from "../types/calendar";
 import { WHAT_IF_LIMITS, validateWhatIfAdjustment, type WhatIfAdjustment, type WhatIfBaselineSnapshot } from "../types/whatIf";
 import { occurrencesBetween, type RunwayEvent } from "./runwayEngine";
 
