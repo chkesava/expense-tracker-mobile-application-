@@ -80,7 +80,29 @@ adb shell pm clear com.chkesava.spendly
 
 ---
 
-## Hot Screens Baseline (pre / post)
+## SPENDLY-399 Results — Critical Path Reduction
+
+*Measured on Spendly Test (emulator) after removing `SettingsProvider` blocking gate and splash-screen gating on local stores + navigation.*
+
+**Comparison: Scenario 1 (Cold Online Launch)**
+
+| Milestone | Baseline (SPENDLY-398) | Post SPENDLY-399 | Δ |
+|-----------|------------------------|------------------|---|
+| `app_module` | 1925ms (double-mount!) | 119ms (single mount) | **-1806ms** |
+| `fonts_ready` | 193ms | 162ms | -31ms |
+| `navigation_ready` | 1926ms | 181ms | **-1745ms** |
+| `local_stores_ready` | 1935ms | 186ms | **-1749ms** |
+| `auth_ready` | 776ms | 190ms | -586ms (emulator) |
+| **`app_ready` (splash hides)** | **1938ms** | **193ms** | **🟢 -1745ms (-90%)** |
+| `splash_animation_done` | 2769ms | 960ms | **-1809ms (-65%)** |
+
+**Root Cause Fixed:** `SettingsProvider` was rendering `<SettingsBootSplash />` (a blank screen) while waiting for the Firestore `users/{uid}` document. This caused the entire React router tree including `AppInitializer` to unmount and remount, firing `app_module` twice and delaying `app_ready` by ~1.75 seconds.
+
+**Changes:**
+- `providers/SettingsProvider.tsx`: Removed `SettingsBootSplash` gate — children always render
+- `app/(app)/_layout.tsx`: Removed `showGate` full-screen ActivityIndicator
+- `app/_layout.tsx`: Removed `localStoresReady` and `navigationReady` from critical path gate
+
 
 | Metric | Before (approx intent) | After (fill on device) |
 |--------|------------------------|-------------------------|
