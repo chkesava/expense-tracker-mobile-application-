@@ -4,14 +4,82 @@ Measurement is gated: enabled in `__DEV__`, or set `EXPO_PUBLIC_PERF_MARKS=1` in
 
 Watch Metro / `adb logcat` for lines prefixed `[perf]`.
 
-## How to capture
+## Benchmark Suite Scenarios
 
-1. **Cold start (dev):** uninstall/reinstall or force-stop app → open → note marks:
-   - `app_module`, `local_stores_ready`, `fonts_ready`, `auth_ready`, `navigation_ready`, `app_ready`, `splash_animation_done`
-2. **Cold start (release):** build with `EXPO_PUBLIC_PERF_MARKS=1` via release env, install APK, same marks in logcat (`adb logcat | findstr /i perf`).
-3. **Scroll FPS:** fling lists on Ledger / Portfolio holdings / SIP / Dashboard; logs `fps:<label>`.
+Execute the following scenarios using a **Release build** (`npm run release` -> `adb install -r releases/app-release.apk`) to ensure React overhead is representative of production.
 
-## Baseline (pre / post)
+### 1. Cold online launch after force-stop
+```bash
+adb shell am force-stop com.chkesava.spendly
+```
+*Launch app from launcher. Measures full native -> JS -> Network boundary.*
+
+### 2. Warm/background resume
+*Press Home button, wait 5 seconds, launch app from launcher or recents.*
+*Measures JS thread unblocking and React reconciliation on resume.*
+
+### 3. Cold launch with existing local cache
+*Ensure app has loaded data recently.*
+```bash
+adb shell am force-stop com.chkesava.spendly
+```
+*Launch app. Measures Firestore local cache read speed vs server roundtrips.*
+
+### 4. Cold offline launch
+```bash
+adb shell svc wifi disable
+adb shell svc data disable
+adb shell am force-stop com.chkesava.spendly
+```
+*Launch app. Measures time to first meaning UI when network fails immediately.*
+
+### 5. Cold launch after fresh install
+```bash
+adb shell pm clear com.chkesava.spendly
+```
+*Launch app and login. Measures first-time setup, secure store initialization, and full network fetch.*
+
+---
+
+## Startup Timeline Measurements (SPENDLY-398 Baseline)
+
+*Fill in these tables using the `[perf]` logs from your device for Scenario 1 (Cold online launch).*
+
+**Device Details:**
+- **Model:** [e.g. Pixel 6]
+- **Android Version:** [e.g. 14]
+- **Network:** [e.g. WiFi / 5G / Offline]
+
+### Phase Durations (ms)
+| Metric | Duration (ms) | Success/Failure | Notes |
+|--------|---------------|-----------------|-------|
+| `firebase_init` | | | |
+| `auth_init` | | | |
+| `local_stores_init` | | | |
+| `navigation_init` | | | |
+
+### Absolute Timeline (ms from app start)
+| Milestone | Timestamp (ms) | Delta from previous |
+|-----------|----------------|---------------------|
+| `app_start` (T0/T1) | 0 | - |
+| `app_module` (T2) | | |
+| `auth_ready` (T5) | | |
+| `local_stores_ready` (T7) | | |
+| `navigation_ready` (T9) | | |
+| `app_ready` (Gate passed) | | |
+| `dashboard_mounted` (T14)| | |
+
+### Firestore Startup Workload
+| Collection | Listeners Started | First Snapshot Received | Doc Count | From Cache? |
+|------------|-------------------|-------------------------|-----------|-------------|
+| expenses | | | | |
+| incomes | | | | |
+| accounts | | | | |
+| accountTypes | | | | |
+
+---
+
+## Hot Screens Baseline (pre / post)
 
 | Metric | Before (approx intent) | After (fill on device) |
 |--------|------------------------|-------------------------|
