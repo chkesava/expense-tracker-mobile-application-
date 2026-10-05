@@ -50,6 +50,7 @@ const SOURCE_LABELS: Record<string, string> = {
   incomes: "income",
   subscriptions: "subscriptions and EMIs",
   card_bills: "card bills",
+  calendar: "scheduled commitments",
 };
 
 const timeLabel = (ms: number) => new Date(ms).toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });

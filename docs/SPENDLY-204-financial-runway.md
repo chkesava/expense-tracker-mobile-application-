@@ -17,10 +17,10 @@
 | 2 | [SPENDLY-207](https://kesavach.atlassian.net/browse/SPENDLY-207) | Liquid resource classification and overrides | 205 | Merged to the epic branch |
 | 3 | [SPENDLY-206](https://kesavach.atlassian.net/browse/SPENDLY-206) | Calculation and projection engine | 205, 207 | Merged to the epic branch |
 | 4 | [SPENDLY-208](https://kesavach.atlassian.net/browse/SPENDLY-208) | Historical burn rate and baseline | 206 | Merged to the epic branch |
-| 5 | SPENDLY-209 | Commitment-aware runway using Financial Calendar | 206; needs **SPENDLY-176** | Blocked: SPENDLY-176 is To Do |
+| 5 | [SPENDLY-209](https://kesavach.atlassian.net/browse/SPENDLY-209) | Commitment-aware runway using Financial Calendar | 206, 176 | Merged to the epic branch |
 | 6 | [SPENDLY-210](https://kesavach.atlassian.net/browse/SPENDLY-210) | Timeline, threshold planning, explanatory UI | 206 (209 link relaxed 2026-10-03) | Merged to the epic branch |
-| 7 | SPENDLY-211 | What-If integration | 210; needs **SPENDLY-195** | Blocked: SPENDLY-195 is To Do |
-| 8 | SPENDLY-212 | QA and rollout | 206, 208–211 | Last |
+| 7 | SPENDLY-211 | What-If integration | 210; needs **SPENDLY-195** | Merged to the epic branch |
+| 8 | SPENDLY-212 | QA and rollout | 206, 208–211 | Merged to the epic branch |
 
 ## Decisions
 - **2026-10-02:** liquid by default means bank, cash and wallet only.

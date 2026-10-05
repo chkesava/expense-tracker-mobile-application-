@@ -12,13 +12,12 @@
  * saved this" (`whatIfRecalculationStatus`).
  */
 
-import type { CreditCardBill } from "../types/creditCardBill";
+import type { CalendarEvent } from "../types/calendar";
 import type { Expense, Income } from "../types/expense";
-import type { Subscription } from "../types/subscription";
 import type { WhatIfBaselineReference, WhatIfBaselineSnapshot } from "../types/whatIf";
 import { roundMoney } from "./money";
 import type { RunwayBaselineResult } from "./runwayBaseline";
-import { creditCardBillsToRunwayEvents, subscriptionsToRunwayEvents } from "./runwayEvents";
+import { calendarToRunwayEvents } from "./runwayEvents";
 
 export interface WhatIfBaselineInput {
   today: string;
@@ -27,13 +26,12 @@ export interface WhatIfBaselineInput {
   /** Counted liquid money (runway sources); null when unknown. */
   liquid: number | null;
   runwayBaseline: RunwayBaselineResult;
-  subscriptions: readonly Subscription[];
-  bills: readonly CreditCardBill[];
+  calendarEvents: readonly CalendarEvent[];
   expenses: readonly Pick<Expense, "amount">[];
   incomes: readonly Pick<Income, "amount">[];
 }
 
-function fingerprint(rows: readonly { amount?: number }[]): string {
+function fingerprint(rows: readonly { amount?: number | null }[]): string {
   const sum = rows.reduce((total, row) => total + (Number.isFinite(row.amount) ? (row.amount as number) : 0), 0);
   return `${rows.length}:${roundMoney(sum)}`;
 }
@@ -48,8 +46,7 @@ export function buildWhatIfReference(input: WhatIfBaselineInput): WhatIfBaseline
       { source: "accounts", version: input.liquid === null ? "unknown" : String(roundMoney(input.liquid)) },
       { source: "expenses", version: fingerprint(input.expenses) },
       { source: "incomes", version: fingerprint(input.incomes) },
-      { source: "subscriptions", version: fingerprint(input.subscriptions) },
-      { source: "card_bills", version: fingerprint(input.bills.map((b) => ({ amount: b.remainingAmount }))) },
+      { source: "calendar", version: fingerprint(input.calendarEvents) },
     ],
   };
 }
@@ -59,9 +56,6 @@ export function buildWhatIfBaselineSnapshot(input: WhatIfBaselineInput): WhatIfB
     reference: buildWhatIfReference(input),
     liquid: input.liquid === null ? null : roundMoney(input.liquid),
     baseline: input.runwayBaseline.projectionBaseline,
-    events: [
-      ...subscriptionsToRunwayEvents(input.subscriptions, input.today),
-      ...creditCardBillsToRunwayEvents(input.bills, input.currency),
-    ],
+    events: calendarToRunwayEvents(input.calendarEvents, input.today, input.currency),
   };
 }

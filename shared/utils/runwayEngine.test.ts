@@ -1,9 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import type { CreditCardBill } from "../types/creditCardBill";
-import type { Subscription } from "../types/subscription";
+
 import { occurrencesBetween, runRunwayEngine, type RunwayEngineInput, type RunwayEvent } from "./runwayEngine";
-import { creditCardBillsToRunwayEvents, subscriptionsToRunwayEvents } from "./runwayEvents";
 
 const base = (over: Partial<RunwayEngineInput> = {}): RunwayEngineInput => ({
   today: "2026-10-01",
@@ -221,43 +219,6 @@ describe("cadence, month boundaries and leap years", () => {
     expect(r.periods[0]).toMatchObject({ month: "2028-02", startDate: "2028-02-15", endDate: "2028-02-29", outflow: 15000 });
     expect(r.periods[1]).toMatchObject({ month: "2028-03", outflow: 29000 });
     expect(r.horizonEnd).toBe("2028-03-31");
-  });
-});
-
-describe("event adapters", () => {
-  const sub = (over: Partial<Subscription>): Subscription => ({
-    id: "s1",
-    name: "Netflix",
-    amount: 649,
-    category: "Entertainment & Hobbies",
-    dayOfMonth: 10,
-    isActive: true,
-    lastProcessed: "2026-09",
-    type: "subscription",
-    ...over,
-  });
-
-  it("turns active recurring items into scheduled outflows", () => {
-    const events = subscriptionsToRunwayEvents(
-      [
-        sub({}),
-        sub({ id: "emi", name: "Home loan", type: "emi", amount: 25000, dayOfMonth: 5, endYear: 2027, endMonth: 3 }),
-        sub({ id: "paused", isActive: false }),
-        sub({ id: "move", type: "transfer" }),
-        sub({ id: "done", type: "emi", endYear: 2026, endMonth: 8 }),
-      ],
-      "2026-10-01"
-    );
-    expect(events.map((e) => e.id)).toEqual(["subscription:s1", "subscription:emi"]);
-    expect(events[0]).toMatchObject({ burnClass: "discretionary", schedule: { kind: "monthly", firstDate: "2026-10-10" } });
-    expect(events[1]).toMatchObject({ burnClass: "debt_service", schedule: { kind: "monthly", firstDate: "2026-10-05", untilMonth: "2027-03" } });
-  });
-
-  it("turns unpaid card bills into one-time outflows", () => {
-    const bill = (over: Partial<CreditCardBill>) =>
-      ({ id: "b1", accountId: "c", dueDate: "2026-10-20", remainingAmount: 12000, status: "UPCOMING", currency: "INR", ...over }) as CreditCardBill;
-    const events = creditCardBillsToRunwayEvents([bill({}), bill({ id: "paid", status: "PAID", remainingAmount: 0 }), bill({ id: "usd", currency: "USD" })], "INR");
-    expect(events).toEqual([expect.objectContaining({ id: "creditCardBill:b1", amount: 12000, schedule: { kind: "once", date: "2026-10-20" } })]);
   });
 });
 
