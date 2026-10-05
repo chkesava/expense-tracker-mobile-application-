@@ -4,6 +4,7 @@
  * whole pipeline is testable without React or Firebase.
  */
 
+import type { CalendarEvent } from "../types/calendar";
 import type { CreditCardBill } from "../types/creditCardBill";
 import type { Expense, Income } from "../types/expense";
 import type { RunwayAssumptionCode, RunwayConfidence } from "../types/runway";
@@ -11,7 +12,7 @@ import type { Subscription } from "../types/subscription";
 import { buildRunwayBaseline, type RunwayBaselineResult } from "./runwayBaseline";
 import { deriveConfidence } from "./runwayContract";
 import { runRunwayEngine, type RunwayEngineOutput, type RunwayEvent } from "./runwayEngine";
-import { creditCardBillsToRunwayEvents, subscriptionsToRunwayEvents } from "./runwayEvents";
+import { calendarToRunwayEvents } from "./runwayEvents";
 import { thresholdFromSettings, type RunwaySettings } from "./runwaySettings";
 import type { RunwaySources } from "./runwaySources";
 
@@ -21,6 +22,7 @@ export interface RunwayModelInput {
   incomes: readonly Income[];
   subscriptions: readonly Subscription[];
   bills: readonly CreditCardBill[];
+  calendarEvents: readonly CalendarEvent[];
   today: string;
   displayCurrency: string;
   settings: RunwaySettings;
@@ -47,7 +49,7 @@ export function buildRunwayModel(input: RunwayModelInput): RunwayModel {
   });
   const projection = settings.mode === "commitment_projection";
   const events = projection
-    ? [...subscriptionsToRunwayEvents(input.subscriptions, input.today), ...creditCardBillsToRunwayEvents(input.bills, input.displayCurrency)]
+    ? calendarToRunwayEvents(input.calendarEvents, input.today, input.displayCurrency)
     : [];
   const output = runRunwayEngine({
     today: input.today,
@@ -59,15 +61,30 @@ export function buildRunwayModel(input: RunwayModelInput): RunwayModel {
     events,
   });
 
+  const hasUncertainCommitments =
+    baseline.assumptions.includes("uncertain_commitments") ||
+    (projection &&
+      input.calendarEvents.some(
+        (ce) =>
+          ce.direction !== "neutral" &&
+          ce.state !== "completed" &&
+          ce.state !== "cancelled" &&
+          (ce.amount === null || ce.amount <= 0)
+      ));
+
   const resources = input.sources.resources;
   const { level, reasons } = deriveConfidence({
     monthsOfHistory: baseline.monthsOfHistory,
     includedResourceCount: input.sources.counted.length,
     unknownResourceCount: resources.filter((r) => r.liquidity === "unknown" && !r.included).length,
     unsupportedCurrencyCount: resources.filter((r) => r.reasons.includes("currency_unsupported")).length,
-    uncertainCommitmentCount: baseline.assumptions.includes("uncertain_commitments") ? 1 : 0,
+    uncertainCommitmentCount: hasUncertainCommitments ? 1 : 0,
     unresolvedCategoryCount: baseline.unresolvedCategoryCount,
   });
-  const assumptions = [...new Set<RunwayAssumptionCode>([...reasons, ...baseline.assumptions])];
+  
+  const allAssumptions = new Set<RunwayAssumptionCode>([...reasons, ...baseline.assumptions]);
+  if (hasUncertainCommitments) allAssumptions.add("uncertain_commitments");
+  const assumptions = [...allAssumptions];
+  
   return { baseline, events, output, confidence: level, assumptions };
 }

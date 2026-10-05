@@ -77,3 +77,39 @@ export function creditCardBillsToRunwayEvents(bills: readonly CreditCardBill[], 
       schedule: { kind: "once" as const, date: b.dueDate },
     }));
 }
+
+
+import type { CalendarEvent } from "../types/calendar";
+import type { RunwayCertainty } from "../types/runway";
+
+export function calendarToRunwayEvents(events: readonly CalendarEvent[], today: string, displayCurrency: string): RunwayEvent[] {
+  const out: RunwayEvent[] = [];
+  for (const ce of events) {
+    if (ce.direction === "neutral") continue;
+    if (ce.state === "completed" || ce.state === "cancelled") continue;
+    // Missing/unknown amounts are skipped for math but flagged later.
+    if (ce.amount === null || ce.amount <= 0) continue;
+    // Ignore events in un-convertible currencies for runway projection.
+    if (ce.currency.toUpperCase() !== displayCurrency.toUpperCase()) continue;
+
+    let certainty: RunwayCertainty = "expected";
+    if (ce.state === "actual") certainty = "actual";
+    // For bills that have been generated but not paid, certainty can be 'actual'.
+    if (ce.source === "card_bill") certainty = "actual";
+
+    // Overdue items that are before today hit the runway today, because they are unpaid cash obligations.
+    const date = ce.date < today ? today : ce.date;
+
+    out.push({
+      id: ce.recurrenceId ?? ce.id,
+      label: ce.title,
+      source: ce.source,
+      direction: ce.direction,
+      amount: ce.amount,
+      burnClass: ce.burnClass,
+      certainty,
+      schedule: { kind: "once", date },
+    });
+  }
+  return out;
+}

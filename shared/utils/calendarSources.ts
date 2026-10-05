@@ -23,6 +23,7 @@ import { getInvestmentValuation } from "./investmentInterest";
 import { isActiveLedgerRow } from "./ledgerRow";
 import { roundMoney } from "./money";
 import { occurrencesBetween, type RunwaySchedule } from "./runwayEngine";
+import { burnClassForExpense } from "./runwayContract";
 import { getNextRenewalDate, isEmiTermCompleted } from "./subscriptionProcessor";
 import { transactionHref } from "./transactionRef";
 
@@ -80,6 +81,7 @@ export function cardBillEvents(bills: readonly CreditCardBill[], cardNames: Read
         amount: roundMoney(open ? b.remainingAmount : b.statementAmount),
         currency: b.currency,
         direction: "out",
+        burnClass: "debt_service",
         state,
         actionable: open,
         href: `/credit-card-bills/${b.id}`,
@@ -121,6 +123,7 @@ export function subscriptionEvents(subs: readonly Subscription[], ctx: CalendarC
           subtitle: source === "emi" ? "EMI" : sub.category,
           amount: roundMoney(sub.amount),
           direction: "out",
+          burnClass: source === "emi" ? "debt_service" : burnClassForExpense({ category: sub.category }).burnClass,
           state: "scheduled",
           actionable: true,
           href: "/ledger?tab=subscriptions",
@@ -153,6 +156,7 @@ export function borrowingEvents(borrowings: readonly Borrowing[], ctx: CalendarC
         subtitle: settled ? "Settled" : "Loan due date",
         amount: settled ? null : amount,
         direction: "out",
+        burnClass: "debt_service",
         state,
         actionable: !settled,
         href: `/ledger?tab=borrowings&id=${b.id}`,
@@ -301,6 +305,7 @@ export function sipEvents(plans: readonly SipPlan[], ctx: CalendarContext): Cale
           amount: roundMoney(p.investmentAmount),
           currency: p.currency,
           direction: "out",
+          burnClass: "savings_contribution",
           state: skipped ? "cancelled" : openState(date, ctx.today, "scheduled"),
           actionable: !skipped,
           href: "/investments?tab=sip",
