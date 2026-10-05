@@ -16,7 +16,7 @@ import {
 } from "@/components/accounts/accountScreenTheme";
 import { EmptyState } from "@/components/common/EmptyState";
 import { usePageListBottomPadding } from "@/components/layout/usePageListBottomPadding";
-import { HoldingCard } from "@/components/portfolio/HoldingCard";
+import { HoldingCard, HoldingTableHeader } from "@/components/portfolio/HoldingCard";
 import { HoldingDetailModal } from "@/components/portfolio/HoldingDetailModal";
 import { AddHoldingModal, type AddHoldingOptions } from "@/components/portfolio/AddHoldingModal";
 import { ManageStockCashModal } from "@/components/portfolio/ManageStockCashModal";
@@ -26,8 +26,6 @@ import { appDialog } from "@/lib/appDialog";
 import { haptic } from "@/lib/haptics";
 import { sampleScrollFps } from "@/lib/perf";
 import { usePortfolio } from "@/hooks/usePortfolio";
-import { useMarketQuotes } from "@/hooks/useMarketQuotes";
-import { computePositionMetrics } from "@/shared/types/market";
 import type {
   Holding,
   HoldingWithMetrics,
@@ -61,15 +59,26 @@ function ItemSeparator() {
   return <View style={styles.separator} />;
 }
 
-export function HoldingsList({ listHeader }: { listHeader?: ReactNode }) {
+/**
+ * The holdings list on the Stocks home. `holdings` comes from
+ * PortfolioDashboard, already priced by the shared `buildHoldingsWithMetrics`
+ * (SPENDLY-388), so cards and the summary read the same objects and no second
+ * quote subscription or calculation runs here.
+ */
+export function HoldingsList({ holdings, listHeader }: { holdings: HoldingWithMetrics[]; listHeader?: ReactNode }) {
   const { theme, themeName } = useTheme();
   const surfaces = useSurfaces();
   const listBottomPadding = usePageListBottomPadding();
   const isDark = themeUsesDarkPalette(themeName);
   const displayCurrency = useDisplayCurrency();
 
+  // Tablet / web layouts get the dense table row; phones keep the compact
+  // card. Measured on the list itself: the web shell can cap content width
+  // well below the window width.
+  const [listWidth, setListWidth] = useState(0);
+  const wide = listWidth >= 720;
+
   const {
-    holdings,
     transactions,
     cashBalance,
     availableCash,
@@ -81,15 +90,6 @@ export function HoldingsList({ listHeader }: { listHeader?: ReactNode }) {
     executeMockSell,
   } = usePortfolio();
 
-  const symbols = useMemo(
-    () =>
-      holdings.map((holding) => ({
-        symbol: holding.yahooSymbol || holding.symbol,
-        instrumentType: holding.instrumentType,
-      })),
-    [holdings]
-  );
-  const { quotes } = useMarketQuotes(symbols);
 
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<InstrumentType | "all">("all");
@@ -102,32 +102,7 @@ export function HoldingsList({ listHeader }: { listHeader?: ReactNode }) {
     null
   );
 
-  const holdingsWithMetrics: HoldingWithMetrics[] = useMemo(() => {
-    return holdings.map((holding) => {
-      const quote = quotes.get(holding.yahooSymbol || holding.symbol);
-      const currentPrice = quote?.currentPrice || holding.averageBuyPrice;
-      const hasLiveQuote = !!quote;
-      const metrics = computePositionMetrics(
-        currentPrice,
-        holding.quantity,
-        holding.averageBuyPrice
-      );
-      const dayChange = quote ? quote.dayChange * holding.quantity : 0;
-      const dayChangePercent = quote?.dayChangePercent || 0;
-
-      return {
-        ...holding,
-        currentPrice,
-        investedValue: metrics.investedValue,
-        currentValue: metrics.currentValue,
-        profit: metrics.profitLoss,
-        profitPercent: metrics.returnPercent,
-        dayChange,
-        dayChangePercent,
-        hasLiveQuote,
-      };
-    });
-  }, [holdings, quotes]);
+  const holdingsWithMetrics = holdings;
 
   const filteredAndSortedHoldings = useMemo(() => {
     let result = holdingsWithMetrics;
@@ -295,9 +270,10 @@ export function HoldingsList({ listHeader }: { listHeader?: ReactNode }) {
         currency={displayCurrency}
         onPress={onPressHolding}
         onMenu={onMenuHolding}
+        wide={wide}
       />
     ),
-    [displayCurrency, onMenuHolding, onPressHolding]
+    [displayCurrency, onMenuHolding, onPressHolding, wide]
   );
 
   const keyExtractor = useCallback((item: HoldingWithMetrics) => item.id, []);
@@ -501,7 +477,7 @@ export function HoldingsList({ listHeader }: { listHeader?: ReactNode }) {
   );
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} onLayout={(e) => setListWidth(Math.round(e.nativeEvent.layout.width))}>
       <FlashList
         style={styles.list}
         data={filteredAndSortedHoldings}
@@ -512,13 +488,14 @@ export function HoldingsList({ listHeader }: { listHeader?: ReactNode }) {
           <View>
             {listHeader}
             {toolbar}
+            {wide && filteredAndSortedHoldings.length > 0 ? <HoldingTableHeader /> : null}
           </View>
         }
         ListEmptyComponent={empty}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ paddingBottom: listBottomPadding }}
-        extraData={`${filter}-${sort}-${search}-${isDark}-${detailHoldingId}-${trade?.id ?? ""}`}
+        extraData={`${filter}-${sort}-${search}-${isDark}-${detailHoldingId}-${trade?.id ?? ""}-${wide}`}
         onScrollBeginDrag={() => sampleScrollFps("portfolio_holdings")}
       />
 
