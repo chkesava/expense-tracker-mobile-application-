@@ -73,6 +73,7 @@ import {
 } from "@/lib/firestoreReadDebug";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { scheduleIdleWork } from "@/shared/utils/scheduleIdle";
+import { perfEvent } from "@/lib/perf";
 
 function noteServerSync(fromCache: boolean): void {
   if (!fromCache) setGlobalLastServerSyncAt(Date.now());
@@ -364,6 +365,9 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     // is the only difference — it marks the unlimited listener.
     const makeApplyExpensesSnap =
       (fromFullQuery: boolean) => (snap: QuerySnapshot) => {
+        if (!expensesHydratedRef.current) {
+          perfEvent("firestore_first_snapshot", { collection: "expenses", docCount: snap.docs.length });
+        }
         logQuerySnapshot(expensePath, snap);
         const { items, pendingWrites } = foldLedgerSnapshot<Expense>(snap.docs, {
           activeOnly: true,
@@ -418,6 +422,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     // SPENDLY-12: first paint is a page, not the lifetime ledger. The idle
     // upgrade below is the same pattern docs/PERF_BASELINE.md described and
     // commit 007f649 removed. Do not set loading on the upgrade.
+    perfEvent("firestore_listener_start", { collection: "expenses" });
     let expensesUnsub = onSnapshot(
       query(expensesCol, orderBy("createdAt", "desc"), limit(LEDGER_STAGED_LIMIT)),
       FINANCE_SNAPSHOT_LISTEN_OPTIONS,
@@ -431,6 +436,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         "Couldn't load your expenses."
       )
     );
+    perfEvent("firestore_listener_start", { collection: "incomes" });
     let incomesUnsub = onSnapshot(
       query(incomesCol, orderBy("createdAt", "desc"), limit(LEDGER_STAGED_LIMIT)),
       FINANCE_SNAPSHOT_LISTEN_OPTIONS,
