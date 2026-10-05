@@ -21,7 +21,7 @@
 | 5 | [SPENDLY-200](https://kesavach.atlassian.net/browse/SPENDLY-200) | Savings, goals and investment scenarios | 197 | Implemented; merge approval pending |
 | 6 | [SPENDLY-201](https://kesavach.atlassian.net/browse/SPENDLY-201) | Baseline/scenario comparison and timeline | 198, 199, 200 | Implemented; merge approval pending |
 | 7 | [SPENDLY-202](https://kesavach.atlassian.net/browse/SPENDLY-202) | Saved scenarios and lifecycle | 196, 201 | Merged into the epic (3583c1a) |
-| 8 | [SPENDLY-387](https://kesavach.atlassian.net/browse/SPENDLY-387) | What If screens and side-menu entry (added 2026-10-05) | 201, 202 | Committed on its story branch; merge approval pending |
+| 8 | [SPENDLY-387](https://kesavach.atlassian.net/browse/SPENDLY-387) | What If screens and side-menu entry (added 2026-10-05) | 201, 202 | Merged into the epic |
 | 9 | [SPENDLY-203](https://kesavach.atlassian.net/browse/SPENDLY-203) | QA, performance, safety and rollout | 198–202, 387 | To Do |
 
 ## Decisions
