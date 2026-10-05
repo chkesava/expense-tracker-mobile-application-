@@ -14,15 +14,15 @@
 
 | # | Story | Scope | Dependencies | State |
 |---|---|---|---|---|
-| 1 | [SPENDLY-196](https://kesavach.atlassian.net/browse/SPENDLY-196) | Scenario model and baseline snapshot | None | Implemented; merge approval pending |
-| 2 | [SPENDLY-197](https://kesavach.atlassian.net/browse/SPENDLY-197) | Core financial projection engine | 196 | Implemented; merge approval pending |
-| 3 | [SPENDLY-198](https://kesavach.atlassian.net/browse/SPENDLY-198) | Income, expense and purchase scenarios | 197 | Implemented; merge approval pending |
-| 4 | [SPENDLY-199](https://kesavach.atlassian.net/browse/SPENDLY-199) | Debt, EMI and borrowing simulation | 197 | Implemented; merge approval pending |
-| 5 | [SPENDLY-200](https://kesavach.atlassian.net/browse/SPENDLY-200) | Savings, goals and investment scenarios | 197 | Implemented; merge approval pending |
-| 6 | [SPENDLY-201](https://kesavach.atlassian.net/browse/SPENDLY-201) | Baseline/scenario comparison and timeline | 198, 199, 200 | Implemented; merge approval pending |
+| 1 | [SPENDLY-196](https://kesavach.atlassian.net/browse/SPENDLY-196) | Scenario model and baseline snapshot | None | Merged into the epic |
+| 2 | [SPENDLY-197](https://kesavach.atlassian.net/browse/SPENDLY-197) | Core financial projection engine | 196 | Merged into the epic |
+| 3 | [SPENDLY-198](https://kesavach.atlassian.net/browse/SPENDLY-198) | Income, expense and purchase scenarios | 197 | Merged into the epic |
+| 4 | [SPENDLY-199](https://kesavach.atlassian.net/browse/SPENDLY-199) | Debt, EMI and borrowing simulation | 197 | Merged into the epic |
+| 5 | [SPENDLY-200](https://kesavach.atlassian.net/browse/SPENDLY-200) | Savings, goals and investment scenarios | 197 | Merged into the epic |
+| 6 | [SPENDLY-201](https://kesavach.atlassian.net/browse/SPENDLY-201) | Baseline/scenario comparison and timeline | 198, 199, 200 | Merged into the epic |
 | 7 | [SPENDLY-202](https://kesavach.atlassian.net/browse/SPENDLY-202) | Saved scenarios and lifecycle | 196, 201 | Merged into the epic (3583c1a) |
 | 8 | [SPENDLY-387](https://kesavach.atlassian.net/browse/SPENDLY-387) | What If screens and side-menu entry (added 2026-10-05) | 201, 202 | Merged into the epic |
-| 9 | [SPENDLY-203](https://kesavach.atlassian.net/browse/SPENDLY-203) | QA, performance, safety and rollout | 198–202, 387 | Committed on its story branch; merge approval pending |
+| 9 | [SPENDLY-203](https://kesavach.atlassian.net/browse/SPENDLY-203) | QA, performance, safety and rollout | 198–202, 387 | Merged into the epic |
 
 ## Decisions
 
@@ -37,3 +37,4 @@
 - **SPENDLY-219 What-If integration** remains on hold until SPENDLY-195 is complete; its Calendar portion is already complete.
 - SPENDLY-195 also feeds the later SPENDLY-277 Action Center.
 - **2026-10-05:** stories 196–202 added no screens. At the user's request, SPENDLY-387 was added for the What If screens, with a side-menu entry like Financial calendar. It blocks SPENDLY-203, so the epic reaches `main` only once it's usable.
+- **2026-10-05:** all stories merged into the epic; PR to `main` opened at the user's request. Rollout: deploy the `whatIfScenarios` rules first (rules only), then release the app.
