@@ -11,8 +11,9 @@ import {
 } from "@/components/accounts/accountScreenTheme";
 import { Amount } from "@/components/common/Amount";
 import { useSettings } from "@/providers/SettingsProvider";
-import { currencySymbol, formatAmountNumber } from "@/shared/utils/formatCurrency";
+import { currencySymbol, formatAmount, formatAmountNumber } from "@/shared/utils/formatCurrency";
 import type { HoldingWithMetrics, PortfolioSummary } from "@/shared/features/portfolio/types";
+import { portfolioSummaryA11yLabel } from "@/shared/features/portfolio/utils/portfolioMetrics";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
@@ -75,11 +76,7 @@ function HeroCurrencyAmount({
   const negative = value < 0;
 
   return (
-    <View
-      accessible
-      accessibilityLabel={`Amount ${value}`}
-      style={styles.heroAmountRow}
-    >
+    <View style={styles.heroAmountRow}>
       <Text
         style={[
           styles.heroSymbol,
@@ -151,8 +148,10 @@ export function PortfolioSummaryCard({
   onManageCash,
 }: PortfolioSummaryCardProps) {
   const { theme, themeName } = useTheme();
+  const { settings } = useSettings();
   const isDark = themeUsesDarkPalette(themeName);
   const muted = theme.colors.mutedForeground;
+  const heroLabel = portfolioSummaryA11yLabel(summary, (n) => formatAmount(n, currency), !!settings?.ghostMode);
   const line = isDark ? "rgba(148, 163, 184, 0.16)" : "rgba(15, 23, 42, 0.1)";
   const symbol = currencySymbol(currency);
 
@@ -228,8 +227,8 @@ export function PortfolioSummaryCard({
       />
 
       <View style={styles.body}>
-        <View style={styles.hero}>
-          <Text style={[styles.kicker, { color: muted }]}>Total Portfolio Value</Text>
+        <View style={styles.hero} accessible accessibilityRole="summary" accessibilityLabel={heroLabel}>
+          <Text style={[styles.kicker, { color: muted }]}>Current Value</Text>
           <HeroCurrencyAmount value={summary.portfolioValue} currency={currency} />
           <View style={styles.todayRow}>
             <Text style={[styles.todayArrow, { color: todayColor }]}>
@@ -249,23 +248,40 @@ export function PortfolioSummaryCard({
           </View>
         </View>
 
-        <View style={[styles.metrics, { borderTopColor: line }]}>
+        {/* SPENDLY-388: the two core values first, cash and count second. */}
+        <View style={[styles.metrics, { borderTopColor: line }]} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
           <View style={styles.metricCol}>
+            <Text style={[styles.metricLabel, { color: muted }]} numberOfLines={1}>
+              Invested
+            </Text>
+            <Amount
+              value={summary.totalInvested}
+              currency={currency}
+              style={[styles.metricValueLarge, { color: theme.colors.foreground }]}
+              ghostable
+            />
+          </View>
+          <View style={[styles.vRule, { backgroundColor: line }]} />
+          <View style={[styles.metricCol, styles.metricColEnd]}>
             <Text style={[styles.metricLabel, { color: muted }]} numberOfLines={1}>
               Overall P&L
             </Text>
-            <Amount
-              value={Math.abs(summary.overallGainLoss)}
-              currency={currency}
-              prefix={overallPrefix}
-              style={[styles.metricValue, { color: overallColor }]}
-              ghostable
-            />
-            <Text style={[styles.metricPercent, { color: overallColor }]}>
-              ({signedPercent(summary.overallGainLossPercent)})
-            </Text>
+            <View style={styles.pnlInline}>
+              <Amount
+                value={Math.abs(summary.overallGainLoss)}
+                currency={currency}
+                prefix={overallPrefix}
+                style={[styles.metricValueLarge, { color: overallColor }]}
+                ghostable
+              />
+              <Text style={[styles.metricPercent, { color: overallColor }]}>
+                ({signedPercent(summary.overallGainLossPercent)})
+              </Text>
+            </View>
           </View>
-          <View style={[styles.vRule, { backgroundColor: line }]} />
+        </View>
+
+        <View style={[styles.metrics, styles.metricsSecondary, { borderTopColor: line }]}>
           <Pressable
             onPress={onManageCash}
             disabled={!onManageCash}
@@ -274,7 +290,11 @@ export function PortfolioSummaryCard({
               onManageCash && pressed ? styles.pressed : null,
             ]}
             accessibilityRole={onManageCash ? "button" : undefined}
-            accessibilityLabel="Cash balance"
+            accessibilityLabel={
+              settings?.ghostMode
+                ? "Cash balance hidden. Manage cash"
+                : `Cash balance ${formatAmount(summary.cashBalance, currency)}. Not part of portfolio value.${onManageCash ? " Manage cash" : ""}`
+            }
           >
             <View style={styles.cashLabelRow}>
               <Text style={[styles.metricLabel, { color: muted }]} numberOfLines={1}>
@@ -292,7 +312,7 @@ export function PortfolioSummaryCard({
             />
           </Pressable>
           <View style={[styles.vRule, { backgroundColor: line }]} />
-          <View style={styles.metricCol}>
+          <View style={[styles.metricCol, styles.metricColEnd]} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
             <Text style={[styles.metricLabel, { color: muted }]} numberOfLines={1}>
               Holdings
             </Text>
@@ -437,6 +457,24 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     letterSpacing: 0.7,
     textTransform: "uppercase",
+  },
+  metricsSecondary: {
+    paddingTop: 10,
+  },
+  metricColEnd: {
+    alignItems: "flex-end",
+  },
+  pnlInline: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    flexWrap: "wrap",
+    justifyContent: "flex-end",
+    gap: 4,
+  },
+  metricValueLarge: {
+    fontSize: 17,
+    fontWeight: "800",
+    fontVariant: ["tabular-nums"],
   },
   metricValue: {
     fontSize: 14,

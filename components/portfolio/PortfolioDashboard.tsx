@@ -22,7 +22,11 @@ import { OrdersTab } from "@/components/portfolio/OrdersTab";
 import { haptic } from "@/lib/haptics";
 import { useMarketQuotes } from "@/hooks/useMarketQuotes";
 import { PortfolioDataProvider, usePortfolio } from "@/hooks/usePortfolio";
-import { computePositionMetrics } from "@/shared/types/market";
+import {
+  buildHoldingsWithMetrics,
+  buildPortfolioSummary,
+  quoteKeyFor,
+} from "@/shared/features/portfolio/utils/portfolioMetrics";
 import type {
   AllocationSlice,
   HoldingWithMetrics,
@@ -119,7 +123,7 @@ function PortfolioDashboardInner({ listHeader }: { listHeader?: ReactNode }) {
     () =>
       [
         ...holdings.map((h) => ({
-          symbol: h.yahooSymbol,
+          symbol: quoteKeyFor(h),
           instrumentType: h.instrumentType,
         })),
         ...watchlist.map((w) => ({
@@ -137,67 +141,16 @@ function PortfolioDashboardInner({ listHeader }: { listHeader?: ReactNode }) {
     refetch: refetchQuotes,
   } = useMarketQuotes(symbolRequests);
 
-  const holdingsWithMetrics: HoldingWithMetrics[] = useMemo(() => {
-    return holdings.map((h) => {
-      const quote = quotes.get(h.yahooSymbol);
-      const currentPrice = quote?.currentPrice ?? h.averageBuyPrice;
-      const hasLiveQuote = !!quote;
-      const metrics = computePositionMetrics(
-        currentPrice,
-        h.quantity,
-        h.averageBuyPrice
-      );
-      return {
-        ...h,
-        currentPrice,
-        investedValue: metrics.investedValue,
-        currentValue: metrics.currentValue,
-        profit: metrics.profitLoss,
-        profitPercent: metrics.returnPercent,
-        dayChange: quote?.dayChange ?? 0,
-        dayChangePercent: quote?.dayChangePercent ?? 0,
-        hasLiveQuote,
-      };
-    });
-  }, [holdings, quotes]);
+  // SPENDLY-388: one shared derivation, so the summary and every card reconcile.
+  const holdingsWithMetrics: HoldingWithMetrics[] = useMemo(
+    () => buildHoldingsWithMetrics(holdings, quotes),
+    [holdings, quotes]
+  );
 
-  const summary: PortfolioSummary = useMemo(() => {
-    let portfolioValue = 0;
-    let totalInvested = 0;
-    let todayGainLoss = 0;
-    let topGainer: HoldingWithMetrics | null = null;
-    let topLoser: HoldingWithMetrics | null = null;
-
-    holdingsWithMetrics.forEach((h) => {
-      portfolioValue += h.currentValue;
-      totalInvested += h.investedValue;
-      todayGainLoss += h.dayChange * h.quantity;
-
-      if (!topGainer || h.profitPercent > topGainer.profitPercent) topGainer = h;
-      if (!topLoser || h.profitPercent < topLoser.profitPercent) topLoser = h;
-    });
-
-    const overallGainLoss = portfolioValue - totalInvested;
-    const overallGainLossPercent =
-      totalInvested > 0 ? (overallGainLoss / totalInvested) * 100 : 0;
-    const todayGainLossPercent =
-      portfolioValue > 0
-        ? (todayGainLoss / (portfolioValue - todayGainLoss)) * 100
-        : 0;
-
-    return {
-      portfolioValue,
-      todayGainLoss,
-      todayGainLossPercent,
-      overallGainLoss,
-      overallGainLossPercent,
-      totalInvested,
-      totalHoldings: holdingsWithMetrics.length,
-      cashBalance: investmentCashBalance,
-      topGainer,
-      topLoser,
-    };
-  }, [holdingsWithMetrics, investmentCashBalance]);
+  const summary: PortfolioSummary = useMemo(
+    () => buildPortfolioSummary(holdingsWithMetrics, investmentCashBalance),
+    [holdingsWithMetrics, investmentCashBalance]
+  );
 
   const allocations: AllocationSlice[] = useMemo(() => {
     const byType = new Map<string, number>();
@@ -431,6 +384,7 @@ function PortfolioDashboardInner({ listHeader }: { listHeader?: ReactNode }) {
     return (
       <View style={styles.fill}>
         <HoldingsList
+          holdings={holdingsWithMetrics}
           listHeader={
             <View>
               {listHeader}
