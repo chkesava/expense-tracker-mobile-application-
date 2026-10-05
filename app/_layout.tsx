@@ -200,23 +200,20 @@ function AppInitializer({ children }: { children: React.ReactNode }) {
     return () => clearTimeout(timer);
   }, []);
 
-  // Critical path: auth + fonts + local stores + nav (not settings/userDoc)
+  // Critical path: auth + fonts (local stores and nav are NOT critical)
   useEffect(() => {
-    const criticalPathReady =
-      !authLoading && localStoresReady && navigationReady && fontsSettled;
+    const criticalPathReady = !authLoading && fontsSettled;
     if (criticalPathReady || readyTimedOut) {
       if (readyTimedOut && !criticalPathReady) {
         logWarning("app.startupTimeout", new Error("Startup gates did not settle"), {
           authLoading,
-          localStoresReady,
-          navigationReady,
           fontsSettled,
         });
       }
       setAppIsReady(true);
       perfMark("app_ready");
     }
-  }, [authLoading, localStoresReady, navigationReady, fontsSettled, readyTimedOut]);
+  }, [authLoading, fontsSettled, readyTimedOut]);
 
   useEffect(() => {
     if (ACTIVE_PRODUCT === "ganesh") {

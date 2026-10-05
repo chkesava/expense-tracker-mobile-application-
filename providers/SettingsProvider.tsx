@@ -13,11 +13,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { View } from "react-native";
 import { doc, setDoc } from "firebase/firestore";
-
-import { GANESH_SPLASH_MAROON } from "@/components/ganesh/splash/ganeshSplashTheme";
-import { ACTIVE_PRODUCT } from "@/lib/activeProduct";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
 import { commitWrite } from "@/lib/firestoreWrite";
@@ -255,19 +251,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   return (
     <SettingsContext.Provider value={value}>
-      {loading ? <SettingsBootSplash /> : children}
+      {children}
     </SettingsContext.Provider>
-  );
-}
-
-function SettingsBootSplash() {
-  return (
-    <View
-      style={{
-        flex: 1,
-        backgroundColor: ACTIVE_PRODUCT === "ganesh" ? GANESH_SPLASH_MAROON : "#0F2F4B",
-      }}
-    />
   );
 }
 
