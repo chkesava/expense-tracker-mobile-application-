@@ -4,9 +4,9 @@
 Improve Spendly Android startup performance and first-use responsiveness using measured, evidence-based performance engineering.
 
 ## State
-- **SPENDLY-397**: In Progress (Instrumentation completed, awaiting baseline metrics from device)
-- **SPENDLY-398**: In Progress (Documentation added, awaiting test execution on device)
-- **SPENDLY-399**: To Do
+- **SPENDLY-397**: Merged into epic branch
+- **SPENDLY-398**: Merged into epic branch
+- **SPENDLY-399**: Implemented & verified (Awaiting merge to epic branch)
 - **SPENDLY-400**: To Do
 - **SPENDLY-401**: To Do
 - **SPENDLY-402**: To Do
@@ -15,6 +15,6 @@ Improve Spendly Android startup performance and first-use responsiveness using m
 - **SPENDLY-405**: To Do
 
 ## Decisions
-- Instrumented critical startup phases, Firestore listeners, and snapshot deliveries using the updated `lib/perf.ts` system.
-- Formalized the 5-scenario benchmark suite in `docs/PERF_BASELINE.md`.
-- Need real-device metrics (Phase 2 & 4) before deciding which specific area to optimize.
+- Instrumented critical startup phases, Firestore listeners, and snapshot deliveries using the updated `lib/perf.ts` system (SPENDLY-397).
+- Formalized the 5-scenario benchmark suite in `docs/PERF_BASELINE.md` and captured Scenario 1 baseline metrics (SPENDLY-398).
+- Fixed the double-mount root cause in `SettingsProvider.tsx` (removed `SettingsBootSplash` gate), removed the layout spinner gate in `app/(app)/_layout.tsx`, and pruned non-critical stores/nav checks from the splash critical path in `app/_layout.tsx`. Achieved ~90% reduction in `app_ready` time (from 1938ms down to 193ms) (SPENDLY-399).
