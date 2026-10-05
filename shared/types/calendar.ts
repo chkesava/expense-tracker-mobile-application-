@@ -6,6 +6,8 @@
  * link back to it. Documented in docs/SPENDLY-177-calendar-event-model.md.
  */
 
+import type { BurnClass } from "./runway";
+
 export const CALENDAR_SOURCES = [
   "card_bill",
   "subscription",
@@ -54,6 +56,7 @@ export interface CalendarEvent {
   amount: number | null;
   currency: string;
   direction: CalendarDirection;
+  burnClass?: BurnClass;
   state: CalendarEventState;
   priority: CalendarPriority;
   /** Whether the user can act on it from the calendar (pay, record, open). */

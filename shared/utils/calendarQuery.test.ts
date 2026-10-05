@@ -83,8 +83,8 @@ describe("ranges and month boundaries", () => {
     expect(normalizeCalendarRange({ from: "2026-10-31", to: "2026-10-01" }, "2026-10-15")).toEqual(OCT);
     expect(normalizeCalendarRange({ from: "bad", to: "bad" }, "2026-10-15")).toEqual({ from: "2026-10-15", to: "2026-10-15" });
     const long = normalizeCalendarRange({ from: "2026-01-01", to: "2030-01-01" }, "2026-10-15");
-    expect(long.to).toBe("2027-02-04");
-    expect(CALENDAR_MAX_RANGE_DAYS).toBe(400);
+    expect(long.to).toBe("2028-01-20");
+    expect(CALENDAR_MAX_RANGE_DAYS).toBe(750);
   });
 
   it("builds whole-week month grids for either week start, across leap February and year end", () => {

@@ -41,6 +41,7 @@ const model = (over: Partial<typeof DEFAULT_RUNWAY_SETTINGS> = {}, liquid = 1200
     incomes: [inc("2026-07-01", 10000), inc("2026-08-01", 10000), inc("2026-09-01", 10000)],
     subscriptions: [],
     bills: [],
+    calendarEvents: [],
     today: "2026-10-15",
     displayCurrency: "INR",
     settings: { ...DEFAULT_RUNWAY_SETTINGS, windowMonths: 3, ...over },
@@ -88,7 +89,7 @@ describe("headline", () => {
       title: "Below your reserve now",
       badge: "Below reserve",
     });
-    const empty = buildRunwayModel({ sources: sources(1000), expenses: [], incomes: [], subscriptions: [], bills: [], today: "2026-10-15", displayCurrency: "INR", settings: DEFAULT_RUNWAY_SETTINGS });
+    const empty = buildRunwayModel({ sources: sources(1000), expenses: [], incomes: [], subscriptions: [], bills: [], calendarEvents: [], today: "2026-10-15", displayCurrency: "INR", settings: DEFAULT_RUNWAY_SETTINGS });
     expect(runwayHeadline(empty.output, 12, "")).toMatchObject({ title: "Not enough data yet", badge: "Not enough data" });
   });
 

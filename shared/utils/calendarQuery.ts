@@ -39,7 +39,7 @@ import { reminderEvents } from "./calendarReminders";
 import { daysBetweenDateKeys, daysInMonth, endOfWeekDateKey, isValidDateKey, shiftDateKey, startOfWeekDateKey, type FirstDayOfWeek } from "./dates";
 
 /** Longest range one query may cover; longer requests are cut to this. */
-export const CALENDAR_MAX_RANGE_DAYS = 400;
+export const CALENDAR_MAX_RANGE_DAYS = 750;
 /** How far back open overdue items are surfaced. */
 export const CALENDAR_OVERDUE_LOOKBACK_DAYS = 365;
 
