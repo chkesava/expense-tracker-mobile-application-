@@ -33,6 +33,9 @@ describe("resolveAndroidBackAction", () => {
     expect(resolveAndroidBackAction("/runway/sources")).toBe("pop");
     expect(resolveAndroidBackAction("/runway")).toBe("pop");
     expect(resolveAndroidBackAction("/calendar")).toBe("pop");
+    expect(resolveAndroidBackAction("/what-if")).toBe("pop");
+    expect(resolveAndroidBackAction("/what-if/abc")).toBe("pop");
+    expect(resolveAndroidBackAction("/what-if/edit?template=salary")).toBe("pop");
     expect(resolveAndroidBackAction("/goals/optimizer")).toBe("pop");
   });
 
@@ -63,6 +66,9 @@ describe("isNavItemActive", () => {
     expect(isNavItemActive("/dashboard", "home")).toBe(true);
     expect(isNavItemActive("/calendar", "calendar")).toBe(true);
     expect(isNavItemActive("/calendar", "ledger")).toBe(false);
+    expect(isNavItemActive("/what-if", "whatIf")).toBe(true);
+    expect(isNavItemActive("/what-if/abc", "whatIf")).toBe(true);
+    expect(isNavItemActive("/what-if", "calendar")).toBe(false);
     expect(isNavItemActive("/(app)/dashboard", "home")).toBe(true);
     expect(isNavItemActive("/", "home")).toBe(true);
     expect(isNavItemActive("/(app)", "home")).toBe(true);

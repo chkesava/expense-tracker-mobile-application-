@@ -15,6 +15,7 @@ import { usePageListBottomPadding } from "@/components/layout/usePageListBottomP
 import { ChipRow, RowSwitch } from "@/components/settings/SettingsControls";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { WhatIfEntryRow } from "@/components/whatIf/WhatIfEntryRow";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { useGoalFunding } from "@/hooks/useGoalFunding";
 import { useGoalFundingPlans } from "@/hooks/useGoalFundingPlans";
@@ -285,6 +286,8 @@ export default function GoalFundingScreen() {
             ))}
           </View>
         ) : null}
+
+        <WhatIfEntryRow subtitle="Test a monthly saving against your whole budget" template="goal" />
 
         <View style={{ gap: theme.space.xs }}>
           <Text style={h2} accessibilityRole="header">

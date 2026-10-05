@@ -195,6 +195,24 @@ function AppShellInner() {
               }}
             />
             <Stack.Screen
+              name="what-if/index"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
+              name="what-if/edit"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
+              name="what-if/[id]"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
               name="runway/index"
               options={{
                 animation: "slide_from_right",

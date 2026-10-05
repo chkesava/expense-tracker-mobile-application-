@@ -29,6 +29,8 @@ const RESTORABLE_ROUTES = [
   "/runway/",
   "/calendar",
   "/goals/",
+  "/what-if",
+  "/what-if/",
 ] as const;
 
 /**
