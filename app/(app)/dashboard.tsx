@@ -26,7 +26,7 @@ import { ErrorState } from "@/components/common/ErrorState";
 import { WelcomeScreen } from "@/components/onboarding/WelcomeScreen";
 import { PageShell } from "@/components/layout/PageShell";
 import { DashboardSkeleton } from "@/components/ui/DashboardSkeleton";
-import { sampleScrollFps } from "@/lib/perf";
+import { sampleScrollFps, perfEvent } from "@/lib/perf";
 import { useSetupProgress } from "@/providers/SetupProgressProvider";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useBorrowings } from "@/hooks/useBorrowings";
@@ -120,6 +120,7 @@ export default function DashboardScreen() {
   const { markScreenVisited } = useSetupProgress();
 
   useEffect(() => {
+    perfEvent("dashboard_mounted");
     markScreenVisited("dashboard");
   }, [markScreenVisited]);
 

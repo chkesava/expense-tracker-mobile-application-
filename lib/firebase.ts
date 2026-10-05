@@ -52,6 +52,7 @@ import {
 } from "./env";
 import { logWarning } from "./errors";
 import { setWriteQueueDurable } from "./firestoreWrite";
+import { perfStart, perfEnd } from "./perf";
 
 export type FirebaseClients = {
   configured: boolean;
@@ -166,6 +167,7 @@ export function getFirebaseClients(): FirebaseClients {
 
   if (!app) {
     try {
+      perfStart("firebase_init");
       app = createApp();
       const testMode = isLocalTestMode();
       // App Check attests to the production project; the emulator needs none.
@@ -186,7 +188,9 @@ export function getFirebaseClients(): FirebaseClients {
       // Same region the Ganesh functions are deployed to (functions/src/index.ts).
       functions = getFunctions(app, "asia-south1");
       initError = null;
+      perfEnd("firebase_init", { success: true });
     } catch (e) {
+      perfEnd("firebase_init", { success: false, reason: String(e) });
       initError = e instanceof Error ? e.message : String(e);
       app = null;
       auth = null;

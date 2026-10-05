@@ -44,7 +44,7 @@ import {
   waitForPendingWritesOrTimeout,
 } from "@/lib/firebase";
 import { enforceGoogleSignupGate } from "@/lib/googleSignupGate";
-import { perfMark } from "@/lib/perf";
+import { perfMark, perfStart, perfEnd } from "@/lib/perf";
 import { privacySession } from "@/lib/privacySession";
 import { duressUid } from "@/shared/utils/duress";
 import { getGlobalPendingSyncCount } from "@/lib/syncStatusStore";
@@ -133,10 +133,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    perfStart("auth_init");
     const auth = getFirebaseAuth();
     const db = getFirestoreDb();
     if (!auth) {
       setLoading(false);
+      perfEnd("auth_init", { success: false, reason: "No auth object" });
       return;
     }
 
@@ -160,6 +162,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Unblock first paint immediately; seed categories after interactions.
       setRealUser(currentUser);
       setLoading(false);
+      perfEnd("auth_init", { success: true });
       perfMark("auth_ready");
 
       cancelHierarchy?.();
