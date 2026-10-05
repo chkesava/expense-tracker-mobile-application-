@@ -22,7 +22,7 @@ export function useWhatIfBaseline(): {
   retry: () => void;
 } {
   const runway = useRunway();
-  const { model, sources, settings, today, displayCurrency, timezone, expenses, incomes, subscriptions, bills } = runway;
+  const { model, sources, settings, today, displayCurrency, timezone, expenses, incomes, calendarEvents } = runway;
 
   const baseline = useMemo(
     () =>
@@ -32,12 +32,11 @@ export function useWhatIfBaseline(): {
         timezone,
         liquid: sources.resources.length ? sources.liquidTotal : null,
         runwayBaseline: model.baseline,
-        subscriptions,
-        bills,
+        calendarEvents,
         expenses,
         incomes,
       }),
-    [today, displayCurrency, timezone, sources, model.baseline, subscriptions, bills, expenses, incomes]
+    [today, displayCurrency, timezone, sources, model.baseline, calendarEvents, expenses, incomes]
   );
   const threshold = useMemo(() => thresholdFromSettings(settings), [settings]);
 

@@ -36,8 +36,7 @@ describe("what-if baseline adapter", () => {
     timezone: "",
     liquid: 1234.567,
     runwayBaseline,
-    subscriptions: [],
-    bills: [],
+    calendarEvents: [],
     expenses: [{ amount: 100 }, { amount: 50.5 }],
     incomes: [{ amount: 1000 }],
   };
