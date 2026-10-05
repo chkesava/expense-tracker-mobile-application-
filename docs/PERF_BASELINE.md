@@ -53,27 +53,28 @@ adb shell pm clear com.chkesava.spendly
 ### Phase Durations (ms)
 | Metric | Duration (ms) | Success/Failure | Notes |
 |--------|---------------|-----------------|-------|
-| `firebase_init` | | | |
-| `auth_init` | | | |
-| `local_stores_init` | | | |
-| `navigation_init` | | | |
+| `firebase_init` | 1ms | Success | |
+| `auth_init` | 614ms | Success | Took longest on initial launch |
+| `local_stores_init` | 31ms | Success | |
+| `navigation_init` | 66ms | Success | |
 
 ### Absolute Timeline (ms from app start)
 | Milestone | Timestamp (ms) | Delta from previous |
 |-----------|----------------|---------------------|
 | `app_start` (T0/T1) | 0 | - |
-| `app_module` (T2) | | |
-| `auth_ready` (T5) | | |
-| `local_stores_ready` (T7) | | |
-| `navigation_ready` (T9) | | |
-| `app_ready` (Gate passed) | | |
-| `dashboard_mounted` (T14)| | |
+| `app_module` (T2) | 1925 | +1925 |
+| `auth_ready` (T5) | 776 | - |
+| `local_stores_ready` (T7) | 1935 | +10 |
+| `navigation_ready` (T9) | 1926 | - |
+| `app_ready` (Gate passed) | 1938 | +3 |
+| `dashboard_mounted` (T14)| 2157 | +219 |
+| `splash_animation_done` (T15) | 2769 | +612 |
 
 ### Firestore Startup Workload
 | Collection | Listeners Started | First Snapshot Received | Doc Count | From Cache? |
 |------------|-------------------|-------------------------|-----------|-------------|
-| expenses | | | | |
-| incomes | | | | |
+| expenses | 2057ms | 4878ms | 0 | No |
+| incomes | 2057ms | - | 0 | No |
 | accounts | | | | |
 | accountTypes | | | | |
 
