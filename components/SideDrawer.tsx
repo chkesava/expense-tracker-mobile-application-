@@ -28,6 +28,7 @@ import {
   CalendarDays,
   Eye,
   EyeOff,
+  FlaskConical,
   Home,
   LogOut,
   Receipt,
@@ -127,6 +128,7 @@ function SideDrawerPanel({ onClose }: { onClose: () => void }) {
     vaults: Shield,
     insights: BarChart3,
     calendar: CalendarDays,
+    whatIf: FlaskConical,
     settings: Settings,
     admin: Shield,
   };

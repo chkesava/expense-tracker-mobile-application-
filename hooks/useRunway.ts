@@ -38,6 +38,12 @@ export function useRunway() {
     settings,
     today,
     displayCurrency,
+    timezone: appSettings.timezone,
+    // Raw inputs, for consumers that derive more from the same data (What If, SPENDLY-387).
+    expenses,
+    incomes,
+    subscriptions,
+    bills,
     loading: sourcesLoading || settingsLoading || expensesLoading || incomesLoading || subscriptionsLoading,
     error: sourcesError ?? settingsError,
     retry: () => {

@@ -67,6 +67,8 @@ describe("isRestorableRoute", () => {
     expect(isRestorableRoute("/runway/sources")).toBe(true);
     expect(isRestorableRoute("/runway")).toBe(true);
     expect(isRestorableRoute("/calendar")).toBe(true);
+    expect(isRestorableRoute("/what-if")).toBe(true);
+    expect(isRestorableRoute("/what-if/abc")).toBe(true);
     expect(isRestorableRoute("/goals/optimizer")).toBe(true);
   });
 
