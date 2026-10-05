@@ -12,6 +12,7 @@ import { usePageListBottomPadding } from "@/components/layout/usePageListBottomP
 import { RunwaySettingsSheet } from "@/components/runway/RunwaySettingsSheet";
 import { RunwayTimeline } from "@/components/runway/RunwayTimeline";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { WhatIfEntryRow } from "@/components/whatIf/WhatIfEntryRow";
 import { useRunway } from "@/hooks/useRunway";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { writeSavedMessage } from "@/lib/firestoreWrite";
@@ -215,6 +216,8 @@ export default function RunwayScreen() {
             ))}
           </View>
         ) : null}
+
+        <WhatIfEntryRow subtitle="See how a raise, a purchase or a new EMI would change your runway" />
 
         <View style={[card, { borderWidth: StyleSheet.hairlineWidth }]}>
           <Pressable
