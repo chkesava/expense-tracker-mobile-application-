@@ -7,13 +7,16 @@ import {
   EPF_CONTRIBUTION_EVENTS_COLLECTION,
   EPF_CONTRIBUTIONS_COLLECTION,
   EPF_ESTABLISHMENTS_COLLECTION,
+  EPF_WAGE_HISTORY_COLLECTION,
   type EpfContribution,
   type EpfEstablishment,
+  type EpfWageHistoryEntry,
 } from "../../shared/features/epf/types";
 import {
   contributionDocId,
   normalizeEpfContribution,
 } from "../../shared/features/epf/utils/contributions";
+import { normalizeWageHistoryEntry } from "../../shared/features/epf/utils/wageHistory";
 import { normalizeEstablishment } from "../../shared/features/epf/utils";
 import {
   EPF_CRON_MONTHS_PER_BATCH,
@@ -259,6 +262,18 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
       const existing: EpfContribution[] = existingSnap.docs.map((row) =>
         normalizeEpfContribution(row.id, row.data() as Record<string, unknown>),
       );
+
+      // SPENDLY-389: the effective-dated wage schedule, if the user has set
+      // one up. Absent entirely for most establishments today, in which case
+      // `planScheduledContributions` falls back to the old latest-recorded-wage
+      // behavior.
+      const wageHistorySnap = await db
+        .collection(`users/${uid}/${EPF_WAGE_HISTORY_COLLECTION}`)
+        .where("establishmentId", "==", docSnap.id)
+        .get();
+      const wageHistory: EpfWageHistoryEntry[] = wageHistorySnap.docs.map((row) =>
+        normalizeWageHistoryEntry(row.id, row.data() as Record<string, unknown>),
+      );
       // SPENDLY-20: the precondition for the release pass below. "Nothing has
       // touched this document since I read it" is strictly stronger than
       // re-checking the selector, which would miss an edit to a field the
@@ -435,6 +450,7 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
         allEstablishments,
         existing,
         throughMonth,
+        wageHistory,
       });
       // SPENDLY-19: the planner calls isEligibleForAutomatedProcessing, so a
       // 2019 dateJoined cannot mint ~80 simulated months for this batch.

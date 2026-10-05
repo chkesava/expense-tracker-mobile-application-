@@ -195,6 +195,40 @@ export const epfCreditFormSchema = z
 
 export type EpfCreditFormInput = z.infer<typeof epfCreditFormSchema>;
 
+/**
+ * Recording a salary/EPF-wage change with an effective month — SPENDLY-389.
+ *
+ * The month-already-has-a-wage-change and establishment-context checks need
+ * the existing wage history, so they live in `validateWageChange`, the same
+ * split `epfContributionRowFormSchema` uses for the month-in-period check.
+ */
+export const epfWageChangeFormSchema = z
+  .object({
+    effectiveFromMonth: monthKeySchema,
+    wage: epfWageSchema,
+    epsEligible: z.boolean(),
+    employeeShareOverride: nonNegativeAmount.optional(),
+    employerShareOverride: nonNegativeAmount.optional(),
+    epsShareOverride: nonNegativeAmount.optional(),
+    employerEpfShareOverride: nonNegativeAmount.optional(),
+    notes: z.string().trim().max(500, "Notes are too long").optional().or(z.literal("")),
+  })
+  .superRefine((data, ctx) => {
+    if (
+      data.epsShareOverride !== undefined &&
+      data.employerShareOverride !== undefined &&
+      data.epsShareOverride > data.employerShareOverride
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["epsShareOverride"],
+        message: "Pension share cannot exceed the employer contribution",
+      });
+    }
+  });
+
+export type EpfWageChangeFormInput = z.infer<typeof epfWageChangeFormSchema>;
+
 /* ---------------------------------------------------------------------------
  * Transfers — KAN-69
  * ------------------------------------------------------------------------ */

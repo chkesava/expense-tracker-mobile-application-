@@ -13,6 +13,7 @@
 import { useEffect, useRef } from "react";
 
 import { useEpfContributions } from "@/hooks/useEpfContributions";
+import { useEpfWageHistory } from "@/hooks/useEpfWageHistory";
 import { logError } from "@/lib/errors";
 import type { EpfEstablishment } from "@/shared/features/epf/types";
 import { epfCurrentMonth } from "@/shared/features/epf/utils/epfClock";
@@ -33,13 +34,16 @@ export function useEpfCatchUp(args: {
   } = useEpfContributions(establishment?.id, {
       enabled: enabled && Boolean(establishment),
     });
+  const { history: wageHistory, historyLoading: wageHistoryLoading } = useEpfWageHistory(
+    enabled && establishment ? establishment.id : undefined
+  );
 
   // One attempt per establishment per mount. Without this the effect would
   // re-fire on every snapshot the write itself triggers.
   const attempted = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!enabled || !establishment || contributionsLoading) return;
+    if (!enabled || !establishment || contributionsLoading || wageHistoryLoading) return;
     if (!isSchedulable(establishment)) return;
     if (attempted.current === establishment.id) return;
     attempted.current = establishment.id;
@@ -70,6 +74,7 @@ export function useEpfCatchUp(args: {
       // SPENDLY-19: eligibility lives inside the planner, so catch-up and
       // cron cannot mint historical simulated months even if this list is long.
       throughMonth: epfCurrentMonth(),
+      wageHistory,
     });
     if (planned.length === 0) return;
 
@@ -84,6 +89,8 @@ export function useEpfCatchUp(args: {
     allEstablishments,
     contributions,
     contributionsLoading,
+    wageHistory,
+    wageHistoryLoading,
     saveContributions,
     repairCreditWindows,
     repairLifecycleStates,

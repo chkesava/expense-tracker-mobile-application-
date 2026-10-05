@@ -579,3 +579,4 @@ the module in production:
 | KAN-75 | [Index & query review](KAN-75-epf-index-query-review.md) |
 | KAN-73 | This document |
 | SPENDLY-72 | [Current contribution lifecycle](SPENDLY-72-epf-current-lifecycle.md) |
+| SPENDLY-389 | [Effective-dated wage changes](SPENDLY-389-epf-effective-wage.md) |
